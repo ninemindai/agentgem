@@ -1,8 +1,6 @@
 // src/schemas.ts
 import { z } from "zod";
 
-export const ToolKindSchema = z.enum(["web_search", "deck", "dataroom"]);
-
 export const SkillArtifactSchema = z.object({
   type: z.literal("skill"),
   name: z.string(),

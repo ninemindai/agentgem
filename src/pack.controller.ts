@@ -1,15 +1,10 @@
 // src/pack.controller.ts
-import { homedir } from "node:os";
-import { join } from "node:path";
 import type { z } from "zod";
 import { api, get, post } from "@agentback/openapi";
 import { introspectConfig } from "./pack/introspect.js";
 import { buildPack } from "./pack/buildPack.js";
 import { InventorySchema, PackSchema, PackRequestSchema, DirQuerySchema } from "./schemas.js";
-
-function resolveDir(dir?: string): string {
-  return dir && dir.length > 0 ? dir : join(homedir(), ".claude");
-}
+import { resolveDir } from "./resolveDir.js";
 
 @api({ basePath: "/api" })
 export class PackController {
