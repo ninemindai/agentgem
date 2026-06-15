@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "build": "tsc -b",
+    "build": "tsc -b && mkdir -p dist/public && cp src/public/index.html dist/public/index.html",
     "start": "node dist/index.js",
     "test": "tsc -b && vitest run",
     "clean": "rm -rf dist *.tsbuildinfo"

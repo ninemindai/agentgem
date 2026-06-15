@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>agentpack — Pack Builder</title>
+<style>
+  :root{--ink:#221d16;--muted:#6f6555;--line:#ddd3c0;--accent:#9a3324;--paper:#f6f2e9;--card:#fff}
+  *{box-sizing:border-box}body{margin:0;font:14px/1.5 system-ui,sans-serif;color:var(--ink);background:var(--paper)}
+  header{padding:14px 20px;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:center}
+  header h1{font-size:16px;margin:0}header .muted{color:var(--muted)}
+  main{display:grid;grid-template-columns:1fr 1fr;gap:0;height:calc(100vh - 53px)}
+  .pane{padding:16px 20px;overflow:auto}.pane.left{border-right:1px solid var(--line)}
+  .group{margin-bottom:18px}.group h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:0 0 8px}
+  label.row{display:flex;gap:8px;align-items:flex-start;padding:4px 0;cursor:pointer}
+  label.row .d{color:var(--muted);font-size:12px}
+  .bar{display:flex;gap:8px;align-items:center;margin-bottom:12px}
+  input[type=text]{flex:1;padding:6px 8px;border:1px solid var(--line);border-radius:5px;font:inherit}
+  button{padding:6px 12px;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:5px;cursor:pointer;font:inherit}
+  button.ghost{background:transparent;color:var(--accent)}
+  pre{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:12px;font:12px/1.5 ui-monospace,monospace;white-space:pre-wrap;word-break:break-word}
+  .note{color:var(--muted);font-size:12px;margin-top:8px}
+</style>
+</head>
+<body>
+<header><h1>agentpack</h1><span class="muted">Pack Builder · introspecting <code>~/.claude</code></span></header>
+<main>
+  <section class="pane left">
+    <div class="bar"><input id="name" type="text" placeholder="pack name" value="pack" /><button id="all" class="ghost">Select all</button></div>
+    <div id="inventory">Loading…</div>
+  </section>
+  <section class="pane right">
+    <div class="bar"><strong style="flex:1">pack.json (live)</strong><button id="copy" class="ghost">Copy</button><button id="dl">⬇ Download</button></div>
+    <pre id="preview">{}</pre>
+    <p class="note">MCP secrets are shown as <code>&lt;redacted&gt;</code>. Nothing secret is displayed or exported.</p>
+  </section>
+</main>
+<script>
+let inv = { skills: [], mcpServers: [], instructions: [] };
+const sel = { skills: new Set(), mcpServers: new Set(), includeInstructions: false };
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+function group(title, items, kind) {
+  if (!items.length && kind !== "instructions") return "";
+  const rows = items.map(it => {
+    const desc = it.description ? `<span class="d">— ${esc(it.description)}</span>` : (it.transport ? `<span class="d">(${esc(it.transport)})</span>` : "");
+    return `<label class="row"><input type="checkbox" data-kind="${kind}" data-name="${esc(it.name)}"> <span>${esc(it.name)} ${desc}</span></label>`;
+  }).join("");
+  return `<div class="group"><h2>${title} (${items.length})</h2>${rows}</div>`;
+}
+async function load() {
+  inv = await (await fetch("/api/inventory")).json();
+  let html = group("Skills", inv.skills, "skills") + group("MCP servers", inv.mcpServers, "mcpServers");
+  html += `<div class="group"><h2>Instructions</h2><label class="row"><input type="checkbox" data-kind="instructions"> <span>CLAUDE.md ${inv.instructions.length ? "" : "<span class='d'>(none)</span>"}</span></label></div>`;
+  document.getElementById("inventory").innerHTML = html;
+  document.querySelectorAll('input[type=checkbox]').forEach(cb => cb.addEventListener("change", onToggle));
+  refresh();
+}
+function onToggle(e){
+  const { kind, name } = e.target.dataset;
+  if (kind === "instructions") sel.includeInstructions = e.target.checked;
+  else { e.target.checked ? sel[kind].add(name) : sel[kind].delete(name); }
+  refresh();
+}
+let t; function refresh(){ clearTimeout(t); t = setTimeout(build, 120); }
+async function build(){
+  const selection = { skills: [...sel.skills], mcpServers: [...sel.mcpServers], includeInstructions: sel.includeInstructions };
+  const name = document.getElementById("name").value || "pack";
+  const pack = await (await fetch("/api/pack", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ selection, name }) })).json();
+  window.__pack = pack;
+  document.getElementById("preview").textContent = JSON.stringify(pack, null, 2);
+}
+document.getElementById("all").addEventListener("click", () => {
+  document.querySelectorAll('input[type=checkbox]').forEach(cb => { cb.checked = true; cb.dispatchEvent(new Event("change")); });
+});
+document.getElementById("name").addEventListener("input", refresh);
+document.getElementById("dl").addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify(window.__pack || {}, null, 2)], { type: "application/json" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = (document.getElementById("name").value || "pack") + ".json"; a.click();
+});
+document.getElementById("copy").addEventListener("click", () => navigator.clipboard.writeText(document.getElementById("preview").textContent));
+load();
+</script>
+</body>
+</html>
