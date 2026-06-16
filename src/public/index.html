@@ -30,9 +30,10 @@
 <header><h1>agentpack</h1><span class="muted">Pack Builder · introspecting <code>~/.claude</code> · <code>~/.agents</code> · <code>~/.codex</code></span></header>
 <main>
   <section class="pane left">
-    <div class="bar"><input id="name" type="text" placeholder="pack name" value="pack" /><button id="all" class="ghost">Select all</button></div>
+    <div class="bar"><input id="name" type="text" placeholder="pack name" value="pack" style="flex:1" /></div>
     <div class="bar"><input id="search" type="text" placeholder="search names, descriptions, contents…" style="flex:1" /><select id="srcFilter"><option value="">All sources</option></select></div>
     <div class="bar" id="agentBar"></div>
+    <div class="bar" id="selbar"><strong style="flex:1;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)">Selection</strong><button id="all" class="ghost">Select all shown</button><button id="none" class="ghost">Clear</button></div>
     <div id="inventory">Loading…</div>
   </section>
   <section class="pane right">
@@ -145,7 +146,17 @@ async function build(){
   document.getElementById("preview").textContent = JSON.stringify(pack, null, 2);
 }
 document.getElementById("all").addEventListener("click", () => {
-  document.querySelectorAll('#inventory input[type=checkbox]').forEach(cb => { cb.checked = true; cb.dispatchEvent(new Event("change")); });
+  // Select only rows currently visible under the active filters.
+  document.querySelectorAll('#inventory label.row').forEach(row => {
+    if (row.style.display === "none") return;
+    const cb = row.querySelector('input[type=checkbox]');
+    if (cb && !cb.checked) { cb.checked = true; cb.dispatchEvent(new Event("change")); }
+  });
+});
+document.getElementById("none").addEventListener("click", () => {
+  document.querySelectorAll('#inventory input[type=checkbox]').forEach(cb => {
+    if (cb.checked) { cb.checked = false; cb.dispatchEvent(new Event("change")); }
+  });
 });
 document.getElementById("name").addEventListener("input", refresh);
 document.getElementById("dl").addEventListener("click", () => {
