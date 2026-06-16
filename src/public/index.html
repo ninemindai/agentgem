@@ -41,6 +41,16 @@
   .seg{display:inline-flex;border:1px solid var(--line);border-radius:5px;overflow:hidden;margin-left:auto}
   .seg button{border:0;border-radius:0;background:transparent;color:var(--accent);padding:4px 10px;font-size:12px}
   .seg button.on{background:var(--accent);color:#fff}
+  .src{font:11px/1 ui-monospace,monospace;color:var(--accent);border:1px solid var(--line);border-radius:4px;padding:1px 4px}
+  .psummary{display:flex;flex-direction:column;gap:14px}
+  .phead{font-size:14px}
+  .pgroup h3{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:0 0 6px}
+  .prow{display:flex;gap:8px;align-items:center;width:100%;text-align:left;border:0;background:transparent;padding:4px 6px;border-radius:5px;cursor:pointer;font:inherit;color:var(--ink)}
+  .prow:hover{background:rgba(154,51,36,.07)}
+  .prow .pn{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:48%}
+  .prow .pm{margin-left:auto;color:var(--muted);font-size:12px;white-space:nowrap}
+  .redtag{color:var(--accent);font-size:11px}
+  pre.json{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:12px;font:12px/1.5 ui-monospace,monospace;white-space:pre-wrap;word-break:break-word;margin:0}
   #projectBar{flex-wrap:wrap}
   .pchip{display:inline-flex;align-items:center;gap:2px;background:var(--card);border:1px solid var(--line);border-radius:5px;padding:2px 4px 2px 8px;font-size:13px}
   .pchip .premove{border:0;background:transparent;color:var(--muted);padding:0 4px;cursor:pointer;font-size:13px}
@@ -59,8 +69,8 @@
     <div id="inventory">Loading…</div>
   </section>
   <section class="pane right">
-    <div class="bar"><strong style="flex:1">pack.json (live)</strong><button id="copy" class="ghost">Copy</button><button id="dl">⬇ Download</button></div>
-    <pre id="preview">{}</pre>
+    <div class="bar"><strong style="flex:1">Pack (live)</strong><span class="seg" id="preview-modes"><button type="button" data-pmode="summary">Summary</button><button type="button" data-pmode="json">JSON</button></span><button id="copy" class="ghost">Copy</button><button id="dl">⬇ Download</button></div>
+    <div id="preview"></div>
     <p class="note">MCP server config secrets are shown as <code>&lt;redacted&gt;</code> and never exported. Skill, CLAUDE.md &amp; rules bodies are bundled as written — don't keep secrets in them.</p>
   </section>
 </main>
@@ -231,8 +241,59 @@ async function build(){
   if (projects.length) reqBody.projects = projects;
   const pack = await (await fetch("/api/pack", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(reqBody) })).json();
   window.__pack = pack;
-  document.getElementById("preview").textContent = JSON.stringify(pack, null, 2);
+  renderPreview();
 }
+let previewMode = "summary";
+function fmtSize(n){ return n < 1024 ? `${n} B` : `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} KB`; }
+function artSize(a){ return a.type === "mcp_server" ? JSON.stringify(a.config || {}).length : (a.content || "").length; }
+function summaryHtml(p){
+  const arts = p.artifacts || [];
+  if (!arts.length) return `<p class="d">Empty pack — select artifacts on the left to add them.</p>`;
+  const total = arts.reduce((s, a) => s + artSize(a), 0);
+  const groups = [["Skills", "skill"], ["MCP servers", "mcp_server"], ["Instructions", "instructions"]];
+  let h = `<div class="psummary"><div class="phead"><strong>${esc(p.name)}</strong> <span class="d">· ${arts.length} artifact${arts.length === 1 ? "" : "s"} · ${fmtSize(total)}</span></div>`;
+  for (const [label, type] of groups) {
+    const items = arts.filter(a => a.type === type);
+    if (!items.length) continue;
+    h += `<div class="pgroup"><h3>${label} (${items.length})</h3>` + items.map(a => {
+      const i = arts.indexOf(a);
+      const src = a.source ? `<span class="src">${esc(a.source)}</span>` : "";
+      const meta = a.type === "mcp_server" ? `${esc(a.transport || "")} · <span class="redtag">redacted</span>` : fmtSize(artSize(a));
+      return `<button type="button" class="prow" data-i="${i}"><span class="pn">${esc(a.name)}</span> ${src} <span class="pm">${meta}</span></button>`;
+    }).join("") + `</div>`;
+  }
+  return h + `</div>`;
+}
+function renderPreview(){
+  const el = document.getElementById("preview");
+  const p = window.__pack;
+  if (!p) { el.textContent = ""; }
+  else if (p.error || previewMode === "json") {
+    el.innerHTML = ""; const pre = document.createElement("pre"); pre.className = "json";
+    pre.textContent = JSON.stringify(p, null, 2); el.appendChild(pre);
+  } else {
+    el.innerHTML = summaryHtml(p);
+  }
+  document.querySelectorAll("#preview-modes button").forEach(b => b.classList.toggle("on", b.dataset.pmode === previewMode));
+}
+function openArtifact(art){
+  const isMcp = art.type === "mcp_server";
+  modalState.kind = isMcp ? "mcpServers" : "skills";
+  modalState.body = isMcp ? JSON.stringify(art.config, null, 2) : (art.content || "");
+  document.getElementById("modal-title").textContent = art.name;
+  document.getElementById("modal-sub").textContent = (art.source || "") + (art.transport ? ` · ${art.transport}` : "");
+  renderModalBody();
+  document.getElementById("modal").hidden = false;
+}
+document.getElementById("preview-modes").addEventListener("click", e => {
+  const b = e.target.closest("button[data-pmode]"); if (!b) return;
+  previewMode = b.dataset.pmode; renderPreview();
+});
+document.getElementById("preview").addEventListener("click", e => {
+  const row = e.target.closest(".prow"); if (!row) return;
+  const art = (window.__pack && window.__pack.artifacts) ? window.__pack.artifacts[+row.dataset.i] : null;
+  if (art) openArtifact(art);
+});
 document.getElementById("all").addEventListener("click", () => {
   // Select only rows currently visible under the active filters.
   document.querySelectorAll('#inventory label.row').forEach(row => {
@@ -251,7 +312,7 @@ document.getElementById("dl").addEventListener("click", () => {
   const blob = new Blob([JSON.stringify(window.__pack || {}, null, 2)], { type: "application/json" });
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = (document.getElementById("name").value || "pack") + ".json"; a.click();
 });
-document.getElementById("copy").addEventListener("click", () => navigator.clipboard.writeText(document.getElementById("preview").textContent));
+document.getElementById("copy").addEventListener("click", () => navigator.clipboard.writeText(JSON.stringify(window.__pack || {}, null, 2)));
 document.getElementById("srcFilter").addEventListener("change", filterRows);
 document.getElementById("inventory").addEventListener("click", e => {
   // View an item's content in a modal (must not toggle the row's checkbox).
