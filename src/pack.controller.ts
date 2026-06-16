@@ -10,13 +10,13 @@ import { resolveDir } from "./resolveDir.js";
 export class PackController {
   @get("/inventory", { query: DirQuerySchema, response: InventorySchema })
   async inventory(input: { query: z.infer<typeof DirQuerySchema> }): Promise<z.infer<typeof InventorySchema>> {
-    return introspectConfig(resolveDir(input.query.dir));
+    return introspectConfig({ claudeDir: resolveDir(input.query.dir) });
   }
 
   @post("/pack", { body: PackRequestSchema, response: PackSchema })
   async pack(input: { body: z.infer<typeof PackRequestSchema> }): Promise<z.infer<typeof PackSchema>> {
     const dir = resolveDir(input.body.dir);
-    const inventory = introspectConfig(dir);
+    const inventory = introspectConfig({ claudeDir: dir });
     return buildPack(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dir });
   }
 }

@@ -16,7 +16,7 @@ export class PackTools {
     input: InventoryInput,
   })
   async inventory(input: z.infer<typeof InventoryInput>) {
-    return introspectConfig(resolveDir(input.dir));
+    return introspectConfig({ claudeDir: resolveDir(input.dir) });
   }
 
   @tool("pack", {
@@ -25,6 +25,6 @@ export class PackTools {
   })
   async pack(input: z.infer<typeof PackInput>) {
     const dir = resolveDir(input.dir);
-    return buildPack(introspectConfig(dir), input.selection, { name: input.name ?? "pack", createdFrom: dir });
+    return buildPack(introspectConfig({ claudeDir: dir }), input.selection, { name: input.name ?? "pack", createdFrom: dir });
   }
 }
