@@ -13,6 +13,7 @@
   .group{margin-bottom:18px}.group h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:0 0 8px}
   label.row{display:flex;gap:8px;align-items:flex-start;padding:4px 0;cursor:pointer}
   label.row .d{color:var(--muted);font-size:12px}
+  label.row .src{font:11px/1 ui-monospace,monospace;color:var(--accent);border:1px solid var(--line);border-radius:4px;padding:1px 4px;margin-left:4px}
   .bar{display:flex;gap:8px;align-items:center;margin-bottom:12px}
   input[type=text]{flex:1;padding:6px 8px;border:1px solid var(--line);border-radius:5px;font:inherit}
   button{padding:6px 12px;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:5px;cursor:pointer;font:inherit}
@@ -26,6 +27,7 @@
 <main>
   <section class="pane left">
     <div class="bar"><input id="name" type="text" placeholder="pack name" value="pack" /><button id="all" class="ghost">Select all</button></div>
+    <div class="bar"><input id="search" type="text" placeholder="search skills, MCP servers, sources…" style="flex:1" /></div>
     <div id="inventory">Loading…</div>
   </section>
   <section class="pane right">
@@ -41,10 +43,12 @@ function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;","
 function group(title, items, kind) {
   if (!items.length && kind !== "instructions") return "";
   const rows = items.map(it => {
-    const desc = it.description ? `<span class="d">— ${esc(it.description)}</span>` : (it.transport ? `<span class="d">(${esc(it.transport)})</span>` : "");
-    return `<label class="row"><input type="checkbox" data-kind="${kind}" data-name="${esc(it.name)}"> <span>${esc(it.name)} ${desc}</span></label>`;
+    const meta = it.description || it.transport || "";
+    const src = it.source ? ` <span class="src">${esc(it.source)}</span>` : "";
+    const hay = `${it.name} ${meta} ${it.source || ""}`.toLowerCase();
+    return `<label class="row" data-search="${esc(hay)}"><input type="checkbox" data-kind="${kind}" data-name="${esc(it.name)}"> <span>${esc(it.name)}${src} ${meta ? `<span class="d">— ${esc(meta)}</span>` : ""}</span></label>`;
   }).join("");
-  return `<div class="group"><h2>${title} (${items.length})</h2>${rows}</div>`;
+  return `<div class="group" data-group="${kind}"><h2>${title} (${items.length})</h2>${rows}</div>`;
 }
 async function load() {
   inv = await (await fetch("/api/inventory")).json();
@@ -53,6 +57,8 @@ async function load() {
   document.getElementById("inventory").innerHTML = html;
   document.querySelectorAll('input[type=checkbox]').forEach(cb => cb.addEventListener("change", onToggle));
   refresh();
+  document.getElementById("search").addEventListener("input", filterRows);
+  filterRows();
 }
 function onToggle(e){
   const { kind, name } = e.target.dataset;
@@ -61,6 +67,20 @@ function onToggle(e){
   refresh();
 }
 let t; function refresh(){ clearTimeout(t); t = setTimeout(build, 120); }
+function filterRows() {
+  const q = (document.getElementById("search").value || "").trim().toLowerCase();
+  document.querySelectorAll("#inventory label.row").forEach(row => {
+    const hay = row.getAttribute("data-search") || "";
+    row.style.display = !q || hay.includes(q) ? "" : "none";
+  });
+  document.querySelectorAll("#inventory .group").forEach(g => {
+    const all = g.querySelectorAll("label.row");
+    const shown = [...all].filter(r => r.style.display !== "none").length;
+    const h2 = g.querySelector("h2");
+    if (h2 && !h2.dataset.base) h2.dataset.base = h2.textContent.replace(/\s*\(showing.*$/, "");
+    if (h2) h2.textContent = q ? `${h2.dataset.base} — showing ${shown}` : h2.dataset.base;
+  });
+}
 async function build(){
   const selection = { skills: [...sel.skills], mcpServers: [...sel.mcpServers], includeInstructions: sel.includeInstructions };
   const name = document.getElementById("name").value || "pack";
