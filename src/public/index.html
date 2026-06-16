@@ -24,6 +24,15 @@
   button.ghost{background:transparent;color:var(--accent)}
   pre{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:12px;font:12px/1.5 ui-monospace,monospace;white-space:pre-wrap;word-break:break-word}
   .note{color:var(--muted);font-size:12px;margin-top:8px}
+  label.row > span{flex:1}
+  label.row .view{flex:none;font:11px/1 ui-monospace,monospace;color:var(--muted);border:1px solid var(--line);background:transparent;border-radius:4px;padding:2px 6px;cursor:pointer}
+  label.row .view:hover{color:#fff;background:var(--accent);border-color:var(--accent)}
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:10;padding:24px}
+  .modal-bg[hidden]{display:none}
+  .modal{background:var(--card);border:1px solid var(--line);border-radius:8px;max-width:840px;width:100%;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.25)}
+  .modal-h{display:flex;gap:8px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)}
+  .modal-h .t{font-size:15px}
+  .modal-body{margin:0;border:0;border-radius:0 0 8px 8px;overflow:auto;flex:1;background:var(--card)}
 </style>
 </head>
 <body>
@@ -42,6 +51,12 @@
     <p class="note">MCP server config secrets are shown as <code>&lt;redacted&gt;</code> and never exported. Skill, CLAUDE.md &amp; rules bodies are bundled as written — don't keep secrets in them.</p>
   </section>
 </main>
+<div id="modal" class="modal-bg" hidden>
+  <div class="modal">
+    <div class="modal-h"><strong class="t" id="modal-title"></strong><span class="src" id="modal-sub"></span><button id="modal-x" class="ghost" style="margin-left:auto">✕ Close</button></div>
+    <pre class="modal-body" id="modal-body"></pre>
+  </div>
+</div>
 <script>
 let inv = { skills: [], mcpServers: [], instructions: [] };
 const sel = { skills: new Set(), mcpServers: new Set(), includeInstructions: false };
@@ -54,7 +69,7 @@ function group(title, items, kind) {
   const rows = items.map(it => {
     const meta = it.description || it.transport || "";
     const src = it.source ? ` <span class="src" data-src="${esc(it.source)}" title="filter by ${esc(it.source)}">${esc(it.source)}</span>` : "";
-    return `<label class="row" data-source="${esc(it.source || "")}" data-agent="${agentOf(it.source || "")}"><input type="checkbox" data-kind="${kind}" data-name="${esc(it.name)}"> <span>${esc(it.name)}${src} ${meta ? `<span class="d">— ${esc(meta)}</span>` : ""}</span></label>`;
+    return `<label class="row" data-source="${esc(it.source || "")}" data-agent="${agentOf(it.source || "")}"><input type="checkbox" data-kind="${kind}" data-name="${esc(it.name)}"> <span>${esc(it.name)}${src} ${meta ? `<span class="d">— ${esc(meta)}</span>` : ""}</span><button type="button" class="view" data-kind="${kind}" data-name="${esc(it.name)}" title="view content">view</button></label>`;
   }).join("");
   return `<div class="group" data-group="${kind}"><h2>${title} (${items.length})</h2>${rows}</div>`;
 }
@@ -69,7 +84,8 @@ async function load() {
   // The instructions row aggregates CLAUDE.md (claude) and any codex rules, so it belongs
   // to every agent whose instruction files are present — show it if any is enabled.
   const instrAgents = [...new Set(inv.instructions.map(i => i.name.startsWith("codex:") ? "codex" : "claude"))].join(" ") || "claude";
-  html += `<div class="group"><h2>Instructions</h2><label class="row" data-source="" data-agent="${instrAgents}"><input type="checkbox" data-kind="instructions"> <span>${instrLabel}</span></label></div>`;
+  const instrView = inv.instructions.length ? `<button type="button" class="view" data-kind="instructions" data-name="" title="view content">view</button>` : "";
+  html += `<div class="group"><h2>Instructions</h2><label class="row" data-source="" data-agent="${instrAgents}"><input type="checkbox" data-kind="instructions"> <span>${instrLabel}</span>${instrView}</label></div>`;
   document.getElementById("inventory").innerHTML = html;
   // Attach a full-text haystack (name + meta + source + body) to each row, in DOM order.
   // Kept as a JS property, not a DOM attribute, so large skill bodies don't bloat the markup.
@@ -165,8 +181,11 @@ document.getElementById("dl").addEventListener("click", () => {
 });
 document.getElementById("copy").addEventListener("click", () => navigator.clipboard.writeText(document.getElementById("preview").textContent));
 document.getElementById("srcFilter").addEventListener("change", filterRows);
-// Click a source chip to scope the source filter to it (click again to clear).
 document.getElementById("inventory").addEventListener("click", e => {
+  // View an item's content in a modal (must not toggle the row's checkbox).
+  const v = e.target.closest(".view");
+  if (v) { e.preventDefault(); e.stopPropagation(); openItem(v.dataset.kind, v.dataset.name); return; }
+  // Click a source chip to scope the source filter to it (click again to clear).
   const chip = e.target.closest(".src");
   if (!chip) return;
   e.preventDefault(); e.stopPropagation();
@@ -175,6 +194,32 @@ document.getElementById("inventory").addEventListener("click", e => {
   el.value = el.value === val ? "" : val;
   filterRows();
 });
+// --- Content viewer modal. Body is set via textContent (never innerHTML): skill / rules
+// bodies are verbatim, untrusted text and must never be interpreted as markup. ---
+function openItem(kind, name) {
+  let title = name, sub = "", body = "";
+  if (kind === "skills") {
+    const a = inv.skills.find(s => s.name === name);
+    if (!a) return;
+    sub = a.source || ""; body = a.content || "";
+  } else if (kind === "mcpServers") {
+    const a = inv.mcpServers.find(s => s.name === name);
+    if (!a) return;
+    sub = `${a.source || ""} · ${a.transport}`; body = JSON.stringify(a.config, null, 2);
+  } else if (kind === "instructions") {
+    title = "Instructions";
+    sub = inv.instructions.map(i => i.name).join(", ");
+    body = inv.instructions.map(i => `### ${i.name}\n\n${i.content}`).join("\n\n──────────\n\n");
+  } else return;
+  document.getElementById("modal-title").textContent = title;
+  document.getElementById("modal-sub").textContent = sub;
+  document.getElementById("modal-body").textContent = body;
+  document.getElementById("modal").hidden = false;
+}
+function closeModal(){ document.getElementById("modal").hidden = true; }
+document.getElementById("modal-x").addEventListener("click", closeModal);
+document.getElementById("modal").addEventListener("click", e => { if (e.target.id === "modal") closeModal(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal(); });
 load();
 </script>
 </body>
