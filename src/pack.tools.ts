@@ -4,7 +4,7 @@ import { mcpServer, tool } from "@agentback/mcp";
 import { introspectConfig } from "./pack/introspect.js";
 import { buildPack } from "./pack/buildPack.js";
 import { PackSelectionSchema } from "./schemas.js";
-import { resolveDir } from "./resolveDir.js";
+import { resolveDirs } from "./resolveDir.js";
 
 const InventoryInput = z.object({ dir: z.string().optional() });
 const PackInput = z.object({ selection: PackSelectionSchema, name: z.string().optional(), dir: z.string().optional() });
@@ -16,7 +16,7 @@ export class PackTools {
     input: InventoryInput,
   })
   async inventory(input: z.infer<typeof InventoryInput>) {
-    return introspectConfig({ claudeDir: resolveDir(input.dir) });
+    return introspectConfig(resolveDirs(input.dir));
   }
 
   @tool("pack", {
@@ -24,7 +24,7 @@ export class PackTools {
     input: PackInput,
   })
   async pack(input: z.infer<typeof PackInput>) {
-    const dir = resolveDir(input.dir);
-    return buildPack(introspectConfig({ claudeDir: dir }), input.selection, { name: input.name ?? "pack", createdFrom: dir });
+    const dirs = resolveDirs(input.dir);
+    return buildPack(introspectConfig(dirs), input.selection, { name: input.name ?? "pack", createdFrom: dirs.claudeDir });
   }
 }

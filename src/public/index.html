@@ -25,7 +25,7 @@
 </style>
 </head>
 <body>
-<header><h1>agentpack</h1><span class="muted">Pack Builder · introspecting <code>~/.claude</code></span></header>
+<header><h1>agentpack</h1><span class="muted">Pack Builder · introspecting <code>~/.claude</code> · <code>~/.agents</code> · <code>~/.codex</code></span></header>
 <main>
   <section class="pane left">
     <div class="bar"><input id="name" type="text" placeholder="pack name" value="pack" /><button id="all" class="ghost">Select all</button></div>
@@ -35,7 +35,7 @@
   <section class="pane right">
     <div class="bar"><strong style="flex:1">pack.json (live)</strong><button id="copy" class="ghost">Copy</button><button id="dl">⬇ Download</button></div>
     <pre id="preview">{}</pre>
-    <p class="note">MCP server config secrets are shown as <code>&lt;redacted&gt;</code> and never exported. Skill &amp; CLAUDE.md bodies are bundled as written — don't keep secrets in them.</p>
+    <p class="note">MCP server config secrets are shown as <code>&lt;redacted&gt;</code> and never exported. Skill, CLAUDE.md &amp; rules bodies are bundled as written — don't keep secrets in them.</p>
   </section>
 </main>
 <script>
@@ -54,12 +54,18 @@ function group(title, items, kind) {
 async function load() {
   inv = await (await fetch("/api/inventory")).json();
   let html = group("Skills", inv.skills, "skills") + group("MCP servers", inv.mcpServers, "mcpServers");
-  html += `<div class="group"><h2>Instructions</h2><label class="row" data-source=""><input type="checkbox" data-kind="instructions"> <span>CLAUDE.md ${inv.instructions.length ? "" : "<span class='d'>(none)</span>"}</span></label></div>`;
+  // One include-all toggle for instructions; the label lists every instruction file found
+  // (CLAUDE.md, plus any ~/.codex/rules/* files).
+  const instrLabel = inv.instructions.length
+    ? esc(inv.instructions.map(i => i.name).join(", "))
+    : `CLAUDE.md <span class="d">(none)</span>`;
+  html += `<div class="group"><h2>Instructions</h2><label class="row" data-source=""><input type="checkbox" data-kind="instructions"> <span>${instrLabel}</span></label></div>`;
   document.getElementById("inventory").innerHTML = html;
   // Attach a full-text haystack (name + meta + source + body) to each row, in DOM order.
   // Kept as a JS property, not a DOM attribute, so large skill bodies don't bloat the markup.
   const hayOf = it => `${it.name} ${it.description || it.transport || ""} ${it.source || ""} ${it.content || ""}`.toLowerCase();
-  const hays = [...inv.skills.map(hayOf), ...inv.mcpServers.map(hayOf), `claude.md instructions ${(inv.instructions[0]?.content || "").toLowerCase()}`];
+  const instrHay = `instructions ${inv.instructions.map(i => `${i.name} ${i.content}`).join(" ")}`.toLowerCase();
+  const hays = [...inv.skills.map(hayOf), ...inv.mcpServers.map(hayOf), instrHay];
   document.querySelectorAll("#inventory label.row").forEach((row, i) => { row._hay = hays[i] || ""; });
   populateSources();
   document.querySelectorAll('input[type=checkbox]').forEach(cb => cb.addEventListener("change", onToggle));

@@ -13,6 +13,7 @@ import type {
 export interface IntrospectOptions {
   claudeDir?: string;
   agentDir?: string;
+  codexDir?: string;
 }
 
 function isObj(v: unknown): v is Record<string, unknown> {
@@ -65,6 +66,27 @@ function readSkillsDir(skillsRoot: string, source: string): SkillArtifact[] {
   return out;
 }
 
+// Read each file directly under <rulesRoot> as an instructions artifact (Codex keeps its
+// global instructions as rules files, e.g. ~/.codex/rules/default.rules).
+function readRulesDir(rulesRoot: string): InstructionsArtifact[] {
+  const out: InstructionsArtifact[] = [];
+  if (!existsSync(rulesRoot)) return out;
+  let names: string[];
+  try {
+    names = readdirSync(rulesRoot);
+  } catch {
+    return out;
+  }
+  for (const file of names) {
+    try {
+      out.push({ type: "instructions", name: `codex:rules/${file}`, content: readFileSync(join(rulesRoot, file), "utf8") });
+    } catch {
+      // skip subdirectories / unreadable files
+    }
+  }
+  return out;
+}
+
 function serversToArtifacts(servers: Record<string, unknown>, source: string): McpServerArtifact[] {
   return Object.entries(servers).map(([name, cfg]) => {
     const config = isObj(cfg) ? cfg : {};
@@ -91,7 +113,8 @@ function dedupByName<T extends { name: string }>(items: T[]): T[] {
 
 export function introspectConfig(opts: IntrospectOptions = {}): ConfigInventory {
   const claudeDir = opts.claudeDir ?? join(homedir(), ".claude");
-  const agentDir = opts.agentDir ?? join(homedir(), ".agent", "skills");
+  const agentDir = opts.agentDir ?? join(homedir(), ".agents", "skills");
+  const codexDir = opts.codexDir ?? join(homedir(), ".codex");
 
   const skillList: SkillArtifact[] = [];
   const mcpList: McpServerArtifact[] = [];
@@ -118,6 +141,9 @@ export function introspectConfig(opts: IntrospectOptions = {}): ConfigInventory 
 
   skillList.push(...readSkillsDir(agentDir, "agent"));
 
+  // Source 5: Codex skills (~/.codex/skills)
+  skillList.push(...readSkillsDir(join(codexDir, "skills"), "codex"));
+
   const instructions: InstructionsArtifact[] = [];
   const claudeMd = join(claudeDir, "CLAUDE.md");
   if (existsSync(claudeMd)) {
@@ -127,6 +153,8 @@ export function introspectConfig(opts: IntrospectOptions = {}): ConfigInventory 
       // skip unreadable CLAUDE.md
     }
   }
+  // Codex rules (~/.codex/rules/*) as instructions
+  instructions.push(...readRulesDir(join(codexDir, "rules")));
 
   return { skills: dedupByName(skillList), mcpServers: dedupByName(mcpList), instructions };
 }
