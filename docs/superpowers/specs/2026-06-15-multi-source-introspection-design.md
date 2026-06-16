@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-15
 **Status:** Approved design, pre-implementation
-**Project:** `agentpack` (extends `src/pack/` pack-core)
+**Project:** `agentgem` (extends `src/pack/` pack-core)
 **Scope:** Generalize introspection from "user-level Claude config" to an extensible **set of discovery sources**, so the inventory/Pack includes **plugin-bundled** skills + MCP servers and a **generic non-Claude agent** skill path — each artifact tagged by `source`. Borrows the multi-location discovery strategy and the `metadata.internal` hide convention from `vercel-labs/skills`.
 
 ---

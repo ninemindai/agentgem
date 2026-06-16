@@ -5,7 +5,7 @@ export interface SkillArtifact {
   type: "skill";
   name: string;
   description?: string;
-  source: "standalone";
+  source: string;
   content: string;
 }
 
@@ -14,6 +14,7 @@ export interface McpServerArtifact {
   name: string;
   transport: "stdio" | "http" | "sse";
   config: Record<string, unknown>;
+  source?: string;
 }
 
 export interface InstructionsArtifact {
@@ -24,10 +25,19 @@ export interface InstructionsArtifact {
 
 export type PackArtifact = SkillArtifact | McpServerArtifact | InstructionsArtifact;
 
+export interface ProjectInventory {
+  root: string;
+  name: string;
+  skills: SkillArtifact[];
+  mcpServers: McpServerArtifact[];
+  instructions: InstructionsArtifact[];
+}
+
 export interface ConfigInventory {
   skills: SkillArtifact[];
   mcpServers: McpServerArtifact[];
   instructions: InstructionsArtifact[];
+  projects?: ProjectInventory[];
 }
 
 export interface Pack {

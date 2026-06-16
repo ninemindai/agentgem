@@ -1,8 +1,8 @@
-# agentpack — Local Pack-Builder Web UI on AgentBack (Design)
+# agentgem — Local Pack-Builder Web UI on AgentBack (Design)
 
 **Date:** 2026-06-14
 **Status:** Approved design, pre-implementation
-**Project:** `agentpack` (new standalone repo at `/Users/rfeng/Projects/ninemind/agentpack`)
+**Project:** `agentgem` (new standalone repo at `/Users/rfeng/Projects/ninemind/agentgem`)
 **Scope:** A local web UI that introspects the operator's coding-agent config (skills, MCP servers, CLAUDE.md), lets them check what to bundle, and builds a **secret-redacted Pack** — built as an **AgentBack hybrid app** so the same `inventory`/`pack` operations are exposed as REST endpoints *and* MCP tools from one Zod contract.
 
 ---
@@ -20,13 +20,13 @@ all from the same definition. It also dogfoods AgentBack. The web page is just o
 ## 2. Stack & build model
 
 - **Deps:** `@agentback/core`, `@agentback/rest`, `@agentback/mcp`, `@agentback/mcp-http`, `@agentback/openapi` (all `0.2.2`, published to npm); `@agentback/testing` (dev). **zod v4**. TypeScript 6 with `experimentalDecorators` + `emitDecoratorMetadata`. pnpm. vitest.
-- **Build required:** AgentBack uses legacy decorators → `tsc -b` then `node dist/index.js`. **Not `tsx`.** (This is why agentpack is its own repo, not folded into the `tsx`/zod-3 `workflow-profiler`.)
+- **Build required:** AgentBack uses legacy decorators → `tsc -b` then `node dist/index.js`. **Not `tsx`.** (This is why agentgem is its own repo, not folded into the `tsx`/zod-3 `workflow-profiler`.)
 - **Scaffold:** `pnpm create agentback` (hybrid REST+MCP template), then add the pack pieces. If the template differs, mirror `examples/hello-hybrid` in the agentback repo.
 
 ## 3. Modules
 
 ```
-agentpack/
+agentgem/
   src/
     pack/                 # pack-core PORTED from workflow-profiler (pure TS, no zod dep)
       types.ts            # ConfigInventory, Pack, PackArtifact union
@@ -79,10 +79,10 @@ Free from AgentBack: `GET /openapi.json`, Swagger UI at `/explorer`, MCP over HT
 ## 9. Out of scope (later)
 
 - De-duplicating pack-core with `workflow-profiler` (shared package / cross-dep) — ported copy for now; pure files, low drift.
-- Publishing the Pack to a managed backend (Managed Agents / Flue) — separate deferred sub-project; agentpack only *builds* Packs.
+- Publishing the Pack to a managed backend (Managed Agents / Flue) — separate deferred sub-project; agentgem only *builds* Packs.
 - Plugin-bundled artifact introspection, project-level `.claude/`, commands/subagents/settings (v2 of pack-core).
-- Auth/multi-user, a hosted deployment, pack registry. agentpack is a **local** single-operator utility.
+- Auth/multi-user, a hosted deployment, pack registry. agentgem is a **local** single-operator utility.
 
 ## 10. Platform fit
 
-agentpack is the visual front door to the pack capability and the first **AgentBack** app in the ninemind platform — proving the "one Zod contract → REST + MCP" model on a real internal tool. The same `inventory`/`pack` MCP tools make config-packing available to the operator's local agent, reinforcing the agent-native thesis; the Pack it emits feeds the (deferred) publish-to-Managed-Agents step.
+agentgem is the visual front door to the pack capability and the first **AgentBack** app in the ninemind platform — proving the "one Zod contract → REST + MCP" model on a real internal tool. The same `inventory`/`pack` MCP tools make config-packing available to the operator's local agent, reinforcing the agent-native thesis; the Pack it emits feeds the (deferred) publish-to-Managed-Agents step.
