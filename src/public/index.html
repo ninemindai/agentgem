@@ -84,9 +84,11 @@ function onToggle(e){
 let t; function refresh(){ clearTimeout(t); t = setTimeout(build, 120); }
 function filterRows() {
   const q = (document.getElementById("search").value || "").trim().toLowerCase();
+  const tokens = q ? q.split(/\s+/) : [];
   const src = document.getElementById("srcFilter").value;
   document.querySelectorAll("#inventory label.row").forEach(row => {
-    const matchQ = !q || (row._hay || "").includes(q);
+    const hay = row._hay || "";
+    const matchQ = tokens.every(t => hay.includes(t)); // order-independent AND; [] => true
     const matchSrc = !src || (row.getAttribute("data-source") || "") === src;
     row.style.display = matchQ && matchSrc ? "" : "none";
   });
