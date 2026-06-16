@@ -8,7 +8,7 @@ const inv: ConfigInventory = {
     { type: "skill", name: "review", source: "standalone", content: "a" },
     { type: "skill", name: "plan", source: "standalone", content: "b" },
   ],
-  mcpServers: [{ type: "mcp_server", name: "gh", transport: "stdio", config: {} }],
+  mcpServers: [{ type: "mcp_server", name: "gh", transport: "stdio", config: { env: { GH_TOKEN: "<redacted>" } }, secretRefs: [{ name: "GH_TOKEN", location: "env.GH_TOKEN" }] }],
   instructions: [{ type: "instructions", name: "CLAUDE.md", content: "x" }],
   hooks: [{ type: "hook", name: "PreToolUse · Bash", event: "PreToolUse", matcher: "Bash", config: { hooks: [] }, source: "user" }],
 };
@@ -40,5 +40,27 @@ describe("buildPack", () => {
 
   it("throws listing available names on an unknown selection", () => {
     expect(() => buildPack(inv, { skills: ["nope"] })).toThrow(/Available: review, plan/);
+  });
+
+  it("embeds operator checks and defaults to empty when none given", () => {
+    const withChecks = buildPack(inv, { skills: ["review"] }, {
+      checks: [{ kind: "behavioral", name: "smoke", task: "do it", assertions: [] }],
+    });
+    expect(withChecks.checks.map((c) => c.name)).toEqual(["smoke"]);
+    expect(buildPack(inv, { skills: ["review"] }).checks).toEqual([]);
+  });
+
+  it("aggregates requiredSecrets from selected artifacts only (names, never values)", () => {
+    const withMcp = buildPack(inv, { mcpServers: ["gh"] });
+    expect(withMcp.requiredSecrets).toEqual([{ name: "GH_TOKEN", artifact: "gh", location: "env.GH_TOKEN" }]);
+    // a selection without the gh server carries no secret requirement
+    expect(buildPack(inv, { skills: ["review"] }).requiredSecrets).toEqual([]);
+  });
+
+  it("redacts a secret accidentally embedded in operator check text", () => {
+    const pack = buildPack(inv, { skills: ["review"] }, {
+      checks: [{ kind: "behavioral", name: "smoke", task: "use token ghp_abcdefghijklmnopqrstuvwxyz0123", assertions: [] }],
+    });
+    expect(JSON.stringify(pack.checks)).not.toContain("ghp_abcdefghijklmnopqrstuvwxyz0123");
   });
 });
