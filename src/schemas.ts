@@ -29,10 +29,18 @@ export const PackArtifactSchema = z.discriminatedUnion("type", [
   InstructionsArtifactSchema,
 ]);
 
+export const ProjectInventorySchema = z.object({
+  root: z.string(),
+  skills: z.array(SkillArtifactSchema),
+  mcpServers: z.array(McpServerArtifactSchema),
+  instructions: z.array(InstructionsArtifactSchema),
+});
+
 export const InventorySchema = z.object({
   skills: z.array(SkillArtifactSchema),
   mcpServers: z.array(McpServerArtifactSchema),
   instructions: z.array(InstructionsArtifactSchema),
+  project: ProjectInventorySchema.nullable().optional(),
 });
 
 export const PackSelectionSchema = z.union([
@@ -41,6 +49,9 @@ export const PackSelectionSchema = z.union([
     skills: z.array(z.string()).optional(),
     mcpServers: z.array(z.string()).optional(),
     includeInstructions: z.boolean().optional(),
+    projectSkills: z.array(z.string()).optional(),
+    projectMcpServers: z.array(z.string()).optional(),
+    includeProjectInstructions: z.boolean().optional(),
   }),
 ]);
 
@@ -48,9 +59,17 @@ export const PackRequestSchema = z.object({
   selection: PackSelectionSchema,
   name: z.string().optional(),
   dir: z.string().optional(),
+  project: z.string().optional(),
 });
 
-export const DirQuerySchema = z.object({ dir: z.string().optional() });
+export const DirQuerySchema = z.object({ dir: z.string().optional(), project: z.string().optional() });
+
+export const BrowseQuerySchema = z.object({ path: z.string().optional() });
+export const BrowseSchema = z.object({
+  path: z.string(),
+  parent: z.string().nullable(),
+  dirs: z.array(z.object({ name: z.string(), path: z.string() })),
+});
 
 export const PackSchema = z.object({
   name: z.string(),

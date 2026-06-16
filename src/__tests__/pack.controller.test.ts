@@ -1,7 +1,7 @@
 // src/__tests__/pack.controller.test.ts
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { tmpdir, homedir } from "node:os";
 import { join } from "node:path";
 import supertest from "supertest";
 import { RestApplication } from "@agentback/rest";
@@ -10,6 +10,7 @@ import { PackController } from "../pack.controller.js";
 let app: RestApplication;
 let client: ReturnType<typeof supertest>;
 let dir: string;
+let projRoot: string; // must live under home: the project path is clamped to home by resolveUnderHome
 
 beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), "ap-"));
@@ -17,6 +18,12 @@ beforeAll(async () => {
   writeFileSync(join(dir, "skills", "review", "SKILL.md"), "---\nname: review\ndescription: Review code\n---\n# Review\n");
   writeFileSync(join(dir, "settings.json"), JSON.stringify({ mcpServers: { gh: { command: "npx", env: { GH_TOKEN: "ghp_secret" } } } }));
   writeFileSync(join(dir, "CLAUDE.md"), "global instructions");
+
+  projRoot = mkdtempSync(join(homedir(), ".agentpack-proj-"));
+  mkdirSync(join(projRoot, ".claude", "skills", "deploy"), { recursive: true });
+  writeFileSync(join(projRoot, ".claude", "skills", "deploy", "SKILL.md"), "---\nname: deploy\ndescription: Project deploy\n---\n# Deploy\n");
+  writeFileSync(join(projRoot, ".mcp.json"), JSON.stringify({ db: { command: "pg", env: { PW: "projsecret" } } }));
+  writeFileSync(join(projRoot, "CLAUDE.md"), "project instructions");
 
   app = new RestApplication({});
   app.configure("servers.RestServer").to({ port: 0, host: "127.0.0.1" });
@@ -28,6 +35,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await app.stop();
   rmSync(dir, { recursive: true, force: true });
+  rmSync(projRoot, { recursive: true, force: true });
 });
 
 describe("PackController", () => {
@@ -46,5 +54,27 @@ describe("PackController", () => {
       .expect(200);
     expect(r.body.name).toBe("demo");
     expect(r.body.artifacts.map((a: { name: string }) => a.name)).toEqual(["review", "CLAUDE.md"]);
+  });
+
+  it("GET /api/inventory?project= returns a redacted project section", async () => {
+    const r = await client.get(`/api/inventory?dir=${encodeURIComponent(dir)}&project=${encodeURIComponent(projRoot)}`).expect(200);
+    expect(r.body.project.root).toBe(projRoot);
+    expect(r.body.project.skills.map((s: { name: string }) => s.name)).toEqual(["deploy"]);
+    expect(r.body.project.skills[0].source).toBe("project");
+    expect(r.body.project.mcpServers[0].config.env.PW).toBe("<redacted>");
+    expect(JSON.stringify(r.body)).not.toContain("projsecret");
+  });
+
+  it("GET /api/browse lists subdirectory names under home", async () => {
+    const r = await client.get(`/api/browse?path=${encodeURIComponent(projRoot)}`).expect(200);
+    expect(r.body.path).toBe(projRoot);
+    expect(r.body.dirs.map((d: { name: string }) => d.name)).toContain(".claude");
+  });
+
+  it("POST /api/pack includes selected project artifacts", async () => {
+    const r = await client.post("/api/pack")
+      .send({ dir, project: projRoot, selection: { projectSkills: ["deploy"], includeProjectInstructions: true }, name: "p" })
+      .expect(200);
+    expect(r.body.artifacts.map((a: { name: string }) => a.name)).toEqual(["deploy", "CLAUDE.md"]);
   });
 });

@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import { redactMcpConfig } from "./redact.js";
 import type {
   ConfigInventory,
+  ProjectInventory,
   SkillArtifact,
   McpServerArtifact,
   InstructionsArtifact,
@@ -157,4 +158,33 @@ export function introspectConfig(opts: IntrospectOptions = {}): ConfigInventory 
   instructions.push(...readRulesDir(join(codexDir, "rules")));
 
   return { skills: dedupByName(skillList), mcpServers: dedupByName(mcpList), instructions };
+}
+
+// Discover PROJECT-level artifacts under a chosen project root, tagged source "project".
+// Kept separate from the global inventory (its own group, its own selection namespace) so a
+// project artifact never collides with a same-named global one.
+export function introspectProject(root: string): ProjectInventory {
+  const skills: SkillArtifact[] = [];
+  const mcp: McpServerArtifact[] = [];
+  const instructions: InstructionsArtifact[] = [];
+
+  skills.push(...readSkillsDir(join(root, ".claude", "skills"), "project"));
+  skills.push(...readSkillsDir(join(root, ".agents", "skills"), "project"));
+
+  const settings = readJson(join(root, ".claude", "settings.json"));
+  if (isObj(settings) && isObj(settings.mcpServers)) mcp.push(...serversToArtifacts(settings.mcpServers, "project"));
+  mcp.push(...serversToArtifacts(serversFromMcpJson(readJson(join(root, ".mcp.json"))), "project"));
+
+  for (const file of ["CLAUDE.md", "AGENTS.md"]) {
+    const p = join(root, file);
+    if (existsSync(p)) {
+      try {
+        instructions.push({ type: "instructions", name: file, content: readFileSync(p, "utf8") });
+      } catch {
+        // skip unreadable instructions file
+      }
+    }
+  }
+
+  return { root, skills: dedupByName(skills), mcpServers: dedupByName(mcp), instructions };
 }
