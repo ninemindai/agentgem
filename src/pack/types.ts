@@ -27,6 +27,7 @@ export type PackArtifact = SkillArtifact | McpServerArtifact | InstructionsArtif
 
 export interface ProjectInventory {
   root: string;
+  name: string;
   skills: SkillArtifact[];
   mcpServers: McpServerArtifact[];
   instructions: InstructionsArtifact[];
@@ -36,7 +37,7 @@ export interface ConfigInventory {
   skills: SkillArtifact[];
   mcpServers: McpServerArtifact[];
   instructions: InstructionsArtifact[];
-  project?: ProjectInventory | null;
+  projects?: ProjectInventory[];
 }
 
 export interface Pack {

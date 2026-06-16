@@ -25,6 +25,7 @@ describe("introspectProject", () => {
   it("discovers project skills/mcp/instructions tagged source 'project', redacted", () => {
     const p = introspectProject(root);
     expect(p.root).toBe(root);
+    expect(p.name).toBe(root.split("/").pop());
     const sk = Object.fromEntries(p.skills.map((s) => [s.name, s]));
     expect(sk["deploy"].source).toBe("project");
     expect(sk["lint"].source).toBe("project");
@@ -37,6 +38,6 @@ describe("introspectProject", () => {
 
   it("returns empty arrays for a root with no project artifacts", () => {
     const nope = join(root, "nope");
-    expect(introspectProject(nope)).toEqual({ root: nope, skills: [], mcpServers: [], instructions: [] });
+    expect(introspectProject(nope)).toEqual({ root: nope, name: "nope", skills: [], mcpServers: [], instructions: [] });
   });
 });

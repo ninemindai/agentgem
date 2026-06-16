@@ -1,6 +1,12 @@
 // src/pack/buildPack.ts
 import type { ConfigInventory, Pack, PackArtifact } from "./types.js";
 
+export interface ProjectSelection {
+  skills?: string[];
+  mcpServers?: string[];
+  includeInstructions?: boolean;
+}
+
 export type PackSelection =
   | { all: true }
   | {
@@ -8,9 +14,7 @@ export type PackSelection =
       skills?: string[];
       mcpServers?: string[];
       includeInstructions?: boolean;
-      projectSkills?: string[];
-      projectMcpServers?: string[];
-      includeProjectInstructions?: boolean;
+      projects?: Record<string, ProjectSelection>; // keyed by project root path
     };
 
 export function buildPack(
@@ -19,11 +23,11 @@ export function buildPack(
   opts: { name?: string; createdFrom?: string } = {},
 ): Pack {
   const artifacts: PackArtifact[] = [];
-  const project = inventory.project;
+  const projects = inventory.projects ?? [];
 
   if ("all" in selection && selection.all) {
     artifacts.push(...inventory.skills, ...inventory.mcpServers, ...inventory.instructions);
-    if (project) artifacts.push(...project.skills, ...project.mcpServers, ...project.instructions);
+    for (const p of projects) artifacts.push(...p.skills, ...p.mcpServers, ...p.instructions);
   } else {
     const sel = selection as Exclude<PackSelection, { all: true }>;
     for (const n of sel.skills ?? []) {
@@ -37,17 +41,21 @@ export function buildPack(
       artifacts.push(a);
     }
     if (sel.includeInstructions) artifacts.push(...inventory.instructions);
-    for (const n of sel.projectSkills ?? []) {
-      const a = project?.skills.find((s) => s.name === n);
-      if (!a) throw new Error(`No project skill '${n}'. Available: ${project?.skills.map((s) => s.name).join(", ") || "(none)"}`);
-      artifacts.push(a);
+    for (const [root, ps] of Object.entries(sel.projects ?? {})) {
+      const proj = projects.find((p) => p.root === root);
+      if (!proj) throw new Error(`No project '${root}'. Loaded: ${projects.map((p) => p.root).join(", ") || "(none)"}`);
+      for (const n of ps.skills ?? []) {
+        const a = proj.skills.find((s) => s.name === n);
+        if (!a) throw new Error(`No skill '${n}' in project '${proj.name}'. Available: ${proj.skills.map((s) => s.name).join(", ") || "(none)"}`);
+        artifacts.push(a);
+      }
+      for (const n of ps.mcpServers ?? []) {
+        const a = proj.mcpServers.find((s) => s.name === n);
+        if (!a) throw new Error(`No MCP server '${n}' in project '${proj.name}'. Available: ${proj.mcpServers.map((s) => s.name).join(", ") || "(none)"}`);
+        artifacts.push(a);
+      }
+      if (ps.includeInstructions) artifacts.push(...proj.instructions);
     }
-    for (const n of sel.projectMcpServers ?? []) {
-      const a = project?.mcpServers.find((s) => s.name === n);
-      if (!a) throw new Error(`No project MCP server '${n}'. Available: ${project?.mcpServers.map((s) => s.name).join(", ") || "(none)"}`);
-      artifacts.push(a);
-    }
-    if (sel.includeProjectInstructions && project) artifacts.push(...project.instructions);
   }
 
   return { name: opts.name ?? "pack", createdFrom: opts.createdFrom ?? "unknown", artifacts };

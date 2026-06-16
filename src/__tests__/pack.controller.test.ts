@@ -56,18 +56,23 @@ describe("PackController", () => {
     expect(r.body.artifacts.map((a: { name: string }) => a.name)).toEqual(["review", "CLAUDE.md"]);
   });
 
-  it("GET /api/inventory?project= returns a redacted project section", async () => {
-    const r = await client.get(`/api/inventory?dir=${encodeURIComponent(dir)}&project=${encodeURIComponent(projRoot)}`).expect(200);
-    expect(r.body.project.root).toBe(projRoot);
-    expect(r.body.project.skills.map((s: { name: string }) => s.name)).toEqual(["deploy"]);
-    expect(r.body.project.skills[0].source).toBe("project");
-    expect(r.body.project.mcpServers[0].config.env.PW).toBe("<redacted>");
+  it("GET /api/inventory?projects= returns a redacted project section with a name", async () => {
+    const r = await client
+      .get(`/api/inventory?dir=${encodeURIComponent(dir)}&projects=${encodeURIComponent(JSON.stringify([projRoot]))}`)
+      .expect(200);
+    expect(r.body.projects).toHaveLength(1);
+    const proj = r.body.projects[0];
+    expect(proj.root).toBe(projRoot);
+    expect(proj.name).toBe(projRoot.split("/").pop());
+    expect(proj.skills.map((s: { name: string }) => s.name)).toEqual(["deploy"]);
+    expect(proj.skills[0].source).toBe("project");
+    expect(proj.mcpServers[0].config.env.PW).toBe("<redacted>");
     expect(JSON.stringify(r.body)).not.toContain("projsecret");
   });
 
-  it("POST /api/pack includes selected project artifacts", async () => {
+  it("POST /api/pack includes selected artifacts from the keyed project", async () => {
     const r = await client.post("/api/pack")
-      .send({ dir, project: projRoot, selection: { projectSkills: ["deploy"], includeProjectInstructions: true }, name: "p" })
+      .send({ dir, projects: [projRoot], selection: { projects: { [projRoot]: { skills: ["deploy"], includeInstructions: true } } }, name: "p" })
       .expect(200);
     expect(r.body.artifacts.map((a: { name: string }) => a.name)).toEqual(["deploy", "CLAUDE.md"]);
   });

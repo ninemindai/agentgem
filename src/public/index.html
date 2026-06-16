@@ -42,7 +42,9 @@
   .seg button{border:0;border-radius:0;background:transparent;color:var(--accent);padding:4px 10px;font-size:12px}
   .seg button.on{background:var(--accent);color:#fff}
   #projectBar{flex-wrap:wrap}
-  #projectBar code{background:var(--card);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+  .pchip{display:inline-flex;align-items:center;gap:2px;background:var(--card);border:1px solid var(--line);border-radius:5px;padding:2px 4px 2px 8px;font-size:13px}
+  .pchip .premove{border:0;background:transparent;color:var(--muted);padding:0 4px;cursor:pointer;font-size:13px}
+  .pchip .premove:hover{color:var(--accent)}
 </style>
 </head>
 <body>
@@ -69,26 +71,28 @@
   </div>
 </div>
 <script>
-let inv = { skills: [], mcpServers: [], instructions: [], project: null };
-let project = null; // chosen project root path, or null
-const sel = { skills: new Set(), mcpServers: new Set(), includeInstructions: false,
-  projectSkills: new Set(), projectMcpServers: new Set(), includeProjectInstructions: false };
+let inv = { skills: [], mcpServers: [], instructions: [], projects: [] };
+let projects = []; // chosen project root paths (mirrors inv.projects[].root after each load)
+const sel = { skills: new Set(), mcpServers: new Set(), includeInstructions: false, projects: {} };
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
 // Map a fine-grained source to the coding agent it belongs to.
 const AGENT_LABEL = { claude: "Claude", codex: "Codex", agents: "Agents", project: "Project" };
 function agentOf(source){ return source === "project" ? "project" : source === "agent" ? "agents" : source === "codex" ? "codex" : "claude"; }
-function group(title, items, kind) {
+function group(title, items, kind, projectRoot) {
   if (!items.length && kind !== "instructions") return "";
+  const pa = projectRoot ? ` data-project="${esc(projectRoot)}"` : "";
   const rows = items.map(it => {
     const meta = it.description || it.transport || "";
     const src = it.source ? ` <span class="src" data-src="${esc(it.source)}" title="filter by ${esc(it.source)}">${esc(it.source)}</span>` : "";
-    return `<label class="row" data-source="${esc(it.source || "")}" data-agent="${agentOf(it.source || "")}"><input type="checkbox" data-kind="${kind}" data-name="${esc(it.name)}"> <span>${esc(it.name)}${src} ${meta ? `<span class="d">— ${esc(meta)}</span>` : ""}</span><button type="button" class="view" data-kind="${kind}" data-name="${esc(it.name)}" title="view content">view</button></label>`;
+    return `<label class="row" data-source="${esc(it.source || "")}" data-agent="${agentOf(it.source || "")}"${pa}><input type="checkbox" data-kind="${kind}" data-name="${esc(it.name)}"${pa}> <span>${esc(it.name)}${src} ${meta ? `<span class="d">— ${esc(meta)}</span>` : ""}</span><button type="button" class="view" data-kind="${kind}" data-name="${esc(it.name)}"${pa} title="view content">view</button></label>`;
   }).join("");
   return `<div class="group" data-group="${kind}"><h2>${title} (${items.length})</h2>${rows}</div>`;
 }
 async function load() {
-  const url = project ? `/api/inventory?project=${encodeURIComponent(project)}` : "/api/inventory";
-  inv = await (await fetch(url)).json();
+  const qs = projects.length ? `?projects=${encodeURIComponent(JSON.stringify(projects))}` : "";
+  inv = await (await fetch("/api/inventory" + qs)).json();
+  inv.projects = inv.projects || [];
+  projects = inv.projects.map(p => p.root); // reconcile to server-canonical roots
   let html = group("Skills", inv.skills, "skills") + group("MCP servers", inv.mcpServers, "mcpServers");
   // One include-all toggle for instructions; the label lists every instruction file found
   // (CLAUDE.md, plus any ~/.codex/rules/* files).
@@ -98,20 +102,22 @@ async function load() {
   const instrAgents = [...new Set(inv.instructions.map(i => i.name.startsWith("codex:") ? "codex" : "claude"))].join(" ") || "claude";
   const instrView = inv.instructions.length ? `<button type="button" class="view" data-kind="instructions" data-name="" title="view content">view</button>` : "";
   html += `<div class="group"><h2>Instructions</h2><label class="row" data-source="" data-agent="${instrAgents}"><input type="checkbox" data-kind="instructions"> <span>${instrLabel}</span>${instrView}</label></div>`;
-  // Project section (separate group; never merged with global).
-  if (inv.project) {
-    html += group("Project skills", inv.project.skills, "projectSkills");
-    html += group("Project MCP servers", inv.project.mcpServers, "projectMcpServers");
-    if (inv.project.instructions.length) {
-      const pil = esc(inv.project.instructions.map(i => i.name).join(", "));
-      html += `<div class="group"><h2>Project instructions</h2><label class="row" data-source="project" data-agent="project"><input type="checkbox" data-kind="projectInstructions"> <span><span class="src">project</span> ${pil}</span><button type="button" class="view" data-kind="projectInstructions" data-name="" title="view content">view</button></label></div>`;
+  // One section per loaded project (separate groups, separate selection namespace by root).
+  const names = projLabels(inv.projects);
+  inv.projects.forEach((p, i) => {
+    const nm = esc(names[i]);
+    html += group(`Project · ${nm} · skills`, p.skills, "projectSkills", p.root);
+    html += group(`Project · ${nm} · MCP`, p.mcpServers, "projectMcpServers", p.root);
+    if (p.instructions.length) {
+      const pil = esc(p.instructions.map(x => x.name).join(", "));
+      html += `<div class="group"><h2>Project · ${nm} · instructions</h2><label class="row" data-source="project" data-agent="project" data-project="${esc(p.root)}"><input type="checkbox" data-kind="projectInstructions" data-project="${esc(p.root)}"> <span><span class="src">project</span> ${pil}</span><button type="button" class="view" data-kind="projectInstructions" data-name="" data-project="${esc(p.root)}" title="view content">view</button></label></div>`;
     }
-  }
+  });
   document.getElementById("inventory").innerHTML = html;
   // Attach a full-text haystack to each row by looking up its artifact (position-independent).
   document.querySelectorAll("#inventory label.row").forEach(row => {
     const cb = row.querySelector("input[type=checkbox]");
-    row._hay = hayForRow(cb && cb.dataset.kind, cb && cb.dataset.name).toLowerCase();
+    row._hay = hayForRow(cb && cb.dataset.kind, cb && cb.dataset.name, cb && cb.dataset.project).toLowerCase();
   });
   populateSources();
   populateAgents();
@@ -122,24 +128,23 @@ async function load() {
   refresh();
   filterRows();
 }
-function hayForRow(kind, name) {
-  if (kind === "skills" || kind === "projectSkills") {
-    const a = (kind === "skills" ? inv.skills : inv.project ? inv.project.skills : []).find(s => s.name === name);
-    return a ? `${a.name} ${a.description || ""} ${a.source || ""} ${a.content || ""}` : "";
-  }
-  if (kind === "mcpServers" || kind === "projectMcpServers") {
-    const a = (kind === "mcpServers" ? inv.mcpServers : inv.project ? inv.project.mcpServers : []).find(s => s.name === name);
-    return a ? `${a.name} ${a.transport || ""} ${a.source || ""} ${JSON.stringify(a.config || {})}` : "";
-  }
+function hayForRow(kind, name, projRoot) {
+  if (kind === "skills") { const a = inv.skills.find(s => s.name === name); return a ? `${a.name} ${a.description || ""} ${a.source || ""} ${a.content || ""}` : ""; }
+  if (kind === "mcpServers") { const a = inv.mcpServers.find(s => s.name === name); return a ? `${a.name} ${a.transport || ""} ${a.source || ""} ${JSON.stringify(a.config || {})}` : ""; }
   if (kind === "instructions") return `instructions ${inv.instructions.map(i => `${i.name} ${i.content}`).join(" ")}`;
-  if (kind === "projectInstructions") return `project instructions ${(inv.project ? inv.project.instructions : []).map(i => `${i.name} ${i.content}`).join(" ")}`;
+  if (kind === "projectSkills") { const a = projOf(projRoot)?.skills.find(s => s.name === name); return a ? `${a.name} ${a.description || ""} project ${a.content || ""}` : ""; }
+  if (kind === "projectMcpServers") { const a = projOf(projRoot)?.mcpServers.find(s => s.name === name); return a ? `${a.name} ${a.transport || ""} project ${JSON.stringify(a.config || {})}` : ""; }
+  if (kind === "projectInstructions") { const p = projOf(projRoot); return `project instructions ${(p ? p.instructions : []).map(i => `${i.name} ${i.content}`).join(" ")}`; }
   return "";
 }
 function restoreChecks() {
   document.querySelectorAll('#inventory input[type=checkbox]').forEach(cb => {
-    const { kind, name } = cb.dataset;
+    const { kind, name, project } = cb.dataset;
+    const ps = project ? sel.projects[project] : null;
     if (kind === "instructions") cb.checked = sel.includeInstructions;
-    else if (kind === "projectInstructions") cb.checked = sel.includeProjectInstructions;
+    else if (kind === "projectInstructions") cb.checked = !!(ps && ps.includeInstructions);
+    else if (kind === "projectSkills") cb.checked = !!(ps && ps.skills.has(name));
+    else if (kind === "projectMcpServers") cb.checked = !!(ps && ps.mcpServers.has(name));
     else if (sel[kind]) cb.checked = sel[kind].has(name);
   });
 }
@@ -148,7 +153,7 @@ function populateAgents() {
   inv.skills.forEach(s => present.add(agentOf(s.source)));
   inv.mcpServers.forEach(m => present.add(agentOf(m.source)));
   inv.instructions.forEach(i => present.add(i.name.startsWith("codex:") ? "codex" : "claude"));
-  if (inv.project && (inv.project.skills.length || inv.project.mcpServers.length || inv.project.instructions.length)) present.add("project");
+  if ((inv.projects || []).some(p => p.skills.length || p.mcpServers.length || p.instructions.length)) present.add("project");
   const types = ["claude", "codex", "agents", "project"].filter(a => present.has(a));
   const el = document.getElementById("agentBar");
   if (types.length < 2) { el.style.display = "none"; el.innerHTML = ""; return; } // nothing to choose between
@@ -159,7 +164,7 @@ function populateAgents() {
 }
 function populateSources() {
   const counts = {};
-  const all = [...inv.skills, ...inv.mcpServers, ...(inv.project ? [...inv.project.skills, ...inv.project.mcpServers] : [])];
+  const all = [...inv.skills, ...inv.mcpServers, ...(inv.projects || []).flatMap(p => [...p.skills, ...p.mcpServers])];
   all.forEach(it => { if (it.source) counts[it.source] = (counts[it.source] || 0) + 1; });
   const rank = s => s === "standalone" ? 0 : s === "user" ? 1 : s === "agent" ? 2 : s === "project" ? 4 : 3;
   const order = Object.keys(counts).sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
@@ -167,9 +172,11 @@ function populateSources() {
     `<option value="">All sources</option>` + order.map(s => `<option value="${esc(s)}">${esc(s)} (${counts[s]})</option>`).join("");
 }
 function onToggle(e){
-  const { kind, name } = e.target.dataset;
+  const { kind, name, project } = e.target.dataset;
   if (kind === "instructions") sel.includeInstructions = e.target.checked;
-  else if (kind === "projectInstructions") sel.includeProjectInstructions = e.target.checked;
+  else if (kind === "projectInstructions") projSel(project).includeInstructions = e.target.checked;
+  else if (kind === "projectSkills") { const s = projSel(project).skills; e.target.checked ? s.add(name) : s.delete(name); }
+  else if (kind === "projectMcpServers") { const s = projSel(project).mcpServers; e.target.checked ? s.add(name) : s.delete(name); }
   else { e.target.checked ? sel[kind].add(name) : sel[kind].delete(name); }
   refresh();
 }
@@ -199,13 +206,19 @@ function filterRows() {
   });
 }
 async function build(){
-  const selection = {
-    skills: [...sel.skills], mcpServers: [...sel.mcpServers], includeInstructions: sel.includeInstructions,
-    projectSkills: [...sel.projectSkills], projectMcpServers: [...sel.projectMcpServers], includeProjectInstructions: sel.includeProjectInstructions,
-  };
+  const projectsSel = {};
+  for (const [root, ps] of Object.entries(sel.projects)) {
+    const o = {};
+    if (ps.skills.size) o.skills = [...ps.skills];
+    if (ps.mcpServers.size) o.mcpServers = [...ps.mcpServers];
+    if (ps.includeInstructions) o.includeInstructions = true;
+    if (Object.keys(o).length) projectsSel[root] = o;
+  }
+  const selection = { skills: [...sel.skills], mcpServers: [...sel.mcpServers], includeInstructions: sel.includeInstructions };
+  if (Object.keys(projectsSel).length) selection.projects = projectsSel;
   const name = document.getElementById("name").value || "pack";
   const reqBody = { selection, name };
-  if (project) reqBody.project = project;
+  if (projects.length) reqBody.projects = projects;
   const pack = await (await fetch("/api/pack", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(reqBody) })).json();
   window.__pack = pack;
   document.getElementById("preview").textContent = JSON.stringify(pack, null, 2);
@@ -233,7 +246,7 @@ document.getElementById("srcFilter").addEventListener("change", filterRows);
 document.getElementById("inventory").addEventListener("click", e => {
   // View an item's content in a modal (must not toggle the row's checkbox).
   const v = e.target.closest(".view");
-  if (v) { e.preventDefault(); e.stopPropagation(); openItem(v.dataset.kind, v.dataset.name); return; }
+  if (v) { e.preventDefault(); e.stopPropagation(); openItem(v.dataset.kind, v.dataset.name, v.dataset.project); return; }
   // Click a source chip to scope the source filter to it (click again to clear).
   const chip = e.target.closest(".src");
   if (!chip) return;
@@ -282,18 +295,18 @@ function renderModalBody() {
   else el.innerHTML = highlight(modalState.kind, modalState.body);
   document.querySelectorAll("#modal-modes button").forEach(b => b.classList.toggle("on", b.dataset.mode === modalState.mode));
 }
-function openItem(kind, name) {
+function openItem(kind, name, projRoot) {
   let title = name, sub = "", body = "";
   if (kind === "skills" || kind === "projectSkills") {
-    const a = (kind === "skills" ? inv.skills : inv.project ? inv.project.skills : []).find(s => s.name === name);
+    const a = (kind === "skills" ? inv.skills : (projOf(projRoot)?.skills || [])).find(s => s.name === name);
     if (!a) return;
     sub = a.source || ""; body = a.content || "";
   } else if (kind === "mcpServers" || kind === "projectMcpServers") {
-    const a = (kind === "mcpServers" ? inv.mcpServers : inv.project ? inv.project.mcpServers : []).find(s => s.name === name);
+    const a = (kind === "mcpServers" ? inv.mcpServers : (projOf(projRoot)?.mcpServers || [])).find(s => s.name === name);
     if (!a) return;
     sub = `${a.source || ""} · ${a.transport}`; body = JSON.stringify(a.config, null, 2);
   } else if (kind === "instructions" || kind === "projectInstructions") {
-    const list = kind === "instructions" ? inv.instructions : inv.project ? inv.project.instructions : [];
+    const list = kind === "instructions" ? inv.instructions : (projOf(projRoot)?.instructions || []);
     title = kind === "instructions" ? "Instructions" : "Project instructions";
     sub = list.map(i => i.name).join(", ");
     body = list.map(i => `### ${i.name}\n\n${i.content}`).join("\n\n──────────\n\n");
@@ -315,16 +328,31 @@ document.getElementById("modal-x").addEventListener("click", closeModal);
 document.getElementById("modal").addEventListener("click", e => { if (e.target.id === "modal") closeModal(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal(); });
 
-// --- Project root: OS-native folder picker (the server pops the dialog; no in-page browser). ---
+// --- Projects: OS-native folder picker; multiple roots, each labeled by name. ---
+function projOf(root) { return (inv.projects || []).find(p => p.root === root); }
+function projSel(root) { return (sel.projects[root] ??= { skills: new Set(), mcpServers: new Set(), includeInstructions: false }); }
+// Display name = basename, disambiguated by parent dir when two projects share a basename.
+function projLabels(projs) {
+  const counts = {};
+  projs.forEach(p => (counts[p.name] = (counts[p.name] || 0) + 1));
+  return projs.map(p => (counts[p.name] > 1 ? `${p.name} (…/${p.root.split("/").slice(-2, -1)[0] || ""})` : p.name));
+}
 function renderProjectBar() {
   const el = document.getElementById("projectBar");
-  el.innerHTML = project
-    ? `<span class="d">Project:</span> <code>${esc(project)}</code><button id="changeProject" class="ghost">change</button><button id="clearProject" class="ghost">✕ clear</button>`
-    : `<button id="addProject" class="ghost">📁 Add project…</button><span class="d">discover skills, MCP &amp; instructions from a project root</span>`;
+  const names = projLabels(inv.projects || []);
+  const chips = (inv.projects || []).map((p, i) =>
+    `<span class="pchip" title="${esc(p.root)}">📁 ${esc(names[i])}<button class="premove ghost" data-root="${esc(p.root)}" title="remove project">✕</button></span>`).join("");
+  el.innerHTML = (chips ? `<span class="d">Projects:</span> ${chips} ` : "")
+    + `<button id="addProject" class="ghost">📁 Add project…</button>`
+    + (chips ? "" : `<span class="d">discover skills, MCP &amp; instructions from project roots</span>`);
 }
-function setProject(path) {
-  project = path || null;
-  sel.projectSkills.clear(); sel.projectMcpServers.clear(); sel.includeProjectInstructions = false;
+function addProject(path) {
+  const clean = (path || "").replace(/\/+$/, "");
+  if (clean && !projects.includes(clean)) { projects.push(clean); load(); }
+}
+function removeProject(root) {
+  projects = projects.filter(r => r !== root);
+  delete sel.projects[root];
   load();
 }
 async function pickProject() {
@@ -332,14 +360,15 @@ async function pickProject() {
   el.style.opacity = ".5"; // brief hint while the native dialog is open
   try {
     const r = await (await fetch("/api/pick-folder")).json();
-    if (r && r.path) setProject(r.path); // null = user cancelled -> keep current
+    if (r && r.path) addProject(r.path); // null = user cancelled -> keep current
   } finally {
     el.style.opacity = "";
   }
 }
 document.getElementById("projectBar").addEventListener("click", e => {
-  if (e.target.closest("#addProject") || e.target.closest("#changeProject")) pickProject();
-  else if (e.target.closest("#clearProject")) setProject(null);
+  const rm = e.target.closest(".premove");
+  if (rm) { removeProject(rm.dataset.root); return; }
+  if (e.target.closest("#addProject")) pickProject();
 });
 document.getElementById("search").addEventListener("input", filterRows);
 load();

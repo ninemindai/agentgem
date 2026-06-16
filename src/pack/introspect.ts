@@ -1,6 +1,6 @@
 // src/pack/introspect.ts
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { homedir } from "node:os";
 import { redactMcpConfig } from "./redact.js";
 import type {
@@ -186,5 +186,5 @@ export function introspectProject(root: string): ProjectInventory {
     }
   }
 
-  return { root, skills: dedupByName(skills), mcpServers: dedupByName(mcp), instructions };
+  return { root, name: basename(root), skills: dedupByName(skills), mcpServers: dedupByName(mcp), instructions };
 }

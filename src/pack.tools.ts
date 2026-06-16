@@ -7,23 +7,24 @@ import type { ConfigInventory } from "./pack/types.js";
 import { PackSelectionSchema } from "./schemas.js";
 import { resolveDirs, resolveProject } from "./resolveDir.js";
 
-const InventoryInput = z.object({ dir: z.string().optional(), project: z.string().optional() });
-const PackInput = z.object({ selection: PackSelectionSchema, name: z.string().optional(), dir: z.string().optional(), project: z.string().optional() });
+const InventoryInput = z.object({ dir: z.string().optional(), projects: z.array(z.string()).optional() });
+const PackInput = z.object({ selection: PackSelectionSchema, name: z.string().optional(), dir: z.string().optional(), projects: z.array(z.string()).optional() });
 
-function introspectAll(dir?: string, project?: string): ConfigInventory {
+function introspectAll(dir?: string, projects?: string[]): ConfigInventory {
   const inventory = introspectConfig(resolveDirs(dir));
-  if (project && project.length > 0) inventory.project = introspectProject(resolveProject(project));
+  const roots = (projects ?? []).map(resolveProject).filter((r, i, a) => r.length > 0 && a.indexOf(r) === i);
+  if (roots.length) inventory.projects = roots.map(introspectProject);
   return inventory;
 }
 
 @mcpServer()
 export class PackTools {
   @tool("inventory", {
-    description: "Introspect the local coding-agent config (skills, MCP servers, CLAUDE.md). Pass a project root to also include project-level artifacts. Secrets are redacted.",
+    description: "Introspect the local coding-agent config (skills, MCP servers, CLAUDE.md). Pass project roots to also include project-level artifacts. Secrets are redacted.",
     input: InventoryInput,
   })
   async inventory(input: z.infer<typeof InventoryInput>) {
-    return introspectAll(input.dir, input.project);
+    return introspectAll(input.dir, input.projects);
   }
 
   @tool("pack", {
@@ -32,6 +33,6 @@ export class PackTools {
   })
   async pack(input: z.infer<typeof PackInput>) {
     const dirs = resolveDirs(input.dir);
-    return buildPack(introspectAll(input.dir, input.project), input.selection, { name: input.name ?? "pack", createdFrom: dirs.claudeDir });
+    return buildPack(introspectAll(input.dir, input.projects), input.selection, { name: input.name ?? "pack", createdFrom: dirs.claudeDir });
   }
 }

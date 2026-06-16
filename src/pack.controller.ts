@@ -12,13 +12,13 @@ import { pickFolder } from "./pickFolder.js";
 export class PackController {
   @get("/inventory", { query: DirQuerySchema, response: InventorySchema })
   async inventory(input: { query: z.infer<typeof DirQuerySchema> }): Promise<z.infer<typeof InventorySchema>> {
-    return introspectAll(input.query.dir, input.query.project);
+    return introspectAll(input.query.dir, parseProjectsQuery(input.query.projects));
   }
 
   @post("/pack", { body: PackRequestSchema, response: PackSchema })
   async pack(input: { body: z.infer<typeof PackRequestSchema> }): Promise<z.infer<typeof PackSchema>> {
     const dirs = resolveDirs(input.body.dir);
-    const inventory = introspectAll(input.body.dir, input.body.project);
+    const inventory = introspectAll(input.body.dir, input.body.projects);
     return buildPack(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
   }
 
@@ -29,10 +29,22 @@ export class PackController {
   }
 }
 
-// Compose the global inventory with an optional project section. The project root is the
-// user's explicit native-picker selection; we only canonicalize it to an absolute path.
-function introspectAll(dir: string | undefined, project: string | undefined): ConfigInventory {
+// Query params can't carry arrays cleanly, so `projects` arrives JSON-encoded.
+function parseProjectsQuery(s: string | undefined): string[] {
+  if (!s) return [];
+  try {
+    const v = JSON.parse(s);
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+// Compose the global inventory with project sections. Each root is the user's explicit
+// native-picker selection; we canonicalize to absolute paths and dedup.
+function introspectAll(dir: string | undefined, projects: string[] | undefined): ConfigInventory {
   const inventory = introspectConfig(resolveDirs(dir));
-  if (project && project.length > 0) inventory.project = introspectProject(resolveProject(project));
+  const roots = (projects ?? []).map(resolveProject).filter((r, i, a) => r.length > 0 && a.indexOf(r) === i);
+  if (roots.length) inventory.projects = roots.map(introspectProject);
   return inventory;
 }
