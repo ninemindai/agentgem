@@ -95,7 +95,8 @@ function readRulesDir(rulesRoot: string): InstructionsArtifact[] {
 function serversToArtifacts(servers: Record<string, unknown>, source: string): McpServerArtifact[] {
   return Object.entries(servers).map(([name, cfg]) => {
     const config = isObj(cfg) ? cfg : {};
-    return { type: "mcp_server", name, transport: inferTransport(config), config: redactMcpConfig(config), source };
+    const { config: redacted, secrets } = redactMcpConfig(config);
+    return { type: "mcp_server", name, transport: inferTransport(config), config: redacted, source, secretRefs: secrets };
   });
 }
 
@@ -116,7 +117,8 @@ function hooksFromConfig(parsed: unknown, source: string): HookArtifact[] {
     for (const g of groups) {
       if (!isObj(g)) continue;
       const matcher = typeof g.matcher === "string" && g.matcher.length ? g.matcher : undefined;
-      out.push({ type: "hook", name: `${event}${matcher ? ` · ${matcher}` : ""}`, event, matcher, config: redactMcpConfig(g), source });
+      const { config: redacted, secrets } = redactMcpConfig(g);
+      out.push({ type: "hook", name: `${event}${matcher ? ` · ${matcher}` : ""}`, event, matcher, config: redacted, source, secretRefs: secrets });
     }
   }
   return out;

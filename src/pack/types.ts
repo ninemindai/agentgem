@@ -1,6 +1,11 @@
 // src/pack/types.ts
 export type ArtifactType = "skill" | "mcp_server" | "instructions" | "hook";
 
+export interface SecretRef {
+  name: string;     // leaf key, e.g. "OPENAI_API_KEY"
+  location: string; // dotted path within the artifact config, e.g. "env.OPENAI_API_KEY"
+}
+
 export interface SkillArtifact {
   type: "skill";
   name: string;
@@ -15,6 +20,7 @@ export interface McpServerArtifact {
   transport: "stdio" | "http" | "sse";
   config: Record<string, unknown>;
   source?: string;
+  secretRefs?: SecretRef[]; // names+locations redaction stripped from `config`
 }
 
 export interface InstructionsArtifact {
@@ -32,6 +38,7 @@ export interface HookArtifact {
   matcher?: string;
   config: Record<string, unknown>;
   source?: string;
+  secretRefs?: SecretRef[]; // names+locations redaction stripped from `config`
 }
 
 export type PackArtifact = SkillArtifact | McpServerArtifact | InstructionsArtifact | HookArtifact;
