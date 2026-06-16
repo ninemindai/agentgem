@@ -58,7 +58,7 @@
 </style>
 </head>
 <body>
-<header><h1>agentgem</h1><span class="muted">Pack Builder · introspecting <code>~/.claude</code> · <code>~/.agents</code> · <code>~/.codex</code></span></header>
+<header><h1>agentgem</h1><span class="muted">Pack Builder · introspecting <code>~/.claude</code> · <code>~/.agents</code> · <code>~/.codex</code> · <code>~/.hermes</code></span></header>
 <main>
   <section class="pane left">
     <div class="bar"><input id="name" type="text" placeholder="pack name" value="pack" style="flex:1" /></div>
@@ -86,8 +86,10 @@ let projects = []; // chosen project root paths (mirrors inv.projects[].root aft
 const sel = { skills: new Set(), mcpServers: new Set(), includeInstructions: false, hooks: new Set(), projects: {} };
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
 // Map a fine-grained source to the coding agent it belongs to.
-const AGENT_LABEL = { claude: "Claude", codex: "Codex", agents: "Agents", project: "Project" };
-function agentOf(source){ return source === "project" ? "project" : source === "agent" ? "agents" : source === "codex" ? "codex" : "claude"; }
+const AGENT_LABEL = { claude: "Claude", codex: "Codex", agents: "Agents", hermes: "Hermes", project: "Project" };
+function agentOf(source){ return source === "project" ? "project" : source === "agent" ? "agents" : source === "codex" ? "codex" : source === "hermes" ? "hermes" : "claude"; }
+// Instruction artifacts carry no source; map by filename to an agent.
+function instrAgentOf(name){ return name === "SOUL.md" ? "hermes" : name.startsWith("codex:") ? "codex" : "claude"; }
 function group(title, items, kind, projectRoot) {
   if (!items.length && kind !== "instructions") return "";
   const pa = projectRoot ? ` data-project="${esc(projectRoot)}"` : "";
@@ -109,7 +111,7 @@ async function load() {
   const instrLabel = inv.instructions.length
     ? esc(inv.instructions.map(i => i.name).join(", "))
     : `CLAUDE.md <span class="d">(none)</span>`;
-  const instrAgents = [...new Set(inv.instructions.map(i => i.name.startsWith("codex:") ? "codex" : "claude"))].join(" ") || "claude";
+  const instrAgents = [...new Set(inv.instructions.map(i => instrAgentOf(i.name)))].join(" ") || "claude";
   const instrView = inv.instructions.length ? `<button type="button" class="view" data-kind="instructions" data-name="" title="view content">view</button>` : "";
   html += `<div class="group"><h2>Instructions</h2><label class="row" data-source="" data-agent="${instrAgents}"><input type="checkbox" data-kind="instructions"> <span>${instrLabel}</span>${instrView}</label></div>`;
   html += group("Hooks", inv.hooks, "hooks");
@@ -167,10 +169,10 @@ function populateAgents() {
   const present = new Set();
   inv.skills.forEach(s => present.add(agentOf(s.source)));
   inv.mcpServers.forEach(m => present.add(agentOf(m.source)));
-  inv.instructions.forEach(i => present.add(i.name.startsWith("codex:") ? "codex" : "claude"));
+  inv.instructions.forEach(i => present.add(instrAgentOf(i.name)));
   inv.hooks.forEach(h => present.add(agentOf(h.source)));
   if ((inv.projects || []).some(p => p.skills.length || p.mcpServers.length || p.instructions.length || p.hooks.length)) present.add("project");
-  const types = ["claude", "codex", "agents", "project"].filter(a => present.has(a));
+  const types = ["claude", "codex", "agents", "hermes", "project"].filter(a => present.has(a));
   const el = document.getElementById("agentBar");
   if (types.length < 2) { el.style.display = "none"; el.innerHTML = ""; return; } // nothing to choose between
   el.style.display = "";

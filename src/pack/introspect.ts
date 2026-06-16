@@ -16,6 +16,7 @@ export interface IntrospectOptions {
   claudeDir?: string;
   agentDir?: string;
   codexDir?: string;
+  hermesDir?: string;
 }
 
 function isObj(v: unknown): v is Record<string, unknown> {
@@ -44,7 +45,9 @@ function inferTransport(config: Record<string, unknown>): "stdio" | "http" | "ss
   return "stdio";
 }
 
-function readSkillsDir(skillsRoot: string, source: string): SkillArtifact[] {
+// Read <skillsRoot>/<name>/<file> skills. `files` lists the candidate body filenames to try
+// in order (Claude/Codex/Agents use SKILL.md; Hermes uses DESCRIPTION.md).
+function readSkillsDir(skillsRoot: string, source: string, files: string[] = ["SKILL.md"]): SkillArtifact[] {
   const out: SkillArtifact[] = [];
   if (!existsSync(skillsRoot)) return out;
   let names: string[];
@@ -54,8 +57,8 @@ function readSkillsDir(skillsRoot: string, source: string): SkillArtifact[] {
     return out;
   }
   for (const name of names) {
-    const skillMd = join(skillsRoot, name, "SKILL.md");
-    if (!existsSync(skillMd)) continue;
+    const skillMd = files.map((f) => join(skillsRoot, name, f)).find((p) => existsSync(p));
+    if (!skillMd) continue;
     try {
       const content = readFileSync(skillMd, "utf8");
       const { description, internal } = parseFrontmatter(content);
@@ -147,6 +150,7 @@ export function introspectConfig(opts: IntrospectOptions = {}): ConfigInventory 
   const claudeDir = opts.claudeDir ?? join(homedir(), ".claude");
   const agentDir = opts.agentDir ?? join(homedir(), ".agents", "skills");
   const codexDir = opts.codexDir ?? join(homedir(), ".codex");
+  const hermesDir = opts.hermesDir ?? join(homedir(), ".hermes");
 
   const skillList: SkillArtifact[] = [];
   const mcpList: McpServerArtifact[] = [];
@@ -179,6 +183,10 @@ export function introspectConfig(opts: IntrospectOptions = {}): ConfigInventory 
   // Source 5: Codex skills (~/.codex/skills)
   skillList.push(...readSkillsDir(join(codexDir, "skills"), "codex"));
 
+  // Source 6: Hermes skills (~/.hermes/skills/<name>/DESCRIPTION.md, some SKILL.md).
+  // Hermes secrets (.env, auth.json, config.yaml) are never read.
+  skillList.push(...readSkillsDir(join(hermesDir, "skills"), "hermes", ["SKILL.md", "DESCRIPTION.md"]));
+
   const instructions: InstructionsArtifact[] = [];
   const claudeMd = join(claudeDir, "CLAUDE.md");
   if (existsSync(claudeMd)) {
@@ -190,6 +198,15 @@ export function introspectConfig(opts: IntrospectOptions = {}): ConfigInventory 
   }
   // Codex rules (~/.codex/rules/*) as instructions
   instructions.push(...readRulesDir(join(codexDir, "rules")));
+  // Hermes persona (~/.hermes/SOUL.md) as instructions
+  const soul = join(hermesDir, "SOUL.md");
+  if (existsSync(soul)) {
+    try {
+      instructions.push({ type: "instructions", name: "SOUL.md", content: readFileSync(soul, "utf8") });
+    } catch {
+      // skip unreadable SOUL.md
+    }
+  }
 
   return { skills: dedupByName(skillList), mcpServers: dedupByName(mcpList), instructions, hooks: uniqueHookNames(hookList) };
 }

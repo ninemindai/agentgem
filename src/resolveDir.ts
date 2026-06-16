@@ -16,8 +16,8 @@ export function resolveProject(p: string): string {
 // claude dir is ~/.claude and its parent is the home dir — giving ~/.agents/skills and
 // ~/.codex. When `dir` is overridden (tests, non-default homes) the agent/codex roots
 // resolve relative to that same parent, keeping introspection self-contained.
-export function resolveDirs(dir?: string): { claudeDir: string; agentDir: string; codexDir: string } {
+export function resolveDirs(dir?: string): { claudeDir: string; agentDir: string; codexDir: string; hermesDir: string } {
   const claudeDir = resolveDir(dir);
   const home = dirname(claudeDir);
-  return { claudeDir, agentDir: join(home, ".agents", "skills"), codexDir: join(home, ".codex") };
+  return { claudeDir, agentDir: join(home, ".agents", "skills"), codexDir: join(home, ".codex"), hermesDir: join(home, ".hermes") };
 }
