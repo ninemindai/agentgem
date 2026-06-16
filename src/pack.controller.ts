@@ -3,8 +3,12 @@ import type { z } from "zod";
 import { api, get, post } from "@agentback/openapi";
 import { introspectConfig, introspectProject } from "./pack/introspect.js";
 import { buildPack } from "./pack/buildPack.js";
+import { scaffoldChecks } from "./pack/checks.js";
 import type { ConfigInventory } from "./pack/types.js";
-import { InventorySchema, PackSchema, PackRequestSchema, DirQuerySchema, PickQuerySchema, PickFolderSchema } from "./schemas.js";
+import {
+  InventorySchema, PackSchema, PackRequestSchema, DirQuerySchema, PickQuerySchema, PickFolderSchema,
+  ScaffoldChecksRequestSchema, ScaffoldChecksResponseSchema,
+} from "./schemas.js";
 import { resolveDirs, resolveProject } from "./resolveDir.js";
 import { pickFolder } from "./pickFolder.js";
 
@@ -19,7 +23,19 @@ export class PackController {
   async pack(input: { body: z.infer<typeof PackRequestSchema> }): Promise<z.infer<typeof PackSchema>> {
     const dirs = resolveDirs(input.body.dir);
     const inventory = introspectAll(input.body.dir, input.body.projects);
-    return buildPack(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
+    return buildPack(inventory, input.body.selection, {
+      name: input.body.name ?? "pack",
+      createdFrom: dirs.claudeDir,
+      checks: input.body.checks,
+    });
+  }
+
+  @post("/scaffold-checks", { body: ScaffoldChecksRequestSchema, response: ScaffoldChecksResponseSchema })
+  async scaffoldChecks(input: { body: z.infer<typeof ScaffoldChecksRequestSchema> }): Promise<z.infer<typeof ScaffoldChecksResponseSchema>> {
+    const dirs = resolveDirs(input.body.dir);
+    const inventory = introspectAll(input.body.dir, input.body.projects);
+    const pack = buildPack(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
+    return { checks: scaffoldChecks(pack) };
   }
 
   // Pop the OS-native folder picker and return the chosen absolute path (null if cancelled).

@@ -1,5 +1,6 @@
 // src/pack/buildPack.ts
-import type { ConfigInventory, Pack, PackArtifact } from "./types.js";
+import type { ConfigInventory, Pack, PackArtifact, PackCheck, SecretRequirement } from "./types.js";
+import { redactMcpConfig } from "./redact.js";
 
 export interface ProjectSelection {
   skills?: string[];
@@ -22,7 +23,7 @@ export type PackSelection =
 export function buildPack(
   inventory: ConfigInventory,
   selection: PackSelection,
-  opts: { name?: string; createdFrom?: string } = {},
+  opts: { name?: string; createdFrom?: string; checks?: PackCheck[] } = {},
 ): Pack {
   const artifacts: PackArtifact[] = [];
   const projects = inventory.projects ?? [];
@@ -70,5 +71,24 @@ export function buildPack(
     }
   }
 
-  return { name: opts.name ?? "pack", createdFrom: opts.createdFrom ?? "unknown", artifacts };
+  const requiredSecrets: SecretRequirement[] = [];
+  for (const a of artifacts) {
+    if ((a.type === "mcp_server" || a.type === "hook") && a.secretRefs) {
+      for (const ref of a.secretRefs) requiredSecrets.push({ name: ref.name, artifact: a.name, location: ref.location });
+    }
+  }
+
+  // Embed operator checks, but run each through redaction first: a check's task/setup is
+  // operator-authored test data and must not smuggle a raw secret into the shared pack.
+  const checks = (opts.checks ?? []).map(
+    (c) => redactMcpConfig(c as unknown as Record<string, unknown>).config as unknown as PackCheck,
+  );
+
+  return {
+    name: opts.name ?? "pack",
+    createdFrom: opts.createdFrom ?? "unknown",
+    artifacts,
+    checks,
+    requiredSecrets,
+  };
 }
