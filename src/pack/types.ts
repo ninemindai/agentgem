@@ -5,7 +5,7 @@ export interface SkillArtifact {
   type: "skill";
   name: string;
   description?: string;
-  source: "standalone";
+  source: string;
   content: string;
 }
 
@@ -14,6 +14,7 @@ export interface McpServerArtifact {
   name: string;
   transport: "stdio" | "http" | "sse";
   config: Record<string, unknown>;
+  source?: string;
 }
 
 export interface InstructionsArtifact {

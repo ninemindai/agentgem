@@ -5,7 +5,7 @@ export const SkillArtifactSchema = z.object({
   type: z.literal("skill"),
   name: z.string(),
   description: z.string().optional(),
-  source: z.literal("standalone"),
+  source: z.string(),
   content: z.string(),
 });
 
@@ -14,6 +14,7 @@ export const McpServerArtifactSchema = z.object({
   name: z.string(),
   transport: z.enum(["stdio", "http", "sse"]),
   config: z.record(z.string(), z.unknown()),
+  source: z.string().optional(),
 });
 
 export const InstructionsArtifactSchema = z.object({
