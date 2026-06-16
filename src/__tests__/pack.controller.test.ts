@@ -76,4 +76,26 @@ describe("PackController", () => {
       .expect(200);
     expect(r.body.artifacts.map((a: { name: string }) => a.name)).toEqual(["deploy", "CLAUDE.md"]);
   });
+
+  it("POST /api/pack embeds checks and declares requiredSecrets (names, not values)", async () => {
+    const r = await client
+      .post("/api/pack")
+      .send({
+        dir,
+        selection: { skills: ["review"], mcpServers: ["gh"] },
+        checks: [{ kind: "behavioral", name: "smoke", task: "do it with ghp_zzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", assertions: [] }],
+      })
+      .expect(200);
+    expect(r.body.checks.map((c: { name: string }) => c.name)).toEqual(["smoke"]);
+    expect(r.body.requiredSecrets).toContainEqual({ name: "GH_TOKEN", artifact: "gh", location: "env.GH_TOKEN" });
+    expect(JSON.stringify(r.body)).not.toContain("ghp_secret"); // MCP secret value never present
+    expect(JSON.stringify(r.body.checks)).not.toContain("ghp_zzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"); // check text redacted too
+  });
+
+  it("POST /api/scaffold-checks returns editable drafts (behavioral + skillspector for a skill)", async () => {
+    const r = await client.post("/api/scaffold-checks").send({ dir, selection: { skills: ["review"] } }).expect(200);
+    const kinds = r.body.checks.map((c: { kind: string }) => c.kind);
+    expect(kinds).toContain("behavioral");
+    expect(kinds).toContain("external");
+  });
 });
