@@ -51,6 +51,12 @@
   .prow .pm{margin-left:auto;color:var(--muted);font-size:12px;white-space:nowrap}
   .redtag{color:var(--accent);font-size:11px}
   pre.json{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:12px;font:12px/1.5 ui-monospace,monospace;white-space:pre-wrap;word-break:break-word;margin:0}
+  #filterPanel{border:1px solid var(--line);border-radius:6px;padding:10px 12px;margin-bottom:12px;background:rgba(154,51,36,.02)}
+  #filterPanel[hidden]{display:none}
+  #filterPanel .bar{margin-bottom:8px}
+  #filterPanel .bar:last-child{margin-bottom:0}
+  .flabel{width:54px;flex:none}
+  #filtersToggle.on{background:var(--accent);color:#fff}
   #projectBar{flex-wrap:wrap}
   .pchip{display:inline-flex;align-items:center;gap:2px;background:var(--card);border:1px solid var(--line);border-radius:5px;padding:2px 4px 2px 8px;font-size:13px}
   .pchip .premove{border:0;background:transparent;color:var(--muted);padding:0 4px;cursor:pointer;font-size:13px}
@@ -62,10 +68,13 @@
 <main>
   <section class="pane left">
     <div class="bar"><input id="name" type="text" placeholder="pack name" value="pack" style="flex:1" /></div>
-    <div class="bar"><input id="search" type="text" placeholder="search names, descriptions, contents…" style="flex:1" /><select id="srcFilter"><option value="">All sources</option></select></div>
+    <div class="bar"><input id="search" type="text" placeholder="search names, descriptions, contents…" style="flex:1" /><button id="filtersToggle" class="ghost">Filters ▾</button></div>
     <div class="bar" id="projectBar"></div>
-    <div class="bar" id="agentBar"></div>
-    <div class="bar" id="typeBar"></div>
+    <div id="filterPanel" hidden>
+      <div class="bar"><span class="flabel d">Source</span><select id="srcFilter" style="flex:1"><option value="">All sources</option></select></div>
+      <div class="bar" id="agentBar"></div>
+      <div class="bar" id="typeBar"></div>
+    </div>
     <div class="bar" id="selbar"><strong style="flex:1;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)">Selection</strong><button id="all" class="ghost">Select all shown</button><button id="none" class="ghost">Clear</button></div>
     <div id="inventory">Loading…</div>
   </section>
@@ -254,6 +263,7 @@ function filterRows() {
     if (h2 && !h2.dataset.base) h2.dataset.base = h2.textContent.replace(/\s*—\s*showing.*$/, "");
     if (h2) h2.textContent = active ? `${h2.dataset.base} — showing ${shown}` : h2.dataset.base;
   });
+  updateFilterBadge();
 }
 async function build(){
   // Prune the selection to what's currently in the inventory. A stale checkbox (e.g. after a
@@ -490,6 +500,22 @@ document.getElementById("projectBar").addEventListener("click", e => {
   if (e.target.closest("#addProject")) pickProject();
 });
 document.getElementById("search").addEventListener("input", filterRows);
+// Collapsible filters: default hidden; the button shows a "• N" badge for active constraints.
+let filterPanelOpen = false;
+function updateFilterBadge() {
+  const srcOn = !!document.getElementById("srcFilter").value;
+  const agentOn = [...document.querySelectorAll(".agentChk")].some(c => !c.checked);
+  const typeOn = [...document.querySelectorAll(".typeChk")].some(c => !c.checked);
+  const n = (srcOn ? 1 : 0) + (agentOn ? 1 : 0) + (typeOn ? 1 : 0);
+  const btn = document.getElementById("filtersToggle");
+  btn.textContent = `Filters${n ? ` • ${n}` : ""} ${filterPanelOpen ? "▲" : "▾"}`;
+  btn.classList.toggle("on", n > 0);
+}
+document.getElementById("filtersToggle").addEventListener("click", () => {
+  filterPanelOpen = !filterPanelOpen;
+  document.getElementById("filterPanel").hidden = !filterPanelOpen;
+  updateFilterBadge();
+});
 load();
 </script>
 </body>
