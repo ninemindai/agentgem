@@ -36,6 +36,8 @@ describe("PackController", () => {
     expect(r.body.skills.map((s: { name: string }) => s.name)).toEqual(["review"]);
     expect(r.body.mcpServers[0].config.env.GH_TOKEN).toBe("<redacted>");
     expect(JSON.stringify(r.body)).not.toContain("ghp_secret");
+    expect(r.body.skills[0].source).toBe("standalone");
+    expect(r.body.mcpServers[0].source).toBe("user");
   });
 
   it("POST /api/pack builds a pack from a selection", async () => {
