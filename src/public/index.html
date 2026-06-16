@@ -13,7 +13,9 @@
   .group{margin-bottom:18px}.group h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:0 0 8px}
   label.row{display:flex;gap:8px;align-items:flex-start;padding:4px 0;cursor:pointer}
   label.row .d{color:var(--muted);font-size:12px}
-  label.row .src{font:11px/1 ui-monospace,monospace;color:var(--accent);border:1px solid var(--line);border-radius:4px;padding:1px 4px;margin-left:4px}
+  label.row .src{font:11px/1 ui-monospace,monospace;color:var(--accent);border:1px solid var(--line);border-radius:4px;padding:1px 4px;margin-left:4px;cursor:pointer}
+  label.row .src:hover{background:var(--accent);color:#fff}
+  select{padding:6px 8px;border:1px solid var(--line);border-radius:5px;font:inherit;background:var(--card);max-width:48%}
   .bar{display:flex;gap:8px;align-items:center;margin-bottom:12px}
   input[type=text]{flex:1;padding:6px 8px;border:1px solid var(--line);border-radius:5px;font:inherit}
   button{padding:6px 12px;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:5px;cursor:pointer;font:inherit}
@@ -27,7 +29,7 @@
 <main>
   <section class="pane left">
     <div class="bar"><input id="name" type="text" placeholder="pack name" value="pack" /><button id="all" class="ghost">Select all</button></div>
-    <div class="bar"><input id="search" type="text" placeholder="search skills, MCP servers, sources…" style="flex:1" /></div>
+    <div class="bar"><input id="search" type="text" placeholder="search names, descriptions, contents…" style="flex:1" /><select id="srcFilter"><option value="">All sources</option></select></div>
     <div id="inventory">Loading…</div>
   </section>
   <section class="pane right">
@@ -44,21 +46,34 @@ function group(title, items, kind) {
   if (!items.length && kind !== "instructions") return "";
   const rows = items.map(it => {
     const meta = it.description || it.transport || "";
-    const src = it.source ? ` <span class="src">${esc(it.source)}</span>` : "";
-    const hay = `${it.name} ${meta} ${it.source || ""}`.toLowerCase();
-    return `<label class="row" data-search="${esc(hay)}"><input type="checkbox" data-kind="${kind}" data-name="${esc(it.name)}"> <span>${esc(it.name)}${src} ${meta ? `<span class="d">— ${esc(meta)}</span>` : ""}</span></label>`;
+    const src = it.source ? ` <span class="src" data-src="${esc(it.source)}" title="filter by ${esc(it.source)}">${esc(it.source)}</span>` : "";
+    return `<label class="row" data-source="${esc(it.source || "")}"><input type="checkbox" data-kind="${kind}" data-name="${esc(it.name)}"> <span>${esc(it.name)}${src} ${meta ? `<span class="d">— ${esc(meta)}</span>` : ""}</span></label>`;
   }).join("");
   return `<div class="group" data-group="${kind}"><h2>${title} (${items.length})</h2>${rows}</div>`;
 }
 async function load() {
   inv = await (await fetch("/api/inventory")).json();
   let html = group("Skills", inv.skills, "skills") + group("MCP servers", inv.mcpServers, "mcpServers");
-  html += `<div class="group"><h2>Instructions</h2><label class="row" data-search="claude.md instructions"><input type="checkbox" data-kind="instructions"> <span>CLAUDE.md ${inv.instructions.length ? "" : "<span class='d'>(none)</span>"}</span></label></div>`;
+  html += `<div class="group"><h2>Instructions</h2><label class="row" data-source=""><input type="checkbox" data-kind="instructions"> <span>CLAUDE.md ${inv.instructions.length ? "" : "<span class='d'>(none)</span>"}</span></label></div>`;
   document.getElementById("inventory").innerHTML = html;
+  // Attach a full-text haystack (name + meta + source + body) to each row, in DOM order.
+  // Kept as a JS property, not a DOM attribute, so large skill bodies don't bloat the markup.
+  const hayOf = it => `${it.name} ${it.description || it.transport || ""} ${it.source || ""} ${it.content || ""}`.toLowerCase();
+  const hays = [...inv.skills.map(hayOf), ...inv.mcpServers.map(hayOf), `claude.md instructions ${(inv.instructions[0]?.content || "").toLowerCase()}`];
+  document.querySelectorAll("#inventory label.row").forEach((row, i) => { row._hay = hays[i] || ""; });
+  populateSources();
   document.querySelectorAll('input[type=checkbox]').forEach(cb => cb.addEventListener("change", onToggle));
   refresh();
   document.getElementById("search").addEventListener("input", filterRows);
   filterRows();
+}
+function populateSources() {
+  const counts = {};
+  [...inv.skills, ...inv.mcpServers].forEach(it => { if (it.source) counts[it.source] = (counts[it.source] || 0) + 1; });
+  const rank = s => s === "standalone" ? 0 : s === "user" ? 1 : s === "agent" ? 2 : 3;
+  const order = Object.keys(counts).sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+  document.getElementById("srcFilter").innerHTML =
+    `<option value="">All sources</option>` + order.map(s => `<option value="${esc(s)}">${esc(s)} (${counts[s]})</option>`).join("");
 }
 function onToggle(e){
   const { kind, name } = e.target.dataset;
@@ -69,16 +84,19 @@ function onToggle(e){
 let t; function refresh(){ clearTimeout(t); t = setTimeout(build, 120); }
 function filterRows() {
   const q = (document.getElementById("search").value || "").trim().toLowerCase();
+  const src = document.getElementById("srcFilter").value;
   document.querySelectorAll("#inventory label.row").forEach(row => {
-    const hay = row.getAttribute("data-search") || "";
-    row.style.display = !q || hay.includes(q) ? "" : "none";
+    const matchQ = !q || (row._hay || "").includes(q);
+    const matchSrc = !src || (row.getAttribute("data-source") || "") === src;
+    row.style.display = matchQ && matchSrc ? "" : "none";
   });
+  const active = q || src;
   document.querySelectorAll("#inventory .group").forEach(g => {
     const all = g.querySelectorAll("label.row");
     const shown = [...all].filter(r => r.style.display !== "none").length;
     const h2 = g.querySelector("h2");
-    if (h2 && !h2.dataset.base) h2.dataset.base = h2.textContent.replace(/\s*\(showing.*$/, "");
-    if (h2) h2.textContent = q ? `${h2.dataset.base} — showing ${shown}` : h2.dataset.base;
+    if (h2 && !h2.dataset.base) h2.dataset.base = h2.textContent.replace(/\s*—\s*showing.*$/, "");
+    if (h2) h2.textContent = active ? `${h2.dataset.base} — showing ${shown}` : h2.dataset.base;
   });
 }
 async function build(){
@@ -97,6 +115,17 @@ document.getElementById("dl").addEventListener("click", () => {
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = (document.getElementById("name").value || "pack") + ".json"; a.click();
 });
 document.getElementById("copy").addEventListener("click", () => navigator.clipboard.writeText(document.getElementById("preview").textContent));
+document.getElementById("srcFilter").addEventListener("change", filterRows);
+// Click a source chip to scope the source filter to it (click again to clear).
+document.getElementById("inventory").addEventListener("click", e => {
+  const chip = e.target.closest(".src");
+  if (!chip) return;
+  e.preventDefault(); e.stopPropagation();
+  const el = document.getElementById("srcFilter");
+  const val = chip.getAttribute("data-src") || "";
+  el.value = el.value === val ? "" : val;
+  filterRows();
+});
 load();
 </script>
 </body>
