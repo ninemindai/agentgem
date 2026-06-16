@@ -5,14 +5,14 @@ import { introspectConfig, introspectProject } from "./pack/introspect.js";
 import { buildPack } from "./pack/buildPack.js";
 import type { ConfigInventory } from "./pack/types.js";
 import { PackSelectionSchema } from "./schemas.js";
-import { resolveDirs, resolveUnderHome } from "./resolveDir.js";
+import { resolveDirs, resolveProject } from "./resolveDir.js";
 
 const InventoryInput = z.object({ dir: z.string().optional(), project: z.string().optional() });
 const PackInput = z.object({ selection: PackSelectionSchema, name: z.string().optional(), dir: z.string().optional(), project: z.string().optional() });
 
 function introspectAll(dir?: string, project?: string): ConfigInventory {
   const inventory = introspectConfig(resolveDirs(dir));
-  if (project && project.length > 0) inventory.project = introspectProject(resolveUnderHome(project));
+  if (project && project.length > 0) inventory.project = introspectProject(resolveProject(project));
   return inventory;
 }
 

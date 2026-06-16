@@ -4,9 +4,9 @@ import { api, get, post } from "@agentback/openapi";
 import { introspectConfig, introspectProject } from "./pack/introspect.js";
 import { buildPack } from "./pack/buildPack.js";
 import type { ConfigInventory } from "./pack/types.js";
-import { InventorySchema, PackSchema, PackRequestSchema, DirQuerySchema, BrowseQuerySchema, BrowseSchema } from "./schemas.js";
-import { resolveDirs, resolveUnderHome } from "./resolveDir.js";
-import { browseDir } from "./browse.js";
+import { InventorySchema, PackSchema, PackRequestSchema, DirQuerySchema, PickQuerySchema, PickFolderSchema } from "./schemas.js";
+import { resolveDirs, resolveProject } from "./resolveDir.js";
+import { pickFolder } from "./pickFolder.js";
 
 @api({ basePath: "/api" })
 export class PackController {
@@ -22,17 +22,17 @@ export class PackController {
     return buildPack(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
   }
 
-  // Server-backed folder browser for picking a project root. Lists subdirectory names only,
-  // clamped to within the user's home dir (see resolveUnderHome / browseDir).
-  @get("/browse", { query: BrowseQuerySchema, response: BrowseSchema })
-  async browse(input: { query: z.infer<typeof BrowseQuerySchema> }): Promise<z.infer<typeof BrowseSchema>> {
-    return browseDir(input.query.path);
+  // Pop the OS-native folder picker and return the chosen absolute path (null if cancelled).
+  @get("/pick-folder", { query: PickQuerySchema, response: PickFolderSchema })
+  async pickFolder(_input: { query: z.infer<typeof PickQuerySchema> }): Promise<z.infer<typeof PickFolderSchema>> {
+    return { path: await pickFolder() };
   }
 }
 
-// Compose the global inventory with an optional project section (project root validated under home).
+// Compose the global inventory with an optional project section. The project root is the
+// user's explicit native-picker selection; we only canonicalize it to an absolute path.
 function introspectAll(dir: string | undefined, project: string | undefined): ConfigInventory {
   const inventory = introspectConfig(resolveDirs(dir));
-  if (project && project.length > 0) inventory.project = introspectProject(resolveUnderHome(project));
+  if (project && project.length > 0) inventory.project = introspectProject(resolveProject(project));
   return inventory;
 }

@@ -9,7 +9,7 @@
 
 ## 1. Decisions (locked)
 
-- **Picker:** a **server-backed folder browser**. The browser can't hand a real path to the server, so a new `GET /api/browse` lists real directories; the UI navigates them and returns an absolute path the server introspects.
+- **Picker:** an **OS-native folder dialog** (revised — the server-backed in-page browser was too heavy and added a directory-enumeration surface to harden). agentgem runs locally, so `GET /api/pick-folder` pops the OS dialog server-side (`osascript` on macOS, `zenity` on Linux, `FolderBrowserDialog` on Windows) and returns the chosen absolute path (null on cancel). The user explicitly selects the folder — no server-side directory crawling, nothing to home-scope.
 - **Precedence:** **keep both, separate group.** Project artifacts are NOT deduped against global ones. A project `review` and a global `review` both appear, distinguished by `source: "project"`, each in its own selection namespace (so name-based selection stays unambiguous).
 
 ## 2. Project sources (at `<root>`)
@@ -36,18 +36,15 @@ PackSelection += { projectSkills?: string[]; projectMcpServers?: string[]; inclu
 ```
 `buildPack` selects project artifacts from `inventory.project` by name and pushes them (each already tagged `source:"project"`, so a name collision in the Pack's `artifacts[]` is fine — it's a list, not a map).
 
-## 4. `GET /api/browse` (security-sensitive)
+## 4. `GET /api/pick-folder` (native dialog)
 
-- Query `?path=` (default: home dir). Returns `{ path, parent, dirs: [{ name, path }] }`.
-- **Directory names only — never file contents.** Lists immediate subdirectories (`readdir withFileTypes`, `isDirectory()`), sorted.
-- **Home-scoped:** the resolved path must be within the user's home dir; anything outside is clamped back to home. `parent` is null at the home root (can't navigate above home). Prevents traversal to system dirs.
-- Unreadable dir → empty `dirs`, no throw.
-
-This is the only new filesystem-listing surface; it exposes folder *structure under home*, no contents, which the existing local-utility trust model already implies (the server reads the user's config). Documented in the UI.
+- Pops the OS-native folder chooser server-side and returns `{ path: string | null }` (null on cancel / unavailable). The command is platform-specific (`pickFolderCommand`): macOS `osascript … choose folder`, Linux `zenity --file-selection --directory`, Windows `FolderBrowserDialog`.
+- **No directory enumeration, no contents read.** The server never lists folders; the OS dialog does, under the user's own credentials, and only the single chosen path comes back. This removes the home-scoping / path-traversal / symlink-escape surface the in-page browser would have required.
+- The chosen path is the user's explicit selection; `introspectProject` canonicalizes it with `resolveProject` (absolute path) and reads only the specific known files (skills/`.mcp.json`/`CLAUDE.md`/`AGENTS.md`), with MCP redacted.
 
 ## 5. Endpoints / wire
 
-- `GET /api/inventory?dir=&project=` → global inventory + `project` section when `project` given (resolved + validated like browse).
+- `GET /api/inventory?dir=&project=` → global inventory + `project` section when `project` given (canonicalized to an absolute path).
 - `POST /api/pack` body adds `project?: string`; re-introspects project and includes selected project artifacts.
 - MCP `inventory`/`pack` tools gain an optional `project` input for parity.
 

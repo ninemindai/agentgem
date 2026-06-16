@@ -64,12 +64,8 @@ export const PackRequestSchema = z.object({
 
 export const DirQuerySchema = z.object({ dir: z.string().optional(), project: z.string().optional() });
 
-export const BrowseQuerySchema = z.object({ path: z.string().optional() });
-export const BrowseSchema = z.object({
-  path: z.string(),
-  parent: z.string().nullable(),
-  dirs: z.array(z.object({ name: z.string(), path: z.string() })),
-});
+export const PickQuerySchema = z.object({});
+export const PickFolderSchema = z.object({ path: z.string().nullable() });
 
 export const PackSchema = z.object({
   name: z.string(),

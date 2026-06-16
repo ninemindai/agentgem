@@ -1,7 +1,7 @@
 // src/__tests__/pack.controller.test.ts
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
-import { tmpdir, homedir } from "node:os";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import supertest from "supertest";
 import { RestApplication } from "@agentback/rest";
@@ -10,7 +10,7 @@ import { PackController } from "../pack.controller.js";
 let app: RestApplication;
 let client: ReturnType<typeof supertest>;
 let dir: string;
-let projRoot: string; // must live under home: the project path is clamped to home by resolveUnderHome
+let projRoot: string;
 
 beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), "ap-"));
@@ -19,7 +19,7 @@ beforeAll(async () => {
   writeFileSync(join(dir, "settings.json"), JSON.stringify({ mcpServers: { gh: { command: "npx", env: { GH_TOKEN: "ghp_secret" } } } }));
   writeFileSync(join(dir, "CLAUDE.md"), "global instructions");
 
-  projRoot = mkdtempSync(join(homedir(), ".agentgem-proj-"));
+  projRoot = mkdtempSync(join(tmpdir(), "proj-"));
   mkdirSync(join(projRoot, ".claude", "skills", "deploy"), { recursive: true });
   writeFileSync(join(projRoot, ".claude", "skills", "deploy", "SKILL.md"), "---\nname: deploy\ndescription: Project deploy\n---\n# Deploy\n");
   writeFileSync(join(projRoot, ".mcp.json"), JSON.stringify({ db: { command: "pg", env: { PW: "projsecret" } } }));
@@ -63,12 +63,6 @@ describe("PackController", () => {
     expect(r.body.project.skills[0].source).toBe("project");
     expect(r.body.project.mcpServers[0].config.env.PW).toBe("<redacted>");
     expect(JSON.stringify(r.body)).not.toContain("projsecret");
-  });
-
-  it("GET /api/browse lists subdirectory names under home", async () => {
-    const r = await client.get(`/api/browse?path=${encodeURIComponent(projRoot)}`).expect(200);
-    expect(r.body.path).toBe(projRoot);
-    expect(r.body.dirs.map((d: { name: string }) => d.name)).toContain(".claude");
   });
 
   it("POST /api/pack includes selected project artifacts", async () => {

@@ -43,12 +43,6 @@
   .seg button.on{background:var(--accent);color:#fff}
   #projectBar{flex-wrap:wrap}
   #projectBar code{background:var(--card);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
-  .fbc{padding:8px 16px;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-  .fdirs{overflow:auto;flex:1;padding:6px}
-  .fdir{display:block;width:100%;text-align:left;border:0;background:transparent;color:var(--ink);padding:6px 8px;border-radius:5px;cursor:pointer;font:inherit}
-  .fdir:hover{background:rgba(154,51,36,.08)}
-  .modal-foot{display:flex;gap:8px;align-items:center;padding:10px 16px;border-top:1px solid var(--line)}
-  .modal-foot code{flex:1;color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -72,14 +66,6 @@
   <div class="modal">
     <div class="modal-h"><strong class="t" id="modal-title"></strong><span class="src" id="modal-sub"></span><span class="seg" id="modal-modes"><button type="button" data-mode="md">Markdown</button><button type="button" data-mode="raw">Raw</button></span><button id="modal-x" class="ghost" style="margin-left:8px">✕ Close</button></div>
     <pre class="modal-body" id="modal-body"></pre>
-  </div>
-</div>
-<div id="fmodal" class="modal-bg" hidden>
-  <div class="modal" style="max-width:560px;height:70vh">
-    <div class="modal-h"><strong class="t">Choose project root</strong><button id="fmodal-x" class="ghost" style="margin-left:auto">✕</button></div>
-    <div class="fbc" id="fbreadcrumb"></div>
-    <div class="fdirs" id="fdirs"></div>
-    <div class="modal-foot"><code id="fcurrent"></code><button id="fuse">Use this folder</button></div>
   </div>
 </div>
 <script>
@@ -327,9 +313,9 @@ document.getElementById("modal-modes").addEventListener("click", e => {
 });
 document.getElementById("modal-x").addEventListener("click", closeModal);
 document.getElementById("modal").addEventListener("click", e => { if (e.target.id === "modal") closeModal(); });
-document.addEventListener("keydown", e => { if (e.key === "Escape") { closeModal(); document.getElementById("fmodal").hidden = true; } });
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal(); });
 
-// --- Project root: server-backed folder browser (lists dir names only, home-scoped). ---
+// --- Project root: OS-native folder picker (the server pops the dialog; no in-page browser). ---
 function renderProjectBar() {
   const el = document.getElementById("projectBar");
   el.innerHTML = project
@@ -341,32 +327,20 @@ function setProject(path) {
   sel.projectSkills.clear(); sel.projectMcpServers.clear(); sel.includeProjectInstructions = false;
   load();
 }
-let browsePath = null;
-async function openBrowser() {
-  document.getElementById("fmodal").hidden = false;
-  await browseTo(project || null);
-}
-async function browseTo(path) {
-  const url = path ? `/api/browse?path=${encodeURIComponent(path)}` : "/api/browse";
-  const r = await (await fetch(url)).json();
-  browsePath = r.path;
-  document.getElementById("fcurrent").textContent = r.path;
-  document.getElementById("fbreadcrumb").innerHTML =
-    (r.parent ? `<button class="ghost" id="fup">⬆ up</button>` : `<span class="d">home</span>`) + ` <span class="d">${esc(r.path)}</span>`;
-  document.getElementById("fdirs").innerHTML = r.dirs.length
-    ? r.dirs.map(d => `<button class="fdir" data-path="${esc(d.path)}">📁 ${esc(d.name)}</button>`).join("")
-    : `<div class="d" style="padding:8px">(no subfolders)</div>`;
-  const up = document.getElementById("fup");
-  if (up) up.onclick = () => browseTo(r.parent);
-  document.querySelectorAll("#fdirs .fdir").forEach(b => (b.onclick = () => browseTo(b.dataset.path)));
+async function pickProject() {
+  const el = document.getElementById("projectBar");
+  el.style.opacity = ".5"; // brief hint while the native dialog is open
+  try {
+    const r = await (await fetch("/api/pick-folder")).json();
+    if (r && r.path) setProject(r.path); // null = user cancelled -> keep current
+  } finally {
+    el.style.opacity = "";
+  }
 }
 document.getElementById("projectBar").addEventListener("click", e => {
-  if (e.target.closest("#addProject") || e.target.closest("#changeProject")) openBrowser();
+  if (e.target.closest("#addProject") || e.target.closest("#changeProject")) pickProject();
   else if (e.target.closest("#clearProject")) setProject(null);
 });
-document.getElementById("fuse").addEventListener("click", () => { document.getElementById("fmodal").hidden = true; setProject(browsePath); });
-document.getElementById("fmodal-x").addEventListener("click", () => { document.getElementById("fmodal").hidden = true; });
-document.getElementById("fmodal").addEventListener("click", e => { if (e.target.id === "fmodal") e.currentTarget.hidden = true; });
 document.getElementById("search").addEventListener("input", filterRows);
 load();
 </script>

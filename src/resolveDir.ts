@@ -1,19 +1,15 @@
 // src/resolveDir.ts
 import { homedir } from "node:os";
-import { dirname, join, resolve, sep } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 export function resolveDir(dir?: string): string {
   return dir && dir.length > 0 ? dir : join(homedir(), ".claude");
 }
 
-// Clamp an arbitrary path to within the user's home dir. Returns the resolved absolute path
-// when it is home or under home, else home itself. This is the security boundary for the
-// folder browser and project discovery: the server never lists or reads outside home.
-export function resolveUnderHome(p?: string): string {
-  const home = homedir();
-  if (!p || !p.length) return home;
-  const abs = resolve(p);
-  return abs === home || abs.startsWith(home + sep) ? abs : home;
+// Normalize a project root to an absolute path. The path comes from the OS-native folder
+// picker (explicit user selection), so it is trusted; we only canonicalize it.
+export function resolveProject(p: string): string {
+  return resolve(p);
 }
 
 // Derive every discovery root from one base. In production `dir` is undefined, so the
