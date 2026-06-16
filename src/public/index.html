@@ -53,7 +53,7 @@ function group(title, items, kind) {
 async function load() {
   inv = await (await fetch("/api/inventory")).json();
   let html = group("Skills", inv.skills, "skills") + group("MCP servers", inv.mcpServers, "mcpServers");
-  html += `<div class="group"><h2>Instructions</h2><label class="row"><input type="checkbox" data-kind="instructions"> <span>CLAUDE.md ${inv.instructions.length ? "" : "<span class='d'>(none)</span>"}</span></label></div>`;
+  html += `<div class="group"><h2>Instructions</h2><label class="row" data-search="claude.md instructions"><input type="checkbox" data-kind="instructions"> <span>CLAUDE.md ${inv.instructions.length ? "" : "<span class='d'>(none)</span>"}</span></label></div>`;
   document.getElementById("inventory").innerHTML = html;
   document.querySelectorAll('input[type=checkbox]').forEach(cb => cb.addEventListener("change", onToggle));
   refresh();
