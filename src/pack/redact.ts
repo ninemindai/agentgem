@@ -14,7 +14,17 @@ function isHighEntropyToken(s: string): boolean {
 function redactNode(node: unknown, underSecretMap: boolean, path: string, key: string | undefined, secrets: SecretRef[]): unknown {
   if (typeof node === "string") {
     const keyIsSecret = key !== undefined && SECRET_RE.test(key);
-    if (underSecretMap || keyIsSecret || SECRET_RE.test(node) || isHighEntropyToken(node)) {
+    // Value-content heuristics are prose-safe: prose uses words like "bearer" or "token"
+    // legitimately (e.g. "test bearer authentication flow"), so SECRET_RE on the whole string
+    // would produce false positives. Instead:
+    //   • Whitespace-free string: treat the whole value as a single token (existing behaviour).
+    //   • Multi-word string: only flag it if ANY individual whitespace-free token is high-entropy
+    //     (e.g. "use token ghp_abcdefghijklmnopqrstuvwxyz0123" → ghp_… triggers isHighEntropyToken).
+    const isWhitespaceFree = !/\s/.test(node);
+    const looksLikeToken = isWhitespaceFree
+      ? SECRET_RE.test(node) || isHighEntropyToken(node)
+      : node.split(/\s+/).some((t) => t.length > 0 && isHighEntropyToken(t));
+    if (underSecretMap || keyIsSecret || looksLikeToken) {
       secrets.push({ name: key ?? path, location: path });
       return "<redacted>";
     }

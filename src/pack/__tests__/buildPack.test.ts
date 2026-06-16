@@ -57,6 +57,13 @@ describe("buildPack", () => {
     expect(buildPack(inv, { skills: ["review"] }).requiredSecrets).toEqual([]);
   });
 
+  it("preserves benign task prose while still scrubbing real secret tokens", () => {
+    const pack = buildPack(inv, { skills: ["review"] }, {
+      checks: [{ kind: "behavioral", name: "smoke", task: "test bearer authentication flow", assertions: [] }],
+    });
+    expect((pack.checks[0] as { task: string }).task).toBe("test bearer authentication flow");
+  });
+
   it("redacts a secret accidentally embedded in operator check text", () => {
     const pack = buildPack(inv, { skills: ["review"] }, {
       checks: [{ kind: "behavioral", name: "smoke", task: "use token ghp_abcdefghijklmnopqrstuvwxyz0123", assertions: [] }],

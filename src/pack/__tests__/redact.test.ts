@@ -45,6 +45,11 @@ describe("redactMcpConfig", () => {
     expect(out.apiSecret).toBe("<redacted>");
   });
 
+  it("does not redact prose that merely mentions secret words (only whitespace-free tokens)", () => {
+    const { config } = redactMcpConfig({ label: "test bearer authentication flow" });
+    expect(config.label).toBe("test bearer authentication flow");
+  });
+
   it("still preserves benign keys with benign values", () => {
     const { config: out } = redactMcpConfig({ label: "my server", port: 8080, command: "npx" });
     expect(out.label).toBe("my server");
