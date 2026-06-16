@@ -71,7 +71,7 @@
   <section class="pane right">
     <div class="bar"><strong style="flex:1">Pack (live)</strong><span class="seg" id="preview-modes"><button type="button" data-pmode="summary">Summary</button><button type="button" data-pmode="json">JSON</button></span><button id="copy" class="ghost">Copy</button><button id="dl">⬇ Download</button></div>
     <div id="preview"></div>
-    <p class="note">MCP server config secrets are shown as <code>&lt;redacted&gt;</code> and never exported. Skill, CLAUDE.md &amp; rules bodies are bundled as written — don't keep secrets in them.</p>
+    <p class="note">MCP server &amp; hook config secrets are shown as <code>&lt;redacted&gt;</code> and never exported. Skill, CLAUDE.md, rules bodies &amp; hook commands are bundled as written — don't keep secrets in them.</p>
   </section>
 </main>
 <div id="modal" class="modal-bg" hidden>
@@ -83,7 +83,7 @@
 <script>
 let inv = { skills: [], mcpServers: [], instructions: [], projects: [] };
 let projects = []; // chosen project root paths (mirrors inv.projects[].root after each load)
-const sel = { skills: new Set(), mcpServers: new Set(), includeInstructions: false, projects: {} };
+const sel = { skills: new Set(), mcpServers: new Set(), includeInstructions: false, hooks: new Set(), projects: {} };
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
 // Map a fine-grained source to the coding agent it belongs to.
 const AGENT_LABEL = { claude: "Claude", codex: "Codex", agents: "Agents", project: "Project" };
@@ -112,6 +112,7 @@ async function load() {
   const instrAgents = [...new Set(inv.instructions.map(i => i.name.startsWith("codex:") ? "codex" : "claude"))].join(" ") || "claude";
   const instrView = inv.instructions.length ? `<button type="button" class="view" data-kind="instructions" data-name="" title="view content">view</button>` : "";
   html += `<div class="group"><h2>Instructions</h2><label class="row" data-source="" data-agent="${instrAgents}"><input type="checkbox" data-kind="instructions"> <span>${instrLabel}</span>${instrView}</label></div>`;
+  html += group("Hooks", inv.hooks, "hooks");
   // One section per loaded project (separate groups, separate selection namespace by root).
   const names = projLabels(inv.projects);
   inv.projects.forEach((p, i) => {
@@ -122,6 +123,7 @@ async function load() {
       const pil = esc(p.instructions.map(x => x.name).join(", "));
       html += `<div class="group"><h2>Project · ${nm} · instructions</h2><label class="row" data-source="project" data-agent="project" data-project="${esc(p.root)}"><input type="checkbox" data-kind="projectInstructions" data-project="${esc(p.root)}"> <span><span class="src">project</span> ${pil}</span><button type="button" class="view" data-kind="projectInstructions" data-name="" data-project="${esc(p.root)}" title="view content">view</button></label></div>`;
     }
+    html += group(`Project · ${nm} · hooks`, p.hooks, "projectHooks", p.root);
   });
   document.getElementById("inventory").innerHTML = html;
   // Attach a full-text haystack to each row by looking up its artifact (position-independent).
@@ -145,6 +147,8 @@ function hayForRow(kind, name, projRoot) {
   if (kind === "projectSkills") { const a = projOf(projRoot)?.skills.find(s => s.name === name); return a ? `${a.name} ${a.description || ""} project ${a.content || ""}` : ""; }
   if (kind === "projectMcpServers") { const a = projOf(projRoot)?.mcpServers.find(s => s.name === name); return a ? `${a.name} ${a.transport || ""} project ${JSON.stringify(a.config || {})}` : ""; }
   if (kind === "projectInstructions") { const p = projOf(projRoot); return `project instructions ${(p ? p.instructions : []).map(i => `${i.name} ${i.content}`).join(" ")}`; }
+  if (kind === "hooks") { const a = inv.hooks.find(h => h.name === name); return a ? `${a.name} ${a.event} ${a.matcher || ""} ${a.source || ""} ${JSON.stringify(a.config || {})}` : ""; }
+  if (kind === "projectHooks") { const a = projOf(projRoot)?.hooks.find(h => h.name === name); return a ? `${a.name} ${a.event} ${a.matcher || ""} project ${JSON.stringify(a.config || {})}` : ""; }
   return "";
 }
 function restoreChecks() {
@@ -155,6 +159,7 @@ function restoreChecks() {
     else if (kind === "projectInstructions") cb.checked = !!(ps && ps.includeInstructions);
     else if (kind === "projectSkills") cb.checked = !!(ps && ps.skills.has(name));
     else if (kind === "projectMcpServers") cb.checked = !!(ps && ps.mcpServers.has(name));
+    else if (kind === "projectHooks") cb.checked = !!(ps && ps.hooks.has(name));
     else if (sel[kind]) cb.checked = sel[kind].has(name);
   });
 }
@@ -163,7 +168,8 @@ function populateAgents() {
   inv.skills.forEach(s => present.add(agentOf(s.source)));
   inv.mcpServers.forEach(m => present.add(agentOf(m.source)));
   inv.instructions.forEach(i => present.add(i.name.startsWith("codex:") ? "codex" : "claude"));
-  if ((inv.projects || []).some(p => p.skills.length || p.mcpServers.length || p.instructions.length)) present.add("project");
+  inv.hooks.forEach(h => present.add(agentOf(h.source)));
+  if ((inv.projects || []).some(p => p.skills.length || p.mcpServers.length || p.instructions.length || p.hooks.length)) present.add("project");
   const types = ["claude", "codex", "agents", "project"].filter(a => present.has(a));
   const el = document.getElementById("agentBar");
   if (types.length < 2) { el.style.display = "none"; el.innerHTML = ""; return; } // nothing to choose between
@@ -174,7 +180,7 @@ function populateAgents() {
 }
 function populateSources() {
   const counts = {};
-  const all = [...inv.skills, ...inv.mcpServers, ...(inv.projects || []).flatMap(p => [...p.skills, ...p.mcpServers])];
+  const all = [...inv.skills, ...inv.mcpServers, ...inv.hooks, ...(inv.projects || []).flatMap(p => [...p.skills, ...p.mcpServers, ...p.hooks])];
   all.forEach(it => { if (it.source) counts[it.source] = (counts[it.source] || 0) + 1; });
   const rank = s => s === "standalone" ? 0 : s === "user" ? 1 : s === "agent" ? 2 : s === "project" ? 4 : 3;
   const order = Object.keys(counts).sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
@@ -187,6 +193,7 @@ function onToggle(e){
   else if (kind === "projectInstructions") projSel(project).includeInstructions = e.target.checked;
   else if (kind === "projectSkills") { const s = projSel(project).skills; e.target.checked ? s.add(name) : s.delete(name); }
   else if (kind === "projectMcpServers") { const s = projSel(project).mcpServers; e.target.checked ? s.add(name) : s.delete(name); }
+  else if (kind === "projectHooks") { const s = projSel(project).hooks; e.target.checked ? s.add(name) : s.delete(name); }
   else { e.target.checked ? sel[kind].add(name) : sel[kind].delete(name); }
   refresh();
 }
@@ -222,6 +229,7 @@ async function build(){
   const has = (arr, n) => arr.some(x => x.name === n);
   const skills = [...sel.skills].filter(n => has(inv.skills, n));
   const mcpServers = [...sel.mcpServers].filter(n => has(inv.mcpServers, n));
+  const hooks = [...sel.hooks].filter(n => has(inv.hooks, n));
   const projectsSel = {};
   for (const p of inv.projects || []) {
     const ps = sel.projects[p.root];
@@ -229,12 +237,15 @@ async function build(){
     const o = {};
     const s = [...ps.skills].filter(n => has(p.skills, n));
     const m = [...ps.mcpServers].filter(n => has(p.mcpServers, n));
+    const hk = [...ps.hooks].filter(n => has(p.hooks, n));
     if (s.length) o.skills = s;
     if (m.length) o.mcpServers = m;
     if (ps.includeInstructions && p.instructions.length) o.includeInstructions = true;
+    if (hk.length) o.hooks = hk;
     if (Object.keys(o).length) projectsSel[p.root] = o;
   }
   const selection = { skills, mcpServers, includeInstructions: sel.includeInstructions };
+  if (hooks.length) selection.hooks = hooks;
   if (Object.keys(projectsSel).length) selection.projects = projectsSel;
   const name = document.getElementById("name").value || "pack";
   const reqBody = { selection, name };
@@ -245,12 +256,12 @@ async function build(){
 }
 let previewMode = "summary";
 function fmtSize(n){ return n < 1024 ? `${n} B` : `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} KB`; }
-function artSize(a){ return a.type === "mcp_server" ? JSON.stringify(a.config || {}).length : (a.content || "").length; }
+function artSize(a){ return (a.type === "mcp_server" || a.type === "hook") ? JSON.stringify(a.config || {}).length : (a.content || "").length; }
 function summaryHtml(p){
   const arts = p.artifacts || [];
   if (!arts.length) return `<p class="d">Empty pack — select artifacts on the left to add them.</p>`;
   const total = arts.reduce((s, a) => s + artSize(a), 0);
-  const groups = [["Skills", "skill"], ["MCP servers", "mcp_server"], ["Instructions", "instructions"]];
+  const groups = [["Skills", "skill"], ["MCP servers", "mcp_server"], ["Instructions", "instructions"], ["Hooks", "hook"]];
   let h = `<div class="psummary"><div class="phead"><strong>${esc(p.name)}</strong> <span class="d">· ${arts.length} artifact${arts.length === 1 ? "" : "s"} · ${fmtSize(total)}</span></div>`;
   for (const [label, type] of groups) {
     const items = arts.filter(a => a.type === type);
@@ -258,7 +269,7 @@ function summaryHtml(p){
     h += `<div class="pgroup"><h3>${label} (${items.length})</h3>` + items.map(a => {
       const i = arts.indexOf(a);
       const src = a.source ? `<span class="src">${esc(a.source)}</span>` : "";
-      const meta = a.type === "mcp_server" ? `${esc(a.transport || "")} · <span class="redtag">redacted</span>` : fmtSize(artSize(a));
+      const meta = a.type === "mcp_server" ? `${esc(a.transport || "")} · <span class="redtag">redacted</span>` : a.type === "hook" ? esc(a.event || "hook") : fmtSize(artSize(a));
       return `<button type="button" class="prow" data-i="${i}"><span class="pn">${esc(a.name)}</span> ${src} <span class="pm">${meta}</span></button>`;
     }).join("") + `</div>`;
   }
@@ -277,11 +288,11 @@ function renderPreview(){
   document.querySelectorAll("#preview-modes button").forEach(b => b.classList.toggle("on", b.dataset.pmode === previewMode));
 }
 function openArtifact(art){
-  const isMcp = art.type === "mcp_server";
-  modalState.kind = isMcp ? "mcpServers" : "skills";
-  modalState.body = isMcp ? JSON.stringify(art.config, null, 2) : (art.content || "");
+  const isJson = art.type === "mcp_server" || art.type === "hook";
+  modalState.kind = isJson ? "mcpServers" : "skills";
+  modalState.body = isJson ? JSON.stringify(art.config, null, 2) : (art.content || "");
   document.getElementById("modal-title").textContent = art.name;
-  document.getElementById("modal-sub").textContent = (art.source || "") + (art.transport ? ` · ${art.transport}` : "");
+  document.getElementById("modal-sub").textContent = (art.source || "") + (art.transport ? ` · ${art.transport}` : art.event ? ` · ${art.event}` : "");
   renderModalBody();
   document.getElementById("modal").hidden = false;
 }
@@ -381,9 +392,13 @@ function openItem(kind, name, projRoot) {
     title = kind === "instructions" ? "Instructions" : "Project instructions";
     sub = list.map(i => i.name).join(", ");
     body = list.map(i => `### ${i.name}\n\n${i.content}`).join("\n\n──────────\n\n");
+  } else if (kind === "hooks" || kind === "projectHooks") {
+    const a = (kind === "hooks" ? inv.hooks : (projOf(projRoot)?.hooks || [])).find(h => h.name === name);
+    if (!a) return;
+    sub = `${a.source || ""} · ${a.event}`; body = JSON.stringify(a.config, null, 2);
   } else return;
-  // highlight() only special-cases mcp configs (JSON); everything else gets markdown highlighting.
-  modalState.kind = (kind === "mcpServers" || kind === "projectMcpServers") ? "mcpServers" : "skills";
+  // highlight() only special-cases JSON configs (mcp + hooks); everything else gets markdown.
+  modalState.kind = (kind === "mcpServers" || kind === "projectMcpServers" || kind === "hooks" || kind === "projectHooks") ? "mcpServers" : "skills";
   modalState.body = body;
   document.getElementById("modal-title").textContent = title;
   document.getElementById("modal-sub").textContent = sub;
@@ -401,7 +416,7 @@ document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal()
 
 // --- Projects: OS-native folder picker; multiple roots, each labeled by name. ---
 function projOf(root) { return (inv.projects || []).find(p => p.root === root); }
-function projSel(root) { return (sel.projects[root] ??= { skills: new Set(), mcpServers: new Set(), includeInstructions: false }); }
+function projSel(root) { return (sel.projects[root] ??= { skills: new Set(), mcpServers: new Set(), includeInstructions: false, hooks: new Set() }); }
 // Display name = basename, disambiguated by parent dir when two projects share a basename.
 function projLabels(projs) {
   const counts = {};
