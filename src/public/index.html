@@ -65,6 +65,7 @@
     <div class="bar"><input id="search" type="text" placeholder="search names, descriptions, contents…" style="flex:1" /><select id="srcFilter"><option value="">All sources</option></select></div>
     <div class="bar" id="projectBar"></div>
     <div class="bar" id="agentBar"></div>
+    <div class="bar" id="typeBar"></div>
     <div class="bar" id="selbar"><strong style="flex:1;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)">Selection</strong><button id="all" class="ghost">Select all shown</button><button id="none" class="ghost">Clear</button></div>
     <div id="inventory">Loading…</div>
   </section>
@@ -90,13 +91,23 @@ const AGENT_LABEL = { claude: "Claude", codex: "Codex", agents: "Agents", hermes
 function agentOf(source){ return source === "project" ? "project" : source === "agent" ? "agents" : source === "codex" ? "codex" : source === "hermes" ? "hermes" : "claude"; }
 // Instruction artifacts carry no source; map by filename to an agent.
 function instrAgentOf(name){ return name === "SOUL.md" ? "hermes" : name.startsWith("codex:") ? "codex" : "claude"; }
+// Artifact type per row kind (global + project kinds collapse to one type).
+const TYPE_LABEL = { skill: "Skills", mcp: "MCP", instructions: "Instructions", hook: "Hooks" };
+function typeOfKind(kind){
+  if (kind === "skills" || kind === "projectSkills") return "skill";
+  if (kind === "mcpServers" || kind === "projectMcpServers") return "mcp";
+  if (kind === "instructions" || kind === "projectInstructions") return "instructions";
+  if (kind === "hooks" || kind === "projectHooks") return "hook";
+  return "";
+}
 function group(title, items, kind, projectRoot) {
   if (!items.length && kind !== "instructions") return "";
   const pa = projectRoot ? ` data-project="${esc(projectRoot)}"` : "";
+  const ty = typeOfKind(kind);
   const rows = items.map(it => {
     const meta = it.description || it.transport || "";
     const src = it.source ? ` <span class="src" data-src="${esc(it.source)}" title="filter by ${esc(it.source)}">${esc(it.source)}</span>` : "";
-    return `<label class="row" data-source="${esc(it.source || "")}" data-agent="${agentOf(it.source || "")}"${pa}><input type="checkbox" data-kind="${kind}" data-name="${esc(it.name)}"${pa}> <span>${esc(it.name)}${src} ${meta ? `<span class="d">— ${esc(meta)}</span>` : ""}</span><button type="button" class="view" data-kind="${kind}" data-name="${esc(it.name)}"${pa} title="view content">view</button></label>`;
+    return `<label class="row" data-source="${esc(it.source || "")}" data-agent="${agentOf(it.source || "")}" data-type="${ty}"${pa}><input type="checkbox" data-kind="${kind}" data-name="${esc(it.name)}"${pa}> <span>${esc(it.name)}${src} ${meta ? `<span class="d">— ${esc(meta)}</span>` : ""}</span><button type="button" class="view" data-kind="${kind}" data-name="${esc(it.name)}"${pa} title="view content">view</button></label>`;
   }).join("");
   return `<div class="group" data-group="${kind}"><h2>${title} (${items.length})</h2>${rows}</div>`;
 }
@@ -113,7 +124,7 @@ async function load() {
     : `CLAUDE.md <span class="d">(none)</span>`;
   const instrAgents = [...new Set(inv.instructions.map(i => instrAgentOf(i.name)))].join(" ") || "claude";
   const instrView = inv.instructions.length ? `<button type="button" class="view" data-kind="instructions" data-name="" title="view content">view</button>` : "";
-  html += `<div class="group"><h2>Instructions</h2><label class="row" data-source="" data-agent="${instrAgents}"><input type="checkbox" data-kind="instructions"> <span>${instrLabel}</span>${instrView}</label></div>`;
+  html += `<div class="group"><h2>Instructions</h2><label class="row" data-source="" data-agent="${instrAgents}" data-type="instructions"><input type="checkbox" data-kind="instructions"> <span>${instrLabel}</span>${instrView}</label></div>`;
   html += group("Hooks", inv.hooks, "hooks");
   // One section per loaded project (separate groups, separate selection namespace by root).
   const names = projLabels(inv.projects);
@@ -123,7 +134,7 @@ async function load() {
     html += group(`Project · ${nm} · MCP`, p.mcpServers, "projectMcpServers", p.root);
     if (p.instructions.length) {
       const pil = esc(p.instructions.map(x => x.name).join(", "));
-      html += `<div class="group"><h2>Project · ${nm} · instructions</h2><label class="row" data-source="project" data-agent="project" data-project="${esc(p.root)}"><input type="checkbox" data-kind="projectInstructions" data-project="${esc(p.root)}"> <span><span class="src">project</span> ${pil}</span><button type="button" class="view" data-kind="projectInstructions" data-name="" data-project="${esc(p.root)}" title="view content">view</button></label></div>`;
+      html += `<div class="group"><h2>Project · ${nm} · instructions</h2><label class="row" data-source="project" data-agent="project" data-type="instructions" data-project="${esc(p.root)}"><input type="checkbox" data-kind="projectInstructions" data-project="${esc(p.root)}"> <span><span class="src">project</span> ${pil}</span><button type="button" class="view" data-kind="projectInstructions" data-name="" data-project="${esc(p.root)}" title="view content">view</button></label></div>`;
     }
     html += group(`Project · ${nm} · hooks`, p.hooks, "projectHooks", p.root);
   });
@@ -135,6 +146,7 @@ async function load() {
   });
   populateSources();
   populateAgents();
+  populateTypes();
   renderProjectBar();
   // Scope selection toggles to inventory rows only — the filter checkboxes live outside #inventory.
   document.querySelectorAll('#inventory input[type=checkbox]').forEach(cb => cb.addEventListener("change", onToggle));
@@ -180,6 +192,21 @@ function populateAgents() {
     `<label class="chk"><input type="checkbox" class="agentChk" value="${a}" checked> ${AGENT_LABEL[a]}</label>`).join("");
   el.querySelectorAll(".agentChk").forEach(cb => cb.addEventListener("change", filterRows));
 }
+function populateTypes() {
+  const projs = inv.projects || [];
+  const present = new Set();
+  if (inv.skills.length || projs.some(p => p.skills.length)) present.add("skill");
+  if (inv.mcpServers.length || projs.some(p => p.mcpServers.length)) present.add("mcp");
+  if (inv.instructions.length || projs.some(p => p.instructions.length)) present.add("instructions");
+  if (inv.hooks.length || projs.some(p => p.hooks.length)) present.add("hook");
+  const types = ["skill", "mcp", "instructions", "hook"].filter(t => present.has(t));
+  const el = document.getElementById("typeBar");
+  if (types.length < 2) { el.style.display = "none"; el.innerHTML = ""; return; }
+  el.style.display = "";
+  el.innerHTML = `<span class="d">Type:</span>` + types.map(t =>
+    `<label class="chk"><input type="checkbox" class="typeChk" value="${t}" checked> ${TYPE_LABEL[t]}</label>`).join("");
+  el.querySelectorAll(".typeChk").forEach(cb => cb.addEventListener("change", filterRows));
+}
 function populateSources() {
   const counts = {};
   const all = [...inv.skills, ...inv.mcpServers, ...inv.hooks, ...(inv.projects || []).flatMap(p => [...p.skills, ...p.mcpServers, ...p.hooks])];
@@ -207,15 +234,19 @@ function filterRows() {
   const agentBoxes = [...document.querySelectorAll(".agentChk")];
   const agents = new Set(agentBoxes.filter(c => c.checked).map(c => c.value));
   const agentFilterActive = agentBoxes.length > 0 && agentBoxes.some(c => !c.checked);
+  const typeBoxes = [...document.querySelectorAll(".typeChk")];
+  const types = new Set(typeBoxes.filter(c => c.checked).map(c => c.value));
+  const typeFilterActive = typeBoxes.length > 0 && typeBoxes.some(c => !c.checked);
   document.querySelectorAll("#inventory label.row").forEach(row => {
     const hay = row._hay || "";
     const matchQ = tokens.every(t => hay.includes(t)); // order-independent AND; [] => true
     const matchSrc = !src || (row.getAttribute("data-source") || "") === src;
     const rowAgents = (row.getAttribute("data-agent") || "").split(" ").filter(Boolean);
     const matchAgent = agentBoxes.length === 0 || rowAgents.length === 0 || rowAgents.some(a => agents.has(a));
-    row.style.display = matchQ && matchSrc && matchAgent ? "" : "none";
+    const matchType = typeBoxes.length === 0 || types.has(row.getAttribute("data-type"));
+    row.style.display = matchQ && matchSrc && matchAgent && matchType ? "" : "none";
   });
-  const active = q || src || agentFilterActive;
+  const active = q || src || agentFilterActive || typeFilterActive;
   document.querySelectorAll("#inventory .group").forEach(g => {
     const all = g.querySelectorAll("label.row");
     const shown = [...all].filter(r => r.style.display !== "none").length;
