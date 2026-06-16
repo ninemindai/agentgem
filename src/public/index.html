@@ -206,15 +206,25 @@ function filterRows() {
   });
 }
 async function build(){
+  // Prune the selection to what's currently in the inventory. A stale checkbox (e.g. after a
+  // project is removed or the inventory reloads) must never reference a missing name/root —
+  // buildPack throws on that, which would surface as an opaque 500 in the preview.
+  const has = (arr, n) => arr.some(x => x.name === n);
+  const skills = [...sel.skills].filter(n => has(inv.skills, n));
+  const mcpServers = [...sel.mcpServers].filter(n => has(inv.mcpServers, n));
   const projectsSel = {};
-  for (const [root, ps] of Object.entries(sel.projects)) {
+  for (const p of inv.projects || []) {
+    const ps = sel.projects[p.root];
+    if (!ps) continue;
     const o = {};
-    if (ps.skills.size) o.skills = [...ps.skills];
-    if (ps.mcpServers.size) o.mcpServers = [...ps.mcpServers];
-    if (ps.includeInstructions) o.includeInstructions = true;
-    if (Object.keys(o).length) projectsSel[root] = o;
+    const s = [...ps.skills].filter(n => has(p.skills, n));
+    const m = [...ps.mcpServers].filter(n => has(p.mcpServers, n));
+    if (s.length) o.skills = s;
+    if (m.length) o.mcpServers = m;
+    if (ps.includeInstructions && p.instructions.length) o.includeInstructions = true;
+    if (Object.keys(o).length) projectsSel[p.root] = o;
   }
-  const selection = { skills: [...sel.skills], mcpServers: [...sel.mcpServers], includeInstructions: sel.includeInstructions };
+  const selection = { skills, mcpServers, includeInstructions: sel.includeInstructions };
   if (Object.keys(projectsSel).length) selection.projects = projectsSel;
   const name = document.getElementById("name").value || "pack";
   const reqBody = { selection, name };
