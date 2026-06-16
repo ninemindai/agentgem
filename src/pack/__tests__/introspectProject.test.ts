@@ -18,6 +18,7 @@ beforeEach(() => {
   writeFileSync(join(root, ".mcp.json"), JSON.stringify({ db: { command: "pg", env: { PW: "topsecret" } } }));
   writeFileSync(join(root, "CLAUDE.md"), "project claude");
   writeFileSync(join(root, "AGENTS.md"), "project agents");
+  writeFileSync(join(root, ".claude", "settings.json"), JSON.stringify({ hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "./guard.sh" }] }] } }));
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 
@@ -34,10 +35,13 @@ describe("introspectProject", () => {
     expect((m["db"].config.env as Record<string, string>).PW).toBe("<redacted>");
     expect(JSON.stringify(p)).not.toContain("topsecret");
     expect(p.instructions.map((i) => i.name).sort()).toEqual(["AGENTS.md", "CLAUDE.md"]);
+    const hook = p.hooks.find((h) => h.event === "PreToolUse");
+    expect(hook?.name).toBe("PreToolUse · Bash");
+    expect(hook?.source).toBe("project");
   });
 
   it("returns empty arrays for a root with no project artifacts", () => {
     const nope = join(root, "nope");
-    expect(introspectProject(nope)).toEqual({ root: nope, name: "nope", skills: [], mcpServers: [], instructions: [] });
+    expect(introspectProject(nope)).toEqual({ root: nope, name: "nope", skills: [], mcpServers: [], instructions: [], hooks: [] });
   });
 });

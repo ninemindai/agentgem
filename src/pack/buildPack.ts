@@ -5,6 +5,7 @@ export interface ProjectSelection {
   skills?: string[];
   mcpServers?: string[];
   includeInstructions?: boolean;
+  hooks?: string[];
 }
 
 export type PackSelection =
@@ -14,6 +15,7 @@ export type PackSelection =
       skills?: string[];
       mcpServers?: string[];
       includeInstructions?: boolean;
+      hooks?: string[];
       projects?: Record<string, ProjectSelection>; // keyed by project root path
     };
 
@@ -26,8 +28,8 @@ export function buildPack(
   const projects = inventory.projects ?? [];
 
   if ("all" in selection && selection.all) {
-    artifacts.push(...inventory.skills, ...inventory.mcpServers, ...inventory.instructions);
-    for (const p of projects) artifacts.push(...p.skills, ...p.mcpServers, ...p.instructions);
+    artifacts.push(...inventory.skills, ...inventory.mcpServers, ...inventory.instructions, ...inventory.hooks);
+    for (const p of projects) artifacts.push(...p.skills, ...p.mcpServers, ...p.instructions, ...p.hooks);
   } else {
     const sel = selection as Exclude<PackSelection, { all: true }>;
     for (const n of sel.skills ?? []) {
@@ -41,6 +43,11 @@ export function buildPack(
       artifacts.push(a);
     }
     if (sel.includeInstructions) artifacts.push(...inventory.instructions);
+    for (const n of sel.hooks ?? []) {
+      const a = inventory.hooks.find((h) => h.name === n);
+      if (!a) throw new Error(`No hook '${n}'. Available: ${inventory.hooks.map((h) => h.name).join(", ") || "(none)"}`);
+      artifacts.push(a);
+    }
     for (const [root, ps] of Object.entries(sel.projects ?? {})) {
       const proj = projects.find((p) => p.root === root);
       if (!proj) throw new Error(`No project '${root}'. Loaded: ${projects.map((p) => p.root).join(", ") || "(none)"}`);
@@ -55,6 +62,11 @@ export function buildPack(
         artifacts.push(a);
       }
       if (ps.includeInstructions) artifacts.push(...proj.instructions);
+      for (const n of ps.hooks ?? []) {
+        const a = proj.hooks.find((h) => h.name === n);
+        if (!a) throw new Error(`No hook '${n}' in project '${proj.name}'. Available: ${proj.hooks.map((h) => h.name).join(", ") || "(none)"}`);
+        artifacts.push(a);
+      }
     }
   }
 

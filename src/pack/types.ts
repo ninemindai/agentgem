@@ -1,5 +1,5 @@
 // src/pack/types.ts
-export type ArtifactType = "skill" | "mcp_server" | "instructions";
+export type ArtifactType = "skill" | "mcp_server" | "instructions" | "hook";
 
 export interface SkillArtifact {
   type: "skill";
@@ -23,7 +23,18 @@ export interface InstructionsArtifact {
   content: string;
 }
 
-export type PackArtifact = SkillArtifact | McpServerArtifact | InstructionsArtifact;
+// One hook is an (event, matcher) group from a `.hooks` map; `config` is the group object
+// ({ matcher?, hooks: [{ type, command, … }] }), redacted at capture.
+export interface HookArtifact {
+  type: "hook";
+  name: string;
+  event: string;
+  matcher?: string;
+  config: Record<string, unknown>;
+  source?: string;
+}
+
+export type PackArtifact = SkillArtifact | McpServerArtifact | InstructionsArtifact | HookArtifact;
 
 export interface ProjectInventory {
   root: string;
@@ -31,12 +42,14 @@ export interface ProjectInventory {
   skills: SkillArtifact[];
   mcpServers: McpServerArtifact[];
   instructions: InstructionsArtifact[];
+  hooks: HookArtifact[];
 }
 
 export interface ConfigInventory {
   skills: SkillArtifact[];
   mcpServers: McpServerArtifact[];
   instructions: InstructionsArtifact[];
+  hooks: HookArtifact[];
   projects?: ProjectInventory[];
 }
 

@@ -23,10 +23,20 @@ export const InstructionsArtifactSchema = z.object({
   content: z.string(),
 });
 
+export const HookArtifactSchema = z.object({
+  type: z.literal("hook"),
+  name: z.string(),
+  event: z.string(),
+  matcher: z.string().optional(),
+  config: z.record(z.string(), z.unknown()),
+  source: z.string().optional(),
+});
+
 export const PackArtifactSchema = z.discriminatedUnion("type", [
   SkillArtifactSchema,
   McpServerArtifactSchema,
   InstructionsArtifactSchema,
+  HookArtifactSchema,
 ]);
 
 export const ProjectInventorySchema = z.object({
@@ -35,12 +45,14 @@ export const ProjectInventorySchema = z.object({
   skills: z.array(SkillArtifactSchema),
   mcpServers: z.array(McpServerArtifactSchema),
   instructions: z.array(InstructionsArtifactSchema),
+  hooks: z.array(HookArtifactSchema),
 });
 
 export const InventorySchema = z.object({
   skills: z.array(SkillArtifactSchema),
   mcpServers: z.array(McpServerArtifactSchema),
   instructions: z.array(InstructionsArtifactSchema),
+  hooks: z.array(HookArtifactSchema),
   projects: z.array(ProjectInventorySchema).optional(),
 });
 
@@ -52,6 +64,7 @@ const ProjectSelectionSchema = z.record(
     skills: z.array(z.string()).optional(),
     mcpServers: z.array(z.string()).optional(),
     includeInstructions: z.boolean().optional(),
+    hooks: z.array(z.string()).optional(),
   }),
 );
 
@@ -61,6 +74,7 @@ export const PackSelectionSchema = z.union([
     skills: z.array(z.string()).optional(),
     mcpServers: z.array(z.string()).optional(),
     includeInstructions: z.boolean().optional(),
+    hooks: z.array(z.string()).optional(),
     projects: ProjectSelectionSchema.optional(),
   }),
 ]);

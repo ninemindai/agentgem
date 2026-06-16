@@ -9,6 +9,7 @@ import type {
   SkillArtifact,
   McpServerArtifact,
   InstructionsArtifact,
+  HookArtifact,
 } from "./types.js";
 
 export interface IntrospectOptions {
@@ -101,6 +102,36 @@ function serversFromMcpJson(parsed: unknown): Record<string, unknown> {
   return parsed;
 }
 
+// Turn a config's `.hooks` event map into per-(event, matcher) artifacts. Works for both
+// settings.json (user/project) and a plugin's hooks/hooks.json — both nest under `.hooks`.
+// Each group object is redacted (defense; near-no-op for command strings).
+function hooksFromConfig(parsed: unknown, source: string): HookArtifact[] {
+  const out: HookArtifact[] = [];
+  if (!isObj(parsed) || !isObj(parsed.hooks)) return out;
+  for (const [event, groups] of Object.entries(parsed.hooks)) {
+    if (!Array.isArray(groups)) continue;
+    for (const g of groups) {
+      if (!isObj(g)) continue;
+      const matcher = typeof g.matcher === "string" && g.matcher.length ? g.matcher : undefined;
+      out.push({ type: "hook", name: `${event}${matcher ? ` · ${matcher}` : ""}`, event, matcher, config: redactMcpConfig(g), source });
+    }
+  }
+  return out;
+}
+
+// Hooks are selected by name, so make names unique across sources: a collided name gets its
+// source appended (and an index if the source collides too).
+function uniqueHookNames(hooks: HookArtifact[]): HookArtifact[] {
+  const counts: Record<string, number> = {};
+  hooks.forEach((h) => (counts[h.name] = (counts[h.name] || 0) + 1));
+  const idx: Record<string, number> = {};
+  return hooks.map((h) => {
+    if (counts[h.name] === 1) return h;
+    idx[h.name] = (idx[h.name] || 0) + 1;
+    return { ...h, name: `${h.name} (${h.source})${idx[h.name] > 1 ? ` #${idx[h.name]}` : ""}` };
+  });
+}
+
 function dedupByName<T extends { name: string }>(items: T[]): T[] {
   const seen = new Set<string>();
   const out: T[] = [];
@@ -119,6 +150,7 @@ export function introspectConfig(opts: IntrospectOptions = {}): ConfigInventory 
 
   const skillList: SkillArtifact[] = [];
   const mcpList: McpServerArtifact[] = [];
+  const hookList: HookArtifact[] = [];
 
   skillList.push(...readSkillsDir(join(claudeDir, "skills"), "standalone"));
 
@@ -127,6 +159,7 @@ export function introspectConfig(opts: IntrospectOptions = {}): ConfigInventory 
     mcpList.push(...serversToArtifacts(settings.mcpServers, "user"));
   }
   mcpList.push(...serversToArtifacts(serversFromMcpJson(readJson(join(claudeDir, ".mcp.json"))), "user"));
+  hookList.push(...hooksFromConfig(settings, "user"));
 
   const enabled = isObj(settings) && isObj(settings.enabledPlugins) ? settings.enabledPlugins : {};
   const installed = readJson(join(claudeDir, "plugins", "installed_plugins.json"));
@@ -138,6 +171,7 @@ export function introspectConfig(opts: IntrospectOptions = {}): ConfigInventory 
     const source = `plugin:${key}`;
     mcpList.push(...serversToArtifacts(serversFromMcpJson(readJson(join(installPath, ".mcp.json"))), source));
     skillList.push(...readSkillsDir(join(installPath, "skills"), source));
+    hookList.push(...hooksFromConfig(readJson(join(installPath, "hooks", "hooks.json")), source));
   }
 
   skillList.push(...readSkillsDir(agentDir, "agent"));
@@ -157,7 +191,7 @@ export function introspectConfig(opts: IntrospectOptions = {}): ConfigInventory 
   // Codex rules (~/.codex/rules/*) as instructions
   instructions.push(...readRulesDir(join(codexDir, "rules")));
 
-  return { skills: dedupByName(skillList), mcpServers: dedupByName(mcpList), instructions };
+  return { skills: dedupByName(skillList), mcpServers: dedupByName(mcpList), instructions, hooks: uniqueHookNames(hookList) };
 }
 
 // Discover PROJECT-level artifacts under a chosen project root, tagged source "project".
@@ -167,6 +201,7 @@ export function introspectProject(root: string): ProjectInventory {
   const skills: SkillArtifact[] = [];
   const mcp: McpServerArtifact[] = [];
   const instructions: InstructionsArtifact[] = [];
+  const hooks: HookArtifact[] = [];
 
   skills.push(...readSkillsDir(join(root, ".claude", "skills"), "project"));
   skills.push(...readSkillsDir(join(root, ".agents", "skills"), "project"));
@@ -174,6 +209,8 @@ export function introspectProject(root: string): ProjectInventory {
   const settings = readJson(join(root, ".claude", "settings.json"));
   if (isObj(settings) && isObj(settings.mcpServers)) mcp.push(...serversToArtifacts(settings.mcpServers, "project"));
   mcp.push(...serversToArtifacts(serversFromMcpJson(readJson(join(root, ".mcp.json"))), "project"));
+  hooks.push(...hooksFromConfig(settings, "project"));
+  hooks.push(...hooksFromConfig(readJson(join(root, ".claude", "hooks", "hooks.json")), "project"));
 
   for (const file of ["CLAUDE.md", "AGENTS.md"]) {
     const p = join(root, file);
@@ -186,5 +223,5 @@ export function introspectProject(root: string): ProjectInventory {
     }
   }
 
-  return { root, name: basename(root), skills: dedupByName(skills), mcpServers: dedupByName(mcp), instructions };
+  return { root, name: basename(root), skills: dedupByName(skills), mcpServers: dedupByName(mcp), instructions, hooks: uniqueHookNames(hooks) };
 }

@@ -42,6 +42,8 @@ beforeEach(() => {
   writeFileSync(join(pPath, ".mcp.json"), JSON.stringify({ psrv: { command: "go", env: { KEY: "sekret" } } }));
   skill(join(pPath, "skills"), "pskill", "---\nname: pskill\ndescription: Plugin skill\n---\nx");
   skill(join(pPath, "skills"), "review", "---\nname: review\ndescription: PLUGIN review\n---\ndup");
+  mkdirSync(join(pPath, "hooks"), { recursive: true });
+  writeFileSync(join(pPath, "hooks", "hooks.json"), JSON.stringify({ hooks: { SessionStart: [{ matcher: "startup", hooks: [{ type: "command", command: "node x.mjs" }] }] } }));
   writeFileSync(join(qPath, ".mcp.json"), JSON.stringify({ qsrv: { command: "no" } }));
 
   writeFileSync(join(dir, "CLAUDE.md"), "global instructions");
@@ -90,7 +92,16 @@ describe("introspectConfig (multi-source)", () => {
       agentDir: join(agentDir, "nope"),
       codexDir: join(codexDir, "nope"),
     });
-    expect(empty).toEqual({ skills: [], mcpServers: [], instructions: [] });
+    expect(empty).toEqual({ skills: [], mcpServers: [], instructions: [], hooks: [] });
+  });
+
+  it("collects hooks from an enabled plugin's hooks/hooks.json, tagged by source", () => {
+    const inv = introspectConfig({ claudeDir: dir, agentDir, codexDir });
+    const h = inv.hooks.find((x) => x.event === "SessionStart");
+    expect(h).toBeTruthy();
+    expect(h?.name).toBe("SessionStart · startup");
+    expect(h?.matcher).toBe("startup");
+    expect(h?.source).toBe("plugin:p@mp");
   });
 
   it("collects codex skills (source 'codex') and codex rules files as instructions", () => {

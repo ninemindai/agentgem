@@ -8,8 +8,10 @@ describe("wire schemas", () => {
       skills: [{ type: "skill", name: "review", source: "standalone", content: "x" }],
       mcpServers: [{ type: "mcp_server", name: "gh", transport: "stdio", config: { env: { T: "<redacted>" } } }],
       instructions: [{ type: "instructions", name: "CLAUDE.md", content: "y" }],
+      hooks: [{ type: "hook", name: "PreToolUse · Bash", event: "PreToolUse", matcher: "Bash", config: { hooks: [] }, source: "user" }],
     });
     expect(parsed.skills[0].name).toBe("review");
+    expect(parsed.hooks[0].event).toBe("PreToolUse");
   });
 
   it("validates a pack-request with an all selection", () => {

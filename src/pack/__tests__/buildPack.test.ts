@@ -10,6 +10,7 @@ const inv: ConfigInventory = {
   ],
   mcpServers: [{ type: "mcp_server", name: "gh", transport: "stdio", config: {} }],
   instructions: [{ type: "instructions", name: "CLAUDE.md", content: "x" }],
+  hooks: [{ type: "hook", name: "PreToolUse · Bash", event: "PreToolUse", matcher: "Bash", config: { hooks: [] }, source: "user" }],
 };
 
 describe("buildPack", () => {
@@ -28,7 +29,13 @@ describe("buildPack", () => {
 
   it("{ all: true } includes everything", () => {
     const pack = buildPack(inv, { all: true });
-    expect(pack.artifacts.length).toBe(4);
+    expect(pack.artifacts.length).toBe(5); // 2 skills + 1 mcp + 1 instructions + 1 hook
+  });
+
+  it("selects a hook by name", () => {
+    const pack = buildPack(inv, { hooks: ["PreToolUse · Bash"] });
+    expect(pack.artifacts.map((a) => a.type)).toEqual(["hook"]);
+    expect(pack.artifacts[0].name).toBe("PreToolUse · Bash");
   });
 
   it("throws listing available names on an unknown selection", () => {
