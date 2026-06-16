@@ -82,6 +82,10 @@
     <div class="bar"><strong style="flex:1">Pack (live)</strong><span class="seg" id="preview-modes"><button type="button" data-pmode="summary">Summary</button><button type="button" data-pmode="json">JSON</button></span><button id="copy" class="ghost">Copy</button><button id="dl">⬇ Download</button></div>
     <div id="preview"></div>
     <p class="note">MCP server &amp; hook config secrets are shown as <code>&lt;redacted&gt;</code> and never exported. Skill, CLAUDE.md, rules bodies &amp; hook commands are bundled as written — don't keep secrets in them.</p>
+    <div id="checksPanel" class="group" style="margin-top:14px">
+      <div class="bar"><strong style="flex:1">Checks</strong><button id="suggestChecks" class="ghost">Suggest checks</button></div>
+      <div id="checksList"></div>
+    </div>
   </section>
 </main>
 <div id="modal" class="modal-bg" hidden>
@@ -265,10 +269,10 @@ function filterRows() {
   });
   updateFilterBadge();
 }
-async function build(){
-  // Prune the selection to what's currently in the inventory. A stale checkbox (e.g. after a
-  // project is removed or the inventory reloads) must never reference a missing name/root —
-  // buildPack throws on that, which would surface as an opaque 500 in the preview.
+let currentChecks = [];
+// Assemble the selection request body, pruning stale names to what's currently in the inventory.
+// (A stale checkbox after a project removal/reload would make buildPack throw -> opaque 500.)
+function buildSelectionBody(){
   const has = (arr, n) => arr.some(x => x.name === n);
   const skills = [...sel.skills].filter(n => has(inv.skills, n));
   const mcpServers = [...sel.mcpServers].filter(n => has(inv.mcpServers, n));
@@ -290,13 +294,34 @@ async function build(){
   const selection = { skills, mcpServers, includeInstructions: sel.includeInstructions };
   if (hooks.length) selection.hooks = hooks;
   if (Object.keys(projectsSel).length) selection.projects = projectsSel;
-  const name = document.getElementById("name").value || "pack";
-  const reqBody = { selection, name };
+  const reqBody = { selection, name: document.getElementById("name").value || "pack" };
   if (projects.length) reqBody.projects = projects;
+  return reqBody;
+}
+async function build(){
+  const reqBody = buildSelectionBody();
+  reqBody.checks = currentChecks;
   const pack = await (await fetch("/api/pack", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(reqBody) })).json();
   window.__pack = pack;
   renderPreview();
 }
+// Each check renders as an editable JSON textarea (operator refines task/assertions/threshold).
+function renderChecks(){
+  const el = document.getElementById("checksList");
+  if (!currentChecks.length){ el.innerHTML = `<p class="d">No checks. Click "Suggest checks" to scaffold a behavioral + security draft, then edit.</p>`; return; }
+  el.innerHTML = currentChecks.map((c, i) =>
+    `<div class="group"><h2>${esc(c.kind)} · ${esc(c.name)}</h2><textarea data-ci="${i}" style="width:100%;min-height:120px;font:12px/1.5 ui-monospace,monospace;border:1px solid var(--line);border-radius:6px;padding:8px">${esc(JSON.stringify(c, null, 2))}</textarea></div>`).join("");
+}
+document.getElementById("checksList").addEventListener("change", e => {
+  const ta = e.target.closest("textarea[data-ci]"); if (!ta) return;
+  try { currentChecks[+ta.dataset.ci] = JSON.parse(ta.value); ta.style.borderColor = ""; build(); }
+  catch { ta.style.borderColor = "var(--accent)"; } // invalid JSON: flag it, keep last good value
+});
+document.getElementById("suggestChecks").addEventListener("click", async () => {
+  const r = await (await fetch("/api/scaffold-checks", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(buildSelectionBody()) })).json();
+  currentChecks = Array.isArray(r.checks) ? r.checks : [];
+  renderChecks(); build();
+});
 let previewMode = "summary";
 function fmtSize(n){ return n < 1024 ? `${n} B` : `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} KB`; }
 function artSize(a){ return (a.type === "mcp_server" || a.type === "hook") ? JSON.stringify(a.config || {}).length : (a.content || "").length; }
@@ -516,6 +541,7 @@ document.getElementById("filtersToggle").addEventListener("click", () => {
   document.getElementById("filterPanel").hidden = !filterPanelOpen;
   updateFilterBadge();
 });
+renderChecks();
 load();
 </script>
 </body>
