@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make agentpack's introspection multi-source — fold plugin-bundled skills + MCP servers and a generic `~/.agent/skills` path into the inventory, each tagged by `source` (honoring `metadata.internal`) — then add an all-artifacts search box to the UI.
+**Goal:** Make agentgem's introspection multi-source — fold plugin-bundled skills + MCP servers and a generic `~/.agent/skills` path into the inventory, each tagged by `source` (honoring `metadata.internal`) — then add an all-artifacts search box to the UI.
 
 **Architecture:** `introspectConfig(opts)` runs an ordered list of discovery sources (standalone → user-MCP → enabled-plugins → generic-agent), merges + dedups by name, redacts MCP secrets at capture. Artifacts gain a `source` tag. The web page gains a client-side filter over all rows.
 
-**Tech Stack:** TypeScript (NodeNext, zod v4, AgentBack), vitest from `dist` (`pnpm test` = `tsc -b && vitest run`), vanilla JS page. Project `/Users/rfeng/Projects/ninemind/agentpack`.
+**Tech Stack:** TypeScript (NodeNext, zod v4, AgentBack), vitest from `dist` (`pnpm test` = `tsc -b && vitest run`), vanilla JS page. Project `/Users/rfeng/Projects/ninemind/agentgem`.
 
 **Spec:** `docs/superpowers/specs/2026-06-15-multi-source-introspection-design.md`
 

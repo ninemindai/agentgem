@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-15
 **Status:** Approved design (key forks decided by user), pre-implementation
-**Project:** `agentpack`
+**Project:** `agentgem`
 **Scope:** Let the operator point at a **project root** (via a server-backed folder browser) and discover **project-level** skills / MCP servers / instructions, shown in their **own group** alongside the global inventory — not merged with it.
 
 ---

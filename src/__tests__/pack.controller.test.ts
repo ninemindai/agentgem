@@ -19,7 +19,7 @@ beforeAll(async () => {
   writeFileSync(join(dir, "settings.json"), JSON.stringify({ mcpServers: { gh: { command: "npx", env: { GH_TOKEN: "ghp_secret" } } } }));
   writeFileSync(join(dir, "CLAUDE.md"), "global instructions");
 
-  projRoot = mkdtempSync(join(homedir(), ".agentpack-proj-"));
+  projRoot = mkdtempSync(join(homedir(), ".agentgem-proj-"));
   mkdirSync(join(projRoot, ".claude", "skills", "deploy"), { recursive: true });
   writeFileSync(join(projRoot, ".claude", "skills", "deploy", "SKILL.md"), "---\nname: deploy\ndescription: Project deploy\n---\n# Deploy\n");
   writeFileSync(join(projRoot, ".mcp.json"), JSON.stringify({ db: { command: "pg", env: { PW: "projsecret" } } }));
