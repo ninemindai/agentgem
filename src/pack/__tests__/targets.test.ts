@@ -6,6 +6,7 @@ import type { Pack, PackArtifact, SkillArtifact, McpServerArtifact, Instructions
 const pack = (artifacts: PackArtifact[]): Pack => ({ name: "p", createdFrom: "/d", artifacts, checks: [], requiredSecrets: [] });
 const skill = (n: string, content = "# body"): SkillArtifact => ({ type: "skill", name: n, source: "standalone", content });
 const mcp = (n: string): McpServerArtifact => ({ type: "mcp_server", name: n, transport: "stdio", config: { command: "npx", env: { TOK: "<redacted>" } } });
+const httpMcp = (n: string, url = "https://mcp.x/sse"): McpServerArtifact => ({ type: "mcp_server", name: n, transport: "http", config: { url }, secretRefs: [{ name: "X_TOKEN", location: "headers.Authorization" }] });
 const instr = (n: string, content = "do this"): InstructionsArtifact => ({ type: "instructions", name: n, content });
 const hook = (): HookArtifact => ({ type: "hook", name: "PreToolUse · Bash", event: "PreToolUse", matcher: "Bash", config: { matcher: "Bash", hooks: [{ type: "command", command: "x" }] }, source: "user" });
 
@@ -43,6 +44,20 @@ describe("materialize", () => {
     expect(r.skipped.map((s) => s.type).sort()).toEqual(["hook", "mcp_server"]);
   });
 
+  it("eve: agent/skills/<n>.md + agent/instructions.md + per-server connection .ts (http only); hooks skipped", () => {
+    const r = materialize(pack([skill("review"), instr("X"), httpMcp("linear"), mcp("local"), hook()]), "eve");
+    expect(r.files["agent/skills/review.md"]).toBe("# body");
+    expect(r.files["agent/instructions.md"]).toContain("do this");
+    const conn = r.files["agent/connections/linear.ts"];
+    expect(conn).toContain("defineMcpClientConnection");
+    expect(conn).toContain('url: "https://mcp.x/sse"');
+    expect(conn).toContain("process.env.X_TOKEN"); // secret as env-var NAME, never a value
+    expect(conn).not.toContain("<redacted>");
+    // a stdio server can't be an Eve connection -> no file emitted; hooks unsupported -> skipped
+    expect(r.files["agent/connections/local.ts"]).toBeUndefined();
+    expect(r.skipped.map((s) => s.type)).toContain("hook");
+  });
+
   it("skips the later of two same-named skills (path collision); first wins", () => {
     const r = materialize(pack([skill("dup", "first"), skill("dup", "second")]), "claude");
     expect(r.files["skills/dup/SKILL.md"]).toBe("first");
@@ -63,6 +78,7 @@ describe("compatibility", () => {
     expect(c.claude).toEqual({ supported: 2, skipped: 0 });
     expect(c.codex).toEqual({ supported: 1, skipped: 1 });   // hook unsupported
     expect(c.hermes).toEqual({ supported: 1, skipped: 1 });
-    expect(Object.keys(TARGET_REGISTRY).sort()).toEqual(["agents", "claude", "codex", "hermes"]);
+    expect(c.eve).toEqual({ supported: 1, skipped: 1 }); // skill ok, hook unsupported
+    expect(Object.keys(TARGET_REGISTRY).sort()).toEqual(["agents", "claude", "codex", "eve", "hermes"]);
   });
 });
