@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 import type { FileTree, SkippedArtifact } from "./targets.js";
-import type { Pack, PackArtifact, ArtifactType } from "./types.js";
+import type {
+  Pack, PackArtifact, ArtifactType,
+  SkillArtifact, McpServerArtifact, HookArtifact, PackCheck,
+} from "./types.js";
 import { safePathSegment } from "./targets.js";
 
 export type { FileTree, SkippedArtifact };
@@ -133,4 +136,53 @@ export function writePackArchive(pack: Pack, opts: { version?: string } = {}): A
   files[MANIFEST_PATH] = JSON.stringify(manifest, null, 2);
   files[LOCK_PATH] = JSON.stringify(computeLock(files), null, 2);
   return { files, skipped };
+}
+
+export function readPackArchive(files: FileTree): Pack {
+  const manifestRaw = files[MANIFEST_PATH];
+  if (manifestRaw === undefined) throw new Error("archive missing pack.json");
+  const lockRaw = files[LOCK_PATH];
+  if (lockRaw === undefined) throw new Error("archive missing pack.lock");
+
+  const manifest = JSON.parse(manifestRaw) as PackManifest;
+  const lock = JSON.parse(lockRaw) as PackLock;
+  const v = verifyLock(files, lock);
+  if (!v.ok) {
+    throw new Error(
+      `pack.lock verification failed — mismatches:[${v.mismatches.join(",")}] missing:[${v.missing.join(",")}] extra:[${v.extra.join(",")}]`,
+    );
+  }
+
+  const body = (path: string): string => {
+    const c = files[path];
+    if (c === undefined) throw new Error(`manifest references missing file ${path}`);
+    return c;
+  };
+
+  const artifacts: PackArtifact[] = manifest.artifacts.map((e): PackArtifact => {
+    if (e.type === "skill") {
+      const a: SkillArtifact = { type: "skill", name: e.name, source: e.source ?? "standalone", content: body(e.path) };
+      if (e.description !== undefined) a.description = e.description;
+      return a;
+    }
+    if (e.type === "instructions") {
+      return { type: "instructions", name: e.name, content: body(e.path) };
+    }
+    if (e.type === "mcp_server") {
+      const o = JSON.parse(body(e.path)) as { transport: McpServerArtifact["transport"]; config: Record<string, unknown>; source?: string; secretRefs?: McpServerArtifact["secretRefs"] };
+      const a: McpServerArtifact = { type: "mcp_server", name: e.name, transport: o.transport, config: o.config };
+      if (o.source !== undefined) a.source = o.source;
+      if (o.secretRefs !== undefined) a.secretRefs = o.secretRefs;
+      return a;
+    }
+    const o = JSON.parse(body(e.path)) as { event: string; matcher?: string; config: Record<string, unknown>; source?: string; secretRefs?: HookArtifact["secretRefs"] };
+    const a: HookArtifact = { type: "hook", name: e.name, event: o.event, config: o.config };
+    if (o.matcher !== undefined) a.matcher = o.matcher;
+    if (o.source !== undefined) a.source = o.source;
+    if (o.secretRefs !== undefined) a.secretRefs = o.secretRefs;
+    return a;
+  });
+
+  const checks: PackCheck[] = manifest.checks.map((c) => JSON.parse(body(c.path)) as PackCheck);
+  return { name: manifest.name, createdFrom: manifest.createdFrom, artifacts, checks, requiredSecrets: manifest.requiredSecrets };
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeLock, verifyLock, writePackArchive } from "../archive.js";
+import { computeLock, verifyLock, writePackArchive, readPackArchive } from "../archive.js";
 import type { Pack, PackArtifact } from "../types.js";
 
 describe("computeLock", () => {
@@ -85,5 +85,35 @@ describe("writePackArchive", () => {
     expect(files["skills/a_b/SKILL.md"]).toBe("first");
     expect(skipped).toHaveLength(1);
     expect(skipped[0]).toMatchObject({ type: "skill", reason: expect.stringContaining("collision") });
+  });
+});
+
+describe("readPackArchive", () => {
+  const full = pack([
+    { type: "skill", name: "code review", description: "rev", source: "standalone", content: "# Review" },
+    { type: "instructions", name: "soul", content: "be kind" },
+    { type: "mcp_server", name: "context7", transport: "http", config: { url: "https://x/sse", headers: { Authorization: "<redacted>" } }, secretRefs: [{ name: "C7", location: "headers.Authorization" }] },
+    { type: "hook", name: "fmt", event: "PostToolUse", matcher: "Edit", config: { matcher: "Edit", hooks: [{ type: "command", command: "prettier" }] }, source: "user" },
+  ], {
+    requiredSecrets: [{ name: "C7", artifact: "context7", location: "headers.Authorization" }],
+    checks: [{ kind: "behavioral", name: "smoke", task: "do x", assertions: [{ type: "output_contains", substring: "ok" }] }],
+  });
+
+  it("round-trips a Pack exactly", () => {
+    const back = readPackArchive(writePackArchive(full).files);
+    expect(back).toEqual(full);
+  });
+
+  it("throws when a body has been tampered after the lock was written", () => {
+    const { files } = writePackArchive(full);
+    const tampered = { ...files, "skills/code_review/SKILL.md": "# Review EDITED" };
+    expect(() => readPackArchive(tampered)).toThrow(/verification failed/i);
+  });
+
+  it("blessing the edit (recompute lock) lets the read succeed", () => {
+    const { files } = writePackArchive(full);
+    const edited = { ...files, "skills/code_review/SKILL.md": "# Review EDITED" } as typeof files;
+    (edited as Record<string, string>)["pack.lock"] = JSON.stringify(computeLock(edited), null, 2);
+    expect(readPackArchive(edited).artifacts[0]).toMatchObject({ type: "skill", content: "# Review EDITED" });
   });
 });
