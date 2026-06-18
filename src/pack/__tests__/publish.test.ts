@@ -58,6 +58,15 @@ describe("renderManagedAgent", () => {
     expect(JSON.stringify(r)).not.toMatch(/ghp_|Bearer [A-Za-z0-9]/);
   });
 
+  it("skips an http MCP whose url was redacted/malformed (never ships a broken endpoint)", () => {
+    const p: Pack = { ...pack, artifacts: [
+      { type: "mcp_server", name: "bad", transport: "http", source: "user", config: { url: "<redacted>" } },
+    ] };
+    const r = renderManagedAgent(p);
+    expect(r.payload.mcp_servers).toEqual([]);
+    expect(r.skipped.find((s) => s.artifact === "bad")?.reason).toMatch(/not a usable https endpoint/);
+  });
+
   it("skips skills that would overflow the 100K system-prompt limit", () => {
     const big = "x".repeat(60_000);
     const many: Pack = { ...pack, artifacts: [

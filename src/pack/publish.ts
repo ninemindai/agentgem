@@ -58,7 +58,9 @@ export function renderManagedAgent(pack: Pack): ManagedAgentRender {
   for (const m of mcp) {
     if (m.transport === "stdio") { skipped.push({ artifact: m.name, type: "mcp_server", reason: "stdio MCP unsupported on Managed Agents (needs a URL endpoint)" }); continue; }
     const url = typeof m.config.url === "string" ? m.config.url : "";
-    if (!url) { skipped.push({ artifact: m.name, type: "mcp_server", reason: `${m.transport} MCP has no url` }); continue; }
+    // Require a real http(s) endpoint. A redaction-stripped or malformed url (e.g. "<redacted>"
+    // from a token-bearing query string) must not ship a broken server entry.
+    if (!/^https?:\/\//.test(url)) { skipped.push({ artifact: m.name, type: "mcp_server", reason: url ? `${m.transport} MCP url is not a usable https endpoint (redacted or malformed)` : `${m.transport} MCP has no url` }); continue; }
     if (mcp_servers.length >= MAX_MCP) { skipped.push({ artifact: m.name, type: "mcp_server", reason: "exceeds Managed Agents 20-server cap" }); continue; }
     mcp_servers.push({ type: "url", name: m.name, url });
   }
