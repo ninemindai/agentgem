@@ -8,8 +8,9 @@ import type {
   SkillArtifact, McpServerArtifact, InstructionsArtifact, HookArtifact,
 } from "./types.js";
 import { tomlMcpServers } from "./toml.js";
+import { stdioProxyRunner, PROXY_BASE_PORT } from "./mcpProxy.js";
 
-export type TargetId = "claude" | "codex" | "agents" | "hermes";
+export type TargetId = "claude" | "codex" | "agents" | "hermes" | "eve";
 export type FileTree = Record<string, string>;
 
 export interface SkippedArtifact { artifact: string; type: ArtifactType; reason: string }
@@ -27,6 +28,34 @@ interface TargetSpec {
 // ── shared convention renderers ──
 const skillSkillMd = (a: SkillArtifact): FileTree => ({ [`skills/${a.name}/SKILL.md`]: a.content });
 const skillDescriptionMd = (a: SkillArtifact): FileTree => ({ [`skills/${a.name}/DESCRIPTION.md`]: a.content });
+// Eve: a project under agent/. Flat markdown skills (frontmatter optional — description falls back
+// to the first line), a single agent/instructions.md, and one TS connection file per MCP server.
+const skillEveMd = (a: SkillArtifact): FileTree => ({ [`agent/skills/${a.name}.md`]: a.content });
+const eveConnection = (name: string, url: string, secretEnv?: string): string => {
+  const auth = secretEnv ? `,\n  auth: { getToken: async () => ({ token: process.env.${secretEnv}! }) }` : "";
+  return `import { defineMcpClientConnection } from "eve/connections";\n\nexport default defineMcpClientConnection({\n  url: ${JSON.stringify(url)},\n  description: ${JSON.stringify(name)}${auth},\n});\n`;
+};
+// Eve MCP connections: one TS file per server. http/sse -> a direct remote connection (auth reads
+// the secret from an env var name, never a value). stdio -> a localhost connection plus a generated
+// proxy runner (.proxy.mjs) the operator launches to bridge the stdio server to HTTP.
+const mcpEveConnections = (servers: McpServerArtifact[]): FileTree => {
+  const out: FileTree = {};
+  let port = PROXY_BASE_PORT;
+  for (const s of servers) {
+    const url = typeof s.config.url === "string" ? s.config.url : "";
+    const secret = s.secretRefs && s.secretRefs[0] ? s.secretRefs[0].name : undefined;
+    if (/^https?:\/\//.test(url)) {
+      out[`agent/connections/${s.name}.ts`] = eveConnection(s.name, url, secret);
+    } else if (s.transport === "stdio" && typeof s.config.command === "string") {
+      const p = port++;
+      const args = Array.isArray(s.config.args) ? s.config.args.filter((a): a is string => typeof a === "string") : [];
+      out[`agent/connections/${s.name}.ts`] = eveConnection(s.name, `http://localhost:${p}/mcp`);
+      out[`agent/connections/${s.name}.proxy.mjs`] = stdioProxyRunner(s.name, s.config.command, args, (s.secretRefs ?? []).map((r) => r.name), p);
+    }
+    // else: non-stdio without a url (can't connect) -> nothing emitted
+  }
+  return out;
+};
 
 // Multiple instruction artifacts concatenate into the target's single canonical file,
 // each under a "## <name>" separator so provenance survives.
@@ -57,6 +86,8 @@ export const TARGET_REGISTRY: Record<TargetId, TargetSpec> = {
   codex:  { id: "codex",  label: "Codex",  skill: skillSkillMd,       instructions: instructionsAgentsMd, mcp: mcpCodexToml },
   agents: { id: "agents", label: "Agents", skill: skillSkillMd,       instructions: instructionsAgentsMd },
   hermes: { id: "hermes", label: "Hermes", skill: skillDescriptionMd, instructions: instructionsSoulMd },
+  // Eve project layout (agent/...). Hooks are event-reacting code in Eve, not config -> unsupported.
+  eve:    { id: "eve",    label: "Eve",    skill: skillEveMd,         instructions: concatInstructions("agent/instructions.md"), mcp: mcpEveConnections },
 };
 
 export function materialize(pack: Pack, target: TargetId): MaterializeResult {
