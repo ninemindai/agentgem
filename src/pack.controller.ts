@@ -10,6 +10,7 @@ import { renderManagedAgent } from "./pack/publish.js";
 import { writePackArchive, readPackArchive } from "./pack/archive.js";
 import type { PackLock } from "./pack/archive.js";
 import { writeArchiveDir, readArchiveDir } from "./pack/archiveFs.js";
+import { packTar } from "./pack/archiveTar.js";
 import type { Pack } from "./pack/types.js";
 import { publishManagedAgent, publishManagedAgentOnce, anthropicPublishClient } from "./publish.js";
 import type { ConfigInventory } from "./pack/types.js";
@@ -72,7 +73,8 @@ export class PackController {
     const lock = JSON.parse(files["pack.lock"]) as PackLock;
     let path: string | null = null;
     if (input.body.outDir) { writeArchiveDir(input.body.outDir, files); path = input.body.outDir; }
-    return { files, lock, skipped, path };
+    const tarGz = input.body.tar ? packTar(files).toString("base64") : null;
+    return { files, lock, skipped, path, tarGz };
   }
 
   // Offline render of the Managed Agents agent payload + skip/secret/skill lists. No network.

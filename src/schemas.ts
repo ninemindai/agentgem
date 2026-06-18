@@ -186,6 +186,7 @@ export const ArchiveRequestSchema = z.object({
   dir: z.string().optional(),
   projects: z.array(z.string()).optional(),
   outDir: z.string().optional(), // when set, write the tree here and return its path
+  tar: z.boolean().optional(),   // when true, also return the tree as a base64 .tar.gz
 });
 
 export const ArchiveResponseSchema = z.object({
@@ -193,6 +194,7 @@ export const ArchiveResponseSchema = z.object({
   lock: PackLockSchema,
   skipped: z.array(SkippedArtifactSchema),
   path: z.string().nullable(),
+  tarGz: z.string().nullable(), // base64 .tar.gz when `tar` was requested, else null
 });
 
 export const MaterializeRequestSchema = z.object({

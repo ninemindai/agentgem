@@ -6,6 +6,7 @@ import { join } from "node:path";
 import supertest from "supertest";
 import { RestApplication } from "@agentback/rest";
 import { PackController } from "../pack.controller.js";
+import { unpackTar } from "../pack/archiveTar.js";
 
 let app: RestApplication;
 let client: ReturnType<typeof supertest>;
@@ -146,7 +147,20 @@ describe("POST /api/archive", () => {
     expect(r.body.files["mcp/gh.json"]).toBeDefined();
     expect(r.body.files["mcp/gh.json"]).toContain("<redacted>");
     expect(JSON.stringify(r.body)).not.toContain("ghp_secret"); // redaction survives
+    expect(r.body.tarGz).toBeNull(); // no tar unless requested
     rmSync(out, { recursive: true, force: true });
+  });
+
+  it("returns a base64 .tar.gz when tar:true that unpacks back to the same tree", async () => {
+    const r = await client.post("/api/archive")
+      .send({ dir, selection: { skills: ["review"], mcpServers: ["gh"], includeInstructions: true }, name: "demo", tar: true })
+      .expect(200);
+    expect(typeof r.body.tarGz).toBe("string");
+    expect(r.body.path).toBeNull(); // tar requested but no outDir -> nothing written to disk
+    const unpacked = unpackTar(Buffer.from(r.body.tarGz, "base64"));
+    expect(unpacked).toEqual(r.body.files); // round-trips the exact archive tree
+    expect(unpacked["mcp/gh.json"]).toContain("<redacted>");
+    expect(JSON.stringify(unpacked)).not.toContain("ghp_secret"); // tarball is secret-safe too
   });
 });
 

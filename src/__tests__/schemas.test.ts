@@ -96,11 +96,15 @@ describe("archive schemas", () => {
     }).success).toBe(true);
   });
 
-  it("archive request requires a selection; response carries files+lock+skipped+path", () => {
+  it("archive request requires a selection; response carries files+lock+skipped+path+tarGz", () => {
     expect(ArchiveRequestSchema.safeParse({ selection: { all: true }, outDir: "/tmp/out" }).success).toBe(true);
+    expect(ArchiveRequestSchema.safeParse({ selection: { all: true }, tar: true }).success).toBe(true);
     expect(ArchiveRequestSchema.safeParse({ name: "p" }).success).toBe(false);
     expect(ArchiveResponseSchema.safeParse({
-      files: { "pack.json": "{}" }, lock: { formatVersion: 1, files: {}, packDigest: "sha256:x", signature: null }, skipped: [], path: null,
+      files: { "pack.json": "{}" }, lock: { formatVersion: 1, files: {}, packDigest: "sha256:x", signature: null }, skipped: [], path: null, tarGz: null,
+    }).success).toBe(true);
+    expect(ArchiveResponseSchema.safeParse({
+      files: {}, lock: { formatVersion: 1, files: {}, packDigest: "sha256:x", signature: null }, skipped: [], path: null, tarGz: "H4sIAAAA",
     }).success).toBe(true);
   });
 
