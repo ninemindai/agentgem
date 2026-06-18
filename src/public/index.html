@@ -651,7 +651,15 @@ async function wsOpen(name){
   wsCurrent = name;
   const targets = document.getElementById("wsTargets"), tree = document.getElementById("wsTree");
   if (!name){ targets.hidden = true; targets.innerHTML = ""; tree.innerHTML = ""; document.getElementById("wsDelete").hidden = true; return; }
-  const d = await (await fetch("/api/workspace?name=" + encodeURIComponent(name))).json();
+  let d;
+  try {
+    const res = await fetch("/api/workspace?name=" + encodeURIComponent(name));
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    d = await res.json();
+  } catch {
+    tree.innerHTML = '<p class="d">Could not load workspace (it may have been deleted or is corrupted).</p>';
+    return;
+  }
   targets.hidden = false;
   targets.innerHTML = `<strong style="flex:1">Target layout</strong>` + Object.keys(d.compatibility)
     .map(t => `<button type="button" class="ghost wstab" data-t="${esc(t)}">${esc(t)}${(d.renderedTargets || []).includes(t) ? " ●" : ""}</button>`).join("");
@@ -661,11 +669,24 @@ async function wsOpen(name){
 async function wsRender(target){
   const tree = document.getElementById("wsTree");
   tree.innerHTML = `<p class="d">Rendering ${esc(target)}…</p>`;
-  const r = await (await fetch("/api/workspace/render", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: wsCurrent, target }) })).json();
+  let r;
+  try {
+    const res = await fetch("/api/workspace/render", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: wsCurrent, target }) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    r = await res.json();
+  } catch {
+    tree.innerHTML = '<p class="d">Could not load workspace (it may have been deleted or is corrupted).</p>';
+    return;
+  }
   window.__wsFiles = r.files || {};
   const paths = Object.keys(window.__wsFiles).sort();
-  tree.innerHTML = `<div class="pgroup"><h3>${esc(target)} · ${paths.length} files <span class="d">${esc(r.path || "")}</span></h3>`
-    + paths.map(p => `<button type="button" class="prow" data-wspath="${esc(p)}"><span class="pn">${esc(p)}</span></button>`).join("") + `</div>`;
+  const skipSuffix = (r.skipped && r.skipped.length) ? ` · ${r.skipped.length} unsupported` : "";
+  if (paths.length === 0) {
+    tree.innerHTML = `<p class="d">0 files — ${r.skipped ? r.skipped.length : 0} artifact(s) unsupported on ${esc(target)}.</p>`;
+  } else {
+    tree.innerHTML = `<div class="pgroup"><h3>${esc(target)} · ${paths.length} files${skipSuffix} <span class="d">${esc(r.path || "")}</span></h3>`
+      + paths.map(p => `<button type="button" class="prow" data-wspath="${esc(p)}"><span class="pn">${esc(p)}</span></button>`).join("") + `</div>`;
+  }
   await wsRefresh();
 }
 document.getElementById("wsSelect").addEventListener("change", e => wsOpen(e.target.value));

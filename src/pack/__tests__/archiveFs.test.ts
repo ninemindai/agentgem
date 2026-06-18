@@ -24,4 +24,11 @@ describe("readArchiveDir", () => {
     writeFileSync(join(root, ".targets", "eve", "agent.ts"), "derived");
     expect(readArchiveDir(root)).toEqual(tree); // .targets content not present
   });
+
+  it("keeps a dotfile nested under a non-dot directory", () => {
+    const root = tmp();
+    const tree = { "pack.json": "{}", "skills/x/.keep": "nested" };
+    writeArchiveDir(root, tree);
+    expect(readArchiveDir(root)).toEqual(tree); // nested .keep survives; only top-level dot-entries are skipped
+  });
 });
