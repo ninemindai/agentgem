@@ -174,7 +174,6 @@ const ManagedAgentPayloadSchema = z.object({
   model: z.string(),
   system: z.string(),
   mcp_servers: z.array(z.object({ type: z.literal("url"), name: z.string(), url: z.string() })),
-  skills: z.array(z.object({ name: z.string() })),
   tools: z.array(z.union([
     z.object({ type: z.literal("agent_toolset_20260401") }),
     z.object({ type: z.literal("mcp_toolset"), mcp_server_name: z.string() }),
@@ -183,7 +182,7 @@ const ManagedAgentPayloadSchema = z.object({
 
 export const PublishPreviewResponseSchema = z.object({
   payload: ManagedAgentPayloadSchema,
-  skillBodies: z.array(z.object({ name: z.string(), content: z.string() })),
+  inlinedSkills: z.array(z.string()),
   skipped: z.array(SkippedArtifactSchema),
   vaultSecrets: z.array(SecretRequirementSchema),
 });
@@ -193,7 +192,7 @@ export const PublishReadyResponseSchema = z.object({ ready: z.boolean() });
 export const PublishResultSchema = z.object({
   agentId: z.string(),
   version: z.string(),
-  skillIds: z.array(z.object({ name: z.string(), skillId: z.string() })),
+  inlinedSkills: z.array(z.string()),
   skipped: z.array(SkippedArtifactSchema),
   vaultSecrets: z.array(SecretRequirementSchema),
 });

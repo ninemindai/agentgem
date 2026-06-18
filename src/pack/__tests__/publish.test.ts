@@ -23,16 +23,16 @@ const pack: Pack = {
 };
 
 describe("renderManagedAgent", () => {
-  it("maps instructions->system, http MCP->mcp_servers, skills->skillBodies; default model", () => {
+  it("inlines instructions + skills into system, maps http MCP, default model", () => {
     const r = renderManagedAgent(pack);
     expect(r.payload.model).toBe(MANAGED_AGENTS_MODEL);
     expect(r.payload.name).toBe("mypack");
     expect(r.payload.system).toContain("## CLAUDE.md");
-    expect(r.payload.system).toContain("be kind"); // both instruction files concatenated
-    expect(r.skillBodies.map((s) => s.name)).toEqual(["review", "deploy"]);
-    expect(r.payload.skills.map((s) => s.name)).toEqual(["review", "deploy"]);
+    expect(r.payload.system).toContain("be kind");          // instruction files
+    expect(r.payload.system).toContain("# Skill: review");  // skills folded in
+    expect(r.payload.system).toContain("# Skill: deploy");
+    expect(r.inlinedSkills).toEqual(["review", "deploy"]);
     expect(r.payload.mcp_servers).toEqual([{ type: "url", name: "github", url: "https://mcp.github.com/mcp" }]);
-    // tools: agent toolset + an mcp_toolset per mapped server
     expect(r.payload.tools).toEqual([
       { type: "agent_toolset_20260401" },
       { type: "mcp_toolset", mcp_server_name: "github" },
@@ -58,10 +58,14 @@ describe("renderManagedAgent", () => {
     expect(JSON.stringify(r)).not.toMatch(/ghp_|Bearer [A-Za-z0-9]/);
   });
 
-  it("enforces the 20-skill cap", () => {
-    const many: Pack = { ...pack, artifacts: Array.from({ length: 22 }, (_, i) => ({ type: "skill" as const, name: `s${i}`, source: "standalone", content: "x" })) };
+  it("skips skills that would overflow the 100K system-prompt limit", () => {
+    const big = "x".repeat(60_000);
+    const many: Pack = { ...pack, artifacts: [
+      { type: "skill", name: "a", source: "standalone", content: big },
+      { type: "skill", name: "b", source: "standalone", content: big },
+    ] };
     const r = renderManagedAgent(many);
-    expect(r.skillBodies).toHaveLength(20);
-    expect(r.skipped.filter((s) => s.reason.includes("20-skill cap"))).toHaveLength(2);
+    expect(r.inlinedSkills).toEqual(["a"]);
+    expect(r.skipped.find((s) => s.artifact === "b")?.reason).toMatch(/100K system-prompt limit/);
   });
 });

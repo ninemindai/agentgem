@@ -63,7 +63,8 @@ describe("PackController", () => {
     expect(r.body.payload.name).toBe("pub");
     expect(r.body.payload.model).toBe("claude-opus-4-8");
     expect(r.body.payload.system).toContain("global instructions");
-    expect(r.body.skillBodies.map((s: { name: string }) => s.name)).toEqual(["review"]);
+    expect(r.body.payload.system).toContain("# Skill: review"); // skill inlined into system
+    expect(r.body.inlinedSkills).toEqual(["review"]);
     // gh is a stdio (command) server -> skipped; its vault secret is filtered out too
     expect(r.body.payload.mcp_servers).toEqual([]);
     expect(r.body.skipped.find((s: { artifact: string }) => s.artifact === "gh").reason).toMatch(/stdio MCP/);
