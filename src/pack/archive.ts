@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import type { FileTree, SkippedArtifact } from "./targets.js";
+import type { Pack, PackArtifact, ArtifactType } from "./types.js";
+import { safePathSegment } from "./targets.js";
 
 export type { FileTree, SkippedArtifact };
 export const ARCHIVE_FORMAT_VERSION = 1;
@@ -56,4 +58,79 @@ export function verifyLock(files: FileTree, lock: PackLock): VerifyResult {
   let ok = mismatches.length === 0 && missing.length === 0 && extra.length === 0;
   if (ok && computeLock(files).packDigest !== lock.packDigest) { mismatches.push("packDigest"); ok = false; }
   return { ok, mismatches, missing, extra };
+}
+
+interface ManifestArtifactEntry { type: ArtifactType; name: string; path: string; description?: string; source?: string }
+interface ManifestCheckEntry { name: string; path: string }
+interface PackManifest {
+  formatVersion: number;
+  name: string;
+  version: string;
+  createdFrom: string;
+  artifacts: ManifestArtifactEntry[];
+  requiredSecrets: Pack["requiredSecrets"];
+  checks: ManifestCheckEntry[];
+}
+
+export interface ArchiveResult { files: FileTree; skipped: SkippedArtifact[] }
+
+export function writePackArchive(pack: Pack, opts: { version?: string } = {}): ArchiveResult {
+  const files: FileTree = {};
+  const skipped: SkippedArtifact[] = [];
+  const artifacts: ManifestArtifactEntry[] = [];
+
+  const place = (path: string, content: string, name: string, type: ArtifactType): boolean => {
+    if (path in files) { skipped.push({ artifact: name, type, reason: `path collision with an earlier ${type} at ${path}` }); return false; }
+    files[path] = content;
+    return true;
+  };
+
+  for (const a of pack.artifacts) {
+    const seg = safePathSegment(a.name);
+    if (a.type === "skill") {
+      const path = `skills/${seg}/SKILL.md`;
+      if (place(path, a.content, a.name, "skill")) {
+        const e: ManifestArtifactEntry = { type: "skill", name: a.name, path, source: a.source };
+        if (a.description !== undefined) e.description = a.description;
+        artifacts.push(e);
+      }
+    } else if (a.type === "instructions") {
+      const path = `instructions/${seg}.md`;
+      if (place(path, a.content, a.name, "instructions")) artifacts.push({ type: "instructions", name: a.name, path });
+    } else if (a.type === "mcp_server") {
+      const path = `mcp/${seg}.json`;
+      const body: Record<string, unknown> = { transport: a.transport, config: a.config };
+      if (a.source !== undefined) body.source = a.source;
+      if (a.secretRefs !== undefined) body.secretRefs = a.secretRefs;
+      if (place(path, JSON.stringify(body, null, 2), a.name, "mcp_server")) artifacts.push({ type: "mcp_server", name: a.name, path });
+    } else {
+      const path = `hooks/${seg}.json`;
+      const body: Record<string, unknown> = { event: a.event, config: a.config };
+      if (a.matcher !== undefined) body.matcher = a.matcher;
+      if (a.source !== undefined) body.source = a.source;
+      if (a.secretRefs !== undefined) body.secretRefs = a.secretRefs;
+      if (place(path, JSON.stringify(body, null, 2), a.name, "hook")) artifacts.push({ type: "hook", name: a.name, path });
+    }
+  }
+
+  const checks: ManifestCheckEntry[] = [];
+  for (const c of pack.checks) {
+    const path = `checks/${safePathSegment(c.name)}.json`;
+    if (path in files) continue; // check names are unique within a pack; never overwrite a body
+    files[path] = JSON.stringify(c, null, 2);
+    checks.push({ name: c.name, path });
+  }
+
+  const manifest: PackManifest = {
+    formatVersion: ARCHIVE_FORMAT_VERSION,
+    name: pack.name,
+    version: opts.version ?? "0.1.0",
+    createdFrom: pack.createdFrom,
+    artifacts,
+    requiredSecrets: pack.requiredSecrets,
+    checks,
+  };
+  files[MANIFEST_PATH] = JSON.stringify(manifest, null, 2);
+  files[LOCK_PATH] = JSON.stringify(computeLock(files), null, 2);
+  return { files, skipped };
 }

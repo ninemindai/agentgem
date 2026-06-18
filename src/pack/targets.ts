@@ -25,7 +25,7 @@ interface TargetSpec {
   hook?: (hooks: HookArtifact[]) => FileTree;
 }
 
-function safePathSegment(name: string): string {
+export function safePathSegment(name: string): string {
   const safe = name.normalize("NFKC").replace(/[^A-Za-z0-9._-]/g, "_");
   return safe === "." || safe === ".." || safe.length === 0 ? "unnamed" : safe;
 }
