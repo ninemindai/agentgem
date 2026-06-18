@@ -4,10 +4,13 @@ import { api, get, post } from "@agentback/openapi";
 import { introspectConfig, introspectProject } from "./pack/introspect.js";
 import { buildPack } from "./pack/buildPack.js";
 import { scaffoldChecks } from "./pack/checks.js";
+import { materialize, compatibility } from "./pack/targets.js";
+import type { TargetId } from "./pack/targets.js";
 import type { ConfigInventory } from "./pack/types.js";
 import {
   InventorySchema, PackSchema, PackRequestSchema, DirQuerySchema, PickQuerySchema, PickFolderSchema,
   ScaffoldChecksRequestSchema, ScaffoldChecksResponseSchema,
+  MaterializeRequestSchema, MaterializeResponseSchema,
 } from "./schemas.js";
 import { resolveDirs, resolveProject } from "./resolveDir.js";
 import { pickFolder } from "./pickFolder.js";
@@ -36,6 +39,15 @@ export class PackController {
     const inventory = introspectAll(input.body.dir, input.body.projects);
     const pack = buildPack(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
     return { checks: scaffoldChecks(pack) };
+  }
+
+  @post("/materialize", { body: MaterializeRequestSchema, response: MaterializeResponseSchema })
+  async materialize(input: { body: z.infer<typeof MaterializeRequestSchema> }): Promise<z.infer<typeof MaterializeResponseSchema>> {
+    const dirs = resolveDirs(input.body.dir);
+    const inventory = introspectAll(input.body.dir, input.body.projects);
+    const pack = buildPack(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
+    const target = input.body.target as TargetId;
+    return { target, ...materialize(pack, target), compatibility: compatibility(pack) };
   }
 
   // Pop the OS-native folder picker and return the chosen absolute path (null if cancelled).
