@@ -132,3 +132,46 @@ describe("PackController", () => {
     expect(JSON.stringify(r.body)).not.toContain("ghp_secret"); // secret value never present
   });
 });
+
+describe("POST /api/archive", () => {
+  it("returns a manifest+lock tree and writes it to outDir", async () => {
+    const out = mkdtempSync(join(tmpdir(), "arch-"));
+    const r = await client.post("/api/archive")
+      .send({ dir, selection: { skills: ["review"], mcpServers: ["gh"], includeInstructions: true }, name: "demo", version: "2.0.0", outDir: out })
+      .expect(200);
+    expect(r.body.files["skills/review/SKILL.md"]).toContain("# Review");
+    expect(JSON.parse(r.body.files["pack.json"]).version).toBe("2.0.0");
+    expect(r.body.lock.packDigest).toMatch(/^sha256:/);
+    expect(r.body.path).toBe(out);
+    expect(r.body.files["mcp/gh.json"]).toBeDefined();
+    expect(r.body.files["mcp/gh.json"]).toContain("<redacted>");
+    expect(JSON.stringify(r.body)).not.toContain("ghp_secret"); // redaction survives
+    rmSync(out, { recursive: true, force: true });
+  });
+});
+
+describe("POST /api/materialize from an archive", () => {
+  it("renders an Eve project from a written archive (no live introspection)", async () => {
+    const out = mkdtempSync(join(tmpdir(), "arch2-"));
+    await client.post("/api/archive")
+      .send({ dir, selection: { skills: ["review"], includeInstructions: true }, outDir: out })
+      .expect(200);
+
+    const r = await client.post("/api/materialize")
+      .send({ archivePath: out, target: "eve" })
+      .expect(200);
+
+    expect(r.body.target).toBe("eve");
+    expect(r.body.files["agent/skills/review.md"]).toContain("# Review");
+    expect(r.body.files["agent/instructions.md"]).toBeDefined();
+    rmSync(out, { recursive: true, force: true });
+  });
+
+  it("rejects a tampered archive", async () => {
+    const out = mkdtempSync(join(tmpdir(), "arch3-"));
+    await client.post("/api/archive").send({ dir, selection: { skills: ["review"] }, outDir: out }).expect(200);
+    writeFileSync(join(out, "skills", "review", "SKILL.md"), "# tampered");
+    await client.post("/api/materialize").send({ archivePath: out, target: "claude" }).expect(500);
+    rmSync(out, { recursive: true, force: true });
+  });
+});

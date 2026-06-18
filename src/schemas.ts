@@ -146,19 +146,64 @@ export const SkippedArtifactSchema = z.object({
   reason: z.string(),
 });
 
-export const MaterializeRequestSchema = z.object({
-  selection: PackSelectionSchema,
-  target: TargetIdSchema,
-  name: z.string().optional(),
-  dir: z.string().optional(),
-  projects: z.array(z.string()).optional(),
-});
-
 export const MaterializeResponseSchema = z.object({
   target: TargetIdSchema,
   files: z.record(z.string(), z.string()),
   skipped: z.array(SkippedArtifactSchema),
   compatibility: z.record(TargetIdSchema, z.object({ supported: z.number(), skipped: z.number() })),
+});
+
+// ── Pack archive ──
+export const PackLockSchema = z.object({
+  formatVersion: z.number(),
+  files: z.record(z.string(), z.string()),
+  packDigest: z.string(),
+  signature: z.string().nullable(),
+});
+
+export const PackManifestArtifactSchema = z.object({
+  type: z.enum(["skill", "mcp_server", "instructions", "hook"]),
+  name: z.string(),
+  path: z.string(),
+  description: z.string().optional(),
+  source: z.string().optional(),
+});
+
+export const PackManifestSchema = z.object({
+  formatVersion: z.number(),
+  name: z.string(),
+  version: z.string(),
+  createdFrom: z.string(),
+  artifacts: z.array(PackManifestArtifactSchema),
+  requiredSecrets: z.array(SecretRequirementSchema),
+  checks: z.array(z.object({ name: z.string(), path: z.string() })),
+});
+
+export const ArchiveRequestSchema = z.object({
+  selection: PackSelectionSchema,
+  name: z.string().optional(),
+  version: z.string().optional(),
+  dir: z.string().optional(),
+  projects: z.array(z.string()).optional(),
+  outDir: z.string().optional(), // when set, write the tree here and return its path
+});
+
+export const ArchiveResponseSchema = z.object({
+  files: z.record(z.string(), z.string()),
+  lock: PackLockSchema,
+  skipped: z.array(SkippedArtifactSchema),
+  path: z.string().nullable(),
+});
+
+export const MaterializeRequestSchema = z.object({
+  selection: PackSelectionSchema.optional(),
+  archivePath: z.string().optional(),
+  target: TargetIdSchema,
+  name: z.string().optional(),
+  dir: z.string().optional(),
+  projects: z.array(z.string()).optional(),
+}).refine((d) => d.selection !== undefined || d.archivePath !== undefined, {
+  message: "provide either selection or archivePath",
 });
 
 // ── Managed Agents publish ──
