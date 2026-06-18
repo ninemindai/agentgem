@@ -35,4 +35,11 @@ describe("verifyLock", () => {
     expect(verifyLock({ "pack.json": "{}" }, lock).missing).toContain("a.md");
     expect(verifyLock({ ...files, "b.md": "b" }, lock).extra).toContain("b.md");
   });
+
+  it("treats a whitespace/key-reordered pack.json as unmodified", () => {
+    const files = { "pack.json": '{"name":"p","version":"0.1.0"}', "a.md": "a" };
+    const lock = computeLock(files);
+    const reordered = { "pack.json": '{ "version":"0.1.0",\n  "name":"p" }', "a.md": "a" };
+    expect(verifyLock(reordered, lock).ok).toBe(true);
+  });
 });

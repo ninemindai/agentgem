@@ -30,16 +30,17 @@ function stableStringify(value: unknown): string {
   return JSON.stringify(value);
 }
 
+function fileHash(p: string, content: string): string {
+  if (p === MANIFEST_PATH) return sha256(stableStringify(JSON.parse(content)));
+  return sha256(content);
+}
+
 export function computeLock(files: FileTree): PackLock {
   const paths = Object.keys(files).filter((p) => p !== LOCK_PATH).sort();
   const fileDigests: Record<string, string> = {};
   const manifestCanonical = MANIFEST_PATH in files ? stableStringify(JSON.parse(files[MANIFEST_PATH])) : "";
   for (const p of paths) {
-    if (p === MANIFEST_PATH) {
-      fileDigests[p] = sha256(manifestCanonical);
-    } else {
-      fileDigests[p] = sha256(files[p]);
-    }
+    fileDigests[p] = fileHash(p, files[p]);
   }
   const fileLines = paths.map((p) => `${p}:${fileDigests[p]}`).join("\n");
   const packDigest = sha256(manifestCanonical + "\n" + fileLines);
@@ -49,7 +50,7 @@ export function computeLock(files: FileTree): PackLock {
 export function verifyLock(files: FileTree, lock: PackLock): VerifyResult {
   const present = Object.keys(files).filter((p) => p !== LOCK_PATH);
   const mismatches: string[] = [];
-  for (const p of present) if (p in lock.files && sha256(files[p]) !== lock.files[p]) mismatches.push(p);
+  for (const p of present) if (p in lock.files && fileHash(p, files[p]) !== lock.files[p]) mismatches.push(p);
   const missing = Object.keys(lock.files).filter((p) => !(p in files));
   const extra = present.filter((p) => !(p in lock.files));
   let ok = mismatches.length === 0 && missing.length === 0 && extra.length === 0;
