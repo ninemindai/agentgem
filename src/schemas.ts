@@ -259,3 +259,35 @@ export const PackSchema = z.object({
   checks: z.array(PackCheckSchema),
   requiredSecrets: z.array(SecretRequirementSchema),
 });
+
+// ── Workspaces ──
+export const WorkspaceSummarySchema = z.object({
+  name: z.string(),
+  packName: z.string(),
+  version: z.string(),
+  artifactCounts: z.object({ skill: z.number(), mcp_server: z.number(), instructions: z.number(), hook: z.number() }),
+  checks: z.number(),
+  renderedTargets: z.array(TargetIdSchema),
+});
+export const WorkspaceDetailSchema = WorkspaceSummarySchema.extend({
+  files: z.record(z.string(), z.string()),
+  compatibility: z.record(TargetIdSchema, z.object({ supported: z.number(), skipped: z.number() })),
+});
+export const RenderResultSchema = z.object({
+  target: TargetIdSchema,
+  files: z.record(z.string(), z.string()),
+  skipped: z.array(SkippedArtifactSchema),
+  path: z.string(),
+});
+export const CreateWorkspaceRequestSchema = z.object({
+  name: z.string(),
+  selection: PackSelectionSchema,
+  dir: z.string().optional(),
+  projects: z.array(z.string()).optional(),
+  version: z.string().optional(),
+});
+export const WorkspaceQuerySchema = z.object({ name: z.string() });
+export const RenderRequestSchema = z.object({ name: z.string(), target: TargetIdSchema });
+export const WorkspaceNameRequestSchema = z.object({ name: z.string() });
+export const ListWorkspacesResponseSchema = z.object({ workspaces: z.array(WorkspaceSummarySchema) });
+export const DeleteWorkspaceResponseSchema = z.object({ deleted: z.string() });
