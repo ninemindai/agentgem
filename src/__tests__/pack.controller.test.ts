@@ -189,3 +189,34 @@ describe("POST /api/materialize from an archive", () => {
     rmSync(out, { recursive: true, force: true });
   });
 });
+
+describe("workspace ops", () => {
+  it("create -> list -> render(eve) -> read -> delete", async () => {
+    const home = mkdtempSync(join(tmpdir(), "wsh-"));
+    process.env.AGENTGEM_HOME = home;
+    try {
+      const c = await client.post("/api/workspaces")
+        .send({ dir, name: "mp", selection: { skills: ["review"], mcpServers: ["gh"], includeInstructions: true } })
+        .expect(200);
+      expect(c.body.name).toBe("mp");
+      expect(c.body.artifactCounts.skill).toBe(1);
+
+      const l = await client.get("/api/workspaces").expect(200);
+      expect(l.body.workspaces.map((w: { name: string }) => w.name)).toEqual(["mp"]);
+
+      const r = await client.post("/api/workspace/render").send({ name: "mp", target: "eve" }).expect(200);
+      expect(r.body.files["agent/skills/review.md"]).toContain("# Review");
+
+      const d = await client.get("/api/workspace?name=mp").expect(200);
+      expect(d.body.renderedTargets).toEqual(["eve"]);
+      expect(JSON.stringify(d.body)).not.toContain("ghp_secret"); // redaction survives
+
+      const del = await client.post("/api/workspace/delete").send({ name: "mp" }).expect(200);
+      expect(del.body.deleted).toBe("mp");
+      expect((await client.get("/api/workspaces").expect(200)).body.workspaces).toEqual([]);
+    } finally {
+      delete process.env.AGENTGEM_HOME;
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+});
