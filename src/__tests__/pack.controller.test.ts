@@ -132,3 +132,18 @@ describe("PackController", () => {
     expect(JSON.stringify(r.body)).not.toContain("ghp_secret"); // secret value never present
   });
 });
+
+describe("POST /api/archive", () => {
+  it("returns a manifest+lock tree and writes it to outDir", async () => {
+    const out = mkdtempSync(join(tmpdir(), "arch-"));
+    const r = await client.post("/api/archive")
+      .send({ dir, selection: { skills: ["review"], includeInstructions: true }, name: "demo", version: "2.0.0", outDir: out })
+      .expect(200);
+    expect(r.body.files["skills/review/SKILL.md"]).toContain("# Review");
+    expect(JSON.parse(r.body.files["pack.json"]).version).toBe("2.0.0");
+    expect(r.body.lock.packDigest).toMatch(/^sha256:/);
+    expect(r.body.path).toBe(out);
+    expect(JSON.stringify(r.body)).not.toContain("ghp_secret"); // redaction survives
+    rmSync(out, { recursive: true, force: true });
+  });
+});
