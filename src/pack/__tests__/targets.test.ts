@@ -44,17 +44,22 @@ describe("materialize", () => {
     expect(r.skipped.map((s) => s.type).sort()).toEqual(["hook", "mcp_server"]);
   });
 
-  it("eve: agent/skills/<n>.md + agent/instructions.md + per-server connection .ts (http only); hooks skipped", () => {
+  it("eve: skills/instructions + http connection + stdio proxy (connection + .proxy.mjs); hooks skipped", () => {
     const r = materialize(pack([skill("review"), instr("X"), httpMcp("linear"), mcp("local"), hook()]), "eve");
     expect(r.files["agent/skills/review.md"]).toBe("# body");
     expect(r.files["agent/instructions.md"]).toContain("do this");
+    // http server -> direct remote connection
     const conn = r.files["agent/connections/linear.ts"];
-    expect(conn).toContain("defineMcpClientConnection");
     expect(conn).toContain('url: "https://mcp.x/sse"');
     expect(conn).toContain("process.env.X_TOKEN"); // secret as env-var NAME, never a value
-    expect(conn).not.toContain("<redacted>");
-    // a stdio server can't be an Eve connection -> no file emitted; hooks unsupported -> skipped
-    expect(r.files["agent/connections/local.ts"]).toBeUndefined();
+    // stdio server -> a localhost connection + a generated proxy runner
+    expect(r.files["agent/connections/local.ts"]).toContain("url: \"http://localhost:7800/mcp\"");
+    const proxy = r.files["agent/connections/local.proxy.mjs"];
+    expect(proxy).toContain("StdioClientTransport");
+    expect(proxy).toContain('command: "npx"');
+    expect(proxy).toContain("7800");
+    expect(JSON.stringify(r.files)).not.toContain("<redacted>"); // no secret value anywhere
+    // hooks unsupported -> skipped
     expect(r.skipped.map((s) => s.type)).toContain("hook");
   });
 
