@@ -7,7 +7,7 @@ import { scaffoldChecks } from "./pack/checks.js";
 import { materialize, compatibility } from "./pack/targets.js";
 import type { TargetId } from "./pack/targets.js";
 import { renderManagedAgent } from "./pack/publish.js";
-import { publishManagedAgent, anthropicAgentCreator } from "./publish.js";
+import { publishManagedAgent, anthropicPublishClient } from "./publish.js";
 import type { ConfigInventory } from "./pack/types.js";
 import {
   InventorySchema, PackSchema, PackRequestSchema, DirQuerySchema, PickQuerySchema, PickFolderSchema,
@@ -59,7 +59,8 @@ export class PackController {
     const dirs = resolveDirs(input.body.dir);
     const inventory = introspectAll(input.body.dir, input.body.projects);
     const pack = buildPack(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
-    return renderManagedAgent(pack);
+    const r = renderManagedAgent(pack);
+    return { payload: r.payload, skillsToRegister: r.skillsToRegister.map((s) => s.name), skipped: r.skipped, vaultSecrets: r.vaultSecrets };
   }
 
   // Whether the server has an ANTHROPIC_API_KEY (the UI disables Publish without it). Boolean only.
@@ -78,7 +79,7 @@ export class PackController {
     const dirs = resolveDirs(input.body.dir);
     const inventory = introspectAll(input.body.dir, input.body.projects);
     const pack = buildPack(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
-    return publishManagedAgent(pack, anthropicAgentCreator(key));
+    return publishManagedAgent(pack, anthropicPublishClient(key));
   }
 
   // Pop the OS-native folder picker and return the chosen absolute path (null if cancelled).

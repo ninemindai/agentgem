@@ -1,18 +1,18 @@
 // src/pack/publish.ts
-// Pure render: a (redacted) Pack -> the exact Claude Managed Agents `agents.create` payload, plus
-// the side-lists the operator needs. No network, no secret values.
+// Pure render: a (redacted) Pack -> the Managed Agents `agents.create` payload (sans skills) plus
+// the skills to register and the side-lists. No network, no secret values.
 //
-// v1 skill handling: skills are INLINED into the agent `system` prompt (`# Skill: <name>`), using
-// only the confirmed agents.create(system) binding. True on-demand Agent Skills (register each via
-// the Skills API -> reference by skill_id) is a documented follow-up, blocked on verifying the
-// Skills API create body. The 100K system-prompt limit is respected; overflow skills are skipped.
+// Skills become true on-demand Agent Skills: each is registered via the Skills API at publish
+// (client.beta.skills.create -> skill_id) and referenced as { type:"custom", skill_id, version }.
+// Max 20 skills per agent (overflow skipped). MCP needs a URL endpoint (stdio skipped); hooks have
+// no Managed Agents equivalent (skipped).
 import type {
   Pack, ArtifactType, SecretRequirement,
   SkillArtifact, McpServerArtifact, InstructionsArtifact, HookArtifact,
 } from "./types.js";
 
 export const MANAGED_AGENTS_MODEL = "claude-opus-4-8";
-export const SYSTEM_LIMIT = 100_000; // Managed Agents system-prompt cap (chars)
+const MAX_SKILLS = 20;
 const MAX_MCP = 20;
 
 export interface ManagedAgentPayload {
@@ -26,10 +26,10 @@ export interface ManagedAgentPayload {
 export interface SkippedArtifact { artifact: string; type: ArtifactType; reason: string }
 
 export interface ManagedAgentRender {
-  payload: ManagedAgentPayload; // exactly what agents.create receives
-  inlinedSkills: string[];      // skill names folded into the system prompt (preview visibility)
+  payload: ManagedAgentPayload;                    // agents.create payload minus skills (added at publish)
+  skillsToRegister: { name: string; content: string }[]; // each -> Skills API create -> custom skill ref
   skipped: SkippedArtifact[];
-  vaultSecrets: SecretRequirement[]; // names only — operator adds these to a vault post-publish
+  vaultSecrets: SecretRequirement[];               // names only — operator adds these to a vault post-publish
 }
 
 export function renderManagedAgent(pack: Pack): ManagedAgentRender {
@@ -39,19 +39,15 @@ export function renderManagedAgent(pack: Pack): ManagedAgentRender {
   const instr = pack.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions");
   const hooks = pack.artifacts.filter((a): a is HookArtifact => a.type === "hook");
 
-  // Build the system prompt: instructions first (## <name>), then skills (# Skill: <name>),
-  // staying under the 100K char cap. Overflow skills are skipped with a reason.
-  const parts: string[] = instr.map((i) => `## ${i.name}\n\n${i.content}`);
-  let used = parts.join("\n\n---\n\n").length;
-  const inlinedSkills: string[] = [];
+  // instructions -> system prompt (## <name>); skills are NOT inlined — they become Agent Skills.
+  const system = instr.map((i) => `## ${i.name}\n\n${i.content}`).join("\n\n---\n\n");
+
+  // skills -> custom skills to register (cap 20)
+  const skillsToRegister: { name: string; content: string }[] = [];
   for (const s of skills) {
-    const block = `# Skill: ${s.name}\n\n${s.content}`;
-    if (used + block.length + 7 > SYSTEM_LIMIT) { skipped.push({ artifact: s.name, type: "skill", reason: "would exceed the Managed Agents 100K system-prompt limit" }); continue; }
-    parts.push(block);
-    used += block.length + 7; // separator
-    inlinedSkills.push(s.name);
+    if (skillsToRegister.length >= MAX_SKILLS) { skipped.push({ artifact: s.name, type: "skill", reason: "exceeds the Managed Agents 20-skill cap" }); continue; }
+    skillsToRegister.push({ name: s.name, content: s.content });
   }
-  const system = parts.join("\n\n---\n\n");
 
   // mcp -> mcp_servers (URL transport only; stdio has no endpoint), cap 20
   const mcp_servers: { type: "url"; name: string; url: string }[] = [];
@@ -73,10 +69,9 @@ export function renderManagedAgent(pack: Pack): ManagedAgentRender {
     ...mcp_servers.map((s) => ({ type: "mcp_toolset" as const, mcp_server_name: s.name })),
   ];
 
-  // Only surface vault secrets for MCP servers that actually mapped — a skipped stdio server
-  // (or a hook) won't be created on the agent, so its credential isn't needed in a vault.
+  // Only surface vault secrets for MCP servers that actually mapped.
   const mappedNames = new Set(mcp_servers.map((m) => m.name));
   const vaultSecrets = pack.requiredSecrets.filter((s) => mappedNames.has(s.artifact));
 
-  return { payload: { name: pack.name, model: MANAGED_AGENTS_MODEL, system, mcp_servers, tools }, inlinedSkills, skipped, vaultSecrets };
+  return { payload: { name: pack.name, model: MANAGED_AGENTS_MODEL, system, mcp_servers, tools }, skillsToRegister, skipped, vaultSecrets };
 }

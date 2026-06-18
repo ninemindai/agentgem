@@ -384,13 +384,14 @@ async function renderPublish(){
   const sect = (title, rows) => rows.length ? `<div class="pgroup"><h3>${title} (${rows.length})</h3>${rows.join("")}</div>` : "";
   const row = (a, b) => `<div class="prow"><span class="pn">${esc(a)}</span> <span class="pm">${esc(b)}</span></div>`;
   let h = `<div class="psummary"><div class="phead"><strong>${esc(p.name)}</strong> <span class="d">· Managed Agent · ${esc(p.model)}</span></div>`;
-  h += `<div class="pgroup"><h3>System prompt</h3>${row(`instructions + ${r.inlinedSkills.length} skill${r.inlinedSkills.length === 1 ? "" : "s"} inlined`, fmtSize((p.system || "").length))}</div>`;
+  h += `<div class="pgroup"><h3>System prompt</h3>${row("instructions only", fmtSize((p.system || "").length))}</div>`;
+  h += sect("Skills to register", r.skillsToRegister.map(n => row(n, "Agent Skill")));
   h += sect("MCP servers", p.mcp_servers.map(m => row(m.name, m.url)));
   h += sect("Add to a vault after publish", r.vaultSecrets.map(s => row(s.name, `${s.artifact} · ${s.location}`)));
   h += sect("Skipped", r.skipped.map(s => row(s.artifact, s.reason)));
   const ready = await publishReady();
   h += `<div class="pgroup"><button id="publishBtn" ${ready ? "" : "disabled"}>${ready ? "Publish to Managed Agents" : "Publish (set ANTHROPIC_API_KEY)"}</button> <span class="d" id="publishStatus"></span></div>`;
-  h += `<p class="note">Publishing creates an agent in your Anthropic org and sends the redacted config — skills inlined into the system prompt, http/sse MCP servers (URL only), instructions. Secrets are never sent; add MCP credentials to a vault afterward. On-demand Agent Skills (Skills API) is a follow-up.</p></div>`;
+  h += `<p class="note">Publishing creates an agent in your Anthropic org: each skill is registered as an on-demand Agent Skill (Skills API), plus http/sse MCP servers (URL only) and instructions as the system prompt. Secrets are never sent; add MCP credentials to a vault afterward.</p></div>`;
   el.innerHTML = h;
 }
 async function doPublish(){
@@ -400,7 +401,7 @@ async function doPublish(){
   try {
     const r = await (await fetch("/api/publish", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(buildSelectionBody()) })).json();
     if (r.error) { st.textContent = "Failed: " + (r.error.message || JSON.stringify(r.error)); btn.disabled = false; return; }
-    st.innerHTML = `✓ Created <code>${esc(r.agentId)}</code> (v${esc(r.version)})`;
+    st.innerHTML = `✓ Created <code>${esc(r.agentId)}</code> (v${esc(r.version)}) · ${r.registeredSkills.length} skill${r.registeredSkills.length === 1 ? "" : "s"} registered`;
   } catch (e) { st.textContent = "Failed: " + e.message; btn.disabled = false; }
 }
 function openMaterializedFile(path){
