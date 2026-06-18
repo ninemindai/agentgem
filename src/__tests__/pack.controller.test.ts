@@ -98,4 +98,16 @@ describe("PackController", () => {
     expect(kinds).toContain("behavioral");
     expect(kinds).toContain("external");
   });
+
+  it("POST /api/materialize renders the target layout + compatibility, no secret values", async () => {
+    const r = await client
+      .post("/api/materialize")
+      .send({ dir, selection: { skills: ["review"], mcpServers: ["gh"] }, target: "codex" })
+      .expect(200);
+    expect(r.body.target).toBe("codex");
+    expect(r.body.files["skills/review/SKILL.md"]).toBeTruthy();
+    expect(r.body.files["config.toml"]).toContain("[mcp_servers.gh]");
+    expect(r.body.compatibility.codex).toBeTruthy();
+    expect(JSON.stringify(r.body)).not.toContain("ghp_secret"); // secret value never present
+  });
 });
