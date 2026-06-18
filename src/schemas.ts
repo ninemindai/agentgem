@@ -161,6 +161,43 @@ export const MaterializeResponseSchema = z.object({
   compatibility: z.record(TargetIdSchema, z.object({ supported: z.number(), skipped: z.number() })),
 });
 
+// ── Managed Agents publish ──
+export const PublishRequestSchema = z.object({
+  selection: PackSelectionSchema,
+  name: z.string().optional(),
+  dir: z.string().optional(),
+  projects: z.array(z.string()).optional(),
+});
+
+const ManagedAgentPayloadSchema = z.object({
+  name: z.string(),
+  model: z.string(),
+  system: z.string(),
+  mcp_servers: z.array(z.object({ type: z.literal("url"), name: z.string(), url: z.string() })),
+  skills: z.array(z.object({ name: z.string() })),
+  tools: z.array(z.union([
+    z.object({ type: z.literal("agent_toolset_20260401") }),
+    z.object({ type: z.literal("mcp_toolset"), mcp_server_name: z.string() }),
+  ])),
+});
+
+export const PublishPreviewResponseSchema = z.object({
+  payload: ManagedAgentPayloadSchema,
+  skillBodies: z.array(z.object({ name: z.string(), content: z.string() })),
+  skipped: z.array(SkippedArtifactSchema),
+  vaultSecrets: z.array(SecretRequirementSchema),
+});
+
+export const PublishReadyResponseSchema = z.object({ ready: z.boolean() });
+
+export const PublishResultSchema = z.object({
+  agentId: z.string(),
+  version: z.string(),
+  skillIds: z.array(z.object({ name: z.string(), skillId: z.string() })),
+  skipped: z.array(SkippedArtifactSchema),
+  vaultSecrets: z.array(SecretRequirementSchema),
+});
+
 // `projects` is a JSON-encoded string array of root paths (query params can't carry arrays cleanly).
 export const DirQuerySchema = z.object({ dir: z.string().optional(), projects: z.string().optional() });
 

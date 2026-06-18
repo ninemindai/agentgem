@@ -64,10 +64,15 @@ export function renderManagedAgent(pack: Pack): ManagedAgentRender {
     ...mcp_servers.map((s) => ({ type: "mcp_toolset" as const, mcp_server_name: s.name })),
   ];
 
+  // Only surface vault secrets for MCP servers that actually mapped — a skipped stdio server
+  // (or a hook) won't be created on the agent, so its credential isn't needed in a vault.
+  const mappedNames = new Set(mcp_servers.map((m) => m.name));
+  const vaultSecrets = pack.requiredSecrets.filter((s) => mappedNames.has(s.artifact));
+
   return {
     payload: { name: pack.name, model: MANAGED_AGENTS_MODEL, system, mcp_servers, skills: skillBodies.map((s) => ({ name: s.name })), tools },
     skillBodies,
     skipped,
-    vaultSecrets: pack.requiredSecrets,
+    vaultSecrets,
   };
 }

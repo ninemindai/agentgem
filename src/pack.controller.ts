@@ -6,11 +6,13 @@ import { buildPack } from "./pack/buildPack.js";
 import { scaffoldChecks } from "./pack/checks.js";
 import { materialize, compatibility } from "./pack/targets.js";
 import type { TargetId } from "./pack/targets.js";
+import { renderManagedAgent } from "./pack/publish.js";
 import type { ConfigInventory } from "./pack/types.js";
 import {
   InventorySchema, PackSchema, PackRequestSchema, DirQuerySchema, PickQuerySchema, PickFolderSchema,
   ScaffoldChecksRequestSchema, ScaffoldChecksResponseSchema,
   MaterializeRequestSchema, MaterializeResponseSchema,
+  PublishRequestSchema, PublishPreviewResponseSchema, PublishReadyResponseSchema,
 } from "./schemas.js";
 import { resolveDirs, resolveProject } from "./resolveDir.js";
 import { pickFolder } from "./pickFolder.js";
@@ -48,6 +50,21 @@ export class PackController {
     const pack = buildPack(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
     const target = input.body.target as TargetId;
     return { target, ...materialize(pack, target), compatibility: compatibility(pack) };
+  }
+
+  // Offline render of the Managed Agents agent payload + skip/secret/skill lists. No network.
+  @post("/publish-preview", { body: PublishRequestSchema, response: PublishPreviewResponseSchema })
+  async publishPreview(input: { body: z.infer<typeof PublishRequestSchema> }): Promise<z.infer<typeof PublishPreviewResponseSchema>> {
+    const dirs = resolveDirs(input.body.dir);
+    const inventory = introspectAll(input.body.dir, input.body.projects);
+    const pack = buildPack(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
+    return renderManagedAgent(pack);
+  }
+
+  // Whether the server has an ANTHROPIC_API_KEY (the UI disables Publish without it). Boolean only.
+  @get("/publish-ready", { query: PickQuerySchema, response: PublishReadyResponseSchema })
+  async publishReady(_input: { query: z.infer<typeof PickQuerySchema> }): Promise<z.infer<typeof PublishReadyResponseSchema>> {
+    return { ready: !!process.env.ANTHROPIC_API_KEY };
   }
 
   // Pop the OS-native folder picker and return the chosen absolute path (null if cancelled).
