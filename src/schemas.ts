@@ -182,7 +182,7 @@ const ManagedAgentPayloadSchema = z.object({
 
 export const PublishPreviewResponseSchema = z.object({
   payload: ManagedAgentPayloadSchema,
-  inlinedSkills: z.array(z.string()),
+  skillsToRegister: z.array(z.string()),
   skipped: z.array(SkippedArtifactSchema),
   vaultSecrets: z.array(SecretRequirementSchema),
 });
@@ -192,7 +192,7 @@ export const PublishReadyResponseSchema = z.object({ ready: z.boolean() });
 export const PublishResultSchema = z.object({
   agentId: z.string(),
   version: z.string(),
-  inlinedSkills: z.array(z.string()),
+  registeredSkills: z.array(z.object({ name: z.string(), skillId: z.string(), version: z.string() })),
   skipped: z.array(SkippedArtifactSchema),
   vaultSecrets: z.array(SecretRequirementSchema),
 });

@@ -23,15 +23,15 @@ const pack: Pack = {
 };
 
 describe("renderManagedAgent", () => {
-  it("inlines instructions + skills into system, maps http MCP, default model", () => {
+  it("instructions->system, skills->skillsToRegister (not inlined), maps http MCP, default model", () => {
     const r = renderManagedAgent(pack);
     expect(r.payload.model).toBe(MANAGED_AGENTS_MODEL);
     expect(r.payload.name).toBe("mypack");
     expect(r.payload.system).toContain("## CLAUDE.md");
-    expect(r.payload.system).toContain("be kind");          // instruction files
-    expect(r.payload.system).toContain("# Skill: review");  // skills folded in
-    expect(r.payload.system).toContain("# Skill: deploy");
-    expect(r.inlinedSkills).toEqual(["review", "deploy"]);
+    expect(r.payload.system).toContain("be kind");        // instruction files
+    expect(r.payload.system).not.toContain("# Skill:");   // skills are NOT inlined anymore
+    expect(r.skillsToRegister.map((s) => s.name)).toEqual(["review", "deploy"]);
+    expect(r.skillsToRegister[0].content).toContain("# Review");
     expect(r.payload.mcp_servers).toEqual([{ type: "url", name: "github", url: "https://mcp.github.com/mcp" }]);
     expect(r.payload.tools).toEqual([
       { type: "agent_toolset_20260401" },
@@ -67,14 +67,10 @@ describe("renderManagedAgent", () => {
     expect(r.skipped.find((s) => s.artifact === "bad")?.reason).toMatch(/not a usable https endpoint/);
   });
 
-  it("skips skills that would overflow the 100K system-prompt limit", () => {
-    const big = "x".repeat(60_000);
-    const many: Pack = { ...pack, artifacts: [
-      { type: "skill", name: "a", source: "standalone", content: big },
-      { type: "skill", name: "b", source: "standalone", content: big },
-    ] };
+  it("enforces the 20-skill cap (overflow skipped)", () => {
+    const many: Pack = { ...pack, artifacts: Array.from({ length: 22 }, (_, i) => ({ type: "skill" as const, name: `s${i}`, source: "standalone", content: "x" })) };
     const r = renderManagedAgent(many);
-    expect(r.inlinedSkills).toEqual(["a"]);
-    expect(r.skipped.find((s) => s.artifact === "b")?.reason).toMatch(/100K system-prompt limit/);
+    expect(r.skillsToRegister).toHaveLength(20);
+    expect(r.skipped.filter((s) => s.reason.includes("20-skill cap"))).toHaveLength(2);
   });
 });
