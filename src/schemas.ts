@@ -162,12 +162,13 @@ export const MaterializeResponseSchema = z.object({
 });
 
 // ── Managed Agents publish ──
-export const PublishRequestSchema = z.object({
+export const PublishPreviewRequestSchema = z.object({
   selection: PackSelectionSchema,
   name: z.string().optional(),
   dir: z.string().optional(),
   projects: z.array(z.string()).optional(),
 });
+export const PublishRequestSchema = PublishPreviewRequestSchema.extend({ requestId: z.string().min(8).max(128) });
 
 const ManagedAgentPayloadSchema = z.object({
   name: z.string(),
@@ -191,6 +192,7 @@ export const PublishReadyResponseSchema = z.object({ ready: z.boolean() });
 
 export const PublishResultSchema = z.object({
   agentId: z.string(),
+  environmentId: z.string(),
   version: z.string(),
   registeredSkills: z.array(z.object({ name: z.string(), skillId: z.string(), version: z.string() })),
   skipped: z.array(SkippedArtifactSchema),

@@ -1,6 +1,9 @@
 // src/__tests__/schemas.test.ts
 import { describe, it, expect } from "vitest";
-import { InventorySchema, PackSchema, PackRequestSchema, PackCheckSchema, ScaffoldChecksResponseSchema, MaterializeRequestSchema, MaterializeResponseSchema } from "../schemas.js";
+import {
+  InventorySchema, PackSchema, PackRequestSchema, PackCheckSchema, ScaffoldChecksResponseSchema,
+  MaterializeRequestSchema, MaterializeResponseSchema, PublishPreviewRequestSchema, PublishRequestSchema, PublishResultSchema,
+} from "../schemas.js";
 
 describe("wire schemas", () => {
   it("validates an inventory shape", () => {
@@ -68,5 +71,16 @@ describe("wire schemas", () => {
     });
     expect(r.files["CLAUDE.md"]).toBe("x");
     expect(r.skipped[0].type).toBe("hook");
+  });
+
+  it("requires an idempotency key for publish but not preview, and returns a sandbox id", () => {
+    PublishPreviewRequestSchema.parse({ selection: { all: true } });
+    expect(() => PublishRequestSchema.parse({ selection: { all: true } })).toThrow();
+    PublishRequestSchema.parse({ selection: { all: true }, requestId: "request-123" });
+    const result = PublishResultSchema.parse({
+      agentId: "agent_1", environmentId: "env_1", version: "1",
+      registeredSkills: [], skipped: [], vaultSecrets: [],
+    });
+    expect(result.environmentId).toBe("env_1");
   });
 });

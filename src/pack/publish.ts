@@ -51,14 +51,17 @@ export function renderManagedAgent(pack: Pack): ManagedAgentRender {
 
   // mcp -> mcp_servers (URL transport only; stdio has no endpoint), cap 20
   const mcp_servers: { type: "url"; name: string; url: string }[] = [];
+  const mappedMcpNames = new Set<string>();
   for (const m of mcp) {
     if (m.transport === "stdio") { skipped.push({ artifact: m.name, type: "mcp_server", reason: "stdio MCP unsupported on Managed Agents (needs a URL endpoint)" }); continue; }
     const url = typeof m.config.url === "string" ? m.config.url : "";
     // Require a real http(s) endpoint. A redaction-stripped or malformed url (e.g. "<redacted>"
     // from a token-bearing query string) must not ship a broken server entry.
     if (!/^https?:\/\//.test(url)) { skipped.push({ artifact: m.name, type: "mcp_server", reason: url ? `${m.transport} MCP url is not a usable https endpoint (redacted or malformed)` : `${m.transport} MCP has no url` }); continue; }
+    if (mappedMcpNames.has(m.name)) { skipped.push({ artifact: m.name, type: "mcp_server", reason: "duplicate Managed Agents MCP server name" }); continue; }
     if (mcp_servers.length >= MAX_MCP) { skipped.push({ artifact: m.name, type: "mcp_server", reason: "exceeds Managed Agents 20-server cap" }); continue; }
     mcp_servers.push({ type: "url", name: m.name, url });
+    mappedMcpNames.add(m.name);
   }
 
   // hooks -> no Managed Agents equivalent

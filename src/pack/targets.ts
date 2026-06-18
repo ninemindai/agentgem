@@ -8,7 +8,7 @@ import type {
   SkillArtifact, McpServerArtifact, InstructionsArtifact, HookArtifact,
 } from "./types.js";
 import { tomlMcpServers } from "./toml.js";
-import { stdioProxyRunner, PROXY_BASE_PORT } from "./mcpProxy.js";
+import { stdioProxyRunner, PROXY_BASE_PORT, PROXY_HOST } from "./mcpProxy.js";
 
 export type TargetId = "claude" | "codex" | "agents" | "hermes" | "eve";
 export type FileTree = Record<string, string>;
@@ -20,41 +20,70 @@ interface TargetSpec {
   id: TargetId;
   label: string;
   skill?: (a: SkillArtifact) => FileTree;
-  mcp?: (servers: McpServerArtifact[]) => FileTree;
+  mcp?: (servers: McpServerArtifact[]) => MaterializeResult;
   instructions?: (all: InstructionsArtifact[]) => FileTree;
   hook?: (hooks: HookArtifact[]) => FileTree;
 }
 
+function safePathSegment(name: string): string {
+  const safe = name.normalize("NFKC").replace(/[^A-Za-z0-9._-]/g, "_");
+  return safe === "." || safe === ".." || safe.length === 0 ? "unnamed" : safe;
+}
+
+const rendered = (files: FileTree): MaterializeResult => ({ files, skipped: [] });
+
 // ── shared convention renderers ──
-const skillSkillMd = (a: SkillArtifact): FileTree => ({ [`skills/${a.name}/SKILL.md`]: a.content });
-const skillDescriptionMd = (a: SkillArtifact): FileTree => ({ [`skills/${a.name}/DESCRIPTION.md`]: a.content });
+const skillSkillMd = (a: SkillArtifact): FileTree => ({ [`skills/${safePathSegment(a.name)}/SKILL.md`]: a.content });
+const skillDescriptionMd = (a: SkillArtifact): FileTree => ({ [`skills/${safePathSegment(a.name)}/DESCRIPTION.md`]: a.content });
 // Eve: a project under agent/. Flat markdown skills (frontmatter optional — description falls back
 // to the first line), a single agent/instructions.md, and one TS connection file per MCP server.
-const skillEveMd = (a: SkillArtifact): FileTree => ({ [`agent/skills/${a.name}.md`]: a.content });
-const eveConnection = (name: string, url: string, secretEnv?: string): string => {
-  const auth = secretEnv ? `,\n  auth: { getToken: async () => ({ token: process.env.${secretEnv}! }) }` : "";
-  return `import { defineMcpClientConnection } from "eve/connections";\n\nexport default defineMcpClientConnection({\n  url: ${JSON.stringify(url)},\n  description: ${JSON.stringify(name)}${auth},\n});\n`;
+const skillEveMd = (a: SkillArtifact): FileTree => ({ [`agent/skills/${safePathSegment(a.name)}.md`]: a.content });
+const eveConnection = (server: McpServerArtifact, url: string): string => {
+  const refs = server.secretRefs ?? [];
+  const authorization = refs.find((r) => r.location.toLowerCase() === "headers.authorization");
+  const headerEntries = refs
+    .filter((r) => /^headers\./i.test(r.location) && r !== authorization)
+    .map((r) => [r.location.slice("headers.".length), r.name] as const);
+  const auth = authorization
+    ? `,\n  auth: { getToken: async () => ({ token: process.env[${JSON.stringify(authorization.name)}]! }) }`
+    : "";
+  const headers = headerEntries.length
+    ? `,\n  headers: { ${headerEntries.map(([header, env]) => `${JSON.stringify(header)}: process.env[${JSON.stringify(env)}]!`).join(", ")} }`
+    : "";
+  return `import { defineMcpClientConnection } from "eve/connections";\n\nexport default defineMcpClientConnection({\n  url: ${JSON.stringify(url)},\n  description: ${JSON.stringify(server.name)}${auth}${headers},\n});\n`;
 };
 // Eve MCP connections: one TS file per server. http/sse -> a direct remote connection (auth reads
 // the secret from an env var name, never a value). stdio -> a localhost connection plus a generated
-// proxy runner (.proxy.mjs) the operator launches to bridge the stdio server to HTTP.
-const mcpEveConnections = (servers: McpServerArtifact[]): FileTree => {
-  const out: FileTree = {};
+// proxy runner under agent/proxies/ that the operator launches to bridge the stdio server to HTTP.
+const mcpEveConnections = (servers: McpServerArtifact[]): MaterializeResult => {
+  const files: FileTree = {};
+  const skipped: SkippedArtifact[] = [];
   let port = PROXY_BASE_PORT;
   for (const s of servers) {
+    const segment = safePathSegment(s.name);
+    const connectionPath = `agent/connections/${segment}.ts`;
+    if (connectionPath in files) {
+      skipped.push({ artifact: s.name, type: "mcp_server", reason: `path collision with an earlier mcp_server at ${connectionPath}` });
+      continue;
+    }
     const url = typeof s.config.url === "string" ? s.config.url : "";
-    const secret = s.secretRefs && s.secretRefs[0] ? s.secretRefs[0].name : undefined;
     if (/^https?:\/\//.test(url)) {
-      out[`agent/connections/${s.name}.ts`] = eveConnection(s.name, url, secret);
+      const unsupportedSecret = (s.secretRefs ?? []).find((r) => !/^headers\./i.test(r.location));
+      if (unsupportedSecret) {
+        skipped.push({ artifact: s.name, type: "mcp_server", reason: `Eve cannot map secret at ${unsupportedSecret.location}` });
+        continue;
+      }
+      files[connectionPath] = eveConnection(s, url);
     } else if (s.transport === "stdio" && typeof s.config.command === "string") {
       const p = port++;
       const args = Array.isArray(s.config.args) ? s.config.args.filter((a): a is string => typeof a === "string") : [];
-      out[`agent/connections/${s.name}.ts`] = eveConnection(s.name, `http://localhost:${p}/mcp`);
-      out[`agent/connections/${s.name}.proxy.mjs`] = stdioProxyRunner(s.name, s.config.command, args, (s.secretRefs ?? []).map((r) => r.name), p);
+      files[connectionPath] = eveConnection(s, `http://${PROXY_HOST}:${p}/mcp`);
+      files[`agent/proxies/${segment}.mjs`] = stdioProxyRunner(s.name, s.config.command, args, (s.secretRefs ?? []).map((r) => r.name), p);
+    } else {
+      skipped.push({ artifact: s.name, type: "mcp_server", reason: `${s.transport} MCP has no usable URL or stdio command` });
     }
-    // else: non-stdio without a url (can't connect) -> nothing emitted
   }
-  return out;
+  return { files, skipped };
 };
 
 // Multiple instruction artifacts concatenate into the target's single canonical file,
@@ -65,10 +94,10 @@ const instructionsClaudeMd = concatInstructions("CLAUDE.md");
 const instructionsAgentsMd = concatInstructions("AGENTS.md");
 const instructionsSoulMd = concatInstructions("SOUL.md");
 
-const mcpDotMcpJson = (servers: McpServerArtifact[]): FileTree =>
-  ({ ".mcp.json": JSON.stringify({ mcpServers: Object.fromEntries(servers.map((s) => [s.name, s.config])) }, null, 2) });
-const mcpCodexToml = (servers: McpServerArtifact[]): FileTree =>
-  ({ "config.toml": tomlMcpServers(servers) });
+const mcpDotMcpJson = (servers: McpServerArtifact[]): MaterializeResult =>
+  rendered({ ".mcp.json": JSON.stringify({ mcpServers: Object.fromEntries(servers.map((s) => [s.name, s.config])) }, null, 2) });
+const mcpCodexToml = (servers: McpServerArtifact[]): MaterializeResult =>
+  rendered({ "config.toml": tomlMcpServers(servers) });
 
 // Reconstruct settings.json's `.hooks` event map. HookArtifact.config IS the group object
 // ({ matcher?, hooks: [...] }) captured by introspect, so we group those back under their event.
@@ -117,7 +146,11 @@ export function materialize(pack: Pack, target: TargetId): MaterializeResult {
     else skipAll(instr, "instructions");
   }
   if (mcp.length) {
-    if (spec.mcp) merge(spec.mcp(mcp), mcp.map((m) => m.name).join(", "), "mcp_server");
+    if (spec.mcp) {
+      const result = spec.mcp(mcp);
+      merge(result.files, mcp.map((m) => m.name).join(", "), "mcp_server");
+      skipped.push(...result.skipped);
+    }
     else skipAll(mcp, "mcp_server");
   }
   if (hooks.length) {

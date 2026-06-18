@@ -7,13 +7,13 @@ import { scaffoldChecks } from "./pack/checks.js";
 import { materialize, compatibility } from "./pack/targets.js";
 import type { TargetId } from "./pack/targets.js";
 import { renderManagedAgent } from "./pack/publish.js";
-import { publishManagedAgent, anthropicPublishClient } from "./publish.js";
+import { publishManagedAgent, publishManagedAgentOnce, anthropicPublishClient } from "./publish.js";
 import type { ConfigInventory } from "./pack/types.js";
 import {
   InventorySchema, PackSchema, PackRequestSchema, DirQuerySchema, PickQuerySchema, PickFolderSchema,
   ScaffoldChecksRequestSchema, ScaffoldChecksResponseSchema,
   MaterializeRequestSchema, MaterializeResponseSchema,
-  PublishRequestSchema, PublishPreviewResponseSchema, PublishReadyResponseSchema, PublishResultSchema,
+  PublishPreviewRequestSchema, PublishRequestSchema, PublishPreviewResponseSchema, PublishReadyResponseSchema, PublishResultSchema,
 } from "./schemas.js";
 import { resolveDirs, resolveProject } from "./resolveDir.js";
 import { pickFolder } from "./pickFolder.js";
@@ -54,8 +54,8 @@ export class PackController {
   }
 
   // Offline render of the Managed Agents agent payload + skip/secret/skill lists. No network.
-  @post("/publish-preview", { body: PublishRequestSchema, response: PublishPreviewResponseSchema })
-  async publishPreview(input: { body: z.infer<typeof PublishRequestSchema> }): Promise<z.infer<typeof PublishPreviewResponseSchema>> {
+  @post("/publish-preview", { body: PublishPreviewRequestSchema, response: PublishPreviewResponseSchema })
+  async publishPreview(input: { body: z.infer<typeof PublishPreviewRequestSchema> }): Promise<z.infer<typeof PublishPreviewResponseSchema>> {
     const dirs = resolveDirs(input.body.dir);
     const inventory = introspectAll(input.body.dir, input.body.projects);
     const pack = buildPack(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
@@ -69,7 +69,7 @@ export class PackController {
     return { ready: !!process.env.ANTHROPIC_API_KEY };
   }
 
-  // OUTWARD-FACING: creates a Managed Agent in the operator's Anthropic org. Gated on the
+  // OUTWARD-FACING: creates a Managed Agent and cloud environment in the operator's Anthropic org. Gated on the
   // server-side key (the UI also gates via /publish-ready + an explicit confirm). The key is read
   // here and never returned to the client; only the redacted pack payload is sent to Anthropic.
   @post("/publish", { body: PublishRequestSchema, response: PublishResultSchema })
@@ -79,7 +79,12 @@ export class PackController {
     const dirs = resolveDirs(input.body.dir);
     const inventory = introspectAll(input.body.dir, input.body.projects);
     const pack = buildPack(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
-    return publishManagedAgent(pack, anthropicPublishClient(key));
+    const { requestId, ...publishInput } = input.body;
+    return publishManagedAgentOnce(
+      requestId,
+      JSON.stringify(publishInput),
+      () => publishManagedAgent(pack, anthropicPublishClient(key)),
+    );
   }
 
   // Pop the OS-native folder picker and return the chosen absolute path (null if cancelled).

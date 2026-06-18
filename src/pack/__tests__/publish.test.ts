@@ -73,4 +73,11 @@ describe("renderManagedAgent", () => {
     expect(r.skillsToRegister).toHaveLength(20);
     expect(r.skipped.filter((s) => s.reason.includes("20-skill cap"))).toHaveLength(2);
   });
+
+  it("skips duplicate MCP names instead of sending an API-invalid payload", () => {
+    const duplicate = pack.artifacts.find((a) => a.type === "mcp_server" && a.name === "github")!;
+    const r = renderManagedAgent({ ...pack, artifacts: [...pack.artifacts, duplicate] });
+    expect(r.payload.mcp_servers.filter((m) => m.name === "github")).toHaveLength(1);
+    expect(r.skipped.find((s) => s.reason.includes("duplicate"))?.artifact).toBe("github");
+  });
 });

@@ -44,23 +44,46 @@ describe("materialize", () => {
     expect(r.skipped.map((s) => s.type).sort()).toEqual(["hook", "mcp_server"]);
   });
 
-  it("eve: skills/instructions + http connection + stdio proxy (connection + .proxy.mjs); hooks skipped", () => {
+  it("eve: skills/instructions + http connection + stdio proxy runner; hooks skipped", () => {
     const r = materialize(pack([skill("review"), instr("X"), httpMcp("linear"), mcp("local"), hook()]), "eve");
     expect(r.files["agent/skills/review.md"]).toBe("# body");
     expect(r.files["agent/instructions.md"]).toContain("do this");
     // http server -> direct remote connection
     const conn = r.files["agent/connections/linear.ts"];
     expect(conn).toContain('url: "https://mcp.x/sse"');
-    expect(conn).toContain("process.env.X_TOKEN"); // secret as env-var NAME, never a value
+    expect(conn).toContain('process.env["X_TOKEN"]'); // secret as env-var NAME, never a value
     // stdio server -> a localhost connection + a generated proxy runner
-    expect(r.files["agent/connections/local.ts"]).toContain("url: \"http://localhost:7800/mcp\"");
-    const proxy = r.files["agent/connections/local.proxy.mjs"];
+    expect(r.files["agent/connections/local.ts"]).toContain("url: \"http://127.0.0.1:7800/mcp\"");
+    const proxy = r.files["agent/proxies/local.mjs"];
     expect(proxy).toContain("StdioClientTransport");
     expect(proxy).toContain('command: "npx"');
     expect(proxy).toContain("7800");
+    expect(r.files["agent/connections/local.proxy.mjs"]).toBeUndefined();
     expect(JSON.stringify(r.files)).not.toContain("<redacted>"); // no secret value anywhere
     // hooks unsupported -> skipped
     expect(r.skipped.map((s) => s.type)).toContain("hook");
+  });
+
+  it("eve sanitizes file paths and reports invalid or colliding MCP artifacts", () => {
+    const invalid: McpServerArtifact = { type: "mcp_server", name: "missing", transport: "http", config: {} };
+    const first = httpMcp("a/b");
+    const collision = httpMcp("a?b");
+    const r = materialize(pack([skill("../escape"), first, collision, invalid]), "eve");
+    expect(r.files["agent/skills/.._escape.md"]).toBeTruthy();
+    expect(r.files["agent/connections/a_b.ts"]).toBeTruthy();
+    expect(r.skipped.find((s) => s.artifact === "a?b")?.reason).toMatch(/collision/);
+    expect(r.skipped.find((s) => s.artifact === "missing")?.reason).toMatch(/no usable URL/);
+    expect(compatibility(pack([first, collision, invalid])).eve).toEqual({ supported: 1, skipped: 2 });
+  });
+
+  it("eve maps non-Bearer header secrets with bracket-safe environment access", () => {
+    const server: McpServerArtifact = {
+      type: "mcp_server", name: "api", transport: "http", config: { url: "https://mcp.x/mcp" },
+      secretRefs: [{ name: "X-API-KEY", location: "headers.X-Api-Key" }],
+    };
+    const connection = materialize(pack([server]), "eve").files["agent/connections/api.ts"];
+    expect(connection).toContain('"X-Api-Key": process.env["X-API-KEY"]');
+    expect(connection).not.toContain("getToken");
   });
 
   it("skips the later of two same-named skills (path collision); first wins", () => {

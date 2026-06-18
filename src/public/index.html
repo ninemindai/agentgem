@@ -373,7 +373,7 @@ async function renderMaterialize(){
   el.innerHTML = h;
 }
 // Managed Agents publish: offline preview of the agent payload + a gated Publish action.
-let __publishReady = null;
+let __publishReady = null, __publishRequestId = null, __publishFingerprint = null;
 async function publishReady(){ if (__publishReady === null) __publishReady = !!(await (await fetch("/api/publish-ready")).json()).ready; return __publishReady; }
 async function renderPublish(){
   const el = document.getElementById("preview");
@@ -391,17 +391,22 @@ async function renderPublish(){
   h += sect("Skipped", r.skipped.map(s => row(s.artifact, s.reason)));
   const ready = await publishReady();
   h += `<div class="pgroup"><button id="publishBtn" ${ready ? "" : "disabled"}>${ready ? "Publish to Managed Agents" : "Publish (set ANTHROPIC_API_KEY)"}</button> <span class="d" id="publishStatus"></span></div>`;
-  h += `<p class="note">Publishing creates an agent in your Anthropic org: each skill is registered as an on-demand Agent Skill (Skills API), plus http/sse MCP servers (URL only) and instructions as the system prompt. Secrets are never sent; add MCP credentials to a vault afterward.</p></div>`;
+  h += `<p class="note">Publishing creates an agent and a limited-network cloud sandbox in your Anthropic org. Each skill is registered as an on-demand Agent Skill (Skills API), plus http/sse MCP servers (URL only) and instructions as the system prompt. Secrets are never sent; add MCP credentials to a vault before starting sessions.</p></div>`;
   el.innerHTML = h;
 }
 async function doPublish(){
-  if (!confirm("Create a Managed Agent in your Anthropic org and upload this config?")) return;
+  if (!confirm("Create a Managed Agent, cloud sandbox, and uploaded skills in your Anthropic org?")) return;
   const btn = document.getElementById("publishBtn"), st = document.getElementById("publishStatus");
   btn.disabled = true; st.textContent = "Publishing…";
   try {
-    const r = await (await fetch("/api/publish", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(buildSelectionBody()) })).json();
+    const body = buildSelectionBody(), fingerprint = JSON.stringify(body);
+    if (__publishFingerprint !== fingerprint) {
+      __publishFingerprint = fingerprint;
+      __publishRequestId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+    }
+    const r = await (await fetch("/api/publish", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...body, requestId: __publishRequestId }) })).json();
     if (r.error) { st.textContent = "Failed: " + (r.error.message || JSON.stringify(r.error)); btn.disabled = false; return; }
-    st.innerHTML = `✓ Created <code>${esc(r.agentId)}</code> (v${esc(r.version)}) · ${r.registeredSkills.length} skill${r.registeredSkills.length === 1 ? "" : "s"} registered`;
+    st.innerHTML = `✓ Created agent <code>${esc(r.agentId)}</code> (v${esc(r.version)}) + sandbox <code>${esc(r.environmentId)}</code> · ${r.registeredSkills.length} skill${r.registeredSkills.length === 1 ? "" : "s"} registered`;
   } catch (e) { st.textContent = "Failed: " + e.message; btn.disabled = false; }
 }
 function openMaterializedFile(path){
