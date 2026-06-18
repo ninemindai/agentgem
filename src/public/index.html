@@ -79,7 +79,7 @@
     <div id="inventory">Loading…</div>
   </section>
   <section class="pane right">
-    <div class="bar"><strong style="flex:1">Pack (live)</strong><select id="target" title="materialize target" style="margin-left:auto"><option value="claude">Claude</option><option value="codex">Codex</option><option value="agents">Agents</option><option value="hermes">Hermes</option></select><span class="seg" id="preview-modes"><button type="button" data-pmode="summary">Summary</button><button type="button" data-pmode="json">JSON</button><button type="button" data-pmode="materialize">Materialize</button></span><button id="copy" class="ghost">Copy</button><button id="dl">⬇ Download</button></div>
+    <div class="bar"><strong style="flex:1">Pack (live)</strong><select id="target" title="materialize target" style="margin-left:auto"><option value="claude">Claude</option><option value="codex">Codex</option><option value="agents">Agents</option><option value="hermes">Hermes</option></select><span class="seg" id="preview-modes"><button type="button" data-pmode="summary">Summary</button><button type="button" data-pmode="json">JSON</button><button type="button" data-pmode="materialize">Materialize</button><button type="button" data-pmode="managed">Managed Agents</button></span><button id="copy" class="ghost">Copy</button><button id="dl">⬇ Download</button></div>
     <div id="preview"></div>
     <p class="note">MCP server &amp; hook config secrets are shown as <code>&lt;redacted&gt;</code> and never exported. Skill, CLAUDE.md, rules bodies &amp; hook commands are bundled as written — don't keep secrets in them.</p>
     <div id="checksPanel" class="group" style="margin-top:14px">
@@ -346,6 +346,7 @@ function summaryHtml(p){
 function renderPreview(){
   const el = document.getElementById("preview");
   if (previewMode === "materialize") { renderMaterialize(); document.querySelectorAll("#preview-modes button").forEach(b => b.classList.toggle("on", b.dataset.pmode === previewMode)); return; }
+  if (previewMode === "managed") { renderPublish(); document.querySelectorAll("#preview-modes button").forEach(b => b.classList.toggle("on", b.dataset.pmode === previewMode)); return; }
   const p = window.__pack;
   if (!p) { el.textContent = ""; }
   else if (p.error || previewMode === "json") {
@@ -371,6 +372,37 @@ async function renderMaterialize(){
   h += `<p class="note">Compatibility: ${esc(compat)}</p></div>`;
   el.innerHTML = h;
 }
+// Managed Agents publish: offline preview of the agent payload + a gated Publish action.
+let __publishReady = null;
+async function publishReady(){ if (__publishReady === null) __publishReady = !!(await (await fetch("/api/publish-ready")).json()).ready; return __publishReady; }
+async function renderPublish(){
+  const el = document.getElementById("preview");
+  const r = await (await fetch("/api/publish-preview", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(buildSelectionBody()) })).json();
+  window.__publish = r;
+  if (r.error) { el.innerHTML = ""; const pre = document.createElement("pre"); pre.className = "json"; pre.textContent = JSON.stringify(r, null, 2); el.appendChild(pre); return; }
+  const p = r.payload;
+  const sect = (title, rows) => rows.length ? `<div class="pgroup"><h3>${title} (${rows.length})</h3>${rows.join("")}</div>` : "";
+  const row = (a, b) => `<div class="prow"><span class="pn">${esc(a)}</span> <span class="pm">${esc(b)}</span></div>`;
+  let h = `<div class="psummary"><div class="phead"><strong>${esc(p.name)}</strong> <span class="d">· Managed Agent · ${esc(p.model)}</span></div>`;
+  h += `<div class="pgroup"><h3>System prompt</h3>${row(`instructions + ${r.inlinedSkills.length} skill${r.inlinedSkills.length === 1 ? "" : "s"} inlined`, fmtSize((p.system || "").length))}</div>`;
+  h += sect("MCP servers", p.mcp_servers.map(m => row(m.name, m.url)));
+  h += sect("Add to a vault after publish", r.vaultSecrets.map(s => row(s.name, `${s.artifact} · ${s.location}`)));
+  h += sect("Skipped", r.skipped.map(s => row(s.artifact, s.reason)));
+  const ready = await publishReady();
+  h += `<div class="pgroup"><button id="publishBtn" ${ready ? "" : "disabled"}>${ready ? "Publish to Managed Agents" : "Publish (set ANTHROPIC_API_KEY)"}</button> <span class="d" id="publishStatus"></span></div>`;
+  h += `<p class="note">Publishing creates an agent in your Anthropic org and sends the redacted config — skills inlined into the system prompt, http/sse MCP servers (URL only), instructions. Secrets are never sent; add MCP credentials to a vault afterward. On-demand Agent Skills (Skills API) is a follow-up.</p></div>`;
+  el.innerHTML = h;
+}
+async function doPublish(){
+  if (!confirm("Create a Managed Agent in your Anthropic org and upload this config?")) return;
+  const btn = document.getElementById("publishBtn"), st = document.getElementById("publishStatus");
+  btn.disabled = true; st.textContent = "Publishing…";
+  try {
+    const r = await (await fetch("/api/publish", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(buildSelectionBody()) })).json();
+    if (r.error) { st.textContent = "Failed: " + (r.error.message || JSON.stringify(r.error)); btn.disabled = false; return; }
+    st.innerHTML = `✓ Created <code>${esc(r.agentId)}</code> (v${esc(r.version)})`;
+  } catch (e) { st.textContent = "Failed: " + e.message; btn.disabled = false; }
+}
 function openMaterializedFile(path){
   const body = (window.__materialize && window.__materialize.files || {})[path] || "";
   modalState.kind = (path.endsWith(".json") || path.endsWith(".toml")) ? "mcpServers" : "skills";
@@ -395,6 +427,7 @@ document.getElementById("preview-modes").addEventListener("click", e => {
 });
 document.getElementById("target").addEventListener("change", () => { if (previewMode === "materialize") renderPreview(); });
 document.getElementById("preview").addEventListener("click", e => {
+  if (e.target.id === "publishBtn") { doPublish(); return; }
   const mp = e.target.closest("[data-mpath]");
   if (mp) { openMaterializedFile(mp.dataset.mpath); return; }
   const row = e.target.closest(".prow"); if (!row) return;

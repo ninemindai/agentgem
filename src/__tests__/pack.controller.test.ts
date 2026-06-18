@@ -56,6 +56,27 @@ describe("PackController", () => {
     expect(r.body.artifacts.map((a: { name: string }) => a.name)).toEqual(["review", "CLAUDE.md"]);
   });
 
+  it("POST /api/publish-preview renders the agent payload, skips stdio MCP, leaks no secret", async () => {
+    const r = await client.post("/api/publish-preview")
+      .send({ dir, selection: { skills: ["review"], mcpServers: ["gh"], includeInstructions: true }, name: "pub" })
+      .expect(200);
+    expect(r.body.payload.name).toBe("pub");
+    expect(r.body.payload.model).toBe("claude-opus-4-8");
+    expect(r.body.payload.system).toContain("global instructions");
+    expect(r.body.payload.system).toContain("# Skill: review"); // skill inlined into system
+    expect(r.body.inlinedSkills).toEqual(["review"]);
+    // gh is a stdio (command) server -> skipped; its vault secret is filtered out too
+    expect(r.body.payload.mcp_servers).toEqual([]);
+    expect(r.body.skipped.find((s: { artifact: string }) => s.artifact === "gh").reason).toMatch(/stdio MCP/);
+    expect(r.body.vaultSecrets).toEqual([]);
+    expect(JSON.stringify(r.body)).not.toContain("ghp_secret");
+  });
+
+  it("GET /api/publish-ready reports key presence as a boolean", async () => {
+    const r = await client.get("/api/publish-ready").expect(200);
+    expect(typeof r.body.ready).toBe("boolean");
+  });
+
   it("GET /api/inventory?projects= returns a redacted project section with a name", async () => {
     const r = await client
       .get(`/api/inventory?dir=${encodeURIComponent(dir)}&projects=${encodeURIComponent(JSON.stringify([projRoot]))}`)
