@@ -149,3 +149,29 @@ describe("POST /api/archive", () => {
     rmSync(out, { recursive: true, force: true });
   });
 });
+
+describe("POST /api/materialize from an archive", () => {
+  it("renders an Eve project from a written archive (no live introspection)", async () => {
+    const out = mkdtempSync(join(tmpdir(), "arch2-"));
+    await client.post("/api/archive")
+      .send({ dir, selection: { skills: ["review"], includeInstructions: true }, outDir: out })
+      .expect(200);
+
+    const r = await client.post("/api/materialize")
+      .send({ archivePath: out, target: "eve" })
+      .expect(200);
+
+    expect(r.body.target).toBe("eve");
+    expect(r.body.files["agent/skills/review.md"]).toContain("# Review");
+    expect(r.body.files["agent/instructions.md"]).toBeDefined();
+    rmSync(out, { recursive: true, force: true });
+  });
+
+  it("rejects a tampered archive", async () => {
+    const out = mkdtempSync(join(tmpdir(), "arch3-"));
+    await client.post("/api/archive").send({ dir, selection: { skills: ["review"] }, outDir: out }).expect(200);
+    writeFileSync(join(out, "skills", "review", "SKILL.md"), "# tampered");
+    await client.post("/api/materialize").send({ archivePath: out, target: "claude" }).expect(500);
+    rmSync(out, { recursive: true, force: true });
+  });
+});

@@ -7,9 +7,10 @@ import { scaffoldChecks } from "./pack/checks.js";
 import { materialize, compatibility } from "./pack/targets.js";
 import type { TargetId } from "./pack/targets.js";
 import { renderManagedAgent } from "./pack/publish.js";
-import { writePackArchive } from "./pack/archive.js";
+import { writePackArchive, readPackArchive } from "./pack/archive.js";
 import type { PackLock } from "./pack/archive.js";
-import { writeArchiveDir } from "./pack/archiveFs.js";
+import { writeArchiveDir, readArchiveDir } from "./pack/archiveFs.js";
+import type { Pack } from "./pack/types.js";
 import { publishManagedAgent, publishManagedAgentOnce, anthropicPublishClient } from "./publish.js";
 import type { ConfigInventory } from "./pack/types.js";
 import {
@@ -50,10 +51,15 @@ export class PackController {
 
   @post("/materialize", { body: MaterializeRequestSchema, response: MaterializeResponseSchema })
   async materialize(input: { body: z.infer<typeof MaterializeRequestSchema> }): Promise<z.infer<typeof MaterializeResponseSchema>> {
-    const dirs = resolveDirs(input.body.dir);
-    const inventory = introspectAll(input.body.dir, input.body.projects);
-    const pack = buildPack(inventory, input.body.selection!, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
     const target = input.body.target as TargetId;
+    let pack: Pack;
+    if (input.body.archivePath) {
+      pack = readPackArchive(readArchiveDir(input.body.archivePath));
+    } else {
+      const dirs = resolveDirs(input.body.dir);
+      const inventory = introspectAll(input.body.dir, input.body.projects);
+      pack = buildPack(inventory, input.body.selection!, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
+    }
     return { target, ...materialize(pack, target), compatibility: compatibility(pack) };
   }
 
