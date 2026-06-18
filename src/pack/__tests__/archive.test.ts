@@ -86,6 +86,14 @@ describe("writePackArchive", () => {
     expect(skipped).toHaveLength(1);
     expect(skipped[0]).toMatchObject({ type: "skill", reason: expect.stringContaining("collision") });
   });
+
+  it("throws on a check-name path collision rather than silently dropping a check", () => {
+    const p = pack([], { checks: [
+      { kind: "behavioral", name: "smoke test", task: "t", assertions: [{ type: "output_contains", substring: "ok" }] },
+      { kind: "behavioral", name: "smoke/test", task: "t", assertions: [{ type: "output_contains", substring: "ok" }] },
+    ] });
+    expect(() => writePackArchive(p)).toThrow(/check path collision/i);
+  });
 });
 
 describe("readPackArchive", () => {

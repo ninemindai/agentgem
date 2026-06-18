@@ -119,7 +119,7 @@ export function writePackArchive(pack: Pack, opts: { version?: string } = {}): A
   const checks: ManifestCheckEntry[] = [];
   for (const c of pack.checks) {
     const path = `checks/${safePathSegment(c.name)}.json`;
-    if (path in files) continue; // check names are unique within a pack; never overwrite a body
+    if (path in files) throw new Error(`check path collision: '${c.name}' sanitizes to ${path}, already taken`);
     files[path] = JSON.stringify(c, null, 2);
     checks.push({ name: c.name, path });
   }
