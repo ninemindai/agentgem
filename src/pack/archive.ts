@@ -82,6 +82,8 @@ export function writePackArchive(pack: Pack, opts: { version?: string } = {}): A
   const skipped: SkippedArtifact[] = [];
   const artifacts: ManifestArtifactEntry[] = [];
 
+  const withExt = (s: string, ext: string) => (s.endsWith(ext) ? s : s + ext);
+
   const place = (path: string, content: string, name: string, type: ArtifactType): boolean => {
     if (path in files) { skipped.push({ artifact: name, type, reason: `path collision with an earlier ${type} at ${path}` }); return false; }
     files[path] = content;
@@ -98,16 +100,16 @@ export function writePackArchive(pack: Pack, opts: { version?: string } = {}): A
         artifacts.push(e);
       }
     } else if (a.type === "instructions") {
-      const path = `instructions/${seg}.md`;
+      const path = `instructions/${withExt(seg, ".md")}`;
       if (place(path, a.content, a.name, "instructions")) artifacts.push({ type: "instructions", name: a.name, path });
     } else if (a.type === "mcp_server") {
-      const path = `mcp/${seg}.json`;
+      const path = `mcp/${withExt(seg, ".json")}`;
       const body: Record<string, unknown> = { transport: a.transport, config: a.config };
       if (a.source !== undefined) body.source = a.source;
       if (a.secretRefs !== undefined) body.secretRefs = a.secretRefs;
       if (place(path, JSON.stringify(body, null, 2), a.name, "mcp_server")) artifacts.push({ type: "mcp_server", name: a.name, path });
     } else {
-      const path = `hooks/${seg}.json`;
+      const path = `hooks/${withExt(seg, ".json")}`;
       const body: Record<string, unknown> = { event: a.event, config: a.config };
       if (a.matcher !== undefined) body.matcher = a.matcher;
       if (a.source !== undefined) body.source = a.source;
@@ -118,7 +120,7 @@ export function writePackArchive(pack: Pack, opts: { version?: string } = {}): A
 
   const checks: ManifestCheckEntry[] = [];
   for (const c of pack.checks) {
-    const path = `checks/${safePathSegment(c.name)}.json`;
+    const path = `checks/${withExt(safePathSegment(c.name), ".json")}`;
     if (path in files) throw new Error(`check path collision: '${c.name}' sanitizes to ${path}, already taken`);
     files[path] = JSON.stringify(c, null, 2);
     checks.push({ name: c.name, path });

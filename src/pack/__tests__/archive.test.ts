@@ -94,6 +94,19 @@ describe("writePackArchive", () => {
     ] });
     expect(() => writePackArchive(p)).toThrow(/check path collision/i);
   });
+
+  it("does not double the extension when an artifact name already ends in it", () => {
+    const p = pack([
+      { type: "instructions", name: "CLAUDE.md", content: "be kind" },
+      { type: "mcp_server", name: "ctx.json", transport: "http", config: { url: "https://x/sse" } },
+    ]);
+    const { files } = writePackArchive(p);
+    expect(files["instructions/CLAUDE.md"]).toBe("be kind");        // not instructions/CLAUDE.md.md
+    expect(files["instructions/CLAUDE.md.md"]).toBeUndefined();
+    expect(files["mcp/ctx.json"]).toBeDefined();                    // not mcp/ctx.json.json
+    expect(files["mcp/ctx.json.json"]).toBeUndefined();
+    expect(readPackArchive(files)).toEqual(p);                      // still round-trips
+  });
 });
 
 describe("readPackArchive", () => {
