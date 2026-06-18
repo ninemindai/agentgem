@@ -1,6 +1,6 @@
 // src/__tests__/schemas.test.ts
 import { describe, it, expect } from "vitest";
-import { InventorySchema, PackSchema, PackRequestSchema, PackCheckSchema, ScaffoldChecksResponseSchema } from "../schemas.js";
+import { InventorySchema, PackSchema, PackRequestSchema, PackCheckSchema, ScaffoldChecksResponseSchema, MaterializeRequestSchema, MaterializeResponseSchema } from "../schemas.js";
 
 describe("wire schemas", () => {
   it("validates an inventory shape", () => {
@@ -48,5 +48,24 @@ describe("wire schemas", () => {
     expect(p.checks?.length).toBe(1);
     const r = ScaffoldChecksResponseSchema.parse({ checks: [{ kind: "behavioral", name: "smoke", task: "t", assertions: [] }] });
     expect(r.checks[0].name).toBe("smoke");
+  });
+
+  it("validates a materialize request and rejects an unknown target", () => {
+    MaterializeRequestSchema.parse({ selection: { all: true }, target: "codex" });
+    expect(() => MaterializeRequestSchema.parse({ selection: { all: true }, target: "nope" })).toThrow();
+  });
+
+  it("validates a materialize response shape", () => {
+    const r = MaterializeResponseSchema.parse({
+      target: "claude",
+      files: { "CLAUDE.md": "x" },
+      skipped: [{ artifact: "h", type: "hook", reason: "hook unsupported on claude" }],
+      compatibility: {
+        claude: { supported: 1, skipped: 0 }, codex: { supported: 0, skipped: 1 },
+        agents: { supported: 0, skipped: 1 }, hermes: { supported: 0, skipped: 1 },
+      },
+    });
+    expect(r.files["CLAUDE.md"]).toBe("x");
+    expect(r.skipped[0].type).toBe("hook");
   });
 });

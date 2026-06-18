@@ -1,6 +1,7 @@
 // src/schemas.ts
 import { z } from "zod";
 import { RUNNER_REGISTRY } from "./pack/checks.js";
+import { TARGET_REGISTRY } from "./pack/targets.js";
 
 export const SkillArtifactSchema = z.object({
   type: z.literal("skill"),
@@ -135,6 +136,30 @@ export const ScaffoldChecksRequestSchema = z.object({
 });
 
 export const ScaffoldChecksResponseSchema = z.object({ checks: z.array(PackCheckSchema) });
+
+const TARGET_IDS = Object.keys(TARGET_REGISTRY) as [string, ...string[]];
+export const TargetIdSchema = z.enum(TARGET_IDS);
+
+export const SkippedArtifactSchema = z.object({
+  artifact: z.string(),
+  type: z.enum(["skill", "mcp_server", "instructions", "hook"]),
+  reason: z.string(),
+});
+
+export const MaterializeRequestSchema = z.object({
+  selection: PackSelectionSchema,
+  target: TargetIdSchema,
+  name: z.string().optional(),
+  dir: z.string().optional(),
+  projects: z.array(z.string()).optional(),
+});
+
+export const MaterializeResponseSchema = z.object({
+  target: TargetIdSchema,
+  files: z.record(z.string(), z.string()),
+  skipped: z.array(SkippedArtifactSchema),
+  compatibility: z.record(TargetIdSchema, z.object({ supported: z.number(), skipped: z.number() })),
+});
 
 // `projects` is a JSON-encoded string array of root paths (query params can't carry arrays cleanly).
 export const DirQuerySchema = z.object({ dir: z.string().optional(), projects: z.string().optional() });
