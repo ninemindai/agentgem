@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import {
   InventorySchema, PackSchema, PackRequestSchema, PackCheckSchema, ScaffoldChecksResponseSchema,
   MaterializeRequestSchema, MaterializeResponseSchema, PublishPreviewRequestSchema, PublishRequestSchema, PublishResultSchema,
+  PackLockSchema, PackManifestSchema, ArchiveRequestSchema, ArchiveResponseSchema,
 } from "../schemas.js";
 
 describe("wire schemas", () => {
@@ -82,5 +83,30 @@ describe("wire schemas", () => {
       registeredSkills: [], skipped: [], vaultSecrets: [],
     });
     expect(result.environmentId).toBe("env_1");
+  });
+});
+
+describe("archive schemas", () => {
+  it("accepts a well-formed lock and manifest", () => {
+    expect(PackLockSchema.safeParse({ formatVersion: 1, files: { "a.md": "sha256:ab" }, packDigest: "sha256:cd", signature: null }).success).toBe(true);
+    expect(PackManifestSchema.safeParse({
+      formatVersion: 1, name: "p", version: "0.1.0", createdFrom: "/d",
+      artifacts: [{ type: "skill", name: "x", path: "skills/x/SKILL.md", source: "standalone" }],
+      requiredSecrets: [], checks: [],
+    }).success).toBe(true);
+  });
+
+  it("archive request requires a selection; response carries files+lock+skipped+path", () => {
+    expect(ArchiveRequestSchema.safeParse({ selection: { all: true }, outDir: "/tmp/out" }).success).toBe(true);
+    expect(ArchiveRequestSchema.safeParse({ name: "p" }).success).toBe(false);
+    expect(ArchiveResponseSchema.safeParse({
+      files: { "pack.json": "{}" }, lock: { formatVersion: 1, files: {}, packDigest: "sha256:x", signature: null }, skipped: [], path: null,
+    }).success).toBe(true);
+  });
+
+  it("materialize accepts selection OR archivePath, but not neither", () => {
+    expect(MaterializeRequestSchema.safeParse({ selection: { all: true }, target: "claude" }).success).toBe(true);
+    expect(MaterializeRequestSchema.safeParse({ archivePath: "/tmp/pack", target: "eve" }).success).toBe(true);
+    expect(MaterializeRequestSchema.safeParse({ target: "claude" }).success).toBe(false);
   });
 });

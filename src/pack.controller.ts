@@ -48,7 +48,7 @@ export class PackController {
   async materialize(input: { body: z.infer<typeof MaterializeRequestSchema> }): Promise<z.infer<typeof MaterializeResponseSchema>> {
     const dirs = resolveDirs(input.body.dir);
     const inventory = introspectAll(input.body.dir, input.body.projects);
-    const pack = buildPack(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
+    const pack = buildPack(inventory, input.body.selection!, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
     const target = input.body.target as TargetId;
     return { target, ...materialize(pack, target), compatibility: compatibility(pack) };
   }
