@@ -75,7 +75,7 @@ export interface BehavioralCheck {
   kind: "behavioral";
   name: string;
   description?: string;
-  task: string;                 // prompt given to the clean, pack-loaded agent
+  task: string;                 // prompt given to the clean, gem-loaded agent
   setup?: EvalSetup;            // optional workspace seeding
   assertions: EvalAssertion[];  // deterministic; ALL must pass (AND)
   judge?: EvalJudge;            // opt-in LLM-judge; pass = assertions AND judge>=threshold

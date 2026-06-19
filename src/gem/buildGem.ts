@@ -79,13 +79,13 @@ export function buildGem(
   }
 
   // Embed operator checks, but run each through redaction first: a check's task/setup is
-  // operator-authored test data and must not smuggle a raw secret into the shared pack.
+  // operator-authored test data and must not smuggle a raw secret into the shared gem.
   const checks = (opts.checks ?? []).map(
     (c) => redactMcpConfig(c as unknown as Record<string, unknown>).config as unknown as GemCheck,
   );
 
   return {
-    name: opts.name ?? "pack",
+    name: opts.name ?? "gem",
     createdFrom: opts.createdFrom ?? "unknown",
     artifacts,
     checks,

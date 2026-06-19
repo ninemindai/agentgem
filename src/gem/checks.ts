@@ -6,14 +6,14 @@ import type { Gem, GemArtifact, GemCheck } from "./types.js";
 export const RUNNER_REGISTRY = {
   skillspector: {
     id: "skillspector",
-    consumes: "pack-as-directory", // Gem materializes to a dir of SKILL.md + config
+    consumes: "gem-as-directory", // Gem materializes to a dir of SKILL.md + config
     resultShape: "score+findings",
     defaultWith: { failAboveRisk: 40 },
   },
 } as const;
 
-export function scaffoldChecks(pack: Gem): GemCheck[] {
-  const skills = pack.artifacts.filter((a): a is Extract<GemArtifact, { type: "skill" }> => a.type === "skill");
+export function scaffoldChecks(gem: Gem): GemCheck[] {
+  const skills = gem.artifacts.filter((a): a is Extract<GemArtifact, { type: "skill" }> => a.type === "skill");
   const lead = skills[0];
   const intent = lead?.description ?? lead?.name ?? "the bundled capability";
 
@@ -22,7 +22,7 @@ export function scaffoldChecks(pack: Gem): GemCheck[] {
       kind: "behavioral",
       name: "smoke",
       description: "Draft — edit the task and add assertions before relying on this check.",
-      task: `Using this pack, ${intent}. Then report what you did.`,
+      task: `Using this gem, ${intent}. Then report what you did.`,
       assertions: [], // stubs: meaningful deterministic assertions are operator-authored
       timeoutSec: 300,
     },

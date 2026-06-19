@@ -1,4 +1,4 @@
-// src/__tests__/pack.controller.test.ts
+// src/__tests__/gem.controller.test.ts
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -49,8 +49,8 @@ describe("GemController", () => {
     expect(r.body.mcpServers[0].source).toBe("user");
   });
 
-  it("POST /api/pack builds a pack from a selection", async () => {
-    const r = await client.post("/api/pack")
+  it("POST /api/gem builds a gem from a selection", async () => {
+    const r = await client.post("/api/gem")
       .send({ dir, selection: { skills: ["review"], includeInstructions: true }, name: "demo" })
       .expect(200);
     expect(r.body.name).toBe("demo");
@@ -92,16 +92,16 @@ describe("GemController", () => {
     expect(JSON.stringify(r.body)).not.toContain("projsecret");
   });
 
-  it("POST /api/pack includes selected artifacts from the keyed project", async () => {
-    const r = await client.post("/api/pack")
+  it("POST /api/gem includes selected artifacts from the keyed project", async () => {
+    const r = await client.post("/api/gem")
       .send({ dir, projects: [projRoot], selection: { projects: { [projRoot]: { skills: ["deploy"], includeInstructions: true } } }, name: "p" })
       .expect(200);
     expect(r.body.artifacts.map((a: { name: string }) => a.name)).toEqual(["deploy", "CLAUDE.md"]);
   });
 
-  it("POST /api/pack embeds checks and declares requiredSecrets (names, not values)", async () => {
+  it("POST /api/gem embeds checks and declares requiredSecrets (names, not values)", async () => {
     const r = await client
-      .post("/api/pack")
+      .post("/api/gem")
       .send({
         dir,
         selection: { skills: ["review"], mcpServers: ["gh"] },
@@ -141,7 +141,7 @@ describe("POST /api/archive", () => {
       .send({ dir, selection: { skills: ["review"], mcpServers: ["gh"], includeInstructions: true }, name: "demo", version: "2.0.0", outDir: out })
       .expect(200);
     expect(r.body.files["skills/review/SKILL.md"]).toContain("# Review");
-    expect(JSON.parse(r.body.files["pack.json"]).version).toBe("2.0.0");
+    expect(JSON.parse(r.body.files["gem.json"]).version).toBe("2.0.0");
     expect(r.body.lock.gemDigest).toMatch(/^sha256:/);
     expect(r.body.path).toBe(out);
     expect(r.body.files["mcp/gh.json"]).toBeDefined();

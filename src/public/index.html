@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>agentgem — Pack Builder</title>
+<title>agentgem — Gem Builder</title>
 <style>
   :root{--ink:#221d16;--muted:#6f6555;--line:#ddd3c0;--accent:#9a3324;--paper:#f6f2e9;--card:#fff}
   *{box-sizing:border-box}body{margin:0;font:14px/1.5 system-ui,sans-serif;color:var(--ink);background:var(--paper)}
@@ -64,10 +64,10 @@
 </style>
 </head>
 <body>
-<header><h1>agentgem</h1><span class="muted">Pack Builder · introspecting <code>~/.claude</code> · <code>~/.agents</code> · <code>~/.codex</code> · <code>~/.hermes</code></span></header>
+<header><h1>agentgem</h1><span class="muted">Gem Builder · introspecting <code>~/.claude</code> · <code>~/.agents</code> · <code>~/.codex</code> · <code>~/.hermes</code></span></header>
 <main>
   <section class="pane left">
-    <div class="bar"><input id="name" type="text" placeholder="pack name" value="pack" style="flex:1" /></div>
+    <div class="bar"><input id="name" type="text" placeholder="gem name" value="gem" style="flex:1" /></div>
     <div class="bar" id="wsBar">
       <select id="wsSelect" title="open a saved workspace" style="flex:1"><option value="">— no workspace —</option></select>
       <button id="wsNew" class="ghost" title="save the current selection as a new workspace">New workspace…</button>
@@ -86,7 +86,7 @@
     <div id="inventory">Loading…</div>
   </section>
   <section class="pane right">
-    <div class="bar"><strong style="flex:1">Pack (live)</strong><select id="target" title="materialize target" style="margin-left:auto"><option value="claude">Claude</option><option value="codex">Codex</option><option value="agents">Agents</option><option value="hermes">Hermes</option><option value="eve">Eve</option><option value="flue">Flue</option><option value="openai-sandbox">OpenAI Sandbox</option></select><span class="seg" id="preview-modes"><button type="button" data-pmode="summary">Summary</button><button type="button" data-pmode="json">JSON</button><button type="button" data-pmode="materialize">Materialize</button><button type="button" data-pmode="managed">Managed Agents</button></span><button id="copy" class="ghost">Copy</button><button id="dl">⬇ Download</button><button id="save" class="ghost" title="write the pack archive (manifest + lock + files) to a folder">💾 Save archive…</button><button id="dltar" class="ghost" title="download the pack archive as a .tar.gz">⬇ .tar.gz</button><span class="d" id="archiveStatus" style="margin-left:6px"></span></div>
+    <div class="bar"><strong style="flex:1">Gem (live)</strong><select id="target" title="materialize target" style="margin-left:auto"><option value="claude">Claude</option><option value="codex">Codex</option><option value="agents">Agents</option><option value="hermes">Hermes</option><option value="eve">Eve</option><option value="flue">Flue</option><option value="openai-sandbox">OpenAI Sandbox</option></select><span class="seg" id="preview-modes"><button type="button" data-pmode="summary">Summary</button><button type="button" data-pmode="json">JSON</button><button type="button" data-pmode="materialize">Materialize</button><button type="button" data-pmode="managed">Managed Agents</button></span><button id="copy" class="ghost">Copy</button><button id="dl">⬇ Download</button><button id="save" class="ghost" title="write the gem archive (manifest + lock + files) to a folder">💾 Save archive…</button><button id="dltar" class="ghost" title="download the gem archive as a .tar.gz">⬇ .tar.gz</button><span class="d" id="archiveStatus" style="margin-left:6px"></span></div>
     <div id="preview"></div>
     <p class="note">MCP server &amp; hook config secrets are shown as <code>&lt;redacted&gt;</code> and never exported. Skill, CLAUDE.md, rules bodies &amp; hook commands are bundled as written — don't keep secrets in them.</p>
     <div id="checksPanel" class="group" style="margin-top:14px">
@@ -278,7 +278,7 @@ function filterRows() {
 }
 let currentChecks = [];
 // Assemble the selection request body, pruning stale names to what's currently in the inventory.
-// (A stale checkbox after a project removal/reload would make buildPack throw -> opaque 500.)
+// (A stale checkbox after a project removal/reload would make buildGem throw -> opaque 500.)
 function buildSelectionBody(){
   const has = (arr, n) => arr.some(x => x.name === n);
   const skills = [...sel.skills].filter(n => has(inv.skills, n));
@@ -301,15 +301,15 @@ function buildSelectionBody(){
   const selection = { skills, mcpServers, includeInstructions: sel.includeInstructions };
   if (hooks.length) selection.hooks = hooks;
   if (Object.keys(projectsSel).length) selection.projects = projectsSel;
-  const reqBody = { selection, name: document.getElementById("name").value || "pack" };
+  const reqBody = { selection, name: document.getElementById("name").value || "gem" };
   if (projects.length) reqBody.projects = projects;
   return reqBody;
 }
 async function build(){
   const reqBody = buildSelectionBody();
   reqBody.checks = currentChecks;
-  const pack = await (await fetch("/api/pack", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(reqBody) })).json();
-  window.__pack = pack;
+  const gem = await (await fetch("/api/gem", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(reqBody) })).json();
+  window.__gem = gem;
   renderPreview();
 }
 // Each check renders as an editable JSON textarea (operator refines task/assertions/threshold).
@@ -334,7 +334,7 @@ function fmtSize(n){ return n < 1024 ? `${n} B` : `${(n / 1024).toFixed(n < 1024
 function artSize(a){ return (a.type === "mcp_server" || a.type === "hook") ? JSON.stringify(a.config || {}).length : (a.content || "").length; }
 function summaryHtml(p){
   const arts = p.artifacts || [];
-  if (!arts.length) return `<p class="d">Empty pack — select artifacts on the left to add them.</p>`;
+  if (!arts.length) return `<p class="d">Empty gem — select artifacts on the left to add them.</p>`;
   const total = arts.reduce((s, a) => s + artSize(a), 0);
   const groups = [["Skills", "skill"], ["MCP servers", "mcp_server"], ["Instructions", "instructions"], ["Hooks", "hook"]];
   let h = `<div class="psummary"><div class="phead"><strong>${esc(p.name)}</strong> <span class="d">· ${arts.length} artifact${arts.length === 1 ? "" : "s"} · ${fmtSize(total)}</span></div>`;
@@ -354,7 +354,7 @@ function renderPreview(){
   const el = document.getElementById("preview");
   if (previewMode === "materialize") { renderMaterialize(); document.querySelectorAll("#preview-modes button").forEach(b => b.classList.toggle("on", b.dataset.pmode === previewMode)); return; }
   if (previewMode === "managed") { renderPublish(); document.querySelectorAll("#preview-modes button").forEach(b => b.classList.toggle("on", b.dataset.pmode === previewMode)); return; }
-  const p = window.__pack;
+  const p = window.__gem;
   if (!p) { el.textContent = ""; }
   else if (p.error || previewMode === "json") {
     el.innerHTML = ""; const pre = document.createElement("pre"); pre.className = "json";
@@ -444,7 +444,7 @@ document.getElementById("preview").addEventListener("click", e => {
   const mp = e.target.closest("[data-mpath]");
   if (mp) { openMaterializedFile(mp.dataset.mpath); return; }
   const row = e.target.closest(".prow"); if (!row) return;
-  const art = (window.__pack && window.__pack.artifacts) ? window.__pack.artifacts[+row.dataset.i] : null;
+  const art = (window.__gem && window.__gem.artifacts) ? window.__gem.artifacts[+row.dataset.i] : null;
   if (art) openArtifact(art);
 });
 document.getElementById("all").addEventListener("click", () => {
@@ -462,11 +462,11 @@ document.getElementById("none").addEventListener("click", () => {
 });
 document.getElementById("name").addEventListener("input", refresh);
 document.getElementById("dl").addEventListener("click", () => {
-  const blob = new Blob([JSON.stringify(window.__pack || {}, null, 2)], { type: "application/json" });
-  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = (document.getElementById("name").value || "pack") + ".json"; a.click();
+  const blob = new Blob([JSON.stringify(window.__gem || {}, null, 2)], { type: "application/json" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = (document.getElementById("name").value || "gem") + ".json"; a.click();
 });
-document.getElementById("copy").addEventListener("click", () => navigator.clipboard.writeText(JSON.stringify(window.__pack || {}, null, 2)));
-// Save the pack archive (manifest + lock + body files) to a folder via the native picker.
+document.getElementById("copy").addEventListener("click", () => navigator.clipboard.writeText(JSON.stringify(window.__gem || {}, null, 2)));
+// Save the gem archive (manifest + lock + body files) to a folder via the native picker.
 document.getElementById("save").addEventListener("click", async () => {
   const status = document.getElementById("archiveStatus");
   status.textContent = "Choose a folder…";
@@ -477,7 +477,7 @@ document.getElementById("save").addEventListener("click", async () => {
   const n = Object.keys(r.files || {}).length, sk = (r.skipped || []).length;
   status.textContent = `Saved ${n} files to ${r.path}` + (sk ? ` · ${sk} skipped` : "");
 });
-// Download the pack archive as a single .tar.gz (the transport/shipping form).
+// Download the gem archive as a single .tar.gz (the transport/shipping form).
 document.getElementById("dltar").addEventListener("click", async () => {
   const status = document.getElementById("archiveStatus");
   status.textContent = "Building .tar.gz…";
@@ -485,7 +485,7 @@ document.getElementById("dltar").addEventListener("click", async () => {
   if (!r.tarGz) { status.textContent = "No archive — select artifacts on the left."; return; }
   const bytes = Uint8Array.from(atob(r.tarGz), c => c.charCodeAt(0));
   const blob = new Blob([bytes], { type: "application/gzip" });
-  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = (document.getElementById("name").value || "pack") + ".pack.tar.gz"; a.click();
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = (document.getElementById("name").value || "gem") + ".gem.tar.gz"; a.click();
   status.textContent = `Downloaded ${a.download}`;
 });
 document.getElementById("srcFilter").addEventListener("change", filterRows);
@@ -691,7 +691,7 @@ async function wsRender(target){
 }
 document.getElementById("wsSelect").addEventListener("change", e => wsOpen(e.target.value));
 document.getElementById("wsNew").addEventListener("click", async () => {
-  const name = prompt("Workspace name (letters, digits, . _ - only):", document.getElementById("name").value || "pack");
+  const name = prompt("Workspace name (letters, digits, . _ - only):", document.getElementById("name").value || "gem");
   if (!name) return;
   const res = await fetch("/api/workspaces", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...buildSelectionBody(), name }) });
   if (!res.ok){ alert("Could not create workspace (name taken or invalid)."); return; }

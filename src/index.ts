@@ -40,7 +40,7 @@ async function main() {
   const server = await app.restServer;
   console.log(`agentgem listening at ${server.url}`);
   console.log(`  UI:       ${server.url}/`);
-  console.log(`  API:      ${server.url}/api/inventory  ·  POST ${server.url}/api/pack`);
+  console.log(`  API:      ${server.url}/api/inventory  ·  POST ${server.url}/api/gem`);
   console.log(`  Explorer: ${server.url}/explorer/`);
   console.log(`  MCP:      ${server.url}/mcp`);
 }

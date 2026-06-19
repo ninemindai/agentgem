@@ -9,8 +9,8 @@ import { safePathSegment } from "./targets.js";
 export type { FileTree, SkippedArtifact };
 export const ARCHIVE_FORMAT_VERSION = 1;
 
-const MANIFEST_PATH = "pack.json";
-const LOCK_PATH = "pack.lock";
+const MANIFEST_PATH = "gem.json";
+const LOCK_PATH = "gem.lock";
 
 export interface GemLock {
   formatVersion: number;
@@ -77,7 +77,7 @@ interface GemManifest {
 
 export interface ArchiveResult { files: FileTree; skipped: SkippedArtifact[] }
 
-export function writeGemArchive(pack: Gem, opts: { version?: string } = {}): ArchiveResult {
+export function writeGemArchive(gem: Gem, opts: { version?: string } = {}): ArchiveResult {
   const files: FileTree = {};
   const skipped: SkippedArtifact[] = [];
   const artifacts: ManifestArtifactEntry[] = [];
@@ -90,7 +90,7 @@ export function writeGemArchive(pack: Gem, opts: { version?: string } = {}): Arc
     return true;
   };
 
-  for (const a of pack.artifacts) {
+  for (const a of gem.artifacts) {
     const seg = safePathSegment(a.name);
     if (a.type === "skill") {
       const path = `skills/${seg}/SKILL.md`;
@@ -119,7 +119,7 @@ export function writeGemArchive(pack: Gem, opts: { version?: string } = {}): Arc
   }
 
   const checks: ManifestCheckEntry[] = [];
-  for (const c of pack.checks) {
+  for (const c of gem.checks) {
     const path = `checks/${withExt(safePathSegment(c.name), ".json")}`;
     if (path in files) throw new Error(`check path collision: '${c.name}' sanitizes to ${path}, already taken`);
     files[path] = JSON.stringify(c, null, 2);
@@ -128,11 +128,11 @@ export function writeGemArchive(pack: Gem, opts: { version?: string } = {}): Arc
 
   const manifest: GemManifest = {
     formatVersion: ARCHIVE_FORMAT_VERSION,
-    name: pack.name,
+    name: gem.name,
     version: opts.version ?? "0.1.0",
-    createdFrom: pack.createdFrom,
+    createdFrom: gem.createdFrom,
     artifacts,
-    requiredSecrets: pack.requiredSecrets,
+    requiredSecrets: gem.requiredSecrets,
     checks,
   };
   files[MANIFEST_PATH] = JSON.stringify(manifest, null, 2);
@@ -142,16 +142,16 @@ export function writeGemArchive(pack: Gem, opts: { version?: string } = {}): Arc
 
 export function readGemArchive(files: FileTree): Gem {
   const manifestRaw = files[MANIFEST_PATH];
-  if (manifestRaw === undefined) throw new Error("archive missing pack.json");
+  if (manifestRaw === undefined) throw new Error("archive missing gem.json");
   const lockRaw = files[LOCK_PATH];
-  if (lockRaw === undefined) throw new Error("archive missing pack.lock");
+  if (lockRaw === undefined) throw new Error("archive missing gem.lock");
 
   const manifest = JSON.parse(manifestRaw) as GemManifest;
   const lock = JSON.parse(lockRaw) as GemLock;
   const v = verifyLock(files, lock);
   if (!v.ok) {
     throw new Error(
-      `pack.lock verification failed — mismatches:[${v.mismatches.join(",")}] missing:[${v.missing.join(",")}] extra:[${v.extra.join(",")}]`,
+      `gem.lock verification failed — mismatches:[${v.mismatches.join(",")}] missing:[${v.missing.join(",")}] extra:[${v.extra.join(",")}]`,
     );
   }
 

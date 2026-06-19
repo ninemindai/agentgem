@@ -32,12 +32,12 @@ export interface ManagedAgentRender {
   vaultSecrets: SecretRequirement[];               // names only — operator adds these to a vault post-publish
 }
 
-export function renderManagedAgent(pack: Gem): ManagedAgentRender {
+export function renderManagedAgent(gem: Gem): ManagedAgentRender {
   const skipped: SkippedArtifact[] = [];
-  const skills = pack.artifacts.filter((a): a is SkillArtifact => a.type === "skill");
-  const mcp = pack.artifacts.filter((a): a is McpServerArtifact => a.type === "mcp_server");
-  const instr = pack.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions");
-  const hooks = pack.artifacts.filter((a): a is HookArtifact => a.type === "hook");
+  const skills = gem.artifacts.filter((a): a is SkillArtifact => a.type === "skill");
+  const mcp = gem.artifacts.filter((a): a is McpServerArtifact => a.type === "mcp_server");
+  const instr = gem.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions");
+  const hooks = gem.artifacts.filter((a): a is HookArtifact => a.type === "hook");
 
   // instructions -> system prompt (## <name>); skills are NOT inlined — they become Agent Skills.
   const system = instr.map((i) => `## ${i.name}\n\n${i.content}`).join("\n\n---\n\n");
@@ -74,7 +74,7 @@ export function renderManagedAgent(pack: Gem): ManagedAgentRender {
 
   // Only surface vault secrets for MCP servers that actually mapped.
   const mappedNames = new Set(mcp_servers.map((m) => m.name));
-  const vaultSecrets = pack.requiredSecrets.filter((s) => mappedNames.has(s.artifact));
+  const vaultSecrets = gem.requiredSecrets.filter((s) => mappedNames.has(s.artifact));
 
-  return { payload: { name: pack.name, model: MANAGED_AGENTS_MODEL, system, mcp_servers, tools }, skillsToRegister, skipped, vaultSecrets };
+  return { payload: { name: gem.name, model: MANAGED_AGENTS_MODEL, system, mcp_servers, tools }, skillsToRegister, skipped, vaultSecrets };
 }

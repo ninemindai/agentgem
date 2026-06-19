@@ -69,7 +69,7 @@ export const BehavioralCheckSchema = z.object({
   timeoutSec: z.number().optional(),
 });
 
-// runner validates against the registry keys, so a pack can't declare a check no runner can run.
+// runner validates against the registry keys, so a gem can't declare a check no runner can run.
 const RUNNER_IDS = Object.keys(RUNNER_REGISTRY) as [string, ...string[]];
 export const ExternalCheckSchema = z.object({
   kind: z.literal("external"),

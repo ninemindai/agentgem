@@ -5,7 +5,7 @@ import type { PublishClient, CustomSkillRef } from "../publish.js";
 import type { ManagedAgentPayload } from "../gem/publish.js";
 import type { Gem } from "../gem/types.js";
 
-const pack: Gem = {
+const gem: Gem = {
   name: "p", createdFrom: "/d", checks: [], requiredSecrets: [],
   artifacts: [
     { type: "skill", name: "review", source: "standalone", content: "# Review body" },
@@ -26,7 +26,7 @@ describe("publishManagedAgent (injected client)", () => {
       async deleteEnvironment() {},
       async createAgent(payload) { agentPayload = payload; return { id: "agent_1", version: "1" }; },
     };
-    const result = await publishManagedAgent(pack, client);
+    const result = await publishManagedAgent(gem, client);
 
     // each skill was registered with its SKILL.md body
     expect(created.map((c) => c.name)).toEqual(["review", "deploy"]);
@@ -56,7 +56,7 @@ describe("publishManagedAgent (injected client)", () => {
       async deleteEnvironment() {},
       async createAgent() { return { id: "x", version: "1" }; },
     };
-    await expect(publishManagedAgent(pack, client)).rejects.toThrow(/skill upload rejected/);
+    await expect(publishManagedAgent(gem, client)).rejects.toThrow(/skill upload rejected/);
   });
 
   it("rolls back created skills and the sandbox when agent creation fails", async () => {
@@ -69,7 +69,7 @@ describe("publishManagedAgent (injected client)", () => {
       async deleteEnvironment(id) { deletedEnvironments.push(id); },
       async createAgent() { throw new Error("agent rejected"); },
     };
-    await expect(publishManagedAgent(pack, client)).rejects.toThrow(/agent rejected/);
+    await expect(publishManagedAgent(gem, client)).rejects.toThrow(/agent rejected/);
     expect(deletedSkills.sort()).toEqual(["skill_deploy", "skill_review"]);
     expect(deletedEnvironments).toEqual(["env_rollback"]);
   });
@@ -82,8 +82,8 @@ describe("publishManagedAgent (injected client)", () => {
       async deleteEnvironment() { throw new Error("delete denied"); },
       async createAgent() { throw new Error("agent rejected"); },
     };
-    await expect(publishManagedAgent(pack, client)).rejects.toThrow(/rollback was incomplete/);
-    try { await publishManagedAgent(pack, client); }
+    await expect(publishManagedAgent(gem, client)).rejects.toThrow(/rollback was incomplete/);
+    try { await publishManagedAgent(gem, client); }
     catch (error) {
       const messages = (error as AggregateError).errors.map((e: Error) => e.message);
       expect(messages).toContain("failed to delete environment env_orphan");

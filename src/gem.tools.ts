@@ -1,4 +1,4 @@
-// src/pack.tools.ts
+// src/gem.tools.ts
 import { z } from "zod";
 import { mcpServer, tool } from "@agentback/mcp";
 import { introspectConfig, introspectProject } from "./gem/introspect.js";
@@ -27,12 +27,12 @@ export class GemTools {
     return introspectAll(input.dir, input.projects);
   }
 
-  @tool("pack", {
+  @tool("build_gem", {
     description: "Build a redacted Gem from a selection of the introspected config artifacts.",
     input: GemInput,
   })
-  async pack(input: z.infer<typeof GemInput>) {
+  async gem(input: z.infer<typeof GemInput>) {
     const dirs = resolveDirs(input.dir);
-    return buildGem(introspectAll(input.dir, input.projects), input.selection, { name: input.name ?? "pack", createdFrom: dirs.claudeDir });
+    return buildGem(introspectAll(input.dir, input.projects), input.selection, { name: input.name ?? "gem", createdFrom: dirs.claudeDir });
   }
 }

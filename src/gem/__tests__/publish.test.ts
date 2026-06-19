@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 import { renderManagedAgent, MANAGED_AGENTS_MODEL } from "../publish.js";
 import type { Gem } from "../types.js";
 
-const pack: Gem = {
+const gem: Gem = {
   name: "mygem",
   createdFrom: "/home/.claude",
   checks: [],
@@ -24,7 +24,7 @@ const pack: Gem = {
 
 describe("renderManagedAgent", () => {
   it("instructions->system, skills->skillsToRegister (not inlined), maps http MCP, default model", () => {
-    const r = renderManagedAgent(pack);
+    const r = renderManagedAgent(gem);
     expect(r.payload.model).toBe(MANAGED_AGENTS_MODEL);
     expect(r.payload.name).toBe("mygem");
     expect(r.payload.system).toContain("## CLAUDE.md");
@@ -40,7 +40,7 @@ describe("renderManagedAgent", () => {
   });
 
   it("skips stdio MCP and hooks with reasons", () => {
-    const r = renderManagedAgent(pack);
+    const r = renderManagedAgent(gem);
     const byArtifact = Object.fromEntries(r.skipped.map((s) => [s.artifact, s]));
     expect(byArtifact["local"].reason).toMatch(/stdio MCP unsupported/);
     expect(byArtifact["local"].type).toBe("mcp_server");
@@ -49,7 +49,7 @@ describe("renderManagedAgent", () => {
   });
 
   it("surfaces requiredSecrets as vault secrets (names only) and sends no auth inline", () => {
-    const r = renderManagedAgent(pack);
+    const r = renderManagedAgent(gem);
     expect(r.vaultSecrets).toEqual([{ name: "GH_TOKEN", artifact: "github", location: "headers.Authorization" }]);
     // the mcp_servers entry carries ONLY url — no headers/config/auth ever goes in the agent payload
     expect(Object.keys(r.payload.mcp_servers[0]).sort()).toEqual(["name", "type", "url"]);
@@ -59,7 +59,7 @@ describe("renderManagedAgent", () => {
   });
 
   it("skips an http MCP whose url was redacted/malformed (never ships a broken endpoint)", () => {
-    const p: Gem = { ...pack, artifacts: [
+    const p: Gem = { ...gem, artifacts: [
       { type: "mcp_server", name: "bad", transport: "http", source: "user", config: { url: "<redacted>" } },
     ] };
     const r = renderManagedAgent(p);
@@ -68,15 +68,15 @@ describe("renderManagedAgent", () => {
   });
 
   it("enforces the 20-skill cap (overflow skipped)", () => {
-    const many: Gem = { ...pack, artifacts: Array.from({ length: 22 }, (_, i) => ({ type: "skill" as const, name: `s${i}`, source: "standalone", content: "x" })) };
+    const many: Gem = { ...gem, artifacts: Array.from({ length: 22 }, (_, i) => ({ type: "skill" as const, name: `s${i}`, source: "standalone", content: "x" })) };
     const r = renderManagedAgent(many);
     expect(r.skillsToRegister).toHaveLength(20);
     expect(r.skipped.filter((s) => s.reason.includes("20-skill cap"))).toHaveLength(2);
   });
 
   it("skips duplicate MCP names instead of sending an API-invalid payload", () => {
-    const duplicate = pack.artifacts.find((a) => a.type === "mcp_server" && a.name === "github")!;
-    const r = renderManagedAgent({ ...pack, artifacts: [...pack.artifacts, duplicate] });
+    const duplicate = gem.artifacts.find((a) => a.type === "mcp_server" && a.name === "github")!;
+    const r = renderManagedAgent({ ...gem, artifacts: [...gem.artifacts, duplicate] });
     expect(r.payload.mcp_servers.filter((m) => m.name === "github")).toHaveLength(1);
     expect(r.skipped.find((s) => s.reason.includes("duplicate"))?.artifact).toBe("github");
   });

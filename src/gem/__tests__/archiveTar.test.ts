@@ -6,7 +6,7 @@ import { packTar, unpackTar } from "../archiveTar.js";
 describe("packTar/unpackTar", () => {
   it("round-trips a FileTree exactly", () => {
     const tree = {
-      "pack.json": '{\n  "name": "demo"\n}',
+      "gem.json": '{\n  "name": "demo"\n}',
       "skills/review/SKILL.md": "# Review\nLook for bugs.\n",
       "mcp/gh.json": '{"transport":"stdio"}',
       "instructions/CLAUDE.md.md": "Be concise.",

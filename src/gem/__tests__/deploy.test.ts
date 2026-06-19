@@ -4,7 +4,7 @@ import { DEPLOY_REGISTRY, deployTargetIds, deployTargetList } from "../deploy.js
 import { renderManagedAgent } from "../publish.js";
 import type { Gem, GemArtifact } from "../types.js";
 
-const pack = (artifacts: GemArtifact[]): Gem => ({ name: "p", createdFrom: "/d", artifacts, checks: [], requiredSecrets: [] });
+const gem = (artifacts: GemArtifact[]): Gem => ({ name: "p", createdFrom: "/d", artifacts, checks: [], requiredSecrets: [] });
 const skill = (n: string): GemArtifact => ({ type: "skill", name: n, source: "standalone", content: "# body" });
 
 const savedKey = process.env.ANTHROPIC_API_KEY;
@@ -17,7 +17,7 @@ describe("deploy registry", () => {
   });
 
   it("preview equals renderManagedAgent", () => {
-    const p = pack([skill("review")]);
+    const p = gem([skill("review")]);
     expect(DEPLOY_REGISTRY["claude-managed"].preview(p)).toEqual(renderManagedAgent(p));
   });
 
@@ -31,6 +31,6 @@ describe("deploy registry", () => {
 
   it("deploy throws (no network) when ANTHROPIC_API_KEY is unset", async () => {
     delete process.env.ANTHROPIC_API_KEY;
-    await expect(DEPLOY_REGISTRY["claude-managed"].deploy(pack([skill("a")]), "req-12345678")).rejects.toThrow(/ANTHROPIC_API_KEY/);
+    await expect(DEPLOY_REGISTRY["claude-managed"].deploy(gem([skill("a")]), "req-12345678")).rejects.toThrow(/ANTHROPIC_API_KEY/);
   });
 });

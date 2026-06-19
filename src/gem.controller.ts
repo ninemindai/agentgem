@@ -1,4 +1,4 @@
-// src/pack.controller.ts
+// src/gem.controller.ts
 import type { z } from "zod";
 import { api, get, post } from "@agentback/openapi";
 import { introspectConfig, introspectProject } from "./gem/introspect.js";
@@ -35,12 +35,12 @@ export class GemController {
     return introspectAll(input.query.dir, parseProjectsQuery(input.query.projects));
   }
 
-  @post("/pack", { body: GemRequestSchema, response: GemSchema })
-  async pack(input: { body: z.infer<typeof GemRequestSchema> }): Promise<z.infer<typeof GemSchema>> {
+  @post("/gem", { body: GemRequestSchema, response: GemSchema })
+  async gem(input: { body: z.infer<typeof GemRequestSchema> }): Promise<z.infer<typeof GemSchema>> {
     const dirs = resolveDirs(input.body.dir);
     const inventory = introspectAll(input.body.dir, input.body.projects);
     return buildGem(inventory, input.body.selection, {
-      name: input.body.name ?? "pack",
+      name: input.body.name ?? "gem",
       createdFrom: dirs.claudeDir,
       checks: input.body.checks,
     });
@@ -50,31 +50,31 @@ export class GemController {
   async scaffoldChecks(input: { body: z.infer<typeof ScaffoldChecksRequestSchema> }): Promise<z.infer<typeof ScaffoldChecksResponseSchema>> {
     const dirs = resolveDirs(input.body.dir);
     const inventory = introspectAll(input.body.dir, input.body.projects);
-    const pack = buildGem(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
-    return { checks: scaffoldChecks(pack) };
+    const gem = buildGem(inventory, input.body.selection, { name: input.body.name ?? "gem", createdFrom: dirs.claudeDir });
+    return { checks: scaffoldChecks(gem) };
   }
 
   @post("/materialize", { body: MaterializeRequestSchema, response: MaterializeResponseSchema })
   async materialize(input: { body: z.infer<typeof MaterializeRequestSchema> }): Promise<z.infer<typeof MaterializeResponseSchema>> {
     const target = input.body.target as TargetId;
-    let pack: Gem;
+    let gem: Gem;
     if (input.body.archivePath) {
-      pack = readGemArchive(readArchiveDir(input.body.archivePath));
+      gem = readGemArchive(readArchiveDir(input.body.archivePath));
     } else {
       const dirs = resolveDirs(input.body.dir);
       const inventory = introspectAll(input.body.dir, input.body.projects);
-      pack = buildGem(inventory, input.body.selection!, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
+      gem = buildGem(inventory, input.body.selection!, { name: input.body.name ?? "gem", createdFrom: dirs.claudeDir });
     }
-    return { target, ...materialize(pack, target), compatibility: compatibility(pack) };
+    return { target, ...materialize(gem, target), compatibility: compatibility(gem) };
   }
 
   @post("/archive", { body: ArchiveRequestSchema, response: ArchiveResponseSchema })
   async archive(input: { body: z.infer<typeof ArchiveRequestSchema> }): Promise<z.infer<typeof ArchiveResponseSchema>> {
     const dirs = resolveDirs(input.body.dir);
     const inventory = introspectAll(input.body.dir, input.body.projects);
-    const pack = buildGem(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
-    const { files, skipped } = writeGemArchive(pack, { version: input.body.version });
-    const lock = JSON.parse(files["pack.lock"]) as GemLock;
+    const gem = buildGem(inventory, input.body.selection, { name: input.body.name ?? "gem", createdFrom: dirs.claudeDir });
+    const { files, skipped } = writeGemArchive(gem, { version: input.body.version });
+    const lock = JSON.parse(files["gem.lock"]) as GemLock;
     let path: string | null = null;
     if (input.body.outDir) { writeArchiveDir(input.body.outDir, files); path = input.body.outDir; }
     const tarGz = input.body.tar ? packTar(files).toString("base64") : null;
@@ -85,8 +85,8 @@ export class GemController {
   async createWorkspace(input: { body: z.infer<typeof CreateWorkspaceRequestSchema> }): Promise<z.infer<typeof WorkspaceSummarySchema>> {
     const dirs = resolveDirs(input.body.dir);
     const inventory = introspectAll(input.body.dir, input.body.projects);
-    const pack = buildGem(inventory, input.body.selection, { name: input.body.name, createdFrom: dirs.claudeDir });
-    return createWorkspace(input.body.name, pack, { version: input.body.version });
+    const gem = buildGem(inventory, input.body.selection, { name: input.body.name, createdFrom: dirs.claudeDir });
+    return createWorkspace(input.body.name, gem, { version: input.body.version });
   }
 
   @get("/workspaces", { query: PickQuerySchema, response: ListWorkspacesResponseSchema })
@@ -120,9 +120,9 @@ export class GemController {
   async publishPreview(input: { body: z.infer<typeof PublishPreviewRequestSchema> }): Promise<z.infer<typeof PublishPreviewResponseSchema>> {
     const dirs = resolveDirs(input.body.dir);
     const inventory = introspectAll(input.body.dir, input.body.projects);
-    const pack = buildGem(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
+    const gem = buildGem(inventory, input.body.selection, { name: input.body.name ?? "gem", createdFrom: dirs.claudeDir });
     const target = (input.body.target ?? "claude-managed") as DeployTargetId;
-    const r = DEPLOY_REGISTRY[target].preview(pack);
+    const r = DEPLOY_REGISTRY[target].preview(gem);
     return { payload: r.payload, skillsToRegister: r.skillsToRegister.map((s) => s.name), skipped: r.skipped, vaultSecrets: r.vaultSecrets };
   }
 
@@ -134,14 +134,14 @@ export class GemController {
   }
 
   // OUTWARD-FACING: gated network deploy through the selected backend. The key is read server-side
-  // (inside the registry's deploy) and never returned; only the redacted pack payload is sent.
+  // (inside the registry's deploy) and never returned; only the redacted gem payload is sent.
   @post("/publish", { body: PublishRequestSchema, response: PublishResultSchema })
   async publish(input: { body: z.infer<typeof PublishRequestSchema> }): Promise<z.infer<typeof PublishResultSchema>> {
     const dirs = resolveDirs(input.body.dir);
     const inventory = introspectAll(input.body.dir, input.body.projects);
-    const pack = buildGem(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
+    const gem = buildGem(inventory, input.body.selection, { name: input.body.name ?? "gem", createdFrom: dirs.claudeDir });
     const target = (input.body.target ?? "claude-managed") as DeployTargetId;
-    return DEPLOY_REGISTRY[target].deploy(pack, input.body.requestId);
+    return DEPLOY_REGISTRY[target].deploy(gem, input.body.requestId);
   }
 
   // Pop the OS-native folder picker and return the chosen absolute path (null if cancelled).

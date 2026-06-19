@@ -13,23 +13,23 @@ export type DeployTargetId = "claude-managed";
 export interface DeployTarget {
   id: DeployTargetId;
   label: string;
-  preview(pack: Gem): ManagedAgentRender;                          // pure, offline
+  preview(gem: Gem): ManagedAgentRender;                          // pure, offline
   ready(): boolean;                                                 // server configured for this backend
-  deploy(pack: Gem, requestId: string): Promise<PublishResult>;   // gated; throws if not ready
+  deploy(gem: Gem, requestId: string): Promise<PublishResult>;   // gated; throws if not ready
 }
 
 export const DEPLOY_REGISTRY: Record<DeployTargetId, DeployTarget> = {
   "claude-managed": {
     id: "claude-managed",
     label: "Claude Managed Agents",
-    preview: (pack) => renderManagedAgent(pack),
+    preview: (gem) => renderManagedAgent(gem),
     ready: () => !!process.env.ANTHROPIC_API_KEY,
-    deploy: async (pack, requestId) => {
+    deploy: async (gem, requestId) => {
       const key = process.env.ANTHROPIC_API_KEY;
       if (!key) throw new Error("ANTHROPIC_API_KEY is not set on the server — cannot deploy to Claude Managed Agents.");
       // The idempotency fingerprint relies on buildGem's stable ordering: identical retries must
       // serialize to the same string, so don't make buildGem ordering non-deterministic.
-      return publishManagedAgentOnce(requestId, JSON.stringify(pack), () => publishManagedAgent(pack, anthropicPublishClient(key)));
+      return publishManagedAgentOnce(requestId, JSON.stringify(gem), () => publishManagedAgent(gem, anthropicPublishClient(key)));
     },
   },
 };

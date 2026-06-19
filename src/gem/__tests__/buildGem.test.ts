@@ -15,27 +15,27 @@ const inv: ConfigInventory = {
 
 describe("buildGem", () => {
   it("selects a named subset and includes instructions when asked", () => {
-    const pack = buildGem(inv, { skills: ["review"], mcpServers: ["gh"], includeInstructions: true }, { name: "p", createdFrom: "/d" });
-    expect(pack.name).toBe("p");
-    expect(pack.createdFrom).toBe("/d");
-    expect(pack.artifacts.map((a) => a.type)).toEqual(["skill", "mcp_server", "instructions"]);
-    expect(pack.artifacts.map((a) => a.name)).toEqual(["review", "gh", "CLAUDE.md"]);
+    const gem = buildGem(inv, { skills: ["review"], mcpServers: ["gh"], includeInstructions: true }, { name: "p", createdFrom: "/d" });
+    expect(gem.name).toBe("p");
+    expect(gem.createdFrom).toBe("/d");
+    expect(gem.artifacts.map((a) => a.type)).toEqual(["skill", "mcp_server", "instructions"]);
+    expect(gem.artifacts.map((a) => a.name)).toEqual(["review", "gh", "CLAUDE.md"]);
   });
 
   it("excludes instructions when not requested", () => {
-    const pack = buildGem(inv, { skills: ["review"] });
-    expect(pack.artifacts.some((a) => a.type === "instructions")).toBe(false);
+    const gem = buildGem(inv, { skills: ["review"] });
+    expect(gem.artifacts.some((a) => a.type === "instructions")).toBe(false);
   });
 
   it("{ all: true } includes everything", () => {
-    const pack = buildGem(inv, { all: true });
-    expect(pack.artifacts.length).toBe(5); // 2 skills + 1 mcp + 1 instructions + 1 hook
+    const gem = buildGem(inv, { all: true });
+    expect(gem.artifacts.length).toBe(5); // 2 skills + 1 mcp + 1 instructions + 1 hook
   });
 
   it("selects a hook by name", () => {
-    const pack = buildGem(inv, { hooks: ["PreToolUse · Bash"] });
-    expect(pack.artifacts.map((a) => a.type)).toEqual(["hook"]);
-    expect(pack.artifacts[0].name).toBe("PreToolUse · Bash");
+    const gem = buildGem(inv, { hooks: ["PreToolUse · Bash"] });
+    expect(gem.artifacts.map((a) => a.type)).toEqual(["hook"]);
+    expect(gem.artifacts[0].name).toBe("PreToolUse · Bash");
   });
 
   it("throws listing available names on an unknown selection", () => {
@@ -58,16 +58,16 @@ describe("buildGem", () => {
   });
 
   it("preserves benign task prose while still scrubbing real secret tokens", () => {
-    const pack = buildGem(inv, { skills: ["review"] }, {
+    const gem = buildGem(inv, { skills: ["review"] }, {
       checks: [{ kind: "behavioral", name: "smoke", task: "test bearer authentication flow", assertions: [] }],
     });
-    expect((pack.checks[0] as { task: string }).task).toBe("test bearer authentication flow");
+    expect((gem.checks[0] as { task: string }).task).toBe("test bearer authentication flow");
   });
 
   it("redacts a secret accidentally embedded in operator check text", () => {
-    const pack = buildGem(inv, { skills: ["review"] }, {
+    const gem = buildGem(inv, { skills: ["review"] }, {
       checks: [{ kind: "behavioral", name: "smoke", task: "use token ghp_abcdefghijklmnopqrstuvwxyz0123", assertions: [] }],
     });
-    expect(JSON.stringify(pack.checks)).not.toContain("ghp_abcdefghijklmnopqrstuvwxyz0123");
+    expect(JSON.stringify(gem.checks)).not.toContain("ghp_abcdefghijklmnopqrstuvwxyz0123");
   });
 });

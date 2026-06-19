@@ -20,12 +20,12 @@ describe("wire schemas", () => {
     expect(parsed.hooks[0].event).toBe("PreToolUse");
   });
 
-  it("validates a pack-request with an all selection", () => {
+  it("validates a gem-request with an all selection", () => {
     const p = GemRequestSchema.parse({ selection: { all: true }, name: "p" });
     expect("all" in p.selection && p.selection.all).toBe(true);
   });
 
-  it("validates a pack-request with a named selection", () => {
+  it("validates a gem-request with a named selection", () => {
     const p = GemRequestSchema.parse({ selection: { skills: ["review"], includeInstructions: true } });
     expect(p.selection).toMatchObject({ skills: ["review"] });
   });
@@ -49,7 +49,7 @@ describe("wire schemas", () => {
     expect(() => GemCheckSchema.parse({ kind: "behavioral", name: "x", task: "t", assertions: [{ type: "nope" }] })).toThrow();
   });
 
-  it("accepts a pack-request carrying checks, and a scaffold-checks response", () => {
+  it("accepts a gem-request carrying checks, and a scaffold-checks response", () => {
     const p = GemRequestSchema.parse({ selection: { all: true }, checks: [{ kind: "external", name: "s", runner: "skillspector" }] });
     expect(p.checks?.length).toBe(1);
     const r = ScaffoldChecksResponseSchema.parse({ checks: [{ kind: "behavioral", name: "smoke", task: "t", assertions: [] }] });
@@ -104,7 +104,7 @@ describe("archive schemas", () => {
     expect(ArchiveRequestSchema.safeParse({ selection: { all: true }, tar: true }).success).toBe(true);
     expect(ArchiveRequestSchema.safeParse({ name: "p" }).success).toBe(false);
     expect(ArchiveResponseSchema.safeParse({
-      files: { "pack.json": "{}" }, lock: { formatVersion: 1, files: {}, gemDigest: "sha256:x", signature: null }, skipped: [], path: null, tarGz: null,
+      files: { "gem.json": "{}" }, lock: { formatVersion: 1, files: {}, gemDigest: "sha256:x", signature: null }, skipped: [], path: null, tarGz: null,
     }).success).toBe(true);
     expect(ArchiveResponseSchema.safeParse({
       files: {}, lock: { formatVersion: 1, files: {}, gemDigest: "sha256:x", signature: null }, skipped: [], path: null, tarGz: "H4sIAAAA",
@@ -113,7 +113,7 @@ describe("archive schemas", () => {
 
   it("materialize accepts selection OR archivePath, but not neither", () => {
     expect(MaterializeRequestSchema.safeParse({ selection: { all: true }, target: "claude" }).success).toBe(true);
-    expect(MaterializeRequestSchema.safeParse({ archivePath: "/tmp/pack", target: "eve" }).success).toBe(true);
+    expect(MaterializeRequestSchema.safeParse({ archivePath: "/tmp/gem", target: "eve" }).success).toBe(true);
     expect(MaterializeRequestSchema.safeParse({ target: "claude" }).success).toBe(false);
   });
 });

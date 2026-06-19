@@ -58,8 +58,8 @@ export function publishManagedAgentOnce(
   return promise;
 }
 
-export async function publishManagedAgent(pack: Gem, client: PublishClient): Promise<PublishResult> {
-  const render = renderManagedAgent(pack);
+export async function publishManagedAgent(gem: Gem, client: PublishClient): Promise<PublishResult> {
+  const render = renderManagedAgent(gem);
   const registeredSkills: RegisteredSkill[] = [];
   let environmentId: string | undefined;
   try {
@@ -67,7 +67,7 @@ export async function publishManagedAgent(pack: Gem, client: PublishClient): Pro
       const { skillId, version } = await client.createSkill(s.name, s.content);
       registeredSkills.push({ name: s.name, skillId, version });
     }
-    environmentId = (await client.createEnvironment(`${pack.name} sandbox`)).id;
+    environmentId = (await client.createEnvironment(`${gem.name} sandbox`)).id;
     const skills: CustomSkillRef[] = registeredSkills.map((r) => ({ type: "custom", skill_id: r.skillId, version: r.version }));
     const agent = await client.createAgent({ ...render.payload, skills });
     return { agentId: agent.id, environmentId, version: agent.version, registeredSkills, skipped: render.skipped, vaultSecrets: render.vaultSecrets };
