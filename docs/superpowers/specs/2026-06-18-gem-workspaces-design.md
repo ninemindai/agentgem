@@ -3,7 +3,7 @@
 **Date:** 2026-06-18
 **Status:** Approved design, pre-implementation
 **Project:** `agentgem` (`/Users/rfeng/Projects/ninemind/agentgem`)
-**Scope:** Give a gem a **persistent local home** under a managed root (`~/.agentgem/workspaces/<name>/`). Each workspace holds the **canonical gem archive at its root** (the editable source of truth) plus a `.targets/<target>/` subtree of **rendered harness layouts** (eve, flue, codex, …) that are *derived build outputs* regenerated from the archive. Adds workspace-lifecycle ops (create/list/read/render/delete) and a UI switcher so you can browse a gem's project layout for any target on disk. Pure rendering is unchanged — workspaces are an orchestration + persistence layer over the existing `writePackArchive`/`readPackArchive`/`materialize` core.
+**Scope:** Give a gem a **persistent local home** under a managed root (`~/.agentgem/workspaces/<name>/`). Each workspace holds the **canonical gem archive at its root** (the editable source of truth) plus a `.targets/<target>/` subtree of **rendered harness layouts** (eve, flue, codex, …) that are *derived build outputs* regenerated from the archive. Adds workspace-lifecycle ops (create/list/read/render/delete) and a UI switcher so you can browse a gem's project layout for any target on disk. Pure rendering is unchanged — workspaces are an orchestration + persistence layer over the existing `writeGemArchive`/`readGemArchive`/`materialize` core.
 
 ---
 
@@ -17,7 +17,7 @@ A workspace supplies that home and draws the line the rest of the system needs: 
 
 1. **Workspace = archive (source) + `.targets/` (build).** The canonical archive sits at the workspace root; rendered harness layouts live under `.targets/<target>/` and are *derived* — regenerable, never hand-edited, gitignore-able. (User decision.)
 2. **Managed root.** agentgem owns `~/.agentgem/workspaces/`; workspaces are named subdirectories there, created/listed/opened via ops and a UI switcher. Root overridable via `AGENTGEM_HOME` (default `~/.agentgem`). (User decision.)
-3. **Orchestration only — no new rendering.** A new `src/gem/workspaces.ts` composes the existing pure core (`writePackArchive`, `readPackArchive`, `materialize`, `compatibility`). It owns disk layout + lifecycle; it invents no new layout logic.
+3. **Orchestration only — no new rendering.** A new `src/gem/workspaces.ts` composes the existing pure core (`writeGemArchive`, `readGemArchive`, `materialize`, `compatibility`). It owns disk layout + lifecycle; it invents no new layout logic.
 4. **Explicit render, no watcher (YAGNI).** Targets render on an explicit op (a button / per-target tab), not via a filesystem watcher. Edit the archive → render → `.targets/<target>/` refreshes.
 5. **`readArchiveDir` must ignore top-level dot-entries.** The archive's own files are never dot-prefixed, so reading a workspace archive must skip `.targets/` (and `.git/`, etc.) — otherwise `verifyLock` rejects them as `extra` files and every workspace read fails. This is the load-bearing integration change.
 6. **Create-only in v1; edit is the manifest-editor's job.** `createWorkspace` errors if the name exists (no silent clobber). Mutating an existing archive's bodies (then recomputing the lock) is a separate follow-up (the manifest editor). Workspaces v1 = create, list, read, render, delete.
@@ -68,7 +68,7 @@ export function workspaceDir(name: string): string;    // sanitize + confine und
 
 export function createWorkspace(name: string, gem: Gem, opts?: { version?: string }): WorkspaceSummary; // throws if exists
 export function listWorkspaces(): WorkspaceSummary[];  // [] if root missing
-export function readWorkspace(name: string): WorkspaceDetail;          // readArchiveDir → readPackArchive (verifies lock)
+export function readWorkspace(name: string): WorkspaceDetail;          // readArchiveDir → readGemArchive (verifies lock)
 export function renderTarget(name: string, target: TargetId): RenderResult; // materialize → clear+write .targets/<target>/
 export function deleteWorkspace(name: string): void;   // rm -rf the workspace dir
 ```
@@ -97,13 +97,13 @@ Handlers mirror the existing controller pattern (`resolveDirs` → `introspectAl
 
 ## 6. Incidental fix — double-extension body filenames
 
-An instructions artifact literally named `CLAUDE.md` currently serializes to `instructions/CLAUDE.md.md` (the writer appends `.md` to the name). It is **lossless** (the manifest stores `name: "CLAUDE.md"` and round-trips), but the filename is ugly and surfaces in `.targets` inspection. Fix in `writePackArchive`: when forming an instructions body path, don't append `.md` if the sanitized name already ends in `.md`; likewise guard `.json` for mcp/hook/check bodies. Round-trip identity is unaffected (name is restored from the manifest entry, not the filename). A focused test asserts an instruction named `CLAUDE.md` lands at `instructions/CLAUDE.md` and still round-trips.
+An instructions artifact literally named `CLAUDE.md` currently serializes to `instructions/CLAUDE.md.md` (the writer appends `.md` to the name). It is **lossless** (the manifest stores `name: "CLAUDE.md"` and round-trips), but the filename is ugly and surfaces in `.targets` inspection. Fix in `writeGemArchive`: when forming an instructions body path, don't append `.md` if the sanitized name already ends in `.md`; likewise guard `.json` for mcp/hook/check bodies. Round-trip identity is unaffected (name is restored from the manifest entry, not the filename). A focused test asserts an instruction named `CLAUDE.md` lands at `instructions/CLAUDE.md` and still round-trips.
 
 ## 7. Module changes
 
 - `src/gem/workspaces.ts` *(new)* — root/dir resolution + traversal guard, `create/list/read/renderTarget/delete`, `WorkspaceSummary`/`WorkspaceDetail`/`RenderResult` types.
 - `src/gem/archiveFs.ts` — `readArchiveDir` skips top-level dot-entries (§5).
-- `src/gem/archive.ts` — `writePackArchive` body-path no-double-extension guard (§6).
+- `src/gem/archive.ts` — `writeGemArchive` body-path no-double-extension guard (§6).
 - `src/schemas.ts` — workspace request/response schemas.
 - `src/gem.controller.ts` — five workspace ops.
 - `src/public/index.html` — workspace switcher + per-target tabs.

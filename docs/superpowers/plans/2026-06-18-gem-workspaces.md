@@ -4,7 +4,7 @@
 
 **Goal:** Give a gem a persistent local home under `~/.agentgem/workspaces/<name>/` — the canonical archive at root (source of truth) plus `.targets/<target>/` rendered harness layouts (derived) — with create/list/read/render/delete ops and a UI switcher.
 
-**Architecture:** A new orchestration module `src/gem/workspaces.ts` composes the existing pure core (`writePackArchive`, `readPackArchive`, `materialize`, `compatibility`) and owns workspace disk layout. Two small surgical changes to the archive layer make it fit: `readArchiveDir` ignores top-level dot-entries (so `.targets/` doesn't corrupt archive reads), and `writePackArchive` stops double-appending extensions. Five REST/MCP ops + a UI switcher sit on top.
+**Architecture:** A new orchestration module `src/gem/workspaces.ts` composes the existing pure core (`writeGemArchive`, `readGemArchive`, `materialize`, `compatibility`) and owns workspace disk layout. Two small surgical changes to the archive layer make it fit: `readArchiveDir` ignores top-level dot-entries (so `.targets/` doesn't corrupt archive reads), and `writeGemArchive` stops double-appending extensions. Five REST/MCP ops + a UI switcher sit on top.
 
 **Tech Stack:** TypeScript (ESM, NodeNext), Zod v4, `@agentback/*` (rest/openapi controllers), Vitest (tests run from compiled `dist/`), `node:fs`/`node:os`/`node:path`. No new dependencies.
 
@@ -13,7 +13,7 @@
 - **ESM imports use `.js` extensions** even from `.ts` sources (NodeNext).
 - **Tests run from `dist/`**: `npm test` = `tsc -b && vitest run`. Focused: `npm test -- -t "<pattern>"`. A `tsc` error fails the run.
 - **The pure core stays pure**: `archive.ts` and `targets.ts` do no disk/network/env beyond what they already do (`archive.ts` = `node:crypto` + `node:zlib` for tar only). ALL workspace filesystem code lives in `workspaces.ts` (and the existing `archiveFs.ts`).
-- **Reuse, don't duplicate**: import `materialize`, `compatibility`, `TARGET_REGISTRY`, `TargetId`, `SkippedArtifact`, `safePathSegment` from `./targets.js`; `writePackArchive`/`readPackArchive` from `./archive.js`; `writeArchiveDir`/`readArchiveDir` from `./archiveFs.js`.
+- **Reuse, don't duplicate**: import `materialize`, `compatibility`, `TARGET_REGISTRY`, `TargetId`, `SkippedArtifact`, `safePathSegment` from `./targets.js`; `writeGemArchive`/`readGemArchive` from `./archive.js`; `writeArchiveDir`/`readArchiveDir` from `./archiveFs.js`.
 - **Managed root**: `workspacesRoot()` = `${process.env.AGENTGEM_HOME ?? join(homedir(), ".agentgem")}/workspaces`. Tests set `AGENTGEM_HOME` to a temp dir.
 - **Name is untrusted**: a workspace name must equal its `safePathSegment` form (no separators, no `..`); otherwise throw. This is stricter than silent sanitization and prevents two names colliding to one dir.
 - **Secret-safety**: workspaces persist an already-redacted archive; no secret value touches disk. Assert in tests.
@@ -24,28 +24,28 @@
 ### Task 1: No double-extension in archive body filenames
 
 **Files:**
-- Modify: `src/gem/archive.ts` (the `writePackArchive` body-path lines)
+- Modify: `src/gem/archive.ts` (the `writeGemArchive` body-path lines)
 - Test: `src/gem/__tests__/archive.test.ts`
 
 **Interfaces:**
-- Consumes: existing `writePackArchive` (Task 2 of the archive feature).
+- Consumes: existing `writeGemArchive` (Task 2 of the archive feature).
 - Produces: instructions/mcp/hook/check body paths no longer double an extension the sanitized name already carries.
 
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// append to src/gem/__tests__/archive.test.ts (inside the writePackArchive describe block)
+// append to src/gem/__tests__/archive.test.ts (inside the writeGemArchive describe block)
 it("does not double the extension when an artifact name already ends in it", () => {
   const p = gem([
     { type: "instructions", name: "CLAUDE.md", content: "be kind" },
     { type: "mcp_server", name: "ctx.json", transport: "http", config: { url: "https://x/sse" } },
   ]);
-  const { files } = writePackArchive(p);
+  const { files } = writeGemArchive(p);
   expect(files["instructions/CLAUDE.md"]).toBe("be kind");        // not instructions/CLAUDE.md.md
   expect(files["instructions/CLAUDE.md.md"]).toBeUndefined();
   expect(files["mcp/ctx.json"]).toBeDefined();                    // not mcp/ctx.json.json
   expect(files["mcp/ctx.json.json"]).toBeUndefined();
-  expect(readPackArchive(files)).toEqual(p);                      // still round-trips
+  expect(readGemArchive(files)).toEqual(p);                      // still round-trips
 });
 ```
 
@@ -56,7 +56,7 @@ Expected: FAIL — file is at `instructions/CLAUDE.md.md`, so `files["instructio
 
 - [ ] **Step 3: Write minimal implementation**
 
-In `src/gem/archive.ts`, inside `writePackArchive`, add a small helper near the top of the function body (after `const artifacts: ManifestArtifactEntry[] = [];`):
+In `src/gem/archive.ts`, inside `writeGemArchive`, add a small helper near the top of the function body (after `const artifacts: ManifestArtifactEntry[] = [];`):
 
 ```ts
   const withExt = (s: string, ext: string) => (s.endsWith(ext) ? s : s + ext);
@@ -79,7 +79,7 @@ const path = `checks/${withExt(safePathSegment(c.name), ".json")}`;
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `npm test -- -t "does not double the extension"` then `npm test -- -t "writePackArchive"` and `npm test -- -t "readPackArchive"`
+Run: `npm test -- -t "does not double the extension"` then `npm test -- -t "writeGemArchive"` and `npm test -- -t "readGemArchive"`
 Expected: PASS (round-trip identity still green).
 
 - [ ] **Step 5: Commit**
@@ -180,7 +180,7 @@ git commit -m "feat(archive): readArchiveDir skips top-level dot-entries (.targe
 - Test: `src/gem/__tests__/workspaces.test.ts`
 
 **Interfaces:**
-- Consumes: `Gem` from `./types.js`; `TargetId`, `SkippedArtifact`, `materialize`, `compatibility`, `TARGET_REGISTRY`, `safePathSegment` from `./targets.js`; `writePackArchive`, `readPackArchive` from `./archive.js`; `writeArchiveDir`, `readArchiveDir` from `./archiveFs.js`.
+- Consumes: `Gem` from `./types.js`; `TargetId`, `SkippedArtifact`, `materialize`, `compatibility`, `TARGET_REGISTRY`, `safePathSegment` from `./targets.js`; `writeGemArchive`, `readGemArchive` from `./archive.js`; `writeArchiveDir`, `readArchiveDir` from `./archiveFs.js`.
 - Produces:
   - `workspacesRoot(): string`, `workspaceName(name): string` (throws on bad), `workspaceDir(name): string`
   - `WorkspaceSummary`, `WorkspaceDetail`, `RenderResult` interfaces
@@ -280,7 +280,7 @@ import { mkdirSync, rmSync, readdirSync, statSync, existsSync, readFileSync } fr
 import type { Gem } from "./types.js";
 import type { TargetId, SkippedArtifact } from "./targets.js";
 import { materialize, compatibility, TARGET_REGISTRY, safePathSegment } from "./targets.js";
-import { writePackArchive, readPackArchive } from "./archive.js";
+import { writeGemArchive, readGemArchive } from "./archive.js";
 import { writeArchiveDir, readArchiveDir } from "./archiveFs.js";
 
 const TARGETS_DIR = ".targets";
@@ -347,7 +347,7 @@ function summary(name: string, manifestJson: string, dir: string): WorkspaceSumm
 export function createWorkspace(name: string, gem: Gem, opts: { version?: string } = {}): WorkspaceSummary {
   const dir = workspaceDir(name);
   if (existsSync(dir)) throw new Error(`workspace '${name}' already exists`);
-  const { files } = writePackArchive(gem, { version: opts.version });
+  const { files } = writeGemArchive(gem, { version: opts.version });
   mkdirSync(dir, { recursive: true });
   writeArchiveDir(dir, files);
   return summary(workspaceName(name), files["gem.json"], dir);
@@ -365,14 +365,14 @@ export function readWorkspace(name: string): WorkspaceDetail {
   const dir = workspaceDir(name);
   if (!existsSync(join(dir, "gem.json"))) throw new Error(`no workspace '${name}'`);
   const files = readArchiveDir(dir);               // skips .targets/ (Task 2)
-  const gem = readPackArchive(files);             // verifies the lock
+  const gem = readGemArchive(files);             // verifies the lock
   return { ...summary(workspaceName(name), files["gem.json"], dir), files, compatibility: compatibility(gem) };
 }
 
 export function renderTarget(name: string, target: TargetId): RenderResult {
   const dir = workspaceDir(name);
   if (!existsSync(join(dir, "gem.json"))) throw new Error(`no workspace '${name}'`);
-  const gem = readPackArchive(readArchiveDir(dir));
+  const gem = readGemArchive(readArchiveDir(dir));
   const { files, skipped } = materialize(gem, target);
   const out = join(dir, TARGETS_DIR, target);
   rmSync(out, { recursive: true, force: true });   // clear stale renders

@@ -22,7 +22,7 @@ The platform's portability story names Flue alongside Eve/Codex/Claude. Eve prov
 ## 2. Design decisions (locked)
 
 1. **Reuse the SKILL.md renderer.** Flue skills use the identical `skills/<n>/SKILL.md` convention, so `flue` references the existing shared `skillSkillMd` renderer (convergence is literal, not duplicated).
-2. **Add a `compose` hook to `TargetSpec`.** `compose?: (gem: Gem) => MaterializeResult`, run after the per-type renderers and merged with the same collision-checking. Flue uses it to emit `agents/<packname>.ts`. General + reusable (OpenAI-SandboxAgent will want it); Eve/Claude/Codex don't set it, so they're unchanged.
+2. **Add a `compose` hook to `TargetSpec`.** `compose?: (gem: Gem) => MaterializeResult`, run after the per-type renderers and merged with the same collision-checking. Flue uses it to emit `agents/<gemname>.ts`. General + reusable (OpenAI-SandboxAgent will want it); Eve/Claude/Codex don't set it, so they're unchanged.
 3. **Instructions fold into the agent file**, not a standalone file. Flue's `instructions` per-type renderer returns `{}` (a deliberate "handled by compose, no standalone file" marker, so instructions are NOT skip-reported), and `compose` reads instruction artifacts from the gem and embeds the concatenated text as the `instructions:` string.
 4. **MCP mirrors Eve, remote-faithful.** `connections/<n>.ts` factory per server: http/sse → `connectMcpServer` with `url` + env-sourced auth headers; stdio → a generated `proxies/<n>.mjs` (reuse `stdioProxyRunner`) plus a connection at the localhost proxy URL. The async tool-wiring (`init(agent, { tools })`) is the operator's documented step — the same boundary Eve drew (user decision).
 5. **Hooks unsupported → skipped** with a reason (like Eve).
@@ -34,8 +34,8 @@ The platform's portability story names Flue alongside Eve/Codex/Claude. Eve prov
 | artifact | flue output |
 |----------|-------------|
 | skill | `skills/<n>/SKILL.md` (shared `skillSkillMd`) |
-| instructions | folded into `agents/<packname>.ts` `instructions:` (no standalone file) |
-| *(compose)* | `agents/<packname>.ts` — imports each skill, sets instructions, `skills: […]` |
+| instructions | folded into `agents/<gemname>.ts` `instructions:` (no standalone file) |
+| *(compose)* | `agents/<gemname>.ts` — imports each skill, sets instructions, `skills: […]` |
 | mcp_server (http/sse) | `connections/<n>.ts` → `connectMcpServer('<n>', { url, transport, headers })` |
 | mcp_server (stdio) | `proxies/<n>.mjs` (proxy) + `connections/<n>.ts` at the localhost proxy URL |
 | hook | — skip (no native concept) |
@@ -58,7 +58,7 @@ interface TargetSpec {
 
 ## 5. Flue renderers (`src/gem/targets.ts`)
 
-**`agents/<packname>.ts`** via `flueComposeAgent(gem)`:
+**`agents/<gemname>.ts`** via `flueComposeAgent(gem)`:
 ```ts
 import { createAgent, type AgentRouteHandler } from "@flue/runtime";
 import skill0 from "../skills/<seg0>/SKILL.md" with { type: "skill" };
@@ -112,7 +112,7 @@ flue: { id: "flue", label: "Flue", skill: skillSkillMd, instructions: () => ({})
 - **`src/gem/__tests__/targets.test.ts` (unit, external fidelity to Flue):**
   - `compose` mechanism: a target whose `compose` emits a file gets it merged; a `compose` path colliding with a per-type file is reported in `skipped` (not overwritten).
   - flue skill → `skills/<n>/SKILL.md` (exact content).
-  - flue agent file → `agents/<packname>.ts` containing `createAgent`, an `import … with { type: "skill" }` per skill, the skill list, and the instructions string; instruction artifacts are NOT in `skipped`.
+  - flue agent file → `agents/<gemname>.ts` containing `createAgent`, an `import … with { type: "skill" }` per skill, the skill list, and the instructions string; instruction artifacts are NOT in `skipped`.
   - flue http MCP → `connections/<n>.ts` with `connectMcpServer`, the url, and `process.env["<TOK>"]` auth (no secret value); sse server → `transport: "sse"`.
   - flue stdio MCP → `proxies/<n>.mjs` + a `connections/<n>.ts` at `http://127.0.0.1:<port>/mcp`.
   - flue hook → **skipped** with reason.

@@ -34,7 +34,7 @@
 ```ts
 // append to src/gem/__tests__/targets.test.ts
 describe("flue target (agent file + skills)", () => {
-  it("emits agents/<packname>.ts importing skills + folding instructions; hooks skipped", () => {
+  it("emits agents/<gemname>.ts importing skills + folding instructions; hooks skipped", () => {
     const p: Gem = { name: "my gem", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [
       skill("review", "# Review\nLook `here` and ${there}."),
       instr("soul", "be kind"),
@@ -44,7 +44,7 @@ describe("flue target (agent file + skills)", () => {
     // skill body reuses the shared SKILL.md convention
     expect(r.files["skills/review/SKILL.md"]).toContain("# Review");
     // the composed agent file
-    const agent = r.files["agents/my_pack.ts"];
+    const agent = r.files["agents/my_gem.ts"];
     expect(agent).toContain('import { createAgent');
     expect(agent).toContain('import skill0 from "../skills/review/SKILL.md" with { type: "skill" }');
     expect(agent).toContain("skills: [skill0]");
@@ -95,7 +95,7 @@ interface TargetSpec {
 (b) Add the Flue agent-file composer (near the other renderers, after the eve helpers):
 
 ```ts
-// Flue: a single agents/<packname>.ts registers the agent. It imports each skill (reusing the shared
+// Flue: a single agents/<gemname>.ts registers the agent. It imports each skill (reusing the shared
 // skills/<n>/SKILL.md bodies), folds instruction artifacts into the `instructions` string, and lists
 // the skills. MCP connection files are emitted separately (mcpFlueConnections) and wired by the operator.
 function escapeTemplate(s: string): string {

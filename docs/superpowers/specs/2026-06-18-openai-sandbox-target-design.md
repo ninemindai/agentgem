@@ -37,8 +37,8 @@ The platform's portability matrix names the OpenAI Agents SDK SandboxAgent as a 
 | artifact | output |
 |----------|--------|
 | skill | `skills/<n>/SKILL.md` (shared `skillSkillMd`); seeded via Manifest `localDir` |
-| instructions | folded into `<packname>.agent.ts` `instructions:` (no standalone file) |
-| *(compose)* | `<packname>.agent.ts` — `new SandboxAgent({ … })` with capabilities + manifest + mcpServers |
+| instructions | folded into `<gemname>.agent.ts` `instructions:` (no standalone file) |
+| *(compose)* | `<gemname>.agent.ts` — `new SandboxAgent({ … })` with capabilities + manifest + mcpServers |
 | mcp_server (http/sse) | inline `new MCPServerStreamableHttp({ url, name, requestInit:{headers:{Authorization: process.env["<TOK>"]!}} })` |
 | mcp_server (stdio) | inline `new MCPServerStdio({ command, args, env:{<NAME>: process.env["<NAME>"]!}, name })` |
 | hook | — skip (no native concept) |
@@ -51,7 +51,7 @@ import { SandboxAgent, Manifest, localDir, shell, filesystem, skills } from "@op
 import { MCPServerStreamableHttp, MCPServerStdio } from "@openai/agents";  // only the classes used
 
 export const agent = new SandboxAgent({
-  name: "<packname>",
+  name: "<gemname>",
   model: "gpt-5.5",
   instructions: `<concatenated, template-escaped instruction artifacts>`,
   capabilities: [shell(), filesystem(), skills()],            // skills()/skills-entry only if skills exist
@@ -94,7 +94,7 @@ Registry entry:
 
 - **`src/gem/__tests__/targets.test.ts` (unit, external fidelity to the SDK):**
   - skill → `skills/<n>/SKILL.md` (exact content).
-  - agent file → `<packname>.agent.ts` containing `new SandboxAgent`, the `@openai/agents/sandbox` import, `capabilities: [shell(), filesystem(), skills()]`, `defaultManifest: new Manifest(` with the `skills: localDir(` entry, and the instructions string. Instruction artifacts are NOT in `skipped`; skill bodies are NOT inlined into the agent file.
+  - agent file → `<gemname>.agent.ts` containing `new SandboxAgent`, the `@openai/agents/sandbox` import, `capabilities: [shell(), filesystem(), skills()]`, `defaultManifest: new Manifest(` with the `skills: localDir(` entry, and the instructions string. Instruction artifacts are NOT in `skipped`; skill bodies are NOT inlined into the agent file.
   - http MCP → inline `new MCPServerStreamableHttp(` with the url and `process.env["<TOK>"]` auth in `requestInit.headers.Authorization`; no secret value.
   - stdio MCP → inline `new MCPServerStdio(` with `command`/`args` and `env: { <NAME>: process.env["<NAME>"] }`; NO proxy file emitted (assert `proxies/` is absent).
   - hook → **skipped** with reason; a non-`headers.` MCP secret → that server **skipped**.

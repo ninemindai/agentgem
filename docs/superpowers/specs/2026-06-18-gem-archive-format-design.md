@@ -18,8 +18,8 @@ Today a Gem is built fresh on every operation: `introspect(~/.claude) → buildP
 A Gem archive fixes all three at once and gives a clean producer/consumer split:
 
 ```
-Produce:  introspect → buildPack(Gem) → writePackArchive(gem)  ─► [ archive on disk ]
-Consume:  [ archive ] → readPackArchive() → Gem ─┬─ materialize(gem, target) → eve / flue / codex / claude on-disk
+Produce:  introspect → buildPack(Gem) → writeGemArchive(gem)  ─► [ archive on disk ]
+Consume:  [ archive ] → readGemArchive() → Gem ─┬─ materialize(gem, target) → eve / flue / codex / claude on-disk
                                   (verifyLock)     └─ publish(gem)             → claude managed agents (network)
 ```
 
@@ -27,12 +27,12 @@ One archive → N deployments. The archive is the **interchange artifact**; a *d
 
 ## 1. Design decisions (locked)
 
-1. **The archive is a serialization of the existing `Gem`, at the edges** — add `writePackArchive` / `readPackArchive`; `Gem` stays the in-memory hub and the single contract every consumer already takes. No target or publish code changes. (Rejected: making the archive tree the canonical contract and rewriting targets to read files directly — it would duplicate the artifact typing `types.ts`/`buildPack.ts` already own, for no gain.)
+1. **The archive is a serialization of the existing `Gem`, at the edges** — add `writeGemArchive` / `readGemArchive`; `Gem` stays the in-memory hub and the single contract every consumer already takes. No target or publish code changes. (Rejected: making the archive tree the canonical contract and rewriting targets to read files directly — it would duplicate the artifact typing `types.ts`/`buildPack.ts` already own, for no gain.)
 2. **Neutral canonical layout, deliberately not any harness's shape** — the archive is *not* the `claude` `.mcp.json`/`CLAUDE.md` layout nor Eve's `agent/…` layout. A neutral layout maps cleanly to *every* target; adopting one harness's shape would force un-translation to reach the others.
 3. **Manifest + lock split** (package.json / package-lock.json model) — `gem.json` is human-authored and lists artifacts by **path**; `gem.lock` is generated and carries per-file `sha256` plus an overall `gemDigest`. You edit files and re-bless the lock; integrity and authoring stay separated so body edits don't churn the manifest.
 4. **Bodies are real files, never inline strings** — `skills/<n>/SKILL.md`, `instructions/<n>.md`; structured artifacts (`mcp`, `hook`, `checks`) are one JSON file each. Git-diffable, hand-editable.
 5. **Secret-safe by construction** — the archive serializes an *already-redacted* Gem: `mcp/*.json` and `hook/*.json` carry redacted `config` + `secretRefs` (names only); `requiredSecrets` carries names + locations, never values. The whole tree is committable to git. (Same trust boundary as `materialize`.)
-6. **Pure core returns a `FileTree`; the controller owns disk I/O** — `writePackArchive(gem): FileTree` and `readPackArchive(files: FileTree): Gem` are pure (same `Record<path,string>` `materialize` already returns). Disk read/write and tar (de)compression live in the controller, exactly as the harness-targets design keeps writing out of the pure layer.
+6. **Pure core returns a `FileTree`; the controller owns disk I/O** — `writeGemArchive(gem): FileTree` and `readGemArchive(files: FileTree): Gem` are pure (same `Record<path,string>` `materialize` already returns). Disk read/write and tar (de)compression live in the controller, exactly as the harness-targets design keeps writing out of the pure layer.
 7. **`gemDigest` is the signable surface; signing itself is deferred** — `gem.lock` reserves a `signature: null` slot. We compute and verify a stable digest now (over canonicalized JSON + sorted file digests); actual signing is a future layer, not v1.
 8. **Tar is the only transport form** — directory is canonical; `.tar.gz` is the single-file shipping form via a thin `packTar`/`unpackTar` over the same `FileTree`. (Zip skipped — YAGNI.)
 9. **Additive surface** — a new `archive` op; `materialize`/publish ops gain an *optional* "load from archive path" input. No existing request shape breaks.
@@ -115,11 +115,11 @@ export interface PackLock {
 export interface VerifyResult { ok: boolean; mismatches: string[]; missing: string[]; extra: string[] }
 
 // Gem → in-memory archive tree (gem.json, gem.lock, and all body files).
-export function writePackArchive(gem: Gem): FileTree;
+export function writeGemArchive(gem: Gem): FileTree;
 
 // Archive tree → Gem, AFTER verifying the lock. Throws on integrity failure (controller decides
 // whether a flag downgrades to a warning).
-export function readPackArchive(files: FileTree): Gem;
+export function readGemArchive(files: FileTree): Gem;
 
 // Recompute integrity for a tree (used by write, and to "bless" intentional edits).
 export function computeLock(files: FileTree): PackLock;
@@ -128,7 +128,7 @@ export function computeLock(files: FileTree): PackLock;
 export function verifyLock(files: FileTree, lock: PackLock): VerifyResult;
 ```
 
-`writePackArchive` builds the body files, then the manifest, then calls `computeLock` over the whole tree and emits `gem.lock`. `readPackArchive` parses `gem.json`, runs `verifyLock` against the embedded `gem.lock` (mismatch → throw with the offending paths), reattaches each body file to its artifact (`content` for skill/instructions; parsed JSON for mcp/hook/checks), and returns a `Gem` byte-for-byte equivalent to the one that was written.
+`writeGemArchive` builds the body files, then the manifest, then calls `computeLock` over the whole tree and emits `gem.lock`. `readGemArchive` parses `gem.json`, runs `verifyLock` against the embedded `gem.lock` (mismatch → throw with the offending paths), reattaches each body file to its artifact (`content` for skill/instructions; parsed JSON for mcp/hook/checks), and returns a `Gem` byte-for-byte equivalent to the one that was written.
 
 Tar transport (thin, in the controller layer, not `archive.ts`):
 
@@ -141,10 +141,10 @@ export function unpackTar(buf: Buffer): FileTree;
 ## 4. Round-trip contract (the core invariant)
 
 ```
-readPackArchive(writePackArchive(gem))  deep-equals  gem
+readGemArchive(writeGemArchive(gem))  deep-equals  gem
 ```
 
-This identity is what proves "the archive *is* the Gem" and therefore "single source for all targets": any consumer fed `readPackArchive(dir)` sees exactly the Gem it would have gotten from `buildPack`. The plan's first test asserts this against the existing Gem fixtures (skills, instructions, mcp with `secretRefs`, hooks, checks, `requiredSecrets` all present). Lossiness anywhere (a dropped `description`, a coerced `transport`) fails this test.
+This identity is what proves "the archive *is* the Gem" and therefore "single source for all targets": any consumer fed `readGemArchive(dir)` sees exactly the Gem it would have gotten from `buildPack`. The plan's first test asserts this against the existing Gem fixtures (skills, instructions, mcp with `secretRefs`, hooks, checks, `requiredSecrets` all present). Lossiness anywhere (a dropped `description`, a coerced `transport`) fails this test.
 
 ## 5. Trust boundary
 
@@ -155,10 +155,10 @@ Identical to `materialize`: the archive **re-serializes an already-redacted Gem 
 | Op | REST | MCP tool | Shape |
 |----|------|----------|-------|
 | `archive` *(new)* | `POST /api/archive` | `archive` | `{ selection, name?, version?, dir?, projects?, format?: "dir"\|"tar" }` → writes archive, returns `{ files, lock, path? }` |
-| `materialize` *(augmented)* | `POST /api/materialize` | `materialize` | now accepts **either** `{ selection, … }` (today) **or** `{ archivePath }` → `readPackArchive` then existing flow |
+| `materialize` *(augmented)* | `POST /api/materialize` | `materialize` | now accepts **either** `{ selection, … }` (today) **or** `{ archivePath }` → `readGemArchive` then existing flow |
 | `publish*` *(augmented)* | existing | existing | same optional `{ archivePath }` alternative to a live selection |
 
-The handler for `archive` resolves dirs, `introspect`s, `buildPack`s, `writePackArchive`s, and (controller-side) writes the `FileTree` to `dir` — or `packTar`s it when `format:"tar"`. The augmented consumers gain one branch: if `archivePath` is given, load+verify the tree and `readPackArchive` instead of introspecting. No existing field changes meaning.
+The handler for `archive` resolves dirs, `introspect`s, `buildPack`s, `writeGemArchive`s, and (controller-side) writes the `FileTree` to `dir` — or `packTar`s it when `format:"tar"`. The augmented consumers gain one branch: if `archivePath` is given, load+verify the tree and `readGemArchive` instead of introspecting. No existing field changes meaning.
 
 **Schemas (`src/schemas.ts`):** `PackManifestSchema`, `PackLockSchema`, `ArchiveRequestSchema`, `ArchiveResponseSchema`; an optional `archivePath` added to the materialize/publish request schemas (union, not a breaking edit).
 
@@ -166,7 +166,7 @@ The handler for `archive` resolves dirs, `introspect`s, `buildPack`s, `writePack
 
 ## 7. Module changes
 
-- `src/gem/archive.ts` *(new)* — `PackLock`, `VerifyResult`, `writePackArchive`, `readPackArchive`, `computeLock`, `verifyLock`; reuses `safePathSegment` (extract to a shared util if not already shared with `targets.ts`).
+- `src/gem/archive.ts` *(new)* — `PackLock`, `VerifyResult`, `writeGemArchive`, `readGemArchive`, `computeLock`, `verifyLock`; reuses `safePathSegment` (extract to a shared util if not already shared with `targets.ts`).
 - `src/gem/archiveTar.ts` *(new, optional split)* — `packTar`/`unpackTar`.
 - `src/gem/types.ts` — no `Gem` shape change. (Manifest/lock types live in `archive.ts`.)
 - `src/schemas.ts` — manifest/lock/archive schemas; optional `archivePath` on materialize+publish requests.
@@ -178,10 +178,10 @@ The handler for `archive` resolves dirs, `introspect`s, `buildPack`s, `writePack
 Following the per-module `__tests__` + controller (`@agentback/testing`) + gstack page-smoke pattern:
 
 - **`src/gem/__tests__/archive.test.ts` (unit):**
-  - **Round-trip identity** (§4): `readPackArchive(writePackArchive(gem))` deep-equals a fixture Gem covering all four artifact types + checks + `requiredSecrets`.
+  - **Round-trip identity** (§4): `readGemArchive(writeGemArchive(gem))` deep-equals a fixture Gem covering all four artifact types + checks + `requiredSecrets`.
   - **Body extraction**: skill content lands at `skills/<n>/SKILL.md` (exact bytes); instructions at `instructions/<n>.md`; mcp/hook/check JSON files parse back to the exact objects (`transport`, `event`, `matcher`, `secretRefs` preserved).
   - **Lock**: `computeLock` produces a `sha256` per file and a `gemDigest`; recomputed digest is stable across key reordering / trailing whitespace.
-  - **Tamper detection**: mutate one body byte → `verifyLock` reports it in `mismatches`; `readPackArchive` throws naming that path. Re-`computeLock` "blesses" the edit and read succeeds.
+  - **Tamper detection**: mutate one body byte → `verifyLock` reports it in `mismatches`; `readGemArchive` throws naming that path. Re-`computeLock` "blesses" the edit and read succeeds.
   - **Secret safety**: no archive file contains a secret value; `<redacted>` present where `secretRefs` point.
   - **Collision**: two skills sanitizing to the same path → later one dropped with a recorded reason (no overwrite).
 - **`src/gem/__tests__/archiveTar.test.ts`:** `unpackTar(packTar(tree))` deep-equals `tree`.

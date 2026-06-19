@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add `openai-sandbox` to `TARGET_REGISTRY` so `materialize(gem, "openai-sandbox")` renders an OpenAI Agents SDK SandboxAgent project: `<packname>.agent.ts` (`new SandboxAgent({ instructions, capabilities, defaultManifest, mcpServers })`) + `skills/<n>/SKILL.md`.
+**Goal:** Add `openai-sandbox` to `TARGET_REGISTRY` so `materialize(gem, "openai-sandbox")` renders an OpenAI Agents SDK SandboxAgent project: `<gemname>.agent.ts` (`new SandboxAgent({ instructions, capabilities, defaultManifest, mcpServers })`) + `skills/<n>/SKILL.md`.
 
 **Architecture:** Reuse the existing `compose` hook (shipped with Flue) and `skillSkillMd`. A `sandboxComposeAgent(gem)` composer emits the single agent file; skill bodies are real files seeded via the Manifest. MCP servers are inline in the agent (`MCPServerStreamableHttp` / native `MCPServerStdio` — no proxy bridge). No `TargetSpec` model change, no schema change (registry-derived `TargetIdSchema`), one UI `<option>`.
 
@@ -34,7 +34,7 @@
 ```ts
 // append to src/gem/__tests__/targets.test.ts
 describe("openai-sandbox target (agent file + skills)", () => {
-  it("emits <packname>.agent.ts (SandboxAgent + manifest + capabilities) and skill files; hooks + mcp skipped in v1-step1", () => {
+  it("emits <gemname>.agent.ts (SandboxAgent + manifest + capabilities) and skill files; hooks + mcp skipped in v1-step1", () => {
     const p: Gem = { name: "my gem", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [
       skill("review", "# Review\nLook `here` and ${there}."),
       instr("soul", "be kind"),
@@ -42,7 +42,7 @@ describe("openai-sandbox target (agent file + skills)", () => {
     ] };
     const r = materialize(p, "openai-sandbox");
     expect(r.files["skills/review/SKILL.md"]).toContain("# Review");
-    const agent = r.files["my_pack.agent.ts"];
+    const agent = r.files["my_gem.agent.ts"];
     expect(agent).toContain('from "@openai/agents/sandbox"');
     expect(agent).toContain("new SandboxAgent({");
     expect(agent).toContain('model: "gpt-5.5"');
@@ -86,7 +86,7 @@ export type TargetId = "claude" | "codex" | "agents" | "hermes" | "eve" | "flue"
 
 (b) Add the composer (after the Flue helpers; reuses `escapeTemplate`, `safePathSegment`, `rendered`):
 ```ts
-// OpenAI Agents SDK SandboxAgent: one <packname>.agent.ts composes everything. Skill bodies are real
+// OpenAI Agents SDK SandboxAgent: one <gemname>.agent.ts composes everything. Skill bodies are real
 // files (skillSkillMd) seeded read-only via the Manifest; instructions fold into the `instructions`
 // string; MCP servers are added inline in Task 2. No proxy bridge (the SDK has native stdio MCP).
 const sandboxComposeAgent = (gem: Gem): MaterializeResult => {
@@ -116,7 +116,7 @@ export const agent = new SandboxAgent({
 
 (c) Register `openai-sandbox` (after `flue`):
 ```ts
-  // OpenAI Agents SDK SandboxAgent (single <packname>.agent.ts). Skills reuse SKILL.md (seeded via the
+  // OpenAI Agents SDK SandboxAgent (single <gemname>.agent.ts). Skills reuse SKILL.md (seeded via the
   // Manifest); instructions fold into the agent file. MCP is added inline in Task 2 (mcp renderer + compose).
   "openai-sandbox": { id: "openai-sandbox", label: "OpenAI Sandbox", skill: skillSkillMd, instructions: () => ({}), compose: sandboxComposeAgent },
 ```
