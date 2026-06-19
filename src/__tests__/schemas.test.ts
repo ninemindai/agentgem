@@ -68,7 +68,7 @@ describe("wire schemas", () => {
       compatibility: {
         claude: { supported: 1, skipped: 0 }, codex: { supported: 0, skipped: 1 },
         agents: { supported: 0, skipped: 1 }, hermes: { supported: 0, skipped: 1 },
-        eve: { supported: 0, skipped: 1 },
+        eve: { supported: 0, skipped: 1 }, flue: { supported: 0, skipped: 1 },
       },
     });
     expect(r.files["CLAUDE.md"]).toBe("x");

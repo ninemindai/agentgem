@@ -10,7 +10,7 @@ import type {
 import { tomlMcpServers } from "./toml.js";
 import { stdioProxyRunner, PROXY_BASE_PORT, PROXY_HOST } from "./mcpProxy.js";
 
-export type TargetId = "claude" | "codex" | "agents" | "hermes" | "eve";
+export type TargetId = "claude" | "codex" | "agents" | "hermes" | "eve" | "flue";
 export type FileTree = Record<string, string>;
 
 export interface SkippedArtifact { artifact: string; type: ArtifactType; reason: string }
@@ -23,6 +23,7 @@ interface TargetSpec {
   mcp?: (servers: McpServerArtifact[]) => MaterializeResult;
   instructions?: (all: InstructionsArtifact[]) => FileTree;
   hook?: (hooks: HookArtifact[]) => FileTree;
+  compose?: (pack: Pack) => MaterializeResult; // cross-cutting file(s) that see the whole pack (runs last)
 }
 
 export function safePathSegment(name: string): string {
@@ -109,6 +110,36 @@ function hooksToEventMap(hooks: HookArtifact[]): Record<string, unknown[]> {
 const hooksSettingsJson = (hooks: HookArtifact[]): FileTree =>
   ({ "settings.json": JSON.stringify({ hooks: hooksToEventMap(hooks) }, null, 2) });
 
+// Flue: a single agents/<packname>.ts registers the agent. It imports each skill (reusing the shared
+// skills/<n>/SKILL.md bodies), folds instruction artifacts into the `instructions` string, and lists
+// the skills. MCP connection files are emitted separately (mcpFlueConnections) and wired by the operator.
+function escapeTemplate(s: string): string {
+  return s.replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/\$\{/g, "\\${");
+}
+const flueComposeAgent = (pack: Pack): MaterializeResult => {
+  const skills = pack.artifacts.filter((a): a is SkillArtifact => a.type === "skill");
+  const instr = pack.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions");
+  const imports = skills.map((s, i) => `import skill${i} from "../skills/${safePathSegment(s.name)}/SKILL.md" with { type: "skill" };`).join("\n");
+  const skillBodies = skills.map((s) => `## ${s.name}\n\n${s.content}`);
+  const instrBodies = instr.map((i) => `## ${i.name}\n\n${i.content}`);
+  const instructions = [...skillBodies, ...instrBodies].join("\n\n---\n\n");
+  const list = skills.map((_, i) => `skill${i}`).join(", ");
+  const file =
+`import { createAgent, type AgentRouteHandler } from "@flue/runtime";
+${imports}${imports ? "\n" : ""}
+export const route: AgentRouteHandler = async (_c, next) => next();
+
+const instructions = \`${escapeTemplate(instructions)}\`;
+
+export default createAgent(() => ({
+  model: "anthropic/claude-sonnet-4-6",
+  instructions,
+  skills: [${list}],
+}));
+`;
+  return rendered({ [`agents/${safePathSegment(pack.name)}.ts`]: file });
+};
+
 // ── targets compose the shared renderers (convergence is literal, not duplicated) ──
 export const TARGET_REGISTRY: Record<TargetId, TargetSpec> = {
   claude: { id: "claude", label: "Claude", skill: skillSkillMd,       instructions: instructionsClaudeMd, mcp: mcpDotMcpJson, hook: hooksSettingsJson },
@@ -117,6 +148,9 @@ export const TARGET_REGISTRY: Record<TargetId, TargetSpec> = {
   hermes: { id: "hermes", label: "Hermes", skill: skillDescriptionMd, instructions: instructionsSoulMd },
   // Eve project layout (agent/...). Hooks are event-reacting code in Eve, not config -> unsupported.
   eve:    { id: "eve",    label: "Eve",    skill: skillEveMd,         instructions: concatInstructions("agent/instructions.md"), mcp: mcpEveConnections },
+  // Flue project layout. Skills reuse SKILL.md; instructions fold into the composed agent file (no
+  // standalone file -> the empty instructions renderer marks them handled, not skipped). MCP added in Task 2.
+  flue:   { id: "flue",   label: "Flue",   skill: skillSkillMd,        instructions: () => ({}), compose: flueComposeAgent },
 };
 
 export function materialize(pack: Pack, target: TargetId): MaterializeResult {
@@ -156,6 +190,12 @@ export function materialize(pack: Pack, target: TargetId): MaterializeResult {
   if (hooks.length) {
     if (spec.hook) merge(spec.hook(hooks), hooks.map((h) => h.name).join(", "), "hook");
     else skipAll(hooks, "hook");
+  }
+
+  if (spec.compose) {
+    const result = spec.compose(pack);
+    merge(result.files, "(composed agent)", "instructions"); // collisions reported; agent file derives from instructions+skills
+    skipped.push(...result.skipped);
   }
 
   return { files, skipped };

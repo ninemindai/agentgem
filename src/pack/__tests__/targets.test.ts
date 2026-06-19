@@ -100,6 +100,38 @@ describe("materialize", () => {
   });
 });
 
+describe("flue target (agent file + skills)", () => {
+  it("emits agents/<packname>.ts importing skills + folding instructions; hooks skipped", () => {
+    const p: Pack = { name: "my pack", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [
+      skill("review", "# Review\nLook `here` and ${there}."),
+      instr("soul", "be kind"),
+      hook(),
+    ] };
+    const r = materialize(p, "flue");
+    // skill body reuses the shared SKILL.md convention
+    expect(r.files["skills/review/SKILL.md"]).toContain("# Review");
+    // the composed agent file
+    const agent = r.files["agents/my_pack.ts"];
+    expect(agent).toContain('import { createAgent');
+    expect(agent).toContain('import skill0 from "../skills/review/SKILL.md" with { type: "skill" }');
+    expect(agent).toContain("skills: [skill0]");
+    expect(agent).toContain("be kind");                 // instructions folded in
+    expect(agent).toContain('model: "anthropic/claude-sonnet-4-6"');
+    // template escaping: backtick and ${ must be escaped so the file is valid TS
+    expect(agent).toContain("\\`here\\`");
+    expect(agent).toContain("\\${there}");
+    // instructions are NOT reported skipped (they're composed, not dropped)
+    expect(r.skipped.find((s) => s.type === "instructions")).toBeUndefined();
+    // hooks unsupported -> skipped
+    expect(r.skipped.map((s) => s.type)).toContain("hook");
+  });
+
+  it("compatibility includes a flue entry", () => {
+    const p: Pack = { name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [skill("a")] };
+    expect(compatibility(p).flue).toBeTruthy();
+  });
+});
+
 describe("compatibility", () => {
   it("summarizes supported/skipped per target", () => {
     const c = compatibility(pack([skill("a"), hook()]));
@@ -107,6 +139,6 @@ describe("compatibility", () => {
     expect(c.codex).toEqual({ supported: 1, skipped: 1 });   // hook unsupported
     expect(c.hermes).toEqual({ supported: 1, skipped: 1 });
     expect(c.eve).toEqual({ supported: 1, skipped: 1 }); // skill ok, hook unsupported
-    expect(Object.keys(TARGET_REGISTRY).sort()).toEqual(["agents", "claude", "codex", "eve", "hermes"]);
+    expect(Object.keys(TARGET_REGISTRY).sort()).toEqual(["agents", "claude", "codex", "eve", "flue", "hermes"]);
   });
 });
