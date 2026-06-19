@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add harness **targets** so a Pack can be rendered into a specific coding-agent's on-disk layout via a pure `materialize(pack, target): { files, skipped }`, with a derived compatibility summary — agentgem produces the file tree; it writes nothing.
+**Goal:** Add harness **targets** so a Gem can be rendered into a specific coding-agent's on-disk layout via a pure `materialize(gem, target): { files, skipped }`, with a derived compatibility summary — agentgem produces the file tree; it writes nothing.
 
-**Architecture:** A purpose-built TOML emitter (leaf), then `src/pack/targets.ts` composing per-artifact-type **convention renderers** (`SKILL.md`/`DESCRIPTION.md`, `CLAUDE.md`/`AGENTS.md`/`SOUL.md`, `.mcp.json`/`config.toml`, `settings.json`) into four targets (claude/codex/agents/hermes). Unmappable artifacts are skipped-with-reason. Then zod schemas, a `materialize` REST/MCP op, and a UI "Materialize" preview mode. Tests assert **external fidelity** (exact paths + format-valid content), not round-trip through `introspect.ts`.
+**Architecture:** A purpose-built TOML emitter (leaf), then `src/gem/targets.ts` composing per-artifact-type **convention renderers** (`SKILL.md`/`DESCRIPTION.md`, `CLAUDE.md`/`AGENTS.md`/`SOUL.md`, `.mcp.json`/`config.toml`, `settings.json`) into four targets (claude/codex/agents/hermes). Unmappable artifacts are skipped-with-reason. Then zod schemas, a `materialize` REST/MCP op, and a UI "Materialize" preview mode. Tests assert **external fidelity** (exact paths + format-valid content), not round-trip through `introspect.ts`.
 
 **Tech Stack:** TypeScript 6 (legacy decorators, `tsc -b`), zod v4, AgentBack, vitest, `@agentback/testing`/supertest, vanilla-JS page. pnpm.
 
@@ -20,15 +20,15 @@
 A tiny TOML serializer for the known MCP-config shape only (command/url/type scalars, args array, env/headers sub-tables). Not a general TOML library.
 
 **Files:**
-- Create: `src/pack/toml.ts`
-- Test: `src/pack/__tests__/toml.test.ts`
+- Create: `src/gem/toml.ts`
+- Test: `src/gem/__tests__/toml.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `src/pack/__tests__/toml.test.ts`:
+Create `src/gem/__tests__/toml.test.ts`:
 
 ```ts
-// src/pack/__tests__/toml.test.ts
+// src/gem/__tests__/toml.test.ts
 import { describe, it, expect } from "vitest";
 import { tomlMcpServers } from "../toml.js";
 import type { McpServerArtifact } from "../types.js";
@@ -60,13 +60,13 @@ describe("tomlMcpServers", () => {
 
 - [ ] **Step 2: Run it, watch it fail**
 
-Run: `pnpm exec vitest run src/pack/__tests__/toml.test.ts`
+Run: `pnpm exec vitest run src/gem/__tests__/toml.test.ts`
 Expected: FAIL — cannot find module `../toml.js`.
 
-- [ ] **Step 3: Implement `src/pack/toml.ts`**
+- [ ] **Step 3: Implement `src/gem/toml.ts`**
 
 ```ts
-// src/pack/toml.ts
+// src/gem/toml.ts
 // Minimal TOML emitter for the MCP-server config shape ONLY (command/url/type scalars,
 // args array, env/headers sub-tables). Not a general TOML library.
 import type { McpServerArtifact } from "./types.js";
@@ -109,14 +109,14 @@ export function tomlMcpServers(servers: McpServerArtifact[]): string {
 
 - [ ] **Step 4: Run it, watch it pass; then the full gate**
 
-Run: `pnpm exec vitest run src/pack/__tests__/toml.test.ts` → PASS.
+Run: `pnpm exec vitest run src/gem/__tests__/toml.test.ts` → PASS.
 Run: `pnpm test` → PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/pack/toml.ts src/pack/__tests__/toml.test.ts
-git commit -m "feat(pack): purpose-built TOML emitter for MCP server config"
+git add src/gem/toml.ts src/gem/__tests__/toml.test.ts
+git commit -m "feat(gem): purpose-built TOML emitter for MCP server config"
 ```
 
 ---
@@ -124,20 +124,20 @@ git commit -m "feat(pack): purpose-built TOML emitter for MCP server config"
 ### Task 2: `targets.ts` — convention renderers, registry, materialize, compatibility
 
 **Files:**
-- Create: `src/pack/targets.ts`
-- Test: `src/pack/__tests__/targets.test.ts`
+- Create: `src/gem/targets.ts`
+- Test: `src/gem/__tests__/targets.test.ts`
 
 - [ ] **Step 1: Write the failing tests**
 
-Create `src/pack/__tests__/targets.test.ts`:
+Create `src/gem/__tests__/targets.test.ts`:
 
 ```ts
-// src/pack/__tests__/targets.test.ts
+// src/gem/__tests__/targets.test.ts
 import { describe, it, expect } from "vitest";
 import { materialize, compatibility, TARGET_REGISTRY } from "../targets.js";
-import type { Pack, PackArtifact, SkillArtifact, McpServerArtifact, InstructionsArtifact, HookArtifact } from "../types.js";
+import type { Gem, PackArtifact, SkillArtifact, McpServerArtifact, InstructionsArtifact, HookArtifact } from "../types.js";
 
-const pack = (artifacts: PackArtifact[]): Pack => ({ name: "p", createdFrom: "/d", artifacts, checks: [], requiredSecrets: [] });
+const gem = (artifacts: PackArtifact[]): Gem => ({ name: "p", createdFrom: "/d", artifacts, checks: [], requiredSecrets: [] });
 const skill = (n: string, content = "# body"): SkillArtifact => ({ type: "skill", name: n, source: "standalone", content });
 const mcp = (n: string): McpServerArtifact => ({ type: "mcp_server", name: n, transport: "stdio", config: { command: "npx", env: { TOK: "<redacted>" } } });
 const instr = (n: string, content = "do this"): InstructionsArtifact => ({ type: "instructions", name: n, content });
@@ -145,7 +145,7 @@ const hook = (): HookArtifact => ({ type: "hook", name: "PreToolUse · Bash", ev
 
 describe("materialize", () => {
   it("claude: SKILL.md, CLAUDE.md, .mcp.json, settings.json hooks; nothing skipped", () => {
-    const r = materialize(pack([skill("review"), instr("CLAUDE.md"), mcp("gh"), hook()]), "claude");
+    const r = materialize(gem([skill("review"), instr("CLAUDE.md"), mcp("gh"), hook()]), "claude");
     expect(r.files["skills/review/SKILL.md"]).toBe("# body");
     expect(r.files["CLAUDE.md"]).toContain("do this");
     expect(JSON.parse(r.files[".mcp.json"]).mcpServers.gh.env.TOK).toBe("<redacted>");
@@ -154,7 +154,7 @@ describe("materialize", () => {
   });
 
   it("codex: AGENTS.md + config.toml; hooks skipped", () => {
-    const r = materialize(pack([skill("review"), instr("CLAUDE.md"), mcp("gh"), hook()]), "codex");
+    const r = materialize(gem([skill("review"), instr("CLAUDE.md"), mcp("gh"), hook()]), "codex");
     expect(r.files["skills/review/SKILL.md"]).toBe("# body");
     expect(r.files["AGENTS.md"]).toContain("do this");
     expect(r.files["config.toml"]).toContain("[mcp_servers.gh]");
@@ -163,7 +163,7 @@ describe("materialize", () => {
   });
 
   it("agents: AGENTS.md + skills; mcp + hooks skipped", () => {
-    const r = materialize(pack([skill("review"), instr("X"), mcp("gh"), hook()]), "agents");
+    const r = materialize(gem([skill("review"), instr("X"), mcp("gh"), hook()]), "agents");
     expect(r.files["skills/review/SKILL.md"]).toBe("# body");
     expect(r.files["AGENTS.md"]).toContain("do this");
     expect(r.files[".mcp.json"]).toBeUndefined();
@@ -171,21 +171,21 @@ describe("materialize", () => {
   });
 
   it("hermes: DESCRIPTION.md + SOUL.md; mcp + hooks skipped", () => {
-    const r = materialize(pack([skill("review"), instr("X"), mcp("gh"), hook()]), "hermes");
+    const r = materialize(gem([skill("review"), instr("X"), mcp("gh"), hook()]), "hermes");
     expect(r.files["skills/review/DESCRIPTION.md"]).toBe("# body");
     expect(r.files["SOUL.md"]).toContain("do this");
     expect(r.skipped.map((s) => s.type).sort()).toEqual(["hook", "mcp_server"]);
   });
 
   it("skips the later of two same-named skills (path collision); first wins", () => {
-    const r = materialize(pack([skill("dup", "first"), skill("dup", "second")]), "claude");
+    const r = materialize(gem([skill("dup", "first"), skill("dup", "second")]), "claude");
     expect(r.files["skills/dup/SKILL.md"]).toBe("first");
     expect(r.skipped).toHaveLength(1);
     expect(r.skipped[0].reason).toContain("collision");
   });
 
   it("never emits a secret value", () => {
-    const r = materialize(pack([mcp("gh")]), "claude");
+    const r = materialize(gem([mcp("gh")]), "claude");
     expect(r.files[".mcp.json"]).toContain("<redacted>");
     expect(JSON.stringify(r.files)).not.toContain("realsecret");
   });
@@ -193,7 +193,7 @@ describe("materialize", () => {
 
 describe("compatibility", () => {
   it("summarizes supported/skipped per target", () => {
-    const c = compatibility(pack([skill("a"), hook()]));
+    const c = compatibility(gem([skill("a"), hook()]));
     expect(c.claude).toEqual({ supported: 2, skipped: 0 });
     expect(c.codex).toEqual({ supported: 1, skipped: 1 });   // hook unsupported
     expect(c.hermes).toEqual({ supported: 1, skipped: 1 });
@@ -204,19 +204,19 @@ describe("compatibility", () => {
 
 - [ ] **Step 2: Run it, watch it fail**
 
-Run: `pnpm exec vitest run src/pack/__tests__/targets.test.ts`
+Run: `pnpm exec vitest run src/gem/__tests__/targets.test.ts`
 Expected: FAIL — cannot find module `../targets.js`.
 
-- [ ] **Step 3: Implement `src/pack/targets.ts`**
+- [ ] **Step 3: Implement `src/gem/targets.ts`**
 
 ```ts
-// src/pack/targets.ts
-// Render a normalized Pack INTO a harness's on-disk layout. Pure; writes nothing — returns an
+// src/gem/targets.ts
+// Render a normalized Gem INTO a harness's on-disk layout. Pure; writes nothing — returns an
 // in-memory FileTree. Targets compose shared per-artifact-type convention renderers; unmappable
-// artifacts are skipped with a reason. Materialize re-renders an already-redacted Pack; the
-// runner rebinds real secrets from pack.requiredSecrets at install.
+// artifacts are skipped with a reason. Materialize re-renders an already-redacted Gem; the
+// runner rebinds real secrets from gem.requiredSecrets at install.
 import type {
-  Pack, ArtifactType,
+  Gem, ArtifactType,
   SkillArtifact, McpServerArtifact, InstructionsArtifact, HookArtifact,
 } from "./types.js";
 import { tomlMcpServers } from "./toml.js";
@@ -271,7 +271,7 @@ export const TARGET_REGISTRY: Record<TargetId, TargetSpec> = {
   hermes: { id: "hermes", label: "Hermes", skill: skillDescriptionMd, instructions: instructionsSoulMd },
 };
 
-export function materialize(pack: Pack, target: TargetId): MaterializeResult {
+export function materialize(gem: Gem, target: TargetId): MaterializeResult {
   const spec = TARGET_REGISTRY[target];
   const files: FileTree = {};
   const skipped: SkippedArtifact[] = [];
@@ -285,10 +285,10 @@ export function materialize(pack: Pack, target: TargetId): MaterializeResult {
   const skipAll = (arr: { name: string }[], type: ArtifactType) =>
     arr.forEach((a) => skipped.push({ artifact: a.name, type, reason: `${type} unsupported on ${target}` }));
 
-  const skills = pack.artifacts.filter((a): a is SkillArtifact => a.type === "skill");
-  const mcp = pack.artifacts.filter((a): a is McpServerArtifact => a.type === "mcp_server");
-  const instr = pack.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions");
-  const hooks = pack.artifacts.filter((a): a is HookArtifact => a.type === "hook");
+  const skills = gem.artifacts.filter((a): a is SkillArtifact => a.type === "skill");
+  const mcp = gem.artifacts.filter((a): a is McpServerArtifact => a.type === "mcp_server");
+  const instr = gem.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions");
+  const hooks = gem.artifacts.filter((a): a is HookArtifact => a.type === "hook");
 
   if (spec.skill) for (const s of skills) merge(spec.skill(s), s.name, "skill");
   else skipAll(skills, "skill");
@@ -309,11 +309,11 @@ export function materialize(pack: Pack, target: TargetId): MaterializeResult {
   return { files, skipped };
 }
 
-export function compatibility(pack: Pack): Record<TargetId, { supported: number; skipped: number }> {
+export function compatibility(gem: Gem): Record<TargetId, { supported: number; skipped: number }> {
   const out = {} as Record<TargetId, { supported: number; skipped: number }>;
   for (const id of Object.keys(TARGET_REGISTRY) as TargetId[]) {
-    const r = materialize(pack, id);
-    out[id] = { supported: pack.artifacts.length - r.skipped.length, skipped: r.skipped.length };
+    const r = materialize(gem, id);
+    out[id] = { supported: gem.artifacts.length - r.skipped.length, skipped: r.skipped.length };
   }
   return out;
 }
@@ -321,14 +321,14 @@ export function compatibility(pack: Pack): Record<TargetId, { supported: number;
 
 - [ ] **Step 4: Run it, watch it pass; then the full gate**
 
-Run: `pnpm exec vitest run src/pack/__tests__/targets.test.ts` → PASS.
+Run: `pnpm exec vitest run src/gem/__tests__/targets.test.ts` → PASS.
 Run: `pnpm test` → PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/pack/targets.ts src/pack/__tests__/targets.test.ts
-git commit -m "feat(pack): targets.ts — materialize a Pack per harness + compatibility"
+git add src/gem/targets.ts src/gem/__tests__/targets.test.ts
+git commit -m "feat(gem): targets.ts — materialize a Gem per harness + compatibility"
 ```
 
 ---
@@ -371,10 +371,10 @@ Expected: FAIL — `MaterializeRequestSchema` / `MaterializeResponseSchema` not 
 
 - [ ] **Step 3: Add the schemas**
 
-In `src/schemas.ts`, add this import below the existing `import { RUNNER_REGISTRY } from "./pack/checks.js";`:
+In `src/schemas.ts`, add this import below the existing `import { RUNNER_REGISTRY } from "./gem/checks.js";`:
 
 ```ts
-import { TARGET_REGISTRY } from "./pack/targets.js";
+import { TARGET_REGISTRY } from "./gem/targets.js";
 ```
 
 Add these schemas after `ScaffoldChecksResponseSchema`:
@@ -414,7 +414,7 @@ Run: `pnpm test` → PASS.
 
 ```bash
 git add src/schemas.ts src/__tests__/schemas.test.ts
-git commit -m "feat(pack): zod schemas for the materialize op (target-validated)"
+git commit -m "feat(gem): zod schemas for the materialize op (target-validated)"
 ```
 
 ---
@@ -422,12 +422,12 @@ git commit -m "feat(pack): zod schemas for the materialize op (target-validated)
 ### Task 4: Controller — `materialize` op (REST + MCP)
 
 **Files:**
-- Modify: `src/pack.controller.ts`
-- Test: `src/__tests__/pack.controller.test.ts`
+- Modify: `src/gem.controller.ts`
+- Test: `src/__tests__/gem.controller.test.ts`
 
 - [ ] **Step 1: Add a failing controller test**
 
-In `src/__tests__/pack.controller.test.ts`, add inside `describe("PackController", ...)` (the `beforeAll` seeds a `review` skill and a `gh` MCP server with `env.GH_TOKEN: "ghp_secret"`):
+In `src/__tests__/gem.controller.test.ts`, add inside `describe("PackController", ...)` (the `beforeAll` seeds a `review` skill and a `gh` MCP server with `env.GH_TOKEN: "ghp_secret"`):
 
 ```ts
 it("POST /api/materialize renders the target layout + compatibility, no secret values", async () => {
@@ -445,15 +445,15 @@ it("POST /api/materialize renders the target layout + compatibility, no secret v
 
 - [ ] **Step 2: Run it, watch it fail**
 
-Run: `pnpm exec vitest run src/__tests__/pack.controller.test.ts`
+Run: `pnpm exec vitest run src/__tests__/gem.controller.test.ts`
 Expected: FAIL — `/api/materialize` 404s.
 
 - [ ] **Step 3: Implement the controller change**
 
-In `src/pack.controller.ts`, add the targets import (next to the existing `scaffoldChecks` import):
+In `src/gem.controller.ts`, add the targets import (next to the existing `scaffoldChecks` import):
 
 ```ts
-import { materialize, compatibility } from "./pack/targets.js";
+import { materialize, compatibility } from "./gem/targets.js";
 ```
 
 Add the two schema names to the existing schemas import block:
@@ -469,21 +469,21 @@ Add this method after the existing `scaffoldChecks` method (the `materialize` me
   async materialize(input: { body: z.infer<typeof MaterializeRequestSchema> }): Promise<z.infer<typeof MaterializeResponseSchema>> {
     const dirs = resolveDirs(input.body.dir);
     const inventory = introspectAll(input.body.dir, input.body.projects);
-    const pack = buildPack(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
-    return { target: input.body.target, ...materialize(pack, input.body.target), compatibility: compatibility(pack) };
+    const gem = buildPack(inventory, input.body.selection, { name: input.body.name ?? "gem", createdFrom: dirs.claudeDir });
+    return { target: input.body.target, ...materialize(gem, input.body.target), compatibility: compatibility(gem) };
   }
 ```
 
 - [ ] **Step 4: Run it, watch it pass; then the full gate**
 
-Run: `pnpm exec vitest run src/__tests__/pack.controller.test.ts` → PASS.
+Run: `pnpm exec vitest run src/__tests__/gem.controller.test.ts` → PASS.
 Run: `pnpm test` → PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/pack.controller.ts src/__tests__/pack.controller.test.ts
-git commit -m "feat(api): materialize op renders a pack per harness target (REST + MCP)"
+git add src/gem.controller.ts src/__tests__/gem.controller.test.ts
+git commit -m "feat(api): materialize op renders a gem per harness target (REST + MCP)"
 ```
 
 ---
@@ -495,7 +495,7 @@ Adds a target `<select>` and a third preview mode that renders the materialized 
 **Files:**
 - Modify: `src/public/index.html`
 
-Read the file first. Landmarks: the right-pane bar `<div class="bar"><strong style="flex:1">Pack (live)</strong><span class="seg" id="preview-modes">…</span>…</div>` (~line 82); `let previewMode = "summary";` and `function renderPreview(){…}` (~lines 300, 321); the `#preview` click handler that opens artifacts via `.prow` (~line 346); `buildSelectionBody()` already exists (from the checks feature).
+Read the file first. Landmarks: the right-pane bar `<div class="bar"><strong style="flex:1">Gem (live)</strong><span class="seg" id="preview-modes">…</span>…</div>` (~line 82); `let previewMode = "summary";` and `function renderPreview(){…}` (~lines 300, 321); the `#preview` click handler that opens artifacts via `.prow` (~line 346); `buildSelectionBody()` already exists (from the checks feature).
 
 - [ ] **Step 1: Add the target select + Materialize mode button**
 

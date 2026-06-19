@@ -1,9 +1,9 @@
 // src/__tests__/schemas.test.ts
 import { describe, it, expect } from "vitest";
 import {
-  InventorySchema, PackSchema, PackRequestSchema, PackCheckSchema, ScaffoldChecksResponseSchema,
+  InventorySchema, GemSchema, GemRequestSchema, GemCheckSchema, ScaffoldChecksResponseSchema,
   MaterializeRequestSchema, MaterializeResponseSchema, PublishPreviewRequestSchema, PublishRequestSchema, PublishResultSchema,
-  PackLockSchema, PackManifestSchema, ArchiveRequestSchema, ArchiveResponseSchema,
+  GemLockSchema, GemManifestSchema, ArchiveRequestSchema, ArchiveResponseSchema,
   WorkspaceSummarySchema, CreateWorkspaceRequestSchema, RenderRequestSchema, RenderResultSchema,
   DeployTargetIdSchema, DeployReadyQuerySchema, DeployTargetsResponseSchema,
 } from "../schemas.js";
@@ -20,18 +20,18 @@ describe("wire schemas", () => {
     expect(parsed.hooks[0].event).toBe("PreToolUse");
   });
 
-  it("validates a pack-request with an all selection", () => {
-    const p = PackRequestSchema.parse({ selection: { all: true }, name: "p" });
+  it("validates a gem-request with an all selection", () => {
+    const p = GemRequestSchema.parse({ selection: { all: true }, name: "p" });
     expect("all" in p.selection && p.selection.all).toBe(true);
   });
 
-  it("validates a pack-request with a named selection", () => {
-    const p = PackRequestSchema.parse({ selection: { skills: ["review"], includeInstructions: true } });
+  it("validates a gem-request with a named selection", () => {
+    const p = GemRequestSchema.parse({ selection: { skills: ["review"], includeInstructions: true } });
     expect(p.selection).toMatchObject({ skills: ["review"] });
   });
 
-  it("accepts a Pack", () => {
-    const pk = PackSchema.parse({
+  it("accepts a Gem", () => {
+    const pk = GemSchema.parse({
       name: "p",
       createdFrom: "/d",
       artifacts: [{ type: "instructions", name: "CLAUDE.md", content: "y" }],
@@ -43,14 +43,14 @@ describe("wire schemas", () => {
   });
 
   it("validates both check kinds and rejects an unknown runner", () => {
-    PackCheckSchema.parse({ kind: "behavioral", name: "smoke", task: "do it", assertions: [{ type: "file_exists", path: "out.txt" }] });
-    PackCheckSchema.parse({ kind: "external", name: "sec", runner: "skillspector", with: { failAboveRisk: 40 } });
-    expect(() => PackCheckSchema.parse({ kind: "external", name: "sec", runner: "totally-made-up" })).toThrow();
-    expect(() => PackCheckSchema.parse({ kind: "behavioral", name: "x", task: "t", assertions: [{ type: "nope" }] })).toThrow();
+    GemCheckSchema.parse({ kind: "behavioral", name: "smoke", task: "do it", assertions: [{ type: "file_exists", path: "out.txt" }] });
+    GemCheckSchema.parse({ kind: "external", name: "sec", runner: "skillspector", with: { failAboveRisk: 40 } });
+    expect(() => GemCheckSchema.parse({ kind: "external", name: "sec", runner: "totally-made-up" })).toThrow();
+    expect(() => GemCheckSchema.parse({ kind: "behavioral", name: "x", task: "t", assertions: [{ type: "nope" }] })).toThrow();
   });
 
-  it("accepts a pack-request carrying checks, and a scaffold-checks response", () => {
-    const p = PackRequestSchema.parse({ selection: { all: true }, checks: [{ kind: "external", name: "s", runner: "skillspector" }] });
+  it("accepts a gem-request carrying checks, and a scaffold-checks response", () => {
+    const p = GemRequestSchema.parse({ selection: { all: true }, checks: [{ kind: "external", name: "s", runner: "skillspector" }] });
     expect(p.checks?.length).toBe(1);
     const r = ScaffoldChecksResponseSchema.parse({ checks: [{ kind: "behavioral", name: "smoke", task: "t", assertions: [] }] });
     expect(r.checks[0].name).toBe("smoke");
@@ -91,8 +91,8 @@ describe("wire schemas", () => {
 
 describe("archive schemas", () => {
   it("accepts a well-formed lock and manifest", () => {
-    expect(PackLockSchema.safeParse({ formatVersion: 1, files: { "a.md": "sha256:ab" }, packDigest: "sha256:cd", signature: null }).success).toBe(true);
-    expect(PackManifestSchema.safeParse({
+    expect(GemLockSchema.safeParse({ formatVersion: 1, files: { "a.md": "sha256:ab" }, gemDigest: "sha256:cd", signature: null }).success).toBe(true);
+    expect(GemManifestSchema.safeParse({
       formatVersion: 1, name: "p", version: "0.1.0", createdFrom: "/d",
       artifacts: [{ type: "skill", name: "x", path: "skills/x/SKILL.md", source: "standalone" }],
       requiredSecrets: [], checks: [],
@@ -104,16 +104,16 @@ describe("archive schemas", () => {
     expect(ArchiveRequestSchema.safeParse({ selection: { all: true }, tar: true }).success).toBe(true);
     expect(ArchiveRequestSchema.safeParse({ name: "p" }).success).toBe(false);
     expect(ArchiveResponseSchema.safeParse({
-      files: { "pack.json": "{}" }, lock: { formatVersion: 1, files: {}, packDigest: "sha256:x", signature: null }, skipped: [], path: null, tarGz: null,
+      files: { "gem.json": "{}" }, lock: { formatVersion: 1, files: {}, gemDigest: "sha256:x", signature: null }, skipped: [], path: null, tarGz: null,
     }).success).toBe(true);
     expect(ArchiveResponseSchema.safeParse({
-      files: {}, lock: { formatVersion: 1, files: {}, packDigest: "sha256:x", signature: null }, skipped: [], path: null, tarGz: "H4sIAAAA",
+      files: {}, lock: { formatVersion: 1, files: {}, gemDigest: "sha256:x", signature: null }, skipped: [], path: null, tarGz: "H4sIAAAA",
     }).success).toBe(true);
   });
 
   it("materialize accepts selection OR archivePath, but not neither", () => {
     expect(MaterializeRequestSchema.safeParse({ selection: { all: true }, target: "claude" }).success).toBe(true);
-    expect(MaterializeRequestSchema.safeParse({ archivePath: "/tmp/pack", target: "eve" }).success).toBe(true);
+    expect(MaterializeRequestSchema.safeParse({ archivePath: "/tmp/gem", target: "eve" }).success).toBe(true);
     expect(MaterializeRequestSchema.safeParse({ target: "claude" }).success).toBe(false);
   });
 });
@@ -121,7 +121,7 @@ describe("archive schemas", () => {
 describe("workspace schemas", () => {
   it("validates a workspace summary", () => {
     expect(WorkspaceSummarySchema.safeParse({
-      name: "mp", packName: "demo", version: "0.1.0",
+      name: "mp", gemName: "demo", version: "0.1.0",
       artifactCounts: { skill: 1, mcp_server: 0, instructions: 1, hook: 0 }, checks: 0, renderedTargets: ["eve"],
     }).success).toBe(true);
   });

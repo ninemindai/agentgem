@@ -15,19 +15,19 @@
 
 ## 1. Design decisions (locked)
 
-1. **`DeployTarget` interface + `DEPLOY_REGISTRY`** in a new `src/pack/deploy.ts`, mirroring `TARGET_REGISTRY`. One entry: `claude-managed`.
-2. **Three operations per target**, matching the existing controller surface: `preview(pack)` (pure offline render), `ready()` (server configured for this backend), `deploy(pack, requestId)` (gated network deploy with idempotency).
-3. **Reuse the existing pure/network code unchanged.** `preview` = `renderManagedAgent` (`src/pack/publish.ts`); `deploy` wraps `publishManagedAgentOnce` + `publishManagedAgent` + `anthropicPublishClient` (`src/publish.ts`). No behavior change to those functions.
+1. **`DeployTarget` interface + `DEPLOY_REGISTRY`** in a new `src/gem/deploy.ts`, mirroring `TARGET_REGISTRY`. One entry: `claude-managed`.
+2. **Three operations per target**, matching the existing controller surface: `preview(gem)` (pure offline render), `ready()` (server configured for this backend), `deploy(gem, requestId)` (gated network deploy with idempotency).
+3. **Reuse the existing pure/network code unchanged.** `preview` = `renderManagedAgent` (`src/gem/publish.ts`); `deploy` wraps `publishManagedAgentOnce` + `publishManagedAgent` + `anthropicPublishClient` (`src/publish.ts`). No behavior change to those functions.
 4. **Keep the `/publish*` routes** (backward compat — no UI churn). They route through the registry and gain an **optional** `target` (default `claude-managed`). `DeployTargetIdSchema = z.enum(Object.keys(DEPLOY_REGISTRY))` (registry-derived, like `TargetIdSchema`).
 5. **Add `GET /api/deploy-targets`** — list `{ id, label, ready }` so the registry is discoverable (the UI can later offer a backend picker).
 6. **Defer the generic schema.** `preview`/`deploy` keep the Anthropic-typed return shapes (`ManagedAgentRender` / `PublishResult`); the response schemas (`PublishPreviewResponseSchema`, `PublishResultSchema`) are unchanged. When Bedrock lands, these become target-discriminated unions — that's the Bedrock follow-up's job.
-7. **Idempotency fingerprint becomes pack-based.** `deploy` computes the dedup fingerprint from `JSON.stringify(pack)` (the logical content) rather than the raw request body — same-pack redeploys dedupe correctly; a behavior refinement, not a regression.
+7. **Idempotency fingerprint becomes gem-based.** `deploy` computes the dedup fingerprint from `JSON.stringify(gem)` (the logical content) rather than the raw request body — same-gem redeploys dedupe correctly; a behavior refinement, not a regression.
 8. **Secret/gating boundary unchanged.** `ready()` reads `process.env`; `deploy()` reads the key server-side, never returns it, sends only the redacted payload. Identical trust boundary to today.
 
-## 2. The interface (`src/pack/deploy.ts`, new)
+## 2. The interface (`src/gem/deploy.ts`, new)
 
 ```ts
-import type { Pack } from "./types.js";
+import type { Gem } from "./types.js";
 import { renderManagedAgent } from "./publish.js";
 import type { ManagedAgentRender } from "./publish.js";
 import { publishManagedAgent, publishManagedAgentOnce, anthropicPublishClient } from "../publish.js";
@@ -38,21 +38,21 @@ export type DeployTargetId = "claude-managed";
 export interface DeployTarget {
   id: DeployTargetId;
   label: string;
-  preview(pack: Pack): ManagedAgentRender;                 // pure, offline (no network/secret)
+  preview(gem: Gem): ManagedAgentRender;                 // pure, offline (no network/secret)
   ready(): boolean;                                        // server configured for this backend
-  deploy(pack: Pack, requestId: string): Promise<PublishResult>; // gated; throws if not ready
+  deploy(gem: Gem, requestId: string): Promise<PublishResult>; // gated; throws if not ready
 }
 
 export const DEPLOY_REGISTRY: Record<DeployTargetId, DeployTarget> = {
   "claude-managed": {
     id: "claude-managed",
     label: "Claude Managed Agents",
-    preview: (pack) => renderManagedAgent(pack),
+    preview: (gem) => renderManagedAgent(gem),
     ready: () => !!process.env.ANTHROPIC_API_KEY,
-    deploy: (pack, requestId) => {
+    deploy: (gem, requestId) => {
       const key = process.env.ANTHROPIC_API_KEY;
       if (!key) throw new Error("ANTHROPIC_API_KEY is not set on the server — cannot deploy to Claude Managed Agents.");
-      return publishManagedAgentOnce(requestId, JSON.stringify(pack), () => publishManagedAgent(pack, anthropicPublishClient(key)));
+      return publishManagedAgentOnce(requestId, JSON.stringify(gem), () => publishManagedAgent(gem, anthropicPublishClient(key)));
     },
   },
 };
@@ -63,15 +63,15 @@ export function deployTargetList(): { id: DeployTargetId; label: string; ready: 
 }
 ```
 
-No cycle: `deploy.ts` imports `src/publish.ts` (which imports `src/pack/publish.ts`); nothing imports `deploy.ts` back.
+No cycle: `deploy.ts` imports `src/publish.ts` (which imports `src/gem/publish.ts`); nothing imports `deploy.ts` back.
 
-## 3. Controller — registry-driven, backward compatible (`src/pack.controller.ts`)
+## 3. Controller — registry-driven, backward compatible (`src/gem.controller.ts`)
 
 | Op | REST | Change |
 |----|------|--------|
-| publish-preview | `POST /api/publish-preview` | add optional `target`; `DEPLOY_REGISTRY[target ?? "claude-managed"].preview(pack)` |
+| publish-preview | `POST /api/publish-preview` | add optional `target`; `DEPLOY_REGISTRY[target ?? "claude-managed"].preview(gem)` |
 | publish-ready | `GET /api/publish-ready` | add optional `target` (query); `{ ready: DEPLOY_REGISTRY[target ?? "claude-managed"].ready() }` |
-| publish | `POST /api/publish` | add optional `target`; drop the inline key check + Anthropic imports → `DEPLOY_REGISTRY[target ?? "claude-managed"].deploy(pack, requestId)` |
+| publish | `POST /api/publish` | add optional `target`; drop the inline key check + Anthropic imports → `DEPLOY_REGISTRY[target ?? "claude-managed"].deploy(gem, requestId)` |
 | deploy-targets *(new)* | `GET /api/deploy-targets` | `{ targets: deployTargetList() }` |
 
 The controller loses its direct imports of `renderManagedAgent`, `publishManagedAgent`, `publishManagedAgentOnce`, `anthropicPublishClient` (moved behind the registry); it imports `DEPLOY_REGISTRY`, `deployTargetList`, `DeployTargetId`. Existing callers that omit `target` are unaffected (default `claude-managed`).
@@ -84,18 +84,18 @@ No required UI change (the single backend works as today). Optionally: the exist
 
 ## 5. Module changes
 
-- `src/pack/deploy.ts` *(new)* — `DeployTargetId`, `DeployTarget`, `DEPLOY_REGISTRY`, `deployTargetIds`, `deployTargetList`.
+- `src/gem/deploy.ts` *(new)* — `DeployTargetId`, `DeployTarget`, `DEPLOY_REGISTRY`, `deployTargetIds`, `deployTargetList`.
 - `src/schemas.ts` — `DeployTargetIdSchema`, `DeployTargetsResponseSchema`, `DeployReadyQuerySchema`; optional `target` on publish-preview/publish request schemas.
-- `src/pack.controller.ts` — publish ops route through `DEPLOY_REGISTRY`; new `GET /api/deploy-targets`; Anthropic imports removed.
-- `src/publish.ts`, `src/pack/publish.ts` — **unchanged** (reused as-is).
+- `src/gem.controller.ts` — publish ops route through `DEPLOY_REGISTRY`; new `GET /api/deploy-targets`; Anthropic imports removed.
+- `src/publish.ts`, `src/gem/publish.ts` — **unchanged** (reused as-is).
 
 ## 6. Testing
 
-- **`src/pack/__tests__/deploy.test.ts` (new, unit):**
-  - `DEPLOY_REGISTRY["claude-managed"].preview(pack)` equals `renderManagedAgent(pack)` (same payload/skills/skipped).
+- **`src/gem/__tests__/deploy.test.ts` (new, unit):**
+  - `DEPLOY_REGISTRY["claude-managed"].preview(gem)` equals `renderManagedAgent(gem)` (same payload/skills/skipped).
   - `ready()` reflects `ANTHROPIC_API_KEY` (set/unset in `process.env` around the assertion).
   - `deployTargetList()` returns one entry `{ id:"claude-managed", label, ready }`.
-  - `deploy(pack, id)` throws when `ANTHROPIC_API_KEY` is unset (no network).
+  - `deploy(gem, id)` throws when `ANTHROPIC_API_KEY` is unset (no network).
 - **Controller (`@agentback/testing`):**
   - `GET /api/deploy-targets` → one target with a boolean `ready`.
   - `POST /api/publish-preview` (no `target`, and `target:"claude-managed"`) → identical Anthropic payload; no secret value.

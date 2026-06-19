@@ -2,8 +2,8 @@
 
 **Date:** 2026-06-15
 **Status:** Approved design, pre-implementation
-**Project:** `agentgem` (extends `src/pack/` pack-core)
-**Scope:** Generalize introspection from "user-level Claude config" to an extensible **set of discovery sources**, so the inventory/Pack includes **plugin-bundled** skills + MCP servers and a **generic non-Claude agent** skill path — each artifact tagged by `source`. Borrows the multi-location discovery strategy and the `metadata.internal` hide convention from `vercel-labs/skills`.
+**Project:** `agentgem` (extends `src/gem/` gem-core)
+**Scope:** Generalize introspection from "user-level Claude config" to an extensible **set of discovery sources**, so the inventory/Gem includes **plugin-bundled** skills + MCP servers and a **generic non-Claude agent** skill path — each artifact tagged by `source`. Borrows the multi-location discovery strategy and the `metadata.internal` hide convention from `vercel-labs/skills`.
 
 ---
 
@@ -62,7 +62,7 @@ interface SkillArtifact { type: "skill"; name; description?; source: string; con
 interface McpServerArtifact { type: "mcp_server"; name; transport; config; source: string; }
 //   source ∈ "user" | "plugin:<name>@<marketplace>"
 ```
-`ConfigInventory`, `Pack`, `buildPack`, the REST controller, and the MCP tools are otherwise unchanged (they pass artifacts through). `src/schemas.ts` updates: `SkillArtifactSchema.source = z.string()`; `McpServerArtifactSchema` gains `source: z.string()`.
+`ConfigInventory`, `Gem`, `buildPack`, the REST controller, and the MCP tools are otherwise unchanged (they pass artifacts through). `src/schemas.ts` updates: `SkillArtifactSchema.source = z.string()`; `McpServerArtifactSchema` gains `source: z.string()`.
 
 ## 7. Testing (hermetic)
 
@@ -82,4 +82,4 @@ Project-level discovery (`./.claude/skills`, `./.agents/skills` relative to cwd)
 
 ## 9. Platform fit
 
-Borrows `vercel-labs/skills`' multi-location discovery + portable-`SKILL.md` + `metadata.internal` conventions, scoped to YAGNI. Makes the Pack reflect the operator's *actual* capability stack (plugins included) and sets up "multi-agent config discovery" — the inventory becomes source-aware, which the upcoming search UI surfaces (filter/group by source).
+Borrows `vercel-labs/skills`' multi-location discovery + portable-`SKILL.md` + `metadata.internal` conventions, scoped to YAGNI. Makes the Gem reflect the operator's *actual* capability stack (plugins included) and sets up "multi-agent config discovery" — the inventory becomes source-aware, which the upcoming search UI surfaces (filter/group by source).

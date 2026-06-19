@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add `flue` as a `TARGET_REGISTRY` entry so `materialize(pack, "flue")` renders a Flue project (`agents/<name>.ts` + `skills/<n>/SKILL.md` + `connections/<n>.ts` + stdio `proxies/<n>.mjs`), plus a small reusable `compose` hook on `TargetSpec` for the cross-cutting agent file.
+**Goal:** Add `flue` as a `TARGET_REGISTRY` entry so `materialize(gem, "flue")` renders a Flue project (`agents/<name>.ts` + `skills/<n>/SKILL.md` + `connections/<n>.ts` + stdio `proxies/<n>.mjs`), plus a small reusable `compose` hook on `TargetSpec` for the cross-cutting agent file.
 
-**Architecture:** Three increments in `src/pack/targets.ts`: (1) a `compose?(pack)=>MaterializeResult` hook run after the per-type renderers, and a `flue` entry that emits the agent file via compose + reuses `skillSkillMd` for skill bodies; (2) `mcpFlueConnections` adding Flue MCP connection files (parallel to `mcpEveConnections`, reusing `mcpProxy.ts` for stdio); (3) one UI `<option>`. `TargetIdSchema` derives from registry keys, so schemas/workspaces/compatibility pick up `flue` automatically.
+**Architecture:** Three increments in `src/gem/targets.ts`: (1) a `compose?(gem)=>MaterializeResult` hook run after the per-type renderers, and a `flue` entry that emits the agent file via compose + reuses `skillSkillMd` for skill bodies; (2) `mcpFlueConnections` adding Flue MCP connection files (parallel to `mcpEveConnections`, reusing `mcpProxy.ts` for stdio); (3) one UI `<option>`. `TargetIdSchema` derives from registry keys, so schemas/workspaces/compatibility pick up `flue` automatically.
 
 **Tech Stack:** TypeScript (ESM, NodeNext), Vitest (tests run from `dist/`). No new dependencies.
 
@@ -22,20 +22,20 @@
 ### Task 1: `compose` hook + Flue agent file (skills + instructions)
 
 **Files:**
-- Modify: `src/pack/targets.ts`
-- Test: `src/pack/__tests__/targets.test.ts`
+- Modify: `src/gem/targets.ts`
+- Test: `src/gem/__tests__/targets.test.ts`
 
 **Interfaces:**
-- Consumes: existing `Pack`, `SkillArtifact`, `InstructionsArtifact`, `skillSkillMd`, `safePathSegment`, `rendered`, `materialize`, `compatibility`.
-- Produces: `compose?: (pack: Pack) => MaterializeResult` on `TargetSpec`; `TargetId` gains `"flue"`; `flueComposeAgent(pack)`; a `flue` registry entry (skill + empty-instructions + compose; **no mcp yet — added in Task 2**).
+- Consumes: existing `Gem`, `SkillArtifact`, `InstructionsArtifact`, `skillSkillMd`, `safePathSegment`, `rendered`, `materialize`, `compatibility`.
+- Produces: `compose?: (gem: Gem) => MaterializeResult` on `TargetSpec`; `TargetId` gains `"flue"`; `flueComposeAgent(gem)`; a `flue` registry entry (skill + empty-instructions + compose; **no mcp yet — added in Task 2**).
 
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// append to src/pack/__tests__/targets.test.ts
+// append to src/gem/__tests__/targets.test.ts
 describe("flue target (agent file + skills)", () => {
-  it("emits agents/<packname>.ts importing skills + folding instructions; hooks skipped", () => {
-    const p: Pack = { name: "my pack", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [
+  it("emits agents/<gemname>.ts importing skills + folding instructions; hooks skipped", () => {
+    const p: Gem = { name: "my gem", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [
       skill("review", "# Review\nLook `here` and ${there}."),
       instr("soul", "be kind"),
       hook(),
@@ -44,7 +44,7 @@ describe("flue target (agent file + skills)", () => {
     // skill body reuses the shared SKILL.md convention
     expect(r.files["skills/review/SKILL.md"]).toContain("# Review");
     // the composed agent file
-    const agent = r.files["agents/my_pack.ts"];
+    const agent = r.files["agents/my_gem.ts"];
     expect(agent).toContain('import { createAgent');
     expect(agent).toContain('import skill0 from "../skills/review/SKILL.md" with { type: "skill" }');
     expect(agent).toContain("skills: [skill0]");
@@ -60,7 +60,7 @@ describe("flue target (agent file + skills)", () => {
   });
 
   it("compatibility includes a flue entry", () => {
-    const p: Pack = { name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [skill("a")] };
+    const p: Gem = { name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [skill("a")] };
     expect(compatibility(p).flue).toBeTruthy();
   });
 });
@@ -73,7 +73,7 @@ Expected: FAIL — `materialize(p, "flue")` errors (`"flue"` not a `TargetId` / 
 
 - [ ] **Step 3: Write minimal implementation**
 
-In `src/pack/targets.ts`:
+In `src/gem/targets.ts`:
 
 (a) Extend the `TargetId` union and `TargetSpec`:
 
@@ -88,22 +88,22 @@ interface TargetSpec {
   mcp?: (servers: McpServerArtifact[]) => MaterializeResult;
   instructions?: (all: InstructionsArtifact[]) => FileTree;
   hook?: (hooks: HookArtifact[]) => FileTree;
-  compose?: (pack: Pack) => MaterializeResult; // cross-cutting file(s) that see the whole pack (runs last)
+  compose?: (gem: Gem) => MaterializeResult; // cross-cutting file(s) that see the whole gem (runs last)
 }
 ```
 
 (b) Add the Flue agent-file composer (near the other renderers, after the eve helpers):
 
 ```ts
-// Flue: a single agents/<packname>.ts registers the agent. It imports each skill (reusing the shared
+// Flue: a single agents/<gemname>.ts registers the agent. It imports each skill (reusing the shared
 // skills/<n>/SKILL.md bodies), folds instruction artifacts into the `instructions` string, and lists
 // the skills. MCP connection files are emitted separately (mcpFlueConnections) and wired by the operator.
 function escapeTemplate(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/\$\{/g, "\\${");
 }
-const flueComposeAgent = (pack: Pack): MaterializeResult => {
-  const skills = pack.artifacts.filter((a): a is SkillArtifact => a.type === "skill");
-  const instr = pack.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions");
+const flueComposeAgent = (gem: Gem): MaterializeResult => {
+  const skills = gem.artifacts.filter((a): a is SkillArtifact => a.type === "skill");
+  const instr = gem.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions");
   const imports = skills.map((s, i) => `import skill${i} from "../skills/${safePathSegment(s.name)}/SKILL.md" with { type: "skill" };`).join("\n");
   const instructions = instr.map((i) => `## ${i.name}\n\n${i.content}`).join("\n\n---\n\n");
   const list = skills.map((_, i) => `skill${i}`).join(", ");
@@ -120,7 +120,7 @@ export default createAgent(() => ({
   skills: [${list}],
 }));
 `;
-  return rendered({ [`agents/${safePathSegment(pack.name)}.ts`]: file });
+  return rendered({ [`agents/${safePathSegment(gem.name)}.ts`]: file });
 };
 ```
 
@@ -136,7 +136,7 @@ export default createAgent(() => ({
 
 ```ts
   if (spec.compose) {
-    const result = spec.compose(pack);
+    const result = spec.compose(gem);
     merge(result.files, "(composed agent)", "instructions"); // collisions reported; agent file derives from instructions+skills
     skipped.push(...result.skipped);
   }
@@ -152,7 +152,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/pack/targets.ts src/pack/__tests__/targets.test.ts
+git add src/gem/targets.ts src/gem/__tests__/targets.test.ts
 git commit -m "feat(targets): compose hook + Flue agent file (skills + instructions)"
 ```
 
@@ -161,8 +161,8 @@ git commit -m "feat(targets): compose hook + Flue agent file (skills + instructi
 ### Task 2: Flue MCP connections (http/sse + stdio proxy)
 
 **Files:**
-- Modify: `src/pack/targets.ts`
-- Test: `src/pack/__tests__/targets.test.ts`
+- Modify: `src/gem/targets.ts`
+- Test: `src/gem/__tests__/targets.test.ts`
 
 **Interfaces:**
 - Consumes: `McpServerArtifact`, `stdioProxyRunner`, `PROXY_BASE_PORT`, `PROXY_HOST`, `safePathSegment`; the `flue` registry entry (Task 1).
@@ -171,7 +171,7 @@ git commit -m "feat(targets): compose hook + Flue agent file (skills + instructi
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// append to src/pack/__tests__/targets.test.ts
+// append to src/gem/__tests__/targets.test.ts
 describe("flue MCP connections", () => {
   it("http server -> a connectMcpServer connection with env auth, no secret value", () => {
     const r = materialize({ name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [httpMcp("ctx")] }, "flue");
@@ -208,7 +208,7 @@ Expected: FAIL — `connections/ctx.ts` undefined (flue has no `mcp` renderer ye
 
 - [ ] **Step 3: Write minimal implementation**
 
-In `src/pack/targets.ts`, add the Flue connection renderer (after `flueComposeAgent`):
+In `src/gem/targets.ts`, add the Flue connection renderer (after `flueComposeAgent`):
 
 ```ts
 // One TS factory per MCP server. http/sse -> a direct remote connection (auth reads the secret from an
@@ -276,7 +276,7 @@ Expected: PASS. (Note: `MaterializeResponseSchema`/workspace `compatibility` rec
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/pack/targets.ts src/pack/__tests__/targets.test.ts
+git add src/gem/targets.ts src/gem/__tests__/targets.test.ts
 git commit -m "feat(targets): Flue MCP connections (http/sse + stdio proxy bridge)"
 ```
 

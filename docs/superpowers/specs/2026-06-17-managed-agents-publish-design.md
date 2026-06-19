@@ -1,9 +1,9 @@
-# Publish a Pack to Managed Agents — Design
+# Publish a Gem to Managed Agents — Design
 
 **Date:** 2026-06-17
 **Status:** Implemented, including managed cloud environment creation, retry idempotency, and rollback
 **Project:** `agentgem`
-**Scope:** Render a Pack into a Claude **Managed Agent** config and **publish** it (create the agent, its skills, and a limited-network managed cloud environment via the Anthropic API).
+**Scope:** Render a Gem into a Claude **Managed Agent** config and **publish** it (create the agent, its skills, and a limited-network managed cloud environment via the Anthropic API).
 
 ---
 
@@ -29,7 +29,7 @@ const agent = await client.beta.agents.create({
 
 ## 3. Mapping — what publishes, what's skipped (honest compatibility)
 
-| Pack artifact | Managed Agents | Result |
+| Gem artifact | Managed Agents | Result |
 | --- | --- | --- |
 | **skill** | Skills API create → `skills:[{type:custom,skill_id}]` | ✅ published (cap 20; warn over) |
 | **instructions** (CLAUDE.md / SOUL.md / rules / AGENTS.md) | concatenated into `system` (≤100K) | ✅ |
@@ -49,12 +49,12 @@ Reuses the existing `compatibility`/`skipped` shape so the UI shows exactly what
 
 - **Explicit, gated action.** A "Publish to Managed Agents" button with a confirm ("creates an agent, cloud sandbox, and uploaded skills in your Anthropic org"). Never auto-fires. Retries reuse the same request ID so a lost response cannot duplicate resources.
 - **Key stays server-side.** `ANTHROPIC_API_KEY` read from the server env; never sent to the browser, never logged.
-- **No secrets leave the boundary.** The pack is already redacted; publish sends redacted MCP configs + skill bodies + instructions only. MCP credentials are added by the operator to a **vault** afterward (we surface names only). The preview asserts no secret values are present before any network call.
+- **No secrets leave the boundary.** The gem is already redacted; publish sends redacted MCP configs + skill bodies + instructions only. MCP credentials are added by the operator to a **vault** afterward (we surface names only). The preview asserts no secret values are present before any network call.
 - **Outward-facing confirm.** Because publish sends config to Anthropic, the UI requires the explicit click; the server requires the key.
 
 ## 6. Stack
 
-- Add `@anthropic-ai/sdk` (dep). New `src/pack/publish.ts` (pure render: pack → agent payload + skip/secret/skill lists) and `src/publish.ts` (the network publish: skills.create → environments.create → agents.create, with rollback and request deduplication; isolated so the pure render is unit-tested without network).
+- Add `@anthropic-ai/sdk` (dep). New `src/gem/publish.ts` (pure render: gem → agent payload + skip/secret/skill lists) and `src/publish.ts` (the network publish: skills.create → environments.create → agents.create, with rollback and request deduplication; isolated so the pure render is unit-tested without network).
 - Controller: `/api/publish-preview` + `/api/publish`. Zod schemas (`ManagedAgentPayloadSchema`, `PublishResultSchema`).
 - UI: in the right pane, a "Managed Agents" mode showing the preview (payload + skipped + skills-to-create + vault-secrets) and a **Publish** button (disabled until the server reports a key present via a small `GET /api/publish/ready`).
 - Model default `claude-opus-4-8`.

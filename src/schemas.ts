@@ -1,8 +1,8 @@
 // src/schemas.ts
 import { z } from "zod";
-import { RUNNER_REGISTRY } from "./pack/checks.js";
-import { TARGET_REGISTRY } from "./pack/targets.js";
-import { deployTargetIds } from "./pack/deploy.js";
+import { RUNNER_REGISTRY } from "./gem/checks.js";
+import { TARGET_REGISTRY } from "./gem/targets.js";
+import { deployTargetIds } from "./gem/deploy.js";
 
 export const SkillArtifactSchema = z.object({
   type: z.literal("skill"),
@@ -37,7 +37,7 @@ export const HookArtifactSchema = z.object({
   secretRefs: z.array(z.object({ name: z.string(), location: z.string() })).optional(),
 });
 
-export const PackArtifactSchema = z.discriminatedUnion("type", [
+export const GemArtifactSchema = z.discriminatedUnion("type", [
   SkillArtifactSchema,
   McpServerArtifactSchema,
   InstructionsArtifactSchema,
@@ -69,7 +69,7 @@ export const BehavioralCheckSchema = z.object({
   timeoutSec: z.number().optional(),
 });
 
-// runner validates against the registry keys, so a pack can't declare a check no runner can run.
+// runner validates against the registry keys, so a gem can't declare a check no runner can run.
 const RUNNER_IDS = Object.keys(RUNNER_REGISTRY) as [string, ...string[]];
 export const ExternalCheckSchema = z.object({
   kind: z.literal("external"),
@@ -79,7 +79,7 @@ export const ExternalCheckSchema = z.object({
   with: z.record(z.string(), z.unknown()).optional(),
 });
 
-export const PackCheckSchema = z.discriminatedUnion("kind", [BehavioralCheckSchema, ExternalCheckSchema]);
+export const GemCheckSchema = z.discriminatedUnion("kind", [BehavioralCheckSchema, ExternalCheckSchema]);
 
 export const ProjectInventorySchema = z.object({
   root: z.string(),
@@ -110,7 +110,7 @@ const ProjectSelectionSchema = z.record(
   }),
 );
 
-export const PackSelectionSchema = z.union([
+export const GemSelectionSchema = z.union([
   z.object({ all: z.literal(true) }),
   z.object({
     skills: z.array(z.string()).optional(),
@@ -121,22 +121,22 @@ export const PackSelectionSchema = z.union([
   }),
 ]);
 
-export const PackRequestSchema = z.object({
-  selection: PackSelectionSchema,
+export const GemRequestSchema = z.object({
+  selection: GemSelectionSchema,
   name: z.string().optional(),
   dir: z.string().optional(),
   projects: z.array(z.string()).optional(),
-  checks: z.array(PackCheckSchema).optional(),
+  checks: z.array(GemCheckSchema).optional(),
 });
 
 export const ScaffoldChecksRequestSchema = z.object({
-  selection: PackSelectionSchema,
+  selection: GemSelectionSchema,
   name: z.string().optional(),
   dir: z.string().optional(),
   projects: z.array(z.string()).optional(),
 });
 
-export const ScaffoldChecksResponseSchema = z.object({ checks: z.array(PackCheckSchema) });
+export const ScaffoldChecksResponseSchema = z.object({ checks: z.array(GemCheckSchema) });
 
 const TARGET_IDS = Object.keys(TARGET_REGISTRY) as [string, ...string[]];
 export const TargetIdSchema = z.enum(TARGET_IDS);
@@ -154,15 +154,15 @@ export const MaterializeResponseSchema = z.object({
   compatibility: z.record(TargetIdSchema, z.object({ supported: z.number(), skipped: z.number() })),
 });
 
-// ── Pack archive ──
-export const PackLockSchema = z.object({
+// ── Gem archive ──
+export const GemLockSchema = z.object({
   formatVersion: z.number(),
   files: z.record(z.string(), z.string()),
-  packDigest: z.string(),
+  gemDigest: z.string(),
   signature: z.string().nullable(),
 });
 
-export const PackManifestArtifactSchema = z.object({
+export const GemManifestArtifactSchema = z.object({
   type: z.enum(["skill", "mcp_server", "instructions", "hook"]),
   name: z.string(),
   path: z.string(),
@@ -170,18 +170,18 @@ export const PackManifestArtifactSchema = z.object({
   source: z.string().optional(),
 });
 
-export const PackManifestSchema = z.object({
+export const GemManifestSchema = z.object({
   formatVersion: z.number(),
   name: z.string(),
   version: z.string(),
   createdFrom: z.string(),
-  artifacts: z.array(PackManifestArtifactSchema),
+  artifacts: z.array(GemManifestArtifactSchema),
   requiredSecrets: z.array(SecretRequirementSchema),
   checks: z.array(z.object({ name: z.string(), path: z.string() })),
 });
 
 export const ArchiveRequestSchema = z.object({
-  selection: PackSelectionSchema,
+  selection: GemSelectionSchema,
   name: z.string().optional(),
   version: z.string().optional(),
   dir: z.string().optional(),
@@ -192,14 +192,14 @@ export const ArchiveRequestSchema = z.object({
 
 export const ArchiveResponseSchema = z.object({
   files: z.record(z.string(), z.string()),
-  lock: PackLockSchema,
+  lock: GemLockSchema,
   skipped: z.array(SkippedArtifactSchema),
   path: z.string().nullable(),
   tarGz: z.string().nullable(), // base64 .tar.gz when `tar` was requested, else null
 });
 
 export const MaterializeRequestSchema = z.object({
-  selection: PackSelectionSchema.optional(),
+  selection: GemSelectionSchema.optional(),
   archivePath: z.string().optional(),
   target: TargetIdSchema,
   name: z.string().optional(),
@@ -217,7 +217,7 @@ export const DeployTargetsResponseSchema = z.object({
 
 // ── Managed Agents publish ──
 export const PublishPreviewRequestSchema = z.object({
-  selection: PackSelectionSchema,
+  selection: GemSelectionSchema,
   name: z.string().optional(),
   dir: z.string().optional(),
   projects: z.array(z.string()).optional(),
@@ -260,18 +260,18 @@ export const DirQuerySchema = z.object({ dir: z.string().optional(), projects: z
 export const PickQuerySchema = z.object({});
 export const PickFolderSchema = z.object({ path: z.string().nullable() });
 
-export const PackSchema = z.object({
+export const GemSchema = z.object({
   name: z.string(),
   createdFrom: z.string(),
-  artifacts: z.array(PackArtifactSchema),
-  checks: z.array(PackCheckSchema),
+  artifacts: z.array(GemArtifactSchema),
+  checks: z.array(GemCheckSchema),
   requiredSecrets: z.array(SecretRequirementSchema),
 });
 
 // ── Workspaces ──
 export const WorkspaceSummarySchema = z.object({
   name: z.string(),
-  packName: z.string(),
+  gemName: z.string(),
   version: z.string(),
   artifactCounts: z.object({ skill: z.number(), mcp_server: z.number(), instructions: z.number(), hook: z.number() }),
   checks: z.number(),
@@ -289,7 +289,7 @@ export const RenderResultSchema = z.object({
 });
 export const CreateWorkspaceRequestSchema = z.object({
   name: z.string(),
-  selection: PackSelectionSchema,
+  selection: GemSelectionSchema,
   dir: z.string().optional(),
   projects: z.array(z.string()).optional(),
   version: z.string().optional(),

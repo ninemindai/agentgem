@@ -34,7 +34,7 @@ Selection gains a project namespace:
 ```ts
 PackSelection += { projectSkills?: string[]; projectMcpServers?: string[]; includeProjectInstructions?: boolean }
 ```
-`buildPack` selects project artifacts from `inventory.project` by name and pushes them (each already tagged `source:"project"`, so a name collision in the Pack's `artifacts[]` is fine — it's a list, not a map).
+`buildPack` selects project artifacts from `inventory.project` by name and pushes them (each already tagged `source:"project"`, so a name collision in the Gem's `artifacts[]` is fine — it's a list, not a map).
 
 ## 4. `GET /api/pick-folder` (native dialog)
 
@@ -45,8 +45,8 @@ PackSelection += { projectSkills?: string[]; projectMcpServers?: string[]; inclu
 ## 5. Endpoints / wire
 
 - `GET /api/inventory?dir=&project=` → global inventory + `project` section when `project` given (canonicalized to an absolute path).
-- `POST /api/pack` body adds `project?: string`; re-introspects project and includes selected project artifacts.
-- MCP `inventory`/`pack` tools gain an optional `project` input for parity.
+- `POST /api/gem` body adds `project?: string`; re-introspects project and includes selected project artifacts.
+- MCP `inventory`/`gem` tools gain an optional `project` input for parity.
 
 ## 6. UI
 

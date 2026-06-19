@@ -1,0 +1,73 @@
+// tests/gem/buildGem.test.ts
+import { describe, it, expect } from "vitest";
+import { buildGem } from "../buildGem.js";
+import type { ConfigInventory } from "../types.js";
+
+const inv: ConfigInventory = {
+  skills: [
+    { type: "skill", name: "review", source: "standalone", content: "a" },
+    { type: "skill", name: "plan", source: "standalone", content: "b" },
+  ],
+  mcpServers: [{ type: "mcp_server", name: "gh", transport: "stdio", config: { env: { GH_TOKEN: "<redacted>" } }, secretRefs: [{ name: "GH_TOKEN", location: "env.GH_TOKEN" }] }],
+  instructions: [{ type: "instructions", name: "CLAUDE.md", content: "x" }],
+  hooks: [{ type: "hook", name: "PreToolUse · Bash", event: "PreToolUse", matcher: "Bash", config: { hooks: [] }, source: "user" }],
+};
+
+describe("buildGem", () => {
+  it("selects a named subset and includes instructions when asked", () => {
+    const gem = buildGem(inv, { skills: ["review"], mcpServers: ["gh"], includeInstructions: true }, { name: "p", createdFrom: "/d" });
+    expect(gem.name).toBe("p");
+    expect(gem.createdFrom).toBe("/d");
+    expect(gem.artifacts.map((a) => a.type)).toEqual(["skill", "mcp_server", "instructions"]);
+    expect(gem.artifacts.map((a) => a.name)).toEqual(["review", "gh", "CLAUDE.md"]);
+  });
+
+  it("excludes instructions when not requested", () => {
+    const gem = buildGem(inv, { skills: ["review"] });
+    expect(gem.artifacts.some((a) => a.type === "instructions")).toBe(false);
+  });
+
+  it("{ all: true } includes everything", () => {
+    const gem = buildGem(inv, { all: true });
+    expect(gem.artifacts.length).toBe(5); // 2 skills + 1 mcp + 1 instructions + 1 hook
+  });
+
+  it("selects a hook by name", () => {
+    const gem = buildGem(inv, { hooks: ["PreToolUse · Bash"] });
+    expect(gem.artifacts.map((a) => a.type)).toEqual(["hook"]);
+    expect(gem.artifacts[0].name).toBe("PreToolUse · Bash");
+  });
+
+  it("throws listing available names on an unknown selection", () => {
+    expect(() => buildGem(inv, { skills: ["nope"] })).toThrow(/Available: review, plan/);
+  });
+
+  it("embeds operator checks and defaults to empty when none given", () => {
+    const withChecks = buildGem(inv, { skills: ["review"] }, {
+      checks: [{ kind: "behavioral", name: "smoke", task: "do it", assertions: [] }],
+    });
+    expect(withChecks.checks.map((c) => c.name)).toEqual(["smoke"]);
+    expect(buildGem(inv, { skills: ["review"] }).checks).toEqual([]);
+  });
+
+  it("aggregates requiredSecrets from selected artifacts only (names, never values)", () => {
+    const withMcp = buildGem(inv, { mcpServers: ["gh"] });
+    expect(withMcp.requiredSecrets).toEqual([{ name: "GH_TOKEN", artifact: "gh", location: "env.GH_TOKEN" }]);
+    // a selection without the gh server carries no secret requirement
+    expect(buildGem(inv, { skills: ["review"] }).requiredSecrets).toEqual([]);
+  });
+
+  it("preserves benign task prose while still scrubbing real secret tokens", () => {
+    const gem = buildGem(inv, { skills: ["review"] }, {
+      checks: [{ kind: "behavioral", name: "smoke", task: "test bearer authentication flow", assertions: [] }],
+    });
+    expect((gem.checks[0] as { task: string }).task).toBe("test bearer authentication flow");
+  });
+
+  it("redacts a secret accidentally embedded in operator check text", () => {
+    const gem = buildGem(inv, { skills: ["review"] }, {
+      checks: [{ kind: "behavioral", name: "smoke", task: "use token ghp_abcdefghijklmnopqrstuvwxyz0123", assertions: [] }],
+    });
+    expect(JSON.stringify(gem.checks)).not.toContain("ghp_abcdefghijklmnopqrstuvwxyz0123");
+  });
+});

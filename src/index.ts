@@ -7,8 +7,8 @@ import { RestApplication } from "@agentback/rest";
 import { installExplorer } from "@agentback/rest-explorer";
 import { MCPComponent } from "@agentback/mcp";
 import { installMcpHttp } from "@agentback/mcp-http";
-import { PackController } from "./pack.controller.js";
-import { PackTools } from "./pack.tools.js";
+import { GemController } from "./gem.controller.js";
+import { GemTools } from "./gem.tools.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 function pageHtml(): string {
@@ -23,8 +23,8 @@ export async function createApp(port: number): Promise<RestApplication> {
   app.configure("servers.RestServer").to({ port, host: "127.0.0.1" });
   app.component(MCPComponent);
   app.configure("servers.MCPServer").to({ name: "agentgem", version: "0.1.0", transports: { stdio: false } });
-  app.restController(PackController);
-  app.service(PackTools);
+  app.restController(GemController);
+  app.service(GemTools);
   await installExplorer(app, { title: "agentgem API" });
   await installMcpHttp(app);
   const server = await app.restServer;
@@ -40,7 +40,7 @@ async function main() {
   const server = await app.restServer;
   console.log(`agentgem listening at ${server.url}`);
   console.log(`  UI:       ${server.url}/`);
-  console.log(`  API:      ${server.url}/api/inventory  ·  POST ${server.url}/api/pack`);
+  console.log(`  API:      ${server.url}/api/inventory  ·  POST ${server.url}/api/gem`);
   console.log(`  Explorer: ${server.url}/explorer/`);
   console.log(`  MCP:      ${server.url}/mcp`);
 }

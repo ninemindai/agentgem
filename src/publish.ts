@@ -1,11 +1,11 @@
 // src/publish.ts
-// Network publish: render a Pack, register each skill as a custom Agent Skill (Skills API), then
+// Network publish: render a Gem, register each skill as a custom Agent Skill (Skills API), then
 // create the agent referencing those skills. The PublishClient is injected so the orchestration is
 // unit-tested without a key or network. Only confirmed SDK bindings are used.
 import Anthropic, { toFile } from "@anthropic-ai/sdk";
-import { renderManagedAgent } from "./pack/publish.js";
-import type { ManagedAgentPayload, SkippedArtifact } from "./pack/publish.js";
-import type { Pack, SecretRequirement } from "./pack/types.js";
+import { renderManagedAgent } from "./gem/publish.js";
+import type { ManagedAgentPayload, SkippedArtifact } from "./gem/publish.js";
+import type { Gem, SecretRequirement } from "./gem/types.js";
 
 export interface RegisteredSkill { name: string; skillId: string; version: string }
 
@@ -58,8 +58,8 @@ export function publishManagedAgentOnce(
   return promise;
 }
 
-export async function publishManagedAgent(pack: Pack, client: PublishClient): Promise<PublishResult> {
-  const render = renderManagedAgent(pack);
+export async function publishManagedAgent(gem: Gem, client: PublishClient): Promise<PublishResult> {
+  const render = renderManagedAgent(gem);
   const registeredSkills: RegisteredSkill[] = [];
   let environmentId: string | undefined;
   try {
@@ -67,7 +67,7 @@ export async function publishManagedAgent(pack: Pack, client: PublishClient): Pr
       const { skillId, version } = await client.createSkill(s.name, s.content);
       registeredSkills.push({ name: s.name, skillId, version });
     }
-    environmentId = (await client.createEnvironment(`${pack.name} sandbox`)).id;
+    environmentId = (await client.createEnvironment(`${gem.name} sandbox`)).id;
     const skills: CustomSkillRef[] = registeredSkills.map((r) => ({ type: "custom", skill_id: r.skillId, version: r.version }));
     const agent = await client.createAgent({ ...render.payload, skills });
     return { agentId: agent.id, environmentId, version: agent.version, registeredSkills, skipped: render.skipped, vaultSecrets: render.vaultSecrets };
