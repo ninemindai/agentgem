@@ -120,9 +120,7 @@ const flueComposeAgent = (pack: Pack): MaterializeResult => {
   const skills = pack.artifacts.filter((a): a is SkillArtifact => a.type === "skill");
   const instr = pack.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions");
   const imports = skills.map((s, i) => `import skill${i} from "../skills/${safePathSegment(s.name)}/SKILL.md" with { type: "skill" };`).join("\n");
-  const skillBodies = skills.map((s) => `## ${s.name}\n\n${s.content}`);
-  const instrBodies = instr.map((i) => `## ${i.name}\n\n${i.content}`);
-  const instructions = [...skillBodies, ...instrBodies].join("\n\n---\n\n");
+  const instructions = instr.map((i) => `## ${i.name}\n\n${i.content}`).join("\n\n---\n\n");
   const list = skills.map((_, i) => `skill${i}`).join(", ");
   const file =
 `import { createAgent, type AgentRouteHandler } from "@flue/runtime";

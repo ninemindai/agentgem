@@ -117,9 +117,9 @@ describe("flue target (agent file + skills)", () => {
     expect(agent).toContain("skills: [skill0]");
     expect(agent).toContain("be kind");                 // instructions folded in
     expect(agent).toContain('model: "anthropic/claude-sonnet-4-6"');
-    // template escaping: backtick and ${ must be escaped so the file is valid TS
-    expect(agent).toContain("\\`here\\`");
-    expect(agent).toContain("\\${there}");
+    // skill body lives in the SKILL.md file, NOT inlined into the agent file
+    expect(r.files["skills/review/SKILL.md"]).toContain("# Review");
+    expect(agent).not.toContain("Look");
     // instructions are NOT reported skipped (they're composed, not dropped)
     expect(r.skipped.find((s) => s.type === "instructions")).toBeUndefined();
     // hooks unsupported -> skipped
