@@ -132,6 +132,32 @@ describe("flue target (agent file + skills)", () => {
   });
 });
 
+describe("flue MCP connections", () => {
+  it("http server -> a connectMcpServer connection with env auth, no secret value", () => {
+    const r = materialize({ name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [httpMcp("ctx")] }, "flue");
+    const c = r.files["connections/ctx.ts"];
+    expect(c).toContain('import { connectMcpServer } from "@flue/runtime"');
+    expect(c).toContain('connectMcpServer("ctx"');
+    expect(c).toContain("https://mcp.x/sse");
+    expect(c).toContain('process.env["X_TOKEN"]');     // auth by env name
+    expect(JSON.stringify(r.files)).not.toContain("secret-value"); // no value leaks
+  });
+
+  it("sse server -> transport: \"sse\"", () => {
+    const sse: McpServerArtifact = { type: "mcp_server", name: "leg", transport: "sse", config: { url: "https://leg/sse" } };
+    const r = materialize({ name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [sse] }, "flue");
+    expect(r.files["connections/leg.ts"]).toContain('transport: "sse"');
+  });
+
+  it("stdio server -> a proxy runner plus a localhost connection", () => {
+    const r = materialize({ name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [mcp("gh")] }, "flue");
+    expect(r.files["proxies/gh.mjs"]).toBeTruthy();
+    expect(r.files["connections/gh.ts"]).toContain("http://127.0.0.1:");
+    expect(r.files["connections/gh.ts"]).toContain("/mcp");
+    expect(r.skipped).toEqual([]);
+  });
+});
+
 describe("compatibility", () => {
   it("summarizes supported/skipped per target", () => {
     const c = compatibility(pack([skill("a"), hook()]));

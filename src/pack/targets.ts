@@ -116,6 +116,55 @@ const hooksSettingsJson = (hooks: HookArtifact[]): FileTree =>
 function escapeTemplate(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/\$\{/g, "\\${");
 }
+// One TS factory per MCP server. http/sse -> a direct remote connection (auth reads the secret from an
+// env var name, never a value). stdio -> a localhost connection plus a generated proxy runner under
+// proxies/ that bridges the stdio server to HTTP (same mechanism as Eve).
+const flueConnection = (server: McpServerArtifact, url: string): string => {
+  const refs = server.secretRefs ?? [];
+  const authorization = refs.find((r) => r.location.toLowerCase() === "headers.authorization");
+  const headerEntries: (readonly [string, string])[] = [
+    ...(authorization ? [["Authorization", authorization.name] as const] : []),
+    ...refs.filter((r) => /^headers\./i.test(r.location) && r !== authorization)
+          .map((r) => [r.location.slice("headers.".length), r.name] as const),
+  ];
+  const transport = server.transport === "sse" ? `,\n  transport: "sse"` : "";
+  const headers = headerEntries.length
+    ? `,\n  headers: { ${headerEntries.map(([h, env]) => `${JSON.stringify(h)}: process.env[${JSON.stringify(env)}]!`).join(", ")} }`
+    : "";
+  return `import { connectMcpServer } from "@flue/runtime";\n\nexport default () => connectMcpServer(${JSON.stringify(server.name)}, {\n  url: ${JSON.stringify(url)}${transport}${headers},\n});\n`;
+};
+
+const mcpFlueConnections = (servers: McpServerArtifact[]): MaterializeResult => {
+  const files: FileTree = {};
+  const skipped: SkippedArtifact[] = [];
+  let port = PROXY_BASE_PORT;
+  for (const s of servers) {
+    const seg = safePathSegment(s.name);
+    const connectionPath = `connections/${seg}.ts`;
+    if (connectionPath in files) {
+      skipped.push({ artifact: s.name, type: "mcp_server", reason: `path collision with an earlier mcp_server at ${connectionPath}` });
+      continue;
+    }
+    const url = typeof s.config.url === "string" ? s.config.url : "";
+    if (/^https?:\/\//.test(url)) {
+      const unsupportedSecret = (s.secretRefs ?? []).find((r) => !/^headers\./i.test(r.location));
+      if (unsupportedSecret) {
+        skipped.push({ artifact: s.name, type: "mcp_server", reason: `Flue cannot map secret at ${unsupportedSecret.location}` });
+        continue;
+      }
+      files[connectionPath] = flueConnection(s, url);
+    } else if (s.transport === "stdio" && typeof s.config.command === "string") {
+      const p = port++;
+      const args = Array.isArray(s.config.args) ? s.config.args.filter((a): a is string => typeof a === "string") : [];
+      // localhost proxy connection carries no auth headers (the proxy injects the secrets into the stdio process)
+      files[connectionPath] = flueConnection({ ...s, secretRefs: undefined }, `http://${PROXY_HOST}:${p}/mcp`);
+      files[`proxies/${seg}.mjs`] = stdioProxyRunner(s.name, s.config.command, args, (s.secretRefs ?? []).map((r) => r.name), p);
+    } else {
+      skipped.push({ artifact: s.name, type: "mcp_server", reason: `${s.transport} MCP has no usable URL or stdio command` });
+    }
+  }
+  return { files, skipped };
+};
 const flueComposeAgent = (pack: Pack): MaterializeResult => {
   const skills = pack.artifacts.filter((a): a is SkillArtifact => a.type === "skill");
   const instr = pack.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions");
@@ -148,7 +197,7 @@ export const TARGET_REGISTRY: Record<TargetId, TargetSpec> = {
   eve:    { id: "eve",    label: "Eve",    skill: skillEveMd,         instructions: concatInstructions("agent/instructions.md"), mcp: mcpEveConnections },
   // Flue project layout. Skills reuse SKILL.md; instructions fold into the composed agent file (no
   // standalone file -> the empty instructions renderer marks them handled, not skipped). MCP added in Task 2.
-  flue:   { id: "flue",   label: "Flue",   skill: skillSkillMd,        instructions: () => ({}), compose: flueComposeAgent },
+  flue:   { id: "flue",   label: "Flue",   skill: skillSkillMd,        instructions: () => ({}), mcp: mcpFlueConnections, compose: flueComposeAgent },
 };
 
 export function materialize(pack: Pack, target: TargetId): MaterializeResult {
