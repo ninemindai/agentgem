@@ -190,6 +190,33 @@ describe("POST /api/materialize from an archive", () => {
   });
 });
 
+describe("deploy registry ops", () => {
+  it("GET /api/deploy-targets lists claude-managed with a boolean ready", async () => {
+    const r = await client.get("/api/deploy-targets").expect(200);
+    expect(r.body.targets.map((t: { id: string }) => t.id)).toEqual(["claude-managed"]);
+    expect(typeof r.body.targets[0].ready).toBe("boolean");
+  });
+
+  it("publish-preview routes through the registry (target optional, identical payload)", async () => {
+    const base = { dir, selection: { skills: ["review"], mcpServers: ["gh"], includeInstructions: true }, name: "pub" };
+    const a = await client.post("/api/publish-preview").send(base).expect(200);
+    const b = await client.post("/api/publish-preview").send({ ...base, target: "claude-managed" }).expect(200);
+    expect(a.body.payload.name).toBe("pub");
+    expect(a.body).toEqual(b.body);
+    expect(JSON.stringify(a.body)).not.toContain("ghp_secret");
+  });
+
+  it("POST /api/publish without ANTHROPIC_API_KEY returns 500 (gated via the registry)", async () => {
+    const saved = process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    try {
+      await client.post("/api/publish").send({ dir, selection: { skills: ["review"] }, requestId: "req-12345678" }).expect(500);
+    } finally {
+      if (saved !== undefined) process.env.ANTHROPIC_API_KEY = saved;
+    }
+  });
+});
+
 describe("workspace ops", () => {
   it("create -> list -> render(eve) -> read -> delete", async () => {
     const home = mkdtempSync(join(tmpdir(), "wsh-"));

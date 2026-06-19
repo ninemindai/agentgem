@@ -2,6 +2,7 @@
 import { z } from "zod";
 import { RUNNER_REGISTRY } from "./pack/checks.js";
 import { TARGET_REGISTRY } from "./pack/targets.js";
+import { deployTargetIds } from "./pack/deploy.js";
 
 export const SkillArtifactSchema = z.object({
   type: z.literal("skill"),
@@ -208,12 +209,19 @@ export const MaterializeRequestSchema = z.object({
   message: "provide either selection or archivePath",
 });
 
+export const DeployTargetIdSchema = z.enum(deployTargetIds);
+export const DeployReadyQuerySchema = z.object({ target: DeployTargetIdSchema.optional() });
+export const DeployTargetsResponseSchema = z.object({
+  targets: z.array(z.object({ id: DeployTargetIdSchema, label: z.string(), ready: z.boolean() })),
+});
+
 // ── Managed Agents publish ──
 export const PublishPreviewRequestSchema = z.object({
   selection: PackSelectionSchema,
   name: z.string().optional(),
   dir: z.string().optional(),
   projects: z.array(z.string()).optional(),
+  target: DeployTargetIdSchema.optional(),
 });
 export const PublishRequestSchema = PublishPreviewRequestSchema.extend({ requestId: z.string().min(8).max(128) });
 

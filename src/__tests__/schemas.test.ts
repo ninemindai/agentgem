@@ -5,6 +5,7 @@ import {
   MaterializeRequestSchema, MaterializeResponseSchema, PublishPreviewRequestSchema, PublishRequestSchema, PublishResultSchema,
   PackLockSchema, PackManifestSchema, ArchiveRequestSchema, ArchiveResponseSchema,
   WorkspaceSummarySchema, CreateWorkspaceRequestSchema, RenderRequestSchema, RenderResultSchema,
+  DeployTargetIdSchema, DeployReadyQuerySchema, DeployTargetsResponseSchema,
 } from "../schemas.js";
 
 describe("wire schemas", () => {
@@ -130,5 +131,19 @@ describe("workspace schemas", () => {
     expect(RenderRequestSchema.safeParse({ name: "mp", target: "eve" }).success).toBe(true);
     expect(RenderRequestSchema.safeParse({ name: "mp", target: "nope" }).success).toBe(false);
     expect(RenderResultSchema.safeParse({ target: "eve", files: {}, skipped: [], path: "/x" }).success).toBe(true);
+  });
+});
+
+describe("deploy schemas", () => {
+  it("validates the deploy target id and rejects unknown", () => {
+    expect(DeployTargetIdSchema.safeParse("claude-managed").success).toBe(true);
+    expect(DeployTargetIdSchema.safeParse("nope").success).toBe(false);
+  });
+  it("publish-preview accepts an optional target; ready query + targets response validate", () => {
+    expect(PublishPreviewRequestSchema.safeParse({ selection: { all: true } }).success).toBe(true);
+    expect(PublishPreviewRequestSchema.safeParse({ selection: { all: true }, target: "claude-managed" }).success).toBe(true);
+    expect(DeployReadyQuerySchema.safeParse({}).success).toBe(true);
+    expect(DeployReadyQuerySchema.safeParse({ target: "claude-managed" }).success).toBe(true);
+    expect(DeployTargetsResponseSchema.safeParse({ targets: [{ id: "claude-managed", label: "Claude Managed Agents", ready: false }] }).success).toBe(true);
   });
 });

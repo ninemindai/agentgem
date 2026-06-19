@@ -6,20 +6,22 @@ import { buildPack } from "./pack/buildPack.js";
 import { scaffoldChecks } from "./pack/checks.js";
 import { materialize, compatibility } from "./pack/targets.js";
 import type { TargetId } from "./pack/targets.js";
-import { renderManagedAgent } from "./pack/publish.js";
+import { DEPLOY_REGISTRY, deployTargetList } from "./pack/deploy.js";
+import type { DeployTargetId } from "./pack/deploy.js";
 import { createWorkspace, listWorkspaces, readWorkspace, renderTarget, deleteWorkspace } from "./pack/workspaces.js";
 import { writePackArchive, readPackArchive } from "./pack/archive.js";
 import type { PackLock } from "./pack/archive.js";
 import { writeArchiveDir, readArchiveDir } from "./pack/archiveFs.js";
 import { packTar } from "./pack/archiveTar.js";
 import type { Pack } from "./pack/types.js";
-import { publishManagedAgent, publishManagedAgentOnce, anthropicPublishClient } from "./publish.js";
+
 import type { ConfigInventory } from "./pack/types.js";
 import {
   InventorySchema, PackSchema, PackRequestSchema, DirQuerySchema, PickQuerySchema, PickFolderSchema,
   ScaffoldChecksRequestSchema, ScaffoldChecksResponseSchema,
   MaterializeRequestSchema, MaterializeResponseSchema,
   PublishPreviewRequestSchema, PublishRequestSchema, PublishPreviewResponseSchema, PublishReadyResponseSchema, PublishResultSchema,
+  DeployTargetsResponseSchema, DeployReadyQuerySchema,
   ArchiveRequestSchema, ArchiveResponseSchema,
   CreateWorkspaceRequestSchema, WorkspaceQuerySchema, RenderRequestSchema, WorkspaceNameRequestSchema, WorkspaceSummarySchema, WorkspaceDetailSchema, RenderResultSchema, ListWorkspacesResponseSchema, DeleteWorkspaceResponseSchema,
 } from "./schemas.js";
@@ -108,38 +110,38 @@ export class PackController {
     return { deleted: input.body.name };
   }
 
-  // Offline render of the Managed Agents agent payload + skip/secret/skill lists. No network.
+  @get("/deploy-targets", { query: PickQuerySchema, response: DeployTargetsResponseSchema })
+  async deployTargets(_input: { query: z.infer<typeof PickQuerySchema> }): Promise<z.infer<typeof DeployTargetsResponseSchema>> {
+    return { targets: deployTargetList() };
+  }
+
+  // Offline render of the deploy payload + skip/secret/skill lists. No network.
   @post("/publish-preview", { body: PublishPreviewRequestSchema, response: PublishPreviewResponseSchema })
   async publishPreview(input: { body: z.infer<typeof PublishPreviewRequestSchema> }): Promise<z.infer<typeof PublishPreviewResponseSchema>> {
     const dirs = resolveDirs(input.body.dir);
     const inventory = introspectAll(input.body.dir, input.body.projects);
     const pack = buildPack(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
-    const r = renderManagedAgent(pack);
+    const target = (input.body.target ?? "claude-managed") as DeployTargetId;
+    const r = DEPLOY_REGISTRY[target].preview(pack);
     return { payload: r.payload, skillsToRegister: r.skillsToRegister.map((s) => s.name), skipped: r.skipped, vaultSecrets: r.vaultSecrets };
   }
 
-  // Whether the server has an ANTHROPIC_API_KEY (the UI disables Publish without it). Boolean only.
-  @get("/publish-ready", { query: PickQuerySchema, response: PublishReadyResponseSchema })
-  async publishReady(_input: { query: z.infer<typeof PickQuerySchema> }): Promise<z.infer<typeof PublishReadyResponseSchema>> {
-    return { ready: !!process.env.ANTHROPIC_API_KEY };
+  // Whether the server is configured for the deploy backend (the UI gates on this). Boolean only.
+  @get("/publish-ready", { query: DeployReadyQuerySchema, response: PublishReadyResponseSchema })
+  async publishReady(input: { query: z.infer<typeof DeployReadyQuerySchema> }): Promise<z.infer<typeof PublishReadyResponseSchema>> {
+    const target = (input.query.target ?? "claude-managed") as DeployTargetId;
+    return { ready: DEPLOY_REGISTRY[target].ready() };
   }
 
-  // OUTWARD-FACING: creates a Managed Agent and cloud environment in the operator's Anthropic org. Gated on the
-  // server-side key (the UI also gates via /publish-ready + an explicit confirm). The key is read
-  // here and never returned to the client; only the redacted pack payload is sent to Anthropic.
+  // OUTWARD-FACING: gated network deploy through the selected backend. The key is read server-side
+  // (inside the registry's deploy) and never returned; only the redacted pack payload is sent.
   @post("/publish", { body: PublishRequestSchema, response: PublishResultSchema })
   async publish(input: { body: z.infer<typeof PublishRequestSchema> }): Promise<z.infer<typeof PublishResultSchema>> {
-    const key = process.env.ANTHROPIC_API_KEY;
-    if (!key) throw new Error("ANTHROPIC_API_KEY is not set on the server — cannot publish to Managed Agents.");
     const dirs = resolveDirs(input.body.dir);
     const inventory = introspectAll(input.body.dir, input.body.projects);
     const pack = buildPack(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
-    const { requestId, ...publishInput } = input.body;
-    return publishManagedAgentOnce(
-      requestId,
-      JSON.stringify(publishInput),
-      () => publishManagedAgent(pack, anthropicPublishClient(key)),
-    );
+    const target = (input.body.target ?? "claude-managed") as DeployTargetId;
+    return DEPLOY_REGISTRY[target].deploy(pack, input.body.requestId);
   }
 
   // Pop the OS-native folder picker and return the chosen absolute path (null if cancelled).
