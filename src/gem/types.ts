@@ -121,7 +121,7 @@ export interface CheckResult {
 }
 
 export interface GemVerificationReport {
-  packName: string;
+  gemName: string;
   createdFrom: string;
   results: CheckResult[];
   passed: boolean; // all results passed AND results.length > 0

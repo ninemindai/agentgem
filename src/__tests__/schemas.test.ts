@@ -91,7 +91,7 @@ describe("wire schemas", () => {
 
 describe("archive schemas", () => {
   it("accepts a well-formed lock and manifest", () => {
-    expect(GemLockSchema.safeParse({ formatVersion: 1, files: { "a.md": "sha256:ab" }, packDigest: "sha256:cd", signature: null }).success).toBe(true);
+    expect(GemLockSchema.safeParse({ formatVersion: 1, files: { "a.md": "sha256:ab" }, gemDigest: "sha256:cd", signature: null }).success).toBe(true);
     expect(GemManifestSchema.safeParse({
       formatVersion: 1, name: "p", version: "0.1.0", createdFrom: "/d",
       artifacts: [{ type: "skill", name: "x", path: "skills/x/SKILL.md", source: "standalone" }],
@@ -104,10 +104,10 @@ describe("archive schemas", () => {
     expect(ArchiveRequestSchema.safeParse({ selection: { all: true }, tar: true }).success).toBe(true);
     expect(ArchiveRequestSchema.safeParse({ name: "p" }).success).toBe(false);
     expect(ArchiveResponseSchema.safeParse({
-      files: { "pack.json": "{}" }, lock: { formatVersion: 1, files: {}, packDigest: "sha256:x", signature: null }, skipped: [], path: null, tarGz: null,
+      files: { "pack.json": "{}" }, lock: { formatVersion: 1, files: {}, gemDigest: "sha256:x", signature: null }, skipped: [], path: null, tarGz: null,
     }).success).toBe(true);
     expect(ArchiveResponseSchema.safeParse({
-      files: {}, lock: { formatVersion: 1, files: {}, packDigest: "sha256:x", signature: null }, skipped: [], path: null, tarGz: "H4sIAAAA",
+      files: {}, lock: { formatVersion: 1, files: {}, gemDigest: "sha256:x", signature: null }, skipped: [], path: null, tarGz: "H4sIAAAA",
     }).success).toBe(true);
   });
 
@@ -121,7 +121,7 @@ describe("archive schemas", () => {
 describe("workspace schemas", () => {
   it("validates a workspace summary", () => {
     expect(WorkspaceSummarySchema.safeParse({
-      name: "mp", packName: "demo", version: "0.1.0",
+      name: "mp", gemName: "demo", version: "0.1.0",
       artifactCounts: { skill: 1, mcp_server: 0, instructions: 1, hook: 0 }, checks: 0, renderedTargets: ["eve"],
     }).success).toBe(true);
   });

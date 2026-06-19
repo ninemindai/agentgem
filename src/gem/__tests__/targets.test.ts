@@ -101,8 +101,8 @@ describe("materialize", () => {
 });
 
 describe("flue target (agent file + skills)", () => {
-  it("emits agents/<packname>.ts importing skills + folding instructions; hooks skipped", () => {
-    const p: Gem = { name: "my pack", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [
+  it("emits agents/<gemname>.ts importing skills + folding instructions; hooks skipped", () => {
+    const p: Gem = { name: "my gem", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [
       skill("review", "# Review\nLook `here` and ${there}."),
       instr("soul", "be kind"),
       hook(),
@@ -111,7 +111,7 @@ describe("flue target (agent file + skills)", () => {
     // skill body reuses the shared SKILL.md convention
     expect(r.files["skills/review/SKILL.md"]).toContain("# Review");
     // the composed agent file
-    const agent = r.files["agents/my_pack.ts"];
+    const agent = r.files["agents/my_gem.ts"];
     expect(agent).toContain('import { createAgent');
     expect(agent).toContain('import skill0 from "../skills/review/SKILL.md" with { type: "skill" }');
     expect(agent).toContain("skills: [skill0]");
@@ -159,15 +159,15 @@ describe("flue MCP connections", () => {
 });
 
 describe("openai-sandbox target (agent file + skills)", () => {
-  it("emits <packname>.agent.ts (SandboxAgent + manifest + capabilities) and skill files; hooks + mcp skipped in v1-step1", () => {
-    const p: Gem = { name: "my pack", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [
+  it("emits <gemname>.agent.ts (SandboxAgent + manifest + capabilities) and skill files; hooks + mcp skipped in v1-step1", () => {
+    const p: Gem = { name: "my gem", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [
       skill("review", "# Review\nLook `here` and ${there}."),
       instr("soul", "be kind\n`here` and ${there}."),
       hook(),
     ] };
     const r = materialize(p, "openai-sandbox");
     expect(r.files["skills/review/SKILL.md"]).toContain("# Review");
-    const agent = r.files["my_pack.agent.ts"];
+    const agent = r.files["my_gem.agent.ts"];
     expect(agent).toContain('from "@openai/agents/sandbox"');
     expect(agent).toContain("new SandboxAgent({");
     expect(agent).toContain('model: "gpt-5.5"');

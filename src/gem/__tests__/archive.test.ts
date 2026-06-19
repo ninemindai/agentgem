@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeLock, verifyLock, writePackArchive, readPackArchive } from "../archive.js";
+import { computeLock, verifyLock, writeGemArchive, readGemArchive } from "../archive.js";
 import type { Gem, GemArtifact } from "../types.js";
 
 describe("computeLock", () => {
@@ -8,14 +8,14 @@ describe("computeLock", () => {
     const b = computeLock({ "skills/x/SKILL.md": "# x", "pack.json": '{"name":"p"}' });
     expect(a.files["pack.lock"]).toBeUndefined();
     expect(a.files["skills/x/SKILL.md"]).toMatch(/^sha256:[0-9a-f]{64}$/);
-    expect(a.packDigest).toBe(b.packDigest); // key/insertion order does not change the digest
+    expect(a.gemDigest).toBe(b.gemDigest); // key/insertion order does not change the digest
     expect(a.signature).toBeNull();
   });
 
-  it("packDigest is stable across manifest key reordering and whitespace", () => {
+  it("gemDigest is stable across manifest key reordering and whitespace", () => {
     const a = computeLock({ "pack.json": '{"name":"p","version":"0.1.0"}' });
     const b = computeLock({ "pack.json": '{ "version":"0.1.0",\n "name":"p" }' });
-    expect(a.packDigest).toBe(b.packDigest);
+    expect(a.gemDigest).toBe(b.gemDigest);
   });
 });
 
@@ -48,7 +48,7 @@ describe("verifyLock", () => {
 const pack = (artifacts: GemArtifact[], extra: Partial<Gem> = {}): Gem =>
   ({ name: "demo", createdFrom: "/d", artifacts, checks: [], requiredSecrets: [], ...extra });
 
-describe("writePackArchive", () => {
+describe("writeGemArchive", () => {
   it("extracts bodies to files and writes manifest + lock", () => {
     const p = pack([
       { type: "skill", name: "code review", description: "rev", source: "standalone", content: "# Review" },
@@ -57,7 +57,7 @@ describe("writePackArchive", () => {
       { type: "hook", name: "fmt", event: "PostToolUse", matcher: "Edit", config: { matcher: "Edit", hooks: [{ type: "command", command: "prettier" }] }, source: "user" },
     ], { requiredSecrets: [{ name: "C7", artifact: "context7", location: "headers.Authorization" }] });
 
-    const { files, skipped } = writePackArchive(p, { version: "1.2.3" });
+    const { files, skipped } = writeGemArchive(p, { version: "1.2.3" });
     expect(skipped).toEqual([]);
     expect(files["skills/code_review/SKILL.md"]).toBe("# Review");
     expect(files["instructions/soul.md"]).toBe("be kind");
@@ -78,7 +78,7 @@ describe("writePackArchive", () => {
   });
 
   it("reports a post-sanitization path collision instead of overwriting", () => {
-    const { skipped, files } = writePackArchive(pack([
+    const { skipped, files } = writeGemArchive(pack([
       { type: "skill", name: "a b", source: "standalone", content: "first" },
       { type: "skill", name: "a/b", source: "standalone", content: "second" }, // both -> skills/a_b/SKILL.md
     ]));
@@ -92,7 +92,7 @@ describe("writePackArchive", () => {
       { kind: "behavioral", name: "smoke test", task: "t", assertions: [{ type: "output_contains", substring: "ok" }] },
       { kind: "behavioral", name: "smoke/test", task: "t", assertions: [{ type: "output_contains", substring: "ok" }] },
     ] });
-    expect(() => writePackArchive(p)).toThrow(/check path collision/i);
+    expect(() => writeGemArchive(p)).toThrow(/check path collision/i);
   });
 
   it("does not double the extension when an artifact name already ends in it", () => {
@@ -100,16 +100,16 @@ describe("writePackArchive", () => {
       { type: "instructions", name: "CLAUDE.md", content: "be kind" },
       { type: "mcp_server", name: "ctx.json", transport: "http", config: { url: "https://x/sse" } },
     ]);
-    const { files } = writePackArchive(p);
+    const { files } = writeGemArchive(p);
     expect(files["instructions/CLAUDE.md"]).toBe("be kind");        // not instructions/CLAUDE.md.md
     expect(files["instructions/CLAUDE.md.md"]).toBeUndefined();
     expect(files["mcp/ctx.json"]).toBeDefined();                    // not mcp/ctx.json.json
     expect(files["mcp/ctx.json.json"]).toBeUndefined();
-    expect(readPackArchive(files)).toEqual(p);                      // still round-trips
+    expect(readGemArchive(files)).toEqual(p);                      // still round-trips
   });
 });
 
-describe("readPackArchive", () => {
+describe("readGemArchive", () => {
   const full = pack([
     { type: "skill", name: "code review", description: "rev", source: "standalone", content: "# Review" },
     { type: "instructions", name: "soul", content: "be kind" },
@@ -121,20 +121,20 @@ describe("readPackArchive", () => {
   });
 
   it("round-trips a Gem exactly", () => {
-    const back = readPackArchive(writePackArchive(full).files);
+    const back = readGemArchive(writeGemArchive(full).files);
     expect(back).toEqual(full);
   });
 
   it("throws when a body has been tampered after the lock was written", () => {
-    const { files } = writePackArchive(full);
+    const { files } = writeGemArchive(full);
     const tampered = { ...files, "skills/code_review/SKILL.md": "# Review EDITED" };
-    expect(() => readPackArchive(tampered)).toThrow(/verification failed/i);
+    expect(() => readGemArchive(tampered)).toThrow(/verification failed/i);
   });
 
   it("blessing the edit (recompute lock) lets the read succeed", () => {
-    const { files } = writePackArchive(full);
+    const { files } = writeGemArchive(full);
     const edited = { ...files, "skills/code_review/SKILL.md": "# Review EDITED" } as typeof files;
     (edited as Record<string, string>)["pack.lock"] = JSON.stringify(computeLock(edited), null, 2);
-    expect(readPackArchive(edited).artifacts[0]).toMatchObject({ type: "skill", content: "# Review EDITED" });
+    expect(readGemArchive(edited).artifacts[0]).toMatchObject({ type: "skill", content: "# Review EDITED" });
   });
 });

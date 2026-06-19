@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import supertest from "supertest";
 import { RestApplication } from "@agentback/rest";
-import { PackController } from "../gem.controller.js";
+import { GemController } from "../gem.controller.js";
 import { unpackTar } from "../gem/archiveTar.js";
 
 let app: RestApplication;
@@ -28,7 +28,7 @@ beforeAll(async () => {
 
   app = new RestApplication({});
   app.configure("servers.RestServer").to({ port: 0, host: "127.0.0.1" });
-  app.restController(PackController);
+  app.restController(GemController);
   await app.start();
   const server = await app.restServer;
   client = supertest(server.url);
@@ -39,7 +39,7 @@ afterAll(async () => {
   rmSync(projRoot, { recursive: true, force: true });
 });
 
-describe("PackController", () => {
+describe("GemController", () => {
   it("GET /api/inventory returns redacted inventory", async () => {
     const r = await client.get(`/api/inventory?dir=${encodeURIComponent(dir)}`).expect(200);
     expect(r.body.skills.map((s: { name: string }) => s.name)).toEqual(["review"]);
@@ -142,7 +142,7 @@ describe("POST /api/archive", () => {
       .expect(200);
     expect(r.body.files["skills/review/SKILL.md"]).toContain("# Review");
     expect(JSON.parse(r.body.files["pack.json"]).version).toBe("2.0.0");
-    expect(r.body.lock.packDigest).toMatch(/^sha256:/);
+    expect(r.body.lock.gemDigest).toMatch(/^sha256:/);
     expect(r.body.path).toBe(out);
     expect(r.body.files["mcp/gh.json"]).toBeDefined();
     expect(r.body.files["mcp/gh.json"]).toContain("<redacted>");

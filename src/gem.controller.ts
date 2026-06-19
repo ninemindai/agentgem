@@ -2,14 +2,14 @@
 import type { z } from "zod";
 import { api, get, post } from "@agentback/openapi";
 import { introspectConfig, introspectProject } from "./gem/introspect.js";
-import { buildPack } from "./gem/buildGem.js";
+import { buildGem } from "./gem/buildGem.js";
 import { scaffoldChecks } from "./gem/checks.js";
 import { materialize, compatibility } from "./gem/targets.js";
 import type { TargetId } from "./gem/targets.js";
 import { DEPLOY_REGISTRY, deployTargetList } from "./gem/deploy.js";
 import type { DeployTargetId } from "./gem/deploy.js";
 import { createWorkspace, listWorkspaces, readWorkspace, renderTarget, deleteWorkspace } from "./gem/workspaces.js";
-import { writePackArchive, readPackArchive } from "./gem/archive.js";
+import { writeGemArchive, readGemArchive } from "./gem/archive.js";
 import type { GemLock } from "./gem/archive.js";
 import { writeArchiveDir, readArchiveDir } from "./gem/archiveFs.js";
 import { packTar } from "./gem/archiveTar.js";
@@ -29,7 +29,7 @@ import { resolveDirs, resolveProject } from "./resolveDir.js";
 import { pickFolder } from "./pickFolder.js";
 
 @api({ basePath: "/api" })
-export class PackController {
+export class GemController {
   @get("/inventory", { query: DirQuerySchema, response: InventorySchema })
   async inventory(input: { query: z.infer<typeof DirQuerySchema> }): Promise<z.infer<typeof InventorySchema>> {
     return introspectAll(input.query.dir, parseProjectsQuery(input.query.projects));
@@ -39,7 +39,7 @@ export class PackController {
   async pack(input: { body: z.infer<typeof GemRequestSchema> }): Promise<z.infer<typeof GemSchema>> {
     const dirs = resolveDirs(input.body.dir);
     const inventory = introspectAll(input.body.dir, input.body.projects);
-    return buildPack(inventory, input.body.selection, {
+    return buildGem(inventory, input.body.selection, {
       name: input.body.name ?? "pack",
       createdFrom: dirs.claudeDir,
       checks: input.body.checks,
@@ -50,7 +50,7 @@ export class PackController {
   async scaffoldChecks(input: { body: z.infer<typeof ScaffoldChecksRequestSchema> }): Promise<z.infer<typeof ScaffoldChecksResponseSchema>> {
     const dirs = resolveDirs(input.body.dir);
     const inventory = introspectAll(input.body.dir, input.body.projects);
-    const pack = buildPack(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
+    const pack = buildGem(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
     return { checks: scaffoldChecks(pack) };
   }
 
@@ -59,11 +59,11 @@ export class PackController {
     const target = input.body.target as TargetId;
     let pack: Gem;
     if (input.body.archivePath) {
-      pack = readPackArchive(readArchiveDir(input.body.archivePath));
+      pack = readGemArchive(readArchiveDir(input.body.archivePath));
     } else {
       const dirs = resolveDirs(input.body.dir);
       const inventory = introspectAll(input.body.dir, input.body.projects);
-      pack = buildPack(inventory, input.body.selection!, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
+      pack = buildGem(inventory, input.body.selection!, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
     }
     return { target, ...materialize(pack, target), compatibility: compatibility(pack) };
   }
@@ -72,8 +72,8 @@ export class PackController {
   async archive(input: { body: z.infer<typeof ArchiveRequestSchema> }): Promise<z.infer<typeof ArchiveResponseSchema>> {
     const dirs = resolveDirs(input.body.dir);
     const inventory = introspectAll(input.body.dir, input.body.projects);
-    const pack = buildPack(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
-    const { files, skipped } = writePackArchive(pack, { version: input.body.version });
+    const pack = buildGem(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
+    const { files, skipped } = writeGemArchive(pack, { version: input.body.version });
     const lock = JSON.parse(files["pack.lock"]) as GemLock;
     let path: string | null = null;
     if (input.body.outDir) { writeArchiveDir(input.body.outDir, files); path = input.body.outDir; }
@@ -85,7 +85,7 @@ export class PackController {
   async createWorkspace(input: { body: z.infer<typeof CreateWorkspaceRequestSchema> }): Promise<z.infer<typeof WorkspaceSummarySchema>> {
     const dirs = resolveDirs(input.body.dir);
     const inventory = introspectAll(input.body.dir, input.body.projects);
-    const pack = buildPack(inventory, input.body.selection, { name: input.body.name, createdFrom: dirs.claudeDir });
+    const pack = buildGem(inventory, input.body.selection, { name: input.body.name, createdFrom: dirs.claudeDir });
     return createWorkspace(input.body.name, pack, { version: input.body.version });
   }
 
@@ -120,7 +120,7 @@ export class PackController {
   async publishPreview(input: { body: z.infer<typeof PublishPreviewRequestSchema> }): Promise<z.infer<typeof PublishPreviewResponseSchema>> {
     const dirs = resolveDirs(input.body.dir);
     const inventory = introspectAll(input.body.dir, input.body.projects);
-    const pack = buildPack(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
+    const pack = buildGem(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
     const target = (input.body.target ?? "claude-managed") as DeployTargetId;
     const r = DEPLOY_REGISTRY[target].preview(pack);
     return { payload: r.payload, skillsToRegister: r.skillsToRegister.map((s) => s.name), skipped: r.skipped, vaultSecrets: r.vaultSecrets };
@@ -139,7 +139,7 @@ export class PackController {
   async publish(input: { body: z.infer<typeof PublishRequestSchema> }): Promise<z.infer<typeof PublishResultSchema>> {
     const dirs = resolveDirs(input.body.dir);
     const inventory = introspectAll(input.body.dir, input.body.projects);
-    const pack = buildPack(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
+    const pack = buildGem(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
     const target = (input.body.target ?? "claude-managed") as DeployTargetId;
     return DEPLOY_REGISTRY[target].deploy(pack, input.body.requestId);
   }

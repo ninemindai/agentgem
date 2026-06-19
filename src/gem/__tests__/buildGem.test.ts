@@ -1,6 +1,6 @@
 // tests/gem/buildGem.test.ts
 import { describe, it, expect } from "vitest";
-import { buildPack } from "../buildGem.js";
+import { buildGem } from "../buildGem.js";
 import type { ConfigInventory } from "../types.js";
 
 const inv: ConfigInventory = {
@@ -13,9 +13,9 @@ const inv: ConfigInventory = {
   hooks: [{ type: "hook", name: "PreToolUse · Bash", event: "PreToolUse", matcher: "Bash", config: { hooks: [] }, source: "user" }],
 };
 
-describe("buildPack", () => {
+describe("buildGem", () => {
   it("selects a named subset and includes instructions when asked", () => {
-    const pack = buildPack(inv, { skills: ["review"], mcpServers: ["gh"], includeInstructions: true }, { name: "p", createdFrom: "/d" });
+    const pack = buildGem(inv, { skills: ["review"], mcpServers: ["gh"], includeInstructions: true }, { name: "p", createdFrom: "/d" });
     expect(pack.name).toBe("p");
     expect(pack.createdFrom).toBe("/d");
     expect(pack.artifacts.map((a) => a.type)).toEqual(["skill", "mcp_server", "instructions"]);
@@ -23,49 +23,49 @@ describe("buildPack", () => {
   });
 
   it("excludes instructions when not requested", () => {
-    const pack = buildPack(inv, { skills: ["review"] });
+    const pack = buildGem(inv, { skills: ["review"] });
     expect(pack.artifacts.some((a) => a.type === "instructions")).toBe(false);
   });
 
   it("{ all: true } includes everything", () => {
-    const pack = buildPack(inv, { all: true });
+    const pack = buildGem(inv, { all: true });
     expect(pack.artifacts.length).toBe(5); // 2 skills + 1 mcp + 1 instructions + 1 hook
   });
 
   it("selects a hook by name", () => {
-    const pack = buildPack(inv, { hooks: ["PreToolUse · Bash"] });
+    const pack = buildGem(inv, { hooks: ["PreToolUse · Bash"] });
     expect(pack.artifacts.map((a) => a.type)).toEqual(["hook"]);
     expect(pack.artifacts[0].name).toBe("PreToolUse · Bash");
   });
 
   it("throws listing available names on an unknown selection", () => {
-    expect(() => buildPack(inv, { skills: ["nope"] })).toThrow(/Available: review, plan/);
+    expect(() => buildGem(inv, { skills: ["nope"] })).toThrow(/Available: review, plan/);
   });
 
   it("embeds operator checks and defaults to empty when none given", () => {
-    const withChecks = buildPack(inv, { skills: ["review"] }, {
+    const withChecks = buildGem(inv, { skills: ["review"] }, {
       checks: [{ kind: "behavioral", name: "smoke", task: "do it", assertions: [] }],
     });
     expect(withChecks.checks.map((c) => c.name)).toEqual(["smoke"]);
-    expect(buildPack(inv, { skills: ["review"] }).checks).toEqual([]);
+    expect(buildGem(inv, { skills: ["review"] }).checks).toEqual([]);
   });
 
   it("aggregates requiredSecrets from selected artifacts only (names, never values)", () => {
-    const withMcp = buildPack(inv, { mcpServers: ["gh"] });
+    const withMcp = buildGem(inv, { mcpServers: ["gh"] });
     expect(withMcp.requiredSecrets).toEqual([{ name: "GH_TOKEN", artifact: "gh", location: "env.GH_TOKEN" }]);
     // a selection without the gh server carries no secret requirement
-    expect(buildPack(inv, { skills: ["review"] }).requiredSecrets).toEqual([]);
+    expect(buildGem(inv, { skills: ["review"] }).requiredSecrets).toEqual([]);
   });
 
   it("preserves benign task prose while still scrubbing real secret tokens", () => {
-    const pack = buildPack(inv, { skills: ["review"] }, {
+    const pack = buildGem(inv, { skills: ["review"] }, {
       checks: [{ kind: "behavioral", name: "smoke", task: "test bearer authentication flow", assertions: [] }],
     });
     expect((pack.checks[0] as { task: string }).task).toBe("test bearer authentication flow");
   });
 
   it("redacts a secret accidentally embedded in operator check text", () => {
-    const pack = buildPack(inv, { skills: ["review"] }, {
+    const pack = buildGem(inv, { skills: ["review"] }, {
       checks: [{ kind: "behavioral", name: "smoke", task: "use token ghp_abcdefghijklmnopqrstuvwxyz0123", assertions: [] }],
     });
     expect(JSON.stringify(pack.checks)).not.toContain("ghp_abcdefghijklmnopqrstuvwxyz0123");

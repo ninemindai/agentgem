@@ -110,7 +110,7 @@ function hooksToEventMap(hooks: HookArtifact[]): Record<string, unknown[]> {
 const hooksSettingsJson = (hooks: HookArtifact[]): FileTree =>
   ({ "settings.json": JSON.stringify({ hooks: hooksToEventMap(hooks) }, null, 2) });
 
-// Flue: a single agents/<packname>.ts registers the agent. It imports each skill (reusing the shared
+// Flue: a single agents/<gemname>.ts registers the agent. It imports each skill (reusing the shared
 // skills/<n>/SKILL.md bodies), folds instruction artifacts into the `instructions` string, and lists
 // the skills. MCP connection files are emitted separately (mcpFlueConnections) and wired by the operator.
 function escapeTemplate(s: string): string {
@@ -187,7 +187,7 @@ export default createAgent(() => ({
   return rendered({ [`agents/${safePathSegment(pack.name)}.ts`]: file });
 };
 
-// OpenAI Agents SDK SandboxAgent: one <packname>.agent.ts composes everything. Skill bodies are real
+// OpenAI Agents SDK SandboxAgent: one <gemname>.agent.ts composes everything. Skill bodies are real
 // files (skillSkillMd) seeded read-only via the Manifest; instructions fold into the `instructions`
 // string; MCP servers are added inline in Task 2. No proxy bridge (the SDK has native stdio MCP).
 
@@ -269,7 +269,7 @@ export const TARGET_REGISTRY: Record<TargetId, TargetSpec> = {
   // Flue project layout. Skills reuse SKILL.md; instructions fold into the composed agent file (no
   // standalone file -> the empty instructions renderer marks them handled, not skipped). MCP added in Task 2.
   flue:   { id: "flue",   label: "Flue",   skill: skillSkillMd,        instructions: () => ({}), mcp: mcpFlueConnections, compose: flueComposeAgent },
-  // OpenAI Agents SDK SandboxAgent (single <packname>.agent.ts). Skills reuse SKILL.md (seeded via the
+  // OpenAI Agents SDK SandboxAgent (single <gemname>.agent.ts). Skills reuse SKILL.md (seeded via the
   // Manifest); instructions fold into the agent file. MCP is added inline in Task 2 (mcp renderer + compose).
   "openai-sandbox": { id: "openai-sandbox", label: "OpenAI Sandbox", skill: skillSkillMd, instructions: () => ({}), mcp: () => ({ files: {}, skipped: [] }), compose: sandboxComposeAgent },
 };

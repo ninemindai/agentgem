@@ -8,14 +8,14 @@ import { mkdirSync, rmSync, readdirSync, statSync, existsSync, readFileSync } fr
 import type { Gem } from "./types.js";
 import type { TargetId, SkippedArtifact } from "./targets.js";
 import { materialize, compatibility, TARGET_REGISTRY, safePathSegment } from "./targets.js";
-import { writePackArchive, readPackArchive } from "./archive.js";
+import { writeGemArchive, readGemArchive } from "./archive.js";
 import { writeArchiveDir, readArchiveDir } from "./archiveFs.js";
 
 const TARGETS_DIR = ".targets";
 
 export interface WorkspaceSummary {
   name: string;
-  packName: string;
+  gemName: string;
   version: string;
   artifactCounts: { skill: number; mcp_server: number; instructions: number; hook: number };
   checks: number;
@@ -64,7 +64,7 @@ function summary(name: string, manifestJson: string, dir: string): WorkspaceSumm
   const m = JSON.parse(manifestJson) as { name: string; version: string; artifacts: { type: string }[]; checks: unknown[] };
   return {
     name,
-    packName: m.name,
+    gemName: m.name,
     version: m.version,
     artifactCounts: countArtifacts(m.artifacts),
     checks: m.checks.length,
@@ -75,7 +75,7 @@ function summary(name: string, manifestJson: string, dir: string): WorkspaceSumm
 export function createWorkspace(name: string, pack: Gem, opts: { version?: string } = {}): WorkspaceSummary {
   const dir = workspaceDir(name);
   if (existsSync(dir)) throw new Error(`workspace '${name}' already exists`);
-  const { files } = writePackArchive(pack, { version: opts.version });
+  const { files } = writeGemArchive(pack, { version: opts.version });
   mkdirSync(dir, { recursive: true });
   writeArchiveDir(dir, files);
   return summary(workspaceName(name), files["pack.json"], dir);
@@ -93,14 +93,14 @@ export function readWorkspace(name: string): WorkspaceDetail {
   const dir = workspaceDir(name);
   if (!existsSync(join(dir, "pack.json"))) throw new Error(`no workspace '${name}'`);
   const files = readArchiveDir(dir);               // skips .targets/ (Task 2)
-  const pack = readPackArchive(files);             // verifies the lock
+  const pack = readGemArchive(files);             // verifies the lock
   return { ...summary(workspaceName(name), files["pack.json"], dir), files, compatibility: compatibility(pack) };
 }
 
 export function renderTarget(name: string, target: TargetId): RenderResult {
   const dir = workspaceDir(name);
   if (!existsSync(join(dir, "pack.json"))) throw new Error(`no workspace '${name}'`);
-  const pack = readPackArchive(readArchiveDir(dir));
+  const pack = readGemArchive(readArchiveDir(dir));
   const { files, skipped } = materialize(pack, target);
   const out = join(dir, TARGETS_DIR, target);
   rmSync(out, { recursive: true, force: true });   // clear stale renders

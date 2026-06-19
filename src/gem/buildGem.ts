@@ -20,7 +20,7 @@ export type GemSelection =
       projects?: Record<string, ProjectSelection>; // keyed by project root path
     };
 
-export function buildPack(
+export function buildGem(
   inventory: ConfigInventory,
   selection: GemSelection,
   opts: { name?: string; createdFrom?: string; checks?: GemCheck[] } = {},

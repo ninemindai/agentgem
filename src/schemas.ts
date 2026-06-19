@@ -158,7 +158,7 @@ export const MaterializeResponseSchema = z.object({
 export const GemLockSchema = z.object({
   formatVersion: z.number(),
   files: z.record(z.string(), z.string()),
-  packDigest: z.string(),
+  gemDigest: z.string(),
   signature: z.string().nullable(),
 });
 
@@ -271,7 +271,7 @@ export const GemSchema = z.object({
 // ── Workspaces ──
 export const WorkspaceSummarySchema = z.object({
   name: z.string(),
-  packName: z.string(),
+  gemName: z.string(),
   version: z.string(),
   artifactCounts: z.object({ skill: z.number(), mcp_server: z.number(), instructions: z.number(), hook: z.number() }),
   checks: z.number(),

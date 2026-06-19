@@ -15,7 +15,7 @@ const LOCK_PATH = "pack.lock";
 export interface GemLock {
   formatVersion: number;
   files: Record<string, string>; // path -> "sha256:<hex>"
-  packDigest: string;            // "sha256:<hex>"
+  gemDigest: string;            // "sha256:<hex>"
   signature: string | null;
 }
 
@@ -48,8 +48,8 @@ export function computeLock(files: FileTree): GemLock {
     fileDigests[p] = fileHash(p, files[p]);
   }
   const fileLines = paths.map((p) => `${p}:${fileDigests[p]}`).join("\n");
-  const packDigest = sha256(manifestCanonical + "\n" + fileLines);
-  return { formatVersion: ARCHIVE_FORMAT_VERSION, files: fileDigests, packDigest, signature: null };
+  const gemDigest = sha256(manifestCanonical + "\n" + fileLines);
+  return { formatVersion: ARCHIVE_FORMAT_VERSION, files: fileDigests, gemDigest, signature: null };
 }
 
 export function verifyLock(files: FileTree, lock: GemLock): VerifyResult {
@@ -59,7 +59,7 @@ export function verifyLock(files: FileTree, lock: GemLock): VerifyResult {
   const missing = Object.keys(lock.files).filter((p) => !(p in files));
   const extra = present.filter((p) => !(p in lock.files));
   let ok = mismatches.length === 0 && missing.length === 0 && extra.length === 0;
-  if (ok && computeLock(files).packDigest !== lock.packDigest) { mismatches.push("packDigest"); ok = false; }
+  if (ok && computeLock(files).gemDigest !== lock.gemDigest) { mismatches.push("gemDigest"); ok = false; }
   return { ok, mismatches, missing, extra };
 }
 
@@ -77,7 +77,7 @@ interface GemManifest {
 
 export interface ArchiveResult { files: FileTree; skipped: SkippedArtifact[] }
 
-export function writePackArchive(pack: Gem, opts: { version?: string } = {}): ArchiveResult {
+export function writeGemArchive(pack: Gem, opts: { version?: string } = {}): ArchiveResult {
   const files: FileTree = {};
   const skipped: SkippedArtifact[] = [];
   const artifacts: ManifestArtifactEntry[] = [];
@@ -140,7 +140,7 @@ export function writePackArchive(pack: Gem, opts: { version?: string } = {}): Ar
   return { files, skipped };
 }
 
-export function readPackArchive(files: FileTree): Gem {
+export function readGemArchive(files: FileTree): Gem {
   const manifestRaw = files[MANIFEST_PATH];
   if (manifestRaw === undefined) throw new Error("archive missing pack.json");
   const lockRaw = files[LOCK_PATH];

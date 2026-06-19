@@ -4,7 +4,7 @@ import { renderManagedAgent, MANAGED_AGENTS_MODEL } from "../publish.js";
 import type { Gem } from "../types.js";
 
 const pack: Gem = {
-  name: "mypack",
+  name: "mygem",
   createdFrom: "/home/.claude",
   checks: [],
   requiredSecrets: [{ name: "GH_TOKEN", artifact: "github", location: "headers.Authorization" }],
@@ -26,7 +26,7 @@ describe("renderManagedAgent", () => {
   it("instructions->system, skills->skillsToRegister (not inlined), maps http MCP, default model", () => {
     const r = renderManagedAgent(pack);
     expect(r.payload.model).toBe(MANAGED_AGENTS_MODEL);
-    expect(r.payload.name).toBe("mypack");
+    expect(r.payload.name).toBe("mygem");
     expect(r.payload.system).toContain("## CLAUDE.md");
     expect(r.payload.system).toContain("be kind");        // instruction files
     expect(r.payload.system).not.toContain("# Skill:");   // skills are NOT inlined anymore
