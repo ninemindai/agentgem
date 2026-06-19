@@ -158,6 +158,71 @@ describe("flue MCP connections", () => {
   });
 });
 
+describe("openai-sandbox target (agent file + skills)", () => {
+  it("emits <packname>.agent.ts (SandboxAgent + manifest + capabilities) and skill files; hooks + mcp skipped in v1-step1", () => {
+    const p: Pack = { name: "my pack", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [
+      skill("review", "# Review\nLook `here` and ${there}."),
+      instr("soul", "be kind\n`here` and ${there}."),
+      hook(),
+    ] };
+    const r = materialize(p, "openai-sandbox");
+    expect(r.files["skills/review/SKILL.md"]).toContain("# Review");
+    const agent = r.files["my_pack.agent.ts"];
+    expect(agent).toContain('from "@openai/agents/sandbox"');
+    expect(agent).toContain("new SandboxAgent({");
+    expect(agent).toContain('model: "gpt-5.5"');
+    expect(agent).toContain("capabilities: [shell(), filesystem(), skills(), compaction()]");
+    expect(agent).toContain('localDir({ from: "skills", readOnly: true })');
+    expect(agent).toContain("be kind");                          // instructions folded in
+    expect(agent).not.toContain("Look");                          // skill body NOT inlined
+    expect(agent).toContain("\\`here\\`");                        // template escaping
+    expect(agent).toContain("\\${there}");
+    expect(r.skipped.find((s) => s.type === "instructions")).toBeUndefined();
+    expect(r.skipped.map((s) => s.type)).toContain("hook");
+  });
+
+  it("no-skills pack -> capabilities without skills() and an empty manifest", () => {
+    const p: Pack = { name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [instr("i", "hi")] };
+    const agent = materialize(p, "openai-sandbox").files["p.agent.ts"];
+    expect(agent).toContain("capabilities: [shell(), filesystem(), compaction()]");
+    expect(agent).not.toContain("skills()");
+    expect(agent).toContain("new Manifest({ entries: {} })");
+  });
+
+  it("compatibility includes an openai-sandbox entry", () => {
+    expect(compatibility({ name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [skill("a")] })["openai-sandbox"]).toBeTruthy();
+  });
+});
+
+describe("openai-sandbox MCP (inline, native stdio)", () => {
+  it("http server -> inline MCPServerStreamableHttp with env auth, no secret value", () => {
+    const r = materialize({ name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [httpMcp("ctx")] }, "openai-sandbox");
+    const agent = r.files["p.agent.ts"];
+    expect(agent).toContain('import { MCPServerStreamableHttp } from "@openai/agents"');
+    expect(agent).toContain("new MCPServerStreamableHttp({");
+    expect(agent).toContain("https://mcp.x/sse");
+    expect(agent).toContain('requestInit: { headers: { "Authorization": process.env["X_TOKEN"]! } }');
+    expect(JSON.stringify(r.files)).not.toContain("secret-value");
+    expect(r.skipped).toEqual([]);                                // mcp not skip-reported
+  });
+
+  it("stdio server -> inline MCPServerStdio (native, no proxy file)", () => {
+    const r = materialize({ name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [mcp("gh")] }, "openai-sandbox");
+    const agent = r.files["p.agent.ts"];
+    expect(agent).toContain('import { MCPServerStdio } from "@openai/agents"');
+    expect(agent).toContain("new MCPServerStdio({");
+    expect(agent).toContain('command: "npx"');
+    expect(Object.keys(r.files).some((k) => k.startsWith("proxies/"))).toBe(false); // native: NO proxy
+  });
+
+  it("a non-header MCP secret is skipped with a reason; no mcp import when none map", () => {
+    const bad: McpServerArtifact = { type: "mcp_server", name: "weird", transport: "http", config: { url: "https://w/sse" }, secretRefs: [{ name: "K", location: "query.key" }] };
+    const r = materialize({ name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [bad] }, "openai-sandbox");
+    expect(r.skipped.find((s) => s.artifact === "weird")).toBeTruthy();
+    expect(r.files["p.agent.ts"]).not.toContain('from "@openai/agents"'); // no MCP import when none mapped
+  });
+});
+
 describe("compatibility", () => {
   it("summarizes supported/skipped per target", () => {
     const c = compatibility(pack([skill("a"), hook()]));
@@ -165,6 +230,6 @@ describe("compatibility", () => {
     expect(c.codex).toEqual({ supported: 1, skipped: 1 });   // hook unsupported
     expect(c.hermes).toEqual({ supported: 1, skipped: 1 });
     expect(c.eve).toEqual({ supported: 1, skipped: 1 }); // skill ok, hook unsupported
-    expect(Object.keys(TARGET_REGISTRY).sort()).toEqual(["agents", "claude", "codex", "eve", "flue", "hermes"]);
+    expect(Object.keys(TARGET_REGISTRY).sort()).toEqual(["agents", "claude", "codex", "eve", "flue", "hermes", "openai-sandbox"]);
   });
 });
