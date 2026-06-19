@@ -171,7 +171,7 @@ describe("openai-sandbox target (agent file + skills)", () => {
     expect(agent).toContain('from "@openai/agents/sandbox"');
     expect(agent).toContain("new SandboxAgent({");
     expect(agent).toContain('model: "gpt-5.5"');
-    expect(agent).toContain("capabilities: [shell(), filesystem(), skills()]");
+    expect(agent).toContain("capabilities: [shell(), filesystem(), skills(), compaction()]");
     expect(agent).toContain('localDir({ from: "skills", readOnly: true })');
     expect(agent).toContain("be kind");                          // instructions folded in
     expect(agent).not.toContain("Look");                          // skill body NOT inlined
@@ -184,7 +184,7 @@ describe("openai-sandbox target (agent file + skills)", () => {
   it("no-skills pack -> capabilities without skills() and an empty manifest", () => {
     const p: Pack = { name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [instr("i", "hi")] };
     const agent = materialize(p, "openai-sandbox").files["p.agent.ts"];
-    expect(agent).toContain("capabilities: [shell(), filesystem()]");
+    expect(agent).toContain("capabilities: [shell(), filesystem(), compaction()]");
     expect(agent).not.toContain("skills()");
     expect(agent).toContain("new Manifest({ entries: {} })");
   });

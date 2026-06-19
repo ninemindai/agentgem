@@ -226,9 +226,9 @@ const sandboxComposeAgent = (pack: Pack): MaterializeResult => {
   const instructions = instr.map((i) => `## ${i.name}\n\n${i.content}`).join("\n\n---\n\n");
   const hasSkills = skills.length > 0;
   const sandboxImport = hasSkills
-    ? `import { SandboxAgent, Manifest, localDir, shell, filesystem, skills } from "@openai/agents/sandbox";`
-    : `import { SandboxAgent, Manifest, shell, filesystem } from "@openai/agents/sandbox";`;
-  const capabilities = hasSkills ? "[shell(), filesystem(), skills()]" : "[shell(), filesystem()]";
+    ? `import { SandboxAgent, Manifest, localDir, shell, filesystem, skills, compaction } from "@openai/agents/sandbox";`
+    : `import { SandboxAgent, Manifest, shell, filesystem, compaction } from "@openai/agents/sandbox";`;
+  const capabilities = hasSkills ? "[shell(), filesystem(), skills(), compaction()]" : "[shell(), filesystem(), compaction()]";
   const manifestEntries = hasSkills ? `{ skills: localDir({ from: "skills", readOnly: true }) }` : "{}";
 
   // Render MCP servers inline.
