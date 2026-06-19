@@ -7,8 +7,8 @@ import { RestApplication } from "@agentback/rest";
 import { installExplorer } from "@agentback/rest-explorer";
 import { MCPComponent } from "@agentback/mcp";
 import { installMcpHttp } from "@agentback/mcp-http";
-import { PackController } from "./pack.controller.js";
-import { PackTools } from "./pack.tools.js";
+import { PackController } from "./gem.controller.js";
+import { PackTools } from "./gem.tools.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 function pageHtml(): string {

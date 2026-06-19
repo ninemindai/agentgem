@@ -1,4 +1,4 @@
-// src/pack/buildPack.ts
+// src/gem/buildGem.ts
 import type { ConfigInventory, Pack, PackArtifact, PackCheck, SecretRequirement } from "./types.js";
 import { redactMcpConfig } from "./redact.js";
 

@@ -1,4 +1,4 @@
-// src/pack/__tests__/introspect.test.ts
+// src/gem/__tests__/introspect.test.ts
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

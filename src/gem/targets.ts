@@ -1,4 +1,4 @@
-// src/pack/targets.ts
+// src/gem/targets.ts
 // Render a normalized Pack INTO a harness's on-disk layout. Pure; writes nothing — returns an
 // in-memory FileTree. Targets compose shared per-artifact-type convention renderers; unmappable
 // artifacts are skipped with a reason. Materialize re-renders an already-redacted Pack; the

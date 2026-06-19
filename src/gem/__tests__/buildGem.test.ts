@@ -1,6 +1,6 @@
-// tests/pack/buildPack.test.ts
+// tests/gem/buildGem.test.ts
 import { describe, it, expect } from "vitest";
-import { buildPack } from "../buildPack.js";
+import { buildPack } from "../buildGem.js";
 import type { ConfigInventory } from "../types.js";
 
 const inv: ConfigInventory = {

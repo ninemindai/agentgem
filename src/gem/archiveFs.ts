@@ -1,4 +1,4 @@
-// src/pack/archiveFs.ts
+// src/gem/archiveFs.ts
 import { mkdirSync, writeFileSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import type { FileTree } from "./archive.js";

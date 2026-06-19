@@ -1,8 +1,8 @@
 // src/schemas.ts
 import { z } from "zod";
-import { RUNNER_REGISTRY } from "./pack/checks.js";
-import { TARGET_REGISTRY } from "./pack/targets.js";
-import { deployTargetIds } from "./pack/deploy.js";
+import { RUNNER_REGISTRY } from "./gem/checks.js";
+import { TARGET_REGISTRY } from "./gem/targets.js";
+import { deployTargetIds } from "./gem/deploy.js";
 
 export const SkillArtifactSchema = z.object({
   type: z.literal("skill"),

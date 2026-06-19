@@ -1,4 +1,4 @@
-// src/pack/__tests__/archiveTar.test.ts
+// src/gem/__tests__/archiveTar.test.ts
 import { describe, it, expect } from "vitest";
 import { gunzipSync } from "node:zlib";
 import { packTar, unpackTar } from "../archiveTar.js";

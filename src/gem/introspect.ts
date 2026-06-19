@@ -1,4 +1,4 @@
-// src/pack/introspect.ts
+// src/gem/introspect.ts
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { basename, join } from "node:path";
 import { homedir } from "node:os";

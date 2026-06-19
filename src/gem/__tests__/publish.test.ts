@@ -1,4 +1,4 @@
-// src/pack/__tests__/publish.test.ts
+// src/gem/__tests__/publish.test.ts
 import { describe, it, expect } from "vitest";
 import { renderManagedAgent, MANAGED_AGENTS_MODEL } from "../publish.js";
 import type { Pack } from "../types.js";

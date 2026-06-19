@@ -1,4 +1,4 @@
-// src/pack/checks.ts
+// src/gem/checks.ts
 // Scaffold editable check drafts from a built Pack. Pure; runs nothing. The runner registry
 // holds DECLARATIONS only — the adapters that actually execute live in the platform runner.
 import type { Pack, PackArtifact, PackCheck } from "./types.js";

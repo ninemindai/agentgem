@@ -1,4 +1,4 @@
-// src/pack/deploy.ts
+// src/gem/deploy.ts
 // Deploy backends as a registry (mirrors TARGET_REGISTRY for materialize). Each DeployTarget renders
 // a Pack offline (preview), reports whether the server is configured for it (ready), and performs the
 // gated network deploy (deploy). Reuses the existing pure render + network orchestration unchanged.

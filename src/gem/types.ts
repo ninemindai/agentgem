@@ -1,4 +1,4 @@
-// src/pack/types.ts
+// src/gem/types.ts
 export type ArtifactType = "skill" | "mcp_server" | "instructions" | "hook";
 
 export interface SecretRef {

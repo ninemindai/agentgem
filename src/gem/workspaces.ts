@@ -1,4 +1,4 @@
-// src/pack/workspaces.ts
+// src/gem/workspaces.ts
 // A pack's persistent local home: the canonical archive at the workspace root (source of truth) plus
 // .targets/<target>/ rendered harness layouts (derived). Orchestration over the pure archive/materialize
 // core; this module owns all workspace filesystem I/O.

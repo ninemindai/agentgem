@@ -1,4 +1,4 @@
-// src/pack/mcpProxy.ts
+// src/gem/mcpProxy.ts
 // Shared, target-agnostic generator for a stdio->Streamable-HTTP MCP proxy runner. A url-only
 // target (Eve today) can't connect to a stdio (command) MCP server directly; instead we emit a
 // self-contained runner the operator launches where the agent runs. It spawns the stdio server and

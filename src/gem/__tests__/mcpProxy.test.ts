@@ -1,4 +1,4 @@
-// src/pack/__tests__/mcpProxy.test.ts
+// src/gem/__tests__/mcpProxy.test.ts
 import { describe, it, expect } from "vitest";
 import { stdioProxyRunner, PROXY_BASE_PORT, PROXY_HOST } from "../mcpProxy.js";
 

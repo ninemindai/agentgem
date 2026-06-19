@@ -1,4 +1,4 @@
-// src/pack/__tests__/toml.test.ts
+// src/gem/__tests__/toml.test.ts
 import { describe, it, expect } from "vitest";
 import { tomlMcpServers } from "../toml.js";
 import type { McpServerArtifact } from "../types.js";

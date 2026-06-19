@@ -2,8 +2,8 @@
 import { describe, it, expect } from "vitest";
 import { publishManagedAgent, publishManagedAgentOnce } from "../publish.js";
 import type { PublishClient, CustomSkillRef } from "../publish.js";
-import type { ManagedAgentPayload } from "../pack/publish.js";
-import type { Pack } from "../pack/types.js";
+import type { ManagedAgentPayload } from "../gem/publish.js";
+import type { Pack } from "../gem/types.js";
 
 const pack: Pack = {
   name: "p", createdFrom: "/d", checks: [], requiredSecrets: [],

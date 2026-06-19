@@ -1,4 +1,4 @@
-// tests/pack/redact.test.ts
+// tests/gem/redact.test.ts
 import { describe, it, expect } from "vitest";
 import { redactMcpConfig } from "../redact.js";
 

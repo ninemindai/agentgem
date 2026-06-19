@@ -3,9 +3,9 @@
 // create the agent referencing those skills. The PublishClient is injected so the orchestration is
 // unit-tested without a key or network. Only confirmed SDK bindings are used.
 import Anthropic, { toFile } from "@anthropic-ai/sdk";
-import { renderManagedAgent } from "./pack/publish.js";
-import type { ManagedAgentPayload, SkippedArtifact } from "./pack/publish.js";
-import type { Pack, SecretRequirement } from "./pack/types.js";
+import { renderManagedAgent } from "./gem/publish.js";
+import type { ManagedAgentPayload, SkippedArtifact } from "./gem/publish.js";
+import type { Pack, SecretRequirement } from "./gem/types.js";
 
 export interface RegisteredSkill { name: string; skillId: string; version: string }
 

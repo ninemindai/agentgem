@@ -1,4 +1,4 @@
-// src/pack/archiveTar.ts
+// src/gem/archiveTar.ts
 // Pack a FileTree into a single .tar.gz buffer and back — the archive's transport/shipping form
 // (the directory tree is the canonical form). Dependency-free: a minimal POSIX ustar writer/reader
 // over node:zlib gzip. In-process only (no disk/network), so the pure core stays pure.

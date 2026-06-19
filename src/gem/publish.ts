@@ -1,4 +1,4 @@
-// src/pack/publish.ts
+// src/gem/publish.ts
 // Pure render: a (redacted) Pack -> the Managed Agents `agents.create` payload (sans skills) plus
 // the skills to register and the side-lists. No network, no secret values.
 //

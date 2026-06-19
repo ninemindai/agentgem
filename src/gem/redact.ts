@@ -1,4 +1,4 @@
-// src/pack/redact.ts
+// src/gem/redact.ts
 // Strip secret VALUES from an MCP/hook config while preserving its shape, and record the
 // NAME + LOCATION of every value stripped so a runtime can re-inject by name. Values never leave.
 import type { SecretRef } from "./types.js";

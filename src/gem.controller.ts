@@ -1,21 +1,21 @@
 // src/pack.controller.ts
 import type { z } from "zod";
 import { api, get, post } from "@agentback/openapi";
-import { introspectConfig, introspectProject } from "./pack/introspect.js";
-import { buildPack } from "./pack/buildPack.js";
-import { scaffoldChecks } from "./pack/checks.js";
-import { materialize, compatibility } from "./pack/targets.js";
-import type { TargetId } from "./pack/targets.js";
-import { DEPLOY_REGISTRY, deployTargetList } from "./pack/deploy.js";
-import type { DeployTargetId } from "./pack/deploy.js";
-import { createWorkspace, listWorkspaces, readWorkspace, renderTarget, deleteWorkspace } from "./pack/workspaces.js";
-import { writePackArchive, readPackArchive } from "./pack/archive.js";
-import type { PackLock } from "./pack/archive.js";
-import { writeArchiveDir, readArchiveDir } from "./pack/archiveFs.js";
-import { packTar } from "./pack/archiveTar.js";
-import type { Pack } from "./pack/types.js";
+import { introspectConfig, introspectProject } from "./gem/introspect.js";
+import { buildPack } from "./gem/buildGem.js";
+import { scaffoldChecks } from "./gem/checks.js";
+import { materialize, compatibility } from "./gem/targets.js";
+import type { TargetId } from "./gem/targets.js";
+import { DEPLOY_REGISTRY, deployTargetList } from "./gem/deploy.js";
+import type { DeployTargetId } from "./gem/deploy.js";
+import { createWorkspace, listWorkspaces, readWorkspace, renderTarget, deleteWorkspace } from "./gem/workspaces.js";
+import { writePackArchive, readPackArchive } from "./gem/archive.js";
+import type { PackLock } from "./gem/archive.js";
+import { writeArchiveDir, readArchiveDir } from "./gem/archiveFs.js";
+import { packTar } from "./gem/archiveTar.js";
+import type { Pack } from "./gem/types.js";
 
-import type { ConfigInventory } from "./pack/types.js";
+import type { ConfigInventory } from "./gem/types.js";
 import {
   InventorySchema, PackSchema, PackRequestSchema, DirQuerySchema, PickQuerySchema, PickFolderSchema,
   ScaffoldChecksRequestSchema, ScaffoldChecksResponseSchema,

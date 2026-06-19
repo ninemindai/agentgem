@@ -1,4 +1,4 @@
-// src/pack/__tests__/workspaces.test.ts
+// src/gem/__tests__/workspaces.test.ts
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";

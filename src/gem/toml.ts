@@ -1,4 +1,4 @@
-// src/pack/toml.ts
+// src/gem/toml.ts
 // Minimal TOML emitter for the MCP-server config shape ONLY (command/url/type scalars,
 // args array, env/headers sub-tables). Not a general TOML library.
 import type { McpServerArtifact } from "./types.js";

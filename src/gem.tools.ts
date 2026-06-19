@@ -1,9 +1,9 @@
 // src/pack.tools.ts
 import { z } from "zod";
 import { mcpServer, tool } from "@agentback/mcp";
-import { introspectConfig, introspectProject } from "./pack/introspect.js";
-import { buildPack } from "./pack/buildPack.js";
-import type { ConfigInventory } from "./pack/types.js";
+import { introspectConfig, introspectProject } from "./gem/introspect.js";
+import { buildPack } from "./gem/buildGem.js";
+import type { ConfigInventory } from "./gem/types.js";
 import { PackSelectionSchema } from "./schemas.js";
 import { resolveDirs, resolveProject } from "./resolveDir.js";
 

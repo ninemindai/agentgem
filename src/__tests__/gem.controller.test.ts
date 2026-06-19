@@ -5,8 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import supertest from "supertest";
 import { RestApplication } from "@agentback/rest";
-import { PackController } from "../pack.controller.js";
-import { unpackTar } from "../pack/archiveTar.js";
+import { PackController } from "../gem.controller.js";
+import { unpackTar } from "../gem/archiveTar.js";
 
 let app: RestApplication;
 let client: ReturnType<typeof supertest>;

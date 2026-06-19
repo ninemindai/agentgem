@@ -1,4 +1,4 @@
-// src/pack/__tests__/deploy.test.ts
+// src/gem/__tests__/deploy.test.ts
 import { describe, it, expect, afterEach } from "vitest";
 import { DEPLOY_REGISTRY, deployTargetIds, deployTargetList } from "../deploy.js";
 import { renderManagedAgent } from "../publish.js";

@@ -1,4 +1,4 @@
-// src/pack/__tests__/targets.test.ts
+// src/gem/__tests__/targets.test.ts
 import { describe, it, expect } from "vitest";
 import { materialize, compatibility, TARGET_REGISTRY } from "../targets.js";
 import type { Pack, PackArtifact, SkillArtifact, McpServerArtifact, InstructionsArtifact, HookArtifact } from "../types.js";

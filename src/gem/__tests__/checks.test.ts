@@ -1,4 +1,4 @@
-// src/pack/__tests__/checks.test.ts
+// src/gem/__tests__/checks.test.ts
 import { describe, it, expect } from "vitest";
 import { scaffoldChecks, RUNNER_REGISTRY } from "../checks.js";
 import type { Pack } from "../types.js";
