@@ -100,6 +100,64 @@ describe("materialize", () => {
   });
 });
 
+describe("flue target (agent file + skills)", () => {
+  it("emits agents/<packname>.ts importing skills + folding instructions; hooks skipped", () => {
+    const p: Pack = { name: "my pack", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [
+      skill("review", "# Review\nLook `here` and ${there}."),
+      instr("soul", "be kind"),
+      hook(),
+    ] };
+    const r = materialize(p, "flue");
+    // skill body reuses the shared SKILL.md convention
+    expect(r.files["skills/review/SKILL.md"]).toContain("# Review");
+    // the composed agent file
+    const agent = r.files["agents/my_pack.ts"];
+    expect(agent).toContain('import { createAgent');
+    expect(agent).toContain('import skill0 from "../skills/review/SKILL.md" with { type: "skill" }');
+    expect(agent).toContain("skills: [skill0]");
+    expect(agent).toContain("be kind");                 // instructions folded in
+    expect(agent).toContain('model: "anthropic/claude-sonnet-4-6"');
+    // skill body lives in the SKILL.md file, NOT inlined into the agent file
+    expect(r.files["skills/review/SKILL.md"]).toContain("# Review");
+    expect(agent).not.toContain("Look");
+    // instructions are NOT reported skipped (they're composed, not dropped)
+    expect(r.skipped.find((s) => s.type === "instructions")).toBeUndefined();
+    // hooks unsupported -> skipped
+    expect(r.skipped.map((s) => s.type)).toContain("hook");
+  });
+
+  it("compatibility includes a flue entry", () => {
+    const p: Pack = { name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [skill("a")] };
+    expect(compatibility(p).flue).toBeTruthy();
+  });
+});
+
+describe("flue MCP connections", () => {
+  it("http server -> a connectMcpServer connection with env auth, no secret value", () => {
+    const r = materialize({ name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [httpMcp("ctx")] }, "flue");
+    const c = r.files["connections/ctx.ts"];
+    expect(c).toContain('import { connectMcpServer } from "@flue/runtime"');
+    expect(c).toContain('connectMcpServer("ctx"');
+    expect(c).toContain("https://mcp.x/sse");
+    expect(c).toContain('process.env["X_TOKEN"]');     // auth by env name
+    expect(JSON.stringify(r.files)).not.toContain("secret-value"); // no value leaks
+  });
+
+  it("sse server -> transport: \"sse\"", () => {
+    const sse: McpServerArtifact = { type: "mcp_server", name: "leg", transport: "sse", config: { url: "https://leg/sse" } };
+    const r = materialize({ name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [sse] }, "flue");
+    expect(r.files["connections/leg.ts"]).toContain('transport: "sse"');
+  });
+
+  it("stdio server -> a proxy runner plus a localhost connection", () => {
+    const r = materialize({ name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [mcp("gh")] }, "flue");
+    expect(r.files["proxies/gh.mjs"]).toBeTruthy();
+    expect(r.files["connections/gh.ts"]).toContain("http://127.0.0.1:");
+    expect(r.files["connections/gh.ts"]).toContain("/mcp");
+    expect(r.skipped).toEqual([]);
+  });
+});
+
 describe("compatibility", () => {
   it("summarizes supported/skipped per target", () => {
     const c = compatibility(pack([skill("a"), hook()]));
@@ -107,6 +165,6 @@ describe("compatibility", () => {
     expect(c.codex).toEqual({ supported: 1, skipped: 1 });   // hook unsupported
     expect(c.hermes).toEqual({ supported: 1, skipped: 1 });
     expect(c.eve).toEqual({ supported: 1, skipped: 1 }); // skill ok, hook unsupported
-    expect(Object.keys(TARGET_REGISTRY).sort()).toEqual(["agents", "claude", "codex", "eve", "hermes"]);
+    expect(Object.keys(TARGET_REGISTRY).sort()).toEqual(["agents", "claude", "codex", "eve", "flue", "hermes"]);
   });
 });
