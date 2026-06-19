@@ -4,6 +4,7 @@ import {
   InventorySchema, PackSchema, PackRequestSchema, PackCheckSchema, ScaffoldChecksResponseSchema,
   MaterializeRequestSchema, MaterializeResponseSchema, PublishPreviewRequestSchema, PublishRequestSchema, PublishResultSchema,
   PackLockSchema, PackManifestSchema, ArchiveRequestSchema, ArchiveResponseSchema,
+  WorkspaceSummarySchema, CreateWorkspaceRequestSchema, RenderRequestSchema, RenderResultSchema,
 } from "../schemas.js";
 
 describe("wire schemas", () => {
@@ -96,11 +97,15 @@ describe("archive schemas", () => {
     }).success).toBe(true);
   });
 
-  it("archive request requires a selection; response carries files+lock+skipped+path", () => {
+  it("archive request requires a selection; response carries files+lock+skipped+path+tarGz", () => {
     expect(ArchiveRequestSchema.safeParse({ selection: { all: true }, outDir: "/tmp/out" }).success).toBe(true);
+    expect(ArchiveRequestSchema.safeParse({ selection: { all: true }, tar: true }).success).toBe(true);
     expect(ArchiveRequestSchema.safeParse({ name: "p" }).success).toBe(false);
     expect(ArchiveResponseSchema.safeParse({
-      files: { "pack.json": "{}" }, lock: { formatVersion: 1, files: {}, packDigest: "sha256:x", signature: null }, skipped: [], path: null,
+      files: { "pack.json": "{}" }, lock: { formatVersion: 1, files: {}, packDigest: "sha256:x", signature: null }, skipped: [], path: null, tarGz: null,
+    }).success).toBe(true);
+    expect(ArchiveResponseSchema.safeParse({
+      files: {}, lock: { formatVersion: 1, files: {}, packDigest: "sha256:x", signature: null }, skipped: [], path: null, tarGz: "H4sIAAAA",
     }).success).toBe(true);
   });
 
@@ -108,5 +113,21 @@ describe("archive schemas", () => {
     expect(MaterializeRequestSchema.safeParse({ selection: { all: true }, target: "claude" }).success).toBe(true);
     expect(MaterializeRequestSchema.safeParse({ archivePath: "/tmp/pack", target: "eve" }).success).toBe(true);
     expect(MaterializeRequestSchema.safeParse({ target: "claude" }).success).toBe(false);
+  });
+});
+
+describe("workspace schemas", () => {
+  it("validates a workspace summary", () => {
+    expect(WorkspaceSummarySchema.safeParse({
+      name: "mp", packName: "demo", version: "0.1.0",
+      artifactCounts: { skill: 1, mcp_server: 0, instructions: 1, hook: 0 }, checks: 0, renderedTargets: ["eve"],
+    }).success).toBe(true);
+  });
+  it("create requires name+selection; render requires name+target", () => {
+    expect(CreateWorkspaceRequestSchema.safeParse({ name: "mp", selection: { all: true } }).success).toBe(true);
+    expect(CreateWorkspaceRequestSchema.safeParse({ selection: { all: true } }).success).toBe(false);
+    expect(RenderRequestSchema.safeParse({ name: "mp", target: "eve" }).success).toBe(true);
+    expect(RenderRequestSchema.safeParse({ name: "mp", target: "nope" }).success).toBe(false);
+    expect(RenderResultSchema.safeParse({ target: "eve", files: {}, skipped: [], path: "/x" }).success).toBe(true);
   });
 });

@@ -68,6 +68,13 @@
 <main>
   <section class="pane left">
     <div class="bar"><input id="name" type="text" placeholder="pack name" value="pack" style="flex:1" /></div>
+    <div class="bar" id="wsBar">
+      <select id="wsSelect" title="open a saved workspace" style="flex:1"><option value="">— no workspace —</option></select>
+      <button id="wsNew" class="ghost" title="save the current selection as a new workspace">New workspace…</button>
+      <button id="wsDelete" class="ghost" title="delete the open workspace" hidden>Delete</button>
+    </div>
+    <div class="bar" id="wsTargets" hidden></div>
+    <div id="wsTree"></div>
     <div class="bar"><input id="search" type="text" placeholder="search names, descriptions, contents…" style="flex:1" /><button id="filtersToggle" class="ghost">Filters ▾</button></div>
     <div class="bar" id="projectBar"></div>
     <div id="filterPanel" hidden>
@@ -79,7 +86,7 @@
     <div id="inventory">Loading…</div>
   </section>
   <section class="pane right">
-    <div class="bar"><strong style="flex:1">Pack (live)</strong><select id="target" title="materialize target" style="margin-left:auto"><option value="claude">Claude</option><option value="codex">Codex</option><option value="agents">Agents</option><option value="hermes">Hermes</option><option value="eve">Eve</option></select><span class="seg" id="preview-modes"><button type="button" data-pmode="summary">Summary</button><button type="button" data-pmode="json">JSON</button><button type="button" data-pmode="materialize">Materialize</button><button type="button" data-pmode="managed">Managed Agents</button></span><button id="copy" class="ghost">Copy</button><button id="dl">⬇ Download</button></div>
+    <div class="bar"><strong style="flex:1">Pack (live)</strong><select id="target" title="materialize target" style="margin-left:auto"><option value="claude">Claude</option><option value="codex">Codex</option><option value="agents">Agents</option><option value="hermes">Hermes</option><option value="eve">Eve</option></select><span class="seg" id="preview-modes"><button type="button" data-pmode="summary">Summary</button><button type="button" data-pmode="json">JSON</button><button type="button" data-pmode="materialize">Materialize</button><button type="button" data-pmode="managed">Managed Agents</button></span><button id="copy" class="ghost">Copy</button><button id="dl">⬇ Download</button><button id="save" class="ghost" title="write the pack archive (manifest + lock + files) to a folder">💾 Save archive…</button><button id="dltar" class="ghost" title="download the pack archive as a .tar.gz">⬇ .tar.gz</button><span class="d" id="archiveStatus" style="margin-left:6px"></span></div>
     <div id="preview"></div>
     <p class="note">MCP server &amp; hook config secrets are shown as <code>&lt;redacted&gt;</code> and never exported. Skill, CLAUDE.md, rules bodies &amp; hook commands are bundled as written — don't keep secrets in them.</p>
     <div id="checksPanel" class="group" style="margin-top:14px">
@@ -459,6 +466,28 @@ document.getElementById("dl").addEventListener("click", () => {
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = (document.getElementById("name").value || "pack") + ".json"; a.click();
 });
 document.getElementById("copy").addEventListener("click", () => navigator.clipboard.writeText(JSON.stringify(window.__pack || {}, null, 2)));
+// Save the pack archive (manifest + lock + body files) to a folder via the native picker.
+document.getElementById("save").addEventListener("click", async () => {
+  const status = document.getElementById("archiveStatus");
+  status.textContent = "Choose a folder…";
+  const picked = await (await fetch("/api/pick-folder")).json();
+  if (!picked.path) { status.textContent = ""; return; }
+  status.textContent = "Saving…";
+  const r = await (await fetch("/api/archive", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...buildSelectionBody(), outDir: picked.path }) })).json();
+  const n = Object.keys(r.files || {}).length, sk = (r.skipped || []).length;
+  status.textContent = `Saved ${n} files to ${r.path}` + (sk ? ` · ${sk} skipped` : "");
+});
+// Download the pack archive as a single .tar.gz (the transport/shipping form).
+document.getElementById("dltar").addEventListener("click", async () => {
+  const status = document.getElementById("archiveStatus");
+  status.textContent = "Building .tar.gz…";
+  const r = await (await fetch("/api/archive", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...buildSelectionBody(), tar: true }) })).json();
+  if (!r.tarGz) { status.textContent = "No archive — select artifacts on the left."; return; }
+  const bytes = Uint8Array.from(atob(r.tarGz), c => c.charCodeAt(0));
+  const blob = new Blob([bytes], { type: "application/gzip" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = (document.getElementById("name").value || "pack") + ".pack.tar.gz"; a.click();
+  status.textContent = `Downloaded ${a.download}`;
+});
 document.getElementById("srcFilter").addEventListener("change", filterRows);
 document.getElementById("inventory").addEventListener("click", e => {
   // View an item's content in a modal (must not toggle the row's checkbox).
@@ -610,6 +639,81 @@ document.getElementById("filtersToggle").addEventListener("click", () => {
 });
 renderChecks();
 load();
+let wsCurrent = "";
+async function wsRefresh(){
+  const r = await (await fetch("/api/workspaces")).json();
+  const sel = document.getElementById("wsSelect");
+  sel.innerHTML = `<option value="">— no workspace —</option>` + (r.workspaces || [])
+    .map(w => `<option value="${esc(w.name)}"${w.name === wsCurrent ? " selected" : ""}>${esc(w.name)} · ${w.artifactCounts.skill + w.artifactCounts.mcp_server + w.artifactCounts.instructions + w.artifactCounts.hook} artifacts</option>`).join("");
+  document.getElementById("wsDelete").hidden = !wsCurrent;
+}
+async function wsOpen(name){
+  wsCurrent = name;
+  const targets = document.getElementById("wsTargets"), tree = document.getElementById("wsTree");
+  if (!name){ targets.hidden = true; targets.innerHTML = ""; tree.innerHTML = ""; document.getElementById("wsDelete").hidden = true; return; }
+  let d;
+  try {
+    const res = await fetch("/api/workspace?name=" + encodeURIComponent(name));
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    d = await res.json();
+  } catch {
+    tree.innerHTML = '<p class="d">Could not load workspace (it may have been deleted or is corrupted).</p>';
+    return;
+  }
+  targets.hidden = false;
+  targets.innerHTML = `<strong style="flex:1">Target layout</strong>` + Object.keys(d.compatibility)
+    .map(t => `<button type="button" class="ghost wstab" data-t="${esc(t)}">${esc(t)}${(d.renderedTargets || []).includes(t) ? " ●" : ""}</button>`).join("");
+  tree.innerHTML = `<p class="d">Pick a target to render its project layout.</p>`;
+  document.getElementById("wsDelete").hidden = false;
+}
+async function wsRender(target){
+  const tree = document.getElementById("wsTree");
+  tree.innerHTML = `<p class="d">Rendering ${esc(target)}…</p>`;
+  let r;
+  try {
+    const res = await fetch("/api/workspace/render", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: wsCurrent, target }) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    r = await res.json();
+  } catch {
+    tree.innerHTML = '<p class="d">Could not load workspace (it may have been deleted or is corrupted).</p>';
+    return;
+  }
+  window.__wsFiles = r.files || {};
+  const paths = Object.keys(window.__wsFiles).sort();
+  const skipSuffix = (r.skipped && r.skipped.length) ? ` · ${r.skipped.length} unsupported` : "";
+  if (paths.length === 0) {
+    tree.innerHTML = `<p class="d">0 files — ${r.skipped ? r.skipped.length : 0} artifact(s) unsupported on ${esc(target)}.</p>`;
+  } else {
+    tree.innerHTML = `<div class="pgroup"><h3>${esc(target)} · ${paths.length} files${skipSuffix} <span class="d">${esc(r.path || "")}</span></h3>`
+      + paths.map(p => `<button type="button" class="prow" data-wspath="${esc(p)}"><span class="pn">${esc(p)}</span></button>`).join("") + `</div>`;
+  }
+  await wsRefresh();
+}
+document.getElementById("wsSelect").addEventListener("change", e => wsOpen(e.target.value));
+document.getElementById("wsNew").addEventListener("click", async () => {
+  const name = prompt("Workspace name (letters, digits, . _ - only):", document.getElementById("name").value || "pack");
+  if (!name) return;
+  const res = await fetch("/api/workspaces", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...buildSelectionBody(), name }) });
+  if (!res.ok){ alert("Could not create workspace (name taken or invalid)."); return; }
+  await wsRefresh(); await wsOpen(name); document.getElementById("wsSelect").value = name;
+});
+document.getElementById("wsDelete").addEventListener("click", async () => {
+  if (!wsCurrent || !confirm(`Delete workspace "${wsCurrent}"? This removes its folder and rendered targets.`)) return;
+  await fetch("/api/workspace/delete", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: wsCurrent }) });
+  await wsOpen(""); await wsRefresh();
+});
+document.getElementById("wsTargets").addEventListener("click", e => { const b = e.target.closest(".wstab"); if (b) wsRender(b.dataset.t); });
+document.getElementById("wsTree").addEventListener("click", e => {
+  const b = e.target.closest("[data-wspath]"); if (!b) return;
+  const p = b.dataset.wspath, body = (window.__wsFiles || {})[p] || "";
+  modalState.kind = "skills";
+  modalState.body = body;
+  document.getElementById("modal-title").textContent = p;
+  document.getElementById("modal-sub").textContent = wsCurrent;
+  renderModalBody();
+  document.getElementById("modal").hidden = false;
+});
+wsRefresh();
 </script>
 </body>
 </html>

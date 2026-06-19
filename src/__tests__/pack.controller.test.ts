@@ -6,6 +6,7 @@ import { join } from "node:path";
 import supertest from "supertest";
 import { RestApplication } from "@agentback/rest";
 import { PackController } from "../pack.controller.js";
+import { unpackTar } from "../pack/archiveTar.js";
 
 let app: RestApplication;
 let client: ReturnType<typeof supertest>;
@@ -146,7 +147,20 @@ describe("POST /api/archive", () => {
     expect(r.body.files["mcp/gh.json"]).toBeDefined();
     expect(r.body.files["mcp/gh.json"]).toContain("<redacted>");
     expect(JSON.stringify(r.body)).not.toContain("ghp_secret"); // redaction survives
+    expect(r.body.tarGz).toBeNull(); // no tar unless requested
     rmSync(out, { recursive: true, force: true });
+  });
+
+  it("returns a base64 .tar.gz when tar:true that unpacks back to the same tree", async () => {
+    const r = await client.post("/api/archive")
+      .send({ dir, selection: { skills: ["review"], mcpServers: ["gh"], includeInstructions: true }, name: "demo", tar: true })
+      .expect(200);
+    expect(typeof r.body.tarGz).toBe("string");
+    expect(r.body.path).toBeNull(); // tar requested but no outDir -> nothing written to disk
+    const unpacked = unpackTar(Buffer.from(r.body.tarGz, "base64"));
+    expect(unpacked).toEqual(r.body.files); // round-trips the exact archive tree
+    expect(unpacked["mcp/gh.json"]).toContain("<redacted>");
+    expect(JSON.stringify(unpacked)).not.toContain("ghp_secret"); // tarball is secret-safe too
   });
 });
 
@@ -173,5 +187,36 @@ describe("POST /api/materialize from an archive", () => {
     writeFileSync(join(out, "skills", "review", "SKILL.md"), "# tampered");
     await client.post("/api/materialize").send({ archivePath: out, target: "claude" }).expect(500);
     rmSync(out, { recursive: true, force: true });
+  });
+});
+
+describe("workspace ops", () => {
+  it("create -> list -> render(eve) -> read -> delete", async () => {
+    const home = mkdtempSync(join(tmpdir(), "wsh-"));
+    process.env.AGENTGEM_HOME = home;
+    try {
+      const c = await client.post("/api/workspaces")
+        .send({ dir, name: "mp", selection: { skills: ["review"], mcpServers: ["gh"], includeInstructions: true } })
+        .expect(200);
+      expect(c.body.name).toBe("mp");
+      expect(c.body.artifactCounts.skill).toBe(1);
+
+      const l = await client.get("/api/workspaces").expect(200);
+      expect(l.body.workspaces.map((w: { name: string }) => w.name)).toEqual(["mp"]);
+
+      const r = await client.post("/api/workspace/render").send({ name: "mp", target: "eve" }).expect(200);
+      expect(r.body.files["agent/skills/review.md"]).toContain("# Review");
+
+      const d = await client.get("/api/workspace?name=mp").expect(200);
+      expect(d.body.renderedTargets).toEqual(["eve"]);
+      expect(JSON.stringify(d.body)).not.toContain("ghp_secret"); // redaction survives
+
+      const del = await client.post("/api/workspace/delete").send({ name: "mp" }).expect(200);
+      expect(del.body.deleted).toBe("mp");
+      expect((await client.get("/api/workspaces").expect(200)).body.workspaces).toEqual([]);
+    } finally {
+      delete process.env.AGENTGEM_HOME;
+      rmSync(home, { recursive: true, force: true });
+    }
   });
 });

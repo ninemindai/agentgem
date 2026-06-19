@@ -17,6 +17,7 @@ export function readArchiveDir(root: string): FileTree {
   const files: FileTree = {};
   const walk = (d: string): void => {
     for (const entry of readdirSync(d)) {
+      if (d === root && entry.startsWith(".")) continue; // skip .targets/, .git/, etc. (archive files are never dot-prefixed)
       const abs = join(d, entry);
       if (statSync(abs).isDirectory()) walk(abs);
       else files[relative(root, abs).split(sep).join("/")] = readFileSync(abs, "utf8");

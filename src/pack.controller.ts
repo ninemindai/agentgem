@@ -7,9 +7,11 @@ import { scaffoldChecks } from "./pack/checks.js";
 import { materialize, compatibility } from "./pack/targets.js";
 import type { TargetId } from "./pack/targets.js";
 import { renderManagedAgent } from "./pack/publish.js";
+import { createWorkspace, listWorkspaces, readWorkspace, renderTarget, deleteWorkspace } from "./pack/workspaces.js";
 import { writePackArchive, readPackArchive } from "./pack/archive.js";
 import type { PackLock } from "./pack/archive.js";
 import { writeArchiveDir, readArchiveDir } from "./pack/archiveFs.js";
+import { packTar } from "./pack/archiveTar.js";
 import type { Pack } from "./pack/types.js";
 import { publishManagedAgent, publishManagedAgentOnce, anthropicPublishClient } from "./publish.js";
 import type { ConfigInventory } from "./pack/types.js";
@@ -19,6 +21,7 @@ import {
   MaterializeRequestSchema, MaterializeResponseSchema,
   PublishPreviewRequestSchema, PublishRequestSchema, PublishPreviewResponseSchema, PublishReadyResponseSchema, PublishResultSchema,
   ArchiveRequestSchema, ArchiveResponseSchema,
+  CreateWorkspaceRequestSchema, WorkspaceQuerySchema, RenderRequestSchema, WorkspaceNameRequestSchema, WorkspaceSummarySchema, WorkspaceDetailSchema, RenderResultSchema, ListWorkspacesResponseSchema, DeleteWorkspaceResponseSchema,
 } from "./schemas.js";
 import { resolveDirs, resolveProject } from "./resolveDir.js";
 import { pickFolder } from "./pickFolder.js";
@@ -72,7 +75,37 @@ export class PackController {
     const lock = JSON.parse(files["pack.lock"]) as PackLock;
     let path: string | null = null;
     if (input.body.outDir) { writeArchiveDir(input.body.outDir, files); path = input.body.outDir; }
-    return { files, lock, skipped, path };
+    const tarGz = input.body.tar ? packTar(files).toString("base64") : null;
+    return { files, lock, skipped, path, tarGz };
+  }
+
+  @post("/workspaces", { body: CreateWorkspaceRequestSchema, response: WorkspaceSummarySchema })
+  async createWorkspace(input: { body: z.infer<typeof CreateWorkspaceRequestSchema> }): Promise<z.infer<typeof WorkspaceSummarySchema>> {
+    const dirs = resolveDirs(input.body.dir);
+    const inventory = introspectAll(input.body.dir, input.body.projects);
+    const pack = buildPack(inventory, input.body.selection, { name: input.body.name, createdFrom: dirs.claudeDir });
+    return createWorkspace(input.body.name, pack, { version: input.body.version });
+  }
+
+  @get("/workspaces", { query: PickQuerySchema, response: ListWorkspacesResponseSchema })
+  async listWorkspaces(_input: { query: z.infer<typeof PickQuerySchema> }): Promise<z.infer<typeof ListWorkspacesResponseSchema>> {
+    return { workspaces: listWorkspaces() };
+  }
+
+  @get("/workspace", { query: WorkspaceQuerySchema, response: WorkspaceDetailSchema })
+  async readWorkspace(input: { query: z.infer<typeof WorkspaceQuerySchema> }): Promise<z.infer<typeof WorkspaceDetailSchema>> {
+    return readWorkspace(input.query.name);
+  }
+
+  @post("/workspace/render", { body: RenderRequestSchema, response: RenderResultSchema })
+  async renderWorkspace(input: { body: z.infer<typeof RenderRequestSchema> }): Promise<z.infer<typeof RenderResultSchema>> {
+    return renderTarget(input.body.name, input.body.target as TargetId);
+  }
+
+  @post("/workspace/delete", { body: WorkspaceNameRequestSchema, response: DeleteWorkspaceResponseSchema })
+  async deleteWorkspace(input: { body: z.infer<typeof WorkspaceNameRequestSchema> }): Promise<z.infer<typeof DeleteWorkspaceResponseSchema>> {
+    deleteWorkspace(input.body.name);
+    return { deleted: input.body.name };
   }
 
   // Offline render of the Managed Agents agent payload + skip/secret/skill lists. No network.
