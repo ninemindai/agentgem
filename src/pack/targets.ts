@@ -190,9 +190,39 @@ export default createAgent(() => ({
 // OpenAI Agents SDK SandboxAgent: one <packname>.agent.ts composes everything. Skill bodies are real
 // files (skillSkillMd) seeded read-only via the Manifest; instructions fold into the `instructions`
 // string; MCP servers are added inline in Task 2. No proxy bridge (the SDK has native stdio MCP).
+
+// Per-server MCP renderer for OpenAI SandboxAgent (inline, native stdio + streamable-http).
+type SandboxServer = { code: string; cls: "MCPServerStreamableHttp" | "MCPServerStdio" } | { skip: string };
+const sandboxMcpServer = (s: McpServerArtifact): SandboxServer => {
+  const url = typeof s.config.url === "string" ? s.config.url : "";
+  if (/^https?:\/\//.test(url)) {
+    const refs = s.secretRefs ?? [];
+    const unsupported = refs.find((r) => !/^headers\./i.test(r.location));
+    if (unsupported) return { skip: `OpenAI sandbox cannot map secret at ${unsupported.location}` };
+    const authorization = refs.find((r) => r.location.toLowerCase() === "headers.authorization");
+    const headerEntries: (readonly [string, string])[] = [
+      ...(authorization ? [["Authorization", authorization.name] as const] : []),
+      ...refs.filter((r) => /^headers\./i.test(r.location) && r !== authorization).map((r) => [r.location.slice("headers.".length), r.name] as const),
+    ];
+    const requestInit = headerEntries.length
+      ? `, requestInit: { headers: { ${headerEntries.map(([h, e]) => `${JSON.stringify(h)}: process.env[${JSON.stringify(e)}]!`).join(", ")} } }`
+      : "";
+    return { code: `  new MCPServerStreamableHttp({ name: ${JSON.stringify(s.name)}, url: ${JSON.stringify(url)}${requestInit} }),`, cls: "MCPServerStreamableHttp" };
+  }
+  if (s.transport === "stdio" && typeof s.config.command === "string") {
+    const args = Array.isArray(s.config.args) ? s.config.args.filter((a): a is string => typeof a === "string") : [];
+    const envNames = (s.secretRefs ?? []).map((r) => r.name);
+    const argsStr = args.length ? `, args: ${JSON.stringify(args)}` : "";
+    const envStr = envNames.length ? `, env: { ${envNames.map((n) => `${JSON.stringify(n)}: process.env[${JSON.stringify(n)}]!`).join(", ")} }` : "";
+    return { code: `  new MCPServerStdio({ name: ${JSON.stringify(s.name)}, command: ${JSON.stringify(s.config.command)}${argsStr}${envStr} }),`, cls: "MCPServerStdio" };
+  }
+  return { skip: `${s.transport} MCP has no usable URL or stdio command` };
+};
+
 const sandboxComposeAgent = (pack: Pack): MaterializeResult => {
   const skills = pack.artifacts.filter((a): a is SkillArtifact => a.type === "skill");
   const instr = pack.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions");
+  const mcps = pack.artifacts.filter((a): a is McpServerArtifact => a.type === "mcp_server");
   const instructions = instr.map((i) => `## ${i.name}\n\n${i.content}`).join("\n\n---\n\n");
   const hasSkills = skills.length > 0;
   const sandboxImport = hasSkills
@@ -200,18 +230,32 @@ const sandboxComposeAgent = (pack: Pack): MaterializeResult => {
     : `import { SandboxAgent, Manifest, shell, filesystem } from "@openai/agents/sandbox";`;
   const capabilities = hasSkills ? "[shell(), filesystem(), skills()]" : "[shell(), filesystem()]";
   const manifestEntries = hasSkills ? `{ skills: localDir({ from: "skills", readOnly: true }) }` : "{}";
+
+  // Render MCP servers inline.
+  const skipped: SkippedArtifact[] = [];
+  const serverCodes: string[] = [];
+  const usedClasses = new Set<string>();
+  for (const s of mcps) {
+    const res = sandboxMcpServer(s);
+    if ("skip" in res) { skipped.push({ artifact: s.name, type: "mcp_server", reason: res.skip }); continue; }
+    serverCodes.push(res.code);
+    usedClasses.add(res.cls);
+  }
+  const mcpImport = usedClasses.size ? `import { ${[...usedClasses].sort().join(", ")} } from "@openai/agents";\n` : "";
+  const mcpServers = serverCodes.length ? `\n  mcpServers: [\n${serverCodes.join("\n")}\n  ],` : "";
+
   const file =
 `${sandboxImport}
-
+${mcpImport}
 export const agent = new SandboxAgent({
   name: ${JSON.stringify(pack.name)},
   model: "gpt-5.5",
   instructions: \`${escapeTemplate(instructions)}\`,
   capabilities: ${capabilities},
-  defaultManifest: new Manifest({ entries: ${manifestEntries} }),
+  defaultManifest: new Manifest({ entries: ${manifestEntries} }),${mcpServers}
 });
 `;
-  return rendered({ [`${safePathSegment(pack.name)}.agent.ts`]: file });
+  return { files: { [`${safePathSegment(pack.name)}.agent.ts`]: file }, skipped };
 };
 
 // ── targets compose the shared renderers (convergence is literal, not duplicated) ──
@@ -227,7 +271,7 @@ export const TARGET_REGISTRY: Record<TargetId, TargetSpec> = {
   flue:   { id: "flue",   label: "Flue",   skill: skillSkillMd,        instructions: () => ({}), mcp: mcpFlueConnections, compose: flueComposeAgent },
   // OpenAI Agents SDK SandboxAgent (single <packname>.agent.ts). Skills reuse SKILL.md (seeded via the
   // Manifest); instructions fold into the agent file. MCP is added inline in Task 2 (mcp renderer + compose).
-  "openai-sandbox": { id: "openai-sandbox", label: "OpenAI Sandbox", skill: skillSkillMd, instructions: () => ({}), compose: sandboxComposeAgent },
+  "openai-sandbox": { id: "openai-sandbox", label: "OpenAI Sandbox", skill: skillSkillMd, instructions: () => ({}), mcp: () => ({ files: {}, skipped: [] }), compose: sandboxComposeAgent },
 };
 
 export function materialize(pack: Pack, target: TargetId): MaterializeResult {

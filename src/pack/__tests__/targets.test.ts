@@ -194,6 +194,35 @@ describe("openai-sandbox target (agent file + skills)", () => {
   });
 });
 
+describe("openai-sandbox MCP (inline, native stdio)", () => {
+  it("http server -> inline MCPServerStreamableHttp with env auth, no secret value", () => {
+    const r = materialize({ name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [httpMcp("ctx")] }, "openai-sandbox");
+    const agent = r.files["p.agent.ts"];
+    expect(agent).toContain('import { MCPServerStreamableHttp } from "@openai/agents"');
+    expect(agent).toContain("new MCPServerStreamableHttp({");
+    expect(agent).toContain("https://mcp.x/sse");
+    expect(agent).toContain('requestInit: { headers: { "Authorization": process.env["X_TOKEN"]! } }');
+    expect(JSON.stringify(r.files)).not.toContain("secret-value");
+    expect(r.skipped).toEqual([]);                                // mcp not skip-reported
+  });
+
+  it("stdio server -> inline MCPServerStdio (native, no proxy file)", () => {
+    const r = materialize({ name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [mcp("gh")] }, "openai-sandbox");
+    const agent = r.files["p.agent.ts"];
+    expect(agent).toContain('import { MCPServerStdio } from "@openai/agents"');
+    expect(agent).toContain("new MCPServerStdio({");
+    expect(agent).toContain('command: "npx"');
+    expect(Object.keys(r.files).some((k) => k.startsWith("proxies/"))).toBe(false); // native: NO proxy
+  });
+
+  it("a non-header MCP secret is skipped with a reason; no mcp import when none map", () => {
+    const bad: McpServerArtifact = { type: "mcp_server", name: "weird", transport: "http", config: { url: "https://w/sse" }, secretRefs: [{ name: "K", location: "query.key" }] };
+    const r = materialize({ name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [bad] }, "openai-sandbox");
+    expect(r.skipped.find((s) => s.artifact === "weird")).toBeTruthy();
+    expect(r.files["p.agent.ts"]).not.toContain('from "@openai/agents"'); // no MCP import when none mapped
+  });
+});
+
 describe("compatibility", () => {
   it("summarizes supported/skipped per target", () => {
     const c = compatibility(pack([skill("a"), hook()]));
