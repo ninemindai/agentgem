@@ -158,6 +158,42 @@ describe("flue MCP connections", () => {
   });
 });
 
+describe("openai-sandbox target (agent file + skills)", () => {
+  it("emits <packname>.agent.ts (SandboxAgent + manifest + capabilities) and skill files; hooks + mcp skipped in v1-step1", () => {
+    const p: Pack = { name: "my pack", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [
+      skill("review", "# Review\nLook `here` and ${there}."),
+      instr("soul", "be kind\n`here` and ${there}."),
+      hook(),
+    ] };
+    const r = materialize(p, "openai-sandbox");
+    expect(r.files["skills/review/SKILL.md"]).toContain("# Review");
+    const agent = r.files["my_pack.agent.ts"];
+    expect(agent).toContain('from "@openai/agents/sandbox"');
+    expect(agent).toContain("new SandboxAgent({");
+    expect(agent).toContain('model: "gpt-5.5"');
+    expect(agent).toContain("capabilities: [shell(), filesystem(), skills()]");
+    expect(agent).toContain('localDir({ from: "skills", readOnly: true })');
+    expect(agent).toContain("be kind");                          // instructions folded in
+    expect(agent).not.toContain("Look");                          // skill body NOT inlined
+    expect(agent).toContain("\\`here\\`");                        // template escaping
+    expect(agent).toContain("\\${there}");
+    expect(r.skipped.find((s) => s.type === "instructions")).toBeUndefined();
+    expect(r.skipped.map((s) => s.type)).toContain("hook");
+  });
+
+  it("no-skills pack -> capabilities without skills() and an empty manifest", () => {
+    const p: Pack = { name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [instr("i", "hi")] };
+    const agent = materialize(p, "openai-sandbox").files["p.agent.ts"];
+    expect(agent).toContain("capabilities: [shell(), filesystem()]");
+    expect(agent).not.toContain("skills()");
+    expect(agent).toContain("new Manifest({ entries: {} })");
+  });
+
+  it("compatibility includes an openai-sandbox entry", () => {
+    expect(compatibility({ name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [skill("a")] })["openai-sandbox"]).toBeTruthy();
+  });
+});
+
 describe("compatibility", () => {
   it("summarizes supported/skipped per target", () => {
     const c = compatibility(pack([skill("a"), hook()]));
@@ -165,6 +201,6 @@ describe("compatibility", () => {
     expect(c.codex).toEqual({ supported: 1, skipped: 1 });   // hook unsupported
     expect(c.hermes).toEqual({ supported: 1, skipped: 1 });
     expect(c.eve).toEqual({ supported: 1, skipped: 1 }); // skill ok, hook unsupported
-    expect(Object.keys(TARGET_REGISTRY).sort()).toEqual(["agents", "claude", "codex", "eve", "flue", "hermes"]);
+    expect(Object.keys(TARGET_REGISTRY).sort()).toEqual(["agents", "claude", "codex", "eve", "flue", "hermes", "openai-sandbox"]);
   });
 });

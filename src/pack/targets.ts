@@ -10,7 +10,7 @@ import type {
 import { tomlMcpServers } from "./toml.js";
 import { stdioProxyRunner, PROXY_BASE_PORT, PROXY_HOST } from "./mcpProxy.js";
 
-export type TargetId = "claude" | "codex" | "agents" | "hermes" | "eve" | "flue";
+export type TargetId = "claude" | "codex" | "agents" | "hermes" | "eve" | "flue" | "openai-sandbox";
 export type FileTree = Record<string, string>;
 
 export interface SkippedArtifact { artifact: string; type: ArtifactType; reason: string }
@@ -187,6 +187,33 @@ export default createAgent(() => ({
   return rendered({ [`agents/${safePathSegment(pack.name)}.ts`]: file });
 };
 
+// OpenAI Agents SDK SandboxAgent: one <packname>.agent.ts composes everything. Skill bodies are real
+// files (skillSkillMd) seeded read-only via the Manifest; instructions fold into the `instructions`
+// string; MCP servers are added inline in Task 2. No proxy bridge (the SDK has native stdio MCP).
+const sandboxComposeAgent = (pack: Pack): MaterializeResult => {
+  const skills = pack.artifacts.filter((a): a is SkillArtifact => a.type === "skill");
+  const instr = pack.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions");
+  const instructions = instr.map((i) => `## ${i.name}\n\n${i.content}`).join("\n\n---\n\n");
+  const hasSkills = skills.length > 0;
+  const sandboxImport = hasSkills
+    ? `import { SandboxAgent, Manifest, localDir, shell, filesystem, skills } from "@openai/agents/sandbox";`
+    : `import { SandboxAgent, Manifest, shell, filesystem } from "@openai/agents/sandbox";`;
+  const capabilities = hasSkills ? "[shell(), filesystem(), skills()]" : "[shell(), filesystem()]";
+  const manifestEntries = hasSkills ? `{ skills: localDir({ from: "skills", readOnly: true }) }` : "{}";
+  const file =
+`${sandboxImport}
+
+export const agent = new SandboxAgent({
+  name: ${JSON.stringify(pack.name)},
+  model: "gpt-5.5",
+  instructions: \`${escapeTemplate(instructions)}\`,
+  capabilities: ${capabilities},
+  defaultManifest: new Manifest({ entries: ${manifestEntries} }),
+});
+`;
+  return rendered({ [`${safePathSegment(pack.name)}.agent.ts`]: file });
+};
+
 // ── targets compose the shared renderers (convergence is literal, not duplicated) ──
 export const TARGET_REGISTRY: Record<TargetId, TargetSpec> = {
   claude: { id: "claude", label: "Claude", skill: skillSkillMd,       instructions: instructionsClaudeMd, mcp: mcpDotMcpJson, hook: hooksSettingsJson },
@@ -198,6 +225,9 @@ export const TARGET_REGISTRY: Record<TargetId, TargetSpec> = {
   // Flue project layout. Skills reuse SKILL.md; instructions fold into the composed agent file (no
   // standalone file -> the empty instructions renderer marks them handled, not skipped). MCP added in Task 2.
   flue:   { id: "flue",   label: "Flue",   skill: skillSkillMd,        instructions: () => ({}), mcp: mcpFlueConnections, compose: flueComposeAgent },
+  // OpenAI Agents SDK SandboxAgent (single <packname>.agent.ts). Skills reuse SKILL.md (seeded via the
+  // Manifest); instructions fold into the agent file. MCP is added inline in Task 2 (mcp renderer + compose).
+  "openai-sandbox": { id: "openai-sandbox", label: "OpenAI Sandbox", skill: skillSkillMd, instructions: () => ({}), compose: sandboxComposeAgent },
 };
 
 export function materialize(pack: Pack, target: TargetId): MaterializeResult {
