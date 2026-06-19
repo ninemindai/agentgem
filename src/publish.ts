@@ -1,11 +1,11 @@
 // src/publish.ts
-// Network publish: render a Pack, register each skill as a custom Agent Skill (Skills API), then
+// Network publish: render a Gem, register each skill as a custom Agent Skill (Skills API), then
 // create the agent referencing those skills. The PublishClient is injected so the orchestration is
 // unit-tested without a key or network. Only confirmed SDK bindings are used.
 import Anthropic, { toFile } from "@anthropic-ai/sdk";
 import { renderManagedAgent } from "./gem/publish.js";
 import type { ManagedAgentPayload, SkippedArtifact } from "./gem/publish.js";
-import type { Pack, SecretRequirement } from "./gem/types.js";
+import type { Gem, SecretRequirement } from "./gem/types.js";
 
 export interface RegisteredSkill { name: string; skillId: string; version: string }
 
@@ -58,7 +58,7 @@ export function publishManagedAgentOnce(
   return promise;
 }
 
-export async function publishManagedAgent(pack: Pack, client: PublishClient): Promise<PublishResult> {
+export async function publishManagedAgent(pack: Gem, client: PublishClient): Promise<PublishResult> {
   const render = renderManagedAgent(pack);
   const registeredSkills: RegisteredSkill[] = [];
   let environmentId: string | undefined;

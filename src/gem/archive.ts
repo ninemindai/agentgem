@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import type { FileTree, SkippedArtifact } from "./targets.js";
 import type {
-  Pack, PackArtifact, ArtifactType,
-  SkillArtifact, McpServerArtifact, HookArtifact, PackCheck,
+  Gem, GemArtifact, ArtifactType,
+  SkillArtifact, McpServerArtifact, HookArtifact, GemCheck,
 } from "./types.js";
 import { safePathSegment } from "./targets.js";
 
@@ -12,7 +12,7 @@ export const ARCHIVE_FORMAT_VERSION = 1;
 const MANIFEST_PATH = "pack.json";
 const LOCK_PATH = "pack.lock";
 
-export interface PackLock {
+export interface GemLock {
   formatVersion: number;
   files: Record<string, string>; // path -> "sha256:<hex>"
   packDigest: string;            // "sha256:<hex>"
@@ -40,7 +40,7 @@ function fileHash(p: string, content: string): string {
   return sha256(content);
 }
 
-export function computeLock(files: FileTree): PackLock {
+export function computeLock(files: FileTree): GemLock {
   const paths = Object.keys(files).filter((p) => p !== LOCK_PATH).sort();
   const fileDigests: Record<string, string> = {};
   const manifestCanonical = MANIFEST_PATH in files ? stableStringify(JSON.parse(files[MANIFEST_PATH])) : "";
@@ -52,7 +52,7 @@ export function computeLock(files: FileTree): PackLock {
   return { formatVersion: ARCHIVE_FORMAT_VERSION, files: fileDigests, packDigest, signature: null };
 }
 
-export function verifyLock(files: FileTree, lock: PackLock): VerifyResult {
+export function verifyLock(files: FileTree, lock: GemLock): VerifyResult {
   const present = Object.keys(files).filter((p) => p !== LOCK_PATH);
   const mismatches: string[] = [];
   for (const p of present) if (p in lock.files && fileHash(p, files[p]) !== lock.files[p]) mismatches.push(p);
@@ -65,19 +65,19 @@ export function verifyLock(files: FileTree, lock: PackLock): VerifyResult {
 
 interface ManifestArtifactEntry { type: ArtifactType; name: string; path: string; description?: string; source?: string }
 interface ManifestCheckEntry { name: string; path: string }
-interface PackManifest {
+interface GemManifest {
   formatVersion: number;
   name: string;
   version: string;
   createdFrom: string;
   artifacts: ManifestArtifactEntry[];
-  requiredSecrets: Pack["requiredSecrets"];
+  requiredSecrets: Gem["requiredSecrets"];
   checks: ManifestCheckEntry[];
 }
 
 export interface ArchiveResult { files: FileTree; skipped: SkippedArtifact[] }
 
-export function writePackArchive(pack: Pack, opts: { version?: string } = {}): ArchiveResult {
+export function writePackArchive(pack: Gem, opts: { version?: string } = {}): ArchiveResult {
   const files: FileTree = {};
   const skipped: SkippedArtifact[] = [];
   const artifacts: ManifestArtifactEntry[] = [];
@@ -126,7 +126,7 @@ export function writePackArchive(pack: Pack, opts: { version?: string } = {}): A
     checks.push({ name: c.name, path });
   }
 
-  const manifest: PackManifest = {
+  const manifest: GemManifest = {
     formatVersion: ARCHIVE_FORMAT_VERSION,
     name: pack.name,
     version: opts.version ?? "0.1.0",
@@ -140,14 +140,14 @@ export function writePackArchive(pack: Pack, opts: { version?: string } = {}): A
   return { files, skipped };
 }
 
-export function readPackArchive(files: FileTree): Pack {
+export function readPackArchive(files: FileTree): Gem {
   const manifestRaw = files[MANIFEST_PATH];
   if (manifestRaw === undefined) throw new Error("archive missing pack.json");
   const lockRaw = files[LOCK_PATH];
   if (lockRaw === undefined) throw new Error("archive missing pack.lock");
 
-  const manifest = JSON.parse(manifestRaw) as PackManifest;
-  const lock = JSON.parse(lockRaw) as PackLock;
+  const manifest = JSON.parse(manifestRaw) as GemManifest;
+  const lock = JSON.parse(lockRaw) as GemLock;
   const v = verifyLock(files, lock);
   if (!v.ok) {
     throw new Error(
@@ -161,7 +161,7 @@ export function readPackArchive(files: FileTree): Pack {
     return c;
   };
 
-  const artifacts: PackArtifact[] = manifest.artifacts.map((e): PackArtifact => {
+  const artifacts: GemArtifact[] = manifest.artifacts.map((e): GemArtifact => {
     if (e.type === "skill") {
       const a: SkillArtifact = { type: "skill", name: e.name, source: e.source ?? "standalone", content: body(e.path) };
       if (e.description !== undefined) a.description = e.description;
@@ -185,6 +185,6 @@ export function readPackArchive(files: FileTree): Pack {
     return a;
   });
 
-  const checks: PackCheck[] = manifest.checks.map((c) => JSON.parse(body(c.path)) as PackCheck);
+  const checks: GemCheck[] = manifest.checks.map((c) => JSON.parse(body(c.path)) as GemCheck);
   return { name: manifest.name, createdFrom: manifest.createdFrom, artifacts, checks, requiredSecrets: manifest.requiredSecrets };
 }

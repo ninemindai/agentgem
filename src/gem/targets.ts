@@ -1,10 +1,10 @@
 // src/gem/targets.ts
-// Render a normalized Pack INTO a harness's on-disk layout. Pure; writes nothing — returns an
+// Render a normalized Gem INTO a harness's on-disk layout. Pure; writes nothing — returns an
 // in-memory FileTree. Targets compose shared per-artifact-type convention renderers; unmappable
-// artifacts are skipped with a reason. Materialize re-renders an already-redacted Pack; the
+// artifacts are skipped with a reason. Materialize re-renders an already-redacted Gem; the
 // runner rebinds real secrets from pack.requiredSecrets at install.
 import type {
-  Pack, ArtifactType,
+  Gem, ArtifactType,
   SkillArtifact, McpServerArtifact, InstructionsArtifact, HookArtifact,
 } from "./types.js";
 import { tomlMcpServers } from "./toml.js";
@@ -23,7 +23,7 @@ interface TargetSpec {
   mcp?: (servers: McpServerArtifact[]) => MaterializeResult;
   instructions?: (all: InstructionsArtifact[]) => FileTree;
   hook?: (hooks: HookArtifact[]) => FileTree;
-  compose?: (pack: Pack) => MaterializeResult; // cross-cutting file(s) that see the whole pack (runs last)
+  compose?: (pack: Gem) => MaterializeResult; // cross-cutting file(s) that see the whole pack (runs last)
 }
 
 export function safePathSegment(name: string): string {
@@ -165,7 +165,7 @@ const mcpFlueConnections = (servers: McpServerArtifact[]): MaterializeResult => 
   }
   return { files, skipped };
 };
-const flueComposeAgent = (pack: Pack): MaterializeResult => {
+const flueComposeAgent = (pack: Gem): MaterializeResult => {
   const skills = pack.artifacts.filter((a): a is SkillArtifact => a.type === "skill");
   const instr = pack.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions");
   const imports = skills.map((s, i) => `import skill${i} from "../skills/${safePathSegment(s.name)}/SKILL.md" with { type: "skill" };`).join("\n");
@@ -219,7 +219,7 @@ const sandboxMcpServer = (s: McpServerArtifact): SandboxServer => {
   return { skip: `${s.transport} MCP has no usable URL or stdio command` };
 };
 
-const sandboxComposeAgent = (pack: Pack): MaterializeResult => {
+const sandboxComposeAgent = (pack: Gem): MaterializeResult => {
   const skills = pack.artifacts.filter((a): a is SkillArtifact => a.type === "skill");
   const instr = pack.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions");
   const mcps = pack.artifacts.filter((a): a is McpServerArtifact => a.type === "mcp_server");
@@ -274,7 +274,7 @@ export const TARGET_REGISTRY: Record<TargetId, TargetSpec> = {
   "openai-sandbox": { id: "openai-sandbox", label: "OpenAI Sandbox", skill: skillSkillMd, instructions: () => ({}), mcp: () => ({ files: {}, skipped: [] }), compose: sandboxComposeAgent },
 };
 
-export function materialize(pack: Pack, target: TargetId): MaterializeResult {
+export function materialize(pack: Gem, target: TargetId): MaterializeResult {
   const spec = TARGET_REGISTRY[target];
   const files: FileTree = {};
   const skipped: SkippedArtifact[] = [];
@@ -322,7 +322,7 @@ export function materialize(pack: Pack, target: TargetId): MaterializeResult {
   return { files, skipped };
 }
 
-export function compatibility(pack: Pack): Record<TargetId, { supported: number; skipped: number }> {
+export function compatibility(pack: Gem): Record<TargetId, { supported: number; skipped: number }> {
   const out = {} as Record<TargetId, { supported: number; skipped: number }>;
   for (const id of Object.keys(TARGET_REGISTRY) as TargetId[]) {
     const r = materialize(pack, id);

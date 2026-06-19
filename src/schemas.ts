@@ -154,7 +154,7 @@ export const MaterializeResponseSchema = z.object({
   compatibility: z.record(TargetIdSchema, z.object({ supported: z.number(), skipped: z.number() })),
 });
 
-// ── Pack archive ──
+// ── Gem archive ──
 export const PackLockSchema = z.object({
   formatVersion: z.number(),
   files: z.record(z.string(), z.string()),

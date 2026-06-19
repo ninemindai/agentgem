@@ -1,5 +1,5 @@
 // src/gem/buildGem.ts
-import type { ConfigInventory, Pack, PackArtifact, PackCheck, SecretRequirement } from "./types.js";
+import type { ConfigInventory, Gem, GemArtifact, GemCheck, SecretRequirement } from "./types.js";
 import { redactMcpConfig } from "./redact.js";
 
 export interface ProjectSelection {
@@ -9,7 +9,7 @@ export interface ProjectSelection {
   hooks?: string[];
 }
 
-export type PackSelection =
+export type GemSelection =
   | { all: true }
   | {
       all?: false;
@@ -22,17 +22,17 @@ export type PackSelection =
 
 export function buildPack(
   inventory: ConfigInventory,
-  selection: PackSelection,
-  opts: { name?: string; createdFrom?: string; checks?: PackCheck[] } = {},
-): Pack {
-  const artifacts: PackArtifact[] = [];
+  selection: GemSelection,
+  opts: { name?: string; createdFrom?: string; checks?: GemCheck[] } = {},
+): Gem {
+  const artifacts: GemArtifact[] = [];
   const projects = inventory.projects ?? [];
 
   if ("all" in selection && selection.all) {
     artifacts.push(...inventory.skills, ...inventory.mcpServers, ...inventory.instructions, ...inventory.hooks);
     for (const p of projects) artifacts.push(...p.skills, ...p.mcpServers, ...p.instructions, ...p.hooks);
   } else {
-    const sel = selection as Exclude<PackSelection, { all: true }>;
+    const sel = selection as Exclude<GemSelection, { all: true }>;
     for (const n of sel.skills ?? []) {
       const a = inventory.skills.find((s) => s.name === n);
       if (!a) throw new Error(`No skill '${n}'. Available: ${inventory.skills.map((s) => s.name).join(", ") || "(none)"}`);
@@ -81,7 +81,7 @@ export function buildPack(
   // Embed operator checks, but run each through redaction first: a check's task/setup is
   // operator-authored test data and must not smuggle a raw secret into the shared pack.
   const checks = (opts.checks ?? []).map(
-    (c) => redactMcpConfig(c as unknown as Record<string, unknown>).config as unknown as PackCheck,
+    (c) => redactMcpConfig(c as unknown as Record<string, unknown>).config as unknown as GemCheck,
   );
 
   return {

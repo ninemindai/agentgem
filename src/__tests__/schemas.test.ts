@@ -30,7 +30,7 @@ describe("wire schemas", () => {
     expect(p.selection).toMatchObject({ skills: ["review"] });
   });
 
-  it("accepts a Pack", () => {
+  it("accepts a Gem", () => {
     const pk = PackSchema.parse({
       name: "p",
       createdFrom: "/d",

@@ -6,15 +6,15 @@ import { join } from "node:path";
 import {
   workspacesRoot, workspaceDir, createWorkspace, listWorkspaces, readWorkspace, renderTarget, deleteWorkspace,
 } from "../workspaces.js";
-import type { Pack, PackArtifact } from "../types.js";
+import type { Gem, GemArtifact } from "../types.js";
 
 let home: string;
 beforeEach(() => { home = mkdtempSync(join(tmpdir(), "agh-")); process.env.AGENTGEM_HOME = home; });
 afterEach(() => { delete process.env.AGENTGEM_HOME; rmSync(home, { recursive: true, force: true }); });
 
-const pack = (artifacts: PackArtifact[]): Pack => ({ name: "demo", createdFrom: "/d", artifacts, checks: [], requiredSecrets: [] });
-const skill = (n: string, content = "# body"): PackArtifact => ({ type: "skill", name: n, source: "standalone", content });
-const instr = (): PackArtifact => ({ type: "instructions", name: "soul", content: "be kind" });
+const pack = (artifacts: GemArtifact[]): Gem => ({ name: "demo", createdFrom: "/d", artifacts, checks: [], requiredSecrets: [] });
+const skill = (n: string, content = "# body"): GemArtifact => ({ type: "skill", name: n, source: "standalone", content });
+const instr = (): GemArtifact => ({ type: "instructions", name: "soul", content: "be kind" });
 
 describe("workspaces", () => {
   it("workspacesRoot honors AGENTGEM_HOME", () => {

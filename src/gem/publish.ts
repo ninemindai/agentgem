@@ -1,5 +1,5 @@
 // src/gem/publish.ts
-// Pure render: a (redacted) Pack -> the Managed Agents `agents.create` payload (sans skills) plus
+// Pure render: a (redacted) Gem -> the Managed Agents `agents.create` payload (sans skills) plus
 // the skills to register and the side-lists. No network, no secret values.
 //
 // Skills become true on-demand Agent Skills: each is registered via the Skills API at publish
@@ -7,7 +7,7 @@
 // Max 20 skills per agent (overflow skipped). MCP needs a URL endpoint (stdio skipped); hooks have
 // no Managed Agents equivalent (skipped).
 import type {
-  Pack, ArtifactType, SecretRequirement,
+  Gem, ArtifactType, SecretRequirement,
   SkillArtifact, McpServerArtifact, InstructionsArtifact, HookArtifact,
 } from "./types.js";
 
@@ -32,7 +32,7 @@ export interface ManagedAgentRender {
   vaultSecrets: SecretRequirement[];               // names only — operator adds these to a vault post-publish
 }
 
-export function renderManagedAgent(pack: Pack): ManagedAgentRender {
+export function renderManagedAgent(pack: Gem): ManagedAgentRender {
   const skipped: SkippedArtifact[] = [];
   const skills = pack.artifacts.filter((a): a is SkillArtifact => a.type === "skill");
   const mcp = pack.artifacts.filter((a): a is McpServerArtifact => a.type === "mcp_server");

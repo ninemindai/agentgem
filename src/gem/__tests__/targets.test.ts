@@ -1,9 +1,9 @@
 // src/gem/__tests__/targets.test.ts
 import { describe, it, expect } from "vitest";
 import { materialize, compatibility, TARGET_REGISTRY } from "../targets.js";
-import type { Pack, PackArtifact, SkillArtifact, McpServerArtifact, InstructionsArtifact, HookArtifact } from "../types.js";
+import type { Gem, GemArtifact, SkillArtifact, McpServerArtifact, InstructionsArtifact, HookArtifact } from "../types.js";
 
-const pack = (artifacts: PackArtifact[]): Pack => ({ name: "p", createdFrom: "/d", artifacts, checks: [], requiredSecrets: [] });
+const pack = (artifacts: GemArtifact[]): Gem => ({ name: "p", createdFrom: "/d", artifacts, checks: [], requiredSecrets: [] });
 const skill = (n: string, content = "# body"): SkillArtifact => ({ type: "skill", name: n, source: "standalone", content });
 const mcp = (n: string): McpServerArtifact => ({ type: "mcp_server", name: n, transport: "stdio", config: { command: "npx", env: { TOK: "<redacted>" } } });
 const httpMcp = (n: string, url = "https://mcp.x/sse"): McpServerArtifact => ({ type: "mcp_server", name: n, transport: "http", config: { url }, secretRefs: [{ name: "X_TOKEN", location: "headers.Authorization" }] });
@@ -102,7 +102,7 @@ describe("materialize", () => {
 
 describe("flue target (agent file + skills)", () => {
   it("emits agents/<packname>.ts importing skills + folding instructions; hooks skipped", () => {
-    const p: Pack = { name: "my pack", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [
+    const p: Gem = { name: "my pack", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [
       skill("review", "# Review\nLook `here` and ${there}."),
       instr("soul", "be kind"),
       hook(),
@@ -127,7 +127,7 @@ describe("flue target (agent file + skills)", () => {
   });
 
   it("compatibility includes a flue entry", () => {
-    const p: Pack = { name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [skill("a")] };
+    const p: Gem = { name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [skill("a")] };
     expect(compatibility(p).flue).toBeTruthy();
   });
 });
@@ -160,7 +160,7 @@ describe("flue MCP connections", () => {
 
 describe("openai-sandbox target (agent file + skills)", () => {
   it("emits <packname>.agent.ts (SandboxAgent + manifest + capabilities) and skill files; hooks + mcp skipped in v1-step1", () => {
-    const p: Pack = { name: "my pack", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [
+    const p: Gem = { name: "my pack", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [
       skill("review", "# Review\nLook `here` and ${there}."),
       instr("soul", "be kind\n`here` and ${there}."),
       hook(),
@@ -182,7 +182,7 @@ describe("openai-sandbox target (agent file + skills)", () => {
   });
 
   it("no-skills pack -> capabilities without skills() and an empty manifest", () => {
-    const p: Pack = { name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [instr("i", "hi")] };
+    const p: Gem = { name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [instr("i", "hi")] };
     const agent = materialize(p, "openai-sandbox").files["p.agent.ts"];
     expect(agent).toContain("capabilities: [shell(), filesystem(), compaction()]");
     expect(agent).not.toContain("skills()");

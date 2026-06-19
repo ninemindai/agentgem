@@ -28,7 +28,7 @@ export class PackTools {
   }
 
   @tool("pack", {
-    description: "Build a redacted Pack from a selection of the introspected config artifacts.",
+    description: "Build a redacted Gem from a selection of the introspected config artifacts.",
     input: PackInput,
   })
   async pack(input: z.infer<typeof PackInput>) {

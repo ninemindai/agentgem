@@ -1,8 +1,8 @@
 // src/gem/deploy.ts
 // Deploy backends as a registry (mirrors TARGET_REGISTRY for materialize). Each DeployTarget renders
-// a Pack offline (preview), reports whether the server is configured for it (ready), and performs the
+// a Gem offline (preview), reports whether the server is configured for it (ready), and performs the
 // gated network deploy (deploy). Reuses the existing pure render + network orchestration unchanged.
-import type { Pack } from "./types.js";
+import type { Gem } from "./types.js";
 import { renderManagedAgent } from "./publish.js";
 import type { ManagedAgentRender } from "./publish.js";
 import { publishManagedAgent, publishManagedAgentOnce, anthropicPublishClient } from "../publish.js";
@@ -13,9 +13,9 @@ export type DeployTargetId = "claude-managed";
 export interface DeployTarget {
   id: DeployTargetId;
   label: string;
-  preview(pack: Pack): ManagedAgentRender;                          // pure, offline
+  preview(pack: Gem): ManagedAgentRender;                          // pure, offline
   ready(): boolean;                                                 // server configured for this backend
-  deploy(pack: Pack, requestId: string): Promise<PublishResult>;   // gated; throws if not ready
+  deploy(pack: Gem, requestId: string): Promise<PublishResult>;   // gated; throws if not ready
 }
 
 export const DEPLOY_REGISTRY: Record<DeployTargetId, DeployTarget> = {

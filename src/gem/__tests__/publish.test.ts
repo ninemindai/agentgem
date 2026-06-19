@@ -1,9 +1,9 @@
 // src/gem/__tests__/publish.test.ts
 import { describe, it, expect } from "vitest";
 import { renderManagedAgent, MANAGED_AGENTS_MODEL } from "../publish.js";
-import type { Pack } from "../types.js";
+import type { Gem } from "../types.js";
 
-const pack: Pack = {
+const pack: Gem = {
   name: "mypack",
   createdFrom: "/home/.claude",
   checks: [],
@@ -59,7 +59,7 @@ describe("renderManagedAgent", () => {
   });
 
   it("skips an http MCP whose url was redacted/malformed (never ships a broken endpoint)", () => {
-    const p: Pack = { ...pack, artifacts: [
+    const p: Gem = { ...pack, artifacts: [
       { type: "mcp_server", name: "bad", transport: "http", source: "user", config: { url: "<redacted>" } },
     ] };
     const r = renderManagedAgent(p);
@@ -68,7 +68,7 @@ describe("renderManagedAgent", () => {
   });
 
   it("enforces the 20-skill cap (overflow skipped)", () => {
-    const many: Pack = { ...pack, artifacts: Array.from({ length: 22 }, (_, i) => ({ type: "skill" as const, name: `s${i}`, source: "standalone", content: "x" })) };
+    const many: Gem = { ...pack, artifacts: Array.from({ length: 22 }, (_, i) => ({ type: "skill" as const, name: `s${i}`, source: "standalone", content: "x" })) };
     const r = renderManagedAgent(many);
     expect(r.skillsToRegister).toHaveLength(20);
     expect(r.skipped.filter((s) => s.reason.includes("20-skill cap"))).toHaveLength(2);

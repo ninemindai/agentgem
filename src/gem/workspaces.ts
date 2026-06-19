@@ -5,7 +5,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { mkdirSync, rmSync, readdirSync, statSync, existsSync, readFileSync } from "node:fs";
-import type { Pack } from "./types.js";
+import type { Gem } from "./types.js";
 import type { TargetId, SkippedArtifact } from "./targets.js";
 import { materialize, compatibility, TARGET_REGISTRY, safePathSegment } from "./targets.js";
 import { writePackArchive, readPackArchive } from "./archive.js";
@@ -72,7 +72,7 @@ function summary(name: string, manifestJson: string, dir: string): WorkspaceSumm
   };
 }
 
-export function createWorkspace(name: string, pack: Pack, opts: { version?: string } = {}): WorkspaceSummary {
+export function createWorkspace(name: string, pack: Gem, opts: { version?: string } = {}): WorkspaceSummary {
   const dir = workspaceDir(name);
   if (existsSync(dir)) throw new Error(`workspace '${name}' already exists`);
   const { files } = writePackArchive(pack, { version: opts.version });

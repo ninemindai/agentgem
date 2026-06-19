@@ -2,10 +2,10 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { DEPLOY_REGISTRY, deployTargetIds, deployTargetList } from "../deploy.js";
 import { renderManagedAgent } from "../publish.js";
-import type { Pack, PackArtifact } from "../types.js";
+import type { Gem, GemArtifact } from "../types.js";
 
-const pack = (artifacts: PackArtifact[]): Pack => ({ name: "p", createdFrom: "/d", artifacts, checks: [], requiredSecrets: [] });
-const skill = (n: string): PackArtifact => ({ type: "skill", name: n, source: "standalone", content: "# body" });
+const pack = (artifacts: GemArtifact[]): Gem => ({ name: "p", createdFrom: "/d", artifacts, checks: [], requiredSecrets: [] });
+const skill = (n: string): GemArtifact => ({ type: "skill", name: n, source: "standalone", content: "# body" });
 
 const savedKey = process.env.ANTHROPIC_API_KEY;
 afterEach(() => { if (savedKey === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = savedKey; });

@@ -41,7 +41,7 @@ export interface HookArtifact {
   secretRefs?: SecretRef[]; // names+locations redaction stripped from `config`
 }
 
-export type PackArtifact = SkillArtifact | McpServerArtifact | InstructionsArtifact | HookArtifact;
+export type GemArtifact = SkillArtifact | McpServerArtifact | InstructionsArtifact | HookArtifact;
 
 export interface ProjectInventory {
   root: string;
@@ -60,7 +60,7 @@ export interface ConfigInventory {
   projects?: ProjectInventory[];
 }
 
-// ── Declared secret surface (aggregated onto the Pack) ──
+// ── Declared secret surface (aggregated onto the Gem) ──
 export interface SecretRequirement {
   name: string;      // leaf key, e.g. "OPENAI_API_KEY"
   artifact: string;  // owning artifact name, e.g. mcp server "context7"
@@ -69,7 +69,7 @@ export interface SecretRequirement {
 }
 
 // ── Checks (discriminated union: behavioral | external) ──
-export type PackCheck = BehavioralCheck | ExternalCheck;
+export type GemCheck = BehavioralCheck | ExternalCheck;
 
 export interface BehavioralCheck {
   kind: "behavioral";
@@ -120,17 +120,17 @@ export interface CheckResult {
   error?: string;
 }
 
-export interface PackVerificationReport {
+export interface GemVerificationReport {
   packName: string;
   createdFrom: string;
   results: CheckResult[];
   passed: boolean; // all results passed AND results.length > 0
 }
 
-export interface Pack {
+export interface Gem {
   name: string;
   createdFrom: string;
-  artifacts: PackArtifact[];
-  checks: PackCheck[];                   // 0..n; embedded operator checks
+  artifacts: GemArtifact[];
+  checks: GemCheck[];                   // 0..n; embedded operator checks
   requiredSecrets: SecretRequirement[];  // declared secret surface; names only
 }

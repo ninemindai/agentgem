@@ -10,10 +10,10 @@ import { DEPLOY_REGISTRY, deployTargetList } from "./gem/deploy.js";
 import type { DeployTargetId } from "./gem/deploy.js";
 import { createWorkspace, listWorkspaces, readWorkspace, renderTarget, deleteWorkspace } from "./gem/workspaces.js";
 import { writePackArchive, readPackArchive } from "./gem/archive.js";
-import type { PackLock } from "./gem/archive.js";
+import type { GemLock } from "./gem/archive.js";
 import { writeArchiveDir, readArchiveDir } from "./gem/archiveFs.js";
 import { packTar } from "./gem/archiveTar.js";
-import type { Pack } from "./gem/types.js";
+import type { Gem } from "./gem/types.js";
 
 import type { ConfigInventory } from "./gem/types.js";
 import {
@@ -57,7 +57,7 @@ export class PackController {
   @post("/materialize", { body: MaterializeRequestSchema, response: MaterializeResponseSchema })
   async materialize(input: { body: z.infer<typeof MaterializeRequestSchema> }): Promise<z.infer<typeof MaterializeResponseSchema>> {
     const target = input.body.target as TargetId;
-    let pack: Pack;
+    let pack: Gem;
     if (input.body.archivePath) {
       pack = readPackArchive(readArchiveDir(input.body.archivePath));
     } else {
@@ -74,7 +74,7 @@ export class PackController {
     const inventory = introspectAll(input.body.dir, input.body.projects);
     const pack = buildPack(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
     const { files, skipped } = writePackArchive(pack, { version: input.body.version });
-    const lock = JSON.parse(files["pack.lock"]) as PackLock;
+    const lock = JSON.parse(files["pack.lock"]) as GemLock;
     let path: string | null = null;
     if (input.body.outDir) { writeArchiveDir(input.body.outDir, files); path = input.body.outDir; }
     const tarGz = input.body.tar ? packTar(files).toString("base64") : null;

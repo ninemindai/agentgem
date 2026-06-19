@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { computeLock, verifyLock, writePackArchive, readPackArchive } from "../archive.js";
-import type { Pack, PackArtifact } from "../types.js";
+import type { Gem, GemArtifact } from "../types.js";
 
 describe("computeLock", () => {
   it("hashes every file except pack.lock and is order-independent", () => {
@@ -45,7 +45,7 @@ describe("verifyLock", () => {
   });
 });
 
-const pack = (artifacts: PackArtifact[], extra: Partial<Pack> = {}): Pack =>
+const pack = (artifacts: GemArtifact[], extra: Partial<Gem> = {}): Gem =>
   ({ name: "demo", createdFrom: "/d", artifacts, checks: [], requiredSecrets: [], ...extra });
 
 describe("writePackArchive", () => {
@@ -120,7 +120,7 @@ describe("readPackArchive", () => {
     checks: [{ kind: "behavioral", name: "smoke", task: "do x", assertions: [{ type: "output_contains", substring: "ok" }] }],
   });
 
-  it("round-trips a Pack exactly", () => {
+  it("round-trips a Gem exactly", () => {
     const back = readPackArchive(writePackArchive(full).files);
     expect(back).toEqual(full);
   });
