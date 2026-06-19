@@ -4,11 +4,11 @@ import { mcpServer, tool } from "@agentback/mcp";
 import { introspectConfig, introspectProject } from "./gem/introspect.js";
 import { buildPack } from "./gem/buildGem.js";
 import type { ConfigInventory } from "./gem/types.js";
-import { PackSelectionSchema } from "./schemas.js";
+import { GemSelectionSchema } from "./schemas.js";
 import { resolveDirs, resolveProject } from "./resolveDir.js";
 
 const InventoryInput = z.object({ dir: z.string().optional(), projects: z.array(z.string()).optional() });
-const PackInput = z.object({ selection: PackSelectionSchema, name: z.string().optional(), dir: z.string().optional(), projects: z.array(z.string()).optional() });
+const PackInput = z.object({ selection: GemSelectionSchema, name: z.string().optional(), dir: z.string().optional(), projects: z.array(z.string()).optional() });
 
 function introspectAll(dir?: string, projects?: string[]): ConfigInventory {
   const inventory = introspectConfig(resolveDirs(dir));

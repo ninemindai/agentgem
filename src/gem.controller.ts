@@ -17,7 +17,7 @@ import type { Gem } from "./gem/types.js";
 
 import type { ConfigInventory } from "./gem/types.js";
 import {
-  InventorySchema, PackSchema, PackRequestSchema, DirQuerySchema, PickQuerySchema, PickFolderSchema,
+  InventorySchema, GemSchema, GemRequestSchema, DirQuerySchema, PickQuerySchema, PickFolderSchema,
   ScaffoldChecksRequestSchema, ScaffoldChecksResponseSchema,
   MaterializeRequestSchema, MaterializeResponseSchema,
   PublishPreviewRequestSchema, PublishRequestSchema, PublishPreviewResponseSchema, PublishReadyResponseSchema, PublishResultSchema,
@@ -35,8 +35,8 @@ export class PackController {
     return introspectAll(input.query.dir, parseProjectsQuery(input.query.projects));
   }
 
-  @post("/pack", { body: PackRequestSchema, response: PackSchema })
-  async pack(input: { body: z.infer<typeof PackRequestSchema> }): Promise<z.infer<typeof PackSchema>> {
+  @post("/pack", { body: GemRequestSchema, response: GemSchema })
+  async pack(input: { body: z.infer<typeof GemRequestSchema> }): Promise<z.infer<typeof GemSchema>> {
     const dirs = resolveDirs(input.body.dir);
     const inventory = introspectAll(input.body.dir, input.body.projects);
     return buildPack(inventory, input.body.selection, {
