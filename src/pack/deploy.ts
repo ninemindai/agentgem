@@ -27,6 +27,8 @@ export const DEPLOY_REGISTRY: Record<DeployTargetId, DeployTarget> = {
     deploy: async (pack, requestId) => {
       const key = process.env.ANTHROPIC_API_KEY;
       if (!key) throw new Error("ANTHROPIC_API_KEY is not set on the server — cannot deploy to Claude Managed Agents.");
+      // The idempotency fingerprint relies on buildPack's stable ordering: identical retries must
+      // serialize to the same string, so don't make buildPack ordering non-deterministic.
       return publishManagedAgentOnce(requestId, JSON.stringify(pack), () => publishManagedAgent(pack, anthropicPublishClient(key)));
     },
   },
