@@ -1,17 +1,17 @@
-# Pack Checks Implementation Plan
+# Gem Checks Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Give every Pack a self-contained set of `checks` (behavioral evals + external security scans) and a declared `requiredSecrets` surface (names only), authored/scaffolded/validated/embedded by agentgem — without agentgem running anything.
+**Goal:** Give every Gem a self-contained set of `checks` (behavioral evals + external security scans) and a declared `requiredSecrets` surface (names only), authored/scaffolded/validated/embedded by agentgem — without agentgem running anything.
 
-**Architecture:** Redaction is upgraded to *record* the names+locations it strips (not just drop them); `buildPack` aggregates those into `Pack.requiredSecrets` and embeds operator-supplied `checks`. A new `scaffoldChecks` produces editable drafts (one behavioral, plus a SkillSpector security check when skills are present). Both surface through the existing one-Zod-contract → REST+MCP controller. Execution (the agent runner, the SkillSpector adapter, secret injection) is out of scope — agentgem owns the *types* and the *embedding*.
+**Architecture:** Redaction is upgraded to *record* the names+locations it strips (not just drop them); `buildPack` aggregates those into `Gem.requiredSecrets` and embeds operator-supplied `checks`. A new `scaffoldChecks` produces editable drafts (one behavioral, plus a SkillSpector security check when skills are present). Both surface through the existing one-Zod-contract → REST+MCP controller. Execution (the agent runner, the SkillSpector adapter, secret injection) is out of scope — agentgem owns the *types* and the *embedding*.
 
 **Tech Stack:** TypeScript 6 (legacy decorators, `tsc -b` build), zod v4, AgentBack (`@agentback/rest|mcp|openapi`), vitest, `@agentback/testing`/supertest, vanilla-JS page. pnpm.
 
 **Conventions for every task:**
 - Run a single test file fast with `pnpm exec vitest run <path>`.
 - Before each commit run the full gate `pnpm test` (it does `tsc -b && vitest run`, so it typechecks too — critical because these tasks change shared types).
-- Work on branch `feat/pack-checks` (already checked out).
+- Work on branch `feat/gem-checks` (already checked out).
 
 ---
 
@@ -20,14 +20,14 @@
 Change `redactMcpConfig` to return `{ config, secrets }` (names + locations of every redacted value; never values), add the `SecretRef` type and a `secretRefs?` field to the two artifact kinds whose config holds secrets, and update the two call sites in `introspect.ts`.
 
 **Files:**
-- Modify: `src/pack/types.ts`
-- Modify: `src/pack/redact.ts`
-- Modify: `src/pack/introspect.ts:95-100` (`serversToArtifacts`), `src/pack/introspect.ts:111-123` (`hooksFromConfig`)
-- Test: `src/pack/__tests__/redact.test.ts`
+- Modify: `src/gem/types.ts`
+- Modify: `src/gem/redact.ts`
+- Modify: `src/gem/introspect.ts:95-100` (`serversToArtifacts`), `src/gem/introspect.ts:111-123` (`hooksFromConfig`)
+- Test: `src/gem/__tests__/redact.test.ts`
 
 - [ ] **Step 1: Add the `SecretRef` type and `secretRefs?` fields**
 
-In `src/pack/types.ts`, add the interface (place it above `SkillArtifact`):
+In `src/gem/types.ts`, add the interface (place it above `SkillArtifact`):
 
 ```ts
 export interface SecretRef {
@@ -63,7 +63,7 @@ export interface HookArtifact {
 
 - [ ] **Step 2: Update the existing redact tests to the new return shape, and add a secret-surface test**
 
-In `src/pack/__tests__/redact.test.ts`, the three existing tests destructure the return value as the config. Change each `const out = redactMcpConfig({...});` to `const { config: out } = redactMcpConfig({...});` (3 occurrences). Then add this new test inside the `describe` block:
+In `src/gem/__tests__/redact.test.ts`, the three existing tests destructure the return value as the config. Change each `const out = redactMcpConfig({...});` to `const { config: out } = redactMcpConfig({...});` (3 occurrences). Then add this new test inside the `describe` block:
 
 ```ts
 it("records the name + location of every redacted value, never the value", () => {
@@ -89,15 +89,15 @@ it("records the name + location of every redacted value, never the value", () =>
 
 - [ ] **Step 3: Run the redact test, watch it fail**
 
-Run: `pnpm exec vitest run src/pack/__tests__/redact.test.ts`
+Run: `pnpm exec vitest run src/gem/__tests__/redact.test.ts`
 Expected: FAIL — `redactMcpConfig(...).config`/`.secrets` are undefined (function still returns the bare config).
 
 - [ ] **Step 4: Rewrite `redactMcpConfig` to record secrets**
 
-Replace the entire contents of `src/pack/redact.ts` with:
+Replace the entire contents of `src/gem/redact.ts` with:
 
 ```ts
-// src/pack/redact.ts
+// src/gem/redact.ts
 // Strip secret VALUES from an MCP/hook config while preserving its shape, and record the
 // NAME + LOCATION of every value stripped so a runtime can re-inject by name. Values never leave.
 import type { SecretRef } from "./types.js";
@@ -140,7 +140,7 @@ export function redactMcpConfig(config: Record<string, unknown>): { config: Reco
 
 - [ ] **Step 5: Update the two call sites in `introspect.ts`**
 
-Replace `serversToArtifacts` (currently `src/pack/introspect.ts:95-100`) with:
+Replace `serversToArtifacts` (currently `src/gem/introspect.ts:95-100`) with:
 
 ```ts
 function serversToArtifacts(servers: Record<string, unknown>, source: string): McpServerArtifact[] {
@@ -152,7 +152,7 @@ function serversToArtifacts(servers: Record<string, unknown>, source: string): M
 }
 ```
 
-In `hooksFromConfig` (currently `src/pack/introspect.ts:111-123`), replace the `out.push(...)` line with:
+In `hooksFromConfig` (currently `src/gem/introspect.ts:111-123`), replace the `out.push(...)` line with:
 
 ```ts
       const { config: redacted, secrets } = redactMcpConfig(g);
@@ -167,27 +167,27 @@ Expected: PASS. (`introspect.test.ts` still passes — it asserts on `config.env
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/pack/types.ts src/pack/redact.ts src/pack/introspect.ts src/pack/__tests__/redact.test.ts
-git commit -m "feat(pack): redaction records secret names+locations as secretRefs"
+git add src/gem/types.ts src/gem/redact.ts src/gem/introspect.ts src/gem/__tests__/redact.test.ts
+git commit -m "feat(gem): redaction records secret names+locations as secretRefs"
 ```
 
 ---
 
-### Task 2: Pack gains `checks` + `requiredSecrets`; `buildPack` populates them
+### Task 2: Gem gains `checks` + `requiredSecrets`; `buildPack` populates them
 
-Add the check/result types, make `Pack` carry `checks` and `requiredSecrets`, and have `buildPack` accept operator `checks` and aggregate `requiredSecrets` from the *selected* artifacts only.
+Add the check/result types, make `Gem` carry `checks` and `requiredSecrets`, and have `buildPack` accept operator `checks` and aggregate `requiredSecrets` from the *selected* artifacts only.
 
 **Files:**
-- Modify: `src/pack/types.ts`
-- Modify: `src/pack/buildPack.ts`
-- Test: `src/pack/__tests__/buildPack.test.ts`
+- Modify: `src/gem/types.ts`
+- Modify: `src/gem/buildPack.ts`
+- Test: `src/gem/__tests__/buildPack.test.ts`
 
 - [ ] **Step 1: Add the check, secret-requirement, and result types**
 
-In `src/pack/types.ts`, add (after the `SecretRef` interface from Task 1):
+In `src/gem/types.ts`, add (after the `SecretRef` interface from Task 1):
 
 ```ts
-// ── Declared secret surface (aggregated onto the Pack) ──
+// ── Declared secret surface (aggregated onto the Gem) ──
 export interface SecretRequirement {
   name: string;      // leaf key, e.g. "OPENAI_API_KEY"
   artifact: string;  // owning artifact name, e.g. mcp server "context7"
@@ -202,7 +202,7 @@ export interface BehavioralCheck {
   kind: "behavioral";
   name: string;
   description?: string;
-  task: string;                 // prompt given to the clean, pack-loaded agent
+  task: string;                 // prompt given to the clean, gem-loaded agent
   setup?: EvalSetup;            // optional workspace seeding
   assertions: EvalAssertion[];  // deterministic; ALL must pass (AND)
   judge?: EvalJudge;            // opt-in LLM-judge; pass = assertions AND judge>=threshold
@@ -255,10 +255,10 @@ export interface PackVerificationReport {
 }
 ```
 
-Then extend the `Pack` interface (currently `src/pack/types.ts:56-60`) to:
+Then extend the `Gem` interface (currently `src/gem/types.ts:56-60`) to:
 
 ```ts
-export interface Pack {
+export interface Gem {
   name: string;
   createdFrom: string;
   artifacts: PackArtifact[];
@@ -269,7 +269,7 @@ export interface Pack {
 
 - [ ] **Step 2: Add the failing tests for embedding checks and aggregating secrets**
 
-In `src/pack/__tests__/buildPack.test.ts`, update the `inv` fixture so the `gh` server carries `secretRefs`, and add two tests. Replace the `mcpServers` line of `inv` with:
+In `src/gem/__tests__/buildPack.test.ts`, update the `inv` fixture so the `gh` server carries `secretRefs`, and add two tests. Replace the `mcpServers` line of `inv` with:
 
 ```ts
   mcpServers: [{ type: "mcp_server", name: "gh", transport: "stdio", config: { env: { GH_TOKEN: "<redacted>" } }, secretRefs: [{ name: "GH_TOKEN", location: "env.GH_TOKEN" }] }],
@@ -294,34 +294,34 @@ it("aggregates requiredSecrets from selected artifacts only (names, never values
 });
 
 it("redacts a secret accidentally embedded in operator check text", () => {
-  const pack = buildPack(inv, { skills: ["review"] }, {
+  const gem = buildPack(inv, { skills: ["review"] }, {
     checks: [{ kind: "behavioral", name: "smoke", task: "use token ghp_abcdefghijklmnopqrstuvwxyz0123", assertions: [] }],
   });
-  expect(JSON.stringify(pack.checks)).not.toContain("ghp_abcdefghijklmnopqrstuvwxyz0123");
+  expect(JSON.stringify(gem.checks)).not.toContain("ghp_abcdefghijklmnopqrstuvwxyz0123");
 });
 ```
 
 - [ ] **Step 3: Run the buildPack test, watch it fail**
 
-Run: `pnpm exec vitest run src/pack/__tests__/buildPack.test.ts`
-Expected: FAIL — `pack.checks`/`pack.requiredSecrets` are undefined (and a TS error if run via `pnpm test`).
+Run: `pnpm exec vitest run src/gem/__tests__/buildPack.test.ts`
+Expected: FAIL — `gem.checks`/`gem.requiredSecrets` are undefined (and a TS error if run via `pnpm test`).
 
 - [ ] **Step 4: Implement in `buildPack`**
 
-In `src/pack/buildPack.ts`, update the import line to add the new types, and import the redactor (operator check text is passed through the same capture-time redaction so an accidental secret can't ride along):
+In `src/gem/buildPack.ts`, update the import line to add the new types, and import the redactor (operator check text is passed through the same capture-time redaction so an accidental secret can't ride along):
 
 ```ts
-import type { ConfigInventory, Pack, PackArtifact, PackCheck, SecretRequirement } from "./types.js";
+import type { ConfigInventory, Gem, PackArtifact, PackCheck, SecretRequirement } from "./types.js";
 import { redactMcpConfig } from "./redact.js";
 ```
 
-Change the `opts` parameter (currently `src/pack/buildPack.ts:25`) to:
+Change the `opts` parameter (currently `src/gem/buildPack.ts:25`) to:
 
 ```ts
   opts: { name?: string; createdFrom?: string; checks?: PackCheck[] } = {},
 ```
 
-Replace the final `return` statement (currently `src/pack/buildPack.ts:73`) with:
+Replace the final `return` statement (currently `src/gem/buildPack.ts:73`) with:
 
 ```ts
   const requiredSecrets: SecretRequirement[] = [];
@@ -332,13 +332,13 @@ Replace the final `return` statement (currently `src/pack/buildPack.ts:73`) with
   }
 
   // Embed operator checks, but run each through redaction first: a check's task/setup is
-  // operator-authored test data and must not smuggle a raw secret into the shared pack.
+  // operator-authored test data and must not smuggle a raw secret into the shared gem.
   const checks = (opts.checks ?? []).map(
     (c) => redactMcpConfig(c as unknown as Record<string, unknown>).config as unknown as PackCheck,
   );
 
   return {
-    name: opts.name ?? "pack",
+    name: opts.name ?? "gem",
     createdFrom: opts.createdFrom ?? "unknown",
     artifacts,
     checks,
@@ -349,42 +349,42 @@ Replace the final `return` statement (currently `src/pack/buildPack.ts:73`) with
 - [ ] **Step 5: Run the full gate**
 
 Run: `pnpm test`
-Expected: PASS. (Existing buildPack tests assert on `pack.artifacts`/`pack.name` only — unaffected by the two new fields.)
+Expected: PASS. (Existing buildPack tests assert on `gem.artifacts`/`gem.name` only — unaffected by the two new fields.)
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/pack/types.ts src/pack/buildPack.ts src/pack/__tests__/buildPack.test.ts
-git commit -m "feat(pack): Pack carries checks + requiredSecrets; buildPack populates both"
+git add src/gem/types.ts src/gem/buildPack.ts src/gem/__tests__/buildPack.test.ts
+git commit -m "feat(gem): Gem carries checks + requiredSecrets; buildPack populates both"
 ```
 
 ---
 
 ### Task 3: `scaffoldChecks` + the runner registry
 
-A pure module that drafts checks from a built Pack: always a behavioral draft; plus a SkillSpector security draft when the pack contains skills.
+A pure module that drafts checks from a built Gem: always a behavioral draft; plus a SkillSpector security draft when the gem contains skills.
 
 **Files:**
-- Create: `src/pack/checks.ts`
-- Test: `src/pack/__tests__/checks.test.ts`
+- Create: `src/gem/checks.ts`
+- Test: `src/gem/__tests__/checks.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `src/pack/__tests__/checks.test.ts`:
+Create `src/gem/__tests__/checks.test.ts`:
 
 ```ts
-// src/pack/__tests__/checks.test.ts
+// src/gem/__tests__/checks.test.ts
 import { describe, it, expect } from "vitest";
 import { scaffoldChecks, RUNNER_REGISTRY } from "../checks.js";
-import type { Pack } from "../types.js";
+import type { Gem } from "../types.js";
 
-function pack(over: Partial<Pack> = {}): Pack {
+function gem(over: Partial<Gem> = {}): Gem {
   return { name: "p", createdFrom: "/d", artifacts: [], checks: [], requiredSecrets: [], ...over };
 }
 
 describe("scaffoldChecks", () => {
   it("drafts a behavioral check plus a skillspector security check when skills are present", () => {
-    const p = pack({ artifacts: [{ type: "skill", name: "review", description: "Review code", source: "standalone", content: "x" }] });
+    const p = gem({ artifacts: [{ type: "skill", name: "review", description: "Review code", source: "standalone", content: "x" }] });
     const checks = scaffoldChecks(p);
     const beh = checks.find((c) => c.kind === "behavioral");
     const ext = checks.find((c) => c.kind === "external");
@@ -395,8 +395,8 @@ describe("scaffoldChecks", () => {
     expect(ext && ext.kind === "external" && ext.with).toEqual(RUNNER_REGISTRY.skillspector.defaultWith);
   });
 
-  it("drafts only a behavioral check when the pack has no skills", () => {
-    const p = pack({ artifacts: [{ type: "instructions", name: "CLAUDE.md", content: "x" }] });
+  it("drafts only a behavioral check when the gem has no skills", () => {
+    const p = gem({ artifacts: [{ type: "instructions", name: "CLAUDE.md", content: "x" }] });
     const checks = scaffoldChecks(p);
     expect(checks.map((c) => c.kind)).toEqual(["behavioral"]);
   });
@@ -405,28 +405,28 @@ describe("scaffoldChecks", () => {
 
 - [ ] **Step 2: Run it, watch it fail**
 
-Run: `pnpm exec vitest run src/pack/__tests__/checks.test.ts`
+Run: `pnpm exec vitest run src/gem/__tests__/checks.test.ts`
 Expected: FAIL — cannot find module `../checks.js`.
 
-- [ ] **Step 3: Implement `src/pack/checks.ts`**
+- [ ] **Step 3: Implement `src/gem/checks.ts`**
 
 ```ts
-// src/pack/checks.ts
-// Scaffold editable check drafts from a built Pack. Pure; runs nothing. The runner registry
+// src/gem/checks.ts
+// Scaffold editable check drafts from a built Gem. Pure; runs nothing. The runner registry
 // holds DECLARATIONS only — the adapters that actually execute live in the platform runner.
-import type { Pack, PackArtifact, PackCheck } from "./types.js";
+import type { Gem, PackArtifact, PackCheck } from "./types.js";
 
 export const RUNNER_REGISTRY = {
   skillspector: {
     id: "skillspector",
-    consumes: "pack-as-directory", // Pack materializes to a dir of SKILL.md + config
+    consumes: "gem-as-directory", // Gem materializes to a dir of SKILL.md + config
     resultShape: "score+findings",
     defaultWith: { failAboveRisk: 40 },
   },
 } as const;
 
-export function scaffoldChecks(pack: Pack): PackCheck[] {
-  const skills = pack.artifacts.filter((a): a is Extract<PackArtifact, { type: "skill" }> => a.type === "skill");
+export function scaffoldChecks(gem: Gem): PackCheck[] {
+  const skills = gem.artifacts.filter((a): a is Extract<PackArtifact, { type: "skill" }> => a.type === "skill");
   const lead = skills[0];
   const intent = lead?.description ?? lead?.name ?? "the bundled capability";
 
@@ -435,7 +435,7 @@ export function scaffoldChecks(pack: Pack): PackCheck[] {
       kind: "behavioral",
       name: "smoke",
       description: "Draft — edit the task and add assertions before relying on this check.",
-      task: `Using this pack, ${intent}. Then report what you did.`,
+      task: `Using this gem, ${intent}. Then report what you did.`,
       assertions: [], // stubs: meaningful deterministic assertions are operator-authored
       timeoutSec: 300,
     },
@@ -452,7 +452,7 @@ export function scaffoldChecks(pack: Pack): PackCheck[] {
 
 - [ ] **Step 4: Run it, watch it pass; then the full gate**
 
-Run: `pnpm exec vitest run src/pack/__tests__/checks.test.ts`
+Run: `pnpm exec vitest run src/gem/__tests__/checks.test.ts`
 Expected: PASS.
 Run: `pnpm test`
 Expected: PASS.
@@ -460,15 +460,15 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/pack/checks.ts src/pack/__tests__/checks.test.ts
-git commit -m "feat(pack): scaffoldChecks + runner registry (behavioral + skillspector drafts)"
+git add src/gem/checks.ts src/gem/__tests__/checks.test.ts
+git commit -m "feat(gem): scaffoldChecks + runner registry (behavioral + skillspector drafts)"
 ```
 
 ---
 
 ### Task 4: Wire schemas (validation + the new wire contract)
 
-Add zod schemas for every new type, extend the artifact + pack schemas, add the `checks` field to the pack request, and add the scaffold-checks request/response schemas. `runner` validates against the registry keys.
+Add zod schemas for every new type, extend the artifact + gem schemas, add the `checks` field to the gem request, and add the scaffold-checks request/response schemas. `runner` validates against the registry keys.
 
 **Files:**
 - Modify: `src/schemas.ts`
@@ -482,10 +482,10 @@ In `src/__tests__/schemas.test.ts`, update the import line to:
 import { InventorySchema, PackSchema, PackRequestSchema, PackCheckSchema, ScaffoldChecksResponseSchema } from "../schemas.js";
 ```
 
-Update the existing "accepts a Pack" test to include the now-required fields:
+Update the existing "accepts a Gem" test to include the now-required fields:
 
 ```ts
-it("accepts a Pack", () => {
+it("accepts a Gem", () => {
   const pk = PackSchema.parse({
     name: "p",
     createdFrom: "/d",
@@ -508,7 +508,7 @@ it("validates both check kinds and rejects an unknown runner", () => {
   expect(() => PackCheckSchema.parse({ kind: "behavioral", name: "x", task: "t", assertions: [{ type: "nope" }] })).toThrow();
 });
 
-it("accepts a pack-request carrying checks, and a scaffold-checks response", () => {
+it("accepts a gem-request carrying checks, and a scaffold-checks response", () => {
   const p = PackRequestSchema.parse({ selection: { all: true }, checks: [{ kind: "external", name: "s", runner: "skillspector" }] });
   expect(p.checks?.length).toBe(1);
   const r = ScaffoldChecksResponseSchema.parse({ checks: [{ kind: "behavioral", name: "smoke", task: "t", assertions: [] }] });
@@ -526,7 +526,7 @@ Expected: FAIL — `PackCheckSchema` / `ScaffoldChecksResponseSchema` are not ex
 In `src/schemas.ts`, add this import at the top (below the existing `import { z } from "zod";`):
 
 ```ts
-import { RUNNER_REGISTRY } from "./pack/checks.js";
+import { RUNNER_REGISTRY } from "./gem/checks.js";
 ```
 
 Add `secretRefs` to the two artifact schemas. In `McpServerArtifactSchema` and `HookArtifactSchema`, add this field (before the closing `})`):
@@ -563,7 +563,7 @@ export const BehavioralCheckSchema = z.object({
   timeoutSec: z.number().optional(),
 });
 
-// runner validates against the registry keys, so a pack can't declare a check no runner can run.
+// runner validates against the registry keys, so a gem can't declare a check no runner can run.
 const RUNNER_IDS = Object.keys(RUNNER_REGISTRY) as [string, ...string[]];
 export const ExternalCheckSchema = z.object({
   kind: z.literal("external"),
@@ -618,27 +618,27 @@ Expected: PASS.
 
 ```bash
 git add src/schemas.ts src/__tests__/schemas.test.ts
-git commit -m "feat(pack): zod schemas for checks, requiredSecrets, scaffold-checks; registry-validated runner"
+git commit -m "feat(gem): zod schemas for checks, requiredSecrets, scaffold-checks; registry-validated runner"
 ```
 
 ---
 
-### Task 5: Controller — `scaffold_checks` op + `pack` embeds checks
+### Task 5: Controller — `scaffold_checks` op + `gem` embeds checks
 
-Expose `scaffold_checks` (REST `POST /api/scaffold-checks`, MCP tool `scaffold_checks`) and pass operator `checks` through `pack`.
+Expose `scaffold_checks` (REST `POST /api/scaffold-checks`, MCP tool `scaffold_checks`) and pass operator `checks` through `gem`.
 
 **Files:**
-- Modify: `src/pack.controller.ts`
-- Test: `src/__tests__/pack.controller.test.ts`
+- Modify: `src/gem.controller.ts`
+- Test: `src/__tests__/gem.controller.test.ts`
 
 - [ ] **Step 1: Add failing controller tests**
 
-In `src/__tests__/pack.controller.test.ts`, add these tests inside the `describe("PackController", ...)` block (the existing `beforeAll` seeds a `gh` MCP server with `env.GH_TOKEN` and a `review` skill):
+In `src/__tests__/gem.controller.test.ts`, add these tests inside the `describe("GemController", ...)` block (the existing `beforeAll` seeds a `gh` MCP server with `env.GH_TOKEN` and a `review` skill):
 
 ```ts
-it("POST /api/pack embeds checks and declares requiredSecrets (names, not values)", async () => {
+it("POST /api/gem embeds checks and declares requiredSecrets (names, not values)", async () => {
   const r = await client
-    .post("/api/pack")
+    .post("/api/gem")
     .send({
       dir,
       selection: { skills: ["review"], mcpServers: ["gh"] },
@@ -661,16 +661,16 @@ it("POST /api/scaffold-checks returns editable drafts (behavioral + skillspector
 
 - [ ] **Step 2: Run the controller test, watch it fail**
 
-Run: `pnpm exec vitest run src/__tests__/pack.controller.test.ts`
-Expected: FAIL — `/api/scaffold-checks` 404s; `r.body.checks` undefined on the pack response.
+Run: `pnpm exec vitest run src/__tests__/gem.controller.test.ts`
+Expected: FAIL — `/api/scaffold-checks` 404s; `r.body.checks` undefined on the gem response.
 
 - [ ] **Step 3: Implement the controller changes**
 
-In `src/pack.controller.ts`, update the imports:
+In `src/gem.controller.ts`, update the imports:
 
 ```ts
-import { buildPack } from "./pack/buildPack.js";
-import { scaffoldChecks } from "./pack/checks.js";
+import { buildPack } from "./gem/buildPack.js";
+import { scaffoldChecks } from "./gem/checks.js";
 ```
 
 ```ts
@@ -680,15 +680,15 @@ import {
 } from "./schemas.js";
 ```
 
-Replace the `pack` handler (currently `src/pack.controller.ts:18-23`) with:
+Replace the `gem` handler (currently `src/gem.controller.ts:18-23`) with:
 
 ```ts
-  @post("/pack", { body: PackRequestSchema, response: PackSchema })
-  async pack(input: { body: z.infer<typeof PackRequestSchema> }): Promise<z.infer<typeof PackSchema>> {
+  @post("/gem", { body: PackRequestSchema, response: PackSchema })
+  async gem(input: { body: z.infer<typeof PackRequestSchema> }): Promise<z.infer<typeof PackSchema>> {
     const dirs = resolveDirs(input.body.dir);
     const inventory = introspectAll(input.body.dir, input.body.projects);
     return buildPack(inventory, input.body.selection, {
-      name: input.body.name ?? "pack",
+      name: input.body.name ?? "gem",
       createdFrom: dirs.claudeDir,
       checks: input.body.checks,
     });
@@ -698,14 +698,14 @@ Replace the `pack` handler (currently `src/pack.controller.ts:18-23`) with:
   async scaffoldChecks(input: { body: z.infer<typeof ScaffoldChecksRequestSchema> }): Promise<z.infer<typeof ScaffoldChecksResponseSchema>> {
     const dirs = resolveDirs(input.body.dir);
     const inventory = introspectAll(input.body.dir, input.body.projects);
-    const pack = buildPack(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
-    return { checks: scaffoldChecks(pack) };
+    const gem = buildPack(inventory, input.body.selection, { name: input.body.name ?? "gem", createdFrom: dirs.claudeDir });
+    return { checks: scaffoldChecks(gem) };
   }
 ```
 
 - [ ] **Step 4: Run the controller test, watch it pass; then the full gate**
 
-Run: `pnpm exec vitest run src/__tests__/pack.controller.test.ts`
+Run: `pnpm exec vitest run src/__tests__/gem.controller.test.ts`
 Expected: PASS.
 Run: `pnpm test`
 Expected: PASS.
@@ -713,15 +713,15 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/pack.controller.ts src/__tests__/pack.controller.test.ts
-git commit -m "feat(api): scaffold_checks op + pack embeds checks (REST + MCP)"
+git add src/gem.controller.ts src/__tests__/gem.controller.test.ts
+git commit -m "feat(api): scaffold_checks op + gem embeds checks (REST + MCP)"
 ```
 
 ---
 
 ### Task 6: Page — Checks panel (scaffold + edit + embed)
 
-Add a "Suggest checks" flow and a per-check editor to the right pane; route the operator's checks into the live `POST /api/pack` so the preview and the downloaded `pack.json` always carry them. The page is verified with the gstack browser (per the project's smoke-test convention), not vitest.
+Add a "Suggest checks" flow and a per-check editor to the right pane; route the operator's checks into the live `POST /api/gem` so the preview and the downloaded `gem.json` always carry them. The page is verified with the gstack browser (per the project's smoke-test convention), not vitest.
 
 **Files:**
 - Modify: `src/public/index.html`
@@ -739,7 +739,7 @@ In `src/public/index.html`, inside `<section class="pane right">`, immediately a
 
 - [ ] **Step 2: Add check state + rendering, and refactor `build()` to share selection assembly**
 
-In the `<script>`, replace the entire `build()` function (currently lines 268-299) with the following — it factors the request-body assembly into `buildSelectionBody()` (reused by scaffold) and threads `currentChecks` into the pack request:
+In the `<script>`, replace the entire `build()` function (currently lines 268-299) with the following — it factors the request-body assembly into `buildSelectionBody()` (reused by scaffold) and threads `currentChecks` into the gem request:
 
 ```js
 let currentChecks = [];
@@ -767,15 +767,15 @@ function buildSelectionBody(){
   const selection = { skills, mcpServers, includeInstructions: sel.includeInstructions };
   if (hooks.length) selection.hooks = hooks;
   if (Object.keys(projectsSel).length) selection.projects = projectsSel;
-  const reqBody = { selection, name: document.getElementById("name").value || "pack" };
+  const reqBody = { selection, name: document.getElementById("name").value || "gem" };
   if (projects.length) reqBody.projects = projects;
   return reqBody;
 }
 async function build(){
   const reqBody = buildSelectionBody();
   reqBody.checks = currentChecks;
-  const pack = await (await fetch("/api/pack", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(reqBody) })).json();
-  window.__pack = pack;
+  const gem = await (await fetch("/api/gem", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(reqBody) })).json();
+  window.__gem = gem;
   renderPreview();
 }
 // Each check renders as an editable JSON textarea (operator refines task/assertions/threshold).
@@ -818,7 +818,7 @@ Drive the served URL with the `browse`/gstack skill and confirm:
 2. Tick a skill on the left, click **Suggest checks** — two drafts appear (`behavioral · smoke` and `external · security-scan`).
 3. Edit the behavioral textarea's `task` string; switch the preview to **JSON**.
 4. The preview's `checks[]` reflects the edit, and `requiredSecrets[]` lists secret **names** (e.g. for a selected MCP server) with **no secret values** anywhere in the JSON.
-5. Click **Download** — the saved `pack.json` contains `checks` and `requiredSecrets`.
+5. Click **Download** — the saved `gem.json` contains `checks` and `requiredSecrets`.
 
 Expected: all five hold. If `requiredSecrets` is empty, ensure the selected set includes an MCP server that has secrets.
 
@@ -826,7 +826,7 @@ Expected: all five hold. If `requiredSecrets` is empty, ensure the selected set 
 
 ```bash
 git add src/public/index.html
-git commit -m "feat(ui): Checks panel — scaffold, edit, and embed checks into the pack"
+git commit -m "feat(ui): Checks panel — scaffold, edit, and embed checks into the gem"
 ```
 
 ---
@@ -835,5 +835,5 @@ git commit -m "feat(ui): Checks panel — scaffold, edit, and embed checks into 
 
 - [ ] `pnpm test` is green (typecheck + all unit/controller tests).
 - [ ] `GET /openapi.json` lists `POST /api/scaffold-checks` (free from AgentBack — sanity-check the contract surfaced).
-- [ ] A built `pack.json` round-trips through `PackSchema` with `checks` + `requiredSecrets` present.
-- [ ] No secret value appears anywhere in a pack response (`requiredSecrets` carries names only).
+- [ ] A built `gem.json` round-trips through `PackSchema` with `checks` + `requiredSecrets` present.
+- [ ] No secret value appears anywhere in a gem response (`requiredSecrets` carries names only).

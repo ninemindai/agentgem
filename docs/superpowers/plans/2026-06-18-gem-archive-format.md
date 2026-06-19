@@ -1,10 +1,10 @@
-# Pack Archive Format Implementation Plan
+# Gem Archive Format Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make a Pack a durable, verifiable on-disk archive (manifest `pack.json` + integrity `pack.lock` + body files) that serializes to/from the existing in-memory `Pack`, and let `materialize` consume an archive instead of a live introspection.
+**Goal:** Make a Gem a durable, verifiable on-disk archive (manifest `gem.json` + integrity `gem.lock` + body files) that serializes to/from the existing in-memory `Gem`, and let `materialize` consume an archive instead of a live introspection.
 
-**Architecture:** A new pure module `src/pack/archive.ts` adds `writePackArchive(pack)` / `readPackArchive(files)` over the same `FileTree` (`Record<path,string>`) that `targets.ts` already returns, plus `computeLock` / `verifyLock` for sha256 integrity. Disk I/O lives in a thin `src/pack/archiveFs.ts` and the controller — the core writes nothing. `materialize`/publish keep taking a `Pack`; only the controller gains an `archivePath` branch that loads one from disk.
+**Architecture:** A new pure module `src/gem/archive.ts` adds `writePackArchive(gem)` / `readPackArchive(files)` over the same `FileTree` (`Record<path,string>`) that `targets.ts` already returns, plus `computeLock` / `verifyLock` for sha256 integrity. Disk I/O lives in a thin `src/gem/archiveFs.ts` and the controller — the core writes nothing. `materialize`/publish keep taking a `Gem`; only the controller gains an `archivePath` branch that loads one from disk.
 
 **Tech Stack:** TypeScript (ESM, NodeNext), Zod v4, `@agentback/*` (rest/openapi controllers), Vitest (tests run from compiled `dist/`), `node:crypto` for hashing. No new dependencies.
 
@@ -12,11 +12,11 @@
 
 - **ESM imports use `.js` extensions** even from `.ts` sources (e.g. `import { x } from "./targets.js"`). NodeNext resolution.
 - **Tests run from `dist/`**: `npm test` = `tsc -b && vitest run`. Focused run: `npm test -- -t "<name pattern>"`. A failing `tsc` fails the whole run, so type errors surface as test failures.
-- **Secret-safety is invariant**: the archive serializes an *already-redacted* Pack. No archive file may contain a secret *value*; MCP/hook configs keep their `<redacted>` placeholders; `requiredSecrets`/`secretRefs` carry names + locations only. Assert this in tests.
+- **Secret-safety is invariant**: the archive serializes an *already-redacted* Gem. No archive file may contain a secret *value*; MCP/hook configs keep their `<redacted>` placeholders; `requiredSecrets`/`secretRefs` carry names + locations only. Assert this in tests.
 - **The pure core (`archive.ts`) performs no disk, network, or env access** — same discipline as `targets.ts`. All `fs` lives in `archiveFs.ts` / the controller.
 - **Reuse, don't duplicate**: `FileTree` and `SkippedArtifact` are imported from `./targets.js`; `safePathSegment` is exported from `targets.ts` and shared.
-- **Round-trip identity is the headline invariant**: `readPackArchive(writePackArchive(pack).files)` deep-equals `pack`.
-- `ARCHIVE_FORMAT_VERSION = 1`. Body files are JSON `null, 2`-pretty-printed; `pack.json`/`pack.lock` likewise.
+- **Round-trip identity is the headline invariant**: `readPackArchive(writePackArchive(gem).files)` deep-equals `gem`.
+- `ARCHIVE_FORMAT_VERSION = 1`. Body files are JSON `null, 2`-pretty-printed; `gem.json`/`gem.lock` likewise.
 - Plan refinement of spec §3: `writePackArchive` returns `{ files, skipped }` (not bare `FileTree`) so post-sanitization path collisions are reported the same way `materialize` reports them (spec §2 "recorded reason").
 
 ---
@@ -24,14 +24,14 @@
 ### Task 1: Lock primitives (`computeLock`, `verifyLock`)
 
 **Files:**
-- Create: `src/pack/archive.ts`
-- Test: `src/pack/__tests__/archive.test.ts`
+- Create: `src/gem/archive.ts`
+- Test: `src/gem/__tests__/archive.test.ts`
 
 **Interfaces:**
 - Consumes: `FileTree`, `SkippedArtifact` from `./targets.js`.
 - Produces:
   - `export const ARCHIVE_FORMAT_VERSION = 1`
-  - `export interface PackLock { formatVersion: number; files: Record<string,string>; packDigest: string; signature: string | null }`
+  - `export interface PackLock { formatVersion: number; files: Record<string,string>; gemDigest: string; signature: string | null }`
   - `export interface VerifyResult { ok: boolean; mismatches: string[]; missing: string[]; extra: string[] }`
   - `export function computeLock(files: FileTree): PackLock`
   - `export function verifyLock(files: FileTree, lock: PackLock): VerifyResult`
@@ -39,30 +39,30 @@
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// src/pack/__tests__/archive.test.ts
+// src/gem/__tests__/archive.test.ts
 import { describe, it, expect } from "vitest";
 import { computeLock, verifyLock } from "../archive.js";
 
 describe("computeLock", () => {
-  it("hashes every file except pack.lock and is order-independent", () => {
-    const a = computeLock({ "pack.json": '{"name":"p"}', "skills/x/SKILL.md": "# x", "pack.lock": "ignored" });
-    const b = computeLock({ "skills/x/SKILL.md": "# x", "pack.json": '{"name":"p"}' });
-    expect(a.files["pack.lock"]).toBeUndefined();
+  it("hashes every file except gem.lock and is order-independent", () => {
+    const a = computeLock({ "gem.json": '{"name":"p"}', "skills/x/SKILL.md": "# x", "gem.lock": "ignored" });
+    const b = computeLock({ "skills/x/SKILL.md": "# x", "gem.json": '{"name":"p"}' });
+    expect(a.files["gem.lock"]).toBeUndefined();
     expect(a.files["skills/x/SKILL.md"]).toMatch(/^sha256:[0-9a-f]{64}$/);
-    expect(a.packDigest).toBe(b.packDigest); // key/insertion order does not change the digest
+    expect(a.gemDigest).toBe(b.gemDigest); // key/insertion order does not change the digest
     expect(a.signature).toBeNull();
   });
 
-  it("packDigest is stable across manifest key reordering and whitespace", () => {
-    const a = computeLock({ "pack.json": '{"name":"p","version":"0.1.0"}' });
-    const b = computeLock({ "pack.json": '{ "version":"0.1.0",\n "name":"p" }' });
-    expect(a.packDigest).toBe(b.packDigest);
+  it("gemDigest is stable across manifest key reordering and whitespace", () => {
+    const a = computeLock({ "gem.json": '{"name":"p","version":"0.1.0"}' });
+    const b = computeLock({ "gem.json": '{ "version":"0.1.0",\n "name":"p" }' });
+    expect(a.gemDigest).toBe(b.gemDigest);
   });
 });
 
 describe("verifyLock", () => {
   it("ok for an untouched tree, detects a tampered body", () => {
-    const files = { "pack.json": '{"name":"p"}', "skills/x/SKILL.md": "# x" };
+    const files = { "gem.json": '{"name":"p"}', "skills/x/SKILL.md": "# x" };
     const lock = computeLock(files);
     expect(verifyLock(files, lock).ok).toBe(true);
     const tampered = { ...files, "skills/x/SKILL.md": "# x EDITED" };
@@ -72,9 +72,9 @@ describe("verifyLock", () => {
   });
 
   it("reports missing and extra files", () => {
-    const files = { "pack.json": "{}", "a.md": "a" };
+    const files = { "gem.json": "{}", "a.md": "a" };
     const lock = computeLock(files);
-    expect(verifyLock({ "pack.json": "{}" }, lock).missing).toContain("a.md");
+    expect(verifyLock({ "gem.json": "{}" }, lock).missing).toContain("a.md");
     expect(verifyLock({ ...files, "b.md": "b" }, lock).extra).toContain("b.md");
   });
 });
@@ -88,20 +88,20 @@ Expected: FAIL — `Cannot find module '../archive.js'` / `computeLock is not a 
 - [ ] **Step 3: Write minimal implementation**
 
 ```ts
-// src/pack/archive.ts
+// src/gem/archive.ts
 import { createHash } from "node:crypto";
 import type { FileTree, SkippedArtifact } from "./targets.js";
 
 export type { FileTree, SkippedArtifact };
 export const ARCHIVE_FORMAT_VERSION = 1;
 
-const MANIFEST_PATH = "pack.json";
-const LOCK_PATH = "pack.lock";
+const MANIFEST_PATH = "gem.json";
+const LOCK_PATH = "gem.lock";
 
 export interface PackLock {
   formatVersion: number;
   files: Record<string, string>; // path -> "sha256:<hex>"
-  packDigest: string;            // "sha256:<hex>"
+  gemDigest: string;            // "sha256:<hex>"
   signature: string | null;
 }
 
@@ -127,8 +127,8 @@ export function computeLock(files: FileTree): PackLock {
   for (const p of paths) fileDigests[p] = sha256(files[p]);
   const manifestCanonical = MANIFEST_PATH in files ? stableStringify(JSON.parse(files[MANIFEST_PATH])) : "";
   const fileLines = paths.map((p) => `${p}:${fileDigests[p]}`).join("\n");
-  const packDigest = sha256(manifestCanonical + "\n" + fileLines);
-  return { formatVersion: ARCHIVE_FORMAT_VERSION, files: fileDigests, packDigest, signature: null };
+  const gemDigest = sha256(manifestCanonical + "\n" + fileLines);
+  return { formatVersion: ARCHIVE_FORMAT_VERSION, files: fileDigests, gemDigest, signature: null };
 }
 
 export function verifyLock(files: FileTree, lock: PackLock): VerifyResult {
@@ -138,7 +138,7 @@ export function verifyLock(files: FileTree, lock: PackLock): VerifyResult {
   const missing = Object.keys(lock.files).filter((p) => !(p in files));
   const extra = present.filter((p) => !(p in lock.files));
   let ok = mismatches.length === 0 && missing.length === 0 && extra.length === 0;
-  if (ok && computeLock(files).packDigest !== lock.packDigest) { mismatches.push("packDigest"); ok = false; }
+  if (ok && computeLock(files).gemDigest !== lock.gemDigest) { mismatches.push("gemDigest"); ok = false; }
   return { ok, mismatches, missing, extra };
 }
 ```
@@ -151,29 +151,29 @@ Expected: PASS (both describe blocks green).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/pack/archive.ts src/pack/__tests__/archive.test.ts
+git add src/gem/archive.ts src/gem/__tests__/archive.test.ts
 git commit -m "feat(archive): sha256 lock primitives (computeLock/verifyLock)"
 ```
 
 ---
 
-### Task 2: `writePackArchive` (Pack → archive tree)
+### Task 2: `writePackArchive` (Gem → archive tree)
 
 **Files:**
-- Modify: `src/pack/targets.ts` (export `safePathSegment`)
-- Modify: `src/pack/archive.ts`
-- Test: `src/pack/__tests__/archive.test.ts`
+- Modify: `src/gem/targets.ts` (export `safePathSegment`)
+- Modify: `src/gem/archive.ts`
+- Test: `src/gem/__tests__/archive.test.ts`
 
 **Interfaces:**
-- Consumes: `Pack`, `PackArtifact`, `SkillArtifact`, `McpServerArtifact`, `InstructionsArtifact`, `HookArtifact`, `PackCheck` from `./types.js`; `safePathSegment` from `./targets.js`; `computeLock` (Task 1).
+- Consumes: `Gem`, `PackArtifact`, `SkillArtifact`, `McpServerArtifact`, `InstructionsArtifact`, `HookArtifact`, `PackCheck` from `./types.js`; `safePathSegment` from `./targets.js`; `computeLock` (Task 1).
 - Produces:
   - `export interface ArchiveResult { files: FileTree; skipped: SkippedArtifact[] }`
-  - `export function writePackArchive(pack: Pack, opts?: { version?: string }): ArchiveResult`
-  - On-disk layout: `skills/<seg>/SKILL.md`, `instructions/<seg>.md`, `mcp/<seg>.json` (`{transport,config,source?,secretRefs?}`), `hooks/<seg>.json` (`{event,matcher?,config,source?,secretRefs?}`), `checks/<seg>.json`, `pack.json`, `pack.lock`. `seg = safePathSegment(name)`.
+  - `export function writePackArchive(gem: Gem, opts?: { version?: string }): ArchiveResult`
+  - On-disk layout: `skills/<seg>/SKILL.md`, `instructions/<seg>.md`, `mcp/<seg>.json` (`{transport,config,source?,secretRefs?}`), `hooks/<seg>.json` (`{event,matcher?,config,source?,secretRefs?}`), `checks/<seg>.json`, `gem.json`, `gem.lock`. `seg = safePathSegment(name)`.
 
 - [ ] **Step 1: Export `safePathSegment` from `targets.ts`**
 
-In `src/pack/targets.ts`, change the existing declaration so it is exported (currently `function safePathSegment`):
+In `src/gem/targets.ts`, change the existing declaration so it is exported (currently `function safePathSegment`):
 
 ```ts
 export function safePathSegment(name: string): string {
@@ -185,16 +185,16 @@ export function safePathSegment(name: string): string {
 - [ ] **Step 2: Write the failing test**
 
 ```ts
-// append to src/pack/__tests__/archive.test.ts
+// append to src/gem/__tests__/archive.test.ts
 import { writePackArchive } from "../archive.js";
-import type { Pack, PackArtifact } from "../types.js";
+import type { Gem, PackArtifact } from "../types.js";
 
-const pack = (artifacts: PackArtifact[], extra: Partial<Pack> = {}): Pack =>
+const gem = (artifacts: PackArtifact[], extra: Partial<Gem> = {}): Gem =>
   ({ name: "demo", createdFrom: "/d", artifacts, checks: [], requiredSecrets: [], ...extra });
 
 describe("writePackArchive", () => {
   it("extracts bodies to files and writes manifest + lock", () => {
-    const p = pack([
+    const p = gem([
       { type: "skill", name: "code review", description: "rev", source: "standalone", content: "# Review" },
       { type: "instructions", name: "soul", content: "be kind" },
       { type: "mcp_server", name: "context7", transport: "http", config: { url: "https://x/sse", headers: { Authorization: "<redacted>" } }, secretRefs: [{ name: "C7", location: "headers.Authorization" }] },
@@ -208,7 +208,7 @@ describe("writePackArchive", () => {
     expect(JSON.parse(files["mcp/context7.json"]).transport).toBe("http");
     expect(JSON.parse(files["hooks/fmt.json"]).event).toBe("PostToolUse");
 
-    const manifest = JSON.parse(files["pack.json"]);
+    const manifest = JSON.parse(files["gem.json"]);
     expect(manifest.formatVersion).toBe(1);
     expect(manifest.version).toBe("1.2.3");
     expect(manifest.name).toBe("demo");
@@ -216,13 +216,13 @@ describe("writePackArchive", () => {
       .toMatchObject({ type: "skill", path: "skills/code_review/SKILL.md", description: "rev", source: "standalone" });
     expect(manifest.requiredSecrets[0].name).toBe("C7");
 
-    expect(files["pack.lock"]).toBeDefined();
-    expect(JSON.parse(files["pack.lock"]).files["skills/code_review/SKILL.md"]).toMatch(/^sha256:/);
+    expect(files["gem.lock"]).toBeDefined();
+    expect(JSON.parse(files["gem.lock"]).files["skills/code_review/SKILL.md"]).toMatch(/^sha256:/);
     expect(JSON.stringify(files)).not.toContain("ghp_"); // no secret values anywhere
   });
 
   it("reports a post-sanitization path collision instead of overwriting", () => {
-    const { skipped, files } = writePackArchive(pack([
+    const { skipped, files } = writePackArchive(gem([
       { type: "skill", name: "a b", source: "standalone", content: "first" },
       { type: "skill", name: "a/b", source: "standalone", content: "second" }, // both -> skills/a_b/SKILL.md
     ]));
@@ -240,11 +240,11 @@ Expected: FAIL — `writePackArchive is not a function`.
 
 - [ ] **Step 4: Write minimal implementation**
 
-Add to `src/pack/archive.ts` (imports at top, function below `verifyLock`):
+Add to `src/gem/archive.ts` (imports at top, function below `verifyLock`):
 
 ```ts
 // add to the imports block:
-import type { Pack, PackArtifact, ArtifactType } from "./types.js";
+import type { Gem, PackArtifact, ArtifactType } from "./types.js";
 import { safePathSegment } from "./targets.js";
 
 interface ManifestArtifactEntry { type: ArtifactType; name: string; path: string; description?: string; source?: string }
@@ -255,13 +255,13 @@ interface PackManifest {
   version: string;
   createdFrom: string;
   artifacts: ManifestArtifactEntry[];
-  requiredSecrets: Pack["requiredSecrets"];
+  requiredSecrets: Gem["requiredSecrets"];
   checks: ManifestCheckEntry[];
 }
 
 export interface ArchiveResult { files: FileTree; skipped: SkippedArtifact[] }
 
-export function writePackArchive(pack: Pack, opts: { version?: string } = {}): ArchiveResult {
+export function writePackArchive(gem: Gem, opts: { version?: string } = {}): ArchiveResult {
   const files: FileTree = {};
   const skipped: SkippedArtifact[] = [];
   const artifacts: ManifestArtifactEntry[] = [];
@@ -272,7 +272,7 @@ export function writePackArchive(pack: Pack, opts: { version?: string } = {}): A
     return true;
   };
 
-  for (const a of pack.artifacts) {
+  for (const a of gem.artifacts) {
     const seg = safePathSegment(a.name);
     if (a.type === "skill") {
       const path = `skills/${seg}/SKILL.md`;
@@ -301,20 +301,20 @@ export function writePackArchive(pack: Pack, opts: { version?: string } = {}): A
   }
 
   const checks: ManifestCheckEntry[] = [];
-  for (const c of pack.checks) {
+  for (const c of gem.checks) {
     const path = `checks/${safePathSegment(c.name)}.json`;
-    if (path in files) continue; // check names are unique within a pack; never overwrite a body
+    if (path in files) continue; // check names are unique within a gem; never overwrite a body
     files[path] = JSON.stringify(c, null, 2);
     checks.push({ name: c.name, path });
   }
 
   const manifest: PackManifest = {
     formatVersion: ARCHIVE_FORMAT_VERSION,
-    name: pack.name,
+    name: gem.name,
     version: opts.version ?? "0.1.0",
-    createdFrom: pack.createdFrom,
+    createdFrom: gem.createdFrom,
     artifacts,
-    requiredSecrets: pack.requiredSecrets,
+    requiredSecrets: gem.requiredSecrets,
     checks,
   };
   files[MANIFEST_PATH] = JSON.stringify(manifest, null, 2);
@@ -331,30 +331,30 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/pack/targets.ts src/pack/archive.ts src/pack/__tests__/archive.test.ts
-git commit -m "feat(archive): writePackArchive — Pack to manifest+lock+body tree"
+git add src/gem/targets.ts src/gem/archive.ts src/gem/__tests__/archive.test.ts
+git commit -m "feat(archive): writePackArchive — Gem to manifest+lock+body tree"
 ```
 
 ---
 
-### Task 3: `readPackArchive` (archive tree → Pack) + round-trip identity
+### Task 3: `readPackArchive` (archive tree → Gem) + round-trip identity
 
 **Files:**
-- Modify: `src/pack/archive.ts`
-- Test: `src/pack/__tests__/archive.test.ts`
+- Modify: `src/gem/archive.ts`
+- Test: `src/gem/__tests__/archive.test.ts`
 
 **Interfaces:**
-- Consumes: `writePackArchive`, `verifyLock`, the manifest body files (Task 2); `Pack`, artifact types, `PackCheck` from `./types.js`.
-- Produces: `export function readPackArchive(files: FileTree): Pack` — verifies the lock (throws on failure) and reconstructs the exact `Pack`.
+- Consumes: `writePackArchive`, `verifyLock`, the manifest body files (Task 2); `Gem`, artifact types, `PackCheck` from `./types.js`.
+- Produces: `export function readPackArchive(files: FileTree): Gem` — verifies the lock (throws on failure) and reconstructs the exact `Gem`.
 
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// append to src/pack/__tests__/archive.test.ts
+// append to src/gem/__tests__/archive.test.ts
 import { readPackArchive } from "../archive.js";
 
 describe("readPackArchive", () => {
-  const full = pack([
+  const full = gem([
     { type: "skill", name: "code review", description: "rev", source: "standalone", content: "# Review" },
     { type: "instructions", name: "soul", content: "be kind" },
     { type: "mcp_server", name: "context7", transport: "http", config: { url: "https://x/sse", headers: { Authorization: "<redacted>" } }, secretRefs: [{ name: "C7", location: "headers.Authorization" }] },
@@ -364,7 +364,7 @@ describe("readPackArchive", () => {
     checks: [{ kind: "behavioral", name: "smoke", task: "do x", assertions: [{ type: "output_contains", substring: "ok" }] }],
   });
 
-  it("round-trips a Pack exactly", () => {
+  it("round-trips a Gem exactly", () => {
     const back = readPackArchive(writePackArchive(full).files);
     expect(back).toEqual(full);
   });
@@ -378,7 +378,7 @@ describe("readPackArchive", () => {
   it("blessing the edit (recompute lock) lets the read succeed", () => {
     const { files } = writePackArchive(full);
     const edited = { ...files, "skills/code_review/SKILL.md": "# Review EDITED" };
-    edited["pack.lock"] = JSON.stringify(computeLock(edited), null, 2);
+    edited["gem.lock"] = JSON.stringify(computeLock(edited), null, 2);
     expect(readPackArchive(edited).artifacts[0]).toMatchObject({ type: "skill", content: "# Review EDITED" });
   });
 });
@@ -391,27 +391,27 @@ Expected: FAIL — `readPackArchive is not a function`.
 
 - [ ] **Step 3: Write minimal implementation**
 
-Add to `src/pack/archive.ts` (extend the type import and append the function):
+Add to `src/gem/archive.ts` (extend the type import and append the function):
 
 ```ts
 // extend the types import to include the artifact + check types:
 import type {
-  Pack, PackArtifact, ArtifactType,
+  Gem, PackArtifact, ArtifactType,
   SkillArtifact, McpServerArtifact, HookArtifact, PackCheck,
 } from "./types.js";
 
-export function readPackArchive(files: FileTree): Pack {
+export function readPackArchive(files: FileTree): Gem {
   const manifestRaw = files[MANIFEST_PATH];
-  if (manifestRaw === undefined) throw new Error("archive missing pack.json");
+  if (manifestRaw === undefined) throw new Error("archive missing gem.json");
   const lockRaw = files[LOCK_PATH];
-  if (lockRaw === undefined) throw new Error("archive missing pack.lock");
+  if (lockRaw === undefined) throw new Error("archive missing gem.lock");
 
   const manifest = JSON.parse(manifestRaw) as PackManifest;
   const lock = JSON.parse(lockRaw) as PackLock;
   const v = verifyLock(files, lock);
   if (!v.ok) {
     throw new Error(
-      `pack.lock verification failed — mismatches:[${v.mismatches.join(",")}] missing:[${v.missing.join(",")}] extra:[${v.extra.join(",")}]`,
+      `gem.lock verification failed — mismatches:[${v.mismatches.join(",")}] missing:[${v.missing.join(",")}] extra:[${v.extra.join(",")}]`,
     );
   }
 
@@ -463,8 +463,8 @@ Expected: PASS — all of `computeLock`/`verifyLock`/`writePackArchive`/`readPac
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/pack/archive.ts src/pack/__tests__/archive.test.ts
-git commit -m "feat(archive): readPackArchive — verified tree to Pack (round-trip identity)"
+git add src/gem/archive.ts src/gem/__tests__/archive.test.ts
+git commit -m "feat(archive): readPackArchive — verified tree to Gem (round-trip identity)"
 ```
 
 ---
@@ -489,7 +489,7 @@ import {
 
 describe("archive schemas", () => {
   it("accepts a well-formed lock and manifest", () => {
-    expect(PackLockSchema.safeParse({ formatVersion: 1, files: { "a.md": "sha256:ab" }, packDigest: "sha256:cd", signature: null }).success).toBe(true);
+    expect(PackLockSchema.safeParse({ formatVersion: 1, files: { "a.md": "sha256:ab" }, gemDigest: "sha256:cd", signature: null }).success).toBe(true);
     expect(PackManifestSchema.safeParse({
       formatVersion: 1, name: "p", version: "0.1.0", createdFrom: "/d",
       artifacts: [{ type: "skill", name: "x", path: "skills/x/SKILL.md", source: "standalone" }],
@@ -501,13 +501,13 @@ describe("archive schemas", () => {
     expect(ArchiveRequestSchema.safeParse({ selection: { all: true }, outDir: "/tmp/out" }).success).toBe(true);
     expect(ArchiveRequestSchema.safeParse({ name: "p" }).success).toBe(false);
     expect(ArchiveResponseSchema.safeParse({
-      files: { "pack.json": "{}" }, lock: { formatVersion: 1, files: {}, packDigest: "sha256:x", signature: null }, skipped: [], path: null,
+      files: { "gem.json": "{}" }, lock: { formatVersion: 1, files: {}, gemDigest: "sha256:x", signature: null }, skipped: [], path: null,
     }).success).toBe(true);
   });
 
   it("materialize accepts selection OR archivePath, but not neither", () => {
     expect(MaterializeRequestSchema.safeParse({ selection: { all: true }, target: "claude" }).success).toBe(true);
-    expect(MaterializeRequestSchema.safeParse({ archivePath: "/tmp/pack", target: "eve" }).success).toBe(true);
+    expect(MaterializeRequestSchema.safeParse({ archivePath: "/tmp/gem", target: "eve" }).success).toBe(true);
     expect(MaterializeRequestSchema.safeParse({ target: "claude" }).success).toBe(false);
   });
 });
@@ -523,11 +523,11 @@ Expected: FAIL — `PackLockSchema` undefined / import error.
 In `src/schemas.ts`, add after the existing `MaterializeResponseSchema` block, and replace the current `MaterializeRequestSchema` definition:
 
 ```ts
-// ── Pack archive ──
+// ── Gem archive ──
 export const PackLockSchema = z.object({
   formatVersion: z.number(),
   files: z.record(z.string(), z.string()),
-  packDigest: z.string(),
+  gemDigest: z.string(),
   signature: z.string().nullable(),
 });
 
@@ -603,9 +603,9 @@ git commit -m "feat(schemas): manifest/lock/archive schemas; materialize accepts
 ### Task 5: `archiveFs` disk helpers + `POST /api/archive` op
 
 **Files:**
-- Create: `src/pack/archiveFs.ts`
-- Modify: `src/pack.controller.ts`
-- Test: `src/__tests__/pack.controller.test.ts`
+- Create: `src/gem/archiveFs.ts`
+- Modify: `src/gem.controller.ts`
+- Test: `src/__tests__/gem.controller.test.ts`
 
 **Interfaces:**
 - Consumes: `FileTree` from `./archive.js`; `writePackArchive`, `PackLock` from `./archive.js`; `ArchiveRequestSchema`/`ArchiveResponseSchema` (Task 4); existing `buildPack`, `resolveDirs`, `introspectAll`.
@@ -616,7 +616,7 @@ git commit -m "feat(schemas): manifest/lock/archive schemas; materialize accepts
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// append to src/__tests__/pack.controller.test.ts (uses the existing `dir` fake ~/.claude + `client`)
+// append to src/__tests__/gem.controller.test.ts (uses the existing `dir` fake ~/.claude + `client`)
 import { mkdtempSync as mkdtempSync2 } from "node:fs"; // (or reuse the top import; do not double-declare)
 
 describe("POST /api/archive", () => {
@@ -626,8 +626,8 @@ describe("POST /api/archive", () => {
       .send({ dir, selection: { skills: ["review"], includeInstructions: true }, name: "demo", version: "2.0.0", outDir: out })
       .expect(200);
     expect(r.body.files["skills/review/SKILL.md"]).toContain("# Review");
-    expect(JSON.parse(r.body.files["pack.json"]).version).toBe("2.0.0");
-    expect(r.body.lock.packDigest).toMatch(/^sha256:/);
+    expect(JSON.parse(r.body.files["gem.json"]).version).toBe("2.0.0");
+    expect(r.body.lock.gemDigest).toMatch(/^sha256:/);
     expect(r.body.path).toBe(out);
     expect(JSON.stringify(r.body)).not.toContain("ghp_secret"); // redaction survives
     rmSync(out, { recursive: true, force: true });
@@ -645,7 +645,7 @@ Expected: FAIL — 404/route missing or `archive` not a method.
 - [ ] **Step 3: Write `archiveFs.ts`**
 
 ```ts
-// src/pack/archiveFs.ts
+// src/gem/archiveFs.ts
 import { mkdirSync, writeFileSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import type { FileTree } from "./archive.js";
@@ -676,12 +676,12 @@ export function readArchiveDir(root: string): FileTree {
 
 - [ ] **Step 4: Wire the controller**
 
-In `src/pack.controller.ts`, add imports:
+In `src/gem.controller.ts`, add imports:
 
 ```ts
-import { writePackArchive } from "./pack/archive.js";
-import type { PackLock } from "./pack/archive.js";
-import { writeArchiveDir } from "./pack/archiveFs.js";
+import { writePackArchive } from "./gem/archive.js";
+import type { PackLock } from "./gem/archive.js";
+import { writeArchiveDir } from "./gem/archiveFs.js";
 ```
 
 Extend the `schemas.js` import list with `ArchiveRequestSchema, ArchiveResponseSchema`, then add this method inside the class (e.g. after `materialize`):
@@ -691,9 +691,9 @@ Extend the `schemas.js` import list with `ArchiveRequestSchema, ArchiveResponseS
   async archive(input: { body: z.infer<typeof ArchiveRequestSchema> }): Promise<z.infer<typeof ArchiveResponseSchema>> {
     const dirs = resolveDirs(input.body.dir);
     const inventory = introspectAll(input.body.dir, input.body.projects);
-    const pack = buildPack(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
-    const { files, skipped } = writePackArchive(pack, { version: input.body.version });
-    const lock = JSON.parse(files["pack.lock"]) as PackLock;
+    const gem = buildPack(inventory, input.body.selection, { name: input.body.name ?? "gem", createdFrom: dirs.claudeDir });
+    const { files, skipped } = writePackArchive(gem, { version: input.body.version });
+    const lock = JSON.parse(files["gem.lock"]) as PackLock;
     let path: string | null = null;
     if (input.body.outDir) { writeArchiveDir(input.body.outDir, files); path = input.body.outDir; }
     return { files, lock, skipped, path };
@@ -708,8 +708,8 @@ Expected: PASS (tree returned, written to outDir, no secret value present).
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/pack/archiveFs.ts src/pack.controller.ts src/__tests__/pack.controller.test.ts
-git commit -m "feat(api): POST /api/archive — build + write a pack archive"
+git add src/gem/archiveFs.ts src/gem.controller.ts src/__tests__/gem.controller.test.ts
+git commit -m "feat(api): POST /api/archive — build + write a gem archive"
 ```
 
 ---
@@ -717,17 +717,17 @@ git commit -m "feat(api): POST /api/archive — build + write a pack archive"
 ### Task 6: `materialize` consumes an archive (`archivePath`)
 
 **Files:**
-- Modify: `src/pack.controller.ts`
-- Test: `src/__tests__/pack.controller.test.ts`
+- Modify: `src/gem.controller.ts`
+- Test: `src/__tests__/gem.controller.test.ts`
 
 **Interfaces:**
-- Consumes: `readPackArchive` from `./pack/archive.js`, `readArchiveDir` from `./pack/archiveFs.js`, the `archivePath` field on `MaterializeRequestSchema` (Task 4), `/api/archive` (Task 5).
+- Consumes: `readPackArchive` from `./gem/archive.js`, `readArchiveDir` from `./gem/archiveFs.js`, the `archivePath` field on `MaterializeRequestSchema` (Task 4), `/api/archive` (Task 5).
 - Produces: the existing `POST /api/materialize` now branches — if `archivePath` is set it loads + verifies the archive and renders from it, with no live introspection.
 
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// append to src/__tests__/pack.controller.test.ts
+// append to src/__tests__/gem.controller.test.ts
 describe("POST /api/materialize from an archive", () => {
   it("renders an Eve project from a written archive (no live introspection)", async () => {
     const out = mkdtempSync(join(tmpdir(), "arch2-"));
@@ -762,12 +762,12 @@ Expected: FAIL — `archivePath` ignored; Eve files come back empty / wrong, or 
 
 - [ ] **Step 3: Update the controller**
 
-In `src/pack.controller.ts`, add imports:
+In `src/gem.controller.ts`, add imports:
 
 ```ts
-import { readPackArchive } from "./pack/archive.js";
-import { readArchiveDir } from "./pack/archiveFs.js";
-import type { Pack } from "./pack/types.js";
+import { readPackArchive } from "./gem/archive.js";
+import { readArchiveDir } from "./gem/archiveFs.js";
+import type { Gem } from "./gem/types.js";
 ```
 
 Replace the body of the existing `materialize` method with the branch:
@@ -776,15 +776,15 @@ Replace the body of the existing `materialize` method with the branch:
   @post("/materialize", { body: MaterializeRequestSchema, response: MaterializeResponseSchema })
   async materialize(input: { body: z.infer<typeof MaterializeRequestSchema> }): Promise<z.infer<typeof MaterializeResponseSchema>> {
     const target = input.body.target as TargetId;
-    let pack: Pack;
+    let gem: Gem;
     if (input.body.archivePath) {
-      pack = readPackArchive(readArchiveDir(input.body.archivePath));
+      gem = readPackArchive(readArchiveDir(input.body.archivePath));
     } else {
       const dirs = resolveDirs(input.body.dir);
       const inventory = introspectAll(input.body.dir, input.body.projects);
-      pack = buildPack(inventory, input.body.selection!, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
+      gem = buildPack(inventory, input.body.selection!, { name: input.body.name ?? "gem", createdFrom: dirs.claudeDir });
     }
-    return { target, ...materialize(pack, target), compatibility: compatibility(pack) };
+    return { target, ...materialize(gem, target), compatibility: compatibility(gem) };
   }
 ```
 
@@ -801,8 +801,8 @@ Expected: PASS — every existing test plus the new archive + controller tests.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/pack.controller.ts src/__tests__/pack.controller.test.ts
-git commit -m "feat(api): materialize can render from a pack archive (archivePath)"
+git add src/gem.controller.ts src/__tests__/gem.controller.test.ts
+git commit -m "feat(api): materialize can render from a gem archive (archivePath)"
 ```
 
 ---
@@ -821,13 +821,13 @@ These are intentionally out of this foundation plan; each is a separate, indepen
 ## Self-Review
 
 **Spec coverage:**
-- §1.1 serialize at edges → Tasks 2/3 (`writePackArchive`/`readPackArchive`); `Pack` unchanged ✓
+- §1.1 serialize at edges → Tasks 2/3 (`writePackArchive`/`readPackArchive`); `Gem` unchanged ✓
 - §1.2 neutral layout → Task 2 paths (`skills/`, `instructions/`, `mcp/`, `hooks/`, `checks/`) ✓
 - §1.3 manifest+lock split → Tasks 1 (lock) + 2 (manifest) ✓
 - §1.4 bodies as files → Task 2 ✓
 - §1.5 secret-safe → asserted in Tasks 2 & 5 ✓
 - §1.6 pure core / controller owns I/O → `archive.ts` pure; `archiveFs.ts` + controller hold all `fs` (Task 5) ✓
-- §1.7 packDigest signable, signing deferred → `signature: null` in Task 1 ✓
+- §1.7 gemDigest signable, signing deferred → `signature: null` in Task 1 ✓
 - §1.8 tar → **Deferred** (named above) — directory form delivers working software now ✓
 - §1.9 additive surface → Task 4 (optional `archivePath`) + Tasks 5/6 ✓
 - §2 layout + `safePathSegment` reuse → Task 2 ✓

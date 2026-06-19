@@ -1,15 +1,15 @@
-# agentgem — Flue Target: materialize a Pack into a Flue project (Design)
+# agentgem — Flue Target: materialize a Gem into a Flue project (Design)
 
 **Date:** 2026-06-18
 **Status:** Approved design, pre-implementation
 **Project:** `agentgem` (`/Users/rfeng/Projects/ninemind/agentgem`)
-**Scope:** Add `flue` as a new `TARGET_REGISTRY` entry so `materialize(pack, "flue")` renders a Pack into a [Flue](https://flueframework.com) project (TypeScript agent framework by the Astro team, `@flue/runtime`). Flue is the first target that needs a **composed agent file** aggregating skills + instructions, so this also adds a small reusable `compose` hook to the target model. Once shipped, every workspace renders `.targets/flue/` for free.
+**Scope:** Add `flue` as a new `TARGET_REGISTRY` entry so `materialize(gem, "flue")` renders a Gem into a [Flue](https://flueframework.com) project (TypeScript agent framework by the Astro team, `@flue/runtime`). Flue is the first target that needs a **composed agent file** aggregating skills + instructions, so this also adds a small reusable `compose` hook to the target model. Once shipped, every workspace renders `.targets/flue/` for free.
 
 ---
 
 ## 0. Motivation
 
-The platform's portability story names Flue alongside Eve/Codex/Claude. Eve proved the code-gen target pattern (TS project layout, MCP via generated connections, stdio→HTTP proxy bridge). Flue is the natural next target and a clean parallel — but it surfaces one model gap: Flue registers an agent through a single `agents/<name>.ts` file that *imports and lists* its skills and embeds its instructions, whereas the current `TARGET_REGISTRY` renders strictly per-artifact-type with no hook that sees the whole pack. Flue forces (and earns) a general `compose` hook, which the future OpenAI-SandboxAgent target will reuse.
+The platform's portability story names Flue alongside Eve/Codex/Claude. Eve proved the code-gen target pattern (TS project layout, MCP via generated connections, stdio→HTTP proxy bridge). Flue is the natural next target and a clean parallel — but it surfaces one model gap: Flue registers an agent through a single `agents/<name>.ts` file that *imports and lists* its skills and embeds its instructions, whereas the current `TARGET_REGISTRY` renders strictly per-artifact-type with no hook that sees the whole gem. Flue forces (and earns) a general `compose` hook, which the future OpenAI-SandboxAgent target will reuse.
 
 ## 1. Flue conventions (verified via /withastro/flue docs)
 
@@ -22,8 +22,8 @@ The platform's portability story names Flue alongside Eve/Codex/Claude. Eve prov
 ## 2. Design decisions (locked)
 
 1. **Reuse the SKILL.md renderer.** Flue skills use the identical `skills/<n>/SKILL.md` convention, so `flue` references the existing shared `skillSkillMd` renderer (convergence is literal, not duplicated).
-2. **Add a `compose` hook to `TargetSpec`.** `compose?: (pack: Pack) => MaterializeResult`, run after the per-type renderers and merged with the same collision-checking. Flue uses it to emit `agents/<packname>.ts`. General + reusable (OpenAI-SandboxAgent will want it); Eve/Claude/Codex don't set it, so they're unchanged.
-3. **Instructions fold into the agent file**, not a standalone file. Flue's `instructions` per-type renderer returns `{}` (a deliberate "handled by compose, no standalone file" marker, so instructions are NOT skip-reported), and `compose` reads instruction artifacts from the pack and embeds the concatenated text as the `instructions:` string.
+2. **Add a `compose` hook to `TargetSpec`.** `compose?: (gem: Gem) => MaterializeResult`, run after the per-type renderers and merged with the same collision-checking. Flue uses it to emit `agents/<packname>.ts`. General + reusable (OpenAI-SandboxAgent will want it); Eve/Claude/Codex don't set it, so they're unchanged.
+3. **Instructions fold into the agent file**, not a standalone file. Flue's `instructions` per-type renderer returns `{}` (a deliberate "handled by compose, no standalone file" marker, so instructions are NOT skip-reported), and `compose` reads instruction artifacts from the gem and embeds the concatenated text as the `instructions:` string.
 4. **MCP mirrors Eve, remote-faithful.** `connections/<n>.ts` factory per server: http/sse → `connectMcpServer` with `url` + env-sourced auth headers; stdio → a generated `proxies/<n>.mjs` (reuse `stdioProxyRunner`) plus a connection at the localhost proxy URL. The async tool-wiring (`init(agent, { tools })`) is the operator's documented step — the same boundary Eve drew (user decision).
 5. **Hooks unsupported → skipped** with a reason (like Eve).
 6. **No `flue.config.ts` / `package.json` / `tools/` scaffold in v1.** We emit the *source layout* (agent + skills + connections + proxies), matching Eve's scope; the operator runs `npx flue init` for project config. Named out of scope.
@@ -40,7 +40,7 @@ The platform's portability story names Flue alongside Eve/Codex/Claude. Eve prov
 | mcp_server (stdio) | `proxies/<n>.mjs` (proxy) + `connections/<n>.ts` at the localhost proxy URL |
 | hook | — skip (no native concept) |
 
-## 4. The `compose` hook (`src/pack/targets.ts`)
+## 4. The `compose` hook (`src/gem/targets.ts`)
 
 ```ts
 interface TargetSpec {
@@ -50,15 +50,15 @@ interface TargetSpec {
   mcp?: (servers: McpServerArtifact[]) => MaterializeResult;
   instructions?: (all: InstructionsArtifact[]) => FileTree;
   hook?: (hooks: HookArtifact[]) => FileTree;
-  compose?: (pack: Pack) => MaterializeResult; // NEW: cross-cutting file(s) that see the whole pack
+  compose?: (gem: Gem) => MaterializeResult; // NEW: cross-cutting file(s) that see the whole gem
 }
 ```
 
-`materialize()` runs `compose` **after** the per-type renderers and merges its `files`/`skipped` with the existing collision-checking `merge`/`skipped` machinery (a `compose` path that collides with a per-type file is reported, never silently overwritten). `compose` is the only renderer that receives the whole `Pack`; it derives skill import paths with the shared `safePathSegment` so they match what `skillSkillMd` emitted.
+`materialize()` runs `compose` **after** the per-type renderers and merges its `files`/`skipped` with the existing collision-checking `merge`/`skipped` machinery (a `compose` path that collides with a per-type file is reported, never silently overwritten). `compose` is the only renderer that receives the whole `Gem`; it derives skill import paths with the shared `safePathSegment` so they match what `skillSkillMd` emitted.
 
-## 5. Flue renderers (`src/pack/targets.ts`)
+## 5. Flue renderers (`src/gem/targets.ts`)
 
-**`agents/<packname>.ts`** via `flueComposeAgent(pack)`:
+**`agents/<packname>.ts`** via `flueComposeAgent(gem)`:
 ```ts
 import { createAgent, type AgentRouteHandler } from "@flue/runtime";
 import skill0 from "../skills/<seg0>/SKILL.md" with { type: "skill" };
@@ -74,7 +74,7 @@ export default createAgent(() => ({
   skills: [skill0, skill1],
 }));
 ```
-- Agent filename = `safePathSegment(pack.name)`.
+- Agent filename = `safePathSegment(gem.name)`.
 - Template-literal escaping for `instructions`: `\` → `\\`, `` ` `` → `` \` ``, `${` → `\${`.
 - Empty skills → `skills: []`; empty instructions → `instructions: ""`.
 
@@ -104,12 +104,12 @@ flue: { id: "flue", label: "Flue", skill: skillSkillMd, instructions: () => ({})
 
 ## 7. Module changes
 
-- `src/pack/targets.ts` — `compose` on `TargetSpec`; `materialize()` runs+merges `compose`; `TargetId` gains `"flue"`; `flueComposeAgent`, `mcpFlueConnections`, and the `flue` registry entry. (Reuses `skillSkillMd`, `safePathSegment`, `stdioProxyRunner`, `PROXY_*`.)
+- `src/gem/targets.ts` — `compose` on `TargetSpec`; `materialize()` runs+merges `compose`; `TargetId` gains `"flue"`; `flueComposeAgent`, `mcpFlueConnections`, and the `flue` registry entry. (Reuses `skillSkillMd`, `safePathSegment`, `stdioProxyRunner`, `PROXY_*`.)
 - `src/public/index.html` — one `<option value="flue">Flue</option>`.
 
 ## 8. Testing
 
-- **`src/pack/__tests__/targets.test.ts` (unit, external fidelity to Flue):**
+- **`src/gem/__tests__/targets.test.ts` (unit, external fidelity to Flue):**
   - `compose` mechanism: a target whose `compose` emits a file gets it merged; a `compose` path colliding with a per-type file is reported in `skipped` (not overwritten).
   - flue skill → `skills/<n>/SKILL.md` (exact content).
   - flue agent file → `agents/<packname>.ts` containing `createAgent`, an `import … with { type: "skill" }` per skill, the skill list, and the instructions string; instruction artifacts are NOT in `skipped`.
@@ -117,7 +117,7 @@ flue: { id: "flue", label: "Flue", skill: skillSkillMd, instructions: () => ({})
   - flue stdio MCP → `proxies/<n>.mjs` + a `connections/<n>.ts` at `http://127.0.0.1:<port>/mcp`.
   - flue hook → **skipped** with reason.
   - instructions template escaping: a body containing a backtick and `${` is escaped so the generated file is valid TS.
-  - `compatibility(pack)` includes a `flue` entry.
+  - `compatibility(gem)` includes a `flue` entry.
   - secret-safety: no flue file contains a secret value.
 - **Page (gstack at verify time):** materialize-preview target **Flue** shows `agents/…` + `skills/…`; and in a workspace, the **flue** tab renders `.targets/flue/`.
 
@@ -126,8 +126,8 @@ flue: { id: "flue", label: "Flue", skill: skillSkillMd, instructions: () => ({})
 - **Full async MCP wiring** (`run()` + `init(agent,{tools})` + `close()` in the agent file) — operator's step in v1; a deeper-wiring mode is a later option.
 - **`flue.config.ts` / `package.json` / `tools/` scaffold** — operator runs `npx flue init`.
 - **OpenAI-SandboxAgent target** — separate spec; will reuse the new `compose` hook.
-- **Per-skill agent splitting** (one agent file per skill vs one aggregate agent) — v1 emits a single aggregate agent named after the pack.
+- **Per-skill agent splitting** (one agent file per skill vs one aggregate agent) — v1 emits a single aggregate agent named after the gem.
 
 ## 10. Platform fit
 
-Flue extends producible portability to a fourth code-gen surface with a small, faithful renderer set, and pays down a real model debt: the `compose` hook makes "one file that composes the whole pack" a first-class, reusable capability rather than a Flue special-case. Because `flue` is just a `TARGET_REGISTRY` entry, it lights up everywhere the registry is consumed — `materialize`, `compatibility`, and every workspace's `.targets/flue/` — with zero changes to the archive, workspaces, or schema layers.
+Flue extends producible portability to a fourth code-gen surface with a small, faithful renderer set, and pays down a real model debt: the `compose` hook makes "one file that composes the whole gem" a first-class, reusable capability rather than a Flue special-case. Because `flue` is just a `TARGET_REGISTRY` entry, it lights up everywhere the registry is consumed — `materialize`, `compatibility`, and every workspace's `.targets/flue/` — with zero changes to the archive, workspaces, or schema layers.

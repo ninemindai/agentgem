@@ -17,11 +17,11 @@
 ## File Structure
 
 ```
-src/pack/types.ts        # MODIFY: SkillArtifact.source widen to string; McpServerArtifact gains source?
+src/gem/types.ts        # MODIFY: SkillArtifact.source widen to string; McpServerArtifact gains source?
 src/schemas.ts           # MODIFY: SkillArtifactSchema.source z.string(); McpServerArtifactSchema.source optional
-src/pack/introspect.ts   # REWRITE: discovery-sources architecture (standalone/user/plugins/agent) + dedup
-src/pack.controller.ts   # MODIFY: introspectConfig({ claudeDir }) call shape
-src/pack.tools.ts        # MODIFY: introspectConfig({ claudeDir }) call shape
+src/gem/introspect.ts   # REWRITE: discovery-sources architecture (standalone/user/plugins/agent) + dedup
+src/gem.controller.ts   # MODIFY: introspectConfig({ claudeDir }) call shape
+src/gem.tools.ts        # MODIFY: introspectConfig({ claudeDir }) call shape
 src/public/index.html    # MODIFY: all-artifacts search box + per-row source tag
 ```
 
@@ -30,10 +30,10 @@ src/public/index.html    # MODIFY: all-artifacts search box + per-row source tag
 ### Task 1: Type + schema changes for `source`
 
 **Files:**
-- Modify: `src/pack/types.ts`
+- Modify: `src/gem/types.ts`
 - Modify: `src/schemas.ts`
 
-- [ ] **Step 1: Update `src/pack/types.ts`**
+- [ ] **Step 1: Update `src/gem/types.ts`**
 - Change `SkillArtifact.source` from the literal to a string:
 ```typescript
 export interface SkillArtifact {
@@ -54,7 +54,7 @@ export interface McpServerArtifact {
   source?: string;       // "user" | "plugin:<name>@<marketplace>"
 }
 ```
-(Leave `InstructionsArtifact`, `PackArtifact`, `ConfigInventory`, `Pack` unchanged.)
+(Leave `InstructionsArtifact`, `PackArtifact`, `ConfigInventory`, `Gem` unchanged.)
 
 - [ ] **Step 2: Update `src/schemas.ts`**
 - `SkillArtifactSchema`: change `source: z.literal("standalone")` to `source: z.string()`.
@@ -64,7 +64,7 @@ export interface McpServerArtifact {
 
 - [ ] **Step 4: Commit**
 ```bash
-git add src/pack/types.ts src/schemas.ts
+git add src/gem/types.ts src/schemas.ts
 git commit -m "feat: source tag on skill/mcp artifacts (widen skill source, add optional mcp source)"
 ```
 
@@ -73,12 +73,12 @@ git commit -m "feat: source tag on skill/mcp artifacts (widen skill source, add 
 ### Task 2: Rewrite introspectConfig as discovery sources
 
 **Files:**
-- Modify: `src/pack/introspect.ts` (full rewrite)
-- Modify: `src/pack/__tests__/introspect.test.ts` (adapt existing 3 to the new opts signature + add multi-source tests)
+- Modify: `src/gem/introspect.ts` (full rewrite)
+- Modify: `src/gem/__tests__/introspect.test.ts` (adapt existing 3 to the new opts signature + add multi-source tests)
 
-- [ ] **Step 1: Replace `src/pack/__tests__/introspect.test.ts` entirely** with the adapted + new tests:
+- [ ] **Step 1: Replace `src/gem/__tests__/introspect.test.ts` entirely** with the adapted + new tests:
 ```typescript
-// src/pack/__tests__/introspect.test.ts
+// src/gem/__tests__/introspect.test.ts
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -180,9 +180,9 @@ describe("introspectConfig (multi-source)", () => {
 
 - [ ] **Step 2: Run it (FAIL — new signature/behavior):** `pnpm test`
 
-- [ ] **Step 3: Replace `src/pack/introspect.ts` entirely** with:
+- [ ] **Step 3: Replace `src/gem/introspect.ts` entirely** with:
 ```typescript
-// src/pack/introspect.ts
+// src/gem/introspect.ts
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -327,7 +327,7 @@ export function introspectConfig(opts: IntrospectOptions = {}): ConfigInventory 
 
 - [ ] **Step 5: Commit**
 ```bash
-git add src/pack/introspect.ts src/pack/__tests__/introspect.test.ts
+git add src/gem/introspect.ts src/gem/__tests__/introspect.test.ts
 git commit -m "feat: discovery-sources introspection (standalone/user/plugins/agent) + dedup + internal skip"
 ```
 
@@ -336,19 +336,19 @@ git commit -m "feat: discovery-sources introspection (standalone/user/plugins/ag
 ### Task 3: Update controller + tools to the opts signature
 
 **Files:**
-- Modify: `src/pack.controller.ts`
-- Modify: `src/pack.tools.ts`
-- Modify: `src/__tests__/pack.controller.test.ts` (assert a `source` field)
+- Modify: `src/gem.controller.ts`
+- Modify: `src/gem.tools.ts`
+- Modify: `src/__tests__/gem.controller.test.ts` (assert a `source` field)
 
-- [ ] **Step 1: `src/pack.controller.ts`** — change both `introspectConfig(resolveDir(...))` calls to the opts shape:
+- [ ] **Step 1: `src/gem.controller.ts`** — change both `introspectConfig(resolveDir(...))` calls to the opts shape:
   - in `inventory`: `return introspectConfig({ claudeDir: resolveDir(input.query.dir) });`
-  - in `pack`: `const inventory = introspectConfig({ claudeDir: dir });` (where `dir = resolveDir(input.body.dir)`).
+  - in `gem`: `const inventory = introspectConfig({ claudeDir: dir });` (where `dir = resolveDir(input.body.dir)`).
 
-- [ ] **Step 2: `src/pack.tools.ts`** — same change in both tools:
+- [ ] **Step 2: `src/gem.tools.ts`** — same change in both tools:
   - `inventory`: `return introspectConfig({ claudeDir: resolveDir(input.dir) });`
-  - `pack`: `return buildPack(introspectConfig({ claudeDir: dir }), input.selection, { name: input.name ?? "pack", createdFrom: dir });`
+  - `gem`: `return buildPack(introspectConfig({ claudeDir: dir }), input.selection, { name: input.name ?? "gem", createdFrom: dir });`
 
-- [ ] **Step 3: Add a `source` assertion** to `src/__tests__/pack.controller.test.ts` — inside the existing "GET /api/inventory returns redacted inventory" test, after the existing assertions, add:
+- [ ] **Step 3: Add a `source` assertion** to `src/__tests__/gem.controller.test.ts` — inside the existing "GET /api/inventory returns redacted inventory" test, after the existing assertions, add:
 ```typescript
     expect(r.body.skills[0].source).toBe("standalone");
     expect(r.body.mcpServers[0].source).toBe("user");
@@ -359,7 +359,7 @@ git commit -m "feat: discovery-sources introspection (standalone/user/plugins/ag
 
 - [ ] **Step 5: Commit**
 ```bash
-git add src/pack.controller.ts src/pack.tools.ts src/__tests__/pack.controller.test.ts
+git add src/gem.controller.ts src/gem.tools.ts src/__tests__/gem.controller.test.ts
 git commit -m "feat: controller + tools use introspectConfig opts; assert source in inventory"
 ```
 
@@ -370,7 +370,7 @@ git commit -m "feat: controller + tools use introspectConfig opts; assert source
 **Files:**
 - Modify: `src/public/index.html`
 
-- [ ] **Step 1: READ `src/public/index.html`.** It has a left `.pane` with a `.bar` (pack name + Select all), a `#inventory` div populated by `load()` via `group(title, items, kind)`, and `onToggle`/`refresh`/`build`. You will: (a) add a search input, (b) show each row's `source`, (c) filter rows live without unchecking.
+- [ ] **Step 1: READ `src/public/index.html`.** It has a left `.pane` with a `.bar` (gem name + Select all), a `#inventory` div populated by `load()` via `group(title, items, kind)`, and `onToggle`/`refresh`/`build`. You will: (a) add a search input, (b) show each row's `source`, (c) filter rows live without unchecking.
 
 - [ ] **Step 2: Add a search input** — in the left `.pane`, immediately BEFORE `<div id="inventory">Loading…</div>`, add:
 ```html
@@ -432,7 +432,7 @@ Expected: `"source":"standalone"` (and on this machine, plugin sources like `"so
 - [ ] **Step 6: Commit**
 ```bash
 git add src/public/index.html
-git commit -m "feat: all-artifacts search box + per-row source tags in the pack UI"
+git commit -m "feat: all-artifacts search box + per-row source tags in the gem UI"
 ```
 
 ---
@@ -442,4 +442,4 @@ git commit -m "feat: all-artifacts search box + per-row source tags in the pack 
 - **Spec coverage:** discovery-sources architecture + ordered v1 sources (Task 2 — spec §2); both MCP shapes incl. bare plugin maps (Task 2 `serversFromMcpJson` — spec §3); `metadata.internal` skip (Task 2 `parseFrontmatter` — spec §4); dedup by name + precedence (Task 2 `dedupByName` ordering — spec §5); source type changes (Task 1 — spec §6); redaction unchanged (reused `redactMcpConfig` — spec §3); enabled-only plugins + generic agent path (Task 2 — spec §2); tests incl. internal-skip/dedup/disabled-plugin/redaction-leak (Task 2 — spec §7); controller/tools updated + source asserted (Task 3). Search UI over all artifacts (Task 4) is the user's original ask, now meaningful.
 - **Type consistency:** `IntrospectOptions { claudeDir?, agentDir? }`; `introspectConfig(opts)` used in controller + tools (Task 3) and tests (Task 2); `SkillArtifact.source: string`, `McpServerArtifact.source?: string` (Task 1) ↔ schemas (Task 1) ↔ introspect emits both (Task 2). Relative imports `.js`.
 - **No placeholders:** complete code + commands throughout.
-- **Out of scope (later):** project-level discovery, more agent paths, plugin commands/agents, pack-core dedup with workflow-profiler, publish.
+- **Out of scope (later):** project-level discovery, more agent paths, plugin commands/agents, gem-core dedup with workflow-profiler, publish.

@@ -1,10 +1,10 @@
-# Pack Workspaces Implementation Plan
+# Gem Workspaces Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Give a pack a persistent local home under `~/.agentgem/workspaces/<name>/` — the canonical archive at root (source of truth) plus `.targets/<target>/` rendered harness layouts (derived) — with create/list/read/render/delete ops and a UI switcher.
+**Goal:** Give a gem a persistent local home under `~/.agentgem/workspaces/<name>/` — the canonical archive at root (source of truth) plus `.targets/<target>/` rendered harness layouts (derived) — with create/list/read/render/delete ops and a UI switcher.
 
-**Architecture:** A new orchestration module `src/pack/workspaces.ts` composes the existing pure core (`writePackArchive`, `readPackArchive`, `materialize`, `compatibility`) and owns workspace disk layout. Two small surgical changes to the archive layer make it fit: `readArchiveDir` ignores top-level dot-entries (so `.targets/` doesn't corrupt archive reads), and `writePackArchive` stops double-appending extensions. Five REST/MCP ops + a UI switcher sit on top.
+**Architecture:** A new orchestration module `src/gem/workspaces.ts` composes the existing pure core (`writePackArchive`, `readPackArchive`, `materialize`, `compatibility`) and owns workspace disk layout. Two small surgical changes to the archive layer make it fit: `readArchiveDir` ignores top-level dot-entries (so `.targets/` doesn't corrupt archive reads), and `writePackArchive` stops double-appending extensions. Five REST/MCP ops + a UI switcher sit on top.
 
 **Tech Stack:** TypeScript (ESM, NodeNext), Zod v4, `@agentback/*` (rest/openapi controllers), Vitest (tests run from compiled `dist/`), `node:fs`/`node:os`/`node:path`. No new dependencies.
 
@@ -17,15 +17,15 @@
 - **Managed root**: `workspacesRoot()` = `${process.env.AGENTGEM_HOME ?? join(homedir(), ".agentgem")}/workspaces`. Tests set `AGENTGEM_HOME` to a temp dir.
 - **Name is untrusted**: a workspace name must equal its `safePathSegment` form (no separators, no `..`); otherwise throw. This is stricter than silent sanitization and prevents two names colliding to one dir.
 - **Secret-safety**: workspaces persist an already-redacted archive; no secret value touches disk. Assert in tests.
-- **`.targets/<target>/` is derived**: a render clears the target subdir first, then writes the verbatim `materialize(pack, target)` FileTree.
+- **`.targets/<target>/` is derived**: a render clears the target subdir first, then writes the verbatim `materialize(gem, target)` FileTree.
 
 ---
 
 ### Task 1: No double-extension in archive body filenames
 
 **Files:**
-- Modify: `src/pack/archive.ts` (the `writePackArchive` body-path lines)
-- Test: `src/pack/__tests__/archive.test.ts`
+- Modify: `src/gem/archive.ts` (the `writePackArchive` body-path lines)
+- Test: `src/gem/__tests__/archive.test.ts`
 
 **Interfaces:**
 - Consumes: existing `writePackArchive` (Task 2 of the archive feature).
@@ -34,9 +34,9 @@
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// append to src/pack/__tests__/archive.test.ts (inside the writePackArchive describe block)
+// append to src/gem/__tests__/archive.test.ts (inside the writePackArchive describe block)
 it("does not double the extension when an artifact name already ends in it", () => {
-  const p = pack([
+  const p = gem([
     { type: "instructions", name: "CLAUDE.md", content: "be kind" },
     { type: "mcp_server", name: "ctx.json", transport: "http", config: { url: "https://x/sse" } },
   ]);
@@ -56,7 +56,7 @@ Expected: FAIL — file is at `instructions/CLAUDE.md.md`, so `files["instructio
 
 - [ ] **Step 3: Write minimal implementation**
 
-In `src/pack/archive.ts`, inside `writePackArchive`, add a small helper near the top of the function body (after `const artifacts: ManifestArtifactEntry[] = [];`):
+In `src/gem/archive.ts`, inside `writePackArchive`, add a small helper near the top of the function body (after `const artifacts: ManifestArtifactEntry[] = [];`):
 
 ```ts
   const withExt = (s: string, ext: string) => (s.endsWith(ext) ? s : s + ext);
@@ -85,7 +85,7 @@ Expected: PASS (round-trip identity still green).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/pack/archive.ts src/pack/__tests__/archive.test.ts
+git add src/gem/archive.ts src/gem/__tests__/archive.test.ts
 git commit -m "fix(archive): don't double an extension the artifact name already has"
 ```
 
@@ -94,8 +94,8 @@ git commit -m "fix(archive): don't double an extension the artifact name already
 ### Task 2: `readArchiveDir` ignores top-level dot-entries
 
 **Files:**
-- Modify: `src/pack/archiveFs.ts`
-- Test: `src/pack/__tests__/archiveFs.test.ts`
+- Modify: `src/gem/archiveFs.ts`
+- Test: `src/gem/__tests__/archiveFs.test.ts`
 
 **Interfaces:**
 - Consumes: existing `readArchiveDir`/`writeArchiveDir` (archive feature Task 5).
@@ -104,7 +104,7 @@ git commit -m "fix(archive): don't double an extension the artifact name already
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// src/pack/__tests__/archiveFs.test.ts
+// src/gem/__tests__/archiveFs.test.ts
 import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -118,14 +118,14 @@ afterEach(() => { while (tmps.length) rmSync(tmps.pop()!, { recursive: true, for
 describe("readArchiveDir", () => {
   it("round-trips a written tree", () => {
     const root = tmp();
-    const tree = { "pack.json": "{}", "skills/x/SKILL.md": "# x" };
+    const tree = { "gem.json": "{}", "skills/x/SKILL.md": "# x" };
     writeArchiveDir(root, tree);
     expect(readArchiveDir(root)).toEqual(tree);
   });
 
   it("skips top-level dot-entries (e.g. .targets/)", () => {
     const root = tmp();
-    const tree = { "pack.json": "{}", "skills/x/SKILL.md": "# x" };
+    const tree = { "gem.json": "{}", "skills/x/SKILL.md": "# x" };
     writeArchiveDir(root, tree);
     mkdirSync(join(root, ".targets", "eve"), { recursive: true });
     writeFileSync(join(root, ".targets", "eve", "agent.ts"), "derived");
@@ -141,7 +141,7 @@ Expected: FAIL — result includes `.targets/eve/agent.ts`.
 
 - [ ] **Step 3: Write minimal implementation**
 
-In `src/pack/archiveFs.ts`, change the `walk` closure inside `readArchiveDir` to skip top-level dot-entries:
+In `src/gem/archiveFs.ts`, change the `walk` closure inside `readArchiveDir` to skip top-level dot-entries:
 
 ```ts
 export function readArchiveDir(root: string): FileTree {
@@ -167,7 +167,7 @@ Expected: PASS (both round-trip and dot-skip).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/pack/archiveFs.ts src/pack/__tests__/archiveFs.test.ts
+git add src/gem/archiveFs.ts src/gem/__tests__/archiveFs.test.ts
 git commit -m "feat(archive): readArchiveDir skips top-level dot-entries (.targets/)"
 ```
 
@@ -176,20 +176,20 @@ git commit -m "feat(archive): readArchiveDir skips top-level dot-entries (.targe
 ### Task 3: `workspaces.ts` — lifecycle module
 
 **Files:**
-- Create: `src/pack/workspaces.ts`
-- Test: `src/pack/__tests__/workspaces.test.ts`
+- Create: `src/gem/workspaces.ts`
+- Test: `src/gem/__tests__/workspaces.test.ts`
 
 **Interfaces:**
-- Consumes: `Pack` from `./types.js`; `TargetId`, `SkippedArtifact`, `materialize`, `compatibility`, `TARGET_REGISTRY`, `safePathSegment` from `./targets.js`; `writePackArchive`, `readPackArchive` from `./archive.js`; `writeArchiveDir`, `readArchiveDir` from `./archiveFs.js`.
+- Consumes: `Gem` from `./types.js`; `TargetId`, `SkippedArtifact`, `materialize`, `compatibility`, `TARGET_REGISTRY`, `safePathSegment` from `./targets.js`; `writePackArchive`, `readPackArchive` from `./archive.js`; `writeArchiveDir`, `readArchiveDir` from `./archiveFs.js`.
 - Produces:
   - `workspacesRoot(): string`, `workspaceName(name): string` (throws on bad), `workspaceDir(name): string`
   - `WorkspaceSummary`, `WorkspaceDetail`, `RenderResult` interfaces
-  - `createWorkspace(name, pack, opts?)`, `listWorkspaces()`, `readWorkspace(name)`, `renderTarget(name, target)`, `deleteWorkspace(name)`
+  - `createWorkspace(name, gem, opts?)`, `listWorkspaces()`, `readWorkspace(name)`, `renderTarget(name, target)`, `deleteWorkspace(name)`
 
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// src/pack/__tests__/workspaces.test.ts
+// src/gem/__tests__/workspaces.test.ts
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, existsSync, writeFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -197,13 +197,13 @@ import { join } from "node:path";
 import {
   workspacesRoot, workspaceDir, createWorkspace, listWorkspaces, readWorkspace, renderTarget, deleteWorkspace,
 } from "../workspaces.js";
-import type { Pack, PackArtifact } from "../types.js";
+import type { Gem, PackArtifact } from "../types.js";
 
 let home: string;
 beforeEach(() => { home = mkdtempSync(join(tmpdir(), "agh-")); process.env.AGENTGEM_HOME = home; });
 afterEach(() => { delete process.env.AGENTGEM_HOME; rmSync(home, { recursive: true, force: true }); });
 
-const pack = (artifacts: PackArtifact[]): Pack => ({ name: "demo", createdFrom: "/d", artifacts, checks: [], requiredSecrets: [] });
+const gem = (artifacts: PackArtifact[]): Gem => ({ name: "demo", createdFrom: "/d", artifacts, checks: [], requiredSecrets: [] });
 const skill = (n: string, content = "# body"): PackArtifact => ({ type: "skill", name: n, source: "standalone", content });
 const instr = (): PackArtifact => ({ type: "instructions", name: "soul", content: "be kind" });
 
@@ -215,15 +215,15 @@ describe("workspaces", () => {
   it("workspaceDir rejects names with separators or traversal", () => {
     expect(() => workspaceDir("../escape")).toThrow(/invalid workspace name/i);
     expect(() => workspaceDir("a/b")).toThrow(/invalid workspace name/i);
-    expect(workspaceDir("my-pack")).toBe(join(home, "workspaces", "my-pack"));
+    expect(workspaceDir("my-gem")).toBe(join(home, "workspaces", "my-gem"));
   });
 
   it("create writes the archive; list and read report it", () => {
-    const s = createWorkspace("mp", pack([skill("review"), instr()]));
+    const s = createWorkspace("mp", gem([skill("review"), instr()]));
     expect(s.name).toBe("mp");
     expect(s.artifactCounts.skill).toBe(1);
     expect(s.renderedTargets).toEqual([]);
-    expect(existsSync(join(home, "workspaces", "mp", "pack.json"))).toBe(true);
+    expect(existsSync(join(home, "workspaces", "mp", "gem.json"))).toBe(true);
 
     const list = listWorkspaces();
     expect(list.map((w) => w.name)).toEqual(["mp"]);
@@ -234,12 +234,12 @@ describe("workspaces", () => {
   });
 
   it("create throws on a duplicate name", () => {
-    createWorkspace("dup", pack([skill("a")]));
-    expect(() => createWorkspace("dup", pack([skill("b")]))).toThrow(/already exists/i);
+    createWorkspace("dup", gem([skill("a")]));
+    expect(() => createWorkspace("dup", gem([skill("b")]))).toThrow(/already exists/i);
   });
 
   it("renderTarget writes .targets/<target>/ and clears stale files on re-render", () => {
-    createWorkspace("rw", pack([skill("review"), instr()]));
+    createWorkspace("rw", gem([skill("review"), instr()]));
     const r = renderTarget("rw", "eve");
     expect(r.target).toBe("eve");
     expect(r.files["agent/skills/review.md"]).toBe("# body");
@@ -254,7 +254,7 @@ describe("workspaces", () => {
   });
 
   it("delete removes the workspace; listing an empty root is []", () => {
-    createWorkspace("gone", pack([skill("a")]));
+    createWorkspace("gone", gem([skill("a")]));
     deleteWorkspace("gone");
     expect(existsSync(join(home, "workspaces", "gone"))).toBe(false);
     expect(listWorkspaces()).toEqual([]);
@@ -270,14 +270,14 @@ Expected: FAIL — `Cannot find module '../workspaces.js'`.
 - [ ] **Step 3: Write minimal implementation**
 
 ```ts
-// src/pack/workspaces.ts
-// A pack's persistent local home: the canonical archive at the workspace root (source of truth) plus
+// src/gem/workspaces.ts
+// A gem's persistent local home: the canonical archive at the workspace root (source of truth) plus
 // .targets/<target>/ rendered harness layouts (derived). Orchestration over the pure archive/materialize
 // core; this module owns all workspace filesystem I/O.
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { mkdirSync, rmSync, readdirSync, statSync, existsSync, readFileSync } from "node:fs";
-import type { Pack } from "./types.js";
+import type { Gem } from "./types.js";
 import type { TargetId, SkippedArtifact } from "./targets.js";
 import { materialize, compatibility, TARGET_REGISTRY, safePathSegment } from "./targets.js";
 import { writePackArchive, readPackArchive } from "./archive.js";
@@ -344,36 +344,36 @@ function summary(name: string, manifestJson: string, dir: string): WorkspaceSumm
   };
 }
 
-export function createWorkspace(name: string, pack: Pack, opts: { version?: string } = {}): WorkspaceSummary {
+export function createWorkspace(name: string, gem: Gem, opts: { version?: string } = {}): WorkspaceSummary {
   const dir = workspaceDir(name);
   if (existsSync(dir)) throw new Error(`workspace '${name}' already exists`);
-  const { files } = writePackArchive(pack, { version: opts.version });
+  const { files } = writePackArchive(gem, { version: opts.version });
   mkdirSync(dir, { recursive: true });
   writeArchiveDir(dir, files);
-  return summary(workspaceName(name), files["pack.json"], dir);
+  return summary(workspaceName(name), files["gem.json"], dir);
 }
 
 export function listWorkspaces(): WorkspaceSummary[] {
   const root = workspacesRoot();
   if (!existsSync(root)) return [];
   return readdirSync(root)
-    .filter((n) => statSync(join(root, n)).isDirectory() && existsSync(join(root, n, "pack.json")))
-    .map((n) => summary(n, readFileSync(join(root, n, "pack.json"), "utf8"), join(root, n)));
+    .filter((n) => statSync(join(root, n)).isDirectory() && existsSync(join(root, n, "gem.json")))
+    .map((n) => summary(n, readFileSync(join(root, n, "gem.json"), "utf8"), join(root, n)));
 }
 
 export function readWorkspace(name: string): WorkspaceDetail {
   const dir = workspaceDir(name);
-  if (!existsSync(join(dir, "pack.json"))) throw new Error(`no workspace '${name}'`);
+  if (!existsSync(join(dir, "gem.json"))) throw new Error(`no workspace '${name}'`);
   const files = readArchiveDir(dir);               // skips .targets/ (Task 2)
-  const pack = readPackArchive(files);             // verifies the lock
-  return { ...summary(workspaceName(name), files["pack.json"], dir), files, compatibility: compatibility(pack) };
+  const gem = readPackArchive(files);             // verifies the lock
+  return { ...summary(workspaceName(name), files["gem.json"], dir), files, compatibility: compatibility(gem) };
 }
 
 export function renderTarget(name: string, target: TargetId): RenderResult {
   const dir = workspaceDir(name);
-  if (!existsSync(join(dir, "pack.json"))) throw new Error(`no workspace '${name}'`);
-  const pack = readPackArchive(readArchiveDir(dir));
-  const { files, skipped } = materialize(pack, target);
+  if (!existsSync(join(dir, "gem.json"))) throw new Error(`no workspace '${name}'`);
+  const gem = readPackArchive(readArchiveDir(dir));
+  const { files, skipped } = materialize(gem, target);
   const out = join(dir, TARGETS_DIR, target);
   rmSync(out, { recursive: true, force: true });   // clear stale renders
   mkdirSync(out, { recursive: true });
@@ -396,7 +396,7 @@ Expected: PASS (all six cases).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/pack/workspaces.ts src/pack/__tests__/workspaces.test.ts
+git add src/gem/workspaces.ts src/gem/__tests__/workspaces.test.ts
 git commit -m "feat(workspaces): create/list/read/render/delete lifecycle module"
 ```
 
@@ -497,8 +497,8 @@ git commit -m "feat(schemas): workspace request/response schemas"
 ### Task 5: Workspace controller ops
 
 **Files:**
-- Modify: `src/pack.controller.ts`
-- Test: `src/__tests__/pack.controller.test.ts`
+- Modify: `src/gem.controller.ts`
+- Test: `src/__tests__/gem.controller.test.ts`
 
 **Interfaces:**
 - Consumes: the workspace module (Task 3) and schemas (Task 4); existing `buildPack`, `resolveDirs`, `introspectAll`.
@@ -508,7 +508,7 @@ git commit -m "feat(schemas): workspace request/response schemas"
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// append to src/__tests__/pack.controller.test.ts
+// append to src/__tests__/gem.controller.test.ts
 import { mkdtempSync as mkd } from "node:fs"; // reuse existing imports; shown only to signal dependency
 describe("workspace ops", () => {
   it("create -> list -> render(eve) -> read -> delete", async () => {
@@ -551,11 +551,11 @@ Expected: FAIL — routes 404 / methods missing.
 
 - [ ] **Step 3: Write minimal implementation**
 
-In `src/pack.controller.ts`, add imports:
+In `src/gem.controller.ts`, add imports:
 
 ```ts
-import { createWorkspace, listWorkspaces, readWorkspace, renderTarget, deleteWorkspace } from "./pack/workspaces.js";
-import type { TargetId } from "./pack/targets.js";
+import { createWorkspace, listWorkspaces, readWorkspace, renderTarget, deleteWorkspace } from "./gem/workspaces.js";
+import type { TargetId } from "./gem/targets.js";
 ```
 
 Add to the `./schemas.js` import list: `CreateWorkspaceRequestSchema, WorkspaceQuerySchema, RenderRequestSchema, WorkspaceNameRequestSchema, WorkspaceSummarySchema, WorkspaceDetailSchema, RenderResultSchema, ListWorkspacesResponseSchema, DeleteWorkspaceResponseSchema`.
@@ -569,8 +569,8 @@ Add these methods inside the class (e.g. after `archive`):
   async createWorkspace(input: { body: z.infer<typeof CreateWorkspaceRequestSchema> }): Promise<z.infer<typeof WorkspaceSummarySchema>> {
     const dirs = resolveDirs(input.body.dir);
     const inventory = introspectAll(input.body.dir, input.body.projects);
-    const pack = buildPack(inventory, input.body.selection, { name: input.body.name, createdFrom: dirs.claudeDir });
-    return createWorkspace(input.body.name, pack, { version: input.body.version });
+    const gem = buildPack(inventory, input.body.selection, { name: input.body.name, createdFrom: dirs.claudeDir });
+    return createWorkspace(input.body.name, gem, { version: input.body.version });
   }
 
   @get("/workspaces", { query: PickQuerySchema, response: ListWorkspacesResponseSchema })
@@ -603,7 +603,7 @@ Expected: PASS (full suite green).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/pack.controller.ts src/__tests__/pack.controller.test.ts
+git add src/gem.controller.ts src/__tests__/gem.controller.test.ts
 git commit -m "feat(api): workspace ops — create/list/read/render/delete"
 ```
 
@@ -670,7 +670,7 @@ async function wsRender(target){
 }
 document.getElementById("wsSelect").addEventListener("change", e => wsOpen(e.target.value));
 document.getElementById("wsNew").addEventListener("click", async () => {
-  const name = prompt("Workspace name (letters, digits, . _ - only):", document.getElementById("name").value || "pack");
+  const name = prompt("Workspace name (letters, digits, . _ - only):", document.getElementById("name").value || "gem");
   if (!name) return;
   const res = await fetch("/api/workspaces", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...buildSelectionBody(), name }) });
   if (!res.ok){ alert("Could not create workspace (name taken or invalid)."); return; }

@@ -1,21 +1,21 @@
-# Pack → Gem Rename Implementation Plan
+# Gem → Gem Rename Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Rename the core domain concept `Pack` → `Gem` across code, the MCP tool, the on-disk archive format, and docs/memory — with zero behavioral change.
+**Goal:** Rename the core domain concept `Gem` → `Gem` across code, the MCP tool, the on-disk archive format, and docs/memory — with zero behavioral change.
 
-**Architecture:** A curated, symbol-class-by-symbol-class rename (not a blind `s/pack/gem/g`). Word-boundary (`\b`) replacements protect the look-alikes that must stay (`packTar`/`unpackTar`/`unpacked`, anything with `package`). Each task is a coherent rename pass that keeps `tsc` and the vitest suite green, then commits.
+**Architecture:** A curated, symbol-class-by-symbol-class rename (not a blind `s/gem/gem/g`). Word-boundary (`\b`) replacements protect the look-alikes that must stay (`packTar`/`unpackTar`/`unpacked`, anything with `package`). Each task is a coherent rename pass that keeps `tsc` and the vitest suite green, then commits.
 
 **Tech Stack:** TypeScript, pnpm, vitest, BSD `sed` (macOS — uses `sed -i ''`).
 
 ## Global Constraints
 
-- **Curated rename, never blind.** Every `sed` uses `\b` word boundaries on a specific identifier. Never run `s/pack/gem/g`.
+- **Curated rename, never blind.** Every `sed` uses `\b` word boundaries on a specific identifier. Never run `s/gem/gem/g`.
 - **Never rename:** `packTar`, `unpackTar`, `unpacked`, `unpacks` (generic tar verb); any token containing `package` (`allow_package_managers`, `packageManager`, `package.json`).
-- **Clean break on disk:** no backward-compat reading of legacy `pack.json`/`pack.lock`.
+- **Clean break on disk:** no backward-compat reading of legacy `gem.json`/`gem.lock`.
 - **Green between tasks:** every task ends with `pnpm build` AND `pnpm test` passing, then a commit.
 - **macOS sed:** in-place edits use `sed -i ''` (note the empty-string arg).
-- Spec: `docs/superpowers/specs/2026-06-19-pack-to-gem-rename-design.md`.
+- Spec: `docs/superpowers/specs/2026-06-19-gem-to-gem-rename-design.md`.
 
 ---
 
@@ -24,28 +24,28 @@
 Move files first (history-preserving), updating only import *paths* — no identifier renames yet, so the build stays green.
 
 **Files:**
-- Move: `src/pack/` → `src/gem/` (whole dir incl. `__tests__/`)
-- Move: `src/pack.controller.ts` → `src/gem.controller.ts`
-- Move: `src/pack.tools.ts` → `src/gem.tools.ts`
+- Move: `src/gem/` → `src/gem/` (whole dir incl. `__tests__/`)
+- Move: `src/gem.controller.ts` → `src/gem.controller.ts`
+- Move: `src/gem.tools.ts` → `src/gem.tools.ts`
 - Move: `src/gem/buildPack.ts` → `src/gem/buildGem.ts`
 - Move: `src/gem/__tests__/buildPack.test.ts` → `src/gem/__tests__/buildGem.test.ts`
-- Move: `src/__tests__/pack.controller.test.ts` → `src/__tests__/gem.controller.test.ts`
+- Move: `src/__tests__/gem.controller.test.ts` → `src/__tests__/gem.controller.test.ts`
 - Modify: every file importing the above paths.
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: new file layout under `src/gem/`; modules `./gem/buildGem`, `./gem.controller`, `./gem.tools` importable. Symbol names are unchanged this task (`buildPack`, `Pack`, etc. still exist).
+- Produces: new file layout under `src/gem/`; modules `./gem/buildGem`, `./gem.controller`, `./gem.tools` importable. Symbol names are unchanged this task (`buildPack`, `Gem`, etc. still exist).
 
 - [ ] **Step 1: Move directory and files with git mv**
 
 ```bash
 cd /Users/rfeng/Projects/ninemind/agentgem
-git mv src/pack src/gem
-git mv src/pack.controller.ts src/gem.controller.ts
-git mv src/pack.tools.ts src/gem.tools.ts
+git mv src/gem src/gem
+git mv src/gem.controller.ts src/gem.controller.ts
+git mv src/gem.tools.ts src/gem.tools.ts
 git mv src/gem/buildPack.ts src/gem/buildGem.ts
 git mv src/gem/__tests__/buildPack.test.ts src/gem/__tests__/buildGem.test.ts
-git mv src/__tests__/pack.controller.test.ts src/__tests__/gem.controller.test.ts
+git mv src/__tests__/gem.controller.test.ts src/__tests__/gem.controller.test.ts
 ```
 
 - [ ] **Step 2: Fix import paths referencing moved modules**
@@ -53,12 +53,12 @@ git mv src/__tests__/pack.controller.test.ts src/__tests__/gem.controller.test.t
 ```bash
 cd /Users/rfeng/Projects/ninemind/agentgem
 # directory + module path segments in import specifiers and any string paths
-grep -rl --include='*.ts' -e "pack/" -e "pack.controller" -e "pack.tools" -e "buildPack" src \
+grep -rl --include='*.ts' -e "gem/" -e "gem.controller" -e "gem.tools" -e "buildPack" src \
   | xargs sed -i '' \
-      -e "s#/pack/#/gem/#g" \
-      -e "s#\./pack/#./gem/#g" \
-      -e "s#\./pack\.controller#./gem.controller#g" \
-      -e "s#\./pack\.tools#./gem.tools#g" \
+      -e "s#/gem/#/gem/#g" \
+      -e "s#\./gem/#./gem/#g" \
+      -e "s#\./gem\.controller#./gem.controller#g" \
+      -e "s#\./gem\.tools#./gem.tools#g" \
       -e "s#/buildPack#/buildGem#g" \
       -e "s#\./buildPack#./buildGem#g"
 ```
@@ -77,12 +77,12 @@ Expected: PASS (all suites; behavior unchanged).
 
 ```bash
 git add -A
-git commit -m "refactor(gem): rename pack files/dirs to gem; fix import paths"
+git commit -m "refactor(gem): rename gem files/dirs to gem; fix import paths"
 ```
 
 ---
 
-### Task 2: Rename the `Pack` type family → `Gem`
+### Task 2: Rename the `Gem` type family → `Gem`
 
 Rename the domain *types/interfaces* (not zod schemas, not functions — those are Tasks 3–4). Word boundaries keep `PackArtifactSchema`, `packTar`, etc. untouched.
 
@@ -92,13 +92,13 @@ Rename the domain *types/interfaces* (not zod schemas, not functions — those a
 
 **Interfaces:**
 - Consumes: file layout from Task 1.
-- Produces: `Gem`, `GemArtifact`, `GemCheck`, `GemVerificationReport`, `GemLock`, `GemManifest`, `GemManifestArtifact`, `GemSelection` (replacing the `Pack*` type names). `*Schema` names are NOT changed yet.
+- Produces: `Gem`, `GemArtifact`, `GemCheck`, `GemVerificationReport`, `GemLock`, `GemManifest`, `GemManifestArtifact`, `GemSelection` (replacing the `Gem*` type names). `*Schema` names are NOT changed yet.
 
 - [ ] **Step 1: Replace type identifiers (specific tokens, word-bounded)**
 
 ```bash
 cd /Users/rfeng/Projects/ninemind/agentgem
-FILES=$(grep -rl --include='*.ts' -E '\b(Pack|PackArtifact|PackCheck|PackVerificationReport|PackLock|PackManifest|PackManifestArtifact|PackSelection)\b' src)
+FILES=$(grep -rl --include='*.ts' -E '\b(Gem|PackArtifact|PackCheck|PackVerificationReport|PackLock|PackManifest|PackManifestArtifact|PackSelection)\b' src)
 echo "$FILES" | xargs sed -i '' \
   -e 's/\bPackVerificationReport\b/GemVerificationReport/g' \
   -e 's/\bPackManifestArtifact\b/GemManifestArtifact/g' \
@@ -115,12 +115,12 @@ echo "$FILES" | xargs sed -i '' \
 - [ ] **Step 2: Build to verify all type references updated**
 
 Run: `pnpm build`
-Expected: PASS. A failure here names any file still referencing an old `Pack*` type — fix and rebuild.
+Expected: PASS. A failure here names any file still referencing an old `Gem*` type — fix and rebuild.
 
 - [ ] **Step 3: Confirm no schema names were caught**
 
 Run: `grep -rnE '\bGem[A-Za-z]*Schema\b' src`
-Expected: NO matches (schemas are still `Pack*Schema` until Task 3).
+Expected: NO matches (schemas are still `Gem*Schema` until Task 3).
 
 - [ ] **Step 4: Run tests**
 
@@ -131,12 +131,12 @@ Expected: PASS.
 
 ```bash
 git add -A
-git commit -m "refactor(gem): rename Pack type family to Gem"
+git commit -m "refactor(gem): rename Gem type family to Gem"
 ```
 
 ---
 
-### Task 3: Rename the zod schemas `Pack*Schema` → `Gem*Schema`
+### Task 3: Rename the zod schemas `Gem*Schema` → `Gem*Schema`
 
 **Files:**
 - Modify: `src/schemas.ts` (definitions) and every consumer (`src/gem.tools.ts`, `src/gem.controller.ts`, `src/gem/*.ts`, tests).
@@ -166,7 +166,7 @@ echo "$FILES" | xargs sed -i '' \
 Run: `pnpm build`
 Expected: PASS.
 
-- [ ] **Step 3: Verify no stray `Pack*Schema` remain**
+- [ ] **Step 3: Verify no stray `Gem*Schema` remain**
 
 Run: `grep -rnE '\bPack[A-Za-z]*Schema\b' src`
 Expected: NO matches.
@@ -180,7 +180,7 @@ Expected: PASS.
 
 ```bash
 git add -A
-git commit -m "refactor(gem): rename Pack*Schema to Gem*Schema"
+git commit -m "refactor(gem): rename Gem*Schema to Gem*Schema"
 ```
 
 ---
@@ -200,7 +200,7 @@ Rename the remaining mixed-case / specific lowercase identifiers. Each is word-b
 
 ```bash
 cd /Users/rfeng/Projects/ninemind/agentgem
-FILES=$(grep -rl --include='*.ts' -E '\b(buildPack|writePackArchive|readPackArchive|PackController|PackTools|PackInput|packDigest|packName|packname|mypack|my_pack)\b' src)
+FILES=$(grep -rl --include='*.ts' -E '\b(buildPack|writePackArchive|readPackArchive|PackController|PackTools|PackInput|gemDigest|packName|packname|mypack|my_pack)\b' src)
 echo "$FILES" | xargs sed -i '' \
   -e 's/\bwritePackArchive\b/writeGemArchive/g' \
   -e 's/\breadPackArchive\b/readGemArchive/g' \
@@ -223,7 +223,7 @@ Expected: PASS.
 - [ ] **Step 3: Run tests**
 
 Run: `pnpm test`
-Expected: PASS. Archive tests still reference `pack.json`/`pack.lock` strings (unchanged until Task 5) and the `gemDigest` field via the renamed symbol — both consistent.
+Expected: PASS. Archive tests still reference `gem.json`/`gem.lock` strings (unchanged until Task 5) and the `gemDigest` field via the renamed symbol — both consistent.
 
 - [ ] **Step 4: Confirm tar verbs & package tokens survived**
 
@@ -241,10 +241,10 @@ git commit -m "refactor(gem): rename buildPack/archive fns, controller/tools cla
 
 ### Task 5: On-disk format strings, MCP tool name, lowercase noun
 
-The ordering-sensitive pass. Do the literal-string changes (tool name, file names) FIRST, then the global bare-`pack` noun sweep, so `"pack"` (tool) → `"build_gem"` rather than `"gem"`.
+The ordering-sensitive pass. Do the literal-string changes (tool name, file names) FIRST, then the global bare-`gem` noun sweep, so `"gem"` (tool) → `"build_gem"` rather than `"gem"`.
 
 **Files:**
-- Modify: `src/gem/archive.ts` (`MANIFEST_PATH`, `LOCK_PATH`, error strings), `src/gem.tools.ts` (`@tool("pack")`, default name), plus any remaining bare-`pack` in comments/vars/prompts/tests.
+- Modify: `src/gem/archive.ts` (`MANIFEST_PATH`, `LOCK_PATH`, error strings), `src/gem.tools.ts` (`@tool("gem")`, default name), plus any remaining bare-`gem` in comments/vars/prompts/tests.
 
 **Interfaces:**
 - Consumes: everything from Tasks 1–4.
@@ -254,21 +254,21 @@ The ordering-sensitive pass. Do the literal-string changes (tool name, file name
 
 ```bash
 cd /Users/rfeng/Projects/ninemind/agentgem
-sed -i '' -e 's/@tool("pack"/@tool("build_gem"/' src/gem.tools.ts
-sed -i '' -e 's/input\.name ?? "pack"/input.name ?? "gem"/' src/gem.tools.ts
+sed -i '' -e 's/@tool("gem"/@tool("build_gem"/' src/gem.tools.ts
+sed -i '' -e 's/input\.name ?? "gem"/input.name ?? "gem"/' src/gem.tools.ts
 ```
 
 - [ ] **Step 2: Change on-disk file names and error strings**
 
 ```bash
 cd /Users/rfeng/Projects/ninemind/agentgem
-sed -i '' -e 's/"pack\.json"/"gem.json"/g' -e 's/"pack\.lock"/"gem.lock"/g' src/gem/archive.ts
+sed -i '' -e 's/"gem\.json"/"gem.json"/g' -e 's/"gem\.lock"/"gem.lock"/g' src/gem/archive.ts
 # error-message prose that names the files (string literals, not paths)
-grep -rl --include='*.ts' -e 'pack.json' -e 'pack.lock' src \
-  | xargs sed -i '' -e 's/pack\.json/gem.json/g' -e 's/pack\.lock/gem.lock/g'
+grep -rl --include='*.ts' -e 'gem.json' -e 'gem.lock' src \
+  | xargs sed -i '' -e 's/gem\.json/gem.json/g' -e 's/gem\.lock/gem.lock/g'
 ```
 
-- [ ] **Step 3: Sweep remaining bare lowercase `pack` noun (word-bounded)**
+- [ ] **Step 3: Sweep remaining bare lowercase `gem` noun (word-bounded)**
 
 ```bash
 cd /Users/rfeng/Projects/ninemind/agentgem
@@ -285,7 +285,7 @@ Expected: PASS.
 - [ ] **Step 5: Run tests**
 
 Run: `pnpm test`
-Expected: PASS. Archive round-trip tests now assert `gem.json`/`gem.lock`. If a test still hard-codes `pack.json`, update that literal to `gem.json` and re-run.
+Expected: PASS. Archive round-trip tests now assert `gem.json`/`gem.lock`. If a test still hard-codes `gem.json`, update that literal to `gem.json` and re-run.
 
 - [ ] **Step 6: Final grep gate over source**
 
@@ -307,8 +307,8 @@ git commit -m "refactor(gem): on-disk gem.json/gem.lock, build_gem tool, lowerca
 ### Task 6: Docs & memory
 
 **Files:**
-- Move + edit: `docs/superpowers/plans/2026-06-16-pack-checks.md`, `docs/superpowers/plans/2026-06-18-pack-archive-format.md`, `docs/superpowers/plans/2026-06-18-pack-workspaces.md`, `docs/superpowers/specs/2026-06-16-pack-checks-design.md`, `docs/superpowers/specs/2026-06-18-pack-archive-format-design.md`, `docs/superpowers/specs/2026-06-18-pack-workspaces-design.md`.
-- Modify: auto-memory `…/memory/pack-archive-format-spec.md` and `…/memory/MEMORY.md`.
+- Move + edit: `docs/superpowers/plans/2026-06-16-gem-checks.md`, `docs/superpowers/plans/2026-06-18-gem-archive-format.md`, `docs/superpowers/plans/2026-06-18-gem-workspaces.md`, `docs/superpowers/specs/2026-06-16-gem-checks-design.md`, `docs/superpowers/specs/2026-06-18-gem-archive-format-design.md`, `docs/superpowers/specs/2026-06-18-gem-workspaces-design.md`.
+- Modify: auto-memory `…/memory/gem-archive-format-spec.md` and `…/memory/MEMORY.md`.
 
 **Interfaces:**
 - Consumes: final naming from Tasks 1–5.
@@ -318,12 +318,12 @@ git commit -m "refactor(gem): on-disk gem.json/gem.lock, build_gem tool, lowerca
 
 ```bash
 cd /Users/rfeng/Projects/ninemind/agentgem
-git mv docs/superpowers/plans/2026-06-16-pack-checks.md          docs/superpowers/plans/2026-06-16-gem-checks.md
-git mv docs/superpowers/plans/2026-06-18-pack-archive-format.md  docs/superpowers/plans/2026-06-18-gem-archive-format.md
-git mv docs/superpowers/plans/2026-06-18-pack-workspaces.md      docs/superpowers/plans/2026-06-18-gem-workspaces.md
-git mv docs/superpowers/specs/2026-06-16-pack-checks-design.md         docs/superpowers/specs/2026-06-16-gem-checks-design.md
-git mv docs/superpowers/specs/2026-06-18-pack-archive-format-design.md docs/superpowers/specs/2026-06-18-gem-archive-format-design.md
-git mv docs/superpowers/specs/2026-06-18-pack-workspaces-design.md     docs/superpowers/specs/2026-06-18-gem-workspaces-design.md
+git mv docs/superpowers/plans/2026-06-16-gem-checks.md          docs/superpowers/plans/2026-06-16-gem-checks.md
+git mv docs/superpowers/plans/2026-06-18-gem-archive-format.md  docs/superpowers/plans/2026-06-18-gem-archive-format.md
+git mv docs/superpowers/plans/2026-06-18-gem-workspaces.md      docs/superpowers/plans/2026-06-18-gem-workspaces.md
+git mv docs/superpowers/specs/2026-06-16-gem-checks-design.md         docs/superpowers/specs/2026-06-16-gem-checks-design.md
+git mv docs/superpowers/specs/2026-06-18-gem-archive-format-design.md docs/superpowers/specs/2026-06-18-gem-archive-format-design.md
+git mv docs/superpowers/specs/2026-06-18-gem-workspaces-design.md     docs/superpowers/specs/2026-06-18-gem-workspaces-design.md
 ```
 
 - [ ] **Step 2: Update prose inside docs (preserve tar/package terms)**
@@ -343,11 +343,11 @@ Then read each renamed doc and fix any now-awkward sentence by hand (the auto-pa
 
 - [ ] **Step 3: Update auto-memory**
 
-Rewrite `/Users/rfeng/.claude/projects/-Users-rfeng-Projects-ninemind-agentgem/memory/pack-archive-format-spec.md`:
+Rewrite `/Users/rfeng/.claude/projects/-Users-rfeng-Projects-ninemind-agentgem/memory/gem-archive-format-spec.md`:
 - Rename the file to `gem-archive-format-spec.md` (and its `name:` frontmatter slug to `gem-archive-format-spec`).
 - Update body to describe `gem.json` + `gem.lock` + `gemDigest` serializing a `Gem`.
 
-Then update `…/memory/MEMORY.md`: change the index line to point at `gem-archive-format-spec.md` with a `Gem`-worded hook, and do a light prose pass on the target fast-follow lines that say "Pack".
+Then update `…/memory/MEMORY.md`: change the index line to point at `gem-archive-format-spec.md` with a `Gem`-worded hook, and do a light prose pass on the target fast-follow lines that say "Gem".
 
 - [ ] **Step 4: Verify docs grep gate**
 
@@ -358,7 +358,7 @@ Expected: only intentional `packTar`/`package`-style survivors, if any.
 
 ```bash
 git add -A
-git commit -m "docs(gem): rename pack docs/memory to gem"
+git commit -m "docs(gem): rename gem docs/memory to gem"
 ```
 
 ---
@@ -376,4 +376,4 @@ git commit -m "docs(gem): rename pack docs/memory to gem"
 
 **Type consistency:** `Gem`/`GemArtifact`/`GemCheck`/`Gem*Schema`/`buildGem`/`writeGemArchive`/`readGemArchive`/`GemController`/`GemTools`/`GemInput`/`gemDigest` used identically across tasks and match the spec table. ✓
 
-**Note on ordering:** Tasks 2–4 use `\b`-bounded replacements, so they are internally order-independent except where longer tokens are listed first as defense-in-depth. Task 5 is the one ordering-sensitive pass (tool/file literals before the bare-`pack` sweep) and is sequenced accordingly.
+**Note on ordering:** Tasks 2–4 use `\b`-bounded replacements, so they are internally order-independent except where longer tokens are listed first as defense-in-depth. Task 5 is the one ordering-sensitive pass (tool/file literals before the bare-`gem` sweep) and is sequenced accordingly.

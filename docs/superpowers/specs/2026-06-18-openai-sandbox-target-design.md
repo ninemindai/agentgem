@@ -1,15 +1,15 @@
-# agentgem — OpenAI SandboxAgent Target: materialize a Pack into an OpenAI Agents SDK project (Design)
+# agentgem — OpenAI SandboxAgent Target: materialize a Gem into an OpenAI Agents SDK project (Design)
 
 **Date:** 2026-06-18
 **Status:** Approved design, pre-implementation
 **Project:** `agentgem` (`/Users/rfeng/Projects/ninemind/agentgem`)
-**Scope:** Add `openai-sandbox` as a `TARGET_REGISTRY` entry so `materialize(pack, "openai-sandbox")` renders a Pack into an [OpenAI Agents SDK](https://github.com/openai/openai-agents-js) **SandboxAgent** project (`@openai/agents`). Distinct from the existing `codex` target (Codex CLI: `AGENTS.md` + `config.toml`); this is the code-defined SDK shape. Reuses the `compose` hook shipped with Flue — no `TargetSpec` model change. Once shipped, every workspace renders `.targets/openai-sandbox/` for free.
+**Scope:** Add `openai-sandbox` as a `TARGET_REGISTRY` entry so `materialize(gem, "openai-sandbox")` renders a Gem into an [OpenAI Agents SDK](https://github.com/openai/openai-agents-js) **SandboxAgent** project (`@openai/agents`). Distinct from the existing `codex` target (Codex CLI: `AGENTS.md` + `config.toml`); this is the code-defined SDK shape. Reuses the `compose` hook shipped with Flue — no `TargetSpec` model change. Once shipped, every workspace renders `.targets/openai-sandbox/` for free.
 
 ---
 
 ## 0. Motivation
 
-The platform's portability matrix names the OpenAI Agents SDK SandboxAgent as a distinct deploy surface from Codex CLI. Flue proved the code-gen pattern and added the reusable `compose(pack)` hook; SandboxAgent is the same "one file composes the whole pack" shape, so it lands cheaply on that hook. It also exercises two things Flue couldn't: **native stdio MCP** (no proxy bridge) and a **Manifest** that seeds the workspace — confirming the target model generalizes across genuinely different harnesses.
+The platform's portability matrix names the OpenAI Agents SDK SandboxAgent as a distinct deploy surface from Codex CLI. Flue proved the code-gen pattern and added the reusable `compose(gem)` hook; SandboxAgent is the same "one file composes the whole gem" shape, so it lands cheaply on that hook. It also exercises two things Flue couldn't: **native stdio MCP** (no proxy bridge) and a **Manifest** that seeds the workspace — confirming the target model generalizes across genuinely different harnesses.
 
 ## 1. OpenAI Agents SDK conventions (verified via /openai/openai-agents-js + developers.openai.com)
 
@@ -25,7 +25,7 @@ The platform's portability matrix names the OpenAI Agents SDK SandboxAgent as a 
 ## 2. Design decisions (locked)
 
 1. **Reuse the `compose` hook + `skillSkillMd`.** `openai-sandbox` sets `skill: skillSkillMd` (skill bodies as real `skills/<n>/SKILL.md`) and `compose: sandboxComposeAgent` (the single agent file). No `TargetSpec` change.
-2. **Everything but skill bodies folds into the agent file.** `instructions` and `mcp_server` have **empty per-type renderers** (`() => ({})` / an empty `MaterializeResult`) so they aren't skip-reported, and `compose` reads them from the pack and emits them inline in the agent file (`instructions:` string; `mcpServers: [...]` server instances). This is the same "handled by compose" pattern Flue used for instructions, extended to MCP because the SDK embeds MCP servers in the agent (no separate connection files).
+2. **Everything but skill bodies folds into the agent file.** `instructions` and `mcp_server` have **empty per-type renderers** (`() => ({})` / an empty `MaterializeResult`) so they aren't skip-reported, and `compose` reads them from the gem and emits them inline in the agent file (`instructions:` string; `mcpServers: [...]` server instances). This is the same "handled by compose" pattern Flue used for instructions, extended to MCP because the SDK embeds MCP servers in the agent (no separate connection files).
 3. **Native stdio MCP — no proxy.** http/sse → `MCPServerStreamableHttp`; stdio → `MCPServerStdio` (command/args + secrets as `env`). `mcpProxy.ts` is **not** used by this target.
 4. **Skills seeded via Manifest `localDir`, not inlined.** `defaultManifest` mounts the real `skills/` dir read-only (`localDir({ from: "skills", readOnly: true })`) and enables `skills()` + `filesystem()` so the agent can read them regardless of exact skill auto-discovery. Keeps skill bodies in real files (reuse `skillSkillMd`), not escaped into TS.
 5. **Hooks unsupported → skipped** with a reason.
@@ -43,9 +43,9 @@ The platform's portability matrix names the OpenAI Agents SDK SandboxAgent as a 
 | mcp_server (stdio) | inline `new MCPServerStdio({ command, args, env:{<NAME>: process.env["<NAME>"]!}, name })` |
 | hook | — skip (no native concept) |
 
-## 4. The composer (`src/pack/targets.ts`)
+## 4. The composer (`src/gem/targets.ts`)
 
-`sandboxComposeAgent(pack): MaterializeResult` (uses the `compose` hook; receives the whole pack):
+`sandboxComposeAgent(gem): MaterializeResult` (uses the `compose` hook; receives the whole gem):
 ```ts
 import { SandboxAgent, Manifest, localDir, shell, filesystem, skills } from "@openai/agents/sandbox";
 import { MCPServerStreamableHttp, MCPServerStdio } from "@openai/agents";  // only the classes used
@@ -63,9 +63,9 @@ export const agent = new SandboxAgent({
 });
 ```
 Details:
-- File path `<safePathSegment(pack.name)>.agent.ts`.
+- File path `<safePathSegment(gem.name)>.agent.ts`.
 - Imports are emitted conditionally: the `@openai/agents` MCP import line only lists the classes actually used (StreamableHttp and/or Stdio); omitted entirely when there are no MCP servers. The sandbox import always present.
-- `capabilities` includes `skills()` and the `defaultManifest` `skills` entry **only when the pack has skills**; otherwise an empty/minimal manifest (`new Manifest({ entries: {} })`) and `capabilities: [shell(), filesystem()]`.
+- `capabilities` includes `skills()` and the `defaultManifest` `skills` entry **only when the gem has skills**; otherwise an empty/minimal manifest (`new Manifest({ entries: {} })`) and `capabilities: [shell(), filesystem()]`.
 - `instructions` is template-escaped (`\` → `\\`, `` ` `` → `` \` ``, `${` → `\${`) — reuse the `escapeTemplate` helper added for Flue.
 - `mcpServers` rendering + skip rules:
   - http/sse with a real `url` → `MCPServerStreamableHttp`. Auth from a `headers.authorization` secretRef → `requestInit.headers.Authorization = process.env["<NAME>"]!`; other `headers.*` secrets → additional header entries. A non-`headers.` secret → **skip** that server with a reason.
@@ -87,20 +87,20 @@ Registry entry:
 
 ## 6. Module changes
 
-- `src/pack/targets.ts` — `TargetId` gains `"openai-sandbox"`; `sandboxComposeAgent` (+ small MCP-server render helpers); the registry entry. Reuses `skillSkillMd`, `safePathSegment`, `escapeTemplate`, the `compose` hook + merge. **Does not** use `mcpProxy.ts`.
+- `src/gem/targets.ts` — `TargetId` gains `"openai-sandbox"`; `sandboxComposeAgent` (+ small MCP-server render helpers); the registry entry. Reuses `skillSkillMd`, `safePathSegment`, `escapeTemplate`, the `compose` hook + merge. **Does not** use `mcpProxy.ts`.
 - `src/public/index.html` — one `<option>`.
 
 ## 7. Testing
 
-- **`src/pack/__tests__/targets.test.ts` (unit, external fidelity to the SDK):**
+- **`src/gem/__tests__/targets.test.ts` (unit, external fidelity to the SDK):**
   - skill → `skills/<n>/SKILL.md` (exact content).
   - agent file → `<packname>.agent.ts` containing `new SandboxAgent`, the `@openai/agents/sandbox` import, `capabilities: [shell(), filesystem(), skills()]`, `defaultManifest: new Manifest(` with the `skills: localDir(` entry, and the instructions string. Instruction artifacts are NOT in `skipped`; skill bodies are NOT inlined into the agent file.
   - http MCP → inline `new MCPServerStreamableHttp(` with the url and `process.env["<TOK>"]` auth in `requestInit.headers.Authorization`; no secret value.
   - stdio MCP → inline `new MCPServerStdio(` with `command`/`args` and `env: { <NAME>: process.env["<NAME>"] }`; NO proxy file emitted (assert `proxies/` is absent).
   - hook → **skipped** with reason; a non-`headers.` MCP secret → that server **skipped**.
-  - no-skills pack → agent file has `capabilities: [shell(), filesystem()]` and no `skills` manifest entry (valid TS).
+  - no-skills gem → agent file has `capabilities: [shell(), filesystem()]` and no `skills` manifest entry (valid TS).
   - instructions template escaping (backtick + `${`).
-  - `compatibility(pack)` includes an `openai-sandbox` entry; secret-safety: no emitted file contains a secret value.
+  - `compatibility(gem)` includes an `openai-sandbox` entry; secret-safety: no emitted file contains a secret value.
 - **Page (gstack at verify time):** materialize-preview target **OpenAI Sandbox** shows `<name>.agent.ts` + `skills/…`; and a workspace **openai-sandbox** tab renders `.targets/openai-sandbox/`.
 
 ## 8. Out of scope (named follow-ups)

@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add `openai-sandbox` to `TARGET_REGISTRY` so `materialize(pack, "openai-sandbox")` renders an OpenAI Agents SDK SandboxAgent project: `<packname>.agent.ts` (`new SandboxAgent({ instructions, capabilities, defaultManifest, mcpServers })`) + `skills/<n>/SKILL.md`.
+**Goal:** Add `openai-sandbox` to `TARGET_REGISTRY` so `materialize(gem, "openai-sandbox")` renders an OpenAI Agents SDK SandboxAgent project: `<packname>.agent.ts` (`new SandboxAgent({ instructions, capabilities, defaultManifest, mcpServers })`) + `skills/<n>/SKILL.md`.
 
-**Architecture:** Reuse the existing `compose` hook (shipped with Flue) and `skillSkillMd`. A `sandboxComposeAgent(pack)` composer emits the single agent file; skill bodies are real files seeded via the Manifest. MCP servers are inline in the agent (`MCPServerStreamableHttp` / native `MCPServerStdio` — no proxy bridge). No `TargetSpec` model change, no schema change (registry-derived `TargetIdSchema`), one UI `<option>`.
+**Architecture:** Reuse the existing `compose` hook (shipped with Flue) and `skillSkillMd`. A `sandboxComposeAgent(gem)` composer emits the single agent file; skill bodies are real files seeded via the Manifest. MCP servers are inline in the agent (`MCPServerStreamableHttp` / native `MCPServerStdio` — no proxy bridge). No `TargetSpec` model change, no schema change (registry-derived `TargetIdSchema`), one UI `<option>`.
 
 **Tech Stack:** TypeScript (ESM, NodeNext), Vitest (tests from `dist/`). No new dependencies.
 
@@ -22,20 +22,20 @@
 ### Task 1: `openai-sandbox` target — agent file (skills + instructions)
 
 **Files:**
-- Modify: `src/pack/targets.ts`
-- Test: `src/pack/__tests__/targets.test.ts`
+- Modify: `src/gem/targets.ts`
+- Test: `src/gem/__tests__/targets.test.ts`
 
 **Interfaces:**
-- Consumes: `Pack`, `SkillArtifact`, `InstructionsArtifact`, `skillSkillMd`, `safePathSegment`, `escapeTemplate`, `rendered`, the `compose` hook.
-- Produces: `TargetId` gains `"openai-sandbox"`; `sandboxComposeAgent(pack)`; a registry entry `{ skill: skillSkillMd, instructions: () => ({}), compose: sandboxComposeAgent }` (**no `mcp` renderer yet → MCP servers are skip-reported in Task 1; Task 2 adds inline MCP**).
+- Consumes: `Gem`, `SkillArtifact`, `InstructionsArtifact`, `skillSkillMd`, `safePathSegment`, `escapeTemplate`, `rendered`, the `compose` hook.
+- Produces: `TargetId` gains `"openai-sandbox"`; `sandboxComposeAgent(gem)`; a registry entry `{ skill: skillSkillMd, instructions: () => ({}), compose: sandboxComposeAgent }` (**no `mcp` renderer yet → MCP servers are skip-reported in Task 1; Task 2 adds inline MCP**).
 
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// append to src/pack/__tests__/targets.test.ts
+// append to src/gem/__tests__/targets.test.ts
 describe("openai-sandbox target (agent file + skills)", () => {
   it("emits <packname>.agent.ts (SandboxAgent + manifest + capabilities) and skill files; hooks + mcp skipped in v1-step1", () => {
-    const p: Pack = { name: "my pack", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [
+    const p: Gem = { name: "my gem", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [
       skill("review", "# Review\nLook `here` and ${there}."),
       instr("soul", "be kind"),
       hook(),
@@ -56,8 +56,8 @@ describe("openai-sandbox target (agent file + skills)", () => {
     expect(r.skipped.map((s) => s.type)).toContain("hook");
   });
 
-  it("no-skills pack -> capabilities without skills() and an empty manifest", () => {
-    const p: Pack = { name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [instr("i", "hi")] };
+  it("no-skills gem -> capabilities without skills() and an empty manifest", () => {
+    const p: Gem = { name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [instr("i", "hi")] };
     const agent = materialize(p, "openai-sandbox").files["p.agent.ts"];
     expect(agent).toContain("capabilities: [shell(), filesystem()]");
     expect(agent).not.toContain("skills()");
@@ -77,7 +77,7 @@ Expected: FAIL — `"openai-sandbox"` is not a `TargetId` / not in the registry.
 
 - [ ] **Step 3: Write minimal implementation**
 
-In `src/pack/targets.ts`:
+In `src/gem/targets.ts`:
 
 (a) Extend `TargetId`:
 ```ts
@@ -89,9 +89,9 @@ export type TargetId = "claude" | "codex" | "agents" | "hermes" | "eve" | "flue"
 // OpenAI Agents SDK SandboxAgent: one <packname>.agent.ts composes everything. Skill bodies are real
 // files (skillSkillMd) seeded read-only via the Manifest; instructions fold into the `instructions`
 // string; MCP servers are added inline in Task 2. No proxy bridge (the SDK has native stdio MCP).
-const sandboxComposeAgent = (pack: Pack): MaterializeResult => {
-  const skills = pack.artifacts.filter((a): a is SkillArtifact => a.type === "skill");
-  const instr = pack.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions");
+const sandboxComposeAgent = (gem: Gem): MaterializeResult => {
+  const skills = gem.artifacts.filter((a): a is SkillArtifact => a.type === "skill");
+  const instr = gem.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions");
   const instructions = instr.map((i) => `## ${i.name}\n\n${i.content}`).join("\n\n---\n\n");
   const hasSkills = skills.length > 0;
   const sandboxImport = hasSkills
@@ -103,14 +103,14 @@ const sandboxComposeAgent = (pack: Pack): MaterializeResult => {
 `${sandboxImport}
 
 export const agent = new SandboxAgent({
-  name: ${JSON.stringify(pack.name)},
+  name: ${JSON.stringify(gem.name)},
   model: "gpt-5.5",
   instructions: \`${escapeTemplate(instructions)}\`,
   capabilities: ${capabilities},
   defaultManifest: new Manifest({ entries: ${manifestEntries} }),
 });
 `;
-  return rendered({ [`${safePathSegment(pack.name)}.agent.ts`]: file });
+  return rendered({ [`${safePathSegment(gem.name)}.agent.ts`]: file });
 };
 ```
 
@@ -129,7 +129,7 @@ Expected: PASS (mcp servers, if any, are skip-reported since no `mcp` renderer y
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/pack/targets.ts src/pack/__tests__/targets.test.ts
+git add src/gem/targets.ts src/gem/__tests__/targets.test.ts
 git commit -m "feat(targets): OpenAI SandboxAgent target — agent file (skills + instructions)"
 ```
 
@@ -138,8 +138,8 @@ git commit -m "feat(targets): OpenAI SandboxAgent target — agent file (skills 
 ### Task 2: Inline MCP servers (native stdio + streamable-http)
 
 **Files:**
-- Modify: `src/pack/targets.ts`
-- Test: `src/pack/__tests__/targets.test.ts`
+- Modify: `src/gem/targets.ts`
+- Test: `src/gem/__tests__/targets.test.ts`
 
 **Interfaces:**
 - Consumes: `McpServerArtifact`; `sandboxComposeAgent` (Task 1).
@@ -148,7 +148,7 @@ git commit -m "feat(targets): OpenAI SandboxAgent target — agent file (skills 
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// append to src/pack/__tests__/targets.test.ts
+// append to src/gem/__tests__/targets.test.ts
 describe("openai-sandbox MCP (inline, native stdio)", () => {
   it("http server -> inline MCPServerStreamableHttp with env auth, no secret value", () => {
     const r = materialize({ name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [httpMcp("ctx")] }, "openai-sandbox");
@@ -186,7 +186,7 @@ Expected: FAIL — the agent file has no `mcpServers`; the http server is skip-r
 
 - [ ] **Step 3: Write minimal implementation**
 
-In `src/pack/targets.ts`, add the per-server renderer (before `sandboxComposeAgent`):
+In `src/gem/targets.ts`, add the per-server renderer (before `sandboxComposeAgent`):
 ```ts
 type SandboxServer = { code: string; cls: "MCPServerStreamableHttp" | "MCPServerStdio" } | { skip: string };
 const sandboxMcpServer = (s: McpServerArtifact): SandboxServer => {
@@ -218,7 +218,7 @@ const sandboxMcpServer = (s: McpServerArtifact): SandboxServer => {
 
 Update `sandboxComposeAgent` to render MCP. Add near the top of the function (after `instructions`):
 ```ts
-  const mcps = pack.artifacts.filter((a): a is McpServerArtifact => a.type === "mcp_server");
+  const mcps = gem.artifacts.filter((a): a is McpServerArtifact => a.type === "mcp_server");
   const skipped: SkippedArtifact[] = [];
   const serverCodes: string[] = [];
   const usedClasses = new Set<string>();
@@ -237,14 +237,14 @@ Then change the `sandboxImport` line in the template to be preceded by `mcpImpor
 `${sandboxImport}
 ${mcpImport}
 export const agent = new SandboxAgent({
-  name: ${JSON.stringify(pack.name)},
+  name: ${JSON.stringify(gem.name)},
   model: "gpt-5.5",
   instructions: \`${escapeTemplate(instructions)}\`,
   capabilities: ${capabilities},
   defaultManifest: new Manifest({ entries: ${manifestEntries} }),${mcpServers}
 });
 `;
-  return { files: { [`${safePathSegment(pack.name)}.agent.ts`]: file }, skipped };
+  return { files: { [`${safePathSegment(gem.name)}.agent.ts`]: file }, skipped };
 ```
 (When `mcpImport` is empty the line is just a blank line after the sandbox import — acceptable. If you prefer no blank line, conditionally join; keep it simple and valid.)
 
@@ -261,7 +261,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/pack/targets.ts src/pack/__tests__/targets.test.ts
+git add src/gem/targets.ts src/gem/__tests__/targets.test.ts
 git commit -m "feat(targets): OpenAI SandboxAgent inline MCP (native stdio + streamable-http)"
 ```
 

@@ -4,41 +4,41 @@
 
 **Goal:** Refactor the Anthropic-specific publish path into a `DEPLOY_REGISTRY` of `DeployTarget { preview, ready, deploy }` (mirroring `TARGET_REGISTRY`), route the existing `/publish*` ops through it with an optional `target` (default `claude-managed`), and add `GET /api/deploy-targets`.
 
-**Architecture:** A new `src/pack/deploy.ts` holds the interface + registry, reusing the existing pure render (`renderManagedAgent`) and network orchestration (`publishManagedAgentOnce`/`publishManagedAgent`/`anthropicPublishClient`) unchanged. The controller stops importing Anthropic specifics and consumes the registry by id. Single backend; Anthropic-typed preview/result shapes preserved (generic schema deferred to the Bedrock follow-up).
+**Architecture:** A new `src/gem/deploy.ts` holds the interface + registry, reusing the existing pure render (`renderManagedAgent`) and network orchestration (`publishManagedAgentOnce`/`publishManagedAgent`/`anthropicPublishClient`) unchanged. The controller stops importing Anthropic specifics and consumes the registry by id. Single backend; Anthropic-typed preview/result shapes preserved (generic schema deferred to the Bedrock follow-up).
 
 **Tech Stack:** TypeScript (ESM, NodeNext), Zod v4, `@agentback/*`, Vitest (tests from `dist/`). No new dependencies.
 
 ## Global Constraints
 
 - **ESM `.js` import extensions** (NodeNext). Tests from `dist/`: `npm test` = `tsc -b && vitest run`; focused `npm test -- -t "<pattern>"`.
-- **Reuse unchanged**: `renderManagedAgent` (`src/pack/publish.js`), `publishManagedAgent`/`publishManagedAgentOnce`/`anthropicPublishClient` + `PublishResult` (`src/publish.js`). Do NOT modify those files.
+- **Reuse unchanged**: `renderManagedAgent` (`src/gem/publish.js`), `publishManagedAgent`/`publishManagedAgentOnce`/`anthropicPublishClient` + `PublishResult` (`src/publish.js`). Do NOT modify those files.
 - **Backward compatible**: ops without `target` behave exactly as today (default `claude-managed`). Existing publish-preview/publish-ready tests must pass unchanged.
 - **Trust boundary unchanged**: `ready()` reads `process.env`; `deploy()` reads the key server-side, never returns it, sends only the redacted payload.
 - **Registry-derived enum**: `DeployTargetIdSchema = z.enum(deployTargetIds)` (like `TargetIdSchema = z.enum(Object.keys(TARGET_REGISTRY))`).
-- No import cycle: `schemas.ts → deploy.ts → publish.ts → pack/publish.ts → types.ts` (none import `schemas.ts`).
+- No import cycle: `schemas.ts → deploy.ts → publish.ts → gem/publish.ts → types.ts` (none import `schemas.ts`).
 
 ---
 
 ### Task 1: `deploy.ts` — DeployTarget interface + registry
 
 **Files:**
-- Create: `src/pack/deploy.ts`
-- Test: `src/pack/__tests__/deploy.test.ts`
+- Create: `src/gem/deploy.ts`
+- Test: `src/gem/__tests__/deploy.test.ts`
 
 **Interfaces:**
-- Consumes: `Pack` (`./types.js`); `renderManagedAgent` + `ManagedAgentRender` (`./publish.js`); `publishManagedAgent`, `publishManagedAgentOnce`, `anthropicPublishClient`, `PublishResult` (`../publish.js`).
+- Consumes: `Gem` (`./types.js`); `renderManagedAgent` + `ManagedAgentRender` (`./publish.js`); `publishManagedAgent`, `publishManagedAgentOnce`, `anthropicPublishClient`, `PublishResult` (`../publish.js`).
 - Produces: `DeployTargetId`, `DeployTarget`, `DEPLOY_REGISTRY`, `deployTargetIds`, `deployTargetList()`.
 
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// src/pack/__tests__/deploy.test.ts
+// src/gem/__tests__/deploy.test.ts
 import { describe, it, expect, afterEach } from "vitest";
 import { DEPLOY_REGISTRY, deployTargetIds, deployTargetList } from "../deploy.js";
 import { renderManagedAgent } from "../publish.js";
-import type { Pack, PackArtifact } from "../types.js";
+import type { Gem, PackArtifact } from "../types.js";
 
-const pack = (artifacts: PackArtifact[]): Pack => ({ name: "p", createdFrom: "/d", artifacts, checks: [], requiredSecrets: [] });
+const gem = (artifacts: PackArtifact[]): Gem => ({ name: "p", createdFrom: "/d", artifacts, checks: [], requiredSecrets: [] });
 const skill = (n: string): PackArtifact => ({ type: "skill", name: n, source: "standalone", content: "# body" });
 
 const savedKey = process.env.ANTHROPIC_API_KEY;
@@ -51,7 +51,7 @@ describe("deploy registry", () => {
   });
 
   it("preview equals renderManagedAgent", () => {
-    const p = pack([skill("review")]);
+    const p = gem([skill("review")]);
     expect(DEPLOY_REGISTRY["claude-managed"].preview(p)).toEqual(renderManagedAgent(p));
   });
 
@@ -65,7 +65,7 @@ describe("deploy registry", () => {
 
   it("deploy throws (no network) when ANTHROPIC_API_KEY is unset", async () => {
     delete process.env.ANTHROPIC_API_KEY;
-    await expect(DEPLOY_REGISTRY["claude-managed"].deploy(pack([skill("a")]), "req-12345678")).rejects.toThrow(/ANTHROPIC_API_KEY/);
+    await expect(DEPLOY_REGISTRY["claude-managed"].deploy(gem([skill("a")]), "req-12345678")).rejects.toThrow(/ANTHROPIC_API_KEY/);
   });
 });
 ```
@@ -78,11 +78,11 @@ Expected: FAIL — `Cannot find module '../deploy.js'`.
 - [ ] **Step 3: Write minimal implementation**
 
 ```ts
-// src/pack/deploy.ts
+// src/gem/deploy.ts
 // Deploy backends as a registry (mirrors TARGET_REGISTRY for materialize). Each DeployTarget renders
-// a Pack offline (preview), reports whether the server is configured for it (ready), and performs the
+// a Gem offline (preview), reports whether the server is configured for it (ready), and performs the
 // gated network deploy (deploy). Reuses the existing pure render + network orchestration unchanged.
-import type { Pack } from "./types.js";
+import type { Gem } from "./types.js";
 import { renderManagedAgent } from "./publish.js";
 import type { ManagedAgentRender } from "./publish.js";
 import { publishManagedAgent, publishManagedAgentOnce, anthropicPublishClient } from "../publish.js";
@@ -93,21 +93,21 @@ export type DeployTargetId = "claude-managed";
 export interface DeployTarget {
   id: DeployTargetId;
   label: string;
-  preview(pack: Pack): ManagedAgentRender;                          // pure, offline
+  preview(gem: Gem): ManagedAgentRender;                          // pure, offline
   ready(): boolean;                                                 // server configured for this backend
-  deploy(pack: Pack, requestId: string): Promise<PublishResult>;   // gated; throws if not ready
+  deploy(gem: Gem, requestId: string): Promise<PublishResult>;   // gated; throws if not ready
 }
 
 export const DEPLOY_REGISTRY: Record<DeployTargetId, DeployTarget> = {
   "claude-managed": {
     id: "claude-managed",
     label: "Claude Managed Agents",
-    preview: (pack) => renderManagedAgent(pack),
+    preview: (gem) => renderManagedAgent(gem),
     ready: () => !!process.env.ANTHROPIC_API_KEY,
-    deploy: (pack, requestId) => {
+    deploy: (gem, requestId) => {
       const key = process.env.ANTHROPIC_API_KEY;
       if (!key) throw new Error("ANTHROPIC_API_KEY is not set on the server — cannot deploy to Claude Managed Agents.");
-      return publishManagedAgentOnce(requestId, JSON.stringify(pack), () => publishManagedAgent(pack, anthropicPublishClient(key)));
+      return publishManagedAgentOnce(requestId, JSON.stringify(gem), () => publishManagedAgent(gem, anthropicPublishClient(key)));
     },
   },
 };
@@ -127,7 +127,7 @@ Expected: PASS (no network — the deploy-throws case never reaches the client).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/pack/deploy.ts src/pack/__tests__/deploy.test.ts
+git add src/gem/deploy.ts src/gem/__tests__/deploy.test.ts
 git commit -m "feat(deploy): DeployTarget registry wrapping the managed-agents path"
 ```
 
@@ -140,7 +140,7 @@ git commit -m "feat(deploy): DeployTarget registry wrapping the managed-agents p
 - Test: `src/__tests__/schemas.test.ts`
 
 **Interfaces:**
-- Consumes: `deployTargetIds` from `./pack/deploy.js`; existing `PublishPreviewRequestSchema`, `PublishRequestSchema`.
+- Consumes: `deployTargetIds` from `./gem/deploy.js`; existing `PublishPreviewRequestSchema`, `PublishRequestSchema`.
 - Produces: `DeployTargetIdSchema`, `DeployReadyQuerySchema`, `DeployTargetsResponseSchema`; optional `target` added to `PublishPreviewRequestSchema` (so `PublishRequestSchema` inherits it via `.extend`).
 
 - [ ] **Step 1: Write the failing test**
@@ -175,7 +175,7 @@ In `src/schemas.ts`:
 
 (a) Add the import near the top (with the other registry imports):
 ```ts
-import { deployTargetIds } from "./pack/deploy.js";
+import { deployTargetIds } from "./gem/deploy.js";
 ```
 
 (b) Define the deploy schemas (place just above the `// ── Managed Agents publish ──` block):
@@ -215,17 +215,17 @@ git commit -m "feat(schemas): deploy target id + targets/ready schemas; optional
 ### Task 3: Route the controller through the registry + `GET /api/deploy-targets`
 
 **Files:**
-- Modify: `src/pack.controller.ts`
-- Test: `src/__tests__/pack.controller.test.ts`
+- Modify: `src/gem.controller.ts`
+- Test: `src/__tests__/gem.controller.test.ts`
 
 **Interfaces:**
-- Consumes: `DEPLOY_REGISTRY`, `deployTargetList`, `DeployTargetId` (`./pack/deploy.js`); `DeployTargetsResponseSchema`, `DeployReadyQuerySchema` (Task 2); existing `buildPack`/`resolveDirs`/`introspectAll`.
+- Consumes: `DEPLOY_REGISTRY`, `deployTargetList`, `DeployTargetId` (`./gem/deploy.js`); `DeployTargetsResponseSchema`, `DeployReadyQuerySchema` (Task 2); existing `buildPack`/`resolveDirs`/`introspectAll`.
 - Produces: publish-preview/publish-ready/publish route through the registry by `target` (default `claude-managed`); new `GET /api/deploy-targets`. The direct Anthropic imports are removed.
 
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// append to src/__tests__/pack.controller.test.ts
+// append to src/__tests__/gem.controller.test.ts
 describe("deploy registry ops", () => {
   it("GET /api/deploy-targets lists claude-managed with a boolean ready", async () => {
     const r = await client.get("/api/deploy-targets").expect(200);
@@ -261,17 +261,17 @@ Expected: FAIL — `/api/deploy-targets` 404.
 
 - [ ] **Step 3: Update the controller**
 
-In `src/pack.controller.ts`:
+In `src/gem.controller.ts`:
 
 (a) Replace the publish imports. Remove:
 ```ts
-import { renderManagedAgent } from "./pack/publish.js";
+import { renderManagedAgent } from "./gem/publish.js";
 import { publishManagedAgent, publishManagedAgentOnce, anthropicPublishClient } from "./publish.js";
 ```
 Add:
 ```ts
-import { DEPLOY_REGISTRY, deployTargetList } from "./pack/deploy.js";
-import type { DeployTargetId } from "./pack/deploy.js";
+import { DEPLOY_REGISTRY, deployTargetList } from "./gem/deploy.js";
+import type { DeployTargetId } from "./gem/deploy.js";
 ```
 Add to the `./schemas.js` import list: `DeployTargetsResponseSchema, DeployReadyQuerySchema` (and ensure `PublishPreviewRequestSchema`, `PublishRequestSchema`, `PublishPreviewResponseSchema`, `PublishReadyResponseSchema`, `PublishResultSchema` remain).
 
@@ -287,9 +287,9 @@ Add to the `./schemas.js` import list: `DeployTargetsResponseSchema, DeployReady
   async publishPreview(input: { body: z.infer<typeof PublishPreviewRequestSchema> }): Promise<z.infer<typeof PublishPreviewResponseSchema>> {
     const dirs = resolveDirs(input.body.dir);
     const inventory = introspectAll(input.body.dir, input.body.projects);
-    const pack = buildPack(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
+    const gem = buildPack(inventory, input.body.selection, { name: input.body.name ?? "gem", createdFrom: dirs.claudeDir });
     const target = (input.body.target ?? "claude-managed") as DeployTargetId;
-    const r = DEPLOY_REGISTRY[target].preview(pack);
+    const r = DEPLOY_REGISTRY[target].preview(gem);
     return { payload: r.payload, skillsToRegister: r.skillsToRegister.map((s) => s.name), skipped: r.skipped, vaultSecrets: r.vaultSecrets };
   }
 
@@ -301,14 +301,14 @@ Add to the `./schemas.js` import list: `DeployTargetsResponseSchema, DeployReady
   }
 
   // OUTWARD-FACING: gated network deploy through the selected backend. The key is read server-side
-  // (inside the registry's deploy) and never returned; only the redacted pack payload is sent.
+  // (inside the registry's deploy) and never returned; only the redacted gem payload is sent.
   @post("/publish", { body: PublishRequestSchema, response: PublishResultSchema })
   async publish(input: { body: z.infer<typeof PublishRequestSchema> }): Promise<z.infer<typeof PublishResultSchema>> {
     const dirs = resolveDirs(input.body.dir);
     const inventory = introspectAll(input.body.dir, input.body.projects);
-    const pack = buildPack(inventory, input.body.selection, { name: input.body.name ?? "pack", createdFrom: dirs.claudeDir });
+    const gem = buildPack(inventory, input.body.selection, { name: input.body.name ?? "gem", createdFrom: dirs.claudeDir });
     const target = (input.body.target ?? "claude-managed") as DeployTargetId;
-    return DEPLOY_REGISTRY[target].deploy(pack, input.body.requestId);
+    return DEPLOY_REGISTRY[target].deploy(gem, input.body.requestId);
   }
 ```
 
@@ -322,7 +322,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/pack.controller.ts src/__tests__/pack.controller.test.ts
+git add src/gem.controller.ts src/__tests__/gem.controller.test.ts
 git commit -m "feat(api): route publish ops through DEPLOY_REGISTRY; add GET /api/deploy-targets"
 ```
 
@@ -333,15 +333,15 @@ git commit -m "feat(api): route publish ops through DEPLOY_REGISTRY; add GET /ap
 **Spec coverage:**
 - §1.1 DeployTarget + registry → Task 1 ✓
 - §1.2 three ops (preview/ready/deploy) → Task 1 ✓
-- §1.3 reuse pure+network code unchanged → Task 1 (imports renderManagedAgent + publishManagedAgent* verbatim; `src/publish.ts`/`src/pack/publish.ts` untouched) ✓
+- §1.3 reuse pure+network code unchanged → Task 1 (imports renderManagedAgent + publishManagedAgent* verbatim; `src/publish.ts`/`src/gem/publish.ts` untouched) ✓
 - §1.4 keep /publish* routes + optional target + registry-derived enum → Tasks 2,3 ✓
 - §1.5 GET /api/deploy-targets → Task 3 ✓
 - §1.6 generic schema deferred (Anthropic shapes kept) → Tasks 2,3 (preview/result schemas unchanged) ✓
-- §1.7 pack-based idempotency fingerprint → Task 1 (`JSON.stringify(pack)`) ✓
+- §1.7 gem-based idempotency fingerprint → Task 1 (`JSON.stringify(gem)`) ✓
 - §1.8 trust boundary unchanged → Task 1 (`ready()` reads env; `deploy()` reads key server-side) ✓
 - §3 controller table → Task 3 ✓
 - §6 testing → Tasks 1–3 (unit + controller; network test unaffected) ✓
 
 **Placeholder scan:** No TBD/TODO; complete code in every code step; commands + expected output in run steps. ✓
 
-**Type consistency:** `DeployTargetId`/`DeployTarget`/`DEPLOY_REGISTRY`/`deployTargetIds`/`deployTargetList` defined in Task 1 and used consistently in Tasks 2–3; `DeployTargetIdSchema = z.enum(deployTargetIds)` keeps the schema in lockstep with the registry; the controller's `(input.body.target ?? "claude-managed") as DeployTargetId` matches the registry keys; removed imports (`renderManagedAgent`, `publishManagedAgent*`, `anthropicPublishClient`) are fully replaced by registry calls. No cycle (`schemas.ts → deploy.ts → publish.ts → pack/publish.ts → types.ts`). ✓
+**Type consistency:** `DeployTargetId`/`DeployTarget`/`DEPLOY_REGISTRY`/`deployTargetIds`/`deployTargetList` defined in Task 1 and used consistently in Tasks 2–3; `DeployTargetIdSchema = z.enum(deployTargetIds)` keeps the schema in lockstep with the registry; the controller's `(input.body.target ?? "claude-managed") as DeployTargetId` matches the registry keys; removed imports (`renderManagedAgent`, `publishManagedAgent*`, `anthropicPublishClient`) are fully replaced by registry calls. No cycle (`schemas.ts → deploy.ts → publish.ts → gem/publish.ts → types.ts`). ✓
