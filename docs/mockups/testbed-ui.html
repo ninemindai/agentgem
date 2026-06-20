@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>agentgem — Lapidary Ledger (mockup)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* Lapidary Ledger palette — warm paper base, terracotta seal, emerald = certified */
+    --paper:#f4efe3;        /* parchment */
+    --paper-2:#efe8d8;      /* sunk panel */
+    --card:#fbf8f1;         /* raised card */
+    --ink:#211c15;          /* near-black warm */
+    --ink-2:#4a4133;
+    --muted:#857a64;        /* taupe */
+    --line:#ddd2bb;         /* hairline */
+    --line-2:#cfc3a8;
+    --accent:#9a3324;       /* terracotta seal */
+    --accent-soft:rgba(154,51,36,.08);
+    --accent-ink:#7d2a1e;
+    --gem:#1f6b4f;          /* emerald — certified/verified/deployed */
+    --gem-soft:rgba(31,107,79,.10);
+    --gold:#b08436;         /* facet highlight */
+    --shadow:0 1px 0 rgba(255,255,255,.6) inset, 0 10px 30px -12px rgba(33,28,21,.35);
+    --r:9px;
+    --display:"Fraunces",Georgia,serif;
+    --ui:"Hanken Grotesk",system-ui,sans-serif;
+    --mono:"JetBrains Mono",ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;font-family:var(--ui);font-size:14px;line-height:1.5;color:var(--ink);
+    background:
+      radial-gradient(1200px 600px at 85% -10%, rgba(176,132,54,.07), transparent 60%),
+      radial-gradient(900px 500px at -5% 110%, rgba(31,107,79,.06), transparent 55%),
+      var(--paper);
+    background-attachment:fixed;
+    -webkit-font-smoothing:antialiased;
+  }
+  /* paper grain */
+  body::before{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.5;mix-blend-mode:multiply;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E");
+  }
+  .app{position:relative;z-index:1;display:flex;flex-direction:column;height:100vh}
+
+  /* ─────────── Header ─────────── */
+  header{
+    display:flex;align-items:center;gap:18px;padding:14px 26px;
+    border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg, rgba(251,248,241,.7), rgba(251,248,241,0));
+    backdrop-filter:blur(2px);
+  }
+  .brand{display:flex;align-items:center;gap:11px}
+  .brand .mark{width:30px;height:30px;flex:none;filter:drop-shadow(0 2px 4px rgba(33,28,21,.18))}
+  .brand h1{
+    font-family:var(--display);font-optical-sizing:auto;font-weight:600;font-size:23px;
+    margin:0;letter-spacing:-.01em;line-height:1;
+  }
+  .brand .tag{
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--muted);border-left:1px solid var(--line-2);padding-left:11px;margin-left:3px;
+  }
+  .spacer{flex:1}
+  .testbed-chip{
+    display:flex;align-items:center;gap:9px;background:var(--card);border:1px solid var(--line);
+    border-radius:99px;padding:6px 8px 6px 13px;box-shadow:var(--shadow);font-size:12.5px;
+  }
+  .testbed-chip .loupe{width:15px;height:15px;color:var(--accent)}
+  .testbed-chip .path{font-family:var(--mono);color:var(--ink-2);font-size:12px}
+  .testbed-chip .path b{color:var(--ink);font-weight:600}
+  .testbed-chip .swap{
+    border:1px solid var(--line);background:transparent;color:var(--accent);border-radius:99px;
+    font:600 11px/1 var(--ui);padding:5px 10px;cursor:pointer;transition:.15s
+  }
+  .testbed-chip .swap:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+  /* ─────────── Stage rail ─────────── */
+  .rail{
+    display:flex;align-items:stretch;gap:0;padding:13px 26px 15px;
+    border-bottom:1px solid var(--line);background:var(--paper-2);
+    position:relative;overflow:hidden;
+  }
+  .rail::after{ /* drawn baseline that fills to current stage */
+    content:"";position:absolute;left:64px;right:64px;top:50%;height:2px;background:var(--line-2);z-index:0;
+  }
+  .station{
+    position:relative;z-index:1;flex:1;display:flex;flex-direction:column;align-items:center;gap:7px;
+    cursor:pointer;background:transparent;border:0;font:inherit;color:inherit;padding:0;
+  }
+  .station .node{
+    width:34px;height:34px;display:grid;place-items:center;border-radius:9px;
+    background:var(--card);border:1.5px solid var(--line-2);transition:.25s ease;
+    transform:rotate(45deg);box-shadow:0 4px 10px -6px rgba(33,28,21,.4);
+  }
+  .station .node svg{transform:rotate(-45deg);width:16px;height:16px;color:var(--muted);transition:.25s}
+  .station .label{font-family:var(--display);font-weight:600;font-size:13.5px;letter-spacing:.01em}
+  .station .sub{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.04em;min-height:12px}
+  .station.done .node{background:var(--gem);border-color:var(--gem)}
+  .station.done .node svg{color:#fff}
+  .station.active .node{
+    background:var(--accent);border-color:var(--accent);transform:rotate(45deg) scale(1.12);
+    box-shadow:0 0 0 5px var(--accent-soft),0 8px 18px -8px rgba(154,51,36,.7);
+  }
+  .station.active .node svg{color:#fff}
+  .station.active .label{color:var(--accent-ink)}
+  .station.todo .label,.station.todo .sub{color:var(--muted)}
+  .station:hover .node{transform:rotate(45deg) translateY(-2px)}
+  .station.active:hover .node{transform:rotate(45deg) scale(1.12) translateY(-2px)}
+
+  /* ─────────── Main two-pane ─────────── */
+  main{display:grid;grid-template-columns:1.05fr .95fr;flex:1;min-height:0}
+  .pane{padding:20px 24px;overflow:auto;min-height:0}
+  .pane.left{border-right:1px solid var(--line)}
+  .pane::-webkit-scrollbar{width:10px}
+  .pane::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:99px;border:3px solid var(--paper)}
+
+  .eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin:0 0 3px}
+  .stage-title{font-family:var(--display);font-weight:600;font-size:21px;margin:0 0 16px;letter-spacing:-.01em;display:flex;align-items:baseline;gap:10px}
+  .stage-title .count{font-family:var(--mono);font-size:12px;color:var(--accent);font-weight:500;letter-spacing:0}
+
+  .toolbar{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+  .field{display:flex;align-items:center;gap:7px;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:7px 11px;flex:1;min-width:160px}
+  .field svg{width:15px;height:15px;color:var(--muted);flex:none}
+  .field input{border:0;background:transparent;font:inherit;color:var(--ink);width:100%;outline:none}
+  .field input::placeholder{color:var(--muted)}
+
+  button.btn{font:600 13px/1 var(--ui);padding:8px 14px;border-radius:var(--r);cursor:pointer;border:1px solid var(--accent);background:var(--accent);color:#fbf8f1;transition:.16s;box-shadow:0 6px 16px -10px rgba(154,51,36,.9)}
+  button.btn:hover{transform:translateY(-1px);box-shadow:0 10px 22px -10px rgba(154,51,36,.95)}
+  button.btn:active{transform:translateY(0)}
+  button.ghost{background:transparent;color:var(--accent);box-shadow:none}
+  button.ghost:hover{background:var(--accent-soft)}
+  button.gem{border-color:var(--gem);background:var(--gem);box-shadow:0 6px 16px -10px rgba(31,107,79,.9)}
+  button.gem.ghost{background:transparent;color:var(--gem)}
+  button.gem.ghost:hover{background:var(--gem-soft)}
+  :focus-visible{outline:2.5px solid var(--accent);outline-offset:2px;border-radius:6px}
+
+  /* import strip */
+  .import-strip{
+    display:flex;align-items:center;gap:12px;background:linear-gradient(100deg,var(--accent-soft),transparent);
+    border:1px dashed var(--line-2);border-radius:var(--r);padding:11px 14px;margin-bottom:16px
+  }
+  .import-strip .ic{width:26px;height:26px;color:var(--accent);flex:none}
+  .import-strip .txt{flex:1;font-size:12.5px;color:var(--ink-2)}
+  .import-strip .txt b{color:var(--ink)}
+
+  /* inventory groups */
+  .group{margin-bottom:18px}
+  .group > h2{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.16em;color:var(--muted);margin:0 0 8px;display:flex;align-items:center;gap:8px}
+  .group > h2::after{content:"";flex:1;height:1px;background:var(--line)}
+  .row{
+    display:flex;align-items:center;gap:11px;padding:9px 12px;border:1px solid transparent;border-radius:8px;cursor:pointer;
+    transition:background .14s,border-color .14s,transform .14s;position:relative
+  }
+  .row:hover{background:var(--card);border-color:var(--line)}
+  .row .box{
+    width:17px;height:17px;border:1.5px solid var(--line-2);border-radius:5px;flex:none;display:grid;place-items:center;
+    background:var(--card);transition:.15s
+  }
+  .row .box svg{width:11px;height:11px;color:#fff;opacity:0;transform:scale(.5);transition:.15s}
+  .row.on{background:var(--card);border-color:var(--line)}
+  .row.on .box{background:var(--accent);border-color:var(--accent)}
+  .row.on .box svg{opacity:1;transform:scale(1)}
+  .row.on::before{content:"";position:absolute;left:0;top:6px;bottom:6px;width:3px;border-radius:99px;background:var(--accent)}
+  .row .name{font-weight:600;font-size:13.5px}
+  .row .desc{color:var(--muted);font-size:12px;margin-left:2px;font-weight:400}
+  .row .src{font-family:var(--mono);font-size:10px;color:var(--accent);border:1px solid var(--line);border-radius:5px;padding:2px 6px;letter-spacing:.03em}
+  .row .src.proj{color:var(--gem);border-color:rgba(31,107,79,.3)}
+  .row .rightmeta{margin-left:auto;display:flex;align-items:center;gap:8px}
+  .row .view{font-family:var(--mono);font-size:10px;color:var(--muted);border:1px solid var(--line);background:transparent;border-radius:5px;padding:3px 7px;cursor:pointer;opacity:0;transition:.15s}
+  .row:hover .view{opacity:1}
+  .row .view:hover{color:#fff;background:var(--accent);border-color:var(--accent)}
+
+  /* test-drive handoff */
+  .testdrive{margin-top:22px;border:1px solid var(--line);border-radius:var(--r);background:var(--card);overflow:hidden;box-shadow:var(--shadow)}
+  .testdrive .hd{display:flex;align-items:center;gap:9px;padding:11px 14px;border-bottom:1px solid var(--line);background:var(--paper-2)}
+  .testdrive .hd svg{width:16px;height:16px;color:var(--accent)}
+  .testdrive .hd b{font-family:var(--display);font-size:14px;font-weight:600}
+  .testdrive .hd .pill{margin-left:auto;font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--gem);background:var(--gem-soft);padding:3px 8px;border-radius:99px}
+  .cmd{display:flex;align-items:center;gap:10px;padding:13px 14px;font-family:var(--mono);font-size:12.5px;color:var(--ink)}
+  .cmd .dollar{color:var(--accent);font-weight:600}
+  .cmd code{flex:1}
+  .cmd .cp{font-family:var(--ui);font-weight:600;font-size:11px;color:var(--accent);border:1px solid var(--line);background:transparent;border-radius:6px;padding:5px 10px;cursor:pointer;transition:.15s}
+  .cmd .cp:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .testdrive .ft{padding:0 14px 12px;color:var(--muted);font-size:11.5px}
+
+  /* ─────────── Right pane: the certificate ─────────── */
+  .cert{
+    border:1px solid var(--line-2);border-radius:14px;background:
+      linear-gradient(180deg,var(--card),var(--paper));
+    box-shadow:var(--shadow);overflow:hidden;position:relative
+  }
+  .cert::before,.cert::after{content:"";position:absolute;width:54px;height:54px;border:1px solid var(--line-2);opacity:.7;pointer-events:none}
+  .cert::before{top:10px;left:10px;border-right:0;border-bottom:0;border-radius:8px 0 0 0}
+  .cert::after{bottom:10px;right:10px;border-left:0;border-top:0;border-radius:0 0 8px 0}
+  .cert-h{display:flex;flex-direction:column;align-items:center;text-align:center;padding:24px 22px 16px;border-bottom:1px solid var(--line)}
+  .cert-h .gemmark{width:58px;height:58px;margin-bottom:10px}
+  .cert-h .kicker{font-family:var(--mono);font-size:10px;letter-spacing:.28em;text-transform:uppercase;color:var(--muted)}
+  .cert-h .gname{font-family:var(--display);font-weight:600;font-size:27px;letter-spacing:-.015em;margin:3px 0 2px}
+  .cert-h .from{font-family:var(--mono);font-size:11px;color:var(--muted)}
+  .seal{
+    position:absolute;top:18px;right:20px;width:78px;height:78px;display:grid;place-items:center;text-align:center;
+    border:2px solid var(--gem);border-radius:50%;color:var(--gem);transform:rotate(-12deg);opacity:.92;
+    font-family:var(--display);font-weight:700;font-size:10px;letter-spacing:.12em;text-transform:uppercase;line-height:1.25
+  }
+  .seal small{display:block;font-family:var(--mono);font-weight:500;font-size:7.5px;letter-spacing:.1em;margin-top:2px}
+
+  .tally{display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid var(--line)}
+  .tally .t{padding:14px 8px;text-align:center;border-right:1px solid var(--line)}
+  .tally .t:last-child{border-right:0}
+  .tally .t .n{font-family:var(--display);font-weight:600;font-size:24px;line-height:1}
+  .tally .t .l{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-top:5px}
+
+  .cert-body{padding:16px 20px 20px}
+  .crow{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px dashed var(--line)}
+  .crow:last-child{border-bottom:0}
+  .crow .k{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);width:120px;flex:none}
+  .crow .v{font-size:13px}
+  .chip{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11px;padding:3px 8px;border-radius:99px;border:1px solid var(--line)}
+  .chip.secret{color:var(--accent);border-color:rgba(154,51,36,.3);background:var(--accent-soft)}
+  .chip.pass{color:var(--gem);border-color:rgba(31,107,79,.3);background:var(--gem-soft)}
+
+  .actions{display:flex;flex-direction:column;gap:12px;margin-top:18px}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--card)}
+  .seg button{border:0;background:transparent;color:var(--muted);font:600 12px/1 var(--ui);padding:7px 13px;cursor:pointer;transition:.14s}
+  .seg button.on{background:var(--accent);color:#fff}
+  .target-row{display:flex;align-items:center;gap:10px}
+  .target-row label{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+  select.target{font:600 13px/1 var(--ui);padding:8px 11px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);cursor:pointer;flex:1}
+  .deploy-row{display:flex;gap:10px}
+  .deploy-row .btn{flex:1;text-align:center}
+
+  /* package CTA */
+  .pkg-cta{margin:18px 0 0;display:flex;align-items:center;gap:12px;justify-content:center;flex-direction:column}
+  .pkg-cta .btn{font-size:14px;padding:11px 26px}
+  .pkg-note{font-size:11.5px;color:var(--muted)}
+
+  /* entrance animations */
+  @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes stamp{0%{opacity:0;transform:rotate(-12deg) scale(1.6)}60%{opacity:1;transform:rotate(-12deg) scale(.92)}100%{transform:rotate(-12deg) scale(1)}}
+  @keyframes shimmer{0%,100%{opacity:.0}50%{opacity:.55}}
+  .reveal{opacity:0;animation:rise .5s cubic-bezier(.2,.7,.2,1) forwards}
+  .seal{animation:stamp .6s cubic-bezier(.2,.8,.2,1) .2s both}
+  .gemmark .glint{animation:shimmer 3.4s ease-in-out infinite}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Header -->
+  <header>
+    <div class="brand">
+      <!-- faceted gem mark -->
+      <svg class="mark" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+        <path d="M20 2 L36 14 L20 38 L4 14 Z" fill="#9a3324"/>
+        <path d="M20 2 L36 14 L20 16 Z" fill="#bb4a38"/>
+        <path d="M20 2 L4 14 L20 16 Z" fill="#7d2a1e"/>
+        <path d="M4 14 L20 16 L20 38 Z" fill="#8b2e21"/>
+        <path d="M36 14 L20 16 L20 38 Z" fill="#a8392a"/>
+        <path d="M4 14 L36 14 L20 16 Z" fill="#c8543f"/>
+      </svg>
+      <h1>agentgem</h1>
+      <span class="tag">Lapidary Ledger</span>
+    </div>
+    <div class="spacer"></div>
+    <div class="testbed-chip">
+      <svg class="loupe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="10" r="7"/><path d="m20 20-4-4"/></svg>
+      <span class="path">~/projects/<b>research-agent</b></span>
+      <button class="swap">Switch testbed</button>
+    </div>
+  </header>
+
+  <!-- Stage rail -->
+  <nav class="rail" id="rail">
+    <button class="station active" data-stage="testbed">
+      <span class="node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M3 12h18"/></svg></span>
+      <span class="label">Testbed</span>
+      <span class="sub">14 artifacts</span>
+    </button>
+    <button class="station todo" data-stage="package">
+      <span class="node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5"/></svg></span>
+      <span class="label">Package</span>
+      <span class="sub">select &amp; cut</span>
+    </button>
+    <button class="station todo" data-stage="workspace">
+      <span class="node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18v12H3z"/><path d="M3 7l3-4h12l3 4"/></svg></span>
+      <span class="label">Workspace</span>
+      <span class="sub">gem home</span>
+    </button>
+    <button class="station todo" data-stage="target">
+      <span class="node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg></span>
+      <span class="label">Target</span>
+      <span class="sub">eve · flue · …</span>
+    </button>
+    <button class="station todo" data-stage="deploy">
+      <span class="node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg></span>
+      <span class="label">Deploy</span>
+      <span class="sub">ship</span>
+    </button>
+  </nav>
+
+  <!-- Two-pane working area -->
+  <main>
+    <!-- LEFT: Testbed working surface -->
+    <section class="pane left">
+      <p class="eyebrow reveal" style="animation-delay:.02s">Stage 1 — author &amp; test-drive</p>
+      <h2 class="stage-title reveal" style="animation-delay:.05s">Testbed <span class="count">research-agent · .claude/</span></h2>
+
+      <div class="import-strip reveal" style="animation-delay:.08s">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+        <span class="txt"><b>Import from machine</b> — pull skills, MCP servers &amp; hooks from your global <code>~/.claude</code> config into this testbed.</span>
+        <button class="btn ghost">Import…</button>
+      </div>
+
+      <div class="toolbar reveal" style="animation-delay:.10s">
+        <div class="field">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4-4"/></svg>
+          <input placeholder="Search names, descriptions, contents…">
+        </div>
+        <button class="btn ghost">Filters ▾</button>
+      </div>
+
+      <!-- Skills -->
+      <div class="group reveal" style="animation-delay:.13s">
+        <h2>Skills</h2>
+        <div class="row on" data-i><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m5 12 5 5 9-11"/></svg></span><span class="name">browser-harness</span><span class="desc">— direct browser control via CDP</span><span class="rightmeta"><span class="src proj">project</span><button class="view">view</button></span></div>
+        <div class="row on"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m5 12 5 5 9-11"/></svg></span><span class="name">make-pdf</span><span class="desc">— markdown → publication PDF</span><span class="rightmeta"><span class="src">imported</span><button class="view">view</button></span></div>
+        <div class="row"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m5 12 5 5 9-11"/></svg></span><span class="name">scrape</span><span class="desc">— pull structured data from a page</span><span class="rightmeta"><span class="src">imported</span><button class="view">view</button></span></div>
+      </div>
+
+      <!-- MCP -->
+      <div class="group reveal" style="animation-delay:.16s">
+        <h2>MCP Servers</h2>
+        <div class="row on"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m5 12 5 5 9-11"/></svg></span><span class="name">context7</span><span class="desc">— live library docs</span><span class="rightmeta"><span class="src proj">project</span><button class="view">view</button></span></div>
+        <div class="row on"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m5 12 5 5 9-11"/></svg></span><span class="name">firecrawl</span><span class="desc">— crawl &amp; extract · <span style="color:var(--accent)">1 secret</span></span><span class="rightmeta"><span class="src">imported</span><button class="view">view</button></span></div>
+      </div>
+
+      <!-- Hooks -->
+      <div class="group reveal" style="animation-delay:.19s">
+        <h2>Hooks</h2>
+        <div class="row"><span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m5 12 5 5 9-11"/></svg></span><span class="name">PreToolUse · Bash</span><span class="desc">— guard destructive commands</span><span class="rightmeta"><span class="src proj">project</span><button class="view">view</button></span></div>
+      </div>
+
+      <!-- Test-drive handoff -->
+      <div class="testdrive reveal" style="animation-delay:.22s">
+        <div class="hd">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 3 14 9-14 9z"/></svg>
+          <b>Test-drive this agent</b>
+          <span class="pill">Claude Code</span>
+        </div>
+        <div class="cmd"><span class="dollar">$</span><code id="cmd">cd ~/projects/research-agent &amp;&amp; claude</code><button class="cp" id="copyBtn">Copy</button></div>
+        <div class="ft">Runs your real harness against this folder. Global + project config merge live — import pins your global picks into the testbed so the gem matches what you tested.</div>
+      </div>
+    </section>
+
+    <!-- RIGHT: the certificate (live gem) -->
+    <aside class="pane right">
+      <p class="eyebrow reveal" style="animation-delay:.06s">Live preview</p>
+      <h2 class="stage-title reveal" style="animation-delay:.09s">The Gem</h2>
+
+      <div class="cert reveal" style="animation-delay:.12s">
+        <div class="seal" id="seal">Certified<small>3/3 checks</small></div>
+        <div class="cert-h">
+          <svg class="gemmark" viewBox="0 0 64 64" fill="none">
+            <path d="M32 4 58 24 32 60 6 24 Z" fill="#9a3324"/>
+            <path d="M32 4 58 24 32 26 Z" fill="#bb4a38"/>
+            <path d="M32 4 6 24 32 26 Z" fill="#7d2a1e"/>
+            <path d="M6 24 32 26 32 60 Z" fill="#8b2e21"/>
+            <path d="M58 24 32 26 32 60 Z" fill="#a8392a"/>
+            <path d="M6 24 58 24 32 26 Z" fill="#c8543f"/>
+            <path class="glint" d="M32 4 58 24 32 26 Z" fill="#ffd9a0"/>
+          </svg>
+          <span class="kicker">Certificate of Authenticity</span>
+          <span class="gname">research-agent</span>
+          <span class="from">from ~/projects/research-agent</span>
+        </div>
+
+        <div class="tally">
+          <div class="t"><div class="n">3</div><div class="l">Skills</div></div>
+          <div class="t"><div class="n">2</div><div class="l">MCP</div></div>
+          <div class="t"><div class="n">1</div><div class="l">Hooks</div></div>
+          <div class="t"><div class="n">1</div><div class="l">Instr</div></div>
+        </div>
+
+        <div class="cert-body">
+          <div class="crow"><span class="k">Required secrets</span><span class="v"><span class="chip secret">🔑 FIRECRAWL_API_KEY</span></span></div>
+          <div class="crow"><span class="k">Checks</span><span class="v"><span class="chip pass">✓ behavioral · 2</span> <span class="chip pass">✓ skillspector</span></span></div>
+          <div class="crow"><span class="k">Digest</span><span class="v" style="font-family:var(--mono);font-size:11px;color:var(--muted)">sha256:7f3a…c1e9</span></div>
+
+          <div class="actions">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div class="seg" id="pmodes">
+                <button class="on">Summary</button><button>JSON</button><button>Materialize</button>
+              </div>
+              <div class="spacer"></div>
+              <button class="btn ghost">⬇ .tar.gz</button>
+            </div>
+            <div class="target-row">
+              <label>Target</label>
+              <select class="target"><option>eve</option><option>flue</option><option>openai-sandbox</option><option>claude</option><option>codex</option></select>
+            </div>
+            <div class="deploy-row">
+              <button class="btn ghost">▶ Run locally</button>
+              <button class="btn gem">▲ Deploy to Vercel</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pkg-cta reveal" style="animation-delay:.18s">
+        <button class="btn" id="pkgBtn">Cut &amp; package gem →</button>
+        <span class="pkg-note">Re-reads the testbed, re-select what goes in, then advances to Workspace.</span>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<script>
+  // copy handoff command
+  const copyBtn=document.getElementById('copyBtn');
+  copyBtn.addEventListener('click',()=>{
+    navigator.clipboard?.writeText('cd ~/projects/research-agent && claude');
+    copyBtn.textContent='Copied ✓';copyBtn.style.background='var(--gem)';copyBtn.style.color='#fff';copyBtn.style.borderColor='var(--gem)';
+    setTimeout(()=>{copyBtn.textContent='Copy';copyBtn.style.background='';copyBtn.style.color='';copyBtn.style.borderColor='';},1400);
+  });
+
+  // toggle inventory rows
+  document.querySelectorAll('.row').forEach(r=>r.addEventListener('click',e=>{
+    if(e.target.closest('.view'))return; r.classList.toggle('on');
+  }));
+
+  // preview mode segmented control
+  document.querySelectorAll('#pmodes button').forEach(b=>b.addEventListener('click',()=>{
+    document.querySelectorAll('#pmodes button').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+  }));
+
+  // stage rail navigation (mock: mark prior stages done, clicked active)
+  const stations=[...document.querySelectorAll('.station')];
+  stations.forEach((s,i)=>s.addEventListener('click',()=>{
+    stations.forEach((x,j)=>{x.classList.remove('active','done','todo');x.classList.add(j<i?'done':j===i?'active':'todo');});
+  }));
+
+  // package → advance to Package stage, re-stamp the seal
+  document.getElementById('pkgBtn').addEventListener('click',()=>{
+    stations[0].classList.replace('active','done');
+    stations[1].classList.replace('todo','active');
+    const seal=document.getElementById('seal');
+    seal.style.animation='none';void seal.offsetWidth;seal.style.animation='stamp .6s cubic-bezier(.2,.8,.2,1) both';
+  });
+</script>
+</body>
+</html>

@@ -3,68 +3,152 @@
 <head>
 <meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>agentgem — Gem Builder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  :root{--ink:#221d16;--muted:#6f6555;--line:#ddd3c0;--accent:#9a3324;--paper:#f6f2e9;--card:#fff}
-  *{box-sizing:border-box}body{margin:0;font:14px/1.5 system-ui,sans-serif;color:var(--ink);background:var(--paper)}
-  header{padding:14px 20px;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:center}
-  header h1{font-size:16px;margin:0}header .muted{color:var(--muted)}
-  main{display:grid;grid-template-columns:1fr 1fr;gap:0;height:calc(100vh - 53px)}
-  .pane{padding:16px 20px;overflow:auto}.pane.left{border-right:1px solid var(--line)}
-  .group{margin-bottom:18px}.group h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:0 0 8px}
-  label.row{display:flex;gap:8px;align-items:flex-start;padding:4px 0;cursor:pointer}
-  label.row .d{color:var(--muted);font-size:12px}
-  label.row .src{font:11px/1 ui-monospace,monospace;color:var(--accent);border:1px solid var(--line);border-radius:4px;padding:1px 4px;margin-left:4px;cursor:pointer}
-  label.row .src:hover{background:var(--accent);color:#fff}
-  select{padding:6px 8px;border:1px solid var(--line);border-radius:5px;font:inherit;background:var(--card);max-width:48%}
-  .bar{display:flex;gap:8px;align-items:center;margin-bottom:12px}
-  .bar .chk{display:flex;gap:4px;align-items:center;cursor:pointer;font-size:13px;color:var(--ink)}
-  .bar .chk input{margin:0}
-  input[type=text]{flex:1;padding:6px 8px;border:1px solid var(--line);border-radius:5px;font:inherit}
-  button{padding:6px 12px;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:5px;cursor:pointer;font:inherit}
-  button.ghost{background:transparent;color:var(--accent)}
-  pre{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:12px;font:12px/1.5 ui-monospace,monospace;white-space:pre-wrap;word-break:break-word}
-  .note{color:var(--muted);font-size:12px;margin-top:8px}
-  label.row > span{flex:1}
-  label.row .view{flex:none;font:11px/1 ui-monospace,monospace;color:var(--muted);border:1px solid var(--line);background:transparent;border-radius:4px;padding:2px 6px;cursor:pointer}
+  /* ── Lapidary Ledger — warm paper, terracotta seal, emerald = certified ── */
+  :root{
+    --paper:#f4efe3;--paper-2:#efe8d8;--card:#fbf8f1;
+    --ink:#211c15;--ink-2:#4a4133;--muted:#857a64;
+    --line:#ddd2bb;--line-2:#cfc3a8;
+    --accent:#9a3324;--accent-ink:#7d2a1e;--accent-soft:rgba(154,51,36,.08);
+    --gem:#1f6b4f;--gem-soft:rgba(31,107,79,.10);--gold:#b08436;
+    --r:8px;--shadow:0 1px 0 rgba(255,255,255,.55) inset,0 10px 28px -14px rgba(33,28,21,.34);
+    --display:"Fraunces",Georgia,serif;--ui:"Hanken Grotesk",system-ui,sans-serif;--mono:"JetBrains Mono",ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;font-family:var(--ui);font-size:14px;line-height:1.5;color:var(--ink);
+    background:radial-gradient(1200px 600px at 88% -12%,rgba(176,132,54,.07),transparent 60%),radial-gradient(900px 500px at -6% 112%,rgba(31,107,79,.06),transparent 55%),var(--paper);
+    background-attachment:fixed;-webkit-font-smoothing:antialiased;
+  }
+  body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.5;mix-blend-mode:multiply;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
+  /* ── header ── */
+  header{position:relative;z-index:1;padding:14px 24px;border-bottom:1px solid var(--line);display:flex;gap:14px;align-items:center;
+    background:linear-gradient(180deg,rgba(251,248,241,.7),rgba(251,248,241,0));backdrop-filter:blur(2px)}
+  header .mark{width:28px;height:28px;flex:none;filter:drop-shadow(0 2px 4px rgba(33,28,21,.18))}
+  header h1{font-family:var(--display);font-optical-sizing:auto;font-weight:600;font-size:22px;margin:0;letter-spacing:-.01em;line-height:1}
+  header .tag{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);border-left:1px solid var(--line-2);padding-left:11px}
+  header .muted{color:var(--muted);font-size:12px}
+  header code{font-family:var(--mono);font-size:11px;color:var(--accent-ink);background:var(--accent-soft);padding:1px 5px;border-radius:4px}
+  .spacer{flex:1}
+  .testbed-chip{display:flex;align-items:center;gap:9px;background:var(--card);border:1px solid var(--line);border-radius:99px;padding:6px 8px 6px 13px;box-shadow:var(--shadow);font-size:12.5px}
+  .testbed-chip .path{font-family:var(--mono);color:var(--ink-2);font-size:12px}
+  .testbed-chip .path b{color:var(--ink)}
+  .testbed-chip button{font:600 11px/1 var(--ui);padding:5px 10px;border-radius:99px}
+  main{position:relative;z-index:1;display:grid;grid-template-columns:1.04fr .96fr;gap:0;height:calc(100vh - 58px)}
+  .pane{padding:18px 22px;overflow:auto}.pane.left{border-right:1px solid var(--line)}
+  .pane::-webkit-scrollbar{width:10px}.pane::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:99px;border:3px solid var(--paper)}
+  /* ── groups & rows ── */
+  .group{margin-bottom:18px}
+  .group h2{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.16em;color:var(--muted);margin:0 0 8px;display:flex;align-items:center;gap:9px}
+  .group h2::after{content:"";flex:1;height:1px;background:var(--line)}
+  label.row{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;cursor:pointer;border:1px solid transparent;border-radius:8px;transition:background .14s,border-color .14s;position:relative}
+  label.row:hover{background:var(--card);border-color:var(--line)}
+  label.row:has(input:checked){background:var(--card);border-color:var(--line)}
+  label.row:has(input:checked)::before{content:"";position:absolute;left:0;top:7px;bottom:7px;width:3px;border-radius:99px;background:var(--accent)}
+  label.row input[type=checkbox]{margin-top:2px;width:16px;height:16px;accent-color:var(--accent);cursor:pointer;flex:none}
+  label.row > span{flex:1;font-weight:600;font-size:13.5px}
+  label.row .d{color:var(--muted);font-size:12px;font-weight:400}
+  label.row .src,.src{font-family:var(--mono);font-size:10px;color:var(--accent);border:1px solid var(--line);border-radius:5px;padding:2px 6px;letter-spacing:.03em;cursor:pointer}
+  label.row .src:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+  label.row .view{flex:none;font-family:var(--mono);font-size:10px;color:var(--muted);border:1px solid var(--line);background:transparent;border-radius:5px;padding:3px 7px;cursor:pointer;opacity:0;transition:.15s}
+  label.row:hover .view{opacity:1}
   label.row .view:hover{color:#fff;background:var(--accent);border-color:var(--accent)}
-  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:10;padding:24px}
+  /* ── controls ── */
+  select{padding:7px 10px;border:1px solid var(--line);border-radius:var(--r);font:600 13px/1 var(--ui);background:var(--card);color:var(--ink);max-width:48%;cursor:pointer}
+  .bar{display:flex;gap:8px;align-items:center;margin-bottom:12px}
+  .bar .chk{display:flex;gap:5px;align-items:center;cursor:pointer;font-size:13px;color:var(--ink)}
+  .bar .chk input{margin:0;accent-color:var(--accent)}
+  .bar strong{font-family:var(--display);font-weight:600}
+  input[type=text]{flex:1;padding:8px 11px;border:1px solid var(--line);border-radius:var(--r);font:inherit;background:var(--card);color:var(--ink)}
+  input[type=text]::placeholder{color:var(--muted)}
+  button{font:600 13px/1 var(--ui);padding:8px 13px;border:1px solid var(--accent);background:var(--accent);color:#fbf8f1;border-radius:var(--r);cursor:pointer;transition:.16s;box-shadow:0 6px 16px -11px rgba(154,51,36,.9)}
+  button:hover{transform:translateY(-1px);box-shadow:0 10px 22px -11px rgba(154,51,36,.95)}
+  button:active{transform:translateY(0)}
+  button.ghost{background:transparent;color:var(--accent);box-shadow:none}
+  button.ghost:hover{background:var(--accent-soft);transform:none}
+  :focus-visible{outline:2.5px solid var(--accent);outline-offset:2px;border-radius:6px}
+  pre{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px;font:12px/1.6 var(--mono);white-space:pre-wrap;word-break:break-word;color:var(--ink)}
+  .note{color:var(--muted);font-size:11.5px;margin-top:10px;line-height:1.55}
+  .note code{font-family:var(--mono);font-size:11px;color:var(--accent-ink)}
+  /* ── modal ── */
+  .modal-bg{position:fixed;inset:0;background:rgba(33,28,21,.5);display:flex;align-items:center;justify-content:center;z-index:10;padding:24px;backdrop-filter:blur(2px)}
   .modal-bg[hidden]{display:none}
-  .modal{background:var(--card);border:1px solid var(--line);border-radius:8px;max-width:840px;width:100%;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.25)}
-  .modal-h{display:flex;gap:8px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)}
-  .modal-h .t{font-size:15px}
-  .modal-body{margin:0;border:0;border-radius:0 0 8px 8px;overflow:auto;flex:1;background:var(--card)}
-  .fm{display:block;background:rgba(154,51,36,.06);border:1px solid var(--line);border-radius:6px;padding:8px;margin-bottom:10px}
+  .modal{background:var(--card);border:1px solid var(--line-2);border-radius:12px;max-width:840px;width:100%;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 24px 60px -20px rgba(33,28,21,.55)}
+  .modal-h{display:flex;gap:8px;align-items:center;padding:13px 16px;border-bottom:1px solid var(--line);background:var(--paper-2);border-radius:12px 12px 0 0}
+  .modal-h .t{font-family:var(--display);font-weight:600;font-size:16px}
+  .modal-body{margin:0;border:0;border-radius:0 0 12px 12px;overflow:auto;flex:1;background:var(--card)}
+  .fm{display:block;background:var(--accent-soft);border:1px solid var(--line);border-radius:6px;padding:9px;margin-bottom:11px}
   .fmfence{color:var(--muted)} .fmk{color:var(--accent);font-weight:600} .fmc{color:var(--muted)} .fmv{color:var(--ink)}
-  .mh{color:var(--accent);font-weight:700} .mq{color:var(--muted);font-style:italic} .mfence{color:var(--muted)}
-  .mcode{color:#2e7d32} .mic{color:#2e7d32} .mb{font-weight:700} .mli{color:var(--accent);font-weight:600} .mlink{color:#1a5fb4}
-  .redacted{color:#fff;background:var(--accent);border-radius:3px;padding:0 3px;font-weight:600}
-  .seg{display:inline-flex;border:1px solid var(--line);border-radius:5px;overflow:hidden;margin-left:auto}
-  .seg button{border:0;border-radius:0;background:transparent;color:var(--accent);padding:4px 10px;font-size:12px}
+  .mh{color:var(--accent-ink);font-weight:700;font-family:var(--display)} .mq{color:var(--muted);font-style:italic} .mfence{color:var(--muted)}
+  .mcode{color:var(--gem)} .mic{color:var(--gem)} .mb{font-weight:700} .mli{color:var(--accent);font-weight:600} .mlink{color:#1a5fb4}
+  .redacted{color:#fff;background:var(--accent);border-radius:3px;padding:0 4px;font-weight:600}
+  /* ── segmented control ── */
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;margin-left:auto;background:var(--card)}
+  .seg button{border:0;border-radius:0;background:transparent;color:var(--muted);padding:6px 11px;font:600 12px/1 var(--ui);box-shadow:none}
+  .seg button:hover{background:var(--accent-soft);color:var(--accent);transform:none}
   .seg button.on{background:var(--accent);color:#fff}
-  .src{font:11px/1 ui-monospace,monospace;color:var(--accent);border:1px solid var(--line);border-radius:4px;padding:1px 4px}
-  .psummary{display:flex;flex-direction:column;gap:14px}
-  .phead{font-size:14px}
-  .pgroup h3{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:0 0 6px}
-  .prow{display:flex;gap:8px;align-items:center;width:100%;text-align:left;border:0;background:transparent;padding:4px 6px;border-radius:5px;cursor:pointer;font:inherit;color:var(--ink)}
-  .prow:hover{background:rgba(154,51,36,.07)}
-  .prow .pn{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:48%}
-  .prow .pm{margin-left:auto;color:var(--muted);font-size:12px;white-space:nowrap}
+  /* ── right pane: the certificate ── */
+  .pane.right{background:linear-gradient(180deg,rgba(251,248,241,.4),transparent 30%)}
+  .pane.right > .bar:first-child strong{font-size:17px}
+  #preview{border:1px solid var(--line-2);border-radius:14px;background:linear-gradient(180deg,var(--card),var(--paper));box-shadow:var(--shadow);padding:18px 20px;position:relative;overflow:hidden}
+  #preview::before,#preview::after{content:"";position:absolute;width:46px;height:46px;border:1px solid var(--line-2);opacity:.6;pointer-events:none}
+  #preview::before{top:9px;left:9px;border-right:0;border-bottom:0;border-radius:7px 0 0 0}
+  #preview::after{bottom:9px;right:9px;border-left:0;border-top:0;border-radius:0 0 7px 0}
+  .psummary{display:flex;flex-direction:column;gap:15px}
+  .phead{font-family:var(--display);font-weight:600;font-size:16px}
+  .pgroup h3{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted);margin:0 0 6px}
+  .prow{display:flex;gap:8px;align-items:center;width:100%;text-align:left;border:0;background:transparent;padding:6px 8px;border-radius:7px;cursor:pointer;font:inherit;color:var(--ink)}
+  .prow:hover{background:var(--accent-soft)}
+  .prow .pn{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:48%}
+  .prow .pm{margin-left:auto;color:var(--muted);font-size:12px;white-space:nowrap;font-family:var(--mono)}
   .redtag{color:var(--accent);font-size:11px}
-  pre.json{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:12px;font:12px/1.5 ui-monospace,monospace;white-space:pre-wrap;word-break:break-word;margin:0}
-  #filterPanel{border:1px solid var(--line);border-radius:6px;padding:10px 12px;margin-bottom:12px;background:rgba(154,51,36,.02)}
+  pre.json{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px;font:12px/1.6 var(--mono);white-space:pre-wrap;word-break:break-word;margin:0}
+  /* ── filters ── */
+  #filterPanel{border:1px solid var(--line);border-radius:var(--r);padding:11px 13px;margin-bottom:12px;background:var(--accent-soft)}
   #filterPanel[hidden]{display:none}
-  #filterPanel .bar{margin-bottom:8px}
-  #filterPanel .bar:last-child{margin-bottom:0}
-  .flabel{width:54px;flex:none}
+  #filterPanel .bar{margin-bottom:8px}#filterPanel .bar:last-child{margin-bottom:0}
+  .flabel{width:54px;flex:none;font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase}
   #filtersToggle.on{background:var(--accent);color:#fff}
+  /* ── project chips ── */
   #projectBar{flex-wrap:wrap}
-  .pchip{display:inline-flex;align-items:center;gap:2px;background:var(--card);border:1px solid var(--line);border-radius:5px;padding:2px 4px 2px 8px;font-size:13px}
-  .pchip .premove{border:0;background:transparent;color:var(--muted);padding:0 4px;cursor:pointer;font-size:13px}
-  .pchip .premove:hover{color:var(--accent)}
+  .pchip{display:inline-flex;align-items:center;gap:3px;background:var(--card);border:1px solid var(--line);border-radius:99px;padding:3px 5px 3px 11px;font-size:12.5px}
+  .pchip .premove{border:0;background:transparent;color:var(--muted);padding:0 4px;cursor:pointer;font-size:13px;box-shadow:none}
+  .pchip .premove:hover{color:var(--accent);transform:none;background:transparent}
+  .wstab{font-family:var(--mono);font-size:11px}
+  /* ── entrance motion ── */
+  @keyframes rise{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:translateY(0)}}
+  #inventory .group{opacity:0;animation:rise .45s cubic-bezier(.2,.7,.2,1) forwards}
+  #inventory .group:nth-child(1){animation-delay:.04s}#inventory .group:nth-child(2){animation-delay:.09s}
+  #inventory .group:nth-child(3){animation-delay:.14s}#inventory .group:nth-child(4){animation-delay:.19s}
+  #inventory .group:nth-child(n+5){animation-delay:.24s}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+  .testdrive{margin-top:18px;border:1px solid var(--line);border-radius:var(--r);background:var(--card);overflow:hidden;box-shadow:var(--shadow)}
+  .testdrive .hd{display:flex;align-items:center;gap:9px;padding:11px 14px;border-bottom:1px solid var(--line);background:var(--paper-2);font-family:var(--display);font-weight:600}
+  .testdrive .pill{margin-left:auto;font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--gem);background:var(--gem-soft);padding:3px 8px;border-radius:99px}
+  .testdrive .cmd{display:flex;align-items:center;gap:10px;padding:12px 14px;font-family:var(--mono);font-size:12.5px}
+  .testdrive .cmd .dollar{color:var(--accent);font-weight:600}.testdrive .cmd code{flex:1}
+  .testdrive .ft{padding:0 14px 12px;color:var(--muted);font-size:11.5px}
 </style>
 </head>
 <body>
-<header><h1>agentgem</h1><span class="muted">Gem Builder · introspecting <code>~/.claude</code> · <code>~/.agents</code> · <code>~/.codex</code> · <code>~/.hermes</code></span></header>
+<header>
+  <svg class="mark" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+    <path d="M20 2 L36 14 L20 38 L4 14 Z" fill="#9a3324"/>
+    <path d="M20 2 L36 14 L20 16 Z" fill="#bb4a38"/>
+    <path d="M20 2 L4 14 L20 16 Z" fill="#7d2a1e"/>
+    <path d="M4 14 L20 16 L20 38 Z" fill="#8b2e21"/>
+    <path d="M36 14 L20 16 L20 38 Z" fill="#a8392a"/>
+    <path d="M4 14 L36 14 L20 16 Z" fill="#c8543f"/>
+  </svg>
+  <h1>agentgem</h1>
+  <span class="tag">Gem Builder</span>
+  <span class="spacer" style="flex:1"></span>
+  <span id="testbedChip" class="testbed-chip"></span>
+</header>
 <main>
   <section class="pane left">
     <div class="bar"><input id="name" type="text" placeholder="gem name" value="gem" style="flex:1" /></div>
@@ -94,7 +178,13 @@
       <div class="bar" id="typeBar"></div>
     </div>
     <div class="bar" id="selbar"><strong style="flex:1;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)">Selection</strong><button id="all" class="ghost">Select all shown</button><button id="none" class="ghost">Clear</button></div>
+    <div class="bar"><button id="importBtn" class="ghost">⬇ Import from machine…</button><span class="d" id="importStatus" style="margin-left:8px"></span></div>
     <div id="inventory">Loading…</div>
+    <div id="testdrive" class="testdrive" hidden>
+      <div class="hd">▶ Test-drive this agent <span class="pill">Claude Code</span></div>
+      <div class="cmd"><span class="dollar">$</span> <code id="tdCmd"></code> <button id="tdCopy" class="ghost">Copy</button></div>
+      <div class="ft">Runs your real harness in the testbed. Imported secrets are live there; the packaged gem stays redacted.</div>
+    </div>
   </section>
   <section class="pane right">
     <div class="bar"><strong style="flex:1">Gem (live)</strong><select id="target" title="materialize target" style="margin-left:auto"><option value="claude">Claude</option><option value="codex">Codex</option><option value="agents">Agents</option><option value="hermes">Hermes</option><option value="eve">Eve</option><option value="flue">Flue</option><option value="openai-sandbox">OpenAI Sandbox</option></select><span class="seg" id="preview-modes"><button type="button" data-pmode="summary">Summary</button><button type="button" data-pmode="json">JSON</button><button type="button" data-pmode="materialize">Materialize</button><button type="button" data-pmode="managed">Managed Agents</button></span><button id="copy" class="ghost">Copy</button><button id="dl">⬇ Download</button><button id="save" class="ghost" title="write the gem archive (manifest + lock + files) to a folder">💾 Save archive…</button><button id="dltar" class="ghost" title="download the gem archive as a .tar.gz">⬇ .tar.gz</button><span class="d" id="archiveStatus" style="margin-left:6px"></span></div>
@@ -112,9 +202,36 @@
     <pre class="modal-body" id="modal-body"></pre>
   </div>
 </div>
+<div id="importModal" class="modal-bg" hidden>
+  <div class="modal">
+    <div class="modal-h"><strong class="t">Import from machine</strong><span class="src">~/.claude · ~/.agents · ~/.codex · ~/.hermes</span><button id="importClose" class="ghost" style="margin-left:auto">✕ Close</button></div>
+    <div class="modal-body" style="padding:14px"><div id="importInventory">Loading…</div></div>
+    <div class="modal-h" style="border-top:1px solid var(--line);border-bottom:0">
+      <span class="d">Writes real secrets into this testbed so it runs — don't commit <code>.mcp.json</code>/<code>settings.json</code>.</span>
+      <button id="importApply" style="margin-left:auto">Add to testbed</button>
+    </div>
+  </div>
+</div>
 <script>
 let inv = { skills: [], mcpServers: [], instructions: [], projects: [] };
 let projects = []; // chosen project root paths (mirrors inv.projects[].root after each load)
+let activeTestbed = localStorage.getItem("agentgem.testbed") || null;
+function setTestbed(path){ activeTestbed = path || null; if(path) localStorage.setItem("agentgem.testbed", path); else localStorage.removeItem("agentgem.testbed"); renderTestbedChip(); }
+function renderTestbedChip(){
+  const el = document.getElementById("testbedChip");
+  if(!activeTestbed){ el.innerHTML = `<button id="tbNew">Create / open testbed…</button>`; document.getElementById("tbNew").onclick = openOrCreateTestbed; return; }
+  const short = activeTestbed.replace(/^.*\//, "");
+  el.innerHTML = `<span class="path">📁 <b>${esc(short)}</b></span><button id="tbSwap" class="ghost">Switch</button>`;
+  document.getElementById("tbSwap").onclick = openOrCreateTestbed;
+}
+async function openOrCreateTestbed(){
+  const pick = await (await fetch("/api/pick-folder")).json();
+  if(!pick.path) return;
+  const name = prompt("Testbed agent name", pick.path.replace(/^.*\//, "")) || pick.path.replace(/^.*\//, "");
+  await fetch("/api/testbed/scaffold", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({ root: pick.path, name }) });
+  setTestbed(pick.path);
+  load();
+}
 const sel = { skills: new Set(), mcpServers: new Set(), includeInstructions: false, hooks: new Set(), projects: {} };
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
 // Map a fine-grained source to the coding agent it belongs to.
@@ -143,47 +260,35 @@ function group(title, items, kind, projectRoot) {
   return `<div class="group" data-group="${kind}"><h2>${title} (${items.length})</h2>${rows}</div>`;
 }
 async function load() {
-  const qs = projects.length ? `?projects=${encodeURIComponent(JSON.stringify(projects))}` : "";
+  renderTestbedChip();
+  if (!activeTestbed) {
+    document.getElementById("inventory").innerHTML =
+      `<div class="group"><h2>No testbed</h2><p class="note">Create or open a testbed project to author and test-drive an agent, then package it into a gem. Use <b>Create / open testbed…</b> in the top bar.</p></div>`;
+    return;
+  }
+  projects = [activeTestbed];
+  const qs = `?projects=${encodeURIComponent(JSON.stringify(projects))}`;
   inv = await (await fetch("/api/inventory" + qs)).json();
   inv.projects = inv.projects || [];
-  projects = inv.projects.map(p => p.root); // reconcile to server-canonical roots
-  let html = group("Skills", inv.skills, "skills") + group("MCP servers", inv.mcpServers, "mcpServers");
-  // One include-all toggle for instructions; the label lists every instruction file found
-  // (CLAUDE.md, plus any ~/.codex/rules/* files).
-  const instrLabel = inv.instructions.length
-    ? esc(inv.instructions.map(i => i.name).join(", "))
-    : `CLAUDE.md <span class="d">(none)</span>`;
-  const instrAgents = [...new Set(inv.instructions.map(i => instrAgentOf(i.name)))].join(" ") || "claude";
-  const instrView = inv.instructions.length ? `<button type="button" class="view" data-kind="instructions" data-name="" title="view content">view</button>` : "";
-  html += `<div class="group"><h2>Instructions</h2><label class="row" data-source="" data-agent="${instrAgents}" data-type="instructions"><input type="checkbox" data-kind="instructions"> <span>${instrLabel}</span>${instrView}</label></div>`;
-  html += group("Hooks", inv.hooks, "hooks");
-  // One section per loaded project (separate groups, separate selection namespace by root).
-  const names = projLabels(inv.projects);
-  inv.projects.forEach((p, i) => {
-    const nm = esc(names[i]);
-    html += group(`Project · ${nm} · skills`, p.skills, "projectSkills", p.root);
-    html += group(`Project · ${nm} · MCP`, p.mcpServers, "projectMcpServers", p.root);
-    if (p.instructions.length) {
-      const pil = esc(p.instructions.map(x => x.name).join(", "));
-      html += `<div class="group"><h2>Project · ${nm} · instructions</h2><label class="row" data-source="project" data-agent="project" data-type="instructions" data-project="${esc(p.root)}"><input type="checkbox" data-kind="projectInstructions" data-project="${esc(p.root)}"> <span><span class="src">project</span> ${pil}</span><button type="button" class="view" data-kind="projectInstructions" data-name="" data-project="${esc(p.root)}" title="view content">view</button></label></div>`;
-    }
-    html += group(`Project · ${nm} · hooks`, p.hooks, "projectHooks", p.root);
-  });
+  // Render ONLY the active testbed's project groups (global groups are reached via Import).
+  const proj = inv.projects.find(p => p.root === activeTestbed) || { root: activeTestbed, name: activeTestbed.replace(/^.*\//, ""), skills: [], mcpServers: [], instructions: [], hooks: [] };
+  let html = group("Skills", proj.skills, "projectSkills", proj.root)
+           + group("MCP servers", proj.mcpServers, "projectMcpServers", proj.root)
+           + group("Hooks", proj.hooks, "projectHooks", proj.root);
+  if (proj.instructions.length) {
+    const pil = esc(proj.instructions.map(x => x.name).join(", "));
+    html += `<div class="group"><h2>Instructions</h2><label class="row" data-source="project" data-agent="project" data-type="instructions" data-project="${esc(proj.root)}"><input type="checkbox" data-kind="projectInstructions" data-project="${esc(proj.root)}"> <span><span class="src">project</span> ${pil}</span><button type="button" class="view" data-kind="projectInstructions" data-name="" data-project="${esc(proj.root)}" title="view content">view</button></label></div>`;
+  }
   document.getElementById("inventory").innerHTML = html;
-  // Attach a full-text haystack to each row by looking up its artifact (position-independent).
   document.querySelectorAll("#inventory label.row").forEach(row => {
     const cb = row.querySelector("input[type=checkbox]");
     row._hay = hayForRow(cb && cb.dataset.kind, cb && cb.dataset.name, cb && cb.dataset.project).toLowerCase();
   });
-  populateSources();
-  populateAgents();
-  populateTypes();
-  renderProjectBar();
-  // Scope selection toggles to inventory rows only — the filter checkboxes live outside #inventory.
+  populateSources(); populateAgents(); populateTypes(); renderProjectBar();
   document.querySelectorAll('#inventory input[type=checkbox]').forEach(cb => cb.addEventListener("change", onToggle));
-  restoreChecks();   // reflect persisted selection after a rebuild (e.g. project change)
+  restoreChecks();
   refresh();
-  filterRows();
+  renderTestDrive();
 }
 function hayForRow(kind, name, projRoot) {
   if (kind === "skills") { const a = inv.skills.find(s => s.name === name); return a ? `${a.name} ${a.description || ""} ${a.source || ""} ${a.content || ""}` : ""; }
@@ -726,6 +831,33 @@ document.getElementById("wsTree").addEventListener("click", e => {
   document.getElementById("modal").hidden = false;
 });
 wsRefresh();
+const importSel = { skills: new Set(), mcpServers: new Set(), hooks: new Set(), includeInstructions: false };
+async function openImport(){
+  if(!activeTestbed){ alert("Create or open a testbed first."); return; }
+  importSel.skills.clear(); importSel.mcpServers.clear(); importSel.hooks.clear(); importSel.includeInstructions = false;
+  document.getElementById("importModal").hidden = false;
+  const gi = await (await fetch("/api/inventory")).json();
+  const grp = (title, items, kind) => items.length ? `<div class="group"><h2>${title}</h2>` + items.map(it =>
+    `<label class="row"><input type="checkbox" data-ikind="${kind}" data-name="${esc(it.name)}"> <span>${esc(it.name)}${it.source?` <span class="src">${esc(it.source)}</span>`:""}${(it.description||it.transport)?` <span class="d">— ${esc(it.description||it.transport)}</span>`:""}</span></label>`).join("") + `</div>` : "";
+  let h = grp("Skills", gi.skills, "skills") + grp("MCP servers", gi.mcpServers, "mcpServers") + grp("Hooks", gi.hooks, "hooks");
+  if(gi.instructions.length) h += `<div class="group"><h2>Instructions</h2><label class="row"><input type="checkbox" data-ikind="instructions"> <span>${esc(gi.instructions.map(i=>i.name).join(", "))}</span></label></div>`;
+  document.getElementById("importInventory").innerHTML = h;
+  document.querySelectorAll('#importInventory input[type=checkbox]').forEach(cb => cb.addEventListener("change", e => {
+    const k = e.target.dataset.ikind, n = e.target.dataset.name;
+    if(k === "instructions"){ importSel.includeInstructions = e.target.checked; return; }
+    const set = importSel[k]; if(e.target.checked) set.add(n); else set.delete(n);
+  }));
+}
+async function applyImport(){
+  const selection = { skills:[...importSel.skills], mcpServers:[...importSel.mcpServers], hooks:[...importSel.hooks], includeInstructions: importSel.includeInstructions };
+  const r = await (await fetch("/api/testbed/import", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({ root: activeTestbed, selection }) })).json();
+  document.getElementById("importModal").hidden = true;
+  document.getElementById("importStatus").textContent = `Imported ${r.written.length}${r.skipped.length?` · skipped ${r.skipped.length}`:""}`;
+  load();
+}
+document.getElementById("importBtn").onclick = openImport;
+document.getElementById("importClose").onclick = () => document.getElementById("importModal").hidden = true;
+document.getElementById("importApply").onclick = applyImport;
 let __runWs = null, __runPoll = null;
 async function runRefreshReady(name){
   const r = await (await fetch(`/api/run-ready?name=${encodeURIComponent(name)}&target=eve`)).json();
@@ -765,6 +897,16 @@ document.getElementById("runStop").addEventListener("click", async () => {
   await fetch("/api/run/stop", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({ name: __runWs, target:"eve" }) });
   runStartPolling(__runWs);
 });
+function renderTestDrive(){
+  const card = document.getElementById("testdrive");
+  if(!activeTestbed){ card.hidden = true; return; }
+  card.hidden = false;
+  document.getElementById("tdCmd").textContent = `cd ${activeTestbed} && claude`;
+}
+document.getElementById("tdCopy").onclick = () => {
+  navigator.clipboard?.writeText(`cd ${activeTestbed} && claude`);
+  const b = document.getElementById("tdCopy"); b.textContent = "Copied ✓"; setTimeout(()=>b.textContent="Copy", 1400);
+};
 </script>
 </body>
 </html>
