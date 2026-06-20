@@ -33,6 +33,11 @@
   header .tag{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);border-left:1px solid var(--line-2);padding-left:11px}
   header .muted{color:var(--muted);font-size:12px}
   header code{font-family:var(--mono);font-size:11px;color:var(--accent-ink);background:var(--accent-soft);padding:1px 5px;border-radius:4px}
+  .spacer{flex:1}
+  .testbed-chip{display:flex;align-items:center;gap:9px;background:var(--card);border:1px solid var(--line);border-radius:99px;padding:6px 8px 6px 13px;box-shadow:var(--shadow);font-size:12.5px}
+  .testbed-chip .path{font-family:var(--mono);color:var(--ink-2);font-size:12px}
+  .testbed-chip .path b{color:var(--ink)}
+  .testbed-chip button{font:600 11px/1 var(--ui);padding:5px 10px;border-radius:99px}
   main{position:relative;z-index:1;display:grid;grid-template-columns:1.04fr .96fr;gap:0;height:calc(100vh - 58px)}
   .pane{padding:18px 22px;overflow:auto}.pane.left{border-right:1px solid var(--line)}
   .pane::-webkit-scrollbar{width:10px}.pane::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:99px;border:3px solid var(--paper)}
@@ -135,7 +140,8 @@
   </svg>
   <h1>agentgem</h1>
   <span class="tag">Gem Builder</span>
-  <span class="muted">introspecting <code>~/.claude</code> · <code>~/.agents</code> · <code>~/.codex</code> · <code>~/.hermes</code></span>
+  <span class="spacer" style="flex:1"></span>
+  <span id="testbedChip" class="testbed-chip"></span>
 </header>
 <main>
   <section class="pane left">
@@ -187,6 +193,23 @@
 <script>
 let inv = { skills: [], mcpServers: [], instructions: [], projects: [] };
 let projects = []; // chosen project root paths (mirrors inv.projects[].root after each load)
+let activeTestbed = localStorage.getItem("agentgem.testbed") || null;
+function setTestbed(path){ activeTestbed = path || null; if(path) localStorage.setItem("agentgem.testbed", path); else localStorage.removeItem("agentgem.testbed"); renderTestbedChip(); }
+function renderTestbedChip(){
+  const el = document.getElementById("testbedChip");
+  if(!activeTestbed){ el.innerHTML = `<button id="tbNew">Create / open testbed…</button>`; document.getElementById("tbNew").onclick = openOrCreateTestbed; return; }
+  const short = activeTestbed.replace(/^.*\//, "");
+  el.innerHTML = `<span class="path">📁 <b>${esc(short)}</b></span><button id="tbSwap" class="ghost">Switch</button>`;
+  document.getElementById("tbSwap").onclick = openOrCreateTestbed;
+}
+async function openOrCreateTestbed(){
+  const pick = await (await fetch("/api/pick-folder")).json();
+  if(!pick.path) return;
+  const name = prompt("Testbed agent name", pick.path.replace(/^.*\//, "")) || pick.path.replace(/^.*\//, "");
+  await fetch("/api/testbed/scaffold", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({ root: pick.path, name }) });
+  setTestbed(pick.path);
+  load();
+}
 const sel = { skills: new Set(), mcpServers: new Set(), includeInstructions: false, hooks: new Set(), projects: {} };
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
 // Map a fine-grained source to the coding agent it belongs to.
@@ -215,47 +238,34 @@ function group(title, items, kind, projectRoot) {
   return `<div class="group" data-group="${kind}"><h2>${title} (${items.length})</h2>${rows}</div>`;
 }
 async function load() {
-  const qs = projects.length ? `?projects=${encodeURIComponent(JSON.stringify(projects))}` : "";
+  renderTestbedChip();
+  if (!activeTestbed) {
+    document.getElementById("inventory").innerHTML =
+      `<div class="group"><h2>No testbed</h2><p class="note">Create or open a testbed project to author and test-drive an agent, then package it into a gem. Use <b>Create / open testbed…</b> in the top bar.</p></div>`;
+    return;
+  }
+  projects = [activeTestbed];
+  const qs = `?projects=${encodeURIComponent(JSON.stringify(projects))}`;
   inv = await (await fetch("/api/inventory" + qs)).json();
   inv.projects = inv.projects || [];
-  projects = inv.projects.map(p => p.root); // reconcile to server-canonical roots
-  let html = group("Skills", inv.skills, "skills") + group("MCP servers", inv.mcpServers, "mcpServers");
-  // One include-all toggle for instructions; the label lists every instruction file found
-  // (CLAUDE.md, plus any ~/.codex/rules/* files).
-  const instrLabel = inv.instructions.length
-    ? esc(inv.instructions.map(i => i.name).join(", "))
-    : `CLAUDE.md <span class="d">(none)</span>`;
-  const instrAgents = [...new Set(inv.instructions.map(i => instrAgentOf(i.name)))].join(" ") || "claude";
-  const instrView = inv.instructions.length ? `<button type="button" class="view" data-kind="instructions" data-name="" title="view content">view</button>` : "";
-  html += `<div class="group"><h2>Instructions</h2><label class="row" data-source="" data-agent="${instrAgents}" data-type="instructions"><input type="checkbox" data-kind="instructions"> <span>${instrLabel}</span>${instrView}</label></div>`;
-  html += group("Hooks", inv.hooks, "hooks");
-  // One section per loaded project (separate groups, separate selection namespace by root).
-  const names = projLabels(inv.projects);
-  inv.projects.forEach((p, i) => {
-    const nm = esc(names[i]);
-    html += group(`Project · ${nm} · skills`, p.skills, "projectSkills", p.root);
-    html += group(`Project · ${nm} · MCP`, p.mcpServers, "projectMcpServers", p.root);
-    if (p.instructions.length) {
-      const pil = esc(p.instructions.map(x => x.name).join(", "));
-      html += `<div class="group"><h2>Project · ${nm} · instructions</h2><label class="row" data-source="project" data-agent="project" data-type="instructions" data-project="${esc(p.root)}"><input type="checkbox" data-kind="projectInstructions" data-project="${esc(p.root)}"> <span><span class="src">project</span> ${pil}</span><button type="button" class="view" data-kind="projectInstructions" data-name="" data-project="${esc(p.root)}" title="view content">view</button></label></div>`;
-    }
-    html += group(`Project · ${nm} · hooks`, p.hooks, "projectHooks", p.root);
-  });
+  // Render ONLY the active testbed's project groups (global groups are reached via Import).
+  const proj = inv.projects.find(p => p.root === activeTestbed) || { root: activeTestbed, name: activeTestbed.replace(/^.*\//, ""), skills: [], mcpServers: [], instructions: [], hooks: [] };
+  let html = group("Skills", proj.skills, "projectSkills", proj.root)
+           + group("MCP servers", proj.mcpServers, "projectMcpServers", proj.root)
+           + group("Hooks", proj.hooks, "projectHooks", proj.root);
+  if (proj.instructions.length) {
+    const pil = esc(proj.instructions.map(x => x.name).join(", "));
+    html += `<div class="group"><h2>Instructions</h2><label class="row" data-source="project" data-agent="project" data-type="instructions" data-project="${esc(proj.root)}"><input type="checkbox" data-kind="projectInstructions" data-project="${esc(proj.root)}"> <span><span class="src">project</span> ${pil}</span><button type="button" class="view" data-kind="projectInstructions" data-name="" data-project="${esc(proj.root)}" title="view content">view</button></label></div>`;
+  }
   document.getElementById("inventory").innerHTML = html;
-  // Attach a full-text haystack to each row by looking up its artifact (position-independent).
   document.querySelectorAll("#inventory label.row").forEach(row => {
     const cb = row.querySelector("input[type=checkbox]");
     row._hay = hayForRow(cb && cb.dataset.kind, cb && cb.dataset.name, cb && cb.dataset.project).toLowerCase();
   });
-  populateSources();
-  populateAgents();
-  populateTypes();
-  renderProjectBar();
-  // Scope selection toggles to inventory rows only — the filter checkboxes live outside #inventory.
+  populateSources(); populateAgents(); populateTypes(); renderProjectBar();
   document.querySelectorAll('#inventory input[type=checkbox]').forEach(cb => cb.addEventListener("change", onToggle));
-  restoreChecks();   // reflect persisted selection after a rebuild (e.g. project change)
+  restoreChecks();
   refresh();
-  filterRows();
 }
 function hayForRow(kind, name, projRoot) {
   if (kind === "skills") { const a = inv.skills.find(s => s.name === name); return a ? `${a.name} ${a.description || ""} ${a.source || ""} ${a.content || ""}` : ""; }
