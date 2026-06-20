@@ -64,6 +64,20 @@ describe("mergeGems", () => {
     await expect(mergeGems(nodes, source)).rejects.toThrow(/collision/i);
   });
 
+  it("silently dedups same-name/same-content artifacts from unrelated siblings", async () => {
+    const sharedContent = "# shared skill";
+    const lGem: Gem = { name: "l", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [{ type: "skill", name: "shared", source: "standalone", content: sharedContent }] };
+    const rGem: Gem = { name: "r", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [{ type: "skill", name: "shared", source: "standalone", content: sharedContent }] };
+    const { source } = fakeSource({ "p/l": { gem: lGem, version: "1.0.0" }, "p/r": { gem: rGem, version: "1.0.0" } });
+    const nodes: ResolvedNode[] = [
+      { key: "@a/l", version: "1.0.0", path: "p/l", gemDigest: await digestOf(source, "p/l"), deps: [] },
+      { key: "@a/r", version: "1.0.0", path: "p/r", gemDigest: await digestOf(source, "p/r"), deps: [] },
+    ];
+    const { gem, provenance } = await mergeGems(nodes, source);
+    expect(gem.artifacts.filter((a) => a.name === "shared")).toHaveLength(1);
+    expect(provenance.overrides).toEqual([]);
+  });
+
   it("rejects an archive whose digest disagrees with the resolved node", async () => {
     const { source } = fakeSource({ "p/root": { gem: root, version: "1.0.0" } });
     const nodes: ResolvedNode[] = [{ key: "@a/github-search", version: "1.0.0", path: "p/root", gemDigest: "sha256:WRONG", deps: [] }];

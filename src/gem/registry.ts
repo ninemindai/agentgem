@@ -1,3 +1,7 @@
+import type { Gem, GemArtifact, SecretRequirement, GemCheck } from "./types.js";
+import { readGemArchive, computeLock, verifyLock } from "./archive.js";
+import type { FileTree } from "./targets.js";
+
 export const REGISTRY_FORMAT_VERSION = 1;
 
 export interface RegistryItemVersion { path: string; gemDigest: string; dependencies: string[] }
@@ -99,10 +103,6 @@ export function resolveGraph(rootRefs: string[], index: RegistryIndex): Resolved
   }
   return order;
 }
-
-import type { Gem, GemArtifact, SecretRequirement, GemCheck } from "./types.js";
-import { readGemArchive, computeLock, verifyLock } from "./archive.js";
-import type { FileTree } from "./targets.js";
 
 export interface RegistrySource {
   id: string; label: string;
