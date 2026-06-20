@@ -1,5 +1,5 @@
 import type { Gem, GemArtifact, SecretRequirement, GemCheck } from "./types.js";
-import { readGemArchive, computeLock, verifyLock } from "./archive.js";
+import { readGemArchive, computeLock, verifyLock, writeGemArchive, readGemMeta } from "./archive.js";
 import type { FileTree } from "./targets.js";
 
 export const REGISTRY_FORMAT_VERSION = 1;
@@ -167,4 +167,49 @@ export async function mergeGems(graph: ResolvedNode[], source: RegistrySource): 
     requiredSecrets: [...secrets.values()],
   };
   return { gem: merged, provenance };
+}
+
+// ── publish ────────────────────────────────────────────────────────────────
+
+export interface RegistryPublisher {
+  putCommit(files: FileTree, message: string): Promise<{ commit: string }>;
+}
+
+export function updateIndex(
+  index: RegistryIndex,
+  e: { key: string; version: string; path: string; gemDigest: string; dependencies: string[] },
+): RegistryIndex {
+  const items = { ...index.items };
+  const existing = items[e.key];
+  const versions = { ...(existing?.versions ?? {}) };
+  versions[e.version] = { path: e.path, gemDigest: e.gemDigest, dependencies: e.dependencies };
+  const latest = existing && cmpSemver(existing.latest, e.version) >= 0 ? existing.latest : e.version;
+  items[e.key] = { latest, versions };
+  return { formatVersion: REGISTRY_FORMAT_VERSION, items };
+}
+
+export async function publishGem(args: {
+  gem: Gem; scope: string; name?: string; version: string; dependencies?: string[];
+  index: RegistryIndex; publisher: RegistryPublisher;
+}): Promise<{ ref: string; version: string; gemDigest: string; commit: string; path: string }> {
+  const name = args.name ?? args.gem.name;
+  if (!SEG.test(args.scope) || !SEG.test(name)) throw new Error(`invalid scope/name '@${args.scope}/${name}': must match [a-z0-9-]`);
+  parseSemver(args.version); // validate
+  const key = `@${args.scope}/${name}`;
+  const path = `items/${args.scope}/${name}/${args.version}`;
+
+  const { files } = writeGemArchive(args.gem, { version: args.version, dependencies: args.dependencies });
+  const { gemDigest, dependencies } = readGemMeta(files);
+
+  const prior = args.index.items[key]?.versions[args.version];
+  if (prior && prior.gemDigest !== gemDigest) {
+    throw new Error(`${key}@${args.version} is already published and immutable (digest ${prior.gemDigest})`);
+  }
+
+  const nextIndex = updateIndex(args.index, { key, version: args.version, path, gemDigest, dependencies });
+  const commitFiles: FileTree = { "registry.json": JSON.stringify(nextIndex, null, 2) };
+  for (const [rel, content] of Object.entries(files)) commitFiles[`${path}/${rel}`] = content;
+
+  const { commit } = await args.publisher.putCommit(commitFiles, `publish ${key}@${args.version}`);
+  return { ref: key, version: args.version, gemDigest, commit, path };
 }
