@@ -1,7 +1,7 @@
 // src/gem/__tests__/run.test.ts
 import { describe, it, expect } from "vitest";
 import { pushLog, nodeMajor, parseEveUrl, parseVercelUrl } from "../run.js";
-import { startLocal, stopLocal, getRunStatus, type ProcessRunner, type ProcHandle } from "../run.js";
+import { startLocal, stopLocal, getRunStatus, deployVercel, type ProcessRunner, type ProcHandle } from "../run.js";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -104,5 +104,39 @@ describe("local run", () => {
     await Promise.resolve(); await Promise.resolve();
     const state = await p;
     expect(state.state).toBe("failed");
+  });
+});
+
+describe("vercel deploy", () => {
+  it("throws when VERCEL_TOKEN is unset", async () => {
+    seedWorkspace();
+    delete process.env.VERCEL_TOKEN;
+    const { runner } = fakeRunner();
+    await expect(deployVercel("gem", runner)).rejects.toThrow(/VERCEL_TOKEN/);
+  });
+
+  it("builds with VERCEL=1, then deploys with the token, and parses the URL", async () => {
+    seedWorkspace();
+    process.env.VERCEL_TOKEN = "tok_test";
+    const { runner, calls, handles } = fakeRunner();
+    const p = deployVercel("gem", runner);
+    await Promise.resolve(); handles[0].exitCbs.forEach((cb) => cb(0)); // npm install
+    await Promise.resolve(); await Promise.resolve();
+    // eve build with VERCEL=1
+    const build = calls[1];
+    expect(build.args).toContain("build");
+    expect(build.env.VERCEL).toBe("1");
+    handles[1].exitCbs.forEach((cb) => cb(0));
+    await Promise.resolve();
+    // vercel deploy --prebuilt --yes --token=tok_test
+    const deploy = calls[2];
+    expect(deploy.args).toEqual(["deploy", "--prebuilt", "--yes", "--token=tok_test"]);
+    handles[2].lineCbs.forEach((cb) => cb("https://gem-abc123.vercel.app", "out"));
+    handles[2].exitCbs.forEach((cb) => cb(0));
+    const state = await p;
+    expect(state.mode).toBe("vercel");
+    expect(state.state).toBe("idle");
+    expect(state.url).toBe("https://gem-abc123.vercel.app");
+    delete process.env.VERCEL_TOKEN;
   });
 });

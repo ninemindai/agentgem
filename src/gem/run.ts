@@ -144,3 +144,34 @@ export function stopLocal(name: string): { stopped: boolean } {
 export function getRunStatus(name: string): RunState {
   return registry.get(name)?.state ?? { mode: "local", state: "idle", logTail: [] };
 }
+
+// agentgem's own pinned vercel CLI (installed as a dependency), run with cwd = the eve run dir.
+const VERCEL_BIN = join(process.cwd(), "node_modules", ".bin", "vercel");
+
+export async function deployVercel(name: string, runner: ProcessRunner = realRunner): Promise<RunState> {
+  const token = process.env.VERCEL_TOKEN;
+  if (!token) throw new Error("VERCEL_TOKEN is not set on the server — cannot deploy to Vercel.");
+  const state: RunState = { mode: "vercel", state: "installing", logTail: [] };
+  registry.set(name, { state });
+  try {
+    const runDir = await ensureRunProject(name, runner, state.logTail);
+    state.state = "building";
+    const buildCode = await runToEnd(runner, EVE_BIN(runDir), ["build"], runDir, { ...process.env, VERCEL: "1" }, state.logTail);
+    if (buildCode !== 0) { state.state = "failed"; return state; }
+    state.state = "deploying";
+    const lines: string[] = [];
+    const code = await new Promise<number>((resolve) => {
+      const h = runner.spawn(VERCEL_BIN, ["deploy", "--prebuilt", "--yes", `--token=${token}`], { cwd: runDir, env: process.env });
+      h.onLine((line) => { pushLog(state.logTail, line); lines.push(line); });
+      h.onExit((c) => resolve(c ?? 0));
+    });
+    if (code !== 0) { state.state = "failed"; return state; }
+    state.url = parseVercelUrl(lines);
+    state.state = "idle";
+    return state;
+  } catch (err) {
+    state.state = "failed";
+    pushLog(state.logTail, err instanceof Error ? err.message : String(err));
+    return state;
+  }
+}
