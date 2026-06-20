@@ -114,7 +114,6 @@
   .flabel{width:54px;flex:none;font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase}
   #filtersToggle.on{background:var(--accent);color:#fff}
   /* ── project chips ── */
-  #projectBar{flex-wrap:wrap}
   .pchip{display:inline-flex;align-items:center;gap:3px;background:var(--card);border:1px solid var(--line);border-radius:99px;padding:3px 5px 3px 11px;font-size:12.5px}
   .pchip .premove{border:0;background:transparent;color:var(--muted);padding:0 4px;cursor:pointer;font-size:13px;box-shadow:none}
   .pchip .premove:hover{color:var(--accent);transform:none;background:transparent}
@@ -171,7 +170,6 @@
       <pre id="runLog" style="max-height:200px;overflow:auto;background:#111;color:#ddd;padding:8px;font-size:12px"></pre>
     </div>
     <div class="bar"><input id="search" type="text" placeholder="search names, descriptions, contents…" style="flex:1" /><button id="filtersToggle" class="ghost">Filters ▾</button></div>
-    <div class="bar" id="projectBar"></div>
     <div id="filterPanel" hidden>
       <div class="bar"><span class="flabel d">Source</span><select id="srcFilter" style="flex:1"><option value="">All sources</option></select></div>
       <div class="bar" id="agentBar"></div>
@@ -284,9 +282,10 @@ async function load() {
     const cb = row.querySelector("input[type=checkbox]");
     row._hay = hayForRow(cb && cb.dataset.kind, cb && cb.dataset.name, cb && cb.dataset.project).toLowerCase();
   });
-  populateSources(); populateAgents(); populateTypes(); renderProjectBar();
+  populateSources(); populateAgents(); populateTypes();
   document.querySelectorAll('#inventory input[type=checkbox]').forEach(cb => cb.addEventListener("change", onToggle));
   restoreChecks();
+  filterRows();   // apply any active filters to the freshly rendered rows
   refresh();
   renderTestDrive();
 }
@@ -697,45 +696,8 @@ document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal()
 // --- Projects: OS-native folder picker; multiple roots, each labeled by name. ---
 function projOf(root) { return (inv.projects || []).find(p => p.root === root); }
 function projSel(root) { return (sel.projects[root] ??= { skills: new Set(), mcpServers: new Set(), includeInstructions: false, hooks: new Set() }); }
-// Display name = basename, disambiguated by parent dir when two projects share a basename.
-function projLabels(projs) {
-  const counts = {};
-  projs.forEach(p => (counts[p.name] = (counts[p.name] || 0) + 1));
-  return projs.map(p => (counts[p.name] > 1 ? `${p.name} (…/${p.root.split("/").slice(-2, -1)[0] || ""})` : p.name));
-}
-function renderProjectBar() {
-  const el = document.getElementById("projectBar");
-  const names = projLabels(inv.projects || []);
-  const chips = (inv.projects || []).map((p, i) =>
-    `<span class="pchip" title="${esc(p.root)}">📁 ${esc(names[i])}<button class="premove ghost" data-root="${esc(p.root)}" title="remove project">✕</button></span>`).join("");
-  el.innerHTML = (chips ? `<span class="d">Projects:</span> ${chips} ` : "")
-    + `<button id="addProject" class="ghost">📁 Add project…</button>`
-    + (chips ? "" : `<span class="d">discover skills, MCP &amp; instructions from project roots</span>`);
-}
-function addProject(path) {
-  const clean = (path || "").replace(/\/+$/, "");
-  if (clean && !projects.includes(clean)) { projects.push(clean); load(); }
-}
-function removeProject(root) {
-  projects = projects.filter(r => r !== root);
-  delete sel.projects[root];
-  load();
-}
-async function pickProject() {
-  const el = document.getElementById("projectBar");
-  el.style.opacity = ".5"; // brief hint while the native dialog is open
-  try {
-    const r = await (await fetch("/api/pick-folder")).json();
-    if (r && r.path) addProject(r.path); // null = user cancelled -> keep current
-  } finally {
-    el.style.opacity = "";
-  }
-}
-document.getElementById("projectBar").addEventListener("click", e => {
-  const rm = e.target.closest(".premove");
-  if (rm) { removeProject(rm.dataset.root); return; }
-  if (e.target.closest("#addProject")) pickProject();
-});
+// (Project add/remove UI removed: the active testbed — set via the header chip — is the single
+// project source now. `projects` is kept in sync with [activeTestbed] inside load().)
 document.getElementById("search").addEventListener("input", filterRows);
 // Collapsible filters: default hidden; the button shows a "• N" badge for active constraints.
 let filterPanelOpen = false;
@@ -852,7 +814,12 @@ async function applyImport(){
   const selection = { skills:[...importSel.skills], mcpServers:[...importSel.mcpServers], hooks:[...importSel.hooks], includeInstructions: importSel.includeInstructions };
   const r = await (await fetch("/api/testbed/import", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({ root: activeTestbed, selection }) })).json();
   document.getElementById("importModal").hidden = true;
-  document.getElementById("importStatus").textContent = `Imported ${r.written.length}${r.skipped.length?` · skipped ${r.skipped.length}`:""}`;
+  const st = document.getElementById("importStatus");
+  if (!r || r.error || !Array.isArray(r.written)) {
+    st.textContent = "Import failed" + (r && r.error ? `: ${r.error.message || r.error}` : "");
+  } else {
+    st.textContent = `Imported ${r.written.length}${r.skipped.length ? ` · skipped ${r.skipped.length}` : ""}`;
+  }
   load();
 }
 document.getElementById("importBtn").onclick = openImport;
