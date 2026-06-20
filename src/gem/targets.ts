@@ -10,7 +10,7 @@ import type {
 import { tomlMcpServers } from "./toml.js";
 import { stdioProxyRunner, PROXY_BASE_PORT, PROXY_HOST } from "./mcpProxy.js";
 
-export type TargetId = "claude" | "codex" | "agents" | "hermes" | "eve" | "flue" | "openai-sandbox";
+export type TargetId = "claude" | "codex" | "agents" | "hermes" | "eve" | "flue" | "openai-sandbox" | "agentcore";
 export type FileTree = Record<string, string>;
 
 export interface SkippedArtifact { artifact: string; type: ArtifactType; reason: string }
@@ -54,6 +54,8 @@ const skillEveMd = (a: SkillArtifact): FileTree => {
   const out = desc ? `---\ndescription: ${JSON.stringify(desc)}\n---\n${body}` : body;
   return { [`agent/skills/${eveSegment(a.name)}.md`]: out };
 };
+// AgentCore path-skills live on the harness filesystem; emit each skill body under .agents/skills/<seg>/.
+const skillAgentcoreMd = (a: SkillArtifact): FileTree => ({ [`.agents/skills/${safePathSegment(a.name)}/SKILL.md`]: a.content });
 const eveConnection = (server: McpServerArtifact, url: string): string => {
   const refs = server.secretRefs ?? [];
   const authorization = refs.find((r) => r.location.toLowerCase() === "headers.authorization");
@@ -440,6 +442,9 @@ export const TARGET_REGISTRY: Record<TargetId, TargetSpec> = {
   // OpenAI Agents SDK SandboxAgent (single <gemname>.agent.ts). Skills reuse SKILL.md (seeded via the
   // Manifest); instructions fold into the agent file. MCP is added inline in Task 2 (mcp renderer + compose).
   "openai-sandbox": { id: "openai-sandbox", label: "OpenAI Sandbox", skill: skillSkillMd, instructions: () => ({}), mcp: () => ({ files: {}, skipped: [] }), compose: sandboxComposeAgent },
+  // AgentCore harness project (app/<gem>/harness.json + container-baked skills). Instructions/MCP
+  // fold into the composed harness.json; stdio MCP is reported skipped by compose; hooks unsupported.
+  agentcore: { id: "agentcore", label: "AgentCore", skill: skillAgentcoreMd, instructions: () => ({}), mcp: () => ({ files: {}, skipped: [] }), compose: agentcoreComposeProject },
 };
 
 export function materialize(gem: Gem, target: TargetId): MaterializeResult {

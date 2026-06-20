@@ -292,7 +292,7 @@ describe("compatibility", () => {
     expect(c.codex).toEqual({ supported: 1, skipped: 1 });   // hook unsupported
     expect(c.hermes).toEqual({ supported: 1, skipped: 1 });
     expect(c.eve).toEqual({ supported: 1, skipped: 1 }); // skill ok, hook unsupported
-    expect(Object.keys(TARGET_REGISTRY).sort()).toEqual(["agents", "claude", "codex", "eve", "flue", "hermes", "openai-sandbox"]);
+    expect(Object.keys(TARGET_REGISTRY).sort()).toEqual(["agentcore", "agents", "claude", "codex", "eve", "flue", "hermes", "openai-sandbox"]);
   });
 });
 
@@ -307,6 +307,21 @@ describe("agentcoreComposeProject", () => {
     expect(files["SECRETS.md"]).toContain("agentcore add credential");
     expect(files["SECRETS.md"]).toContain("X_TOKEN");
     expect(skipped).toHaveLength(0);
+    expect(JSON.stringify(files)).not.toContain("<redacted>");
+  });
+});
+
+describe("materialize agentcore", () => {
+  it("renders skill files under .agents/skills, harness.json, and reports stdio MCP + hooks skipped", () => {
+    const g = gem([skill("scrape", "---\nname: scrape\n---\n# body"), httpMcp("exa"), mcp("local"), instr("CLAUDE.md"), hook()]);
+    const { files, skipped } = materialize(g, "agentcore");
+    expect(files[".agents/skills/scrape/SKILL.md"]).toContain("# body");
+    const harness = JSON.parse(files["app/p/harness.json"]);
+    expect(harness.skills).toEqual([{ path: ".agents/skills/scrape" }]);
+    expect((harness.tools as Array<{ name: string }>).map((t) => t.name)).toEqual(["exa"]); // http only
+    const reasons = skipped.map((s) => `${s.artifact}:${s.reason}`);
+    expect(reasons.some((r) => r.startsWith("local:") && /stdio/.test(r))).toBe(true);
+    expect(reasons.some((r) => r.startsWith("PreToolUse · Bash:"))).toBe(true); // hook unsupported
     expect(JSON.stringify(files)).not.toContain("<redacted>");
   });
 });
