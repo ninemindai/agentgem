@@ -1,6 +1,6 @@
 // src/gem/__tests__/targets.test.ts
 import { describe, it, expect } from "vitest";
-import { materialize, compatibility, TARGET_REGISTRY } from "../targets.js";
+import { materialize, compatibility, TARGET_REGISTRY, buildAgentcoreHarness, agentcoreComposeProject } from "../targets.js";
 import type { Gem, GemArtifact, SkillArtifact, McpServerArtifact, InstructionsArtifact, HookArtifact } from "../types.js";
 
 const gem = (artifacts: GemArtifact[]): Gem => ({ name: "p", createdFrom: "/d", artifacts, checks: [], requiredSecrets: [] });
@@ -261,6 +261,30 @@ describe("eve compose (runnable project scaffold)", () => {
   });
 });
 
+describe("buildAgentcoreHarness", () => {
+  it("maps instructions->systemPrompt, http MCP->remote_mcp, skills->path, defaults the model", () => {
+    const g = gem([skill("scrape"), httpMcp("exa"), instr("CLAUDE.md", "be terse")]);
+    const { harness, skipped } = buildAgentcoreHarness(g);
+    expect(harness.model).toEqual({ bedrockModelConfig: { modelId: "global.anthropic.claude-sonnet-4-6" } });
+    expect(harness.systemPrompt).toEqual([{ text: expect.stringContaining("be terse") }]);
+    expect(harness.skills).toEqual([{ path: ".agents/skills/scrape" }]);
+    const tools = harness.tools as Array<{ type: string; name: string; config: { remoteMcp: { url: string; headers: Record<string, string> } } }>;
+    expect(tools[0]).toMatchObject({ type: "remote_mcp", name: "exa", config: { remoteMcp: { url: "https://mcp.x/sse" } } });
+    // secret header is a token-vault placeholder, never a raw value
+    expect(tools[0].config.remoteMcp.headers.Authorization).toMatch(/^\$\{arn:aws:bedrock-agentcore:.*apikeycredentialprovider\/X_TOKEN\}$/);
+    expect(skipped).toHaveLength(0);
+    expect(JSON.stringify(harness)).not.toContain("<redacted>");
+  });
+
+  it("skips stdio MCP with a reason and omits empty sections", () => {
+    const { harness, skipped } = buildAgentcoreHarness(gem([mcp("local")]));
+    expect(skipped).toContainEqual({ artifact: "local", type: "mcp_server", reason: expect.stringContaining("stdio") });
+    expect(harness.tools).toBeUndefined();        // no mapped tools -> key omitted
+    expect(harness.systemPrompt).toBeUndefined();  // no instructions -> key omitted
+    expect(harness.skills).toBeUndefined();        // no skills -> key omitted
+  });
+});
+
 describe("compatibility", () => {
   it("summarizes supported/skipped per target", () => {
     const c = compatibility(gem([skill("a"), hook()]));
@@ -268,6 +292,36 @@ describe("compatibility", () => {
     expect(c.codex).toEqual({ supported: 1, skipped: 1 });   // hook unsupported
     expect(c.hermes).toEqual({ supported: 1, skipped: 1 });
     expect(c.eve).toEqual({ supported: 1, skipped: 1 }); // skill ok, hook unsupported
-    expect(Object.keys(TARGET_REGISTRY).sort()).toEqual(["agents", "claude", "codex", "eve", "flue", "hermes", "openai-sandbox"]);
+    expect(Object.keys(TARGET_REGISTRY).sort()).toEqual(["agentcore", "agents", "claude", "codex", "eve", "flue", "hermes", "openai-sandbox"]);
+  });
+});
+
+describe("agentcoreComposeProject", () => {
+  it("emits harness.json, scaffold, Dockerfile COPY, and a SECRETS checklist", () => {
+    const g = { ...gem([skill("scrape"), httpMcp("exa")]), requiredSecrets: [{ name: "X_TOKEN", artifact: "exa", location: "headers.Authorization" }] };
+    const { files, skipped } = agentcoreComposeProject(g);
+    expect(JSON.parse(files["app/p/harness.json"]).model.bedrockModelConfig.modelId).toBe("global.anthropic.claude-sonnet-4-6");
+    expect(files["agentcore/agentcore.json"]).toBeDefined();
+    expect(files["agentcore/aws-targets.json"]).toBeDefined();
+    expect(files["Dockerfile"]).toContain("COPY .agents/skills/ .agents/skills/");
+    expect(files["SECRETS.md"]).toContain("agentcore add credential");
+    expect(files["SECRETS.md"]).toContain("X_TOKEN");
+    expect(skipped).toHaveLength(0);
+    expect(JSON.stringify(files)).not.toContain("<redacted>");
+  });
+});
+
+describe("materialize agentcore", () => {
+  it("renders skill files under .agents/skills, harness.json, and reports stdio MCP + hooks skipped", () => {
+    const g = gem([skill("scrape", "---\nname: scrape\n---\n# body"), httpMcp("exa"), mcp("local"), instr("CLAUDE.md"), hook()]);
+    const { files, skipped } = materialize(g, "agentcore");
+    expect(files[".agents/skills/scrape/SKILL.md"]).toContain("# body");
+    const harness = JSON.parse(files["app/p/harness.json"]);
+    expect(harness.skills).toEqual([{ path: ".agents/skills/scrape" }]);
+    expect((harness.tools as Array<{ name: string }>).map((t) => t.name)).toEqual(["exa"]); // http only
+    const reasons = skipped.map((s) => `${s.artifact}:${s.reason}`);
+    expect(reasons.some((r) => r.startsWith("local:") && /stdio/.test(r))).toBe(true);
+    expect(reasons.some((r) => r.startsWith("PreToolUse · Bash:"))).toBe(true); // hook unsupported
+    expect(JSON.stringify(files)).not.toContain("<redacted>");
   });
 });

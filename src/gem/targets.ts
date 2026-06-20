@@ -4,13 +4,13 @@
 // artifacts are skipped with a reason. Materialize re-renders an already-redacted Gem; the
 // runner rebinds real secrets from gem.requiredSecrets at install.
 import type {
-  Gem, ArtifactType,
+  Gem, ArtifactType, SecretRequirement,
   SkillArtifact, McpServerArtifact, InstructionsArtifact, HookArtifact,
 } from "./types.js";
 import { tomlMcpServers } from "./toml.js";
 import { stdioProxyRunner, PROXY_BASE_PORT, PROXY_HOST } from "./mcpProxy.js";
 
-export type TargetId = "claude" | "codex" | "agents" | "hermes" | "eve" | "flue" | "openai-sandbox";
+export type TargetId = "claude" | "codex" | "agents" | "hermes" | "eve" | "flue" | "openai-sandbox" | "agentcore";
 export type FileTree = Record<string, string>;
 
 export interface SkippedArtifact { artifact: string; type: ArtifactType; reason: string }
@@ -54,6 +54,8 @@ const skillEveMd = (a: SkillArtifact): FileTree => {
   const out = desc ? `---\ndescription: ${JSON.stringify(desc)}\n---\n${body}` : body;
   return { [`agent/skills/${eveSegment(a.name)}.md`]: out };
 };
+// AgentCore path-skills live on the harness filesystem; emit each skill body under .agents/skills/<seg>/.
+const skillAgentcoreMd = (a: SkillArtifact): FileTree => ({ [`.agents/skills/${safePathSegment(a.name)}/SKILL.md`]: a.content });
 const eveConnection = (server: McpServerArtifact, url: string): string => {
   const refs = server.secretRefs ?? [];
   const authorization = refs.find((r) => r.location.toLowerCase() === "headers.authorization");
@@ -93,6 +95,84 @@ const mcpEveConnections = (servers: McpServerArtifact[]): MaterializeResult => {
     }
   }
   return { files, skipped };
+};
+
+// ── AgentCore harness renderers ──
+const AGENTCORE_MODEL_ID = "global.anthropic.claude-sonnet-4-6";
+// A token-vault placeholder for a secret header value. REGION/ACCOUNT are left as literal
+// placeholders for the user to fill (SECRETS.md lists the `agentcore add credential` commands).
+const agentcoreSecretRef = (name: string): string =>
+  `\${arn:aws:bedrock-agentcore:REGION:ACCOUNT:token-vault/default/apikeycredentialprovider/${name}}`;
+
+// http/sse MCP -> a remote_mcp tool. Secret header values become token-vault placeholders.
+// stdio (and url-less http) servers are skipped: the harness is remote-URL only.
+const agentcoreMcpTools = (servers: McpServerArtifact[]): { tools: unknown[]; skipped: SkippedArtifact[] } => {
+  const tools: unknown[] = [];
+  const skipped: SkippedArtifact[] = [];
+  for (const s of servers) {
+    const url = typeof s.config.url === "string" ? s.config.url : "";
+    if (!/^https?:\/\//.test(url)) {
+      skipped.push({ artifact: s.name, type: "mcp_server", reason: `AgentCore remote_mcp requires an HTTP/SSE URL; ${s.transport} MCP unsupported` });
+      continue;
+    }
+    const refs = s.secretRefs ?? [];
+    const unsupportedSecret = refs.find((r) => !/^headers\./i.test(r.location));
+    if (unsupportedSecret) {
+      skipped.push({ artifact: s.name, type: "mcp_server", reason: `AgentCore cannot map secret at ${unsupportedSecret.location}` });
+      continue;
+    }
+    const headerEntries = refs
+      .filter((r) => /^headers\./i.test(r.location))
+      .map((r) => [r.location.slice("headers.".length), agentcoreSecretRef(r.name)] as const);
+    const remoteMcp: Record<string, unknown> = { url };
+    if (headerEntries.length) remoteMcp.headers = Object.fromEntries(headerEntries);
+    tools.push({ type: "remote_mcp", name: s.name, config: { remoteMcp } });
+  }
+  return { tools, skipped };
+};
+
+// Assemble the harness.json object. model is always present; systemPrompt/tools/skills only when non-empty.
+export const buildAgentcoreHarness = (gem: Gem): { harness: Record<string, unknown>; skipped: SkippedArtifact[] } => {
+  const skills = gem.artifacts.filter((a): a is SkillArtifact => a.type === "skill");
+  const mcp = gem.artifacts.filter((a): a is McpServerArtifact => a.type === "mcp_server");
+  const instr = gem.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions");
+  const { tools, skipped } = agentcoreMcpTools(mcp);
+  const harness: Record<string, unknown> = { model: { bedrockModelConfig: { modelId: AGENTCORE_MODEL_ID } } };
+  if (instr.length) harness.systemPrompt = [{ text: instr.map((i) => `## ${i.name}\n\n${i.content}`).join("\n\n---\n\n") }];
+  if (tools.length) harness.tools = tools;
+  if (skills.length) harness.skills = skills.map((s) => ({ path: `.agents/skills/${safePathSegment(s.name)}` }));
+  return { harness, skipped };
+};
+
+// ── AgentCore project scaffold (harness.json + deployment files) ──
+const AGENTCORE_DOCKERFILE = `# AgentCore harness custom image: bakes local skills onto the harness filesystem
+# so the harness.json path-skills resolve. Build with: agentcore deploy --build Container
+FROM public.ecr.aws/bedrock-agentcore/harness-base:latest
+COPY .agents/skills/ .agents/skills/
+`;
+const agentcoreProjectJson = (gemName: string): string =>
+  JSON.stringify({ version: "1.0", harnesses: [{ name: safePathSegment(gemName), path: `app/${safePathSegment(gemName)}` }] }, null, 2) + "\n";
+const AGENTCORE_AWS_TARGETS = JSON.stringify({ account: "REPLACE_WITH_ACCOUNT_ID", region: "us-west-2" }, null, 2) + "\n";
+const agentcoreSecretsMd = (secrets: SecretRequirement[]): string => {
+  if (!secrets.length) return `# Secrets\n\nThis agent declares no secrets.\n`;
+  const lines = secrets.map((s) => `- \`${s.name}\` (for ${s.artifact} at ${s.location}):\n  \`\`\`\n  agentcore add credential --type api-key --name ${s.name} --api-key <value>\n  \`\`\``);
+  return `# Secrets\n\nRegister each credential in AgentCore Identity, then replace \`REGION\`/\`ACCOUNT\` in the \`\${arn:...}\` placeholders in \`app/<agent>/harness.json\`:\n\n${lines.join("\n")}\n`;
+};
+
+// Cross-cutting scaffold: harness.json (the agent config) plus the files needed to deploy it.
+export const agentcoreComposeProject = (gem: Gem): MaterializeResult => {
+  const seg = safePathSegment(gem.name);
+  const { harness, skipped } = buildAgentcoreHarness(gem);
+  return {
+    files: {
+      [`app/${seg}/harness.json`]: JSON.stringify(harness, null, 2) + "\n",
+      "agentcore/agentcore.json": agentcoreProjectJson(gem.name),
+      "agentcore/aws-targets.json": AGENTCORE_AWS_TARGETS,
+      "Dockerfile": AGENTCORE_DOCKERFILE,
+      "SECRETS.md": agentcoreSecretsMd(gem.requiredSecrets),
+    },
+    skipped,
+  };
 };
 
 // Multiple instruction artifacts concatenate into the target's single canonical file,
@@ -362,6 +442,9 @@ export const TARGET_REGISTRY: Record<TargetId, TargetSpec> = {
   // OpenAI Agents SDK SandboxAgent (single <gemname>.agent.ts). Skills reuse SKILL.md (seeded via the
   // Manifest); instructions fold into the agent file. MCP is added inline in Task 2 (mcp renderer + compose).
   "openai-sandbox": { id: "openai-sandbox", label: "OpenAI Sandbox", skill: skillSkillMd, instructions: () => ({}), mcp: () => ({ files: {}, skipped: [] }), compose: sandboxComposeAgent },
+  // AgentCore harness project (app/<gem>/harness.json + container-baked skills). Instructions/MCP
+  // fold into the composed harness.json; stdio MCP is reported skipped by compose; hooks unsupported.
+  agentcore: { id: "agentcore", label: "AgentCore", skill: skillAgentcoreMd, instructions: () => ({}), mcp: () => ({ files: {}, skipped: [] }), compose: agentcoreComposeProject },
 };
 
 export function materialize(gem: Gem, target: TargetId): MaterializeResult {
