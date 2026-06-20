@@ -185,6 +185,12 @@
     </div>
   </section>
 </main>
+<div id="modal" class="modal-bg" hidden>
+  <div class="modal">
+    <div class="modal-h"><strong class="t" id="modal-title"></strong><span class="src" id="modal-sub"></span><span class="seg" id="modal-modes"><button type="button" data-mode="md">Markdown</button><button type="button" data-mode="raw">Raw</button></span><button id="modal-x" class="ghost" style="margin-left:8px">✕ Close</button></div>
+    <pre class="modal-body" id="modal-body"></pre>
+  </div>
+</div>
 <div id="importModal" class="modal-bg" hidden>
   <div class="modal">
     <div class="modal-h"><strong class="t">Import from machine</strong><span class="src">~/.claude · ~/.agents · ~/.codex · ~/.hermes</span><button id="importClose" class="ghost" style="margin-left:auto">✕ Close</button></div>
@@ -193,12 +199,6 @@
       <span class="d">Writes real secrets into this testbed so it runs — don't commit <code>.mcp.json</code>/<code>settings.json</code>.</span>
       <button id="importApply" style="margin-left:auto">Add to testbed</button>
     </div>
-  </div>
-</div>
-<div id="modal" class="modal-bg" hidden>
-  <div class="modal">
-    <div class="modal-h"><strong class="t" id="modal-title"></strong><span class="src" id="modal-sub"></span><span class="seg" id="modal-modes"><button type="button" data-mode="md">Markdown</button><button type="button" data-mode="raw">Raw</button></span><button id="modal-x" class="ghost" style="margin-left:8px">✕ Close</button></div>
-    <pre class="modal-body" id="modal-body"></pre>
   </div>
 </div>
 <script>
