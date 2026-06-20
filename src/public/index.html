@@ -572,40 +572,74 @@ async function renderMaterialize(){
   el.innerHTML = h;
 }
 // Managed Agents publish: offline preview of the agent payload + a gated Publish action.
-let __publishReady = null, __publishRequestId = null, __publishFingerprint = null;
-async function publishReady(){ if (__publishReady === null) __publishReady = !!(await (await fetch("/api/publish-ready")).json()).ready; return __publishReady; }
+let __publishReady = null, __publishRequestId = null, __publishFingerprint = null, __deployTargets = null;
+async function publishReady(target){ if (__publishReady === null) __publishReady = !!(await (await fetch(`/api/publish-ready?target=${encodeURIComponent(target)}`)).json()).ready; return __publishReady; }
+async function getDeployTargets(){ if (!__deployTargets) { const d = await (await fetch("/api/deploy-targets")).json(); __deployTargets = d.targets || []; } return __deployTargets; }
 async function renderPublish(){
   const el = document.getElementById("preview");
-  const r = await (await fetch("/api/publish-preview", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(buildSelectionBody()) })).json();
+  const targets = await getDeployTargets();
+  const existingSel = document.getElementById("deployTarget");
+  const selectedTarget = existingSel ? existingSel.value : (targets[0] ? targets[0].id : "claude-managed");
+  const targetOpts = targets.map(t => `<option value="${esc(t.id)}" ${t.id === selectedTarget ? "selected" : ""}>${esc(t.label || t.id)}</option>`).join("");
+  const selHtml = `<div class="pgroup" style="display:flex;align-items:center;gap:8px"><label for="deployTarget" style="white-space:nowrap">Backend:</label><select id="deployTarget">${targetOpts}</select></div>`;
+  const body = { ...buildSelectionBody(), target: selectedTarget };
+  const r = await (await fetch("/api/publish-preview", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })).json();
   window.__publish = r;
-  if (r.error) { el.innerHTML = ""; const pre = document.createElement("pre"); pre.className = "json"; pre.textContent = JSON.stringify(r, null, 2); el.appendChild(pre); return; }
-  const p = r.payload;
+  if (r.error) { el.innerHTML = selHtml; const pre = document.createElement("pre"); pre.className = "json"; pre.textContent = JSON.stringify(r, null, 2); el.appendChild(pre); attachDeployTargetListener(); return; }
   const sect = (title, rows) => rows.length ? `<div class="pgroup"><h3>${title} (${rows.length})</h3>${rows.join("")}</div>` : "";
   const row = (a, b) => `<div class="prow"><span class="pn">${esc(a)}</span> <span class="pm">${esc(b)}</span></div>`;
-  let h = `<div class="psummary"><div class="phead"><strong>${esc(p.name)}</strong> <span class="d">· Managed Agent · ${esc(p.model)}</span></div>`;
+  if (r.kind === "agentcore-harness") {
+    let h = `<div class="psummary">${selHtml}<div class="phead"><strong>${esc(r.request.harnessName)}</strong> <span class="d">· AgentCore Harness</span></div>`;
+    h += `<div class="pgroup"><h3>CreateHarness request</h3><pre class="json">${esc(JSON.stringify(r.request, null, 2))}</pre></div>`;
+    h += sect("Skipped", r.skipped.map(s => row(s.artifact, s.reason)));
+    h += sect("Add to a vault after publish", r.vaultSecrets.map(s => row(s.name, `${s.artifact} · ${s.location}`)));
+    __publishReady = null;
+    const ready = await (await fetch(`/api/publish-ready?target=agentcore-managed`)).json();
+    h += `<div class="pgroup"><button id="publishBtn" ${ready.ready ? "" : "disabled"}>${ready.ready ? "Create AgentCore Harness" : "Publish (set AWS creds + AGENTCORE_EXECUTION_ROLE_ARN)"}</button> <span class="d" id="publishStatus"></span></div>`;
+    h += `<p class="note">Creates a Bedrock AgentCore harness via CreateHarness. Local skills are skipped (the API takes git/s3 skill sources); MCP secret headers reference AgentCore Identity token-vault ARNs. Secrets are never sent.</p></div>`;
+    el.innerHTML = h; attachDeployTargetListener(); return;
+  }
+  // managed-agent branch (claude-managed)
+  const p = r.payload;
+  let h = `<div class="psummary">${selHtml}<div class="phead"><strong>${esc(p.name)}</strong> <span class="d">· Managed Agent · ${esc(p.model)}</span></div>`;
   h += `<div class="pgroup"><h3>System prompt</h3>${row("instructions only", fmtSize((p.system || "").length))}</div>`;
   h += sect("Skills to register", r.skillsToRegister.map(n => row(n, "Agent Skill")));
   h += sect("MCP servers", p.mcp_servers.map(m => row(m.name, m.url)));
   h += sect("Add to a vault after publish", r.vaultSecrets.map(s => row(s.name, `${s.artifact} · ${s.location}`)));
   h += sect("Skipped", r.skipped.map(s => row(s.artifact, s.reason)));
-  const ready = await publishReady();
-  h += `<div class="pgroup"><button id="publishBtn" ${ready ? "" : "disabled"}>${ready ? "Publish to Managed Agents" : "Publish (set ANTHROPIC_API_KEY)"}</button> <span class="d" id="publishStatus"></span></div>`;
+  __publishReady = null;
+  const ready = await (await fetch(`/api/publish-ready?target=${encodeURIComponent(selectedTarget)}`)).json();
+  h += `<div class="pgroup"><button id="publishBtn" ${ready.ready ? "" : "disabled"}>${ready.ready ? "Publish to Managed Agents" : "Publish (set ANTHROPIC_API_KEY)"}</button> <span class="d" id="publishStatus"></span></div>`;
   h += `<p class="note">Publishing creates an agent and a limited-network cloud sandbox in your Anthropic org. Each skill is registered as an on-demand Agent Skill (Skills API), plus http/sse MCP servers (URL only) and instructions as the system prompt. Secrets are never sent; add MCP credentials to a vault before starting sessions.</p></div>`;
   el.innerHTML = h;
+  attachDeployTargetListener();
+}
+function attachDeployTargetListener(){
+  const sel = document.getElementById("deployTarget");
+  if (sel && !sel.__deployListened) { sel.__deployListened = true; sel.addEventListener("change", () => { __publishReady = null; renderPublish(); }); }
 }
 async function doPublish(){
-  if (!confirm("Create a Managed Agent, cloud sandbox, and uploaded skills in your Anthropic org?")) return;
+  const selectedTarget = document.getElementById("deployTarget")?.value || "claude-managed";
+  if (selectedTarget === "agentcore-managed") {
+    if (!confirm("Create an AgentCore harness in your AWS account via CreateHarness?")) return;
+  } else {
+    if (!confirm("Create a Managed Agent, cloud sandbox, and uploaded skills in your Anthropic org?")) return;
+  }
   const btn = document.getElementById("publishBtn"), st = document.getElementById("publishStatus");
   btn.disabled = true; st.textContent = "Publishing…";
   try {
-    const body = buildSelectionBody(), fingerprint = JSON.stringify(body);
+    const body = { ...buildSelectionBody(), target: selectedTarget }, fingerprint = JSON.stringify(body);
     if (__publishFingerprint !== fingerprint) {
       __publishFingerprint = fingerprint;
       __publishRequestId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
     }
     const r = await (await fetch("/api/publish", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...body, requestId: __publishRequestId }) })).json();
     if (r.error) { st.textContent = "Failed: " + (r.error.message || JSON.stringify(r.error)); btn.disabled = false; return; }
-    st.innerHTML = `✓ Created agent <code>${esc(r.agentId)}</code> (v${esc(r.version)}) + sandbox <code>${esc(r.environmentId)}</code> · ${r.registeredSkills.length} skill${r.registeredSkills.length === 1 ? "" : "s"} registered`;
+    if (r.kind === "agentcore-harness") {
+      st.innerHTML = `✓ Created AgentCore harness <code>${esc(r.harnessId || "")}</code>`;
+    } else {
+      st.innerHTML = `✓ Created agent <code>${esc(r.agentId)}</code> (v${esc(r.version)}) + sandbox <code>${esc(r.environmentId)}</code> · ${r.registeredSkills.length} skill${r.registeredSkills.length === 1 ? "" : "s"} registered`;
+    }
   } catch (e) { st.textContent = "Failed: " + e.message; btn.disabled = false; }
 }
 function openMaterializedFile(path){
