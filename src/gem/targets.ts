@@ -95,6 +95,53 @@ const mcpEveConnections = (servers: McpServerArtifact[]): MaterializeResult => {
   return { files, skipped };
 };
 
+// ── AgentCore harness renderers ──
+const AGENTCORE_MODEL_ID = "global.anthropic.claude-sonnet-4-6";
+// A token-vault placeholder for a secret header value. REGION/ACCOUNT are left as literal
+// placeholders for the user to fill (SECRETS.md lists the `agentcore add credential` commands).
+const agentcoreSecretRef = (name: string): string =>
+  `\${arn:aws:bedrock-agentcore:REGION:ACCOUNT:token-vault/default/apikeycredentialprovider/${name}}`;
+
+// http/sse MCP -> a remote_mcp tool. Secret header values become token-vault placeholders.
+// stdio (and url-less http) servers are skipped: the harness is remote-URL only.
+const agentcoreMcpTools = (servers: McpServerArtifact[]): { tools: unknown[]; skipped: SkippedArtifact[] } => {
+  const tools: unknown[] = [];
+  const skipped: SkippedArtifact[] = [];
+  for (const s of servers) {
+    const url = typeof s.config.url === "string" ? s.config.url : "";
+    if (!/^https?:\/\//.test(url)) {
+      skipped.push({ artifact: s.name, type: "mcp_server", reason: `AgentCore remote_mcp requires an HTTP/SSE URL; ${s.transport} MCP unsupported` });
+      continue;
+    }
+    const refs = s.secretRefs ?? [];
+    const unsupportedSecret = refs.find((r) => !/^headers\./i.test(r.location));
+    if (unsupportedSecret) {
+      skipped.push({ artifact: s.name, type: "mcp_server", reason: `AgentCore cannot map secret at ${unsupportedSecret.location}` });
+      continue;
+    }
+    const headerEntries = refs
+      .filter((r) => /^headers\./i.test(r.location))
+      .map((r) => [r.location.slice("headers.".length), agentcoreSecretRef(r.name)] as const);
+    const remoteMcp: Record<string, unknown> = { url };
+    if (headerEntries.length) remoteMcp.headers = Object.fromEntries(headerEntries);
+    tools.push({ type: "remote_mcp", name: s.name, config: { remoteMcp } });
+  }
+  return { tools, skipped };
+};
+
+// Assemble the harness.json object. model is always present; systemPrompt/tools/skills only when non-empty.
+export const buildAgentcoreHarness = (gem: Gem): { harness: Record<string, unknown>; skipped: SkippedArtifact[] } => {
+  const skills = gem.artifacts.filter((a): a is SkillArtifact => a.type === "skill");
+  const mcp = gem.artifacts.filter((a): a is McpServerArtifact => a.type === "mcp_server");
+  const instr = gem.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions");
+  const { tools, skipped } = agentcoreMcpTools(mcp);
+  const harness: Record<string, unknown> = { model: { bedrockModelConfig: { modelId: AGENTCORE_MODEL_ID } } };
+  if (instr.length) harness.systemPrompt = [{ text: instr.map((i) => `## ${i.name}\n\n${i.content}`).join("\n\n---\n\n") }];
+  if (tools.length) harness.tools = tools;
+  if (skills.length) harness.skills = skills.map((s) => ({ path: `.agents/skills/${safePathSegment(s.name)}` }));
+  return { harness, skipped };
+};
+
 // Multiple instruction artifacts concatenate into the target's single canonical file,
 // each under a "## <name>" separator so provenance survives.
 const concatInstructions = (file: string) => (all: InstructionsArtifact[]): FileTree =>
