@@ -34,7 +34,6 @@ function cmpSemver(a: string, b: string): number {
   return 0;
 }
 function satisfies(version: string, range: string): boolean {
-  if (range === "latest") return true;
   if (!range.startsWith("^")) return cmpSemver(version, range) === 0;
   const base = range.slice(1);
   const [bMaj, bMin] = parseSemver(base);
@@ -46,7 +45,11 @@ function satisfies(version: string, range: string): boolean {
 }
 
 export function selectVersion(item: RegistryItem, range: string): string {
-  if (range === "latest") return item.latest;
+  if (range === "latest") {
+    if (item.versions[item.latest] === undefined)
+      throw new Error(`latest version '${item.latest}' is not present in the item's versions`);
+    return item.latest;
+  }
   const matches = Object.keys(item.versions).filter((v) => satisfies(v, range));
   if (matches.length === 0) throw new Error(`no version of item satisfies '${range}'`);
   return matches.sort(cmpSemver)[matches.length - 1];
@@ -79,6 +82,7 @@ export function resolveGraph(rootRefs: string[], index: RegistryIndex): Resolved
     if (s === "visiting") throw new Error(`dependency cycle: ${[...trail, key].join(" -> ")}`);
     state.set(key, "visiting");
     const v = index.items[key].versions[version];
+    if (v === undefined) throw new Error(`resolved version ${key}@${version} not found in the index`);
     const depKeys: string[] = [];
     for (const depRef of v.dependencies) {
       const { key: dKey, version: dVer } = choose(depRef, `${key}@${version}`);

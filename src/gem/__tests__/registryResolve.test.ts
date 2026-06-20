@@ -53,6 +53,12 @@ describe("resolveGraph", () => {
   it("throws on an unknown item", () => {
     expect(() => resolveGraph(["@a/missing"], idx)).toThrow(/unknown item/i);
   });
+  it("throws when latest points to a version absent from versions", () => {
+    const malformed: RegistryIndex = { formatVersion: 1, items: {
+      "@a/x": { latest: "2.0.0", versions: { "1.0.0": { path: "p/x", gemDigest: "sha256:x", dependencies: [] } } },
+    } };
+    expect(() => resolveGraph(["@a/x"], malformed)).toThrow(/version/i);
+  });
   it("throws on incompatible ranges for the same item", () => {
     const conflict: RegistryIndex = { formatVersion: 1, items: {
       "@a/top": { latest: "1.0.0", versions: { "1.0.0": { path: "p/top", gemDigest: "sha256:t", dependencies: ["@a/dep@1.0.0", "@a/mid@^1.0.0"] } } },
