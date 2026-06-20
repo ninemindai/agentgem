@@ -7,6 +7,7 @@ import { renderManagedAgent } from "./publish.js";
 import type { ManagedAgentRender, ManagedAgentPayload, SkippedArtifact } from "./publish.js";
 import { publishManagedAgent, publishManagedAgentOnce, anthropicPublishClient } from "../publish.js";
 import type { PublishResult } from "../publish.js";
+import { previewAgentcorePublish, deployAgentcorePublish, agentcorePublishReady } from "./agentcorePublish.js";
 
 export type DeployTargetId = "claude-managed" | "agentcore-managed";
 
@@ -31,7 +32,7 @@ const managedAgentPreview = (gem: Gem): DeployPreview => {
   return { kind: "managed-agent", payload: r.payload, skillsToRegister: r.skillsToRegister.map((s) => s.name), skipped: r.skipped, vaultSecrets: r.vaultSecrets };
 };
 
-export const DEPLOY_REGISTRY: Record<DeployTargetId, DeployTarget> = {
+export const DEPLOY_REGISTRY = {
   "claude-managed": {
     id: "claude-managed",
     label: "Claude Managed Agents",
@@ -46,8 +47,14 @@ export const DEPLOY_REGISTRY: Record<DeployTargetId, DeployTarget> = {
       return { kind: "managed-agent", ...r };
     },
   },
-  // "agentcore-managed" added in Task 3.
-} as Record<DeployTargetId, DeployTarget>;
+  "agentcore-managed": {
+    id: "agentcore-managed",
+    label: "AgentCore Harness",
+    preview: previewAgentcorePublish,
+    ready: agentcorePublishReady,
+    deploy: (gem, requestId) => deployAgentcorePublish(gem, requestId),
+  },
+} as const satisfies Record<DeployTargetId, DeployTarget>;
 
 export const deployTargetIds = Object.keys(DEPLOY_REGISTRY) as [DeployTargetId, ...DeployTargetId[]];
 
