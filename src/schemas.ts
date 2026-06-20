@@ -236,23 +236,35 @@ const ManagedAgentPayloadSchema = z.object({
   ])),
 });
 
-export const PublishPreviewResponseSchema = z.object({
+const ManagedAgentPreviewSchema = z.object({
+  kind: z.literal("managed-agent"),
   payload: ManagedAgentPayloadSchema,
   skillsToRegister: z.array(z.string()),
   skipped: z.array(SkippedArtifactSchema),
   vaultSecrets: z.array(SecretRequirementSchema),
 });
-
-export const PublishReadyResponseSchema = z.object({ ready: z.boolean() });
-
-export const PublishResultSchema = z.object({
-  agentId: z.string(),
-  environmentId: z.string(),
-  version: z.string(),
-  registeredSkills: z.array(z.object({ name: z.string(), skillId: z.string(), version: z.string() })),
+const AgentcorePreviewSchema = z.object({
+  kind: z.literal("agentcore-harness"),
+  request: z.record(z.string(), z.unknown()),
   skipped: z.array(SkippedArtifactSchema),
   vaultSecrets: z.array(SecretRequirementSchema),
 });
+export const PublishPreviewResponseSchema = z.discriminatedUnion("kind", [ManagedAgentPreviewSchema, AgentcorePreviewSchema]);
+
+export const PublishReadyResponseSchema = z.object({ ready: z.boolean() });
+
+const ManagedAgentResultSchema = z.object({
+  kind: z.literal("managed-agent"),
+  agentId: z.string(), environmentId: z.string(), version: z.string(),
+  registeredSkills: z.array(z.object({ name: z.string(), skillId: z.string(), version: z.string() })),
+  skipped: z.array(SkippedArtifactSchema), vaultSecrets: z.array(SecretRequirementSchema),
+});
+const AgentcoreResultSchema = z.object({
+  kind: z.literal("agentcore-harness"),
+  harnessArn: z.string(), harnessId: z.string(), harnessName: z.string(), harnessVersion: z.string(), status: z.string(),
+  skipped: z.array(SkippedArtifactSchema), vaultSecrets: z.array(SecretRequirementSchema),
+});
+export const PublishResultSchema = z.discriminatedUnion("kind", [ManagedAgentResultSchema, AgentcoreResultSchema]);
 
 // `projects` is a JSON-encoded string array of root paths (query params can't carry arrays cleanly).
 export const DirQuerySchema = z.object({ dir: z.string().optional(), projects: z.string().optional() });

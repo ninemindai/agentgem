@@ -82,10 +82,12 @@ describe("wire schemas", () => {
     expect(() => PublishRequestSchema.parse({ selection: { all: true } })).toThrow();
     PublishRequestSchema.parse({ selection: { all: true }, requestId: "request-123" });
     const result = PublishResultSchema.parse({
+      kind: "managed-agent",
       agentId: "agent_1", environmentId: "env_1", version: "1",
       registeredSkills: [], skipped: [], vaultSecrets: [],
     });
-    expect(result.environmentId).toBe("env_1");
+    expect(result.kind).toBe("managed-agent");
+    if (result.kind === "managed-agent") expect(result.environmentId).toBe("env_1");
   });
 });
 

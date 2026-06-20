@@ -215,6 +215,14 @@ describe("deploy registry ops", () => {
       if (saved !== undefined) process.env.ANTHROPIC_API_KEY = saved;
     }
   });
+
+  it("publish-preview is tagged kind=managed-agent", async () => {
+    const r = await client.post("/api/publish-preview")
+      .send({ dir, selection: { skills: ["review"], includeInstructions: true }, name: "pub" }).expect(200);
+    expect(r.body.kind).toBe("managed-agent");
+    expect(r.body.payload.name).toBe("pub");           // existing managed-agent fields still present
+    expect(Array.isArray(r.body.skillsToRegister)).toBe(true);
+  });
 });
 
 describe("testbed ops", () => {
