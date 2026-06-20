@@ -336,3 +336,13 @@ export const TestbedImportResponseSchema = z.object({
   written: z.array(ImportedRefSchema),
   skipped: z.array(z.object({ artifact: z.string(), reason: z.string() })),
 });
+
+// ── AgentCore deploy (Phase 2) ──
+export const AgentcoreReadyResponseSchema = z.object({ cli: z.boolean(), awsCreds: z.boolean() });
+export const AgentcoreDeployRequestSchema = z.object({ name: z.string() });
+export const AgentcoreStatusQuerySchema = z.object({ name: z.string() });
+export const AgentcoreDeployStateSchema = z.object({
+  state: z.enum(["idle", "installing", "building", "running", "deploying", "failed"]),
+  url: z.string().optional(),
+  logTail: z.array(z.string()),
+});

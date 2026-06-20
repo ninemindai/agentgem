@@ -74,7 +74,7 @@ export const realRunner: ProcessRunner = {
 };
 
 // Run one command to completion; pipe its lines into `log`; resolve with the exit code.
-function runToEnd(runner: ProcessRunner, cmd: string, args: string[], cwd: string, env: NodeJS.ProcessEnv, log: string[]): Promise<number> {
+export function runToEnd(runner: ProcessRunner, cmd: string, args: string[], cwd: string, env: NodeJS.ProcessEnv, log: string[]): Promise<number> {
   return new Promise((resolve) => {
     const h = runner.spawn(cmd, args, { cwd, env });
     h.onLine((line) => pushLog(log, line));

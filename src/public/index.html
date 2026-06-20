@@ -215,6 +215,15 @@
       <div id="runUrl" style="margin:4px 0"></div>
       <pre id="runLog" style="max-height:200px;overflow:auto;background:#111;color:#ddd;padding:8px;font-size:12px"></pre>
     </div>
+    <div id="acPanel" style="display:none;margin-top:8px">
+      <div class="bar">
+        <strong style="flex:1">Deploy to AWS (AgentCore)</strong>
+        <button id="acDeploy" class="btn gem ghost">▲ Deploy</button>
+        <span class="d" id="acState" style="margin-left:8px"></span>
+      </div>
+      <div id="acUrl" style="margin:4px 0"></div>
+      <pre id="acLog" style="max-height:200px;overflow:auto;background:#111;color:#ddd;padding:8px;font-size:12px"></pre>
+    </div>
     <div class="bar"><input id="search" type="text" placeholder="search names, descriptions, contents…" style="flex:1" /><button id="filtersToggle" class="ghost">Filters ▾</button></div>
     <div id="filterPanel" hidden>
       <div class="bar"><span class="flabel d">Source</span><select id="srcFilter" style="flex:1"><option value="">All sources</option></select></div>
@@ -811,6 +820,7 @@ async function wsOpen(name){
     .map(t => `<button type="button" class="ghost wstab" data-t="${esc(t)}">${esc(t)}${(d.renderedTargets || []).includes(t) ? " ●" : ""}</button>`).join("");
   tree.innerHTML = `<p class="d">Pick a target to render its project layout.</p>`;
   document.getElementById("wsDelete").hidden = false;
+  refreshAcPanel();
 }
 async function wsRender(target){
   const tree = document.getElementById("wsTree");
@@ -932,6 +942,40 @@ document.getElementById("runStop").addEventListener("click", async () => {
   await fetch("/api/run/stop", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({ name: __runWs, target:"eve" }) });
   runStartPolling(__runWs);
 });
+// ── AgentCore deploy panel ────────────────────────────────────────────
+let __acPoll = null;
+function renderAcState(s){
+  document.getElementById("acState").textContent = s.state || "";
+  const urlEl = document.getElementById("acUrl");
+  urlEl.innerHTML = s.url ? `<code>${esc(s.url)}</code>` : "";
+  document.getElementById("acLog").textContent = (s.logTail || []).join("\n");
+}
+// Show the AgentCore deploy panel only when a workspace is open and the target is agentcore.
+async function refreshAcPanel(){
+  const panel = document.getElementById("acPanel");
+  const ws = document.getElementById("wsSelect").value;
+  const show = !!ws && document.getElementById("target").value === "agentcore";
+  panel.style.display = show ? "" : "none";
+  if (!show) return;
+  const ready = await (await fetch("/api/agentcore/deploy-ready")).json();
+  const btn = document.getElementById("acDeploy");
+  btn.disabled = !(ready.cli && ready.awsCreds);
+  btn.title = ready.cli && ready.awsCreds ? "" : `needs: ${!ready.cli ? "agentcore CLI " : ""}${!ready.awsCreds ? "AWS creds" : ""}`.trim();
+}
+document.getElementById("acDeploy").addEventListener("click", async () => {
+  const name = document.getElementById("wsSelect").value; if (!name) return;
+  const btn = document.getElementById("acDeploy"); btn.disabled = true;
+  renderAcState({ state: "deploying", logTail: ["starting agentcore deploy…"] });
+  const s = await (await fetch("/api/agentcore/deploy", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name }) })).json();
+  renderAcState(s); btn.disabled = false;
+  clearInterval(__acPoll);
+  if (s.state === "deploying") __acPoll = setInterval(async () => {
+    const st = await (await fetch(`/api/agentcore/deploy-status?name=${encodeURIComponent(name)}`)).json();
+    renderAcState(st); if (st.state !== "deploying") clearInterval(__acPoll);
+  }, 2000);
+});
+document.getElementById("target").addEventListener("change", refreshAcPanel);
+document.getElementById("wsSelect").addEventListener("change", refreshAcPanel);
 function renderTestDrive(){
   const card = document.getElementById("testdrive");
   if(!activeTestbed){ card.hidden = true; return; }
