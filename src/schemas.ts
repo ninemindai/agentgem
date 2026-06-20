@@ -299,3 +299,16 @@ export const RenderRequestSchema = z.object({ name: z.string(), target: TargetId
 export const WorkspaceNameRequestSchema = z.object({ name: z.string() });
 export const ListWorkspacesResponseSchema = z.object({ workspaces: z.array(WorkspaceSummarySchema) });
 export const DeleteWorkspaceResponseSchema = z.object({ deleted: z.string() });
+
+export const RunReadyQuerySchema = z.object({ name: z.string(), target: TargetIdSchema });
+export const RunReadyResponseSchema = z.object({ local: z.boolean(), vercel: z.boolean() });
+export const RunRequestSchema = z.object({ name: z.string(), target: TargetIdSchema, mode: z.enum(["local", "vercel"]) });
+export const RunStatusQuerySchema = z.object({ name: z.string(), target: TargetIdSchema });
+export const RunStateSchema = z.object({
+  mode: z.enum(["local", "vercel"]),
+  state: z.enum(["idle", "installing", "building", "running", "deploying", "failed"]),
+  url: z.string().optional(),
+  logTail: z.array(z.string()),
+});
+export const RunStopRequestSchema = z.object({ name: z.string(), target: TargetIdSchema });
+export const RunStopResponseSchema = z.object({ stopped: z.boolean() });

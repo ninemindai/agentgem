@@ -331,7 +331,7 @@ const evePackageJson = (gemName: string): string =>
     type: "module",
     imports: { "#*": "./agent/*", "#evals/*": "./evals/*" },
     scripts: { build: "eve build", dev: "eve dev", start: "eve start", typecheck: "tsgo" },
-    dependencies: { "@vercel/connect": "0.2.2", ai: "7.0.0-beta.178", eve: "^0.11.7", zod: "4.4.3" },
+    dependencies: { "@vercel/connect": "0.2.2", ai: "7.0.0-beta.178", eve: "^0.11.7", microsandbox: "^0.5.0", zod: "4.4.3" },
     devDependencies: { "@types/node": "24.x", "@typescript/native-preview": "7.0.0-dev.20260523.1" },
     overrides: { ai: "7.0.0-beta.178" },
     resolutions: { ai: "7.0.0-beta.178" },

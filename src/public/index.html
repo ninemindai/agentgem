@@ -75,6 +75,17 @@
     </div>
     <div class="bar" id="wsTargets" hidden></div>
     <div id="wsTree"></div>
+    <div id="runPanel" style="display:none;margin-top:8px">
+      <div class="bar">
+        <strong style="flex:1">Run eve</strong>
+        <button id="runLocal" class="ghost">▶ Run locally</button>
+        <button id="runVercel" class="ghost">▲ Deploy to Vercel</button>
+        <button id="runStop" class="ghost" style="display:none">■ Stop</button>
+        <span class="d" id="runState" style="margin-left:8px"></span>
+      </div>
+      <div id="runUrl" style="margin:4px 0"></div>
+      <pre id="runLog" style="max-height:200px;overflow:auto;background:#111;color:#ddd;padding:8px;font-size:12px"></pre>
+    </div>
     <div class="bar"><input id="search" type="text" placeholder="search names, descriptions, contents…" style="flex:1" /><button id="filtersToggle" class="ghost">Filters ▾</button></div>
     <div class="bar" id="projectBar"></div>
     <div id="filterPanel" hidden>
@@ -650,7 +661,7 @@ async function wsRefresh(){
 async function wsOpen(name){
   wsCurrent = name;
   const targets = document.getElementById("wsTargets"), tree = document.getElementById("wsTree");
-  if (!name){ targets.hidden = true; targets.innerHTML = ""; tree.innerHTML = ""; document.getElementById("wsDelete").hidden = true; return; }
+  if (!name){ targets.hidden = true; targets.innerHTML = ""; tree.innerHTML = ""; document.getElementById("wsDelete").hidden = true; runShowFor("", ""); return; }
   let d;
   try {
     const res = await fetch("/api/workspace?name=" + encodeURIComponent(name));
@@ -688,6 +699,7 @@ async function wsRender(target){
       + paths.map(p => `<button type="button" class="prow" data-wspath="${esc(p)}"><span class="pn">${esc(p)}</span></button>`).join("") + `</div>`;
   }
   await wsRefresh();
+  runShowFor(wsCurrent, target);
 }
 document.getElementById("wsSelect").addEventListener("change", e => wsOpen(e.target.value));
 document.getElementById("wsNew").addEventListener("click", async () => {
@@ -714,6 +726,45 @@ document.getElementById("wsTree").addEventListener("click", e => {
   document.getElementById("modal").hidden = false;
 });
 wsRefresh();
+let __runWs = null, __runPoll = null;
+async function runRefreshReady(name){
+  const r = await (await fetch(`/api/run-ready?name=${encodeURIComponent(name)}&target=eve`)).json();
+  const lb = document.getElementById("runLocal"), vb = document.getElementById("runVercel");
+  lb.disabled = !r.local; lb.title = r.local ? "" : "needs Node 24+";
+  vb.disabled = !r.vercel; vb.title = r.vercel ? "" : "set VERCEL_TOKEN on the server";
+}
+function runRenderState(s){
+  document.getElementById("runState").textContent = s.state || "idle";
+  document.getElementById("runStop").style.display = s.state === "running" ? "" : "none";
+  document.getElementById("runUrl").innerHTML = s.url ? `<a href="${esc(s.url)}" target="_blank">${esc(s.url)}</a>` : "";
+  document.getElementById("runLog").textContent = (s.logTail || []).join("\n");
+}
+function runStartPolling(name){
+  if (__runPoll) clearInterval(__runPoll);
+  __runPoll = setInterval(async () => {
+    const s = await (await fetch(`/api/run-status?name=${encodeURIComponent(name)}&target=eve`)).json();
+    runRenderState(s);
+    if (!["installing","building","running","deploying"].includes(s.state)) { clearInterval(__runPoll); __runPoll = null; }
+  }, 1500);
+}
+// Show the Run panel whenever a workspace's eve target is in view; call this from wsRender.
+function runShowFor(name, target){
+  __runWs = name;
+  document.getElementById("runPanel").style.display = target === "eve" ? "" : "none";
+  if (target === "eve") runRefreshReady(name);
+}
+document.getElementById("runLocal").addEventListener("click", async () => {
+  const s = await (await fetch("/api/run", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({ name: __runWs, target:"eve", mode:"local" }) })).json();
+  runRenderState(s); runStartPolling(__runWs);
+});
+document.getElementById("runVercel").addEventListener("click", async () => {
+  const s = await (await fetch("/api/run", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({ name: __runWs, target:"eve", mode:"vercel" }) })).json();
+  runRenderState(s); runStartPolling(__runWs);
+});
+document.getElementById("runStop").addEventListener("click", async () => {
+  await fetch("/api/run/stop", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({ name: __runWs, target:"eve" }) });
+  runStartPolling(__runWs);
+});
 </script>
 </body>
 </html>
