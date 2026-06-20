@@ -21,3 +21,77 @@ export function parseRef(input: string): ParsedRef {
   if (range !== "latest" && !/^\^?\d+\.\d+\.\d+$/.test(range)) throw new Error(`invalid ref '${input}': bad version range '${range}'`);
   return { key: `@${scope}/${name}`, scope, name, range };
 }
+
+// ── minimal semver (exact + caret only; no external dep) ──
+function parseSemver(v: string): [number, number, number] {
+  const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(v);
+  if (!m) throw new Error(`invalid semver '${v}'`);
+  return [Number(m[1]), Number(m[2]), Number(m[3])];
+}
+function cmpSemver(a: string, b: string): number {
+  const x = parseSemver(a), y = parseSemver(b);
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i];
+  return 0;
+}
+function satisfies(version: string, range: string): boolean {
+  if (range === "latest") return true;
+  if (!range.startsWith("^")) return cmpSemver(version, range) === 0;
+  const base = range.slice(1);
+  const [bMaj, bMin] = parseSemver(base);
+  const [vMaj, vMin] = parseSemver(version);
+  if (cmpSemver(version, base) < 0) return false;       // must be >= base
+  if (bMaj > 0) return vMaj === bMaj;                    // ^1.2.3 := >=1.2.3 <2.0.0
+  if (bMin > 0) return vMaj === 0 && vMin === bMin;      // ^0.2.3 := >=0.2.3 <0.3.0
+  return cmpSemver(version, base) === 0;                 // ^0.0.3 := exact
+}
+
+export function selectVersion(item: RegistryItem, range: string): string {
+  if (range === "latest") return item.latest;
+  const matches = Object.keys(item.versions).filter((v) => satisfies(v, range));
+  if (matches.length === 0) throw new Error(`no version of item satisfies '${range}'`);
+  return matches.sort(cmpSemver)[matches.length - 1];
+}
+
+export interface ResolvedNode { key: string; version: string; path: string; gemDigest: string; deps: string[] }
+
+export function resolveGraph(rootRefs: string[], index: RegistryIndex): ResolvedNode[] {
+  const chosen = new Map<string, { version: string; by: string }>(); // key -> selection
+
+  const choose = (ref: string, requestedBy: string): { key: string; version: string } => {
+    const { key, range } = parseRef(ref);
+    const item = index.items[key];
+    if (!item) throw new Error(`unknown item '${key}' (requested by ${requestedBy})`);
+    const version = selectVersion(item, range);
+    const prev = chosen.get(key);
+    if (prev && prev.version !== version) {
+      throw new Error(`version conflict for ${key}: ${prev.by} wants ${prev.version}, ${requestedBy} wants ${version}`);
+    }
+    if (!prev) chosen.set(key, { version, by: requestedBy });
+    return { key, version };
+  };
+
+  const order: ResolvedNode[] = [];
+  const state = new Map<string, "visiting" | "done">();
+
+  const visit = (key: string, version: string, trail: string[]): void => {
+    const s = state.get(key);
+    if (s === "done") return;
+    if (s === "visiting") throw new Error(`dependency cycle: ${[...trail, key].join(" -> ")}`);
+    state.set(key, "visiting");
+    const v = index.items[key].versions[version];
+    const depKeys: string[] = [];
+    for (const depRef of v.dependencies) {
+      const { key: dKey, version: dVer } = choose(depRef, `${key}@${version}`);
+      depKeys.push(dKey);
+      visit(dKey, dVer, [...trail, key]);
+    }
+    order.push({ key, version, path: v.path, gemDigest: v.gemDigest, deps: depKeys });
+    state.set(key, "done");
+  };
+
+  for (const ref of rootRefs) {
+    const { key, version } = choose(ref, "(root)");
+    visit(key, version, []);
+  }
+  return order;
+}
