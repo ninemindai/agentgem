@@ -99,3 +99,72 @@ export function resolveGraph(rootRefs: string[], index: RegistryIndex): Resolved
   }
   return order;
 }
+
+import type { Gem, GemArtifact, SecretRequirement, GemCheck } from "./types.js";
+import { readGemArchive, computeLock, verifyLock } from "./archive.js";
+import type { FileTree } from "./targets.js";
+
+export interface RegistrySource {
+  id: string; label: string;
+  ready(): boolean;
+  getIndex(): Promise<RegistryIndex>;
+  fetchItem(path: string): Promise<FileTree>;
+}
+export interface Provenance {
+  items: { key: string; version: string }[];
+  overrides: { artifact: string; winner: string; loser: string }[];
+}
+
+const artifactContentKey = (a: GemArtifact): string => JSON.stringify(a);
+
+export async function mergeGems(graph: ResolvedNode[], source: RegistrySource): Promise<{ gem: Gem; provenance: Provenance }> {
+  // ancestor sets: which keys is `key` (transitively) built on? deps appear before dependents in `graph`.
+  const directDeps = new Map(graph.map((n) => [n.key, n.deps]));
+  const ancestorsOf = (key: string): Set<string> => {
+    const out = new Set<string>(); const stack = [...(directDeps.get(key) ?? [])];
+    while (stack.length) { const k = stack.pop()!; if (!out.has(k)) { out.add(k); stack.push(...(directDeps.get(k) ?? [])); } }
+    return out;
+  };
+
+  const byName = new Map<string, { artifact: GemArtifact; owner: string; contentKey: string }>();
+  const secrets = new Map<string, SecretRequirement>();
+  const checks = new Map<string, GemCheck>();
+  const provenance: Provenance = { items: [], overrides: [] };
+
+  for (const node of graph) {
+    const files = await source.fetchItem(node.path);
+    const v = verifyLock(files, JSON.parse(files["gem.lock"]));
+    if (!v.ok) throw new Error(`integrity failure for ${node.key}@${node.version}: lock mismatch [${v.mismatches.join(",")}]`);
+    if (computeLock(files).gemDigest !== node.gemDigest) {
+      throw new Error(`integrity failure for ${node.key}@${node.version}: digest disagrees with the registry index`);
+    }
+    const gem = readGemArchive(files);
+    provenance.items.push({ key: node.key, version: node.version });
+
+    for (const artifact of gem.artifacts) {
+      const contentKey = artifactContentKey(artifact);
+      const prev = byName.get(artifact.name);
+      if (!prev) { byName.set(artifact.name, { artifact, owner: node.key, contentKey }); continue; }
+      if (prev.contentKey === contentKey) continue;                       // identical via two paths → dedup
+      if (ancestorsOf(node.key).has(prev.owner)) {                        // dependent overrides ancestor
+        byName.set(artifact.name, { artifact, owner: node.key, contentKey });
+        provenance.overrides.push({ artifact: artifact.name, winner: node.key, loser: prev.owner });
+        continue;
+      }
+      throw new Error(`artifact name collision: '${artifact.name}' defined by unrelated items ${prev.owner} and ${node.key}`);
+    }
+    for (const s of gem.requiredSecrets) secrets.set(`${s.name}:${s.location}`, s);
+    for (const c of gem.checks) checks.set(c.name, c);
+  }
+
+  const rootKey = graph.length ? graph[graph.length - 1].key : "(empty)";
+  const rootVer = graph.length ? graph[graph.length - 1].version : "0.0.0";
+  const merged: Gem = {
+    name: rootKey.split("/").pop() ?? "gem",
+    createdFrom: `registry:${rootKey}@${rootVer}`,
+    artifacts: [...byName.values()].map((e) => e.artifact),
+    checks: [...checks.values()],
+    requiredSecrets: [...secrets.values()],
+  };
+  return { gem: merged, provenance };
+}
