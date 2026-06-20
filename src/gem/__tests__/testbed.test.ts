@@ -97,3 +97,31 @@ describe("importArtifacts — mcp + hooks + containment", () => {
     expect(gem.requiredSecrets).toContainEqual({ name: "GH_TOKEN", artifact: "gh", location: "env.GH_TOKEN" });
   });
 });
+
+describe("importArtifacts — overwritten semantics", () => {
+  const rawInv = inv({
+    skills: [{ type: "skill", name: "s", description: "d", source: "standalone", content: "body" }],
+    instructions: [{ type: "instructions", name: "CLAUDE.md", content: "RULES" }],
+    mcpServers: [{ type: "mcp_server", name: "gh", transport: "stdio", config: { command: "x" }, source: "user" }],
+  });
+
+  it("reports overwritten:false on first import, true when skill/mcp/instructions are re-imported", () => {
+    scaffoldTestbed(root, "x");
+    const sel = { skills: ["s"], mcpServers: ["gh"], includeInstructions: true };
+    const first = importArtifacts(root, sel, rawInv);
+    expect(first.written.find((w) => w.type === "skill")?.overwritten).toBe(false);
+    expect(first.written.find((w) => w.type === "mcp_server")?.overwritten).toBe(false);
+    expect(first.written.find((w) => w.type === "instructions")?.overwritten).toBe(false);
+    const second = importArtifacts(root, sel, rawInv);
+    expect(second.written.find((w) => w.type === "skill")?.overwritten).toBe(true);
+    expect(second.written.find((w) => w.type === "mcp_server")?.overwritten).toBe(true);
+    expect(second.written.find((w) => w.type === "instructions")?.overwritten).toBe(true);
+  });
+
+  it("reports overwritten:false for hooks even on re-import (deduped, never replaced)", () => {
+    scaffoldTestbed(root, "x");
+    const rawHook = inv({ hooks: [{ type: "hook", name: "PreToolUse · Bash", event: "PreToolUse", matcher: "Bash", config: { matcher: "Bash", hooks: [{ type: "command", command: "./g.sh" }] }, source: "user" }] });
+    expect(importArtifacts(root, { hooks: ["PreToolUse · Bash"] }, rawHook).written[0].overwritten).toBe(false);
+    expect(importArtifacts(root, { hooks: ["PreToolUse · Bash"] }, rawHook).written[0].overwritten).toBe(false);
+  });
+});

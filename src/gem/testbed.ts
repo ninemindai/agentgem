@@ -45,15 +45,18 @@ function escapeRegex(s: string): string {
 }
 
 // Replace an existing marked block, else append one. Keeps re-import idempotent.
-function upsertMarkedBlock(root: string, rel: string, name: string, content: string): void {
+// Returns true when an existing block was replaced (so the caller can report `overwritten`).
+function upsertMarkedBlock(root: string, rel: string, name: string, content: string): boolean {
   const abs = join(root, rel);
   const existing = existsSync(abs) ? readFileSync(abs, "utf8") : "";
   const { open, close } = marker(name);
   const block = `${open}\n${content}\n${close}`;
   const re = new RegExp(`${escapeRegex(open)}[\\s\\S]*?${escapeRegex(close)}`);
-  const next = re.test(existing) ? existing.replace(re, block) : `${existing}${existing && !existing.endsWith("\n") ? "\n" : ""}${block}\n`;
+  const replaced = re.test(existing);
+  const next = replaced ? existing.replace(re, block) : `${existing}${existing && !existing.endsWith("\n") ? "\n" : ""}${block}\n`;
   mkdirSync(dirname(abs), { recursive: true });
   writeFileSync(abs, next, "utf8");
+  return replaced;
 }
 
 export function importArtifacts(root: string, selection: ImportSelection, rawInv: ConfigInventory): { written: ImportedRef[]; skipped: ImportSkip[] } {
@@ -72,8 +75,8 @@ export function importArtifacts(root: string, selection: ImportSelection, rawInv
 
   if (selection.includeInstructions) {
     for (const ins of rawInv.instructions) {
-      upsertMarkedBlock(root, "CLAUDE.md", ins.name, ins.content);
-      written.push({ type: "instructions", name: ins.name, overwritten: false });
+      const overwritten = upsertMarkedBlock(root, "CLAUDE.md", ins.name, ins.content);
+      written.push({ type: "instructions", name: ins.name, overwritten });
     }
   }
 
@@ -102,7 +105,9 @@ export function importArtifacts(root: string, selection: ImportSelection, rawInv
     hooks[h.event] = groups;
     doc.hooks = hooks;
     writeJson(abs, doc);
-    written.push({ type: "hook", name, overwritten: exists });
+    // Hooks are never replaced — a matching group is deduped (no-op), a differing one is appended.
+    // So `overwritten` is always false; idempotent re-import simply re-reports the existing group.
+    written.push({ type: "hook", name, overwritten: false });
   }
 
   return { written, skipped };

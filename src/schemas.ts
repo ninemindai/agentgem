@@ -327,7 +327,7 @@ export const TestbedImportRequestSchema = z.object({
   selection: TestbedImportSelectionSchema,
   dir: z.string().optional(),
 });
-const ImportedRefSchema = z.object({
+export const ImportedRefSchema = z.object({
   type: z.enum(["skill", "mcp_server", "instructions", "hook"]),
   name: z.string(),
   overwritten: z.boolean(),

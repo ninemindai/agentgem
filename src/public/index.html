@@ -22,6 +22,7 @@
     margin:0;font-family:var(--ui);font-size:14px;line-height:1.5;color:var(--ink);
     background:radial-gradient(1200px 600px at 88% -12%,rgba(176,132,54,.07),transparent 60%),radial-gradient(900px 500px at -6% 112%,rgba(31,107,79,.06),transparent 55%),var(--paper);
     background-attachment:fixed;-webkit-font-smoothing:antialiased;
+    display:flex;flex-direction:column;height:100vh;overflow:hidden;
   }
   body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.5;mix-blend-mode:multiply;
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
@@ -38,7 +39,20 @@
   .testbed-chip .path{font-family:var(--mono);color:var(--ink-2);font-size:12px}
   .testbed-chip .path b{color:var(--ink)}
   .testbed-chip button{font:600 11px/1 var(--ui);padding:5px 10px;border-radius:99px}
-  main{position:relative;z-index:1;display:grid;grid-template-columns:1.04fr .96fr;gap:0;height:calc(100vh - 58px)}
+  main{position:relative;z-index:1;display:grid;grid-template-columns:1.04fr .96fr;gap:0;flex:1;min-height:0}
+  /* stage rail */
+  .rail{position:relative;z-index:1;flex:none;display:flex;align-items:stretch;padding:11px 26px 13px;border-bottom:1px solid var(--line);background:var(--paper-2);overflow:hidden}
+  .rail::after{content:"";position:absolute;left:62px;right:62px;top:calc(50% - 7px);height:2px;background:var(--line-2);z-index:0}
+  .station{position:relative;z-index:1;flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;background:transparent;border:0;font:inherit;color:inherit;padding:0}
+  .station .node{width:30px;height:30px;display:grid;place-items:center;border-radius:8px;background:var(--card);border:1.5px solid var(--line-2);transition:.25s ease;transform:rotate(45deg);box-shadow:0 4px 10px -6px rgba(33,28,21,.4)}
+  .station .node svg{transform:rotate(-45deg);width:15px;height:15px;color:var(--muted);transition:.25s}
+  .station .label{font-family:var(--display);font-weight:600;font-size:12.5px;letter-spacing:.01em}
+  .station .sub{font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.03em;min-height:11px}
+  .station.done .node{background:var(--gem);border-color:var(--gem)} .station.done .node svg{color:#fff}
+  .station.active .node{background:var(--accent);border-color:var(--accent);transform:rotate(45deg) scale(1.1);box-shadow:0 0 0 5px var(--accent-soft),0 8px 18px -8px rgba(154,51,36,.7)}
+  .station.active .node svg{color:#fff} .station.active .label{color:var(--accent-ink)}
+  .station.todo .label,.station.todo .sub{color:var(--muted)}
+  .station:hover .node{transform:rotate(45deg) translateY(-2px)} .station.active:hover .node{transform:rotate(45deg) scale(1.1) translateY(-2px)}
   .pane{padding:18px 22px;overflow:auto}.pane.left{border-right:1px solid var(--line)}
   .pane::-webkit-scrollbar{width:10px}.pane::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:99px;border:3px solid var(--paper)}
   /* ── groups & rows ── */
@@ -100,6 +114,31 @@
   #preview::after{bottom:9px;right:9px;border-left:0;border-top:0;border-radius:0 0 7px 0}
   .psummary{display:flex;flex-direction:column;gap:15px}
   .phead{font-family:var(--display);font-weight:600;font-size:16px}
+  /* certificate composition */
+  .cert-h{display:flex;flex-direction:column;align-items:center;text-align:center;padding:4px 0 14px;border-bottom:1px solid var(--line);margin-bottom:14px}
+  .cert-h .gemmark{width:52px;height:52px;margin-bottom:8px;filter:drop-shadow(0 3px 6px rgba(33,28,21,.22))}
+  .cert-h .kicker{font-family:var(--mono);font-size:9.5px;letter-spacing:.26em;text-transform:uppercase;color:var(--muted)}
+  .cert-h .gname{font-family:var(--display);font-weight:600;font-size:25px;letter-spacing:-.015em;margin:2px 0 1px}
+  .cert-h .from{font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+  .gemmark .glint{animation:shimmer 3.6s ease-in-out infinite}
+  @keyframes shimmer{0%,100%{opacity:0}50%{opacity:.5}}
+  @media (prefers-reduced-motion:reduce){.gemmark .glint{animation:none}}
+  .seal{position:absolute;top:16px;right:18px;z-index:1;width:72px;height:72px;display:grid;place-items:center;text-align:center;border:2px solid var(--gem);border-radius:50%;color:var(--gem);transform:rotate(-11deg);background:var(--gem-soft);font-family:var(--display);font-weight:700;font-size:10px;letter-spacing:.1em;text-transform:uppercase;line-height:1.25;animation:stampin .5s cubic-bezier(.2,.8,.2,1) both}
+  .seal.draft{border-color:var(--line-2);color:var(--muted);background:transparent}
+  .seal small{display:block;font-family:var(--mono);font-weight:500;font-size:7px;letter-spacing:.04em;margin-top:2px}
+  @keyframes stampin{0%{opacity:0;transform:rotate(-11deg) scale(1.5)}60%{opacity:1;transform:rotate(-11deg) scale(.94)}100%{transform:rotate(-11deg) scale(1)}}
+  @media (prefers-reduced-motion:reduce){.seal{animation:none}}
+  .tally{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:14px;background:var(--card)}
+  .tally .t{padding:11px 6px;text-align:center;border-right:1px solid var(--line)}
+  .tally .t:last-child{border-right:0}
+  .tally .t .n{font-family:var(--display);font-weight:600;font-size:22px;line-height:1}
+  .tally .t .l{font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:4px}
+  .crow{display:flex;gap:10px;align-items:baseline;padding:8px 0;border-bottom:1px dashed var(--line)}
+  .crow .k{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);width:84px;flex:none}
+  .crow .v{flex:1;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .chip{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10.5px;padding:3px 8px;border-radius:99px;border:1px solid var(--line);color:var(--ink-2)}
+  .chip.secret{color:var(--accent);border-color:rgba(154,51,36,.3);background:var(--accent-soft)}
+  .chip.pass{color:var(--gem);border-color:rgba(31,107,79,.3);background:var(--gem-soft)}
   .pgroup h3{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted);margin:0 0 6px}
   .prow{display:flex;gap:8px;align-items:center;width:100%;text-align:left;border:0;background:transparent;padding:6px 8px;border-radius:7px;cursor:pointer;font:inherit;color:var(--ink)}
   .prow:hover{background:var(--accent-soft)}
@@ -114,7 +153,6 @@
   .flabel{width:54px;flex:none;font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase}
   #filtersToggle.on{background:var(--accent);color:#fff}
   /* ── project chips ── */
-  #projectBar{flex-wrap:wrap}
   .pchip{display:inline-flex;align-items:center;gap:3px;background:var(--card);border:1px solid var(--line);border-radius:99px;padding:3px 5px 3px 11px;font-size:12.5px}
   .pchip .premove{border:0;background:transparent;color:var(--muted);padding:0 4px;cursor:pointer;font-size:13px;box-shadow:none}
   .pchip .premove:hover{color:var(--accent);transform:none;background:transparent}
@@ -149,6 +187,13 @@
   <span class="spacer" style="flex:1"></span>
   <span id="testbedChip" class="testbed-chip"></span>
 </header>
+<nav class="rail" id="rail">
+  <button class="station" data-stage="testbed"><span class="node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M3 12h18"/></svg></span><span class="label">Testbed</span><span class="sub" data-sub="testbed"></span></button>
+  <button class="station" data-stage="package"><span class="node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5"/></svg></span><span class="label">Package</span><span class="sub" data-sub="package"></span></button>
+  <button class="station" data-stage="workspace"><span class="node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18v12H3z"/><path d="M3 7l3-4h12l3 4"/></svg></span><span class="label">Workspace</span><span class="sub" data-sub="workspace"></span></button>
+  <button class="station" data-stage="target"><span class="node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg></span><span class="label">Target</span><span class="sub" data-sub="target"></span></button>
+  <button class="station" data-stage="deploy"><span class="node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg></span><span class="label">Deploy</span><span class="sub" data-sub="deploy"></span></button>
+</nav>
 <main>
   <section class="pane left">
     <div class="bar"><input id="name" type="text" placeholder="gem name" value="gem" style="flex:1" /></div>
@@ -171,7 +216,6 @@
       <pre id="runLog" style="max-height:200px;overflow:auto;background:#111;color:#ddd;padding:8px;font-size:12px"></pre>
     </div>
     <div class="bar"><input id="search" type="text" placeholder="search names, descriptions, contents…" style="flex:1" /><button id="filtersToggle" class="ghost">Filters ▾</button></div>
-    <div class="bar" id="projectBar"></div>
     <div id="filterPanel" hidden>
       <div class="bar"><span class="flabel d">Source</span><select id="srcFilter" style="flex:1"><option value="">All sources</option></select></div>
       <div class="bar" id="agentBar"></div>
@@ -284,11 +328,13 @@ async function load() {
     const cb = row.querySelector("input[type=checkbox]");
     row._hay = hayForRow(cb && cb.dataset.kind, cb && cb.dataset.name, cb && cb.dataset.project).toLowerCase();
   });
-  populateSources(); populateAgents(); populateTypes(); renderProjectBar();
+  populateSources(); populateAgents(); populateTypes();
   document.querySelectorAll('#inventory input[type=checkbox]').forEach(cb => cb.addEventListener("change", onToggle));
   restoreChecks();
+  filterRows();   // apply any active filters to the freshly rendered rows
   refresh();
   renderTestDrive();
+  renderRail();
 }
 function hayForRow(kind, name, projRoot) {
   if (kind === "skills") { const a = inv.skills.find(s => s.name === name); return a ? `${a.name} ${a.description || ""} ${a.source || ""} ${a.content || ""}` : ""; }
@@ -448,12 +494,32 @@ document.getElementById("suggestChecks").addEventListener("click", async () => {
 let previewMode = "summary";
 function fmtSize(n){ return n < 1024 ? `${n} B` : `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} KB`; }
 function artSize(a){ return (a.type === "mcp_server" || a.type === "hook") ? JSON.stringify(a.config || {}).length : (a.content || "").length; }
+const GEM_MARK_SVG = `<svg class="gemmark" viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M32 4 58 24 32 60 6 24 Z" fill="#9a3324"/><path d="M32 4 58 24 32 26 Z" fill="#bb4a38"/><path d="M32 4 6 24 32 26 Z" fill="#7d2a1e"/><path d="M6 24 32 26 32 60 Z" fill="#8b2e21"/><path d="M58 24 32 26 32 60 Z" fill="#a8392a"/><path d="M6 24 58 24 32 26 Z" fill="#c8543f"/><path class="glint" d="M32 4 58 24 32 26 Z" fill="#ffd9a0"/></svg>`;
+// Render the live gem as a "certificate of authenticity": faceted mark, name, artifact tally,
+// the secret/check trust rows, a seal, then the per-artifact list (clickable to view).
 function summaryHtml(p){
   const arts = p.artifacts || [];
   if (!arts.length) return `<p class="d">Empty gem — select artifacts on the left to add them.</p>`;
   const total = arts.reduce((s, a) => s + artSize(a), 0);
+  const count = (t) => arts.filter(a => a.type === t).length;
+  const secrets = p.requiredSecrets || [];
+  const checks = p.checks || [];
+  const seal = checks.length
+    ? `<div class="seal" title="${checks.length} check${checks.length === 1 ? "" : "s"} declared">Checks<small>${checks.length} declared</small></div>`
+    : `<div class="seal draft" title="no checks declared">Draft<small>no checks</small></div>`;
+  let h = `<div class="psummary">${seal}`;
+  h += `<div class="cert-h">${GEM_MARK_SVG}<span class="kicker">Certificate of Authenticity</span><span class="gname">${esc(p.name)}</span><span class="from">${esc(p.createdFrom || "")} · ${fmtSize(total)}</span></div>`;
+  h += `<div class="tally">`
+    + `<div class="t"><div class="n">${count("skill")}</div><div class="l">Skills</div></div>`
+    + `<div class="t"><div class="n">${count("mcp_server")}</div><div class="l">MCP</div></div>`
+    + `<div class="t"><div class="n">${count("hook")}</div><div class="l">Hooks</div></div>`
+    + `<div class="t"><div class="n">${count("instructions")}</div><div class="l">Instr</div></div></div>`;
+  if (secrets.length) h += `<div class="crow"><span class="k">Secrets</span><span class="v">`
+    + secrets.map(s => `<span class="chip secret" title="${esc(s.artifact)} · ${esc(s.location)}">🔑 ${esc(s.name)}</span>`).join("") + `</span></div>`;
+  h += `<div class="crow"><span class="k">Checks</span><span class="v">`
+    + (checks.length ? checks.map(c => `<span class="chip pass">✓ ${esc(c.kind)} · ${esc(c.name)}</span>`).join("") : `<span class="d">none — add via the Checks panel below</span>`)
+    + `</span></div>`;
   const groups = [["Skills", "skill"], ["MCP servers", "mcp_server"], ["Instructions", "instructions"], ["Hooks", "hook"]];
-  let h = `<div class="psummary"><div class="phead"><strong>${esc(p.name)}</strong> <span class="d">· ${arts.length} artifact${arts.length === 1 ? "" : "s"} · ${fmtSize(total)}</span></div>`;
   for (const [label, type] of groups) {
     const items = arts.filter(a => a.type === type);
     if (!items.length) continue;
@@ -468,6 +534,7 @@ function summaryHtml(p){
 }
 function renderPreview(){
   const el = document.getElementById("preview");
+  if (typeof renderRail === "function") renderRail();
   if (previewMode === "materialize") { renderMaterialize(); document.querySelectorAll("#preview-modes button").forEach(b => b.classList.toggle("on", b.dataset.pmode === previewMode)); return; }
   if (previewMode === "managed") { renderPublish(); document.querySelectorAll("#preview-modes button").forEach(b => b.classList.toggle("on", b.dataset.pmode === previewMode)); return; }
   const p = window.__gem;
@@ -697,45 +764,8 @@ document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal()
 // --- Projects: OS-native folder picker; multiple roots, each labeled by name. ---
 function projOf(root) { return (inv.projects || []).find(p => p.root === root); }
 function projSel(root) { return (sel.projects[root] ??= { skills: new Set(), mcpServers: new Set(), includeInstructions: false, hooks: new Set() }); }
-// Display name = basename, disambiguated by parent dir when two projects share a basename.
-function projLabels(projs) {
-  const counts = {};
-  projs.forEach(p => (counts[p.name] = (counts[p.name] || 0) + 1));
-  return projs.map(p => (counts[p.name] > 1 ? `${p.name} (…/${p.root.split("/").slice(-2, -1)[0] || ""})` : p.name));
-}
-function renderProjectBar() {
-  const el = document.getElementById("projectBar");
-  const names = projLabels(inv.projects || []);
-  const chips = (inv.projects || []).map((p, i) =>
-    `<span class="pchip" title="${esc(p.root)}">📁 ${esc(names[i])}<button class="premove ghost" data-root="${esc(p.root)}" title="remove project">✕</button></span>`).join("");
-  el.innerHTML = (chips ? `<span class="d">Projects:</span> ${chips} ` : "")
-    + `<button id="addProject" class="ghost">📁 Add project…</button>`
-    + (chips ? "" : `<span class="d">discover skills, MCP &amp; instructions from project roots</span>`);
-}
-function addProject(path) {
-  const clean = (path || "").replace(/\/+$/, "");
-  if (clean && !projects.includes(clean)) { projects.push(clean); load(); }
-}
-function removeProject(root) {
-  projects = projects.filter(r => r !== root);
-  delete sel.projects[root];
-  load();
-}
-async function pickProject() {
-  const el = document.getElementById("projectBar");
-  el.style.opacity = ".5"; // brief hint while the native dialog is open
-  try {
-    const r = await (await fetch("/api/pick-folder")).json();
-    if (r && r.path) addProject(r.path); // null = user cancelled -> keep current
-  } finally {
-    el.style.opacity = "";
-  }
-}
-document.getElementById("projectBar").addEventListener("click", e => {
-  const rm = e.target.closest(".premove");
-  if (rm) { removeProject(rm.dataset.root); return; }
-  if (e.target.closest("#addProject")) pickProject();
-});
+// (Project add/remove UI removed: the active testbed — set via the header chip — is the single
+// project source now. `projects` is kept in sync with [activeTestbed] inside load().)
 document.getElementById("search").addEventListener("input", filterRows);
 // Collapsible filters: default hidden; the button shows a "• N" badge for active constraints.
 let filterPanelOpen = false;
@@ -852,7 +882,12 @@ async function applyImport(){
   const selection = { skills:[...importSel.skills], mcpServers:[...importSel.mcpServers], hooks:[...importSel.hooks], includeInstructions: importSel.includeInstructions };
   const r = await (await fetch("/api/testbed/import", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({ root: activeTestbed, selection }) })).json();
   document.getElementById("importModal").hidden = true;
-  document.getElementById("importStatus").textContent = `Imported ${r.written.length}${r.skipped.length?` · skipped ${r.skipped.length}`:""}`;
+  const st = document.getElementById("importStatus");
+  if (!r || r.error || !Array.isArray(r.written)) {
+    st.textContent = "Import failed" + (r && r.error ? `: ${r.error.message || r.error}` : "");
+  } else {
+    st.textContent = `Imported ${r.written.length}${r.skipped.length ? ` · skipped ${r.skipped.length}` : ""}`;
+  }
   load();
 }
 document.getElementById("importBtn").onclick = openImport;
@@ -907,6 +942,52 @@ document.getElementById("tdCopy").onclick = () => {
   navigator.clipboard?.writeText(`cd ${activeTestbed} && claude`);
   const b = document.getElementById("tdCopy"); b.textContent = "Copied ✓"; setTimeout(()=>b.textContent="Copy", 1400);
 };
+
+// ── Lifecycle stage rail ──────────────────────────────────────────────
+// Reflects observable state across the Testbed→Package→Workspace→Target→Deploy flow.
+// Stations before the current one are "done", the current one "active", the rest "todo".
+// Clicking a station performs the natural navigation for that stage.
+const RAIL_STAGES = ["testbed", "package", "workspace", "target", "deploy"];
+function railState(){
+  const wsVal = document.getElementById("wsSelect")?.value || "";
+  const gemArts = (window.__gem && window.__gem.artifacts || []).length;
+  const targetRendered = /●/.test(document.getElementById("wsTargets")?.textContent || "") || previewMode === "materialize";
+  const runState = (document.getElementById("runState")?.textContent || "").toLowerCase();
+  const deployed = /running|deploy|live|ready/.test(runState) || !!(document.getElementById("runUrl")?.querySelector("a"));
+  let idx = 0;                                  // testbed (setup)
+  if (activeTestbed) idx = 1;                   // package (have a testbed)
+  if (activeTestbed && wsVal) idx = 2;          // workspace (packaged + open)
+  if (idx >= 2 && targetRendered) idx = 3;      // target (rendered)
+  if (idx >= 3 && deployed) idx = 4;            // deploy
+  const subs = {
+    testbed: activeTestbed ? activeTestbed.replace(/^.*\//, "") : "none",
+    package: gemArts ? `${gemArts} artifact${gemArts === 1 ? "" : "s"}` : "select & cut",
+    workspace: wsVal || "gem home",
+    target: (targetRendered ? document.getElementById("target")?.value : "") || "eve · flue · …",
+    deploy: deployed ? (runState || "live") : "ship",
+  };
+  return { idx, subs };
+}
+function renderRail(){
+  const { idx, subs } = railState();
+  document.querySelectorAll("#rail .station").forEach((st, i) => {
+    st.classList.remove("done", "active", "todo");
+    st.classList.add(i < idx ? "done" : i === idx ? "active" : "todo");
+    const sub = st.querySelector(".sub"); if (sub) sub.textContent = subs[st.dataset.stage] || "";
+  });
+}
+document.getElementById("rail").addEventListener("click", e => {
+  const st = e.target.closest(".station"); if (!st) return;
+  const stage = st.dataset.stage;
+  if (stage === "testbed") { if (!activeTestbed) openOrCreateTestbed(); else document.querySelector(".pane.left")?.scrollTo({ top: 0, behavior: "smooth" }); }
+  else if (stage === "package") { previewMode = "summary"; renderPreview(); }
+  else if (stage === "workspace") { document.getElementById("wsSelect")?.scrollIntoView({ behavior: "smooth", block: "center" }); document.getElementById("wsSelect")?.focus(); }
+  else if (stage === "target") { previewMode = "materialize"; renderPreview(); }
+  else if (stage === "deploy") { previewMode = "managed"; renderPreview(); document.getElementById("runPanel")?.scrollIntoView({ behavior: "smooth", block: "center" }); }
+  renderRail();
+});
+document.getElementById("wsSelect").addEventListener("change", renderRail);
+renderRail();
 </script>
 </body>
 </html>
