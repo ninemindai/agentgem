@@ -22,6 +22,7 @@
     margin:0;font-family:var(--ui);font-size:14px;line-height:1.5;color:var(--ink);
     background:radial-gradient(1200px 600px at 88% -12%,rgba(176,132,54,.07),transparent 60%),radial-gradient(900px 500px at -6% 112%,rgba(31,107,79,.06),transparent 55%),var(--paper);
     background-attachment:fixed;-webkit-font-smoothing:antialiased;
+    display:flex;flex-direction:column;height:100vh;overflow:hidden;
   }
   body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.5;mix-blend-mode:multiply;
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E")}
@@ -38,7 +39,20 @@
   .testbed-chip .path{font-family:var(--mono);color:var(--ink-2);font-size:12px}
   .testbed-chip .path b{color:var(--ink)}
   .testbed-chip button{font:600 11px/1 var(--ui);padding:5px 10px;border-radius:99px}
-  main{position:relative;z-index:1;display:grid;grid-template-columns:1.04fr .96fr;gap:0;height:calc(100vh - 58px)}
+  main{position:relative;z-index:1;display:grid;grid-template-columns:1.04fr .96fr;gap:0;flex:1;min-height:0}
+  /* stage rail */
+  .rail{position:relative;z-index:1;flex:none;display:flex;align-items:stretch;padding:11px 26px 13px;border-bottom:1px solid var(--line);background:var(--paper-2);overflow:hidden}
+  .rail::after{content:"";position:absolute;left:62px;right:62px;top:calc(50% - 7px);height:2px;background:var(--line-2);z-index:0}
+  .station{position:relative;z-index:1;flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;background:transparent;border:0;font:inherit;color:inherit;padding:0}
+  .station .node{width:30px;height:30px;display:grid;place-items:center;border-radius:8px;background:var(--card);border:1.5px solid var(--line-2);transition:.25s ease;transform:rotate(45deg);box-shadow:0 4px 10px -6px rgba(33,28,21,.4)}
+  .station .node svg{transform:rotate(-45deg);width:15px;height:15px;color:var(--muted);transition:.25s}
+  .station .label{font-family:var(--display);font-weight:600;font-size:12.5px;letter-spacing:.01em}
+  .station .sub{font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:.03em;min-height:11px}
+  .station.done .node{background:var(--gem);border-color:var(--gem)} .station.done .node svg{color:#fff}
+  .station.active .node{background:var(--accent);border-color:var(--accent);transform:rotate(45deg) scale(1.1);box-shadow:0 0 0 5px var(--accent-soft),0 8px 18px -8px rgba(154,51,36,.7)}
+  .station.active .node svg{color:#fff} .station.active .label{color:var(--accent-ink)}
+  .station.todo .label,.station.todo .sub{color:var(--muted)}
+  .station:hover .node{transform:rotate(45deg) translateY(-2px)} .station.active:hover .node{transform:rotate(45deg) scale(1.1) translateY(-2px)}
   .pane{padding:18px 22px;overflow:auto}.pane.left{border-right:1px solid var(--line)}
   .pane::-webkit-scrollbar{width:10px}.pane::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:99px;border:3px solid var(--paper)}
   /* ── groups & rows ── */
@@ -173,6 +187,13 @@
   <span class="spacer" style="flex:1"></span>
   <span id="testbedChip" class="testbed-chip"></span>
 </header>
+<nav class="rail" id="rail">
+  <button class="station" data-stage="testbed"><span class="node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M3 12h18"/></svg></span><span class="label">Testbed</span><span class="sub" data-sub="testbed"></span></button>
+  <button class="station" data-stage="package"><span class="node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5"/></svg></span><span class="label">Package</span><span class="sub" data-sub="package"></span></button>
+  <button class="station" data-stage="workspace"><span class="node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18v12H3z"/><path d="M3 7l3-4h12l3 4"/></svg></span><span class="label">Workspace</span><span class="sub" data-sub="workspace"></span></button>
+  <button class="station" data-stage="target"><span class="node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg></span><span class="label">Target</span><span class="sub" data-sub="target"></span></button>
+  <button class="station" data-stage="deploy"><span class="node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg></span><span class="label">Deploy</span><span class="sub" data-sub="deploy"></span></button>
+</nav>
 <main>
   <section class="pane left">
     <div class="bar"><input id="name" type="text" placeholder="gem name" value="gem" style="flex:1" /></div>
@@ -313,6 +334,7 @@ async function load() {
   filterRows();   // apply any active filters to the freshly rendered rows
   refresh();
   renderTestDrive();
+  renderRail();
 }
 function hayForRow(kind, name, projRoot) {
   if (kind === "skills") { const a = inv.skills.find(s => s.name === name); return a ? `${a.name} ${a.description || ""} ${a.source || ""} ${a.content || ""}` : ""; }
@@ -512,6 +534,7 @@ function summaryHtml(p){
 }
 function renderPreview(){
   const el = document.getElementById("preview");
+  if (typeof renderRail === "function") renderRail();
   if (previewMode === "materialize") { renderMaterialize(); document.querySelectorAll("#preview-modes button").forEach(b => b.classList.toggle("on", b.dataset.pmode === previewMode)); return; }
   if (previewMode === "managed") { renderPublish(); document.querySelectorAll("#preview-modes button").forEach(b => b.classList.toggle("on", b.dataset.pmode === previewMode)); return; }
   const p = window.__gem;
@@ -919,6 +942,52 @@ document.getElementById("tdCopy").onclick = () => {
   navigator.clipboard?.writeText(`cd ${activeTestbed} && claude`);
   const b = document.getElementById("tdCopy"); b.textContent = "Copied ✓"; setTimeout(()=>b.textContent="Copy", 1400);
 };
+
+// ── Lifecycle stage rail ──────────────────────────────────────────────
+// Reflects observable state across the Testbed→Package→Workspace→Target→Deploy flow.
+// Stations before the current one are "done", the current one "active", the rest "todo".
+// Clicking a station performs the natural navigation for that stage.
+const RAIL_STAGES = ["testbed", "package", "workspace", "target", "deploy"];
+function railState(){
+  const wsVal = document.getElementById("wsSelect")?.value || "";
+  const gemArts = (window.__gem && window.__gem.artifacts || []).length;
+  const targetRendered = /●/.test(document.getElementById("wsTargets")?.textContent || "") || previewMode === "materialize";
+  const runState = (document.getElementById("runState")?.textContent || "").toLowerCase();
+  const deployed = /running|deploy|live|ready/.test(runState) || !!(document.getElementById("runUrl")?.querySelector("a"));
+  let idx = 0;                                  // testbed (setup)
+  if (activeTestbed) idx = 1;                   // package (have a testbed)
+  if (activeTestbed && wsVal) idx = 2;          // workspace (packaged + open)
+  if (idx >= 2 && targetRendered) idx = 3;      // target (rendered)
+  if (idx >= 3 && deployed) idx = 4;            // deploy
+  const subs = {
+    testbed: activeTestbed ? activeTestbed.replace(/^.*\//, "") : "none",
+    package: gemArts ? `${gemArts} artifact${gemArts === 1 ? "" : "s"}` : "select & cut",
+    workspace: wsVal || "gem home",
+    target: (targetRendered ? document.getElementById("target")?.value : "") || "eve · flue · …",
+    deploy: deployed ? (runState || "live") : "ship",
+  };
+  return { idx, subs };
+}
+function renderRail(){
+  const { idx, subs } = railState();
+  document.querySelectorAll("#rail .station").forEach((st, i) => {
+    st.classList.remove("done", "active", "todo");
+    st.classList.add(i < idx ? "done" : i === idx ? "active" : "todo");
+    const sub = st.querySelector(".sub"); if (sub) sub.textContent = subs[st.dataset.stage] || "";
+  });
+}
+document.getElementById("rail").addEventListener("click", e => {
+  const st = e.target.closest(".station"); if (!st) return;
+  const stage = st.dataset.stage;
+  if (stage === "testbed") { if (!activeTestbed) openOrCreateTestbed(); else document.querySelector(".pane.left")?.scrollTo({ top: 0, behavior: "smooth" }); }
+  else if (stage === "package") { previewMode = "summary"; renderPreview(); }
+  else if (stage === "workspace") { document.getElementById("wsSelect")?.scrollIntoView({ behavior: "smooth", block: "center" }); document.getElementById("wsSelect")?.focus(); }
+  else if (stage === "target") { previewMode = "materialize"; renderPreview(); }
+  else if (stage === "deploy") { previewMode = "managed"; renderPreview(); document.getElementById("runPanel")?.scrollIntoView({ behavior: "smooth", block: "center" }); }
+  renderRail();
+});
+document.getElementById("wsSelect").addEventListener("change", renderRail);
+renderRail();
 </script>
 </body>
 </html>
