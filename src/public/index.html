@@ -172,6 +172,7 @@
       <div class="bar" id="typeBar"></div>
     </div>
     <div class="bar" id="selbar"><strong style="flex:1;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)">Selection</strong><button id="all" class="ghost">Select all shown</button><button id="none" class="ghost">Clear</button></div>
+    <div class="bar"><button id="importBtn" class="ghost">⬇ Import from machine…</button><span class="d" id="importStatus" style="margin-left:8px"></span></div>
     <div id="inventory">Loading…</div>
   </section>
   <section class="pane right">
@@ -184,6 +185,16 @@
     </div>
   </section>
 </main>
+<div id="importModal" class="modal-bg" hidden>
+  <div class="modal">
+    <div class="modal-h"><strong class="t">Import from machine</strong><span class="src">~/.claude · ~/.agents · ~/.codex · ~/.hermes</span><button id="importClose" class="ghost" style="margin-left:auto">✕ Close</button></div>
+    <div class="modal-body" style="padding:14px"><div id="importInventory">Loading…</div></div>
+    <div class="modal-h" style="border-top:1px solid var(--line);border-bottom:0">
+      <span class="d">Writes real secrets into this testbed so it runs — don't commit <code>.mcp.json</code>/<code>settings.json</code>.</span>
+      <button id="importApply" style="margin-left:auto">Add to testbed</button>
+    </div>
+  </div>
+</div>
 <div id="modal" class="modal-bg" hidden>
   <div class="modal">
     <div class="modal-h"><strong class="t" id="modal-title"></strong><span class="src" id="modal-sub"></span><span class="seg" id="modal-modes"><button type="button" data-mode="md">Markdown</button><button type="button" data-mode="raw">Raw</button></span><button id="modal-x" class="ghost" style="margin-left:8px">✕ Close</button></div>
@@ -808,6 +819,33 @@ document.getElementById("wsTree").addEventListener("click", e => {
   document.getElementById("modal").hidden = false;
 });
 wsRefresh();
+const importSel = { skills: new Set(), mcpServers: new Set(), hooks: new Set(), includeInstructions: false };
+async function openImport(){
+  if(!activeTestbed){ alert("Create or open a testbed first."); return; }
+  importSel.skills.clear(); importSel.mcpServers.clear(); importSel.hooks.clear(); importSel.includeInstructions = false;
+  document.getElementById("importModal").hidden = false;
+  const gi = await (await fetch("/api/inventory")).json();
+  const grp = (title, items, kind) => items.length ? `<div class="group"><h2>${title}</h2>` + items.map(it =>
+    `<label class="row"><input type="checkbox" data-ikind="${kind}" data-name="${esc(it.name)}"> <span>${esc(it.name)}${it.source?` <span class="src">${esc(it.source)}</span>`:""}${(it.description||it.transport)?` <span class="d">— ${esc(it.description||it.transport)}</span>`:""}</span></label>`).join("") + `</div>` : "";
+  let h = grp("Skills", gi.skills, "skills") + grp("MCP servers", gi.mcpServers, "mcpServers") + grp("Hooks", gi.hooks, "hooks");
+  if(gi.instructions.length) h += `<div class="group"><h2>Instructions</h2><label class="row"><input type="checkbox" data-ikind="instructions"> <span>${esc(gi.instructions.map(i=>i.name).join(", "))}</span></label></div>`;
+  document.getElementById("importInventory").innerHTML = h;
+  document.querySelectorAll('#importInventory input[type=checkbox]').forEach(cb => cb.addEventListener("change", e => {
+    const k = e.target.dataset.ikind, n = e.target.dataset.name;
+    if(k === "instructions"){ importSel.includeInstructions = e.target.checked; return; }
+    const set = importSel[k]; if(e.target.checked) set.add(n); else set.delete(n);
+  }));
+}
+async function applyImport(){
+  const selection = { skills:[...importSel.skills], mcpServers:[...importSel.mcpServers], hooks:[...importSel.hooks], includeInstructions: importSel.includeInstructions };
+  const r = await (await fetch("/api/testbed/import", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({ root: activeTestbed, selection }) })).json();
+  document.getElementById("importModal").hidden = true;
+  document.getElementById("importStatus").textContent = `Imported ${r.written.length}${r.skipped.length?` · skipped ${r.skipped.length}`:""}`;
+  load();
+}
+document.getElementById("importBtn").onclick = openImport;
+document.getElementById("importClose").onclick = () => document.getElementById("importModal").hidden = true;
+document.getElementById("importApply").onclick = applyImport;
 let __runWs = null, __runPoll = null;
 async function runRefreshReady(name){
   const r = await (await fetch(`/api/run-ready?name=${encodeURIComponent(name)}&target=eve`)).json();
