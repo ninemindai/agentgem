@@ -44,7 +44,7 @@ describe("materialize", () => {
     expect(r.skipped.map((s) => s.type).sort()).toEqual(["hook", "mcp_server"]);
   });
 
-  it("eve: skills/instructions + http connection + stdio proxy runner; hooks skipped", () => {
+  it("eve: skills/instructions + http connection; stdio + hooks skipped", () => {
     const r = materialize(gem([skill("review"), instr("X"), httpMcp("linear"), mcp("local"), hook()]), "eve");
     expect(r.files["agent/skills/review.md"]).toBe("# body");
     expect(r.files["agent/instructions.md"]).toContain("do this");
@@ -52,13 +52,10 @@ describe("materialize", () => {
     const conn = r.files["agent/connections/linear.ts"];
     expect(conn).toContain('url: "https://mcp.x/sse"');
     expect(conn).toContain('process.env["X_TOKEN"]'); // secret as env-var NAME, never a value
-    // stdio server -> a localhost connection + a generated proxy runner
-    expect(r.files["agent/connections/local.ts"]).toContain("url: \"http://127.0.0.1:7800/mcp\"");
-    const proxy = r.files["agent/proxies/local.mjs"];
-    expect(proxy).toContain("StdioClientTransport");
-    expect(proxy).toContain('command: "npx"');
-    expect(proxy).toContain("7800");
-    expect(r.files["agent/connections/local.proxy.mjs"]).toBeUndefined();
+    // stdio server -> unsupported (eve connections are URL-only); no connection, no proxy
+    expect(r.files["agent/connections/local.ts"]).toBeUndefined();
+    expect(r.files["agent/proxies/local.mjs"]).toBeUndefined();
+    expect(r.skipped.find((s) => s.artifact === "local")?.reason).toMatch(/stdio MCP unsupported/);
     expect(JSON.stringify(r.files)).not.toContain("<redacted>"); // no secret value anywhere
     // hooks unsupported -> skipped
     expect(r.skipped.map((s) => s.type)).toContain("hook");
@@ -72,7 +69,7 @@ describe("materialize", () => {
     expect(r.files["agent/skills/.._escape.md"]).toBeTruthy();
     expect(r.files["agent/connections/a_b.ts"]).toBeTruthy();
     expect(r.skipped.find((s) => s.artifact === "a?b")?.reason).toMatch(/collision/);
-    expect(r.skipped.find((s) => s.artifact === "missing")?.reason).toMatch(/no usable URL/);
+    expect(r.skipped.find((s) => s.artifact === "missing")?.reason).toMatch(/HTTP\/SSE URL/);
     expect(compatibility(gem([first, collision, invalid])).eve).toEqual({ supported: 1, skipped: 2 });
   });
 

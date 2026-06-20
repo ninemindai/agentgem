@@ -64,13 +64,11 @@ const eveConnection = (server: McpServerArtifact, url: string): string => {
     : "";
   return `import { defineMcpClientConnection } from "eve/connections";\n\nexport default defineMcpClientConnection({\n  url: ${JSON.stringify(url)},\n  description: ${JSON.stringify(server.name)}${auth}${headers},\n});\n`;
 };
-// Eve MCP connections: one TS file per server. http/sse -> a direct remote connection (auth reads
-// the secret from an env var name, never a value). stdio -> a localhost connection plus a generated
-// proxy runner under agent/proxies/ that the operator launches to bridge the stdio server to HTTP.
+// Eve MCP connections: one TS file per http/sse server (auth reads the secret from an env var name,
+// never a value). eve connections are URL-only, so stdio (and url-less http) servers are skipped.
 const mcpEveConnections = (servers: McpServerArtifact[]): MaterializeResult => {
   const files: FileTree = {};
   const skipped: SkippedArtifact[] = [];
-  let port = PROXY_BASE_PORT;
   for (const s of servers) {
     const segment = safePathSegment(s.name);
     const connectionPath = `agent/connections/${segment}.ts`;
@@ -86,13 +84,8 @@ const mcpEveConnections = (servers: McpServerArtifact[]): MaterializeResult => {
         continue;
       }
       files[connectionPath] = eveConnection(s, url);
-    } else if (s.transport === "stdio" && typeof s.config.command === "string") {
-      const p = port++;
-      const args = Array.isArray(s.config.args) ? s.config.args.filter((a): a is string => typeof a === "string") : [];
-      files[connectionPath] = eveConnection(s, `http://${PROXY_HOST}:${p}/mcp`);
-      files[`agent/proxies/${segment}.mjs`] = stdioProxyRunner(s.name, s.config.command, args, (s.secretRefs ?? []).map((r) => r.name), p);
     } else {
-      skipped.push({ artifact: s.name, type: "mcp_server", reason: `${s.transport} MCP has no usable URL or stdio command` });
+      skipped.push({ artifact: s.name, type: "mcp_server", reason: `eve connections require an HTTP/SSE URL; ${s.transport} MCP unsupported` });
     }
   }
   return { files, skipped };
