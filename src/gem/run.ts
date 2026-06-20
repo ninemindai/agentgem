@@ -2,6 +2,12 @@
 // Run/deploy the rendered eve project. Side-effecting orchestration (peer of workspaces.ts).
 // Process spawning is injected via ProcessRunner so command/env/state logic is unit-testable.
 import { spawn as nodeSpawn } from "node:child_process";
+import { existsSync, mkdirSync, rmSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { workspaceDir } from "./workspaces.js";
+import { readGemArchive } from "./archive.js";
+import { readArchiveDir, writeArchiveDir } from "./archiveFs.js";
+import { materialize } from "./targets.js";
 
 export interface ProcHandle {
   onLine(cb: (line: string, stream: "out" | "err") => void): void;
@@ -66,3 +72,75 @@ export const realRunner: ProcessRunner = {
     };
   },
 };
+
+// Run one command to completion; pipe its lines into `log`; resolve with the exit code.
+function runToEnd(runner: ProcessRunner, cmd: string, args: string[], cwd: string, env: NodeJS.ProcessEnv, log: string[]): Promise<number> {
+  return new Promise((resolve) => {
+    const h = runner.spawn(cmd, args, { cwd, env });
+    h.onLine((line) => pushLog(log, line));
+    h.onExit((code) => resolve(code ?? 0));
+  });
+}
+
+// Re-render eve into a stable .run/eve dir (preserving node_modules) and npm-install when needed.
+export async function ensureRunProject(name: string, runner: ProcessRunner, log: string[]): Promise<string> {
+  const dir = workspaceDir(name);
+  if (!existsSync(join(dir, "gem.json"))) throw new Error(`no workspace '${name}'`);
+  const gem = readGemArchive(readArchiveDir(dir));
+  const { files } = materialize(gem, "eve");
+  const runDir = join(dir, ".run", "eve");
+  rmSync(join(runDir, "agent"), { recursive: true, force: true }); // drop stale skills/connections
+  mkdirSync(runDir, { recursive: true });
+  writeArchiveDir(runDir, files); // writes agent/* + package.json + tsconfig + ignore files
+  const pkg = readFileSync(join(runDir, "package.json"), "utf8");
+  const marker = join(runDir, ".installed-package.json");
+  const installed = existsSync(marker) ? readFileSync(marker, "utf8") : "";
+  if (!existsSync(join(runDir, "node_modules")) || installed !== pkg) {
+    const code = await runToEnd(runner, "npm", ["install", "--no-audit", "--no-fund"], runDir, process.env, log);
+    if (code !== 0) throw new Error("npm install failed");
+    writeFileSync(marker, pkg, "utf8");
+  }
+  return runDir;
+}
+
+const registry = new Map<string, { state: RunState; handle?: ProcHandle }>();
+const EVE_BIN = (runDir: string) => join(runDir, "node_modules", ".bin", "eve");
+
+export async function startLocal(name: string, runner: ProcessRunner = realRunner): Promise<RunState> {
+  for (const e of registry.values()) {
+    if (e.state.mode === "local" && e.state.state === "running") throw new Error("a local run is already active");
+  }
+  const state: RunState = { mode: "local", state: "installing", logTail: [] };
+  registry.set(name, { state });
+  try {
+    const runDir = await ensureRunProject(name, runner, state.logTail);
+    state.state = "building";
+    const buildCode = await runToEnd(runner, EVE_BIN(runDir), ["build"], runDir, process.env, state.logTail);
+    if (buildCode !== 0) { state.state = "failed"; return state; }
+    const handle = runner.spawn(EVE_BIN(runDir), ["start"], { cwd: runDir, env: process.env });
+    registry.set(name, { state, handle });
+    state.state = "running";
+    handle.onLine((line) => {
+      pushLog(state.logTail, line);
+      if (!state.url) { const u = parseEveUrl([line]); if (u) state.url = u; }
+    });
+    handle.onExit((code) => { if (state.state === "running") state.state = code === 0 ? "idle" : "failed"; });
+    return state;
+  } catch (err) {
+    state.state = "failed";
+    pushLog(state.logTail, err instanceof Error ? err.message : String(err));
+    return state;
+  }
+}
+
+export function stopLocal(name: string): { stopped: boolean } {
+  const e = registry.get(name);
+  if (!e?.handle) return { stopped: false };
+  e.handle.kill();
+  e.state.state = "idle";
+  return { stopped: true };
+}
+
+export function getRunStatus(name: string): RunState {
+  return registry.get(name)?.state ?? { mode: "local", state: "idle", logTail: [] };
+}
