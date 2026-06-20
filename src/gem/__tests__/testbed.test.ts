@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { scaffoldTestbed, importArtifacts } from "../testbed.js";
 import type { ConfigInventory } from "../types.js";
+import { introspectProject } from "../introspect.js";
+import { buildGem } from "../buildGem.js";
 
 let root: string;
 beforeEach(() => { root = mkdtempSync(join(tmpdir(), "tb-")); });
@@ -59,5 +61,39 @@ describe("importArtifacts — skills + instructions", () => {
     scaffoldTestbed(root, "x");
     const r = importArtifacts(root, { skills: ["nope"] }, inv({}));
     expect(r.skipped).toContainEqual({ artifact: "nope", reason: "not found in global inventory" });
+  });
+});
+
+describe("importArtifacts — mcp + hooks + containment", () => {
+  const rawMcp = inv({ mcpServers: [{ type: "mcp_server", name: "gh", transport: "stdio", config: { command: "npx", env: { GH_TOKEN: "ghp_realsecretvalue" } }, source: "user" }] });
+
+  it("merges raw MCP config into .mcp.json, preserving existing servers", () => {
+    scaffoldTestbed(root, "x");
+    writeFileSync(join(root, ".mcp.json"), JSON.stringify({ mcpServers: { keep: { command: "k" } } }));
+    const r = importArtifacts(root, { mcpServers: ["gh"] }, rawMcp);
+    const mcp = JSON.parse(readFileSync(join(root, ".mcp.json"), "utf8"));
+    expect(mcp.mcpServers.keep).toBeDefined();                 // existing preserved
+    expect(mcp.mcpServers.gh.env.GH_TOKEN).toBe("ghp_realsecretvalue"); // raw, so testbed runs
+    expect(r.written).toContainEqual({ type: "mcp_server", name: "gh", overwritten: false });
+  });
+
+  it("appends a hook group into settings.json without duplicating on re-import", () => {
+    scaffoldTestbed(root, "x");
+    const rawHook = inv({ hooks: [{ type: "hook", name: "PreToolUse · Bash", event: "PreToolUse", matcher: "Bash", config: { matcher: "Bash", hooks: [{ type: "command", command: "./g.sh" }] }, source: "user" }] });
+    importArtifacts(root, { hooks: ["PreToolUse · Bash"] }, rawHook);
+    importArtifacts(root, { hooks: ["PreToolUse · Bash"] }, rawHook); // twice
+    const s = JSON.parse(readFileSync(join(root, ".claude", "settings.json"), "utf8"));
+    expect(s.hooks.PreToolUse).toHaveLength(1); // deduped
+  });
+
+  it("CONTAINMENT: raw secret in testbed, but the packaged Gem is redacted", () => {
+    scaffoldTestbed(root, "x");
+    importArtifacts(root, { mcpServers: ["gh"] }, rawMcp);
+    // package the testbed: introspectProject redacts again
+    const proj = introspectProject(root);
+    const gem = buildGem({ skills: [], mcpServers: [], instructions: [], hooks: [], projects: [proj] },
+      { projects: { [root]: { mcpServers: ["gh"] } } }, { name: "g" });
+    expect(JSON.stringify(gem)).not.toContain("ghp_realsecretvalue"); // never leaks into the Gem
+    expect(gem.requiredSecrets).toContainEqual({ name: "GH_TOKEN", artifact: "gh", location: "env.GH_TOKEN" });
   });
 });

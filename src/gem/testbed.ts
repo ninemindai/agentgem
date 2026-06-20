@@ -6,6 +6,15 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { ConfigInventory } from "./types.js";
 
+function readJson(abs: string): Record<string, unknown> {
+  try { const v = JSON.parse(readFileSync(abs, "utf8")); return v && typeof v === "object" && !Array.isArray(v) ? v : {}; }
+  catch { return {}; }
+}
+function writeJson(abs: string, obj: unknown): void {
+  mkdirSync(dirname(abs), { recursive: true });
+  writeFileSync(abs, JSON.stringify(obj, null, 2) + "\n", "utf8");
+}
+
 function writeIfAbsent(root: string, rel: string, content: string, created: string[]): void {
   const abs = join(root, rel);
   if (existsSync(abs)) return;
@@ -66,6 +75,34 @@ export function importArtifacts(root: string, selection: ImportSelection, rawInv
       upsertMarkedBlock(root, "CLAUDE.md", ins.name, ins.content);
       written.push({ type: "instructions", name: ins.name, overwritten: false });
     }
+  }
+
+  for (const name of selection.mcpServers ?? []) {
+    const m = rawInv.mcpServers.find((s) => s.name === name);
+    if (!m) { skipped.push({ artifact: name, reason: "not found in global inventory" }); continue; }
+    const abs = join(root, ".mcp.json");
+    const doc = readJson(abs);
+    const servers = (doc.mcpServers && typeof doc.mcpServers === "object" ? doc.mcpServers : {}) as Record<string, unknown>;
+    const overwritten = name in servers;
+    servers[name] = m.config; // raw config — local testbed only
+    doc.mcpServers = servers;
+    writeJson(abs, doc);
+    written.push({ type: "mcp_server", name, overwritten });
+  }
+
+  for (const name of selection.hooks ?? []) {
+    const h = rawInv.hooks.find((x) => x.name === name);
+    if (!h) { skipped.push({ artifact: name, reason: "not found in global inventory" }); continue; }
+    const abs = join(root, ".claude", "settings.json");
+    const doc = readJson(abs);
+    const hooks = (doc.hooks && typeof doc.hooks === "object" ? doc.hooks : {}) as Record<string, unknown[]>;
+    const groups = Array.isArray(hooks[h.event]) ? hooks[h.event] : [];
+    const exists = groups.some((g) => JSON.stringify(g) === JSON.stringify(h.config));
+    if (!exists) groups.push(h.config);
+    hooks[h.event] = groups;
+    doc.hooks = hooks;
+    writeJson(abs, doc);
+    written.push({ type: "hook", name, overwritten: exists });
   }
 
   return { written, skipped };
