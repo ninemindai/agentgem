@@ -29,6 +29,9 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.104.2
         version: 0.104.2(zod@4.4.3)
+      dotenv:
+        specifier: ^17.4.2
+        version: 17.4.2
       tslib:
         specifier: ^2.8.1
         version: 2.8.1

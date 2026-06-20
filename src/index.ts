@@ -1,4 +1,5 @@
 // src/index.ts
+import "dotenv/config"; // load .env into process.env before anything reads it
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
