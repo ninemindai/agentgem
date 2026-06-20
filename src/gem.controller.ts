@@ -27,8 +27,10 @@ import {
   RunReadyQuerySchema, RunReadyResponseSchema, RunRequestSchema, RunStatusQuerySchema, RunStateSchema, RunStopRequestSchema, RunStopResponseSchema,
   TestbedScaffoldRequestSchema, TestbedScaffoldResponseSchema,
   TestbedImportRequestSchema, TestbedImportResponseSchema,
+  AgentcoreReadyResponseSchema, AgentcoreDeployRequestSchema, AgentcoreStatusQuerySchema, AgentcoreDeployStateSchema,
 } from "./schemas.js";
 import { runReadiness, startLocal, stopLocal, getRunStatus, deployVercel } from "./gem/run.js";
+import { agentcoreReadiness, deployAgentcore, getAgentcoreStatus } from "./gem/agentcoreRun.js";
 import { scaffoldTestbed, importArtifacts } from "./gem/testbed.js";
 import { resolveDirs, resolveProject } from "./resolveDir.js";
 import { pickFolder } from "./pickFolder.js";
@@ -137,6 +139,22 @@ export class GemController {
   @post("/run/stop", { body: RunStopRequestSchema, response: RunStopResponseSchema })
   async runStop(input: { body: z.infer<typeof RunStopRequestSchema> }): Promise<z.infer<typeof RunStopResponseSchema>> {
     return stopLocal(input.body.name);
+  }
+
+  @get("/agentcore/deploy-ready", { query: PickQuerySchema, response: AgentcoreReadyResponseSchema })
+  async agentcoreDeployReady(_input: { query: z.infer<typeof PickQuerySchema> }): Promise<z.infer<typeof AgentcoreReadyResponseSchema>> {
+    return agentcoreReadiness();
+  }
+
+  // OUTWARD-FACING: shells the agentcore CLI to deploy the workspace's rendered project to AWS.
+  @post("/agentcore/deploy", { body: AgentcoreDeployRequestSchema, response: AgentcoreDeployStateSchema })
+  async agentcoreDeploy(input: { body: z.infer<typeof AgentcoreDeployRequestSchema> }): Promise<z.infer<typeof AgentcoreDeployStateSchema>> {
+    return deployAgentcore(input.body.name);
+  }
+
+  @get("/agentcore/deploy-status", { query: AgentcoreStatusQuerySchema, response: AgentcoreDeployStateSchema })
+  async agentcoreDeployStatus(input: { query: z.infer<typeof AgentcoreStatusQuerySchema> }): Promise<z.infer<typeof AgentcoreDeployStateSchema>> {
+    return getAgentcoreStatus(input.query.name);
   }
 
   @get("/deploy-targets", { query: PickQuerySchema, response: DeployTargetsResponseSchema })

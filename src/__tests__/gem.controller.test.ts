@@ -291,3 +291,25 @@ describe("workspace ops", () => {
     }
   });
 });
+
+describe("agentcore deploy ops", () => {
+  it("GET /api/agentcore/deploy-ready returns booleans", async () => {
+    const r = await client.get("/api/agentcore/deploy-ready").expect(200);
+    expect(typeof r.body.cli).toBe("boolean");
+    expect(typeof r.body.awsCreds).toBe("boolean");
+  });
+
+  it("POST /api/agentcore/deploy without AWS creds is rejected", async () => {
+    const savedP = process.env.AWS_PROFILE, savedK = process.env.AWS_ACCESS_KEY_ID;
+    delete process.env.AWS_PROFILE; delete process.env.AWS_ACCESS_KEY_ID;
+    process.env.AGENTCORE_BIN = "/usr/bin/env"; // CLI present so the failure is specifically the creds gate
+    try {
+      const res = await client.post("/api/agentcore/deploy").send({ name: "gem" });
+      expect(res.status).toBeGreaterThanOrEqual(400);
+    } finally {
+      if (savedP !== undefined) process.env.AWS_PROFILE = savedP;
+      if (savedK !== undefined) process.env.AWS_ACCESS_KEY_ID = savedK;
+      delete process.env.AGENTCORE_BIN;
+    }
+  });
+});
