@@ -262,6 +262,88 @@ export const agent = new SandboxAgent({
   return { files: { [`${safePathSegment(gem.name)}.agent.ts`]: file }, skipped };
 };
 
+// ── Eve runnable-project scaffold (templates pinned to eve 0.11.x, from `eve init`) ──
+const EVE_TSCONFIG = `{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["agent/**/*.ts", "evals/**/*.ts", ".eve/**/*.d.ts"]
+}
+`;
+const EVE_AGENT_TS = `import { defineAgent } from "eve";
+
+export default defineAgent({
+  model: "anthropic/claude-sonnet-4.6",
+});
+`;
+const EVE_CHANNEL_TS = `import { eveChannel } from "eve/channels/eve";
+import { localDev, placeholderAuth, vercelOidc } from "eve/channels/auth";
+
+export default eveChannel({
+  auth: [
+    // Open on localhost for \`eve dev\` and the REPL; ignored in production.
+    localDev(),
+    // Lets the eve TUI and your Vercel deployments reach the deployed agent.
+    vercelOidc(),
+    // This placeholder will not allow browser requests in production.
+    // Replace it with your app's auth provider, like Auth.js or Clerk,
+    // or use none() for a public demo.
+    placeholderAuth(),
+  ],
+});
+`;
+const EVE_GITIGNORE = `node_modules
+.env*
+.eve
+.vercel
+.workflow-data
+.next
+.output
+.nitro
+dist
+.DS_Store
+*.tsbuildinfo
+`;
+const EVE_VERCELIGNORE = `node_modules
+.env*
+.eve
+.workflow-data
+.next
+.output
+.nitro
+dist
+`;
+const evePackageJson = (gemName: string): string =>
+  JSON.stringify({
+    name: safePathSegment(gemName).toLowerCase(),
+    version: "0.0.0",
+    type: "module",
+    imports: { "#*": "./agent/*", "#evals/*": "./evals/*" },
+    scripts: { build: "eve build", dev: "eve dev", start: "eve start", typecheck: "tsgo" },
+    dependencies: { "@vercel/connect": "0.2.2", ai: "7.0.0-beta.178", eve: "^0.11.7", zod: "4.4.3" },
+    devDependencies: { "@types/node": "24.x", "@typescript/native-preview": "7.0.0-dev.20260523.1" },
+    overrides: { ai: "7.0.0-beta.178" },
+    resolutions: { ai: "7.0.0-beta.178" },
+    engines: { node: "24.x" },
+  }, null, 2) + "\n";
+
+// Cross-cutting scaffold: the files `eve init` provides so the rendered agent/ source is runnable.
+const eveComposeProject = (gem: Gem): MaterializeResult => rendered({
+  "package.json": evePackageJson(gem.name),
+  "tsconfig.json": EVE_TSCONFIG,
+  "agent/agent.ts": EVE_AGENT_TS,
+  "agent/channels/eve.ts": EVE_CHANNEL_TS,
+  ".gitignore": EVE_GITIGNORE,
+  ".vercelignore": EVE_VERCELIGNORE,
+});
+
 // ── targets compose the shared renderers (convergence is literal, not duplicated) ──
 export const TARGET_REGISTRY: Record<TargetId, TargetSpec> = {
   claude: { id: "claude", label: "Claude", skill: skillSkillMd,       instructions: instructionsClaudeMd, mcp: mcpDotMcpJson, hook: hooksSettingsJson },
@@ -269,7 +351,7 @@ export const TARGET_REGISTRY: Record<TargetId, TargetSpec> = {
   agents: { id: "agents", label: "Agents", skill: skillSkillMd,       instructions: instructionsAgentsMd },
   hermes: { id: "hermes", label: "Hermes", skill: skillDescriptionMd, instructions: instructionsSoulMd },
   // Eve project layout (agent/...). Hooks are event-reacting code in Eve, not config -> unsupported.
-  eve:    { id: "eve",    label: "Eve",    skill: skillEveMd,         instructions: concatInstructions("agent/instructions.md"), mcp: mcpEveConnections },
+  eve:    { id: "eve",    label: "Eve",    skill: skillEveMd,         instructions: concatInstructions("agent/instructions.md"), mcp: mcpEveConnections, compose: eveComposeProject },
   // Flue project layout. Skills reuse SKILL.md; instructions fold into the composed agent file (no
   // standalone file -> the empty instructions renderer marks them handled, not skipped). MCP added in Task 2.
   flue:   { id: "flue",   label: "Flue",   skill: skillSkillMd,        instructions: () => ({}), mcp: mcpFlueConnections, compose: flueComposeAgent },

@@ -236,6 +236,24 @@ describe("openai-sandbox MCP (inline, native stdio)", () => {
   });
 });
 
+describe("eve compose (runnable project scaffold)", () => {
+  it("eve: compose emits a runnable project scaffold", () => {
+    const r = materialize(gem([skill("review")]), "eve");
+    const pkg = JSON.parse(r.files["package.json"]);
+    expect(pkg.name).toBe("p");                       // from gem name "p"
+    expect(pkg.engines.node).toBe("24.x");
+    expect(pkg.dependencies.eve).toBe("^0.11.7");
+    expect(pkg.dependencies.ai).toBe("7.0.0-beta.178");
+    expect(pkg.scripts.start).toBe("eve start");
+    expect(r.files["agent/agent.ts"]).toContain('model: "anthropic/claude-sonnet-4.6"');
+    expect(r.files["agent/agent.ts"]).toContain('defineAgent');
+    expect(r.files["agent/channels/eve.ts"]).toContain("eveChannel");
+    expect(r.files["tsconfig.json"]).toContain('"moduleResolution": "NodeNext"');
+    expect(r.files[".gitignore"]).toContain(".eve");
+    expect(r.files[".vercelignore"]).toContain("node_modules");
+  });
+});
+
 describe("compatibility", () => {
   it("summarizes supported/skipped per target", () => {
     const c = compatibility(gem([skill("a"), hook()]));
