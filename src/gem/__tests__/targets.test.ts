@@ -76,6 +76,22 @@ describe("materialize", () => {
     expect(compatibility(gem([first, collision, invalid])).eve).toEqual({ supported: 1, skipped: 2 });
   });
 
+  it("eve: strips disallowed skill frontmatter, keeps only description + body", () => {
+    const messy: SkillArtifact = {
+      type: "skill", name: "gst", source: "standalone", description: "Use for QA",
+      content: "---\nname: gst\npreamble-tier: 1\nallowed-tools:\n  - Bash\nmetadata:\n  priority: 1\n---\n# Body\n\nDo the thing.\n",
+    };
+    const out = materialize(gem([messy]), "eve").files["agent/skills/gst.md"];
+    expect(out).toBe('---\ndescription: "Use for QA"\n---\n# Body\n\nDo the thing.\n');
+    expect(out).not.toContain("preamble-tier");
+    expect(out).not.toContain("allowed-tools");
+  });
+
+  it("eve: skill with no description emits the body alone (no frontmatter)", () => {
+    const plain: SkillArtifact = { type: "skill", name: "p", source: "standalone", content: "# Just body\n" };
+    expect(materialize(gem([plain]), "eve").files["agent/skills/p.md"]).toBe("# Just body\n");
+  });
+
   it("eve maps non-Bearer header secrets with bracket-safe environment access", () => {
     const server: McpServerArtifact = {
       type: "mcp_server", name: "api", transport: "http", config: { url: "https://mcp.x/mcp" },

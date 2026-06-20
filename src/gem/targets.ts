@@ -36,9 +36,20 @@ const rendered = (files: FileTree): MaterializeResult => ({ files, skipped: [] }
 // ── shared convention renderers ──
 const skillSkillMd = (a: SkillArtifact): FileTree => ({ [`skills/${safePathSegment(a.name)}/SKILL.md`]: a.content });
 const skillDescriptionMd = (a: SkillArtifact): FileTree => ({ [`skills/${safePathSegment(a.name)}/DESCRIPTION.md`]: a.content });
-// Eve: a project under agent/. Flat markdown skills (frontmatter optional — description falls back
-// to the first line), a single agent/instructions.md, and one TS connection file per MCP server.
-const skillEveMd = (a: SkillArtifact): FileTree => ({ [`agent/skills/${safePathSegment(a.name)}.md`]: a.content });
+// Strip a leading YAML frontmatter block ("---\n … \n---\n") if present; return the body.
+function stripYamlFrontmatter(content: string): string {
+  const m = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/.exec(content);
+  return m ? content.slice(m[0].length) : content;
+}
+// Eve authored-skill shape allows only description/metadata/license. Re-emit a clean description
+// (from the artifact) over the original body; omit frontmatter entirely when there's no description
+// (eve falls back to the first body line). JSON.stringify yields a safe double-quoted YAML scalar.
+const skillEveMd = (a: SkillArtifact): FileTree => {
+  const body = stripYamlFrontmatter(a.content);
+  const desc = a.description?.trim();
+  const out = desc ? `---\ndescription: ${JSON.stringify(desc)}\n---\n${body}` : body;
+  return { [`agent/skills/${safePathSegment(a.name)}.md`]: out };
+};
 const eveConnection = (server: McpServerArtifact, url: string): string => {
   const refs = server.secretRefs ?? [];
   const authorization = refs.find((r) => r.location.toLowerCase() === "headers.authorization");
