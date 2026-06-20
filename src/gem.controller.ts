@@ -169,8 +169,7 @@ export class GemController {
     const inventory = introspectAll(input.body.dir, input.body.projects);
     const gem = buildGem(inventory, input.body.selection, { name: input.body.name ?? "gem", createdFrom: dirs.claudeDir });
     const target = (input.body.target ?? "claude-managed") as DeployTargetId;
-    const r = DEPLOY_REGISTRY[target].preview(gem);
-    return { payload: r.payload, skillsToRegister: r.skillsToRegister.map((s) => s.name), skipped: r.skipped, vaultSecrets: r.vaultSecrets };
+    return DEPLOY_REGISTRY[target].preview(gem);
   }
 
   // Whether the server is configured for the deploy backend (the UI gates on this). Boolean only.

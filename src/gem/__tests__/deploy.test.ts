@@ -16,15 +16,26 @@ describe("deploy registry", () => {
     expect(DEPLOY_REGISTRY["claude-managed"].label).toBe("Claude Managed Agents");
   });
 
-  it("preview equals renderManagedAgent", () => {
+  it("preview is a wire-ready tagged DeployPreview (kind=managed-agent)", () => {
     const p = gem([skill("review")]);
-    expect(DEPLOY_REGISTRY["claude-managed"].preview(p)).toEqual(renderManagedAgent(p));
+    const preview = DEPLOY_REGISTRY["claude-managed"].preview(p);
+    const render = renderManagedAgent(p);
+    expect(preview.kind).toBe("managed-agent");
+    expect(preview.skipped).toEqual(render.skipped);
+    expect(preview.vaultSecrets).toEqual(render.vaultSecrets);
+    if (preview.kind === "managed-agent") {
+      expect(preview.payload).toEqual(render.payload);
+      expect(preview.skillsToRegister).toEqual(render.skillsToRegister.map((s) => s.name));
+    }
   });
 
   it("ready reflects ANTHROPIC_API_KEY; deployTargetList carries it", () => {
     delete process.env.ANTHROPIC_API_KEY;
     expect(DEPLOY_REGISTRY["claude-managed"].ready()).toBe(false);
-    expect(deployTargetList()).toEqual([{ id: "claude-managed", label: "Claude Managed Agents", ready: false }]);
+    expect(deployTargetList()).toEqual([
+      { id: "claude-managed", label: "Claude Managed Agents", ready: false },
+      { id: "agentcore-managed", label: "AgentCore Harness", ready: false },
+    ]);
     process.env.ANTHROPIC_API_KEY = "sk-test";
     expect(DEPLOY_REGISTRY["claude-managed"].ready()).toBe(true);
   });

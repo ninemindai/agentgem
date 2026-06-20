@@ -191,10 +191,11 @@ describe("POST /api/materialize from an archive", () => {
 });
 
 describe("deploy registry ops", () => {
-  it("GET /api/deploy-targets lists claude-managed with a boolean ready", async () => {
+  it("GET /api/deploy-targets lists claude-managed and agentcore-managed with boolean ready", async () => {
     const r = await client.get("/api/deploy-targets").expect(200);
-    expect(r.body.targets.map((t: { id: string }) => t.id)).toEqual(["claude-managed"]);
+    expect(r.body.targets.map((t: { id: string }) => t.id)).toEqual(["claude-managed", "agentcore-managed"]);
     expect(typeof r.body.targets[0].ready).toBe("boolean");
+    expect(typeof r.body.targets[1].ready).toBe("boolean");
   });
 
   it("publish-preview routes through the registry (target optional, identical payload)", async () => {
@@ -214,6 +215,14 @@ describe("deploy registry ops", () => {
     } finally {
       if (saved !== undefined) process.env.ANTHROPIC_API_KEY = saved;
     }
+  });
+
+  it("publish-preview is tagged kind=managed-agent", async () => {
+    const r = await client.post("/api/publish-preview")
+      .send({ dir, selection: { skills: ["review"], includeInstructions: true }, name: "pub" }).expect(200);
+    expect(r.body.kind).toBe("managed-agent");
+    expect(r.body.payload.name).toBe("pub");           // existing managed-agent fields still present
+    expect(Array.isArray(r.body.skillsToRegister)).toBe(true);
   });
 });
 
@@ -311,5 +320,22 @@ describe("agentcore deploy ops", () => {
       if (savedK !== undefined) process.env.AWS_ACCESS_KEY_ID = savedK;
       delete process.env.AGENTCORE_BIN;
     }
+  });
+});
+
+describe("agentcore-managed deploy backend", () => {
+  it("deploy-targets lists agentcore-managed with a boolean ready", async () => {
+    const r = await client.get("/api/deploy-targets").expect(200);
+    const ac = r.body.targets.find((t: { id: string }) => t.id === "agentcore-managed");
+    expect(ac).toBeTruthy();
+    expect(typeof ac.ready).toBe("boolean");
+  });
+  it("publish-preview target=agentcore-managed renders a CreateHarness request, skips local skills, no secret", async () => {
+    const r = await client.post("/api/publish-preview")
+      .send({ dir, selection: { skills: ["review"], mcpServers: ["gh"], includeInstructions: true }, name: "pub", target: "agentcore-managed" }).expect(200);
+    expect(r.body.kind).toBe("agentcore-harness");
+    expect(r.body.request.harnessName).toMatch(/^[a-zA-Z][a-zA-Z0-9_]{0,39}$/);
+    expect(r.body.skipped.some((s: { artifact: string }) => s.artifact === "review")).toBe(true); // local skill skipped
+    expect(JSON.stringify(r.body)).not.toContain("ghp_secret");
   });
 });
