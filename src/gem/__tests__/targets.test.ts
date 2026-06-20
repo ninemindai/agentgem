@@ -61,12 +61,18 @@ describe("materialize", () => {
     expect(r.skipped.map((s) => s.type)).toContain("hook");
   });
 
+  it("eve: skill name starting with a non-alphanumeric is made eve-valid", () => {
+    const r = materialize(gem([skill("_gstack-command")]), "eve");
+    expect(r.files["agent/skills/gstack-command.md"]).toBeTruthy();
+    expect(r.files["agent/skills/_gstack-command.md"]).toBeUndefined();
+  });
+
   it("eve sanitizes file paths and reports invalid or colliding MCP artifacts", () => {
     const invalid: McpServerArtifact = { type: "mcp_server", name: "missing", transport: "http", config: {} };
     const first = httpMcp("a/b");
     const collision = httpMcp("a?b");
     const r = materialize(gem([skill("../escape"), first, collision, invalid]), "eve");
-    expect(r.files["agent/skills/.._escape.md"]).toBeTruthy();
+    expect(r.files["agent/skills/escape.md"]).toBeTruthy();
     expect(r.files["agent/connections/a_b.ts"]).toBeTruthy();
     expect(r.skipped.find((s) => s.artifact === "a?b")?.reason).toMatch(/collision/);
     expect(r.skipped.find((s) => s.artifact === "missing")?.reason).toMatch(/HTTP\/SSE URL/);

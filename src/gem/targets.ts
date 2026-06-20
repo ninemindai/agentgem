@@ -31,6 +31,10 @@ export function safePathSegment(name: string): string {
   return safe === "." || safe === ".." || safe.length === 0 ? "unnamed" : safe;
 }
 
+// Eve derives skill/connection names from the filename and requires the segment to START with an
+// alphanumeric character. Strip leading non-alphanumerics from the safe segment.
+const eveSegment = (name: string): string => safePathSegment(name).replace(/^[^A-Za-z0-9]+/, "") || "unnamed";
+
 const rendered = (files: FileTree): MaterializeResult => ({ files, skipped: [] });
 
 // ── shared convention renderers ──
@@ -48,7 +52,7 @@ const skillEveMd = (a: SkillArtifact): FileTree => {
   const body = stripYamlFrontmatter(a.content);
   const desc = a.description?.trim();
   const out = desc ? `---\ndescription: ${JSON.stringify(desc)}\n---\n${body}` : body;
-  return { [`agent/skills/${safePathSegment(a.name)}.md`]: out };
+  return { [`agent/skills/${eveSegment(a.name)}.md`]: out };
 };
 const eveConnection = (server: McpServerArtifact, url: string): string => {
   const refs = server.secretRefs ?? [];
@@ -70,7 +74,7 @@ const mcpEveConnections = (servers: McpServerArtifact[]): MaterializeResult => {
   const files: FileTree = {};
   const skipped: SkippedArtifact[] = [];
   for (const s of servers) {
-    const segment = safePathSegment(s.name);
+    const segment = eveSegment(s.name);
     const connectionPath = `agent/connections/${segment}.ts`;
     if (connectionPath in files) {
       skipped.push({ artifact: s.name, type: "mcp_server", reason: `path collision with an earlier mcp_server at ${connectionPath}` });
