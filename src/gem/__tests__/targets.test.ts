@@ -1,6 +1,6 @@
 // src/gem/__tests__/targets.test.ts
 import { describe, it, expect } from "vitest";
-import { materialize, compatibility, TARGET_REGISTRY, buildAgentcoreHarness } from "../targets.js";
+import { materialize, compatibility, TARGET_REGISTRY, buildAgentcoreHarness, agentcoreComposeProject } from "../targets.js";
 import type { Gem, GemArtifact, SkillArtifact, McpServerArtifact, InstructionsArtifact, HookArtifact } from "../types.js";
 
 const gem = (artifacts: GemArtifact[]): Gem => ({ name: "p", createdFrom: "/d", artifacts, checks: [], requiredSecrets: [] });
@@ -293,5 +293,20 @@ describe("compatibility", () => {
     expect(c.hermes).toEqual({ supported: 1, skipped: 1 });
     expect(c.eve).toEqual({ supported: 1, skipped: 1 }); // skill ok, hook unsupported
     expect(Object.keys(TARGET_REGISTRY).sort()).toEqual(["agents", "claude", "codex", "eve", "flue", "hermes", "openai-sandbox"]);
+  });
+});
+
+describe("agentcoreComposeProject", () => {
+  it("emits harness.json, scaffold, Dockerfile COPY, and a SECRETS checklist", () => {
+    const g = { ...gem([skill("scrape"), httpMcp("exa")]), requiredSecrets: [{ name: "X_TOKEN", artifact: "exa", location: "headers.Authorization" }] };
+    const { files, skipped } = agentcoreComposeProject(g);
+    expect(JSON.parse(files["app/p/harness.json"]).model.bedrockModelConfig.modelId).toBe("global.anthropic.claude-sonnet-4-6");
+    expect(files["agentcore/agentcore.json"]).toBeDefined();
+    expect(files["agentcore/aws-targets.json"]).toBeDefined();
+    expect(files["Dockerfile"]).toContain("COPY .agents/skills/ .agents/skills/");
+    expect(files["SECRETS.md"]).toContain("agentcore add credential");
+    expect(files["SECRETS.md"]).toContain("X_TOKEN");
+    expect(skipped).toHaveLength(0);
+    expect(JSON.stringify(files)).not.toContain("<redacted>");
   });
 });

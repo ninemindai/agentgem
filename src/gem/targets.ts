@@ -4,7 +4,7 @@
 // artifacts are skipped with a reason. Materialize re-renders an already-redacted Gem; the
 // runner rebinds real secrets from gem.requiredSecrets at install.
 import type {
-  Gem, ArtifactType,
+  Gem, ArtifactType, SecretRequirement,
   SkillArtifact, McpServerArtifact, InstructionsArtifact, HookArtifact,
 } from "./types.js";
 import { tomlMcpServers } from "./toml.js";
@@ -140,6 +140,37 @@ export const buildAgentcoreHarness = (gem: Gem): { harness: Record<string, unkno
   if (tools.length) harness.tools = tools;
   if (skills.length) harness.skills = skills.map((s) => ({ path: `.agents/skills/${safePathSegment(s.name)}` }));
   return { harness, skipped };
+};
+
+// ── AgentCore project scaffold (harness.json + deployment files) ──
+const AGENTCORE_DOCKERFILE = `# AgentCore harness custom image: bakes local skills onto the harness filesystem
+# so the harness.json path-skills resolve. Build with: agentcore deploy --build Container
+FROM public.ecr.aws/bedrock-agentcore/harness-base:latest
+COPY .agents/skills/ .agents/skills/
+`;
+const agentcoreProjectJson = (gemName: string): string =>
+  JSON.stringify({ version: "1.0", harnesses: [{ name: safePathSegment(gemName), path: `app/${safePathSegment(gemName)}` }] }, null, 2) + "\n";
+const AGENTCORE_AWS_TARGETS = JSON.stringify({ account: "REPLACE_WITH_ACCOUNT_ID", region: "us-west-2" }, null, 2) + "\n";
+const agentcoreSecretsMd = (secrets: SecretRequirement[]): string => {
+  if (!secrets.length) return `# Secrets\n\nThis agent declares no secrets.\n`;
+  const lines = secrets.map((s) => `- \`${s.name}\` (for ${s.artifact} at ${s.location}):\n  \`\`\`\n  agentcore add credential --type api-key --name ${s.name} --api-key <value>\n  \`\`\``);
+  return `# Secrets\n\nRegister each credential in AgentCore Identity, then replace \`REGION\`/\`ACCOUNT\` in the \`\${arn:...}\` placeholders in \`app/<agent>/harness.json\`:\n\n${lines.join("\n")}\n`;
+};
+
+// Cross-cutting scaffold: harness.json (the agent config) plus the files needed to deploy it.
+export const agentcoreComposeProject = (gem: Gem): MaterializeResult => {
+  const seg = safePathSegment(gem.name);
+  const { harness, skipped } = buildAgentcoreHarness(gem);
+  return {
+    files: {
+      [`app/${seg}/harness.json`]: JSON.stringify(harness, null, 2) + "\n",
+      "agentcore/agentcore.json": agentcoreProjectJson(gem.name),
+      "agentcore/aws-targets.json": AGENTCORE_AWS_TARGETS,
+      "Dockerfile": AGENTCORE_DOCKERFILE,
+      "SECRETS.md": agentcoreSecretsMd(gem.requiredSecrets),
+    },
+    skipped,
+  };
 };
 
 // Multiple instruction artifacts concatenate into the target's single canonical file,
