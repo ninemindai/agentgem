@@ -126,6 +126,12 @@
   #inventory .group:nth-child(3){animation-delay:.14s}#inventory .group:nth-child(4){animation-delay:.19s}
   #inventory .group:nth-child(n+5){animation-delay:.24s}
   @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+  .testdrive{margin-top:18px;border:1px solid var(--line);border-radius:var(--r);background:var(--card);overflow:hidden;box-shadow:var(--shadow)}
+  .testdrive .hd{display:flex;align-items:center;gap:9px;padding:11px 14px;border-bottom:1px solid var(--line);background:var(--paper-2);font-family:var(--display);font-weight:600}
+  .testdrive .pill{margin-left:auto;font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--gem);background:var(--gem-soft);padding:3px 8px;border-radius:99px}
+  .testdrive .cmd{display:flex;align-items:center;gap:10px;padding:12px 14px;font-family:var(--mono);font-size:12.5px}
+  .testdrive .cmd .dollar{color:var(--accent);font-weight:600}.testdrive .cmd code{flex:1}
+  .testdrive .ft{padding:0 14px 12px;color:var(--muted);font-size:11.5px}
 </style>
 </head>
 <body>
@@ -174,6 +180,11 @@
     <div class="bar" id="selbar"><strong style="flex:1;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)">Selection</strong><button id="all" class="ghost">Select all shown</button><button id="none" class="ghost">Clear</button></div>
     <div class="bar"><button id="importBtn" class="ghost">⬇ Import from machine…</button><span class="d" id="importStatus" style="margin-left:8px"></span></div>
     <div id="inventory">Loading…</div>
+    <div id="testdrive" class="testdrive" hidden>
+      <div class="hd">▶ Test-drive this agent <span class="pill">Claude Code</span></div>
+      <div class="cmd"><span class="dollar">$</span> <code id="tdCmd"></code> <button id="tdCopy" class="ghost">Copy</button></div>
+      <div class="ft">Runs your real harness in the testbed. Imported secrets are live there; the packaged gem stays redacted.</div>
+    </div>
   </section>
   <section class="pane right">
     <div class="bar"><strong style="flex:1">Gem (live)</strong><select id="target" title="materialize target" style="margin-left:auto"><option value="claude">Claude</option><option value="codex">Codex</option><option value="agents">Agents</option><option value="hermes">Hermes</option><option value="eve">Eve</option><option value="flue">Flue</option><option value="openai-sandbox">OpenAI Sandbox</option></select><span class="seg" id="preview-modes"><button type="button" data-pmode="summary">Summary</button><button type="button" data-pmode="json">JSON</button><button type="button" data-pmode="materialize">Materialize</button><button type="button" data-pmode="managed">Managed Agents</button></span><button id="copy" class="ghost">Copy</button><button id="dl">⬇ Download</button><button id="save" class="ghost" title="write the gem archive (manifest + lock + files) to a folder">💾 Save archive…</button><button id="dltar" class="ghost" title="download the gem archive as a .tar.gz">⬇ .tar.gz</button><span class="d" id="archiveStatus" style="margin-left:6px"></span></div>
@@ -277,6 +288,7 @@ async function load() {
   document.querySelectorAll('#inventory input[type=checkbox]').forEach(cb => cb.addEventListener("change", onToggle));
   restoreChecks();
   refresh();
+  renderTestDrive();
 }
 function hayForRow(kind, name, projRoot) {
   if (kind === "skills") { const a = inv.skills.find(s => s.name === name); return a ? `${a.name} ${a.description || ""} ${a.source || ""} ${a.content || ""}` : ""; }
@@ -885,6 +897,16 @@ document.getElementById("runStop").addEventListener("click", async () => {
   await fetch("/api/run/stop", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({ name: __runWs, target:"eve" }) });
   runStartPolling(__runWs);
 });
+function renderTestDrive(){
+  const card = document.getElementById("testdrive");
+  if(!activeTestbed){ card.hidden = true; return; }
+  card.hidden = false;
+  document.getElementById("tdCmd").textContent = `cd ${activeTestbed} && claude`;
+}
+document.getElementById("tdCopy").onclick = () => {
+  navigator.clipboard?.writeText(`cd ${activeTestbed} && claude`);
+  const b = document.getElementById("tdCopy"); b.textContent = "Copied ✓"; setTimeout(()=>b.textContent="Copy", 1400);
+};
 </script>
 </body>
 </html>
