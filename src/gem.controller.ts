@@ -24,7 +24,9 @@ import {
   DeployTargetsResponseSchema, DeployReadyQuerySchema,
   ArchiveRequestSchema, ArchiveResponseSchema,
   CreateWorkspaceRequestSchema, WorkspaceQuerySchema, RenderRequestSchema, WorkspaceNameRequestSchema, WorkspaceSummarySchema, WorkspaceDetailSchema, RenderResultSchema, ListWorkspacesResponseSchema, DeleteWorkspaceResponseSchema,
+  RunReadyQuerySchema, RunReadyResponseSchema, RunRequestSchema, RunStatusQuerySchema, RunStateSchema, RunStopRequestSchema, RunStopResponseSchema,
 } from "./schemas.js";
+import { runReadiness, startLocal, stopLocal, getRunStatus, deployVercel } from "./gem/run.js";
 import { resolveDirs, resolveProject } from "./resolveDir.js";
 import { pickFolder } from "./pickFolder.js";
 
@@ -108,6 +110,30 @@ export class GemController {
   async deleteWorkspace(input: { body: z.infer<typeof WorkspaceNameRequestSchema> }): Promise<z.infer<typeof DeleteWorkspaceResponseSchema>> {
     deleteWorkspace(input.body.name);
     return { deleted: input.body.name };
+  }
+
+  // Whether the server is configured to run/deploy the rendered eve project. Booleans only.
+  @get("/run-ready", { query: RunReadyQuerySchema, response: RunReadyResponseSchema })
+  async runReady(_input: { query: z.infer<typeof RunReadyQuerySchema> }): Promise<z.infer<typeof RunReadyResponseSchema>> {
+    return runReadiness();
+  }
+
+  // OUTWARD-FACING (local machine): run the rendered eve project locally or deploy it to Vercel.
+  @post("/run", { body: RunRequestSchema, response: RunStateSchema })
+  async run(input: { body: z.infer<typeof RunRequestSchema> }): Promise<z.infer<typeof RunStateSchema>> {
+    const { name, mode } = input.body;
+    const state = mode === "vercel" ? await deployVercel(name) : await startLocal(name);
+    return state;
+  }
+
+  @get("/run-status", { query: RunStatusQuerySchema, response: RunStateSchema })
+  async runStatus(input: { query: z.infer<typeof RunStatusQuerySchema> }): Promise<z.infer<typeof RunStateSchema>> {
+    return getRunStatus(input.query.name);
+  }
+
+  @post("/run/stop", { body: RunStopRequestSchema, response: RunStopResponseSchema })
+  async runStop(input: { body: z.infer<typeof RunStopRequestSchema> }): Promise<z.infer<typeof RunStopResponseSchema>> {
+    return stopLocal(input.body.name);
   }
 
   @get("/deploy-targets", { query: PickQuerySchema, response: DeployTargetsResponseSchema })

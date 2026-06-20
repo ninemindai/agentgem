@@ -217,6 +217,21 @@ describe("deploy registry ops", () => {
   });
 });
 
+describe("run ops", () => {
+  it("GET /api/run-ready returns booleans", async () => {
+    const res = await client.get("/api/run-ready").query({ name: "gem", target: "eve" });
+    expect(res.status).toBe(200);
+    expect(typeof res.body.local).toBe("boolean");
+    expect(typeof res.body.vercel).toBe("boolean");
+  });
+
+  it("POST /api/run mode=vercel without VERCEL_TOKEN is rejected", async () => {
+    delete process.env.VERCEL_TOKEN;
+    const res = await client.post("/api/run").send({ name: "gem", target: "eve", mode: "vercel" });
+    expect(res.status).toBeGreaterThanOrEqual(400);
+  });
+});
+
 describe("workspace ops", () => {
   it("create -> list -> render(eve) -> read -> delete", async () => {
     const home = mkdtempSync(join(tmpdir(), "wsh-"));
