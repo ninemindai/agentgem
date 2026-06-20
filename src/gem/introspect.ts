@@ -17,6 +17,7 @@ export interface IntrospectOptions {
   agentDir?: string;
   codexDir?: string;
   hermesDir?: string;
+  redact?: boolean; // default true; false yields raw config (writer-only)
 }
 
 function isObj(v: unknown): v is Record<string, unknown> {
@@ -92,9 +93,10 @@ function readRulesDir(rulesRoot: string): InstructionsArtifact[] {
   return out;
 }
 
-function serversToArtifacts(servers: Record<string, unknown>, source: string): McpServerArtifact[] {
+function serversToArtifacts(servers: Record<string, unknown>, source: string, redact = true): McpServerArtifact[] {
   return Object.entries(servers).map(([name, cfg]) => {
     const config = isObj(cfg) ? cfg : {};
+    if (!redact) return { type: "mcp_server", name, transport: inferTransport(config), config, source };
     const { config: redacted, secrets } = redactMcpConfig(config);
     return { type: "mcp_server", name, transport: inferTransport(config), config: redacted, source, secretRefs: secrets };
   });
@@ -109,7 +111,7 @@ function serversFromMcpJson(parsed: unknown): Record<string, unknown> {
 // Turn a config's `.hooks` event map into per-(event, matcher) artifacts. Works for both
 // settings.json (user/project) and a plugin's hooks/hooks.json — both nest under `.hooks`.
 // Each group object is redacted (defense; near-no-op for command strings).
-function hooksFromConfig(parsed: unknown, source: string): HookArtifact[] {
+function hooksFromConfig(parsed: unknown, source: string, redact = true): HookArtifact[] {
   const out: HookArtifact[] = [];
   if (!isObj(parsed) || !isObj(parsed.hooks)) return out;
   for (const [event, groups] of Object.entries(parsed.hooks)) {
@@ -117,6 +119,7 @@ function hooksFromConfig(parsed: unknown, source: string): HookArtifact[] {
     for (const g of groups) {
       if (!isObj(g)) continue;
       const matcher = typeof g.matcher === "string" && g.matcher.length ? g.matcher : undefined;
+      if (!redact) { out.push({ type: "hook", name: `${event}${matcher ? ` · ${matcher}` : ""}`, event, matcher, config: g, source }); continue; }
       const { config: redacted, secrets } = redactMcpConfig(g);
       out.push({ type: "hook", name: `${event}${matcher ? ` · ${matcher}` : ""}`, event, matcher, config: redacted, source, secretRefs: secrets });
     }
@@ -149,6 +152,7 @@ function dedupByName<T extends { name: string }>(items: T[]): T[] {
 }
 
 export function introspectConfig(opts: IntrospectOptions = {}): ConfigInventory {
+  const redact = opts.redact ?? true;
   const claudeDir = opts.claudeDir ?? join(homedir(), ".claude");
   const agentDir = opts.agentDir ?? join(homedir(), ".agents", "skills");
   const codexDir = opts.codexDir ?? join(homedir(), ".codex");
@@ -162,10 +166,10 @@ export function introspectConfig(opts: IntrospectOptions = {}): ConfigInventory 
 
   const settings = readJson(join(claudeDir, "settings.json"));
   if (isObj(settings) && isObj(settings.mcpServers)) {
-    mcpList.push(...serversToArtifacts(settings.mcpServers, "user"));
+    mcpList.push(...serversToArtifacts(settings.mcpServers, "user", redact));
   }
-  mcpList.push(...serversToArtifacts(serversFromMcpJson(readJson(join(claudeDir, ".mcp.json"))), "user"));
-  hookList.push(...hooksFromConfig(settings, "user"));
+  mcpList.push(...serversToArtifacts(serversFromMcpJson(readJson(join(claudeDir, ".mcp.json"))), "user", redact));
+  hookList.push(...hooksFromConfig(settings, "user", redact));
 
   const enabled = isObj(settings) && isObj(settings.enabledPlugins) ? settings.enabledPlugins : {};
   const installed = readJson(join(claudeDir, "plugins", "installed_plugins.json"));
@@ -175,9 +179,9 @@ export function introspectConfig(opts: IntrospectOptions = {}): ConfigInventory 
     const installPath = Array.isArray(entry) && isObj(entry[0]) ? (entry[0].installPath as string | undefined) : undefined;
     if (!installPath || typeof installPath !== "string") continue;
     const source = `plugin:${key}`;
-    mcpList.push(...serversToArtifacts(serversFromMcpJson(readJson(join(installPath, ".mcp.json"))), source));
+    mcpList.push(...serversToArtifacts(serversFromMcpJson(readJson(join(installPath, ".mcp.json"))), source, redact));
     skillList.push(...readSkillsDir(join(installPath, "skills"), source));
-    hookList.push(...hooksFromConfig(readJson(join(installPath, "hooks", "hooks.json")), source));
+    hookList.push(...hooksFromConfig(readJson(join(installPath, "hooks", "hooks.json")), source, redact));
   }
 
   skillList.push(...readSkillsDir(agentDir, "agent"));
