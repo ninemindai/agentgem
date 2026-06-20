@@ -100,6 +100,31 @@
   #preview::after{bottom:9px;right:9px;border-left:0;border-top:0;border-radius:0 0 7px 0}
   .psummary{display:flex;flex-direction:column;gap:15px}
   .phead{font-family:var(--display);font-weight:600;font-size:16px}
+  /* certificate composition */
+  .cert-h{display:flex;flex-direction:column;align-items:center;text-align:center;padding:4px 0 14px;border-bottom:1px solid var(--line);margin-bottom:14px}
+  .cert-h .gemmark{width:52px;height:52px;margin-bottom:8px;filter:drop-shadow(0 3px 6px rgba(33,28,21,.22))}
+  .cert-h .kicker{font-family:var(--mono);font-size:9.5px;letter-spacing:.26em;text-transform:uppercase;color:var(--muted)}
+  .cert-h .gname{font-family:var(--display);font-weight:600;font-size:25px;letter-spacing:-.015em;margin:2px 0 1px}
+  .cert-h .from{font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+  .gemmark .glint{animation:shimmer 3.6s ease-in-out infinite}
+  @keyframes shimmer{0%,100%{opacity:0}50%{opacity:.5}}
+  @media (prefers-reduced-motion:reduce){.gemmark .glint{animation:none}}
+  .seal{position:absolute;top:16px;right:18px;z-index:1;width:72px;height:72px;display:grid;place-items:center;text-align:center;border:2px solid var(--gem);border-radius:50%;color:var(--gem);transform:rotate(-11deg);background:var(--gem-soft);font-family:var(--display);font-weight:700;font-size:10px;letter-spacing:.1em;text-transform:uppercase;line-height:1.25;animation:stampin .5s cubic-bezier(.2,.8,.2,1) both}
+  .seal.draft{border-color:var(--line-2);color:var(--muted);background:transparent}
+  .seal small{display:block;font-family:var(--mono);font-weight:500;font-size:7px;letter-spacing:.04em;margin-top:2px}
+  @keyframes stampin{0%{opacity:0;transform:rotate(-11deg) scale(1.5)}60%{opacity:1;transform:rotate(-11deg) scale(.94)}100%{transform:rotate(-11deg) scale(1)}}
+  @media (prefers-reduced-motion:reduce){.seal{animation:none}}
+  .tally{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:14px;background:var(--card)}
+  .tally .t{padding:11px 6px;text-align:center;border-right:1px solid var(--line)}
+  .tally .t:last-child{border-right:0}
+  .tally .t .n{font-family:var(--display);font-weight:600;font-size:22px;line-height:1}
+  .tally .t .l{font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:4px}
+  .crow{display:flex;gap:10px;align-items:baseline;padding:8px 0;border-bottom:1px dashed var(--line)}
+  .crow .k{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);width:84px;flex:none}
+  .crow .v{flex:1;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .chip{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10.5px;padding:3px 8px;border-radius:99px;border:1px solid var(--line);color:var(--ink-2)}
+  .chip.secret{color:var(--accent);border-color:rgba(154,51,36,.3);background:var(--accent-soft)}
+  .chip.pass{color:var(--gem);border-color:rgba(31,107,79,.3);background:var(--gem-soft)}
   .pgroup h3{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted);margin:0 0 6px}
   .prow{display:flex;gap:8px;align-items:center;width:100%;text-align:left;border:0;background:transparent;padding:6px 8px;border-radius:7px;cursor:pointer;font:inherit;color:var(--ink)}
   .prow:hover{background:var(--accent-soft)}
@@ -447,12 +472,32 @@ document.getElementById("suggestChecks").addEventListener("click", async () => {
 let previewMode = "summary";
 function fmtSize(n){ return n < 1024 ? `${n} B` : `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} KB`; }
 function artSize(a){ return (a.type === "mcp_server" || a.type === "hook") ? JSON.stringify(a.config || {}).length : (a.content || "").length; }
+const GEM_MARK_SVG = `<svg class="gemmark" viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M32 4 58 24 32 60 6 24 Z" fill="#9a3324"/><path d="M32 4 58 24 32 26 Z" fill="#bb4a38"/><path d="M32 4 6 24 32 26 Z" fill="#7d2a1e"/><path d="M6 24 32 26 32 60 Z" fill="#8b2e21"/><path d="M58 24 32 26 32 60 Z" fill="#a8392a"/><path d="M6 24 58 24 32 26 Z" fill="#c8543f"/><path class="glint" d="M32 4 58 24 32 26 Z" fill="#ffd9a0"/></svg>`;
+// Render the live gem as a "certificate of authenticity": faceted mark, name, artifact tally,
+// the secret/check trust rows, a seal, then the per-artifact list (clickable to view).
 function summaryHtml(p){
   const arts = p.artifacts || [];
   if (!arts.length) return `<p class="d">Empty gem — select artifacts on the left to add them.</p>`;
   const total = arts.reduce((s, a) => s + artSize(a), 0);
+  const count = (t) => arts.filter(a => a.type === t).length;
+  const secrets = p.requiredSecrets || [];
+  const checks = p.checks || [];
+  const seal = checks.length
+    ? `<div class="seal" title="${checks.length} check${checks.length === 1 ? "" : "s"} declared">Checks<small>${checks.length} declared</small></div>`
+    : `<div class="seal draft" title="no checks declared">Draft<small>no checks</small></div>`;
+  let h = `<div class="psummary">${seal}`;
+  h += `<div class="cert-h">${GEM_MARK_SVG}<span class="kicker">Certificate of Authenticity</span><span class="gname">${esc(p.name)}</span><span class="from">${esc(p.createdFrom || "")} · ${fmtSize(total)}</span></div>`;
+  h += `<div class="tally">`
+    + `<div class="t"><div class="n">${count("skill")}</div><div class="l">Skills</div></div>`
+    + `<div class="t"><div class="n">${count("mcp_server")}</div><div class="l">MCP</div></div>`
+    + `<div class="t"><div class="n">${count("hook")}</div><div class="l">Hooks</div></div>`
+    + `<div class="t"><div class="n">${count("instructions")}</div><div class="l">Instr</div></div></div>`;
+  if (secrets.length) h += `<div class="crow"><span class="k">Secrets</span><span class="v">`
+    + secrets.map(s => `<span class="chip secret" title="${esc(s.artifact)} · ${esc(s.location)}">🔑 ${esc(s.name)}</span>`).join("") + `</span></div>`;
+  h += `<div class="crow"><span class="k">Checks</span><span class="v">`
+    + (checks.length ? checks.map(c => `<span class="chip pass">✓ ${esc(c.kind)} · ${esc(c.name)}</span>`).join("") : `<span class="d">none — add via the Checks panel below</span>`)
+    + `</span></div>`;
   const groups = [["Skills", "skill"], ["MCP servers", "mcp_server"], ["Instructions", "instructions"], ["Hooks", "hook"]];
-  let h = `<div class="psummary"><div class="phead"><strong>${esc(p.name)}</strong> <span class="d">· ${arts.length} artifact${arts.length === 1 ? "" : "s"} · ${fmtSize(total)}</span></div>`;
   for (const [label, type] of groups) {
     const items = arts.filter(a => a.type === type);
     if (!items.length) continue;
