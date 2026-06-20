@@ -33,6 +33,14 @@ actually run/deploy it.
   child (surfaced as a caveat).
 - **Local server only.** Run endpoints spawn processes and install deps — they
   are for the operator's own machine, never an untrusted caller.
+- **Local run needs a host sandbox runtime (machine prerequisite).** eve's
+  `defaultBackend()` uses `microsandbox` locally; the generated scaffold adds the
+  `microsandbox` npm dep, but its **VM runtime** is a one-time host install
+  (`npx microsandbox install`, or run `eve dev` once, or have Docker running) —
+  outside agentgem, like requiring Node 24 or a Docker daemon. Until it's
+  present, `eve start` exits with an actionable error that the run module
+  surfaces verbatim in `logTail` (state `failed`). The **Vercel deploy path is
+  unaffected** — on Vercel, `defaultBackend()` uses Vercel Sandbox.
 
 ## Architecture
 
