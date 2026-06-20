@@ -44,7 +44,7 @@ describe("materialize", () => {
     expect(r.skipped.map((s) => s.type).sort()).toEqual(["hook", "mcp_server"]);
   });
 
-  it("eve: skills/instructions + http connection + stdio proxy runner; hooks skipped", () => {
+  it("eve: skills/instructions + http connection; stdio + hooks skipped", () => {
     const r = materialize(gem([skill("review"), instr("X"), httpMcp("linear"), mcp("local"), hook()]), "eve");
     expect(r.files["agent/skills/review.md"]).toBe("# body");
     expect(r.files["agent/instructions.md"]).toContain("do this");
@@ -52,16 +52,19 @@ describe("materialize", () => {
     const conn = r.files["agent/connections/linear.ts"];
     expect(conn).toContain('url: "https://mcp.x/sse"');
     expect(conn).toContain('process.env["X_TOKEN"]'); // secret as env-var NAME, never a value
-    // stdio server -> a localhost connection + a generated proxy runner
-    expect(r.files["agent/connections/local.ts"]).toContain("url: \"http://127.0.0.1:7800/mcp\"");
-    const proxy = r.files["agent/proxies/local.mjs"];
-    expect(proxy).toContain("StdioClientTransport");
-    expect(proxy).toContain('command: "npx"');
-    expect(proxy).toContain("7800");
-    expect(r.files["agent/connections/local.proxy.mjs"]).toBeUndefined();
+    // stdio server -> unsupported (eve connections are URL-only); no connection, no proxy
+    expect(r.files["agent/connections/local.ts"]).toBeUndefined();
+    expect(r.files["agent/proxies/local.mjs"]).toBeUndefined();
+    expect(r.skipped.find((s) => s.artifact === "local")?.reason).toMatch(/stdio MCP unsupported/);
     expect(JSON.stringify(r.files)).not.toContain("<redacted>"); // no secret value anywhere
     // hooks unsupported -> skipped
     expect(r.skipped.map((s) => s.type)).toContain("hook");
+  });
+
+  it("eve: skill name starting with a non-alphanumeric is made eve-valid", () => {
+    const r = materialize(gem([skill("_gstack-command")]), "eve");
+    expect(r.files["agent/skills/gstack-command.md"]).toBeTruthy();
+    expect(r.files["agent/skills/_gstack-command.md"]).toBeUndefined();
   });
 
   it("eve sanitizes file paths and reports invalid or colliding MCP artifacts", () => {
@@ -69,11 +72,27 @@ describe("materialize", () => {
     const first = httpMcp("a/b");
     const collision = httpMcp("a?b");
     const r = materialize(gem([skill("../escape"), first, collision, invalid]), "eve");
-    expect(r.files["agent/skills/.._escape.md"]).toBeTruthy();
+    expect(r.files["agent/skills/escape.md"]).toBeTruthy();
     expect(r.files["agent/connections/a_b.ts"]).toBeTruthy();
     expect(r.skipped.find((s) => s.artifact === "a?b")?.reason).toMatch(/collision/);
-    expect(r.skipped.find((s) => s.artifact === "missing")?.reason).toMatch(/no usable URL/);
+    expect(r.skipped.find((s) => s.artifact === "missing")?.reason).toMatch(/HTTP\/SSE URL/);
     expect(compatibility(gem([first, collision, invalid])).eve).toEqual({ supported: 1, skipped: 2 });
+  });
+
+  it("eve: strips disallowed skill frontmatter, keeps only description + body", () => {
+    const messy: SkillArtifact = {
+      type: "skill", name: "gst", source: "standalone", description: "Use for QA",
+      content: "---\nname: gst\npreamble-tier: 1\nallowed-tools:\n  - Bash\nmetadata:\n  priority: 1\n---\n# Body\n\nDo the thing.\n",
+    };
+    const out = materialize(gem([messy]), "eve").files["agent/skills/gst.md"];
+    expect(out).toBe('---\ndescription: "Use for QA"\n---\n# Body\n\nDo the thing.\n');
+    expect(out).not.toContain("preamble-tier");
+    expect(out).not.toContain("allowed-tools");
+  });
+
+  it("eve: skill with no description emits the body alone (no frontmatter)", () => {
+    const plain: SkillArtifact = { type: "skill", name: "p", source: "standalone", content: "# Just body\n" };
+    expect(materialize(gem([plain]), "eve").files["agent/skills/p.md"]).toBe("# Just body\n");
   });
 
   it("eve maps non-Bearer header secrets with bracket-safe environment access", () => {
@@ -220,6 +239,24 @@ describe("openai-sandbox MCP (inline, native stdio)", () => {
     const r = materialize({ name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [bad] }, "openai-sandbox");
     expect(r.skipped.find((s) => s.artifact === "weird")).toBeTruthy();
     expect(r.files["p.agent.ts"]).not.toContain('from "@openai/agents"'); // no MCP import when none mapped
+  });
+});
+
+describe("eve compose (runnable project scaffold)", () => {
+  it("eve: compose emits a runnable project scaffold", () => {
+    const r = materialize(gem([skill("review")]), "eve");
+    const pkg = JSON.parse(r.files["package.json"]);
+    expect(pkg.name).toBe("p");                       // from gem name "p"
+    expect(pkg.engines.node).toBe("24.x");
+    expect(pkg.dependencies.eve).toBe("^0.11.7");
+    expect(pkg.dependencies.ai).toBe("7.0.0-beta.178");
+    expect(pkg.scripts.start).toBe("eve start");
+    expect(r.files["agent/agent.ts"]).toContain('model: "anthropic/claude-sonnet-4.6"');
+    expect(r.files["agent/agent.ts"]).toContain('defineAgent');
+    expect(r.files["agent/channels/eve.ts"]).toContain("eveChannel");
+    expect(r.files["tsconfig.json"]).toContain('"moduleResolution": "NodeNext"');
+    expect(r.files[".gitignore"]).toContain(".eve");
+    expect(r.files[".vercelignore"]).toContain("node_modules");
   });
 });
 

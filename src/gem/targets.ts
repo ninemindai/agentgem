@@ -31,14 +31,29 @@ export function safePathSegment(name: string): string {
   return safe === "." || safe === ".." || safe.length === 0 ? "unnamed" : safe;
 }
 
+// Eve derives skill/connection names from the filename and requires the segment to START with an
+// alphanumeric character. Strip leading non-alphanumerics from the safe segment.
+const eveSegment = (name: string): string => safePathSegment(name).replace(/^[^A-Za-z0-9]+/, "") || "unnamed";
+
 const rendered = (files: FileTree): MaterializeResult => ({ files, skipped: [] });
 
 // ── shared convention renderers ──
 const skillSkillMd = (a: SkillArtifact): FileTree => ({ [`skills/${safePathSegment(a.name)}/SKILL.md`]: a.content });
 const skillDescriptionMd = (a: SkillArtifact): FileTree => ({ [`skills/${safePathSegment(a.name)}/DESCRIPTION.md`]: a.content });
-// Eve: a project under agent/. Flat markdown skills (frontmatter optional — description falls back
-// to the first line), a single agent/instructions.md, and one TS connection file per MCP server.
-const skillEveMd = (a: SkillArtifact): FileTree => ({ [`agent/skills/${safePathSegment(a.name)}.md`]: a.content });
+// Strip a leading YAML frontmatter block ("---\n … \n---\n") if present; return the body.
+function stripYamlFrontmatter(content: string): string {
+  const m = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/.exec(content);
+  return m ? content.slice(m[0].length) : content;
+}
+// Eve authored-skill shape allows only description/metadata/license. Re-emit a clean description
+// (from the artifact) over the original body; omit frontmatter entirely when there's no description
+// (eve falls back to the first body line). JSON.stringify yields a safe double-quoted YAML scalar.
+const skillEveMd = (a: SkillArtifact): FileTree => {
+  const body = stripYamlFrontmatter(a.content);
+  const desc = a.description?.trim();
+  const out = desc ? `---\ndescription: ${JSON.stringify(desc)}\n---\n${body}` : body;
+  return { [`agent/skills/${eveSegment(a.name)}.md`]: out };
+};
 const eveConnection = (server: McpServerArtifact, url: string): string => {
   const refs = server.secretRefs ?? [];
   const authorization = refs.find((r) => r.location.toLowerCase() === "headers.authorization");
@@ -53,15 +68,13 @@ const eveConnection = (server: McpServerArtifact, url: string): string => {
     : "";
   return `import { defineMcpClientConnection } from "eve/connections";\n\nexport default defineMcpClientConnection({\n  url: ${JSON.stringify(url)},\n  description: ${JSON.stringify(server.name)}${auth}${headers},\n});\n`;
 };
-// Eve MCP connections: one TS file per server. http/sse -> a direct remote connection (auth reads
-// the secret from an env var name, never a value). stdio -> a localhost connection plus a generated
-// proxy runner under agent/proxies/ that the operator launches to bridge the stdio server to HTTP.
+// Eve MCP connections: one TS file per http/sse server (auth reads the secret from an env var name,
+// never a value). eve connections are URL-only, so stdio (and url-less http) servers are skipped.
 const mcpEveConnections = (servers: McpServerArtifact[]): MaterializeResult => {
   const files: FileTree = {};
   const skipped: SkippedArtifact[] = [];
-  let port = PROXY_BASE_PORT;
   for (const s of servers) {
-    const segment = safePathSegment(s.name);
+    const segment = eveSegment(s.name);
     const connectionPath = `agent/connections/${segment}.ts`;
     if (connectionPath in files) {
       skipped.push({ artifact: s.name, type: "mcp_server", reason: `path collision with an earlier mcp_server at ${connectionPath}` });
@@ -75,13 +88,8 @@ const mcpEveConnections = (servers: McpServerArtifact[]): MaterializeResult => {
         continue;
       }
       files[connectionPath] = eveConnection(s, url);
-    } else if (s.transport === "stdio" && typeof s.config.command === "string") {
-      const p = port++;
-      const args = Array.isArray(s.config.args) ? s.config.args.filter((a): a is string => typeof a === "string") : [];
-      files[connectionPath] = eveConnection(s, `http://${PROXY_HOST}:${p}/mcp`);
-      files[`agent/proxies/${segment}.mjs`] = stdioProxyRunner(s.name, s.config.command, args, (s.secretRefs ?? []).map((r) => r.name), p);
     } else {
-      skipped.push({ artifact: s.name, type: "mcp_server", reason: `${s.transport} MCP has no usable URL or stdio command` });
+      skipped.push({ artifact: s.name, type: "mcp_server", reason: `eve connections require an HTTP/SSE URL; ${s.transport} MCP unsupported` });
     }
   }
   return { files, skipped };
@@ -258,6 +266,88 @@ export const agent = new SandboxAgent({
   return { files: { [`${safePathSegment(gem.name)}.agent.ts`]: file }, skipped };
 };
 
+// ── Eve runnable-project scaffold (templates pinned to eve 0.11.x, from `eve init`) ──
+const EVE_TSCONFIG = `{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["agent/**/*.ts", "evals/**/*.ts", ".eve/**/*.d.ts"]
+}
+`;
+const EVE_AGENT_TS = `import { defineAgent } from "eve";
+
+export default defineAgent({
+  model: "anthropic/claude-sonnet-4.6",
+});
+`;
+const EVE_CHANNEL_TS = `import { eveChannel } from "eve/channels/eve";
+import { localDev, placeholderAuth, vercelOidc } from "eve/channels/auth";
+
+export default eveChannel({
+  auth: [
+    // Open on localhost for \`eve dev\` and the REPL; ignored in production.
+    localDev(),
+    // Lets the eve TUI and your Vercel deployments reach the deployed agent.
+    vercelOidc(),
+    // This placeholder will not allow browser requests in production.
+    // Replace it with your app's auth provider, like Auth.js or Clerk,
+    // or use none() for a public demo.
+    placeholderAuth(),
+  ],
+});
+`;
+const EVE_GITIGNORE = `node_modules
+.env*
+.eve
+.vercel
+.workflow-data
+.next
+.output
+.nitro
+dist
+.DS_Store
+*.tsbuildinfo
+`;
+const EVE_VERCELIGNORE = `node_modules
+.env*
+.eve
+.workflow-data
+.next
+.output
+.nitro
+dist
+`;
+const evePackageJson = (gemName: string): string =>
+  JSON.stringify({
+    name: safePathSegment(gemName).toLowerCase(),
+    version: "0.0.0",
+    type: "module",
+    imports: { "#*": "./agent/*", "#evals/*": "./evals/*" },
+    scripts: { build: "eve build", dev: "eve dev", start: "eve start", typecheck: "tsgo" },
+    dependencies: { "@vercel/connect": "0.2.2", ai: "7.0.0-beta.178", eve: "^0.11.7", zod: "4.4.3" },
+    devDependencies: { "@types/node": "24.x", "@typescript/native-preview": "7.0.0-dev.20260523.1" },
+    overrides: { ai: "7.0.0-beta.178" },
+    resolutions: { ai: "7.0.0-beta.178" },
+    engines: { node: "24.x" },
+  }, null, 2) + "\n";
+
+// Cross-cutting scaffold: the files `eve init` provides so the rendered agent/ source is runnable.
+const eveComposeProject = (gem: Gem): MaterializeResult => rendered({
+  "package.json": evePackageJson(gem.name),
+  "tsconfig.json": EVE_TSCONFIG,
+  "agent/agent.ts": EVE_AGENT_TS,
+  "agent/channels/eve.ts": EVE_CHANNEL_TS,
+  ".gitignore": EVE_GITIGNORE,
+  ".vercelignore": EVE_VERCELIGNORE,
+});
+
 // ── targets compose the shared renderers (convergence is literal, not duplicated) ──
 export const TARGET_REGISTRY: Record<TargetId, TargetSpec> = {
   claude: { id: "claude", label: "Claude", skill: skillSkillMd,       instructions: instructionsClaudeMd, mcp: mcpDotMcpJson, hook: hooksSettingsJson },
@@ -265,7 +355,7 @@ export const TARGET_REGISTRY: Record<TargetId, TargetSpec> = {
   agents: { id: "agents", label: "Agents", skill: skillSkillMd,       instructions: instructionsAgentsMd },
   hermes: { id: "hermes", label: "Hermes", skill: skillDescriptionMd, instructions: instructionsSoulMd },
   // Eve project layout (agent/...). Hooks are event-reacting code in Eve, not config -> unsupported.
-  eve:    { id: "eve",    label: "Eve",    skill: skillEveMd,         instructions: concatInstructions("agent/instructions.md"), mcp: mcpEveConnections },
+  eve:    { id: "eve",    label: "Eve",    skill: skillEveMd,         instructions: concatInstructions("agent/instructions.md"), mcp: mcpEveConnections, compose: eveComposeProject },
   // Flue project layout. Skills reuse SKILL.md; instructions fold into the composed agent file (no
   // standalone file -> the empty instructions renderer marks them handled, not skipped). MCP added in Task 2.
   flue:   { id: "flue",   label: "Flue",   skill: skillSkillMd,        instructions: () => ({}), mcp: mcpFlueConnections, compose: flueComposeAgent },
