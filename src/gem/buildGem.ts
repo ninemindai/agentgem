@@ -71,6 +71,20 @@ export function buildGem(
     }
   }
 
+  // Defense in depth: an mcp/hook artifact missing `secretRefs` was never redacted (e.g. it came
+  // from introspectConfig({redact:false}), which the import path uses). Re-redact it before it can
+  // enter the gem. Already-redacted artifacts carry a secretRefs array (possibly empty) and are
+  // left untouched, so this never double-redacts or corrupts existing refs.
+  const guarded = artifacts.map((a) => {
+    if ((a.type === "mcp_server" || a.type === "hook") && a.secretRefs === undefined) {
+      const { config, secrets } = redactMcpConfig(a.config);
+      return { ...a, config, secretRefs: secrets };
+    }
+    return a;
+  });
+  artifacts.length = 0;
+  artifacts.push(...guarded);
+
   const requiredSecrets: SecretRequirement[] = [];
   for (const a of artifacts) {
     if ((a.type === "mcp_server" || a.type === "hook") && a.secretRefs) {

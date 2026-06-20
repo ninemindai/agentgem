@@ -70,4 +70,24 @@ describe("buildGem", () => {
     });
     expect(JSON.stringify(gem.checks)).not.toContain("ghp_abcdefghijklmnopqrstuvwxyz0123");
   });
+
+  // Defense in depth: a RAW inventory (mcp config with real secret, secretRefs undefined — as
+  // introspectConfig({redact:false}) produces) must still yield a redacted gem, even via {all:true}.
+  it("re-redacts raw artifacts that arrive without secretRefs (e.g. all:true over a raw inventory)", () => {
+    const rawInv: ConfigInventory = {
+      skills: [], instructions: [], hooks: [],
+      mcpServers: [{ type: "mcp_server", name: "gh", transport: "stdio", config: { env: { GH_TOKEN: "ghp_realsecretvalue" } }, source: "user" }],
+    };
+    const gem = buildGem(rawInv, { all: true }, { name: "g" });
+    expect(JSON.stringify(gem)).not.toContain("ghp_realsecretvalue");           // raw value scrubbed
+    expect(gem.requiredSecrets).toContainEqual({ name: "GH_TOKEN", artifact: "gh", location: "env.GH_TOKEN" });
+  });
+
+  it("leaves already-redacted artifacts (secretRefs present) untouched", () => {
+    const gem = buildGem(inv, { mcpServers: ["gh"] }, { name: "g" });
+    const mcp = gem.artifacts.find((a) => a.type === "mcp_server");
+    const env = (mcp as { config: Record<string, Record<string, string>> }).config.env;
+    expect(env.GH_TOKEN).toBe("<redacted>");
+    expect(gem.requiredSecrets).toEqual([{ name: "GH_TOKEN", artifact: "gh", location: "env.GH_TOKEN" }]); // no dup
+  });
 });
