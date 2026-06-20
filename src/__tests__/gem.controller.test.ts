@@ -1,6 +1,6 @@
 // src/__tests__/gem.controller.test.ts
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import supertest from "supertest";
@@ -213,6 +213,35 @@ describe("deploy registry ops", () => {
       await client.post("/api/publish").send({ dir, selection: { skills: ["review"] }, requestId: "req-12345678" }).expect(500);
     } finally {
       if (saved !== undefined) process.env.ANTHROPIC_API_KEY = saved;
+    }
+  });
+});
+
+describe("testbed ops", () => {
+  it("scaffold then import (raw MCP) — testbed runs, packaged gem stays redacted", async () => {
+    const tb = mkdtempSync(join(tmpdir(), "tb-"));
+    try {
+      const sc = await client.post("/api/testbed/scaffold").send({ root: tb, name: "agent" }).expect(200);
+      expect(sc.body.created).toContain("CLAUDE.md");
+
+      // `dir` points at the global config fixture built in beforeAll (has mcp `gh` with ghp_secret)
+      const im = await client.post("/api/testbed/import")
+        .send({ root: tb, dir, selection: { skills: ["review"], mcpServers: ["gh"], includeInstructions: true } })
+        .expect(200);
+      expect(im.body.written.map((w: { name: string }) => w.name).sort()).toContain("gh");
+
+      // testbed .mcp.json holds the RAW secret (so `claude` runs there)
+      const mcp = JSON.parse(readFileSync(join(tb, ".mcp.json"), "utf8"));
+      expect(mcp.mcpServers.gh.env.GH_TOKEN).toBe("ghp_secret");
+
+      // but packaging the testbed yields a redacted gem
+      const g = await client.post("/api/gem")
+        .send({ projects: [tb], selection: { projects: { [tb]: { skills: ["review"], mcpServers: ["gh"] } } }, name: "p" })
+        .expect(200);
+      expect(JSON.stringify(g.body)).not.toContain("ghp_secret");
+      expect(g.body.requiredSecrets).toContainEqual({ name: "GH_TOKEN", artifact: "gh", location: "env.GH_TOKEN" });
+    } finally {
+      rmSync(tb, { recursive: true, force: true });
     }
   });
 });

@@ -25,8 +25,11 @@ import {
   ArchiveRequestSchema, ArchiveResponseSchema,
   CreateWorkspaceRequestSchema, WorkspaceQuerySchema, RenderRequestSchema, WorkspaceNameRequestSchema, WorkspaceSummarySchema, WorkspaceDetailSchema, RenderResultSchema, ListWorkspacesResponseSchema, DeleteWorkspaceResponseSchema,
   RunReadyQuerySchema, RunReadyResponseSchema, RunRequestSchema, RunStatusQuerySchema, RunStateSchema, RunStopRequestSchema, RunStopResponseSchema,
+  TestbedScaffoldRequestSchema, TestbedScaffoldResponseSchema,
+  TestbedImportRequestSchema, TestbedImportResponseSchema,
 } from "./schemas.js";
 import { runReadiness, startLocal, stopLocal, getRunStatus, deployVercel } from "./gem/run.js";
+import { scaffoldTestbed, importArtifacts } from "./gem/testbed.js";
 import { resolveDirs, resolveProject } from "./resolveDir.js";
 import { pickFolder } from "./pickFolder.js";
 
@@ -168,6 +171,17 @@ export class GemController {
     const gem = buildGem(inventory, input.body.selection, { name: input.body.name ?? "gem", createdFrom: dirs.claudeDir });
     const target = (input.body.target ?? "claude-managed") as DeployTargetId;
     return DEPLOY_REGISTRY[target].deploy(gem, input.body.requestId);
+  }
+
+  @post("/testbed/scaffold", { body: TestbedScaffoldRequestSchema, response: TestbedScaffoldResponseSchema })
+  async scaffoldTestbed(input: { body: z.infer<typeof TestbedScaffoldRequestSchema> }): Promise<z.infer<typeof TestbedScaffoldResponseSchema>> {
+    return scaffoldTestbed(resolveProject(input.body.root), input.body.name);
+  }
+
+  @post("/testbed/import", { body: TestbedImportRequestSchema, response: TestbedImportResponseSchema })
+  async importTestbed(input: { body: z.infer<typeof TestbedImportRequestSchema> }): Promise<z.infer<typeof TestbedImportResponseSchema>> {
+    const rawInv = introspectConfig({ ...resolveDirs(input.body.dir), redact: false });
+    return importArtifacts(resolveProject(input.body.root), input.body.selection, rawInv);
   }
 
   // Pop the OS-native folder picker and return the chosen absolute path (null if cancelled).

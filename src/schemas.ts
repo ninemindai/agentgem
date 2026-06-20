@@ -312,3 +312,27 @@ export const RunStateSchema = z.object({
 });
 export const RunStopRequestSchema = z.object({ name: z.string(), target: TargetIdSchema });
 export const RunStopResponseSchema = z.object({ stopped: z.boolean() });
+
+// ── Testbed (testbed-first on-ramp) ──
+export const TestbedImportSelectionSchema = z.object({
+  skills: z.array(z.string()).optional(),
+  mcpServers: z.array(z.string()).optional(),
+  hooks: z.array(z.string()).optional(),
+  includeInstructions: z.boolean().optional(),
+});
+export const TestbedScaffoldRequestSchema = z.object({ root: z.string(), name: z.string() });
+export const TestbedScaffoldResponseSchema = z.object({ root: z.string(), created: z.array(z.string()) });
+export const TestbedImportRequestSchema = z.object({
+  root: z.string(),
+  selection: TestbedImportSelectionSchema,
+  dir: z.string().optional(),
+});
+const ImportedRefSchema = z.object({
+  type: z.enum(["skill", "mcp_server", "instructions", "hook"]),
+  name: z.string(),
+  overwritten: z.boolean(),
+});
+export const TestbedImportResponseSchema = z.object({
+  written: z.array(ImportedRefSchema),
+  skipped: z.array(z.object({ artifact: z.string(), reason: z.string() })),
+});
