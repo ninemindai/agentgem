@@ -249,6 +249,7 @@ describe("eve compose (runnable project scaffold)", () => {
     expect(pkg.name).toBe("p");                       // from gem name "p"
     expect(pkg.engines.node).toBe("24.x");
     expect(pkg.dependencies.eve).toBe("^0.11.7");
+    expect(pkg.dependencies.microsandbox).toBe("^0.5.0");
     expect(pkg.dependencies.ai).toBe("7.0.0-beta.178");
     expect(pkg.scripts.start).toBe("eve start");
     expect(r.files["agent/agent.ts"]).toContain('model: "anthropic/claude-sonnet-4.6"');
