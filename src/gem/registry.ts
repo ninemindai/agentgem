@@ -1,6 +1,7 @@
 import type { Gem, GemArtifact, SecretRequirement, GemCheck } from "./types.js";
 import { readGemArchive, computeLock, verifyLock, writeGemArchive, readGemMeta } from "./archive.js";
-import type { FileTree } from "./targets.js";
+import { materialize } from "./targets.js";
+import type { FileTree, TargetId } from "./targets.js";
 
 export const REGISTRY_FORMAT_VERSION = 1;
 
@@ -219,4 +220,34 @@ export async function publishGem(args: {
 
   const { commit } = await args.publisher.putCommit(commitFiles, `publish ${key}@${args.version}`);
   return { ref: key, version: args.version, gemDigest, commit, path };
+}
+
+// ── install ────────────────────────────────────────────────────────────────
+
+export interface InstallPlan {
+  items: { key: string; version: string }[];
+  totalArtifacts: number;
+  requiredSecrets: SecretRequirement[];
+  overrides: Provenance["overrides"];
+  materialize?: { files: FileTree; skipped: { artifact: string; type: string; reason: string }[] };
+}
+
+export async function resolveInstall(args: {
+  refs: string[]; mode: "materialize" | "workspace"; target?: TargetId; source: RegistrySource;
+}): Promise<{ plan: InstallPlan; gem: Gem }> {
+  const index = await args.source.getIndex();
+  const graph = resolveGraph(args.refs, index);
+  const { gem, provenance } = await mergeGems(graph, args.source);
+
+  const plan: InstallPlan = {
+    items: provenance.items,
+    totalArtifacts: gem.artifacts.length,
+    requiredSecrets: gem.requiredSecrets,
+    overrides: provenance.overrides,
+  };
+  if (args.mode === "materialize") {
+    if (!args.target) throw new Error("materialize mode requires a target harness id");
+    plan.materialize = materialize(gem, args.target);
+  }
+  return { plan, gem };
 }
