@@ -56,6 +56,7 @@ export function githubRegistryPublisher(cfg: GithubCfg, http: Http = defaultHttp
   if (!cfg.token) throw new Error("publishing requires GITHUB_TOKEN");
   return {
     async putCommit(files: FileTree, message: string): Promise<{ commit: string }> {
+      // GitHub API asymmetry: GET a single ref is singular "git/ref/...", PATCH update is plural "git/refs/..." (below). Do not "fix" to plural — plural GET returns an array.
       const ref = (await ghJson(http, cfg, `git/ref/heads/${cfg.ref}`)) as { object: { sha: string } };
       const base = ref.object.sha;
       const baseCommit = (await ghJson(http, cfg, `git/commits/${base}`)) as { tree: { sha: string } };
