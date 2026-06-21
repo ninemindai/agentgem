@@ -29,16 +29,24 @@ describe("publishGem", () => {
   });
 
   it("is idempotent when re-publishing identical content at the same version", async () => {
-    const { publisher } = capturingPublisher();
+    const { publisher, commits } = capturingPublisher();
     const first = await publishGem({ gem, scope: "acme", version: "1.0.0", index: empty, publisher });
     const idx = updateIndex(empty, { key: "@acme/github-search", version: "1.0.0", path: first.path, gemDigest: first.gemDigest, dependencies: [] });
     await expect(publishGem({ gem, scope: "acme", version: "1.0.0", index: idx, publisher })).resolves.toMatchObject({ gemDigest: first.gemDigest });
+    expect(commits).toHaveLength(1); // second publish was a no-op — no second commit issued
   });
 
   it("refuses to overwrite an existing version with different content", async () => {
     const { publisher } = capturingPublisher();
     const idx = updateIndex(empty, { key: "@acme/github-search", version: "1.0.0", path: "items/acme/github-search/1.0.0", gemDigest: "sha256:OLD", dependencies: [] });
     await expect(publishGem({ gem, scope: "acme", version: "1.0.0", index: idx, publisher })).rejects.toThrow(/immutable|already published/i);
+  });
+
+  it("updateIndex throws when re-registering an existing version with a different digest", () => {
+    const idx = updateIndex(empty, { key: "@a/x", version: "1.0.0", path: "p", gemDigest: "sha256:OLD", dependencies: [] });
+    expect(() => updateIndex(idx, { key: "@a/x", version: "1.0.0", path: "p", gemDigest: "sha256:NEW", dependencies: [] })).toThrow(/immutable/i);
+    // re-registering with the SAME digest must not throw
+    expect(() => updateIndex(idx, { key: "@a/x", version: "1.0.0", path: "p", gemDigest: "sha256:OLD", dependencies: [] })).not.toThrow();
   });
 
   it("bumps latest only when the new version is higher", () => {

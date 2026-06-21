@@ -182,6 +182,10 @@ export function updateIndex(
   const items = { ...index.items };
   const existing = items[e.key];
   const versions = { ...(existing?.versions ?? {}) };
+  const existingVersion = existing?.versions[e.version];
+  if (existingVersion && existingVersion.gemDigest !== e.gemDigest) {
+    throw new Error(`${e.key}@${e.version} is immutable (published ${existingVersion.gemDigest}, attempted ${e.gemDigest})`);
+  }
   versions[e.version] = { path: e.path, gemDigest: e.gemDigest, dependencies: e.dependencies };
   const latest = existing && cmpSemver(existing.latest, e.version) >= 0 ? existing.latest : e.version;
   items[e.key] = { latest, versions };
@@ -203,7 +207,10 @@ export async function publishGem(args: {
 
   const prior = args.index.items[key]?.versions[args.version];
   if (prior && prior.gemDigest !== gemDigest) {
-    throw new Error(`${key}@${args.version} is already published and immutable (digest ${prior.gemDigest})`);
+    throw new Error(`${key}@${args.version} is already published and immutable (published ${prior.gemDigest}, attempted ${gemDigest})`);
+  }
+  if (prior && prior.gemDigest === gemDigest) {
+    return { ref: key, version: args.version, gemDigest, commit: "", path };
   }
 
   const nextIndex = updateIndex(args.index, { key, version: args.version, path, gemDigest, dependencies });
