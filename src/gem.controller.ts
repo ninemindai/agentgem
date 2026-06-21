@@ -28,10 +28,16 @@ import {
   TestbedScaffoldRequestSchema, TestbedScaffoldResponseSchema,
   TestbedImportRequestSchema, TestbedImportResponseSchema,
   AgentcoreReadyResponseSchema, AgentcoreDeployRequestSchema, AgentcoreStatusQuerySchema, AgentcoreDeployStateSchema,
+  RegistryReadyResponseSchema, RegistryIndexResponseSchema,
+  RegistryResolveRequestSchema, RegistryResolveResponseSchema,
+  RegistryInstallRequestSchema, RegistryInstallResponseSchema,
+  RegistryPublishRequestSchema, RegistryPublishResponseSchema,
 } from "./schemas.js";
 import { runReadiness, startLocal, stopLocal, getRunStatus, deployVercel } from "./gem/run.js";
 import { agentcoreReadiness, deployAgentcore, getAgentcoreStatus } from "./gem/agentcoreRun.js";
 import { scaffoldTestbed, importArtifacts } from "./gem/testbed.js";
+import { resolveInstall, publishGem } from "./gem/registry.js";
+import { githubRegistrySource, githubRegistryPublisher, registryConfigFromEnv } from "./gem/registryGithub.js";
 import { resolveDirs, resolveProject } from "./resolveDir.js";
 import { pickFolder } from "./pickFolder.js";
 
@@ -200,6 +206,58 @@ export class GemController {
   async importTestbed(input: { body: z.infer<typeof TestbedImportRequestSchema> }): Promise<z.infer<typeof TestbedImportResponseSchema>> {
     const rawInv = introspectConfig({ ...resolveDirs(input.body.dir), redact: false });
     return importArtifacts(resolveProject(input.body.root), input.body.selection, rawInv);
+  }
+
+  // Resolve the configured registry source, or throw a clear error the UI can surface.
+  private registrySource() {
+    const cfg = registryConfigFromEnv();
+    if (!cfg) throw new Error("the registry is not configured — set AGENTGEM_REGISTRY_REPO");
+    return { cfg, source: githubRegistrySource(cfg) };
+  }
+
+  @get("/registry/ready", { query: PickQuerySchema, response: RegistryReadyResponseSchema })
+  async registryReady(_input: { query: z.infer<typeof PickQuerySchema> }): Promise<z.infer<typeof RegistryReadyResponseSchema>> {
+    return { ready: registryConfigFromEnv() !== null };
+  }
+
+  @get("/registry/index", { query: PickQuerySchema, response: RegistryIndexResponseSchema })
+  async registryIndex(_input: { query: z.infer<typeof PickQuerySchema> }): Promise<z.infer<typeof RegistryIndexResponseSchema>> {
+    return this.registrySource().source.getIndex();
+  }
+
+  @post("/registry/resolve", { body: RegistryResolveRequestSchema, response: RegistryResolveResponseSchema })
+  async registryResolve(input: { body: z.infer<typeof RegistryResolveRequestSchema> }): Promise<z.infer<typeof RegistryResolveResponseSchema>> {
+    const { source } = this.registrySource();
+    const { plan } = await resolveInstall({ refs: input.body.refs, mode: input.body.mode, target: input.body.target as TargetId | undefined, source });
+    return { plan };
+  }
+
+  // Apply: materialize into `dest`, or land the merged Gem in the workspace store.
+  @post("/registry/install", { body: RegistryInstallRequestSchema, response: RegistryInstallResponseSchema })
+  async registryInstall(input: { body: z.infer<typeof RegistryInstallRequestSchema> }): Promise<z.infer<typeof RegistryInstallResponseSchema>> {
+    const { source } = this.registrySource();
+    const { plan, gem } = await resolveInstall({ refs: input.body.refs, mode: input.body.mode, target: input.body.target as TargetId | undefined, source });
+    if (input.body.mode === "materialize") {
+      if (!input.body.dest) throw new Error("materialize mode requires `dest`");
+      writeArchiveDir(input.body.dest, plan.materialize!.files);
+      return { plan, applied: { mode: "materialize", dest: input.body.dest, written: Object.keys(plan.materialize!.files) } };
+    }
+    const name = input.body.workspaceName ?? gem.name;
+    createWorkspace(name, gem);
+    return { plan, applied: { mode: "workspace", workspace: name } };
+  }
+
+  // OUTWARD-FACING: gated network publish. Reads a Gem from the workspace, writes its archive +
+  // updated index in one commit. Requires GITHUB_TOKEN (enforced by the publisher).
+  @post("/registry/publish", { body: RegistryPublishRequestSchema, response: RegistryPublishResponseSchema })
+  async registryPublish(input: { body: z.infer<typeof RegistryPublishRequestSchema> }): Promise<z.infer<typeof RegistryPublishResponseSchema>> {
+    const { cfg, source } = this.registrySource();
+    const gem = readGemArchive(readWorkspace(input.body.workspace).files); // WorkspaceDetail exposes .files, not .gem
+    const index = await source.getIndex();
+    return publishGem({
+      gem, scope: input.body.scope, name: input.body.name, version: input.body.version,
+      dependencies: input.body.dependencies, index, publisher: githubRegistryPublisher(cfg),
+    });
   }
 
   // Pop the OS-native folder picker and return the chosen absolute path (null if cancelled).

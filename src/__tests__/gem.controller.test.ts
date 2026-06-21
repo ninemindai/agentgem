@@ -292,6 +292,30 @@ describe("workspace ops", () => {
   });
 });
 
+describe("registry endpoints", () => {
+  it("reports not-ready when AGENTGEM_REGISTRY_REPO is unset", async () => {
+    const prev = process.env.AGENTGEM_REGISTRY_REPO;
+    delete process.env.AGENTGEM_REGISTRY_REPO;
+    try {
+      const res = await new GemController().registryReady({ query: {} });
+      expect(res).toEqual({ ready: false });
+    } finally {
+      if (prev !== undefined) process.env.AGENTGEM_REGISTRY_REPO = prev;
+    }
+  });
+
+  it("rejects install before the registry is configured", async () => {
+    const prev = process.env.AGENTGEM_REGISTRY_REPO;
+    delete process.env.AGENTGEM_REGISTRY_REPO;
+    try {
+      await expect(new GemController().registryInstall({ body: { refs: ["@a/x"], mode: "workspace" } }))
+        .rejects.toThrow(/registry is not configured/i);
+    } finally {
+      if (prev !== undefined) process.env.AGENTGEM_REGISTRY_REPO = prev;
+    }
+  });
+});
+
 describe("agentcore deploy ops", () => {
   it("GET /api/agentcore/deploy-ready returns booleans", async () => {
     const r = await client.get("/api/agentcore/deploy-ready").expect(200);
