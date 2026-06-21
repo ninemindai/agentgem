@@ -83,6 +83,42 @@ describe("mergeGems", () => {
     const nodes: ResolvedNode[] = [{ key: "@a/github-search", version: "1.0.0", path: "p/root", gemDigest: "sha256:WRONG", deps: [] }];
     await expect(mergeGems(nodes, source)).rejects.toThrow(/digest/i);
   });
+  it("errors on a same-name/different-content check collision between unrelated siblings", async () => {
+    const checkA = { kind: "behavioral" as const, name: "lint", task: "run lint", assertions: [] };
+    const checkB = { kind: "behavioral" as const, name: "lint", task: "run lint --strict", assertions: [] };
+    const lGem: Gem = { name: "l", createdFrom: "/d", checks: [checkA], requiredSecrets: [], artifacts: [] };
+    const rGem: Gem = { name: "r", createdFrom: "/d", checks: [checkB], requiredSecrets: [], artifacts: [] };
+    const { source } = fakeSource({ "p/l": { gem: lGem, version: "1.0.0" }, "p/r": { gem: rGem, version: "1.0.0" } });
+    const nodes: ResolvedNode[] = [
+      { key: "@a/l", version: "1.0.0", path: "p/l", gemDigest: await digestOf(source, "p/l"), deps: [] },
+      { key: "@a/r", version: "1.0.0", path: "p/r", gemDigest: await digestOf(source, "p/r"), deps: [] },
+    ];
+    await expect(mergeGems(nodes, source)).rejects.toThrow(/collision/i);
+  });
+
+  it("dedups same-name/same-content checks from ancestor and dependent", async () => {
+    const sharedCheck = { kind: "behavioral" as const, name: "lint", task: "run lint", assertions: [] };
+    const baseGem: Gem = { name: "b", createdFrom: "/d", checks: [sharedCheck], requiredSecrets: [], artifacts: [] };
+    const depGem: Gem = { name: "d", createdFrom: "/d", checks: [sharedCheck], requiredSecrets: [], artifacts: [] };
+    const { source } = fakeSource({ "p/base": { gem: baseGem, version: "1.0.0" }, "p/dep": { gem: depGem, version: "1.0.0" } });
+    const nodes: ResolvedNode[] = [
+      { key: "@a/base", version: "1.0.0", path: "p/base", gemDigest: await digestOf(source, "p/base"), deps: [] },
+      { key: "@a/dep", version: "1.0.0", path: "p/dep", gemDigest: await digestOf(source, "p/dep"), deps: ["@a/base"] },
+    ];
+    const { gem } = await mergeGems(nodes, source);
+    expect(gem.checks.filter((c) => c.name === "lint")).toHaveLength(1);
+  });
+
+  it("throws a descriptive error when gem.lock is missing from the archive", async () => {
+    const fakeNode: ResolvedNode = { key: "@a/broken", version: "1.0.0", path: "p/broken", gemDigest: "sha256:fake", deps: [] };
+    const source: RegistrySource = {
+      id: "fake", label: "fake", ready: () => true,
+      async getIndex() { return { formatVersion: 1, items: {} }; },
+      async fetchItem() { return { "gem.json": "{}" }; }, // no gem.lock
+    };
+    await expect(mergeGems([fakeNode], source)).rejects.toThrow(/missing gem\.lock/i);
+  });
+
 });
 
 async function digestOf(source: RegistrySource, path: string): Promise<string> {

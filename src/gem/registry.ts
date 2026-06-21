@@ -129,11 +129,12 @@ export async function mergeGems(graph: ResolvedNode[], source: RegistrySource): 
 
   const byName = new Map<string, { artifact: GemArtifact; owner: string; contentKey: string }>();
   const secrets = new Map<string, SecretRequirement>();
-  const checks = new Map<string, GemCheck>();
+  const byCheckName = new Map<string, { check: GemCheck; owner: string; contentKey: string }>();
   const provenance: Provenance = { items: [], overrides: [] };
 
   for (const node of graph) {
     const files = await source.fetchItem(node.path);
+    if (files["gem.lock"] === undefined) throw new Error(`archive for ${node.key}@${node.version} is missing gem.lock`);
     const v = verifyLock(files, JSON.parse(files["gem.lock"]));
     if (!v.ok) throw new Error(`integrity failure for ${node.key}@${node.version}: lock mismatch [${v.mismatches.join(",")}]`);
     if (computeLock(files).gemDigest !== node.gemDigest) {
@@ -155,7 +156,17 @@ export async function mergeGems(graph: ResolvedNode[], source: RegistrySource): 
       throw new Error(`artifact name collision: '${artifact.name}' defined by unrelated items ${prev.owner} and ${node.key}`);
     }
     for (const s of gem.requiredSecrets) secrets.set(`${s.name}:${s.location}`, s);
-    for (const c of gem.checks) checks.set(c.name, c);
+    for (const c of gem.checks) {
+      const contentKey = JSON.stringify(c);
+      const prev = byCheckName.get(c.name);
+      if (!prev) { byCheckName.set(c.name, { check: c, owner: node.key, contentKey }); continue; }
+      if (prev.contentKey === contentKey) continue;                       // identical via two paths → dedup
+      if (ancestorsOf(node.key).has(prev.owner)) {                        // dependent overrides ancestor
+        byCheckName.set(c.name, { check: c, owner: node.key, contentKey });
+        continue;
+      }
+      throw new Error(`check name collision: '${c.name}' defined by unrelated items ${prev.owner} and ${node.key}`);
+    }
   }
 
   const rootKey = graph.length ? graph[graph.length - 1].key : "(empty)";
@@ -164,7 +175,7 @@ export async function mergeGems(graph: ResolvedNode[], source: RegistrySource): 
     name: rootKey.split("/").pop() ?? "gem",
     createdFrom: `registry:${rootKey}@${rootVer}`,
     artifacts: [...byName.values()].map((e) => e.artifact),
-    checks: [...checks.values()],
+    checks: [...byCheckName.values()].map((e) => e.check),
     requiredSecrets: [...secrets.values()],
   };
   return { gem: merged, provenance };

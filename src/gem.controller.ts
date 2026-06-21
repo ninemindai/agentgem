@@ -37,7 +37,7 @@ import { runReadiness, startLocal, stopLocal, getRunStatus, deployVercel } from 
 import { agentcoreReadiness, deployAgentcore, getAgentcoreStatus } from "./gem/agentcoreRun.js";
 import { scaffoldTestbed, importArtifacts } from "./gem/testbed.js";
 import { resolveInstall, publishGem } from "./gem/registry.js";
-import { githubRegistrySource, githubRegistryPublisher, registryConfigFromEnv } from "./gem/registryGithub.js";
+import { githubRegistrySource, githubRegistryPublisher, registryConfigFromEnv, registryReady } from "./gem/registryGithub.js";
 import { resolveDirs, resolveProject } from "./resolveDir.js";
 import { pickFolder } from "./pickFolder.js";
 
@@ -217,7 +217,7 @@ export class GemController {
 
   @get("/registry/ready", { query: PickQuerySchema, response: RegistryReadyResponseSchema })
   async registryReady(_input: { query: z.infer<typeof PickQuerySchema> }): Promise<z.infer<typeof RegistryReadyResponseSchema>> {
-    return { ready: registryConfigFromEnv() !== null };
+    return { ready: registryReady() };
   }
 
   @get("/registry/index", { query: PickQuerySchema, response: RegistryIndexResponseSchema })
