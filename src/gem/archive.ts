@@ -73,11 +73,12 @@ interface GemManifest {
   artifacts: ManifestArtifactEntry[];
   requiredSecrets: Gem["requiredSecrets"];
   checks: ManifestCheckEntry[];
+  dependencies?: string[];
 }
 
 export interface ArchiveResult { files: FileTree; skipped: SkippedArtifact[] }
 
-export function writeGemArchive(gem: Gem, opts: { version?: string } = {}): ArchiveResult {
+export function writeGemArchive(gem: Gem, opts: { version?: string; dependencies?: string[] } = {}): ArchiveResult {
   const files: FileTree = {};
   const skipped: SkippedArtifact[] = [];
   const artifacts: ManifestArtifactEntry[] = [];
@@ -134,6 +135,7 @@ export function writeGemArchive(gem: Gem, opts: { version?: string } = {}): Arch
     artifacts,
     requiredSecrets: gem.requiredSecrets,
     checks,
+    ...(opts.dependencies && opts.dependencies.length ? { dependencies: opts.dependencies } : {}),
   };
   files[MANIFEST_PATH] = JSON.stringify(manifest, null, 2);
   files[LOCK_PATH] = JSON.stringify(computeLock(files), null, 2);
@@ -187,4 +189,14 @@ export function readGemArchive(files: FileTree): Gem {
 
   const checks: GemCheck[] = manifest.checks.map((c) => JSON.parse(body(c.path)) as GemCheck);
   return { name: manifest.name, createdFrom: manifest.createdFrom, artifacts, checks, requiredSecrets: manifest.requiredSecrets };
+}
+
+export function readGemMeta(files: FileTree): { name: string; version: string; dependencies: string[]; gemDigest: string } {
+  const manifestRaw = files["gem.json"];
+  if (manifestRaw === undefined) throw new Error("archive missing gem.json");
+  const lockRaw = files["gem.lock"];
+  if (lockRaw === undefined) throw new Error("archive missing gem.lock");
+  const manifest = JSON.parse(manifestRaw) as GemManifest;
+  const lock = JSON.parse(lockRaw) as GemLock;
+  return { name: manifest.name, version: manifest.version, dependencies: manifest.dependencies ?? [], gemDigest: lock.gemDigest };
 }

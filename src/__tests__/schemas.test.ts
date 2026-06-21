@@ -6,6 +6,7 @@ import {
   GemLockSchema, GemManifestSchema, ArchiveRequestSchema, ArchiveResponseSchema,
   WorkspaceSummarySchema, CreateWorkspaceRequestSchema, RenderRequestSchema, RenderResultSchema,
   DeployTargetIdSchema, DeployReadyQuerySchema, DeployTargetsResponseSchema,
+  RegistryResolveRequestSchema, RegistryInstallRequestSchema, RegistryPublishRequestSchema,
 } from "../schemas.js";
 
 describe("wire schemas", () => {
@@ -147,5 +148,18 @@ describe("deploy schemas", () => {
     expect(DeployReadyQuerySchema.safeParse({}).success).toBe(true);
     expect(DeployReadyQuerySchema.safeParse({ target: "claude-managed" }).success).toBe(true);
     expect(DeployTargetsResponseSchema.safeParse({ targets: [{ id: "claude-managed", label: "Claude Managed Agents", ready: false }] }).success).toBe(true);
+  });
+});
+
+describe("registry schemas", () => {
+  it("accepts a resolve request with refs + target", () => {
+    expect(RegistryResolveRequestSchema.parse({ refs: ["@acme/x"], mode: "materialize", target: "claude" }).refs).toEqual(["@acme/x"]);
+  });
+  it("rejects an install request with an empty refs array", () => {
+    expect(() => RegistryInstallRequestSchema.parse({ refs: [], mode: "workspace" })).toThrow();
+  });
+  it("requires scope + version on a publish request", () => {
+    expect(() => RegistryPublishRequestSchema.parse({ refs: [] })).toThrow();
+    expect(RegistryPublishRequestSchema.parse({ workspace: "w", scope: "acme", version: "1.0.0" }).scope).toBe("acme");
   });
 });

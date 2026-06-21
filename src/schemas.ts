@@ -358,3 +358,55 @@ export const AgentcoreDeployStateSchema = z.object({
   url: z.string().optional(),
   logTail: z.array(z.string()),
 });
+
+// ── Gem Registry ──
+export const RegistryReadyResponseSchema = z.object({ ready: z.boolean() });
+
+const RegistryItemVersionSchema = z.object({ path: z.string(), gemDigest: z.string(), dependencies: z.array(z.string()) });
+export const RegistryIndexResponseSchema = z.object({
+  formatVersion: z.number(),
+  items: z.record(z.string(), z.object({ latest: z.string(), versions: z.record(z.string(), RegistryItemVersionSchema) })),
+});
+
+export const RegistryResolveRequestSchema = z.object({
+  refs: z.array(z.string()).min(1),
+  mode: z.enum(["materialize", "workspace"]),
+  target: TargetIdSchema.optional(),
+});
+const InstallPlanSchema = z.object({
+  items: z.array(z.object({ key: z.string(), version: z.string() })),
+  totalArtifacts: z.number(),
+  requiredSecrets: z.array(z.object({ name: z.string(), artifact: z.string(), location: z.string() })),
+  overrides: z.array(z.object({ artifact: z.string(), winner: z.string(), loser: z.string() })),
+  materialize: z.object({
+    files: z.record(z.string(), z.string()),
+    skipped: z.array(z.object({ artifact: z.string(), type: z.string(), reason: z.string() })),
+  }).optional(),
+});
+export const RegistryResolveResponseSchema = z.object({ plan: InstallPlanSchema });
+
+export const RegistryInstallRequestSchema = z.object({
+  refs: z.array(z.string()).min(1),
+  mode: z.enum(["materialize", "workspace"]),
+  target: TargetIdSchema.optional(),
+  dest: z.string().optional(),
+  workspaceName: z.string().optional(),
+});
+export const RegistryInstallResponseSchema = z.object({
+  plan: InstallPlanSchema,
+  applied: z.discriminatedUnion("mode", [
+    z.object({ mode: z.literal("materialize"), dest: z.string(), written: z.array(z.string()) }),
+    z.object({ mode: z.literal("workspace"), workspace: z.string() }),
+  ]),
+});
+
+export const RegistryPublishRequestSchema = z.object({
+  workspace: z.string(),
+  scope: z.string(),
+  name: z.string().optional(),
+  version: z.string(),
+  dependencies: z.array(z.string()).optional(),
+});
+export const RegistryPublishResponseSchema = z.object({
+  ref: z.string(), version: z.string(), gemDigest: z.string(), commit: z.string(), path: z.string(),
+});
