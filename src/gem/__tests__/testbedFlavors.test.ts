@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TESTBED_FLAVORS, detectFlavor, discoverProjects } from "../testbedFlavors.js";
+import { TESTBED_FLAVORS, detectFlavor, writeMcpCodexToml, discoverProjects } from "../testbedFlavors.js";
 import { scaffoldTestbed } from "../testbed.js";
 import { resolveDirs } from "../../resolveDir.js";
 
@@ -73,7 +73,7 @@ describe("scaffoldTestbed flavors", () => {
     expect(existsSync(join(root, ".agents", "skills"))).toBe(true);
     expect(readFileSync(join(root, ".gitignore"), "utf8")).toContain(".codex/config.toml");
     expect(TESTBED_FLAVORS.codex.runCommand).toBe("codex");
-    expect(TESTBED_FLAVORS.codex.importSupported).toBe(false);
+    expect(TESTBED_FLAVORS.codex.importSupported).toBe(true);
   });
   it("hermes scaffold writes .hermes/skills + .hermes/SOUL.md", () => {
     scaffoldTestbed(root, "agent", "hermes");
@@ -86,5 +86,51 @@ describe("scaffoldTestbed flavors", () => {
     expect(existsSync(join(root, ".claude", "settings.json"))).toBe(true);
     expect(readFileSync(join(root, "CLAUDE.md"), "utf8")).toBe("# agent\n");
     expect(TESTBED_FLAVORS.claude.importSupported).toBe(true);
+  });
+});
+
+describe("writeMcpCodexToml", () => {
+  it("writes a fresh mcp server into .codex/config.toml", () => {
+    expect(writeMcpCodexToml(root, "gh", { command: "npx", env: { GH_TOKEN: "ghp_x" } })).toBe(false);
+    const toml = readFileSync(join(root, ".codex", "config.toml"), "utf8");
+    expect(toml).toContain("[mcp_servers.gh]");
+    expect(toml).toContain('command = "npx"');
+    expect(toml).toContain("[mcp_servers.gh.env]");
+    expect(toml).toContain('GH_TOKEN = "ghp_x"');   // raw — local testbed only
+  });
+  it("merges a second server and PRESERVES a non-mcp section; reports overwritten", () => {
+    mkdirSync(join(root, ".codex"), { recursive: true });
+    writeFileSync(join(root, ".codex", "config.toml"), '[model]\nname = "gpt-5"\n\n[mcp_servers.gh]\ncommand = "npx"\n');
+    expect(writeMcpCodexToml(root, "exa", { url: "https://mcp.x/sse" })).toBe(false);  // new server
+    let toml = readFileSync(join(root, ".codex", "config.toml"), "utf8");
+    expect(toml).toContain("[model]");                 // non-mcp section preserved
+    expect(toml).toContain('name = "gpt-5"');
+    expect(toml).toContain("[mcp_servers.gh]");        // existing server kept
+    expect(toml).toContain("[mcp_servers.exa]");       // new server added
+    expect(writeMcpCodexToml(root, "gh", { command: "node" })).toBe(true);  // overwrite existing
+    toml = readFileSync(join(root, ".codex", "config.toml"), "utf8");
+    expect((toml.match(/\[mcp_servers\.gh\]/g) || []).length).toBe(1);  // not duplicated
+    expect(toml).toContain('command = "node"');
+  });
+});
+
+describe("flavor import blocks", () => {
+  it("each flavor declares import rules; all importSupported", () => {
+    expect(TESTBED_FLAVORS.claude.import.skillRel("x")).toBe(".claude/skills/x/SKILL.md");
+    expect(TESTBED_FLAVORS.claude.import.instructionsFile).toBe("CLAUDE.md");
+    expect(typeof TESTBED_FLAVORS.claude.import.writeMcp).toBe("function");
+    expect(TESTBED_FLAVORS.claude.import.supportsHooks).toBe(true);
+
+    expect(TESTBED_FLAVORS.codex.import.skillRel("x")).toBe(".agents/skills/x/SKILL.md");
+    expect(TESTBED_FLAVORS.codex.import.instructionsFile).toBe("AGENTS.md");
+    expect(typeof TESTBED_FLAVORS.codex.import.writeMcp).toBe("function");
+    expect(TESTBED_FLAVORS.codex.import.supportsHooks).toBe(false);
+
+    expect(TESTBED_FLAVORS.hermes.import.skillRel("x")).toBe(".hermes/skills/x/DESCRIPTION.md");
+    expect(TESTBED_FLAVORS.hermes.import.instructionsFile).toBe(".hermes/SOUL.md");
+    expect(TESTBED_FLAVORS.hermes.import.writeMcp).toBeUndefined();   // Hermes has no MCP-server config
+    expect(TESTBED_FLAVORS.hermes.import.supportsHooks).toBe(false);
+
+    for (const id of ["claude", "codex", "hermes"] as const) expect(TESTBED_FLAVORS[id].importSupported).toBe(true);
   });
 });

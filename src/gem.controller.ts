@@ -221,7 +221,7 @@ export class GemController {
   @post("/testbed/import", { body: TestbedImportRequestSchema, response: TestbedImportResponseSchema })
   async importTestbed(input: { body: z.infer<typeof TestbedImportRequestSchema> }): Promise<z.infer<typeof TestbedImportResponseSchema>> {
     const rawInv = introspectConfig({ ...resolveDirs(input.body.dir), redact: false });
-    return importArtifacts(resolveProject(input.body.root), input.body.selection, rawInv);
+    return importArtifacts(resolveProject(input.body.root), input.body.selection, rawInv, (input.body.flavor ?? "claude") as TestbedFlavorId);
   }
 
   // Resolve the configured registry source, or throw a clear error the UI can surface.

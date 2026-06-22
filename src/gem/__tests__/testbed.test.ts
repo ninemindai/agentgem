@@ -125,3 +125,48 @@ describe("importArtifacts — overwritten semantics", () => {
     expect(importArtifacts(root, { hooks: ["PreToolUse · Bash"] }, rawHook).written[0].overwritten).toBe(false);
   });
 });
+
+describe("importArtifacts — flavors", () => {
+  const raw = (over = {}) => inv({
+    skills: [{ type: "skill", name: "scrape", source: "standalone", content: "# body" }],
+    instructions: [{ type: "instructions", name: "CLAUDE.md", content: "RULES" }],
+    mcpServers: [{ type: "mcp_server", name: "gh", transport: "stdio", config: { command: "npx", env: { GH_TOKEN: "ghp_realsecret" } }, source: "user" }],
+    hooks: [{ type: "hook", name: "PreToolUse · Bash", event: "PreToolUse", matcher: "Bash", config: { matcher: "Bash", hooks: [{ type: "command", command: "./g.sh" }] }, source: "user" }],
+    ...over,
+  });
+
+  it("codex import writes .agents/skills + AGENTS.md + .codex/config.toml MCP; hooks skip-reported", () => {
+    scaffoldTestbed(root, "x", "codex");
+    const r = importArtifacts(root, { skills: ["scrape"], includeInstructions: true, mcpServers: ["gh"], hooks: ["PreToolUse · Bash"] }, raw(), "codex");
+    expect(readFileSync(join(root, ".agents", "skills", "scrape", "SKILL.md"), "utf8")).toContain("# body");
+    expect(readFileSync(join(root, "AGENTS.md"), "utf8")).toContain("RULES");
+    expect(readFileSync(join(root, ".codex", "config.toml"), "utf8")).toContain("[mcp_servers.gh]");
+    expect(r.skipped.some((s) => s.artifact === "PreToolUse · Bash" && /no hooks/i.test(s.reason))).toBe(true);
+  });
+
+  it("hermes import writes .hermes/skills DESCRIPTION.md + SOUL.md; MCP + hooks skip-reported", () => {
+    scaffoldTestbed(root, "x", "hermes");
+    const r = importArtifacts(root, { skills: ["scrape"], includeInstructions: true, mcpServers: ["gh"], hooks: ["PreToolUse · Bash"] }, raw(), "hermes");
+    expect(readFileSync(join(root, ".hermes", "skills", "scrape", "DESCRIPTION.md"), "utf8")).toContain("# body");
+    expect(readFileSync(join(root, ".hermes", "SOUL.md"), "utf8")).toContain("RULES");
+    expect(r.skipped.some((s) => s.artifact === "gh" && /no MCP-server config/i.test(s.reason))).toBe(true);
+    expect(r.skipped.some((s) => s.artifact === "PreToolUse · Bash" && /no hooks/i.test(s.reason))).toBe(true);
+  });
+
+  it("claude import is unchanged (default flavor)", () => {
+    scaffoldTestbed(root, "x");
+    importArtifacts(root, { skills: ["scrape"], mcpServers: ["gh"], includeInstructions: true, hooks: ["PreToolUse · Bash"] }, raw());
+    expect(existsSync(join(root, ".claude", "skills", "scrape", "SKILL.md"))).toBe(true);
+    expect(JSON.parse(readFileSync(join(root, ".mcp.json"), "utf8")).mcpServers.gh).toBeDefined();
+    expect(JSON.parse(readFileSync(join(root, ".claude", "settings.json"), "utf8")).hooks.PreToolUse).toHaveLength(1);
+  });
+
+  it("CONTAINMENT (codex): raw secret in testbed, redacted in the packaged Gem", () => {
+    scaffoldTestbed(root, "x", "codex");
+    importArtifacts(root, { mcpServers: ["gh"] }, raw(), "codex");
+    const gem = buildGem({ skills: [], mcpServers: [], instructions: [], hooks: [], projects: [introspectProject(root)] },
+      { projects: { [root]: { mcpServers: ["gh"] } } }, { name: "g" });
+    expect(JSON.stringify(gem)).not.toContain("ghp_realsecret");
+    expect(gem.requiredSecrets).toContainEqual({ name: "GH_TOKEN", artifact: "gh", location: "env.GH_TOKEN" });
+  });
+});

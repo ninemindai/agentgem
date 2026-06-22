@@ -360,6 +360,7 @@ export const TestbedImportRequestSchema = z.object({
   root: z.string(),
   selection: TestbedImportSelectionSchema,
   dir: z.string().optional(),
+  flavor: TestbedFlavorIdSchema.optional(),
 });
 export const ImportedRefSchema = z.object({
   type: z.enum(["skill", "mcp_server", "instructions", "hook"]),

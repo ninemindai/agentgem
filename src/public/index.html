@@ -281,8 +281,8 @@ let projects = []; // chosen project root paths (mirrors inv.projects[].root aft
 let activeTestbed = localStorage.getItem("agentgem.testbed") || null;
 const FLAVORS = {
   claude: { label: "Claude Code", run: "claude", importSupported: true },
-  codex:  { label: "Codex",       run: "codex",  importSupported: false },
-  hermes: { label: "Hermes",      run: "hermes", importSupported: false },
+  codex:  { label: "Codex",       run: "codex",  importSupported: true },
+  hermes: { label: "Hermes",      run: "hermes", importSupported: true },
 };
 let activeFlavor = localStorage.getItem("agentgem.testbedFlavor") || "claude";
 function setFlavor(id){ activeFlavor = (id in FLAVORS) ? id : "claude"; localStorage.setItem("agentgem.testbedFlavor", activeFlavor); }
@@ -988,7 +988,7 @@ async function openImport(){
 }
 async function applyImport(){
   const selection = { skills:[...importSel.skills], mcpServers:[...importSel.mcpServers], hooks:[...importSel.hooks], includeInstructions: importSel.includeInstructions };
-  const r = await (await fetch("/api/testbed/import", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({ root: activeTestbed, selection }) })).json();
+  const r = await (await fetch("/api/testbed/import", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({ root: activeTestbed, selection, flavor: activeFlavor }) })).json();
   document.getElementById("importModal").hidden = true;
   const st = document.getElementById("importStatus");
   if (!r || r.error || !Array.isArray(r.written)) {

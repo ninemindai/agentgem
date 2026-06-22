@@ -364,6 +364,21 @@ describe("agentcore-managed deploy backend", () => {
   });
 });
 
+describe("testbed import flavor wiring", () => {
+  it("POST /api/testbed/import flavor=codex writes the codex shape", async () => {
+    const tb = mkdtempSync(join(tmpdir(), "cxi-"));
+    try {
+      await client.post("/api/testbed/scaffold").send({ root: tb, name: "cx", flavor: "codex" }).expect(200);
+      const im = await client.post("/api/testbed/import")
+        .send({ root: tb, dir, flavor: "codex", selection: { skills: ["review"], mcpServers: ["gh"], includeInstructions: true } })
+        .expect(200);
+      expect(im.body.written.some((w: { name: string }) => w.name === "review")).toBe(true);
+      expect(existsSync(join(tb, ".agents", "skills", "review", "SKILL.md"))).toBe(true);
+      expect(readFileSync(join(tb, ".codex", "config.toml"), "utf8")).toContain("[mcp_servers.gh]");
+    } finally { rmSync(tb, { recursive: true, force: true }); }
+  });
+});
+
 describe("testbed flavors", () => {
   it("detect returns the flavor for a codex-shaped dir and scaffolds a hermes testbed", async () => {
     const cx = mkdtempSync(join(tmpdir(), "cx-")); mkdirSync(join(cx, ".codex"), { recursive: true });
