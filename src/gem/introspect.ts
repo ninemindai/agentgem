@@ -3,6 +3,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { basename, join } from "node:path";
 import { homedir } from "node:os";
 import { redactMcpConfig } from "./redact.js";
+import { parseTomlMcpServers } from "./toml.js";
 import type {
   ConfigInventory,
   ProjectInventory,
@@ -235,11 +236,20 @@ export function introspectProject(root: string): ProjectInventory {
   hooks.push(...hooksFromConfig(settings, "project"));
   hooks.push(...hooksFromConfig(readJson(join(root, ".claude", "hooks", "hooks.json")), "project"));
 
-  for (const file of ["CLAUDE.md", "AGENTS.md"]) {
-    const p = join(root, file);
+  // Hermes project skills (nested-flat: .hermes/skills/<n>/DESCRIPTION.md|SKILL.md)
+  skills.push(...readSkillsDir(join(root, ".hermes", "skills"), "project", ["DESCRIPTION.md", "SKILL.md"]));
+  // Codex project MCP (.codex/config.toml [mcp_servers])
+  const codexToml = join(root, ".codex", "config.toml");
+  if (existsSync(codexToml)) {
+    try { mcp.push(...serversToArtifacts(parseTomlMcpServers(readFileSync(codexToml, "utf8")), "project")); }
+    catch { /* skip unparseable codex config */ }
+  }
+
+  for (const rel of ["CLAUDE.md", "AGENTS.md", join(".hermes", "SOUL.md")]) {
+    const p = join(root, rel);
     if (existsSync(p)) {
       try {
-        instructions.push({ type: "instructions", name: file, content: readFileSync(p, "utf8") });
+        instructions.push({ type: "instructions", name: basename(rel), content: readFileSync(p, "utf8") });
       } catch {
         // skip unreadable instructions file
       }
