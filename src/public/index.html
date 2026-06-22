@@ -265,6 +265,16 @@
     </div>
   </div>
 </div>
+<div id="recentModal" class="modal-bg" hidden>
+  <div class="modal">
+    <div class="modal-h"><strong class="t">Open testbed</strong><span class="src">recent projects from Claude / Codex history</span><button id="recentClose" class="ghost" style="margin-left:auto">✕ Close</button></div>
+    <div class="modal-body" style="padding:14px"><div id="recentList">Loading…</div></div>
+    <div class="modal-h" style="border-top:1px solid var(--line);border-bottom:0">
+      <span class="d">Pick a recent project, or browse for any folder.</span>
+      <button id="recentBrowse" style="margin-left:auto">Browse folder…</button>
+    </div>
+  </div>
+</div>
 <script>
 let inv = { skills: [], mcpServers: [], instructions: [], projects: [] };
 let projects = []; // chosen project root paths (mirrors inv.projects[].root after each load)
@@ -285,7 +295,47 @@ function renderTestbedChip(){
   el.innerHTML = `<span class="path">📁 <b>${esc(short)}</b> <span style="color:var(--muted);font-size:11px">${esc(flavorLabel)}</span></span><button id="tbSwap" class="ghost">Switch</button>`;
   document.getElementById("tbSwap").onclick = openOrCreateTestbed;
 }
+// Entry point for the testbed chip: lead with recent projects harvested from
+// Claude/Codex session history, with the OS folder picker as the fallback.
 async function openOrCreateTestbed(){
+  const m = document.getElementById("recentModal");
+  const list = document.getElementById("recentList");
+  list.innerHTML = "Loading…";
+  m.hidden = false;
+  let data = { enabled: false, projects: [] };
+  try { data = await (await fetch("/api/testbed/projects")).json(); } catch {}
+  if(!data.enabled){
+    list.innerHTML = `<p class="note">Recent-project suggestions are off. Start agentgem with <code>AGENTGEM_RECENT_PROJECTS=1</code> to scan your Claude/Codex history, or use <b>Browse folder…</b> to pick any folder.</p>`;
+    return;
+  }
+  const projs = data.projects || [];
+  if(!projs.length){
+    list.innerHTML = `<p class="note">No recent projects found in your Claude/Codex history — use <b>Browse folder…</b> to pick one.</p>`;
+    return;
+  }
+  list.innerHTML = projs.map((p,i)=>{
+    const short = esc(p.path.replace(/^.*\//, "") || p.path);
+    const fl = esc((FLAVORS[p.flavor]||FLAVORS.claude).label);
+    const when = p.lastUsed ? esc(p.lastUsed.slice(0,10)) : "";
+    const stale = p.exists ? "" : ` <span class="d" title="path no longer exists">· missing</span>`;
+    return `<label class="row recent" data-i="${i}"${p.exists?"":' style="opacity:.5"'}><span><b>${short}</b> <span class="src">${fl}</span> <span class="d">${esc(p.path)}</span>${stale}</span><span class="d" style="margin-left:auto">${when}</span></label>`;
+  }).join("");
+  list.querySelectorAll("label.recent").forEach(row=>{
+    row.onclick = ()=>{ const p = projs[+row.dataset.i]; if(!p.exists) return; m.hidden = true; useTestbed(p.path, p.flavor); };
+  });
+}
+// Adopt a known project+flavor: scaffold is idempotent (writeIfAbsent), so this
+// safely fills any missing skeleton without disturbing existing config.
+async function useTestbed(path, flavor){
+  setFlavor(flavor);
+  const name = path.replace(/^.*\//, "");
+  await fetch("/api/testbed/scaffold", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({ root: path, name, flavor }) });
+  setTestbed(path);
+  load();
+}
+// Fallback: OS-native folder picker for any folder not in history.
+async function browseForTestbed(){
+  document.getElementById("recentModal").hidden = true;
   const pick = await (await fetch("/api/pick-folder")).json();
   if(!pick.path) return;
   let flavor = (await (await fetch(`/api/testbed/detect?root=${encodeURIComponent(pick.path)}`)).json()).flavor;
@@ -962,6 +1012,8 @@ async function applyImport(){
 }
 document.getElementById("importBtn").onclick = openImport;
 document.getElementById("importClose").onclick = () => document.getElementById("importModal").hidden = true;
+document.getElementById("recentClose").onclick = () => document.getElementById("recentModal").hidden = true;
+document.getElementById("recentBrowse").onclick = browseForTestbed;
 document.getElementById("importApply").onclick = applyImport;
 let __runWs = null, __runPoll = null;
 async function runRefreshReady(name){
