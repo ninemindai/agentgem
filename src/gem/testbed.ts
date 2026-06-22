@@ -48,14 +48,15 @@ function upsertMarkedBlock(root: string, rel: string, name: string, content: str
   return replaced;
 }
 
-export function importArtifacts(root: string, selection: ImportSelection, rawInv: ConfigInventory): { written: ImportedRef[]; skipped: ImportSkip[] } {
+export function importArtifacts(root: string, selection: ImportSelection, rawInv: ConfigInventory, flavor: TestbedFlavorId = "claude"): { written: ImportedRef[]; skipped: ImportSkip[] } {
   const written: ImportedRef[] = [];
   const skipped: ImportSkip[] = [];
+  const { import: imp, label } = TESTBED_FLAVORS[flavor];
 
   for (const name of selection.skills ?? []) {
     const sk = rawInv.skills.find((s) => s.name === name);
     if (!sk) { skipped.push({ artifact: name, reason: "not found in global inventory" }); continue; }
-    const rel = `.claude/skills/${name}/SKILL.md`;
+    const rel = imp.skillRel(name);
     const overwritten = existsSync(join(root, rel));
     mkdirSync(dirname(join(root, rel)), { recursive: true });
     writeFileSync(join(root, rel), sk.content, "utf8");
@@ -64,7 +65,7 @@ export function importArtifacts(root: string, selection: ImportSelection, rawInv
 
   if (selection.includeInstructions) {
     for (const ins of rawInv.instructions) {
-      const overwritten = upsertMarkedBlock(root, "CLAUDE.md", ins.name, ins.content);
+      const overwritten = upsertMarkedBlock(root, imp.instructionsFile, ins.name, ins.content);
       written.push({ type: "instructions", name: ins.name, overwritten });
     }
   }
@@ -72,19 +73,15 @@ export function importArtifacts(root: string, selection: ImportSelection, rawInv
   for (const name of selection.mcpServers ?? []) {
     const m = rawInv.mcpServers.find((s) => s.name === name);
     if (!m) { skipped.push({ artifact: name, reason: "not found in global inventory" }); continue; }
-    const abs = join(root, ".mcp.json");
-    const doc = readJson(abs);
-    const servers = (doc.mcpServers && typeof doc.mcpServers === "object" ? doc.mcpServers : {}) as Record<string, unknown>;
-    const overwritten = name in servers;
-    servers[name] = m.config; // raw config — local testbed only
-    doc.mcpServers = servers;
-    writeJson(abs, doc);
+    if (!imp.writeMcp) { skipped.push({ artifact: name, reason: `${label} has no MCP-server config` }); continue; }
+    const overwritten = imp.writeMcp(root, name, m.config); // raw config — local testbed only
     written.push({ type: "mcp_server", name, overwritten });
   }
 
   for (const name of selection.hooks ?? []) {
     const h = rawInv.hooks.find((x) => x.name === name);
     if (!h) { skipped.push({ artifact: name, reason: "not found in global inventory" }); continue; }
+    if (!imp.supportsHooks) { skipped.push({ artifact: name, reason: `${label} has no hooks` }); continue; }
     const abs = join(root, ".claude", "settings.json");
     const doc = readJson(abs);
     const hooks = (doc.hooks && typeof doc.hooks === "object" ? doc.hooks : {}) as Record<string, unknown[]>;
@@ -94,8 +91,6 @@ export function importArtifacts(root: string, selection: ImportSelection, rawInv
     hooks[h.event] = groups;
     doc.hooks = hooks;
     writeJson(abs, doc);
-    // Hooks are never replaced — a matching group is deduped (no-op), a differing one is appended.
-    // So `overwritten` is always false; idempotent re-import simply re-reports the existing group.
     written.push({ type: "hook", name, overwritten: false });
   }
 
