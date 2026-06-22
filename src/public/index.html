@@ -269,19 +269,33 @@
 let inv = { skills: [], mcpServers: [], instructions: [], projects: [] };
 let projects = []; // chosen project root paths (mirrors inv.projects[].root after each load)
 let activeTestbed = localStorage.getItem("agentgem.testbed") || null;
+const FLAVORS = {
+  claude: { label: "Claude Code", run: "claude", importSupported: true },
+  codex:  { label: "Codex",       run: "codex",  importSupported: false },
+  hermes: { label: "Hermes",      run: "hermes", importSupported: false },
+};
+let activeFlavor = localStorage.getItem("agentgem.testbedFlavor") || "claude";
+function setFlavor(id){ activeFlavor = (id in FLAVORS) ? id : "claude"; localStorage.setItem("agentgem.testbedFlavor", activeFlavor); }
 function setTestbed(path){ activeTestbed = path || null; if(path) localStorage.setItem("agentgem.testbed", path); else localStorage.removeItem("agentgem.testbed"); renderTestbedChip(); }
 function renderTestbedChip(){
   const el = document.getElementById("testbedChip");
   if(!activeTestbed){ el.innerHTML = `<button id="tbNew">Create / open testbed…</button>`; document.getElementById("tbNew").onclick = openOrCreateTestbed; return; }
   const short = activeTestbed.replace(/^.*\//, "");
-  el.innerHTML = `<span class="path">📁 <b>${esc(short)}</b></span><button id="tbSwap" class="ghost">Switch</button>`;
+  const flavorLabel = (FLAVORS[activeFlavor] || FLAVORS.claude).label;
+  el.innerHTML = `<span class="path">📁 <b>${esc(short)}</b> <span style="color:var(--muted);font-size:11px">${esc(flavorLabel)}</span></span><button id="tbSwap" class="ghost">Switch</button>`;
   document.getElementById("tbSwap").onclick = openOrCreateTestbed;
 }
 async function openOrCreateTestbed(){
   const pick = await (await fetch("/api/pick-folder")).json();
   if(!pick.path) return;
+  let flavor = (await (await fetch(`/api/testbed/detect?root=${encodeURIComponent(pick.path)}`)).json()).flavor;
+  if(!flavor){
+    const choice = (prompt("Harness flavor for this testbed — claude / codex / hermes", "claude") || "claude").trim().toLowerCase();
+    flavor = (choice in FLAVORS) ? choice : "claude";
+  }
+  setFlavor(flavor);
   const name = prompt("Testbed agent name", pick.path.replace(/^.*\//, "")) || pick.path.replace(/^.*\//, "");
-  await fetch("/api/testbed/scaffold", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({ root: pick.path, name }) });
+  await fetch("/api/testbed/scaffold", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({ root: pick.path, name, flavor }) });
   setTestbed(pick.path);
   load();
 }
@@ -907,6 +921,7 @@ wsRefresh();
 const importSel = { skills: new Set(), mcpServers: new Set(), hooks: new Set(), includeInstructions: false };
 async function openImport(){
   if(!activeTestbed){ alert("Create or open a testbed first."); return; }
+  if(!FLAVORS[activeFlavor].importSupported){ alert(`Import into ${FLAVORS[activeFlavor].label} testbeds isn't supported yet — hand-edit the project, then it'll be picked up.`); return; }
   importSel.skills.clear(); importSel.mcpServers.clear(); importSel.hooks.clear(); importSel.includeInstructions = false;
   document.getElementById("importModal").hidden = false;
   const gi = await (await fetch("/api/inventory")).json();
@@ -1013,10 +1028,12 @@ function renderTestDrive(){
   const card = document.getElementById("testdrive");
   if(!activeTestbed){ card.hidden = true; return; }
   card.hidden = false;
-  document.getElementById("tdCmd").textContent = `cd ${activeTestbed} && claude`;
+  document.getElementById("tdCmd").textContent = `cd ${activeTestbed} && ${(FLAVORS[activeFlavor] || FLAVORS.claude).run}`;
+  const ib = document.getElementById("importBtn");
+  if (ib) { const ok = (FLAVORS[activeFlavor] || FLAVORS.claude).importSupported; ib.disabled = !ok; ib.title = ok ? "" : `Not supported for ${(FLAVORS[activeFlavor] || FLAVORS.claude).label} testbeds`; }
 }
 document.getElementById("tdCopy").onclick = () => {
-  navigator.clipboard?.writeText(`cd ${activeTestbed} && claude`);
+  navigator.clipboard?.writeText(`cd ${activeTestbed} && ${(FLAVORS[activeFlavor] || FLAVORS.claude).run}`);
   const b = document.getElementById("tdCopy"); b.textContent = "Copied ✓"; setTimeout(()=>b.textContent="Copy", 1400);
 };
 
