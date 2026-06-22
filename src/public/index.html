@@ -196,8 +196,8 @@
 </nav>
 <main>
   <section class="pane left">
-    <div class="bar"><input id="name" type="text" placeholder="gem name" value="gem" style="flex:1" /></div>
-    <div class="bar" id="wsBar">
+    <div class="bar" id="nameBar" style="display:none"><input id="name" type="text" placeholder="gem name" value="gem" style="flex:1" /></div>
+    <div class="bar" id="wsBar" style="display:none">
       <select id="wsSelect" title="open a saved workspace" style="flex:1"><option value="">— no workspace —</option></select>
       <button id="wsNew" class="ghost" title="save the current selection as a new workspace">New workspace…</button>
       <button id="wsDelete" class="ghost" title="delete the open workspace" hidden>Delete</button>
@@ -302,6 +302,13 @@ const FLAVORS = {
 let activeFlavor = localStorage.getItem("agentgem.testbedFlavor") || "claude";
 function setFlavor(id){ activeFlavor = (id in FLAVORS) ? id : "claude"; localStorage.setItem("agentgem.testbedFlavor", activeFlavor); }
 function setTestbed(path){ activeTestbed = path || null; if(path) localStorage.setItem("agentgem.testbed", path); else localStorage.removeItem("agentgem.testbed"); renderTestbedChip(); }
+// The gem defaults to its project's name. Track manual edits so we never clobber a name the user typed.
+let nameEdited = false;
+function syncGemName(){
+  if(nameEdited) return;
+  const el = document.getElementById("name");
+  if(el) el.value = activeTestbed ? activeTestbed.replace(/^.*\//, "") : "gem";
+}
 function renderTestbedChip(){
   const el = document.getElementById("testbedChip");
   if(!activeTestbed){ el.innerHTML = `<button id="tbNew">Create / open testbed…</button>`; document.getElementById("tbNew").onclick = openOrCreateTestbed; return; }
@@ -404,6 +411,8 @@ async function useTestbed(path, flavor, name){
   name = name || path.replace(/^.*\//, "");
   await fetch("/api/testbed/scaffold", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({ root: path, name, flavor }) });
   setTestbed(path);
+  nameEdited = false;                         // picking a project is explicit — default the gem name to it
+  document.getElementById("name").value = name;
   load();
 }
 
@@ -814,7 +823,7 @@ document.getElementById("none").addEventListener("click", () => {
     if (cb.checked) { cb.checked = false; cb.dispatchEvent(new Event("change")); }
   });
 });
-document.getElementById("name").addEventListener("input", refresh);
+document.getElementById("name").addEventListener("input", () => { nameEdited = true; refresh(); });
 document.getElementById("dl").addEventListener("click", () => {
   const blob = new Blob([JSON.stringify(window.__gem || {}, null, 2)], { type: "application/json" });
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = (document.getElementById("name").value || "gem") + ".json"; a.click();
@@ -1201,6 +1210,14 @@ function renderRail(){
     st.classList.add(i < idx ? "done" : i === idx ? "active" : "todo");
     const sub = st.querySelector(".sub"); if (sub) sub.textContent = subs[st.dataset.stage] || "";
   });
+  // Reveal the gem identity + workspace controls only once there's something to package
+  // (artifacts selected or a workspace open) — they're downstream of pure testbed authoring.
+  const gemArts = (window.__gem && window.__gem.artifacts || []).length;
+  const wsVal = document.getElementById("wsSelect")?.value || "";
+  const showPkg = gemArts > 0 || !!wsVal;
+  if (showPkg) syncGemName();                  // keep the name current when the bar appears
+  const nameBar = document.getElementById("nameBar"); if (nameBar) nameBar.style.display = showPkg ? "" : "none";
+  const wsBar = document.getElementById("wsBar"); if (wsBar) wsBar.style.display = showPkg ? "" : "none";
 }
 document.getElementById("rail").addEventListener("click", e => {
   const st = e.target.closest(".station"); if (!st) return;
