@@ -26,6 +26,7 @@ import {
   CreateWorkspaceRequestSchema, WorkspaceQuerySchema, RenderRequestSchema, WorkspaceNameRequestSchema, WorkspaceSummarySchema, WorkspaceDetailSchema, RenderResultSchema, ListWorkspacesResponseSchema, DeleteWorkspaceResponseSchema,
   RunReadyQuerySchema, RunReadyResponseSchema, RunRequestSchema, RunStatusQuerySchema, RunStateSchema, RunStopRequestSchema, RunStopResponseSchema,
   TestbedDetectQuerySchema, TestbedDetectResponseSchema,
+  TestbedProjectsQuerySchema, TestbedProjectsResponseSchema,
   TestbedScaffoldRequestSchema, TestbedScaffoldResponseSchema,
   TestbedImportRequestSchema, TestbedImportResponseSchema,
   AgentcoreReadyResponseSchema, AgentcoreDeployRequestSchema, AgentcoreStatusQuerySchema, AgentcoreDeployStateSchema,
@@ -37,7 +38,7 @@ import {
 import { runReadiness, startLocal, stopLocal, getRunStatus, deployVercel } from "./gem/run.js";
 import { agentcoreReadiness, deployAgentcore, getAgentcoreStatus } from "./gem/agentcoreRun.js";
 import { scaffoldTestbed, importArtifacts } from "./gem/testbed.js";
-import { detectFlavor } from "./gem/testbedFlavors.js";
+import { detectFlavor, discoverProjects } from "./gem/testbedFlavors.js";
 import type { TestbedFlavorId } from "./gem/testbedFlavors.js";
 import { resolveInstall, publishGem } from "./gem/registry.js";
 import { githubRegistrySource, githubRegistryPublisher, registryConfigFromEnv, registryReady } from "./gem/registryGithub.js";
@@ -204,6 +205,14 @@ export class GemController {
     return { flavor: detectFlavor(resolveProject(input.query.root)) };
   }
 
+  // Scanning the user's whole Claude/Codex history is opt-in: off by default, on when
+  // AGENTGEM_RECENT_PROJECTS is truthy. Disabled -> empty list (the UI prompts to enable).
+  @get("/testbed/projects", { query: TestbedProjectsQuerySchema, response: TestbedProjectsResponseSchema })
+  async testbedProjects(input: { query: z.infer<typeof TestbedProjectsQuerySchema> }): Promise<z.infer<typeof TestbedProjectsResponseSchema>> {
+    if (!recentProjectsEnabled()) return { enabled: false, projects: [] };
+    return { enabled: true, projects: discoverProjects(resolveDirs(input.query.dir)) };
+  }
+
   @post("/testbed/scaffold", { body: TestbedScaffoldRequestSchema, response: TestbedScaffoldResponseSchema })
   async scaffoldTestbed(input: { body: z.infer<typeof TestbedScaffoldRequestSchema> }): Promise<z.infer<typeof TestbedScaffoldResponseSchema>> {
     return scaffoldTestbed(resolveProject(input.body.root), input.body.name, (input.body.flavor ?? "claude") as TestbedFlavorId);
@@ -272,6 +281,11 @@ export class GemController {
   async pickFolder(_input: { query: z.infer<typeof PickQuerySchema> }): Promise<z.infer<typeof PickFolderSchema>> {
     return { path: await pickFolder() };
   }
+}
+
+// Opt-in gate for scanning the user's cross-repo Claude/Codex history.
+function recentProjectsEnabled(): boolean {
+  return /^(1|true|yes|on)$/i.test(process.env.AGENTGEM_RECENT_PROJECTS ?? "");
 }
 
 // Query params can't carry arrays cleanly, so `projects` arrives JSON-encoded.
