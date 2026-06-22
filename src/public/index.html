@@ -102,6 +102,11 @@
   .redacted{color:#fff;background:var(--accent);border-radius:3px;padding:0 4px;font-weight:600}
   /* ── segmented control ── */
   .seg{display:inline-flex;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;margin-left:auto;background:var(--card)}
+  .exportwrap{position:relative;display:inline-block}
+  .exportmenu{position:absolute;right:0;top:calc(100% + 4px);min-width:190px;padding:4px;background:var(--card);border:1px solid var(--line-2);border-radius:8px;box-shadow:0 14px 34px -12px rgba(33,28,21,.5);z-index:30;display:flex;flex-direction:column}
+  .exportmenu[hidden]{display:none}
+  .exportmenu .menuitem{display:block;width:100%;text-align:left;border:0;background:transparent;padding:8px 10px;border-radius:6px;cursor:pointer;font:inherit;color:inherit}
+  .exportmenu .menuitem:hover{background:var(--line)}
   .seg button{border:0;border-radius:0;background:transparent;color:var(--muted);padding:6px 11px;font:600 12px/1 var(--ui);box-shadow:none}
   .seg button:hover{background:var(--accent-soft);color:var(--accent);transform:none}
   .seg button.on{background:var(--accent);color:#fff}
@@ -240,7 +245,7 @@
     </div>
   </section>
   <section class="pane right">
-    <div class="bar"><strong style="flex:1">Gem (live)</strong><select id="target" title="materialize target" style="margin-left:auto"><option value="claude">Claude</option><option value="codex">Codex</option><option value="agents">Agents</option><option value="hermes">Hermes</option><option value="eve">Eve</option><option value="flue">Flue</option><option value="openai-sandbox">OpenAI Sandbox</option><option value="agentcore">AgentCore</option></select><span class="seg" id="preview-modes"><button type="button" data-pmode="summary">Summary</button><button type="button" data-pmode="json">JSON</button><button type="button" data-pmode="materialize">Materialize</button><button type="button" data-pmode="managed">Managed Agents</button></span><button id="copy" class="ghost">Copy</button><button id="dl">⬇ Download</button><button id="save" class="ghost" title="write the gem archive (manifest + lock + files) to a folder">💾 Save archive…</button><button id="dltar" class="ghost" title="download the gem archive as a .tar.gz">⬇ .tar.gz</button><span class="d" id="archiveStatus" style="margin-left:6px"></span></div>
+    <div class="bar"><strong style="flex:1">Gem (live)</strong><select id="target" title="materialize target" style="margin-left:auto"><option value="claude">Claude</option><option value="codex">Codex</option><option value="agents">Agents</option><option value="hermes">Hermes</option><option value="eve">Eve</option><option value="flue">Flue</option><option value="openai-sandbox">OpenAI Sandbox</option><option value="agentcore">AgentCore</option></select><span class="seg" id="preview-modes"><button type="button" data-pmode="summary">Summary</button><button type="button" data-pmode="json">JSON</button><button type="button" data-pmode="materialize">Materialize</button><button type="button" data-pmode="managed">Managed Agents</button></span><span class="exportwrap"><button id="exportBtn">Export ▾</button><div id="exportMenu" class="exportmenu" hidden><button id="dltar" class="menuitem" title="download the gem archive as a .tar.gz">⬇ Download .tar.gz</button><button id="save" class="menuitem" title="write the gem archive (manifest + lock + files) to a folder">💾 Save to folder…</button><button id="dl" class="menuitem">⬇ Download JSON</button><button id="copy" class="menuitem">⧉ Copy JSON</button></div></span><span class="d" id="archiveStatus" style="margin-left:6px"></span></div>
     <div id="preview"></div>
     <p class="note">MCP server &amp; hook config secrets are shown as <code>&lt;redacted&gt;</code> and never exported. Skill, CLAUDE.md, rules bodies &amp; hook commands are bundled as written — don't keep secrets in them.</p>
     <div id="checksPanel" class="group" style="margin-top:14px">
@@ -801,7 +806,9 @@ document.getElementById("preview-modes").addEventListener("click", e => {
   const b = e.target.closest("button[data-pmode]"); if (!b) return;
   previewMode = b.dataset.pmode; renderPreview();
 });
-document.getElementById("target").addEventListener("change", () => { if (previewMode === "materialize") renderPreview(); });
+// Re-render the active preview panel whenever the target changes (materialize/managed are
+// target-specific; summary/json are target-agnostic so this is a harmless no-op for them).
+document.getElementById("target").addEventListener("change", renderPreview);
 document.getElementById("preview").addEventListener("click", e => {
   if (e.target.id === "publishBtn") { doPublish(); return; }
   const mp = e.target.closest("[data-mpath]");
@@ -851,6 +858,15 @@ document.getElementById("dltar").addEventListener("click", async () => {
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = (document.getElementById("name").value || "gem") + ".gem.tar.gz"; a.click();
   status.textContent = `Downloaded ${a.download}`;
 });
+// Export ▾ dropdown: toggle, close on outside click / Escape, and close after any item runs.
+(function(){
+  const btn = document.getElementById("exportBtn"), menu = document.getElementById("exportMenu");
+  const close = () => { menu.hidden = true; };
+  btn.addEventListener("click", e => { e.stopPropagation(); menu.hidden = !menu.hidden; });
+  menu.querySelectorAll(".menuitem").forEach(mi => mi.addEventListener("click", close));
+  document.addEventListener("click", e => { if (!menu.hidden && !menu.contains(e.target) && e.target !== btn) close(); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") close(); });
+})();
 document.getElementById("srcFilter").addEventListener("change", filterRows);
 document.getElementById("inventory").addEventListener("click", e => {
   // View an item's content in a modal (must not toggle the row's checkbox).
