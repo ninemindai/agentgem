@@ -9,6 +9,13 @@ import type { McpServerArtifact } from "./types.js";
 
 export type TestbedFlavorId = "claude" | "codex" | "hermes";
 
+export interface FlavorImport {
+  skillRel(name: string): string;
+  instructionsFile: string;
+  writeMcp?: (root: string, name: string, rawConfig: Record<string, unknown>) => boolean;
+  supportsHooks: boolean;
+}
+
 export interface TestbedFlavor {
   id: TestbedFlavorId;
   label: string;
@@ -16,6 +23,7 @@ export interface TestbedFlavor {
   scaffold(root: string, name: string): { created: string[] };
   runCommand: string;
   importSupported: boolean;
+  import: FlavorImport;
 }
 
 function writeIfAbsent(root: string, rel: string, content: string, created: string[]): void {
@@ -53,6 +61,23 @@ export function writeMcpCodexToml(root: string, name: string, rawConfig: Record<
   return overwritten;
 }
 
+function readJsonFile(abs: string): Record<string, unknown> {
+  try { const v = JSON.parse(readFileSync(abs, "utf8")); return v && typeof v === "object" && !Array.isArray(v) ? v : {}; }
+  catch { return {}; }
+}
+
+export function writeMcpJson(root: string, name: string, rawConfig: Record<string, unknown>): boolean {
+  const abs = join(root, ".mcp.json");
+  const doc = readJsonFile(abs);
+  const servers = (doc.mcpServers && typeof doc.mcpServers === "object" ? doc.mcpServers : {}) as Record<string, unknown>;
+  const overwritten = name in servers;
+  servers[name] = rawConfig;                       // raw config — local testbed only
+  doc.mcpServers = servers;
+  mkdirSync(dirname(abs), { recursive: true });
+  writeFileSync(abs, JSON.stringify(doc, null, 2) + "\n", "utf8");
+  return overwritten;
+}
+
 export const TESTBED_FLAVORS: Record<TestbedFlavorId, TestbedFlavor> = {
   claude: {
     id: "claude", label: "Claude Code", runCommand: "claude", importSupported: true,
@@ -65,9 +90,10 @@ export const TESTBED_FLAVORS: Record<TestbedFlavorId, TestbedFlavor> = {
       writeIfAbsent(root, ".gitignore", ".mcp.json\n.claude/settings.json\n.env\n.targets/\n", created);
       return { created };
     },
+    import: { skillRel: (n) => `.claude/skills/${n}/SKILL.md`, instructionsFile: "CLAUDE.md", writeMcp: writeMcpJson, supportsHooks: true },
   },
   codex: {
-    id: "codex", label: "Codex", runCommand: "codex", importSupported: false,
+    id: "codex", label: "Codex", runCommand: "codex", importSupported: true,
     detect: (root) => existsSync(join(root, ".codex")) || existsSync(join(root, "AGENTS.md")),
     scaffold: (root, name) => {
       const created: string[] = [];
@@ -76,9 +102,10 @@ export const TESTBED_FLAVORS: Record<TestbedFlavorId, TestbedFlavor> = {
       writeIfAbsent(root, ".gitignore", ".codex/config.toml\n.env\n.targets/\n", created);
       return { created };
     },
+    import: { skillRel: (n) => `.agents/skills/${n}/SKILL.md`, instructionsFile: "AGENTS.md", writeMcp: writeMcpCodexToml, supportsHooks: false },
   },
   hermes: {
-    id: "hermes", label: "Hermes", runCommand: "hermes", importSupported: false,
+    id: "hermes", label: "Hermes", runCommand: "hermes", importSupported: true,
     detect: (root) => existsSync(join(root, ".hermes")),
     scaffold: (root, name) => {
       const created: string[] = [];
@@ -87,6 +114,7 @@ export const TESTBED_FLAVORS: Record<TestbedFlavorId, TestbedFlavor> = {
       writeIfAbsent(root, ".gitignore", ".hermes/config.yaml\n.env\n.targets/\n", created);
       return { created };
     },
+    import: { skillRel: (n) => `.hermes/skills/${n}/DESCRIPTION.md`, instructionsFile: ".hermes/SOUL.md", writeMcp: undefined, supportsHooks: false },
   },
 };
 

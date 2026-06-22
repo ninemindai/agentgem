@@ -31,7 +31,7 @@ describe("scaffoldTestbed flavors", () => {
     expect(existsSync(join(root, ".agents", "skills"))).toBe(true);
     expect(readFileSync(join(root, ".gitignore"), "utf8")).toContain(".codex/config.toml");
     expect(TESTBED_FLAVORS.codex.runCommand).toBe("codex");
-    expect(TESTBED_FLAVORS.codex.importSupported).toBe(false);
+    expect(TESTBED_FLAVORS.codex.importSupported).toBe(true);
   });
   it("hermes scaffold writes .hermes/skills + .hermes/SOUL.md", () => {
     scaffoldTestbed(root, "agent", "hermes");
@@ -69,5 +69,26 @@ describe("writeMcpCodexToml", () => {
     toml = readFileSync(join(root, ".codex", "config.toml"), "utf8");
     expect((toml.match(/\[mcp_servers\.gh\]/g) || []).length).toBe(1);  // not duplicated
     expect(toml).toContain('command = "node"');
+  });
+});
+
+describe("flavor import blocks", () => {
+  it("each flavor declares import rules; all importSupported", () => {
+    expect(TESTBED_FLAVORS.claude.import.skillRel("x")).toBe(".claude/skills/x/SKILL.md");
+    expect(TESTBED_FLAVORS.claude.import.instructionsFile).toBe("CLAUDE.md");
+    expect(typeof TESTBED_FLAVORS.claude.import.writeMcp).toBe("function");
+    expect(TESTBED_FLAVORS.claude.import.supportsHooks).toBe(true);
+
+    expect(TESTBED_FLAVORS.codex.import.skillRel("x")).toBe(".agents/skills/x/SKILL.md");
+    expect(TESTBED_FLAVORS.codex.import.instructionsFile).toBe("AGENTS.md");
+    expect(typeof TESTBED_FLAVORS.codex.import.writeMcp).toBe("function");
+    expect(TESTBED_FLAVORS.codex.import.supportsHooks).toBe(false);
+
+    expect(TESTBED_FLAVORS.hermes.import.skillRel("x")).toBe(".hermes/skills/x/DESCRIPTION.md");
+    expect(TESTBED_FLAVORS.hermes.import.instructionsFile).toBe(".hermes/SOUL.md");
+    expect(TESTBED_FLAVORS.hermes.import.writeMcp).toBeUndefined();   // Hermes has no MCP-server config
+    expect(TESTBED_FLAVORS.hermes.import.supportsHooks).toBe(false);
+
+    for (const id of ["claude", "codex", "hermes"] as const) expect(TESTBED_FLAVORS[id].importSupported).toBe(true);
   });
 });
