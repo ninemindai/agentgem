@@ -1,4 +1,6 @@
 // src/gem.controller.ts
+import { existsSync } from "node:fs";
+import { basename } from "node:path";
 import type { z } from "zod";
 import { api, get, post } from "@agentback/openapi";
 import { introspectConfig, introspectProject } from "./gem/introspect.js";
@@ -27,6 +29,8 @@ import {
   RunReadyQuerySchema, RunReadyResponseSchema, RunRequestSchema, RunStatusQuerySchema, RunStateSchema, RunStopRequestSchema, RunStopResponseSchema,
   TestbedDetectQuerySchema, TestbedDetectResponseSchema,
   TestbedProjectsQuerySchema, TestbedProjectsResponseSchema,
+  TestbedSuggestionQuerySchema, TestbedSuggestionResponseSchema,
+  TestbedRecentsResponseSchema,
   TestbedScaffoldRequestSchema, TestbedScaffoldResponseSchema,
   TestbedImportRequestSchema, TestbedImportResponseSchema,
   AgentcoreReadyResponseSchema, AgentcoreDeployRequestSchema, AgentcoreStatusQuerySchema, AgentcoreDeployStateSchema,
@@ -38,11 +42,12 @@ import {
 import { runReadiness, startLocal, stopLocal, getRunStatus, deployVercel } from "./gem/run.js";
 import { agentcoreReadiness, deployAgentcore, getAgentcoreStatus } from "./gem/agentcoreRun.js";
 import { scaffoldTestbed, importArtifacts } from "./gem/testbed.js";
-import { detectFlavor, discoverProjects } from "./gem/testbedFlavors.js";
+import { detectFlavor, suggestTestbed, discoverProjects } from "./gem/testbedFlavors.js";
 import type { TestbedFlavorId } from "./gem/testbedFlavors.js";
+import { readRecents, upsertRecent } from "./gem/recents.js";
 import { resolveInstall, publishGem } from "./gem/registry.js";
 import { githubRegistrySource, githubRegistryPublisher, registryConfigFromEnv, registryReady } from "./gem/registryGithub.js";
-import { resolveDirs, resolveProject } from "./resolveDir.js";
+import { resolveDirs, resolveProject, agentgemHome } from "./resolveDir.js";
 import { pickFolder } from "./pickFolder.js";
 
 @api({ basePath: "/api" })
@@ -205,6 +210,19 @@ export class GemController {
     return { flavor: detectFlavor(resolveProject(input.query.root)) };
   }
 
+  @get("/testbed/suggestion", { query: TestbedSuggestionQuerySchema, response: TestbedSuggestionResponseSchema })
+  async testbedSuggestion(input: { query: z.infer<typeof TestbedSuggestionQuerySchema> }): Promise<z.infer<typeof TestbedSuggestionResponseSchema>> {
+    const cwd = resolveProject(input.query.cwd ?? process.cwd());
+    const { looksLikeProject, flavor } = suggestTestbed(cwd);
+    return { cwd, looksLikeProject, flavor, name: basename(cwd) };
+  }
+
+  @get("/testbed/recents", { query: PickQuerySchema, response: TestbedRecentsResponseSchema })
+  async testbedRecents(_input: { query: z.infer<typeof PickQuerySchema> }): Promise<z.infer<typeof TestbedRecentsResponseSchema>> {
+    const recents = readRecents(agentgemHome()).map((r) => ({ ...r, exists: existsSync(r.path) }));
+    return { recents };
+  }
+
   // Scanning the user's whole Claude/Codex history is opt-in: off by default, on when
   // AGENTGEM_RECENT_PROJECTS is truthy. Disabled -> empty list (the UI prompts to enable).
   @get("/testbed/projects", { query: TestbedProjectsQuerySchema, response: TestbedProjectsResponseSchema })
@@ -215,7 +233,11 @@ export class GemController {
 
   @post("/testbed/scaffold", { body: TestbedScaffoldRequestSchema, response: TestbedScaffoldResponseSchema })
   async scaffoldTestbed(input: { body: z.infer<typeof TestbedScaffoldRequestSchema> }): Promise<z.infer<typeof TestbedScaffoldResponseSchema>> {
-    return scaffoldTestbed(resolveProject(input.body.root), input.body.name, (input.body.flavor ?? "claude") as TestbedFlavorId);
+    const root = resolveProject(input.body.root);
+    const flavor = (input.body.flavor ?? "claude") as TestbedFlavorId;
+    const res = scaffoldTestbed(root, input.body.name, flavor);
+    upsertRecent(agentgemHome(), { path: root, flavor, name: input.body.name });
+    return res;
   }
 
   @post("/testbed/import", { body: TestbedImportRequestSchema, response: TestbedImportResponseSchema })

@@ -332,6 +332,25 @@ export const TestbedFlavorIdSchema = z.enum(FLAVOR_IDS);
 export const TestbedDetectQuerySchema = z.object({ root: z.string() });
 export const TestbedDetectResponseSchema = z.object({ flavor: TestbedFlavorIdSchema.nullable() });
 
+// cwd probe for the front door. `cwd` overrides process.cwd() (tests); production omits it.
+export const TestbedSuggestionQuerySchema = z.object({ cwd: z.string().optional() });
+export const TestbedSuggestionResponseSchema = z.object({
+  cwd: z.string(),
+  looksLikeProject: z.boolean(),
+  flavor: TestbedFlavorIdSchema.nullable(),
+  name: z.string(),
+});
+
+// Persisted "testbeds opened in agentgem". `exists` is computed per-request (stale paths).
+export const RecentEntrySchema = z.object({
+  path: z.string(),
+  flavor: TestbedFlavorIdSchema,
+  name: z.string(),
+  lastUsed: z.string(),
+  exists: z.boolean(),
+});
+export const TestbedRecentsResponseSchema = z.object({ recents: z.array(RecentEntrySchema) });
+
 // Recent-projects candidates harvested from harness session history. `dir` overrides
 // the ~/.claude base (tests / non-default homes); production leaves it undefined.
 export const TestbedProjectsQuerySchema = z.object({ dir: z.string().optional() });

@@ -419,4 +419,32 @@ describe("testbed flavors", () => {
       rmSync(home, { recursive: true, force: true });
     }
   });
+
+  it("suggestion: reports the cwd folder as a claude project", async () => {
+    const proj = mkdtempSync(join(tmpdir(), "sug-"));
+    mkdirSync(join(proj, ".claude"), { recursive: true });
+    try {
+      const r = await client.get(`/api/testbed/suggestion?cwd=${encodeURIComponent(proj)}`).expect(200);
+      expect(r.body).toMatchObject({ looksLikeProject: true, flavor: "claude" });
+      expect(r.body.cwd).toBe(proj);
+      expect(typeof r.body.name).toBe("string");
+    } finally { rmSync(proj, { recursive: true, force: true }); }
+  });
+
+  it("recents: scaffolding records a recent that /recents returns with exists", async () => {
+    const home = mkdtempSync(join(tmpdir(), "rec-"));
+    const proj = mkdtempSync(join(tmpdir(), "recproj-"));
+    const prev = process.env.AGENTGEM_HOME;
+    process.env.AGENTGEM_HOME = home;
+    try {
+      await client.post("/api/testbed/scaffold")
+        .send({ root: proj, name: "myagent", flavor: "claude" }).expect(200);
+      const r = await client.get("/api/testbed/recents").expect(200);
+      expect(r.body.recents[0]).toMatchObject({ path: proj, flavor: "claude", name: "myagent", exists: true });
+    } finally {
+      if (prev !== undefined) process.env.AGENTGEM_HOME = prev; else delete process.env.AGENTGEM_HOME;
+      rmSync(home, { recursive: true, force: true });
+      rmSync(proj, { recursive: true, force: true });
+    }
+  });
 });
