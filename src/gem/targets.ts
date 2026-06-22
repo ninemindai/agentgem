@@ -316,19 +316,17 @@ const flueComposeAgent = (gem: Gem): MaterializeResult => {
   const { emitted } = flueConnectionFiles(mcps);
   const connImports = emitted.map((seg, i) => `import conn${i} from "../connections/${seg}.ts";`).join("\n");
   const importBlock = [skillImports, connImports].filter(Boolean).join("\n");
-  const config = `model: "anthropic/claude-sonnet-4-6",
-  instructions,
-  skills: [${skillList}],`;
+  const fields = [`model: "anthropic/claude-sonnet-4-6",`, `instructions,`, `skills: [${skillList}],`];
+  const indent = (lines: string[], n: number) => lines.map((l) => " ".repeat(n) + l).join("\n");
   const initializer = emitted.length
     ? `createAgent(async () => {
   const connections = await Promise.all([${emitted.map((_, i) => `conn${i}()`).join(", ")}]);
   return {
-  ${config}
-  tools: connections.flatMap((c) => c.tools),
+${indent([...fields, `tools: connections.flatMap((c) => c.tools),`], 4)}
   };
 })`
     : `createAgent(() => ({
-  ${config}
+${indent(fields, 2)}
 }))`;
 
   const file =
