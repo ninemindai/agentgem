@@ -573,7 +573,6 @@ async function renderMaterialize(){
 }
 // Managed Agents publish: offline preview of the agent payload + a gated Publish action.
 let __publishReady = null, __publishRequestId = null, __publishFingerprint = null, __deployTargets = null;
-async function publishReady(target){ if (__publishReady === null) __publishReady = !!(await (await fetch(`/api/publish-ready?target=${encodeURIComponent(target)}`)).json()).ready; return __publishReady; }
 async function getDeployTargets(){ if (!__deployTargets) { const d = await (await fetch("/api/deploy-targets")).json(); __deployTargets = d.targets || []; } return __deployTargets; }
 async function renderPublish(){
   const el = document.getElementById("preview");

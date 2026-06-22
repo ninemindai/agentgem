@@ -36,7 +36,8 @@ afterEach(() => { process.env = { ...savedEnv }; });
 
 describe("agentcore pure helpers", () => {
   it("agentcoreReadiness reports cli + awsCreds booleans from env", () => {
-    delete process.env.AGENTCORE_BIN; delete process.env.AWS_ACCESS_KEY_ID; delete process.env.AWS_PROFILE;
+    // Empty PATH so the bin scan can't find a host-installed `agentcore` (keeps the test deterministic).
+    delete process.env.AGENTCORE_BIN; delete process.env.AWS_ACCESS_KEY_ID; delete process.env.AWS_PROFILE; process.env.PATH = "";
     expect(agentcoreReadiness()).toEqual({ cli: false, awsCreds: false });
     process.env.AWS_PROFILE = "default"; process.env.AWS_REGION = "us-west-2";
     expect(agentcoreReadiness().awsCreds).toBe(true);

@@ -46,16 +46,32 @@ describe("deployAgentcorePublish", () => {
   it("throws without an execution role", async () => {
     delete process.env.AGENTCORE_EXECUTION_ROLE_ARN;
     process.env.AWS_PROFILE = "default"; process.env.AWS_REGION = "us-west-2";
-    await expect(deployAgentcorePublish(gem(), "req-abcdefghijklmnopqrstuvwxyz123456", { createHarness: async () => { throw new Error("should not be called"); } })).rejects.toThrow(/execution role/i);
+    const fake: AgentcoreControlClient = { createHarness: async () => { throw new Error("should not be called"); }, getHarness: async () => ({ status: "READY", harnessVersion: "1" }) };
+    await expect(deployAgentcorePublish(gem(), "req-abcdefghijklmnopqrstuvwxyz123456", fake)).rejects.toThrow(/execution role/i);
   });
   it("calls the injected client and returns a kind=agentcore-harness result", async () => {
     process.env.AGENTCORE_EXECUTION_ROLE_ARN = "arn:aws:iam::123456789012:role/HarnessRole";
     process.env.AWS_PROFILE = "default"; process.env.AWS_REGION = "us-west-2";
     let seen: Record<string, unknown> | null = null;
-    const fake: AgentcoreControlClient = { createHarness: async (req) => { seen = req; return { arn: "arn:aws:bedrock-agentcore:us-west-2:123:harness/Researchagent-Ab12", harnessId: "Researchagent-Ab12", harnessName: "Researchagent", harnessVersion: "1", status: "READY" }; } };
+    const fake: AgentcoreControlClient = {
+      createHarness: async (req) => { seen = req; return { arn: "arn:aws:bedrock-agentcore:us-west-2:123:harness/Researchagent-Ab12", harnessId: "Researchagent-Ab12", harnessName: "Researchagent", harnessVersion: "1", status: "READY" }; },
+      getHarness: async () => ({ status: "READY", harnessVersion: "1" }),
+    };
     const res = await deployAgentcorePublish(gem(), "req-abcdefghijklmnopqrstuvwxyz123456", fake);
     expect(seen!.harnessName).toMatch(/^[a-zA-Z][a-zA-Z0-9_]{0,39}$/);
     expect(res.kind).toBe("agentcore-harness");
     if (res.kind === "agentcore-harness") { expect(res.harnessArn).toContain("harness/"); expect(res.status).toBe("READY"); }
+  });
+  it("polls GetHarness until terminal when CreateHarness returns CREATING (no GetHarness call when already terminal)", async () => {
+    process.env.AGENTCORE_EXECUTION_ROLE_ARN = "arn:aws:iam::123456789012:role/HarnessRole";
+    process.env.AWS_PROFILE = "default"; process.env.AWS_REGION = "us-west-2";
+    let getCalls = 0;
+    const fake: AgentcoreControlClient = {
+      createHarness: async () => ({ arn: "arn:aws:bedrock-agentcore:us-west-2:123:harness/G-Ab12", harnessId: "G-Ab12", harnessName: "G", harnessVersion: "1", status: "CREATING" }),
+      getHarness: async () => { getCalls++; return { status: "READY", harnessVersion: "2" }; },
+    };
+    const res = await deployAgentcorePublish(gem(), "req-abcdefghijklmnopqrstuvwxyz123456", fake);
+    expect(getCalls).toBe(1);                       // polled once, then terminal -> stop (no sleep)
+    if (res.kind === "agentcore-harness") { expect(res.status).toBe("READY"); expect(res.harnessVersion).toBe("2"); }
   });
 });

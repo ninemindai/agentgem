@@ -177,6 +177,44 @@ describe("flue MCP connections", () => {
   });
 });
 
+describe("flue MCP wiring (connections reach the agent)", () => {
+  it("imports each emitted connection and awaits its tools into the agent (async initializer)", () => {
+    const r = materialize({ name: "my gem", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [
+      skill("review"), httpMcp("ctx"), mcp("gh"),
+    ] }, "flue");
+    const agent = r.files["agents/my_gem.ts"];
+    // both connection files are still emitted
+    expect(r.files["connections/ctx.ts"]).toBeTruthy();
+    expect(r.files["connections/gh.ts"]).toBeTruthy();
+    // the agent imports each emitted connection thunk, in emitted order
+    expect(agent).toContain('import conn0 from "../connections/ctx.ts";');
+    expect(agent).toContain('import conn1 from "../connections/gh.ts";');
+    // the initializer goes async and awaits the connections, spreading their tools
+    expect(agent).toContain("createAgent(async () => {");
+    expect(agent).toContain("await Promise.all([conn0(), conn1()])");
+    expect(agent).toContain("tools: ");
+    // skills still wired
+    expect(agent).toContain("skills: [skill0]");
+  });
+
+  it("no MCP servers -> synchronous initializer, no tools/connection wiring (unchanged)", () => {
+    const r = materialize(gem([skill("a")]), "flue");
+    const agent = r.files["agents/p.ts"];
+    expect(agent).toContain("createAgent(() => ({");
+    expect(agent).not.toContain("../connections/");
+    expect(agent).not.toContain("tools:");
+  });
+
+  it("does not import a skipped MCP connection (no broken import)", () => {
+    const badSecret: McpServerArtifact = { type: "mcp_server", name: "bad", transport: "http", config: { url: "https://x/sse" }, secretRefs: [{ name: "Q", location: "query.key" }] };
+    const r = materialize({ name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [skill("a"), badSecret] }, "flue");
+    const agent = r.files["agents/p.ts"];
+    expect(r.files["connections/bad.ts"]).toBeUndefined();       // skipped -> no file
+    expect(agent).not.toContain("../connections/bad.ts");        // and not imported
+    expect(r.skipped.find((s) => s.type === "mcp_server")).toBeTruthy();
+  });
+});
+
 describe("openai-sandbox target (agent file + skills)", () => {
   it("emits <gemname>.agent.ts (SandboxAgent + manifest + capabilities) and skill files; hooks + mcp skipped in v1-step1", () => {
     const p: Gem = { name: "my gem", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [
@@ -283,6 +321,11 @@ describe("buildAgentcoreHarness", () => {
     expect(harness.systemPrompt).toBeUndefined();  // no instructions -> key omitted
     expect(harness.skills).toBeUndefined();        // no skills -> key omitted
   });
+  it("dedupes harness.skills by path when two names collapse to the same segment", () => {
+    // "a b" and "a/b" both safePathSegment -> "a_b"
+    const { harness } = buildAgentcoreHarness(gem([skill("a b"), skill("a/b")]));
+    expect(harness.skills).toEqual([{ path: ".agents/skills/a_b" }]);
+  });
 });
 
 describe("compatibility", () => {
@@ -300,9 +343,16 @@ describe("agentcoreComposeProject", () => {
   it("emits harness.json, scaffold, Dockerfile COPY, and a SECRETS checklist", () => {
     const g = { ...gem([skill("scrape"), httpMcp("exa")]), requiredSecrets: [{ name: "X_TOKEN", artifact: "exa", location: "headers.Authorization" }] };
     const { files, skipped } = agentcoreComposeProject(g);
-    expect(JSON.parse(files["app/p/harness.json"]).model.bedrockModelConfig.modelId).toBe("global.anthropic.claude-sonnet-4-6");
-    expect(files["agentcore/agentcore.json"]).toBeDefined();
-    expect(files["agentcore/aws-targets.json"]).toBeDefined();
+    // CLI harness.json format: model {provider, modelId}, system prompt in a sibling file (not inline).
+    const harness = JSON.parse(files["app/p/harness.json"]);
+    expect(harness.model).toEqual({ provider: "bedrock", modelId: "global.anthropic.claude-sonnet-4-6" });
+    expect(harness.systemPrompt).toBeUndefined();
+    expect(files["app/p/system-prompt.md"]).toBeDefined();
+    const proj = JSON.parse(files["agentcore/agentcore.json"]);
+    expect(proj.name).toBe("p");
+    expect(proj.version).toBe(1);
+    expect(proj.harnesses).toEqual([{ name: "p", path: "app/p" }]);
+    expect(files["agentcore/aws-targets.json"]).toBe("[]\n");
     expect(files["Dockerfile"]).toContain("COPY .agents/skills/ .agents/skills/");
     expect(files["SECRETS.md"]).toContain("agentcore add credential");
     expect(files["SECRETS.md"]).toContain("X_TOKEN");
