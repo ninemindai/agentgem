@@ -722,8 +722,11 @@ async function renderPublish(){
   const targets = await getDeployTargets();
   const existingSel = document.getElementById("deployTarget");
   const selectedTarget = existingSel ? existingSel.value : (targets[0] ? targets[0].id : "claude-managed");
-  const targetOpts = targets.map(t => `<option value="${esc(t.id)}" ${t.id === selectedTarget ? "selected" : ""}>${esc(t.label || t.id)}</option>`).join("");
+  // Managed backends (DEPLOY_REGISTRY) + self-host deploys for the materialize targets.
+  const targetOpts = targets.map(t => `<option value="${esc(t.id)}" ${t.id === selectedTarget ? "selected" : ""}>${esc(t.label || t.id)}</option>`).join("")
+    + `<option value="eve-vercel" ${selectedTarget === "eve-vercel" ? "selected" : ""}>Eve → Vercel (self-host)</option>`;
   const selHtml = `<div class="pgroup" style="display:flex;align-items:center;gap:8px"><label for="deployTarget" style="white-space:nowrap">Backend:</label><select id="deployTarget">${targetOpts}</select></div>`;
+  if (selectedTarget === "eve-vercel") { await renderEveDeploy(el, selHtml); return; }
   const body = { ...buildSelectionBody(), target: selectedTarget };
   const r = await (await fetch("/api/publish-preview", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })).json();
   window.__publish = r;
@@ -783,6 +786,52 @@ async function doPublish(){
       st.innerHTML = `✓ Created agent <code>${esc(r.agentId)}</code> (v${esc(r.version)}) + sandbox <code>${esc(r.environmentId)}</code> · ${r.registeredSkills.length} skill${r.registeredSkills.length === 1 ? "" : "s"} registered`;
     }
   } catch (e) { st.textContent = "Failed: " + e.message; btn.disabled = false; }
+}
+// ── Self-host deploy: Eve → Vercel (reuses the workspace run/deploy backend) ──
+// Eve deploys a saved workspace's eve project (deployVercel re-renders it from the
+// workspace gem), so this panel needs a workspace open and VERCEL_TOKEN on the server.
+let __evePoll = null;
+const eveRunning = s => ["installing", "building", "running", "deploying"].includes(s);
+async function renderEveDeploy(el, selHtml){
+  if (!wsCurrent){
+    el.innerHTML = selHtml + `<div class="pgroup"><p class="note">Eve deploys a saved <b>workspace</b>'s eve project. Open or create a workspace first (the <b>Workspace</b> stage), then deploy it here.</p></div>`;
+    attachDeployTargetListener(); return;
+  }
+  const ready = await (await fetch(`/api/run-ready?name=${encodeURIComponent(wsCurrent)}&target=eve`)).json();
+  let h = `<div class="psummary">${selHtml}<div class="phead"><strong>${esc(wsCurrent)}</strong> <span class="d">· Eve → Vercel (self-host)</span></div>`;
+  h += `<div class="pgroup"><button id="eveDeployBtn" ${ready.vercel ? "" : "disabled"}>${ready.vercel ? "▲ Deploy to Vercel" : "Deploy (set VERCEL_TOKEN)"}</button> <span class="d" id="eveDeployState"></span></div>`;
+  h += `<div id="eveDeployUrl" style="margin:4px 0"></div>`;
+  h += `<pre id="eveDeployLog" class="json" style="max-height:220px;overflow:auto" hidden></pre>`;
+  h += `<p class="note">Builds the workspace's eve project (<code>eve build</code>) and deploys via the pinned Vercel CLI (<code>vercel deploy --prebuilt</code>). The eve project is re-rendered from the workspace gem automatically. Requires <code>VERCEL_TOKEN</code> on the server.</p></div>`;
+  el.innerHTML = h;
+  attachDeployTargetListener();
+  // reflect any in-flight/last deploy state for this workspace
+  const cur = await (await fetch(`/api/run-status?name=${encodeURIComponent(wsCurrent)}&target=eve`)).json();
+  if (cur && cur.mode === "vercel" && (cur.state !== "idle" || cur.url)) { eveRenderRun(cur); if (eveRunning(cur.state)) evePollRun(wsCurrent); }
+  document.getElementById("eveDeployBtn")?.addEventListener("click", eveDeploy);
+}
+async function eveDeploy(){
+  if (!wsCurrent) return;
+  const btn = document.getElementById("eveDeployBtn"), st = document.getElementById("eveDeployState");
+  if (btn) btn.disabled = true; if (st) st.textContent = "Deploying…";
+  const s = await (await fetch("/api/run", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: wsCurrent, target: "eve", mode: "vercel" }) })).json();
+  eveRenderRun(s); evePollRun(wsCurrent);
+}
+function eveRenderRun(s){
+  const st = document.getElementById("eveDeployState"), url = document.getElementById("eveDeployUrl"), log = document.getElementById("eveDeployLog"), btn = document.getElementById("eveDeployBtn");
+  if (!st) return;
+  st.textContent = s.state || "";
+  if (url) url.innerHTML = s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.url)}</a>` : "";
+  if (log && s.logTail && s.logTail.length){ log.hidden = false; log.textContent = s.logTail.join("\n"); log.scrollTop = log.scrollHeight; }
+  if (btn) btn.disabled = eveRunning(s.state);
+}
+function evePollRun(ws){
+  if (__evePoll) clearInterval(__evePoll);
+  __evePoll = setInterval(async () => {
+    const s = await (await fetch(`/api/run-status?name=${encodeURIComponent(ws)}&target=eve`)).json();
+    eveRenderRun(s);
+    if (!eveRunning(s.state)) { clearInterval(__evePoll); __evePoll = null; }
+  }, 1500);
 }
 function openMaterializedFile(path){
   const body = (window.__materialize && window.__materialize.files || {})[path] || "";
