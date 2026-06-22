@@ -162,22 +162,46 @@ const AGENTCORE_DOCKERFILE = `# AgentCore harness custom image: bakes local skil
 FROM public.ecr.aws/bedrock-agentcore/harness-base:latest
 COPY .agents/skills/ .agents/skills/
 `;
-const agentcoreProjectJson = (gemName: string): string =>
-  JSON.stringify({ version: "1.0", harnesses: [{ name: safePathSegment(gemName), path: `app/${safePathSegment(gemName)}` }] }, null, 2) + "\n";
-const AGENTCORE_AWS_TARGETS = JSON.stringify({ account: "REPLACE_WITH_ACCOUNT_ID", region: "us-west-2" }, null, 2) + "\n";
+// Matches the shape `agentcore create` scaffolds (schema v1): top-level name/version/managedBy +
+// the resource arrays the CLI expects, with the single harness registered under `harnesses`.
+const agentcoreProjectJson = (gemName: string): string => {
+  const name = safePathSegment(gemName);
+  return JSON.stringify({
+    $schema: "https://schema.agentcore.aws.dev/v1/agentcore.json",
+    name,
+    version: 1,
+    managedBy: "CDK",
+    tags: { "agentcore:created-by": "agentgem", "agentcore:project-name": name },
+    runtimes: [], memories: [], knowledgeBases: [], credentials: [], evaluators: [],
+    onlineEvalConfigs: [], agentCoreGateways: [], policyEngines: [], configBundles: [],
+    abTests: [], harnesses: [{ name, path: `app/${name}` }], datasets: [], payments: [],
+  }, null, 2) + "\n";
+};
+// `agentcore create` scaffolds an empty targets list; `agentcore deploy` resolves account/region from AWS creds.
+const AGENTCORE_AWS_TARGETS = "[]\n";
 const agentcoreSecretsMd = (secrets: SecretRequirement[]): string => {
   if (!secrets.length) return `# Secrets\n\nThis agent declares no secrets.\n`;
   const lines = secrets.map((s) => `- \`${s.name}\` (for ${s.artifact} at ${s.location}):\n  \`\`\`\n  agentcore add credential --type api-key --name ${s.name} --api-key <value>\n  \`\`\``);
   return `# Secrets\n\nRegister each credential in AgentCore Identity, then replace \`REGION\`/\`ACCOUNT\` in the \`\${arn:...}\` placeholders in \`app/<agent>/harness.json\`:\n\n${lines.join("\n")}\n`;
 };
 
-// Cross-cutting scaffold: harness.json (the agent config) plus the files needed to deploy it.
+// Cross-cutting scaffold in the AgentCore CLI's project format (verified against `agentcore create`):
+// harness.json uses model {provider,modelId} and carries no inline prompt — the system prompt lives in
+// a sibling system-prompt.md. (The raw CreateHarness API shape, used by the publish backend, differs.)
 export const agentcoreComposeProject = (gem: Gem): MaterializeResult => {
   const seg = safePathSegment(gem.name);
   const { harness, skipped } = buildAgentcoreHarness(gem);
+  const systemPrompt = (harness.systemPrompt as { text: string }[] | undefined)?.[0]?.text ?? "You are a helpful assistant.";
+  const harnessJson = {
+    name: seg,
+    model: { provider: "bedrock", modelId: AGENTCORE_MODEL_ID },
+    tools: (harness.tools as unknown[]) ?? [],
+    skills: (harness.skills as unknown[]) ?? [],
+  };
   return {
     files: {
-      [`app/${seg}/harness.json`]: JSON.stringify(harness, null, 2) + "\n",
+      [`app/${seg}/harness.json`]: JSON.stringify(harnessJson, null, 2) + "\n",
+      [`app/${seg}/system-prompt.md`]: systemPrompt + "\n",
       "agentcore/agentcore.json": agentcoreProjectJson(gem.name),
       "agentcore/aws-targets.json": AGENTCORE_AWS_TARGETS,
       "Dockerfile": AGENTCORE_DOCKERFILE,
@@ -212,7 +236,8 @@ const hooksSettingsJson = (hooks: HookArtifact[]): FileTree =>
 
 // Flue: a single agents/<gemname>.ts registers the agent. It imports each skill (reusing the shared
 // skills/<n>/SKILL.md bodies), folds instruction artifacts into the `instructions` string, and lists
-// the skills. MCP connection files are emitted separately (mcpFlueConnections) and wired by the operator.
+// the skills. MCP connection files are emitted by the `mcp` renderer and imported by the agent file
+// (flueComposeAgent), which awaits them and spreads their adapted tools into the agent's `tools`.
 function escapeTemplate(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/\$\{/g, "\\${");
 }
@@ -234,8 +259,13 @@ const flueConnection = (server: McpServerArtifact, url: string): string => {
   return `import { connectMcpServer } from "@flue/runtime";\n\nexport default () => connectMcpServer(${JSON.stringify(server.name)}, {\n  url: ${JSON.stringify(url)}${transport}${headers},\n});\n`;
 };
 
-const mcpFlueConnections = (servers: McpServerArtifact[]): MaterializeResult => {
+// Plan the connections/<seg>.ts files (and stdio proxies/) for the MCP servers, returning the segs
+// that got a file in iteration order. Single source of truth: both the `mcp` renderer (which writes
+// the files) and `compose` (which imports them into the agent) consume this, so the agent never
+// imports a connection that wasn't emitted, nor strands one that was.
+function flueConnectionFiles(servers: McpServerArtifact[]): { files: FileTree; emitted: string[]; skipped: SkippedArtifact[] } {
   const files: FileTree = {};
+  const emitted: string[] = [];
   const skipped: SkippedArtifact[] = [];
   let port = PROXY_BASE_PORT;
   for (const s of servers) {
@@ -253,36 +283,62 @@ const mcpFlueConnections = (servers: McpServerArtifact[]): MaterializeResult => 
         continue;
       }
       files[connectionPath] = flueConnection(s, url);
+      emitted.push(seg);
     } else if (s.transport === "stdio" && typeof s.config.command === "string") {
       const p = port++;
       const args = Array.isArray(s.config.args) ? s.config.args.filter((a): a is string => typeof a === "string") : [];
       // localhost proxy connection carries no auth headers (the proxy injects the secrets into the stdio process)
       files[connectionPath] = flueConnection({ ...s, secretRefs: undefined }, `http://${PROXY_HOST}:${p}/mcp`);
       files[`proxies/${seg}.mjs`] = stdioProxyRunner(s.name, s.config.command, args, (s.secretRefs ?? []).map((r) => r.name), p);
+      emitted.push(seg);
     } else {
       skipped.push({ artifact: s.name, type: "mcp_server", reason: `${s.transport} MCP has no usable URL or stdio command` });
     }
   }
+  return { files, emitted, skipped };
+}
+
+const mcpFlueConnections = (servers: McpServerArtifact[]): MaterializeResult => {
+  const { files, skipped } = flueConnectionFiles(servers);
   return { files, skipped };
 };
 const flueComposeAgent = (gem: Gem): MaterializeResult => {
   const skills = gem.artifacts.filter((a): a is SkillArtifact => a.type === "skill");
   const instr = gem.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions");
-  const imports = skills.map((s, i) => `import skill${i} from "../skills/${safePathSegment(s.name)}/SKILL.md" with { type: "skill" };`).join("\n");
+  const mcps = gem.artifacts.filter((a): a is McpServerArtifact => a.type === "mcp_server");
+  const skillImports = skills.map((s, i) => `import skill${i} from "../skills/${safePathSegment(s.name)}/SKILL.md" with { type: "skill" };`).join("\n");
   const instructions = instr.map((i) => `## ${i.name}\n\n${i.content}`).join("\n\n---\n\n");
-  const list = skills.map((_, i) => `skill${i}`).join(", ");
+  const skillList = skills.map((_, i) => `skill${i}`).join(", ");
+
+  // Wire the emitted MCP connections into the agent's tools. connectMcpServer is async, so when there
+  // are connections the initializer goes async, awaits the connection thunks, and spreads their adapted
+  // tools. The connections stay open for the agent's lifetime (no .close() — unlike a transient run()).
+  const { emitted } = flueConnectionFiles(mcps);
+  const connImports = emitted.map((seg, i) => `import conn${i} from "../connections/${seg}.ts";`).join("\n");
+  const importBlock = [skillImports, connImports].filter(Boolean).join("\n");
+  const config = `model: "anthropic/claude-sonnet-4-6",
+  instructions,
+  skills: [${skillList}],`;
+  const initializer = emitted.length
+    ? `createAgent(async () => {
+  const connections = await Promise.all([${emitted.map((_, i) => `conn${i}()`).join(", ")}]);
+  return {
+  ${config}
+  tools: connections.flatMap((c) => c.tools),
+  };
+})`
+    : `createAgent(() => ({
+  ${config}
+}))`;
+
   const file =
 `import { createAgent, type AgentRouteHandler } from "@flue/runtime";
-${imports}${imports ? "\n" : ""}
+${importBlock}${importBlock ? "\n" : ""}
 export const route: AgentRouteHandler = async (_c, next) => next();
 
 const instructions = \`${escapeTemplate(instructions)}\`;
 
-export default createAgent(() => ({
-  model: "anthropic/claude-sonnet-4-6",
-  instructions,
-  skills: [${list}],
-}));
+export default ${initializer};
 `;
   return rendered({ [`agents/${safePathSegment(gem.name)}.ts`]: file });
 };
