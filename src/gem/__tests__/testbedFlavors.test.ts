@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TESTBED_FLAVORS, detectFlavor, writeMcpCodexToml, discoverProjects } from "../testbedFlavors.js";
+import { TESTBED_FLAVORS, detectFlavor, suggestTestbed, writeMcpCodexToml, discoverProjects } from "../testbedFlavors.js";
 import { scaffoldTestbed } from "../testbed.js";
 import { resolveDirs } from "../../resolveDir.js";
 
@@ -22,6 +22,29 @@ describe("detectFlavor", () => {
     expect(detectFlavor(join(root, "d"))).toBeNull();   // ambiguous
     mkdirSync(join(root, "e"), { recursive: true });
     expect(detectFlavor(join(root, "e"))).toBeNull();   // none
+  });
+});
+
+describe("suggestTestbed", () => {
+  it("reports a claude project for a .claude marker", () => {
+    mkdirSync(join(root, "p", ".claude"), { recursive: true });
+    expect(suggestTestbed(join(root, "p"))).toEqual({ looksLikeProject: true, flavor: "claude" });
+  });
+
+  it("reports an adoptable project (flavor null) for a bare git repo", () => {
+    mkdirSync(join(root, "g", ".git"), { recursive: true });
+    expect(suggestTestbed(join(root, "g"))).toEqual({ looksLikeProject: true, flavor: null });
+  });
+
+  it("reports looksLikeProject with null flavor when markers are ambiguous", () => {
+    mkdirSync(join(root, "amb", ".claude"), { recursive: true });
+    mkdirSync(join(root, "amb", ".hermes"), { recursive: true });
+    expect(suggestTestbed(join(root, "amb"))).toEqual({ looksLikeProject: true, flavor: null });
+  });
+
+  it("reports not-a-project for an empty folder", () => {
+    mkdirSync(join(root, "empty"), { recursive: true });
+    expect(suggestTestbed(join(root, "empty"))).toEqual({ looksLikeProject: false, flavor: null });
   });
 });
 

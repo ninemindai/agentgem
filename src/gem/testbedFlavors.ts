@@ -151,6 +151,20 @@ export function detectFlavor(root: string): TestbedFlavorId | null {
   return hits.length === 1 ? hits[0] : null;
 }
 
+// What the startup cwd probe needs: is this folder worth offering as a testbed,
+// and (if unambiguous) which flavor. flavor stays null for ambiguous/marker-less
+// git repos — the UI shows an inline flavor toggle in that case.
+export interface TestbedSuggestion {
+  looksLikeProject: boolean;
+  flavor: TestbedFlavorId | null;
+}
+
+export function suggestTestbed(root: string): TestbedSuggestion {
+  const anyMarker = flavorIds().some((id) => TESTBED_FLAVORS[id].detect(root));
+  const looksLikeProject = anyMarker || existsSync(join(root, ".git"));
+  return { looksLikeProject, flavor: detectFlavor(root) };
+}
+
 // ── Project discovery (recent-projects candidates from session history) ──
 
 // A previously-seen project surfaced to the picker. `lastUsed` is an ISO string
