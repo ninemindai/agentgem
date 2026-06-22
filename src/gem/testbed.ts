@@ -5,6 +5,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { ConfigInventory } from "./types.js";
+import { TESTBED_FLAVORS, type TestbedFlavorId } from "./testbedFlavors.js";
 
 function readJson(abs: string): Record<string, unknown> {
   try { const v = JSON.parse(readFileSync(abs, "utf8")); return v && typeof v === "object" && !Array.isArray(v) ? v : {}; }
@@ -15,20 +16,8 @@ function writeJson(abs: string, obj: unknown): void {
   writeFileSync(abs, JSON.stringify(obj, null, 2) + "\n", "utf8");
 }
 
-function writeIfAbsent(root: string, rel: string, content: string, created: string[]): void {
-  const abs = join(root, rel);
-  if (existsSync(abs)) return;
-  mkdirSync(dirname(abs), { recursive: true });
-  writeFileSync(abs, content, "utf8");
-  created.push(rel);
-}
-
-export function scaffoldTestbed(root: string, name: string): { root: string; created: string[] } {
-  const created: string[] = [];
-  mkdirSync(join(root, ".claude", "skills"), { recursive: true });
-  writeIfAbsent(root, ".claude/settings.json", "{}\n", created);
-  writeIfAbsent(root, "CLAUDE.md", `# ${name}\n`, created);
-  writeIfAbsent(root, ".gitignore", ".mcp.json\n.claude/settings.json\n.env\n.targets/\n", created);
+export function scaffoldTestbed(root: string, name: string, flavor: TestbedFlavorId = "claude"): { root: string; created: string[] } {
+  const { created } = TESTBED_FLAVORS[flavor].scaffold(root, name);
   return { root, created };
 }
 

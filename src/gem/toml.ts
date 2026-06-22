@@ -37,3 +37,62 @@ export function tomlMcpServers(servers: McpServerArtifact[]): string {
   }
   return blocks.length ? blocks.join("\n\n") + "\n" : "";
 }
+
+// Inverse of tomlMcpServers for the [mcp_servers.*] subset only (scalars, scalar arrays, one level of
+// sub-tables). Not a general TOML parser. Unknown/other top-level tables are ignored.
+function parseScalar(raw: string): unknown {
+  const s = raw.trim();
+  if (s.startsWith('"') && s.endsWith('"')) {
+    return s.slice(1, -1).replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+  }
+  if (s === "true") return true;
+  if (s === "false") return false;
+  if (/^-?\d+(\.\d+)?$/.test(s)) return Number(s);
+  return s;
+}
+function parseArray(raw: string): unknown[] {
+  const inner = raw.trim().replace(/^\[/, "").replace(/\]$/, "").trim();
+  if (!inner) return [];
+  // split on commas not inside quotes
+  const parts: string[] = []; let cur = ""; let inStr = false;
+  for (let i = 0; i < inner.length; i++) {
+    const ch = inner[i];
+    if (ch === '"' && inner[i - 1] !== "\\") inStr = !inStr;
+    if (ch === "," && !inStr) { parts.push(cur); cur = ""; } else cur += ch;
+  }
+  if (cur.trim()) parts.push(cur);
+  return parts.map((p) => parseScalar(p));
+}
+function unquoteKey(k: string): string {
+  const s = k.trim();
+  return s.startsWith('"') && s.endsWith('"') ? s.slice(1, -1) : s;
+}
+export function parseTomlMcpServers(toml: string): Record<string, Record<string, unknown>> {
+  const out: Record<string, Record<string, unknown>> = {};
+  let server: string | null = null;
+  let sub: string | null = null;     // sub-table key (e.g. "env") within the current server
+  for (const rawLine of toml.split("\n")) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const header = line.match(/^\[mcp_servers\.([^\]]+)\]$/);
+    if (header) {
+      // split "name" or "name.sub" on the first dot outside quotes
+      const segs = header[1].match(/("(?:[^"\\]|\\.)*"|[^.]+)/g) ?? [];
+      const name = unquoteKey(segs[0] ?? "");
+      server = name; sub = segs[1] ? unquoteKey(segs[1]) : null;
+      out[server] ??= {};
+      if (sub) (out[server][sub] ??= {});
+      continue;
+    }
+    if (line.startsWith("[")) { server = null; sub = null; continue; } // some other table
+    if (!server) continue;
+    const eq = line.indexOf("=");
+    if (eq < 0) continue;
+    const key = unquoteKey(line.slice(0, eq));
+    const valRaw = line.slice(eq + 1).trim();
+    const val = valRaw.startsWith("[") ? parseArray(valRaw) : parseScalar(valRaw);
+    if (sub) (out[server][sub] as Record<string, unknown>)[key] = val;
+    else out[server][key] = val;
+  }
+  return out;
+}

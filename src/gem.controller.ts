@@ -25,6 +25,7 @@ import {
   ArchiveRequestSchema, ArchiveResponseSchema,
   CreateWorkspaceRequestSchema, WorkspaceQuerySchema, RenderRequestSchema, WorkspaceNameRequestSchema, WorkspaceSummarySchema, WorkspaceDetailSchema, RenderResultSchema, ListWorkspacesResponseSchema, DeleteWorkspaceResponseSchema,
   RunReadyQuerySchema, RunReadyResponseSchema, RunRequestSchema, RunStatusQuerySchema, RunStateSchema, RunStopRequestSchema, RunStopResponseSchema,
+  TestbedDetectQuerySchema, TestbedDetectResponseSchema,
   TestbedScaffoldRequestSchema, TestbedScaffoldResponseSchema,
   TestbedImportRequestSchema, TestbedImportResponseSchema,
   AgentcoreReadyResponseSchema, AgentcoreDeployRequestSchema, AgentcoreStatusQuerySchema, AgentcoreDeployStateSchema,
@@ -36,6 +37,8 @@ import {
 import { runReadiness, startLocal, stopLocal, getRunStatus, deployVercel } from "./gem/run.js";
 import { agentcoreReadiness, deployAgentcore, getAgentcoreStatus } from "./gem/agentcoreRun.js";
 import { scaffoldTestbed, importArtifacts } from "./gem/testbed.js";
+import { detectFlavor } from "./gem/testbedFlavors.js";
+import type { TestbedFlavorId } from "./gem/testbedFlavors.js";
 import { resolveInstall, publishGem } from "./gem/registry.js";
 import { githubRegistrySource, githubRegistryPublisher, registryConfigFromEnv, registryReady } from "./gem/registryGithub.js";
 import { resolveDirs, resolveProject } from "./resolveDir.js";
@@ -196,9 +199,14 @@ export class GemController {
     return DEPLOY_REGISTRY[target].deploy(gem, input.body.requestId);
   }
 
+  @get("/testbed/detect", { query: TestbedDetectQuerySchema, response: TestbedDetectResponseSchema })
+  async testbedDetect(input: { query: z.infer<typeof TestbedDetectQuerySchema> }): Promise<z.infer<typeof TestbedDetectResponseSchema>> {
+    return { flavor: detectFlavor(resolveProject(input.query.root)) };
+  }
+
   @post("/testbed/scaffold", { body: TestbedScaffoldRequestSchema, response: TestbedScaffoldResponseSchema })
   async scaffoldTestbed(input: { body: z.infer<typeof TestbedScaffoldRequestSchema> }): Promise<z.infer<typeof TestbedScaffoldResponseSchema>> {
-    return scaffoldTestbed(resolveProject(input.body.root), input.body.name);
+    return scaffoldTestbed(resolveProject(input.body.root), input.body.name, (input.body.flavor ?? "claude") as TestbedFlavorId);
   }
 
   @post("/testbed/import", { body: TestbedImportRequestSchema, response: TestbedImportResponseSchema })
