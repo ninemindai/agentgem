@@ -2,9 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TESTBED_FLAVORS, detectFlavor, suggestTestbed, writeMcpCodexToml, discoverProjects } from "../testbedFlavors.js";
+import { TESTBED_FLAVORS, detectFlavor, suggestTestbed, writeMcpCodexToml } from "../testbedFlavors.js";
 import { scaffoldTestbed } from "../testbed.js";
-import { resolveDirs } from "../../resolveDir.js";
 
 let root: string;
 beforeEach(() => { root = mkdtempSync(join(tmpdir(), "fl-")); });
@@ -45,47 +44,6 @@ describe("suggestTestbed", () => {
   it("reports not-a-project for an empty folder", () => {
     mkdirSync(join(root, "empty"), { recursive: true });
     expect(suggestTestbed(join(root, "empty"))).toEqual({ looksLikeProject: false, flavor: null });
-  });
-});
-
-describe("discoverProjects", () => {
-  // resolveDirs treats its arg as the .claude dir; siblings (.codex) hang off its parent.
-  const dirsFor = (home: string) => resolveDirs(join(home, ".claude"));
-
-  it("reads claude cwd from the newest session, ignoring the lossy folder name", () => {
-    const home = mkdtempSync(join(tmpdir(), "home-"));
-    const proj = join(home, ".claude", "projects", "-Users-me-Projects-cool-app");
-    mkdirSync(proj, { recursive: true });
-    // First record has no cwd (summary); a later line carries the real path.
-    writeFileSync(join(proj, "s.jsonl"),
-      `{"type":"summary"}\n{"type":"user","cwd":"/Users/me/Projects/cool-app"}\n`);
-
-    const found = discoverProjects(dirsFor(home));
-    expect(found).toEqual([
-      expect.objectContaining({ path: "/Users/me/Projects/cool-app", flavor: "claude", exists: false }),
-    ]);
-    expect(typeof found[0].lastUsed).toBe("string");
-    rmSync(home, { recursive: true, force: true });
-  });
-
-  it("walks codex's date-partitioned sessions and pulls payload.cwd", () => {
-    const home = mkdtempSync(join(tmpdir(), "home-"));
-    const day = join(home, ".codex", "sessions", "2026", "06", "22");
-    mkdirSync(day, { recursive: true });
-    writeFileSync(join(day, "rollout-x.jsonl"),
-      `{"type":"session_meta","payload":{"cwd":"${home}"}}\n{"type":"event"}\n`);
-
-    const found = discoverProjects(dirsFor(home));
-    // `home` exists, so this candidate is marked usable.
-    expect(found).toContainEqual(expect.objectContaining({ path: home, flavor: "codex", exists: true }));
-    rmSync(home, { recursive: true, force: true });
-  });
-
-  it("returns [] for hermes and when no history exists", () => {
-    const home = mkdtempSync(join(tmpdir(), "home-"));
-    expect(TESTBED_FLAVORS.hermes.discoverProjects(dirsFor(home))).toEqual([]);
-    expect(discoverProjects(dirsFor(home))).toEqual([]);
-    rmSync(home, { recursive: true, force: true });
   });
 });
 

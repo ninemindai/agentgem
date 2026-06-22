@@ -393,33 +393,6 @@ describe("testbed flavors", () => {
     } finally { rmSync(cx, { recursive: true, force: true }); }
   });
 
-  it("recent projects: gated off by default, lists from session history when enabled", async () => {
-    // Fake home: ~/.claude/projects/<encoded>/<session>.jsonl carrying the real cwd.
-    const home = mkdtempSync(join(tmpdir(), "rp-"));
-    const proj = join(home, ".claude", "projects", "-Users-me-app");
-    mkdirSync(proj, { recursive: true });
-    writeFileSync(join(proj, "s.jsonl"), `{"type":"summary"}\n{"type":"user","cwd":"${home}"}\n`);
-    const claudeDir = join(home, ".claude");
-    const q = `/api/testbed/projects?dir=${encodeURIComponent(claudeDir)}`;
-    const prev = process.env.AGENTGEM_RECENT_PROJECTS;
-    try {
-      delete process.env.AGENTGEM_RECENT_PROJECTS;
-      const off = await client.get(q).expect(200);
-      expect(off.body).toEqual({ enabled: false, projects: [] });
-
-      process.env.AGENTGEM_RECENT_PROJECTS = "1";
-      const on = await client.get(q).expect(200);
-      expect(on.body.enabled).toBe(true);
-      expect(on.body.projects).toContainEqual(
-        expect.objectContaining({ path: home, flavor: "claude", exists: true }),
-      );
-    } finally {
-      if (prev !== undefined) process.env.AGENTGEM_RECENT_PROJECTS = prev;
-      else delete process.env.AGENTGEM_RECENT_PROJECTS;
-      rmSync(home, { recursive: true, force: true });
-    }
-  });
-
   it("suggestion: reports the cwd folder as a claude project", async () => {
     const proj = mkdtempSync(join(tmpdir(), "sug-"));
     mkdirSync(join(proj, ".claude"), { recursive: true });

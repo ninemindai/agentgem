@@ -351,22 +351,6 @@ export const RecentEntrySchema = z.object({
 });
 export const TestbedRecentsResponseSchema = z.object({ recents: z.array(RecentEntrySchema) });
 
-// Recent-projects candidates harvested from harness session history. `dir` overrides
-// the ~/.claude base (tests / non-default homes); production leaves it undefined.
-export const TestbedProjectsQuerySchema = z.object({ dir: z.string().optional() });
-export const ProjectCandidateSchema = z.object({
-  path: z.string(),
-  flavor: TestbedFlavorIdSchema,
-  lastUsed: z.string().nullable(),
-  exists: z.boolean(),
-});
-// `enabled` reflects the AGENTGEM_RECENT_PROJECTS opt-in; off -> empty list, so the
-// UI can explain how to turn history scanning on rather than showing a blank picker.
-export const TestbedProjectsResponseSchema = z.object({
-  enabled: z.boolean(),
-  projects: z.array(ProjectCandidateSchema),
-});
-
 export const TestbedImportSelectionSchema = z.object({
   skills: z.array(z.string()).optional(),
   mcpServers: z.array(z.string()).optional(),
