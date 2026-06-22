@@ -930,6 +930,18 @@ async function applyImport(){
     st.textContent = "Import failed" + (r && r.error ? `: ${r.error.message || r.error}` : "");
   } else {
     st.textContent = `Imported ${r.written.length}${r.skipped.length ? ` · skipped ${r.skipped.length}` : ""}`;
+    // Auto-select what was just imported — it was deliberately added, so default it into the gem
+    // (restoreChecks() in load() reflects these into the checkboxes). Without this, imported
+    // artifacts render unchecked and never reach the gem/materialize output.
+    if (activeTestbed) {
+      const ps = projSel(activeTestbed);
+      for (const w of r.written) {
+        if (w.type === "skill") ps.skills.add(w.name);
+        else if (w.type === "mcp_server") ps.mcpServers.add(w.name);
+        else if (w.type === "hook") ps.hooks.add(w.name);
+        else if (w.type === "instructions") ps.includeInstructions = true;
+      }
+    }
   }
   load();
 }
