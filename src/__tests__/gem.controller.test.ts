@@ -1,6 +1,6 @@
 // src/__tests__/gem.controller.test.ts
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import supertest from "supertest";
@@ -361,5 +361,20 @@ describe("agentcore-managed deploy backend", () => {
     expect(r.body.request.harnessName).toMatch(/^[a-zA-Z][a-zA-Z0-9_]{0,39}$/);
     expect(r.body.skipped.some((s: { artifact: string }) => s.artifact === "review")).toBe(true); // local skill skipped
     expect(JSON.stringify(r.body)).not.toContain("ghp_secret");
+  });
+});
+
+describe("testbed flavors", () => {
+  it("detect returns the flavor for a codex-shaped dir and scaffolds a hermes testbed", async () => {
+    const cx = mkdtempSync(join(tmpdir(), "cx-")); mkdirSync(join(cx, ".codex"), { recursive: true });
+    try {
+      const d = await client.get(`/api/testbed/detect?root=${encodeURIComponent(cx)}`).expect(200);
+      expect(d.body.flavor).toBe("codex");
+      const hm = mkdtempSync(join(tmpdir(), "hm-"));
+      const s = await client.post("/api/testbed/scaffold").send({ root: hm, name: "h", flavor: "hermes" }).expect(200);
+      expect(existsSync(join(hm, ".hermes", "SOUL.md"))).toBe(true);
+      expect(s.body.created).toContain(".hermes/SOUL.md");
+      rmSync(hm, { recursive: true, force: true });
+    } finally { rmSync(cx, { recursive: true, force: true }); }
   });
 });

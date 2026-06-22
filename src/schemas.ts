@@ -3,6 +3,7 @@ import { z } from "zod";
 import { RUNNER_REGISTRY } from "./gem/checks.js";
 import { TARGET_REGISTRY } from "./gem/targets.js";
 import { deployTargetIds } from "./gem/deploy.js";
+import { flavorIds } from "./gem/testbedFlavors.js";
 
 export const SkillArtifactSchema = z.object({
   type: z.literal("skill"),
@@ -326,13 +327,18 @@ export const RunStopRequestSchema = z.object({ name: z.string(), target: TargetI
 export const RunStopResponseSchema = z.object({ stopped: z.boolean() });
 
 // ── Testbed (testbed-first on-ramp) ──
+const FLAVOR_IDS = flavorIds() as [string, ...string[]];
+export const TestbedFlavorIdSchema = z.enum(FLAVOR_IDS);
+export const TestbedDetectQuerySchema = z.object({ root: z.string() });
+export const TestbedDetectResponseSchema = z.object({ flavor: TestbedFlavorIdSchema.nullable() });
+
 export const TestbedImportSelectionSchema = z.object({
   skills: z.array(z.string()).optional(),
   mcpServers: z.array(z.string()).optional(),
   hooks: z.array(z.string()).optional(),
   includeInstructions: z.boolean().optional(),
 });
-export const TestbedScaffoldRequestSchema = z.object({ root: z.string(), name: z.string() });
+export const TestbedScaffoldRequestSchema = z.object({ root: z.string(), name: z.string(), flavor: TestbedFlavorIdSchema.optional() });
 export const TestbedScaffoldResponseSchema = z.object({ root: z.string(), created: z.array(z.string()) });
 export const TestbedImportRequestSchema = z.object({
   root: z.string(),
