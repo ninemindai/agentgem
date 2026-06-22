@@ -267,10 +267,23 @@
 </div>
 <div id="recentModal" class="modal-bg" hidden>
   <div class="modal">
-    <div class="modal-h"><strong class="t">Open testbed</strong><span class="src">recent projects from Claude / Codex history</span><button id="recentClose" class="ghost" style="margin-left:auto">✕ Close</button></div>
-    <div class="modal-body" style="padding:14px"><div id="recentList">Loading…</div></div>
+    <div class="modal-h"><strong class="t">Open a testbed</strong><button id="recentClose" class="ghost" style="margin-left:auto">✕ Close</button></div>
+    <div class="modal-body" style="padding:14px">
+      <div id="tbCwd" hidden style="padding:12px;border:1px solid var(--line);border-radius:8px;margin-bottom:14px">
+        <div style="margin-bottom:6px">This folder looks like a <span id="tbCwdFlavor"></span> project</div>
+        <div class="d" id="tbCwdPath" style="margin-bottom:8px;word-break:break-all"></div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <label class="d">name</label>
+          <input id="tbName" style="flex:1;min-width:120px" />
+          <span id="tbFlavor" style="display:flex;gap:4px"></span>
+          <button id="tbUse" style="margin-left:auto">Use this ▸</button>
+        </div>
+      </div>
+      <div class="src" style="margin-bottom:6px">Recent <span class="d">(testbeds you've opened here)</span></div>
+      <div id="recentList">Loading…</div>
+    </div>
     <div class="modal-h" style="border-top:1px solid var(--line);border-bottom:0">
-      <span class="d">Pick a recent project, or browse for any folder.</span>
+      <span class="d">Not this folder? Pick a recent one above, or browse.</span>
       <button id="recentBrowse" style="margin-left:auto">Browse folder…</button>
     </div>
   </div>
@@ -295,59 +308,83 @@ function renderTestbedChip(){
   el.innerHTML = `<span class="path">📁 <b>${esc(short)}</b> <span style="color:var(--muted);font-size:11px">${esc(flavorLabel)}</span></span><button id="tbSwap" class="ghost">Switch</button>`;
   document.getElementById("tbSwap").onclick = openOrCreateTestbed;
 }
-// Entry point for the testbed chip: lead with recent projects harvested from
-// Claude/Codex session history, with the OS folder picker as the fallback.
+// Front door: confirm the cwd suggestion up top, with recents + Browse below.
+let candidate = null; // { path, flavor } currently shown in the top block
+
 async function openOrCreateTestbed(){
-  const m = document.getElementById("recentModal");
+  document.getElementById("recentModal").hidden = false;
+  try {
+    const s = await (await fetch("/api/testbed/suggestion")).json();
+    if (s.looksLikeProject) renderCandidate(s.cwd, s.flavor, s.name);
+    else renderCandidate(null);
+  } catch { renderCandidate(null); }
+  renderRecents();
+}
+
+// Fill (or hide) the top "use this folder" block. flavor null -> toggle starts unset.
+function renderCandidate(path, flavor, name){
+  const box = document.getElementById("tbCwd");
+  if(!path){ box.hidden = true; candidate = null; return; }
+  box.hidden = false;
+  candidate = { path, flavor: flavor || null };
+  document.getElementById("tbCwdPath").textContent = path;
+  document.getElementById("tbName").value = name || path.replace(/^.*\//, "");
+  renderFlavorToggle();
+}
+
+function renderFlavorToggle(){
+  document.getElementById("tbCwdFlavor").textContent = candidate.flavor ? (FLAVORS[candidate.flavor]||{}).label || candidate.flavor : "—";
+  const el = document.getElementById("tbFlavor");
+  el.innerHTML = Object.entries(FLAVORS).map(([id,f])=>
+    `<button type="button" class="ghost" data-f="${id}" aria-pressed="${candidate.flavor===id}"${candidate.flavor===id?' style="font-weight:700;text-decoration:underline"':''}>${esc(f.label)}</button>`
+  ).join("");
+  el.querySelectorAll("button").forEach(b=>{ b.onclick = ()=>{ candidate.flavor = b.dataset.f; renderFlavorToggle(); }; });
+  document.getElementById("tbUse").disabled = !candidate.flavor;
+}
+
+async function confirmCandidate(){
+  if(!candidate || !candidate.flavor) return;
+  const name = document.getElementById("tbName").value.trim() || candidate.path.replace(/^.*\//, "");
+  document.getElementById("recentModal").hidden = true;
+  await useTestbed(candidate.path, candidate.flavor, name);
+}
+
+async function renderRecents(){
   const list = document.getElementById("recentList");
   list.innerHTML = "Loading…";
-  m.hidden = false;
-  let data = { enabled: false, projects: [] };
-  try { data = await (await fetch("/api/testbed/projects")).json(); } catch {}
-  if(!data.enabled){
-    list.innerHTML = `<p class="note">Recent-project suggestions are off. Start agentgem with <code>AGENTGEM_RECENT_PROJECTS=1</code> to scan your Claude/Codex history, or use <b>Browse folder…</b> to pick any folder.</p>`;
+  let recents = [];
+  try { recents = (await (await fetch("/api/testbed/recents")).json()).recents || []; } catch {}
+  if(!recents.length){
+    list.innerHTML = `<p class="note">No recent testbeds yet — confirm the folder above, or <b>Browse folder…</b>.</p>`;
     return;
   }
-  const projs = data.projects || [];
-  if(!projs.length){
-    list.innerHTML = `<p class="note">No recent projects found in your Claude/Codex history — use <b>Browse folder…</b> to pick one.</p>`;
-    return;
-  }
-  list.innerHTML = projs.map((p,i)=>{
-    const short = esc(p.path.replace(/^.*\//, "") || p.path);
+  list.innerHTML = recents.map((p,i)=>{
+    const short = esc(p.name || p.path.replace(/^.*\//, "") || p.path);
     const fl = esc((FLAVORS[p.flavor]||FLAVORS.claude).label);
     const when = p.lastUsed ? esc(p.lastUsed.slice(0,10)) : "";
     const stale = p.exists ? "" : ` <span class="d" title="path no longer exists">· missing</span>`;
     return `<label class="row recent" data-i="${i}"${p.exists?"":' style="opacity:.5"'}><span><b>${short}</b> <span class="src">${fl}</span> <span class="d">${esc(p.path)}</span>${stale}</span><span class="d" style="margin-left:auto">${when}</span></label>`;
   }).join("");
   list.querySelectorAll("label.recent").forEach(row=>{
-    row.onclick = ()=>{ const p = projs[+row.dataset.i]; if(!p.exists) return; m.hidden = true; useTestbed(p.path, p.flavor); };
+    row.onclick = ()=>{ const p = recents[+row.dataset.i]; if(!p.exists) return; document.getElementById("recentModal").hidden = true; useTestbed(p.path, p.flavor, p.name); };
   });
 }
-// Adopt a known project+flavor: scaffold is idempotent (writeIfAbsent), so this
-// safely fills any missing skeleton without disturbing existing config.
-async function useTestbed(path, flavor){
+
+// Adopt a known project+flavor: scaffold is idempotent (writeIfAbsent) and records a recent.
+async function useTestbed(path, flavor, name){
   setFlavor(flavor);
-  const name = path.replace(/^.*\//, "");
+  name = name || path.replace(/^.*\//, "");
   await fetch("/api/testbed/scaffold", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({ root: path, name, flavor }) });
   setTestbed(path);
   load();
 }
-// Fallback: OS-native folder picker for any folder not in history.
+
+// Browse routes the picked folder back through the same confirm block (no prompts).
 async function browseForTestbed(){
-  document.getElementById("recentModal").hidden = true;
   const pick = await (await fetch("/api/pick-folder")).json();
   if(!pick.path) return;
-  let flavor = (await (await fetch(`/api/testbed/detect?root=${encodeURIComponent(pick.path)}`)).json()).flavor;
-  if(!flavor){
-    const choice = (prompt("Harness flavor for this testbed — claude / codex / hermes", "claude") || "claude").trim().toLowerCase();
-    flavor = (choice in FLAVORS) ? choice : "claude";
-  }
-  setFlavor(flavor);
-  const name = prompt("Testbed agent name", pick.path.replace(/^.*\//, "")) || pick.path.replace(/^.*\//, "");
-  await fetch("/api/testbed/scaffold", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({ root: pick.path, name, flavor }) });
-  setTestbed(pick.path);
-  load();
+  const flavor = (await (await fetch(`/api/testbed/detect?root=${encodeURIComponent(pick.path)}`)).json()).flavor;
+  renderCandidate(pick.path, flavor, pick.path.replace(/^.*\//, ""));
 }
 const sel = { skills: new Set(), mcpServers: new Set(), includeInstructions: false, hooks: new Set(), projects: {} };
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
@@ -1014,6 +1051,7 @@ document.getElementById("importBtn").onclick = openImport;
 document.getElementById("importClose").onclick = () => document.getElementById("importModal").hidden = true;
 document.getElementById("recentClose").onclick = () => document.getElementById("recentModal").hidden = true;
 document.getElementById("recentBrowse").onclick = browseForTestbed;
+document.getElementById("tbUse").onclick = confirmCandidate;
 document.getElementById("importApply").onclick = applyImport;
 let __runWs = null, __runPoll = null;
 async function runRefreshReady(name){

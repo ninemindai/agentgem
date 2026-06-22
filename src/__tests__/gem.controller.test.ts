@@ -12,8 +12,15 @@ let app: RestApplication;
 let client: ReturnType<typeof supertest>;
 let dir: string;
 let projRoot: string;
+let agentgemHomeDir: string;
+let prevAgentgemHome: string | undefined;
 
 beforeAll(async () => {
+  // Isolate agentgem's recents store so scaffold calls never touch the real ~/.agentgem.
+  agentgemHomeDir = mkdtempSync(join(tmpdir(), "agem-home-"));
+  prevAgentgemHome = process.env.AGENTGEM_HOME;
+  process.env.AGENTGEM_HOME = agentgemHomeDir;
+
   dir = mkdtempSync(join(tmpdir(), "ap-"));
   mkdirSync(join(dir, "skills", "review"), { recursive: true });
   writeFileSync(join(dir, "skills", "review", "SKILL.md"), "---\nname: review\ndescription: Review code\n---\n# Review\n");
@@ -37,6 +44,9 @@ afterAll(async () => {
   await app.stop();
   rmSync(dir, { recursive: true, force: true });
   rmSync(projRoot, { recursive: true, force: true });
+  rmSync(agentgemHomeDir, { recursive: true, force: true });
+  if (prevAgentgemHome !== undefined) process.env.AGENTGEM_HOME = prevAgentgemHome;
+  else delete process.env.AGENTGEM_HOME;
 });
 
 describe("GemController", () => {
@@ -273,6 +283,7 @@ describe("run ops", () => {
 describe("workspace ops", () => {
   it("create -> list -> render(eve) -> read -> delete", async () => {
     const home = mkdtempSync(join(tmpdir(), "wsh-"));
+    const prevHome = process.env.AGENTGEM_HOME;
     process.env.AGENTGEM_HOME = home;
     try {
       const c = await client.post("/api/workspaces")
@@ -295,7 +306,7 @@ describe("workspace ops", () => {
       expect(del.body.deleted).toBe("mp");
       expect((await client.get("/api/workspaces").expect(200)).body.workspaces).toEqual([]);
     } finally {
-      delete process.env.AGENTGEM_HOME;
+      if (prevHome !== undefined) process.env.AGENTGEM_HOME = prevHome; else delete process.env.AGENTGEM_HOME;
       rmSync(home, { recursive: true, force: true });
     }
   });
