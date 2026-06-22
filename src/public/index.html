@@ -966,12 +966,15 @@ document.getElementById("filtersToggle").addEventListener("click", () => {
 renderChecks();
 load();
 let wsCurrent = "";
+let wsAny = false; // any saved workspaces exist — keeps the workspace bar reachable to open them
 async function wsRefresh(){
   const r = await (await fetch("/api/workspaces")).json();
+  wsAny = (r.workspaces || []).length > 0;
   const sel = document.getElementById("wsSelect");
   sel.innerHTML = `<option value="">— no workspace —</option>` + (r.workspaces || [])
     .map(w => `<option value="${esc(w.name)}"${w.name === wsCurrent ? " selected" : ""}>${esc(w.name)} · ${w.artifactCounts.skill + w.artifactCounts.mcp_server + w.artifactCounts.instructions + w.artifactCounts.hook} artifacts</option>`).join("");
   document.getElementById("wsDelete").hidden = !wsCurrent;
+  if (typeof renderRail === "function") renderRail();
 }
 async function wsOpen(name){
   wsCurrent = name;
@@ -1023,6 +1026,7 @@ document.getElementById("wsNew").addEventListener("click", async () => {
   if (!name) return;
   const res = await fetch("/api/workspaces", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...buildSelectionBody(), name }) });
   if (!res.ok){ alert("Could not create workspace (name taken or invalid)."); return; }
+  wsCurrent = name;                                   // mark selected before refresh so the option shows
   await wsRefresh(); await wsOpen(name); document.getElementById("wsSelect").value = name;
 });
 document.getElementById("wsDelete").addEventListener("click", async () => {
@@ -1214,10 +1218,11 @@ function renderRail(){
   // (artifacts selected or a workspace open) — they're downstream of pure testbed authoring.
   const gemArts = (window.__gem && window.__gem.artifacts || []).length;
   const wsVal = document.getElementById("wsSelect")?.value || "";
-  const showPkg = gemArts > 0 || !!wsVal;
+  const showPkg = gemArts > 0 || !!wsVal;       // gem identity: only while packaging / a ws is open
+  const showWs = showPkg || wsAny;              // workspace controls: also whenever saved workspaces exist
   if (showPkg) syncGemName();                  // keep the name current when the bar appears
   const nameBar = document.getElementById("nameBar"); if (nameBar) nameBar.style.display = showPkg ? "" : "none";
-  const wsBar = document.getElementById("wsBar"); if (wsBar) wsBar.style.display = showPkg ? "" : "none";
+  const wsBar = document.getElementById("wsBar"); if (wsBar) wsBar.style.display = showWs ? "" : "none";
 }
 document.getElementById("rail").addEventListener("click", e => {
   const st = e.target.closest(".station"); if (!st) return;
