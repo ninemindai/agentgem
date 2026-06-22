@@ -21,3 +21,10 @@ export function resolveDirs(dir?: string): { claudeDir: string; agentDir: string
   const home = dirname(claudeDir);
   return { claudeDir, agentDir: join(home, ".agents", "skills"), codexDir: join(home, ".codex"), hermesDir: join(home, ".hermes") };
 }
+
+// Base dir for agentgem's own state (recents, etc.): ~/.agentgem lives under this.
+// AGENTGEM_HOME overrides the home root for tests / non-default setups.
+export function agentgemHome(): string {
+  const override = process.env.AGENTGEM_HOME;
+  return override && override.length > 0 ? override : homedir();
+}
