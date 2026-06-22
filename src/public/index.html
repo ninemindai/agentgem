@@ -281,6 +281,8 @@
       </div>
       <div class="src" style="margin-bottom:6px">Recent <span class="d">(testbeds you've opened here)</span></div>
       <div id="recentList">Loading…</div>
+      <div class="src" style="margin:14px 0 6px">Discovered <span class="d">(projects from your Claude / Codex history)</span></div>
+      <div id="discoveredList">Loading…</div>
     </div>
     <div class="modal-h" style="border-top:1px solid var(--line);border-bottom:0">
       <span class="d">Not this folder? Pick a recent one above, or browse.</span>
@@ -318,7 +320,8 @@ async function openOrCreateTestbed(){
     if (s.looksLikeProject) renderCandidate(s.cwd, s.flavor, s.name);
     else renderCandidate(null);
   } catch { renderCandidate(null); }
-  renderRecents();
+  await renderRecents();
+  renderDiscovered();
 }
 
 // Fill (or hide) the top "use this folder" block. flavor null -> toggle starts unset.
@@ -349,11 +352,13 @@ async function confirmCandidate(){
   await useTestbed(candidate.path, candidate.flavor, name);
 }
 
+let recentPaths = new Set(); // paths already in agentgem recents — dedup the Discovered list against these
 async function renderRecents(){
   const list = document.getElementById("recentList");
   list.innerHTML = "Loading…";
   let recents = [];
   try { recents = (await (await fetch("/api/testbed/recents")).json()).recents || []; } catch {}
+  recentPaths = new Set(recents.map(r=>r.path));
   if(!recents.length){
     list.innerHTML = `<p class="note">No recent testbeds yet — confirm the folder above, or <b>Browse folder…</b>.</p>`;
     return;
@@ -367,6 +372,29 @@ async function renderRecents(){
   }).join("");
   list.querySelectorAll("label.recent").forEach(row=>{
     row.onclick = ()=>{ const p = recents[+row.dataset.i]; if(!p.exists) return; document.getElementById("recentModal").hidden = true; useTestbed(p.path, p.flavor, p.name); };
+  });
+}
+
+// Cross-repo projects from Claude/Codex session history, minus anything already in Recent.
+async function renderDiscovered(){
+  const list = document.getElementById("discoveredList");
+  list.innerHTML = "Loading…";
+  let projects = [];
+  try { projects = (await (await fetch("/api/testbed/projects")).json()).projects || []; } catch {}
+  projects = projects.filter(p=>!recentPaths.has(p.path));
+  if(!projects.length){
+    list.innerHTML = `<p class="note">No projects found in your Claude / Codex history.</p>`;
+    return;
+  }
+  list.innerHTML = projects.map((p,i)=>{
+    const short = esc(p.path.replace(/^.*\//, "") || p.path);
+    const fl = esc((FLAVORS[p.flavor]||FLAVORS.claude).label);
+    const when = p.lastUsed ? esc(p.lastUsed.slice(0,10)) : "";
+    const stale = p.exists ? "" : ` <span class="d" title="path no longer exists">· missing</span>`;
+    return `<label class="row disc" data-i="${i}"${p.exists?"":' style="opacity:.5"'}><span><b>${short}</b> <span class="src">${fl}</span> <span class="d">${esc(p.path)}</span>${stale}</span><span class="d" style="margin-left:auto">${when}</span></label>`;
+  }).join("");
+  list.querySelectorAll("label.disc").forEach(row=>{
+    row.onclick = ()=>{ const p = projects[+row.dataset.i]; if(!p.exists) return; document.getElementById("recentModal").hidden = true; useTestbed(p.path, p.flavor, p.path.replace(/^.*\//, "")); };
   });
 }
 

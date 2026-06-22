@@ -351,6 +351,17 @@ export const RecentEntrySchema = z.object({
 });
 export const TestbedRecentsResponseSchema = z.object({ recents: z.array(RecentEntrySchema) });
 
+// Cross-repo discovery: projects harvested from Claude/Codex session history (ungated).
+// `dir` overrides the ~/.claude base (tests / non-default homes); production omits it.
+export const TestbedProjectsQuerySchema = z.object({ dir: z.string().optional() });
+export const ProjectCandidateSchema = z.object({
+  path: z.string(),
+  flavor: TestbedFlavorIdSchema,
+  lastUsed: z.string().nullable(),
+  exists: z.boolean(),
+});
+export const TestbedProjectsResponseSchema = z.object({ projects: z.array(ProjectCandidateSchema) });
+
 export const TestbedImportSelectionSchema = z.object({
   skills: z.array(z.string()).optional(),
   mcpServers: z.array(z.string()).optional(),

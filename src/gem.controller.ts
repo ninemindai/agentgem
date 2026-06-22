@@ -30,6 +30,7 @@ import {
   TestbedDetectQuerySchema, TestbedDetectResponseSchema,
   TestbedSuggestionQuerySchema, TestbedSuggestionResponseSchema,
   TestbedRecentsResponseSchema,
+  TestbedProjectsQuerySchema, TestbedProjectsResponseSchema,
   TestbedScaffoldRequestSchema, TestbedScaffoldResponseSchema,
   TestbedImportRequestSchema, TestbedImportResponseSchema,
   AgentcoreReadyResponseSchema, AgentcoreDeployRequestSchema, AgentcoreStatusQuerySchema, AgentcoreDeployStateSchema,
@@ -41,7 +42,7 @@ import {
 import { runReadiness, startLocal, stopLocal, getRunStatus, deployVercel } from "./gem/run.js";
 import { agentcoreReadiness, deployAgentcore, getAgentcoreStatus } from "./gem/agentcoreRun.js";
 import { scaffoldTestbed, importArtifacts } from "./gem/testbed.js";
-import { detectFlavor, suggestTestbed } from "./gem/testbedFlavors.js";
+import { detectFlavor, suggestTestbed, discoverProjects } from "./gem/testbedFlavors.js";
 import type { TestbedFlavorId } from "./gem/testbedFlavors.js";
 import { readRecents, upsertRecent } from "./gem/recents.js";
 import { resolveInstall, publishGem } from "./gem/registry.js";
@@ -220,6 +221,13 @@ export class GemController {
   async testbedRecents(_input: { query: z.infer<typeof PickQuerySchema> }): Promise<z.infer<typeof TestbedRecentsResponseSchema>> {
     const recents = readRecents(agentgemHome()).map((r) => ({ ...r, exists: existsSync(r.path) }));
     return { recents };
+  }
+
+  // Cross-repo discovery from Claude/Codex session history. Ungated — the front door
+  // shows these under a "Discovered" section beneath the user's own recents.
+  @get("/testbed/projects", { query: TestbedProjectsQuerySchema, response: TestbedProjectsResponseSchema })
+  async testbedProjects(input: { query: z.infer<typeof TestbedProjectsQuerySchema> }): Promise<z.infer<typeof TestbedProjectsResponseSchema>> {
+    return { projects: discoverProjects(resolveDirs(input.query.dir)) };
   }
 
   @post("/testbed/scaffold", { body: TestbedScaffoldRequestSchema, response: TestbedScaffoldResponseSchema })

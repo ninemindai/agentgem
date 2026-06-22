@@ -415,6 +415,19 @@ describe("testbed flavors", () => {
     } finally { rmSync(proj, { recursive: true, force: true }); }
   });
 
+  it("projects: discovers projects from Claude session history (ungated)", async () => {
+    const home = mkdtempSync(join(tmpdir(), "disc-"));
+    const proj = join(home, ".claude", "projects", "-Users-me-app");
+    mkdirSync(proj, { recursive: true });
+    writeFileSync(join(proj, "s.jsonl"), `{"type":"summary"}\n{"type":"user","cwd":"${home}"}\n`);
+    try {
+      const r = await client.get(`/api/testbed/projects?dir=${encodeURIComponent(join(home, ".claude"))}`).expect(200);
+      expect(r.body.projects).toContainEqual(
+        expect.objectContaining({ path: home, flavor: "claude", exists: true }),
+      );
+    } finally { rmSync(home, { recursive: true, force: true }); }
+  });
+
   it("recents: scaffolding records a recent that /recents returns with exists", async () => {
     const home = mkdtempSync(join(tmpdir(), "rec-"));
     const proj = mkdtempSync(join(tmpdir(), "recproj-"));
