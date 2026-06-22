@@ -1,6 +1,6 @@
 // src/gem/__tests__/toml.test.ts
 import { describe, it, expect } from "vitest";
-import { tomlMcpServers } from "../toml.js";
+import { tomlMcpServers, parseTomlMcpServers } from "../toml.js";
 import type { McpServerArtifact } from "../types.js";
 
 const srv = (name: string, config: Record<string, unknown>): McpServerArtifact => ({ type: "mcp_server", name, transport: "stdio", config });
@@ -24,5 +24,20 @@ describe("tomlMcpServers", () => {
 
   it("returns empty string for no servers", () => {
     expect(tomlMcpServers([])).toBe("");
+  });
+});
+
+describe("parseTomlMcpServers", () => {
+  it("round-trips the shape tomlMcpServers writes", () => {
+    const servers: McpServerArtifact[] = [
+      { type: "mcp_server", name: "gh", transport: "stdio", config: { command: "npx", args: ["-y", "gh-mcp"], env: { GH_TOKEN: "x" } } },
+      { type: "mcp_server", name: "exa", transport: "http", config: { url: "https://mcp.x/sse" } },
+    ];
+    const parsed = parseTomlMcpServers(tomlMcpServers(servers));
+    expect(parsed.gh).toEqual({ command: "npx", args: ["-y", "gh-mcp"], env: { GH_TOKEN: "x" } });
+    expect(parsed.exa).toEqual({ url: "https://mcp.x/sse" });
+  });
+  it("returns {} for input without an [mcp_servers] table", () => {
+    expect(parseTomlMcpServers('[other]\nx = 1\n')).toEqual({});
   });
 });
