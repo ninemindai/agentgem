@@ -2,8 +2,10 @@
 // The set of harness "flavors" a testbed can be authored/test-driven as. Flavors drive the
 // flavor-specific bits — detection, scaffold skeleton, test-drive run command, and import support.
 // Introspection is flavor-agnostic (introspectProject reads whatever project config is present).
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { parseTomlMcpServers, tomlMcpServers } from "./toml.js";
+import type { McpServerArtifact } from "./types.js";
 
 export type TestbedFlavorId = "claude" | "codex" | "hermes";
 
@@ -22,6 +24,33 @@ function writeIfAbsent(root: string, rel: string, content: string, created: stri
   mkdirSync(dirname(abs), { recursive: true });
   writeFileSync(abs, content, "utf8");
   created.push(rel);
+}
+
+// Remove every [mcp_servers...] section (header through to the next top-level table or EOF),
+// preserving all other content. Lets writeMcpCodexToml regenerate just the MCP block.
+function stripMcpServerBlocks(toml: string): string {
+  const out: string[] = [];
+  let skipping = false;
+  for (const line of toml.split("\n")) {
+    if (/^\s*\[/.test(line)) skipping = /^\s*\[mcp_servers(\.|\])/.test(line); // a table header (re)sets the mode
+    if (!skipping) out.push(line);
+  }
+  return out.join("\n");
+}
+
+export function writeMcpCodexToml(root: string, name: string, rawConfig: Record<string, unknown>): boolean {
+  const abs = join(root, ".codex", "config.toml");
+  const text = existsSync(abs) ? readFileSync(abs, "utf8") : "";
+  const servers = parseTomlMcpServers(text);
+  const overwritten = name in servers;
+  servers[name] = rawConfig;                      // raw config — local testbed only
+  const nonMcp = stripMcpServerBlocks(text).trimEnd();
+  const arts = Object.entries(servers).map(([n, config]) =>
+    ({ type: "mcp_server", name: n, transport: "stdio", config } as McpServerArtifact));
+  const block = tomlMcpServers(arts);            // regenerated [mcp_servers...] section
+  mkdirSync(dirname(abs), { recursive: true });
+  writeFileSync(abs, (nonMcp ? nonMcp + "\n\n" : "") + block, "utf8");
+  return overwritten;
 }
 
 export const TESTBED_FLAVORS: Record<TestbedFlavorId, TestbedFlavor> = {
