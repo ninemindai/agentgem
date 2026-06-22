@@ -234,7 +234,7 @@
     <div class="bar"><button id="importBtn" class="ghost">⬇ Import from machine…</button><span class="d" id="importStatus" style="margin-left:8px"></span></div>
     <div id="inventory">Loading…</div>
     <div id="testdrive" class="testdrive" hidden>
-      <div class="hd">▶ Test-drive this agent <span class="pill">Claude Code</span></div>
+      <div class="hd">▶ Test-drive this agent <span class="pill" id="tdPill">Claude Code</span></div>
       <div class="cmd"><span class="dollar">$</span> <code id="tdCmd"></code> <button id="tdCopy" class="ghost">Copy</button></div>
       <div class="ft">Runs your real harness in the testbed. Imported secrets are live there; the packaged gem stays redacted.</div>
     </div>
@@ -1040,7 +1040,9 @@ function renderTestDrive(){
   const card = document.getElementById("testdrive");
   if(!activeTestbed){ card.hidden = true; return; }
   card.hidden = false;
-  document.getElementById("tdCmd").textContent = `cd ${activeTestbed} && ${(FLAVORS[activeFlavor] || FLAVORS.claude).run}`;
+  const fl = FLAVORS[activeFlavor] || FLAVORS.claude;
+  document.getElementById("tdCmd").textContent = `cd ${activeTestbed} && ${fl.run}`;
+  document.getElementById("tdPill").textContent = fl.label;
   const ib = document.getElementById("importBtn");
   if (ib) { const ok = (FLAVORS[activeFlavor] || FLAVORS.claude).importSupported; ib.disabled = !ok; ib.title = ok ? "" : `Not supported for ${(FLAVORS[activeFlavor] || FLAVORS.claude).label} testbeds`; }
 }
