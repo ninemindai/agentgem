@@ -112,7 +112,7 @@ const agentcoreMcpTools = (servers: McpServerArtifact[]): { tools: unknown[]; sk
   for (const s of servers) {
     const url = typeof s.config.url === "string" ? s.config.url : "";
     if (!/^https?:\/\//.test(url)) {
-      skipped.push({ artifact: s.name, type: "mcp_server", reason: `AgentCore remote_mcp requires an HTTP/SSE URL; ${s.transport} MCP unsupported` });
+      skipped.push({ artifact: s.name, type: "mcp_server", reason: `AgentCore remote_mcp requires an HTTP/SSE URL; ${s.transport === "stdio" ? "stdio MCP unsupported" : "no URL found"}` });
       continue;
     }
     const refs = s.secretRefs ?? [];
@@ -140,7 +140,19 @@ export const buildAgentcoreHarness = (gem: Gem): { harness: Record<string, unkno
   const harness: Record<string, unknown> = { model: { bedrockModelConfig: { modelId: AGENTCORE_MODEL_ID } } };
   if (instr.length) harness.systemPrompt = [{ text: instr.map((i) => `## ${i.name}\n\n${i.content}`).join("\n\n---\n\n") }];
   if (tools.length) harness.tools = tools;
-  if (skills.length) harness.skills = skills.map((s) => ({ path: `.agents/skills/${safePathSegment(s.name)}` }));
+  if (skills.length) {
+    // Dedupe by path: two skill names can collapse to the same safePathSegment, and the harness
+    // skills[] must not carry a duplicate path (the files are deduped by materialize's merge).
+    const seen = new Set<string>();
+    const paths: { path: string }[] = [];
+    for (const s of skills) {
+      const path = `.agents/skills/${safePathSegment(s.name)}`;
+      if (seen.has(path)) continue;
+      seen.add(path);
+      paths.push({ path });
+    }
+    harness.skills = paths;
+  }
   return { harness, skipped };
 };
 

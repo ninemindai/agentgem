@@ -3,13 +3,20 @@
 // so the network call is unit-testable with a fake (no live AWS). Skills are skip-and-reported: the API
 // takes git/s3 sources, not the local skill files a gem carries.
 import type { Gem, SecretRequirement } from "./types.js";
-import { buildAgentcoreHarness, safePathSegment } from "./targets.js";
+import { buildAgentcoreHarness } from "./targets.js";
 import type { SkippedArtifact } from "./publish.js";
 import type { DeployPreview, DeployResult } from "./deploy.js";
 
 export interface AgentcoreControlClient {
   createHarness(req: Record<string, unknown>): Promise<{ arn: string; harnessId: string; harnessName: string; harnessVersion: string; status: string; failureReason?: string }>;
+  getHarness(harnessId: string): Promise<{ status: string; harnessVersion: string; failureReason?: string }>;
 }
+
+// CreateHarness returns while the harness is still CREATING; these gate the poll-to-terminal loop.
+const POLL_INTERVAL_MS = 3000;
+const POLL_MAX_ATTEMPTS = 40;
+const isTerminalHarnessStatus = (s: string): boolean => /ready|fail/i.test(s);
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 // CreateHarness harnessName pattern: [a-zA-Z][a-zA-Z0-9_]{0,39}
 export function harnessNameFor(gem: Gem): string {
@@ -52,6 +59,13 @@ export function realAgentcoreControlClient(): AgentcoreControlClient {
         harnessVersion: String(h.harnessVersion ?? ""), status: String(h.status ?? ""), failureReason: h.failureReason as string | undefined,
       };
     },
+    async getHarness(harnessId) {
+      const { BedrockAgentCoreControlClient, GetHarnessCommand } = await import("@aws-sdk/client-bedrock-agentcore-control");
+      const client = new BedrockAgentCoreControlClient({});
+      const out = await client.send(new GetHarnessCommand({ harnessId } as never));
+      const h = (out as { harness?: Record<string, unknown> }).harness ?? {};
+      return { status: String(h.status ?? ""), harnessVersion: String(h.harnessVersion ?? ""), failureReason: h.failureReason as string | undefined };
+    },
   };
 }
 
@@ -66,5 +80,16 @@ export async function deployAgentcorePublish(gem: Gem, _requestId: string, clien
   if (!roleArn) throw new Error("AGENTCORE_EXECUTION_ROLE_ARN is not set — cannot create an AgentCore harness (execution role required).");
   const { request, skipped, vaultSecrets } = buildCreateHarnessRequest(gem, { executionRoleArn: roleArn });
   const h = await client.createHarness(request);
-  return { kind: "agentcore-harness", harnessArn: h.arn, harnessId: h.harnessId, harnessName: h.harnessName, harnessVersion: h.harnessVersion, status: h.status, skipped, vaultSecrets };
+  // Poll GetHarness until the harness reaches a terminal state (READY or *FAILED*); CreateHarness
+  // returns while still CREATING. Polls immediately (no leading sleep) and stops on terminal/attempts.
+  let status = h.status;
+  let harnessVersion = h.harnessVersion;
+  for (let i = 0; i < POLL_MAX_ATTEMPTS && !isTerminalHarnessStatus(status); i++) {
+    const g = await client.getHarness(h.harnessId);
+    status = g.status;
+    harnessVersion = g.harnessVersion || harnessVersion;
+    if (isTerminalHarnessStatus(status)) break;
+    await sleep(POLL_INTERVAL_MS);
+  }
+  return { kind: "agentcore-harness", harnessArn: h.arn, harnessId: h.harnessId, harnessName: h.harnessName, harnessVersion, status, skipped, vaultSecrets };
 }

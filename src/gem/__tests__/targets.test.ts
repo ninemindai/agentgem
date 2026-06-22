@@ -283,6 +283,11 @@ describe("buildAgentcoreHarness", () => {
     expect(harness.systemPrompt).toBeUndefined();  // no instructions -> key omitted
     expect(harness.skills).toBeUndefined();        // no skills -> key omitted
   });
+  it("dedupes harness.skills by path when two names collapse to the same segment", () => {
+    // "a b" and "a/b" both safePathSegment -> "a_b"
+    const { harness } = buildAgentcoreHarness(gem([skill("a b"), skill("a/b")]));
+    expect(harness.skills).toEqual([{ path: ".agents/skills/a_b" }]);
+  });
 });
 
 describe("compatibility", () => {
