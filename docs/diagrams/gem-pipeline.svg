@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 540" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace">
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+    </marker>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+    </pattern>
+  </defs>
+
+  <rect x="0" y="0" width="1000" height="540" fill="#020617"/>
+  <rect x="0" y="0" width="1000" height="540" fill="url(#grid)"/>
+
+  <text x="20" y="34" fill="#f1f5f9" font-size="18" font-weight="700">AgentGem — Gem Build Pipeline</text>
+
+  <!-- arrows -->
+  <line x1="190" y1="258" x2="228" y2="258" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <line x1="400" y1="258" x2="438" y2="258" stroke="#fb7185" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <line x1="590" y1="258" x2="628" y2="258" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <line x1="780" y1="258" x2="818" y2="258" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <line x1="870" y1="306" x2="820" y2="378" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <line x1="900" y1="306" x2="930" y2="378" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <line x1="705" y1="378" x2="705" y2="308" stroke="#34d399" stroke-width="1.5" stroke-dasharray="5,5" marker-end="url(#arrowhead)"/>
+
+  <!-- redaction boundary -->
+  <rect x="28" y="165" width="390" height="182" rx="10" fill="rgba(136, 19, 55, 0.06)" stroke="#fb7185" stroke-width="1" stroke-dasharray="4,4"/>
+
+  <!-- boxes -->
+  <rect x="40" y="185" width="150" height="150" rx="6" fill="#0f172a"/>
+  <rect x="40" y="185" width="150" height="150" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+  <rect x="230" y="210" width="170" height="96" rx="6" fill="#0f172a"/>
+  <rect x="230" y="210" width="170" height="96" rx="6" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1.5"/>
+  <rect x="440" y="210" width="150" height="96" rx="6" fill="#0f172a"/>
+  <rect x="440" y="210" width="150" height="96" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+  <rect x="630" y="210" width="150" height="96" rx="6" fill="#0f172a"/>
+  <rect x="630" y="210" width="150" height="96" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <rect x="820" y="210" width="150" height="96" rx="6" fill="#0f172a"/>
+  <rect x="820" y="210" width="150" height="96" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+
+  <rect x="760" y="378" width="110" height="58" rx="6" fill="#0f172a"/>
+  <rect x="760" y="378" width="110" height="58" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <rect x="878" y="378" width="100" height="58" rx="6" fill="#0f172a"/>
+  <rect x="878" y="378" width="100" height="58" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <rect x="630" y="378" width="150" height="58" rx="6" fill="#0f172a"/>
+  <rect x="630" y="378" width="150" height="58" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+
+  <!-- text -->
+  <text x="38" y="158" fill="#fb7185" font-size="9" font-weight="600">Redaction trust boundary — secrets stripped at capture; only redacted shapes flow right &#8594;</text>
+
+  <text x="115" y="208" fill="#ffffff" font-size="11" font-weight="600" text-anchor="middle">Config sources</text>
+  <text x="115" y="230" fill="#94a3b8" font-size="8" text-anchor="middle">~/.claude (skills,</text>
+  <text x="115" y="242" fill="#94a3b8" font-size="8" text-anchor="middle">MCP, CLAUDE.md)</text>
+  <text x="115" y="258" fill="#94a3b8" font-size="8" text-anchor="middle">enabled plugins</text>
+  <text x="115" y="274" fill="#94a3b8" font-size="8" text-anchor="middle">~/.agents · ~/.codex</text>
+  <text x="115" y="290" fill="#94a3b8" font-size="8" text-anchor="middle">~/.hermes</text>
+  <text x="115" y="306" fill="#94a3b8" font-size="8" text-anchor="middle">project dirs</text>
+
+  <text x="315" y="244" fill="#ffffff" font-size="11" font-weight="600" text-anchor="middle">introspect()</text>
+  <text x="315" y="262" fill="#94a3b8" font-size="8" text-anchor="middle">reads + redactMcpConfig()</text>
+  <text x="315" y="276" fill="#94a3b8" font-size="8" text-anchor="middle">at the moment of capture</text>
+  <text x="315" y="292" fill="#fb7185" font-size="8" text-anchor="middle">value + key-name rules</text>
+
+  <text x="515" y="244" fill="#ffffff" font-size="11" font-weight="600" text-anchor="middle">ConfigInventory</text>
+  <text x="515" y="262" fill="#94a3b8" font-size="8" text-anchor="middle">skills · mcpServers</text>
+  <text x="515" y="276" fill="#94a3b8" font-size="8" text-anchor="middle">instructions · hooks</text>
+  <text x="515" y="292" fill="#94a3b8" font-size="8" text-anchor="middle">+ SecretRef[] (no values)</text>
+
+  <text x="705" y="244" fill="#ffffff" font-size="11" font-weight="600" text-anchor="middle">buildGem()</text>
+  <text x="705" y="262" fill="#94a3b8" font-size="8" text-anchor="middle">select by name</text>
+  <text x="705" y="276" fill="#94a3b8" font-size="8" text-anchor="middle">re-redact (defense)</text>
+  <text x="705" y="292" fill="#94a3b8" font-size="8" text-anchor="middle">&#8594; Gem + requiredSecrets</text>
+
+  <text x="895" y="244" fill="#ffffff" font-size="11" font-weight="600" text-anchor="middle">writeGemArchive()</text>
+  <text x="895" y="262" fill="#94a3b8" font-size="8" text-anchor="middle">layout by type</text>
+  <text x="895" y="276" fill="#94a3b8" font-size="8" text-anchor="middle">gem.json + gem.lock</text>
+  <text x="895" y="292" fill="#94a3b8" font-size="8" text-anchor="middle">sha256 digest</text>
+
+  <text x="815" y="402" fill="#ffffff" font-size="10" font-weight="600" text-anchor="middle">archiveFs</text>
+  <text x="815" y="418" fill="#94a3b8" font-size="8" text-anchor="middle">directory tree</text>
+  <text x="928" y="402" fill="#ffffff" font-size="10" font-weight="600" text-anchor="middle">archiveTar</text>
+  <text x="928" y="418" fill="#94a3b8" font-size="8" text-anchor="middle">.tar.gz</text>
+
+  <text x="705" y="402" fill="#ffffff" font-size="10" font-weight="600" text-anchor="middle">scaffoldChecks()</text>
+  <text x="705" y="418" fill="#94a3b8" font-size="8" text-anchor="middle">behavioral + skillspector</text>
+
+  <!-- legend -->
+  <rect x="40" y="492" width="16" height="10" rx="2" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1"/>
+  <text x="62" y="500" fill="#94a3b8" font-size="8">Redaction</text>
+  <rect x="170" y="492" width="16" height="10" rx="2" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1"/>
+  <text x="192" y="500" fill="#94a3b8" font-size="8">Data / sources</text>
+  <rect x="330" y="492" width="16" height="10" rx="2" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+  <text x="352" y="500" fill="#94a3b8" font-size="8">Compose / checks</text>
+  <rect x="510" y="492" width="16" height="10" rx="2" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
+  <text x="532" y="500" fill="#94a3b8" font-size="8">Archive output</text>
+</svg>

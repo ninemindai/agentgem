@@ -15,7 +15,36 @@ OpenAPI 3.1 document — so the web page and your local agent call exactly the s
   your first Gem.
 - **[Concepts](concepts.md)** — what a Gem is, the archive format, the redaction trust
   boundary, and the AgentBack one-contract model.
+
+## Architecture & internals
+
+- **[Architecture](architecture.md)** — the system map: clients → contract surface → Gem
+  core → distribution, with diagrams.
+- **[The build pipeline](pipeline.md)** — introspect → redact → buildGem → archive.
+- **[Archive format](archive-format.md)** — the manifest + lock spec, hashing, and
+  serialization.
+- **[Redaction](redaction.md)** — the trust boundary and its rules.
+- **[API reference](api-reference.md)** — every REST endpoint and MCP tool.
+
+## Distribution
+
 - **[Targets & deploy](targets.md)** — the deploy targets (Eve, Flue, OpenAI Sandbox,
   Bedrock AgentCore) and the publish / undeploy lifecycle.
 - **[Registry](registry.md)** — the GitHub-backed Gem registry: publish, resolve, merge,
   and install composable Gems.
+- **[Testbed & run](testbed-and-run.md)** — install a Gem into a local testbed; run or
+  deploy a materialized target locally, to Vercel, or to Cloudflare.
+
+## Contributing
+
+- **[Development](development.md)** — build, test, the decorator/compiled-`dist` setup, and
+  code conventions.
+
+## Diagrams
+
+Architecture diagrams live in [`diagrams/`](diagrams/) as `.svg` (embedded in these docs),
+`.png` (raster fallback), and `.html` (interactive, with Copy / PNG / PDF export):
+
+- [System architecture](diagrams/system-architecture.svg)
+- [Gem build pipeline](diagrams/gem-pipeline.svg)
+- [Distribution](diagrams/distribution.svg)
