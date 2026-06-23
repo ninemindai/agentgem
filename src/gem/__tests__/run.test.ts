@@ -1,7 +1,8 @@
 // src/gem/__tests__/run.test.ts
 import { describe, it, expect } from "vitest";
 import { pushLog, nodeMajor, parseEveUrl, parseVercelUrl, parseSingleTeamScope, parseWorkersUrl, runReadiness, deployCloudflare } from "../run.js";
-import { startLocal, stopLocal, getRunStatus, deployVercel, type ProcessRunner, type ProcHandle } from "../run.js";
+import { startLocal, stopLocal, getRunStatus, deployVercel, undeployVercel, type ProcessRunner, type ProcHandle } from "../run.js";
+import { readDeployRecord, writeDeployRecord } from "../deployRecord.js";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -172,6 +173,47 @@ describe("vercel deploy", () => {
     const state = await p;
     expect(state.state).toBe("idle");
     expect(state.url).toBe("https://gem-xyz.vercel.app");
+    delete process.env.VERCEL_TOKEN;
+  });
+});
+
+describe("vercel deploy record + undeploy", () => {
+  it("records the project + url on a successful deploy", async () => {
+    seedWorkspace();
+    process.env.VERCEL_TOKEN = "tok_test"; delete process.env.VERCEL_SCOPE;
+    const { runner, handles } = fakeRunner();
+    const p = deployVercel("gem", runner);
+    await Promise.resolve(); handles[0].exitCbs.forEach((cb) => cb(0)); // install
+    await Promise.resolve(); await Promise.resolve();
+    handles[1].lineCbs.forEach((cb) => cb("https://eve-gem-abc.vercel.app", "out"));
+    handles[1].exitCbs.forEach((cb) => cb(0));
+    await p;
+    const rec = readDeployRecord("gem", "eve");
+    expect(rec?.url).toBe("https://eve-gem-abc.vercel.app");
+    expect(rec?.project).toBe("eve-gem");
+    delete process.env.VERCEL_TOKEN;
+  });
+
+  it("undeployVercel runs vercel remove for the recorded project and clears the record", async () => {
+    seedWorkspace();
+    process.env.VERCEL_TOKEN = "tok_test"; delete process.env.VERCEL_SCOPE;
+    writeDeployRecord("gem", { backend: "eve", project: "eve-gem", url: "https://x.vercel.app" });
+    const { runner, calls, handles } = fakeRunner();
+    const up = undeployVercel("gem", runner);
+    await Promise.resolve();
+    expect(calls[0].args).toEqual(["remove", "eve-gem", "--yes", "--token=tok_test"]);
+    handles[0].exitCbs.forEach((cb) => cb(0));
+    const r = await up;
+    expect(r.removed).toBe(true);
+    expect(readDeployRecord("gem", "eve")).toBeNull();
+    delete process.env.VERCEL_TOKEN;
+  });
+
+  it("undeployVercel fails safe when nothing is recorded", async () => {
+    seedWorkspace();
+    process.env.VERCEL_TOKEN = "tok_test";
+    const { runner } = fakeRunner();
+    await expect(undeployVercel("gem", runner)).rejects.toThrow(/no .*deploy/i);
     delete process.env.VERCEL_TOKEN;
   });
 });
