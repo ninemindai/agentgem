@@ -724,9 +724,11 @@ async function renderPublish(){
   const selectedTarget = existingSel ? existingSel.value : (targets[0] ? targets[0].id : "claude-managed");
   // Managed backends (DEPLOY_REGISTRY) + self-host deploys for the materialize targets.
   const targetOpts = targets.map(t => `<option value="${esc(t.id)}" ${t.id === selectedTarget ? "selected" : ""}>${esc(t.label || t.id)}</option>`).join("")
-    + `<option value="eve-vercel" ${selectedTarget === "eve-vercel" ? "selected" : ""}>Eve → Vercel (self-host)</option>`;
+    + `<option value="eve-vercel" ${selectedTarget === "eve-vercel" ? "selected" : ""}>Eve → Vercel (self-host)</option>`
+    + `<option value="flue-cloudflare" ${selectedTarget === "flue-cloudflare" ? "selected" : ""}>Flue → Cloudflare (self-host)</option>`;
   const selHtml = `<div class="pgroup" style="display:flex;align-items:center;gap:8px"><label for="deployTarget" style="white-space:nowrap">Backend:</label><select id="deployTarget">${targetOpts}</select></div>`;
   if (selectedTarget === "eve-vercel") { await renderEveDeploy(el, selHtml); return; }
+  if (selectedTarget === "flue-cloudflare") { await renderFlueDeploy(el, selHtml); return; }
   const body = { ...buildSelectionBody(), target: selectedTarget };
   const r = await (await fetch("/api/publish-preview", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })).json();
   window.__publish = r;
@@ -831,6 +833,48 @@ function evePollRun(ws){
     const s = await (await fetch(`/api/run-status?name=${encodeURIComponent(ws)}&target=eve`)).json();
     eveRenderRun(s);
     if (!eveRunning(s.state)) { clearInterval(__evePoll); __evePoll = null; }
+  }, 1500);
+}
+// ── Self-host deploy: Flue → Cloudflare (npm install -> flue build -> wrangler deploy) ──
+let __fluePoll = null;
+async function renderFlueDeploy(el, selHtml){
+  if (!wsCurrent){
+    el.innerHTML = selHtml + `<div class="pgroup"><p class="note">Flue deploys a saved <b>workspace</b>'s flue project to Cloudflare Workers. Open or create a workspace first (the <b>Workspace</b> stage), then deploy it here.</p></div>`;
+    attachDeployTargetListener(); return;
+  }
+  const ready = await (await fetch(`/api/run-ready?name=${encodeURIComponent(wsCurrent)}&target=flue`)).json();
+  let h = `<div class="psummary">${selHtml}<div class="phead"><strong>${esc(wsCurrent)}</strong> <span class="d">· Flue → Cloudflare (self-host)</span></div>`;
+  h += `<div class="pgroup"><button id="flueDeployBtn" ${ready.cloudflare ? "" : "disabled"}>${ready.cloudflare ? "▲ Deploy to Cloudflare" : "Deploy (set CLOUDFLARE_API_TOKEN)"}</button> <span class="d" id="flueDeployState"></span></div>`;
+  h += `<div id="flueDeployUrl" style="margin:4px 0"></div>`;
+  h += `<pre id="flueDeployLog" class="json" style="max-height:220px;overflow:auto" hidden></pre>`;
+  h += `<p class="note">Runs <code>npm install</code> → <code>flue build --target cloudflare</code> → <code>wrangler deploy</code> on the workspace's flue project (re-rendered from the gem). Requires <code>CLOUDFLARE_API_TOKEN</code> on the server.</p></div>`;
+  el.innerHTML = h;
+  attachDeployTargetListener();
+  const cur = await (await fetch(`/api/run-status?name=${encodeURIComponent(wsCurrent)}&target=flue`)).json();
+  if (cur && cur.mode === "cloudflare" && (cur.state !== "idle" || cur.url)) { flueRenderRun(cur); if (eveRunning(cur.state)) fluePollRun(wsCurrent); }
+  document.getElementById("flueDeployBtn")?.addEventListener("click", flueDeploy);
+}
+async function flueDeploy(){
+  if (!wsCurrent) return;
+  const btn = document.getElementById("flueDeployBtn"), st = document.getElementById("flueDeployState");
+  if (btn) btn.disabled = true; if (st) st.textContent = "Deploying…";
+  const s = await (await fetch("/api/run", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: wsCurrent, target: "flue", mode: "cloudflare" }) })).json();
+  flueRenderRun(s); fluePollRun(wsCurrent);
+}
+function flueRenderRun(s){
+  const st = document.getElementById("flueDeployState"), url = document.getElementById("flueDeployUrl"), log = document.getElementById("flueDeployLog"), btn = document.getElementById("flueDeployBtn");
+  if (!st) return;
+  st.textContent = s.state || "";
+  if (url) url.innerHTML = s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.url)}</a>` : "";
+  if (log && s.logTail && s.logTail.length){ log.hidden = false; log.textContent = s.logTail.join("\n"); log.scrollTop = log.scrollHeight; }
+  if (btn) btn.disabled = eveRunning(s.state);
+}
+function fluePollRun(ws){
+  if (__fluePoll) clearInterval(__fluePoll);
+  __fluePoll = setInterval(async () => {
+    const s = await (await fetch(`/api/run-status?name=${encodeURIComponent(ws)}&target=flue`)).json();
+    flueRenderRun(s);
+    if (!eveRunning(s.state)) { clearInterval(__fluePoll); __fluePoll = null; }
   }, 1500);
 }
 function openMaterializedFile(path){
