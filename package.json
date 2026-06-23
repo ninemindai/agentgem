@@ -1,6 +1,26 @@
 {
   "name": "agentgem",
   "version": "0.1.0",
+  "description": "A local web UI that introspects your coding-agent config, redacts secrets at capture, and builds a portable, composable Gem.",
+  "license": "MIT",
+  "author": "ninemind.ai",
+  "homepage": "https://agentgem.ninemind.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ninemindai/agentgem.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ninemindai/agentgem/issues"
+  },
+  "keywords": [
+    "claude",
+    "coding-agent",
+    "mcp",
+    "agentback",
+    "secret-redaction",
+    "agent-config",
+    "gem"
+  ],
   "type": "module",
   "packageManager": "pnpm@10.29.2",
   "scripts": {
