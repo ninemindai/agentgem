@@ -68,6 +68,10 @@ want, name the Gem, and watch the live `gem.json` render with secrets already sh
 as `<redacted>`. Download it — that archive is what every target and the registry
 consume.
 
+<p align="center">
+  <img src="docs/screenshot.png" alt="The AgentGem Gem Builder: selected skills and MCP servers on the left, the live gem.json on the right with every secret shown as <redacted>" width="100%">
+</p>
+
 Prefer a persistent command? Install it globally:
 
 ```bash
