@@ -843,6 +843,7 @@ async function renderEveDeploy(el, selHtml){
   const ready = await (await fetch(`/api/run-ready?name=${encodeURIComponent(wsCurrent)}&target=eve`)).json();
   let h = `<div class="psummary">${selHtml}<div class="phead"><strong>${esc(wsCurrent)}</strong> <span class="d">· Eve → Vercel (self-host)</span></div>`;
   if (ready.vercel) {
+    h += `<div class="pgroup" style="display:flex;gap:8px;align-items:center"><label for="eveAuthMode" class="d">Auth</label><select id="eveAuthMode"><option value="placeholder">Placeholder (secure — wire your own provider)</option><option value="public">Public — anyone can reach the agent (demo)</option></select></div>`;
     h += `<div class="pgroup"><button id="eveDeployBtn">▲ Deploy to Vercel</button> <span class="d" id="eveDeployState"></span></div>`;
     h += `<div id="eveDeployUrl" style="margin:4px 0"></div>`;
     h += `<pre id="eveDeployLog" class="json" style="max-height:220px;overflow:auto" hidden></pre>`;
@@ -864,8 +865,9 @@ async function eveDeploy(){
   if (!wsCurrent) return;
   const btn = document.getElementById("eveDeployBtn"), st = document.getElementById("eveDeployState");
   if (btn) btn.disabled = true; if (st) st.textContent = "Deploying…";
+  const eveAuth = document.getElementById("eveAuthMode")?.value || "placeholder";
   try {
-    const s = await (await fetch("/api/run", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: wsCurrent, target: "eve", mode: "vercel" }) })).json();
+    const s = await (await fetch("/api/run", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: wsCurrent, target: "eve", mode: "vercel", eveAuth }) })).json();
     eveRenderRun(s); evePollRun(wsCurrent);
   } catch (e) {
     if (st) st.textContent = "Failed: " + (e && e.message ? e.message : "deploy request error");

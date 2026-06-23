@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { workspaceDir } from "./workspaces.js";
 import { readGemArchive } from "./archive.js";
 import { readArchiveDir, writeArchiveDir } from "./archiveFs.js";
-import { materialize, type TargetId } from "./targets.js";
+import { materialize, type TargetId, type MaterializeOpts } from "./targets.js";
 
 export interface ProcHandle {
   onLine(cb: (line: string, stream: "out" | "err") => void): void;
@@ -103,11 +103,11 @@ export function runToEnd(runner: ProcessRunner, cmd: string, args: string[], cwd
 }
 
 // Re-render <target> into a stable .run/<target> dir (preserving node_modules) and npm-install when needed.
-export async function ensureRunProject(name: string, target: TargetId, runner: ProcessRunner, log: string[]): Promise<string> {
+export async function ensureRunProject(name: string, target: TargetId, runner: ProcessRunner, log: string[], opts: MaterializeOpts = {}): Promise<string> {
   const dir = workspaceDir(name);
   if (!existsSync(join(dir, "gem.json"))) throw new Error(`no workspace '${name}'`);
   const gem = readGemArchive(readArchiveDir(dir));
-  const { files } = materialize(gem, target);
+  const { files } = materialize(gem, target, opts);
   const runDir = join(dir, ".run", target);
   mkdirSync(runDir, { recursive: true });
   // Drop stale rendered sources + build caches; keep node_modules + the install marker.
@@ -178,7 +178,7 @@ const VERCEL_BIN = join(process.cwd(), "node_modules", ".bin", "vercel");
 // build skips Vercel sandbox-template prewarm, so Vercel must build it. Scope: use VERCEL_SCOPE if
 // set, else deploy without scope and — when the CLI refuses with a single available team — retry
 // with --scope <that team>.
-export async function deployVercel(name: string, runner: ProcessRunner = realRunner): Promise<RunState> {
+export async function deployVercel(name: string, runner: ProcessRunner = realRunner, opts: MaterializeOpts = {}): Promise<RunState> {
   const token = process.env.VERCEL_TOKEN;
   if (!token) throw new Error("VERCEL_TOKEN is not set on the server — cannot deploy to Vercel.");
   const state: RunState = { mode: "vercel", state: "installing", logTail: [] };
@@ -193,7 +193,7 @@ export async function deployVercel(name: string, runner: ProcessRunner = realRun
     });
   };
   try {
-    const runDir = await ensureRunProject(name, "eve", runner, state.logTail);
+    const runDir = await ensureRunProject(name, "eve", runner, state.logTail, opts);
     state.state = "deploying";
     const explicitScope = process.env.VERCEL_SCOPE;
     let { code, lines } = await vercelDeploy(runDir, explicitScope);

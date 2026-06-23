@@ -16,6 +16,9 @@ export type FileTree = Record<string, string>;
 export interface SkippedArtifact { artifact: string; type: ArtifactType; reason: string }
 export interface MaterializeResult { files: FileTree; skipped: SkippedArtifact[] }
 
+// Per-materialization options that some targets honor (e.g. eve's deploy-time auth posture).
+export interface MaterializeOpts { eveAuth?: "placeholder" | "public" }
+
 interface TargetSpec {
   id: TargetId;
   label: string;
@@ -23,7 +26,7 @@ interface TargetSpec {
   mcp?: (servers: McpServerArtifact[]) => MaterializeResult;
   instructions?: (all: InstructionsArtifact[]) => FileTree;
   hook?: (hooks: HookArtifact[]) => FileTree;
-  compose?: (gem: Gem) => MaterializeResult; // cross-cutting file(s) that see the whole gem (runs last)
+  compose?: (gem: Gem, opts: MaterializeOpts) => MaterializeResult; // cross-cutting file(s) that see the whole gem (runs last)
 }
 
 export function safePathSegment(name: string): string {
@@ -464,7 +467,22 @@ export default defineAgent({
   model: "anthropic/claude-sonnet-4.6",
 });
 `;
-const EVE_CHANNEL_TS = `import { eveChannel } from "eve/channels/eve";
+// eve's channel auth posture. "placeholder" (default) is eve's secure scaffold — deployed agents
+// reject non-Vercel-OIDC production requests until you wire a real provider. "public" uses none(),
+// making the deployed agent (and its tools) reachable by anyone — handy for a demo / `eve dev`.
+const eveChannelTs = (authMode: "placeholder" | "public"): string => authMode === "public"
+  ? `import { eveChannel } from "eve/channels/eve";
+import { localDev, none } from "eve/channels/auth";
+
+export default eveChannel({
+  auth: [
+    localDev(),
+    // PUBLIC: anyone can reach this agent and call its tools (chosen at deploy time for a demo).
+    none(),
+  ],
+});
+`
+  : `import { eveChannel } from "eve/channels/eve";
 import { localDev, placeholderAuth, vercelOidc } from "eve/channels/auth";
 
 export default eveChannel({
@@ -516,12 +534,12 @@ const evePackageJson = (gemName: string): string =>
   }, null, 2) + "\n";
 
 // Cross-cutting scaffold: the files `eve init` provides so the rendered agent/ source is runnable.
-const eveComposeProject = (gem: Gem): MaterializeResult => {
+const eveComposeProject = (gem: Gem, opts: MaterializeOpts = {}): MaterializeResult => {
   const files: FileTree = {
     "package.json": evePackageJson(gem.name),
     "tsconfig.json": EVE_TSCONFIG,
     "agent/agent.ts": EVE_AGENT_TS,
-    "agent/channels/eve.ts": EVE_CHANNEL_TS,
+    "agent/channels/eve.ts": eveChannelTs(opts.eveAuth ?? "placeholder"),
     ".gitignore": EVE_GITIGNORE,
     ".vercelignore": EVE_VERCELIGNORE,
   };
@@ -553,7 +571,7 @@ export const TARGET_REGISTRY: Record<TargetId, TargetSpec> = {
   agentcore: { id: "agentcore", label: "AgentCore", skill: skillAgentcoreMd, instructions: () => ({}), mcp: () => ({ files: {}, skipped: [] }), compose: agentcoreComposeProject },
 };
 
-export function materialize(gem: Gem, target: TargetId): MaterializeResult {
+export function materialize(gem: Gem, target: TargetId, opts: MaterializeOpts = {}): MaterializeResult {
   const spec = TARGET_REGISTRY[target];
   const files: FileTree = {};
   const skipped: SkippedArtifact[] = [];
@@ -593,7 +611,7 @@ export function materialize(gem: Gem, target: TargetId): MaterializeResult {
   }
 
   if (spec.compose) {
-    const result = spec.compose(gem);
+    const result = spec.compose(gem, opts);
     merge(result.files, "(composed agent)", "instructions"); // collisions reported; agent file derives from instructions+skills
     skipped.push(...result.skipped);
   }

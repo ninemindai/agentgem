@@ -152,7 +152,7 @@ export class GemController {
   @post("/run", { body: RunRequestSchema, response: RunStateSchema })
   async run(input: { body: z.infer<typeof RunRequestSchema> }): Promise<z.infer<typeof RunStateSchema>> {
     const { name, mode } = input.body;
-    const state = mode === "cloudflare" ? await deployCloudflare(name) : mode === "vercel" ? await deployVercel(name) : await startLocal(name);
+    const state = mode === "cloudflare" ? await deployCloudflare(name) : mode === "vercel" ? await deployVercel(name, undefined, { eveAuth: input.body.eveAuth }) : await startLocal(name);
     return state;
   }
 

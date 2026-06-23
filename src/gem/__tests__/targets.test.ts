@@ -279,6 +279,14 @@ describe("eve compose (runnable project scaffold)", () => {
     expect(r.files[".vercelignore"]).toContain("node_modules");
   });
 
+  it("eve channel auth: default is placeholder; opts.eveAuth='public' uses none()", () => {
+    const def = materialize(gem([skill("review")]), "eve").files["agent/channels/eve.ts"];
+    expect(def).toContain("placeholderAuth()");
+    const pub = materialize(gem([skill("review")]), "eve", { eveAuth: "public" }).files["agent/channels/eve.ts"];
+    expect(pub).toContain("none()");
+    expect(pub).not.toContain("placeholderAuth");        // public chain drops the placeholder entirely
+  });
+
   it("emits a default agent/instructions.md when the gem has no instructions (eve build requires it)", () => {
     const r = materialize(gem([skill("review")]), "eve");
     expect(r.files["agent/instructions.md"]).toBeTruthy();
