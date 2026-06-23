@@ -1,11 +1,33 @@
 # Concepts
 
+## From project to reusable Gem
+
+AgentGem starts where you already work: a **project** you've built up with your agent.
+Over time that project accrues its own setup — project-specific skills, MCP servers,
+hooks, and instructions — distinct from your global, user-scoped configuration. The flow
+turns that lived-in project into something portable:
+
+1. **Discover.** AgentGem surfaces the projects you've worked in with your agent — read
+   from your agent's session history — so you don't have to remember paths. (Today this is
+   backed by a recents list; richer session-history discovery is on the roadmap.)
+2. **Compose.** It introspects the project's own artifacts (tagged `source: "project"`)
+   and layers them with your **user-scoped** settings (tagged `source: "user"`), so a
+   project artifact never collides with a same-named global one. Skills, MCP servers,
+   hooks, and instructions are captured across **Claude, Codex, and Hermes**.
+3. **Iterate.** You keep working in the project — running tasks and workflows — refining
+   the setup until it does what you want.
+4. **Crystallize.** When it's right, you capture it as a **Gem**: a secret-safe, reusable
+   archive (secrets redacted at capture).
+5. **Publish / deploy.** Push the Gem to the registry, or compile it to a deploy target.
+
+The rest of this page covers what that Gem actually is.
+
 ## What a Gem is
 
 A **Gem** is a portable, secret-safe snapshot of a slice of your coding-agent config —
-the skills, MCP servers, and `CLAUDE.md` you chose to bundle. It's the unit AgentGem
-produces and the neutral source that every deploy target and the registry consume. You
-build it once; everything downstream reads from it.
+the skills, MCP servers, hooks, and instructions you chose to bundle. It's the unit
+AgentGem produces and the neutral source that every deploy target and the registry
+consume. You build it once; everything downstream reads from it.
 
 A Gem is intentionally *not* tied to any one runtime. The same Gem can be installed back
 into a local testbed, merged with other Gems, published to the registry, or compiled to a
@@ -36,7 +58,7 @@ original CLI enforced. Secrets stay on your machine; what leaves is a config *sh
 
 ## The AgentBack one-contract model
 
-AgentGem is built on **AgentBack**, ninemind's AI-native API/MCP framework. Each operation
+AgentGem is built on **[AgentBack](https://agentback.dev)**, ninemind's AI-native API/MCP framework. Each operation
 — `inventory`, `gem` — is defined once as a Zod contract. From that single definition
 AgentBack derives:
 

@@ -172,8 +172,9 @@ ${body}
       <a href="${rel}docs/targets.html">Targets &amp; deploy</a>
       <a href="${rel}docs/registry.html">Registry</a>
       <a href="${rel}llms.txt">llms.txt</a>
+      <a href="https://agentback.dev">AgentBack</a>
     </div>
-    <span class="note">built on AgentBack</span>
+    <span class="note">built on <a href="https://agentback.dev">AgentBack</a></span>
   </div>
 </footer>
 </body>
