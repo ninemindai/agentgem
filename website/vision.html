@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Vision — a Shopify for AI agents · AgentGem</title>
+<meta name="description" content="AgentGem's north star: a Shopify for AI agent-based services. Package agents into Gems, publish to a marketplace, deploy on demand, discover over A2A, and monetize with x402 / MPP." />
+<link rel="icon" href="assets/gem.svg" type="image/svg+xml" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-in">
+    <a class="brand" href="index.html"><img src="assets/gem.svg" alt="" />agentgem</a>
+    <span class="tag">Vision</span>
+    <span class="spacer"></span>
+    <div class="nav-links">
+      <a href="vision.html">Vision</a>
+      <a href="docs/index.html">Docs</a>
+      <a href="docs/getting-started.html">Get started</a>
+      <a href="https://github.com/ninemindai/agentgem">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<section class="hero">
+  <a class="hero-kicker" href="vision.html"><span class="dot"></span>The north star</a>
+  <h1>A Shopify for AI agents.</h1>
+  <p class="lede">Shopify didn't sell stores — it sold the infrastructure to launch one without building commerce from scratch. <b>AgentGem is building the same foundation for AI agents:</b> a way to package an agent once, then publish it to a marketplace, deploy it on demand, let other agents discover it, and get paid per call.</p>
+  <div class="cta-row">
+    <a class="btn btn-primary" href="docs/getting-started.html">Start building →</a>
+    <a class="btn btn-ghost" href="docs/concepts.html">How it works</a>
+  </div>
+</section>
+
+<section class="band">
+  <div class="wrap">
+    <p class="eyebrow">The ladder</p>
+    <h2 class="sec-title">Package → Publish → Deploy → Discover → Monetize.</h2>
+    <p class="lead">Each rung is a primitive of the agent economy. AgentGem owns the first ones today; the rest are how a Gem becomes a <b>service you can sell</b>.</p>
+    <div class="ladder">
+      <div class="rung">
+        <div class="step"><span class="n"><b>1</b></span>Package</div>
+        <div class="desc">An agent project — skills, MCP servers, hooks, instructions — becomes a secret-safe, composable <b>Gem</b>: the portable product unit.</div>
+        <span class="status shipped">Shipped</span>
+      </div>
+      <div class="rung">
+        <div class="step"><span class="n"><b>2</b></span>Publish</div>
+        <div class="desc">Push Gems to the <b>marketplace</b> (today, a GitHub-backed registry) so others can find, compose, and install them.</div>
+        <span class="status shipped">Shipped</span>
+      </div>
+      <div class="rung">
+        <div class="step"><span class="n"><b>3</b></span>Deploy on demand</div>
+        <div class="desc">A published Gem spins up as a live service <b>when it's called</b> — no standing infrastructure to manage.</div>
+        <span class="status emerging">Emerging</span>
+      </div>
+      <div class="rung">
+        <div class="step"><span class="n"><b>4</b></span>Discover</div>
+        <div class="desc">Other agents find and call your services over <b>A2A</b> — the agent-to-agent discovery and interop layer.</div>
+        <span class="status vision">Vision</span>
+      </div>
+      <div class="rung">
+        <div class="step"><span class="n"><b>5</b></span>Monetize</div>
+        <div class="desc">Charge per call with agent-native payment rails — <b>x402</b> and <b>MPP</b> — so a Gem becomes a revenue-generating shop.</div>
+        <span class="status vision">Vision</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="wrap" style="padding:64px 0 8px">
+  <p class="eyebrow">Why this works</p>
+  <h2 class="sec-title">The primitives are already half-built.</h2>
+  <div class="cards">
+    <div class="card">
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5"/></svg></div>
+      <h3>The Gem is the product unit</h3>
+      <p>Like a Shopify store package, a Gem is portable, versioned, and secret-safe — the atom every downstream step (publish, deploy, sell) operates on.</p>
+      <div class="chips"><span class="chip">manifest + lock</span><span class="chip">redacted</span></div>
+    </div>
+    <div class="card">
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5M12 13v8"/></svg></div>
+      <h3>The registry is the storefront seed</h3>
+      <p>Publish, resolve, merge, and install already work. Turning a catalog into a discoverable, transactable marketplace is an extension, not a rebuild.</p>
+      <div class="chips"><span class="chip">A2A discovery</span></div>
+    </div>
+    <div class="card">
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg></div>
+      <h3>Deploy targets are the runtime</h3>
+      <p>Gems already compile to Eve, Flue, OpenAI, AgentCore, and Claude. On-demand deployment makes "run when called" the default.</p>
+      <div class="chips"><span class="chip">on demand</span></div>
+    </div>
+    <div class="card">
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+      <h3>Payments are agent-native</h3>
+      <p>Built on <a href="https://agentback.dev">AgentBack</a>, every Gem is already a metered API surface. <b>x402</b> / <b>MPP</b> turn per-call metering into per-call revenue.</p>
+      <div class="chips"><span class="chip">x402</span><span class="chip">MPP</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="wrap" style="padding:56px 0 8px;max-width:760px">
+  <p class="eyebrow">Where AgentGem sits today</p>
+  <h2 class="sec-title" style="text-align:left">The stepping stone.</h2>
+  <p style="color:var(--ink-2);font-size:16px">AgentGem is the on-ramp: it takes the messy, secret-laden reality of a real project you've built with your agent and turns it into a clean, shareable Gem. That single act — <b>packaging</b> — is what makes everything above it possible. You can't have a marketplace of agent services without a portable, safe unit to sell; you can't monetize per call without a metered surface to charge against. AgentGem builds that unit. The rest of the ladder is how the agent economy gets built on top of it.</p>
+  <div class="cta-row" style="justify-content:flex-start;margin-top:24px">
+    <a class="btn btn-primary" href="docs/getting-started.html">Build your first Gem →</a>
+    <a class="btn btn-ghost" href="docs/registry.html">See the registry</a>
+  </div>
+</section>
+
+<footer class="foot">
+  <div class="foot-in">
+    <a class="brand" href="index.html"><img src="assets/gem.svg" alt="" />agentgem</a>
+    <div class="foot-links">
+      <a href="vision.html">Vision</a>
+      <a href="docs/getting-started.html">Getting started</a>
+      <a href="docs/concepts.html">Concepts</a>
+      <a href="docs/targets.html">Targets &amp; deploy</a>
+      <a href="docs/registry.html">Registry</a>
+      <a href="https://agentback.dev">AgentBack</a>
+      <a href="https://github.com/ninemindai/agentgem">GitHub</a>
+    </div>
+    <span class="note">built on <a href="https://agentback.dev">AgentBack</a></span>
+  </div>
+</footer>
+
+</body>
+</html>

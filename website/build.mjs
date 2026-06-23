@@ -19,7 +19,7 @@ const websiteDir = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(websiteDir, '..');
 const out = path.join(websiteDir, 'dist');
 const GITHUB = 'https://github.com/ninemindai/agentgem';
-const DOMAIN = 'agentgem.dev'; // placeholder — set at deploy time
+const DOMAIN = 'agentgem.ninemind.ai';
 const SITE = `https://${DOMAIN}`;
 
 // Markdown sources, repo-relative. Each becomes docs/<name>.html.
@@ -191,6 +191,7 @@ ${body}
   <div class="foot-in">
     <a class="brand" href="${rel}index.html"><img src="${rel}assets/gem.svg" alt="" />agentgem</a>
     <div class="foot-links">
+      <a href="${rel}vision.html">Vision</a>
       <a href="${rel}docs/getting-started.html">Getting started</a>
       <a href="${rel}docs/concepts.html">Concepts</a>
       <a href="${rel}docs/targets.html">Targets &amp; deploy</a>
@@ -227,8 +228,9 @@ function write(outPage, content) {
 fs.rmSync(out, {recursive: true, force: true});
 fs.mkdirSync(out, {recursive: true});
 
-// Static assets: homepage, stylesheet, gem mark.
+// Static assets: homepage, vision page, stylesheet, gem mark.
 fs.copyFileSync(path.join(websiteDir, 'index.html'), path.join(out, 'index.html'));
+fs.copyFileSync(path.join(websiteDir, 'vision.html'), path.join(out, 'vision.html'));
 fs.copyFileSync(path.join(websiteDir, 'styles.css'), path.join(out, 'styles.css'));
 copyDir(path.join(websiteDir, 'assets'), path.join(out, 'assets'));
 
@@ -287,7 +289,7 @@ write(
 );
 
 // sitemap.xml — homepage + every rendered docs HTML page.
-const sitemapUrls = [`${SITE}/`, ...docMeta.map(d => `${SITE}/${d.outHtml}`)];
+const sitemapUrls = [`${SITE}/`, `${SITE}/vision.html`, ...docMeta.map(d => `${SITE}/${d.outHtml}`)];
 write(
   'sitemap.xml',
   '<?xml version="1.0" encoding="UTF-8"?>\n' +
