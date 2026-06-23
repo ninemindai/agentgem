@@ -860,8 +860,13 @@ async function eveDeploy(){
   if (!wsCurrent) return;
   const btn = document.getElementById("eveDeployBtn"), st = document.getElementById("eveDeployState");
   if (btn) btn.disabled = true; if (st) st.textContent = "Deploying…";
-  const s = await (await fetch("/api/run", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: wsCurrent, target: "eve", mode: "vercel" }) })).json();
-  eveRenderRun(s); evePollRun(wsCurrent);
+  try {
+    const s = await (await fetch("/api/run", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: wsCurrent, target: "eve", mode: "vercel" }) })).json();
+    eveRenderRun(s); evePollRun(wsCurrent);
+  } catch (e) {
+    if (st) st.textContent = "Failed: " + (e && e.message ? e.message : "deploy request error");
+    if (btn) btn.disabled = false;
+  }
 }
 function eveRenderRun(s){
   const st = document.getElementById("eveDeployState"), url = document.getElementById("eveDeployUrl"), log = document.getElementById("eveDeployLog"), btn = document.getElementById("eveDeployBtn");
@@ -910,8 +915,13 @@ async function flueDeploy(){
   if (!wsCurrent) return;
   const btn = document.getElementById("flueDeployBtn"), st = document.getElementById("flueDeployState");
   if (btn) btn.disabled = true; if (st) st.textContent = "Deploying…";
-  const s = await (await fetch("/api/run", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: wsCurrent, target: "flue", mode: "cloudflare" }) })).json();
-  flueRenderRun(s); fluePollRun(wsCurrent);
+  try {
+    const s = await (await fetch("/api/run", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: wsCurrent, target: "flue", mode: "cloudflare" }) })).json();
+    flueRenderRun(s); fluePollRun(wsCurrent);
+  } catch (e) {
+    if (st) st.textContent = "Failed: " + (e && e.message ? e.message : "deploy request error");
+    if (btn) btn.disabled = false;
+  }
 }
 function flueRenderRun(s){
   const st = document.getElementById("flueDeployState"), url = document.getElementById("flueDeployUrl"), log = document.getElementById("flueDeployLog"), btn = document.getElementById("flueDeployBtn");
