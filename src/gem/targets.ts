@@ -43,6 +43,8 @@ const flueName = (name: string): string => {
   const s = name.normalize("NFKC").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   return s.length ? s : "agent";
 };
+// Exported alias so run.ts and other callers share one source of truth for the worker name.
+export function flueWorkerName(gemName: string): string { return flueName(gemName); }
 // PascalCase of the kebab name; flue derives the Durable Object class as `Flue<Pascal>Agent`.
 const fluePascal = (name: string): string =>
   flueName(name).split("-").filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join("") || "Agent";

@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { workspaceDir } from "./workspaces.js";
 import { readGemArchive } from "./archive.js";
 import { readArchiveDir, writeArchiveDir } from "./archiveFs.js";
-import { materialize, type TargetId, type MaterializeOpts } from "./targets.js";
+import { materialize, flueWorkerName, type TargetId, type MaterializeOpts } from "./targets.js";
 import { writeDeployRecord, readDeployRecord, clearDeployRecord } from "./deployRecord.js";
 
 export interface ProcHandle {
@@ -261,10 +261,29 @@ export async function deployCloudflare(name: string, runner: ProcessRunner = rea
     if (code !== 0) { state.state = "failed"; return state; }
     state.url = parseWorkersUrl(lines);
     state.state = "idle";
+    writeDeployRecord(name, { backend: "flue", at: new Date().toISOString(), url: state.url, worker: flueWorkerName(name) });
     return state;
   } catch (err) {
     state.state = "failed";
     pushLog(state.logTail, err instanceof Error ? err.message : String(err));
     return state;
   }
+}
+
+export async function undeployCloudflare(name: string, runner: ProcessRunner = realRunner): Promise<{ removed: boolean; logTail: string[] }> {
+  const token = process.env.CLOUDFLARE_API_TOKEN;
+  if (!token) throw new Error("CLOUDFLARE_API_TOKEN is not set on the server — cannot undeploy from Cloudflare.");
+  const rec = readDeployRecord(name, "flue");
+  if (!rec?.worker) throw new Error(`no recorded flue/Cloudflare deploy for '${name}'`);
+  const runDir = join(workspaceDir(name), ".run", "flue");
+  const logTail: string[] = [];
+  const env = { ...process.env, CLOUDFLARE_API_TOKEN: token };
+  const code = await new Promise<number>((resolve) => {
+    const h = runner.spawn(binIn(runDir, "wrangler"), ["delete", "--name", rec.worker!, "--force"], { cwd: runDir, env });
+    h.onLine((l) => pushLog(logTail, l));
+    h.onExit((c) => resolve(c ?? 0));
+  });
+  if (code !== 0) return { removed: false, logTail };
+  clearDeployRecord(name, "flue");
+  return { removed: true, logTail };
 }

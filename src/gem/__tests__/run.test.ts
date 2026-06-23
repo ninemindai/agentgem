@@ -1,6 +1,6 @@
 // src/gem/__tests__/run.test.ts
 import { describe, it, expect } from "vitest";
-import { pushLog, nodeMajor, parseEveUrl, parseVercelUrl, parseSingleTeamScope, parseWorkersUrl, runReadiness, deployCloudflare } from "../run.js";
+import { pushLog, nodeMajor, parseEveUrl, parseVercelUrl, parseSingleTeamScope, parseWorkersUrl, runReadiness, deployCloudflare, undeployCloudflare } from "../run.js";
 import { startLocal, stopLocal, getRunStatus, deployVercel, undeployVercel, vercelProject, type ProcessRunner, type ProcHandle } from "../run.js";
 import { readDeployRecord, writeDeployRecord } from "../deployRecord.js";
 import { mkdtempSync } from "node:fs";
@@ -268,5 +268,47 @@ describe("deployCloudflare", () => {
     expect(state.state).toBe("idle");
     expect(state.url).toBe("https://my-gem.acct.workers.dev");
     delete process.env.CLOUDFLARE_API_TOKEN;
+  });
+
+  it("records the worker + url on a successful deploy", async () => {
+    seedWorkspace();
+    process.env.CLOUDFLARE_API_TOKEN = "cf_test_token";
+    const { runner, handles } = fakeRunner();
+    const p = deployCloudflare("gem", runner);
+    await Promise.resolve(); handles[0].exitCbs.forEach((cb) => cb(0)); // install
+    await Promise.resolve(); await Promise.resolve();
+    handles[1].exitCbs.forEach((cb) => cb(0)); // flue build
+    await Promise.resolve();
+    handles[2].lineCbs.forEach((cb) => cb("https://gem.acct.workers.dev", "out"));
+    handles[2].exitCbs.forEach((cb) => cb(0));
+    await p;
+    const rec = readDeployRecord("gem", "flue");
+    expect(rec?.worker).toBe("gem");
+    expect(rec?.url).toBe("https://gem.acct.workers.dev");
+    delete process.env.CLOUDFLARE_API_TOKEN;
+  });
+});
+
+describe("undeployCloudflare", () => {
+  it("undeployCloudflare runs wrangler delete for the recorded worker and clears the record", async () => {
+    seedWorkspace();
+    process.env.CLOUDFLARE_API_TOKEN = "cf";
+    writeDeployRecord("gem", { backend: "flue", worker: "gem", url: "https://gem.acct.workers.dev" });
+    const { runner, calls, handles } = fakeRunner();
+    const up = undeployCloudflare("gem", runner);
+    await Promise.resolve();
+    expect(calls[0].args).toEqual(["delete", "--name", "gem", "--force"]);
+    handles[0].exitCbs.forEach((cb) => cb(0));
+    const r = await up;
+    expect(r.removed).toBe(true);
+    expect(readDeployRecord("gem", "flue")).toBeNull();
+    delete process.env.CLOUDFLARE_API_TOKEN;
+  });
+
+  it("undeployCloudflare fails safe when nothing recorded / no token", async () => {
+    seedWorkspace();
+    delete process.env.CLOUDFLARE_API_TOKEN;
+    const { runner } = fakeRunner();
+    await expect(undeployCloudflare("gem", runner)).rejects.toThrow(/CLOUDFLARE_API_TOKEN/);
   });
 });
