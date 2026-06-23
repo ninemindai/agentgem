@@ -716,12 +716,16 @@ async function renderMaterialize(){
 }
 // Managed Agents publish: offline preview of the agent payload + a gated Publish action.
 let __publishReady = null, __publishRequestId = null, __publishFingerprint = null, __deployTargets = null;
+// The default deploy backend for each materialize target/harness. Selecting a harness in the
+// "Gem (live)" dropdown sets the Deploy backend to its match; the user can still override it.
+const BACKEND_FOR_TARGET = { claude: "claude-managed", agentcore: "agentcore-managed", eve: "eve-vercel", flue: "flue-cloudflare" };
+let deployBackend = null; // last chosen/derived backend; null until first computed
 async function getDeployTargets(){ if (!__deployTargets) { const d = await (await fetch("/api/deploy-targets")).json(); __deployTargets = d.targets || []; } return __deployTargets; }
 async function renderPublish(){
   const el = document.getElementById("preview");
   const targets = await getDeployTargets();
-  const existingSel = document.getElementById("deployTarget");
-  const selectedTarget = existingSel ? existingSel.value : (targets[0] ? targets[0].id : "claude-managed");
+  const harness = document.getElementById("target")?.value;
+  const selectedTarget = deployBackend || BACKEND_FOR_TARGET[harness] || (targets[0] ? targets[0].id : "claude-managed");
   // Managed backends (DEPLOY_REGISTRY) + self-host deploys for the materialize targets.
   const targetOpts = targets.map(t => `<option value="${esc(t.id)}" ${t.id === selectedTarget ? "selected" : ""}>${esc(t.label || t.id)}</option>`).join("")
     + `<option value="eve-vercel" ${selectedTarget === "eve-vercel" ? "selected" : ""}>Eve → Vercel (self-host)</option>`
@@ -768,7 +772,7 @@ async function renderPublish(){
 }
 function attachDeployTargetListener(){
   const sel = document.getElementById("deployTarget");
-  if (sel && !sel.__deployListened) { sel.__deployListened = true; sel.addEventListener("change", () => { __publishReady = null; renderPublish(); }); }
+  if (sel && !sel.__deployListened) { sel.__deployListened = true; sel.addEventListener("change", () => { deployBackend = sel.value; __publishReady = null; renderPublish(); }); }
 }
 async function doPublish(){
   const selectedTarget = document.getElementById("deployTarget")?.value || "claude-managed";
@@ -963,7 +967,12 @@ document.getElementById("preview-modes").addEventListener("click", e => {
 });
 // Re-render the active preview panel whenever the target changes (materialize/managed are
 // target-specific; summary/json are target-agnostic so this is a harmless no-op for them).
-document.getElementById("target").addEventListener("change", renderPreview);
+// Selecting a harness also defaults the Deploy backend to its match (when one exists).
+document.getElementById("target").addEventListener("change", (e) => {
+  const mapped = BACKEND_FOR_TARGET[e.target.value];
+  if (mapped) deployBackend = mapped;
+  renderPreview();
+});
 document.getElementById("preview").addEventListener("click", e => {
   if (e.target.id === "publishBtn") { doPublish(); return; }
   const mp = e.target.closest("[data-mpath]");
