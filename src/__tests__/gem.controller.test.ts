@@ -142,6 +142,43 @@ describe("GemController", () => {
     expect(r.body.compatibility.codex).toBeTruthy();
     expect(JSON.stringify(r.body)).not.toContain("ghp_secret"); // secret value never present
   });
+
+  it("POST /api/undeploy with target=codex returns 422", async () => {
+    const r = await client.post("/api/undeploy").send({ name: "x", target: "codex" });
+    expect(r.status).toBe(422);
+  });
+
+  it("POST /api/undeploy claude-managed without API key returns error", async () => {
+    const prev = process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    try {
+      const r = await client.post("/api/undeploy").send({ name: "some-ws", target: "claude-managed" });
+      expect(r.status).toBeGreaterThanOrEqual(400);
+    } finally {
+      if (prev !== undefined) process.env.ANTHROPIC_API_KEY = prev;
+    }
+  });
+
+  it("POST /api/undeploy agentcore without record returns error", async () => {
+    const r = await client.post("/api/undeploy").send({ name: "no-record-ws", target: "agentcore" });
+    expect(r.status).toBeGreaterThanOrEqual(400);
+  });
+
+  it("GET /api/deploy-record returns null when no record exists", async () => {
+    const r = await client.get("/api/deploy-record?name=nonexistent&backend=eve").expect(200);
+    expect(r.body.record).toBeNull();
+  });
+
+  it("GET /api/deploy-record returns a record after writing one", async () => {
+    const { writeDeployRecord, clearDeployRecord } = await import("../gem/deployRecord.js");
+    writeDeployRecord("test-ws-record", { backend: "eve", at: "2024-01-01T00:00:00Z", project: "eve-test-ws-record", url: "https://example.com" });
+    try {
+      const r = await client.get("/api/deploy-record?name=test-ws-record&backend=eve").expect(200);
+      expect(r.body.record).toMatchObject({ backend: "eve", project: "eve-test-ws-record" });
+    } finally {
+      clearDeployRecord("test-ws-record", "eve");
+    }
+  });
 });
 
 describe("POST /api/archive", () => {

@@ -1,0 +1,38 @@
+name: Deploy Worker (Cloudflare)
+
+# Builds website/dist and deploys the agentgem.ninemind.ai Worker (Workers
+# Static Assets + markdown negotiation, see website/edge/). Cloudflare serves
+# the uploaded assets directly. Auto-runs on content changes; also dispatchable
+# manually. Needs the CLOUDFLARE_API_TOKEN secret (account token with Workers
+# Scripts: Edit, plus DNS + SSL Edit on ninemind.ai for the custom domain).
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - 'docs/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.13.0
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: node website/build.mjs
+      # Run wrangler via npx (isolated install) rather than
+      # cloudflare/wrangler-action: the action does `npm i wrangler` which can
+      # walk up to a workspace root package.json and fail ERESOLVE. npx installs
+      # in its own cache, independent of the repo's deps.
+      - name: Deploy Worker
+        working-directory: website/edge
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx --yes wrangler@4.103.0 deploy

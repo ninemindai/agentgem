@@ -1,7 +1,8 @@
 // src/gem/__tests__/run.test.ts
 import { describe, it, expect } from "vitest";
-import { pushLog, nodeMajor, parseEveUrl, parseVercelUrl, parseSingleTeamScope, parseWorkersUrl, runReadiness, deployCloudflare } from "../run.js";
-import { startLocal, stopLocal, getRunStatus, deployVercel, type ProcessRunner, type ProcHandle } from "../run.js";
+import { pushLog, nodeMajor, parseEveUrl, parseVercelUrl, parseSingleTeamScope, parseWorkersUrl, runReadiness, deployCloudflare, undeployCloudflare } from "../run.js";
+import { startLocal, stopLocal, getRunStatus, deployVercel, undeployVercel, vercelProject, type ProcessRunner, type ProcHandle } from "../run.js";
+import { readDeployRecord, writeDeployRecord } from "../deployRecord.js";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -37,6 +38,12 @@ describe("run pure helpers", () => {
     expect(parseWorkersUrl(["Uploaded", "https://my-gem.acct.workers.dev", "Done"]))
       .toBe("https://my-gem.acct.workers.dev");
     expect(parseWorkersUrl(["no url here"])).toBeUndefined();
+  });
+
+  it("vercelProject slugs the gem name and never yields a trailing-dash/empty project", () => {
+    expect(vercelProject("demo-gem")).toBe("eve-demo-gem");
+    expect(vercelProject("My Gem!")).toBe("eve-my-gem");
+    expect(vercelProject("---")).toBe("eve-agent"); // all-non-alnum -> fallback, not "eve-"
   });
 
   it("parseSingleTeamScope extracts the lone team from a missing_scope response", () => {
@@ -176,6 +183,47 @@ describe("vercel deploy", () => {
   });
 });
 
+describe("vercel deploy record + undeploy", () => {
+  it("records the project + url on a successful deploy", async () => {
+    seedWorkspace();
+    process.env.VERCEL_TOKEN = "tok_test"; delete process.env.VERCEL_SCOPE;
+    const { runner, handles } = fakeRunner();
+    const p = deployVercel("gem", runner);
+    await Promise.resolve(); handles[0].exitCbs.forEach((cb) => cb(0)); // install
+    await Promise.resolve(); await Promise.resolve();
+    handles[1].lineCbs.forEach((cb) => cb("https://eve-gem-abc.vercel.app", "out"));
+    handles[1].exitCbs.forEach((cb) => cb(0));
+    await p;
+    const rec = readDeployRecord("gem", "eve");
+    expect(rec?.url).toBe("https://eve-gem-abc.vercel.app");
+    expect(rec?.project).toBe("eve-gem");
+    delete process.env.VERCEL_TOKEN;
+  });
+
+  it("undeployVercel runs vercel remove for the recorded project and clears the record", async () => {
+    seedWorkspace();
+    process.env.VERCEL_TOKEN = "tok_test"; delete process.env.VERCEL_SCOPE;
+    writeDeployRecord("gem", { backend: "eve", project: "eve-gem", url: "https://x.vercel.app" });
+    const { runner, calls, handles } = fakeRunner();
+    const up = undeployVercel("gem", runner);
+    await Promise.resolve();
+    expect(calls[0].args).toEqual(["remove", "eve-gem", "--yes", "--token=tok_test"]);
+    handles[0].exitCbs.forEach((cb) => cb(0));
+    const r = await up;
+    expect(r.removed).toBe(true);
+    expect(readDeployRecord("gem", "eve")).toBeNull();
+    delete process.env.VERCEL_TOKEN;
+  });
+
+  it("undeployVercel fails safe when nothing is recorded", async () => {
+    seedWorkspace();
+    process.env.VERCEL_TOKEN = "tok_test";
+    const { runner } = fakeRunner();
+    await expect(undeployVercel("gem", runner)).rejects.toThrow(/no .*deploy/i);
+    delete process.env.VERCEL_TOKEN;
+  });
+});
+
 describe("runReadiness cloudflare gate", () => {
   it("reports cloudflare true only when CLOUDFLARE_API_TOKEN is set", () => {
     const prev = process.env.CLOUDFLARE_API_TOKEN;
@@ -219,6 +267,57 @@ describe("deployCloudflare", () => {
     expect(state.mode).toBe("cloudflare");
     expect(state.state).toBe("idle");
     expect(state.url).toBe("https://my-gem.acct.workers.dev");
+    delete process.env.CLOUDFLARE_API_TOKEN;
+  });
+
+  it("records the worker + url on a successful deploy", async () => {
+    seedWorkspace();
+    process.env.CLOUDFLARE_API_TOKEN = "cf_test_token";
+    const { runner, handles } = fakeRunner();
+    const p = deployCloudflare("gem", runner);
+    await Promise.resolve(); handles[0].exitCbs.forEach((cb) => cb(0)); // install
+    await Promise.resolve(); await Promise.resolve();
+    handles[1].exitCbs.forEach((cb) => cb(0)); // flue build
+    await Promise.resolve();
+    handles[2].lineCbs.forEach((cb) => cb("https://gem.acct.workers.dev", "out"));
+    handles[2].exitCbs.forEach((cb) => cb(0));
+    await p;
+    const rec = readDeployRecord("gem", "flue");
+    expect(rec?.worker).toBe("gem");
+    expect(rec?.url).toBe("https://gem.acct.workers.dev");
+    delete process.env.CLOUDFLARE_API_TOKEN;
+  });
+});
+
+describe("undeployCloudflare", () => {
+  it("undeployCloudflare runs wrangler delete for the recorded worker and clears the record", async () => {
+    seedWorkspace();
+    process.env.CLOUDFLARE_API_TOKEN = "cf";
+    writeDeployRecord("gem", { backend: "flue", worker: "gem", url: "https://gem.acct.workers.dev" });
+    const { runner, calls, handles } = fakeRunner();
+    const up = undeployCloudflare("gem", runner);
+    await Promise.resolve();
+    expect(calls[0].args).toEqual(["delete", "--name", "gem", "--force"]);
+    expect(calls[0].env.CLOUDFLARE_API_TOKEN).toBe("cf"); // token threaded into the spawn env
+    handles[0].exitCbs.forEach((cb) => cb(0));
+    const r = await up;
+    expect(r.removed).toBe(true);
+    expect(readDeployRecord("gem", "flue")).toBeNull();
+    delete process.env.CLOUDFLARE_API_TOKEN;
+  });
+
+  it("undeployCloudflare throws without a token", async () => {
+    seedWorkspace();
+    delete process.env.CLOUDFLARE_API_TOKEN;
+    const { runner } = fakeRunner();
+    await expect(undeployCloudflare("gem", runner)).rejects.toThrow(/CLOUDFLARE_API_TOKEN/);
+  });
+
+  it("undeployCloudflare throws when no flue deploy is recorded", async () => {
+    seedWorkspace();
+    process.env.CLOUDFLARE_API_TOKEN = "cf";
+    const { runner } = fakeRunner();
+    await expect(undeployCloudflare("gem", runner)).rejects.toThrow(/no recorded flue/i);
     delete process.env.CLOUDFLARE_API_TOKEN;
   });
 });

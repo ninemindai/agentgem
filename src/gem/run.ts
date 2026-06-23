@@ -7,7 +7,8 @@ import { join } from "node:path";
 import { workspaceDir } from "./workspaces.js";
 import { readGemArchive } from "./archive.js";
 import { readArchiveDir, writeArchiveDir } from "./archiveFs.js";
-import { materialize, type TargetId, type MaterializeOpts } from "./targets.js";
+import { materialize, flueWorkerName, type TargetId, type MaterializeOpts } from "./targets.js";
+import { writeDeployRecord, readDeployRecord, clearDeployRecord } from "./deployRecord.js";
 
 export interface ProcHandle {
   onLine(cb: (line: string, stream: "out" | "err") => void): void;
@@ -108,7 +109,7 @@ export async function ensureRunProject(name: string, target: TargetId, runner: P
   if (!existsSync(join(dir, "gem.json"))) throw new Error(`no workspace '${name}'`);
   const gem = readGemArchive(readArchiveDir(dir));
   const { files } = materialize(gem, target, opts);
-  const runDir = join(dir, ".run", target);
+  const runDir = target === "eve" ? join(dir, ".run", vercelProject(name)) : join(dir, ".run", target);
   mkdirSync(runDir, { recursive: true });
   // Drop stale rendered sources + build caches; keep node_modules + the install marker.
   for (const entry of readdirSync(runDir)) {
@@ -126,6 +127,11 @@ export async function ensureRunProject(name: string, target: TargetId, runner: P
   }
   return runDir;
 }
+
+// Per-gem Vercel project name: eve-<slug(name)>. Slug = lowercase, non-alnum→'-', trimmed.
+// Vercel derives the project name from the deploy directory's basename, so we name the runDir accordingly.
+export const vercelProject = (name: string) =>
+  "eve-" + (name.normalize("NFKC").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "agent");
 
 const registry = new Map<string, { state: RunState; handle?: ProcHandle }>();
 const EVE_BIN = (runDir: string) => join(runDir, "node_modules", ".bin", "eve");
@@ -204,12 +210,34 @@ export async function deployVercel(name: string, runner: ProcessRunner = realRun
     if (code !== 0) { state.state = "failed"; return state; }
     state.url = parseVercelUrl(lines);
     state.state = "idle";
+    writeDeployRecord(name, { backend: "eve", at: new Date().toISOString(), url: state.url, project: vercelProject(name) });
     return state;
   } catch (err) {
     state.state = "failed";
     pushLog(state.logTail, err instanceof Error ? err.message : String(err));
     return state;
   }
+}
+
+export async function undeployVercel(name: string, runner: ProcessRunner = realRunner): Promise<{ removed: boolean; logTail: string[] }> {
+  const token = process.env.VERCEL_TOKEN;
+  if (!token) throw new Error("VERCEL_TOKEN is not set on the server — cannot undeploy from Vercel.");
+  const rec = readDeployRecord(name, "eve");
+  if (!rec?.project) throw new Error(`no recorded eve/Vercel deploy for '${name}'`);
+  const logTail: string[] = [];
+  const scope = process.env.VERCEL_SCOPE;
+  const run = (s?: string) => new Promise<{ code: number; lines: string[] }>((resolve) => {
+    const lines: string[] = [];
+    const args = ["remove", rec.project!, "--yes", `--token=${token}`, ...(s ? [`--scope=${s}`] : [])];
+    const h = runner.spawn(VERCEL_BIN, args, { cwd: workspaceDir(name), env: process.env });
+    h.onLine((l) => { pushLog(logTail, l); lines.push(l); });
+    h.onExit((c) => resolve({ code: c ?? 0, lines }));
+  });
+  let { code, lines } = await run(scope);
+  if (code !== 0 && !scope) { const team = parseSingleTeamScope(lines); if (team) ({ code } = await run(team)); }
+  if (code !== 0) return { removed: false, logTail };
+  clearDeployRecord(name, "eve");
+  return { removed: true, logTail };
 }
 
 export async function deployCloudflare(name: string, runner: ProcessRunner = realRunner): Promise<RunState> {
@@ -232,6 +260,7 @@ export async function deployCloudflare(name: string, runner: ProcessRunner = rea
     });
     if (code !== 0) { state.state = "failed"; return state; }
     state.url = parseWorkersUrl(lines);
+    writeDeployRecord(name, { backend: "flue", at: new Date().toISOString(), url: state.url, worker: flueWorkerName(name) });
     state.state = "idle";
     return state;
   } catch (err) {
@@ -239,4 +268,22 @@ export async function deployCloudflare(name: string, runner: ProcessRunner = rea
     pushLog(state.logTail, err instanceof Error ? err.message : String(err));
     return state;
   }
+}
+
+export async function undeployCloudflare(name: string, runner: ProcessRunner = realRunner): Promise<{ removed: boolean; logTail: string[] }> {
+  const token = process.env.CLOUDFLARE_API_TOKEN;
+  if (!token) throw new Error("CLOUDFLARE_API_TOKEN is not set on the server — cannot undeploy from Cloudflare.");
+  const rec = readDeployRecord(name, "flue");
+  if (!rec?.worker) throw new Error(`no recorded flue/Cloudflare deploy for '${name}'`);
+  const runDir = join(workspaceDir(name), ".run", "flue");
+  const logTail: string[] = [];
+  const env = { ...process.env, CLOUDFLARE_API_TOKEN: token };
+  const code = await new Promise<number>((resolve) => {
+    const h = runner.spawn(binIn(runDir, "wrangler"), ["delete", "--name", rec.worker!, "--force"], { cwd: runDir, env });
+    h.onLine((l) => pushLog(logTail, l));
+    h.onExit((c) => resolve(c ?? 0));
+  });
+  if (code !== 0) return { removed: false, logTail };
+  clearDeployRecord(name, "flue");
+  return { removed: true, logTail };
 }

@@ -6,6 +6,7 @@ import Anthropic, { toFile } from "@anthropic-ai/sdk";
 import { renderManagedAgent } from "./gem/publish.js";
 import type { ManagedAgentPayload, SkippedArtifact } from "./gem/publish.js";
 import type { Gem, SecretRequirement } from "./gem/types.js";
+import type { DeployRecord } from "./gem/deployRecord.js";
 
 export interface RegisteredSkill { name: string; skillId: string; version: string }
 
@@ -29,6 +30,7 @@ export interface PublishClient {
   createEnvironment(name: string): Promise<{ id: string }>;
   deleteEnvironment(environmentId: string): Promise<void>;
   createAgent(payload: ManagedAgentPayload & { skills: CustomSkillRef[] }): Promise<{ id: string; version: string }>;
+  deleteAgent?(agentId: string): Promise<void>;
 }
 
 const PUBLISH_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -86,6 +88,24 @@ export async function publishManagedAgent(gem: Gem, client: PublishClient): Prom
   }
 }
 
+// Tear down a managed-agent deploy: delete the agent, its environment, then each registered skill.
+// Each delete is independent — a failure in one does NOT abort the others (so an already-gone
+// resource doesn't strand the rest) — but real failures are collected and rethrown so the caller
+// (and the user) learns the teardown was partial. Mirrors publishManagedAgent's rollback contract.
+export async function undeployManagedAgent(rec: DeployRecord, client: PublishClient): Promise<void> {
+  const errors: Error[] = [];
+  const attempt = async (what: string, fn: () => Promise<void>) => {
+    try { await fn(); } catch (cause) { errors.push(new Error(`failed to delete ${what}`, { cause })); }
+  };
+  if (rec.agentId) await attempt(`agent ${rec.agentId}`, async () => {
+    if (!client.deleteAgent) throw new Error("client does not support deleting agents");
+    await client.deleteAgent(rec.agentId!);
+  });
+  if (rec.environmentId) await attempt(`environment ${rec.environmentId}`, () => client.deleteEnvironment(rec.environmentId!));
+  for (const sid of rec.skillIds ?? []) await attempt(`skill ${sid}`, () => client.deleteSkill(sid));
+  if (errors.length) throw new AggregateError(errors, `undeploy completed with ${errors.length} failure(s)`);
+}
+
 const safeUploadDirectory = (name: string): string => {
   const safe = name.normalize("NFKC").replace(/[^A-Za-z0-9._-]/g, "_");
   return safe === "." || safe === ".." || safe.length === 0 ? "skill" : safe;
@@ -115,6 +135,16 @@ export function anthropicPublishClient(apiKey: string): PublishClient {
     async createAgent(payload) {
       const agent = await client.beta.agents.create(payload as unknown as Parameters<typeof client.beta.agents.create>[0]);
       return { id: agent.id, version: String((agent as { version?: unknown }).version ?? "") };
+    },
+    // NOTE: @anthropic-ai/sdk does not expose client.beta.agents.delete() as of this writing.
+    // The agents resource only has create/retrieve/update/list/archive. We fall back to the
+    // low-level client.delete() which sends a raw DELETE to /v1/agents/{id} with the required
+    // managed-agents-2026-04-01 beta header.
+    async deleteAgent(agentId) {
+      await (client as unknown as { delete(path: string, opts?: unknown): Promise<unknown> }).delete(
+        `/v1/agents/${agentId}`,
+        { headers: { "anthropic-beta": "managed-agents-2026-04-01" } },
+      );
     },
   };
 }
