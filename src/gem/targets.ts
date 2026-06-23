@@ -245,8 +245,8 @@ function hooksToEventMap(hooks: HookArtifact[]): Record<string, unknown[]> {
 const hooksSettingsJson = (hooks: HookArtifact[]): FileTree =>
   ({ "settings.json": JSON.stringify({ hooks: hooksToEventMap(hooks) }, null, 2) });
 
-// Flue: a single agents/<gemname>.ts registers the agent. It imports each skill (reusing the shared
-// skills/<n>/SKILL.md bodies), folds instruction artifacts into the `instructions` string, and lists
+// Flue: a single src/agents/<gemname>.ts registers the agent. It imports each skill (from
+// src/skills/<n>/SKILL.md bodies), folds instruction artifacts into the `instructions` string, and lists
 // the skills. MCP connection files are emitted by the `mcp` renderer and imported by the agent file
 // (flueComposeAgent), which awaits them and spreads their adapted tools into the agent's `tools`.
 function escapeTemplate(s: string): string {
@@ -270,7 +270,7 @@ const flueConnection = (server: McpServerArtifact, url: string): string => {
   return `import { connectMcpServer } from "@flue/runtime";\n\nexport default () => connectMcpServer(${JSON.stringify(server.name)}, {\n  url: ${JSON.stringify(url)}${transport}${headers},\n});\n`;
 };
 
-// Plan the connections/<seg>.ts files (and stdio proxies/) for the MCP servers, returning the segs
+// Plan the src/connections/<seg>.ts files (and stdio src/proxies/) for the MCP servers, returning the segs
 // that got a file in iteration order. Single source of truth: both the `mcp` renderer (which writes
 // the files) and `compose` (which imports them into the agent) consume this, so the agent never
 // imports a connection that wasn't emitted, nor strands one that was.
