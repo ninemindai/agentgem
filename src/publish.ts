@@ -88,10 +88,22 @@ export async function publishManagedAgent(gem: Gem, client: PublishClient): Prom
   }
 }
 
+// Tear down a managed-agent deploy: delete the agent, its environment, then each registered skill.
+// Each delete is independent — a failure in one does NOT abort the others (so an already-gone
+// resource doesn't strand the rest) — but real failures are collected and rethrown so the caller
+// (and the user) learns the teardown was partial. Mirrors publishManagedAgent's rollback contract.
 export async function undeployManagedAgent(rec: DeployRecord, client: PublishClient): Promise<void> {
-  if (rec.agentId) { try { await client.deleteAgent?.(rec.agentId); } catch { /* already gone */ } }
-  if (rec.environmentId) { try { await client.deleteEnvironment(rec.environmentId); } catch { /* already gone */ } }
-  for (const sid of rec.skillIds ?? []) { try { await client.deleteSkill(sid); } catch { /* already gone */ } }
+  const errors: Error[] = [];
+  const attempt = async (what: string, fn: () => Promise<void>) => {
+    try { await fn(); } catch (cause) { errors.push(new Error(`failed to delete ${what}`, { cause })); }
+  };
+  if (rec.agentId) await attempt(`agent ${rec.agentId}`, async () => {
+    if (!client.deleteAgent) throw new Error("client does not support deleting agents");
+    await client.deleteAgent(rec.agentId!);
+  });
+  if (rec.environmentId) await attempt(`environment ${rec.environmentId}`, () => client.deleteEnvironment(rec.environmentId!));
+  for (const sid of rec.skillIds ?? []) await attempt(`skill ${sid}`, () => client.deleteSkill(sid));
+  if (errors.length) throw new AggregateError(errors, `undeploy completed with ${errors.length} failure(s)`);
 }
 
 const safeUploadDirectory = (name: string): string => {

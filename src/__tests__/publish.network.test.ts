@@ -102,6 +102,20 @@ describe("publishManagedAgent (injected client)", () => {
     expect(deleted).toContain("agent:a1");
     expect(deleted).toContain("env:e1");
     expect(deleted).toEqual(expect.arrayContaining(["skill:s1", "skill:s2"]));
+    expect(deleted.indexOf("agent:a1")).toBeLessThan(deleted.indexOf("env:e1")); // agent before environment
+  });
+
+  it("undeployManagedAgent isolates failures: a failing agent delete still removes env+skills, then rethrows", async () => {
+    const deleted: string[] = [];
+    const client = {
+      deleteAgent: async () => { throw new Error("403"); },
+      deleteEnvironment: async (id: string) => { deleted.push("env:" + id); },
+      deleteSkill: async (id: string) => { deleted.push("skill:" + id); },
+    } as unknown as PublishClient;
+    await expect(
+      undeployManagedAgent({ backend: "claude-managed", agentId: "a1", environmentId: "e1", skillIds: ["s1"] }, client),
+    ).rejects.toThrow(/failure/i); // a real failure surfaces (AggregateError)
+    expect(deleted).toEqual(["env:e1", "skill:s1"]); // env + skills still deleted despite the agent error
   });
 
   it("deduplicates concurrent and retried publish requests by requestId", async () => {
