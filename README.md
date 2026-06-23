@@ -47,8 +47,8 @@ call exactly the same thing.
 
 ## Quickstart
 
-Needs Node.js ≥ 22 and a coding-agent config at `~/.claude`. Run it without
-installing:
+Needs Node.js ≥ 22. From the directory of the agent project you want to package,
+run it without installing:
 
 ```bash
 npx @ninemind/agentgem         # npm
@@ -63,10 +63,15 @@ agentgem listening at http://127.0.0.1:4317
   MCP:      http://127.0.0.1:4317/mcp
 ```
 
-Open **<http://127.0.0.1:4317/>**, tick the skills / MCP servers / `CLAUDE.md` you
-want, name the Gem, and watch the live `gem.json` render with secrets already shown
-as `<redacted>`. Download it — that archive is what every target and the registry
-consume.
+Open **<http://127.0.0.1:4317/>**, then:
+
+1. **Open a testbed** — click *Create / open testbed…*. AgentGem detects the project
+   you launched from (it has a `.claude`/`.codex`) and also lists ones from your
+   Claude/Codex session history. Pick it and click *Use this*.
+2. **Pick artifacts** — the project's skills / MCP servers / `CLAUDE.md` show on the
+   left; *Import from machine…* pulls in global ones. Tick what you want, name the Gem.
+3. **Watch it seal** — the live `gem.json` renders with every secret as `<redacted>`.
+   Download it — that archive is what every target and the registry consume.
 
 <p align="center">
   <img src="docs/screenshot.png" alt="The AgentGem Gem Builder: selected skills and MCP servers on the left, the live gem.json on the right with every secret shown as <redacted>" width="100%">

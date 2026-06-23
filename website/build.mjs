@@ -237,6 +237,9 @@ copyDir(path.join(websiteDir, 'assets'), path.join(out, 'assets'));
 // Diagrams referenced by the docs (./diagrams/*.svg|png), served under /docs/diagrams.
 copyDir(path.join(root, 'docs', 'diagrams'), path.join(out, 'docs', 'diagrams'));
 
+// Screenshot referenced by getting-started.md (./screenshot.png), served under /docs.
+fs.copyFileSync(path.join(root, 'docs', 'screenshot.png'), path.join(out, 'docs', 'screenshot.png'));
+
 // Render each doc page: HTML in the shell + the raw .md copied alongside.
 const docMeta = [];
 for (const src of DOC_PAGES) {
