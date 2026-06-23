@@ -1,6 +1,6 @@
 // src/__tests__/publish.network.test.ts
 import { describe, it, expect } from "vitest";
-import { publishManagedAgent, publishManagedAgentOnce } from "../publish.js";
+import { publishManagedAgent, publishManagedAgentOnce, undeployManagedAgent } from "../publish.js";
 import type { PublishClient, CustomSkillRef } from "../publish.js";
 import type { ManagedAgentPayload } from "../gem/publish.js";
 import type { Gem } from "../gem/types.js";
@@ -89,6 +89,19 @@ describe("publishManagedAgent (injected client)", () => {
       expect(messages).toContain("failed to delete environment env_orphan");
       expect(messages).toContain("failed to delete skill skill_review");
     }
+  });
+
+  it("undeployManagedAgent deletes agent, environment, and skills", async () => {
+    const deleted: string[] = [];
+    const client = {
+      deleteAgent: async (id: string) => { deleted.push("agent:" + id); },
+      deleteEnvironment: async (id: string) => { deleted.push("env:" + id); },
+      deleteSkill: async (id: string) => { deleted.push("skill:" + id); },
+    } as unknown as PublishClient;
+    await undeployManagedAgent({ backend: "claude-managed", agentId: "a1", environmentId: "e1", skillIds: ["s1", "s2"] }, client);
+    expect(deleted).toContain("agent:a1");
+    expect(deleted).toContain("env:e1");
+    expect(deleted).toEqual(expect.arrayContaining(["skill:s1", "skill:s2"]));
   });
 
   it("deduplicates concurrent and retried publish requests by requestId", async () => {
