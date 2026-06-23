@@ -6,10 +6,12 @@ import type { Gem, SecretRequirement } from "./types.js";
 import { buildAgentcoreHarness } from "./targets.js";
 import type { SkippedArtifact } from "./publish.js";
 import type { DeployPreview, DeployResult } from "./deploy.js";
+import type { DeployRecord } from "./deployRecord.js";
 
 export interface AgentcoreControlClient {
   createHarness(req: Record<string, unknown>): Promise<{ arn: string; harnessId: string; harnessName: string; harnessVersion: string; status: string; failureReason?: string }>;
   getHarness(harnessId: string): Promise<{ status: string; harnessVersion: string; failureReason?: string }>;
+  deleteHarness(harnessId: string): Promise<void>;
 }
 
 // CreateHarness returns while the harness is still CREATING; these gate the poll-to-terminal loop.
@@ -66,7 +68,16 @@ export function realAgentcoreControlClient(): AgentcoreControlClient {
       const h = (out as { harness?: Record<string, unknown> }).harness ?? {};
       return { status: String(h.status ?? ""), harnessVersion: String(h.harnessVersion ?? ""), failureReason: h.failureReason as string | undefined };
     },
+    async deleteHarness(harnessId) {
+      const { BedrockAgentCoreControlClient, DeleteHarnessCommand } = await import("@aws-sdk/client-bedrock-agentcore-control");
+      const c = new BedrockAgentCoreControlClient({});
+      await c.send(new DeleteHarnessCommand({ harnessId } as never));
+    },
   };
+}
+
+export async function undeployAgentcoreHarness(rec: DeployRecord, client: AgentcoreControlClient): Promise<void> {
+  if (rec.harnessId) await client.deleteHarness(rec.harnessId);
 }
 
 export function previewAgentcorePublish(gem: Gem): DeployPreview {
