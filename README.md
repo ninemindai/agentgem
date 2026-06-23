@@ -1,7 +1,11 @@
-# AgentGem
+<a href="https://agentgem.ninemind.ai">
+  <img src="docs/banner.svg" alt="AgentGem — your agent works locally. Gem it." width="100%">
+</a>
 
 > A local web UI that introspects your coding-agent config, redacts secrets at
 > capture, and builds a portable, composable **Gem**.
+>
+> **[agentgem.ninemind.ai](https://agentgem.ninemind.ai)**
 
 AgentGem reads your coding-agent config — skills, MCP servers, and `CLAUDE.md` —
 **redacts secrets the moment they're read**, and produces a **Gem**: a manifest + lock

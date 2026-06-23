@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" fill="none" role="img" aria-label="AgentGem — your agent works locally. Gem it.">
+  <defs>
+    <style>
+      .wm { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, "Roboto Mono", monospace; }
+    </style>
+  </defs>
+
+  <!-- paper card -->
+  <rect x="1" y="1" width="1198" height="298" rx="20" fill="#f4efe3" stroke="#ddd2bb" stroke-width="2"/>
+  <rect x="1" y="1" width="1198" height="6" rx="3" fill="#b08436"/>
+
+  <!-- gem mark (from website/assets/gem.svg, scaled ~3.1x, centered at y) -->
+  <g transform="translate(96 88) scale(3.1)">
+    <path d="M20 2 L36 14 L20 38 L4 14 Z" fill="#9a3324"/>
+    <path d="M20 2 L36 14 L20 16 Z" fill="#bb4a38"/>
+    <path d="M20 2 L4 14 L20 16 Z" fill="#7d2a1e"/>
+    <path d="M4 14 L20 16 L20 38 Z" fill="#8b2e21"/>
+    <path d="M36 14 L20 16 L20 38 Z" fill="#a8392a"/>
+    <path d="M4 14 L36 14 L20 16 Z" fill="#c8543f"/>
+  </g>
+
+  <!-- wordmark + taglines -->
+  <text class="wm" x="280" y="138" font-size="76" font-weight="700" fill="#211c15" letter-spacing="-1">AgentGem</text>
+  <text class="wm" x="282" y="186" font-size="30" font-weight="500" fill="#4a4133">Your agent works locally. <tspan fill="#9a3324" font-weight="700">Gem it.</tspan></text>
+  <text class="mono" x="283" y="226" font-size="17" fill="#857a64">secret-safe&#160;·&#160;composable&#160;·&#160;deploy-anywhere Gems for your coding agent</text>
+</svg>
