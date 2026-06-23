@@ -39,7 +39,7 @@ import {
   RegistryInstallRequestSchema, RegistryInstallResponseSchema,
   RegistryPublishRequestSchema, RegistryPublishResponseSchema,
 } from "./schemas.js";
-import { runReadiness, startLocal, stopLocal, getRunStatus, deployVercel } from "./gem/run.js";
+import { runReadiness, startLocal, stopLocal, getRunStatus, deployVercel, deployCloudflare } from "./gem/run.js";
 import { agentcoreReadiness, deployAgentcore, getAgentcoreStatus } from "./gem/agentcoreRun.js";
 import { scaffoldTestbed, importArtifacts } from "./gem/testbed.js";
 import { detectFlavor, suggestTestbed, discoverProjects } from "./gem/testbedFlavors.js";
@@ -142,7 +142,7 @@ export class GemController {
   @post("/run", { body: RunRequestSchema, response: RunStateSchema })
   async run(input: { body: z.infer<typeof RunRequestSchema> }): Promise<z.infer<typeof RunStateSchema>> {
     const { name, mode } = input.body;
-    const state = mode === "vercel" ? await deployVercel(name) : await startLocal(name);
+    const state = mode === "cloudflare" ? await deployCloudflare(name) : mode === "vercel" ? await deployVercel(name) : await startLocal(name);
     return state;
   }
 
