@@ -2,12 +2,12 @@
 // Run/deploy the rendered eve project. Side-effecting orchestration (peer of workspaces.ts).
 // Process spawning is injected via ProcessRunner so command/env/state logic is unit-testable.
 import { spawn as nodeSpawn } from "node:child_process";
-import { existsSync, mkdirSync, rmSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { workspaceDir } from "./workspaces.js";
 import { readGemArchive } from "./archive.js";
 import { readArchiveDir, writeArchiveDir } from "./archiveFs.js";
-import { materialize } from "./targets.js";
+import { materialize, type TargetId } from "./targets.js";
 
 export interface ProcHandle {
   onLine(cb: (line: string, stream: "out" | "err") => void): void;
@@ -18,7 +18,7 @@ export interface ProcessRunner {
   spawn(cmd: string, args: string[], opts: { cwd: string; env: NodeJS.ProcessEnv }): ProcHandle;
 }
 
-export type RunMode = "local" | "vercel";
+export type RunMode = "local" | "vercel" | "cloudflare";
 export type RunPhase = "idle" | "installing" | "building" | "running" | "deploying" | "failed";
 export interface RunState { mode: RunMode; state: RunPhase; url?: string; logTail: string[] }
 
@@ -32,8 +32,8 @@ export function nodeMajor(version: string): number {
   const m = /^v?(\d+)/.exec(version);
   return m ? Number(m[1]) : 0;
 }
-export function runReadiness(): { local: boolean; vercel: boolean } {
-  return { local: nodeMajor(process.version) >= 24, vercel: !!process.env.VERCEL_TOKEN };
+export function runReadiness(): { local: boolean; vercel: boolean; cloudflare: boolean } {
+  return { local: nodeMajor(process.version) >= 24, vercel: !!process.env.VERCEL_TOKEN, cloudflare: !!process.env.CLOUDFLARE_API_TOKEN };
 }
 // eve start prints a localhost URL once listening; grab the first http(s) URL.
 export function parseEveUrl(lines: string[]): string | undefined {
@@ -43,6 +43,11 @@ export function parseEveUrl(lines: string[]): string | undefined {
 // vercel deploy prints the deployment URL (a bare https://<id>.vercel.app line).
 export function parseVercelUrl(lines: string[]): string | undefined {
   for (const l of lines) { const m = /(https:\/\/[^\s]+\.vercel\.app[^\s]*)/.exec(l); if (m) return m[1]; }
+  return undefined;
+}
+// wrangler prints the deployed Worker URL (https://<name>.<acct>.workers.dev).
+export function parseWorkersUrl(lines: string[]): string | undefined {
+  for (const l of lines) { const m = /(https:\/\/[^\s]+\.workers\.dev[^\s]*)/.exec(l); if (m) return m[1]; }
   return undefined;
 }
 
@@ -82,16 +87,20 @@ export function runToEnd(runner: ProcessRunner, cmd: string, args: string[], cwd
   });
 }
 
-// Re-render eve into a stable .run/eve dir (preserving node_modules) and npm-install when needed.
-export async function ensureRunProject(name: string, runner: ProcessRunner, log: string[]): Promise<string> {
+// Re-render <target> into a stable .run/<target> dir (preserving node_modules) and npm-install when needed.
+export async function ensureRunProject(name: string, target: TargetId, runner: ProcessRunner, log: string[]): Promise<string> {
   const dir = workspaceDir(name);
   if (!existsSync(join(dir, "gem.json"))) throw new Error(`no workspace '${name}'`);
   const gem = readGemArchive(readArchiveDir(dir));
-  const { files } = materialize(gem, "eve");
-  const runDir = join(dir, ".run", "eve");
-  rmSync(join(runDir, "agent"), { recursive: true, force: true }); // drop stale skills/connections
+  const { files } = materialize(gem, target);
+  const runDir = join(dir, ".run", target);
   mkdirSync(runDir, { recursive: true });
-  writeArchiveDir(runDir, files); // writes agent/* + package.json + tsconfig + ignore files
+  // Drop stale rendered sources + build caches; keep node_modules + the install marker.
+  for (const entry of readdirSync(runDir)) {
+    if (entry === "node_modules" || entry === ".installed-package.json") continue;
+    rmSync(join(runDir, entry), { recursive: true, force: true });
+  }
+  writeArchiveDir(runDir, files);
   const pkg = readFileSync(join(runDir, "package.json"), "utf8");
   const marker = join(runDir, ".installed-package.json");
   const installed = existsSync(marker) ? readFileSync(marker, "utf8") : "";
@@ -111,14 +120,14 @@ export async function startLocal(name: string, runner: ProcessRunner = realRunne
     if (e.state.mode === "local" && e.state.state === "running") throw new Error("a local run is already active");
   }
   const state: RunState = { mode: "local", state: "installing", logTail: [] };
-  registry.set(name, { state });
+  registry.set(`${name}:eve`, { state });
   try {
-    const runDir = await ensureRunProject(name, runner, state.logTail);
+    const runDir = await ensureRunProject(name, "eve", runner, state.logTail);
     state.state = "building";
     const buildCode = await runToEnd(runner, EVE_BIN(runDir), ["build"], runDir, process.env, state.logTail);
     if (buildCode !== 0) { state.state = "failed"; return state; }
     const handle = runner.spawn(EVE_BIN(runDir), ["start"], { cwd: runDir, env: process.env });
-    registry.set(name, { state, handle });
+    registry.set(`${name}:eve`, { state, handle });
     state.state = "running";
     handle.onLine((line) => {
       pushLog(state.logTail, line);
@@ -133,17 +142,19 @@ export async function startLocal(name: string, runner: ProcessRunner = realRunne
   }
 }
 
-export function stopLocal(name: string): { stopped: boolean } {
-  const e = registry.get(name);
+export function stopLocal(name: string, target: string): { stopped: boolean } {
+  const e = registry.get(`${name}:${target}`);
   if (!e?.handle) return { stopped: false };
   e.handle.kill();
   e.state.state = "idle";
   return { stopped: true };
 }
 
-export function getRunStatus(name: string): RunState {
-  return registry.get(name)?.state ?? { mode: "local", state: "idle", logTail: [] };
+export function getRunStatus(name: string, target: string): RunState {
+  return registry.get(`${name}:${target}`)?.state ?? { mode: "local", state: "idle", logTail: [] };
 }
+
+const binIn = (runDir: string, name: string) => join(runDir, "node_modules", ".bin", name);
 
 // agentgem's own pinned vercel CLI (installed as a dependency), run with cwd = the eve run dir.
 const VERCEL_BIN = join(process.cwd(), "node_modules", ".bin", "vercel");
@@ -152,9 +163,9 @@ export async function deployVercel(name: string, runner: ProcessRunner = realRun
   const token = process.env.VERCEL_TOKEN;
   if (!token) throw new Error("VERCEL_TOKEN is not set on the server — cannot deploy to Vercel.");
   const state: RunState = { mode: "vercel", state: "installing", logTail: [] };
-  registry.set(name, { state });
+  registry.set(`${name}:eve`, { state });
   try {
-    const runDir = await ensureRunProject(name, runner, state.logTail);
+    const runDir = await ensureRunProject(name, "eve", runner, state.logTail);
     state.state = "building";
     const buildCode = await runToEnd(runner, EVE_BIN(runDir), ["build"], runDir, { ...process.env, VERCEL: "1" }, state.logTail);
     if (buildCode !== 0) { state.state = "failed"; return state; }
@@ -167,6 +178,35 @@ export async function deployVercel(name: string, runner: ProcessRunner = realRun
     });
     if (code !== 0) { state.state = "failed"; return state; }
     state.url = parseVercelUrl(lines);
+    state.state = "idle";
+    return state;
+  } catch (err) {
+    state.state = "failed";
+    pushLog(state.logTail, err instanceof Error ? err.message : String(err));
+    return state;
+  }
+}
+
+export async function deployCloudflare(name: string, runner: ProcessRunner = realRunner): Promise<RunState> {
+  const token = process.env.CLOUDFLARE_API_TOKEN;
+  if (!token) throw new Error("CLOUDFLARE_API_TOKEN is not set on the server — cannot deploy to Cloudflare.");
+  const state: RunState = { mode: "cloudflare", state: "installing", logTail: [] };
+  registry.set(`${name}:flue`, { state });
+  try {
+    const runDir = await ensureRunProject(name, "flue", runner, state.logTail);
+    state.state = "building";
+    const buildCode = await runToEnd(runner, binIn(runDir, "flue"), ["build", "--target", "cloudflare"], runDir, process.env, state.logTail);
+    if (buildCode !== 0) { state.state = "failed"; return state; }
+    state.state = "deploying";
+    const lines: string[] = [];
+    const env = { ...process.env, CLOUDFLARE_API_TOKEN: token };
+    const code = await new Promise<number>((resolve) => {
+      const h = runner.spawn(binIn(runDir, "wrangler"), ["deploy"], { cwd: runDir, env });
+      h.onLine((line) => { pushLog(state.logTail, line); lines.push(line); });
+      h.onExit((c) => resolve(c ?? 0));
+    });
+    if (code !== 0) { state.state = "failed"; return state; }
+    state.url = parseWorkersUrl(lines);
     state.state = "idle";
     return state;
   } catch (err) {

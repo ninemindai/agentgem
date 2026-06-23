@@ -148,12 +148,12 @@ export class GemController {
 
   @get("/run-status", { query: RunStatusQuerySchema, response: RunStateSchema })
   async runStatus(input: { query: z.infer<typeof RunStatusQuerySchema> }): Promise<z.infer<typeof RunStateSchema>> {
-    return getRunStatus(input.query.name);
+    return getRunStatus(input.query.name, input.query.target);
   }
 
   @post("/run/stop", { body: RunStopRequestSchema, response: RunStopResponseSchema })
   async runStop(input: { body: z.infer<typeof RunStopRequestSchema> }): Promise<z.infer<typeof RunStopResponseSchema>> {
-    return stopLocal(input.body.name);
+    return stopLocal(input.body.name, input.body.target);
   }
 
   @get("/agentcore/deploy-ready", { query: PickQuerySchema, response: AgentcoreReadyResponseSchema })

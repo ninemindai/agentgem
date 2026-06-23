@@ -1,6 +1,6 @@
 // src/gem/__tests__/run.test.ts
 import { describe, it, expect } from "vitest";
-import { pushLog, nodeMajor, parseEveUrl, parseVercelUrl } from "../run.js";
+import { pushLog, nodeMajor, parseEveUrl, parseVercelUrl, parseWorkersUrl, runReadiness, deployCloudflare } from "../run.js";
 import { startLocal, stopLocal, getRunStatus, deployVercel, type ProcessRunner, type ProcHandle } from "../run.js";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -31,6 +31,12 @@ describe("run pure helpers", () => {
   it("parseVercelUrl returns the deployment .vercel.app URL", () => {
     expect(parseVercelUrl(["Inspect: x", "https://gem-abc123.vercel.app"])).toBe("https://gem-abc123.vercel.app");
     expect(parseVercelUrl(["http://localhost:3000"])).toBeUndefined();
+  });
+
+  it("parseWorkersUrl grabs the workers.dev URL from wrangler output", () => {
+    expect(parseWorkersUrl(["Uploaded", "https://my-gem.acct.workers.dev", "Done"]))
+      .toBe("https://my-gem.acct.workers.dev");
+    expect(parseWorkersUrl(["no url here"])).toBeUndefined();
   });
 });
 
@@ -89,9 +95,9 @@ describe("local run", () => {
     expect(state.state).toBe("running");
     expect(state.url).toBe("http://127.0.0.1:3000");
     // stop kills the start child
-    expect(stopLocal("gem").stopped).toBe(true);
+    expect(stopLocal("gem", "eve").stopped).toBe(true);
     expect(handles[2].killed).toBe(true);
-    expect(getRunStatus("gem").state).toBe("idle");
+    expect(getRunStatus("gem", "eve").state).toBe("idle");
   });
 
   it("startLocal marks failed when eve build exits non-zero", async () => {
@@ -138,5 +144,52 @@ describe("vercel deploy", () => {
     expect(state.state).toBe("idle");
     expect(state.url).toBe("https://gem-abc123.vercel.app");
     delete process.env.VERCEL_TOKEN;
+  });
+});
+
+describe("runReadiness cloudflare gate", () => {
+  it("reports cloudflare true only when CLOUDFLARE_API_TOKEN is set", () => {
+    const prev = process.env.CLOUDFLARE_API_TOKEN;
+    try {
+      delete process.env.CLOUDFLARE_API_TOKEN;
+      expect(runReadiness().cloudflare).toBe(false);
+      process.env.CLOUDFLARE_API_TOKEN = "t";
+      expect(runReadiness().cloudflare).toBe(true);
+    } finally { if (prev !== undefined) process.env.CLOUDFLARE_API_TOKEN = prev; else delete process.env.CLOUDFLARE_API_TOKEN; }
+  });
+});
+
+describe("deployCloudflare", () => {
+  it("fails fast without CLOUDFLARE_API_TOKEN", async () => {
+    const prev = process.env.CLOUDFLARE_API_TOKEN;
+    delete process.env.CLOUDFLARE_API_TOKEN;
+    try {
+      await expect(deployCloudflare("nope")).rejects.toThrow(/CLOUDFLARE_API_TOKEN/);
+    } finally { if (prev !== undefined) process.env.CLOUDFLARE_API_TOKEN = prev; }
+  });
+
+  it("installs, runs flue build, deploys via wrangler, and parses the workers URL", async () => {
+    seedWorkspace();
+    process.env.CLOUDFLARE_API_TOKEN = "cf_test_token";
+    const { runner, calls, handles } = fakeRunner();
+    const p = deployCloudflare("gem", runner);
+    await Promise.resolve(); handles[0].exitCbs.forEach((cb) => cb(0)); // npm install
+    await Promise.resolve(); await Promise.resolve();
+    // flue build --target cloudflare
+    const build = calls[1];
+    expect(build.args).toEqual(["build", "--target", "cloudflare"]);
+    handles[1].exitCbs.forEach((cb) => cb(0));
+    await Promise.resolve();
+    // wrangler deploy
+    const deploy = calls[2];
+    expect(deploy.args).toEqual(["deploy"]);
+    expect(deploy.env.CLOUDFLARE_API_TOKEN).toBe("cf_test_token");
+    handles[2].lineCbs.forEach((cb) => cb("https://my-gem.acct.workers.dev", "out"));
+    handles[2].exitCbs.forEach((cb) => cb(0));
+    const state = await p;
+    expect(state.mode).toBe("cloudflare");
+    expect(state.state).toBe("idle");
+    expect(state.url).toBe("https://my-gem.acct.workers.dev");
+    delete process.env.CLOUDFLARE_API_TOKEN;
   });
 });
