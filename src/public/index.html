@@ -756,10 +756,15 @@ async function renderPublish(){
   h += sect("Skipped", r.skipped.map(s => row(s.artifact, s.reason)));
   __publishReady = null;
   const ready = await (await fetch(`/api/publish-ready?target=${encodeURIComponent(selectedTarget)}`)).json();
-  h += `<div class="pgroup"><button id="publishBtn" ${ready.ready ? "" : "disabled"}>${ready.ready ? "Publish to Managed Agents" : "Publish (set ANTHROPIC_API_KEY)"}</button> <span class="d" id="publishStatus"></span></div>`;
+  if (ready.ready) {
+    h += `<div class="pgroup"><button id="publishBtn">Publish to Managed Agents</button> <span class="d" id="publishStatus"></span></div>`;
+  } else {
+    h += credEntryHtml("ANTHROPIC_API_KEY");
+  }
   h += `<p class="note">Publishing creates an agent and a limited-network cloud sandbox in your Anthropic org. Each skill is registered as an on-demand Agent Skill (Skills API), plus http/sse MCP servers (URL only) and instructions as the system prompt. Secrets are never sent; add MCP credentials to a vault before starting sessions.</p></div>`;
   el.innerHTML = h;
   attachDeployTargetListener();
+  if (!ready.ready) wireCredEntry("ANTHROPIC_API_KEY", () => renderPublish());
 }
 function attachDeployTargetListener(){
   const sel = document.getElementById("deployTarget");
@@ -794,6 +799,38 @@ async function doPublish(){
 // workspace gem), so this panel needs a workspace open and VERCEL_TOKEN on the server.
 let __evePoll = null;
 const eveRunning = s => ["installing", "building", "running", "deploying"].includes(s);
+// Where to get each server credential the deploy/publish backends gate on.
+const CRED_LINKS = {
+  ANTHROPIC_API_KEY: "https://console.anthropic.com/settings/keys",
+  VERCEL_TOKEN: "https://vercel.com/account/tokens",
+  CLOUDFLARE_API_TOKEN: "https://dash.cloudflare.com/profile/api-tokens",
+};
+// A reusable "paste a server credential" block, shown when a backend is gated on a missing key.
+// Saving sets it in the running server + persists to ~/.agentgem/.env, then re-renders the panel.
+function credEntryHtml(key){
+  const link = CRED_LINKS[key] || "";
+  return `<div class="pgroup" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">`
+    + `<span class="d">Needs <code>${esc(key)}</code>.</span>`
+    + (link ? ` <a href="${esc(link)}" target="_blank" rel="noopener">Get a token ↗</a>` : "")
+    + `<input id="credInput" type="password" placeholder="paste ${esc(key)}" style="flex:1;min-width:160px" />`
+    + `<button id="credSave">Save</button> <span class="d" id="credStatus"></span></div>`
+    + `<p class="note">Stored unencrypted in <code>~/.agentgem/.env</code> on this machine — a server credential, kept out of any Gem.</p>`;
+}
+function wireCredEntry(key, onSaved){
+  const btn = document.getElementById("credSave"); if (!btn) return;
+  const save = async () => {
+    const v = document.getElementById("credInput").value.trim();
+    if (!v) return;
+    const st = document.getElementById("credStatus"); st.textContent = "Saving…";
+    try {
+      const r = await fetch("/api/credential", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key, value: v }) });
+      if (!r.ok) { st.textContent = "Failed"; return; }
+      onSaved();
+    } catch { st.textContent = "Failed"; }
+  };
+  btn.onclick = save;
+  document.getElementById("credInput")?.addEventListener("keydown", (e) => { if (e.key === "Enter") save(); });
+}
 async function renderEveDeploy(el, selHtml){
   if (!wsCurrent){
     el.innerHTML = selHtml + `<div class="pgroup"><p class="note">Eve deploys a saved <b>workspace</b>'s eve project. Open or create a workspace first (the <b>Workspace</b> stage), then deploy it here.</p></div>`;
@@ -801,16 +838,23 @@ async function renderEveDeploy(el, selHtml){
   }
   const ready = await (await fetch(`/api/run-ready?name=${encodeURIComponent(wsCurrent)}&target=eve`)).json();
   let h = `<div class="psummary">${selHtml}<div class="phead"><strong>${esc(wsCurrent)}</strong> <span class="d">· Eve → Vercel (self-host)</span></div>`;
-  h += `<div class="pgroup"><button id="eveDeployBtn" ${ready.vercel ? "" : "disabled"}>${ready.vercel ? "▲ Deploy to Vercel" : "Deploy (set VERCEL_TOKEN)"}</button> <span class="d" id="eveDeployState"></span></div>`;
-  h += `<div id="eveDeployUrl" style="margin:4px 0"></div>`;
-  h += `<pre id="eveDeployLog" class="json" style="max-height:220px;overflow:auto" hidden></pre>`;
-  h += `<p class="note">Builds the workspace's eve project (<code>eve build</code>) and deploys via the pinned Vercel CLI (<code>vercel deploy --prebuilt</code>). The eve project is re-rendered from the workspace gem automatically. Requires <code>VERCEL_TOKEN</code> on the server.</p></div>`;
+  if (ready.vercel) {
+    h += `<div class="pgroup"><button id="eveDeployBtn">▲ Deploy to Vercel</button> <span class="d" id="eveDeployState"></span></div>`;
+    h += `<div id="eveDeployUrl" style="margin:4px 0"></div>`;
+    h += `<pre id="eveDeployLog" class="json" style="max-height:220px;overflow:auto" hidden></pre>`;
+  } else {
+    h += credEntryHtml("VERCEL_TOKEN");
+  }
+  h += `<p class="note">Builds the workspace's eve project (<code>eve build</code>) and deploys via the pinned Vercel CLI (<code>vercel deploy --prebuilt</code>). The eve project is re-rendered from the workspace gem automatically.</p></div>`;
   el.innerHTML = h;
   attachDeployTargetListener();
-  // reflect any in-flight/last deploy state for this workspace
-  const cur = await (await fetch(`/api/run-status?name=${encodeURIComponent(wsCurrent)}&target=eve`)).json();
-  if (cur && cur.mode === "vercel" && (cur.state !== "idle" || cur.url)) { eveRenderRun(cur); if (eveRunning(cur.state)) evePollRun(wsCurrent); }
-  document.getElementById("eveDeployBtn")?.addEventListener("click", eveDeploy);
+  if (ready.vercel) {
+    const cur = await (await fetch(`/api/run-status?name=${encodeURIComponent(wsCurrent)}&target=eve`)).json();
+    if (cur && cur.mode === "vercel" && (cur.state !== "idle" || cur.url)) { eveRenderRun(cur); if (eveRunning(cur.state)) evePollRun(wsCurrent); }
+    document.getElementById("eveDeployBtn")?.addEventListener("click", eveDeploy);
+  } else {
+    wireCredEntry("VERCEL_TOKEN", () => renderPublish());
+  }
 }
 async function eveDeploy(){
   if (!wsCurrent) return;
@@ -844,15 +888,23 @@ async function renderFlueDeploy(el, selHtml){
   }
   const ready = await (await fetch(`/api/run-ready?name=${encodeURIComponent(wsCurrent)}&target=flue`)).json();
   let h = `<div class="psummary">${selHtml}<div class="phead"><strong>${esc(wsCurrent)}</strong> <span class="d">· Flue → Cloudflare (self-host)</span></div>`;
-  h += `<div class="pgroup"><button id="flueDeployBtn" ${ready.cloudflare ? "" : "disabled"}>${ready.cloudflare ? "▲ Deploy to Cloudflare" : "Deploy (set CLOUDFLARE_API_TOKEN)"}</button> <span class="d" id="flueDeployState"></span></div>`;
-  h += `<div id="flueDeployUrl" style="margin:4px 0"></div>`;
-  h += `<pre id="flueDeployLog" class="json" style="max-height:220px;overflow:auto" hidden></pre>`;
-  h += `<p class="note">Runs <code>npm install</code> → <code>flue build --target cloudflare</code> → <code>wrangler deploy</code> on the workspace's flue project (re-rendered from the gem). Requires <code>CLOUDFLARE_API_TOKEN</code> on the server.</p></div>`;
+  if (ready.cloudflare) {
+    h += `<div class="pgroup"><button id="flueDeployBtn">▲ Deploy to Cloudflare</button> <span class="d" id="flueDeployState"></span></div>`;
+    h += `<div id="flueDeployUrl" style="margin:4px 0"></div>`;
+    h += `<pre id="flueDeployLog" class="json" style="max-height:220px;overflow:auto" hidden></pre>`;
+  } else {
+    h += credEntryHtml("CLOUDFLARE_API_TOKEN");
+  }
+  h += `<p class="note">Runs <code>npm install</code> → <code>flue build --target cloudflare</code> → <code>wrangler deploy</code> on the workspace's flue project (re-rendered from the gem).</p></div>`;
   el.innerHTML = h;
   attachDeployTargetListener();
-  const cur = await (await fetch(`/api/run-status?name=${encodeURIComponent(wsCurrent)}&target=flue`)).json();
-  if (cur && cur.mode === "cloudflare" && (cur.state !== "idle" || cur.url)) { flueRenderRun(cur); if (eveRunning(cur.state)) fluePollRun(wsCurrent); }
-  document.getElementById("flueDeployBtn")?.addEventListener("click", flueDeploy);
+  if (ready.cloudflare) {
+    const cur = await (await fetch(`/api/run-status?name=${encodeURIComponent(wsCurrent)}&target=flue`)).json();
+    if (cur && cur.mode === "cloudflare" && (cur.state !== "idle" || cur.url)) { flueRenderRun(cur); if (eveRunning(cur.state)) fluePollRun(wsCurrent); }
+    document.getElementById("flueDeployBtn")?.addEventListener("click", flueDeploy);
+  } else {
+    wireCredEntry("CLOUDFLARE_API_TOKEN", () => renderPublish());
+  }
 }
 async function flueDeploy(){
   if (!wsCurrent) return;

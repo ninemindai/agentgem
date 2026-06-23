@@ -1,5 +1,10 @@
 // src/index.ts
-import "dotenv/config"; // load .env into process.env before anything reads it
+import "dotenv/config"; // load cwd .env into process.env before anything reads it
+import { config as loadEnv } from "dotenv";
+import { credentialsEnvPath } from "./gem/credentials.js";
+// Also load persisted server credentials from ~/.agentgem/.env (without overriding an env/.env
+// value that's already set — an explicit launch-time setting wins).
+loadEnv({ path: credentialsEnvPath() });
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";

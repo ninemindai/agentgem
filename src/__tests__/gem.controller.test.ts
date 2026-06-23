@@ -296,6 +296,30 @@ describe("run ops", () => {
       else delete process.env.CLOUDFLARE_API_TOKEN;
     }
   });
+
+  it("POST /api/credential sets the credential in the running process and gates flip", async () => {
+    const saved = process.env.ANTHROPIC_API_KEY;
+    try {
+      delete process.env.ANTHROPIC_API_KEY;
+      const before = await client.get("/api/publish-ready").expect(200);
+      expect(before.body.ready).toBe(false);
+
+      const r = await client.post("/api/credential").send({ key: "ANTHROPIC_API_KEY", value: "sk-ant-test" }).expect(200);
+      expect(r.body.ok).toBe(true);
+      expect(process.env.ANTHROPIC_API_KEY).toBe("sk-ant-test");
+
+      const after = await client.get("/api/publish-ready").expect(200);
+      expect(after.body.ready).toBe(true);
+    } finally {
+      if (saved !== undefined) process.env.ANTHROPIC_API_KEY = saved;
+      else delete process.env.ANTHROPIC_API_KEY;
+    }
+  });
+
+  it("POST /api/credential rejects a non-allowlisted key", async () => {
+    const r = await client.post("/api/credential").send({ key: "AWS_SECRET_ACCESS_KEY", value: "x" });
+    expect(r.status).toBe(422); // schema rejects keys outside the allowlist
+  });
 });
 
 describe("workspace ops", () => {

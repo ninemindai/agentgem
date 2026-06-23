@@ -27,6 +27,7 @@ import {
   ArchiveRequestSchema, ArchiveResponseSchema,
   CreateWorkspaceRequestSchema, WorkspaceQuerySchema, RenderRequestSchema, WorkspaceNameRequestSchema, WorkspaceSummarySchema, WorkspaceDetailSchema, RenderResultSchema, ListWorkspacesResponseSchema, DeleteWorkspaceResponseSchema,
   RunReadyQuerySchema, RunReadyResponseSchema, RunRequestSchema, RunStatusQuerySchema, RunStateSchema, RunStopRequestSchema, RunStopResponseSchema,
+  CredentialRequestSchema, CredentialResponseSchema,
   TestbedDetectQuerySchema, TestbedDetectResponseSchema,
   TestbedSuggestionQuerySchema, TestbedSuggestionResponseSchema,
   TestbedRecentsResponseSchema,
@@ -40,6 +41,7 @@ import {
   RegistryPublishRequestSchema, RegistryPublishResponseSchema,
 } from "./schemas.js";
 import { runReadiness, startLocal, stopLocal, getRunStatus, deployVercel, deployCloudflare } from "./gem/run.js";
+import { setCredential } from "./gem/credentials.js";
 import { agentcoreReadiness, deployAgentcore, getAgentcoreStatus } from "./gem/agentcoreRun.js";
 import { scaffoldTestbed, importArtifacts } from "./gem/testbed.js";
 import { detectFlavor, suggestTestbed, discoverProjects } from "./gem/testbedFlavors.js";
@@ -136,6 +138,14 @@ export class GemController {
   @get("/run-ready", { query: RunReadyQuerySchema, response: RunReadyResponseSchema })
   async runReady(_input: { query: z.infer<typeof RunReadyQuerySchema> }): Promise<z.infer<typeof RunReadyResponseSchema>> {
     return runReadiness();
+  }
+
+  // OUTWARD-FACING (local machine): set + persist a server-side deploy/publish credential
+  // (allowlisted keys only) to ~/.agentgem/.env. The value is never logged or returned.
+  @post("/credential", { body: CredentialRequestSchema, response: CredentialResponseSchema })
+  async credential(input: { body: z.infer<typeof CredentialRequestSchema> }): Promise<z.infer<typeof CredentialResponseSchema>> {
+    setCredential(input.body.key, input.body.value);
+    return { ok: true };
   }
 
   // OUTWARD-FACING (local machine): run the rendered eve project locally or deploy it to Vercel.

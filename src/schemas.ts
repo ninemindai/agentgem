@@ -4,6 +4,7 @@ import { RUNNER_REGISTRY } from "./gem/checks.js";
 import { TARGET_REGISTRY } from "./gem/targets.js";
 import { deployTargetIds } from "./gem/deploy.js";
 import { flavorIds } from "./gem/testbedFlavors.js";
+import { CREDENTIAL_KEYS } from "./gem/credentials.js";
 
 export const SkillArtifactSchema = z.object({
   type: z.literal("skill"),
@@ -325,6 +326,11 @@ export const RunStateSchema = z.object({
 });
 export const RunStopRequestSchema = z.object({ name: z.string(), target: TargetIdSchema });
 export const RunStopResponseSchema = z.object({ stopped: z.boolean() });
+
+// Set a server-side credential (allowlisted keys only). Response is just ok — the UI re-fetches
+// the relevant backend readiness (run-ready / publish-ready) on re-render.
+export const CredentialRequestSchema = z.object({ key: z.enum(CREDENTIAL_KEYS), value: z.string().min(1) });
+export const CredentialResponseSchema = z.object({ ok: z.boolean() });
 
 // ── Testbed (testbed-first on-ramp) ──
 const FLAVOR_IDS = flavorIds() as [string, ...string[]];
