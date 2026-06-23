@@ -1,0 +1,37 @@
+#:schema node_modules/wrangler/config-schema.json
+# Cloudflare Worker that SERVES agentgem.ninemind.ai from Workers Static Assets
+# and adds markdown content negotiation (Accept: text/markdown). See ./README.md.
+#
+# Mirrors the agentback.dev edge Worker, adapted for a subdomain: `website/dist`
+# is uploaded as the Worker's static asset set (the ASSETS binding) and served
+# directly at the edge — no separate origin, no second hop.
+
+name = "agentgem-web"
+main = "src/markdown-negotiation.js"
+compatibility_date = "2026-06-23"
+account_id = "8c60d6f6b0408a55768ec315042db967"
+
+# No *.workers.dev URL — this Worker only runs on the custom domain.
+workers_dev = false
+
+# Workers Custom Domain. Unlike agentback.dev (an apex that already had a
+# proxied DNS record, so it used a zone_name route), agentgem.ninemind.ai is a
+# fresh subdomain with no record. custom_domain = true makes `wrangler deploy`
+# provision the proxied DNS record AND the edge TLS cert as part of the deploy —
+# no manual DNS step. The ninemind.ai zone must be in this account.
+routes = [
+  {pattern = "agentgem.ninemind.ai", custom_domain = true},
+]
+
+# Upload website/dist as the static asset set. The Worker reads from this
+# binding (env.ASSETS) for both normal asset serving and markdown twins.
+#
+# run_worker_first = true is REQUIRED for negotiation: by default Cloudflare
+# serves a matching static asset directly and never invokes the Worker, so the
+# Accept: text/markdown branch would be dead code. With it true the Worker runs
+# first on every request, then serves the asset via env.ASSETS for the normal
+# case.
+[assets]
+directory = "../dist"
+binding = "ASSETS"
+run_worker_first = true

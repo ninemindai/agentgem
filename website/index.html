@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>AgentGem — secret-safe, composable Gems for your coding agent</title>
+<meta name="description" content="AgentGem turns your coding-agent config — skills, MCP servers, CLAUDE.md — into a secret-safe, composable Gem. Built on AgentBack: one Zod contract becomes a REST endpoint and an MCP tool." />
+<link rel="icon" href="assets/gem.svg" type="image/svg+xml" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-in">
+    <a class="brand" href="index.html"><img src="assets/gem.svg" alt="" />agentgem</a>
+    <span class="tag">Gem Builder</span>
+    <span class="spacer"></span>
+    <div class="nav-links">
+      <a href="docs/index.html">Docs</a>
+      <a href="docs/getting-started.html">Get started</a>
+      <a href="https://github.com/ninemindai/agentgem">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<section class="hero">
+  <img class="gem" src="assets/gem.svg" alt="AgentGem" />
+  <h1>Pack your agent into a Gem.</h1>
+  <p class="lede">AgentGem introspects your coding-agent config — skills, MCP servers, <code>CLAUDE.md</code> — and builds a <b>secret-safe, composable Gem</b> you can publish to a registry and deploy anywhere. Built on <b>AgentBack</b>: one Zod contract, exposed as a REST endpoint <em>and</em> an MCP tool.</p>
+  <div class="cta-row">
+    <a class="btn btn-primary" href="docs/getting-started.html">Get started →</a>
+    <a class="btn btn-ghost" href="docs/concepts.html">How it works</a>
+  </div>
+</section>
+
+<section class="flow wrap">
+  <p class="eyebrow">The Gem workflow</p>
+  <h2 class="sec-title">Config in. Certified Gem out.</h2>
+  <div class="rail">
+    <div class="station">
+      <span class="node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
+      <span class="label">Introspect</span>
+      <span class="sub">Scan <code>~/.claude</code> for skills, MCP servers &amp; CLAUDE.md</span>
+    </div>
+    <div class="station">
+      <span class="node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg></span>
+      <span class="label">Select &amp; redact</span>
+      <span class="sub">Pick what to bundle; secrets redacted at capture</span>
+    </div>
+    <div class="station">
+      <span class="node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5"/></svg></span>
+      <span class="label">Build Gem</span>
+      <span class="sub">A portable manifest + lock archive</span>
+    </div>
+    <div class="station">
+      <span class="node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg></span>
+      <span class="label">Publish / deploy</span>
+      <span class="sub">To the registry, or to Eve, Flue, OpenAI &amp; AgentCore</span>
+    </div>
+  </div>
+</section>
+
+<section class="wrap" style="padding:24px 0 8px">
+  <p class="eyebrow">Why AgentGem</p>
+  <h2 class="sec-title">One contract, every boundary.</h2>
+  <div class="cards">
+    <div class="card">
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h10"/></svg></div>
+      <h3>One Zod contract</h3>
+      <p>Every operation is defined once. AgentBack exposes it as a REST endpoint, an MCP tool, and an OpenAPI 3.1 doc — with runtime validation for free.</p>
+      <div class="chips"><span class="chip">REST</span><span class="chip">MCP</span><span class="chip">OpenAPI</span></div>
+    </div>
+    <div class="card">
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6z"/><path d="M9 12l2 2 4-4"/></svg></div>
+      <h3>Redacted at capture</h3>
+      <p>MCP secrets are stripped the moment config is read — by value and by key name. No response, preview, or Gem ever carries a raw secret.</p>
+      <div class="chips"><span class="chip">trust boundary</span></div>
+    </div>
+    <div class="card">
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5M12 13v8"/></svg></div>
+      <h3>Composable registry</h3>
+      <p>Publish Gems to a GitHub-backed registry, then resolve, merge, and install them — assembling bigger agents out of smaller, shareable pieces.</p>
+      <div class="chips"><span class="chip">publish</span><span class="chip">merge</span><span class="chip">install</span></div>
+    </div>
+    <div class="card">
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg></div>
+      <h3>Deploy anywhere</h3>
+      <p>The same neutral Gem feeds multiple code-gen targets and managed backends — pick a target, publish, and undeploy when you're done.</p>
+      <div class="chips"><span class="chip">Eve</span><span class="chip">Flue</span><span class="chip">OpenAI</span><span class="chip">AgentCore</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="preview wrap">
+  <p class="eyebrow">What you get</p>
+  <h2 class="sec-title">A Gem, with secrets sealed.</h2>
+  <div class="codewrap">
+    <div class="bar"><i style="background:#e0655a"></i><i style="background:#e0b14a"></i><i style="background:#5ab87a"></i><span class="fn">gem.json</span></div>
+    <pre><span class="c">// built from ~/.claude — secrets never leave your machine</span>
+{
+  <span class="k">"name"</span>: <span class="s">"research-assistant"</span>,
+  <span class="k">"skills"</span>: [<span class="s">"deep-research"</span>, <span class="s">"make-pdf"</span>],
+  <span class="k">"mcpServers"</span>: {
+    <span class="k">"firecrawl"</span>: {
+      <span class="k">"command"</span>: <span class="s">"npx"</span>,
+      <span class="k">"env"</span>: { <span class="k">"FIRECRAWL_API_KEY"</span>: <span class="red">"&lt;redacted&gt;"</span> }
+    }
+  },
+  <span class="k">"claudeMd"</span>: <span class="s">"included"</span>
+}</pre>
+  </div>
+</section>
+
+<footer class="foot">
+  <div class="foot-in">
+    <a class="brand" href="index.html"><img src="assets/gem.svg" alt="" />agentgem</a>
+    <div class="foot-links">
+      <a href="docs/getting-started.html">Getting started</a>
+      <a href="docs/concepts.html">Concepts</a>
+      <a href="docs/targets.html">Targets &amp; deploy</a>
+      <a href="docs/registry.html">Registry</a>
+      <a href="llms.txt">llms.txt</a>
+      <a href="https://github.com/ninemindai/agentgem">GitHub</a>
+    </div>
+    <span class="note">built on AgentBack</span>
+  </div>
+</footer>
+
+</body>
+</html>
