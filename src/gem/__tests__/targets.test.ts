@@ -278,6 +278,19 @@ describe("eve compose (runnable project scaffold)", () => {
     expect(r.files[".gitignore"]).toContain(".eve");
     expect(r.files[".vercelignore"]).toContain("node_modules");
   });
+
+  it("emits a default agent/instructions.md when the gem has no instructions (eve build requires it)", () => {
+    const r = materialize(gem([skill("review")]), "eve");
+    expect(r.files["agent/instructions.md"]).toBeTruthy();
+    expect(r.files["agent/instructions.md"]).toContain("No instructions were included");
+  });
+
+  it("uses the gem's own instructions (no default, no collision) when present", () => {
+    const r = materialize(gem([skill("review"), instr("X", "do this")]), "eve");
+    expect(r.files["agent/instructions.md"]).toContain("do this");
+    expect(r.files["agent/instructions.md"]).not.toContain("No instructions were included");
+    expect(r.skipped.find((s) => s.type === "instructions")).toBeUndefined(); // not dropped via collision
+  });
 });
 
 describe("buildAgentcoreHarness", () => {

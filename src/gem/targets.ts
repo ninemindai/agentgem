@@ -516,14 +516,23 @@ const evePackageJson = (gemName: string): string =>
   }, null, 2) + "\n";
 
 // Cross-cutting scaffold: the files `eve init` provides so the rendered agent/ source is runnable.
-const eveComposeProject = (gem: Gem): MaterializeResult => rendered({
-  "package.json": evePackageJson(gem.name),
-  "tsconfig.json": EVE_TSCONFIG,
-  "agent/agent.ts": EVE_AGENT_TS,
-  "agent/channels/eve.ts": EVE_CHANNEL_TS,
-  ".gitignore": EVE_GITIGNORE,
-  ".vercelignore": EVE_VERCELIGNORE,
-});
+const eveComposeProject = (gem: Gem): MaterializeResult => {
+  const files: FileTree = {
+    "package.json": evePackageJson(gem.name),
+    "tsconfig.json": EVE_TSCONFIG,
+    "agent/agent.ts": EVE_AGENT_TS,
+    "agent/channels/eve.ts": EVE_CHANNEL_TS,
+    ".gitignore": EVE_GITIGNORE,
+    ".vercelignore": EVE_VERCELIGNORE,
+  };
+  // eve build's discovery REQUIRES agent/instructions.md. The instructions renderer only emits it
+  // when the gem has instruction artifacts, so for an instructions-less gem we emit a default here
+  // (compose runs last; when instructions exist their file is already present and we don't clobber it).
+  if (!gem.artifacts.some((a) => a.type === "instructions")) {
+    files["agent/instructions.md"] = `# ${gem.name}\n\nNo instructions were included in this Gem; edit this file to guide the agent.\n`;
+  }
+  return rendered(files);
+};
 
 // ── targets compose the shared renderers (convergence is literal, not duplicated) ──
 export const TARGET_REGISTRY: Record<TargetId, TargetSpec> = {
