@@ -298,6 +298,7 @@ describe("undeployCloudflare", () => {
     const up = undeployCloudflare("gem", runner);
     await Promise.resolve();
     expect(calls[0].args).toEqual(["delete", "--name", "gem", "--force"]);
+    expect(calls[0].env.CLOUDFLARE_API_TOKEN).toBe("cf"); // token threaded into the spawn env
     handles[0].exitCbs.forEach((cb) => cb(0));
     const r = await up;
     expect(r.removed).toBe(true);
@@ -305,10 +306,18 @@ describe("undeployCloudflare", () => {
     delete process.env.CLOUDFLARE_API_TOKEN;
   });
 
-  it("undeployCloudflare fails safe when nothing recorded / no token", async () => {
+  it("undeployCloudflare throws without a token", async () => {
     seedWorkspace();
     delete process.env.CLOUDFLARE_API_TOKEN;
     const { runner } = fakeRunner();
     await expect(undeployCloudflare("gem", runner)).rejects.toThrow(/CLOUDFLARE_API_TOKEN/);
+  });
+
+  it("undeployCloudflare throws when no flue deploy is recorded", async () => {
+    seedWorkspace();
+    process.env.CLOUDFLARE_API_TOKEN = "cf";
+    const { runner } = fakeRunner();
+    await expect(undeployCloudflare("gem", runner)).rejects.toThrow(/no recorded flue/i);
+    delete process.env.CLOUDFLARE_API_TOKEN;
   });
 });

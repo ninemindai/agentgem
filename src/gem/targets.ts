@@ -354,7 +354,7 @@ const instructions = \`${escapeTemplate(instructions)}\`;
 
 export default ${initializer};
 `;
-  const wname = flueName(gem.name);
+  const wname = flueWorkerName(gem.name); // single source of truth shared with run.ts's deploy record
   const doClass = `Flue${fluePascal(gem.name)}Agent`;
   const flueConfig = `import { defineConfig } from "@flue/cli/config";\nexport default defineConfig({ target: "cloudflare" });\n`;
   const pkg = JSON.stringify({
