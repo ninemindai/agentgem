@@ -2,6 +2,7 @@
   "name": "agentgem",
   "version": "0.1.0",
   "type": "module",
+  "packageManager": "pnpm@10.29.2",
   "scripts": {
     "build": "tsc -b && mkdir -p dist/public && cp src/public/index.html dist/public/index.html",
     "dev": "pnpm build && node dist/index.js",
