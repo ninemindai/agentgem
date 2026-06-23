@@ -1,14 +1,15 @@
 # Getting started
 
-AgentGem runs as a small local server. A browser can't read `~/.claude` (it's
-sandboxed), so AgentGem serves the introspection and Gem-building operations from your
-machine — over both HTTP and MCP — while keeping secrets on-device.
+AgentGem runs as a small local server. A browser can't read your agent's config
+directory (it's sandboxed), so AgentGem serves the introspection and Gem-building
+operations from your machine — over both HTTP and MCP — while keeping secrets on-device.
 
 ## Prerequisites
 
 - Node.js (LTS) and [pnpm](https://pnpm.io/).
-- A coding-agent config at `~/.claude` (skills, MCP servers, `CLAUDE.md`). You can point
-  AgentGem at a different directory for testing.
+- A supported coding agent — **Claude** (`~/.claude`), **Codex**, or **Hermes** — with
+  skills, MCP servers, and instructions. You can point AgentGem at a different directory
+  for testing.
 
 ## Install and run
 
@@ -32,7 +33,8 @@ During development, `pnpm dev` builds and starts in one step.
 ## Build your first Gem
 
 1. Open `/`. AgentGem calls `GET /api/inventory` and renders your config: skills (with
-   descriptions), MCP servers (with transport), and an *Include CLAUDE.md* toggle.
+   descriptions), MCP servers (with transport), and an *Include instructions* toggle
+   (e.g. `CLAUDE.md`).
 2. Tick the artifacts you want to bundle and give the Gem a name. On each change the page
    calls `POST /api/gem` and shows the live, pretty-printed `gem.json` — secrets already
    shown as `<redacted>`.

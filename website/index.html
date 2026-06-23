@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>AgentGem — secret-safe, composable Gems for your coding agent</title>
-<meta name="description" content="AgentGem turns your coding-agent config — skills, MCP servers, CLAUDE.md — into a secret-safe, composable Gem. Built on AgentBack: one Zod contract becomes a REST endpoint and an MCP tool." />
+<meta name="description" content="Discover the projects you've built with Claude, Codex, or Hermes — their skills, MCP servers, hooks, and instructions — iterate, and crystallize them into secret-safe, composable Gems you can publish and deploy. Built on AgentBack." />
 <link rel="icon" href="assets/gem.svg" type="image/svg+xml" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -29,7 +29,7 @@
 <section class="hero">
   <img class="gem" src="assets/gem.svg" alt="AgentGem" />
   <h1>Pack your agent into a Gem.</h1>
-  <p class="lede">AgentGem introspects your coding-agent config — skills, MCP servers, <code>CLAUDE.md</code> — and builds a <b>secret-safe, composable Gem</b> you can publish to a registry and deploy anywhere. Built on <b>AgentBack</b>: one Zod contract, exposed as a REST endpoint <em>and</em> an MCP tool.</p>
+  <p class="lede">Start from a project you've built with <b>Claude, Codex, or Hermes</b> — its skills, MCP servers, hooks, and instructions, layered with your user settings. Iterate until it's right, then crystallize it into a <b>secret-safe, composable Gem</b> to publish and deploy. Built on <a href="https://agentback.dev"><b>AgentBack</b></a>: one Zod contract, exposed as a REST endpoint <em>and</em> an MCP tool.</p>
   <div class="cta-row">
     <a class="btn btn-primary" href="docs/getting-started.html">Get started →</a>
     <a class="btn btn-ghost" href="docs/concepts.html">How it works</a>
@@ -38,27 +38,32 @@
 
 <section class="flow wrap">
   <p class="eyebrow">The Gem workflow</p>
-  <h2 class="sec-title">Config in. Certified Gem out.</h2>
+  <h2 class="sec-title">Project in. Reusable Gem out.</h2>
   <div class="rail">
     <div class="station">
-      <span class="node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
-      <span class="label">Introspect</span>
-      <span class="sub">Scan <code>~/.claude</code> for skills, MCP servers &amp; CLAUDE.md</span>
+      <span class="node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h6l2 2h10v9H3z"/><circle cx="13" cy="13" r="2.4"/><path d="m15 15 1.8 1.8"/></svg></span>
+      <span class="label">Discover</span>
+      <span class="sub">Find the projects you've built with your agent, from session history</span>
     </div>
     <div class="station">
-      <span class="node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg></span>
-      <span class="label">Select &amp; redact</span>
-      <span class="sub">Pick what to bundle; secrets redacted at capture</span>
+      <span class="node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/></svg></span>
+      <span class="label">Compose</span>
+      <span class="sub">Project skills, MCP, hooks &amp; instructions, layered with your user settings</span>
     </div>
     <div class="station">
-      <span class="node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5"/></svg></span>
-      <span class="label">Build Gem</span>
-      <span class="sub">A portable manifest + lock archive</span>
+      <span class="node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 4v5h-5"/></svg></span>
+      <span class="label">Iterate</span>
+      <span class="sub">Run tasks &amp; workflows in the project to refine the setup</span>
+    </div>
+    <div class="station">
+      <span class="node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h12l4 6-10 12L2 9z"/><path d="m2 9 10 3 10-3M12 12v9"/></svg></span>
+      <span class="label">Crystallize</span>
+      <span class="sub">Capture it as a secret-safe, reusable Gem — secrets redacted</span>
     </div>
     <div class="station">
       <span class="node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg></span>
       <span class="label">Publish / deploy</span>
-      <span class="sub">To the registry, or to Eve, Flue, OpenAI &amp; AgentCore</span>
+      <span class="sub">To the registry, or to Eve, Flue, OpenAI, AgentCore &amp; Claude</span>
     </div>
   </div>
 </section>
@@ -89,7 +94,7 @@
       <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg></div>
       <h3>Deploy anywhere</h3>
       <p>The same neutral Gem feeds multiple code-gen targets and managed backends — pick a target, publish, and undeploy when you're done.</p>
-      <div class="chips"><span class="chip">Eve</span><span class="chip">Flue</span><span class="chip">OpenAI</span><span class="chip">AgentCore</span></div>
+      <div class="chips"><a class="chip" href="https://eve.dev">Eve</a><a class="chip" href="https://flueframework.com">Flue</a><a class="chip" href="https://github.com/openai/openai-agents-js">OpenAI</a><a class="chip" href="https://aws.amazon.com/bedrock/agentcore/">AgentCore</a><a class="chip" href="https://platform.claude.com/docs/en/managed-agents/overview">Claude Agents</a></div>
     </div>
   </div>
 </section>
@@ -99,7 +104,7 @@
   <h2 class="sec-title">A Gem, with secrets sealed.</h2>
   <div class="codewrap">
     <div class="bar"><i style="background:#e0655a"></i><i style="background:#e0b14a"></i><i style="background:#5ab87a"></i><span class="fn">gem.json</span></div>
-    <pre><span class="c">// built from ~/.claude — secrets never leave your machine</span>
+    <pre><span class="c">// built from your agent config — secrets never leave your machine</span>
 {
   <span class="k">"name"</span>: <span class="s">"research-assistant"</span>,
   <span class="k">"skills"</span>: [<span class="s">"deep-research"</span>, <span class="s">"make-pdf"</span>],
@@ -123,9 +128,10 @@
       <a href="docs/targets.html">Targets &amp; deploy</a>
       <a href="docs/registry.html">Registry</a>
       <a href="llms.txt">llms.txt</a>
+      <a href="https://agentback.dev">AgentBack</a>
       <a href="https://github.com/ninemindai/agentgem">GitHub</a>
     </div>
-    <span class="note">built on AgentBack</span>
+    <span class="note">built on <a href="https://agentback.dev">AgentBack</a></span>
   </div>
 </footer>
 

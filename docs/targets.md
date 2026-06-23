@@ -8,10 +8,11 @@ reads the same Gem, you select where it goes without rebuilding from your raw co
 
 | Target               | Kind                | What it produces                                                        |
 | -------------------- | ------------------- | ---------------------------------------------------------------------- |
-| **Eve**              | Code-gen            | A generated agent project from the Gem — the reference target pattern. |
-| **Flue**             | Code-gen / materialize | Materializes the Gem via the reusable `compose` hook; deployable to Cloudflare. |
-| **OpenAI Sandbox**   | Code-gen            | A SandboxAgent project with native stdio MCP, reusing the `compose` hook. |
-| **Bedrock AgentCore**| Managed backend     | Publishes the Gem to AWS Bedrock AgentCore.                            |
+| [**Eve**](https://eve.dev)                       | Code-gen            | A generated agent project from the Gem — the reference target pattern. |
+| [**Flue**](https://flueframework.com)            | Code-gen / materialize | Materializes the Gem via the reusable `compose` hook; deployable to Cloudflare. |
+| [**OpenAI Sandbox**](https://github.com/openai/openai-agents-js) | Code-gen | A SandboxAgent project with native stdio MCP, reusing the `compose` hook. |
+| [**Bedrock AgentCore**](https://aws.amazon.com/bedrock/agentcore/) | Managed backend | Publishes the Gem to AWS Bedrock AgentCore.                            |
+| [**Claude Managed Agents**](https://platform.claude.com/docs/en/managed-agents/overview) | Managed backend | Publishes the Gem as a Claude Managed Agent via the Anthropic API (agent + skills + managed sandbox). |
 
 All code-gen targets share a common `compose` step, so adding a new target mostly means
 describing how it materializes a Gem — the introspection, selection, and redaction in
