@@ -1,10 +1,12 @@
 // src/index.ts
-import "dotenv/config"; // load cwd .env into process.env before anything reads it
 import { config as loadEnv } from "dotenv";
 import { credentialsEnvPath } from "./gem/credentials.js";
-// Also load persisted server credentials from ~/.agentgem/.env (without overriding an env/.env
-// value that's already set — an explicit launch-time setting wins).
-loadEnv({ path: credentialsEnvPath() });
+// Load env before anything reads it: cwd .env (a dev override) layered over the
+// persisted server credentials in ~/.agentgem/.env. `override` defaults to false,
+// so a value already set in the cwd .env wins. `quiet` silences dotenv's banner/
+// tips so the `agentgem` CLI output stays clean.
+loadEnv({ quiet: true });
+loadEnv({ path: credentialsEnvPath(), quiet: true });
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -39,8 +41,9 @@ export async function createApp(port: number): Promise<RestApplication> {
   return app;
 }
 
-async function main() {
-  const port = Number(process.env.PORT ?? 4317);
+// Start the server and print where its surfaces live. Shared by the default
+// entry point (below) and the `agentgem` CLI (src/cli.ts).
+export async function run(port: number = Number(process.env.PORT ?? 4317)): Promise<RestApplication> {
   const app = await createApp(port);
   await app.start();
   const server = await app.restServer;
@@ -49,8 +52,9 @@ async function main() {
   console.log(`  API:      ${server.url}/api/inventory  ·  POST ${server.url}/api/gem`);
   console.log(`  Explorer: ${server.url}/explorer/`);
   console.log(`  MCP:      ${server.url}/mcp`);
+  return app;
 }
 
 if (isMain(import.meta)) {
-  main().catch((err) => { console.error(err); process.exit(1); });
+  run().catch((err) => { console.error(err); process.exit(1); });
 }

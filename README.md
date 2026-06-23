@@ -46,13 +46,14 @@ call exactly the same thing.
 
 ## Usage
 
-Requires Node.js (LTS) and [pnpm](https://pnpm.io/), plus a coding-agent config at
-`~/.claude`.
+Requires Node.js ≥ 22 and a coding-agent config at `~/.claude`.
 
 ```bash
-pnpm install
-pnpm build      # AgentBack uses legacy decorators — build with tsc, then run dist/
-pnpm start      # → node dist/index.js
+npx @ninemind/agentgem              # run without installing
+# or install the `agentgem` command globally:
+npm install -g @ninemind/agentgem
+agentgem                            # → http://127.0.0.1:4317
+agentgem --port 8080                # override the port (also honors $PORT)
 ```
 
 The server starts on `127.0.0.1` (default port `4317`) and prints:
@@ -75,13 +76,22 @@ Open `/`, tick the skills / MCP servers / `CLAUDE.md` you want, name the Gem, an
 the live `gem.json` render with secrets already shown as `<redacted>`. Download it — that
 archive is what every target and the registry consume.
 
-During development, `pnpm dev` builds and starts in one step. Use `PORT` to override the
-port and `?dir=/path/to/.claude` to introspect a non-default config directory.
+Append `?dir=/path/to/.claude` to introspect a config directory other than the
+default `~/.claude`.
+
+### From source
+
+To hack on AgentGem, clone the repo and use [pnpm](https://pnpm.io/) (AgentBack
+uses legacy decorators, so it builds with `tsc`, then runs `dist/`):
 
 ```bash
+pnpm install
+pnpm dev        # build + start in one step (→ node dist/index.js)
 pnpm test       # tsc -b && vitest run — tests run against compiled dist/
 pnpm clean      # rm -rf dist *.tsbuildinfo (run before testing after renames/moves)
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow.
 
 ## Layering
 
