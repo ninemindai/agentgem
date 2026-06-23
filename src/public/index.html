@@ -811,7 +811,13 @@ async function undeploy(target){
   const st = document.getElementById("undeployStatus-" + target);
   if (st) st.textContent = "Undeploying…";
   try {
-    const r = await (await fetch("/api/undeploy", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({ name: wsCurrent, target }) })).json();
+    const resp = await fetch("/api/undeploy", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({ name: wsCurrent, target }) });
+    const r = await resp.json();
+    if (!resp.ok || r.error) {
+      const msg = r.error?.message || r.error || (resp.status + " " + resp.statusText) || "undeploy error";
+      if (st) st.textContent = "Failed: " + msg;
+      return;
+    }
     renderPublish();
   } catch (e) { if (st) st.textContent = "Failed: " + (e && e.message ? e.message : "undeploy error"); }
 }

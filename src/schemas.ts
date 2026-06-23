@@ -394,7 +394,7 @@ export const TestbedImportResponseSchema = z.object({
 
 // ── AgentCore deploy (Phase 2) ──
 export const AgentcoreReadyResponseSchema = z.object({ cli: z.boolean(), awsCreds: z.boolean() });
-export const AgentcoreDeployRequestSchema = z.object({ name: z.string(), wsName: z.string().optional() });
+export const AgentcoreDeployRequestSchema = z.object({ name: z.string() });
 export const AgentcoreStatusQuerySchema = z.object({ name: z.string() });
 export const AgentcoreDeployStateSchema = z.object({
   state: z.enum(["idle", "installing", "building", "running", "deploying", "failed"]),
