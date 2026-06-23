@@ -1,6 +1,6 @@
 // src/gem/__tests__/run.test.ts
 import { describe, it, expect } from "vitest";
-import { pushLog, nodeMajor, parseEveUrl, parseVercelUrl, parseWorkersUrl, runReadiness, deployCloudflare } from "../run.js";
+import { pushLog, nodeMajor, parseEveUrl, parseVercelUrl, parseSingleTeamScope, parseWorkersUrl, runReadiness, deployCloudflare } from "../run.js";
 import { startLocal, stopLocal, getRunStatus, deployVercel, type ProcessRunner, type ProcHandle } from "../run.js";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -37,6 +37,17 @@ describe("run pure helpers", () => {
     expect(parseWorkersUrl(["Uploaded", "https://my-gem.acct.workers.dev", "Done"]))
       .toBe("https://my-gem.acct.workers.dev");
     expect(parseWorkersUrl(["no url here"])).toBeUndefined();
+  });
+
+  it("parseSingleTeamScope extracts the lone team from a missing_scope response", () => {
+    const lines = JSON.stringify({ reason: "missing_scope", choices: [{ id: "t", name: "ninemind" }] }, null, 2).split("\n");
+    expect(parseSingleTeamScope(lines)).toBe("ninemind");
+  });
+
+  it("parseSingleTeamScope returns undefined for multiple teams or normal output", () => {
+    const multi = JSON.stringify({ reason: "missing_scope", choices: [{ name: "a" }, { name: "b" }] }, null, 2).split("\n");
+    expect(parseSingleTeamScope(multi)).toBeUndefined();
+    expect(parseSingleTeamScope(["Deploying…", "https://x.vercel.app"])).toBeUndefined();
   });
 });
 
@@ -121,28 +132,46 @@ describe("vercel deploy", () => {
     await expect(deployVercel("gem", runner)).rejects.toThrow(/VERCEL_TOKEN/);
   });
 
-  it("builds with VERCEL=1, then deploys with the token, and parses the URL", async () => {
+  it("deploys from source (no --prebuilt) with the token and parses the URL", async () => {
     seedWorkspace();
     process.env.VERCEL_TOKEN = "tok_test";
+    delete process.env.VERCEL_SCOPE;
     const { runner, calls, handles } = fakeRunner();
     const p = deployVercel("gem", runner);
     await Promise.resolve(); handles[0].exitCbs.forEach((cb) => cb(0)); // npm install
     await Promise.resolve(); await Promise.resolve();
-    // eve build with VERCEL=1
-    const build = calls[1];
-    expect(build.args).toContain("build");
-    expect(build.env.VERCEL).toBe("1");
+    // no local eve build; calls[1] = vercel deploy --yes --token=tok_test (from source, no scope)
+    expect(calls[1].args).toEqual(["deploy", "--yes", "--token=tok_test"]);
+    handles[1].lineCbs.forEach((cb) => cb("https://gem-abc123.vercel.app", "out"));
     handles[1].exitCbs.forEach((cb) => cb(0));
-    await Promise.resolve();
-    // vercel deploy --prebuilt --yes --token=tok_test
-    const deploy = calls[2];
-    expect(deploy.args).toEqual(["deploy", "--prebuilt", "--yes", "--token=tok_test"]);
-    handles[2].lineCbs.forEach((cb) => cb("https://gem-abc123.vercel.app", "out"));
-    handles[2].exitCbs.forEach((cb) => cb(0));
     const state = await p;
     expect(state.mode).toBe("vercel");
     expect(state.state).toBe("idle");
     expect(state.url).toBe("https://gem-abc123.vercel.app");
+    delete process.env.VERCEL_TOKEN;
+  });
+
+  it("retries with --scope when the CLI refuses with a single team", async () => {
+    seedWorkspace();
+    process.env.VERCEL_TOKEN = "tok_test";
+    delete process.env.VERCEL_SCOPE;
+    const { runner, calls, handles } = fakeRunner();
+    const p = deployVercel("gem", runner);
+    await Promise.resolve(); handles[0].exitCbs.forEach((cb) => cb(0)); // npm install
+    await Promise.resolve(); await Promise.resolve();
+    // first deploy (no scope) -> emits the missing_scope JSON and exits non-zero
+    expect(calls[1].args).toEqual(["deploy", "--yes", "--token=tok_test"]);
+    JSON.stringify({ reason: "missing_scope", choices: [{ id: "team_x", name: "ninemind" }] }, null, 2)
+      .split("\n").forEach((l) => handles[1].lineCbs.forEach((cb) => cb(l, "out")));
+    handles[1].exitCbs.forEach((cb) => cb(1));
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+    // retry carries --scope=ninemind
+    expect(calls[2].args).toEqual(["deploy", "--yes", "--token=tok_test", "--scope=ninemind"]);
+    handles[2].lineCbs.forEach((cb) => cb("https://gem-xyz.vercel.app", "out"));
+    handles[2].exitCbs.forEach((cb) => cb(0));
+    const state = await p;
+    expect(state.state).toBe("idle");
+    expect(state.url).toBe("https://gem-xyz.vercel.app");
     delete process.env.VERCEL_TOKEN;
   });
 });

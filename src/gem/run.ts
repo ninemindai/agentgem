@@ -45,6 +45,21 @@ export function parseVercelUrl(lines: string[]): string | undefined {
   for (const l of lines) { const m = /(https:\/\/[^\s]+\.vercel\.app[^\s]*)/.exec(l); if (m) return m[1]; }
   return undefined;
 }
+// When `vercel deploy` runs non-interactively under a token whose account has teams, the CLI
+// refuses with a structured "missing_scope" response listing the available teams. If there is
+// exactly ONE team, return its name so we can retry with --scope; otherwise undefined (ambiguous).
+export function parseSingleTeamScope(lines: string[]): string | undefined {
+  const text = lines.join("\n");
+  if (!/missing_scope|action_required/.test(text)) return undefined;
+  const start = text.indexOf("{"), end = text.lastIndexOf("}");
+  if (start < 0 || end <= start) return undefined;
+  try {
+    const obj = JSON.parse(text.slice(start, end + 1));
+    const choices = Array.isArray(obj.choices) ? obj.choices : [];
+    if (choices.length === 1 && typeof choices[0].name === "string") return choices[0].name;
+  } catch { /* not the structured response */ }
+  return undefined;
+}
 // wrangler prints the deployed Worker URL (https://<name>.<acct>.workers.dev).
 export function parseWorkersUrl(lines: string[]): string | undefined {
   for (const l of lines) { const m = /(https:\/\/[^\s]+\.workers\.dev[^\s]*)/.exec(l); if (m) return m[1]; }
@@ -159,23 +174,33 @@ const binIn = (runDir: string, name: string) => join(runDir, "node_modules", ".b
 // agentgem's own pinned vercel CLI (installed as a dependency), run with cwd = the eve run dir.
 const VERCEL_BIN = join(process.cwd(), "node_modules", ".bin", "vercel");
 
+// Deploy the eve project to Vercel from SOURCE (not --prebuilt): eve warns that a local prebuilt
+// build skips Vercel sandbox-template prewarm, so Vercel must build it. Scope: use VERCEL_SCOPE if
+// set, else deploy without scope and — when the CLI refuses with a single available team — retry
+// with --scope <that team>.
 export async function deployVercel(name: string, runner: ProcessRunner = realRunner): Promise<RunState> {
   const token = process.env.VERCEL_TOKEN;
   if (!token) throw new Error("VERCEL_TOKEN is not set on the server — cannot deploy to Vercel.");
   const state: RunState = { mode: "vercel", state: "installing", logTail: [] };
   registry.set(`${name}:eve`, { state });
+  const vercelDeploy = (runDir: string, scope?: string) => {
+    const args = ["deploy", "--yes", `--token=${token}`, ...(scope ? [`--scope=${scope}`] : [])];
+    const lines: string[] = [];
+    return new Promise<{ code: number; lines: string[] }>((resolve) => {
+      const h = runner.spawn(VERCEL_BIN, args, { cwd: runDir, env: process.env });
+      h.onLine((line) => { pushLog(state.logTail, line); lines.push(line); });
+      h.onExit((c) => resolve({ code: c ?? 0, lines }));
+    });
+  };
   try {
     const runDir = await ensureRunProject(name, "eve", runner, state.logTail);
-    state.state = "building";
-    const buildCode = await runToEnd(runner, EVE_BIN(runDir), ["build"], runDir, { ...process.env, VERCEL: "1" }, state.logTail);
-    if (buildCode !== 0) { state.state = "failed"; return state; }
     state.state = "deploying";
-    const lines: string[] = [];
-    const code = await new Promise<number>((resolve) => {
-      const h = runner.spawn(VERCEL_BIN, ["deploy", "--prebuilt", "--yes", `--token=${token}`], { cwd: runDir, env: process.env });
-      h.onLine((line) => { pushLog(state.logTail, line); lines.push(line); });
-      h.onExit((c) => resolve(c ?? 0));
-    });
+    const explicitScope = process.env.VERCEL_SCOPE;
+    let { code, lines } = await vercelDeploy(runDir, explicitScope);
+    if (code !== 0 && !explicitScope) {
+      const team = parseSingleTeamScope(lines);
+      if (team) { pushLog(state.logTail, `↻ retrying with --scope ${team}`); ({ code, lines } = await vercelDeploy(runDir, team)); }
+    }
     if (code !== 0) { state.state = "failed"; return state; }
     state.url = parseVercelUrl(lines);
     state.state = "idle";

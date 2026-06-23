@@ -845,7 +845,7 @@ async function renderEveDeploy(el, selHtml){
   } else {
     h += credEntryHtml("VERCEL_TOKEN");
   }
-  h += `<p class="note">Builds the workspace's eve project (<code>eve build</code>) and deploys via the pinned Vercel CLI (<code>vercel deploy --prebuilt</code>). The eve project is re-rendered from the workspace gem automatically.</p></div>`;
+  h += `<p class="note">Re-renders the workspace's eve project from the gem and deploys it from source via the pinned Vercel CLI (<code>vercel deploy</code>, which builds on Vercel). If your token has one team, the scope is detected automatically.</p></div>`;
   el.innerHTML = h;
   attachDeployTargetListener();
   if (ready.vercel) {
