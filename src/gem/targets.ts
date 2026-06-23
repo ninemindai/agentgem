@@ -35,6 +35,17 @@ export function safePathSegment(name: string): string {
 // alphanumeric character. Strip leading non-alphanumerics from the safe segment.
 const eveSegment = (name: string): string => safePathSegment(name).replace(/^[^A-Za-z0-9]+/, "") || "unnamed";
 
+// Flue worker + agent-file name: lower-kebab, alphanumeric+dashes only (Cloudflare worker name rules).
+const flueName = (name: string): string => {
+  const s = name.normalize("NFKC").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return s.length ? s : "agent";
+};
+// PascalCase of the kebab name; flue derives the Durable Object class as `Flue<Pascal>Agent`.
+const fluePascal = (name: string): string =>
+  flueName(name).split("-").filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join("") || "Agent";
+// Flue skills live under src/ (the agent file is src/agents/<name>.ts and imports ../skills/...).
+const skillFlueMd = (a: SkillArtifact): FileTree => ({ [`src/skills/${safePathSegment(a.name)}/SKILL.md`]: a.content });
+
 const rendered = (files: FileTree): MaterializeResult => ({ files, skipped: [] });
 
 // ── shared convention renderers ──
@@ -270,7 +281,7 @@ function flueConnectionFiles(servers: McpServerArtifact[]): { files: FileTree; e
   let port = PROXY_BASE_PORT;
   for (const s of servers) {
     const seg = safePathSegment(s.name);
-    const connectionPath = `connections/${seg}.ts`;
+    const connectionPath = `src/connections/${seg}.ts`;
     if (connectionPath in files) {
       skipped.push({ artifact: s.name, type: "mcp_server", reason: `path collision with an earlier mcp_server at ${connectionPath}` });
       continue;
@@ -289,7 +300,7 @@ function flueConnectionFiles(servers: McpServerArtifact[]): { files: FileTree; e
       const args = Array.isArray(s.config.args) ? s.config.args.filter((a): a is string => typeof a === "string") : [];
       // localhost proxy connection carries no auth headers (the proxy injects the secrets into the stdio process)
       files[connectionPath] = flueConnection({ ...s, secretRefs: undefined }, `http://${PROXY_HOST}:${p}/mcp`);
-      files[`proxies/${seg}.mjs`] = stdioProxyRunner(s.name, s.config.command, args, (s.secretRefs ?? []).map((r) => r.name), p);
+      files[`src/proxies/${seg}.mjs`] = stdioProxyRunner(s.name, s.config.command, args, (s.secretRefs ?? []).map((r) => r.name), p);
       emitted.push(seg);
     } else {
       skipped.push({ artifact: s.name, type: "mcp_server", reason: `${s.transport} MCP has no usable URL or stdio command` });
@@ -338,7 +349,27 @@ const instructions = \`${escapeTemplate(instructions)}\`;
 
 export default ${initializer};
 `;
-  return rendered({ [`agents/${safePathSegment(gem.name)}.ts`]: file });
+  const wname = flueName(gem.name);
+  const doClass = `Flue${fluePascal(gem.name)}Agent`;
+  const flueConfig = `import { defineConfig } from "@flue/cli/config";\nexport default defineConfig({ target: "cloudflare" });\n`;
+  const pkg = JSON.stringify({
+    name: wname, version: "0.1.0", private: true, type: "module",
+    scripts: { build: "flue build --target cloudflare", deploy: "wrangler deploy" },
+    dependencies: { "@flue/runtime": "^1.0.0-beta.2", valibot: "^1", agents: "^0.14.1" },
+    devDependencies: { "@flue/cli": "^1.0.0-beta.1", wrangler: "^4" },
+  }, null, 2) + "\n";
+  const wrangler = JSON.stringify({
+    name: wname,
+    compatibility_date: "2026-06-01",
+    compatibility_flags: ["nodejs_compat"],
+    migrations: [{ tag: "v1", new_sqlite_classes: ["FlueRegistry", doClass] }],
+  }, null, 2) + "\n";
+  return rendered({
+    [`src/agents/${wname}.ts`]: file,
+    "flue.config.ts": flueConfig,
+    "package.json": pkg,
+    "wrangler.jsonc": wrangler,
+  });
 };
 
 // OpenAI Agents SDK SandboxAgent: one <gemname>.agent.ts composes everything. Skill bodies are real
@@ -504,7 +535,7 @@ export const TARGET_REGISTRY: Record<TargetId, TargetSpec> = {
   eve:    { id: "eve",    label: "Eve",    skill: skillEveMd,         instructions: concatInstructions("agent/instructions.md"), mcp: mcpEveConnections, compose: eveComposeProject },
   // Flue project layout. Skills reuse SKILL.md; instructions fold into the composed agent file (no
   // standalone file -> the empty instructions renderer marks them handled, not skipped). MCP added in Task 2.
-  flue:   { id: "flue",   label: "Flue",   skill: skillSkillMd,        instructions: () => ({}), mcp: mcpFlueConnections, compose: flueComposeAgent },
+  flue:   { id: "flue",   label: "Flue",   skill: skillFlueMd,        instructions: () => ({}), mcp: mcpFlueConnections, compose: flueComposeAgent },
   // OpenAI Agents SDK SandboxAgent (single <gemname>.agent.ts). Skills reuse SKILL.md (seeded via the
   // Manifest); instructions fold into the agent file. MCP is added inline in Task 2 (mcp renderer + compose).
   "openai-sandbox": { id: "openai-sandbox", label: "OpenAI Sandbox", skill: skillSkillMd, instructions: () => ({}), mcp: () => ({ files: {}, skipped: [] }), compose: sandboxComposeAgent },

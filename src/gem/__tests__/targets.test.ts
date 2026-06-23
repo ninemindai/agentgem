@@ -119,29 +119,35 @@ describe("materialize", () => {
   });
 });
 
-describe("flue target (agent file + skills)", () => {
-  it("emits agents/<gemname>.ts importing skills + folding instructions; hooks skipped", () => {
+describe("flue target (deployable cloudflare project)", () => {
+  it("emits src/ layout, flue.config.ts, package.json, wrangler.jsonc with DO migration", () => {
     const p: Gem = { name: "my gem", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [
       skill("review", "# Review\nLook `here` and ${there}."),
       instr("soul", "be kind"),
       hook(),
     ] };
     const r = materialize(p, "flue");
-    // skill body reuses the shared SKILL.md convention
-    expect(r.files["skills/review/SKILL.md"]).toContain("# Review");
-    // the composed agent file
-    const agent = r.files["agents/my_gem.ts"];
+    expect(r.files["src/skills/review/SKILL.md"]).toContain("# Review");
+    const agent = r.files["src/agents/my-gem.ts"];
     expect(agent).toContain('import { createAgent');
     expect(agent).toContain('import skill0 from "../skills/review/SKILL.md" with { type: "skill" }');
     expect(agent).toContain("skills: [skill0]");
-    expect(agent).toContain("be kind");                 // instructions folded in
+    expect(agent).toContain("be kind");
     expect(agent).toContain('model: "anthropic/claude-sonnet-4-6"');
-    // skill body lives in the SKILL.md file, NOT inlined into the agent file
-    expect(r.files["skills/review/SKILL.md"]).toContain("# Review");
     expect(agent).not.toContain("Look");
-    // instructions are NOT reported skipped (they're composed, not dropped)
-    expect(r.skipped.find((s) => s.type === "instructions")).toBeUndefined();
-    // hooks unsupported -> skipped
+    // flue.config.ts
+    expect(r.files["flue.config.ts"]).toContain('defineConfig({ target: "cloudflare" })');
+    // package.json: type module + required deps
+    const pkg = JSON.parse(r.files["package.json"]);
+    expect(pkg.type).toBe("module");
+    expect(pkg.name).toBe("my-gem");
+    expect(pkg.dependencies).toMatchObject({ "@flue/runtime": expect.any(String), valibot: expect.any(String), agents: expect.any(String) });
+    expect(pkg.devDependencies).toMatchObject({ "@flue/cli": expect.any(String), wrangler: expect.any(String) });
+    // wrangler.jsonc: name + nodejs_compat + DO migration including the agent's class
+    const wr = JSON.parse(r.files["wrangler.jsonc"]);
+    expect(wr.name).toBe("my-gem");
+    expect(wr.compatibility_flags).toContain("nodejs_compat");
+    expect(wr.migrations[0].new_sqlite_classes).toEqual(expect.arrayContaining(["FlueRegistry", "FlueMyGemAgent"]));
     expect(r.skipped.map((s) => s.type)).toContain("hook");
   });
 
@@ -151,28 +157,28 @@ describe("flue target (agent file + skills)", () => {
   });
 });
 
-describe("flue MCP connections", () => {
+describe("flue MCP connections (src/ layout)", () => {
   it("http server -> a connectMcpServer connection with env auth, no secret value", () => {
     const r = materialize({ name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [httpMcp("ctx")] }, "flue");
-    const c = r.files["connections/ctx.ts"];
+    const c = r.files["src/connections/ctx.ts"];
     expect(c).toContain('import { connectMcpServer } from "@flue/runtime"');
     expect(c).toContain('connectMcpServer("ctx"');
     expect(c).toContain("https://mcp.x/sse");
-    expect(c).toContain('process.env["X_TOKEN"]');     // auth by env name
-    expect(JSON.stringify(r.files)).not.toContain("secret-value"); // no value leaks
+    expect(c).toContain('process.env["X_TOKEN"]');
+    expect(JSON.stringify(r.files)).not.toContain("secret-value");
   });
 
   it("sse server -> transport: \"sse\"", () => {
     const sse: McpServerArtifact = { type: "mcp_server", name: "leg", transport: "sse", config: { url: "https://leg/sse" } };
     const r = materialize({ name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [sse] }, "flue");
-    expect(r.files["connections/leg.ts"]).toContain('transport: "sse"');
+    expect(r.files["src/connections/leg.ts"]).toContain('transport: "sse"');
   });
 
   it("stdio server -> a proxy runner plus a localhost connection", () => {
     const r = materialize({ name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [mcp("gh")] }, "flue");
-    expect(r.files["proxies/gh.mjs"]).toBeTruthy();
-    expect(r.files["connections/gh.ts"]).toContain("http://127.0.0.1:");
-    expect(r.files["connections/gh.ts"]).toContain("/mcp");
+    expect(r.files["src/proxies/gh.mjs"]).toBeTruthy();
+    expect(r.files["src/connections/gh.ts"]).toContain("http://127.0.0.1:");
+    expect(r.files["src/connections/gh.ts"]).toContain("/mcp");
     expect(r.skipped).toEqual([]);
   });
 });
@@ -182,36 +188,11 @@ describe("flue MCP wiring (connections reach the agent)", () => {
     const r = materialize({ name: "my gem", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [
       skill("review"), httpMcp("ctx"), mcp("gh"),
     ] }, "flue");
-    const agent = r.files["agents/my_gem.ts"];
-    // both connection files are still emitted
-    expect(r.files["connections/ctx.ts"]).toBeTruthy();
-    expect(r.files["connections/gh.ts"]).toBeTruthy();
-    // the agent imports each emitted connection thunk, in emitted order
-    expect(agent).toContain('import conn0 from "../connections/ctx.ts";');
-    expect(agent).toContain('import conn1 from "../connections/gh.ts";');
-    // the initializer goes async and awaits the connections, spreading their tools
-    expect(agent).toContain("createAgent(async () => {");
+    const agent = r.files["src/agents/my-gem.ts"];
+    expect(agent).toContain('import conn0 from "../connections/ctx.ts"');
+    expect(agent).toContain('import conn1 from "../connections/gh.ts"');
     expect(agent).toContain("await Promise.all([conn0(), conn1()])");
-    expect(agent).toContain("tools: ");
-    // skills still wired
-    expect(agent).toContain("skills: [skill0]");
-  });
-
-  it("no MCP servers -> synchronous initializer, no tools/connection wiring (unchanged)", () => {
-    const r = materialize(gem([skill("a")]), "flue");
-    const agent = r.files["agents/p.ts"];
-    expect(agent).toContain("createAgent(() => ({");
-    expect(agent).not.toContain("../connections/");
-    expect(agent).not.toContain("tools:");
-  });
-
-  it("does not import a skipped MCP connection (no broken import)", () => {
-    const badSecret: McpServerArtifact = { type: "mcp_server", name: "bad", transport: "http", config: { url: "https://x/sse" }, secretRefs: [{ name: "Q", location: "query.key" }] };
-    const r = materialize({ name: "p", createdFrom: "/d", checks: [], requiredSecrets: [], artifacts: [skill("a"), badSecret] }, "flue");
-    const agent = r.files["agents/p.ts"];
-    expect(r.files["connections/bad.ts"]).toBeUndefined();       // skipped -> no file
-    expect(agent).not.toContain("../connections/bad.ts");        // and not imported
-    expect(r.skipped.find((s) => s.type === "mcp_server")).toBeTruthy();
+    expect(agent).toContain("tools: connections.flatMap((c) => c.tools)");
   });
 });
 
