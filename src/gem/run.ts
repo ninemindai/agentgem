@@ -131,7 +131,7 @@ export async function ensureRunProject(name: string, target: TargetId, runner: P
 // Per-gem Vercel project name: eve-<slug(name)>. Slug = lowercase, non-alnum→'-', trimmed.
 // Vercel derives the project name from the deploy directory's basename, so we name the runDir accordingly.
 export const vercelProject = (name: string) =>
-  "eve-" + name.normalize("NFKC").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  "eve-" + (name.normalize("NFKC").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "agent");
 
 const registry = new Map<string, { state: RunState; handle?: ProcHandle }>();
 const EVE_BIN = (runDir: string) => join(runDir, "node_modules", ".bin", "eve");

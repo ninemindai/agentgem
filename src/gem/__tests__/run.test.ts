@@ -1,7 +1,7 @@
 // src/gem/__tests__/run.test.ts
 import { describe, it, expect } from "vitest";
 import { pushLog, nodeMajor, parseEveUrl, parseVercelUrl, parseSingleTeamScope, parseWorkersUrl, runReadiness, deployCloudflare } from "../run.js";
-import { startLocal, stopLocal, getRunStatus, deployVercel, undeployVercel, type ProcessRunner, type ProcHandle } from "../run.js";
+import { startLocal, stopLocal, getRunStatus, deployVercel, undeployVercel, vercelProject, type ProcessRunner, type ProcHandle } from "../run.js";
 import { readDeployRecord, writeDeployRecord } from "../deployRecord.js";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -38,6 +38,12 @@ describe("run pure helpers", () => {
     expect(parseWorkersUrl(["Uploaded", "https://my-gem.acct.workers.dev", "Done"]))
       .toBe("https://my-gem.acct.workers.dev");
     expect(parseWorkersUrl(["no url here"])).toBeUndefined();
+  });
+
+  it("vercelProject slugs the gem name and never yields a trailing-dash/empty project", () => {
+    expect(vercelProject("demo-gem")).toBe("eve-demo-gem");
+    expect(vercelProject("My Gem!")).toBe("eve-my-gem");
+    expect(vercelProject("---")).toBe("eve-agent"); // all-non-alnum -> fallback, not "eve-"
   });
 
   it("parseSingleTeamScope extracts the lone team from a missing_scope response", () => {
