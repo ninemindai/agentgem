@@ -238,11 +238,13 @@ export class GemController {
     const { name, target } = input.body;
     if (target === "eve") {
       const r = await undeployVercel(name);
-      return { removed: r.removed, logTail: r.logTail };
+      if (!r.removed) throw new Error(`Vercel undeploy failed for "${name}". Check logs.`);
+      return { removed: true, logTail: r.logTail };
     }
     if (target === "flue") {
       const r = await undeployCloudflare(name);
-      return { removed: r.removed, logTail: r.logTail };
+      if (!r.removed) throw new Error(`Cloudflare undeploy failed for "${name}". Check logs.`);
+      return { removed: true, logTail: r.logTail };
     }
     if (target === "claude-managed") {
       const key = process.env.ANTHROPIC_API_KEY;

@@ -148,6 +148,22 @@ describe("GemController", () => {
     expect(r.status).toBe(422);
   });
 
+  it("POST /api/undeploy claude-managed without API key returns error", async () => {
+    const prev = process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    try {
+      const r = await client.post("/api/undeploy").send({ name: "some-ws", target: "claude-managed" });
+      expect(r.status).toBeGreaterThanOrEqual(400);
+    } finally {
+      if (prev !== undefined) process.env.ANTHROPIC_API_KEY = prev;
+    }
+  });
+
+  it("POST /api/undeploy agentcore without record returns error", async () => {
+    const r = await client.post("/api/undeploy").send({ name: "no-record-ws", target: "agentcore" });
+    expect(r.status).toBeGreaterThanOrEqual(400);
+  });
+
   it("GET /api/deploy-record returns null when no record exists", async () => {
     const r = await client.get("/api/deploy-record?name=nonexistent&backend=eve").expect(200);
     expect(r.body.record).toBeNull();
