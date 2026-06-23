@@ -3,9 +3,10 @@
 </p>
 
 <p align="center">
+  <a href="https://www.npmjs.com/package/@ninemind/agentgem"><img src="https://img.shields.io/npm/v/%40ninemind%2Fagentgem?color=9a3324&label=npm" alt="npm version"></a>
   <a href="https://github.com/ninemindai/agentgem/actions/workflows/ci.yml"><img src="https://github.com/ninemindai/agentgem/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-9a3324" alt="MIT license"></a>
-  <a href="https://nodejs.org"><img src="https://img.shields.io/badge/node-LTS-1f6b4f" alt="Node LTS"></a>
+  <a href="https://nodejs.org"><img src="https://img.shields.io/node/v/%40ninemind%2Fagentgem?color=1f6b4f" alt="Node version"></a>
   <a href="https://agentback.dev"><img src="https://img.shields.io/badge/built_on-AgentBack-b08436" alt="Built on AgentBack"></a>
   <a href="docs/concepts.md"><img src="https://img.shields.io/badge/MCP-native-211c15" alt="MCP-native"></a>
 </p>
@@ -44,26 +45,35 @@ call exactly the same thing.
 - **An agent-native path** — every operation is also an MCP tool, so your local agent can
   build Gems over `/mcp` with no browser involved.
 
-## Usage
+## Quickstart
 
-Requires Node.js ≥ 22 and a coding-agent config at `~/.claude`.
+Needs Node.js ≥ 22 and a coding-agent config at `~/.claude`. Run it without
+installing:
 
 ```bash
-npx @ninemind/agentgem              # run without installing
-# or install the `agentgem` command globally:
-npm install -g @ninemind/agentgem
-agentgem                            # → http://127.0.0.1:4317
-agentgem --port 8080                # override the port (also honors $PORT)
+npx @ninemind/agentgem         # npm
+pnpm dlx @ninemind/agentgem    # pnpm
 ```
 
-The server starts on `127.0.0.1` (default port `4317`) and prints:
-
-```
+```text
 agentgem listening at http://127.0.0.1:4317
   UI:       http://127.0.0.1:4317/
   API:      http://127.0.0.1:4317/api/inventory  ·  POST http://127.0.0.1:4317/api/gem
   Explorer: http://127.0.0.1:4317/explorer/
   MCP:      http://127.0.0.1:4317/mcp
+```
+
+Open **<http://127.0.0.1:4317/>**, tick the skills / MCP servers / `CLAUDE.md` you
+want, name the Gem, and watch the live `gem.json` render with secrets already shown
+as `<redacted>`. Download it — that archive is what every target and the registry
+consume.
+
+Prefer a persistent command? Install it globally:
+
+```bash
+npm install -g @ninemind/agentgem     # npm
+pnpm add -g @ninemind/agentgem        # pnpm
+agentgem --port 8080                  # honors $PORT; append ?dir=/path/to/.claude for another config
 ```
 
 | Path        | What it is                                              |
@@ -72,23 +82,17 @@ agentgem listening at http://127.0.0.1:4317
 | `/explorer` | Swagger UI for the REST API (from the OpenAPI document) |
 | `/mcp`      | The MCP endpoint — the same contract, for your agent    |
 
-Open `/`, tick the skills / MCP servers / `CLAUDE.md` you want, name the Gem, and watch
-the live `gem.json` render with secrets already shown as `<redacted>`. Download it — that
-archive is what every target and the registry consume.
-
-Append `?dir=/path/to/.claude` to introspect a config directory other than the
-default `~/.claude`.
-
 ### From source
 
-To hack on AgentGem, clone the repo and use [pnpm](https://pnpm.io/) (AgentBack
-uses legacy decorators, so it builds with `tsc`, then runs `dist/`):
+To hack on AgentGem, clone the repo. It's a [pnpm](https://pnpm.io/) project
+(`npm` works too), and AgentBack uses legacy decorators, so it builds with `tsc`
+then runs `dist/`:
 
 ```bash
-pnpm install
-pnpm dev        # build + start in one step (→ node dist/index.js)
-pnpm test       # tsc -b && vitest run — tests run against compiled dist/
-pnpm clean      # rm -rf dist *.tsbuildinfo (run before testing after renames/moves)
+pnpm install     # or: npm install
+pnpm dev         # or: npm run dev   — build + start in one step
+pnpm test        # or: npm test      — tsc -b && vitest run, against compiled dist/
+pnpm clean       # or: npm run clean — rm -rf dist *.tsbuildinfo (run before re-testing after moves)
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow.
