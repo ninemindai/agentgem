@@ -803,6 +803,8 @@ async function doPublish(){
     } else {
       st.innerHTML = `✓ Created agent <code>${esc(r.agentId)}</code> (v${esc(r.version)}) + sandbox <code>${esc(r.environmentId)}</code> · ${r.registeredSkills.length} skill${r.registeredSkills.length === 1 ? "" : "s"} registered`;
     }
+    // Re-render so the Undeploy button appears now that a deploy record exists (when a workspace is active).
+    if (wsCurrent) setTimeout(() => renderPublish(), 1500);
   } catch (e) { st.textContent = "Failed: " + e.message; btn.disabled = false; }
 }
 async function undeploy(target){
@@ -818,7 +820,7 @@ async function undeploy(target){
       if (st) st.textContent = "Failed: " + msg;
       return;
     }
-    renderPublish();
+    await renderPublish();
   } catch (e) { if (st) st.textContent = "Failed: " + (e && e.message ? e.message : "undeploy error"); }
 }
 async function fetchDeployRecord(backend){
@@ -878,18 +880,19 @@ async function renderEveDeploy(el, selHtml){
     h += `<div class="pgroup"><button id="eveDeployBtn">▲ Deploy to Vercel</button> <span class="d" id="eveDeployState"></span></div>`;
     h += `<div id="eveDeployUrl" style="margin:4px 0"></div>`;
     h += `<pre id="eveDeployLog" class="json" style="max-height:220px;overflow:auto" hidden></pre>`;
-    if (deployRec) h += `<div class="pgroup"><button id="eveUndeployBtn">✕ Undeploy from Vercel</button> <span class="d" id="undeployStatus-eve"></span></div>`;
   } else {
     h += credEntryHtml("VERCEL_TOKEN");
   }
+  // Undeploy is available whenever a deploy exists — independent of the deploy-credential gate.
+  if (deployRec) h += `<div class="pgroup"><button id="eveUndeployBtn">✕ Undeploy from Vercel</button> <span class="d" id="undeployStatus-eve"></span></div>`;
   h += `<p class="note">Re-renders the workspace's eve project from the gem and deploys it from source via the pinned Vercel CLI (<code>vercel deploy</code>, which builds on Vercel). If your token has one team, the scope is detected automatically.</p></div>`;
   el.innerHTML = h;
   attachDeployTargetListener();
+  document.getElementById("eveUndeployBtn")?.addEventListener("click", () => undeploy("eve"));
   if (ready.vercel) {
     const cur = await (await fetch(`/api/run-status?name=${encodeURIComponent(wsCurrent)}&target=eve`)).json();
     if (cur && cur.mode === "vercel" && (cur.state !== "idle" || cur.url)) { eveRenderRun(cur); if (eveRunning(cur.state)) evePollRun(wsCurrent); }
     document.getElementById("eveDeployBtn")?.addEventListener("click", eveDeploy);
-    document.getElementById("eveUndeployBtn")?.addEventListener("click", () => undeploy("eve"));
   } else {
     wireCredEntry("VERCEL_TOKEN", () => renderPublish());
   }
@@ -939,18 +942,19 @@ async function renderFlueDeploy(el, selHtml){
     h += `<div class="pgroup"><button id="flueDeployBtn">▲ Deploy to Cloudflare</button> <span class="d" id="flueDeployState"></span></div>`;
     h += `<div id="flueDeployUrl" style="margin:4px 0"></div>`;
     h += `<pre id="flueDeployLog" class="json" style="max-height:220px;overflow:auto" hidden></pre>`;
-    if (deployRec) h += `<div class="pgroup"><button id="flueUndeployBtn">✕ Undeploy from Cloudflare</button> <span class="d" id="undeployStatus-flue"></span></div>`;
   } else {
     h += credEntryHtml("CLOUDFLARE_API_TOKEN");
   }
+  // Undeploy is available whenever a deploy exists — independent of the deploy-credential gate.
+  if (deployRec) h += `<div class="pgroup"><button id="flueUndeployBtn">✕ Undeploy from Cloudflare</button> <span class="d" id="undeployStatus-flue"></span></div>`;
   h += `<p class="note">Runs <code>npm install</code> → <code>flue build --target cloudflare</code> → <code>wrangler deploy</code> on the workspace's flue project (re-rendered from the gem).</p></div>`;
   el.innerHTML = h;
   attachDeployTargetListener();
+  document.getElementById("flueUndeployBtn")?.addEventListener("click", () => undeploy("flue"));
   if (ready.cloudflare) {
     const cur = await (await fetch(`/api/run-status?name=${encodeURIComponent(wsCurrent)}&target=flue`)).json();
     if (cur && cur.mode === "cloudflare" && (cur.state !== "idle" || cur.url)) { flueRenderRun(cur); if (eveRunning(cur.state)) fluePollRun(wsCurrent); }
     document.getElementById("flueDeployBtn")?.addEventListener("click", flueDeploy);
-    document.getElementById("flueUndeployBtn")?.addEventListener("click", () => undeploy("flue"));
   } else {
     wireCredEntry("CLOUDFLARE_API_TOKEN", () => renderPublish());
   }
