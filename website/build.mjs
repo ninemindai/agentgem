@@ -27,25 +27,49 @@ const DOC_PAGES = [
   'docs/index.md',
   'docs/getting-started.md',
   'docs/concepts.md',
+  'docs/architecture.md',
+  'docs/pipeline.md',
+  'docs/archive-format.md',
+  'docs/redaction.md',
+  'docs/api-reference.md',
   'docs/targets.md',
   'docs/registry.md',
+  'docs/testbed-and-run.md',
+  'docs/development.md',
 ];
 
 // One nav definition drives the docs sidebar, llms.txt, and the sitemap.
 const NAV_SECTIONS = [
   {
-    title: 'Documentation',
+    title: 'Start here',
     items: [
       ['docs/index.md', 'Overview'],
       ['docs/getting-started.md', 'Getting started'],
+      ['docs/concepts.md', 'Concepts'],
     ],
   },
   {
-    title: 'Reference',
+    title: 'Architecture & internals',
     items: [
-      ['docs/concepts.md', 'Concepts'],
+      ['docs/architecture.md', 'Architecture'],
+      ['docs/pipeline.md', 'The build pipeline'],
+      ['docs/archive-format.md', 'Archive format'],
+      ['docs/redaction.md', 'Redaction'],
+      ['docs/api-reference.md', 'API reference'],
+    ],
+  },
+  {
+    title: 'Distribution',
+    items: [
       ['docs/targets.md', 'Targets & deploy'],
       ['docs/registry.md', 'Registry'],
+      ['docs/testbed-and-run.md', 'Testbed & run'],
+    ],
+  },
+  {
+    title: 'Contributing',
+    items: [
+      ['docs/development.md', 'Development'],
     ],
   },
 ];
@@ -207,6 +231,9 @@ fs.mkdirSync(out, {recursive: true});
 fs.copyFileSync(path.join(websiteDir, 'index.html'), path.join(out, 'index.html'));
 fs.copyFileSync(path.join(websiteDir, 'styles.css'), path.join(out, 'styles.css'));
 copyDir(path.join(websiteDir, 'assets'), path.join(out, 'assets'));
+
+// Diagrams referenced by the docs (./diagrams/*.svg|png), served under /docs/diagrams.
+copyDir(path.join(root, 'docs', 'diagrams'), path.join(out, 'docs', 'diagrams'));
 
 // Render each doc page: HTML in the shell + the raw .md copied alongside.
 const docMeta = [];
