@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import type { Gem } from "../types.js";
 import {
   harnessNameFor, buildCreateHarnessRequest, agentcorePublishReady,
-  previewAgentcorePublish, deployAgentcorePublish, undeployAgentcoreHarness, type AgentcoreControlClient,
+  deployAgentcorePublish, undeployAgentcoreHarness, type AgentcoreControlClient,
 } from "../agentcorePublish.js";
 
 const gem = (over: Partial<Gem> = {}): Gem => ({
