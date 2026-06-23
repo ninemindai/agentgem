@@ -260,8 +260,8 @@ export async function deployCloudflare(name: string, runner: ProcessRunner = rea
     });
     if (code !== 0) { state.state = "failed"; return state; }
     state.url = parseWorkersUrl(lines);
-    state.state = "idle";
     writeDeployRecord(name, { backend: "flue", at: new Date().toISOString(), url: state.url, worker: flueWorkerName(name) });
+    state.state = "idle";
     return state;
   } catch (err) {
     state.state = "failed";

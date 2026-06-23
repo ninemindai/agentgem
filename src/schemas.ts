@@ -225,7 +225,7 @@ export const PublishPreviewRequestSchema = z.object({
   projects: z.array(z.string()).optional(),
   target: DeployTargetIdSchema.optional(),
 });
-export const PublishRequestSchema = PublishPreviewRequestSchema.extend({ requestId: z.string().min(8).max(128) });
+export const PublishRequestSchema = PublishPreviewRequestSchema.extend({ requestId: z.string().min(8).max(128), wsName: z.string().optional() });
 
 const ManagedAgentPayloadSchema = z.object({
   name: z.string(),
@@ -394,7 +394,7 @@ export const TestbedImportResponseSchema = z.object({
 
 // ── AgentCore deploy (Phase 2) ──
 export const AgentcoreReadyResponseSchema = z.object({ cli: z.boolean(), awsCreds: z.boolean() });
-export const AgentcoreDeployRequestSchema = z.object({ name: z.string() });
+export const AgentcoreDeployRequestSchema = z.object({ name: z.string(), wsName: z.string().optional() });
 export const AgentcoreStatusQuerySchema = z.object({ name: z.string() });
 export const AgentcoreDeployStateSchema = z.object({
   state: z.enum(["idle", "installing", "building", "running", "deploying", "failed"]),
@@ -453,3 +453,8 @@ export const RegistryPublishRequestSchema = z.object({
 export const RegistryPublishResponseSchema = z.object({
   ref: z.string(), version: z.string(), gemDigest: z.string(), commit: z.string(), path: z.string(),
 });
+
+export const UndeployRequestSchema = z.object({ name: z.string(), target: z.enum(["eve", "flue", "claude-managed", "agentcore"]) });
+export const UndeployResponseSchema = z.object({ removed: z.boolean(), logTail: z.array(z.string()).optional() });
+export const DeployRecordQuerySchema = z.object({ name: z.string(), backend: z.enum(["eve", "flue", "claude-managed", "agentcore"]) });
+export const DeployRecordResponseSchema = z.object({ record: z.record(z.string(), z.unknown()).nullable() });

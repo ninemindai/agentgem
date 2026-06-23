@@ -740,6 +740,7 @@ async function renderPublish(){
   const sect = (title, rows) => rows.length ? `<div class="pgroup"><h3>${title} (${rows.length})</h3>${rows.join("")}</div>` : "";
   const row = (a, b) => `<div class="prow"><span class="pn">${esc(a)}</span> <span class="pm">${esc(b)}</span></div>`;
   if (r.kind === "agentcore-harness") {
+    const agentcoreRec = await fetchDeployRecord("agentcore");
     let h = `<div class="psummary">${selHtml}<div class="phead"><strong>${esc(r.request.harnessName)}</strong> <span class="d">· AgentCore Harness</span></div>`;
     h += `<div class="pgroup"><h3>CreateHarness request</h3><pre class="json">${esc(JSON.stringify(r.request, null, 2))}</pre></div>`;
     h += sect("Skipped", r.skipped.map(s => row(s.artifact, s.reason)));
@@ -747,10 +748,14 @@ async function renderPublish(){
     __publishReady = null;
     const ready = await (await fetch(`/api/publish-ready?target=agentcore-managed`)).json();
     h += `<div class="pgroup"><button id="publishBtn" ${ready.ready ? "" : "disabled"}>${ready.ready ? "Create AgentCore Harness" : "Publish (set AWS creds + AGENTCORE_EXECUTION_ROLE_ARN)"}</button> <span class="d" id="publishStatus"></span></div>`;
+    if (agentcoreRec) h += `<div class="pgroup"><button id="agentcoreUndeployBtn">✕ Undeploy AgentCore Harness</button> <span class="d" id="undeployStatus-agentcore"></span></div>`;
     h += `<p class="note">Creates a Bedrock AgentCore harness via CreateHarness. Local skills are skipped (the API takes git/s3 skill sources); MCP secret headers reference AgentCore Identity token-vault ARNs. Secrets are never sent.</p></div>`;
-    el.innerHTML = h; attachDeployTargetListener(); return;
+    el.innerHTML = h; attachDeployTargetListener();
+    document.getElementById("agentcoreUndeployBtn")?.addEventListener("click", () => undeploy("agentcore"));
+    return;
   }
   // managed-agent branch (claude-managed)
+  const managedRec = await fetchDeployRecord("claude-managed");
   const p = r.payload;
   let h = `<div class="psummary">${selHtml}<div class="phead"><strong>${esc(p.name)}</strong> <span class="d">· Managed Agent · ${esc(p.model)}</span></div>`;
   h += `<div class="pgroup"><h3>System prompt</h3>${row("instructions only", fmtSize((p.system || "").length))}</div>`;
@@ -765,10 +770,12 @@ async function renderPublish(){
   } else {
     h += credEntryHtml("ANTHROPIC_API_KEY");
   }
+  if (managedRec) h += `<div class="pgroup"><button id="managedUndeployBtn">✕ Undeploy Managed Agent</button> <span class="d" id="undeployStatus-claude-managed"></span></div>`;
   h += `<p class="note">Publishing creates an agent and a limited-network cloud sandbox in your Anthropic org. Each skill is registered as an on-demand Agent Skill (Skills API), plus http/sse MCP servers (URL only) and instructions as the system prompt. Secrets are never sent; add MCP credentials to a vault before starting sessions.</p></div>`;
   el.innerHTML = h;
   attachDeployTargetListener();
   if (!ready.ready) wireCredEntry("ANTHROPIC_API_KEY", () => renderPublish());
+  document.getElementById("managedUndeployBtn")?.addEventListener("click", () => undeploy("claude-managed"));
 }
 function attachDeployTargetListener(){
   const sel = document.getElementById("deployTarget");
@@ -789,7 +796,7 @@ async function doPublish(){
       __publishFingerprint = fingerprint;
       __publishRequestId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
     }
-    const r = await (await fetch("/api/publish", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...body, requestId: __publishRequestId }) })).json();
+    const r = await (await fetch("/api/publish", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...body, requestId: __publishRequestId, wsName: wsCurrent || undefined }) })).json();
     if (r.error) { st.textContent = "Failed: " + (r.error.message || JSON.stringify(r.error)); btn.disabled = false; return; }
     if (r.kind === "agentcore-harness") {
       st.innerHTML = `✓ Created AgentCore harness <code>${esc(r.harnessId || "")}</code>`;
@@ -797,6 +804,21 @@ async function doPublish(){
       st.innerHTML = `✓ Created agent <code>${esc(r.agentId)}</code> (v${esc(r.version)}) + sandbox <code>${esc(r.environmentId)}</code> · ${r.registeredSkills.length} skill${r.registeredSkills.length === 1 ? "" : "s"} registered`;
     }
   } catch (e) { st.textContent = "Failed: " + e.message; btn.disabled = false; }
+}
+async function undeploy(target){
+  if (!wsCurrent) return;
+  if (!confirm(`Undeploy ${target} for "${wsCurrent}"? This removes the live cloud resource.`)) return;
+  const st = document.getElementById("undeployStatus-" + target);
+  if (st) st.textContent = "Undeploying…";
+  try {
+    const r = await (await fetch("/api/undeploy", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({ name: wsCurrent, target }) })).json();
+    renderPublish();
+  } catch (e) { if (st) st.textContent = "Failed: " + (e && e.message ? e.message : "undeploy error"); }
+}
+async function fetchDeployRecord(backend){
+  if (!wsCurrent) return null;
+  try { const r = await (await fetch(`/api/deploy-record?name=${encodeURIComponent(wsCurrent)}&backend=${encodeURIComponent(backend)}`)).json(); return r.record; }
+  catch { return null; }
 }
 // ── Self-host deploy: Eve → Vercel (reuses the workspace run/deploy backend) ──
 // Eve deploys a saved workspace's eve project (deployVercel re-renders it from the
@@ -840,13 +862,17 @@ async function renderEveDeploy(el, selHtml){
     el.innerHTML = selHtml + `<div class="pgroup"><p class="note">Eve deploys a saved <b>workspace</b>'s eve project. Open or create a workspace first (the <b>Workspace</b> stage), then deploy it here.</p></div>`;
     attachDeployTargetListener(); return;
   }
-  const ready = await (await fetch(`/api/run-ready?name=${encodeURIComponent(wsCurrent)}&target=eve`)).json();
+  const [ready, deployRec] = await Promise.all([
+    (await fetch(`/api/run-ready?name=${encodeURIComponent(wsCurrent)}&target=eve`)).json(),
+    fetchDeployRecord("eve"),
+  ]);
   let h = `<div class="psummary">${selHtml}<div class="phead"><strong>${esc(wsCurrent)}</strong> <span class="d">· Eve → Vercel (self-host)</span></div>`;
   if (ready.vercel) {
     h += `<div class="pgroup" style="display:flex;gap:8px;align-items:center"><label for="eveAuthMode" class="d">Auth</label><select id="eveAuthMode"><option value="placeholder">Placeholder (secure — wire your own provider)</option><option value="public">Public — anyone can reach the agent (demo)</option></select></div>`;
     h += `<div class="pgroup"><button id="eveDeployBtn">▲ Deploy to Vercel</button> <span class="d" id="eveDeployState"></span></div>`;
     h += `<div id="eveDeployUrl" style="margin:4px 0"></div>`;
     h += `<pre id="eveDeployLog" class="json" style="max-height:220px;overflow:auto" hidden></pre>`;
+    if (deployRec) h += `<div class="pgroup"><button id="eveUndeployBtn">✕ Undeploy from Vercel</button> <span class="d" id="undeployStatus-eve"></span></div>`;
   } else {
     h += credEntryHtml("VERCEL_TOKEN");
   }
@@ -857,6 +883,7 @@ async function renderEveDeploy(el, selHtml){
     const cur = await (await fetch(`/api/run-status?name=${encodeURIComponent(wsCurrent)}&target=eve`)).json();
     if (cur && cur.mode === "vercel" && (cur.state !== "idle" || cur.url)) { eveRenderRun(cur); if (eveRunning(cur.state)) evePollRun(wsCurrent); }
     document.getElementById("eveDeployBtn")?.addEventListener("click", eveDeploy);
+    document.getElementById("eveUndeployBtn")?.addEventListener("click", () => undeploy("eve"));
   } else {
     wireCredEntry("VERCEL_TOKEN", () => renderPublish());
   }
@@ -897,12 +924,16 @@ async function renderFlueDeploy(el, selHtml){
     el.innerHTML = selHtml + `<div class="pgroup"><p class="note">Flue deploys a saved <b>workspace</b>'s flue project to Cloudflare Workers. Open or create a workspace first (the <b>Workspace</b> stage), then deploy it here.</p></div>`;
     attachDeployTargetListener(); return;
   }
-  const ready = await (await fetch(`/api/run-ready?name=${encodeURIComponent(wsCurrent)}&target=flue`)).json();
+  const [ready, deployRec] = await Promise.all([
+    (await fetch(`/api/run-ready?name=${encodeURIComponent(wsCurrent)}&target=flue`)).json(),
+    fetchDeployRecord("flue"),
+  ]);
   let h = `<div class="psummary">${selHtml}<div class="phead"><strong>${esc(wsCurrent)}</strong> <span class="d">· Flue → Cloudflare (self-host)</span></div>`;
   if (ready.cloudflare) {
     h += `<div class="pgroup"><button id="flueDeployBtn">▲ Deploy to Cloudflare</button> <span class="d" id="flueDeployState"></span></div>`;
     h += `<div id="flueDeployUrl" style="margin:4px 0"></div>`;
     h += `<pre id="flueDeployLog" class="json" style="max-height:220px;overflow:auto" hidden></pre>`;
+    if (deployRec) h += `<div class="pgroup"><button id="flueUndeployBtn">✕ Undeploy from Cloudflare</button> <span class="d" id="undeployStatus-flue"></span></div>`;
   } else {
     h += credEntryHtml("CLOUDFLARE_API_TOKEN");
   }
@@ -913,6 +944,7 @@ async function renderFlueDeploy(el, selHtml){
     const cur = await (await fetch(`/api/run-status?name=${encodeURIComponent(wsCurrent)}&target=flue`)).json();
     if (cur && cur.mode === "cloudflare" && (cur.state !== "idle" || cur.url)) { flueRenderRun(cur); if (eveRunning(cur.state)) fluePollRun(wsCurrent); }
     document.getElementById("flueDeployBtn")?.addEventListener("click", flueDeploy);
+    document.getElementById("flueUndeployBtn")?.addEventListener("click", () => undeploy("flue"));
   } else {
     wireCredEntry("CLOUDFLARE_API_TOKEN", () => renderPublish());
   }

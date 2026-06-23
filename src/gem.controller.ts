@@ -16,6 +16,10 @@ import type { GemLock } from "./gem/archive.js";
 import { writeArchiveDir, readArchiveDir } from "./gem/archiveFs.js";
 import { packTar } from "./gem/archiveTar.js";
 import type { Gem } from "./gem/types.js";
+import { readDeployRecord, writeDeployRecord, clearDeployRecord } from "./gem/deployRecord.js";
+import type { DeployBackend } from "./gem/deployRecord.js";
+import { undeployManagedAgent, anthropicPublishClient } from "./publish.js";
+import { undeployAgentcoreHarness, realAgentcoreControlClient } from "./gem/agentcorePublish.js";
 
 import type { ConfigInventory } from "./gem/types.js";
 import {
@@ -39,8 +43,9 @@ import {
   RegistryResolveRequestSchema, RegistryResolveResponseSchema,
   RegistryInstallRequestSchema, RegistryInstallResponseSchema,
   RegistryPublishRequestSchema, RegistryPublishResponseSchema,
+  UndeployRequestSchema, UndeployResponseSchema, DeployRecordQuerySchema, DeployRecordResponseSchema,
 } from "./schemas.js";
-import { runReadiness, startLocal, stopLocal, getRunStatus, deployVercel, deployCloudflare } from "./gem/run.js";
+import { runReadiness, startLocal, stopLocal, getRunStatus, deployVercel, deployCloudflare, undeployVercel, undeployCloudflare } from "./gem/run.js";
 import { setCredential } from "./gem/credentials.js";
 import { agentcoreReadiness, deployAgentcore, getAgentcoreStatus } from "./gem/agentcoreRun.js";
 import { scaffoldTestbed, importArtifacts } from "./gem/testbed.js";
@@ -212,7 +217,54 @@ export class GemController {
     const inventory = introspectAll(input.body.dir, input.body.projects);
     const gem = buildGem(inventory, input.body.selection, { name: input.body.name ?? "gem", createdFrom: dirs.claudeDir });
     const target = (input.body.target ?? "claude-managed") as DeployTargetId;
-    return DEPLOY_REGISTRY[target].deploy(gem, input.body.requestId);
+    const result = await DEPLOY_REGISTRY[target].deploy(gem, input.body.requestId);
+    if (input.body.wsName) {
+      const at = new Date().toISOString();
+      if (result.kind === "managed-agent") {
+        writeDeployRecord(input.body.wsName, {
+          backend: "claude-managed", at,
+          agentId: result.agentId, environmentId: result.environmentId,
+          skillIds: result.registeredSkills.map((s) => s.skillId),
+        });
+      } else if (result.kind === "agentcore-harness") {
+        writeDeployRecord(input.body.wsName, { backend: "agentcore", at, harnessId: result.harnessId });
+      }
+    }
+    return result;
+  }
+
+  @post("/undeploy", { body: UndeployRequestSchema, response: UndeployResponseSchema })
+  async undeploy(input: { body: z.infer<typeof UndeployRequestSchema> }): Promise<z.infer<typeof UndeployResponseSchema>> {
+    const { name, target } = input.body;
+    if (target === "eve") {
+      const r = await undeployVercel(name);
+      return { removed: r.removed, logTail: r.logTail };
+    }
+    if (target === "flue") {
+      const r = await undeployCloudflare(name);
+      return { removed: r.removed, logTail: r.logTail };
+    }
+    if (target === "claude-managed") {
+      const key = process.env.ANTHROPIC_API_KEY;
+      if (!key) throw new Error("ANTHROPIC_API_KEY is not set — cannot undeploy from Claude Managed Agents.");
+      const rec = readDeployRecord(name, "claude-managed");
+      if (!rec) throw new Error(`No claude-managed deploy record for workspace "${name}".`);
+      await undeployManagedAgent(rec, anthropicPublishClient(key));
+      clearDeployRecord(name, "claude-managed");
+      return { removed: true };
+    }
+    // agentcore
+    const rec = readDeployRecord(name, "agentcore");
+    if (!rec) throw new Error(`No agentcore deploy record for workspace "${name}".`);
+    await undeployAgentcoreHarness(rec, realAgentcoreControlClient());
+    clearDeployRecord(name, "agentcore");
+    return { removed: true };
+  }
+
+  @get("/deploy-record", { query: DeployRecordQuerySchema, response: DeployRecordResponseSchema })
+  async deployRecord(input: { query: z.infer<typeof DeployRecordQuerySchema> }): Promise<z.infer<typeof DeployRecordResponseSchema>> {
+    const rec = readDeployRecord(input.query.name, input.query.backend as DeployBackend);
+    return { record: rec as Record<string, unknown> | null };
   }
 
   @get("/testbed/detect", { query: TestbedDetectQuerySchema, response: TestbedDetectResponseSchema })
