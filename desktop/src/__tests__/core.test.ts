@@ -8,7 +8,7 @@ describe("coreEntryCandidates", () => {
   it("lists packaged resources first, dev dist second", () => {
     const list = coreEntryCandidates("/app/desktop/dist", "/app/resources");
     expect(list).toEqual([
-      join("/app/resources", "core", "index.js"),
+      join("/app/resources", "core", "index.mjs"),
       join("/app/desktop/dist", "..", "..", "dist", "index.js"),
     ]);
   });

@@ -8,14 +8,13 @@ files:
   - dist/**
   - package.json
 extraResources:
-  # Copy the built core into resources/core so resolveCoreEntry finds it
-  # at runtime in the packaged app.
-  - from: ../dist
+  # Ship the self-contained core bundle (built by scripts/bundle-core.mjs:
+  # index.mjs + public/ + node_modules/{express,cors}) as resources/core, where
+  # resolveCoreEntry loads resources/core/index.mjs at runtime.
+  - from: core-dist
     to: core
     filter:
       - "**/*"
-      - "!**/__tests__/**"
-      - "!**/*.test.*"
   # Copy the tray icon into resources/ so resolveIconPath finds it in packaged builds.
   - from: build/icon.png
     to: icon.png
