@@ -1,0 +1,40 @@
+appId: ai.ninemind.agentgem
+productName: AgentGem
+copyright: © ninemind.ai
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**
+  - package.json
+extraResources:
+  # Copy the built core into resources/core so resolveCoreEntry finds it
+  # at runtime in the packaged app.
+  - from: ../dist
+    to: core
+    filter:
+      - "**/*"
+      - "!**/__tests__/**"
+      - "!**/*.test.*"
+mac:
+  category: public.app-category.developer-tools
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+    - target: zip
+      arch: [x64, arm64]
+win:
+  target:
+    - nsis
+linux:
+  category: Development
+  target:
+    - AppImage
+publish:
+  provider: github
+  owner: ninemindai
+  repo: agentgem
