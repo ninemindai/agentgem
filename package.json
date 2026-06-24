@@ -39,7 +39,7 @@
   "type": "module",
   "packageManager": "pnpm@10.29.2",
   "scripts": {
-    "build": "tsc -b && mkdir -p dist/public && cp src/public/index.html dist/public/index.html",
+    "build": "tsc -b && node scripts/copy-public.mjs",
     "dev": "pnpm build && node dist/index.js",
     "start": "node dist/index.js",
     "build:site": "node website/build.mjs",
