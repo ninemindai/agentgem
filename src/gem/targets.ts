@@ -16,8 +16,9 @@ export type FileTree = Record<string, string>;
 export interface SkippedArtifact { artifact: string; type: ArtifactType; reason: string }
 export interface MaterializeResult { files: FileTree; skipped: SkippedArtifact[] }
 
-// Per-materialization options that some targets honor (e.g. eve's deploy-time auth posture).
-export interface MaterializeOpts { eveAuth?: "placeholder" | "public" }
+// Per-materialization options that some targets honor (e.g. eve's deploy-time auth posture,
+// a2a's opt-in runnable server flavor).
+export interface MaterializeOpts { eveAuth?: "placeholder" | "public"; a2aServer?: boolean }
 
 interface TargetSpec {
   id: TargetId;
@@ -594,10 +595,150 @@ export const a2aAgentCard = (gem: Gem): Record<string, unknown> => {
   };
 };
 
+// ── A2A server mode (opt-in via MaterializeOpts.a2aServer) ──
+// Runtime is Vercel AI SDK v7 (`ai` + `@ai-sdk/mcp`), vendor-neutral via the gateway model string —
+// deliberately NOT @openai/agents, so sandboxMcpServer is not reused (a2aMcpClient is its analogue).
+const A2A_MODEL = "anthropic/claude-sonnet-4-6";
+
+// One AI SDK MCP client per server. http/sse -> { type, url, headers } (secret header values from env
+// NAMES); stdio -> Experimental_StdioMCPTransport (command/args + secrets as env). Skip rules mirror
+// sandboxMcpServer: http/sse map only headers.* secrets; stdio maps secrets to env; url-less non-stdio skipped.
+type A2AClient = { code: string; stdio: boolean } | { skip: string };
+const a2aMcpClient = (s: McpServerArtifact): A2AClient => {
+  const url = typeof s.config.url === "string" ? s.config.url : "";
+  if (/^https?:\/\//.test(url)) {
+    const refs = s.secretRefs ?? [];
+    const unsupported = refs.find((r) => !/^headers\./i.test(r.location));
+    if (unsupported) return { skip: `A2A (AI SDK) cannot map secret at ${unsupported.location}` };
+    const authorization = refs.find((r) => r.location.toLowerCase() === "headers.authorization");
+    const headerEntries: (readonly [string, string])[] = [
+      ...(authorization ? [["Authorization", authorization.name] as const] : []),
+      ...refs.filter((r) => /^headers\./i.test(r.location) && r !== authorization)
+            .map((r) => [r.location.slice("headers.".length), r.name] as const),
+    ];
+    const headers = headerEntries.length
+      ? `, headers: { ${headerEntries.map(([h, e]) => `${JSON.stringify(h)}: process.env[${JSON.stringify(e)}]!`).join(", ")} }`
+      : "";
+    const type = s.transport === "sse" ? "sse" : "http";
+    return { code: `  createMCPClient({ transport: { type: ${JSON.stringify(type)}, url: ${JSON.stringify(url)}${headers} } }),`, stdio: false };
+  }
+  if (s.transport === "stdio" && typeof s.config.command === "string") {
+    const args = Array.isArray(s.config.args) ? s.config.args.filter((a): a is string => typeof a === "string") : [];
+    const envNames = (s.secretRefs ?? []).map((r) => r.name);
+    const envStr = envNames.length ? `, env: { ${envNames.map((n) => `${JSON.stringify(n)}: process.env[${JSON.stringify(n)}]!`).join(", ")} }` : "";
+    return { code: `  createMCPClient({ transport: new Experimental_StdioMCPTransport({ command: ${JSON.stringify(s.config.command)}, args: ${JSON.stringify(args)}${envStr} }) }),`, stdio: true };
+  }
+  return { skip: `${s.transport} MCP has no usable URL or stdio command` };
+};
+
+// A2A projects authenticate via plain process.env. Deliberately NOT agentcoreSecretsMd (its
+// `agentcore add credential` / ${arn:...} body is wrong for an A2A/AI-SDK project).
+const a2aSecretsMd = (secrets: SecretRequirement[]): string => {
+  const model = `## Model access\n\nThe agent calls \`${A2A_MODEL}\` via the AI SDK. Set \`AI_GATEWAY_API_KEY\` ` +
+    `(Vercel AI Gateway) or a direct provider key (e.g. \`ANTHROPIC_API_KEY\`).\n`;
+  const mcp = secrets.length
+    ? `## MCP credentials\n\nSet these before \`npm start\` (e.g. a \`.env\` file):\n\n` +
+      `${secrets.map((s) => `- \`${s.name}\` (for ${s.artifact} at ${s.location})`).join("\n")}\n`
+    : `## MCP credentials\n\nThis agent declares no MCP secrets.\n`;
+  return `# Secrets\n\n${model}\n${mcp}`;
+};
+
+const a2aPackageJson = (gemName: string): string => JSON.stringify({
+  name: safePathSegment(gemName).toLowerCase(), version: "0.1.0", private: true, type: "module",
+  scripts: { build: "tsc", start: "node dist/server.js", dev: "tsx src/server.ts" },
+  // Verified pins: ai v7 beta pairs with @ai-sdk/mcp v2 beta; @a2a-js/sdk 0.3.x.
+  dependencies: { "@a2a-js/sdk": "^0.3.13", ai: "7.0.0-beta.178", "@ai-sdk/mcp": "2.0.0-beta.67", express: "^5", uuid: "^11" },
+  devDependencies: { "@types/express": "^5", "@types/node": "^24", tsx: "^4", typescript: "^5" },
+}, null, 2) + "\n";
+
+// The runnable A2A server: an AI SDK `generateText` tool loop behind the @a2a-js/sdk JSON-RPC handler.
+// Card `url` is rebound from PUBLIC_URL at boot (the static card carries a localhost placeholder).
+const a2aServerTs = (system: string, clientCodes: string[], usesStdio: boolean): string => {
+  const mcpImports = clientCodes.length
+    ? `import { createMCPClient } from "@ai-sdk/mcp";\n${usesStdio ? `import { Experimental_StdioMCPTransport } from "@ai-sdk/mcp/mcp-stdio";\n` : ""}`
+    : "";
+  const bootBlock = clientCodes.length
+    ? `const mcpClients = await Promise.all([\n${clientCodes.join("\n")}\n]);
+const tools = Object.assign({}, ...(await Promise.all(mcpClients.map((c) => c.tools()))));
+for (const sig of ["SIGINT", "SIGTERM"] as const)
+  process.on(sig, () => { Promise.allSettled(mcpClients.map((c) => c.close())).finally(() => process.exit(0)); });`
+    : `const tools = {};`;
+  return `import express from "express";
+import { generateText, stepCountIs } from "ai";
+${mcpImports}import { type AgentCard, AGENT_CARD_PATH } from "@a2a-js/sdk";
+import { type AgentExecutor, type RequestContext, type ExecutionEventBus,
+  DefaultRequestHandler, InMemoryTaskStore } from "@a2a-js/sdk/server";
+import { agentCardHandler, jsonRpcHandler, UserBuilder } from "@a2a-js/sdk/server/express";
+import { v4 as uuid } from "uuid";
+import cardBase from "../agent-card.json" with { type: "json" };
+
+const MODEL = ${JSON.stringify(A2A_MODEL)};
+const SYSTEM = \`${escapeTemplate(system)}\`;
+
+const port = Number(process.env.PORT ?? 41241);
+const baseUrl = process.env.PUBLIC_URL ?? \`http://localhost:\${port}\`;
+const card: AgentCard = { ...(cardBase as AgentCard), url: \`\${baseUrl}/a2a/jsonrpc\`,
+  additionalInterfaces: [{ url: \`\${baseUrl}/a2a/jsonrpc\`, transport: "JSONRPC" }] };
+
+${bootBlock}
+
+// Non-streaming v1: run the tool loop and publish a single agent message.
+class GemExecutor implements AgentExecutor {
+  async execute(ctx: RequestContext, bus: ExecutionEventBus): Promise<void> {
+    const text = (ctx.userMessage.parts ?? []).filter((p: any) => p.kind === "text").map((p: any) => p.text).join("\\n");
+    const { text: output } = await generateText({ model: MODEL, system: SYSTEM, tools, stopWhen: stepCountIs(10), prompt: text });
+    bus.publish({ kind: "message", messageId: uuid(), role: "agent",
+      parts: [{ kind: "text", text: output }], contextId: ctx.contextId });
+    bus.finished();
+  }
+  cancelTask = async (): Promise<void> => {};
+}
+
+const requestHandler = new DefaultRequestHandler(card, new InMemoryTaskStore(), new GemExecutor());
+const app = express();
+app.use(\`/\${AGENT_CARD_PATH}\`, agentCardHandler({ agentCardProvider: requestHandler }));
+app.use("/a2a/jsonrpc", jsonRpcHandler({ requestHandler, userBuilder: UserBuilder.noAuthentication }));
+app.listen(port, () => console.log(\`A2A agent "\${card.name}" listening on :\${port}\`));
+`;
+};
+
 // A2A is wholly compose-driven: per-type renderers are no-ops (so no artifact is skip-reported), and
 // compose emits the Agent Card. Card-only mode models neither MCP nor hooks, so nothing is skipped.
-const a2aComposeProject = (gem: Gem): MaterializeResult =>
-  rendered({ "agent-card.json": JSON.stringify(a2aAgentCard(gem), null, 2) + "\n" });
+// With opts.a2aServer, it additionally emits a runnable server and evaluates MCP/hook mappability.
+const a2aComposeProject = (gem: Gem, opts: MaterializeOpts = {}): MaterializeResult => {
+  const files: FileTree = { "agent-card.json": JSON.stringify(a2aAgentCard(gem), null, 2) + "\n" };
+  if (!opts.a2aServer) return { files, skipped: [] };
+
+  const skills = gem.artifacts.filter((a): a is SkillArtifact => a.type === "skill");
+  const instr  = gem.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions");
+  const mcps   = gem.artifacts.filter((a): a is McpServerArtifact => a.type === "mcp_server");
+  const hooks  = gem.artifacts.filter((a): a is HookArtifact => a.type === "hook");
+
+  // AI SDK has no skills primitive -> fold skill bodies (frontmatter-stripped) into the system prompt.
+  const instrText = instr.map((i) => `## ${i.name}\n\n${i.content}`).join("\n\n---\n\n");
+  const skillText = skills.map((s) => `## Skill: ${s.name}\n\n${stripYamlFrontmatter(s.content)}`).join("\n\n---\n\n");
+  const system = [instrText, skillText].filter(Boolean).join("\n\n---\n\n");
+
+  const skipped: SkippedArtifact[] = [];
+  const clientCodes: string[] = [];
+  let usesStdio = false;
+  for (const s of mcps) {
+    const r = a2aMcpClient(s);
+    if ("skip" in r) { skipped.push({ artifact: s.name, type: "mcp_server", reason: r.skip }); continue; }
+    clientCodes.push(r.code); usesStdio ||= r.stdio;
+  }
+  for (const h of hooks) skipped.push({ artifact: h.name, type: "hook", reason: "A2A has no hook concept" });
+
+  return {
+    files: {
+      ...files,
+      "src/server.ts": a2aServerTs(system, clientCodes, usesStdio),
+      "package.json": a2aPackageJson(gem.name),
+      "SECRETS.md": a2aSecretsMd(gem.requiredSecrets),
+    },
+    skipped,
+  };
+};
 
 // ── targets compose the shared renderers (convergence is literal, not duplicated) ──
 export const TARGET_REGISTRY: Record<TargetId, TargetSpec> = {

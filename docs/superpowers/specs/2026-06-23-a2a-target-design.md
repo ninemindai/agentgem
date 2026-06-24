@@ -1,9 +1,12 @@
 # agentgem — A2A Target: materialize a Gem into an Agent2Agent Agent Card (+ opt-in server) (Design)
 
 **Date:** 2026-06-23
-**Status:** Card primitive **IMPLEMENTED** on branch `a2a-target` (`a2aAgentCard` + `a2a` registry
-entry + card-only tests; full suite green, 297 passing). Server mode (§2, §5.3–5.4) **deferred** as the
-follow-up. SDK surfaces **verified** via context7 (`/a2aproject/a2a-js`, `/vercel/ai`, 2026-06-23).
+**Status:** **IMPLEMENTED** on branch `a2a-target` — Card primitive *and* opt-in server mode
+(`{ a2aServer: true }`). Full suite green (304 passing). SDK surfaces verified via context7 + the
+published packages; pins locked against real tarballs: `ai@7.0.0-beta.178` (`stopWhen` helper is
+`stepCountIs`), `@ai-sdk/mcp@2.0.0-beta.67` (`createMCPClient`, `./mcp-stdio` →
+`Experimental_StdioMCPTransport`), `@a2a-js/sdk@0.3.13` (`./server`, `./server/express`:
+`agentCardHandler`/`jsonRpcHandler`/`UserBuilder`/`AGENT_CARD_PATH`).
 **Project:** `agentgem` (`/Users/rfeng/Projects/ninemind/agentgem`)
 **Scope:** Add `a2a` as a `TARGET_REGISTRY` entry. `materialize(gem, "a2a")` always emits a **runtime-free
 Agent Card** derived from the Gem (the discovery surface, publishable to the registry). With
