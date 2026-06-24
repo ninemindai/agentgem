@@ -17,6 +17,7 @@ import { MCPComponent } from "@agentback/mcp";
 import { installMcpHttp } from "@agentback/mcp-http";
 import { GemController } from "./gem.controller.js";
 import { GemTools } from "./gem.tools.js";
+import { streamWorkflowAnalyze } from "./workflowStream.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 function pageHtml(): string {
@@ -38,6 +39,10 @@ export async function createApp(port: number): Promise<RestApplication> {
   const server = await app.restServer;
   const html = pageHtml();
   server.expressApp.get("/", (_req, res) => res.type("html").send(html));
+  // SSE progress stream for workflow analysis (raw Express — the decorator
+  // framework only returns single JSON bodies). The POST /api/workflow/analyze
+  // route stays for programmatic/test callers.
+  server.expressApp.get("/api/workflow/analyze/stream", streamWorkflowAnalyze);
   return app;
 }
 

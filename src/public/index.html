@@ -441,19 +441,36 @@ function showPicker(){ document.getElementById("anView").hidden = true; document
 // Recommend a Gem for `path` from its session history — IN PLACE, without adopting
 // it as the active testbed. Renders a focused view inside the same modal. One at a
 // time: the focused view replaces the list, so analyses can't overlap from the UI.
-async function analyzeWorkflow(path, flavor, name){
+function analyzeWorkflow(path, flavor, name){
   const view = document.getElementById("anView");
-  view.innerHTML = `<button type="button" class="ghost anBack">← back to projects</button>`
+  let es = null, acc = "", finished = false;
+  view.innerHTML =
+    `<button type="button" class="ghost anBack">← back to projects</button>`
     + `<div style="margin-top:10px"><b>${esc(name)}</b></div>`
-    + `<div class="d" style="margin-top:8px">Analyzing session history… (~15s)</div>`;
-  view.querySelector(".anBack").onclick = (e) => { e.preventDefault(); showPicker(); };
+    + `<div class="d" id="anPhase" style="margin-top:8px">Starting…</div>`
+    + `<pre id="anStream" style="margin-top:8px;max-height:140px;overflow:auto;white-space:pre-wrap;word-break:break-word;font-size:11px;color:var(--muted);background:rgba(127,127,127,.06);padding:8px;border-radius:6px;display:none"></pre>`;
+  view.querySelector(".anBack").onclick = (e) => { e.preventDefault(); finished = true; if (es) es.close(); showPicker(); };
   showAnView();
-  let res;
-  try {
-    res = await (await fetch("/api/workflow/analyze", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({ root: path }) })).json();
-  } catch (e) { renderAnError(view, esc(e && e.message || String(e))); return; }
-  if (res && res.recommendation) renderAnView(view, path, flavor, name, res);
-  else renderAnError(view, "Analysis returned no recommendation.");
+  const phaseEl = view.querySelector("#anPhase");
+  const streamEl = view.querySelector("#anStream");
+
+  es = new EventSource(`/api/workflow/analyze/stream?root=${encodeURIComponent(path)}`);
+  es.addEventListener("phase", (ev) => {
+    const d = JSON.parse(ev.data);
+    if (d.phase === "scanning") phaseEl.textContent = "Scanning session history…";
+    else if (d.phase === "scanned") phaseEl.textContent = `Scanned ${d.transcripts} transcript(s) · ${d.sessions} session(s). Asking Claude…`;
+    else if (d.phase === "thinking") phaseEl.textContent = "Claude is clustering a Gem from your usage…";
+    else if (d.phase === "validating") phaseEl.textContent = "Validating against your inventory…";
+  });
+  es.addEventListener("delta", (ev) => {
+    acc += JSON.parse(ev.data).text;
+    streamEl.style.display = "block";
+    streamEl.textContent = acc.slice(-1200);          // tail of the agent's live output
+    streamEl.scrollTop = streamEl.scrollHeight;
+  });
+  es.addEventListener("done", (ev) => { finished = true; es.close(); renderAnView(view, path, flavor, name, JSON.parse(ev.data)); });
+  es.addEventListener("failed", (ev) => { finished = true; es.close(); renderAnError(view, esc(JSON.parse(ev.data).message || "unknown error")); });
+  es.onerror = () => { if (finished) return; finished = true; es.close(); renderAnError(view, "connection lost"); };
 }
 
 function renderAnError(view, msg){

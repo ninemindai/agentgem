@@ -32,7 +32,7 @@ const SELECTABLE: ArtifactType[] = ["skill", "mcp_server", "hook"];
 export interface AgentDescriptor { id: string; name: string; command: string[] }
 export interface AcpSessionHandle {
   setMode(mode: string): Promise<void>;
-  promptText(text: string): Promise<string>;
+  promptText(text: string, onDelta?: (chunk: string) => void): Promise<string>;
   dispose(): void;
 }
 export interface AcpCtx { open(cwd: string): Promise<AcpSessionHandle> }
@@ -157,7 +157,7 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 export async function recommendWorkflow(
   signal: WorkflowSignal,
   inventory: ProjectInventory,
-  opts: { connectFn?: AcpConnectFn; timeoutMs?: number } = {},
+  opts: { connectFn?: AcpConnectFn; timeoutMs?: number; onDelta?: (chunk: string) => void } = {},
 ): Promise<{ recommendation: GemRecommendation; degraded: boolean }> {
   const connectFn = opts.connectFn ?? testConnectFn ?? defaultConnectFn;
   const timeoutMs = opts.timeoutMs ?? 60_000;
@@ -169,7 +169,7 @@ export async function recommendWorkflow(
     handle = await conn.ctx.open(signal.root);
     await handle.setMode("plan");                 // explicit — never edits files
     const prompt = GROUNDING(JSON.stringify(signal), JSON.stringify(trimmedInv));
-    const text = await withTimeout(handle.promptText(prompt), timeoutMs);
+    const text = await withTimeout(handle.promptText(prompt, opts.onDelta), timeoutMs);
     return { recommendation: validateRecommendation(text, inventory, signal), degraded: false };
   } catch (err) {
     console.error("workflow: recommender fell back to deterministic:", (err as Error).message);
@@ -212,7 +212,7 @@ export const defaultConnectFn: AcpConnectFn = async (descriptor) => {
         async setMode(mode: string) {
           try { await agentCtx.request("session/set_mode", { sessionId, modeId: mode }); } catch { /* best-effort */ }
         },
-        async promptText(text: string) {
+        async promptText(text: string, onDelta?: (chunk: string) => void) {
           let out = "";
           void session.prompt(text);
           for (;;) {
@@ -220,7 +220,7 @@ export const defaultConnectFn: AcpConnectFn = async (descriptor) => {
             if (msg.kind === "stop") break;
             if (msg.kind === "session_update" && msg.update?.sessionUpdate === "agent_message_chunk") {
               const block = msg.update.content;
-              if (block?.type === "text" && typeof block.text === "string") out += block.text;
+              if (block?.type === "text" && typeof block.text === "string") { out += block.text; onDelta?.(block.text); }
             }
           }
           return out;

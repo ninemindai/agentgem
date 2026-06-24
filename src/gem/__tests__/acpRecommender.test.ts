@@ -113,4 +113,19 @@ describe("recommendWorkflow", () => {
     const { degraded } = await recommendWorkflow(signal, inventory, { connectFn: fakeConnect(slow), timeoutMs: 5 });
     expect(degraded).toBe(true);
   });
+
+  it("forwards agent chunks to onDelta", async () => {
+    const chunks: string[] = [];
+    const streamingConnect: AcpConnectFn = async () => ({
+      ctx: { async open() { return {
+        async setMode() {},
+        async promptText(_t: string, onDelta?: (c: string) => void) { onDelta?.('{"name":"X","desc'); onDelta?.('ription":"d","include":[{"type":"skill","name":"qa","reason":"r"}],"confidence":"high"}'); return '{"name":"X","description":"d","include":[{"type":"skill","name":"qa","reason":"r"}],"confidence":"high"}'; },
+        dispose() {},
+      }; } },
+      close() {},
+    });
+    const { recommendation } = await recommendWorkflow(signal, inventory, { connectFn: streamingConnect, onDelta: (c) => chunks.push(c) });
+    expect(chunks.length).toBe(2);
+    expect(recommendation.include.map((i) => i.name)).toEqual(["qa"]);
+  });
 });
