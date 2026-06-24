@@ -12,6 +12,11 @@ import { DESKTOP_NAME } from "./version.js";
 
 const isDev = process.env.AGENTGEM_DEV === "1";
 
+// macOS surfaces app.name in the menu bar (the bold app menu) and dock. Running
+// raw electron in dev it would default to "Electron"; packaged builds get it from
+// productName. Set it before whenReady so dev is branded consistently too.
+app.setName(DESKTOP_NAME);
+
 // Packaged: extraResources puts the icon at resources/icon.png. Dev: it sits
 // next to the build dir two levels up from desktop/dist.
 function resolveIconPath(): string {
