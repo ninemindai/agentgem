@@ -58,6 +58,8 @@ writeFileSync(
     2,
   ),
 );
-execFileSync("npm", ["install", "--omit=dev", "--no-audit", "--no-fund"], { cwd: out, stdio: "inherit" });
+// On Windows the npm launcher is npm.cmd; execFile won't resolve a bare "npm".
+const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
+execFileSync(npmCmd, ["install", "--omit=dev", "--no-audit", "--no-fund"], { cwd: out, stdio: "inherit" });
 
 console.log("core bundled →", out);

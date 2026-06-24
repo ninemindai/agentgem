@@ -5,9 +5,15 @@ on:
       - "desktop-v*"
   workflow_dispatch:
 
+# Each OS builds its own installers (no publish), uploads them as artifacts; a
+# final job attaches everything to the GitHub Release for the triggering tag.
+# Publishing is decoupled from electron-builder because its default release tag
+# is v{version} (e.g. v0.1.1) — which collides with the npm core's tag. We want
+# the desktop-v* tag instead.
 jobs:
   build:
     strategy:
+      fail-fast: false # one platform failing must not cancel the others
       matrix:
         os: [macos-latest, windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
@@ -21,13 +27,51 @@ jobs:
           node-version: 22
       - run: pnpm install
       - run: pnpm -C desktop install
-      # Signing/notarization run only when the secrets are present; absent
-      # secrets produce an unsigned build instead of failing.
-      - run: pnpm -C desktop release
+      # Build installers only (no publish). Signing runs only when a cert is
+      # provided: CSC_IDENTITY_AUTO_DISCOVERY is "false" when CSC_LINK is empty,
+      # so a cert-less runner produces an unsigned build instead of failing.
+      - run: pnpm -C desktop dist
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.CSC_LINK != '' }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.os }}
+          path: |
+            desktop/release/*.dmg
+            desktop/release/*.zip
+            desktop/release/*.exe
+            desktop/release/*.AppImage
+          if-no-files-found: ignore
+
+  release:
+    needs: build
+    # Publish whatever built, even if a platform failed; only on a tag push.
+    if: ${{ always() && startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          TAG="${GITHUB_REF_NAME}"
+          NOTES="Unsigned desktop builds. First launch: macOS — right-click → Open; Windows — More info → Run anyway."
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" artifacts/* --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" artifacts/* \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "AgentGem Desktop $TAG" \
+              --notes "$NOTES"
+          fi
