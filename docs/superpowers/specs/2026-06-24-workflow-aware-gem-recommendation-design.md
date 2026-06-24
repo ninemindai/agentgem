@@ -241,5 +241,77 @@ never edits files or calls tools; it reasons over the JSON brief only.
 
 ## New dependency
 
-`@agentclientprotocol/sdk` (already used by agentback `console-chat`) — added to
-agentgem for the recommender harness.
+`@agentclientprotocol/sdk` (`^0.28`, the version agentback `console-chat` uses) —
+added to agentgem for the recommender harness.
+
+---
+
+## Revisions after design review (2026-06-24)
+
+An independent review against the real agentgem + agentback code found four
+load-bearing issues. These corrections supersede the relevant claims above and
+are the assumptions the implementation plan is built on.
+
+**R1 — Selection is project-namespaced, not a flat name list. (was: MAJOR)**
+`GemSelection` (`buildGem.ts:12-21`) keys project artifacts under
+`projects: Record<projectRoot, ProjectSelection>`, a namespace separate from the
+global top-level arrays. Because v1 scope is exactly one project, the
+recommendation binds to `{ projects: { [root]: ProjectSelection } }` and the
+inventory passed to `buildGem` is `introspectAll(dir, [root])` (the controller's
+existing merge of global + project inventories, `gem.controller.ts:384-388`).
+- `ArtifactUsage` and `RecommendedItem` carry the **project root** they belong to
+  (always the single analyzed root in v1, but explicit and future-proof).
+- **Instructions are not a named checkbox** — `ProjectSelection.includeInstructions`
+  is a boolean (`buildGem.ts:8`). So the recommendation exposes a per-project
+  `includeInstructions: boolean`, NOT an `instructions` entry in `include[]`. The
+  `ArtifactUsage{type:"instructions"}` entry is display-only and drives that flag.
+- **Hook names are the mangled inventory names** (e.g. `PreToolUse · Bash`,
+  `introspect.ts` hook naming). The scanner's hook resolver must emit the EXACT
+  inventory name, matched by event + command basename.
+
+**R2 — Scanner reads FULL transcript files; the head-read byte-cap is dropped.
+(was: BLOCKER)** The `readHead` machinery in `testbedFlavors.ts:202-218` reads
+only the first 64 KB (it exists solely to grab `cwd` near the top). `tool_use`
+blocks are scattered through the whole file, so a front-cap would systematically
+undercount. The scanner instead **streams each `.jsonl` line-by-line over the
+full file**, JSON-parsing each line. The only bound is a generous per-file
+**max-lines safety guard** (runaway protection, e.g. 100k lines → note + stop),
+NOT a byte cap. This revises the "reuse the byte-cap machinery" and "no I/O
+beyond bounded head-reads" claims: the scanner does full-file line I/O, still
+pure-of-side-effects and unit-testable via fixture paths.
+
+**R3 — No SSE in agentgem; v1 returns a single JSON response. (was: BLOCKER)**
+agentgem has no streaming primitive — every route is a decorator (`@post`) over
+`@agentback/openapi` returning one Zod-validated JSON body (`gem.controller.ts`).
+v1 therefore drops SSE: `POST /api/workflow/analyze` is a normal decorator route
+that runs scan → recommend synchronously (bounded by the recommender's ~60s hard
+cap) and returns one `WorkflowAnalyzeResponse` JSON:
+`{ recommendation, selection: GemSelection, signalSummary, degraded }`.
+The UI shows a spinner, then renders the pre-checked selection. Progress
+streaming (SSE on the raw `expressApp`) is an explicit **deferred follow-up**, not
+v1. This removes the "SSE stream for agent progress" from scope.
+
+**R4 — Claude flavor only for v1; codex deferred. (was: MAJOR)** Codex sessions
+use a different envelope (date-partitioned rollout files, `{"type":"session_meta",
+"payload":{cwd}}`, no `Skill` tool, no `mcp__plugin_…` naming —
+`testbedFlavors.ts:115-116, 296-309`). The Claude resolution rules above do not
+transfer. v1 implements the **Claude** scanner only; a codex cwd yields an empty
+signal + a note, and codex transcript analysis joins Hermes in "out of scope
+(follow-up)." `WorkflowSignal.flavor` stays in the type for forward-compat.
+
+**R5 — New cwd→transcript-paths resolver (no existing helper).** `discoverProjects`
+returns only the newest session per folder (for `cwd`), and the Claude folder-name
+encoding is lossy (`testbedFlavors.ts:99`). The scanner needs a new
+`claudeTranscriptsForCwd(dirs, cwd)` that scans **all** `~/.claude/projects/*`
+folders, parses each session's real `cwd`, and returns **every** matching
+`.jsonl` path. This is the "transcript paths" seam — a hand-built path list in
+tests.
+
+**R6 — ACP port: internal deps to replace.** Porting `acp-session.ts` drops/replaces:
+`@agentback/common` `loggers` → agentgem's existing logging (plain `console.*`,
+matching the repo); `buildAugmentedPath` (pnpm-workspace `node_modules/.bin` walk,
+wrong for agentgem) → a minimal PATH (inherit `process.env.PATH`, optionally
+prepend agentgem's own `node_modules/.bin`); `AgentDescriptor` → a local minimal
+type (`{ id; name; command: string[] }`). `permissionMode:'plan'` and the empty
+`mcpServers` array must be passed **explicitly** — `open()` defaults to
+`'default'`, not `'plan'`.
