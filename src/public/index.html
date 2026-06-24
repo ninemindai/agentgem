@@ -2,6 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
+<!-- Same-origin by default. Inline script/style are required by this single-file UI;
+     no eval is used, so 'unsafe-eval' is omitted (this clears Electron's insecure-CSP
+     warning). Google Fonts (stylesheet + font files) and the data: SVG favicon are
+     allowlisted; API calls are same-origin. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; base-uri 'self'; object-src 'none'" />
 <title>agentgem — Gem Builder</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40' fill='none'><path d='M20 2 L36 14 L20 38 L4 14 Z' fill='%239a3324'/><path d='M20 2 L36 14 L20 16 Z' fill='%23bb4a38'/><path d='M20 2 L4 14 L20 16 Z' fill='%237d2a1e'/><path d='M4 14 L20 16 L20 38 Z' fill='%238b2e21'/><path d='M36 14 L20 16 L20 38 Z' fill='%23a8392a'/><path d='M4 14 L36 14 L20 16 Z' fill='%23c8543f'/></svg>" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -578,9 +583,18 @@ function renderGlobalGroup(candidate){
   document.querySelectorAll("#globalGroup input[type=checkbox]").forEach(cb => cb.addEventListener("change", onToggle));
 }
 
+// Prefer the Electron-native folder dialog when running in the desktop app;
+// fall back to the local REST picker in a plain browser. Both return { path }.
+async function pickFolderPath() {
+  if (window.agentgem && window.agentgem.pickFolder) {
+    return await window.agentgem.pickFolder();
+  }
+  return await (await fetch("/api/pick-folder")).json();
+}
+
 // Browse routes the picked folder back through the same confirm block (no prompts).
 async function browseForTestbed(){
-  const pick = await (await fetch("/api/pick-folder")).json();
+  const pick = await pickFolderPath();
   if(!pick.path) return;
   const flavor = (await (await fetch(`/api/testbed/detect?root=${encodeURIComponent(pick.path)}`)).json()).flavor;
   renderCandidate(pick.path, flavor, pick.path.replace(/^.*\//, ""));
@@ -1212,7 +1226,7 @@ document.getElementById("copy").addEventListener("click", () => navigator.clipbo
 document.getElementById("save").addEventListener("click", async () => {
   const status = document.getElementById("archiveStatus");
   status.textContent = "Choose a folder…";
-  const picked = await (await fetch("/api/pick-folder")).json();
+  const picked = await pickFolderPath();
   if (!picked.path) { status.textContent = ""; return; }
   status.textContent = "Saving…";
   const r = await (await fetch("/api/archive", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...buildSelectionBody(), outDir: picked.path }) })).json();

@@ -1,0 +1,42 @@
+appId: ai.ninemind.agentgem
+productName: AgentGem
+copyright: © ninemind.ai
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**
+  - package.json
+extraResources:
+  # Ship the self-contained core bundle (built by scripts/bundle-core.mjs:
+  # index.mjs + public/ + node_modules/{express,cors}) as resources/core, where
+  # resolveCoreEntry loads resources/core/index.mjs at runtime.
+  - from: core-dist
+    to: core
+    filter:
+      - "**/*"
+  # Copy the tray icon into resources/ so resolveIconPath finds it in packaged builds.
+  - from: build/icon.png
+    to: icon.png
+mac:
+  category: public.app-category.developer-tools
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+    - target: zip
+      arch: [x64, arm64]
+win:
+  target:
+    - nsis
+linux:
+  category: Development
+  target:
+    - AppImage
+publish:
+  provider: github
+  owner: ninemindai
+  repo: agentgem

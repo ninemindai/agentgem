@@ -106,6 +106,12 @@ pnpm clean       # or: npm run clean — rm -rf dist *.tsbuildinfo (run before r
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow.
 
+### Desktop app
+
+Prefer a double-click app over the CLI? A native Electron build lives in
+[`desktop/`](desktop/README.md): `pnpm -C desktop dev` to run it, or
+`pnpm -C desktop dist` to package an installer.
+
 ## Layering
 
 Depends on AgentBack: `@agentback/core` (lifecycle), `@agentback/rest` +
