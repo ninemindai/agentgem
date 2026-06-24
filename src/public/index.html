@@ -202,7 +202,7 @@
 </nav>
 <main>
   <section class="pane left">
-    <div class="bar" id="nameBar" style="display:none"><input id="name" type="text" placeholder="gem name" value="gem" style="flex:1" /></div>
+    <div class="bar" id="nameBar" style="display:none"><label for="name" class="d" style="white-space:nowrap">Gem name</label><input id="name" type="text" placeholder="gem name" value="gem" style="flex:1" /></div>
     <div class="bar" id="wsBar" style="display:none">
       <select id="wsSelect" title="open a saved workspace" style="flex:1"><option value="">— no workspace —</option></select>
       <button id="wsNew" class="ghost" title="save the current selection as a new workspace">New workspace…</button>
@@ -388,7 +388,7 @@ async function renderRecents(){
     row.onclick = ()=>{ const p = recents[+row.dataset.i]; if(!p.exists) return; document.getElementById("recentModal").hidden = true; useTestbed(p.path, p.flavor, p.name); };
   });
   list.querySelectorAll("button.anBtn").forEach(btn=>{
-    btn.onclick = (e)=>{ e.preventDefault(); e.stopPropagation(); const p = recents[+btn.dataset.i]; analyzeWorkflow(p.path, p.flavor, p.name); };
+    btn.onclick = (e)=>{ e.preventDefault(); e.stopPropagation(); const p = recents[+btn.dataset.i]; analyzeWorkflow(btn.closest("label"), p.path, p.flavor, p.name); };
   });
 }
 
@@ -415,7 +415,7 @@ async function renderDiscovered(){
     row.onclick = ()=>{ const p = projects[+row.dataset.i]; if(!p.exists) return; document.getElementById("recentModal").hidden = true; useTestbed(p.path, p.flavor, p.path.replace(/^.*\//, "")); };
   });
   list.querySelectorAll("button.anBtn").forEach(btn=>{
-    btn.onclick = (e)=>{ e.preventDefault(); e.stopPropagation(); const p = projects[+btn.dataset.i]; analyzeWorkflow(p.path, p.flavor, p.path.replace(/^.*\//, "")); };
+    btn.onclick = (e)=>{ e.preventDefault(); e.stopPropagation(); const p = projects[+btn.dataset.i]; analyzeWorkflow(btn.closest("label"), p.path, p.flavor, p.path.replace(/^.*\//, "")); };
   });
 }
 
@@ -430,18 +430,54 @@ async function useTestbed(path, flavor, name){
   await load();                               // awaited so callers (e.g. Analyze) can apply once the inventory is rendered
 }
 
-// Recommend a Gem for `path` from its session history, then pre-check the
-// recommended artifacts on the freshly-loaded inventory.
-async function analyzeWorkflow(path, flavor, name){
-  document.getElementById("recentModal").hidden = true;
-  await useTestbed(path, flavor, name);       // adopt + render this project's inventory
-  const banner = ensureAnalyzeBanner();
-  banner.textContent = "Analyzing session history…";
+// Recommend a Gem for `path` from its session history — IN PLACE, without
+// adopting it as the active testbed. The result renders in the modal; switching
+// is an explicit, informed choice (the "Switch & apply" button).
+async function analyzeWorkflow(rowEl, path, flavor, name){
+  const panel = ensureResultPanel(rowEl);
+  panel.innerHTML = `<span class="d">Analyzing session history… (~15s)</span>`;
   let res;
   try {
     res = await (await fetch("/api/workflow/analyze", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({ root: path }) })).json();
-  } catch (e) { banner.textContent = "Analysis failed: " + (e && e.message || e); return; }
-  if (res && res.recommendation) applyRecommendation(path, res); else banner.textContent = "Analysis returned no recommendation.";
+  } catch (e) { panel.innerHTML = `<span class="d">Analysis failed: ${esc(e && e.message || String(e))}</span>`; return; }
+  if (res && res.recommendation) renderResultPanel(panel, path, flavor, name, res);
+  else panel.innerHTML = `<span class="d">Analysis returned no recommendation.</span>`;
+}
+
+// One result panel per row, inserted right after the clicked row label.
+function ensureResultPanel(rowEl){
+  let p = rowEl.nextElementSibling;
+  if (!p || !p.classList.contains("anResult")) {
+    p = document.createElement("div"); p.className = "anResult";
+    p.style.cssText = "margin:-2px 0 8px;padding:8px 10px;border:1px solid var(--line,#3a3a3a);border-radius:8px;background:rgba(127,127,127,.06)";
+    rowEl.parentNode.insertBefore(p, rowEl.nextSibling);
+  }
+  return p;
+}
+
+// Read-only recommendation preview + a button that adopts the project AND applies the selection.
+function renderResultPanel(panel, path, flavor, name, res){
+  const r = res.recommendation;
+  const degraded = res.degraded ? ` <span class="d">(usage frequency — agent unavailable)</span>` : "";
+  const li = (n, t, reason) => `<li><b>${esc(n)}</b> <span class="d">${esc(t)}</span>${reason ? ` — ${esc(reason)}` : ""}</li>`;
+  const items = r.include.map(i => li(i.name, i.type, i.reason)).join("");
+  const instr = r.includeInstructions ? li("CLAUDE.md", "instructions", "loaded every session") : "";
+  const gaps = (res.signalSummary.gaps || []).length ? `<div class="d" style="margin-top:4px">Not in inventory: ${esc(res.signalSummary.gaps.join(", "))}</div>` : "";
+  const empty = (!items && !instr) ? `<div class="d">No project-scoped artifacts to recommend.</div>` : "";
+  panel.innerHTML =
+    `<div><b>${esc(r.name)}</b>${degraded} <span class="d">· ${res.signalSummary.sessionsScanned} session(s)</span></div>`
+    + `<div class="d" style="margin:2px 0 6px">${esc(r.description)}</div>`
+    + (items || instr ? `<ul style="margin:0 0 8px 16px;padding:0">${items}${instr}</ul>` : "")
+    + empty + gaps
+    + `<button type="button" class="ghost anApply" style="margin-top:6px">Switch to this project &amp; apply</button>`;
+  panel.querySelector(".anApply").onclick = (e) => { e.preventDefault(); e.stopPropagation(); switchAndApply(path, flavor, name, res); };
+}
+
+// The explicit switch: adopt the project as the active testbed, then pre-check the recommendation.
+async function switchAndApply(path, flavor, name, res){
+  document.getElementById("recentModal").hidden = true;
+  await useTestbed(path, flavor, name);   // adopt + render this project's inventory
+  applyRecommendation(path, res);         // pre-check the recommended boxes + banner on the inventory pane
 }
 
 function ensureAnalyzeBanner(){
