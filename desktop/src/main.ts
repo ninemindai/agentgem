@@ -97,6 +97,7 @@ async function boot(): Promise<void> {
       buildMenuTemplate({
         platform: process.platform,
         isDev,
+        appName: DESKTOP_NAME,
         onCheckUpdates: () => void autoUpdater.checkForUpdatesAndNotify(),
       }),
     ),
