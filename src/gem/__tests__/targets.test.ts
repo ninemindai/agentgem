@@ -438,7 +438,7 @@ describe("materialize a2a server mode ({ a2aServer: true })", () => {
   it("skill-only gem: no MCP imports, tools = {}, skill body folded into SYSTEM", () => {
     const r = materialize(gem([skill("review", "# Review\n\nDo a careful review."), instr("g", "be terse")]), "a2a", { a2aServer: true });
     const s = r.files["src/server.ts"];
-    expect(s).toContain("generateText");
+    expect(s).toContain("streamText");
     expect(s).not.toContain("createMCPClient");
     expect(s).not.toContain("Experimental_StdioMCPTransport");
     expect(s).toContain("const tools = {}");
@@ -483,5 +483,22 @@ describe("materialize a2a server mode ({ a2aServer: true })", () => {
     const r = materialize(gem([skill("review"), mcp("local"), hook()]), "a2a");
     expect(Object.keys(r.files)).toEqual(["agent-card.json"]);
     expect(r.skipped).toEqual([]);
+  });
+
+  it("server streams: streamText + artifact-update + task lifecycle, served card advertises streaming, cancel wired", () => {
+    const s = materialize(gem([skill("review")]), "a2a", { a2aServer: true }).files["src/server.ts"];
+    expect(s).toContain("streamText");
+    expect(s).toContain("textStream");
+    expect(s).toContain('kind: "artifact-update"');
+    expect(s).toContain('state: "working"');
+    expect(s).toContain('state: "completed"');
+    expect(s).toContain("streaming: true"); // the *served* card overrides the static primitive
+    expect(s).toContain("abortSignal");
+    expect(s).toContain(".abort()"); // cancelTask aborts the in-flight stream
+  });
+
+  it("the static Agent Card primitive still advertises streaming:false (no server promise)", () => {
+    const card = JSON.parse(materialize(gem([skill("review")]), "a2a").files["agent-card.json"]);
+    expect(card.capabilities.streaming).toBe(false);
   });
 });

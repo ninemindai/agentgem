@@ -86,8 +86,12 @@ Vendor-neutral by choice. Card-only mode pulls in **none** of this.
 6. **Skip-reporting only in server mode.** Card-only mode reports nothing. Server mode reports unmappable
    MCP (http/sse non-`headers.*` secrets; url-less non-stdio) and **all** hooks (no A2A concept). stdio
    MCP is **supported** (native `Experimental_StdioMCPTransport`).
-7. **Non-streaming v1.** Single `message` event; Card `capabilities: { streaming: false,
-   pushNotifications: false }`. Streaming (task lifecycle) is v2.
+7. **Streaming (v2, shipped).** The executor uses `streamText` and publishes the A2A task lifecycle
+   (`submitted` → `working` → `artifact-update`* with `append`/`lastChunk` → `completed`); the same
+   executor serves `message/send` (aggregated) and `message/stream` (SSE). `cancelTask` aborts the
+   in-flight stream via a per-task `AbortController`. The *served* card advertises
+   `capabilities.streaming: true`; the *static* card primitive stays `false` (it makes no server
+   promise — see §3.5/`a2aAgentCard`).
 8. **Secret-safe.** `process.env["<NAME>"]` from `secretRefs` (names only). `SECRETS.md` uses a dedicated
    `a2aSecretsMd` (model-access note + plain env listing) — NOT `agentcoreSecretsMd`.
 

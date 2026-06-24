@@ -651,8 +651,10 @@ const a2aPackageJson = (gemName: string): string => JSON.stringify({
   devDependencies: { "@types/express": "^5", "@types/node": "^24", tsx: "^4", typescript: "^5" },
 }, null, 2) + "\n";
 
-// The runnable A2A server: an AI SDK `generateText` tool loop behind the @a2a-js/sdk JSON-RPC handler.
-// Card `url` is rebound from PUBLIC_URL at boot (the static card carries a localhost placeholder).
+// The runnable A2A server: an AI SDK `streamText` tool loop behind the @a2a-js/sdk JSON-RPC handler.
+// Streams incrementally via the A2A task lifecycle (submitted -> working -> artifact-update* ->
+// completed); the same executor serves message/send (aggregated) and message/stream (SSE). The served
+// card advertises streaming: true and rebinds `url` from PUBLIC_URL (the static card carries neither).
 const a2aServerTs = (system: string, clientCodes: string[], usesStdio: boolean): string => {
   const mcpImports = clientCodes.length
     ? `import { createMCPClient } from "@ai-sdk/mcp";\n${usesStdio ? `import { Experimental_StdioMCPTransport } from "@ai-sdk/mcp/mcp-stdio";\n` : ""}`
@@ -664,7 +666,7 @@ for (const sig of ["SIGINT", "SIGTERM"] as const)
   process.on(sig, () => { Promise.allSettled(mcpClients.map((c) => c.close())).finally(() => process.exit(0)); });`
     : `const tools = {};`;
   return `import express from "express";
-import { generateText, stepCountIs } from "ai";
+import { streamText, stepCountIs } from "ai";
 ${mcpImports}import { type AgentCard, AGENT_CARD_PATH } from "@a2a-js/sdk";
 import { type AgentExecutor, type RequestContext, type ExecutionEventBus,
   DefaultRequestHandler, InMemoryTaskStore } from "@a2a-js/sdk/server";
@@ -678,20 +680,41 @@ const SYSTEM = \`${escapeTemplate(system)}\`;
 const port = Number(process.env.PORT ?? 41241);
 const baseUrl = process.env.PUBLIC_URL ?? \`http://localhost:\${port}\`;
 const card: AgentCard = { ...(cardBase as AgentCard), url: \`\${baseUrl}/a2a/jsonrpc\`,
+  capabilities: { ...(cardBase as AgentCard).capabilities, streaming: true },
   additionalInterfaces: [{ url: \`\${baseUrl}/a2a/jsonrpc\`, transport: "JSONRPC" }] };
 
 ${bootBlock}
 
-// Non-streaming v1: run the tool loop and publish a single agent message.
+// Streaming executor: drive the tool loop and publish A2A task-lifecycle + artifact-update events.
 class GemExecutor implements AgentExecutor {
+  private inflight = new Map<string, AbortController>();
   async execute(ctx: RequestContext, bus: ExecutionEventBus): Promise<void> {
-    const text = (ctx.userMessage.parts ?? []).filter((p: any) => p.kind === "text").map((p: any) => p.text).join("\\n");
-    const { text: output } = await generateText({ model: MODEL, system: SYSTEM, tools, stopWhen: stepCountIs(10), prompt: text });
-    bus.publish({ kind: "message", messageId: uuid(), role: "agent",
-      parts: [{ kind: "text", text: output }], contextId: ctx.contextId });
-    bus.finished();
+    const { taskId, contextId, userMessage, task } = ctx;
+    const text = (userMessage.parts ?? []).filter((p: any) => p.kind === "text").map((p: any) => p.text).join("\\n");
+    const ac = new AbortController();
+    this.inflight.set(taskId, ac);
+    if (!task) bus.publish({ kind: "task", id: taskId, contextId, status: { state: "submitted", timestamp: new Date().toISOString() }, history: [userMessage] });
+    bus.publish({ kind: "status-update", taskId, contextId, status: { state: "working", timestamp: new Date().toISOString() }, final: false });
+    const artifactId = uuid();
+    let started = false;
+    try {
+      const result = streamText({ model: MODEL, system: SYSTEM, tools, stopWhen: stepCountIs(10), prompt: text, abortSignal: ac.signal });
+      for await (const delta of result.textStream) {
+        bus.publish({ kind: "artifact-update", taskId, contextId, append: started, lastChunk: false,
+          artifact: { artifactId, name: "response", parts: [{ kind: "text", text: delta }] } });
+        started = true;
+      }
+      bus.publish({ kind: "artifact-update", taskId, contextId, append: true, lastChunk: true, artifact: { artifactId, parts: [] } });
+      bus.publish({ kind: "status-update", taskId, contextId, status: { state: "completed", timestamp: new Date().toISOString() }, final: true });
+    } catch (err) {
+      const state = ac.signal.aborted ? "canceled" : "failed";
+      bus.publish({ kind: "status-update", taskId, contextId, status: { state, timestamp: new Date().toISOString() }, final: true });
+    } finally {
+      this.inflight.delete(taskId);
+      bus.finished();
+    }
   }
-  cancelTask = async (): Promise<void> => {};
+  cancelTask = async (taskId: string): Promise<void> => { this.inflight.get(taskId)?.abort(); };
 }
 
 const requestHandler = new DefaultRequestHandler(card, new InMemoryTaskStore(), new GemExecutor());
