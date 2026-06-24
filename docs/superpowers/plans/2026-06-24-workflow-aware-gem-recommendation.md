@@ -219,8 +219,7 @@ describe("scanWorkflow skills + mcp", () => {
     expect(byName["context7"].confidence).toBe("high");
     expect(byName["qa"].invocations).toBe(1);
     expect(byName["context7"].sessionsUsedIn).toBe(1);
-    // installed-but-unused stays at 0, not dropped:
-    expect(sig.artifacts.find((a) => a.name === "CLAUDE.md")).toBeTruthy();
+    // (instructions are emitted in Task 3 — asserted there, not here)
     // unresolved buckets builtins + unknown servers
     const unresolved = Object.fromEntries(sig.unresolved.map((u) => [u.name, u]));
     expect(unresolved["Bash"].kind).toBe("builtin");
@@ -476,7 +475,7 @@ Replace the artifact-assembly block to also add hooks + instructions and compute
   });
 ```
 
-And in the returned object, use the computed `coOccurrence` and add an empty note:
+In the returned object, **replace** the Task 2 lines `coOccurrence: [],` and `notes,` with the computed values (do NOT add new keys — duplicate object keys are a TS compile error):
 
 ```ts
     coOccurrence,
@@ -1039,7 +1038,8 @@ Add the method inside `class GemController`:
     const { dir, root } = input.body;
     // Inventory for exactly this one project (project-namespaced selection target).
     const inventory = introspectAll(dir, [root]);
-    const project = (inventory.projects ?? []).find((p) => p.root === root);
+    // introspectAll canonicalizes roots via resolveProject (path.resolve); match the same way.
+    const project = (inventory.projects ?? []).find((p) => p.root === resolveProject(root));
     if (!project) throw new Error(`Project '${root}' not found in inventory`);
 
     const dirs = resolveDirs(dir);
