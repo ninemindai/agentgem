@@ -16,6 +16,9 @@ extraResources:
       - "**/*"
       - "!**/__tests__/**"
       - "!**/*.test.*"
+  # Copy the tray icon into resources/ so resolveIconPath finds it in packaged builds.
+  - from: build/icon.png
+    to: icon.png
 mac:
   category: public.app-category.developer-tools
   hardenedRuntime: true

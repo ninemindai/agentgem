@@ -1,5 +1,6 @@
 import { app, BrowserWindow, Menu, dialog, ipcMain } from "electron";
 import { join } from "node:path";
+import { existsSync } from "node:fs";
 import { autoUpdater } from "electron-updater";
 import type { Tray } from "electron";
 import { startEmbeddedServer, type EmbeddedServer } from "./server.js";
@@ -10,6 +11,16 @@ import { createTray } from "./tray.js";
 import { DESKTOP_NAME } from "./version.js";
 
 const isDev = process.env.AGENTGEM_DEV === "1";
+
+// Packaged: extraResources puts the icon at resources/icon.png. Dev: it sits
+// next to the build dir two levels up from desktop/dist.
+function resolveIconPath(): string {
+  const candidates = [
+    join(process.resourcesPath, "icon.png"),
+    join(__dirname, "..", "build", "icon.png"),
+  ];
+  return candidates.find((p) => existsSync(p)) ?? candidates[candidates.length - 1];
+}
 let win: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let server: EmbeddedServer | null = null;
@@ -77,7 +88,7 @@ async function boot(): Promise<void> {
     ),
   );
 
-  const iconPath = join(__dirname, "..", "build", "icon.png");
+  const iconPath = resolveIconPath();
   tray = createTray({ onOpen: showWindow, onQuit: () => app.quit(), iconPath });
 
   if (!isDev) setupUpdates();
@@ -88,16 +99,23 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on("second-instance", showWindow);
-  app.whenReady().then(boot);
+  app.whenReady().then(boot).catch((err) => {
+    dialog.showErrorBox("AgentGem failed to start", String((err as Error)?.message ?? err));
+    app.exit(1);
+  });
   app.on("activate", () => {
     if (win) showWindow();
   });
   app.on("window-all-closed", () => {
     // Stay alive in the tray; do not quit on window close.
   });
-  app.on("before-quit", async () => {
+  app.on("before-quit", (e) => {
+    if (quitting) return;              // second pass after cleanup — let it exit
+    e.preventDefault();
     quitting = true;
     tray?.destroy();
-    if (server) await server.stop();
+    const finish = () => app.exit(0);
+    if (server) server.stop().then(finish, finish);
+    else finish();
   });
 }
