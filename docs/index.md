@@ -13,6 +13,10 @@ OpenAPI 3.1 document — so the web page and your local agent call exactly the s
 
 - **[Getting started](getting-started.md)** — install, run the local server, and build
   your first Gem.
+- **[Desktop app](desktop.md)** — the native macOS/Windows/Linux build, in addition to
+  the `npx` CLI.
+- **[Analyze](analyze.md)** — scan your agent's session history and get workflow-aware
+  Gem recommendations.
 - **[Concepts](concepts.md)** — what a Gem is, the archive format, the redaction trust
   boundary, and the AgentBack one-contract model.
 
@@ -30,6 +34,8 @@ OpenAPI 3.1 document — so the web page and your local agent call exactly the s
 
 - **[Targets & deploy](targets.md)** — the deploy targets (Eve, Flue, OpenAI Sandbox,
   Bedrock AgentCore) and the publish / undeploy lifecycle.
+- **[A2A](a2a.md)** — export a Gem as an A2A Agent Card or a runnable agent-to-agent
+  server so other agents can discover and call it.
 - **[Registry](registry.md)** — the GitHub-backed Gem registry: publish, resolve, merge,
   and install composable Gems.
 - **[Testbed & run](testbed-and-run.md)** — install a Gem into a local testbed; run or

@@ -26,6 +26,8 @@ const SITE = `https://${DOMAIN}`;
 const DOC_PAGES = [
   'docs/index.md',
   'docs/getting-started.md',
+  'docs/desktop.md',
+  'docs/analyze.md',
   'docs/concepts.md',
   'docs/architecture.md',
   'docs/pipeline.md',
@@ -33,6 +35,7 @@ const DOC_PAGES = [
   'docs/redaction.md',
   'docs/api-reference.md',
   'docs/targets.md',
+  'docs/a2a.md',
   'docs/registry.md',
   'docs/testbed-and-run.md',
   'docs/development.md',
@@ -45,6 +48,8 @@ const NAV_SECTIONS = [
     items: [
       ['docs/index.md', 'Overview'],
       ['docs/getting-started.md', 'Getting started'],
+      ['docs/desktop.md', 'Desktop app'],
+      ['docs/analyze.md', 'Analyze'],
       ['docs/concepts.md', 'Concepts'],
     ],
   },
@@ -62,6 +67,7 @@ const NAV_SECTIONS = [
     title: 'Distribution',
     items: [
       ['docs/targets.md', 'Targets & deploy'],
+      ['docs/a2a.md', 'A2A'],
       ['docs/registry.md', 'Registry'],
       ['docs/testbed-and-run.md', 'Testbed & run'],
     ],

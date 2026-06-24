@@ -13,10 +13,15 @@ reads the same Gem, you select where it goes without rebuilding from your raw co
 | [**OpenAI Sandbox**](https://github.com/openai/openai-agents-js) | Code-gen | A SandboxAgent project with native stdio MCP, reusing the `compose` hook. |
 | [**Bedrock AgentCore**](https://aws.amazon.com/bedrock/agentcore/) | Managed backend | Publishes the Gem to AWS Bedrock AgentCore.                            |
 | [**Claude Managed Agents**](https://platform.claude.com/docs/en/managed-agents/overview) | Managed backend | Publishes the Gem as a Claude Managed Agent via the Anthropic API (agent + skills + managed sandbox). |
+| [**A2A**](a2a.md)                                | Code-gen / export   | An [A2A](a2a.md) Agent Card, or a runnable agent-to-agent server (AI SDK v7) other agents can discover and call. |
 
 All code-gen targets share a common `compose` step, so adding a new target mostly means
 describing how it materializes a Gem — the introspection, selection, and redaction in
 front of it are unchanged.
+
+The **A2A** target is a bit different: rather than deploying to a backend, it exports
+your Gem as a discoverable Agent Card or a self-contained server for the
+[agent-to-agent protocol](a2a.md).
 
 ## The deploy lifecycle
 

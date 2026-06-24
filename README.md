@@ -37,9 +37,16 @@ call exactly the same thing.
   re-reading raw config.
 - **Composition** — the manifest/lock split lets small, focused Gems be reconciled into
   larger agents with a single re-resolved lock, not a pile of overlapping config.
+- **Workflow-aware recommendations** — [Analyze](docs/analyze.md) scans your agent's
+  session history to see which skills, MCP servers, and hooks you actually use, and
+  suggests ready-to-build Gems grouped by recurring workflow.
 - **Deploy targets** — Eve and OpenAI Sandbox (code-gen), Flue (materialize, deployable to
   Cloudflare), and Bedrock AgentCore (managed backend); code-gen targets share a common
   `compose` step.
+- **Agent-to-agent (A2A)** — export a Gem as an [A2A](docs/a2a.md) Agent Card or a
+  runnable A2A server so other agents can discover and call it.
+- **A native desktop app** — a [macOS/Windows/Linux build](docs/desktop.md) alongside the
+  `npx` CLI, hosting the same local server in its own window.
 - **A GitHub-backed registry** — publish, resolve, merge, and install composable Gems over
   the same archive format.
 - **An agent-native path** — every operation is also an MCP tool, so your local agent can
@@ -108,9 +115,17 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow.
 
 ### Desktop app
 
-Prefer a double-click app over the CLI? A native Electron build lives in
-[`desktop/`](desktop/README.md): `pnpm -C desktop dev` to run it, or
-`pnpm -C desktop dist` to package an installer.
+Prefer a double-click app over the CLI? AgentGem ships a native **desktop build**
+for macOS, Windows, and Linux — download it from
+[Releases](https://github.com/ninemindai/agentgem/releases) (a `desktop-v*` build).
+It hosts the same local server in its own window, adds a native folder picker, app
+menu, and system tray, and never sends secrets off your machine.
+
+> The builds are currently **unsigned**: on macOS right-click → **Open**, on Windows
+> choose **More info → Run anyway** the first time.
+
+To run or package it from source, see the [desktop guide](docs/desktop.md) — in
+short, `pnpm -C desktop dev` to run, `pnpm -C desktop dist` to build installers.
 
 ## Layering
 
@@ -122,8 +137,11 @@ API, and the MCP endpoint are three boundaries over one set of Zod contracts —
 
 For deeper reference, see [`docs/`](docs/index.md):
 [getting started](docs/getting-started.md) ·
+[desktop app](docs/desktop.md) ·
+[analyze](docs/analyze.md) ·
 [concepts](docs/concepts.md) ·
 [targets & deploy](docs/targets.md) ·
+[A2A](docs/a2a.md) ·
 [registry](docs/registry.md).
 
 ## License
