@@ -1,0 +1,27 @@
+{
+  "name": "agentgem-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Native desktop host for AgentGem",
+  "author": "ninemind.ai",
+  "main": "dist/main.js",
+  "scripts": {
+    "build:core": "pnpm -C .. build",
+    "build": "tsc -p .",
+    "dev": "pnpm build:core && pnpm build && cross-env AGENTGEM_DEV=1 electron dist/main.js",
+    "dist": "pnpm build:core && pnpm build && electron-builder",
+    "release": "pnpm build:core && pnpm build && electron-builder --publish always",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "cross-env": "^7.0.3",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  }
+}
