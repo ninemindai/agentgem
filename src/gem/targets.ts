@@ -636,11 +636,13 @@ const a2aMcpClient = (s: McpServerArtifact): A2AClient => {
 const a2aSecretsMd = (secrets: SecretRequirement[]): string => {
   const model = `## Model access\n\nThe agent calls \`${A2A_MODEL}\` via the AI SDK. Set \`AI_GATEWAY_API_KEY\` ` +
     `(Vercel AI Gateway) or a direct provider key (e.g. \`ANTHROPIC_API_KEY\`).\n`;
+  const access = `## Access control (optional)\n\nSet \`A2A_API_KEY\` to require \`Authorization: Bearer <key>\` on the ` +
+    `agent's JSON-RPC/REST routes. Agent Card discovery (the \`.well-known\` endpoint) stays open.\n`;
   const mcp = secrets.length
     ? `## MCP credentials\n\nSet these before \`npm start\` (e.g. a \`.env\` file):\n\n` +
       `${secrets.map((s) => `- \`${s.name}\` (for ${s.artifact} at ${s.location})`).join("\n")}\n`
     : `## MCP credentials\n\nThis agent declares no MCP secrets.\n`;
-  return `# Secrets\n\n${model}\n${mcp}`;
+  return `# Secrets\n\n${model}\n${access}\n${mcp}`;
 };
 
 const a2aPackageJson = (gemName: string): string => JSON.stringify({
@@ -669,8 +671,8 @@ for (const sig of ["SIGINT", "SIGTERM"] as const)
 import { streamText, stepCountIs } from "ai";
 ${mcpImports}import { type AgentCard, AGENT_CARD_PATH } from "@a2a-js/sdk";
 import { type AgentExecutor, type RequestContext, type ExecutionEventBus,
-  DefaultRequestHandler, InMemoryTaskStore } from "@a2a-js/sdk/server";
-import { agentCardHandler, jsonRpcHandler, UserBuilder } from "@a2a-js/sdk/server/express";
+  DefaultRequestHandler, InMemoryTaskStore, InMemoryPushNotificationStore, DefaultPushNotificationSender } from "@a2a-js/sdk/server";
+import { agentCardHandler, jsonRpcHandler, restHandler, UserBuilder } from "@a2a-js/sdk/server/express";
 import { v4 as uuid } from "uuid";
 import cardBase from "../agent-card.json" with { type: "json" };
 
@@ -679,9 +681,14 @@ const SYSTEM = \`${escapeTemplate(system)}\`;
 
 const port = Number(process.env.PORT ?? 41241);
 const baseUrl = process.env.PUBLIC_URL ?? \`http://localhost:\${port}\`;
+const API_KEY = process.env.A2A_API_KEY; // when set, require \`Authorization: Bearer <key>\` on the RPC/REST routes
 const card: AgentCard = { ...(cardBase as AgentCard), url: \`\${baseUrl}/a2a/jsonrpc\`,
-  capabilities: { ...(cardBase as AgentCard).capabilities, streaming: true },
-  additionalInterfaces: [{ url: \`\${baseUrl}/a2a/jsonrpc\`, transport: "JSONRPC" }] };
+  capabilities: { ...(cardBase as AgentCard).capabilities, streaming: true, pushNotifications: true },
+  additionalInterfaces: [
+    { url: \`\${baseUrl}/a2a/jsonrpc\`, transport: "JSONRPC" },
+    { url: \`\${baseUrl}/a2a/rest\`, transport: "HTTP+JSON" },
+  ],
+  ...(API_KEY ? { securitySchemes: { bearer: { type: "http", scheme: "bearer" } }, security: [{ bearer: [] }] } : {}) };
 
 ${bootBlock}
 
@@ -717,10 +724,19 @@ class GemExecutor implements AgentExecutor {
   cancelTask = async (taskId: string): Promise<void> => { this.inflight.get(taskId)?.abort(); };
 }
 
-const requestHandler = new DefaultRequestHandler(card, new InMemoryTaskStore(), new GemExecutor());
+const pushStore = new InMemoryPushNotificationStore();
+const requestHandler = new DefaultRequestHandler(card, new InMemoryTaskStore(), new GemExecutor(),
+  undefined, pushStore, new DefaultPushNotificationSender(pushStore));
 const app = express();
+// Discovery (the /.well-known Agent Card) stays open; gate only the invocation routes when A2A_API_KEY is set.
+const requireAuth: express.RequestHandler = (req, res, next) => {
+  if (!API_KEY || req.headers.authorization === \`Bearer \${API_KEY}\`) return next();
+  res.status(401).json({ error: "unauthorized" });
+};
+app.use("/a2a", requireAuth);
 app.use(\`/\${AGENT_CARD_PATH}\`, agentCardHandler({ agentCardProvider: requestHandler }));
 app.use("/a2a/jsonrpc", jsonRpcHandler({ requestHandler, userBuilder: UserBuilder.noAuthentication }));
+app.use("/a2a/rest", restHandler({ requestHandler, userBuilder: UserBuilder.noAuthentication }));
 app.listen(port, () => console.log(\`A2A agent "\${card.name}" listening on :\${port}\`));
 `;
 };

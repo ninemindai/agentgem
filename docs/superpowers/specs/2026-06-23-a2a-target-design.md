@@ -295,13 +295,23 @@ a2a: { id: "a2a", label: "A2A", skill: () => ({}), instructions: () => ({}), mcp
 - `SECRETS.md` has the model-access note, lists env-var names, and contains **no** `agentcore`/`arn:`
   strings (guards the B1 fix).
 
-## 7. Out of scope (v1)
+## 7. Shipped beyond v1 / out of scope
 
+**Shipped (server mode):** streaming (§3.7); **HTTP+JSON (REST)** interface via `restHandler` at
+`/a2a/rest` (advertised in `additionalInterfaces`); **push notifications** via
+`InMemoryPushNotificationStore` + `DefaultPushNotificationSender` (`capabilities.pushNotifications:
+true`); **optional bearer auth** — an env-gated (`A2A_API_KEY`) Express middleware on `/a2a/*` that
+leaves `.well-known` discovery open, with the served card declaring `securitySchemes.bearer` +
+`security` only when keyed.
+
+**Still out of scope:**
 - NATS / any transport binding (AgentBack, not packaging).
-- Streaming / task-lifecycle events, `artifact-update`, multi-turn history (v2).
-- A façade adapter that forwards to an already-deployed eve/flue agent (the "Option C" variant) — could
-  layer on later as a second server flavor; v1 server mode is self-contained.
-- A2A client generation, push notifications, auth beyond `noAuthentication`, gRPC/HTTP+JSON.
+- **gRPC** interface (`grpcService`/`A2AService`) — needs `@grpc/grpc-js` + proto; disproportionate
+  weight for a generated scaffold, and gRPC A2A clients are niche.
+- The **"Option C" façade** that forwards to an already-deployed eve/flue agent instead of a fresh
+  runtime — a separate server flavor, parked.
+- A2A client generation; multi-turn task history; SDK-native `User`-based auth (the middleware is
+  deliberately transport-agnostic and independent of the SDK's auth internals).
 
 ## 8. Notes / residual risk
 

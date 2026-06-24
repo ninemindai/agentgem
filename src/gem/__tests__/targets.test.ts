@@ -501,4 +501,28 @@ describe("materialize a2a server mode ({ a2aServer: true })", () => {
     const card = JSON.parse(materialize(gem([skill("review")]), "a2a").files["agent-card.json"]);
     expect(card.capabilities.streaming).toBe(false);
   });
+
+  it("server exposes REST (HTTP+JSON) alongside JSON-RPC", () => {
+    const s = materialize(gem([skill("review")]), "a2a", { a2aServer: true }).files["src/server.ts"];
+    expect(s).toContain("restHandler");
+    expect(s).toContain('"/a2a/rest"');
+    expect(s).toContain('transport: "HTTP+JSON"');
+  });
+
+  it("server enables push notifications (store + sender + card capability)", () => {
+    const s = materialize(gem([skill("review")]), "a2a", { a2aServer: true }).files["src/server.ts"];
+    expect(s).toContain("InMemoryPushNotificationStore");
+    expect(s).toContain("DefaultPushNotificationSender");
+    expect(s).toContain("pushNotifications: true");
+  });
+
+  it("server supports optional bearer auth gated by A2A_API_KEY (discovery stays open)", () => {
+    const s = materialize(gem([skill("review")]), "a2a", { a2aServer: true }).files["src/server.ts"];
+    expect(s).toContain("A2A_API_KEY");
+    expect(s).toContain("401");
+    expect(s).toContain('scheme: "bearer"');
+    expect(s).toContain('app.use("/a2a"'); // gate invocation routes, not the .well-known card
+    const md = materialize(gem([skill("review")]), "a2a", { a2aServer: true }).files["SECRETS.md"];
+    expect(md).toContain("A2A_API_KEY");
+  });
 });
