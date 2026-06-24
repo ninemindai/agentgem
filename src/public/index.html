@@ -381,10 +381,14 @@ async function renderRecents(){
     const fl = esc((FLAVORS[p.flavor]||FLAVORS.claude).label);
     const when = p.lastUsed ? esc(p.lastUsed.slice(0,10)) : "";
     const stale = p.exists ? "" : ` <span class="d" title="path no longer exists">· missing</span>`;
-    return `<label class="row recent" data-i="${i}"${p.exists?"":' style="opacity:.5"'}><span><b>${short}</b> <span class="src">${fl}</span> <span class="d">${esc(p.path)}</span>${stale}</span><span class="d" style="margin-left:auto">${when}</span></label>`;
+    const an = p.exists ? `<button type="button" class="ghost anBtn" data-i="${i}" title="recommend a Gem from this project's session history">Analyze</button>` : "";
+    return `<label class="row recent" data-i="${i}"${p.exists?"":' style="opacity:.5"'}><span><b>${short}</b> <span class="src">${fl}</span> <span class="d">${esc(p.path)}</span>${stale}</span><span class="d" style="margin-left:auto">${when}</span>${an}</label>`;
   }).join("");
   list.querySelectorAll("label.recent").forEach(row=>{
     row.onclick = ()=>{ const p = recents[+row.dataset.i]; if(!p.exists) return; document.getElementById("recentModal").hidden = true; useTestbed(p.path, p.flavor, p.name); };
+  });
+  list.querySelectorAll("button.anBtn").forEach(btn=>{
+    btn.onclick = (e)=>{ e.preventDefault(); e.stopPropagation(); const p = recents[+btn.dataset.i]; analyzeWorkflow(p.path, p.flavor, p.name); };
   });
 }
 
@@ -404,10 +408,14 @@ async function renderDiscovered(){
     const fl = esc((FLAVORS[p.flavor]||FLAVORS.claude).label);
     const when = p.lastUsed ? esc(p.lastUsed.slice(0,10)) : "";
     const stale = p.exists ? "" : ` <span class="d" title="path no longer exists">· missing</span>`;
-    return `<label class="row disc" data-i="${i}"${p.exists?"":' style="opacity:.5"'}><span><b>${short}</b> <span class="src">${fl}</span> <span class="d">${esc(p.path)}</span>${stale}</span><span class="d" style="margin-left:auto">${when}</span></label>`;
+    const an = p.exists ? `<button type="button" class="ghost anBtn" data-i="${i}" title="recommend a Gem from this project's session history">Analyze</button>` : "";
+    return `<label class="row disc" data-i="${i}"${p.exists?"":' style="opacity:.5"'}><span><b>${short}</b> <span class="src">${fl}</span> <span class="d">${esc(p.path)}</span>${stale}</span><span class="d" style="margin-left:auto">${when}</span>${an}</label>`;
   }).join("");
   list.querySelectorAll("label.disc").forEach(row=>{
     row.onclick = ()=>{ const p = projects[+row.dataset.i]; if(!p.exists) return; document.getElementById("recentModal").hidden = true; useTestbed(p.path, p.flavor, p.path.replace(/^.*\//, "")); };
+  });
+  list.querySelectorAll("button.anBtn").forEach(btn=>{
+    btn.onclick = (e)=>{ e.preventDefault(); e.stopPropagation(); const p = projects[+btn.dataset.i]; analyzeWorkflow(p.path, p.flavor, p.path.replace(/^.*\//, "")); };
   });
 }
 
@@ -419,7 +427,47 @@ async function useTestbed(path, flavor, name){
   setTestbed(path);
   nameEdited = false;                         // picking a project is explicit — default the gem name to it
   document.getElementById("name").value = name;
-  load();
+  await load();                               // awaited so callers (e.g. Analyze) can apply once the inventory is rendered
+}
+
+// Recommend a Gem for `path` from its session history, then pre-check the
+// recommended artifacts on the freshly-loaded inventory.
+async function analyzeWorkflow(path, flavor, name){
+  document.getElementById("recentModal").hidden = true;
+  await useTestbed(path, flavor, name);       // adopt + render this project's inventory
+  const banner = ensureAnalyzeBanner();
+  banner.textContent = "Analyzing session history…";
+  let res;
+  try {
+    res = await (await fetch("/api/workflow/analyze", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({ root: path }) })).json();
+  } catch (e) { banner.textContent = "Analysis failed: " + (e && e.message || e); return; }
+  if (res && res.recommendation) applyRecommendation(path, res); else banner.textContent = "Analysis returned no recommendation.";
+}
+
+function ensureAnalyzeBanner(){
+  let b = document.getElementById("analyzeBanner");
+  if (!b) { b = document.createElement("div"); b.id = "analyzeBanner"; b.className = "note"; b.style.margin = "0 0 12px";
+    const inv = document.getElementById("inventory"); inv.insertBefore(b, inv.firstChild); }
+  return b;
+}
+
+// Mutate the shared `sel` model (same shape onToggle maintains), then re-sync
+// the checkboxes and the build preview.
+function applyRecommendation(root, res){
+  const ps = (res.selection.projects || {})[root] || {};
+  const ts = projSel(root);
+  (ps.skills || []).forEach(n => ts.skills.add(n));
+  (ps.mcpServers || []).forEach(n => ts.mcpServers.add(n));
+  (ps.hooks || []).forEach(n => ts.hooks.add(n));
+  if (ps.includeInstructions) ts.includeInstructions = true;
+  restoreChecks(); refresh();
+
+  const r = res.recommendation;
+  const reasons = r.include.map(i => `${esc(i.name)}: ${esc(i.reason)}`).join(" · ");
+  const degraded = res.degraded ? ' <span class="d">(from usage frequency — agent unavailable)</span>' : "";
+  const gaps = (res.signalSummary.gaps || []).length ? `<br><span class="d">Not in inventory: ${esc(res.signalSummary.gaps.join(", "))}</span>` : "";
+  const span = res.signalSummary.sessionsScanned;
+  ensureAnalyzeBanner().innerHTML = `<b>${esc(r.name)}</b>${degraded} — ${esc(r.description)} <span class="d">(${span} session(s))</span><br>${reasons}${gaps}`;
 }
 
 // Browse routes the picked folder back through the same confirm block (no prompts).
