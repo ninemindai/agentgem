@@ -4,6 +4,10 @@
   "private": true,
   "description": "Native desktop host for AgentGem",
   "author": "ninemind.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ninemindai/agentgem.git"
+  },
   "main": "dist/main.js",
   "scripts": {
     "build:core": "pnpm -C .. build",

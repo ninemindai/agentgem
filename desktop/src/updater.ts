@@ -10,6 +10,17 @@ export function updaterFeed(repoUrl: string): GithubFeed {
   return { provider: "github", owner: m[1], repo: m[2] };
 }
 
+// Pull the repo URL out of a package.json `repository` field, which may be a
+// bare string ("owner/repo" or a full URL) or the object form { url }.
+export function repoUrlFromPackageJson(pkg: {
+  repository?: string | { url?: string };
+}): string {
+  const repo = pkg.repository;
+  const url = typeof repo === "string" ? repo : repo?.url;
+  if (!url) throw new Error("package.json has no repository url");
+  return url;
+}
+
 interface MinimalUpdater {
   autoDownload: boolean;
   on(event: string, cb: (...args: any[]) => void): void;

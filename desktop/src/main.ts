@@ -1,12 +1,12 @@
 import { app, BrowserWindow, Menu, dialog, ipcMain } from "electron";
 import { join } from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { autoUpdater } from "electron-updater";
 import type { Tray } from "electron";
 import { startEmbeddedServer, type EmbeddedServer } from "./server.js";
 import { PICK_FOLDER, UPDATE_EVENT, pickFolderResult } from "./ipc.js";
 import { buildMenuTemplate } from "./menu.js";
-import { configureUpdater } from "./updater.js";
+import { configureUpdater, updaterFeed, repoUrlFromPackageJson } from "./updater.js";
 import { createTray } from "./tray.js";
 import { DESKTOP_NAME } from "./version.js";
 
@@ -56,6 +56,15 @@ async function createWindow(url: string): Promise<void> {
 
 function setupUpdates(): void {
   const notify = (status: string) => win?.webContents.send(UPDATE_EVENT, { status });
+  // Set the update feed explicitly from package.json's repository field. If that
+  // fails (missing/odd repository), fall back to the publish config baked into
+  // app-update.yml by electron-builder at package time.
+  try {
+    const pkg = JSON.parse(readFileSync(join(__dirname, "..", "package.json"), "utf8"));
+    autoUpdater.setFeedURL(updaterFeed(repoUrlFromPackageJson(pkg)));
+  } catch {
+    /* keep the baked-in app-update.yml feed */
+  }
   configureUpdater(autoUpdater, {
     onAvailable: () => notify("available"),
     onDownloaded: () => notify("downloaded"),
