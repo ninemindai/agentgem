@@ -422,9 +422,18 @@ async function useTestbed(path, flavor, name){
   load();
 }
 
+// Prefer the Electron-native folder dialog when running in the desktop app;
+// fall back to the local REST picker in a plain browser. Both return { path }.
+async function pickFolderPath() {
+  if (window.agentgem && window.agentgem.pickFolder) {
+    return await window.agentgem.pickFolder();
+  }
+  return await (await fetch("/api/pick-folder")).json();
+}
+
 // Browse routes the picked folder back through the same confirm block (no prompts).
 async function browseForTestbed(){
-  const pick = await (await fetch("/api/pick-folder")).json();
+  const pick = await pickFolderPath();
   if(!pick.path) return;
   const flavor = (await (await fetch(`/api/testbed/detect?root=${encodeURIComponent(pick.path)}`)).json()).flavor;
   renderCandidate(pick.path, flavor, pick.path.replace(/^.*\//, ""));
@@ -1049,7 +1058,7 @@ document.getElementById("copy").addEventListener("click", () => navigator.clipbo
 document.getElementById("save").addEventListener("click", async () => {
   const status = document.getElementById("archiveStatus");
   status.textContent = "Choose a folder…";
-  const picked = await (await fetch("/api/pick-folder")).json();
+  const picked = await pickFolderPath();
   if (!picked.path) { status.textContent = ""; return; }
   status.textContent = "Saving…";
   const r = await (await fetch("/api/archive", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...buildSelectionBody(), outDir: picked.path }) })).json();
