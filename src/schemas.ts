@@ -283,6 +283,7 @@ const RecommendedItemSchema = z.object({
   type: z.enum(["skill", "mcp_server", "instructions", "hook"]),
   name: z.string(),
   reason: z.string(),
+  root: z.string().nullable(),   // project root, or null for a global/plugin artifact
 });
 // One candidate Gem, carrying its own ready-to-POST GemSelection.
 const GemCandidateSchema = z.object({

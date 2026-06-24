@@ -7,11 +7,12 @@
 // degrades to a deterministic frequency-based recommendation. Never throws.
 import { spawn } from "node:child_process";
 import { Readable, Writable } from "node:stream";
-import type { ArtifactType, ProjectInventory } from "./types.js";
-import type { WorkflowSignal } from "./workflowScan.js";
+import type { ArtifactType } from "./types.js";
+import type { WorkflowSignal, ScanInventory } from "./workflowScan.js";
 import type { GemSelection, ProjectSelection } from "./buildGem.js";
 
-export interface RecommendedItem { type: ArtifactType; name: string; reason: string }
+// `root` is the namespace: a project root path, or null for a global/plugin artifact.
+export interface RecommendedItem { type: ArtifactType; name: string; reason: string; root: string | null }
 
 // One recommended Gem = one coherent recurring flow. A project may yield several
 // (e.g. diagram generation vs web scraping).
@@ -63,7 +64,7 @@ export function deterministicAnalysis(signal: WorkflowSignal): WorkflowAnalysis 
     if (a.type === "instructions") { if (a.invocations > 0) includeInstructions = true; continue; }
     if (!SELECTABLE.includes(a.type)) continue;
     if (a.invocations > 0 && a.confidence === "high")
-      include.push({ type: a.type, name: a.name, reason: `${a.invocations} use(s) across ${a.sessionsUsedIn} session(s)` });
+      include.push({ type: a.type, name: a.name, reason: `${a.invocations} use(s) across ${a.sessionsUsedIn} session(s)`, root: a.root });
   }
   const gaps = signal.unresolved.filter((u) => u.kind !== "builtin").map((u) => u.name);
   const candidates: GemCandidate[] = include.length ? [{
@@ -77,17 +78,31 @@ export function deterministicAnalysis(signal: WorkflowSignal): WorkflowAnalysis 
   return { candidates, gaps };
 }
 
-/** Map a validated candidate to a project-namespaced GemSelection. */
+/**
+ * Map a validated candidate to a GemSelection. Global artifacts (root===null)
+ * go top-level; project artifacts go under projects[root]; instructions are a
+ * project boolean. buildGem resolves both namespaces from introspectAll.
+ */
 export function recommendationToSelection(c: GemCandidate): GemSelection {
-  const ps: ProjectSelection = {};
-  const skills = c.include.filter((i) => i.type === "skill").map((i) => i.name);
-  const mcpServers = c.include.filter((i) => i.type === "mcp_server").map((i) => i.name);
-  const hooks = c.include.filter((i) => i.type === "hook").map((i) => i.name);
-  if (skills.length) ps.skills = skills;
-  if (mcpServers.length) ps.mcpServers = mcpServers;
-  if (hooks.length) ps.hooks = hooks;
-  if (c.includeInstructions) ps.includeInstructions = true;
-  return { projects: { [c.root]: ps } };
+  const sel: Exclude<GemSelection, { all: true }> = {};
+  const globalNames = (t: ArtifactType) => c.include.filter((i) => i.type === t && i.root === null).map((i) => i.name);
+  const gSkills = globalNames("skill"), gMcp = globalNames("mcp_server"), gHooks = globalNames("hook");
+  if (gSkills.length) sel.skills = gSkills;
+  if (gMcp.length) sel.mcpServers = gMcp;
+  if (gHooks.length) sel.hooks = gHooks;
+
+  const projects: Record<string, ProjectSelection> = {};
+  const ensure = (root: string) => (projects[root] ??= {});
+  for (const i of c.include) {
+    if (i.root === null) continue;
+    const ps = ensure(i.root);
+    if (i.type === "skill") (ps.skills ??= []).push(i.name);
+    else if (i.type === "mcp_server") (ps.mcpServers ??= []).push(i.name);
+    else if (i.type === "hook") (ps.hooks ??= []).push(i.name);
+  }
+  if (c.includeInstructions) ensure(c.root).includeInstructions = true;
+  if (Object.keys(projects).length) sel.projects = projects;
+  return sel;
 }
 
 // Pull the first {...} block out of an agent message that may wrap JSON in prose/fences.
@@ -104,17 +119,27 @@ function extractJson(text: string): string {
  * structural failure or zero valid candidates, fall back to the deterministic
  * analysis. The inventory is authoritative.
  */
-export function validateAnalysis(raw: unknown, inventory: ProjectInventory, signal: WorkflowSignal): WorkflowAnalysis {
+export function validateAnalysis(raw: unknown, inv: ScanInventory, signal: WorkflowSignal): WorkflowAnalysis {
   const fallback = deterministicAnalysis(signal);
   let obj: any = raw;
   if (typeof raw === "string") { try { obj = JSON.parse(extractJson(raw)); } catch { return fallback; } }
   if (!obj || typeof obj !== "object" || !Array.isArray(obj.candidates)) return fallback;
 
-  const known: Record<string, Set<string>> = {
-    skill: new Set(inventory.skills.map((s) => s.name)),
-    mcp_server: new Set(inventory.mcpServers.map((m) => m.name)),
-    hook: new Set(inventory.hooks.map((h) => h.name)),
+  const g = inv.global ?? { skills: [], mcpServers: [], hooks: [] };
+  // Resolve a name to its namespace: project root if present there, else global
+  // (null), else undefined (hallucinated). Project is preferred on collision.
+  const proj: Record<string, Set<string>> = {
+    skill: new Set(inv.project.skills.map((s) => s.name)),
+    mcp_server: new Set(inv.project.mcpServers.map((m) => m.name)),
+    hook: new Set(inv.project.hooks.map((h) => h.name)),
   };
+  const glob: Record<string, Set<string>> = {
+    skill: new Set(g.skills.map((s) => s.name)),
+    mcp_server: new Set(g.mcpServers.map((m) => m.name)),
+    hook: new Set(g.hooks.map((h) => h.name)),
+  };
+  const resolveRoot = (type: string, name: string): string | null | undefined =>
+    proj[type]?.has(name) ? inv.project.root : glob[type]?.has(name) ? null : undefined;
 
   const candidates: GemCandidate[] = [];
   for (const c of obj.candidates) {
@@ -122,8 +147,9 @@ export function validateAnalysis(raw: unknown, inventory: ProjectInventory, sign
     const include: RecommendedItem[] = [];
     for (const it of c.include) {
       if (!it || !SELECTABLE.includes(it.type) || typeof it.name !== "string") continue;
-      if (!known[it.type]?.has(it.name)) { console.error(`workflow: dropping hallucinated ${it.type} '${it.name}'`); continue; }
-      include.push({ type: it.type, name: it.name, reason: typeof it.reason === "string" ? it.reason : "" });
+      const root = resolveRoot(it.type, it.name);
+      if (root === undefined) { console.error(`workflow: dropping hallucinated ${it.type} '${it.name}'`); continue; }
+      include.push({ type: it.type, name: it.name, reason: typeof it.reason === "string" ? it.reason : "", root });
     }
     if (!include.length) continue;
     candidates.push({
@@ -146,20 +172,32 @@ const GROUNDING = (signalJson: string, inventoryJson: string) =>
   `A project often exercises SEVERAL distinct flows (e.g. diagram generation vs web scraping). ` +
   `Use the per-session "shapes" (sets of artifacts used together) plus co-occurrence to identify each ` +
   `recurring flow, and propose ONE Gem per flow.\n` +
+  `The inventory has PROJECT artifacts (scoped to this repo) and GLOBAL artifacts (from the machine / ` +
+  `installed plugins). Include either by exact name — both get bundled into the Gem.\n` +
   `USAGE SIGNAL (authoritative — invocation counts and shapes are facts):\n${signalJson}\n\n` +
   `INVENTORY (the only artifacts that exist — never invent names outside this):\n${inventoryJson}\n\n` +
   `Return ONLY a JSON object: {"candidates":[{"name","description","includeInstructions":bool,` +
   `"include":[{"type":"skill"|"mcp_server"|"hook","name","reason"}],"confidence":"high"|"medium"|"low"}],"gaps":[string]}.\n` +
   `Each candidate is one coherent flow. Prefer 1–4 candidates; don't split trivially or duplicate. Use exact inventory names.`;
 
-// Skill bodies are large; send descriptions only to stay within context.
-function trimInventory(inv: ProjectInventory) {
+// Skill bodies are large; send descriptions only. Global section is limited to
+// artifacts that actually fired (the global catalog can be huge) — `usedGlobal`.
+function trimInventory(inv: ScanInventory, usedGlobal: Set<string>) {
+  const p = inv.project;
+  const g = inv.global ?? { skills: [], mcpServers: [], hooks: [] };
   return {
-    root: inv.root, name: inv.name,
-    skills: inv.skills.map((s) => ({ name: s.name, description: s.description ?? "" })),
-    mcpServers: inv.mcpServers.map((m) => ({ name: m.name, transport: m.transport })),
-    instructions: inv.instructions.map((i) => ({ name: i.name })),
-    hooks: inv.hooks.map((h) => ({ name: h.name, event: h.event, matcher: h.matcher ?? null })),
+    projectRoot: p.root, name: p.name,
+    project: {
+      skills: p.skills.map((s) => ({ name: s.name, description: s.description ?? "" })),
+      mcpServers: p.mcpServers.map((m) => ({ name: m.name, transport: m.transport })),
+      instructions: p.instructions.map((i) => ({ name: i.name })),
+      hooks: p.hooks.map((h) => ({ name: h.name, event: h.event, matcher: h.matcher ?? null })),
+    },
+    global: {
+      skills: g.skills.filter((s) => usedGlobal.has(s.name)).map((s) => ({ name: s.name })),
+      mcpServers: g.mcpServers.filter((m) => usedGlobal.has(m.name)).map((m) => ({ name: m.name })),
+      hooks: g.hooks.filter((h) => usedGlobal.has(h.name)).map((h) => ({ name: h.name, event: h.event })),
+    },
   };
 }
 
@@ -173,7 +211,7 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
  */
 export async function recommendWorkflow(
   signal: WorkflowSignal,
-  inventory: ProjectInventory,
+  inv: ScanInventory,
   opts: { connectFn?: AcpConnectFn; timeoutMs?: number; onDelta?: (chunk: string) => void } = {},
 ): Promise<{ analysis: WorkflowAnalysis; degraded: boolean }> {
   const connectFn = opts.connectFn ?? testConnectFn ?? defaultConnectFn;
@@ -181,13 +219,14 @@ export async function recommendWorkflow(
   let conn: { ctx: AcpCtx; close: () => void } | null = null;
   let handle: AcpSessionHandle | null = null;
   try {
-    const trimmedInv = trimInventory(inventory);
+    const usedGlobal = new Set(signal.artifacts.filter((a) => a.root === null && a.invocations > 0).map((a) => a.name));
+    const trimmedInv = trimInventory(inv, usedGlobal);
     conn = await connectFn(CLAUDE_AGENT, null);
     handle = await conn.ctx.open(signal.root);
     await handle.setMode("plan");                 // explicit — never edits files
     const prompt = GROUNDING(JSON.stringify(signal), JSON.stringify(trimmedInv));
     const text = await withTimeout(handle.promptText(prompt, opts.onDelta), timeoutMs);
-    return { analysis: validateAnalysis(text, inventory, signal), degraded: false };
+    return { analysis: validateAnalysis(text, inv, signal), degraded: false };
   } catch (err) {
     console.error("workflow: recommender fell back to deterministic:", (err as Error).message);
     return { analysis: deterministicAnalysis(signal), degraded: true };

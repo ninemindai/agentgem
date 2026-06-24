@@ -488,11 +488,14 @@ function renderAnView(view, path, flavor, name, res){
   anCandidates = res.candidates || [];
   const degraded = res.degraded ? ` <span class="d">(usage frequency — agent unavailable)</span>` : "";
   const gaps = (res.gaps || []).length ? `<div class="d" style="margin:8px 0">Used but not in inventory: ${esc(res.gaps.join(", "))}</div>` : "";
-  const li = (n, t, reason) => `<li style="margin-bottom:4px"><b>${esc(n)}</b> <span class="d">${esc(t)}</span>${reason ? ` — ${esc(reason)}` : ""}</li>`;
+  const li = (n, t, reason, root) => {
+    const scope = root === null ? ` <span class="src" title="global / plugin artifact">global</span>` : "";
+    return `<li style="margin-bottom:4px"><b>${esc(n)}</b> <span class="d">${esc(t)}</span>${scope}${reason ? ` — ${esc(reason)}` : ""}</li>`;
+  };
 
   const cards = anCandidates.map((c, i) => {
-    const items = c.include.map(it => li(it.name, it.type, it.reason)).join("");
-    const instr = c.includeInstructions ? li("CLAUDE.md", "instructions", "loaded every session") : "";
+    const items = c.include.map(it => li(it.name, it.type, it.reason, it.root)).join("");
+    const instr = c.includeInstructions ? li("CLAUDE.md", "instructions", "loaded every session", c.root) : "";
     return `<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:10px">`
       + `<div style="font-size:14px"><b>${esc(c.name)}</b> <span class="d">· ${c.confidence}</span></div>`
       + `<div class="d" style="margin:3px 0 8px">${esc(c.description)}</div>`
@@ -531,18 +534,45 @@ function ensureAnalyzeBanner(){
 }
 
 // Mutate the shared `sel` model (same shape onToggle maintains) from one
-// candidate's selection, then re-sync the checkboxes and the build preview.
+// candidate's selection — global artifacts go top-level, project ones under
+// projects[root] — then re-sync the checkboxes and the build preview.
 function applyCandidate(root, candidate){
-  const ps = (candidate.selection.projects || {})[root] || {};
+  const s = candidate.selection;
+  // global (top-level) artifacts
+  (s.skills || []).forEach(n => sel.skills.add(n));
+  (s.mcpServers || []).forEach(n => sel.mcpServers.add(n));
+  (s.hooks || []).forEach(n => sel.hooks.add(n));
+  if (s.includeInstructions) sel.includeInstructions = true;
+  // project artifacts
+  const ps = (s.projects || {})[root] || {};
   const ts = projSel(root);
   (ps.skills || []).forEach(n => ts.skills.add(n));
   (ps.mcpServers || []).forEach(n => ts.mcpServers.add(n));
   (ps.hooks || []).forEach(n => ts.hooks.add(n));
   if (ps.includeInstructions) ts.includeInstructions = true;
+
+  renderGlobalGroup(candidate);   // surface the global picks as checkboxes
   restoreChecks(); refresh();
 
   const reasons = candidate.include.map(i => `${esc(i.name)}: ${esc(i.reason)}`).join(" · ");
   ensureAnalyzeBanner().innerHTML = `<b>${esc(candidate.name)}</b> — ${esc(candidate.description)}<br>${reasons}`;
+}
+
+// The testbed inventory pane normally shows only project artifacts (globals are
+// reached via Import). When a candidate bundles globals, render them as a
+// dedicated checkbox group so they're visible and reviewable. Their data-kind is
+// the top-level kind, so onToggle/restoreChecks/buildSelectionBody treat them as
+// the global selection.
+function renderGlobalGroup(candidate){
+  document.getElementById("globalGroup")?.remove();
+  const globals = (candidate.include || []).filter(i => i.root === null);
+  if (!globals.length) return;
+  const kindOf = t => t === "skill" ? "skills" : t === "mcp_server" ? "mcpServers" : "hooks";
+  const rows = globals.map(i =>
+    `<label class="row"><input type="checkbox" data-kind="${kindOf(i.type)}" data-name="${esc(i.name)}"> <span>${esc(i.name)} <span class="src">global</span> <span class="d">— ${esc(i.type)}</span></span></label>`).join("");
+  document.getElementById("inventory").insertAdjacentHTML("afterbegin",
+    `<div class="group" id="globalGroup"><h2>Global / plugin (recommended)</h2>${rows}</div>`);
+  document.querySelectorAll("#globalGroup input[type=checkbox]").forEach(cb => cb.addEventListener("change", onToggle));
 }
 
 // Browse routes the picked folder back through the same confirm block (no prompts).

@@ -34,6 +34,8 @@ const signal: WorkflowSignal = {
   coOccurrence: [], shapes: [{ artifacts: ["qa", "context7"], sessions: 2 }], notes: [],
 };
 
+const scanInv = { project: inventory };
+
 describe("deterministicAnalysis", () => {
   it("returns one candidate of high-confidence used artifacts + project gaps", () => {
     const a = deterministicAnalysis(signal);
@@ -64,7 +66,7 @@ describe("validateAnalysis", () => {
         { name: "Diagrams", description: "d", include: [{ type: "skill", name: "diagram", reason: "used" }], confidence: "medium" },
       ],
       gaps: ["github"],
-    }, inventory, signal);
+    }, scanInv, signal);
     expect(a.candidates).toHaveLength(2);
     expect(a.candidates[0].include.map((i) => i.name)).toEqual(["qa"]);   // ghost dropped
     expect(a.candidates[1].include.map((i) => i.name)).toEqual(["diagram"]);
@@ -74,14 +76,14 @@ describe("validateAnalysis", () => {
   it("drops candidates with no surviving includes", () => {
     const a = validateAnalysis({
       candidates: [{ name: "X", description: "d", include: [{ type: "skill", name: "ghost", reason: "nope" }], confidence: "high" }],
-    }, inventory, signal);
+    }, scanInv, signal);
     // no valid candidate -> deterministic fallback (one candidate)
     expect(a.candidates).toHaveLength(1);
     expect(a.candidates[0].include.map((i) => i.name).sort()).toEqual(["context7", "qa"]);
   });
 
   it("falls back to deterministic when raw is junk", () => {
-    const a = validateAnalysis("not json at all", inventory, signal);
+    const a = validateAnalysis("not json at all", scanInv, signal);
     expect(a.candidates[0].include.map((i) => i.name).sort()).toEqual(["context7", "qa"]);
   });
 });
@@ -114,13 +116,13 @@ describe("recommendWorkflow", () => {
       ],
       gaps: [],
     });
-    const { analysis, degraded } = await recommendWorkflow(signal, inventory, { connectFn: fakeConnect(canned) });
+    const { analysis, degraded } = await recommendWorkflow(signal, scanInv, { connectFn: fakeConnect(canned) });
     expect(degraded).toBe(false);
     expect(analysis.candidates.map((c) => c.name)).toEqual(["QA Kit", "Diagram Kit"]);
   });
 
   it("degrades to the deterministic analysis on agent error", async () => {
-    const { analysis, degraded } = await recommendWorkflow(signal, inventory, {
+    const { analysis, degraded } = await recommendWorkflow(signal, scanInv, {
       connectFn: async () => { throw new Error("no binary"); },
     });
     expect(degraded).toBe(true);
@@ -129,7 +131,7 @@ describe("recommendWorkflow", () => {
 
   it("degrades on timeout", async () => {
     const slow = () => new Promise<string>((r) => setTimeout(() => r("{}"), 50));
-    const { degraded } = await recommendWorkflow(signal, inventory, { connectFn: fakeConnect(slow), timeoutMs: 5 });
+    const { degraded } = await recommendWorkflow(signal, scanInv, { connectFn: fakeConnect(slow), timeoutMs: 5 });
     expect(degraded).toBe(true);
   });
 
@@ -147,7 +149,7 @@ describe("recommendWorkflow", () => {
       }; } },
       close() {},
     });
-    const { analysis } = await recommendWorkflow(signal, inventory, { connectFn: streamingConnect, onDelta: (c) => chunks.push(c) });
+    const { analysis } = await recommendWorkflow(signal, scanInv, { connectFn: streamingConnect, onDelta: (c) => chunks.push(c) });
     expect(chunks.length).toBe(2);
     expect(analysis.candidates[0].include.map((i) => i.name)).toEqual(["qa"]);
   });

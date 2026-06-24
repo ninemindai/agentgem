@@ -61,7 +61,7 @@ describe("scanWorkflow skills + mcp", () => {
       assistantToolUse("mcp__plugin_unknownsrv__do"),
     ].join("\n") + "\n");
 
-    const sig = scanWorkflow([file], inventory);
+    const sig = scanWorkflow([file], { project: inventory });
     const byName = Object.fromEntries(sig.artifacts.map((a) => [a.name, a]));
     expect(byName["context7"].invocations).toBe(2);
     expect(byName["context7"].confidence).toBe("high");
@@ -89,7 +89,7 @@ describe("scanWorkflow hooks, instructions, co-occurrence", () => {
       JSON.stringify({ type: "user", content: "PreToolUse:Bash [guard.sh] hook success: ok" }),
     ].join("\n") + "\n");
 
-    const sig = scanWorkflow([file], invWithHook);
+    const sig = scanWorkflow([file], { project: invWithHook });
     const byName = Object.fromEntries(sig.artifacts.map((a) => [a.name, a]));
     expect(byName["PreToolUse · Bash"].confidence).toBe("low");
     expect(byName["PreToolUse · Bash"].invocations).toBeGreaterThanOrEqual(1);
@@ -104,7 +104,7 @@ describe("scanWorkflow hooks, instructions, co-occurrence", () => {
   });
 
   it("empty scan yields a valid zero signal with a note", () => {
-    const sig = scanWorkflow([], inventory);
+    const sig = scanWorkflow([], { project: inventory });
     expect(sig.sessions.scanned).toBe(0);
     expect(sig.artifacts.every((a) => a.invocations === 0 || a.type === "instructions")).toBe(true);
     expect(sig.notes.some((n) => /no transcripts/i.test(n))).toBe(true);
@@ -114,7 +114,7 @@ describe("scanWorkflow hooks, instructions, co-occurrence", () => {
     const dir = mkdtempSync(join(tmpdir(), "wfscan4-"));
     const file = join(dir, "s.jsonl");
     writeFileSync(file, ["{ not json", assistantToolUse("Skill", { skill: "qa" })].join("\n") + "\n");
-    const sig = scanWorkflow([file], inventory);
+    const sig = scanWorkflow([file], { project: inventory });
     expect(sig.notes.some((n) => /unparseable/i.test(n))).toBe(true);
     expect(sig.artifacts.find((a) => a.name === "qa")!.invocations).toBe(1);
     rmSync(dir, { recursive: true, force: true });

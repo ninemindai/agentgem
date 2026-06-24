@@ -381,8 +381,11 @@ export class GemController {
 
     const dirs = resolveDirs(dir);
     const paths = claudeTranscriptsForCwd(dirs.claudeDir, root);
-    const signal = scanWorkflow(paths, project);
-    const { analysis, degraded } = await recommendWorkflow(signal, project);
+    // The top-level inventory IS the global/plugin inventory; the project section
+    // is namespaced separately. Scan + recommend over both.
+    const scanInv = { project, global: { skills: inventory.skills, mcpServers: inventory.mcpServers, hooks: inventory.hooks } };
+    const signal = scanWorkflow(paths, scanInv);
+    const { analysis, degraded } = await recommendWorkflow(signal, scanInv);
     const candidates = analysis.candidates.map((c) => ({ ...c, selection: recommendationToSelection(c) as Record<string, unknown> }));
     return {
       candidates,

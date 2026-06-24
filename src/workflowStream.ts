@@ -4,7 +4,7 @@
 // a single JSON body, so streaming progress (scan → agent token stream → done)
 // is served by a raw Express handler registered on `server.expressApp`. The
 // non-streaming POST /api/workflow/analyze stays for programmatic/test callers.
-import { introspectProject } from "./gem/introspect.js";
+import { introspectConfig, introspectProject } from "./gem/introspect.js";
 import { resolveDirs, resolveProject } from "./resolveDir.js";
 import { claudeTranscriptsForCwd, scanWorkflow } from "./gem/workflowScan.js";
 import { recommendWorkflow, recommendationToSelection } from "./gem/acpRecommender.js";
@@ -37,14 +37,16 @@ export async function streamWorkflowAnalyze(req: SseReq, res: SseRes): Promise<v
     if (!root) { send("failed", { message: "missing root" }); return; }
     const dirs = resolveDirs(dir);
     const project = introspectProject(resolveProject(root));
+    const globalInv = introspectConfig(dirs);   // global + plugin artifacts
+    const scanInv = { project, global: { skills: globalInv.skills, mcpServers: globalInv.mcpServers, hooks: globalInv.hooks } };
 
     send("phase", { phase: "scanning" });
     const paths = claudeTranscriptsForCwd(dirs.claudeDir, root);
-    const signal = scanWorkflow(paths, project);
+    const signal = scanWorkflow(paths, scanInv);
     send("phase", { phase: "scanned", transcripts: paths.length, sessions: signal.sessions.scanned });
 
     send("phase", { phase: "thinking" });
-    const { analysis, degraded } = await recommendWorkflow(signal, project, {
+    const { analysis, degraded } = await recommendWorkflow(signal, scanInv, {
       onDelta: (chunk) => send("delta", { text: chunk }),
     });
 
