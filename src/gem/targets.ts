@@ -10,7 +10,7 @@ import type {
 import { tomlMcpServers } from "./toml.js";
 import { stdioProxyRunner, PROXY_BASE_PORT, PROXY_HOST } from "./mcpProxy.js";
 
-export type TargetId = "claude" | "codex" | "agents" | "hermes" | "eve" | "flue" | "openai-sandbox" | "agentcore";
+export type TargetId = "claude" | "codex" | "agents" | "hermes" | "eve" | "flue" | "openai-sandbox" | "agentcore" | "a2a";
 export type FileTree = Record<string, string>;
 
 export interface SkippedArtifact { artifact: string; type: ArtifactType; reason: string }
@@ -554,6 +554,51 @@ const eveComposeProject = (gem: Gem, opts: MaterializeOpts = {}): MaterializeRes
   return rendered(files);
 };
 
+// ── A2A (Agent2Agent) target ──
+// Card primitive: materialize(gem, "a2a") emits a runtime-free Agent Card derived from the gem — the
+// A2A discovery surface, publishable to the registry. The Card is the part native to AgentGem's
+// "describe an agent" mission; a runnable A2A server is a planned opt-in flavor (MaterializeOpts).
+const A2A_PROTOCOL_VERSION = "0.3.0";
+const a2aSkillCard = (a: SkillArtifact) => ({
+  id: safePathSegment(a.name),
+  name: a.name,
+  description: a.description?.trim() || `The ${a.name} skill.`,
+  tags: ["skill"],
+});
+// A one-line card description from an instruction artifact: prefer the first non-empty *prose* line
+// (instruction files usually open with a throwaway "# Title" heading); fall back to the de-headed
+// first line if the doc is headings-only.
+const a2aFirstLine = (s: string): string => {
+  const lines = s.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  return lines.find((l) => !l.startsWith("#")) ?? lines[0]?.replace(/^#+\s*/, "") ?? "";
+};
+
+// Pure Gem -> AgentCard projection. Skills advertise as A2A skills (metadata, not bodies); the first
+// instruction line becomes the card description; a skill-less Gem gets a synthesized `chat` skill
+// (A2A requires >=1). Emits no secret values (skills/instructions carry none post-redaction).
+export const a2aAgentCard = (gem: Gem): Record<string, unknown> => {
+  const skills = gem.artifacts.filter((a): a is SkillArtifact => a.type === "skill");
+  const instr = gem.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions");
+  const cardSkills = skills.map(a2aSkillCard);
+  return {
+    protocolVersion: A2A_PROTOCOL_VERSION,
+    name: gem.name,
+    description: a2aFirstLine(instr[0]?.content ?? "") || `An agent packaged by AgentGem from ${skills.length} skill(s).`,
+    version: "0.1.0",
+    url: "http://localhost:41241/a2a/jsonrpc", // discovery placeholder; the (future) server overrides from PUBLIC_URL
+    capabilities: { streaming: false, pushNotifications: false },
+    defaultInputModes: ["text"],
+    defaultOutputModes: ["text"],
+    skills: cardSkills.length ? cardSkills
+      : [{ id: "chat", name: "chat", description: `Converse with ${gem.name}.`, tags: ["chat"] }],
+  };
+};
+
+// A2A is wholly compose-driven: per-type renderers are no-ops (so no artifact is skip-reported), and
+// compose emits the Agent Card. Card-only mode models neither MCP nor hooks, so nothing is skipped.
+const a2aComposeProject = (gem: Gem): MaterializeResult =>
+  rendered({ "agent-card.json": JSON.stringify(a2aAgentCard(gem), null, 2) + "\n" });
+
 // ── targets compose the shared renderers (convergence is literal, not duplicated) ──
 export const TARGET_REGISTRY: Record<TargetId, TargetSpec> = {
   claude: { id: "claude", label: "Claude", skill: skillSkillMd,       instructions: instructionsClaudeMd, mcp: mcpDotMcpJson, hook: hooksSettingsJson },
@@ -571,6 +616,9 @@ export const TARGET_REGISTRY: Record<TargetId, TargetSpec> = {
   // AgentCore harness project (app/<gem>/harness.json + container-baked skills). Instructions/MCP
   // fold into the composed harness.json; stdio MCP is reported skipped by compose; hooks unsupported.
   agentcore: { id: "agentcore", label: "AgentCore", skill: skillAgentcoreMd, instructions: () => ({}), mcp: () => ({ files: {}, skipped: [] }), compose: agentcoreComposeProject },
+  // A2A Agent Card primitive. Wholly compose-driven (all per-type renderers no-op); compose emits the
+  // runtime-free agent-card.json. Card-only mode reports nothing skipped.
+  a2a: { id: "a2a", label: "A2A", skill: () => ({}), instructions: () => ({}), mcp: () => ({ files: {}, skipped: [] }), hook: () => ({}), compose: a2aComposeProject },
 };
 
 export function materialize(gem: Gem, target: TargetId, opts: MaterializeOpts = {}): MaterializeResult {

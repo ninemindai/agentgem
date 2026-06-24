@@ -1,6 +1,6 @@
 // src/gem/__tests__/targets.test.ts
 import { describe, it, expect } from "vitest";
-import { materialize, compatibility, TARGET_REGISTRY, buildAgentcoreHarness, agentcoreComposeProject } from "../targets.js";
+import { materialize, compatibility, TARGET_REGISTRY, buildAgentcoreHarness, agentcoreComposeProject, a2aAgentCard } from "../targets.js";
 import type { Gem, GemArtifact, SkillArtifact, McpServerArtifact, InstructionsArtifact, HookArtifact } from "../types.js";
 
 const gem = (artifacts: GemArtifact[]): Gem => ({ name: "p", createdFrom: "/d", artifacts, checks: [], requiredSecrets: [] });
@@ -337,7 +337,7 @@ describe("compatibility", () => {
     expect(c.codex).toEqual({ supported: 1, skipped: 1 });   // hook unsupported
     expect(c.hermes).toEqual({ supported: 1, skipped: 1 });
     expect(c.eve).toEqual({ supported: 1, skipped: 1 }); // skill ok, hook unsupported
-    expect(Object.keys(TARGET_REGISTRY).sort()).toEqual(["agentcore", "agents", "claude", "codex", "eve", "flue", "hermes", "openai-sandbox"]);
+    expect(Object.keys(TARGET_REGISTRY).sort()).toEqual(["a2a", "agentcore", "agents", "claude", "codex", "eve", "flue", "hermes", "openai-sandbox"]);
   });
 });
 
@@ -375,5 +375,49 @@ describe("materialize agentcore", () => {
     expect(reasons.some((r) => r.startsWith("local:") && /stdio/.test(r))).toBe(true);
     expect(reasons.some((r) => r.startsWith("PreToolUse · Bash:"))).toBe(true); // hook unsupported
     expect(JSON.stringify(files)).not.toContain("<redacted>");
+  });
+});
+
+describe("materialize a2a (Agent Card primitive)", () => {
+  it("emits exactly agent-card.json with no runtime files", () => {
+    const r = materialize(gem([skill("review"), instr("CLAUDE.md")]), "a2a");
+    expect(Object.keys(r.files)).toEqual(["agent-card.json"]);
+    expect(r.files["src/server.ts"]).toBeUndefined();
+    expect(r.files["package.json"]).toBeUndefined();
+    expect(r.files["SECRETS.md"]).toBeUndefined();
+  });
+
+  it("derives a valid card: one skill entry per gem skill, description from first instruction line, streaming false", () => {
+    const r = materialize(gem([skill("review"), skill("scrape"), instr("CLAUDE.md", "# Heading\n\nReview and scrape things.")]), "a2a");
+    const card = JSON.parse(r.files["agent-card.json"]);
+    expect(card.protocolVersion).toBe("0.3.0");
+    expect(card.name).toBe("p");
+    expect(card.description).toBe("Review and scrape things.");
+    expect(card.capabilities.streaming).toBe(false);
+    expect(card.skills.map((s: { name: string }) => s.name)).toEqual(["review", "scrape"]);
+    expect(card.skills.every((s: { tags: string[] }) => s.tags.includes("skill"))).toBe(true);
+  });
+
+  it("synthesizes a chat skill when the gem has no skills (A2A requires >=1)", () => {
+    const r = materialize(gem([instr("CLAUDE.md")]), "a2a");
+    const card = JSON.parse(r.files["agent-card.json"]);
+    expect(card.skills).toHaveLength(1);
+    expect(card.skills[0].id).toBe("chat");
+  });
+
+  it("card-only mode reports nothing skipped even with hooks and an unmappable MCP server", () => {
+    const r = materialize(gem([skill("review"), mcp("local"), httpMcp("linear"), hook()]), "a2a");
+    expect(r.skipped).toEqual([]);
+    expect(Object.keys(r.files)).toEqual(["agent-card.json"]);
+  });
+
+  it("compatibility includes a2a, describing every gem as a card (no skips)", () => {
+    const c = compatibility(gem([skill("review"), mcp("local"), hook()]));
+    expect(c.a2a).toEqual({ supported: 3, skipped: 0 });
+  });
+
+  it("a2aAgentCard is pure and emits no secret values", () => {
+    const card = a2aAgentCard(gem([skill("review"), httpMcp("linear")]));
+    expect(JSON.stringify(card)).not.toContain("<redacted>");
   });
 });
