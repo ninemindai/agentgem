@@ -275,6 +275,8 @@
   <div class="modal">
     <div class="modal-h"><strong class="t">Open a testbed</strong><button id="recentClose" class="ghost" style="margin-left:auto">✕ Close</button></div>
     <div class="modal-body" style="padding:14px">
+      <div id="anView" hidden></div>
+      <div id="anPicker">
       <div id="tbCwd" hidden style="padding:12px;border:1px solid var(--line);border-radius:8px;margin-bottom:14px">
         <div style="margin-bottom:6px">This folder looks like a <span id="tbCwdFlavor"></span> project</div>
         <div class="d" id="tbCwdPath" style="margin-bottom:8px;word-break:break-all"></div>
@@ -289,8 +291,9 @@
       <div id="recentList">Loading…</div>
       <div class="src" style="margin:14px 0 6px">Discovered <span class="d">(projects from your Claude / Codex history)</span></div>
       <div id="discoveredList">Loading…</div>
+      </div>
     </div>
-    <div class="modal-h" style="border-top:1px solid var(--line);border-bottom:0">
+    <div class="modal-h" id="anFooter" style="border-top:1px solid var(--line);border-bottom:0">
       <span class="d">Not this folder? Pick a recent one above, or browse.</span>
       <button id="recentBrowse" style="margin-left:auto">Browse folder…</button>
     </div>
@@ -328,6 +331,7 @@ let candidate = null; // { path, flavor } currently shown in the top block
 
 async function openOrCreateTestbed(){
   document.getElementById("recentModal").hidden = false;
+  showPicker();   // always open on the project list, not a stale recommendation view
   try {
     const s = await (await fetch("/api/testbed/suggestion")).json();
     if (s.looksLikeProject) renderCandidate(s.cwd, s.flavor, s.name);
@@ -388,7 +392,7 @@ async function renderRecents(){
     row.onclick = ()=>{ const p = recents[+row.dataset.i]; if(!p.exists) return; document.getElementById("recentModal").hidden = true; useTestbed(p.path, p.flavor, p.name); };
   });
   list.querySelectorAll("button.anBtn").forEach(btn=>{
-    btn.onclick = (e)=>{ e.preventDefault(); e.stopPropagation(); const p = recents[+btn.dataset.i]; analyzeWorkflow(btn.closest("label"), p.path, p.flavor, p.name); };
+    btn.onclick = (e)=>{ e.preventDefault(); e.stopPropagation(); const p = recents[+btn.dataset.i]; analyzeWorkflow(p.path, p.flavor, p.name); };
   });
 }
 
@@ -415,7 +419,7 @@ async function renderDiscovered(){
     row.onclick = ()=>{ const p = projects[+row.dataset.i]; if(!p.exists) return; document.getElementById("recentModal").hidden = true; useTestbed(p.path, p.flavor, p.path.replace(/^.*\//, "")); };
   });
   list.querySelectorAll("button.anBtn").forEach(btn=>{
-    btn.onclick = (e)=>{ e.preventDefault(); e.stopPropagation(); const p = projects[+btn.dataset.i]; analyzeWorkflow(btn.closest("label"), p.path, p.flavor, p.path.replace(/^.*\//, "")); };
+    btn.onclick = (e)=>{ e.preventDefault(); e.stopPropagation(); const p = projects[+btn.dataset.i]; analyzeWorkflow(p.path, p.flavor, p.path.replace(/^.*\//, "")); };
   });
 }
 
@@ -430,52 +434,58 @@ async function useTestbed(path, flavor, name){
   await load();                               // awaited so callers (e.g. Analyze) can apply once the inventory is rendered
 }
 
-// Recommend a Gem for `path` from its session history — IN PLACE, without
-// adopting it as the active testbed. The result renders in the modal; switching
-// is an explicit, informed choice (the "Switch & apply" button).
-async function analyzeWorkflow(rowEl, path, flavor, name){
-  const panel = ensureResultPanel(rowEl);
-  panel.innerHTML = `<span class="d">Analyzing session history… (~15s)</span>`;
+// Swap the picker for a focused recommendation view (same modal, no stacking).
+function showAnView(){ document.getElementById("anPicker").hidden = true; document.getElementById("anFooter").hidden = true; document.getElementById("anView").hidden = false; }
+function showPicker(){ document.getElementById("anView").hidden = true; document.getElementById("anPicker").hidden = false; document.getElementById("anFooter").hidden = false; }
+
+// Recommend a Gem for `path` from its session history — IN PLACE, without adopting
+// it as the active testbed. Renders a focused view inside the same modal. One at a
+// time: the focused view replaces the list, so analyses can't overlap from the UI.
+async function analyzeWorkflow(path, flavor, name){
+  const view = document.getElementById("anView");
+  view.innerHTML = `<button type="button" class="ghost anBack">← back to projects</button>`
+    + `<div style="margin-top:10px"><b>${esc(name)}</b></div>`
+    + `<div class="d" style="margin-top:8px">Analyzing session history… (~15s)</div>`;
+  view.querySelector(".anBack").onclick = (e) => { e.preventDefault(); showPicker(); };
+  showAnView();
   let res;
   try {
     res = await (await fetch("/api/workflow/analyze", { method:"POST", headers:{"content-type":"application/json"}, body: JSON.stringify({ root: path }) })).json();
-  } catch (e) { panel.innerHTML = `<span class="d">Analysis failed: ${esc(e && e.message || String(e))}</span>`; return; }
-  if (res && res.recommendation) renderResultPanel(panel, path, flavor, name, res);
-  else panel.innerHTML = `<span class="d">Analysis returned no recommendation.</span>`;
+  } catch (e) { renderAnError(view, esc(e && e.message || String(e))); return; }
+  if (res && res.recommendation) renderAnView(view, path, flavor, name, res);
+  else renderAnError(view, "Analysis returned no recommendation.");
 }
 
-// One result panel per row, inserted right after the clicked row label.
-function ensureResultPanel(rowEl){
-  let p = rowEl.nextElementSibling;
-  if (!p || !p.classList.contains("anResult")) {
-    p = document.createElement("div"); p.className = "anResult";
-    p.style.cssText = "margin:-2px 0 8px;padding:8px 10px;border:1px solid var(--line,#3a3a3a);border-radius:8px;background:rgba(127,127,127,.06)";
-    rowEl.parentNode.insertBefore(p, rowEl.nextSibling);
-  }
-  return p;
+function renderAnError(view, msg){
+  view.innerHTML = `<button type="button" class="ghost anBack">← back to projects</button><div class="d" style="margin-top:10px">Analysis failed: ${msg}</div>`;
+  view.querySelector(".anBack").onclick = (e) => { e.preventDefault(); showPicker(); };
 }
 
-// Read-only recommendation preview + a button that adopts the project AND applies the selection.
-function renderResultPanel(panel, path, flavor, name, res){
+// Read-only recommendation view + a button that adopts the project AND applies the selection.
+function renderAnView(view, path, flavor, name, res){
   const r = res.recommendation;
   const degraded = res.degraded ? ` <span class="d">(usage frequency — agent unavailable)</span>` : "";
-  const li = (n, t, reason) => `<li><b>${esc(n)}</b> <span class="d">${esc(t)}</span>${reason ? ` — ${esc(reason)}` : ""}</li>`;
+  const li = (n, t, reason) => `<li style="margin-bottom:4px"><b>${esc(n)}</b> <span class="d">${esc(t)}</span>${reason ? ` — ${esc(reason)}` : ""}</li>`;
   const items = r.include.map(i => li(i.name, i.type, i.reason)).join("");
   const instr = r.includeInstructions ? li("CLAUDE.md", "instructions", "loaded every session") : "";
-  const gaps = (res.signalSummary.gaps || []).length ? `<div class="d" style="margin-top:4px">Not in inventory: ${esc(res.signalSummary.gaps.join(", "))}</div>` : "";
+  const gaps = (res.signalSummary.gaps || []).length ? `<div class="d" style="margin-top:6px">Not in inventory: ${esc(res.signalSummary.gaps.join(", "))}</div>` : "";
   const empty = (!items && !instr) ? `<div class="d">No project-scoped artifacts to recommend.</div>` : "";
-  panel.innerHTML =
-    `<div><b>${esc(r.name)}</b>${degraded} <span class="d">· ${res.signalSummary.sessionsScanned} session(s)</span></div>`
-    + `<div class="d" style="margin:2px 0 6px">${esc(r.description)}</div>`
-    + (items || instr ? `<ul style="margin:0 0 8px 16px;padding:0">${items}${instr}</ul>` : "")
+  view.innerHTML =
+    `<button type="button" class="ghost anBack">← back to projects</button>`
+    + `<div style="margin-top:10px;font-size:15px"><b>${esc(r.name)}</b>${degraded} <span class="d">· ${res.signalSummary.sessionsScanned} session(s)</span></div>`
+    + `<div class="d" style="margin:4px 0 10px;word-break:break-all">${esc(path)}</div>`
+    + `<div style="margin-bottom:10px">${esc(r.description)}</div>`
+    + (items || instr ? `<ul style="margin:0 0 8px 18px;padding:0">${items}${instr}</ul>` : "")
     + empty + gaps
-    + `<button type="button" class="ghost anApply" style="margin-top:6px">Switch to this project &amp; apply</button>`;
-  panel.querySelector(".anApply").onclick = (e) => { e.preventDefault(); e.stopPropagation(); switchAndApply(path, flavor, name, res); };
+    + `<button type="button" class="anApply" style="margin-top:14px">Switch to this project &amp; apply ▸</button>`;
+  view.querySelector(".anBack").onclick = (e) => { e.preventDefault(); showPicker(); };
+  view.querySelector(".anApply").onclick = (e) => { e.preventDefault(); switchAndApply(path, flavor, name, res); };
 }
 
 // The explicit switch: adopt the project as the active testbed, then pre-check the recommendation.
 async function switchAndApply(path, flavor, name, res){
   document.getElementById("recentModal").hidden = true;
+  showPicker();                            // reset modal for next open
   await useTestbed(path, flavor, name);   // adopt + render this project's inventory
   applyRecommendation(path, res);         // pre-check the recommended boxes + banner on the inventory pane
 }
