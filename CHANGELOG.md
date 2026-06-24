@@ -7,16 +7,10 @@ All notable changes to AgentGem are documented here. The format follows
 The npm core (`@ninemind/agentgem`) and the desktop app are versioned separately:
 core releases are tagged `v*`, desktop releases `desktop-v*`.
 
-## [Unreleased]
+## [0.2.0] — `@ninemind/agentgem` (npm core) — 2026-06-24
 
 ### Added
 
-- **Native desktop app** (macOS, Windows, Linux). An Electron host that runs the
-  AgentGem server in its own window — native folder picker, app menu, system tray,
-  and scaffolded auto-update — with no terminal or `localhost` URL to manage. The
-  core is bundled into a self-contained file so the packaged app is the same server,
-  hosted, not a fork. Builds are currently unsigned. Will ship as `desktop-v0.1.1`.
-  See [docs/desktop.md](docs/desktop.md).
 - **A2A target.** Export any Gem as an [A2A](https://a2a-protocol.org/) target: an
   **Agent Card** (`agent-card.json`, protocol 0.3.0) for discovery, or — opt-in — a
   runnable **A2A server** (AI SDK v7) that serves the Card and executes the agent over
@@ -29,12 +23,17 @@ core releases are tagged `v*`, desktop releases `desktop-v*`.
   per-project caching with re-analyze. `GET /api/workflow/analyze/stream` (SSE) and
   `POST /api/workflow/analyze`. See [docs/analyze.md](docs/analyze.md).
 
-### Notes
+## [desktop-v0.1.1] — desktop app — 2026-06-24
 
-- A2A and Analyze are core features; they will ship in the next `@ninemind/agentgem`
-  npm release.
+### Added
 
-## [0.1.1]
+- **Native desktop app** (macOS, Windows, Linux). An Electron host that runs the
+  AgentGem server in its own window — native folder picker, app menu, system tray,
+  and scaffolded auto-update — with no terminal or `localhost` URL to manage. The
+  core is bundled into a self-contained file so the packaged app is the same server,
+  hosted, not a fork. Builds are currently unsigned. See [docs/desktop.md](docs/desktop.md).
+
+## [0.1.1] — `@ninemind/agentgem` (npm core)
 
 - Initial public release: secret-safe Gem capture, the manifest + lock archive,
   composition, the GitHub-backed registry, deploy targets (Eve, Flue, OpenAI Sandbox,

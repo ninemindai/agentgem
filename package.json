@@ -1,6 +1,6 @@
 {
   "name": "@ninemind/agentgem",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "A local web UI that introspects your coding-agent config, redacts secrets at capture, and builds a portable, composable Gem.",
   "license": "MIT",
   "bin": {
