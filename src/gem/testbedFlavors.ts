@@ -188,6 +188,7 @@ export function discoverProjects(dirs: DiscoveryDirs): ProjectCandidate[] {
     }
   }
   return [...best.values()]
+    .filter((p) => !p.path.includes("/.agentgem/"))   // hide agentgem's own internal workspaces (e.g. the analysis cwd)
     .sort((a, b) => b.lastUsedMs - a.lastUsedMs)
     .map((p) => ({
       path: p.path,

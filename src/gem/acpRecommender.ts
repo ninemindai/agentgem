@@ -6,7 +6,10 @@
 // re-validated against the inventory (the source of truth), and any failure
 // degrades to a deterministic frequency-based recommendation. Never throws.
 import { spawn } from "node:child_process";
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
 import { Readable, Writable } from "node:stream";
+import { agentgemHome } from "../resolveDir.js";
 import type { ArtifactType } from "./types.js";
 import type { WorkflowSignal, ScanInventory } from "./workflowScan.js";
 import type { GemSelection, ProjectSelection } from "./buildGem.js";
@@ -49,6 +52,13 @@ export type AcpConnectFn = (descriptor: AgentDescriptor, app: unknown) => Promis
 
 // Pinned Claude ACP adapter (npm: @agentclientprotocol/claude-agent-acp).
 export const CLAUDE_AGENT: AgentDescriptor = { id: "claude-code", name: "Claude Code", command: ["claude-agent-acp"] };
+
+// Neutral working dir for the recommender's ACP session. We do NOT open the
+// session in the analyzed project, or claude-agent-acp would log a session
+// transcript THERE — inflating that project's own session history (skewing
+// future analyses and busting the per-project cache). The agent only reasons
+// over the JSON brief, so its cwd is irrelevant to the result.
+export function analysisWorkspace(): string { return join(agentgemHome(), ".agentgem", "analysis"); }
 
 let testConnectFn: AcpConnectFn | null = null;
 /** Test-only seam: route recommendWorkflow through an in-process fake agent. */
@@ -222,7 +232,7 @@ export async function recommendWorkflow(
     const usedGlobal = new Set(signal.artifacts.filter((a) => a.root === null && a.invocations > 0).map((a) => a.name));
     const trimmedInv = trimInventory(inv, usedGlobal);
     conn = await connectFn(CLAUDE_AGENT, null);
-    handle = await conn.ctx.open(signal.root);
+    handle = await conn.ctx.open(analysisWorkspace());   // neutral cwd — don't pollute the project
     await handle.setMode("plan");                 // explicit — never edits files
     const prompt = GROUNDING(JSON.stringify(signal), JSON.stringify(trimmedInv));
     const text = await withTimeout(handle.promptText(prompt, opts.onDelta), timeoutMs);
@@ -262,6 +272,7 @@ export const defaultConnectFn: AcpConnectFn = async (descriptor) => {
 
   const ctx: AcpCtx = {
     async open(cwd: string) {
+      try { mkdirSync(cwd, { recursive: true }); } catch { /* best-effort */ }
       const session: any = await agentCtx.buildSession(cwd).start();
       const sessionId = session.sessionId as string;
       return {

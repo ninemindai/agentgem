@@ -444,7 +444,7 @@ function showPicker(){ document.getElementById("anView").hidden = true; document
 // Recommend a Gem for `path` from its session history — IN PLACE, without adopting
 // it as the active testbed. Renders a focused view inside the same modal. One at a
 // time: the focused view replaces the list, so analyses can't overlap from the UI.
-function analyzeWorkflow(path, flavor, name){
+function analyzeWorkflow(path, flavor, name, fresh){
   const view = document.getElementById("anView");
   let es = null, acc = "", finished = false;
   view.innerHTML =
@@ -457,7 +457,7 @@ function analyzeWorkflow(path, flavor, name){
   const phaseEl = view.querySelector("#anPhase");
   const streamEl = view.querySelector("#anStream");
 
-  es = new EventSource(`/api/workflow/analyze/stream?root=${encodeURIComponent(path)}`);
+  es = new EventSource(`/api/workflow/analyze/stream?root=${encodeURIComponent(path)}${fresh ? "&fresh=1" : ""}`);
   es.addEventListener("phase", (ev) => {
     const d = JSON.parse(ev.data);
     if (d.phase === "scanning") phaseEl.textContent = "Scanning session history…";
@@ -505,13 +505,16 @@ function renderAnView(view, path, flavor, name, res){
   }).join("");
 
   const heading = anCandidates.length > 1 ? `${anCandidates.length} candidate Gems` : (anCandidates.length === 1 ? "Recommended Gem" : "No recurring flows found");
+  const cached = res.cached ? ` <span class="src" title="cached — re-analyze to refresh">cached</span>` : "";
   view.innerHTML =
-    `<button type="button" class="ghost anBack">← back to projects</button>`
-    + `<div style="margin-top:10px;font-size:15px"><b>${esc(heading)}</b>${degraded} <span class="d">· ${res.signalSummary.sessionsScanned} session(s)</span></div>`
+    `<div style="display:flex;align-items:center;gap:8px"><button type="button" class="ghost anBack">← back to projects</button>`
+    + `<button type="button" class="ghost anFresh" style="margin-left:auto" title="re-run the analysis ignoring the cache">↻ Re-analyze</button></div>`
+    + `<div style="margin-top:10px;font-size:15px"><b>${esc(heading)}</b>${degraded}${cached} <span class="d">· ${res.signalSummary.sessionsScanned} session(s)</span></div>`
     + `<div class="d" style="margin:4px 0 10px;word-break:break-all">${esc(path)}</div>`
     + (cards || `<div class="d">Nothing to recommend from this project's usage.</div>`)
     + gaps;
   view.querySelector(".anBack").onclick = (e) => { e.preventDefault(); showPicker(); };
+  view.querySelector(".anFresh").onclick = (e) => { e.preventDefault(); analyzeWorkflow(path, flavor, name, true); };
   view.querySelectorAll(".anApply").forEach(btn => {
     btn.onclick = (e) => { e.preventDefault(); switchAndApply(path, flavor, anCandidates[+btn.dataset.i]); };
   });
