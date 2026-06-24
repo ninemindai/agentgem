@@ -44,16 +44,16 @@ export async function streamWorkflowAnalyze(req: SseReq, res: SseRes): Promise<v
     send("phase", { phase: "scanned", transcripts: paths.length, sessions: signal.sessions.scanned });
 
     send("phase", { phase: "thinking" });
-    const { recommendation, degraded } = await recommendWorkflow(signal, project, {
+    const { analysis, degraded } = await recommendWorkflow(signal, project, {
       onDelta: (chunk) => send("delta", { text: chunk }),
     });
 
     send("phase", { phase: "validating" });
-    const selection = recommendationToSelection(recommendation);
+    const candidates = analysis.candidates.map((c) => ({ ...c, selection: recommendationToSelection(c) }));
     send("done", {
-      recommendation,
-      selection,
-      signalSummary: { sessionsScanned: signal.sessions.scanned, spanDays: signal.sessions.spanDays, notes: signal.notes, gaps: recommendation.gaps },
+      candidates,
+      gaps: analysis.gaps,
+      signalSummary: { sessionsScanned: signal.sessions.scanned, spanDays: signal.sessions.spanDays, notes: signal.notes },
       degraded,
     });
   } catch (err) {

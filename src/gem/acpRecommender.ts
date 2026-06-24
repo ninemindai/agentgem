@@ -12,15 +12,23 @@ import type { WorkflowSignal } from "./workflowScan.js";
 import type { GemSelection, ProjectSelection } from "./buildGem.js";
 
 export interface RecommendedItem { type: ArtifactType; name: string; reason: string }
-export interface GemRecommendation {
+
+// One recommended Gem = one coherent recurring flow. A project may yield several
+// (e.g. diagram generation vs web scraping).
+export interface GemCandidate {
   name: string;
   description: string;
   root: string;
   includeInstructions: boolean;
   include: RecommendedItem[];
-  exclude: RecommendedItem[];
-  gaps: string[];
   confidence: "high" | "medium" | "low";
+}
+
+// The full result of analysing a project: zero or more candidate Gems plus the
+// project-level gaps (artifacts used in transcripts but absent from the inventory).
+export interface WorkflowAnalysis {
+  candidates: GemCandidate[];
+  gaps: string[];
 }
 
 // Instructions are a boolean on ProjectSelection, not a named include.
@@ -45,41 +53,41 @@ let testConnectFn: AcpConnectFn | null = null;
 /** Test-only seam: route recommendWorkflow through an in-process fake agent. */
 export function setConnectFnForTests(fn: AcpConnectFn | null): void { testConnectFn = fn; }
 
-// ── Deterministic recommendation (fallback + the agent's baseline) ───────────
-export function deterministicRecommendation(signal: WorkflowSignal): GemRecommendation {
+// ── Deterministic analysis (fallback + the agent's baseline) ─────────────────
+// One frequency-based candidate. Multi-candidate splitting is the agent's value-add;
+// the deterministic fallback stays a single coherent Gem.
+export function deterministicAnalysis(signal: WorkflowSignal): WorkflowAnalysis {
   const include: RecommendedItem[] = [];
-  const exclude: RecommendedItem[] = [];
   let includeInstructions = false;
   for (const a of signal.artifacts) {
     if (a.type === "instructions") { if (a.invocations > 0) includeInstructions = true; continue; }
     if (!SELECTABLE.includes(a.type)) continue;
     if (a.invocations > 0 && a.confidence === "high")
       include.push({ type: a.type, name: a.name, reason: `${a.invocations} use(s) across ${a.sessionsUsedIn} session(s)` });
-    else
-      exclude.push({ type: a.type, name: a.name, reason: a.invocations === 0 ? "installed but never used" : "low-confidence signal" });
   }
-  return {
+  const gaps = signal.unresolved.filter((u) => u.kind !== "builtin").map((u) => u.name);
+  const candidates: GemCandidate[] = include.length ? [{
     name: signal.root.split("/").pop() || "workflow",
     description: `Recommended from ${signal.sessions.scanned} session(s) of usage.`,
     root: signal.root,
     includeInstructions,
-    include, exclude,
-    gaps: signal.unresolved.filter((u) => u.kind !== "builtin").map((u) => u.name),
-    confidence: include.length ? "medium" : "low",
-  };
+    include,
+    confidence: "medium",
+  }] : [];
+  return { candidates, gaps };
 }
 
-/** Map a validated recommendation to a project-namespaced GemSelection. */
-export function recommendationToSelection(rec: GemRecommendation): GemSelection {
+/** Map a validated candidate to a project-namespaced GemSelection. */
+export function recommendationToSelection(c: GemCandidate): GemSelection {
   const ps: ProjectSelection = {};
-  const skills = rec.include.filter((i) => i.type === "skill").map((i) => i.name);
-  const mcpServers = rec.include.filter((i) => i.type === "mcp_server").map((i) => i.name);
-  const hooks = rec.include.filter((i) => i.type === "hook").map((i) => i.name);
+  const skills = c.include.filter((i) => i.type === "skill").map((i) => i.name);
+  const mcpServers = c.include.filter((i) => i.type === "mcp_server").map((i) => i.name);
+  const hooks = c.include.filter((i) => i.type === "hook").map((i) => i.name);
   if (skills.length) ps.skills = skills;
   if (mcpServers.length) ps.mcpServers = mcpServers;
   if (hooks.length) ps.hooks = hooks;
-  if (rec.includeInstructions) ps.includeInstructions = true;
-  return { projects: { [rec.root]: ps } };
+  if (c.includeInstructions) ps.includeInstructions = true;
+  return { projects: { [c.root]: ps } };
 }
 
 // Pull the first {...} block out of an agent message that may wrap JSON in prose/fences.
@@ -90,15 +98,17 @@ function extractJson(text: string): string {
 }
 
 /**
- * Validate a raw agent response against the inventory. Any include[].name not
- * present in the inventory is dropped (logged). On any structural failure, fall
- * back to the deterministic recommendation. The inventory is authoritative.
+ * Validate a raw agent response against the inventory. Each candidate's include
+ * names are checked against the inventory; hallucinated names are dropped
+ * (logged) and a candidate with no surviving includes is discarded. On any
+ * structural failure or zero valid candidates, fall back to the deterministic
+ * analysis. The inventory is authoritative.
  */
-export function validateRecommendation(raw: unknown, inventory: ProjectInventory, signal: WorkflowSignal): GemRecommendation {
-  const fallback = deterministicRecommendation(signal);
+export function validateAnalysis(raw: unknown, inventory: ProjectInventory, signal: WorkflowSignal): WorkflowAnalysis {
+  const fallback = deterministicAnalysis(signal);
   let obj: any = raw;
   if (typeof raw === "string") { try { obj = JSON.parse(extractJson(raw)); } catch { return fallback; } }
-  if (!obj || typeof obj !== "object" || !Array.isArray(obj.include)) return fallback;
+  if (!obj || typeof obj !== "object" || !Array.isArray(obj.candidates)) return fallback;
 
   const known: Record<string, Set<string>> = {
     skill: new Set(inventory.skills.map((s) => s.name)),
@@ -106,34 +116,41 @@ export function validateRecommendation(raw: unknown, inventory: ProjectInventory
     hook: new Set(inventory.hooks.map((h) => h.name)),
   };
 
-  const include: RecommendedItem[] = [];
-  for (const it of obj.include) {
-    if (!it || !SELECTABLE.includes(it.type) || typeof it.name !== "string") continue;
-    if (!known[it.type]?.has(it.name)) { console.error(`workflow: dropping hallucinated ${it.type} '${it.name}'`); continue; }
-    include.push({ type: it.type, name: it.name, reason: typeof it.reason === "string" ? it.reason : "" });
+  const candidates: GemCandidate[] = [];
+  for (const c of obj.candidates) {
+    if (!c || typeof c !== "object" || !Array.isArray(c.include)) continue;
+    const include: RecommendedItem[] = [];
+    for (const it of c.include) {
+      if (!it || !SELECTABLE.includes(it.type) || typeof it.name !== "string") continue;
+      if (!known[it.type]?.has(it.name)) { console.error(`workflow: dropping hallucinated ${it.type} '${it.name}'`); continue; }
+      include.push({ type: it.type, name: it.name, reason: typeof it.reason === "string" ? it.reason : "" });
+    }
+    if (!include.length) continue;
+    candidates.push({
+      name: typeof c.name === "string" ? c.name : (signal.root.split("/").pop() || "workflow"),
+      description: typeof c.description === "string" ? c.description : "",
+      root: signal.root,
+      includeInstructions: c.includeInstructions === true,
+      include,
+      confidence: ["high", "medium", "low"].includes(c.confidence) ? c.confidence : "medium",
+    });
   }
-  if (!include.length) return fallback;
-
-  return {
-    name: typeof obj.name === "string" ? obj.name : fallback.name,
-    description: typeof obj.description === "string" ? obj.description : fallback.description,
-    root: signal.root,
-    includeInstructions: obj.includeInstructions === true || fallback.includeInstructions,
-    include,
-    exclude: fallback.exclude.filter((e) => !include.some((i) => i.name === e.name)),
-    gaps: Array.isArray(obj.gaps) ? obj.gaps.filter((g: unknown) => typeof g === "string") : fallback.gaps,
-    confidence: ["high", "medium", "low"].includes(obj.confidence) ? obj.confidence : "medium",
-  };
+  if (!candidates.length) return fallback;
+  const gaps = Array.isArray(obj.gaps) ? obj.gaps.filter((g: unknown) => typeof g === "string") : fallback.gaps;
+  return { candidates, gaps };
 }
 
 // ── The agent run ────────────────────────────────────────────────────────────
 const GROUNDING = (signalJson: string, inventoryJson: string) =>
-  `You recommend which installed artifacts to bundle into a reusable "Gem".\n` +
-  `USAGE SIGNAL (authoritative — invocation counts are facts):\n${signalJson}\n\n` +
+  `You recommend reusable "Gems" — bundles of installed artifacts for a recurring workflow.\n` +
+  `A project often exercises SEVERAL distinct flows (e.g. diagram generation vs web scraping). ` +
+  `Use the per-session "shapes" (sets of artifacts used together) plus co-occurrence to identify each ` +
+  `recurring flow, and propose ONE Gem per flow.\n` +
+  `USAGE SIGNAL (authoritative — invocation counts and shapes are facts):\n${signalJson}\n\n` +
   `INVENTORY (the only artifacts that exist — never invent names outside this):\n${inventoryJson}\n\n` +
-  `Return ONLY a JSON object: {"name","description","includeInstructions":bool,` +
-  `"include":[{"type":"skill"|"mcp_server"|"hook","name","reason"}],"gaps":[string],"confidence":"high"|"medium"|"low"}.\n` +
-  `Cluster the high-usage artifacts into one coherent Gem. Use exact inventory names.`;
+  `Return ONLY a JSON object: {"candidates":[{"name","description","includeInstructions":bool,` +
+  `"include":[{"type":"skill"|"mcp_server"|"hook","name","reason"}],"confidence":"high"|"medium"|"low"}],"gaps":[string]}.\n` +
+  `Each candidate is one coherent flow. Prefer 1–4 candidates; don't split trivially or duplicate. Use exact inventory names.`;
 
 // Skill bodies are large; send descriptions only to stay within context.
 function trimInventory(inv: ProjectInventory) {
@@ -151,14 +168,14 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 }
 
 /**
- * Recommend a Gem for `signal`/`inventory`. Total: never throws. On any agent
- * error/timeout/junk, returns the deterministic recommendation with degraded:true.
+ * Analyse `signal`/`inventory` into candidate Gems. Total: never throws. On any
+ * agent error/timeout/junk, returns the deterministic analysis with degraded:true.
  */
 export async function recommendWorkflow(
   signal: WorkflowSignal,
   inventory: ProjectInventory,
   opts: { connectFn?: AcpConnectFn; timeoutMs?: number; onDelta?: (chunk: string) => void } = {},
-): Promise<{ recommendation: GemRecommendation; degraded: boolean }> {
+): Promise<{ analysis: WorkflowAnalysis; degraded: boolean }> {
   const connectFn = opts.connectFn ?? testConnectFn ?? defaultConnectFn;
   const timeoutMs = opts.timeoutMs ?? 60_000;
   let conn: { ctx: AcpCtx; close: () => void } | null = null;
@@ -170,10 +187,10 @@ export async function recommendWorkflow(
     await handle.setMode("plan");                 // explicit — never edits files
     const prompt = GROUNDING(JSON.stringify(signal), JSON.stringify(trimmedInv));
     const text = await withTimeout(handle.promptText(prompt, opts.onDelta), timeoutMs);
-    return { recommendation: validateRecommendation(text, inventory, signal), degraded: false };
+    return { analysis: validateAnalysis(text, inventory, signal), degraded: false };
   } catch (err) {
     console.error("workflow: recommender fell back to deterministic:", (err as Error).message);
-    return { recommendation: deterministicRecommendation(signal), degraded: true };
+    return { analysis: deterministicAnalysis(signal), degraded: true };
   } finally {
     try { handle?.dispose(); } catch { /* ignore */ }
     try { conn?.close(); } catch { /* ignore */ }

@@ -284,24 +284,23 @@ const RecommendedItemSchema = z.object({
   name: z.string(),
   reason: z.string(),
 });
-const GemRecommendationSchema = z.object({
+// One candidate Gem, carrying its own ready-to-POST GemSelection.
+const GemCandidateSchema = z.object({
   name: z.string(),
   description: z.string(),
   root: z.string(),
   includeInstructions: z.boolean(),
   include: z.array(RecommendedItemSchema),
-  exclude: z.array(RecommendedItemSchema),
-  gaps: z.array(z.string()),
   confidence: z.enum(["high", "medium", "low"]),
+  selection: z.record(z.string(), z.unknown()), // a GemSelection; buildGem validates structurally at /api/gem
 });
 export const WorkflowAnalyzeResponseSchema = z.object({
-  recommendation: GemRecommendationSchema,
-  selection: z.record(z.string(), z.unknown()),   // a GemSelection; buildGem validates structurally at /api/gem
+  candidates: z.array(GemCandidateSchema),
+  gaps: z.array(z.string()),                     // project-level: used but absent from inventory
   signalSummary: z.object({
     sessionsScanned: z.number(),
     spanDays: z.number(),
     notes: z.array(z.string()),
-    gaps: z.array(z.string()),
   }),
   degraded: z.boolean(),
 });

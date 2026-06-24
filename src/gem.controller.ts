@@ -382,12 +382,12 @@ export class GemController {
     const dirs = resolveDirs(dir);
     const paths = claudeTranscriptsForCwd(dirs.claudeDir, root);
     const signal = scanWorkflow(paths, project);
-    const { recommendation, degraded } = await recommendWorkflow(signal, project);
-    const selection = recommendationToSelection(recommendation);
+    const { analysis, degraded } = await recommendWorkflow(signal, project);
+    const candidates = analysis.candidates.map((c) => ({ ...c, selection: recommendationToSelection(c) as Record<string, unknown> }));
     return {
-      recommendation,
-      selection: selection as Record<string, unknown>,
-      signalSummary: { sessionsScanned: signal.sessions.scanned, spanDays: signal.sessions.spanDays, notes: signal.notes, gaps: recommendation.gaps },
+      candidates,
+      gaps: analysis.gaps,
+      signalSummary: { sessionsScanned: signal.sessions.scanned, spanDays: signal.sessions.spanDays, notes: signal.notes },
       degraded,
     };
   }

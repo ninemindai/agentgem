@@ -1,7 +1,7 @@
 // src/gem/__tests__/acpRecommender.test.ts
 import { describe, it, expect } from "vitest";
 import {
-  recommendationToSelection, deterministicRecommendation, validateRecommendation,
+  recommendationToSelection, deterministicAnalysis, validateAnalysis,
   recommendWorkflow, type AcpConnectFn,
 } from "../acpRecommender.js";
 import type { WorkflowSignal } from "../workflowScan.js";
@@ -10,8 +10,14 @@ import type { ProjectInventory } from "../types.js";
 const ROOT = "/Users/me/work/app";
 const inventory: ProjectInventory = {
   root: ROOT, name: "app",
-  skills: [{ type: "skill", name: "qa", source: "project", content: "x" }],
-  mcpServers: [{ type: "mcp_server", name: "context7", transport: "stdio", config: {} }],
+  skills: [
+    { type: "skill", name: "qa", source: "project", content: "x" },
+    { type: "skill", name: "diagram", source: "project", content: "x" },
+  ],
+  mcpServers: [
+    { type: "mcp_server", name: "context7", transport: "stdio", config: {} },
+    { type: "mcp_server", name: "playwright", transport: "stdio", config: {} },
+  ],
   instructions: [{ type: "instructions", name: "CLAUDE.md", content: "x" }],
   hooks: [{ type: "hook", name: "PreToolUse · Bash", event: "PreToolUse", config: { hooks: [] }, source: "project" }],
 };
@@ -21,28 +27,28 @@ const signal: WorkflowSignal = {
   artifacts: [
     { type: "skill", name: "qa", root: ROOT, invocations: 5, sessionsUsedIn: 3, lastUsedMs: 2, confidence: "high" },
     { type: "mcp_server", name: "context7", root: ROOT, invocations: 4, sessionsUsedIn: 2, lastUsedMs: 2, confidence: "high" },
-    { type: "mcp_server", name: "unusedsrv", root: ROOT, invocations: 0, sessionsUsedIn: 0, lastUsedMs: null, confidence: "high" },
+    { type: "mcp_server", name: "playwright", root: ROOT, invocations: 0, sessionsUsedIn: 0, lastUsedMs: null, confidence: "high" },
     { type: "instructions", name: "CLAUDE.md", root: ROOT, invocations: 3, sessionsUsedIn: 3, lastUsedMs: 2, confidence: "low" },
   ],
-  unresolved: [{ name: "playwright", kind: "mcp_server", count: 9 }],
-  coOccurrence: [], notes: [],
+  unresolved: [{ name: "github", kind: "mcp_server", count: 9 }],
+  coOccurrence: [], shapes: [{ artifacts: ["qa", "context7"], sessions: 2 }], notes: [],
 };
 
-describe("deterministicRecommendation", () => {
-  it("includes high-confidence used artifacts, excludes the unused one", () => {
-    const rec = deterministicRecommendation(signal);
-    expect(rec.include.map((i) => i.name).sort()).toEqual(["context7", "qa"]);
-    expect(rec.exclude.map((i) => i.name)).toContain("unusedsrv");
-    expect(rec.includeInstructions).toBe(true);
-    expect(rec.gaps).toContain("playwright");
-    expect(rec.root).toBe(ROOT);
+describe("deterministicAnalysis", () => {
+  it("returns one candidate of high-confidence used artifacts + project gaps", () => {
+    const a = deterministicAnalysis(signal);
+    expect(a.candidates).toHaveLength(1);
+    expect(a.candidates[0].include.map((i) => i.name).sort()).toEqual(["context7", "qa"]);
+    expect(a.candidates[0].includeInstructions).toBe(true);
+    expect(a.candidates[0].root).toBe(ROOT);
+    expect(a.gaps).toContain("github");
   });
 });
 
 describe("recommendationToSelection", () => {
-  it("maps to a project-namespaced GemSelection with instructions as a boolean", () => {
-    const rec = deterministicRecommendation(signal);
-    const sel = recommendationToSelection(rec) as any;
+  it("maps a candidate to a project-namespaced GemSelection with instructions as a boolean", () => {
+    const c = deterministicAnalysis(signal).candidates[0];
+    const sel = recommendationToSelection(c) as any;
     expect(sel.projects[ROOT].skills).toEqual(["qa"]);
     expect(sel.projects[ROOT].mcpServers).toEqual(["context7"]);
     expect(sel.projects[ROOT].includeInstructions).toBe(true);
@@ -50,19 +56,33 @@ describe("recommendationToSelection", () => {
   });
 });
 
-describe("validateRecommendation", () => {
-  it("drops hallucinated names not in the inventory", () => {
-    const rec = validateRecommendation(
-      { name: "G", description: "d", include: [{ type: "skill", name: "qa", reason: "used" }, { type: "skill", name: "ghost", reason: "made up" }], confidence: "high" },
-      inventory, signal,
-    );
-    expect(rec.include.map((i) => i.name)).toEqual(["qa"]);
-    expect(rec.root).toBe(ROOT);
+describe("validateAnalysis", () => {
+  it("keeps multiple candidates and drops hallucinated names per candidate", () => {
+    const a = validateAnalysis({
+      candidates: [
+        { name: "QA", description: "qa", include: [{ type: "skill", name: "qa", reason: "used" }, { type: "skill", name: "ghost", reason: "nope" }], confidence: "high" },
+        { name: "Diagrams", description: "d", include: [{ type: "skill", name: "diagram", reason: "used" }], confidence: "medium" },
+      ],
+      gaps: ["github"],
+    }, inventory, signal);
+    expect(a.candidates).toHaveLength(2);
+    expect(a.candidates[0].include.map((i) => i.name)).toEqual(["qa"]);   // ghost dropped
+    expect(a.candidates[1].include.map((i) => i.name)).toEqual(["diagram"]);
+    expect(a.gaps).toContain("github");
+  });
+
+  it("drops candidates with no surviving includes", () => {
+    const a = validateAnalysis({
+      candidates: [{ name: "X", description: "d", include: [{ type: "skill", name: "ghost", reason: "nope" }], confidence: "high" }],
+    }, inventory, signal);
+    // no valid candidate -> deterministic fallback (one candidate)
+    expect(a.candidates).toHaveLength(1);
+    expect(a.candidates[0].include.map((i) => i.name).sort()).toEqual(["context7", "qa"]);
   });
 
   it("falls back to deterministic when raw is junk", () => {
-    const rec = validateRecommendation("not json at all", inventory, signal);
-    expect(rec.include.map((i) => i.name).sort()).toEqual(["context7", "qa"]);
+    const a = validateAnalysis("not json at all", inventory, signal);
+    expect(a.candidates[0].include.map((i) => i.name).sort()).toEqual(["context7", "qa"]);
   });
 });
 
@@ -86,26 +106,25 @@ function fakeConnect(canned: string | (() => Promise<string>)): AcpConnectFn {
 }
 
 describe("recommendWorkflow", () => {
-  it("parses the agent's JSON, validating against the inventory", async () => {
-    const canned = JSON.stringify({ name: "QA Kit", description: "qa flow", include: [{ type: "skill", name: "qa", reason: "core" }], confidence: "high" });
-    const { recommendation, degraded } = await recommendWorkflow(signal, inventory, { connectFn: fakeConnect(canned) });
+  it("parses multiple candidates, validating each against the inventory", async () => {
+    const canned = JSON.stringify({
+      candidates: [
+        { name: "QA Kit", description: "qa flow", include: [{ type: "skill", name: "qa", reason: "core" }], confidence: "high" },
+        { name: "Diagram Kit", description: "diagram flow", include: [{ type: "skill", name: "diagram", reason: "core" }], confidence: "medium" },
+      ],
+      gaps: [],
+    });
+    const { analysis, degraded } = await recommendWorkflow(signal, inventory, { connectFn: fakeConnect(canned) });
     expect(degraded).toBe(false);
-    expect(recommendation.name).toBe("QA Kit");
-    expect(recommendation.include.map((i) => i.name)).toEqual(["qa"]);
+    expect(analysis.candidates.map((c) => c.name)).toEqual(["QA Kit", "Diagram Kit"]);
   });
 
-  it("drops hallucinated names even from a live agent response", async () => {
-    const canned = JSON.stringify({ name: "X", description: "d", include: [{ type: "skill", name: "ghost", reason: "nope" }], confidence: "high" });
-    const { recommendation } = await recommendWorkflow(signal, inventory, { connectFn: fakeConnect(canned) });
-    expect(recommendation.include.find((i) => i.name === "ghost")).toBeUndefined();
-  });
-
-  it("degrades to the deterministic recommendation on agent error", async () => {
-    const { recommendation, degraded } = await recommendWorkflow(signal, inventory, {
+  it("degrades to the deterministic analysis on agent error", async () => {
+    const { analysis, degraded } = await recommendWorkflow(signal, inventory, {
       connectFn: async () => { throw new Error("no binary"); },
     });
     expect(degraded).toBe(true);
-    expect(recommendation.include.map((i) => i.name).sort()).toEqual(["context7", "qa"]);
+    expect(analysis.candidates[0].include.map((i) => i.name).sort()).toEqual(["context7", "qa"]);
   });
 
   it("degrades on timeout", async () => {
@@ -119,13 +138,17 @@ describe("recommendWorkflow", () => {
     const streamingConnect: AcpConnectFn = async () => ({
       ctx: { async open() { return {
         async setMode() {},
-        async promptText(_t: string, onDelta?: (c: string) => void) { onDelta?.('{"name":"X","desc'); onDelta?.('ription":"d","include":[{"type":"skill","name":"qa","reason":"r"}],"confidence":"high"}'); return '{"name":"X","description":"d","include":[{"type":"skill","name":"qa","reason":"r"}],"confidence":"high"}'; },
+        async promptText(_t: string, onDelta?: (c: string) => void) {
+          onDelta?.('{"candidates":[{"name":"X","des');
+          onDelta?.('cription":"d","include":[{"type":"skill","name":"qa","reason":"r"}],"confidence":"high"}]}');
+          return '{"candidates":[{"name":"X","description":"d","include":[{"type":"skill","name":"qa","reason":"r"}],"confidence":"high"}]}';
+        },
         dispose() {},
       }; } },
       close() {},
     });
-    const { recommendation } = await recommendWorkflow(signal, inventory, { connectFn: streamingConnect, onDelta: (c) => chunks.push(c) });
+    const { analysis } = await recommendWorkflow(signal, inventory, { connectFn: streamingConnect, onDelta: (c) => chunks.push(c) });
     expect(chunks.length).toBe(2);
-    expect(recommendation.include.map((i) => i.name)).toEqual(["qa"]);
+    expect(analysis.candidates[0].include.map((i) => i.name)).toEqual(["qa"]);
   });
 });

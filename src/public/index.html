@@ -481,33 +481,46 @@ function renderAnError(view, msg){
   view.querySelector(".anBack").onclick = (e) => { e.preventDefault(); showPicker(); };
 }
 
-// Read-only recommendation view + a button that adopts the project AND applies the selection.
+// Read-only view of the candidate Gems. Each card adopts the project AND applies
+// just that candidate's selection.
+let anCandidates = [];   // stash so a card's button can grab its candidate
 function renderAnView(view, path, flavor, name, res){
-  const r = res.recommendation;
+  anCandidates = res.candidates || [];
   const degraded = res.degraded ? ` <span class="d">(usage frequency — agent unavailable)</span>` : "";
+  const gaps = (res.gaps || []).length ? `<div class="d" style="margin:8px 0">Used but not in inventory: ${esc(res.gaps.join(", "))}</div>` : "";
   const li = (n, t, reason) => `<li style="margin-bottom:4px"><b>${esc(n)}</b> <span class="d">${esc(t)}</span>${reason ? ` — ${esc(reason)}` : ""}</li>`;
-  const items = r.include.map(i => li(i.name, i.type, i.reason)).join("");
-  const instr = r.includeInstructions ? li("CLAUDE.md", "instructions", "loaded every session") : "";
-  const gaps = (res.signalSummary.gaps || []).length ? `<div class="d" style="margin-top:6px">Not in inventory: ${esc(res.signalSummary.gaps.join(", "))}</div>` : "";
-  const empty = (!items && !instr) ? `<div class="d">No project-scoped artifacts to recommend.</div>` : "";
+
+  const cards = anCandidates.map((c, i) => {
+    const items = c.include.map(it => li(it.name, it.type, it.reason)).join("");
+    const instr = c.includeInstructions ? li("CLAUDE.md", "instructions", "loaded every session") : "";
+    return `<div style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:10px">`
+      + `<div style="font-size:14px"><b>${esc(c.name)}</b> <span class="d">· ${c.confidence}</span></div>`
+      + `<div class="d" style="margin:3px 0 8px">${esc(c.description)}</div>`
+      + (items || instr ? `<ul style="margin:0 0 8px 18px;padding:0">${items}${instr}</ul>` : `<div class="d">No project-scoped artifacts.</div>`)
+      + `<button type="button" class="anApply" data-i="${i}" style="margin-top:4px">Switch &amp; apply this Gem ▸</button>`
+      + `</div>`;
+  }).join("");
+
+  const heading = anCandidates.length > 1 ? `${anCandidates.length} candidate Gems` : (anCandidates.length === 1 ? "Recommended Gem" : "No recurring flows found");
   view.innerHTML =
     `<button type="button" class="ghost anBack">← back to projects</button>`
-    + `<div style="margin-top:10px;font-size:15px"><b>${esc(r.name)}</b>${degraded} <span class="d">· ${res.signalSummary.sessionsScanned} session(s)</span></div>`
+    + `<div style="margin-top:10px;font-size:15px"><b>${esc(heading)}</b>${degraded} <span class="d">· ${res.signalSummary.sessionsScanned} session(s)</span></div>`
     + `<div class="d" style="margin:4px 0 10px;word-break:break-all">${esc(path)}</div>`
-    + `<div style="margin-bottom:10px">${esc(r.description)}</div>`
-    + (items || instr ? `<ul style="margin:0 0 8px 18px;padding:0">${items}${instr}</ul>` : "")
-    + empty + gaps
-    + `<button type="button" class="anApply" style="margin-top:14px">Switch to this project &amp; apply ▸</button>`;
+    + (cards || `<div class="d">Nothing to recommend from this project's usage.</div>`)
+    + gaps;
   view.querySelector(".anBack").onclick = (e) => { e.preventDefault(); showPicker(); };
-  view.querySelector(".anApply").onclick = (e) => { e.preventDefault(); switchAndApply(path, flavor, name, res); };
+  view.querySelectorAll(".anApply").forEach(btn => {
+    btn.onclick = (e) => { e.preventDefault(); switchAndApply(path, flavor, anCandidates[+btn.dataset.i]); };
+  });
 }
 
-// The explicit switch: adopt the project as the active testbed, then pre-check the recommendation.
-async function switchAndApply(path, flavor, name, res){
+// The explicit switch: adopt the project as the active testbed, then pre-check
+// the chosen candidate's selection.
+async function switchAndApply(path, flavor, candidate){
   document.getElementById("recentModal").hidden = true;
   showPicker();                            // reset modal for next open
-  await useTestbed(path, flavor, name);   // adopt + render this project's inventory
-  applyRecommendation(path, res);         // pre-check the recommended boxes + banner on the inventory pane
+  await useTestbed(path, flavor, candidate.name);   // adopt + render this project's inventory
+  applyCandidate(path, candidate);         // pre-check this candidate's boxes + banner
 }
 
 function ensureAnalyzeBanner(){
@@ -517,10 +530,10 @@ function ensureAnalyzeBanner(){
   return b;
 }
 
-// Mutate the shared `sel` model (same shape onToggle maintains), then re-sync
-// the checkboxes and the build preview.
-function applyRecommendation(root, res){
-  const ps = (res.selection.projects || {})[root] || {};
+// Mutate the shared `sel` model (same shape onToggle maintains) from one
+// candidate's selection, then re-sync the checkboxes and the build preview.
+function applyCandidate(root, candidate){
+  const ps = (candidate.selection.projects || {})[root] || {};
   const ts = projSel(root);
   (ps.skills || []).forEach(n => ts.skills.add(n));
   (ps.mcpServers || []).forEach(n => ts.mcpServers.add(n));
@@ -528,12 +541,8 @@ function applyRecommendation(root, res){
   if (ps.includeInstructions) ts.includeInstructions = true;
   restoreChecks(); refresh();
 
-  const r = res.recommendation;
-  const reasons = r.include.map(i => `${esc(i.name)}: ${esc(i.reason)}`).join(" · ");
-  const degraded = res.degraded ? ' <span class="d">(from usage frequency — agent unavailable)</span>' : "";
-  const gaps = (res.signalSummary.gaps || []).length ? `<br><span class="d">Not in inventory: ${esc(res.signalSummary.gaps.join(", "))}</span>` : "";
-  const span = res.signalSummary.sessionsScanned;
-  ensureAnalyzeBanner().innerHTML = `<b>${esc(r.name)}</b>${degraded} — ${esc(r.description)} <span class="d">(${span} session(s))</span><br>${reasons}${gaps}`;
+  const reasons = candidate.include.map(i => `${esc(i.name)}: ${esc(i.reason)}`).join(" · ");
+  ensureAnalyzeBanner().innerHTML = `<b>${esc(candidate.name)}</b> — ${esc(candidate.description)}<br>${reasons}`;
 }
 
 // Browse routes the picked folder back through the same confirm block (no prompts).

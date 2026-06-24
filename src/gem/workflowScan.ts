@@ -27,6 +27,10 @@ export interface WorkflowSignal {
   artifacts: ArtifactUsage[];
   unresolved: { name: string; kind: ArtifactType | "builtin"; count: number }[];
   coOccurrence: { a: string; b: string; sessions: number }[];
+  // Distinct per-session artifact "shapes": the set of inventory artifacts a
+  // session exercised, and how many sessions had exactly that set. These are the
+  // candidate flows (e.g. {diagram, mermaid} ×20 vs {scrape, playwright} ×15).
+  shapes: { artifacts: string[]; sessions: number }[];
   notes: string[];
 }
 
@@ -205,6 +209,19 @@ export function scanWorkflow(paths: string[], inventory: ProjectInventory): Work
     });
   }
 
+  // Distinct session shapes: group sessions by their exact artifact-set, count
+  // frequency, keep the most common (bounds prompt size on 100s of sessions).
+  const shapeCounts = new Map<string, number>();
+  for (const s of perSession) {
+    if (s.names.size === 0) continue;
+    const key = [...s.names].sort().join(" ");
+    shapeCounts.set(key, (shapeCounts.get(key) ?? 0) + 1);
+  }
+  const shapes = [...shapeCounts.entries()]
+    .map(([k, sessions]) => ({ artifacts: k.split(" "), sessions }))
+    .sort((a, b) => b.sessions - a.sessions)
+    .slice(0, 25);
+
   // Co-occurrence: count sessions in which each unordered pair both fired.
   const pairCounts = new Map<string, number>();
   for (const s of perSession) {
@@ -232,6 +249,7 @@ export function scanWorkflow(paths: string[], inventory: ProjectInventory): Work
     artifacts,
     unresolved: [...unresolved.entries()].map(([name, v]) => ({ name, kind: v.kind, count: v.count })),
     coOccurrence,
+    shapes,
     notes: paths.length === 0 ? [...notes, "no transcripts found for this project"] : notes,
   };
 }

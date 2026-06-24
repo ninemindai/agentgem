@@ -28,7 +28,7 @@ beforeAll(() => {
       async open() {
         return {
           async setMode() {},
-          async promptText() { return JSON.stringify({ name: "QA", description: "d", includeInstructions: false, include: [{ type: "skill", name: "qa", reason: "used" }], confidence: "high" }); },
+          async promptText() { return JSON.stringify({ candidates: [{ name: "QA", description: "d", includeInstructions: false, include: [{ type: "skill", name: "qa", reason: "used" }], confidence: "high" }], gaps: [] }); },
           dispose() {},
         };
       },
@@ -39,12 +39,13 @@ beforeAll(() => {
 afterAll(() => { setConnectFnForTests(null); rmSync(home, { recursive: true, force: true }); });
 
 describe("POST /api/workflow/analyze", () => {
-  it("returns a recommendation and a project-namespaced pre-checked selection", async () => {
+  it("returns candidate Gems each with a project-namespaced pre-checked selection", async () => {
     const ctl = new GemController();
     const res = await ctl.workflowAnalyze({ body: { dir: join(home, ".claude"), root: projectRoot } });
     expect(res.degraded).toBe(false);
-    expect(res.recommendation.include.map((i) => i.name)).toContain("qa");
-    expect((res.selection as any).projects[projectRoot].skills).toContain("qa");
+    expect(res.candidates).toHaveLength(1);
+    expect(res.candidates[0].include.map((i) => i.name)).toContain("qa");
+    expect((res.candidates[0].selection as any).projects[projectRoot].skills).toContain("qa");
     expect(res.signalSummary.sessionsScanned).toBe(1);
   });
 });

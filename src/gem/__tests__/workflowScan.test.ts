@@ -97,6 +97,9 @@ describe("scanWorkflow hooks, instructions, co-occurrence", () => {
     expect(byName["CLAUDE.md"].invocations).toBe(1);
     const pair = sig.coOccurrence.find((c) => [c.a, c.b].includes("qa") && [c.a, c.b].includes("context7"));
     expect(pair?.sessions).toBe(1);
+    // the session's shape is the set of artifacts it exercised
+    const shape = sig.shapes.find((s) => s.artifacts.includes("qa") && s.artifacts.includes("context7"));
+    expect(shape?.sessions).toBe(1);
     rmSync(dir, { recursive: true, force: true });
   });
 
