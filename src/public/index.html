@@ -436,8 +436,10 @@ async function useTestbed(path, flavor, name){
 
 // Swap the picker for a focused recommendation view (same modal, no stacking).
 function anModalTitle(t){ const el = document.querySelector("#recentModal .modal-h .t"); if (el) el.textContent = t; }
-function showAnView(){ document.getElementById("anPicker").hidden = true; document.getElementById("anFooter").hidden = true; document.getElementById("anView").hidden = false; anModalTitle("Workflow recommendation"); }
-function showPicker(){ document.getElementById("anView").hidden = true; document.getElementById("anPicker").hidden = false; document.getElementById("anFooter").hidden = false; anModalTitle("Open a testbed"); }
+// NB: #anFooter has class `modal-h` whose CSS `display:flex` overrides the
+// `hidden` attribute, so toggle its inline display directly.
+function showAnView(){ document.getElementById("anPicker").hidden = true; document.getElementById("anFooter").style.display = "none"; document.getElementById("anView").hidden = false; anModalTitle("Workflow recommendation"); }
+function showPicker(){ document.getElementById("anView").hidden = true; document.getElementById("anPicker").hidden = false; document.getElementById("anFooter").style.display = ""; anModalTitle("Open a testbed"); }
 
 // Recommend a Gem for `path` from its session history — IN PLACE, without adopting
 // it as the active testbed. Renders a focused view inside the same modal. One at a
