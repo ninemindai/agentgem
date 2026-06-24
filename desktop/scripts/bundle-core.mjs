@@ -58,8 +58,12 @@ writeFileSync(
     2,
   ),
 );
-// On Windows the npm launcher is npm.cmd; execFile won't resolve a bare "npm".
-const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
-execFileSync(npmCmd, ["install", "--omit=dev", "--no-audit", "--no-fund"], { cwd: out, stdio: "inherit" });
+// Run npm through a shell so Windows resolves npm.cmd — Node 22 refuses to spawn
+// .cmd/.bat directly without a shell. Command and args are static (no injection).
+execFileSync("npm", ["install", "--omit=dev", "--no-audit", "--no-fund"], {
+  cwd: out,
+  stdio: "inherit",
+  shell: true,
+});
 
 console.log("core bundled →", out);

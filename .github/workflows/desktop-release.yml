@@ -27,12 +27,13 @@ jobs:
           node-version: 22
       - run: pnpm install
       - run: pnpm -C desktop install
-      # Build installers only (no publish). Signing runs only when a cert is
-      # provided: CSC_IDENTITY_AUTO_DISCOVERY is "false" when CSC_LINK is empty,
-      # so a cert-less runner produces an unsigned build instead of failing.
+      # Build installers only (no publish). These are unsigned: signing is off so
+      # the cert-less runner doesn't fail. To enable signing later, set
+      # CSC_IDENTITY_AUTO_DISCOVERY to "true" (or remove the line) and add the
+      # CSC_LINK / CSC_KEY_PASSWORD (+ APPLE_* for notarization) secrets.
       - run: pnpm -C desktop dist
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.CSC_LINK != '' && 'true' || 'false' }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
