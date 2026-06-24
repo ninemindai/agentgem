@@ -1,6 +1,6 @@
 // src/gem/__tests__/targets.test.ts
 import { describe, it, expect } from "vitest";
-import { materialize, compatibility, TARGET_REGISTRY, buildAgentcoreHarness, agentcoreComposeProject } from "../targets.js";
+import { materialize, compatibility, TARGET_REGISTRY, buildAgentcoreHarness, agentcoreComposeProject, a2aAgentCard } from "../targets.js";
 import type { Gem, GemArtifact, SkillArtifact, McpServerArtifact, InstructionsArtifact, HookArtifact } from "../types.js";
 
 const gem = (artifacts: GemArtifact[]): Gem => ({ name: "p", createdFrom: "/d", artifacts, checks: [], requiredSecrets: [] });
@@ -337,7 +337,7 @@ describe("compatibility", () => {
     expect(c.codex).toEqual({ supported: 1, skipped: 1 });   // hook unsupported
     expect(c.hermes).toEqual({ supported: 1, skipped: 1 });
     expect(c.eve).toEqual({ supported: 1, skipped: 1 }); // skill ok, hook unsupported
-    expect(Object.keys(TARGET_REGISTRY).sort()).toEqual(["agentcore", "agents", "claude", "codex", "eve", "flue", "hermes", "openai-sandbox"]);
+    expect(Object.keys(TARGET_REGISTRY).sort()).toEqual(["a2a", "agentcore", "agents", "claude", "codex", "eve", "flue", "hermes", "openai-sandbox"]);
   });
 });
 
@@ -375,5 +375,154 @@ describe("materialize agentcore", () => {
     expect(reasons.some((r) => r.startsWith("local:") && /stdio/.test(r))).toBe(true);
     expect(reasons.some((r) => r.startsWith("PreToolUse · Bash:"))).toBe(true); // hook unsupported
     expect(JSON.stringify(files)).not.toContain("<redacted>");
+  });
+});
+
+describe("materialize a2a (Agent Card primitive)", () => {
+  it("emits exactly agent-card.json with no runtime files", () => {
+    const r = materialize(gem([skill("review"), instr("CLAUDE.md")]), "a2a");
+    expect(Object.keys(r.files)).toEqual(["agent-card.json"]);
+    expect(r.files["src/server.ts"]).toBeUndefined();
+    expect(r.files["package.json"]).toBeUndefined();
+    expect(r.files["SECRETS.md"]).toBeUndefined();
+  });
+
+  it("derives a valid card: one skill entry per gem skill, description from first instruction line, streaming false", () => {
+    const r = materialize(gem([skill("review"), skill("scrape"), instr("CLAUDE.md", "# Heading\n\nReview and scrape things.")]), "a2a");
+    const card = JSON.parse(r.files["agent-card.json"]);
+    expect(card.protocolVersion).toBe("0.3.0");
+    expect(card.name).toBe("p");
+    expect(card.description).toBe("Review and scrape things.");
+    expect(card.capabilities.streaming).toBe(false);
+    expect(card.skills.map((s: { name: string }) => s.name)).toEqual(["review", "scrape"]);
+    expect(card.skills.every((s: { tags: string[] }) => s.tags.includes("skill"))).toBe(true);
+  });
+
+  it("synthesizes a chat skill when the gem has no skills (A2A requires >=1)", () => {
+    const r = materialize(gem([instr("CLAUDE.md")]), "a2a");
+    const card = JSON.parse(r.files["agent-card.json"]);
+    expect(card.skills).toHaveLength(1);
+    expect(card.skills[0].id).toBe("chat");
+  });
+
+  it("card-only mode reports nothing skipped even with hooks and an unmappable MCP server", () => {
+    const r = materialize(gem([skill("review"), mcp("local"), httpMcp("linear"), hook()]), "a2a");
+    expect(r.skipped).toEqual([]);
+    expect(Object.keys(r.files)).toEqual(["agent-card.json"]);
+  });
+
+  it("compatibility includes a2a, describing every gem as a card (no skips)", () => {
+    const c = compatibility(gem([skill("review"), mcp("local"), hook()]));
+    expect(c.a2a).toEqual({ supported: 3, skipped: 0 });
+  });
+
+  it("a2aAgentCard is pure and emits no secret values", () => {
+    const card = a2aAgentCard(gem([skill("review"), httpMcp("linear")]));
+    expect(JSON.stringify(card)).not.toContain("<redacted>");
+  });
+});
+
+describe("materialize a2a server mode ({ a2aServer: true })", () => {
+  const sseMcp = (n: string): McpServerArtifact => ({ type: "mcp_server", name: n, transport: "sse", config: { url: "https://mcp.x/sse" } });
+  const badSecretHttp: McpServerArtifact = { type: "mcp_server", name: "weird", transport: "http", config: { url: "https://mcp.x/mcp" }, secretRefs: [{ name: "K", location: "query.token" }] };
+
+  it("adds src/server.ts, package.json, SECRETS.md alongside the card", () => {
+    const r = materialize(gem([skill("review"), instr("CLAUDE.md")]), "a2a", { a2aServer: true });
+    expect(r.files["agent-card.json"]).toBeTruthy();
+    expect(r.files["src/server.ts"]).toContain('from "ai"');
+    expect(r.files["src/server.ts"]).toContain("stepCountIs(");
+    expect(r.files["package.json"]).toContain("@a2a-js/sdk");
+    expect(r.files["SECRETS.md"]).toContain("Model access");
+  });
+
+  it("skill-only gem: no MCP imports, tools = {}, skill body folded into SYSTEM", () => {
+    const r = materialize(gem([skill("review", "# Review\n\nDo a careful review."), instr("g", "be terse")]), "a2a", { a2aServer: true });
+    const s = r.files["src/server.ts"];
+    expect(s).toContain("streamText");
+    expect(s).not.toContain("createMCPClient");
+    expect(s).not.toContain("Experimental_StdioMCPTransport");
+    expect(s).toContain("const tools = {}");
+    expect(s).toContain("Do a careful review.");
+    expect(s).toContain("be terse");
+  });
+
+  it("stdio MCP is supported: createMCPClient + stdio transport imported, not skipped", () => {
+    const r = materialize(gem([mcp("local")]), "a2a", { a2aServer: true });
+    const s = r.files["src/server.ts"];
+    expect(s).toContain('from "@ai-sdk/mcp"');
+    expect(s).toContain("Experimental_StdioMCPTransport");
+    expect(s).toContain('command: "npx"');
+    expect(r.skipped.find((x) => x.artifact === "local")).toBeUndefined();
+  });
+
+  it("http -> type http with header secret as env NAME; sse -> type sse; no secret values", () => {
+    const r = materialize(gem([httpMcp("linear"), sseMcp("docs")]), "a2a", { a2aServer: true });
+    const s = r.files["src/server.ts"];
+    expect(s).toContain('type: "http"');
+    expect(s).toContain('process.env["X_TOKEN"]');
+    expect(s).toContain('type: "sse"');
+    expect(s).not.toContain("Experimental_StdioMCPTransport");
+    expect(JSON.stringify(r.files)).not.toContain("<redacted>");
+  });
+
+  it("hooks skipped; http MCP with a non-header secret skipped", () => {
+    const r = materialize(gem([badSecretHttp, hook()]), "a2a", { a2aServer: true });
+    expect(r.skipped.find((x) => x.type === "hook")?.reason).toMatch(/no hook concept/);
+    expect(r.skipped.find((x) => x.artifact === "weird")?.reason).toMatch(/cannot map secret/);
+  });
+
+  it("SECRETS.md lists env-var names and the gateway key, with no agentcore/arn strings", () => {
+    const g: Gem = { name: "p", createdFrom: "/d", checks: [], requiredSecrets: [{ name: "X_TOKEN", artifact: "linear", location: "headers.Authorization" }], artifacts: [httpMcp("linear")] };
+    const md = materialize(g, "a2a", { a2aServer: true }).files["SECRETS.md"];
+    expect(md).toContain("X_TOKEN");
+    expect(md).toContain("AI_GATEWAY_API_KEY");
+    expect(md).not.toMatch(/agentcore|arn:/);
+  });
+
+  it("card-only mode (no opts) is unchanged: just the card, nothing skipped", () => {
+    const r = materialize(gem([skill("review"), mcp("local"), hook()]), "a2a");
+    expect(Object.keys(r.files)).toEqual(["agent-card.json"]);
+    expect(r.skipped).toEqual([]);
+  });
+
+  it("server streams: streamText + artifact-update + task lifecycle, served card advertises streaming, cancel wired", () => {
+    const s = materialize(gem([skill("review")]), "a2a", { a2aServer: true }).files["src/server.ts"];
+    expect(s).toContain("streamText");
+    expect(s).toContain("textStream");
+    expect(s).toContain('kind: "artifact-update"');
+    expect(s).toContain('state: "working"');
+    expect(s).toContain('state: "completed"');
+    expect(s).toContain("streaming: true"); // the *served* card overrides the static primitive
+    expect(s).toContain("abortSignal");
+    expect(s).toContain(".abort()"); // cancelTask aborts the in-flight stream
+  });
+
+  it("the static Agent Card primitive still advertises streaming:false (no server promise)", () => {
+    const card = JSON.parse(materialize(gem([skill("review")]), "a2a").files["agent-card.json"]);
+    expect(card.capabilities.streaming).toBe(false);
+  });
+
+  it("server exposes REST (HTTP+JSON) alongside JSON-RPC", () => {
+    const s = materialize(gem([skill("review")]), "a2a", { a2aServer: true }).files["src/server.ts"];
+    expect(s).toContain("restHandler");
+    expect(s).toContain('"/a2a/rest"');
+    expect(s).toContain('transport: "HTTP+JSON"');
+  });
+
+  it("server enables push notifications (store + sender + card capability)", () => {
+    const s = materialize(gem([skill("review")]), "a2a", { a2aServer: true }).files["src/server.ts"];
+    expect(s).toContain("InMemoryPushNotificationStore");
+    expect(s).toContain("DefaultPushNotificationSender");
+    expect(s).toContain("pushNotifications: true");
+  });
+
+  it("server supports optional bearer auth gated by A2A_API_KEY (discovery stays open)", () => {
+    const s = materialize(gem([skill("review")]), "a2a", { a2aServer: true }).files["src/server.ts"];
+    expect(s).toContain("A2A_API_KEY");
+    expect(s).toContain("401");
+    expect(s).toContain('scheme: "bearer"');
+    expect(s).toContain('app.use("/a2a"'); // gate invocation routes, not the .well-known card
+    const md = materialize(gem([skill("review")]), "a2a", { a2aServer: true }).files["SECRETS.md"];
+    expect(md).toContain("A2A_API_KEY");
   });
 });

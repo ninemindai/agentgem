@@ -246,7 +246,7 @@
     </div>
   </section>
   <section class="pane right">
-    <div class="bar"><strong style="flex:1">Gem (live)</strong><select id="target" title="materialize target" style="margin-left:auto"><option value="claude">Claude</option><option value="codex">Codex</option><option value="agents">Agents</option><option value="hermes">Hermes</option><option value="eve">Eve</option><option value="flue">Flue</option><option value="openai-sandbox">OpenAI Sandbox</option><option value="agentcore">AgentCore</option></select><span class="seg" id="preview-modes"><button type="button" data-pmode="summary">Summary</button><button type="button" data-pmode="json">JSON</button><button type="button" data-pmode="materialize">Materialize</button><button type="button" data-pmode="managed">Managed Agents</button></span><span class="exportwrap"><button id="exportBtn">Export ▾</button><div id="exportMenu" class="exportmenu" hidden><button id="dltar" class="menuitem" title="download the gem archive as a .tar.gz">⬇ Download .tar.gz</button><button id="save" class="menuitem" title="write the gem archive (manifest + lock + files) to a folder">💾 Save to folder…</button><button id="dl" class="menuitem">⬇ Download JSON</button><button id="copy" class="menuitem">⧉ Copy JSON</button></div></span><span class="d" id="archiveStatus" style="margin-left:6px"></span></div>
+    <div class="bar"><strong style="flex:1">Gem (live)</strong><select id="target" title="materialize target" style="margin-left:auto"><option value="claude">Claude</option><option value="codex">Codex</option><option value="agents">Agents</option><option value="hermes">Hermes</option><option value="eve">Eve</option><option value="flue">Flue</option><option value="openai-sandbox">OpenAI Sandbox</option><option value="agentcore">AgentCore</option><option value="a2a">A2A</option></select><span class="seg" id="preview-modes"><button type="button" data-pmode="summary">Summary</button><button type="button" data-pmode="json">JSON</button><button type="button" data-pmode="materialize">Materialize</button><button type="button" data-pmode="managed">Managed Agents</button></span><span class="exportwrap"><button id="exportBtn">Export ▾</button><div id="exportMenu" class="exportmenu" hidden><button id="dltar" class="menuitem" title="download the gem archive as a .tar.gz">⬇ Download .tar.gz</button><button id="save" class="menuitem" title="write the gem archive (manifest + lock + files) to a folder">💾 Save to folder…</button><button id="dl" class="menuitem">⬇ Download JSON</button><button id="copy" class="menuitem">⧉ Copy JSON</button></div></span><span class="d" id="archiveStatus" style="margin-left:6px"></span></div>
     <div id="preview"></div>
     <p class="note">MCP server &amp; hook config secrets are shown as <code>&lt;redacted&gt;</code> and never exported. Skill, CLAUDE.md, rules bodies &amp; hook commands are bundled as written — don't keep secrets in them.</p>
     <div id="checksPanel" class="group" style="margin-top:14px">
@@ -856,16 +856,19 @@ function renderPreview(){
   }
   document.querySelectorAll("#preview-modes button").forEach(b => b.classList.toggle("on", b.dataset.pmode === previewMode));
 }
+let a2aServerMode = false; // a2a target: false = Agent Card only (default), true = also emit the runnable server
 async function renderMaterialize(){
   const el = document.getElementById("preview");
   const reqBody = buildSelectionBody();
   reqBody.target = document.getElementById("target").value;
+  if (reqBody.target === "a2a" && a2aServerMode) reqBody.a2aServer = true;
   const m = await (await fetch("/api/materialize", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(reqBody) })).json();
   window.__materialize = m;
   if (m.error) { el.innerHTML = ""; const pre = document.createElement("pre"); pre.className = "json"; pre.textContent = JSON.stringify(m, null, 2); el.appendChild(pre); return; }
   const paths = Object.keys(m.files || {});
   const compat = Object.entries(m.compatibility || {}).map(([t, c]) => `${t} ${c.skipped ? c.skipped + " skipped" : "✓"}`).join(" · ");
   let h = `<div class="psummary"><div class="phead"><strong>${esc(m.target)}</strong> <span class="d">· ${paths.length} file${paths.length === 1 ? "" : "s"}</span></div>`;
+  if (reqBody.target === "a2a") h += `<div class="pgroup"><label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="a2aServerToggle" ${a2aServerMode ? "checked" : ""}> Emit runnable server (AI SDK v7) — otherwise just the Agent Card</label></div>`;
   h += `<div class="pgroup"><h3>Files</h3>` + (paths.length ? paths.map(p => `<button type="button" class="prow" data-mpath="${esc(p)}"><span class="pn">${esc(p)}</span></button>`).join("") : `<p class="d">No files — select artifacts on the left.</p>`) + `</div>`;
   if ((m.skipped || []).length) h += `<div class="pgroup"><h3>Skipped (${m.skipped.length})</h3>` + m.skipped.map(s => `<div class="prow"><span class="pn">${esc(s.artifact)}</span> <span class="pm">${esc(s.reason)}</span></div>`).join("") + `</div>`;
   h += `<p class="note">Compatibility: ${esc(compat)}</p></div>`;
@@ -1173,6 +1176,10 @@ document.getElementById("target").addEventListener("change", (e) => {
   const mapped = BACKEND_FOR_TARGET[e.target.value];
   if (mapped) deployBackend = mapped;
   renderPreview();
+});
+// a2a server toggle (rendered inside the materialize preview): re-materialize with/without the server.
+document.getElementById("preview").addEventListener("change", (e) => {
+  if (e.target.id === "a2aServerToggle") { a2aServerMode = e.target.checked; renderMaterialize(); }
 });
 document.getElementById("preview").addEventListener("click", e => {
   if (e.target.id === "publishBtn") { doPublish(); return; }

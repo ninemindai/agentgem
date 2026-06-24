@@ -72,6 +72,7 @@ describe("wire schemas", () => {
         agents: { supported: 0, skipped: 1 }, hermes: { supported: 0, skipped: 1 },
         eve: { supported: 0, skipped: 1 }, flue: { supported: 0, skipped: 1 },
         "openai-sandbox": { supported: 0, skipped: 1 }, agentcore: { supported: 0, skipped: 1 },
+        a2a: { supported: 1, skipped: 0 },
       },
     });
     expect(r.files["CLAUDE.md"]).toBe("x");

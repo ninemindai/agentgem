@@ -237,6 +237,25 @@ describe("POST /api/materialize from an archive", () => {
   });
 });
 
+describe("POST /api/materialize a2a server toggle", () => {
+  it("a2a defaults to the card primitive (just agent-card.json)", async () => {
+    const r = await client.post("/api/materialize")
+      .send({ dir, selection: { skills: ["review"], includeInstructions: true }, target: "a2a" })
+      .expect(200);
+    expect(Object.keys(r.body.files)).toEqual(["agent-card.json"]);
+    expect(r.body.files["src/server.ts"]).toBeUndefined();
+  });
+
+  it("a2aServer:true emits the runnable server alongside the card", async () => {
+    const r = await client.post("/api/materialize")
+      .send({ dir, selection: { skills: ["review"], includeInstructions: true }, target: "a2a", a2aServer: true })
+      .expect(200);
+    expect(r.body.files["agent-card.json"]).toBeDefined();
+    expect(r.body.files["src/server.ts"]).toContain("@a2a-js/sdk");
+    expect(r.body.files["package.json"]).toContain("@ai-sdk/mcp");
+  });
+});
+
 describe("deploy registry ops", () => {
   it("GET /api/deploy-targets lists claude-managed and agentcore-managed with boolean ready", async () => {
     const r = await client.get("/api/deploy-targets").expect(200);
