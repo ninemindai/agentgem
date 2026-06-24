@@ -44,7 +44,10 @@ import {
   RegistryInstallRequestSchema, RegistryInstallResponseSchema,
   RegistryPublishRequestSchema, RegistryPublishResponseSchema,
   UndeployRequestSchema, UndeployResponseSchema, DeployRecordQuerySchema, DeployRecordResponseSchema,
+  WorkflowAnalyzeRequestSchema, WorkflowAnalyzeResponseSchema,
 } from "./schemas.js";
+import { claudeTranscriptsForCwd, scanWorkflow } from "./gem/workflowScan.js";
+import { recommendWorkflow, recommendationToSelection } from "./gem/acpRecommender.js";
 import { runReadiness, startLocal, stopLocal, getRunStatus, deployVercel, deployCloudflare, undeployVercel, undeployCloudflare } from "./gem/run.js";
 import { setCredential } from "./gem/credentials.js";
 import { agentcoreReadiness, deployAgentcore, getAgentcoreStatus } from "./gem/agentcoreRun.js";
@@ -365,6 +368,31 @@ export class GemController {
   @get("/pick-folder", { query: PickQuerySchema, response: PickFolderSchema })
   async pickFolder(_input: { query: z.infer<typeof PickQuerySchema> }): Promise<z.infer<typeof PickFolderSchema>> {
     return { path: await pickFolder() };
+  }
+
+  @post("/workflow/analyze", { body: WorkflowAnalyzeRequestSchema, response: WorkflowAnalyzeResponseSchema })
+  async workflowAnalyze(input: { body: z.infer<typeof WorkflowAnalyzeRequestSchema> }): Promise<z.infer<typeof WorkflowAnalyzeResponseSchema>> {
+    const { dir, root } = input.body;
+    // Inventory for exactly this one project (project-namespaced selection target).
+    const inventory = introspectAll(dir, [root]);
+    // introspectAll canonicalizes roots via resolveProject (path.resolve); match the same way.
+    const project = (inventory.projects ?? []).find((p) => p.root === resolveProject(root));
+    if (!project) throw new Error(`Project '${root}' not found in inventory`);
+
+    const dirs = resolveDirs(dir);
+    const paths = claudeTranscriptsForCwd(dirs.claudeDir, root);
+    // The top-level inventory IS the global/plugin inventory; the project section
+    // is namespaced separately. Scan + recommend over both.
+    const scanInv = { project, global: { skills: inventory.skills, mcpServers: inventory.mcpServers, hooks: inventory.hooks } };
+    const signal = scanWorkflow(paths, scanInv);
+    const { analysis, degraded } = await recommendWorkflow(signal, scanInv);
+    const candidates = analysis.candidates.map((c) => ({ ...c, selection: recommendationToSelection(c) as Record<string, unknown> }));
+    return {
+      candidates,
+      gaps: analysis.gaps,
+      signalSummary: { sessionsScanned: signal.sessions.scanned, spanDays: signal.sessions.spanDays, notes: signal.notes },
+      degraded,
+    };
   }
 }
 

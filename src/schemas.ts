@@ -274,6 +274,38 @@ export const DirQuerySchema = z.object({ dir: z.string().optional(), projects: z
 export const PickQuerySchema = z.object({});
 export const PickFolderSchema = z.object({ path: z.string().nullable() });
 
+// ── Workflow-aware Gem recommendation ──
+export const WorkflowAnalyzeRequestSchema = z.object({
+  dir: z.string().optional(),   // .claude dir (resolveDirs handles the default)
+  root: z.string(),             // the project root to analyze (one of the discovered cwds)
+});
+const RecommendedItemSchema = z.object({
+  type: z.enum(["skill", "mcp_server", "instructions", "hook"]),
+  name: z.string(),
+  reason: z.string(),
+  root: z.string().nullable(),   // project root, or null for a global/plugin artifact
+});
+// One candidate Gem, carrying its own ready-to-POST GemSelection.
+const GemCandidateSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  root: z.string(),
+  includeInstructions: z.boolean(),
+  include: z.array(RecommendedItemSchema),
+  confidence: z.enum(["high", "medium", "low"]),
+  selection: z.record(z.string(), z.unknown()), // a GemSelection; buildGem validates structurally at /api/gem
+});
+export const WorkflowAnalyzeResponseSchema = z.object({
+  candidates: z.array(GemCandidateSchema),
+  gaps: z.array(z.string()),                     // project-level: used but absent from inventory
+  signalSummary: z.object({
+    sessionsScanned: z.number(),
+    spanDays: z.number(),
+    notes: z.array(z.string()),
+  }),
+  degraded: z.boolean(),
+});
+
 export const GemSchema = z.object({
   name: z.string(),
   createdFrom: z.string(),
