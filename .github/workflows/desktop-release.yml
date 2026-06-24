@@ -27,18 +27,17 @@ jobs:
           node-version: 22
       - run: pnpm install
       - run: pnpm -C desktop install
-      # Build installers only (no publish). These are unsigned: signing is off so
-      # the cert-less runner doesn't fail. To enable signing later, set
-      # CSC_IDENTITY_AUTO_DISCOVERY to "true" (or remove the line) and add the
-      # CSC_LINK / CSC_KEY_PASSWORD (+ APPLE_* for notarization) secrets.
+      # Build installers only (no publish). Unsigned: signing auto-discovery is
+      # off and the signing vars are intentionally NOT passed — passing an empty
+      # CSC_LINK makes electron-builder attempt (and fail) to load a cert on macOS.
+      #
+      # To enable signing later, add back an env block here with the real secrets:
+      #   CSC_LINK / CSC_KEY_PASSWORD          (cert; both platforms)
+      #   APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID  (macOS notarize)
+      # and set `mac.notarize: true` in electron-builder.yml.
       - run: pnpm -C desktop dist
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       - uses: actions/upload-artifact@v4
         with:
           name: installers-${{ matrix.os }}
