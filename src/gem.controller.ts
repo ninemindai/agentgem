@@ -94,7 +94,7 @@ export class GemController {
       const inventory = introspectAll(input.body.dir, input.body.projects);
       gem = buildGem(inventory, input.body.selection!, { name: input.body.name ?? "gem", createdFrom: dirs.claudeDir });
     }
-    return { target, ...materialize(gem, target), compatibility: compatibility(gem) };
+    return { target, ...materialize(gem, target, { a2aServer: input.body.a2aServer }), compatibility: compatibility(gem) };
   }
 
   @post("/archive", { body: ArchiveRequestSchema, response: ArchiveResponseSchema })

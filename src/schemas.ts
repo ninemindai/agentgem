@@ -207,6 +207,7 @@ export const MaterializeRequestSchema = z.object({
   name: z.string().optional(),
   dir: z.string().optional(),
   projects: z.array(z.string()).optional(),
+  a2aServer: z.boolean().optional(), // a2a target: also emit the runnable server, not just the Agent Card
 }).refine((d) => d.selection !== undefined || d.archivePath !== undefined, {
   message: "provide either selection or archivePath",
 });
