@@ -11,6 +11,8 @@
 // only the explicit DOC_PAGES allow-list is.
 
 import {marked} from 'marked';
+import {markedHighlight} from 'marked-highlight';
+import hljs from 'highlight.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -21,6 +23,17 @@ const out = path.join(websiteDir, 'dist');
 const GITHUB = 'https://github.com/ninemindai/agentgem';
 const DOMAIN = 'agentgem.ninemind.ai';
 const SITE = `https://${DOMAIN}`;
+
+// Build-time syntax highlighting: highlight.js emits `hljs-*` class spans into
+// the static HTML (no client JS). Themed in styles.css to the warm code palette
+// the homepage `.codewrap` sample uses, so docs and marketing code read alike.
+marked.use(markedHighlight({
+  langPrefix: 'hljs language-',
+  highlight(code, lang) {
+    const language = lang && hljs.getLanguage(lang) ? lang : 'plaintext';
+    return hljs.highlight(code, {language}).value;
+  },
+}));
 
 // Markdown sources, repo-relative. Each becomes docs/<name>.html.
 const DOC_PAGES = [

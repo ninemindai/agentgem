@@ -168,6 +168,15 @@ a.hero-kicker:hover{text-decoration:none;border-color:var(--accent);transform:tr
 .prose code{font-size:12.8px;background:var(--accent-soft);color:var(--accent-ink);padding:1.5px 5px;border-radius:5px}
 .prose pre{background:#1f1b15;color:#e9e1cf;border-radius:10px;padding:16px 18px;overflow:auto;font-size:12.5px;line-height:1.65;border:1px solid #322a1f}
 .prose pre code{background:none;color:inherit;padding:0;font-size:inherit}
+/* highlight.js theme — reuses the homepage .codewrap token palette (gold/green/
+   terracotta/muted on warm near-black) so docs code matches the marketing sample */
+.prose pre code.hljs{color:#e9e1cf}
+.hljs-keyword,.hljs-built_in,.hljs-type,.hljs-literal,.hljs-attr,.hljs-attribute,.hljs-selector-tag,.hljs-name,.hljs-section,.hljs-doctag{color:#d9a441}
+.hljs-string,.hljs-regexp,.hljs-addition,.hljs-quote,.hljs-meta .hljs-string{color:#8fc7a0}
+.hljs-number,.hljs-symbol,.hljs-bullet,.hljs-link,.hljs-variable,.hljs-template-variable,.hljs-tag,.hljs-deletion,.hljs-meta{color:#e08a6f}
+.hljs-comment{color:#7c7363;font-style:italic}
+.hljs-title,.hljs-title.function_,.hljs-title.class_{color:#e9e1cf}
+.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:600}
 .prose img{max-width:100%;height:auto;display:block;margin:20px 0;border-radius:10px;border:1px solid var(--line)}
 .prose blockquote{margin:16px 0;padding:10px 18px;border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:0 8px 8px 0;color:var(--ink-2);font-size:13px}
 .prose blockquote p{margin:0}
