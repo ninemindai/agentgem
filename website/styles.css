@@ -49,8 +49,8 @@ code,pre{font-family:var(--mono)}
 section{position:relative;z-index:1}
 
 /* ── hero ─────────────────────────────────────────────────────────────── */
-.hero{text-align:center;padding:84px 24px 56px;max-width:880px;margin:0 auto;position:relative;z-index:1}
-.hero .gem{width:72px;height:72px;margin:0 auto 22px;filter:drop-shadow(0 8px 22px rgba(154,51,36,.30))}
+.hero{text-align:center;padding:84px 24px 32px;max-width:880px;margin:0 auto;position:relative;z-index:1}
+.hero .gem{display:block;width:72px;height:72px;margin:0 auto 22px;filter:drop-shadow(0 8px 22px rgba(154,51,36,.30))}
 .hero h1{font-family:var(--display);font-optical-sizing:auto;font-weight:600;font-size:clamp(28px,6.2vw,58px);line-height:1.04;letter-spacing:-.02em;margin:0 0 18px;white-space:nowrap}
 .hero h1 .accent{color:var(--accent)}
 .hero .punch{font-family:var(--display);font-weight:500;font-size:clamp(18px,2.6vw,23px);color:var(--accent-ink);margin:0 auto 20px;letter-spacing:-.01em}
@@ -62,13 +62,17 @@ section{position:relative;z-index:1}
 .btn-primary:hover{background:var(--accent-ink);text-decoration:none;transform:translateY(-1px)}
 .btn-ghost{background:var(--card);color:var(--ink);border-color:var(--line-2);box-shadow:var(--shadow)}
 .btn-ghost:hover{text-decoration:none;border-color:var(--accent);color:var(--accent-ink)}
+/* Soft warm info chip — e.g. the macOS unsigned-build first-launch hint under a download button. */
+.dl-hint{display:inline-block;margin-top:10px;padding:6px 12px;font:500 12.5px/1.5 var(--ui);color:var(--ink-2);background:rgba(176,132,54,.10);border:1px solid rgba(176,132,54,.30);border-radius:var(--r)}
+.dl-hint a{color:var(--accent);font-weight:600}
+.dl-hint a:hover{color:var(--accent-ink)}
 
 /* ── section heads ────────────────────────────────────────────────────── */
 .eyebrow{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.18em;color:var(--accent);text-align:center;margin:0 0 10px}
 .sec-title{font-family:var(--display);font-weight:600;font-size:clamp(26px,4vw,34px);letter-spacing:-.01em;text-align:center;margin:0 0 40px}
 
 /* ── gem workflow rail ────────────────────────────────────────────────── */
-.flow{padding:64px 0}
+.flow{padding:40px 0 64px}
 .rail{display:flex;align-items:flex-start;gap:0;position:relative;max-width:880px;margin:0 auto}
 .rail::after{content:"";position:absolute;left:54px;right:54px;top:23px;height:2px;background:var(--line-2);z-index:0}
 .station{position:relative;z-index:1;flex:1;display:flex;flex-direction:column;align-items:center;gap:11px;text-align:center;padding:0 6px}

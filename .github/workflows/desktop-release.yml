@@ -66,7 +66,23 @@ jobs:
         run: |
           set -e
           TAG="${GITHUB_REF_NAME}"
-          NOTES="Unsigned desktop builds. First launch: macOS — right-click → Open; Windows — More info → Run anyway."
+          NOTES=$(cat <<'EOF'
+          Unsigned desktop builds.
+
+          **macOS** — these builds are not signed/notarized, so Gatekeeper reports
+          *"AgentGem is damaged and can't be opened."* This is expected; the app is
+          fine. After dragging AgentGem into Applications, clear the quarantine flag:
+
+          ```sh
+          xattr -dr com.apple.quarantine /Applications/AgentGem.app
+          ```
+
+          Then open it normally. (Right-click → Open does **not** clear the
+          "damaged" state — only the quarantine strip above does.)
+
+          **Windows** — SmartScreen: click *More info → Run anyway.*
+          EOF
+          )
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$TAG" artifacts/* --clobber --repo "$GITHUB_REPOSITORY"
           else

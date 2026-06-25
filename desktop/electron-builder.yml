@@ -24,6 +24,25 @@ mac:
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
+  # Notarization is enabled here; signing identity + notarization credentials
+  # are supplied at build time via environment variables (see below). With no
+  # Developer ID cert present, electron-builder skips signing and the resulting
+  # .dmg fails Gatekeeper ("damaged and can't be opened").
+  #
+  # Required env vars when building a release:
+  #   CSC_LINK                      base64 of your Developer ID Application .p12
+  #   CSC_KEY_PASSWORD              password for that .p12
+  # plus ONE notarization credential set:
+  #   App Store Connect API key (recommended, no 2FA, CI-friendly):
+  #     APPLE_API_KEY=<base64 of AuthKey_XXXX.p8>
+  #     APPLE_API_KEY_ID=<Key ID>
+  #     APPLE_API_ISSUER=<Issuer ID>
+  #     APPLE_TEAM_ID=<10-char Team ID>
+  #   OR Apple ID:
+  #     APPLE_ID=<your apple id email>
+  #     APPLE_APP_SPECIFIC_PASSWORD=<app-specific password>
+  #     APPLE_TEAM_ID=<10-char Team ID>
+  notarize: true
   target:
     - target: dmg
       arch: [x64, arm64]

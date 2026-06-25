@@ -25,8 +25,16 @@ Grab the latest build from the
 > **The builds are currently unsigned.** Code-signing and notarization are
 > scaffolded but not yet wired, so your OS will warn on first launch:
 >
-> - **macOS** — right-click the app and choose **Open** (or **System Settings →
->   Privacy & Security → Open Anyway**) the first time.
+> - **macOS** — Gatekeeper reports **"AgentGem is damaged and can't be opened."**
+>   The app is fine; this is just the unsigned-build warning. Drag AgentGem into
+>   **Applications**, then clear the quarantine flag in Terminal:
+>
+>   ```bash
+>   xattr -dr com.apple.quarantine /Applications/AgentGem.app
+>   ```
+>
+>   Then open it normally. (Right-clicking **Open** does *not* clear the
+>   "damaged" state — only the command above does.)
 > - **Windows** — on the SmartScreen prompt, choose **More info → Run anyway**.
 >
 > If you'd rather not run an unsigned build, [run it from source](#run-from-source)
@@ -85,8 +93,8 @@ the desktop app is never a fork of the web UI: it's the same server, hosted.
 
 ## Troubleshooting
 
-- **"AgentGem can't be opened" / SmartScreen** — see the unsigned-build note under
-  [Download](#download).
+- **"AgentGem is damaged and can't be opened" / SmartScreen** — expected for the
+  unsigned builds; see the quarantine-strip note under [Download](#download).
 - **Window is blank or the app won't start** — the app shows the underlying error
   in a dialog. Rebuild from source (`pnpm -C desktop dev`) to see the full logs.
 - **A second launch focuses the existing window** — that's intentional; AgentGem
