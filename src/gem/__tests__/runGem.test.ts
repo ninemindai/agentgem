@@ -3,7 +3,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { materializeGemToTestbed, materializeAndRunGem } from "../runGem.js";
+import { materializeGemToTestbed, materializeAndRunGem, AGENT_ADAPTERS } from "../runGem.js";
 import type { RunConnectFn, RunResult } from "../acpRun.js";
 import type { Gem } from "../types.js";
 
@@ -22,13 +22,14 @@ const gem: Gem = {
   requiredSecrets: [],
 };
 
-// A fake agent that records the cwd it was opened in and replays a canned result.
+// A fake agent that records the descriptor + cwd it was driven with, and replays a canned result.
 function fakeAgent(result: RunResult) {
-  const calls = { cwd: null as string | null };
-  const connectFn: RunConnectFn = async () => ({
+  const calls = { cwd: null as string | null, command: null as string | null };
+  const connectFn: RunConnectFn = async (descriptor) => ({
     ctx: {
       async open(cwd: string) {
         calls.cwd = cwd;
+        calls.command = descriptor.command.join(" ");
         return {
           async setMode() {},
           async prompt() { return result; },
@@ -85,5 +86,32 @@ describe("materializeAndRunGem", () => {
     const { connectFn } = fakeAgent({ text: "done", toolCalls: [] });
     const out = await materializeAndRunGem({ gem, dir, task: "go", connectFn });
     expect(out.verification).toBeUndefined();
+  });
+
+  it("defaults to the Claude adapter", async () => {
+    const dir = tmp();
+    const { connectFn, calls } = fakeAgent({ text: "", toolCalls: [] });
+    const out = await materializeAndRunGem({ gem, dir, task: "go", connectFn });
+    expect(calls.command).toContain("claude-agent-acp");
+    expect(out.agent).toBe("claude");
+  });
+
+  it("selects the codex adapter and materializes to the codex flavor", async () => {
+    const dir = tmp();
+    const { connectFn, calls } = fakeAgent({ text: "", toolCalls: [] });
+    await materializeAndRunGem({ gem, dir, task: "go", agent: "codex", connectFn });
+    expect(calls.command).toBe("codex-agent-acp");
+    // codex flavor writes skills under .agents/skills, not .claude/skills
+    expect(existsSync(join(dir, ".agents", "skills", "qa", "SKILL.md"))).toBe(true);
+  });
+});
+
+describe("AGENT_ADAPTERS", () => {
+  it("maps each agent id to a descriptor + testbed flavor; only claude is validated", () => {
+    expect(AGENT_ADAPTERS.claude.flavor).toBe("claude");
+    expect(AGENT_ADAPTERS.claude.descriptor.command).toContain("claude-agent-acp");
+    expect(AGENT_ADAPTERS.claude.validated).toBe(true);
+    expect(AGENT_ADAPTERS.codex.flavor).toBe("codex");
+    expect(AGENT_ADAPTERS.codex.validated).toBe(false);
   });
 });

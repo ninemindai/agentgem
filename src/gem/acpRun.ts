@@ -18,6 +18,7 @@
 // while this path is prototyped. Once both are proven, the two connectFns should be
 // unified into a shared acpSession module.
 import type { AgentDescriptor } from "./acpRecommender.js";
+export type { AgentDescriptor } from "./acpRecommender.js";
 
 // One tool the agent invoked during the run. Mirrors the fields of an ACP
 // `tool_call` session update that matter for verification/observability.
@@ -136,10 +137,17 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   });
 }
 
+// Test seam: route runGemWithAgent through an in-process fake agent (mirrors
+// acpRecommender.setConnectFnForTests). Lets the REST/SSE surface be exercised
+// without spawning a real coding agent.
+let testConnectFn: RunConnectFn | null = null;
+export function setRunConnectFnForTests(fn: RunConnectFn | null): void { testConnectFn = fn; }
+
 export interface RunGemOptions {
   dir: string;
   task: string;
   mode?: string;
+  descriptor?: AgentDescriptor;   // which ACP adapter to spawn; defaults to Claude
   connectFn?: RunConnectFn;
   timeoutMs?: number;
   onDelta?: (chunk: string) => void;
@@ -152,13 +160,13 @@ export interface RunGemOptions {
  * { ok:false, error }.
  */
 export async function runGemWithAgent(opts: RunGemOptions): Promise<GemRunOutcome> {
-  const connectFn = opts.connectFn ?? defaultRunConnectFn;
+  const connectFn = opts.connectFn ?? testConnectFn ?? defaultRunConnectFn;
   const mode = opts.mode ?? DEFAULT_RUN_MODE;
   const timeoutMs = opts.timeoutMs ?? DEFAULT_RUN_TIMEOUT_MS;
   let conn: { ctx: RunCtx; close: () => void } | null = null;
   let handle: RunSessionHandle | null = null;
   try {
-    conn = await connectFn(CLAUDE_RUN_AGENT, null);
+    conn = await connectFn(opts.descriptor ?? CLAUDE_RUN_AGENT, null);
     handle = await conn.ctx.open(opts.dir);   // the testbed dir — NOT a neutral one
     await handle.setMode(mode);               // tool-capable — the agent uses the Gem
     const result = await withTimeout(handle.prompt(opts.task, opts.onDelta, opts.onToolCall), timeoutMs);

@@ -1,6 +1,6 @@
 // src/gem.controller.ts
 import { existsSync } from "node:fs";
-import { basename } from "node:path";
+import { basename, join } from "node:path";
 import type { z } from "zod";
 import { api, get, post } from "@agentback/openapi";
 import { introspectConfig, introspectProject } from "./gem/introspect.js";
@@ -45,6 +45,7 @@ import {
   RegistryPublishRequestSchema, RegistryPublishResponseSchema,
   UndeployRequestSchema, UndeployResponseSchema, DeployRecordQuerySchema, DeployRecordResponseSchema,
   WorkflowAnalyzeRequestSchema, WorkflowAnalyzeResponseSchema,
+  GemRunRequestSchema, GemRunResponseSchema,
 } from "./schemas.js";
 import { claudeTranscriptsForCwd, scanWorkflow } from "./gem/workflowScan.js";
 import { recommendWorkflow, recommendationToSelection } from "./gem/acpRecommender.js";
@@ -52,6 +53,7 @@ import { runReadiness, startLocal, stopLocal, getRunStatus, deployVercel, deploy
 import { setCredential } from "./gem/credentials.js";
 import { agentcoreReadiness, deployAgentcore, getAgentcoreStatus } from "./gem/agentcoreRun.js";
 import { scaffoldTestbed, importArtifacts } from "./gem/testbed.js";
+import { materializeAndRunGem, type AgentId } from "./gem/runGem.js";
 import { detectFlavor, suggestTestbed, discoverProjects } from "./gem/testbedFlavors.js";
 import type { TestbedFlavorId } from "./gem/testbedFlavors.js";
 import { readRecents, upsertRecent } from "./gem/recents.js";
@@ -310,6 +312,19 @@ export class GemController {
   async importTestbed(input: { body: z.infer<typeof TestbedImportRequestSchema> }): Promise<z.infer<typeof TestbedImportResponseSchema>> {
     const rawInv = introspectConfig({ ...resolveDirs(input.body.dir), redact: false });
     return importArtifacts(resolveProject(input.body.root), input.body.selection, rawInv, (input.body.flavor ?? "claude") as TestbedFlavorId);
+  }
+
+  // Test-run a Gem from a .gem archive with a locally-installed ACP coding agent:
+  // materialize into a runnable testbed dir, drive the agent against the task,
+  // and (when expectations are given) attach a verification report.
+  @post("/gem/run", { body: GemRunRequestSchema, response: GemRunResponseSchema })
+  async runGem(input: { body: z.infer<typeof GemRunRequestSchema> }): Promise<z.infer<typeof GemRunResponseSchema>> {
+    const gem = readGemArchive(readArchiveDir(input.body.archivePath));
+    const agent = (input.body.agent ?? "claude") as AgentId;
+    const safeName = gem.name.replace(/[^A-Za-z0-9._-]/g, "-");
+    const dir = input.body.dir ?? join(agentgemHome(), ".agentgem", "runs", safeName);
+    const out = await materializeAndRunGem({ gem, dir, task: input.body.task, agent, expectations: input.body.expectations });
+    return { dir, agent: out.agent, materialized: out.materialized, run: out.run, verification: out.verification };
   }
 
   // Resolve the configured registry source, or throw a clear error the UI can surface.

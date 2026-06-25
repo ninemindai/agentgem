@@ -425,6 +425,46 @@ export const TestbedImportResponseSchema = z.object({
   skipped: z.array(z.object({ artifact: z.string(), reason: z.string() })),
 });
 
+// ── Run a Gem with a local ACP coding agent ──
+export const ToolInvocationSchema = z.object({
+  toolCallId: z.string(),
+  title: z.string(),
+  kind: z.string().optional(),
+  status: z.string().optional(),
+});
+export const RunResultSchema = z.object({
+  text: z.string(),
+  toolCalls: z.array(ToolInvocationSchema),
+});
+export const GemRunOutcomeSchema = z.object({
+  ok: z.boolean(),
+  error: z.string().optional(),
+  result: RunResultSchema,
+});
+export const GemExpectationsSchema = z.object({
+  expectTools: z.array(z.string()).optional(),
+  expectText: z.string().optional(),
+  forbidToolFailures: z.boolean().optional(),
+});
+export const VerificationReportSchema = z.object({
+  passed: z.boolean(),
+  checks: z.array(z.object({ name: z.string(), passed: z.boolean(), detail: z.string() })),
+});
+export const GemRunRequestSchema = z.object({
+  archivePath: z.string(),                                  // a .gem archive dir on disk
+  task: z.string(),
+  dir: z.string().optional(),                              // testbed dir; defaults under AGENTGEM_HOME
+  agent: z.enum(["claude", "codex"]).optional(),           // which local ACP adapter to drive (codex unvalidated)
+  expectations: GemExpectationsSchema.optional(),
+});
+export const GemRunResponseSchema = z.object({
+  dir: z.string(),
+  agent: z.string(),
+  materialized: TestbedImportResponseSchema,
+  run: GemRunOutcomeSchema,
+  verification: VerificationReportSchema.optional(),
+});
+
 // ── AgentCore deploy (Phase 2) ──
 export const AgentcoreReadyResponseSchema = z.object({ cli: z.boolean(), awsCreds: z.boolean() });
 export const AgentcoreDeployRequestSchema = z.object({ name: z.string() });

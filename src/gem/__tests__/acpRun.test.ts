@@ -1,7 +1,7 @@
 // src/gem/__tests__/acpRun.test.ts
 import { describe, it, expect } from "vitest";
 import {
-  runGemWithAgent, createAccumulator, applyUpdate,
+  runGemWithAgent, createAccumulator, applyUpdate, setRunConnectFnForTests,
   type RunConnectFn, type RunResult, type ToolInvocation,
 } from "../acpRun.js";
 
@@ -124,6 +124,30 @@ describe("runGemWithAgent", () => {
     await runGemWithAgent({ dir: DIR, task: "go", connectFn });
     expect(calls.disposed).toBe(true);
     expect(calls.closed).toBe(true);
+  });
+
+  it("passes the chosen agent descriptor to the connectFn (defaults to Claude)", async () => {
+    const seen: string[] = [];
+    const connectFn: RunConnectFn = async (descriptor) => {
+      seen.push(descriptor.command.join(" "));
+      return { ctx: { async open() { return { async setMode() {}, async prompt() { return { text: "", toolCalls: [] }; }, dispose() {} }; } }, close() {} };
+    };
+    await runGemWithAgent({ dir: DIR, task: "go", connectFn });
+    await runGemWithAgent({ dir: DIR, task: "go", connectFn, descriptor: { id: "codex", name: "Codex", command: ["codex-agent-acp"] } });
+    expect(seen[0]).toContain("claude-agent-acp");
+    expect(seen[1]).toBe("codex-agent-acp");
+  });
+
+  it("uses a test-injected connectFn when set, without an explicit opts.connectFn", async () => {
+    const { connectFn, calls } = fakeAgent();
+    setRunConnectFnForTests(connectFn);
+    try {
+      const out = await runGemWithAgent({ dir: DIR, task: "go" });
+      expect(calls.cwd).toBe(DIR);
+      expect(out.ok).toBe(true);
+    } finally {
+      setRunConnectFnForTests(null);
+    }
   });
 });
 
