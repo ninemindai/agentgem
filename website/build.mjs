@@ -194,6 +194,7 @@ ${FONTS}
     <div class="nav-links">
       <a href="${rel}docs/index.html">Docs</a>
       <a href="${rel}docs/getting-started.html">Get started</a>
+      <a href="${rel}blog/index.html">Blog</a>
       <a href="${GITHUB}">GitHub</a>
     </div>
   </div>
@@ -211,6 +212,7 @@ ${body}
     <a class="brand" href="${rel}index.html"><img src="${rel}assets/gem.svg" alt="" />agentgem</a>
     <div class="foot-links">
       <a href="${rel}vision.html">Vision</a>
+      <a href="${rel}blog/index.html">Blog</a>
       <a href="${rel}docs/getting-started.html">Getting started</a>
       <a href="${rel}docs/concepts.html">Concepts</a>
       <a href="${rel}docs/targets.html">Targets &amp; deploy</a>
@@ -251,6 +253,15 @@ fs.mkdirSync(out, {recursive: true});
 fs.copyFileSync(path.join(websiteDir, 'index.html'), path.join(out, 'index.html'));
 fs.copyFileSync(path.join(websiteDir, 'vision.html'), path.join(out, 'vision.html'));
 fs.copyFileSync(path.join(websiteDir, 'styles.css'), path.join(out, 'styles.css'));
+
+// Blog: repo-local, self-contained HTML at docs/blog/ (an index listing +
+// posts/*.html, each its own dark-theme page with inline SVG and CDN fonts).
+// Copied verbatim to dist/blog — add a post by dropping a file in docs/blog/posts
+// and a card in docs/blog/index.html. Mirrors agentback/website's blog.
+copyDir(path.join(root, 'docs', 'blog'), path.join(out, 'blog'));
+const blogPosts = fs.existsSync(path.join(root, 'docs', 'blog', 'posts'))
+  ? fs.readdirSync(path.join(root, 'docs', 'blog', 'posts')).filter(f => f.endsWith('.html'))
+  : [];
 copyDir(path.join(websiteDir, 'assets'), path.join(out, 'assets'));
 
 // Diagrams referenced by the docs (./diagrams/*.svg|png), served under /docs/diagrams.
@@ -311,7 +322,13 @@ write(
 );
 
 // sitemap.xml — homepage + every rendered docs HTML page.
-const sitemapUrls = [`${SITE}/`, `${SITE}/vision.html`, ...docMeta.map(d => `${SITE}/${d.outHtml}`)];
+const sitemapUrls = [
+  `${SITE}/`,
+  `${SITE}/vision.html`,
+  `${SITE}/blog/index.html`,
+  ...blogPosts.map(f => `${SITE}/blog/posts/${f}`),
+  ...docMeta.map(d => `${SITE}/${d.outHtml}`),
+];
 write(
   'sitemap.xml',
   '<?xml version="1.0" encoding="UTF-8"?>\n' +

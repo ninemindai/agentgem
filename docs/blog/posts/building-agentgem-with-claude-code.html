@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Building AgentGem with Claude Code: An Eleven-Day Journey</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Hanken+Grotesk:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-in">
+    <a class="brand" href="../../index.html"><img src="../../assets/gem.svg" alt="" />agentgem</a>
+    <span class="tag">Blog</span>
+    <span class="spacer"></span>
+    <div class="nav-links">
+      <a href="../../vision.html">Vision</a>
+      <a href="../../docs/index.html">Docs</a>
+      <a href="../../docs/getting-started.html">Get started</a>
+      <a href="../index.html">Blog</a>
+      <a href="https://github.com/ninemindai/agentgem">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+  <main class="post" id="report-container">
+
+
+    <nav class="postnav">
+      <a href="../index.html">← AgentGem blog</a>
+      <a href="../../index.html">agentgem.ninemind.ai</a>
+    </nav>
+
+    <!-- ================= HEADER ================= -->
+    <header class="header">
+      <div class="header-row">
+        <span class="pulse-dot"></span>
+        <span class="kicker">AgentGem · Engineering Journal</span>
+        <div class="toolbar">
+          <div class="toolbar-actions">
+            <button onclick="copyAsImage(this)">📋 Copy</button>
+            <button onclick="downloadPNG(this)">🖼️ PNG</button>
+            <button onclick="downloadPDF(this)">📄 PDF</button>
+          </div>
+          <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">⋯</button>
+        </div>
+      </div>
+      <h1>Building AgentGem with Claude Code</h1>
+      <p class="dek">An empty repo to a public, npm-published product in eleven days: a registry, six
+        deploy targets, a marketing site, a desktop app. Most of it driven through a coding agent. If
+        you're trying to get real work out of one, this is less a launch story than a field manual for
+        <em>how to steer it</em>.</p>
+      <p class="byline">Reconstructed from 214 session transcripts · 326 commits · 24 design specs · Jun 14–25, 2026</p>
+    </header>
+
+    <div class="tldr">
+      <div class="tldr-label">TL;DR · if you only skim</div>
+      <ul>
+        <li>A real product (registry, six deploy targets, a site, a desktop app) shipped to npm in 11 days, mostly driven through a coding agent.</li>
+        <li>The method in one breath: spec before code, an adversarial reviewer on <em>every</em> diff, persistent cross-session memory, one git worktree per session, and verify against the real world.</li>
+        <li>The honest part: where the agent fooled itself, including stale compiled tests passing green and parallel agents deleting each other's specs.</li>
+        <li>Want just the rules? Jump to <a href="#transfers">the playbook</a>.</li>
+      </ul>
+    </div>
+
+    <!-- ================= INTRO ================= -->
+    <p><a href="https://agentgem.ninemind.ai">AgentGem</a> packages a coding agent's hard-won configuration (skills, MCP servers,
+      <code>CLAUDE.md</code>) into a portable, composable <strong>Gem</strong>. What follows is the
+      eleven days that built it, told from the inside. The product packages coding agents; it was itself
+      made by working closely with one, so the two stories don't really come apart. Read it for the
+      parts that transfer: the loop that kept the agent on-rails, the guardrails that caught it when it
+      drifted, and the failure modes nobody warns you about until you hit them.</p>
+
+    <h2><span class="num">00</span>The shape of the work</h2>
+    <p>One fact frames everything. Across eleven days the project's history holds <strong>214 Claude
+      Code sessions</strong>. Roughly <strong>180 of them run a single recurring task</strong>,
+      <code>Review this change for security vulnerabilities</code>, fired automatically on nearly every
+      diff. Only about twenty are the "let's build X" conversations a human would recognize as
+      milestones.</p>
+
+    <div class="stat">
+      <div class="big">180⁄214</div>
+      <div class="txt">sessions were automated adversarial security review. The visible features
+        (a website, a registry, a desktop app) rode on top of an <b style="color:#e11d48">invisible
+        verification loop that never let up</b>. The headline work is the tip; the review automation is the iceberg.</div>
+    </div>
+    <p>The transferable bit is right there: don't bolt review on at the end. Wire an adversarial reviewer
+      into the loop so it runs on every diff, automatically, while the context is still fresh. An agent
+      will happily hand you code that looks right. A second agent told to <em>attack</em> that code is
+      how you find out whether it is.</p>
+
+    <!-- ================= DIAGRAM 1 — THE PRODUCT ================= -->
+    <h2><span class="num">01</span>What it became: the Gem pipeline</h2>
+    <p>Strip away the eleven days of iteration and the product is one clean pipeline. Read a local
+      agent's config, redact every secret <em>at the moment of capture</em>, crystallize it into a
+      neutral on-disk <strong>Gem archive</strong>, then fan that one source out to deploy targets and a
+      registry without ever re-reading raw config.</p>
+
+    <figure>
+      <div class="diagram-container">
+        <svg viewBox="0 0 1000 470" role="img" aria-label="AgentGem pipeline diagram">
+          <defs>
+            <marker id="ah" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/></marker>
+            <pattern id="grid1" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e2e8f0" stroke-width="0.5"/></pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="#ffffff"/><rect width="100%" height="100%" fill="url(#grid1)"/>
+
+          <!-- arrows first (behind boxes) -->
+          <line x1="152" y1="120" x2="236" y2="150" stroke="#64748b" stroke-width="1.5" marker-end="url(#ah)"/>
+          <line x1="152" y1="172" x2="236" y2="168" stroke="#64748b" stroke-width="1.5" marker-end="url(#ah)"/>
+          <line x1="152" y1="224" x2="236" y2="190" stroke="#64748b" stroke-width="1.5" marker-end="url(#ah)"/>
+          <text x="180" y="138" fill="#64748b" font-family="JetBrains Mono" font-size="9">introspect</text>
+          <line x1="392" y1="170" x2="476" y2="170" stroke="#059669" stroke-width="1.5" marker-end="url(#ah)"/>
+          <text x="434" y="162" fill="#64748b" font-family="JetBrains Mono" font-size="9" text-anchor="middle">build</text>
+          <text x="434" y="186" fill="#059669" font-family="JetBrains Mono" font-size="8" text-anchor="middle">redacted</text>
+          <line x1="648" y1="150" x2="696" y2="135" stroke="#d97706" stroke-width="1.5" marker-end="url(#ah)"/>
+          <text x="672" y="120" fill="#64748b" font-family="JetBrains Mono" font-size="9" text-anchor="middle">materialize</text>
+          <line x1="648" y1="195" x2="696" y2="290" stroke="#7c3aed" stroke-width="1.5" marker-end="url(#ah)"/>
+          <text x="700" y="240" fill="#64748b" font-family="JetBrains Mono" font-size="9">publish</text>
+
+          <!-- A: sources -->
+          <text x="90" y="70" fill="#0f172a" font-family="JetBrains Mono" font-size="10" font-weight="600" text-anchor="middle">Your coding agent</text>
+          <rect x="30" y="98" width="122" height="44" rx="6" fill="#ffffff"/><rect x="30" y="98" width="122" height="44" rx="6" fill="rgba(100,116,139,0.10)" stroke="#64748b" stroke-width="1.5"/>
+          <text x="91" y="120" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle" font-family="JetBrains Mono">Claude Code</text>
+          <text x="91" y="134" fill="#64748b" font-size="8" text-anchor="middle" font-family="JetBrains Mono">.claude/</text>
+          <rect x="30" y="150" width="122" height="44" rx="6" fill="#ffffff"/><rect x="30" y="150" width="122" height="44" rx="6" fill="rgba(100,116,139,0.10)" stroke="#64748b" stroke-width="1.5"/>
+          <text x="91" y="172" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle" font-family="JetBrains Mono">Codex</text>
+          <text x="91" y="186" fill="#64748b" font-size="8" text-anchor="middle" font-family="JetBrains Mono">.codex/</text>
+          <rect x="30" y="202" width="122" height="44" rx="6" fill="#ffffff"/><rect x="30" y="202" width="122" height="44" rx="6" fill="rgba(100,116,139,0.10)" stroke="#64748b" stroke-width="1.5"/>
+          <text x="91" y="224" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle" font-family="JetBrains Mono">Hermes</text>
+          <text x="91" y="238" fill="#64748b" font-size="8" text-anchor="middle" font-family="JetBrains Mono">.hermes/</text>
+
+          <!-- B: local server inside security boundary -->
+          <rect x="214" y="80" width="190" height="210" rx="10" fill="transparent" stroke="#e11d48" stroke-width="1" stroke-dasharray="4,4"/>
+          <text x="224" y="98" fill="#e11d48" font-size="8" font-family="JetBrains Mono">redact at capture · secrets stay local</text>
+          <rect x="238" y="128" width="146" height="92" rx="6" fill="#ffffff"/><rect x="238" y="128" width="146" height="92" rx="6" fill="rgba(5,150,105,0.10)" stroke="#059669" stroke-width="1.5"/>
+          <text x="311" y="152" fill="#0f172a" font-size="12" font-weight="600" text-anchor="middle" font-family="JetBrains Mono">AgentGem</text>
+          <text x="311" y="168" fill="#0f172a" font-size="12" font-weight="600" text-anchor="middle" font-family="JetBrains Mono">local server</text>
+          <text x="311" y="188" fill="#64748b" font-size="8" text-anchor="middle" font-family="JetBrains Mono">REST + MCP + OpenAPI</text>
+          <text x="311" y="201" fill="#64748b" font-size="8" text-anchor="middle" font-family="JetBrains Mono">one AgentBack contract</text>
+          <text x="311" y="214" fill="#059669" font-size="8" text-anchor="middle" font-family="JetBrains Mono">localhost only</text>
+
+          <!-- C: gem archive -->
+          <rect x="476" y="108" width="172" height="132" rx="6" fill="#ffffff"/><rect x="476" y="108" width="172" height="132" rx="6" fill="rgba(124,58,237,0.10)" stroke="#7c3aed" stroke-width="1.5"/>
+          <text x="562" y="132" fill="#0f172a" font-size="12" font-weight="600" text-anchor="middle" font-family="JetBrains Mono">Gem archive</text>
+          <text x="562" y="154" fill="#64748b" font-size="8.5" text-anchor="middle" font-family="JetBrains Mono">gem.json — manifest</text>
+          <text x="562" y="169" fill="#64748b" font-size="8.5" text-anchor="middle" font-family="JetBrains Mono">gem.lock — sha256 + digest</text>
+          <text x="562" y="184" fill="#64748b" font-size="8.5" text-anchor="middle" font-family="JetBrains Mono">skills/  instructions/</text>
+          <text x="562" y="199" fill="#64748b" font-size="8.5" text-anchor="middle" font-family="JetBrains Mono">mcp/  hooks/  checks/</text>
+          <text x="562" y="222" fill="#7c3aed" font-size="8" text-anchor="middle" font-family="JetBrains Mono">neutral · git-diffable · signable</text>
+
+          <!-- D: targets + registry -->
+          <rect x="696" y="78" width="278" height="150" rx="6" fill="#ffffff"/><rect x="696" y="78" width="278" height="150" rx="6" fill="rgba(217,119,6,0.12)" stroke="#d97706" stroke-width="1.5"/>
+          <text x="835" y="102" fill="#0f172a" font-size="12" font-weight="600" text-anchor="middle" font-family="JetBrains Mono">Materialize / deploy targets</text>
+          <text x="835" y="126" fill="#64748b" font-size="9" text-anchor="middle" font-family="JetBrains Mono">Eve · Flue · OpenAI Sandbox</text>
+          <text x="835" y="143" fill="#64748b" font-size="9" text-anchor="middle" font-family="JetBrains Mono">Codex · Claude-managed</text>
+          <text x="835" y="160" fill="#64748b" font-size="9" text-anchor="middle" font-family="JetBrains Mono">Bedrock AgentCore</text>
+          <text x="835" y="177" fill="#64748b" font-size="9" text-anchor="middle" font-family="JetBrains Mono">A2A Agent Card / server</text>
+          <text x="835" y="200" fill="#d97706" font-size="8" text-anchor="middle" font-family="JetBrains Mono">code-gen targets share one compose step</text>
+
+          <rect x="696" y="252" width="278" height="74" rx="6" fill="#ffffff"/><rect x="696" y="252" width="278" height="74" rx="6" fill="rgba(217,119,6,0.12)" stroke="#d97706" stroke-width="1.5"/>
+          <text x="835" y="276" fill="#0f172a" font-size="12" font-weight="600" text-anchor="middle" font-family="JetBrains Mono">Gem Registry</text>
+          <text x="835" y="296" fill="#64748b" font-size="9" text-anchor="middle" font-family="JetBrains Mono">publish · resolve · merge · install</text>
+          <text x="835" y="312" fill="#d97706" font-size="8" text-anchor="middle" font-family="JetBrains Mono">GitHub-backed · composable</text>
+
+          <!-- legend (outside boundaries) -->
+          <text x="34" y="372" fill="#0f172a" font-size="10" font-weight="600" font-family="JetBrains Mono">Legend</text>
+          <rect x="34" y="384" width="16" height="10" rx="2" fill="rgba(100,116,139,0.10)" stroke="#64748b" stroke-width="1"/><text x="56" y="392" fill="#64748b" font-size="8" font-family="JetBrains Mono">source config</text>
+          <rect x="170" y="384" width="16" height="10" rx="2" fill="rgba(5,150,105,0.10)" stroke="#059669" stroke-width="1"/><text x="192" y="392" fill="#64748b" font-size="8" font-family="JetBrains Mono">local server</text>
+          <rect x="300" y="384" width="16" height="10" rx="2" fill="rgba(124,58,237,0.10)" stroke="#7c3aed" stroke-width="1"/><text x="322" y="392" fill="#64748b" font-size="8" font-family="JetBrains Mono">neutral source</text>
+          <rect x="440" y="384" width="16" height="10" rx="2" fill="rgba(217,119,6,0.12)" stroke="#d97706" stroke-width="1"/><text x="462" y="392" fill="#64748b" font-size="8" font-family="JetBrains Mono">targets / registry</text>
+          <rect x="600" y="384" width="16" height="10" rx="2" fill="transparent" stroke="#e11d48" stroke-width="1" stroke-dasharray="3,3"/><text x="622" y="392" fill="#64748b" font-size="8" font-family="JetBrains Mono">secret boundary</text>
+        </svg>
+      </div>
+      <figcaption><b>Fig 1 — The product.</b> Capture → redact → crystallize → distribute. The Gem archive is the one neutral source every target and the registry consume.</figcaption>
+    </figure>
+
+    <!-- ================= NARRATIVE ================= -->
+    <h2><span class="num">02</span>The eleven days</h2>
+
+    <h3>Day 0–2 · the genesis</h3>
+    <p>The very first commit, on June 14, isn't code. It's a <strong>design spec</strong>. That set the
+      pattern the whole project kept: <strong>spec first, code second</strong>, 24 of them by the end.
+      The founding intuition was a workflow. You install a coding agent, configure skills and MCP
+      servers and hooks, tune it until it actually <em>works</em>, and then that hard-won setup is stuck
+      on one machine. AgentGem answers the "and then what?" Two constraints held from the first hour and
+      never bent: a browser can't read your <code>~/.claude</code>, so a small local server bridges it;
+      and <strong>secrets get redacted the instant they're read</strong>, by value and by key name.</p>
+
+    <h3>Day 4 · the pivot to a format</h3>
+    <blockquote><p>What about turning pack.json into an archive/fs with a manifest for agents? I'm aiming
+      for flue, eve, and claude-managed agents, and codex.</p></blockquote>
+    <p>This is where "pack" stopped being a blob and became a <strong>format</strong>: a human-authored
+      manifest, a generated lock with per-file SHA-256 and a signable digest, the bodies as real files on
+      disk. One decision, <em>serialize at the edges</em>, made everything after it cheap. The archive
+      stays neutral, shaped like no single agent, and every consumer reads it the same way. Targets then
+      multiplied. <strong>Eve</strong> became the reference pattern, <strong>Flue</strong> added the
+      reusable <code>compose</code> hook, <strong>OpenAI Sandbox</strong> reused it. A habit shows up
+      here that the project kept: read the real docs and pin versions <em>from the real tarballs</em>,
+      because guessing at an API surface is how you ship code that won't compile.</p>
+
+    <h3>Day 5–6 · research as steering, and the registry</h3>
+    <p>Here Claude Code worked less as a typist than as a <strong>research analyst that could change
+      direction</strong>. A shadcn thread about treating a GitHub repo as a distribution protocol became
+      the <strong>Gem Registry</strong> the next day, built with subagent-driven TDD across ten tasks,
+      reviewed per task and again across the whole branch. The same stretch shipped the
+      <strong>testbed-first inversion</strong>. Instead of "introspect your machine," the canonical
+      surface became a local <code>.claude/</code> project you test-drive with your own Claude Code, then
+      package. Packaging took <em>zero</em> new code; it reused the archive's selection model.</p>
+
+    <h3>Day 7–8 · meet users where they are</h3>
+    <p>The testbed grew past Claude to also cover <strong>Codex and Hermes</strong>. One finding was
+      worth pinning to memory: <em>Hermes has no MCP-server concept at all</em>, so it's permanently
+      skip-reported rather than deferred. That's the gap between "we haven't built it" and "it can't
+      exist," and only reading the real <code>~/.hermes/config.yaml</code> surfaced it.</p>
+
+    <h3>Day 9 · going public</h3>
+    <p>A website, a README, and some careful git surgery. To scrub an old email from public history, the
+      repo's commits were rewritten to a single clean authoring identity. Then came the realization worth
+      saving to memory: a force-push <em>doesn't</em> actually remove unreachable commits from GitHub's
+      object store; only recreating the repo fresh does. So the repo was recreated. AgentGem went public
+      and shipped to npm as <code>@ninemind/agentgem</code>. The website taught its own lesson.
+      <strong>Lead with the outcome, not the build process.</strong> A five-step workflow rail read as
+      intimidating, so it became a three-beat <em>You've got an agent → Share it → Profit</em>.</p>
+    <p>Putting the site online turned into its own small story. <code>agentgem.ninemind.ai</code> runs as
+      a Cloudflare Worker (<code>agentgem-web</code>) that serves the built pages straight from Workers
+      Static Assets, with one twist: a request carrying <code>Accept: text/markdown</code> gets a
+      hand-authored markdown twin of the page instead of the HTML, so a browser sees the real site and an
+      LLM reading the docs gets clean prose. The subdomain was brand new with no DNS record, so the
+      Worker config sets <code>custom_domain = true</code>; one <code>wrangler deploy</code> then
+      provisions the proxied DNS record and the edge TLS cert together, with no manual DNS step. A GitHub
+      Action redeploys on every push to <code>website/</code> or <code>docs/</code>, authenticated by a
+      scoped <code>CLOUDFLARE_API_TOKEN</code> (Workers Scripts edit, plus DNS and SSL edit on the zone).
+      The one operational scar lives in memory: that token didn't survive the repo recreate, so the live
+      site keeps running but future auto-deploys need it re-added. Cloudflare actually shows up twice in
+      the project, because it's also a deploy target: a built Gem can be pushed to Cloudflare Workers via
+      <code>flue build --target cloudflare</code> and the same <code>wrangler deploy</code>.</p>
+
+    <h3>Day 10–11 · strategy, a desktop app, and the agent inside the agent</h3>
+    <p>The final stretch widened into product strategy, a marketplace question and other direction
+      calls, while still shipping: an Electron <strong>desktop app</strong> in its own worktree, an A2A
+      target, and a deliberately <em>restrained</em> identity decision. AgentGem <strong>declares; it
+      does not enforce</strong>. So don't build a primitive it doesn't need yet. Knowing what not to
+      build counts as a result.</p>
+    <p>The desktop app deserves a closer look, because it shows what "add a native app" should mean when
+      you hand it to an agent. The brief was deliberately narrow: a thin host, not a UI rewrite.
+      Electron's main process loads the already-built core, calls the same <code>createApp(port)</code>
+      the CLI uses on an OS-assigned localhost port, and points a window at it. REST, MCP, and the API
+      explorer keep working untouched; the renderer is the existing web page. The native folder picker,
+      menu, tray, and auto-update get bolted on through a preload bridge, and nothing else moves. The
+      whole thing lives in an isolated <code>desktop/</code> folder with its own <code>node_modules</code>,
+      so Electron's heavy binaries never leak into the lean library that publishes to npm. A
+      cross-platform GitHub Action then builds macOS, Windows, and Linux installers in a matrix. Even
+      there a small gotcha surfaced: electron-builder's default release tag (<code>v{version}</code>)
+      collides with the npm core's tag, so the desktop release rides its own <code>desktop-v*</code> tag.
+      The lesson for driving work like this: constrain the agent to wrap what already exists. "Reuse the
+      server, add a window" is a scope an agent nails; "build a desktop app" invites it to reinvent three
+      things you already shipped.</p>
+
+    <!-- ================= DIAGRAM 2 — THE METHOD ================= -->
+    <h2><span class="num">03</span>How it was built: the Claude Code loop</h2>
+    <p>Underneath the features is a repeatable method, and if you take one thing from this piece, take
+      this. It isn't AgentGem-specific. Every significant change moved through the same loop, isolated in
+      its own git worktree, with persistent memory carrying conclusions between sessions and an
+      adversarial reviewer gating the merge. The agent does the typing; the loop is what keeps the typing
+      honest.</p>
+
+    <figure>
+      <div class="diagram-container">
+        <svg viewBox="0 0 1000 430" role="img" aria-label="Claude Code build loop diagram">
+          <defs>
+            <marker id="ah2" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/></marker>
+            <marker id="ah2r" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#e11d48"/></marker>
+            <marker id="ah2v" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#7c3aed"/></marker>
+            <pattern id="grid2" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e2e8f0" stroke-width="0.5"/></pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="#ffffff"/><rect width="100%" height="100%" fill="url(#grid2)"/>
+
+          <!-- worktree boundary -->
+          <rect x="24" y="64" width="952" height="150" rx="12" fill="rgba(217,119,6,0.06)" stroke="#d97706" stroke-width="1" stroke-dasharray="8,4"/>
+          <text x="38" y="84" fill="#d97706" font-size="10" font-weight="600" font-family="JetBrains Mono">git worktree — one per session (isolation, learned the hard way)</text>
+
+          <!-- stage arrows (behind) -->
+          <line x1="186" y1="150" x2="226" y2="150" stroke="#059669" stroke-width="1.5" marker-end="url(#ah2)"/>
+          <line x1="372" y1="150" x2="412" y2="150" stroke="#059669" stroke-width="1.5" marker-end="url(#ah2)"/>
+          <line x1="558" y1="150" x2="598" y2="150" stroke="#059669" stroke-width="1.5" marker-end="url(#ah2)"/>
+          <line x1="744" y1="150" x2="784" y2="150" stroke="#059669" stroke-width="1.5" marker-end="url(#ah2)"/>
+
+          <!-- reject arc: review back to spec -->
+          <path d="M 650 184 Q 650 250 400 250 Q 110 250 110 186" fill="none" stroke="#e11d48" stroke-width="1.5" stroke-dasharray="5,5" marker-end="url(#ah2r)"/>
+          <text x="400" y="266" fill="#e11d48" font-size="8.5" text-anchor="middle" font-family="JetBrains Mono">findings → revise (≈180 review passes over the project)</text>
+
+          <!-- stages -->
+          <rect x="40" y="120" width="146" height="60" rx="6" fill="#ffffff"/><rect x="40" y="120" width="146" height="60" rx="6" fill="rgba(5,150,105,0.10)" stroke="#059669" stroke-width="1.5"/>
+          <text x="113" y="146" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle" font-family="JetBrains Mono">Brainstorm</text>
+          <text x="113" y="162" fill="#64748b" font-size="8" text-anchor="middle" font-family="JetBrains Mono">spec → docs/specs</text>
+
+          <rect x="226" y="120" width="146" height="60" rx="6" fill="#ffffff"/><rect x="226" y="120" width="146" height="60" rx="6" fill="rgba(5,150,105,0.10)" stroke="#059669" stroke-width="1.5"/>
+          <text x="299" y="146" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle" font-family="JetBrains Mono">Write plan</text>
+          <text x="299" y="162" fill="#64748b" font-size="8" text-anchor="middle" font-family="JetBrains Mono">tasked increments</text>
+
+          <rect x="412" y="120" width="146" height="60" rx="6" fill="#ffffff"/><rect x="412" y="120" width="146" height="60" rx="6" fill="rgba(5,150,105,0.10)" stroke="#059669" stroke-width="1.5"/>
+          <text x="485" y="146" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle" font-family="JetBrains Mono">Subagent TDD</text>
+          <text x="485" y="162" fill="#64748b" font-size="8" text-anchor="middle" font-family="JetBrains Mono">test-first, per task</text>
+
+          <rect x="598" y="120" width="146" height="60" rx="6" fill="#ffffff"/><rect x="598" y="120" width="146" height="60" rx="6" fill="rgba(225,29,72,0.10)" stroke="#e11d48" stroke-width="1.5"/>
+          <text x="671" y="146" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle" font-family="JetBrains Mono">Security review</text>
+          <text x="671" y="162" fill="#64748b" font-size="8" text-anchor="middle" font-family="JetBrains Mono">adversarial, every diff</text>
+
+          <rect x="784" y="120" width="168" height="60" rx="6" fill="#ffffff"/><rect x="784" y="120" width="168" height="60" rx="6" fill="rgba(5,150,105,0.10)" stroke="#059669" stroke-width="1.5"/>
+          <text x="868" y="146" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle" font-family="JetBrains Mono">Merge to main</text>
+          <text x="868" y="162" fill="#64748b" font-size="8" text-anchor="middle" font-family="JetBrains Mono">whole-branch review</text>
+
+          <!-- memory store -->
+          <rect x="270" y="320" width="220" height="68" rx="6" fill="#ffffff"/><rect x="270" y="320" width="220" height="68" rx="6" fill="rgba(124,58,237,0.10)" stroke="#7c3aed" stroke-width="1.5"/>
+          <text x="380" y="344" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle" font-family="JetBrains Mono">Persistent memory</text>
+          <text x="380" y="361" fill="#64748b" font-size="8" text-anchor="middle" font-family="JetBrains Mono">decisions · gotchas · shipped status</text>
+          <text x="380" y="375" fill="#7c3aed" font-size="8" text-anchor="middle" font-family="JetBrains Mono">survives between sessions</text>
+          <line x1="299" y1="320" x2="299" y2="182" stroke="#7c3aed" stroke-width="1.3" stroke-dasharray="4,4" marker-end="url(#ah2v)"/>
+          <line x1="461" y1="182" x2="461" y2="318" stroke="#7c3aed" stroke-width="1.3" stroke-dasharray="4,4" marker-end="url(#ah2v)"/>
+
+          <!-- verify -->
+          <rect x="560" y="320" width="280" height="68" rx="6" fill="#ffffff"/><rect x="560" y="320" width="280" height="68" rx="6" fill="rgba(8,145,178,0.10)" stroke="#0891b2" stroke-width="1.5"/>
+          <text x="700" y="344" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle" font-family="JetBrains Mono">Verify against the real world</text>
+          <text x="700" y="361" fill="#64748b" font-size="8" text-anchor="middle" font-family="JetBrains Mono">browser-harness · real deploys · pinned tarballs</text>
+          <text x="700" y="375" fill="#0891b2" font-size="8" text-anchor="middle" font-family="JetBrains Mono">evidence before "done"</text>
+          <line x1="671" y1="320" x2="671" y2="182" stroke="#0891b2" stroke-width="1.3" stroke-dasharray="4,4" marker-end="url(#ah2v)"/>
+
+          <!-- legend -->
+          <rect x="40" y="404" width="14" height="9" rx="2" fill="rgba(5,150,105,0.10)" stroke="#059669" stroke-width="1"/><text x="60" y="412" fill="#64748b" font-size="8" font-family="JetBrains Mono">build stage</text>
+          <rect x="170" y="404" width="14" height="9" rx="2" fill="rgba(225,29,72,0.10)" stroke="#e11d48" stroke-width="1"/><text x="190" y="412" fill="#64748b" font-size="8" font-family="JetBrains Mono">review gate</text>
+          <rect x="290" y="404" width="14" height="9" rx="2" fill="rgba(124,58,237,0.10)" stroke="#7c3aed" stroke-width="1"/><text x="310" y="412" fill="#64748b" font-size="8" font-family="JetBrains Mono">memory</text>
+          <rect x="395" y="404" width="14" height="9" rx="2" fill="rgba(8,145,178,0.10)" stroke="#0891b2" stroke-width="1"/><text x="415" y="412" fill="#64748b" font-size="8" font-family="JetBrains Mono">verification</text>
+        </svg>
+      </div>
+      <figcaption><b>Fig 2 — The method.</b> Spec → plan → subagent TDD → adversarial review → merge, looped inside a worktree, with memory and real-world verification feeding every stage.</figcaption>
+    </figure>
+
+    <p>The loop above isn't abstract; it ran on a specific, mostly off-the-shelf toolchain. The numbers
+      are how many of the 214 sessions each one shows up in.</p>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-header"><span class="card-dot emerald"></span><h3>Skills</h3></div>
+        <ul>
+          <li>• superpowers: brainstorm → plan → TDD → subagent build → review <span style="color:#857a64">(40)</span></li>
+          <li>• /security-review, on every diff <span style="color:#857a64">(214)</span></li>
+          <li>• browser-harness, live UX checks <span style="color:#857a64">(15)</span></li>
+          <li>• using-git-worktrees <span style="color:#857a64">(21)</span></li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-dot violet"></span><h3>MCP &amp; protocols</h3></div>
+        <ul>
+          <li>• context7, to pin real library docs <span style="color:#857a64">(55)</span></li>
+          <li>• ACP: claude-agent-acp / codex-acp <span style="color:#857a64">(7)</span></li>
+          <li>• <a href="https://agentback.dev">AgentBack</a>, the app's own MCP surface</li>
+          <li>• persistent cross-session memory</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-dot amber"></span><h3>CLI &amp; ops</h3></div>
+        <ul>
+          <li>• pnpm · vitest · tsc -b <span style="color:#857a64">(148)</span></li>
+          <li>• wrangler · vercel · agentcore deploys</li>
+          <li>• git filter-repo --mailmap, history rewrite</li>
+          <li>• gh · npm publish</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="eyebrow">Two traps the agent won't flag for you</p>
+    <p>The memory files carry one scar over and over. When two sessions shared a single checkout,
+      branches got scrambled, and one agent twice <em>deleted another session's design spec</em> as
+      "scope creep." Agents working in parallel will step on each other with total confidence. The rule
+      of one worktree per session was earned, not assumed.</p>
+    <p>The subtler trap cost more. The test runner executed <em>compiled</em> tests from
+      <code>dist/</code>, and <code>tsc -b</code> is incremental, so after a big rename the stale
+      compiled tests lingered and kept passing against the <em>old</em> code. A green check that means
+      nothing. The agent won't catch this, because from where it sits the suite is passing. The fix is a
+      habit you have to teach it (<code>rm -rf dist && rebuild</code>), and the real lesson is older than
+      agents: a passing suite only means what you think it means if you know how the suite is wired.</p>
+
+    <!-- ================= DIAGRAM 3 — THE REFLEXIVE FEATURE ================= -->
+    <h2><span class="num">04</span>The agent inside the agent</h2>
+    <p>The most reflexive feature closes the loop completely. <strong>Analyze</strong> reads
+      <em>your</em> session transcripts and computes a deterministic usage signal, counting only the
+      tools you actually invoked rather than the whole available-but-unused catalog. Then it asks a
+      <strong>local coding agent, over ACP,</strong> which artifacts to bundle. So AgentGem packages
+      coding agents by consulting a coding agent. A guard drops anything the agent names that isn't
+      really in your inventory.</p>
+    <p>That last sentence is the pattern worth copying when you let an agent make decisions. Give it a
+      deterministic signal to reason over, not a blank prompt. Let it propose. Then check its proposal
+      against an authoritative source it can't talk its way around. The agent is good at judgment and
+      bad at staying honest about facts, so you keep the judgment and veto the facts.</p>
+
+    <figure>
+      <div class="diagram-container">
+        <svg viewBox="0 0 1000 360" role="img" aria-label="Workflow-aware recommendation diagram">
+          <defs>
+            <marker id="ah3" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/></marker>
+            <marker id="ah3a" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#e11d48"/></marker>
+            <pattern id="grid3" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e2e8f0" stroke-width="0.5"/></pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="#ffffff"/><rect width="100%" height="100%" fill="url(#grid3)"/>
+
+          <!-- arrows behind -->
+          <line x1="182" y1="120" x2="252" y2="98" stroke="#64748b" stroke-width="1.5" marker-end="url(#ah3)"/>
+          <line x1="182" y1="150" x2="252" y2="180" stroke="#64748b" stroke-width="1.5" marker-end="url(#ah3)"/>
+          <line x1="402" y1="98" x2="470" y2="125" stroke="#059669" stroke-width="1.5" marker-end="url(#ah3)"/>
+          <line x1="402" y1="180" x2="470" y2="150" stroke="#0891b2" stroke-width="1.5" marker-end="url(#ah3)"/>
+          <line x1="630" y1="138" x2="700" y2="138" stroke="#7c3aed" stroke-width="1.5" marker-end="url(#ah3)"/>
+          <text x="665" y="130" fill="#64748b" font-size="8.5" text-anchor="middle" font-family="JetBrains Mono">build</text>
+          <!-- inventory guard -->
+          <line x1="550" y1="250" x2="550" y2="172" stroke="#e11d48" stroke-width="1.4" stroke-dasharray="4,4" marker-end="url(#ah3a)"/>
+          <text x="556" y="215" fill="#e11d48" font-size="8" font-family="JetBrains Mono">drops anything not in inventory</text>
+
+          <!-- transcripts -->
+          <rect x="34" y="106" width="148" height="58" rx="6" fill="#ffffff"/><rect x="34" y="106" width="148" height="58" rx="6" fill="rgba(100,116,139,0.10)" stroke="#64748b" stroke-width="1.5"/>
+          <text x="108" y="131" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle" font-family="JetBrains Mono">Session history</text>
+          <text x="108" y="147" fill="#64748b" font-size="8" text-anchor="middle" font-family="JetBrains Mono">~/.claude transcripts</text>
+
+          <!-- scan -->
+          <rect x="252" y="70" width="150" height="58" rx="6" fill="#ffffff"/><rect x="252" y="70" width="150" height="58" rx="6" fill="rgba(5,150,105,0.10)" stroke="#059669" stroke-width="1.5"/>
+          <text x="327" y="95" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle" font-family="JetBrains Mono">Deterministic scan</text>
+          <text x="327" y="111" fill="#64748b" font-size="8" text-anchor="middle" font-family="JetBrains Mono">counts real tool_use only</text>
+
+          <!-- acp agent -->
+          <rect x="252" y="152" width="150" height="58" rx="6" fill="#ffffff"/><rect x="252" y="152" width="150" height="58" rx="6" fill="rgba(8,145,178,0.10)" stroke="#0891b2" stroke-width="1.5"/>
+          <text x="327" y="177" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle" font-family="JetBrains Mono">Local agent · ACP</text>
+          <text x="327" y="193" fill="#64748b" font-size="8" text-anchor="middle" font-family="JetBrains Mono">Claude Code, plan mode</text>
+
+          <!-- selection -->
+          <rect x="470" y="106" width="160" height="64" rx="6" fill="#ffffff"/><rect x="470" y="106" width="160" height="64" rx="6" fill="rgba(124,58,237,0.10)" stroke="#7c3aed" stroke-width="1.5"/>
+          <text x="550" y="131" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle" font-family="JetBrains Mono">Pre-checked</text>
+          <text x="550" y="147" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle" font-family="JetBrains Mono">Gem selection</text>
+          <text x="550" y="163" fill="#7c3aed" font-size="8" text-anchor="middle" font-family="JetBrains Mono">grouped by workflow</text>
+
+          <!-- inventory -->
+          <rect x="470" y="252" width="160" height="50" rx="6" fill="#ffffff"/><rect x="470" y="252" width="160" height="50" rx="6" fill="rgba(217,119,6,0.12)" stroke="#d97706" stroke-width="1.5"/>
+          <text x="550" y="274" fill="#0f172a" font-size="10" font-weight="600" text-anchor="middle" font-family="JetBrains Mono">Project inventory</text>
+          <text x="550" y="289" fill="#64748b" font-size="8" text-anchor="middle" font-family="JetBrains Mono">authoritative truth</text>
+
+          <!-- build gem -->
+          <rect x="700" y="108" width="150" height="60" rx="6" fill="#ffffff"/><rect x="700" y="108" width="150" height="60" rx="6" fill="rgba(124,58,237,0.10)" stroke="#7c3aed" stroke-width="1.5"/>
+          <text x="775" y="134" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle" font-family="JetBrains Mono">Build a Gem</text>
+          <text x="775" y="150" fill="#64748b" font-size="8" text-anchor="middle" font-family="JetBrains Mono">existing pipeline (Fig 1)</text>
+
+          <!-- legend -->
+          <rect x="34" y="318" width="14" height="9" rx="2" fill="rgba(5,150,105,0.10)" stroke="#059669" stroke-width="1"/><text x="54" y="326" fill="#64748b" font-size="8" font-family="JetBrains Mono">deterministic</text>
+          <rect x="170" y="318" width="14" height="9" rx="2" fill="rgba(8,145,178,0.10)" stroke="#0891b2" stroke-width="1"/><text x="190" y="326" fill="#64748b" font-size="8" font-family="JetBrains Mono">agent (ACP)</text>
+          <rect x="290" y="318" width="14" height="9" rx="2" fill="rgba(217,119,6,0.12)" stroke="#d97706" stroke-width="1"/><text x="310" y="326" fill="#64748b" font-size="8" font-family="JetBrains Mono">inventory</text>
+          <line x1="395" y1="323" x2="411" y2="323" stroke="#e11d48" stroke-width="1.4" stroke-dasharray="3,3"/><text x="417" y="326" fill="#64748b" font-size="8" font-family="JetBrains Mono">hallucination guard</text>
+        </svg>
+      </div>
+      <figcaption><b>Fig 3 — The reflexive loop.</b> A deterministic signal and a local ACP agent agree on a pre-checked selection; the project inventory is the authority that vetoes any hallucination.</figcaption>
+    </figure>
+
+    <!-- ================= PLAYBOOK ================= -->
+    <h2 id="transfers"><span class="num">05</span>What transfers</h2>
+    <p>None of this is exotic. Strip away AgentGem and what's left is a way of working you can run on
+      your own repo tomorrow. The shortlist:</p>
+    <ol class="play">
+      <li><b>Spec before code.</b> A one-page design doc per feature is the cheapest way to keep an agent
+        on-rails; it argues with you on the page instead of in the diff. This project wrote 24.</li>
+      <li><b>Put the reviewer in the loop, not at the end.</b> An automated adversarial pass on every
+        diff, while context is fresh, catches what a final review never will. It ran ~180 times here.</li>
+      <li><b>Give the agent a memory.</b> Write durable decisions and gotchas to a store that outlives
+        the session, or you'll re-explain them next week and re-make the same mistake.</li>
+      <li><b>One worktree per session.</b> Parallel agents on a shared checkout will scramble branches
+        and delete each other's work, confidently. Isolation is not optional.</li>
+      <li><b>Make it prove things.</b> Drive the real app, run the real deploy, pin versions from real
+        tarballs. "Tests pass" and "it works" are claims until you've watched them.</li>
+      <li><b>Pin docs; don't trust recall.</b> A live-docs source (here, context7) stops the agent
+        inventing an API that looked plausible and never existed.</li>
+      <li><b>Let it read the outside world.</b> A linked thread became the registry; a vendor's docs
+        became three deploy targets. The agent is a decent research analyst if you point it outward.</li>
+      <li><b>Decide what <em>not</em> to build.</b> The most valuable design session of the eleven days
+        ended in "don't build this yet." Restraint is a result you can ship.</li>
+    </ol>
+
+    <!-- ================= CLOSING ================= -->
+    <h2><span class="num">06</span>Where it landed</h2>
+    <p>Eleven days, one design spec to a public release. And it was built the way it now asks you to
+      work: spec it, test it, review it adversarially, verify it for real, write down what you learned,
+      and hand your agent the parts an agent is good at.</p>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-header"><span class="card-dot emerald"></span><h3>Shipped</h3></div>
+        <ul>
+          <li>• 326 commits · 24 design specs</li>
+          <li>• Continuously-audited redaction core</li>
+          <li>• Neutral Gem archive (manifest + lock)</li>
+          <li>• GitHub-backed registry</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-dot amber"></span><h3>Targets</h3></div>
+        <ul>
+          <li>• Eve · Flue · OpenAI Sandbox</li>
+          <li>• Codex · Claude-managed</li>
+          <li>• Bedrock AgentCore</li>
+          <li>• A2A Agent Card / server</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-dot cyan"></span><h3>Surfaces</h3></div>
+        <ul>
+          <li>• Local web UI + MCP</li>
+          <li>• Native desktop app</li>
+          <li>• Marketing site + docs</li>
+          <li>• npm: @ninemind/agentgem</li>
+        </ul>
+      </div>
+    </div>
+
+  </main>
+
+<footer class="foot">
+  <div class="foot-in">
+    <a class="brand" href="../../index.html"><img src="../../assets/gem.svg" alt="" />agentgem</a>
+    <div class="foot-links">
+      <a href="../../vision.html">Vision</a>
+      <a href="../../docs/getting-started.html">Getting started</a>
+      <a href="../index.html">Blog</a>
+      <a href="https://www.npmjs.com/package/@ninemind/agentgem">npm</a>
+      <a href="https://github.com/ninemindai/agentgem">GitHub</a>
+    </div>
+    <span class="note">built on <a href="https://agentback.dev">AgentBack</a></span>
+  </div>
+</footer>
+
+
+  <script>
+    async function snap() {
+      const el = document.getElementById('report-container');
+      const r = el.getBoundingClientRect();
+      const pad = 32;
+      return await html2canvas(document.body, { backgroundColor: '#f4efe3', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+    }
+    async function copyAsImage(btn){ const o=btn.textContent; try{ const c=await snap(); const b=await new Promise(r=>c.toBlob(r,'image/png')); await navigator.clipboard.write([new ClipboardItem({'image/png':b})]); btn.textContent='✓ Copied!'; }catch(e){ btn.textContent='✗ Failed'; } setTimeout(()=>btn.textContent=o,2000); }
+    async function downloadPNG(btn){ const o=btn.textContent; btn.textContent='⏳ ...'; try{ const c=await snap(); const a=document.createElement('a'); a.download='agentgem-journey.png'; a.href=c.toDataURL('image/png'); a.click(); btn.textContent='✓ Done!'; }catch(e){ btn.textContent='✗ Failed'; } setTimeout(()=>btn.textContent=o,2000); }
+    async function downloadPDF(btn){ const o=btn.textContent; btn.textContent='⏳ ...'; try{ const c=await snap(); const img=c.toDataURL('image/png'); const {jsPDF}=window.jspdf; const orient=c.width>c.height?'landscape':'portrait'; const pdf=new jsPDF({orientation:orient,unit:'px',format:[c.width,c.height],hotfixes:['px_scaling']}); pdf.addImage(img,'PNG',0,0,c.width,c.height); pdf.save('agentgem-journey.pdf'); btn.textContent='✓ Done!'; }catch(e){ btn.textContent='✗ Failed'; } setTimeout(()=>btn.textContent=o,2000); }
+  </script>
+</body>
+</html>
