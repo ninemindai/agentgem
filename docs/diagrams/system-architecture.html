@@ -9,37 +9,37 @@
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'JetBrains Mono', monospace; background: #020617; min-height: 100vh; padding: 2rem; color: white; }
+    body { font-family: 'JetBrains Mono', monospace; background: #f8fafc; min-height: 100vh; padding: 2rem; color: #0f172a; }
     .container { max-width: 1200px; margin: 0 auto; }
     .header { margin-bottom: 2rem; }
     .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
-    .pulse-dot { width: 12px; height: 12px; background: #22d3ee; border-radius: 50%; animation: pulse 2s infinite; }
+    .pulse-dot { width: 12px; height: 12px; background: #0891b2; border-radius: 50%; animation: pulse 2s infinite; }
     @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
     h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; }
-    .subtitle { color: #94a3b8; font-size: 0.875rem; margin-left: 1.75rem; }
-    .diagram-container { background: rgba(15, 23, 42, 0.5); border-radius: 1rem; border: 1px solid #1e293b; padding: 1.5rem; overflow-x: auto; }
+    .subtitle { color: #64748b; font-size: 0.875rem; margin-left: 1.75rem; }
+    .diagram-container { background: #ffffff; border-radius: 1rem; border: 1px solid #e2e8f0; padding: 1.5rem; overflow-x: auto; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); }
     svg { width: 100%; min-width: 900px; display: block; }
     .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-top: 2rem; }
-    .card { background: rgba(15, 23, 42, 0.5); border-radius: 0.75rem; border: 1px solid #1e293b; padding: 1.25rem; }
+    .card { background: #ffffff; border-radius: 0.75rem; border: 1px solid #e2e8f0; padding: 1.25rem; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); }
     .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
     .card-dot { width: 8px; height: 8px; border-radius: 50%; }
-    .card-dot.cyan { background: #22d3ee; }
-    .card-dot.emerald { background: #34d399; }
-    .card-dot.violet { background: #a78bfa; }
-    .card-dot.amber { background: #fbbf24; }
-    .card-dot.rose { background: #fb7185; }
+    .card-dot.cyan { background: #0891b2; }
+    .card-dot.emerald { background: #059669; }
+    .card-dot.violet { background: #7c3aed; }
+    .card-dot.amber { background: #d97706; }
+    .card-dot.rose { background: #e11d48; }
     .card h3 { font-size: 0.875rem; font-weight: 600; }
-    .card ul { list-style: none; color: #94a3b8; font-size: 0.75rem; }
+    .card ul { list-style: none; color: #64748b; font-size: 0.75rem; }
     .card li { margin-bottom: 0.375rem; }
-    .footer { text-align: center; margin-top: 1.5rem; color: #475569; font-size: 0.75rem; }
+    .footer { text-align: center; margin-top: 1.5rem; color: #94a3b8; font-size: 0.75rem; }
     .toolbar { display: flex; gap: 0.5rem; margin-left: auto; flex-shrink: 0; align-items: center; }
-    .toolbar-toggle { background: transparent; border: none; color: #475569; cursor: pointer; font-size: 1.25rem; line-height: 1; padding: 0.25rem 0.5rem; border-radius: 0.375rem; transition: color 0.2s, background 0.2s; }
-    .toolbar-toggle:hover { color: #94a3b8; background: rgba(30, 41, 59, 0.5); }
+    .toolbar-toggle { background: transparent; border: none; color: #94a3b8; cursor: pointer; font-size: 1.25rem; line-height: 1; padding: 0.25rem 0.5rem; border-radius: 0.375rem; transition: color 0.2s, background 0.2s; }
+    .toolbar-toggle:hover { color: #475569; background: #f1f5f9; }
     .toolbar-actions { display: none; gap: 0.5rem; }
     .toolbar.expanded .toolbar-actions { display: flex; }
-    .toolbar-actions button { background: rgba(30, 41, 59, 0.8); border: 1px solid #334155; color: #94a3b8; padding: 0.375rem 0.75rem; border-radius: 0.375rem; font-family: inherit; font-size: 0.75rem; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
-    .toolbar-actions button:hover { background: rgba(51, 65, 85, 0.8); color: white; border-color: #475569; }
-    @media print { body { background: #020617; padding: 1rem; } .toolbar { display: none !important; } }
+    .toolbar-actions button { background: #ffffff; border: 1px solid #e2e8f0; color: #475569; padding: 0.375rem 0.75rem; border-radius: 0.375rem; font-family: inherit; font-size: 0.75rem; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+    .toolbar-actions button:hover { background: #f1f5f9; color: #0f172a; border-color: #cbd5e1; }
+    @media print { body { background: #ffffff; padding: 1rem; } .toolbar { display: none !important; } }
   </style>
 </head>
 <body>
@@ -57,164 +57,193 @@
           <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">⋯</button>
         </div>
       </div>
-      <p class="subtitle">One Zod contract → REST + MCP + OpenAPI · a framework-agnostic Gem core · archive, targets, registry, and deploy</p>
+      <p class="subtitle">One Zod contract → REST + MCP + OpenAPI · CLI and Desktop host the same core · optional workflow analyze · archive, targets, registry, and deploy</p>
     </div>
 
     <div class="diagram-container">
-      <svg viewBox="0 0 1000 740">
+      <svg viewBox="0 0 1000 810">
         <defs>
           <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-            <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+            <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8" />
           </marker>
           <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e2e8f0" stroke-width="0.5"/>
           </pattern>
         </defs>
 
         <rect width="100%" height="100%" fill="url(#grid)" />
 
-        <!-- ===== Connection arrows (drawn first, behind boxes) ===== -->
-        <!-- Clients -> contract -->
-        <line x1="250" y1="116" x2="200" y2="180" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <!-- ===== arrows (behind boxes) ===== -->
+        <!-- hosts -> contract -->
+        <line x1="155" y1="116" x2="180" y2="180" stroke="#0891b2" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <line x1="400" y1="116" x2="232" y2="180" stroke="#0891b2" stroke-width="1.5" marker-end="url(#arrowhead)"/>
         <line x1="660" y1="116" x2="490" y2="180" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <!-- Contract -> core -->
-        <line x1="190" y1="230" x2="158" y2="328" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <line x1="480" y1="230" x2="575" y2="328" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <!-- Pipeline (inside core) -->
-        <line x1="240" y1="362" x2="298" y2="362" stroke="#fb7185" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <line x1="450" y1="362" x2="508" y2="362" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <line x1="680" y1="362" x2="738" y2="362" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <!-- Core -> distribution bus -->
-        <line x1="825" y1="394" x2="825" y2="472" stroke="#a78bfa" stroke-width="1.5"/>
-        <line x1="160" y1="472" x2="850" y2="472" stroke="#475569" stroke-width="1.5"/>
-        <line x1="160" y1="472" x2="160" y2="498" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <line x1="390" y1="472" x2="390" y2="498" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <line x1="620" y1="472" x2="620" y2="498" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <line x1="850" y1="472" x2="850" y2="498" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <!-- Distribution -> state -->
-        <line x1="620" y1="580" x2="540" y2="608" stroke="#475569" stroke-width="1.5" stroke-dasharray="5,5" marker-end="url(#arrowhead)"/>
-        <line x1="850" y1="580" x2="640" y2="608" stroke="#475569" stroke-width="1.5" stroke-dasharray="5,5" marker-end="url(#arrowhead)"/>
+        <!-- contract -> analyze (optional) -->
+        <line x1="190" y1="230" x2="190" y2="298" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="5,5" marker-end="url(#arrowhead)"/>
+        <!-- analyze chain -->
+        <line x1="310" y1="327" x2="372" y2="327" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <line x1="580" y1="327" x2="652" y2="327" stroke="#059669" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <!-- selection -> buildGem -->
+        <line x1="780" y1="354" x2="618" y2="424" stroke="#0891b2" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <!-- build entry: contract -> core (left elbow, around analyze) -->
+        <polyline points="150,230 52,252 52,458 68,458" fill="none" stroke="#059669" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <!-- core pipeline -->
+        <line x1="240" y1="458" x2="298" y2="458" stroke="#e11d48" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <line x1="450" y1="458" x2="508" y2="458" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <line x1="680" y1="458" x2="738" y2="458" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <!-- core -> distribution bus -->
+        <line x1="825" y1="490" x2="825" y2="562" stroke="#7c3aed" stroke-width="1.5"/>
+        <line x1="160" y1="562" x2="850" y2="562" stroke="#cbd5e1" stroke-width="1.5"/>
+        <line x1="160" y1="562" x2="160" y2="578" stroke="#d97706" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <line x1="390" y1="562" x2="390" y2="578" stroke="#d97706" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <line x1="620" y1="562" x2="620" y2="578" stroke="#d97706" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <line x1="850" y1="562" x2="850" y2="578" stroke="#7c3aed" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <!-- distribution -> state -->
+        <line x1="620" y1="660" x2="540" y2="690" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="5,5" marker-end="url(#arrowhead)"/>
+        <line x1="850" y1="660" x2="640" y2="690" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="5,5" marker-end="url(#arrowhead)"/>
 
-        <!-- ===== Band boundaries ===== -->
-        <rect x="40" y="150" width="920" height="96" rx="12" fill="rgba(52, 211, 153, 0.04)" stroke="#475569" stroke-width="1" stroke-dasharray="8,4"/>
-        <rect x="40" y="292" width="920" height="156" rx="12" fill="rgba(148, 163, 184, 0.03)" stroke="#475569" stroke-width="1" stroke-dasharray="8,4"/>
-        <!-- redaction trust boundary (inside core) -->
-        <rect x="58" y="320" width="402" height="92" rx="8" fill="transparent" stroke="#fb7185" stroke-width="1" stroke-dasharray="4,4"/>
+        <!-- ===== band boundaries ===== -->
+        <rect x="40" y="150" width="920" height="96" rx="12" fill="rgba(5, 150, 105, 0.04)" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="8,4"/>
+        <rect x="40" y="268" width="920" height="96" rx="12" fill="rgba(8, 145, 178, 0.04)" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="8,4"/>
+        <rect x="40" y="386" width="920" height="160" rx="12" fill="rgba(100, 116, 139, 0.04)" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="8,4"/>
+        <rect x="58" y="414" width="402" height="84" rx="8" fill="transparent" stroke="#e11d48" stroke-width="1" stroke-dasharray="4,4"/>
 
-        <!-- ===== Clients ===== -->
-        <rect x="150" y="64" width="200" height="52" rx="6" fill="#0f172a"/>
-        <rect x="150" y="64" width="200" height="52" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
-        <rect x="560" y="64" width="200" height="52" rx="6" fill="#0f172a"/>
-        <rect x="560" y="64" width="200" height="52" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <!-- ===== hosts ===== -->
+        <rect x="55" y="64" width="200" height="52" rx="6" fill="#ffffff"/>
+        <rect x="55" y="64" width="200" height="52" rx="6" fill="rgba(8, 145, 178, 0.10)" stroke="#0891b2" stroke-width="1.5"/>
+        <rect x="300" y="64" width="200" height="52" rx="6" fill="#ffffff"/>
+        <rect x="300" y="64" width="200" height="52" rx="6" fill="rgba(8, 145, 178, 0.10)" stroke="#0891b2" stroke-width="1.5"/>
+        <rect x="560" y="64" width="200" height="52" rx="6" fill="#ffffff"/>
+        <rect x="560" y="64" width="200" height="52" rx="6" fill="rgba(100, 116, 139, 0.10)" stroke="#94a3b8" stroke-width="1.5"/>
 
-        <!-- ===== Contract surface ===== -->
-        <rect x="70" y="182" width="240" height="48" rx="6" fill="#0f172a"/>
-        <rect x="70" y="182" width="240" height="48" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
-        <rect x="380" y="182" width="200" height="48" rx="6" fill="#0f172a"/>
-        <rect x="380" y="182" width="200" height="48" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
-        <rect x="660" y="182" width="240" height="48" rx="6" fill="#0f172a"/>
-        <rect x="660" y="182" width="240" height="48" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <!-- ===== contract ===== -->
+        <rect x="70" y="182" width="240" height="48" rx="6" fill="#ffffff"/>
+        <rect x="70" y="182" width="240" height="48" rx="6" fill="rgba(5, 150, 105, 0.10)" stroke="#059669" stroke-width="1.5"/>
+        <rect x="380" y="182" width="200" height="48" rx="6" fill="#ffffff"/>
+        <rect x="380" y="182" width="200" height="48" rx="6" fill="rgba(5, 150, 105, 0.10)" stroke="#059669" stroke-width="1.5"/>
+        <rect x="660" y="182" width="240" height="48" rx="6" fill="#ffffff"/>
+        <rect x="660" y="182" width="240" height="48" rx="6" fill="rgba(100, 116, 139, 0.10)" stroke="#94a3b8" stroke-width="1.5"/>
 
-        <!-- ===== Gem core stages ===== -->
-        <rect x="70" y="330" width="170" height="64" rx="6" fill="#0f172a"/>
-        <rect x="70" y="330" width="170" height="64" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
-        <rect x="300" y="330" width="150" height="64" rx="6" fill="#0f172a"/>
-        <rect x="300" y="330" width="150" height="64" rx="6" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1.5"/>
-        <rect x="510" y="330" width="170" height="64" rx="6" fill="#0f172a"/>
-        <rect x="510" y="330" width="170" height="64" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
-        <rect x="740" y="330" width="170" height="64" rx="6" fill="#0f172a"/>
-        <rect x="740" y="330" width="170" height="64" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <!-- ===== analyze (optional pre-build assist) ===== -->
+        <rect x="70" y="300" width="240" height="54" rx="6" fill="#ffffff"/>
+        <rect x="70" y="300" width="240" height="54" rx="6" fill="rgba(100, 116, 139, 0.10)" stroke="#94a3b8" stroke-width="1.5"/>
+        <rect x="380" y="300" width="200" height="54" rx="6" fill="#ffffff"/>
+        <rect x="380" y="300" width="200" height="54" rx="6" fill="rgba(5, 150, 105, 0.10)" stroke="#059669" stroke-width="1.5"/>
+        <rect x="660" y="300" width="240" height="54" rx="6" fill="#ffffff"/>
+        <rect x="660" y="300" width="240" height="54" rx="6" fill="rgba(8, 145, 178, 0.10)" stroke="#0891b2" stroke-width="1.5"/>
 
-        <!-- ===== Distribution ===== -->
-        <rect x="60" y="500" width="200" height="80" rx="6" fill="#0f172a"/>
-        <rect x="60" y="500" width="200" height="80" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
-        <rect x="300" y="500" width="180" height="80" rx="6" fill="#0f172a"/>
-        <rect x="300" y="500" width="180" height="80" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
-        <rect x="520" y="500" width="200" height="80" rx="6" fill="#0f172a"/>
-        <rect x="520" y="500" width="200" height="80" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
-        <rect x="760" y="500" width="180" height="80" rx="6" fill="#0f172a"/>
-        <rect x="760" y="500" width="180" height="80" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <!-- ===== core ===== -->
+        <rect x="70" y="426" width="170" height="64" rx="6" fill="#ffffff"/>
+        <rect x="70" y="426" width="170" height="64" rx="6" fill="rgba(100, 116, 139, 0.10)" stroke="#94a3b8" stroke-width="1.5"/>
+        <rect x="300" y="426" width="150" height="64" rx="6" fill="#ffffff"/>
+        <rect x="300" y="426" width="150" height="64" rx="6" fill="rgba(225, 29, 72, 0.10)" stroke="#e11d48" stroke-width="1.5"/>
+        <rect x="510" y="426" width="170" height="64" rx="6" fill="#ffffff"/>
+        <rect x="510" y="426" width="170" height="64" rx="6" fill="rgba(5, 150, 105, 0.10)" stroke="#059669" stroke-width="1.5"/>
+        <rect x="740" y="426" width="170" height="64" rx="6" fill="#ffffff"/>
+        <rect x="740" y="426" width="170" height="64" rx="6" fill="rgba(124, 58, 237, 0.10)" stroke="#7c3aed" stroke-width="1.5"/>
 
-        <!-- ===== Persistent state ===== -->
-        <rect x="290" y="610" width="420" height="56" rx="6" fill="#0f172a"/>
-        <rect x="290" y="610" width="420" height="56" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <!-- ===== distribution ===== -->
+        <rect x="60" y="580" width="200" height="80" rx="6" fill="#ffffff"/>
+        <rect x="60" y="580" width="200" height="80" rx="6" fill="rgba(217, 119, 6, 0.12)" stroke="#d97706" stroke-width="1.5"/>
+        <rect x="300" y="580" width="180" height="80" rx="6" fill="#ffffff"/>
+        <rect x="300" y="580" width="180" height="80" rx="6" fill="rgba(217, 119, 6, 0.12)" stroke="#d97706" stroke-width="1.5"/>
+        <rect x="520" y="580" width="200" height="80" rx="6" fill="#ffffff"/>
+        <rect x="520" y="580" width="200" height="80" rx="6" fill="rgba(217, 119, 6, 0.12)" stroke="#d97706" stroke-width="1.5"/>
+        <rect x="760" y="580" width="180" height="80" rx="6" fill="#ffffff"/>
+        <rect x="760" y="580" width="180" height="80" rx="6" fill="rgba(124, 58, 237, 0.10)" stroke="#7c3aed" stroke-width="1.5"/>
 
-        <!-- ===== All text labels ===== -->
-        <!-- band labels -->
-        <text x="52" y="168" fill="#94a3b8" font-size="10" font-weight="600">Contract surface · one Zod definition → three boundaries (schemas.ts)</text>
-        <text x="52" y="310" fill="#94a3b8" font-size="10" font-weight="600">Gem core — src/gem · pure, framework-agnostic</text>
-        <text x="66" y="333" fill="#fb7185" font-size="8" font-weight="600">redaction trust boundary</text>
+        <!-- ===== state ===== -->
+        <rect x="290" y="690" width="420" height="56" rx="6" fill="#ffffff"/>
+        <rect x="290" y="690" width="420" height="56" rx="6" fill="rgba(124, 58, 237, 0.10)" stroke="#7c3aed" stroke-width="1.5"/>
 
-        <!-- clients -->
-        <text x="250" y="86" fill="white" font-size="11" font-weight="600" text-anchor="middle">Web UI (browser)</text>
-        <text x="250" y="102" fill="#94a3b8" font-size="9" text-anchor="middle">src/public/index.html</text>
-        <text x="660" y="86" fill="white" font-size="11" font-weight="600" text-anchor="middle">Local coding agent</text>
-        <text x="660" y="102" fill="#94a3b8" font-size="9" text-anchor="middle">Claude / Codex / …</text>
+        <!-- ===== band labels ===== -->
+        <text x="52" y="146" fill="#64748b" font-size="10" font-weight="600">Hosts · the web UI + local agent reach the same operations</text>
+        <text x="52" y="168" fill="#64748b" font-size="10" font-weight="600">Contract surface · one Zod definition &#8594; three boundaries (schemas.ts)</text>
+        <text x="52" y="286" fill="#64748b" font-size="10" font-weight="600">Workflow-aware recommendation · POST /workflow/analyze (+ SSE) — optional pre-build assist</text>
+        <text x="52" y="404" fill="#64748b" font-size="10" font-weight="600">Gem core — src/gem · pure, framework-agnostic</text>
+        <text x="66" y="412" fill="#e11d48" font-size="8" font-weight="600">redaction trust boundary</text>
 
-        <!-- contract -->
-        <text x="190" y="203" fill="white" font-size="11" font-weight="600" text-anchor="middle">REST · GemController</text>
-        <text x="190" y="219" fill="#94a3b8" font-size="9" text-anchor="middle">/api/* — 35+ endpoints</text>
-        <text x="480" y="203" fill="white" font-size="11" font-weight="600" text-anchor="middle">MCP · GemTools</text>
-        <text x="480" y="219" fill="#94a3b8" font-size="9" text-anchor="middle">/mcp — 6 tools</text>
-        <text x="780" y="203" fill="white" font-size="11" font-weight="600" text-anchor="middle">OpenAPI 3.1</text>
-        <text x="780" y="219" fill="#94a3b8" font-size="9" text-anchor="middle">/explorer (Swagger UI)</text>
+        <!-- hosts text -->
+        <text x="155" y="86" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">Desktop (Electron)</text>
+        <text x="155" y="102" fill="#64748b" font-size="8" text-anchor="middle">embeds server · tray · auto-update</text>
+        <text x="400" y="86" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">Web UI (browser)</text>
+        <text x="400" y="102" fill="#64748b" font-size="9" text-anchor="middle">src/public/index.html</text>
+        <text x="660" y="86" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">Local coding agent</text>
+        <text x="660" y="102" fill="#64748b" font-size="9" text-anchor="middle">Claude / Codex / …</text>
 
-        <!-- core stages -->
-        <text x="155" y="356" fill="white" font-size="11" font-weight="600" text-anchor="middle">introspect</text>
-        <text x="155" y="372" fill="#94a3b8" font-size="8" text-anchor="middle">~/.claude · plugins</text>
-        <text x="155" y="384" fill="#94a3b8" font-size="8" text-anchor="middle">→ ConfigInventory</text>
-        <text x="375" y="356" fill="white" font-size="11" font-weight="600" text-anchor="middle">redact</text>
-        <text x="375" y="372" fill="#94a3b8" font-size="8" text-anchor="middle">strip secrets</text>
-        <text x="375" y="384" fill="#94a3b8" font-size="8" text-anchor="middle">→ SecretRef[]</text>
-        <text x="595" y="356" fill="white" font-size="11" font-weight="600" text-anchor="middle">buildGem</text>
-        <text x="595" y="372" fill="#94a3b8" font-size="8" text-anchor="middle">select + checks</text>
-        <text x="595" y="384" fill="#94a3b8" font-size="8" text-anchor="middle">→ Gem</text>
-        <text x="825" y="356" fill="white" font-size="11" font-weight="600" text-anchor="middle">archive</text>
-        <text x="825" y="372" fill="#94a3b8" font-size="8" text-anchor="middle">manifest + lock</text>
-        <text x="825" y="384" fill="#94a3b8" font-size="8" text-anchor="middle">fs · tar.gz</text>
+        <!-- contract text -->
+        <text x="190" y="203" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">REST · GemController</text>
+        <text x="190" y="219" fill="#64748b" font-size="9" text-anchor="middle">/api/* — 35+ endpoints</text>
+        <text x="480" y="203" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">MCP · GemTools</text>
+        <text x="480" y="219" fill="#64748b" font-size="9" text-anchor="middle">/mcp — 6 tools</text>
+        <text x="780" y="203" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">OpenAPI 3.1</text>
+        <text x="780" y="219" fill="#64748b" font-size="9" text-anchor="middle">/explorer (Swagger UI)</text>
+
+        <!-- analyze text -->
+        <text x="190" y="324" fill="#0f172a" font-size="10" font-weight="600" text-anchor="middle">scan transcripts</text>
+        <text x="190" y="340" fill="#64748b" font-size="8" text-anchor="middle">&#8594; WorkflowSignal (deterministic)</text>
+        <text x="480" y="324" fill="#0f172a" font-size="10" font-weight="600" text-anchor="middle">ACP recommender</text>
+        <text x="480" y="340" fill="#64748b" font-size="8" text-anchor="middle">local Claude · degrades det.</text>
+        <text x="780" y="324" fill="#0f172a" font-size="10" font-weight="600" text-anchor="middle">&#8594; GemSelection</text>
+        <text x="780" y="340" fill="#64748b" font-size="8" text-anchor="middle">pre-checked in the UI</text>
+        <text x="700" y="396" fill="#0891b2" font-size="8" text-anchor="middle">feeds buildGem's selection</text>
+
+        <!-- core text -->
+        <text x="155" y="452" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">introspect</text>
+        <text x="155" y="468" fill="#64748b" font-size="8" text-anchor="middle">~/.claude · plugins</text>
+        <text x="155" y="480" fill="#64748b" font-size="8" text-anchor="middle">&#8594; ConfigInventory</text>
+        <text x="375" y="452" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">redact</text>
+        <text x="375" y="468" fill="#64748b" font-size="8" text-anchor="middle">strip secrets</text>
+        <text x="375" y="480" fill="#64748b" font-size="8" text-anchor="middle">&#8594; SecretRef[]</text>
+        <text x="595" y="452" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">buildGem</text>
+        <text x="595" y="468" fill="#64748b" font-size="8" text-anchor="middle">select + checks</text>
+        <text x="595" y="480" fill="#64748b" font-size="8" text-anchor="middle">&#8594; Gem</text>
+        <text x="825" y="452" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">archive</text>
+        <text x="825" y="468" fill="#64748b" font-size="8" text-anchor="middle">manifest + lock</text>
+        <text x="825" y="480" fill="#64748b" font-size="8" text-anchor="middle">fs · tar.gz</text>
 
         <!-- bus label -->
-        <text x="505" y="466" fill="#a78bfa" font-size="9" text-anchor="middle" font-weight="600">neutral Gem · manifest + lock (the source every consumer reads)</text>
+        <text x="505" y="556" fill="#7c3aed" font-size="9" text-anchor="middle" font-weight="600">neutral Gem · manifest + lock (the source every consumer reads)</text>
 
         <!-- distribution -->
-        <text x="160" y="524" fill="white" font-size="11" font-weight="600" text-anchor="middle">Targets (materialize)</text>
-        <text x="160" y="542" fill="#94a3b8" font-size="8" text-anchor="middle">Eve · Flue</text>
-        <text x="160" y="555" fill="#94a3b8" font-size="8" text-anchor="middle">OpenAI Sandbox · AgentCore</text>
-        <text x="160" y="571" fill="#fbbf24" font-size="8" text-anchor="middle">→ generated FileTree</text>
-        <text x="390" y="524" fill="white" font-size="11" font-weight="600" text-anchor="middle">Registry</text>
-        <text x="390" y="542" fill="#94a3b8" font-size="8" text-anchor="middle">GitHub-backed</text>
-        <text x="390" y="555" fill="#94a3b8" font-size="8" text-anchor="middle">publish · resolve</text>
-        <text x="390" y="571" fill="#fbbf24" font-size="8" text-anchor="middle">merge · install</text>
-        <text x="620" y="524" fill="white" font-size="11" font-weight="600" text-anchor="middle">Deploy backends</text>
-        <text x="620" y="542" fill="#94a3b8" font-size="8" text-anchor="middle">Anthropic Managed Agents</text>
-        <text x="620" y="555" fill="#94a3b8" font-size="8" text-anchor="middle">AWS Bedrock AgentCore</text>
-        <text x="620" y="571" fill="#fbbf24" font-size="8" text-anchor="middle">+ deploy record</text>
-        <text x="850" y="524" fill="white" font-size="11" font-weight="600" text-anchor="middle">Testbed &amp; Run</text>
-        <text x="850" y="542" fill="#94a3b8" font-size="8" text-anchor="middle">local .claude testbed</text>
-        <text x="850" y="555" fill="#94a3b8" font-size="8" text-anchor="middle">eve / vercel</text>
-        <text x="850" y="571" fill="#94a3b8" font-size="8" text-anchor="middle">cloudflare run</text>
+        <text x="160" y="604" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">Targets (materialize)</text>
+        <text x="160" y="622" fill="#64748b" font-size="8" text-anchor="middle">Eve · Flue · A2A</text>
+        <text x="160" y="635" fill="#64748b" font-size="8" text-anchor="middle">OpenAI Sandbox · AgentCore</text>
+        <text x="160" y="651" fill="#b45309" font-size="8" text-anchor="middle">&#8594; generated FileTree</text>
+        <text x="390" y="604" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">Registry</text>
+        <text x="390" y="622" fill="#64748b" font-size="8" text-anchor="middle">GitHub-backed</text>
+        <text x="390" y="635" fill="#64748b" font-size="8" text-anchor="middle">publish · resolve</text>
+        <text x="390" y="651" fill="#b45309" font-size="8" text-anchor="middle">merge · install</text>
+        <text x="620" y="604" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">Deploy backends</text>
+        <text x="620" y="622" fill="#64748b" font-size="8" text-anchor="middle">Anthropic Managed Agents</text>
+        <text x="620" y="635" fill="#64748b" font-size="8" text-anchor="middle">AWS Bedrock AgentCore</text>
+        <text x="620" y="651" fill="#b45309" font-size="8" text-anchor="middle">+ deploy record</text>
+        <text x="850" y="604" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">Testbed &amp; Run</text>
+        <text x="850" y="622" fill="#64748b" font-size="8" text-anchor="middle">local .claude testbed</text>
+        <text x="850" y="635" fill="#64748b" font-size="8" text-anchor="middle">eve / vercel</text>
+        <text x="850" y="651" fill="#64748b" font-size="8" text-anchor="middle">cloudflare run</text>
 
         <!-- state -->
-        <text x="500" y="634" fill="white" font-size="11" font-weight="600" text-anchor="middle">Server state — ~/.agentgem</text>
-        <text x="500" y="652" fill="#94a3b8" font-size="9" text-anchor="middle">workspaces/ · recents.json · .env (credentials) · deploy records</text>
+        <text x="500" y="716" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">Server state — ~/.agentgem</text>
+        <text x="500" y="734" fill="#64748b" font-size="9" text-anchor="middle">workspaces/ · recents.json · .env (credentials) · deploy records</text>
 
         <!-- arrow labels -->
-        <text x="214" y="150" fill="#94a3b8" font-size="8" text-anchor="middle">HTTP</text>
-        <text x="588" y="150" fill="#94a3b8" font-size="8" text-anchor="middle">MCP</text>
+        <text x="300" y="146" fill="#64748b" font-size="8" text-anchor="middle">HTTP</text>
+        <text x="580" y="146" fill="#64748b" font-size="8" text-anchor="middle">MCP</text>
 
-        <!-- ===== Legend ===== -->
-        <rect x="60" y="700" width="16" height="10" rx="2" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
-        <text x="82" y="708" fill="#94a3b8" font-size="8">Client / UI</text>
-        <rect x="200" y="700" width="16" height="10" rx="2" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
-        <text x="222" y="708" fill="#94a3b8" font-size="8">Contract / compose</text>
-        <rect x="380" y="700" width="16" height="10" rx="2" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1"/>
-        <text x="402" y="708" fill="#94a3b8" font-size="8">Targets / deploy</text>
-        <rect x="540" y="700" width="16" height="10" rx="2" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
-        <text x="562" y="708" fill="#94a3b8" font-size="8">Archive / state</text>
-        <rect x="700" y="700" width="16" height="10" rx="2" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1"/>
-        <text x="722" y="708" fill="#94a3b8" font-size="8">Redaction</text>
-        <rect x="840" y="700" width="16" height="10" rx="2" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1"/>
-        <text x="862" y="708" fill="#94a3b8" font-size="8">External</text>
+        <!-- ===== legend ===== -->
+        <rect x="60" y="780" width="16" height="10" rx="2" fill="rgba(8, 145, 178, 0.10)" stroke="#0891b2" stroke-width="1"/>
+        <text x="82" y="788" fill="#64748b" font-size="8">Host / UI</text>
+        <rect x="190" y="780" width="16" height="10" rx="2" fill="rgba(5, 150, 105, 0.10)" stroke="#059669" stroke-width="1"/>
+        <text x="212" y="788" fill="#64748b" font-size="8">Contract / compose</text>
+        <rect x="370" y="780" width="16" height="10" rx="2" fill="rgba(217, 119, 6, 0.12)" stroke="#d97706" stroke-width="1"/>
+        <text x="392" y="788" fill="#64748b" font-size="8">Targets / deploy</text>
+        <rect x="530" y="780" width="16" height="10" rx="2" fill="rgba(124, 58, 237, 0.10)" stroke="#7c3aed" stroke-width="1"/>
+        <text x="552" y="788" fill="#64748b" font-size="8">Archive / state</text>
+        <rect x="690" y="780" width="16" height="10" rx="2" fill="rgba(225, 29, 72, 0.10)" stroke="#e11d48" stroke-width="1"/>
+        <text x="712" y="788" fill="#64748b" font-size="8">Redaction</text>
+        <rect x="820" y="780" width="16" height="10" rx="2" fill="rgba(100, 116, 139, 0.10)" stroke="#94a3b8" stroke-width="1"/>
+        <text x="842" y="788" fill="#64748b" font-size="8">External</text>
       </svg>
     </div>
 
@@ -225,7 +254,16 @@
           <li>• Each op defined once as a Zod contract</li>
           <li>• Surfaced as REST (GemController) + MCP (GemTools)</li>
           <li>• OpenAPI 3.1 + Swagger /explorer derived from it</li>
-          <li>• Web UI and local agent call the same operations</li>
+          <li>• CLI server and Desktop (Electron) host the same core</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-dot cyan"></div><h3>Workflow-aware analyze (opt-in)</h3></div>
+        <ul>
+          <li>• Scans Claude transcripts → deterministic WorkflowSignal</li>
+          <li>• A local ACP agent clusters + names a Gem</li>
+          <li>• Falls back to a frequency ranking; never throws</li>
+          <li>• Emits a pre-checked GemSelection over SSE</li>
         </ul>
       </div>
       <div class="card">
@@ -241,7 +279,7 @@
         <div class="card-header"><div class="card-dot violet"></div><h3>Gem as neutral source</h3></div>
         <ul>
           <li>• manifest + lock archive (dir or .tar.gz)</li>
-          <li>• Targets, registry, deploy all read the same Gem</li>
+          <li>• Targets (Eve · Flue · A2A · Sandbox · AgentCore), registry, deploy read the same Gem</li>
           <li>• Composable: merge → re-resolve a single lock</li>
           <li>• State persisted under ~/.agentgem</li>
         </ul>
@@ -258,7 +296,7 @@
         const el = document.getElementById('report-container');
         const r = el.getBoundingClientRect();
         const pad = 32;
-        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const canvas = await html2canvas(document.body, { backgroundColor: '#f8fafc', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
         const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
         await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
         btn.textContent = '✓ Copied!';
@@ -271,7 +309,7 @@
         const el = document.getElementById('report-container');
         const r = el.getBoundingClientRect();
         const pad = 32;
-        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const canvas = await html2canvas(document.body, { backgroundColor: '#f8fafc', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
         const link = document.createElement('a'); link.download = 'agentgem-architecture.png'; link.href = canvas.toDataURL('image/png'); link.click();
         btn.textContent = '✓ Done!';
       } catch (e) { btn.textContent = '✗ Failed'; }
@@ -283,7 +321,7 @@
         const el = document.getElementById('report-container');
         const r = el.getBoundingClientRect();
         const pad = 32;
-        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const canvas = await html2canvas(document.body, { backgroundColor: '#f8fafc', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
         const imgData = canvas.toDataURL('image/png');
         const { jsPDF } = window.jspdf;
         const orientation = canvas.width > canvas.height ? 'landscape' : 'portrait';

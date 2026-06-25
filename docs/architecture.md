@@ -15,13 +15,20 @@ first.
 
 There are four horizontal bands:
 
-1. **Clients** — the web UI (`src/public/index.html`) and any local coding agent.
+1. **Hosts / clients** — the web UI (`src/public/index.html`), any local coding agent, and
+   the [Desktop app](desktop.md), which embeds the same server in Electron (tray + auto-update).
 2. **Contract surface** — one Zod definition per operation, surfaced as a REST endpoint, an
    MCP tool, and an OpenAPI 3.1 document. See [the one-contract model](#the-one-contract-model).
 3. **Gem core** (`src/gem/`) — pure, framework-agnostic functions: `introspect` → `redact`
    → `buildGem` → `archive`. See the [build pipeline](pipeline.md).
 4. **Distribution** — the neutral Gem feeds targets (materialize), the registry, deploy
    backends, and local testbeds/runs. See [distribution](#distribution) below.
+
+An optional **workflow-aware recommendation** path sits in front of the core: `POST
+/workflow/analyze` (plus an SSE progress stream) scans a project's Claude transcripts into a
+deterministic `WorkflowSignal`, asks a local ACP agent to cluster and name a Gem (degrading to a
+frequency ranking if the agent is unavailable), and emits a pre-checked `GemSelection` that feeds
+`buildGem`. It only ranks and explains what introspection already found — see [Analyze](analyze.md).
 
 Server-side state lives under `~/.agentgem` (workspaces, recents, credentials, deploy
 records) — never inside a Gem.
@@ -88,7 +95,8 @@ The Gem is a neutral source. Three subsystems consume it, plus local testbeds an
 
 - **Targets** (`targets.ts`) — `materialize(gem, target)` runs per-artifact renderers and a
   cross-cutting `compose` hook to emit a `FileTree`. Code-gen targets: Eve, Flue, OpenAI
-  Sandbox, AgentCore (plus the editor targets claude/codex/agents/hermes). See
+  Sandbox, AgentCore, and A2A (an [Agent Card](a2a.md) projection with an opt-in runnable
+  server) — plus the editor targets claude/codex/agents/hermes. See
   [Targets & deploy](targets.md).
 - **Registry** (`registry.ts`, `registryGithub.ts`) — a GitHub-backed index plus per-version
   item archives; publish / resolve / merge / install with semver and a dependency graph. See
@@ -104,14 +112,18 @@ The Gem is a neutral source. Three subsystems consume it, plus local testbeds an
 ```
 src/
   index.ts            # AgentBack wiring: REST + MCP + Explorer on one app
+  cli.ts              # `agentgem` bin — starts the server
   gem.controller.ts   # REST surface (@api) — /api/*
   gem.tools.ts        # MCP surface (@mcpServer) — /mcp
   schemas.ts          # Zod schemas shared by both surfaces
+  workflowStream.ts   # SSE handler for /workflow/analyze progress
   resolveDir.ts       # config-dir + ~/.agentgem home resolution
   pickFolder.ts       # OS-native folder picker (for the UI)
   publish.ts          # Anthropic Managed Agents publish/undeploy client
   public/index.html   # single-page Gem Builder UI
-  gem/                # framework-agnostic core (pipeline, targets, registry, run, …)
+  gem/                # framework-agnostic core (pipeline, targets, registry, run,
+                      #   workflowScan, acpRecommender, …)
+desktop/              # Electron host — embeds the server (tray + auto-update)
 docs/
   diagrams/           # .svg (for docs), .png (fallback), .html (interactive export)
 ```

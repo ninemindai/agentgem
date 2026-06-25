@@ -1,141 +1,105 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 600" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace">
   <defs>
     <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-      <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+      <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8" />
     </marker>
     <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e2e8f0" stroke-width="0.5"/>
     </pattern>
   </defs>
 
-  <rect x="0" y="0" width="1000" height="600" fill="#020617"/>
+  <rect x="0" y="0" width="1000" height="600" fill="#ffffff"/>
   <rect x="0" y="0" width="1000" height="600" fill="url(#grid)"/>
 
-  <text x="20" y="34" fill="#f1f5f9" font-size="18" font-weight="700">AgentGem — Distribution: Targets, Registry &amp; Deploy</text>
+  <text x="20" y="34" fill="#0f172a" font-size="18" font-weight="700">AgentGem — Distribution</text>
 
-  <!-- arrows from Gem -->
-  <line x1="220" y1="288" x2="298" y2="138" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-  <line x1="220" y1="300" x2="298" y2="300" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-  <line x1="220" y1="312" x2="298" y2="468" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-  <!-- top branch -->
-  <line x1="480" y1="120" x2="558" y2="120" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-  <line x1="740" y1="120" x2="798" y2="120" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-  <!-- mid branch -->
-  <line x1="480" y1="300" x2="558" y2="300" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <!-- arrows -->
+  <line x1="220" y1="288" x2="298" y2="138" stroke="#059669" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <line x1="220" y1="300" x2="298" y2="300" stroke="#d97706" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <line x1="220" y1="312" x2="298" y2="468" stroke="#d97706" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <line x1="480" y1="120" x2="558" y2="120" stroke="#d97706" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <line x1="740" y1="120" x2="798" y2="120" stroke="#d97706" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <line x1="480" y1="300" x2="558" y2="300" stroke="#d97706" stroke-width="1.5" marker-end="url(#arrowhead)"/>
   <line x1="740" y1="300" x2="798" y2="300" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-  <!-- bottom branch -->
-  <line x1="480" y1="462" x2="558" y2="454" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-  <line x1="480" y1="508" x2="558" y2="516" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <line x1="480" y1="462" x2="558" y2="454" stroke="#d97706" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <line x1="480" y1="508" x2="558" y2="516" stroke="#d97706" stroke-width="1.5" marker-end="url(#arrowhead)"/>
   <line x1="740" y1="454" x2="798" y2="472" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="5,5" marker-end="url(#arrowhead)"/>
   <line x1="740" y1="516" x2="798" y2="500" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="5,5" marker-end="url(#arrowhead)"/>
 
-  <!-- Gem -->
-  <rect x="50" y="250" width="170" height="100" rx="6" fill="#0f172a"/>
-  <rect x="50" y="250" width="170" height="100" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <!-- boxes -->
+  <rect x="50" y="250" width="170" height="100" rx="6" fill="#ffffff"/>
+  <rect x="50" y="250" width="170" height="100" rx="6" fill="rgba(124, 58, 237, 0.10)" stroke="#7c3aed" stroke-width="1.5"/>
+  <rect x="300" y="80" width="180" height="80" rx="6" fill="#ffffff"/>
+  <rect x="300" y="80" width="180" height="80" rx="6" fill="rgba(5, 150, 105, 0.10)" stroke="#059669" stroke-width="1.5"/>
+  <rect x="560" y="70" width="180" height="100" rx="6" fill="#ffffff"/>
+  <rect x="560" y="70" width="180" height="100" rx="6" fill="rgba(217, 119, 6, 0.12)" stroke="#d97706" stroke-width="1.5"/>
+  <rect x="800" y="70" width="160" height="100" rx="6" fill="#ffffff"/>
+  <rect x="800" y="70" width="160" height="100" rx="6" fill="rgba(217, 119, 6, 0.12)" stroke="#d97706" stroke-width="1.5"/>
+  <rect x="300" y="255" width="180" height="90" rx="6" fill="#ffffff"/>
+  <rect x="300" y="255" width="180" height="90" rx="6" fill="rgba(217, 119, 6, 0.12)" stroke="#d97706" stroke-width="1.5"/>
+  <rect x="560" y="255" width="180" height="90" rx="6" fill="#ffffff"/>
+  <rect x="560" y="255" width="180" height="90" rx="6" fill="rgba(100, 116, 139, 0.10)" stroke="#94a3b8" stroke-width="1.5"/>
+  <rect x="800" y="255" width="160" height="90" rx="6" fill="#ffffff"/>
+  <rect x="800" y="255" width="160" height="90" rx="6" fill="rgba(100, 116, 139, 0.10)" stroke="#94a3b8" stroke-width="1.5"/>
+  <rect x="300" y="430" width="180" height="110" rx="6" fill="#ffffff"/>
+  <rect x="300" y="430" width="180" height="110" rx="6" fill="rgba(217, 119, 6, 0.12)" stroke="#d97706" stroke-width="1.5"/>
+  <rect x="560" y="430" width="180" height="48" rx="6" fill="#ffffff"/>
+  <rect x="560" y="430" width="180" height="48" rx="6" fill="rgba(100, 116, 139, 0.10)" stroke="#94a3b8" stroke-width="1.5"/>
+  <rect x="560" y="492" width="180" height="48" rx="6" fill="#ffffff"/>
+  <rect x="560" y="492" width="180" height="48" rx="6" fill="rgba(100, 116, 139, 0.10)" stroke="#94a3b8" stroke-width="1.5"/>
+  <rect x="800" y="430" width="160" height="110" rx="6" fill="#ffffff"/>
+  <rect x="800" y="430" width="160" height="110" rx="6" fill="rgba(124, 58, 237, 0.10)" stroke="#7c3aed" stroke-width="1.5"/>
 
-  <!-- materialize -->
-  <rect x="300" y="80" width="180" height="80" rx="6" fill="#0f172a"/>
-  <rect x="300" y="80" width="180" height="80" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
-  <!-- Targets -->
-  <rect x="560" y="70" width="180" height="100" rx="6" fill="#0f172a"/>
-  <rect x="560" y="70" width="180" height="100" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
-  <!-- Run -->
-  <rect x="800" y="70" width="160" height="100" rx="6" fill="#0f172a"/>
-  <rect x="800" y="70" width="160" height="100" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
-
-  <!-- Registry -->
-  <rect x="300" y="255" width="180" height="90" rx="6" fill="#0f172a"/>
-  <rect x="300" y="255" width="180" height="90" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
-  <!-- GitHub -->
-  <rect x="560" y="255" width="180" height="90" rx="6" fill="#0f172a"/>
-  <rect x="560" y="255" width="180" height="90" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
-  <!-- Other machines -->
-  <rect x="800" y="255" width="160" height="90" rx="6" fill="#0f172a"/>
-  <rect x="800" y="255" width="160" height="90" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
-
-  <!-- Deploy backends -->
-  <rect x="300" y="430" width="180" height="110" rx="6" fill="#0f172a"/>
-  <rect x="300" y="430" width="180" height="110" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
-  <!-- Managed Agents -->
-  <rect x="560" y="430" width="180" height="48" rx="6" fill="#0f172a"/>
-  <rect x="560" y="430" width="180" height="48" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
-  <!-- AgentCore -->
-  <rect x="560" y="492" width="180" height="48" rx="6" fill="#0f172a"/>
-  <rect x="560" y="492" width="180" height="48" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
-  <!-- Deploy record -->
-  <rect x="800" y="430" width="160" height="110" rx="6" fill="#0f172a"/>
-  <rect x="800" y="430" width="160" height="110" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
-
-  <!-- text: Gem -->
-  <text x="135" y="290" fill="#ffffff" font-size="13" font-weight="700" text-anchor="middle">Gem</text>
-  <text x="135" y="310" fill="#94a3b8" font-size="9" text-anchor="middle">manifest + lock</text>
-  <text x="135" y="326" fill="#a78bfa" font-size="8" text-anchor="middle">the neutral source</text>
-
-  <!-- materialize -->
-  <text x="390" y="112" fill="#ffffff" font-size="11" font-weight="600" text-anchor="middle">materialize(gem, target)</text>
-  <text x="390" y="130" fill="#94a3b8" font-size="8" text-anchor="middle">per-type renderers +</text>
-  <text x="390" y="143" fill="#94a3b8" font-size="8" text-anchor="middle">compose hook &#8594; FileTree</text>
-
-  <!-- Targets -->
-  <text x="650" y="98" fill="#ffffff" font-size="11" font-weight="600" text-anchor="middle">Code-gen targets</text>
-  <text x="650" y="118" fill="#94a3b8" font-size="8" text-anchor="middle">Eve · Flue</text>
-  <text x="650" y="132" fill="#94a3b8" font-size="8" text-anchor="middle">OpenAI Sandbox</text>
-  <text x="650" y="146" fill="#94a3b8" font-size="8" text-anchor="middle">AgentCore (harness)</text>
-  <text x="650" y="162" fill="#fbbf24" font-size="8" text-anchor="middle">claude · codex · agents · hermes</text>
-
-  <!-- Run -->
-  <text x="880" y="98" fill="#ffffff" font-size="11" font-weight="600" text-anchor="middle">Run / deploy</text>
-  <text x="880" y="118" fill="#94a3b8" font-size="8" text-anchor="middle">eve start (local)</text>
-  <text x="880" y="132" fill="#94a3b8" font-size="8" text-anchor="middle">Vercel (eve)</text>
-  <text x="880" y="146" fill="#94a3b8" font-size="8" text-anchor="middle">Cloudflare (flue)</text>
-  <text x="880" y="162" fill="#fbbf24" font-size="8" text-anchor="middle">src/gem/run.ts</text>
-
-  <!-- Registry -->
-  <text x="390" y="285" fill="#ffffff" font-size="11" font-weight="600" text-anchor="middle">Registry</text>
-  <text x="390" y="305" fill="#94a3b8" font-size="8" text-anchor="middle">publish · resolve</text>
-  <text x="390" y="319" fill="#94a3b8" font-size="8" text-anchor="middle">merge · install</text>
-  <text x="390" y="335" fill="#fbbf24" font-size="8" text-anchor="middle">semver + dep graph</text>
-
-  <!-- GitHub -->
-  <text x="650" y="288" fill="#ffffff" font-size="11" font-weight="600" text-anchor="middle">GitHub repo</text>
-  <text x="650" y="308" fill="#94a3b8" font-size="8" text-anchor="middle">registry.json (index)</text>
-  <text x="650" y="322" fill="#94a3b8" font-size="8" text-anchor="middle">items/&lt;scope&gt;/&lt;name&gt;/&lt;ver&gt;</text>
-  <text x="650" y="338" fill="#94a3b8" font-size="8" text-anchor="middle">atomic commit (Git Data API)</text>
-
-  <!-- Others -->
-  <text x="880" y="288" fill="#ffffff" font-size="11" font-weight="600" text-anchor="middle">Other machines</text>
-  <text x="880" y="308" fill="#94a3b8" font-size="8" text-anchor="middle">resolve + merge</text>
-  <text x="880" y="322" fill="#94a3b8" font-size="8" text-anchor="middle">install &#8594; workspace</text>
-  <text x="880" y="338" fill="#94a3b8" font-size="8" text-anchor="middle">or materialize</text>
-
-  <!-- Deploy backends -->
-  <text x="390" y="462" fill="#ffffff" font-size="11" font-weight="600" text-anchor="middle">Deploy backends</text>
-  <text x="390" y="482" fill="#94a3b8" font-size="8" text-anchor="middle">DEPLOY_REGISTRY</text>
-  <text x="390" y="496" fill="#94a3b8" font-size="8" text-anchor="middle">preview · ready · deploy</text>
-  <text x="390" y="512" fill="#94a3b8" font-size="8" text-anchor="middle">idempotent publish</text>
-  <text x="390" y="528" fill="#fbbf24" font-size="8" text-anchor="middle">+ undeploy</text>
-
-  <!-- Managed -->
-  <text x="650" y="450" fill="#ffffff" font-size="10" font-weight="600" text-anchor="middle">Anthropic Managed Agents</text>
-  <text x="650" y="466" fill="#94a3b8" font-size="8" text-anchor="middle">skills + environment + agent</text>
-
-  <!-- AgentCore -->
-  <text x="650" y="512" fill="#ffffff" font-size="10" font-weight="600" text-anchor="middle">AWS Bedrock AgentCore</text>
-  <text x="650" y="528" fill="#94a3b8" font-size="8" text-anchor="middle">CreateHarness (poll status)</text>
-
-  <!-- Record -->
-  <text x="880" y="470" fill="#ffffff" font-size="11" font-weight="600" text-anchor="middle">Deploy record</text>
-  <text x="880" y="490" fill="#94a3b8" font-size="8" text-anchor="middle">.deploy/&lt;backend&gt;.json</text>
-  <text x="880" y="504" fill="#94a3b8" font-size="8" text-anchor="middle">ids · urls · harnessId</text>
-  <text x="880" y="520" fill="#a78bfa" font-size="8" text-anchor="middle">drives Undeploy buttons</text>
+  <!-- text -->
+  <text x="135" y="290" fill="#0f172a" font-size="13" font-weight="700" text-anchor="middle">Gem</text>
+  <text x="135" y="310" fill="#64748b" font-size="9" text-anchor="middle">manifest + lock</text>
+  <text x="135" y="326" fill="#7c3aed" font-size="8" text-anchor="middle">the neutral source</text>
+  <text x="390" y="112" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">materialize(gem, target)</text>
+  <text x="390" y="130" fill="#64748b" font-size="8" text-anchor="middle">per-type renderers +</text>
+  <text x="390" y="143" fill="#64748b" font-size="8" text-anchor="middle">compose hook → FileTree</text>
+  <text x="650" y="94" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">Code-gen targets</text>
+  <text x="650" y="112" fill="#64748b" font-size="8" text-anchor="middle">Eve · Flue · A2A (Card)</text>
+  <text x="650" y="126" fill="#64748b" font-size="8" text-anchor="middle">OpenAI Sandbox</text>
+  <text x="650" y="140" fill="#64748b" font-size="8" text-anchor="middle">AgentCore (harness)</text>
+  <text x="650" y="156" fill="#b45309" font-size="8" text-anchor="middle">claude · codex · agents · hermes</text>
+  <text x="880" y="98" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">Run / deploy</text>
+  <text x="880" y="118" fill="#64748b" font-size="8" text-anchor="middle">eve start (local)</text>
+  <text x="880" y="132" fill="#64748b" font-size="8" text-anchor="middle">Vercel (eve)</text>
+  <text x="880" y="146" fill="#64748b" font-size="8" text-anchor="middle">Cloudflare (flue)</text>
+  <text x="880" y="162" fill="#b45309" font-size="8" text-anchor="middle">src/gem/run.ts</text>
+  <text x="390" y="285" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">Registry</text>
+  <text x="390" y="305" fill="#64748b" font-size="8" text-anchor="middle">publish · resolve</text>
+  <text x="390" y="319" fill="#64748b" font-size="8" text-anchor="middle">merge · install</text>
+  <text x="390" y="335" fill="#b45309" font-size="8" text-anchor="middle">semver + dep graph</text>
+  <text x="650" y="288" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">GitHub repo</text>
+  <text x="650" y="308" fill="#64748b" font-size="8" text-anchor="middle">registry.json (index)</text>
+  <text x="650" y="322" fill="#64748b" font-size="8" text-anchor="middle">items/&lt;scope&gt;/&lt;name&gt;/&lt;ver&gt;</text>
+  <text x="650" y="338" fill="#64748b" font-size="8" text-anchor="middle">atomic commit (Git Data API)</text>
+  <text x="880" y="288" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">Other machines</text>
+  <text x="880" y="308" fill="#64748b" font-size="8" text-anchor="middle">resolve + merge</text>
+  <text x="880" y="322" fill="#64748b" font-size="8" text-anchor="middle">install → workspace</text>
+  <text x="880" y="338" fill="#64748b" font-size="8" text-anchor="middle">or materialize</text>
+  <text x="390" y="462" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">Deploy backends</text>
+  <text x="390" y="482" fill="#64748b" font-size="8" text-anchor="middle">DEPLOY_REGISTRY</text>
+  <text x="390" y="496" fill="#64748b" font-size="8" text-anchor="middle">preview · ready · deploy</text>
+  <text x="390" y="512" fill="#64748b" font-size="8" text-anchor="middle">idempotent publish</text>
+  <text x="390" y="528" fill="#b45309" font-size="8" text-anchor="middle">+ undeploy</text>
+  <text x="650" y="450" fill="#0f172a" font-size="10" font-weight="600" text-anchor="middle">Anthropic Managed Agents</text>
+  <text x="650" y="466" fill="#64748b" font-size="8" text-anchor="middle">skills + environment + agent</text>
+  <text x="650" y="512" fill="#0f172a" font-size="10" font-weight="600" text-anchor="middle">AWS Bedrock AgentCore</text>
+  <text x="650" y="528" fill="#64748b" font-size="8" text-anchor="middle">CreateHarness (poll status)</text>
+  <text x="880" y="470" fill="#0f172a" font-size="11" font-weight="600" text-anchor="middle">Deploy record</text>
+  <text x="880" y="490" fill="#64748b" font-size="8" text-anchor="middle">.deploy/&lt;backend&gt;.json</text>
+  <text x="880" y="504" fill="#64748b" font-size="8" text-anchor="middle">ids · urls · harnessId</text>
+  <text x="880" y="520" fill="#7c3aed" font-size="8" text-anchor="middle">drives Undeploy buttons</text>
 
   <!-- legend -->
-  <rect x="50" y="560" width="16" height="10" rx="2" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
-  <text x="72" y="568" fill="#94a3b8" font-size="8">Gem / record (state)</text>
-  <rect x="240" y="560" width="16" height="10" rx="2" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
-  <text x="262" y="568" fill="#94a3b8" font-size="8">Compose</text>
-  <rect x="380" y="560" width="16" height="10" rx="2" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1"/>
-  <text x="402" y="568" fill="#94a3b8" font-size="8">Targets / registry / deploy</text>
-  <rect x="620" y="560" width="16" height="10" rx="2" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1"/>
-  <text x="642" y="568" fill="#94a3b8" font-size="8">External backends</text>
+  <rect x="50" y="560" width="16" height="10" rx="2" fill="rgba(124, 58, 237, 0.10)" stroke="#7c3aed" stroke-width="1"/>
+  <text x="72" y="568" fill="#64748b" font-size="8">Gem / record (state)</text>
+  <rect x="240" y="560" width="16" height="10" rx="2" fill="rgba(5, 150, 105, 0.10)" stroke="#059669" stroke-width="1"/>
+  <text x="262" y="568" fill="#64748b" font-size="8">Compose</text>
+  <rect x="380" y="560" width="16" height="10" rx="2" fill="rgba(217, 119, 6, 0.12)" stroke="#d97706" stroke-width="1"/>
+  <text x="402" y="568" fill="#64748b" font-size="8">Targets / registry / deploy</text>
+  <rect x="620" y="560" width="16" height="10" rx="2" fill="rgba(100, 116, 139, 0.10)" stroke="#94a3b8" stroke-width="1"/>
+  <text x="642" y="568" fill="#64748b" font-size="8">External backends</text>
 </svg>
