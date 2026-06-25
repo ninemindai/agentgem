@@ -56,7 +56,41 @@
     <span style="background:#1f1b15;color:#e9e1cf;padding:8px 14px;border-radius:8px;white-space:nowrap">$ npx @ninemind/agentgem</span>
     <span style="margin-left:10px">then open <b style="color:#4a4133">localhost:4317</b></span>
   </p>
-  <p style="margin-top:10px;font-size:14px;color:#857a64">or <a href="docs/desktop.html">download the desktop app</a> for macOS, Windows &amp; Linux</p>
+  <!-- OS-aware desktop download. Bump DV/DTAG below when cutting a desktop-v* release. -->
+  <div class="dl" style="margin-top:16px">
+    <a id="dlBtn" class="btn btn-ghost" href="https://github.com/ninemindai/agentgem/releases">Download the desktop app</a>
+    <p id="dlAlt" style="margin-top:8px;font-size:13px;color:#857a64">for macOS, Windows &amp; Linux</p>
+  </div>
+  <script>
+  (function () {
+    var DV = "0.1.1", DTAG = "desktop-v0.1.1";
+    var dl = "https://github.com/ninemindai/agentgem/releases/download/" + DTAG + "/";
+    var rel = "https://github.com/ninemindai/agentgem/releases/tag/" + DTAG;
+    var help = "docs/desktop.html";
+    var asset = {
+      macArm: dl + "AgentGem-" + DV + "-arm64.dmg",
+      macX64: dl + "AgentGem-" + DV + ".dmg",
+      win: dl + "AgentGem.Setup." + DV + ".exe",
+      linux: dl + "AgentGem-" + DV + ".AppImage"
+    };
+    var btn = document.getElementById("dlBtn"), alt = document.getElementById("dlAlt");
+    var ud = navigator.userAgentData;
+    var plat = ((ud && ud.platform) || navigator.platform || "") + " " + (navigator.userAgent || "");
+    function set(href, label, note) { btn.href = href; btn.textContent = label; alt.innerHTML = note; }
+    var all = '<a href="' + rel + '">all platforms</a> · <a href="' + help + '">install help</a>';
+    if (/iPhone|iPad|Android/i.test(plat)) {
+      set(rel, "View the desktop app", "open on a computer to install · macOS · Windows · Linux");
+    } else if (/Mac/i.test(plat)) {
+      set(asset.macArm, "Download for macOS", 'Apple Silicon · <a href="' + asset.macX64 + '">Intel</a> · ' + all);
+    } else if (/Win/i.test(plat)) {
+      set(asset.win, "Download for Windows", all);
+    } else if (/Linux/i.test(plat)) {
+      set(asset.linux, "Download for Linux (AppImage)", all);
+    } else {
+      set(rel, "Download the desktop app", "macOS · Windows · Linux · " + '<a href="' + help + '">install help</a>');
+    }
+  })();
+  </script>
 </section>
 
 <section class="flow wrap">
