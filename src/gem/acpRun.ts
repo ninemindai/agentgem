@@ -17,8 +17,8 @@
 // NOTE (consolidation): the ACP façade is duplicated from acpRecommender on purpose
 // while this path is prototyped. Once both are proven, the two connectFns should be
 // unified into a shared acpSession module.
-import type { AgentDescriptor } from "./acpRecommender.js";
-export type { AgentDescriptor } from "./acpRecommender.js";
+import { connectAcpAdapter, type AgentDescriptor } from "./acpSession.js";
+export type { AgentDescriptor } from "./acpSession.js";
 
 // One tool the agent invoked during the run. Mirrors the fields of an ACP
 // `tool_call` session update that matter for verification/observability.
@@ -180,61 +180,25 @@ export async function runGemWithAgent(opts: RunGemOptions): Promise<GemRunOutcom
 }
 
 /**
- * Real connect: spawn the ACP adapter and bridge stdio, capturing both message
- * chunks and tool_call updates. Mirrors acpRecommender.defaultConnectFn but runs
- * in a tool-capable mode and aggregates the tool-invocation trace.
- *
- * NEEDS LIVE VALIDATION: stdio bridging + tool_call capture against claude-agent-acp.
+ * Real connect: route through the shared adapter plumbing in tool-capable mode
+ * (auto-allow permissions — the testbed dir is the blast-radius boundary) and
+ * fold each update into a RunResult via applyUpdate, capturing the tool trace.
  */
 export const defaultRunConnectFn: RunConnectFn = async (descriptor) => {
-  const { client, ndJsonStream } = await import("@agentclientprotocol/sdk");
-  const { spawn } = await import("node:child_process");
-  const { mkdirSync } = await import("node:fs");
-  const { Readable, Writable } = await import("node:stream");
-  const [bin, ...args] = descriptor.command;
-  const child = spawn(bin, args, { stdio: ["pipe", "pipe", "inherit"], env: process.env });
-  await new Promise<void>((resolve, reject) => {
-    child.once("spawn", () => resolve());
-    child.once("error", (e) => reject(new Error(`failed to spawn ${bin}: ${e.message}`)));
-  });
-  const app: any = client({ name: "agentgem-gem-runner" });
-  // Unlike the recommender we DO let the agent run tools; the testbed dir is the
-  // blast-radius boundary. Auto-allow permission requests for this prototype.
-  app.onRequest?.("session/request_permission", async () => ({ outcome: { outcome: "selected", optionId: "allow" } }));
-  const input = Readable.toWeb(child.stdout!) as ReadableStream<Uint8Array>;
-  const output = Writable.toWeb(child.stdin!) as WritableStream<Uint8Array>;
-  const connection: any = app.connect(ndJsonStream(output, input));
-  const agentCtx: any = connection.agent;
-
+  const raw = await connectAcpAdapter(descriptor, { clientName: "agentgem-gem-runner", permission: "allow" });
   const ctx: RunCtx = {
     async open(cwd: string) {
-      try { mkdirSync(cwd, { recursive: true }); } catch { /* best-effort */ }
-      const session: any = await agentCtx.buildSession(cwd).start();
-      const sessionId = session.sessionId as string;
+      const session = await raw.open(cwd);
       return {
-        async setMode(mode: string) {
-          try { await agentCtx.request("session/set_mode", { sessionId, modeId: mode }); } catch { /* best-effort */ }
-        },
+        setMode: (mode: string) => session.setMode(mode),
         async prompt(text, onDelta, onToolCall) {
           const acc = createAccumulator();
-          void session.prompt(text);
-          for (;;) {
-            const msg: any = await session.nextUpdate();
-            if (msg.kind === "stop") break;
-            if (msg.kind !== "session_update") continue;
-            applyUpdate(acc, msg.update ?? {}, { onDelta, onToolCall });
-          }
+          await session.prompt(text, (u) => applyUpdate(acc, (u ?? {}) as Parameters<typeof applyUpdate>[1], { onDelta, onToolCall }));
           return acc;
         },
-        dispose() { try { session.dispose?.(); } catch { /* ignore */ } },
+        dispose: () => session.dispose(),
       };
     },
   };
-  return {
-    ctx,
-    close: () => {
-      try { connection.close(); } catch { /* ignore */ }
-      try { child.kill(); } catch { /* ignore */ }
-    },
-  };
+  return { ctx, close: raw.close };
 };
