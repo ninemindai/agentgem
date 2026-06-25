@@ -166,7 +166,7 @@ a.hero-kicker:hover{text-decoration:none;border-color:var(--accent);transform:tr
 .prose ul,.prose ol{padding-left:22px}
 .prose li{margin:5px 0}
 .prose code{font-size:12.8px;background:var(--accent-soft);color:var(--accent-ink);padding:1.5px 5px;border-radius:5px}
-.prose pre{background:#1f1b15;color:#e9e1cf;border-radius:10px;padding:16px 18px;overflow:auto;font-size:12.8px;line-height:1.6;border:1px solid #322a1f}
+.prose pre{background:#1f1b15;color:#e9e1cf;border-radius:10px;padding:16px 18px;overflow:auto;font-size:12.5px;line-height:1.65;border:1px solid #322a1f}
 .prose pre code{background:none;color:inherit;padding:0;font-size:inherit}
 .prose img{max-width:100%;height:auto;display:block;margin:20px 0;border-radius:10px;border:1px solid var(--line)}
 .prose blockquote{margin:16px 0;padding:10px 18px;border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:0 8px 8px 0;color:var(--ink-2);font-size:13px}
