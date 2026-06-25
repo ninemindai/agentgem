@@ -23,7 +23,7 @@ const str = (v: unknown): string => (typeof v === "string" ? v : "");
 export async function streamGemRun(req: SseReq, res: SseRes): Promise<void> {
   const archivePath = str(req.query.archivePath);
   const task = str(req.query.task);
-  const dirParam = str(req.query.dir);
+  const dirParam = str(req.query.runDir);
   const agent = (str(req.query.agent) || "claude") as AgentId;
   const expectTools = str(req.query.expectTools)
     ? str(req.query.expectTools).split(",").map((s) => s.trim()).filter(Boolean)

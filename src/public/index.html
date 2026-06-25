@@ -251,7 +251,7 @@
     </div>
   </section>
   <section class="pane right">
-    <div class="bar"><strong style="flex:1">Gem (live)</strong><select id="target" title="materialize target" style="margin-left:auto"><option value="claude">Claude</option><option value="codex">Codex</option><option value="agents">Agents</option><option value="hermes">Hermes</option><option value="eve">Eve</option><option value="flue">Flue</option><option value="openai-sandbox">OpenAI Sandbox</option><option value="agentcore">AgentCore</option><option value="a2a">A2A</option></select><span class="seg" id="preview-modes"><button type="button" data-pmode="summary">Summary</button><button type="button" data-pmode="json">JSON</button><button type="button" data-pmode="materialize">Materialize</button><button type="button" data-pmode="managed">Managed Agents</button></span><span class="exportwrap"><button id="exportBtn">Export ▾</button><div id="exportMenu" class="exportmenu" hidden><button id="dltar" class="menuitem" title="download the gem archive as a .tar.gz">⬇ Download .tar.gz</button><button id="save" class="menuitem" title="write the gem archive (manifest + lock + files) to a folder">💾 Save to folder…</button><button id="dl" class="menuitem">⬇ Download JSON</button><button id="copy" class="menuitem">⧉ Copy JSON</button></div></span><span class="d" id="archiveStatus" style="margin-left:6px"></span></div>
+    <div class="bar"><strong style="flex:1">Gem (live)</strong><select id="target" title="materialize target" style="margin-left:auto"><option value="claude">Claude</option><option value="codex">Codex</option><option value="agents">Agents</option><option value="hermes">Hermes</option><option value="eve">Eve</option><option value="flue">Flue</option><option value="openai-sandbox">OpenAI Sandbox</option><option value="agentcore">AgentCore</option><option value="a2a">A2A</option></select><span class="seg" id="preview-modes"><button type="button" data-pmode="summary">Summary</button><button type="button" data-pmode="json">JSON</button><button type="button" data-pmode="materialize">Materialize</button><button type="button" data-pmode="run">Run</button><button type="button" data-pmode="managed">Managed Agents</button></span><span class="exportwrap"><button id="exportBtn">Export ▾</button><div id="exportMenu" class="exportmenu" hidden><button id="dltar" class="menuitem" title="download the gem archive as a .tar.gz">⬇ Download .tar.gz</button><button id="save" class="menuitem" title="write the gem archive (manifest + lock + files) to a folder">💾 Save to folder…</button><button id="dl" class="menuitem">⬇ Download JSON</button><button id="copy" class="menuitem">⧉ Copy JSON</button></div></span><span class="d" id="archiveStatus" style="margin-left:6px"></span></div>
     <div id="preview"></div>
     <p class="note">MCP server &amp; hook config secrets are shown as <code>&lt;redacted&gt;</code> and never exported. Skill, CLAUDE.md, rules bodies &amp; hook commands are bundled as written — don't keep secrets in them.</p>
     <div id="checksPanel" class="group" style="margin-top:14px">
@@ -815,6 +815,8 @@ document.getElementById("suggestChecks").addEventListener("click", async () => {
   renderChecks(); build();
 });
 let previewMode = "summary";
+// "Run" preview mode: drive a locally-installed ACP coding agent against the live Gem.
+let __gemRun = { task: "", agent: "claude", expect: "" };
 function fmtSize(n){ return n < 1024 ? `${n} B` : `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} KB`; }
 function artSize(a){ return (a.type === "mcp_server" || a.type === "hook") ? JSON.stringify(a.config || {}).length : (a.content || "").length; }
 const GEM_MARK_SVG = `<svg class="gemmark" viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M32 4 58 24 32 60 6 24 Z" fill="#9a3324"/><path d="M32 4 58 24 32 26 Z" fill="#bb4a38"/><path d="M32 4 6 24 32 26 Z" fill="#7d2a1e"/><path d="M6 24 32 26 32 60 Z" fill="#8b2e21"/><path d="M58 24 32 26 32 60 Z" fill="#a8392a"/><path d="M6 24 58 24 32 26 Z" fill="#c8543f"/><path class="glint" d="M32 4 58 24 32 26 Z" fill="#ffd9a0"/></svg>`;
@@ -860,6 +862,7 @@ function renderPreview(){
   if (typeof renderRail === "function") renderRail();
   if (previewMode === "materialize") { renderMaterialize(); document.querySelectorAll("#preview-modes button").forEach(b => b.classList.toggle("on", b.dataset.pmode === previewMode)); return; }
   if (previewMode === "managed") { renderPublish(); document.querySelectorAll("#preview-modes button").forEach(b => b.classList.toggle("on", b.dataset.pmode === previewMode)); return; }
+  if (previewMode === "run") { renderRun(); document.querySelectorAll("#preview-modes button").forEach(b => b.classList.toggle("on", b.dataset.pmode === previewMode)); return; }
   const p = window.__gem;
   if (!p) { el.textContent = ""; }
   else if (p.error || previewMode === "json") {
@@ -887,6 +890,65 @@ async function renderMaterialize(){
   if ((m.skipped || []).length) h += `<div class="pgroup"><h3>Skipped (${m.skipped.length})</h3>` + m.skipped.map(s => `<div class="prow"><span class="pn">${esc(s.artifact)}</span> <span class="pm">${esc(s.reason)}</span></div>`).join("") + `</div>`;
   h += `<p class="note">Compatibility: ${esc(compat)}</p></div>`;
   el.innerHTML = h;
+}
+// "Run" preview mode: test-run the live Gem with a locally-installed ACP coding agent.
+// Materializes the selected Gem into a testbed, drives the agent against a task, and
+// (when "expect tools" is given) shows a verification verdict — the trust primitive.
+function renderRun(){
+  const el = document.getElementById("preview");
+  const r = window.__gemRunResult;
+  let h = `<div class="psummary"><div class="phead"><strong>Run with a local agent</strong> <span class="d">· drives a locally-installed coding agent over ACP against this Gem</span></div>`;
+  h += `<div class="pgroup"><h3>Task</h3><textarea id="gemRunTask" rows="3" placeholder="Describe what the agent should do with this Gem…" style="width:100%;box-sizing:border-box">${esc(__gemRun.task)}</textarea></div>`;
+  h += `<div class="pgroup" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">`
+    + `<label>Agent <select id="gemRunAgent"><option value="claude"${__gemRun.agent === "claude" ? " selected" : ""}>Claude</option><option value="codex"${__gemRun.agent === "codex" ? " selected" : ""}>Codex (unvalidated)</option></select></label>`
+    + `<label style="flex:1;min-width:160px">Expect tools <span class="d">(optional, comma-separated)</span><input id="gemRunExpect" placeholder="e.g. Write, qa" value="${esc(__gemRun.expect)}" style="width:100%;box-sizing:border-box"></label>`
+    + `<button id="gemRunBtn">Run ▶</button>`
+    + `<span class="d" id="gemRunStatus"></span></div>`;
+  h += `<div id="gemRunOut" class="pgroup">${r ? runResultHtml(r) : '<p class="d">No run yet — select artifacts on the left, enter a task, and Run.</p>'}</div></div>`;
+  el.innerHTML = h;
+  document.getElementById("gemRunBtn").onclick = runGem;
+}
+function runResultHtml(res){
+  if (!res || res.error) return `<pre class="json">${esc(JSON.stringify(res, null, 2))}</pre>`;
+  const run = res.run || {}, rr = run.result || {}, v = res.verification;
+  let h = "";
+  if (v){
+    h += `<div class="prow"><span style="display:inline-block;padding:2px 9px;border-radius:10px;font-weight:600;color:#fff;background:${v.passed ? "#1f7a33" : "#a3301f"}">${v.passed ? "✓ Verified" : "✗ Not verified"}</span></div>`;
+    h += (v.checks || []).map(c => `<div class="prow"><span class="pn">${c.passed ? "✓" : "✗"} ${esc(c.name)}</span> <span class="pm">${esc(c.detail)}</span></div>`).join("");
+  }
+  if (!run.ok) h += `<div class="prow"><span class="pm">${esc(run.error || "run failed")}</span></div>`;
+  if ((rr.toolCalls || []).length) h += `<h3>Tools</h3><div>` + rr.toolCalls.map(t => `<span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:6px;background:rgba(33,28,21,.08);font-size:12px">${esc(t.title)}${t.status ? " · " + esc(t.status) : ""}</span>`).join("") + `</div>`;
+  if (rr.text) h += `<h3>Agent</h3><div style="white-space:pre-wrap;background:rgba(33,28,21,.04);padding:8px;border-radius:6px">${esc(rr.text)}</div>`;
+  h += `<p class="note">Ran <strong>${esc(res.agent || "")}</strong> · materialized ${(res.materialized && res.materialized.written || []).length} artifact(s) into <code>${esc(res.dir || "")}</code></p>`;
+  return h;
+}
+async function runGem(){
+  const taskEl = document.getElementById("gemRunTask");
+  __gemRun.task = taskEl.value.trim();
+  __gemRun.agent = document.getElementById("gemRunAgent").value;
+  __gemRun.expect = document.getElementById("gemRunExpect").value;
+  if (!__gemRun.task){ taskEl.focus(); return; }
+  const btn = document.getElementById("gemRunBtn"), status = document.getElementById("gemRunStatus");
+  btn.disabled = true;
+  const t0 = Date.now();
+  const timer = setInterval(() => { status.textContent = "Running… " + ((Date.now() - t0) / 1000).toFixed(0) + "s"; }, 250);
+  status.textContent = "Running…";
+  try {
+    const body = { ...buildSelectionBody(), task: __gemRun.task, agent: __gemRun.agent };
+    const tools = __gemRun.expect.split(",").map(s => s.trim()).filter(Boolean);
+    if (tools.length) body.expectations = { expectTools: tools };
+    const res = await (await fetch("/api/gem/run", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })).json();
+    window.__gemRunResult = res;
+    clearInterval(timer);
+    status.textContent = res.run && res.run.ok ? "Done in " + ((Date.now() - t0) / 1000).toFixed(1) + "s" : "Failed";
+    document.getElementById("gemRunOut").innerHTML = runResultHtml(res);
+  } catch (e) {
+    clearInterval(timer);
+    status.textContent = "Error";
+    document.getElementById("gemRunOut").innerHTML = `<p class="pm">${esc(String(e))}</p>`;
+  } finally {
+    btn.disabled = false;
+  }
 }
 // Managed Agents publish: offline preview of the agent payload + a gated Publish action.
 let __publishReady = null, __publishRequestId = null, __publishFingerprint = null, __deployTargets = null;

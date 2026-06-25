@@ -319,12 +319,15 @@ export class GemController {
   // and (when expectations are given) attach a verification report.
   @post("/gem/run", { body: GemRunRequestSchema, response: GemRunResponseSchema })
   async runGem(input: { body: z.infer<typeof GemRunRequestSchema> }): Promise<z.infer<typeof GemRunResponseSchema>> {
-    const gem = readGemArchive(readArchiveDir(input.body.archivePath));
-    const agent = (input.body.agent ?? "claude") as AgentId;
+    const b = input.body;
+    const gem: Gem = b.archivePath
+      ? readGemArchive(readArchiveDir(b.archivePath))
+      : buildGem(introspectAll(b.dir, b.projects), b.selection!, { name: b.name ?? "gem", createdFrom: resolveDirs(b.dir).claudeDir });
+    const agent = (b.agent ?? "claude") as AgentId;
     const safeName = gem.name.replace(/[^A-Za-z0-9._-]/g, "-");
-    const dir = input.body.dir ?? join(agentgemHome(), ".agentgem", "runs", safeName);
-    const out = await materializeAndRunGem({ gem, dir, task: input.body.task, agent, expectations: input.body.expectations });
-    return { dir, agent: out.agent, materialized: out.materialized, run: out.run, verification: out.verification };
+    const runDir = b.runDir ?? join(agentgemHome(), ".agentgem", "runs", safeName);
+    const out = await materializeAndRunGem({ gem, dir: runDir, task: b.task, agent, expectations: b.expectations });
+    return { dir: runDir, agent: out.agent, materialized: out.materialized, run: out.run, verification: out.verification };
   }
 
   // Resolve the configured registry source, or throw a clear error the UI can surface.

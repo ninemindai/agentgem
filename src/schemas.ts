@@ -451,11 +451,18 @@ export const VerificationReportSchema = z.object({
   checks: z.array(z.object({ name: z.string(), passed: z.boolean(), detail: z.string() })),
 });
 export const GemRunRequestSchema = z.object({
-  archivePath: z.string(),                                  // a .gem archive dir on disk
+  // The Gem: either a built selection (like /materialize) or a .gem archive dir.
+  selection: GemSelectionSchema.optional(),
+  archivePath: z.string().optional(),
+  name: z.string().optional(),
+  dir: z.string().optional(),                              // introspect home (selection mode), like /materialize
+  projects: z.array(z.string()).optional(),
   task: z.string(),
-  dir: z.string().optional(),                              // testbed dir; defaults under AGENTGEM_HOME
+  runDir: z.string().optional(),                          // where to materialize + run; defaults under AGENTGEM_HOME
   agent: z.enum(["claude", "codex"]).optional(),           // which local ACP adapter to drive (codex unvalidated)
   expectations: GemExpectationsSchema.optional(),
+}).refine((d) => d.selection !== undefined || d.archivePath !== undefined, {
+  message: "provide either selection or archivePath",
 });
 export const GemRunResponseSchema = z.object({
   dir: z.string(),
