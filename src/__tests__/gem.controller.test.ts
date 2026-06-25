@@ -6,7 +6,8 @@ import { join } from "node:path";
 import supertest from "supertest";
 import { RestApplication } from "@agentback/rest";
 import { GemController } from "../gem.controller.js";
-import { unpackTar } from "../gem/archiveTar.js";
+import { createServer } from "node:http";
+import { packTar, unpackTar } from "../gem/archiveTar.js";
 
 let app: RestApplication;
 let client: ReturnType<typeof supertest>;
@@ -234,6 +235,68 @@ describe("POST /api/materialize from an archive", () => {
     writeFileSync(join(out, "skills", "review", "SKILL.md"), "# tampered");
     await client.post("/api/materialize").send({ archivePath: out, target: "claude" }).expect(500);
     rmSync(out, { recursive: true, force: true });
+  });
+});
+
+describe("share loop: .gem file + install from file/URL", () => {
+  it("POST /api/archive with outFile writes one portable .gem that round-trips", async () => {
+    const out = mkdtempSync(join(tmpdir(), "share-"));
+    const gemFile = join(out, "demo.gem");
+    const r = await client.post("/api/archive")
+      .send({ dir, selection: { skills: ["review"], mcpServers: ["gh"] }, name: "demo", version: "3.1.0", outFile: gemFile })
+      .expect(200);
+    expect(r.body.gemFile).toBe(gemFile);
+    expect(existsSync(gemFile)).toBe(true);
+    const unpacked = unpackTar(readFileSync(gemFile));
+    expect(unpacked).toEqual(r.body.files); // the .gem holds the exact archive tree
+    expect(JSON.stringify(unpacked)).not.toContain("ghp_secret"); // still secret-safe on disk
+    rmSync(out, { recursive: true, force: true });
+  });
+
+  it("POST /api/materialize with gemPath installs a shared .gem", async () => {
+    const out = mkdtempSync(join(tmpdir(), "share2-"));
+    const gemFile = join(out, "demo.gem");
+    await client.post("/api/archive")
+      .send({ dir, selection: { skills: ["review"], includeInstructions: true }, outFile: gemFile })
+      .expect(200);
+
+    const r = await client.post("/api/materialize")
+      .send({ gemPath: gemFile, target: "eve" })
+      .expect(200);
+    expect(r.body.files["agent/skills/review.md"]).toContain("# Review");
+    rmSync(out, { recursive: true, force: true });
+  });
+
+  it("POST /api/materialize rejects a tampered .gem (gemPath)", async () => {
+    const out = mkdtempSync(join(tmpdir(), "share3-"));
+    const gemFile = join(out, "demo.gem");
+    await client.post("/api/archive").send({ dir, selection: { skills: ["review"] }, outFile: gemFile }).expect(200);
+    const files = unpackTar(readFileSync(gemFile));
+    files["skills/review/SKILL.md"] = "# tampered";
+    writeFileSync(gemFile, packTar(files));
+    await client.post("/api/materialize").send({ gemPath: gemFile, target: "claude" }).expect(500);
+    rmSync(out, { recursive: true, force: true });
+  });
+
+  it("POST /api/materialize refuses a gemUrl resolving to a private address (SSRF guard)", async () => {
+    // A malicious page could CSRF the localhost server into fetching internal/metadata hosts;
+    // the guard must reject non-public targets even though a real .gem is served there.
+    const out = mkdtempSync(join(tmpdir(), "share4-"));
+    const gemFile = join(out, "demo.gem");
+    await client.post("/api/archive").send({ dir, selection: { skills: ["review"] }, outFile: gemFile }).expect(200);
+    const bytes = readFileSync(gemFile);
+
+    const server = createServer((_req, res) => { res.writeHead(200); res.end(bytes); });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as { port: number }).port;
+    try {
+      await client.post("/api/materialize")
+        .send({ gemUrl: `http://127.0.0.1:${port}/demo.gem`, target: "eve" })
+        .expect(500);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      rmSync(out, { recursive: true, force: true });
+    }
   });
 });
 

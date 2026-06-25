@@ -103,21 +103,24 @@ describe("archive schemas", () => {
     }).success).toBe(true);
   });
 
-  it("archive request requires a selection; response carries files+lock+skipped+path+tarGz", () => {
+  it("archive request requires a selection; response carries files+lock+skipped+path+gemFile+tarGz", () => {
     expect(ArchiveRequestSchema.safeParse({ selection: { all: true }, outDir: "/tmp/out" }).success).toBe(true);
+    expect(ArchiveRequestSchema.safeParse({ selection: { all: true }, outFile: "/tmp/p.gem" }).success).toBe(true);
     expect(ArchiveRequestSchema.safeParse({ selection: { all: true }, tar: true }).success).toBe(true);
     expect(ArchiveRequestSchema.safeParse({ name: "p" }).success).toBe(false);
     expect(ArchiveResponseSchema.safeParse({
-      files: { "gem.json": "{}" }, lock: { formatVersion: 1, files: {}, gemDigest: "sha256:x", signature: null }, skipped: [], path: null, tarGz: null,
+      files: { "gem.json": "{}" }, lock: { formatVersion: 1, files: {}, gemDigest: "sha256:x", signature: null }, skipped: [], path: null, gemFile: null, tarGz: null,
     }).success).toBe(true);
     expect(ArchiveResponseSchema.safeParse({
-      files: {}, lock: { formatVersion: 1, files: {}, gemDigest: "sha256:x", signature: null }, skipped: [], path: null, tarGz: "H4sIAAAA",
+      files: {}, lock: { formatVersion: 1, files: {}, gemDigest: "sha256:x", signature: null }, skipped: [], path: null, gemFile: "/tmp/p.gem", tarGz: "H4sIAAAA",
     }).success).toBe(true);
   });
 
-  it("materialize accepts selection OR archivePath, but not neither", () => {
+  it("materialize accepts selection, archivePath, gemPath, or gemUrl, but not none", () => {
     expect(MaterializeRequestSchema.safeParse({ selection: { all: true }, target: "claude" }).success).toBe(true);
     expect(MaterializeRequestSchema.safeParse({ archivePath: "/tmp/gem", target: "eve" }).success).toBe(true);
+    expect(MaterializeRequestSchema.safeParse({ gemPath: "/tmp/x.gem", target: "eve" }).success).toBe(true);
+    expect(MaterializeRequestSchema.safeParse({ gemUrl: "https://ex.com/x.gem", target: "eve" }).success).toBe(true);
     expect(MaterializeRequestSchema.safeParse({ target: "claude" }).success).toBe(false);
   });
 });
