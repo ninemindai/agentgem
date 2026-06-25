@@ -495,6 +495,17 @@ describe("registry endpoints", () => {
       if (prev !== undefined) process.env.AGENTGEM_REGISTRY_REPO = prev;
     }
   });
+
+  it("rejects search before the registry is configured", async () => {
+    const prev = process.env.AGENTGEM_REGISTRY_REPO;
+    delete process.env.AGENTGEM_REGISTRY_REPO;
+    try {
+      await expect(new GemController().registrySearch({ query: { q: "github" } }))
+        .rejects.toThrow(/registry is not configured/i);
+    } finally {
+      if (prev !== undefined) process.env.AGENTGEM_REGISTRY_REPO = prev;
+    }
+  });
 });
 
 describe("agentcore deploy ops", () => {

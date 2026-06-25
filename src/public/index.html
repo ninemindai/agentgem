@@ -242,7 +242,7 @@
       <div class="bar" id="typeBar"></div>
     </div>
     <div class="bar" id="selbar"><strong style="flex:1;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)">Selection</strong><button id="all" class="ghost">Select all shown</button><button id="none" class="ghost">Clear</button></div>
-    <div class="bar"><button id="importBtn" class="ghost">⬇ Import from machine…</button><span class="d" id="importStatus" style="margin-left:8px"></span></div>
+    <div class="bar"><button id="importBtn" class="ghost">⬇ Import from machine…</button><button id="getBtn" class="ghost">🔗 Get gems…</button><span class="d" id="importStatus" style="margin-left:8px"></span></div>
     <div id="inventory">Loading…</div>
     <div id="testdrive" class="testdrive" hidden>
       <div class="hd">▶ Test-drive this agent <span class="pill" id="tdPill">Claude Code</span></div>
@@ -251,7 +251,7 @@
     </div>
   </section>
   <section class="pane right">
-    <div class="bar"><strong style="flex:1">Gem (live)</strong><select id="target" title="materialize target" style="margin-left:auto"><option value="claude">Claude</option><option value="codex">Codex</option><option value="agents">Agents</option><option value="hermes">Hermes</option><option value="eve">Eve</option><option value="flue">Flue</option><option value="openai-sandbox">OpenAI Sandbox</option><option value="agentcore">AgentCore</option><option value="a2a">A2A</option></select><span class="seg" id="preview-modes"><button type="button" data-pmode="summary">Summary</button><button type="button" data-pmode="json">JSON</button><button type="button" data-pmode="materialize">Materialize</button><button type="button" data-pmode="managed">Managed Agents</button></span><span class="exportwrap"><button id="exportBtn">Export ▾</button><div id="exportMenu" class="exportmenu" hidden><button id="dltar" class="menuitem" title="download the gem archive as a .tar.gz">⬇ Download .tar.gz</button><button id="save" class="menuitem" title="write the gem archive (manifest + lock + files) to a folder">💾 Save to folder…</button><button id="dl" class="menuitem">⬇ Download JSON</button><button id="copy" class="menuitem">⧉ Copy JSON</button></div></span><span class="d" id="archiveStatus" style="margin-left:6px"></span></div>
+    <div class="bar"><strong style="flex:1">Gem (live)</strong><select id="target" title="materialize target" style="margin-left:auto"><option value="claude">Claude</option><option value="codex">Codex</option><option value="agents">Agents</option><option value="hermes">Hermes</option><option value="eve">Eve</option><option value="flue">Flue</option><option value="openai-sandbox">OpenAI Sandbox</option><option value="agentcore">AgentCore</option><option value="a2a">A2A</option></select><span class="seg" id="preview-modes"><button type="button" data-pmode="summary">Summary</button><button type="button" data-pmode="json">JSON</button><button type="button" data-pmode="materialize">Materialize</button><button type="button" data-pmode="managed">Managed Agents</button></span><span class="exportwrap"><button id="exportBtn">Export ▾</button><div id="exportMenu" class="exportmenu" hidden><button id="dlgem" class="menuitem" title="download one portable, self-verifying .gem file to share">🔗 Download .gem (share)</button><button id="dltar" class="menuitem" title="download the gem archive as a .tar.gz">⬇ Download .tar.gz</button><button id="save" class="menuitem" title="write the gem archive (manifest + lock + files) to a folder">💾 Save to folder…</button><button id="dl" class="menuitem">⬇ Download JSON</button><button id="copy" class="menuitem">⧉ Copy JSON</button></div></span><span class="d" id="archiveStatus" style="margin-left:6px"></span></div>
     <div id="preview"></div>
     <p class="note">MCP server &amp; hook config secrets are shown as <code>&lt;redacted&gt;</code> and never exported. Skill, CLAUDE.md, rules bodies &amp; hook commands are bundled as written — don't keep secrets in them.</p>
     <div id="checksPanel" class="group" style="margin-top:14px">
@@ -264,6 +264,23 @@
   <div class="modal">
     <div class="modal-h"><strong class="t" id="modal-title"></strong><span class="src" id="modal-sub"></span><span class="seg" id="modal-modes"><button type="button" data-mode="md">Markdown</button><button type="button" data-mode="raw">Raw</button></span><button id="modal-x" class="ghost" style="margin-left:8px">✕ Close</button></div>
     <pre class="modal-body" id="modal-body"></pre>
+  </div>
+</div>
+<div id="getModal" class="modal-bg" hidden>
+  <div class="modal">
+    <div class="modal-h"><strong class="t">Get gems</strong><span class="src">install a shared .gem, or search the registry</span><button id="getClose" class="ghost" style="margin-left:auto">✕ Close</button></div>
+    <div style="padding:14px;display:flex;flex-direction:column;gap:14px">
+      <div>
+        <div class="bar"><strong style="flex:1;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)">Install a .gem</strong></div>
+        <div class="bar"><input id="installSrc" type="text" placeholder="https://…/foo.gem  or  /path/to/foo.gem" style="flex:1" /><select id="installTarget" title="materialize target"></select><button id="installBtn">Install</button></div>
+        <span class="d" id="installStatus"></span>
+      </div>
+      <div>
+        <div class="bar"><strong style="flex:1;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)">Search the registry</strong></div>
+        <div class="bar"><input id="regSearch" type="text" placeholder="search names, tags, descriptions…" style="flex:1" /><button id="regSearchBtn" class="ghost">Search</button></div>
+        <div id="regResults"></div>
+      </div>
+    </div>
   </div>
 </div>
 <div id="importModal" class="modal-bg" hidden>
@@ -1233,6 +1250,17 @@ document.getElementById("save").addEventListener("click", async () => {
   const n = Object.keys(r.files || {}).length, sk = (r.skipped || []).length;
   status.textContent = `Saved ${n} files to ${r.path}` + (sk ? ` · ${sk} skipped` : "");
 });
+// Download one portable, self-verifying .gem (gzipped tar) to hand to someone else.
+document.getElementById("dlgem").addEventListener("click", async () => {
+  const status = document.getElementById("archiveStatus");
+  status.textContent = "Building .gem…";
+  const r = await (await fetch("/api/archive", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...buildSelectionBody(), tar: true }) })).json();
+  if (!r.tarGz) { status.textContent = "No archive — select artifacts on the left."; return; }
+  const bytes = Uint8Array.from(atob(r.tarGz), c => c.charCodeAt(0));
+  const blob = new Blob([bytes], { type: "application/gzip" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = (document.getElementById("name").value || "gem") + ".gem"; a.click();
+  status.textContent = `Downloaded ${a.download} — share it; install it with “Get gems”.`;
+});
 // Download the gem archive as a single .tar.gz (the transport/shipping form).
 document.getElementById("dltar").addEventListener("click", async () => {
   const status = document.getElementById("archiveStatus");
@@ -1244,6 +1272,52 @@ document.getElementById("dltar").addEventListener("click", async () => {
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = (document.getElementById("name").value || "gem") + ".gem.tar.gz"; a.click();
   status.textContent = `Downloaded ${a.download}`;
 });
+// Get gems: install a shared .gem by URL/path, or search the configured registry.
+(function(){
+  const modal = document.getElementById("getModal");
+  const open = () => {
+    document.getElementById("installTarget").innerHTML = document.getElementById("target").innerHTML;
+    modal.hidden = false;
+  };
+  document.getElementById("getBtn").addEventListener("click", open);
+  document.getElementById("getClose").addEventListener("click", () => { modal.hidden = true; });
+  modal.addEventListener("click", e => { if (e.target === modal) modal.hidden = true; });
+
+  document.getElementById("installBtn").addEventListener("click", async () => {
+    const src = document.getElementById("installSrc").value.trim();
+    const status = document.getElementById("installStatus");
+    if (!src) { status.textContent = "Enter a .gem URL or local path."; return; }
+    const body = { target: document.getElementById("installTarget").value };
+    if (/^https?:\/\//i.test(src)) body.gemUrl = src; else body.gemPath = src;
+    status.textContent = "Installing…";
+    try {
+      const m = await (await fetch("/api/materialize", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })).json();
+      if (m.error) { status.textContent = "Failed: " + m.error; return; }
+      window.__materialize = m;
+      status.textContent = `Installed — ${Object.keys(m.files || {}).length} files for ${m.target}. Switch the preview to Materialize to inspect.`;
+    } catch (e) { status.textContent = "Failed: " + (e && e.message || e); }
+  });
+
+  async function runSearch(){
+    const el = document.getElementById("regResults");
+    const q = document.getElementById("regSearch").value.trim();
+    el.innerHTML = '<p class="note">Searching…</p>';
+    try {
+      const ready = await (await fetch("/api/registry/ready")).json();
+      if (!ready.ready) { el.innerHTML = '<p class="note">No registry configured (set <code>AGENTGEM_REGISTRY_REPO</code>). You can still install a .gem by URL or path above.</p>'; return; }
+      const r = await (await fetch("/api/registry/search?q=" + encodeURIComponent(q) + "&limit=25")).json();
+      const hits = r.results || [];
+      if (!hits.length) { el.innerHTML = '<p class="note">No matching gems.</p>'; return; }
+      el.innerHTML = hits.map(h => {
+        const kinds = (h.artifactKinds || []).join(", ");
+        return `<button type="button" class="prow" data-ref="${esc(h.key)}"><span class="pn">${esc(h.key)}</span> <span class="pm">${esc(h.latest)}${kinds ? " · " + esc(kinds) : ""}</span></button>` +
+          (h.description ? `<div class="note" style="margin:0 0 6px 8px">${esc(h.description)}</div>` : "");
+      }).join("");
+    } catch (e) { el.innerHTML = '<p class="note">Search failed: ' + esc(String(e && e.message || e)) + "</p>"; }
+  }
+  document.getElementById("regSearchBtn").addEventListener("click", runSearch);
+  document.getElementById("regSearch").addEventListener("keydown", e => { if (e.key === "Enter") runSearch(); });
+})();
 // Export ▾ dropdown: toggle, close on outside click / Escape, and close after any item runs.
 (function(){
   const btn = document.getElementById("exportBtn"), menu = document.getElementById("exportMenu");

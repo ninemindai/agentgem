@@ -42,6 +42,7 @@ import {
   TestbedImportRequestSchema, TestbedImportResponseSchema,
   AgentcoreReadyResponseSchema, AgentcoreDeployRequestSchema, AgentcoreStatusQuerySchema, AgentcoreDeployStateSchema,
   RegistryReadyResponseSchema, RegistryIndexResponseSchema,
+  RegistrySearchQuerySchema, RegistrySearchResponseSchema,
   RegistryResolveRequestSchema, RegistryResolveResponseSchema,
   RegistryInstallRequestSchema, RegistryInstallResponseSchema,
   RegistryPublishRequestSchema, RegistryPublishResponseSchema,
@@ -58,6 +59,7 @@ import { detectFlavor, suggestTestbed, discoverProjects } from "./gem/testbedFla
 import type { TestbedFlavorId } from "./gem/testbedFlavors.js";
 import { readRecents, upsertRecent } from "./gem/recents.js";
 import { resolveInstall, publishGem } from "./gem/registry.js";
+import { searchIndex } from "./gem/search.js";
 import { githubRegistrySource, githubRegistryPublisher, registryConfigFromEnv, registryReady } from "./gem/registryGithub.js";
 import { resolveDirs, resolveProject, agentgemHome } from "./resolveDir.js";
 import { pickFolder } from "./pickFolder.js";
@@ -338,6 +340,12 @@ export class GemController {
     return this.registrySource().source.getIndex();
   }
 
+  @get("/registry/search", { query: RegistrySearchQuerySchema, response: RegistrySearchResponseSchema })
+  async registrySearch(input: { query: z.infer<typeof RegistrySearchQuerySchema> }): Promise<z.infer<typeof RegistrySearchResponseSchema>> {
+    const index = await this.registrySource().source.getIndex();
+    return { results: searchIndex(index, input.query.q ?? "", { kind: input.query.kind, tag: input.query.tag, limit: input.query.limit }) };
+  }
+
   @post("/registry/resolve", { body: RegistryResolveRequestSchema, response: RegistryResolveResponseSchema })
   async registryResolve(input: { body: z.infer<typeof RegistryResolveRequestSchema> }): Promise<z.infer<typeof RegistryResolveResponseSchema>> {
     const { source } = this.registrySource();
@@ -370,6 +378,7 @@ export class GemController {
     return publishGem({
       gem, scope: input.body.scope, name: input.body.name, version: input.body.version,
       dependencies: input.body.dependencies, index, publisher: githubRegistryPublisher(cfg),
+      description: input.body.description, tags: input.body.tags,
     });
   }
 

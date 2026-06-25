@@ -7,15 +7,22 @@ import type { ConfigInventory } from "./gem/types.js";
 import { GemSelectionSchema } from "./schemas.js";
 import { resolveDirs, resolveProject } from "./resolveDir.js";
 import { resolveInstall, publishGem } from "./gem/registry.js";
+import { searchIndex } from "./gem/search.js";
 import type { TargetId } from "./gem/targets.js";
 import { githubRegistrySource, githubRegistryPublisher, registryConfigFromEnv } from "./gem/registryGithub.js";
 import { readWorkspace } from "./gem/workspaces.js";
 import { readGemArchive } from "./gem/archive.js";
+import { exportGem, importGem } from "./gem/share.js";
+import { fetchGemBytes } from "./gem/safeFetch.js";
+import { readFileSync } from "node:fs";
 
 const InventoryInput = z.object({ dir: z.string().optional(), projects: z.array(z.string()).optional() });
 const GemInput = z.object({ selection: GemSelectionSchema, name: z.string().optional(), dir: z.string().optional(), projects: z.array(z.string()).optional() });
 const RegistryRefsInput = z.object({ refs: z.array(z.string()).min(1), mode: z.enum(["materialize", "workspace"]), target: z.string().optional() });
-const RegistryPublishInput = z.object({ workspace: z.string(), scope: z.string(), name: z.string().optional(), version: z.string(), dependencies: z.array(z.string()).optional() });
+const RegistryPublishInput = z.object({ workspace: z.string(), scope: z.string(), name: z.string().optional(), version: z.string(), dependencies: z.array(z.string()).optional(), description: z.string().optional(), tags: z.array(z.string()).optional() });
+const RegistrySearchInput = z.object({ q: z.string().optional(), kind: z.string().optional(), tag: z.string().optional(), limit: z.number().int().positive().max(100).optional() });
+const GemExportInput = z.object({ selection: GemSelectionSchema, name: z.string().optional(), version: z.string().optional(), dir: z.string().optional(), projects: z.array(z.string()).optional() });
+const GemInstallInput = z.object({ gemUrl: z.string().optional(), gemPath: z.string().optional(), bytesBase64: z.string().optional() });
 
 function registrySourceOrThrow() {
   const cfg = registryConfigFromEnv();
@@ -49,9 +56,38 @@ export class GemTools {
     return buildGem(introspectAll(input.dir, input.projects), input.selection, { name: input.name ?? "gem", createdFrom: dirs.claudeDir });
   }
 
+  @tool("gem_export", {
+    description: "Export a Gem (built from a selection of the local config) as a single portable .gem archive, returned base64-encoded. Share those bytes as a file/upload/gist; install elsewhere with gem_install. Secrets are redacted; no registry required.",
+    input: GemExportInput,
+  })
+  async gemExport(input: z.infer<typeof GemExportInput>) {
+    const dirs = resolveDirs(input.dir);
+    const gem = buildGem(introspectAll(input.dir, input.projects), input.selection, { name: input.name ?? "gem", createdFrom: dirs.claudeDir });
+    const { filename, bytes, skipped } = exportGem(gem, { version: input.version });
+    return { filename, bytesBase64: bytes.toString("base64"), skipped };
+  }
+
+  @tool("gem_install", {
+    description: "Read and verify a shared .gem from a URL, local file path, or base64 bytes — returning the lock-verified Gem and its manifest meta. URL fetches are SSRF-guarded; tampered archives are rejected. Disk placement is performed via the REST /materialize endpoint.",
+    input: GemInstallInput,
+  })
+  async gemInstall(input: z.infer<typeof GemInstallInput>) {
+    const bytes = input.gemUrl ? await fetchGemBytes(input.gemUrl)
+      : input.gemPath ? readFileSync(input.gemPath)
+      : input.bytesBase64 ? Buffer.from(input.bytesBase64, "base64")
+      : (() => { throw new Error("provide one of gemUrl, gemPath, or bytesBase64"); })();
+    return importGem(bytes);
+  }
+
   @tool("registry_index", { description: "List the gems available in the configured registry (names, versions, dependencies).", input: z.object({}) })
   async registryIndex(_input: Record<string, never>) {
     return registrySourceOrThrow().source.getIndex();
+  }
+
+  @tool("registry_search", { description: "Search the configured registry for gems by name/tags/description. Pass a `kind` (skill|mcp_server|instructions|hook) or `tag` to filter; an empty query browses the catalog. Returns ranked hits with latest version and description.", input: RegistrySearchInput })
+  async registrySearch(input: z.infer<typeof RegistrySearchInput>) {
+    const index = await registrySourceOrThrow().source.getIndex();
+    return { results: searchIndex(index, input.q ?? "", { kind: input.kind, tag: input.tag, limit: input.limit }) };
   }
 
   @tool("registry_resolve", { description: "Resolve registry refs into an install plan (items, artifacts, required secrets, and a materialize preview for a target). No writes.", input: RegistryRefsInput })
@@ -73,6 +109,6 @@ export class GemTools {
     const { cfg, source } = registrySourceOrThrow();
     const gem = readGemArchive(readWorkspace(input.workspace).files);
     const index = await source.getIndex();
-    return publishGem({ gem, scope: input.scope, name: input.name, version: input.version, dependencies: input.dependencies, index, publisher: githubRegistryPublisher(cfg) });
+    return publishGem({ gem, scope: input.scope, name: input.name, version: input.version, dependencies: input.dependencies, index, publisher: githubRegistryPublisher(cfg), description: input.description, tags: input.tags });
   }
 }
