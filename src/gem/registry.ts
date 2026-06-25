@@ -6,7 +6,16 @@ import type { FileTree, TargetId } from "./targets.js";
 export const REGISTRY_FORMAT_VERSION = 1;
 
 export interface RegistryItemVersion { path: string; gemDigest: string; dependencies: string[] }
-export interface RegistryItem { latest: string; versions: Record<string, RegistryItemVersion> }
+// Denormalized, searchable metadata for the latest version — additive/optional so older
+// readers ignore it and the format version need not bump. Populated at publish time.
+export interface RegistryItemDiscovery {
+  description?: string;
+  tags?: string[];
+  author?: string;
+  artifactKinds?: string[];
+  updatedAt?: string;
+}
+export interface RegistryItem { latest: string; versions: Record<string, RegistryItemVersion>; discovery?: RegistryItemDiscovery }
 export interface RegistryIndex { formatVersion: number; items: Record<string, RegistryItem> }
 
 export interface ParsedRef { key: string; scope: string; name: string; range: string }
@@ -187,9 +196,24 @@ export interface RegistryPublisher {
   putCommit(files: FileTree, message: string): Promise<{ commit: string }>;
 }
 
+// Derive the searchable discovery block for a publish: caller-supplied description/tags,
+// falling back to the first artifact's description; kinds/author derived from the gem.
+export function buildDiscovery(
+  gem: Gem, scope: string, opts: { description?: string; tags?: string[]; updatedAt?: string } = {},
+): RegistryItemDiscovery {
+  const description = opts.description ?? gem.artifacts.find((a) => "description" in a && a.description)?.["description" as never];
+  const tags = (opts.tags ?? []).map((t) => t.toLowerCase());
+  const artifactKinds = [...new Set(gem.artifacts.map((a) => a.type))];
+  const d: RegistryItemDiscovery = { author: scope, artifactKinds };
+  if (description) d.description = description;
+  if (tags.length) d.tags = tags;
+  if (opts.updatedAt) d.updatedAt = opts.updatedAt;
+  return d;
+}
+
 export function updateIndex(
   index: RegistryIndex,
-  e: { key: string; version: string; path: string; gemDigest: string; dependencies: string[] },
+  e: { key: string; version: string; path: string; gemDigest: string; dependencies: string[]; discovery?: RegistryItemDiscovery },
 ): RegistryIndex {
   const items = { ...index.items };
   const existing = items[e.key];
@@ -199,14 +223,18 @@ export function updateIndex(
     throw new Error(`${e.key}@${e.version} is immutable (published ${existingVersion.gemDigest}, attempted ${e.gemDigest})`);
   }
   versions[e.version] = { path: e.path, gemDigest: e.gemDigest, dependencies: e.dependencies };
-  const latest = existing && cmpSemver(existing.latest, e.version) >= 0 ? existing.latest : e.version;
-  items[e.key] = { latest, versions };
+  const isNewLatest = !existing || cmpSemver(existing.latest, e.version) < 0;
+  const latest = isNewLatest ? e.version : existing.latest;
+  // discovery reflects the latest version; keep the prior block when publishing an older version
+  const discovery = isNewLatest ? (e.discovery ?? existing?.discovery) : existing?.discovery;
+  items[e.key] = { latest, versions, ...(discovery ? { discovery } : {}) };
   return { formatVersion: REGISTRY_FORMAT_VERSION, items };
 }
 
 export async function publishGem(args: {
   gem: Gem; scope: string; name?: string; version: string; dependencies?: string[];
   index: RegistryIndex; publisher: RegistryPublisher;
+  description?: string; tags?: string[]; updatedAt?: string;
 }): Promise<{ ref: string; version: string; gemDigest: string; commit: string; path: string }> {
   const name = args.name ?? args.gem.name;
   if (!SEG.test(args.scope) || !SEG.test(name)) throw new Error(`invalid scope/name '@${args.scope}/${name}': must match [a-z0-9-]`);
@@ -225,7 +253,8 @@ export async function publishGem(args: {
     return { ref: key, version: args.version, gemDigest, commit: "", path };
   }
 
-  const nextIndex = updateIndex(args.index, { key, version: args.version, path, gemDigest, dependencies });
+  const discovery = buildDiscovery(args.gem, args.scope, { description: args.description, tags: args.tags, updatedAt: args.updatedAt });
+  const nextIndex = updateIndex(args.index, { key, version: args.version, path, gemDigest, dependencies, discovery });
   const commitFiles: FileTree = { "registry.json": JSON.stringify(nextIndex, null, 2) };
   for (const [rel, content] of Object.entries(files)) commitFiles[`${path}/${rel}`] = content;
 

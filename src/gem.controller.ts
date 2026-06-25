@@ -1,5 +1,5 @@
 // src/gem.controller.ts
-import { existsSync } from "node:fs";
+import { existsSync, writeFileSync, readFileSync } from "node:fs";
 import { basename } from "node:path";
 import type { z } from "zod";
 import { api, get, post } from "@agentback/openapi";
@@ -15,6 +15,8 @@ import { writeGemArchive, readGemArchive } from "./gem/archive.js";
 import type { GemLock } from "./gem/archive.js";
 import { writeArchiveDir, readArchiveDir } from "./gem/archiveFs.js";
 import { packTar } from "./gem/archiveTar.js";
+import { importGem } from "./gem/share.js";
+import { fetchGemBytes } from "./gem/safeFetch.js";
 import type { Gem } from "./gem/types.js";
 import { readDeployRecord, writeDeployRecord, clearDeployRecord } from "./gem/deployRecord.js";
 import type { DeployBackend } from "./gem/deployRecord.js";
@@ -40,6 +42,7 @@ import {
   TestbedImportRequestSchema, TestbedImportResponseSchema,
   AgentcoreReadyResponseSchema, AgentcoreDeployRequestSchema, AgentcoreStatusQuerySchema, AgentcoreDeployStateSchema,
   RegistryReadyResponseSchema, RegistryIndexResponseSchema,
+  RegistrySearchQuerySchema, RegistrySearchResponseSchema,
   RegistryResolveRequestSchema, RegistryResolveResponseSchema,
   RegistryInstallRequestSchema, RegistryInstallResponseSchema,
   RegistryPublishRequestSchema, RegistryPublishResponseSchema,
@@ -56,6 +59,7 @@ import { detectFlavor, suggestTestbed, discoverProjects } from "./gem/testbedFla
 import type { TestbedFlavorId } from "./gem/testbedFlavors.js";
 import { readRecents, upsertRecent } from "./gem/recents.js";
 import { resolveInstall, publishGem } from "./gem/registry.js";
+import { searchIndex } from "./gem/search.js";
 import { githubRegistrySource, githubRegistryPublisher, registryConfigFromEnv, registryReady } from "./gem/registryGithub.js";
 import { resolveDirs, resolveProject, agentgemHome } from "./resolveDir.js";
 import { pickFolder } from "./pickFolder.js";
@@ -90,7 +94,12 @@ export class GemController {
   async materialize(input: { body: z.infer<typeof MaterializeRequestSchema> }): Promise<z.infer<typeof MaterializeResponseSchema>> {
     const target = input.body.target as TargetId;
     let gem: Gem;
-    if (input.body.archivePath) {
+    if (input.body.gemPath || input.body.gemUrl) {
+      const bytes = input.body.gemUrl
+        ? await fetchGemBytes(input.body.gemUrl) // SSRF-guarded: rejects non-public hosts
+        : readFileSync(input.body.gemPath!);
+      gem = importGem(bytes).gem; // unpack + verify gem.lock; throws on tampering
+    } else if (input.body.archivePath) {
       gem = readGemArchive(readArchiveDir(input.body.archivePath));
     } else {
       const dirs = resolveDirs(input.body.dir);
@@ -109,8 +118,10 @@ export class GemController {
     const lock = JSON.parse(files["gem.lock"]) as GemLock;
     let path: string | null = null;
     if (input.body.outDir) { writeArchiveDir(input.body.outDir, files); path = input.body.outDir; }
+    let gemFile: string | null = null;
+    if (input.body.outFile) { writeFileSync(input.body.outFile, packTar(files)); gemFile = input.body.outFile; }
     const tarGz = input.body.tar ? packTar(files).toString("base64") : null;
-    return { files, lock, skipped, path, tarGz };
+    return { files, lock, skipped, path, gemFile, tarGz };
   }
 
   @post("/workspaces", { body: CreateWorkspaceRequestSchema, response: WorkspaceSummarySchema })
@@ -329,6 +340,12 @@ export class GemController {
     return this.registrySource().source.getIndex();
   }
 
+  @get("/registry/search", { query: RegistrySearchQuerySchema, response: RegistrySearchResponseSchema })
+  async registrySearch(input: { query: z.infer<typeof RegistrySearchQuerySchema> }): Promise<z.infer<typeof RegistrySearchResponseSchema>> {
+    const index = await this.registrySource().source.getIndex();
+    return { results: searchIndex(index, input.query.q ?? "", { kind: input.query.kind, tag: input.query.tag, limit: input.query.limit }) };
+  }
+
   @post("/registry/resolve", { body: RegistryResolveRequestSchema, response: RegistryResolveResponseSchema })
   async registryResolve(input: { body: z.infer<typeof RegistryResolveRequestSchema> }): Promise<z.infer<typeof RegistryResolveResponseSchema>> {
     const { source } = this.registrySource();
@@ -361,6 +378,7 @@ export class GemController {
     return publishGem({
       gem, scope: input.body.scope, name: input.body.name, version: input.body.version,
       dependencies: input.body.dependencies, index, publisher: githubRegistryPublisher(cfg),
+      description: input.body.description, tags: input.body.tags,
     });
   }
 

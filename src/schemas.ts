@@ -189,6 +189,7 @@ export const ArchiveRequestSchema = z.object({
   dir: z.string().optional(),
   projects: z.array(z.string()).optional(),
   outDir: z.string().optional(), // when set, write the tree here and return its path
+  outFile: z.string().optional(), // when set, write one portable .gem (tar.gz) here
   tar: z.boolean().optional(),   // when true, also return the tree as a base64 .tar.gz
 });
 
@@ -197,19 +198,22 @@ export const ArchiveResponseSchema = z.object({
   lock: GemLockSchema,
   skipped: z.array(SkippedArtifactSchema),
   path: z.string().nullable(),
+  gemFile: z.string().nullable(), // path to the written .gem when `outFile` was set, else null
   tarGz: z.string().nullable(), // base64 .tar.gz when `tar` was requested, else null
 });
 
 export const MaterializeRequestSchema = z.object({
   selection: GemSelectionSchema.optional(),
   archivePath: z.string().optional(),
+  gemPath: z.string().optional(), // install from a single .gem (tar.gz) file on disk
+  gemUrl: z.string().optional(),  // install from a .gem fetched over http(s)
   target: TargetIdSchema,
   name: z.string().optional(),
   dir: z.string().optional(),
   projects: z.array(z.string()).optional(),
   a2aServer: z.boolean().optional(), // a2a target: also emit the runnable server, not just the Agent Card
-}).refine((d) => d.selection !== undefined || d.archivePath !== undefined, {
-  message: "provide either selection or archivePath",
+}).refine((d) => d.selection !== undefined || d.archivePath !== undefined || d.gemPath !== undefined || d.gemUrl !== undefined, {
+  message: "provide one of selection, archivePath, gemPath, or gemUrl",
 });
 
 export const DeployTargetIdSchema = z.enum(deployTargetIds);
@@ -439,9 +443,30 @@ export const AgentcoreDeployStateSchema = z.object({
 export const RegistryReadyResponseSchema = z.object({ ready: z.boolean() });
 
 const RegistryItemVersionSchema = z.object({ path: z.string(), gemDigest: z.string(), dependencies: z.array(z.string()) });
+const RegistryItemDiscoverySchema = z.object({
+  description: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  author: z.string().optional(),
+  artifactKinds: z.array(z.string()).optional(),
+  updatedAt: z.string().optional(),
+});
 export const RegistryIndexResponseSchema = z.object({
   formatVersion: z.number(),
-  items: z.record(z.string(), z.object({ latest: z.string(), versions: z.record(z.string(), RegistryItemVersionSchema) })),
+  items: z.record(z.string(), z.object({ latest: z.string(), versions: z.record(z.string(), RegistryItemVersionSchema), discovery: RegistryItemDiscoverySchema.optional() })),
+});
+
+export const RegistrySearchQuerySchema = z.object({
+  q: z.string().optional(),
+  kind: z.string().optional(),
+  tag: z.string().optional(),
+  limit: z.coerce.number().int().positive().max(100).optional(),
+});
+export const RegistrySearchResponseSchema = z.object({
+  results: z.array(z.object({
+    key: z.string(), latest: z.string(), score: z.number(),
+    description: z.string().optional(), tags: z.array(z.string()).optional(),
+    author: z.string().optional(), artifactKinds: z.array(z.string()).optional(), updatedAt: z.string().optional(),
+  })),
 });
 
 export const RegistryResolveRequestSchema = z.object({
@@ -484,6 +509,8 @@ export const RegistryPublishRequestSchema = z.object({
   name: z.string().optional(),
   version: z.string(),
   dependencies: z.array(z.string()).optional(),
+  description: z.string().optional(), // discovery metadata for search
+  tags: z.array(z.string()).optional(),
 });
 export const RegistryPublishResponseSchema = z.object({
   ref: z.string(), version: z.string(), gemDigest: z.string(), commit: z.string(), path: z.string(),

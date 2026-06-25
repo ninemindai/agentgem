@@ -28,6 +28,29 @@ describe("publishGem", () => {
     expect(idx.items["@acme/github-search"].versions["1.0.0"].gemDigest).toBe(r.gemDigest);
   });
 
+  it("writes denormalized discovery metadata onto the index item", async () => {
+    const { publisher, commits } = capturingPublisher();
+    await publishGem({ gem, scope: "acme", version: "1.0.0", index: empty, publisher,
+      description: "Search GitHub from your agent", tags: ["GitHub", "Search"], updatedAt: "2026-06-24T00:00:00Z" });
+    const idx = JSON.parse(commits[0].files["registry.json"]) as RegistryIndex;
+    const disc = idx.items["@acme/github-search"].discovery;
+    expect(disc).toMatchObject({
+      description: "Search GitHub from your agent",
+      tags: ["github", "search"], // normalized lowercase
+      author: "acme",
+      artifactKinds: ["skill"], // derived from the gem's artifacts
+      updatedAt: "2026-06-24T00:00:00Z",
+    });
+  });
+
+  it("falls back to the first artifact description when none is supplied", async () => {
+    const { publisher, commits } = capturingPublisher();
+    const withDesc: Gem = { ...gem, artifacts: [{ type: "skill", name: "search", source: "standalone", description: "find issues", content: "# Search" }] };
+    await publishGem({ gem: withDesc, scope: "acme", version: "1.0.0", index: empty, publisher });
+    const idx = JSON.parse(commits[0].files["registry.json"]) as RegistryIndex;
+    expect(idx.items["@acme/github-search"].discovery?.description).toBe("find issues");
+  });
+
   it("is idempotent when re-publishing identical content at the same version", async () => {
     const { publisher, commits } = capturingPublisher();
     const first = await publishGem({ gem, scope: "acme", version: "1.0.0", index: empty, publisher });
