@@ -568,10 +568,13 @@ const a2aSkillCard = (a: SkillArtifact) => ({
 });
 // A one-line card description from an instruction artifact: prefer the first non-empty *prose* line
 // (instruction files usually open with a throwaway "# Title" heading); fall back to the de-headed
-// first line if the doc is headings-only.
+// first line if the doc is headings-only. Only ATX headings ("# " … "###### ") count as headings, so a
+// prose line that merely starts with '#' (e.g. "#launch") is kept. Bounded so the card carries a label,
+// not a paragraph.
 const a2aFirstLine = (s: string): string => {
   const lines = s.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  return lines.find((l) => !l.startsWith("#")) ?? lines[0]?.replace(/^#+\s*/, "") ?? "";
+  const line = lines.find((l) => !/^#{1,6}\s/.test(l)) ?? lines[0]?.replace(/^#+\s*/, "") ?? "";
+  return line.length > 200 ? line.slice(0, 197).replace(/\s+\S*$/, "") + "…" : line;
 };
 
 // Pure Gem -> AgentCard projection. Skills advertise as A2A skills (metadata, not bodies); the first
@@ -586,7 +589,9 @@ export const a2aAgentCard = (gem: Gem): Record<string, unknown> => {
     name: gem.name,
     description: a2aFirstLine(instr[0]?.content ?? "") || `An agent packaged by AgentGem from ${skills.length} skill(s).`,
     version: "0.1.0",
-    url: "http://localhost:41241/a2a/jsonrpc", // discovery placeholder; the (future) server overrides from PUBLIC_URL
+    // Non-resolving placeholder (RFC 6761 reserved TLD): a published card must NOT carry a localhost url
+    // a consumer would dial against its own machine. Server mode rebinds this from PUBLIC_URL at boot.
+    url: "https://set-public-url.invalid/a2a/jsonrpc",
     capabilities: { streaming: false, pushNotifications: false },
     defaultInputModes: ["text"],
     defaultOutputModes: ["text"],
@@ -697,7 +702,15 @@ class GemExecutor implements AgentExecutor {
   private inflight = new Map<string, AbortController>();
   async execute(ctx: RequestContext, bus: ExecutionEventBus): Promise<void> {
     const { taskId, contextId, userMessage, task } = ctx;
-    const text = (userMessage.parts ?? []).filter((p: any) => p.kind === "text").map((p: any) => p.text).join("\\n");
+    const text = (userMessage.parts ?? []).filter((p: any) => p.kind === "text").map((p: any) => p.text).join("\\n").trim();
+    // Guard: an A2A message may carry no text parts (file/data only). streamText rejects an empty
+    // prompt, so reply directly instead of failing the request.
+    if (!text) {
+      bus.publish({ kind: "message", messageId: uuid(), role: "agent", contextId,
+        parts: [{ kind: "text", text: "Please include a text message for the agent." }] });
+      bus.finished();
+      return;
+    }
     const ac = new AbortController();
     this.inflight.set(taskId, ac);
     if (!task) bus.publish({ kind: "task", id: taskId, contextId, status: { state: "submitted", timestamp: new Date().toISOString() }, history: [userMessage] });
@@ -711,7 +724,8 @@ class GemExecutor implements AgentExecutor {
           artifact: { artifactId, name: "response", parts: [{ kind: "text", text: delta }] } });
         started = true;
       }
-      bus.publish({ kind: "artifact-update", taskId, contextId, append: true, lastChunk: true, artifact: { artifactId, parts: [] } });
+      // Only close an artifact that was actually opened (empty/tool-only completions stream nothing).
+      if (started) bus.publish({ kind: "artifact-update", taskId, contextId, append: true, lastChunk: true, artifact: { artifactId, parts: [] } });
       bus.publish({ kind: "status-update", taskId, contextId, status: { state: "completed", timestamp: new Date().toISOString() }, final: true });
     } catch (err) {
       const state = ac.signal.aborted ? "canceled" : "failed";
@@ -741,24 +755,33 @@ app.listen(port, () => console.log(\`A2A agent "\${card.name}" listening on :\${
 `;
 };
 
-// A2A is wholly compose-driven: per-type renderers are no-ops (so no artifact is skip-reported), and
-// compose emits the Agent Card. Card-only mode models neither MCP nor hooks, so nothing is skipped.
-// With opts.a2aServer, it additionally emits a runnable server and evaluates MCP/hook mappability.
+// A2A is wholly compose-driven: per-type renderers are no-ops (so materialize never auto-skip-reports),
+// and compose owns ALL skip reporting for both modes. Hooks are never expressible by A2A (card or
+// server). MCP is not expressible by a *Card* (card-only -> all MCP skipped), but the *server* wires it
+// (server mode -> only unmappable MCP skipped). This keeps compatibility() honest: card-only reflects
+// that a Card carries identity + skills, not MCP/hooks, instead of over-claiming full support.
 const a2aComposeProject = (gem: Gem, opts: MaterializeOpts = {}): MaterializeResult => {
   const files: FileTree = { "agent-card.json": JSON.stringify(a2aAgentCard(gem), null, 2) + "\n" };
-  if (!opts.a2aServer) return { files, skipped: [] };
+  const mcps  = gem.artifacts.filter((a): a is McpServerArtifact => a.type === "mcp_server");
+  const hooks = gem.artifacts.filter((a): a is HookArtifact => a.type === "hook");
+  const hookSkips = hooks.map((h): SkippedArtifact => ({ artifact: h.name, type: "hook", reason: "A2A has no hook concept" }));
+
+  if (!opts.a2aServer) {
+    // Card-only: an Agent Card represents identity + skills, not MCP servers or hooks.
+    const cardSkips = mcps.map((s): SkippedArtifact => ({ artifact: s.name, type: "mcp_server", reason: "an Agent Card cannot express MCP servers (materialize with a2aServer to wire them)" }));
+    return { files, skipped: [...cardSkips, ...hookSkips] };
+  }
 
   const skills = gem.artifacts.filter((a): a is SkillArtifact => a.type === "skill");
   const instr  = gem.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions");
-  const mcps   = gem.artifacts.filter((a): a is McpServerArtifact => a.type === "mcp_server");
-  const hooks  = gem.artifacts.filter((a): a is HookArtifact => a.type === "hook");
 
   // AI SDK has no skills primitive -> fold skill bodies (frontmatter-stripped) into the system prompt.
   const instrText = instr.map((i) => `## ${i.name}\n\n${i.content}`).join("\n\n---\n\n");
   const skillText = skills.map((s) => `## Skill: ${s.name}\n\n${stripYamlFrontmatter(s.content)}`).join("\n\n---\n\n");
   const system = [instrText, skillText].filter(Boolean).join("\n\n---\n\n");
 
-  const skipped: SkippedArtifact[] = [];
+  // Server mode: the server wires MCP, so only UNMAPPABLE MCP is skipped; hooks remain unsupported.
+  const skipped: SkippedArtifact[] = [...hookSkips];
   const clientCodes: string[] = [];
   let usesStdio = false;
   for (const s of mcps) {
@@ -766,7 +789,6 @@ const a2aComposeProject = (gem: Gem, opts: MaterializeOpts = {}): MaterializeRes
     if ("skip" in r) { skipped.push({ artifact: s.name, type: "mcp_server", reason: r.skip }); continue; }
     clientCodes.push(r.code); usesStdio ||= r.stdio;
   }
-  for (const h of hooks) skipped.push({ artifact: h.name, type: "hook", reason: "A2A has no hook concept" });
 
   return {
     files: {

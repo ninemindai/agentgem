@@ -133,7 +133,7 @@ export class GemController {
 
   @post("/workspace/render", { body: RenderRequestSchema, response: RenderResultSchema })
   async renderWorkspace(input: { body: z.infer<typeof RenderRequestSchema> }): Promise<z.infer<typeof RenderResultSchema>> {
-    return renderTarget(input.body.name, input.body.target as TargetId);
+    return renderTarget(input.body.name, input.body.target as TargetId, { a2aServer: input.body.a2aServer });
   }
 
   @post("/workspace/delete", { body: WorkspaceNameRequestSchema, response: DeleteWorkspaceResponseSchema })
@@ -332,7 +332,7 @@ export class GemController {
   @post("/registry/resolve", { body: RegistryResolveRequestSchema, response: RegistryResolveResponseSchema })
   async registryResolve(input: { body: z.infer<typeof RegistryResolveRequestSchema> }): Promise<z.infer<typeof RegistryResolveResponseSchema>> {
     const { source } = this.registrySource();
-    const { plan } = await resolveInstall({ refs: input.body.refs, mode: input.body.mode, target: input.body.target as TargetId | undefined, source });
+    const { plan } = await resolveInstall({ refs: input.body.refs, mode: input.body.mode, target: input.body.target as TargetId | undefined, source, a2aServer: input.body.a2aServer });
     return { plan };
   }
 
@@ -340,7 +340,7 @@ export class GemController {
   @post("/registry/install", { body: RegistryInstallRequestSchema, response: RegistryInstallResponseSchema })
   async registryInstall(input: { body: z.infer<typeof RegistryInstallRequestSchema> }): Promise<z.infer<typeof RegistryInstallResponseSchema>> {
     const { source } = this.registrySource();
-    const { plan, gem } = await resolveInstall({ refs: input.body.refs, mode: input.body.mode, target: input.body.target as TargetId | undefined, source });
+    const { plan, gem } = await resolveInstall({ refs: input.body.refs, mode: input.body.mode, target: input.body.target as TargetId | undefined, source, a2aServer: input.body.a2aServer });
     if (input.body.mode === "materialize") {
       if (!input.body.dest) throw new Error("materialize mode requires `dest`");
       writeArchiveDir(input.body.dest, plan.materialize!.files);

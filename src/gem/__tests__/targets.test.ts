@@ -405,20 +405,33 @@ describe("materialize a2a (Agent Card primitive)", () => {
     expect(card.skills[0].id).toBe("chat");
   });
 
-  it("card-only mode reports nothing skipped even with hooks and an unmappable MCP server", () => {
+  it("card-only honestly reports MCP and hooks as skipped (a Card models neither)", () => {
     const r = materialize(gem([skill("review"), mcp("local"), httpMcp("linear"), hook()]), "a2a");
-    expect(r.skipped).toEqual([]);
     expect(Object.keys(r.files)).toEqual(["agent-card.json"]);
+    // skills are represented (card skills[]); MCP + hooks are not expressible by a Card.
+    expect(r.skipped.map((s) => s.type).sort()).toEqual(["hook", "mcp_server", "mcp_server"]);
+    expect(r.skipped.find((s) => s.type === "mcp_server")?.reason).toMatch(/Agent Card/);
   });
 
-  it("compatibility includes a2a, describing every gem as a card (no skips)", () => {
+  it("compatibility scores a2a card-only: skills supported, MCP + hooks skipped", () => {
     const c = compatibility(gem([skill("review"), mcp("local"), hook()]));
-    expect(c.a2a).toEqual({ supported: 3, skipped: 0 });
+    expect(c.a2a).toEqual({ supported: 1, skipped: 2 });
   });
 
-  it("a2aAgentCard is pure and emits no secret values", () => {
+  it("a2aAgentCard is pure, emits no secret values, and carries no localhost url", () => {
     const card = a2aAgentCard(gem([skill("review"), httpMcp("linear")]));
     expect(JSON.stringify(card)).not.toContain("<redacted>");
+    expect(String(card.url)).not.toContain("localhost"); // a published card must not point at the consumer's machine
+  });
+
+  it("a2aFirstLine: keeps a prose line starting with '#' (only ATX headings are skipped) and bounds length", () => {
+    const hashtag = materialize(gem([instr("CLAUDE.md", "#launch is live now")]), "a2a");
+    expect(JSON.parse(hashtag.files["agent-card.json"]).description).toBe("#launch is live now");
+    const long = "word ".repeat(80).trim();
+    const bounded = materialize(gem([instr("CLAUDE.md", long)]), "a2a");
+    const desc = JSON.parse(bounded.files["agent-card.json"]).description as string;
+    expect(desc.length).toBeLessThanOrEqual(201);
+    expect(desc.endsWith("…")).toBe(true);
   });
 });
 
@@ -479,10 +492,20 @@ describe("materialize a2a server mode ({ a2aServer: true })", () => {
     expect(md).not.toMatch(/agentcore|arn:/);
   });
 
-  it("card-only mode (no opts) is unchanged: just the card, nothing skipped", () => {
+  it("card-only mode (no opts) emits just the card; MCP + hooks reported skipped", () => {
     const r = materialize(gem([skill("review"), mcp("local"), hook()]), "a2a");
     expect(Object.keys(r.files)).toEqual(["agent-card.json"]);
-    expect(r.skipped).toEqual([]);
+    expect(r.skipped.map((s) => s.type).sort()).toEqual(["hook", "mcp_server"]);
+  });
+
+  it("empty user text is guarded (no streamText call on a text-less message)", () => {
+    const s = materialize(gem([skill("review")]), "a2a", { a2aServer: true }).files["src/server.ts"];
+    expect(s).toContain("if (!text"); // guard before the model call
+  });
+
+  it("empty model output does not emit an orphaned terminal artifact", () => {
+    const s = materialize(gem([skill("review")]), "a2a", { a2aServer: true }).files["src/server.ts"];
+    expect(s).toContain("if (started)"); // terminal lastChunk artifact only when something streamed
   });
 
   it("server streams: streamText + artifact-update + task lifecycle, served card advertises streaming, cancel wired", () => {

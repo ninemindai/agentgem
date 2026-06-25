@@ -6,7 +6,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { mkdirSync, rmSync, readdirSync, statSync, existsSync, readFileSync } from "node:fs";
 import type { Gem } from "./types.js";
-import type { TargetId, SkippedArtifact } from "./targets.js";
+import type { TargetId, SkippedArtifact, MaterializeOpts } from "./targets.js";
 import { materialize, compatibility, TARGET_REGISTRY, safePathSegment } from "./targets.js";
 import { writeGemArchive, readGemArchive } from "./archive.js";
 import { writeArchiveDir, readArchiveDir } from "./archiveFs.js";
@@ -97,11 +97,11 @@ export function readWorkspace(name: string): WorkspaceDetail {
   return { ...summary(workspaceName(name), files["gem.json"], dir), files, compatibility: compatibility(gem) };
 }
 
-export function renderTarget(name: string, target: TargetId): RenderResult {
+export function renderTarget(name: string, target: TargetId, opts: MaterializeOpts = {}): RenderResult {
   const dir = workspaceDir(name);
   if (!existsSync(join(dir, "gem.json"))) throw new Error(`no workspace '${name}'`);
   const gem = readGemArchive(readArchiveDir(dir));
-  const { files, skipped } = materialize(gem, target);
+  const { files, skipped } = materialize(gem, target, opts);
   const out = join(dir, TARGETS_DIR, target);
   rmSync(out, { recursive: true, force: true });   // clear stale renders
   mkdirSync(out, { recursive: true });

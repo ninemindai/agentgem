@@ -1403,7 +1403,8 @@ async function wsRender(target){
   tree.innerHTML = `<p class="d">Rendering ${esc(target)}…</p>`;
   let r;
   try {
-    const res = await fetch("/api/workspace/render", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: wsCurrent, target }) });
+    const body = { name: wsCurrent, target, ...(target === "a2a" && a2aServerMode ? { a2aServer: true } : {}) };
+    const res = await fetch("/api/workspace/render", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     r = await res.json();
   } catch {

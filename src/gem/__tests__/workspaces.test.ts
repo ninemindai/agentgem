@@ -47,6 +47,12 @@ describe("workspaces", () => {
     expect(() => createWorkspace("dup", gem([skill("b")]))).toThrow(/already exists/i);
   });
 
+  it("renderTarget threads MaterializeOpts so a2a server mode reaches disk (not just card-only)", () => {
+    createWorkspace("a2asrv", gem([skill("review"), instr()]));
+    expect(renderTarget("a2asrv", "a2a").files["src/server.ts"]).toBeUndefined();
+    expect(renderTarget("a2asrv", "a2a", { a2aServer: true }).files["src/server.ts"]).toContain("@a2a-js/sdk");
+  });
+
   it("renderTarget writes .targets/<target>/ and clears stale files on re-render", () => {
     createWorkspace("rw", gem([skill("review"), instr()]));
     const r = renderTarget("rw", "eve");

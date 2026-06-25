@@ -244,7 +244,7 @@ export interface InstallPlan {
 }
 
 export async function resolveInstall(args: {
-  refs: string[]; mode: "materialize" | "workspace"; target?: TargetId; source: RegistrySource;
+  refs: string[]; mode: "materialize" | "workspace"; target?: TargetId; source: RegistrySource; a2aServer?: boolean;
 }): Promise<{ plan: InstallPlan; gem: Gem }> {
   const index = await args.source.getIndex();
   const graph = resolveGraph(args.refs, index);
@@ -258,7 +258,7 @@ export async function resolveInstall(args: {
   };
   if (args.mode === "materialize") {
     if (!args.target) throw new Error("materialize mode requires a target harness id");
-    plan.materialize = materialize(gem, args.target);
+    plan.materialize = materialize(gem, args.target, { a2aServer: args.a2aServer });
   }
   return { plan, gem };
 }

@@ -14,7 +14,7 @@ import { readGemArchive } from "./gem/archive.js";
 
 const InventoryInput = z.object({ dir: z.string().optional(), projects: z.array(z.string()).optional() });
 const GemInput = z.object({ selection: GemSelectionSchema, name: z.string().optional(), dir: z.string().optional(), projects: z.array(z.string()).optional() });
-const RegistryRefsInput = z.object({ refs: z.array(z.string()).min(1), mode: z.enum(["materialize", "workspace"]), target: z.string().optional() });
+const RegistryRefsInput = z.object({ refs: z.array(z.string()).min(1), mode: z.enum(["materialize", "workspace"]), target: z.string().optional(), a2aServer: z.boolean().optional() });
 const RegistryPublishInput = z.object({ workspace: z.string(), scope: z.string(), name: z.string().optional(), version: z.string(), dependencies: z.array(z.string()).optional() });
 
 function registrySourceOrThrow() {
@@ -57,14 +57,14 @@ export class GemTools {
   @tool("registry_resolve", { description: "Resolve registry refs into an install plan (items, artifacts, required secrets, and a materialize preview for a target). No writes.", input: RegistryRefsInput })
   async registryResolve(input: z.infer<typeof RegistryRefsInput>) {
     const { source } = registrySourceOrThrow();
-    const { plan } = await resolveInstall({ refs: input.refs, mode: input.mode, target: input.target as TargetId | undefined, source });
+    const { plan } = await resolveInstall({ refs: input.refs, mode: input.mode, target: input.target as TargetId | undefined, source, a2aServer: input.a2aServer });
     return plan;
   }
 
   @tool("registry_install", { description: "Resolve + merge registry refs, returning the merged Gem and install plan. (Disk/workspace placement is performed via the REST /registry/install endpoint.)", input: RegistryRefsInput })
   async registryInstall(input: z.infer<typeof RegistryRefsInput>) {
     const { source } = registrySourceOrThrow();
-    const { plan, gem } = await resolveInstall({ refs: input.refs, mode: input.mode, target: input.target as TargetId | undefined, source });
+    const { plan, gem } = await resolveInstall({ refs: input.refs, mode: input.mode, target: input.target as TargetId | undefined, source, a2aServer: input.a2aServer });
     return { plan, gem };
   }
 

@@ -342,7 +342,7 @@ export const CreateWorkspaceRequestSchema = z.object({
   version: z.string().optional(),
 });
 export const WorkspaceQuerySchema = z.object({ name: z.string() });
-export const RenderRequestSchema = z.object({ name: z.string(), target: TargetIdSchema });
+export const RenderRequestSchema = z.object({ name: z.string(), target: TargetIdSchema, a2aServer: z.boolean().optional() });
 export const WorkspaceNameRequestSchema = z.object({ name: z.string() });
 export const ListWorkspacesResponseSchema = z.object({ workspaces: z.array(WorkspaceSummarySchema) });
 export const DeleteWorkspaceResponseSchema = z.object({ deleted: z.string() });
@@ -448,6 +448,7 @@ export const RegistryResolveRequestSchema = z.object({
   refs: z.array(z.string()).min(1),
   mode: z.enum(["materialize", "workspace"]),
   target: TargetIdSchema.optional(),
+  a2aServer: z.boolean().optional(),
 });
 const InstallPlanSchema = z.object({
   items: z.array(z.object({ key: z.string(), version: z.string() })),
@@ -467,6 +468,7 @@ export const RegistryInstallRequestSchema = z.object({
   target: TargetIdSchema.optional(),
   dest: z.string().optional(),
   workspaceName: z.string().optional(),
+  a2aServer: z.boolean().optional(),
 });
 export const RegistryInstallResponseSchema = z.object({
   plan: InstallPlanSchema,
