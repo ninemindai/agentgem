@@ -4,7 +4,7 @@
 // artifacts are skipped with a reason. Materialize re-renders an already-redacted Gem; the
 // runner rebinds real secrets from gem.requiredSecrets at install.
 import type {
-  Gem, ArtifactType, SecretRequirement,
+  Gem, ArtifactType, SecretRequirement, SecretRef,
   SkillArtifact, McpServerArtifact, InstructionsArtifact, HookArtifact,
 } from "./types.js";
 import { tomlMcpServers } from "./toml.js";
@@ -53,6 +53,18 @@ const fluePascal = (name: string): string =>
 const skillFlueMd = (a: SkillArtifact): FileTree => ({ [`src/skills/${safePathSegment(a.name)}/SKILL.md`]: a.content });
 
 const rendered = (files: FileTree): MaterializeResult => ({ files, skipped: [] });
+
+// MCP header secrets -> [headerName, envVarName] entries, Authorization first. Shared by the HTTP/SSE
+// renderers (flue / openai-sandbox / a2a); the env-var NAME is emitted, never a value. Callers that
+// require header-only auth check separately for a non-`headers.` secret (the unsupported case).
+const headerSecretEntries = (refs: SecretRef[]): (readonly [string, string])[] => {
+  const authorization = refs.find((r) => r.location.toLowerCase() === "headers.authorization");
+  return [
+    ...(authorization ? [["Authorization", authorization.name] as const] : []),
+    ...refs.filter((r) => /^headers\./i.test(r.location) && r !== authorization)
+          .map((r) => [r.location.slice("headers.".length), r.name] as const),
+  ];
+};
 
 // ── shared convention renderers ──
 const skillSkillMd = (a: SkillArtifact): FileTree => ({ [`skills/${safePathSegment(a.name)}/SKILL.md`]: a.content });
@@ -262,13 +274,7 @@ function escapeTemplate(s: string): string {
 // env var name, never a value). stdio -> a localhost connection plus a generated proxy runner under
 // proxies/ that bridges the stdio server to HTTP (same mechanism as Eve).
 const flueConnection = (server: McpServerArtifact, url: string): string => {
-  const refs = server.secretRefs ?? [];
-  const authorization = refs.find((r) => r.location.toLowerCase() === "headers.authorization");
-  const headerEntries: (readonly [string, string])[] = [
-    ...(authorization ? [["Authorization", authorization.name] as const] : []),
-    ...refs.filter((r) => /^headers\./i.test(r.location) && r !== authorization)
-          .map((r) => [r.location.slice("headers.".length), r.name] as const),
-  ];
+  const headerEntries = headerSecretEntries(server.secretRefs ?? []);
   const transport = server.transport === "sse" ? `,\n  transport: "sse"` : "";
   const headers = headerEntries.length
     ? `,\n  headers: { ${headerEntries.map(([h, env]) => `${JSON.stringify(h)}: process.env[${JSON.stringify(env)}]!`).join(", ")} }`
@@ -390,11 +396,7 @@ const sandboxMcpServer = (s: McpServerArtifact): SandboxServer => {
     const refs = s.secretRefs ?? [];
     const unsupported = refs.find((r) => !/^headers\./i.test(r.location));
     if (unsupported) return { skip: `OpenAI sandbox cannot map secret at ${unsupported.location}` };
-    const authorization = refs.find((r) => r.location.toLowerCase() === "headers.authorization");
-    const headerEntries: (readonly [string, string])[] = [
-      ...(authorization ? [["Authorization", authorization.name] as const] : []),
-      ...refs.filter((r) => /^headers\./i.test(r.location) && r !== authorization).map((r) => [r.location.slice("headers.".length), r.name] as const),
-    ];
+    const headerEntries = headerSecretEntries(refs);
     const requestInit = headerEntries.length
       ? `, requestInit: { headers: { ${headerEntries.map(([h, e]) => `${JSON.stringify(h)}: process.env[${JSON.stringify(e)}]!`).join(", ")} } }`
       : "";
@@ -615,12 +617,7 @@ const a2aMcpClient = (s: McpServerArtifact): A2AClient => {
     const refs = s.secretRefs ?? [];
     const unsupported = refs.find((r) => !/^headers\./i.test(r.location));
     if (unsupported) return { skip: `A2A (AI SDK) cannot map secret at ${unsupported.location}` };
-    const authorization = refs.find((r) => r.location.toLowerCase() === "headers.authorization");
-    const headerEntries: (readonly [string, string])[] = [
-      ...(authorization ? [["Authorization", authorization.name] as const] : []),
-      ...refs.filter((r) => /^headers\./i.test(r.location) && r !== authorization)
-            .map((r) => [r.location.slice("headers.".length), r.name] as const),
-    ];
+    const headerEntries = headerSecretEntries(refs);
     const headers = headerEntries.length
       ? `, headers: { ${headerEntries.map(([h, e]) => `${JSON.stringify(h)}: process.env[${JSON.stringify(e)}]!`).join(", ")} }`
       : "";
