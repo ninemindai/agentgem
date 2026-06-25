@@ -218,11 +218,10 @@
       exist," and only reading the real <code>~/.hermes/config.yaml</code> surfaced it.</p>
 
     <h3>Day 9 · going public</h3>
-    <p>A website, a README, and some careful git surgery. To scrub an old email from public history, the
-      repo's commits were rewritten to a single clean authoring identity. Then came the realization worth
-      saving to memory: a force-push <em>doesn't</em> actually remove unreachable commits from GitHub's
-      object store; only recreating the repo fresh does. So the repo was recreated. AgentGem went public
-      and shipped to npm as <code>@ninemind/agentgem</code>. The website taught its own lesson.
+    <p>A website, a README, and the open-source prep. One lesson from the git side is worth saving to
+      memory: a force-push <em>doesn't</em> remove unreachable commits from GitHub's object store, so if
+      you ever need history truly gone, a force-push isn't enough. AgentGem went public and shipped to npm
+      as <code>@ninemind/agentgem</code>. The website taught its own lesson.
       <strong>Lead with the outcome, not the build process.</strong> A five-step workflow rail read as
       intimidating, so it became a three-beat <em>You've got an agent → Share it → Profit</em>.</p>
     <p>Putting the site online turned into its own small story. <code>agentgem.ninemind.ai</code> runs as
@@ -233,10 +232,9 @@
       Worker config sets <code>custom_domain = true</code>; one <code>wrangler deploy</code> then
       provisions the proxied DNS record and the edge TLS cert together, with no manual DNS step. A GitHub
       Action redeploys on every push to <code>website/</code> or <code>docs/</code>, authenticated by a
-      scoped <code>CLOUDFLARE_API_TOKEN</code> (Workers Scripts edit, plus DNS and SSL edit on the zone).
-      The one operational scar lives in memory: that token didn't survive the repo recreate, so the live
-      site keeps running but future auto-deploys need it re-added. Cloudflare actually shows up twice in
-      the project, because it's also a deploy target: a built Gem can be pushed to Cloudflare Workers via
+      scoped Cloudflare API token (Workers Scripts edit, plus DNS and SSL edit on the zone). Cloudflare
+      actually shows up twice in the project, because it's also a deploy target: a built Gem can be pushed
+      to Cloudflare Workers via
       <code>flue build --target cloudflare</code> and the same <code>wrangler deploy</code>.</p>
 
     <h3>Day 10–11 · strategy, a desktop app, and the agent inside the agent</h3>
