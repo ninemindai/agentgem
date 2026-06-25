@@ -4,3 +4,4 @@ dist/
 .env
 sdd/
 website/dist/
+.DS_Store
