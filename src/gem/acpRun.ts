@@ -182,12 +182,20 @@ export async function runGemWithAgent(opts: RunGemOptions): Promise<GemRunOutcom
 }
 
 /**
- * Real connect: route through the shared adapter plumbing in tool-capable mode
- * (auto-allow permissions — the testbed dir is the blast-radius boundary) and
- * fold each update into a RunResult via applyUpdate, capturing the tool trace.
+ * Real connect: route through the shared adapter plumbing and fold each update into a RunResult via
+ * applyUpdate, capturing the tool trace.
+ *
+ * SECURITY: permission is "deny" by default. Auto-allow grants the agent's tool calls — including
+ * shell — which run with the user's full privileges (the run dir is only the cwd, NOT a sandbox, so
+ * it does NOT bound the blast radius). Auto-allow is therefore opt-in: set AGENTGEM_GEM_RUN_AUTOALLOW=1
+ * to enable it for a trusted local session. Combined with the loopback origin guard (cross-site
+ * requests are rejected) and the server-derived run dir, this keeps a malicious browser tab from
+ * driving a fully-permissioned local agent. A real isolation boundary (container/sandbox) is the
+ * stronger follow-up that would let auto-allow be safe by default.
  */
 export const defaultRunConnectFn: RunConnectFn = async (descriptor) => {
-  const raw = await connectAcpAdapter(descriptor, { clientName: "agentgem-gem-runner", permission: "allow" });
+  const permission = process.env.AGENTGEM_GEM_RUN_AUTOALLOW === "1" ? "allow" : "deny";
+  const raw = await connectAcpAdapter(descriptor, { clientName: "agentgem-gem-runner", permission });
   const ctx: RunCtx = {
     async open(cwd: string) {
       const session = await raw.open(cwd);

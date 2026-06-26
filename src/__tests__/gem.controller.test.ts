@@ -79,16 +79,16 @@ describe("POST /api/gem/run", () => {
 
   it("materializes the gem and returns the agent run + verification", async () => {
     const archiveDir = mkdtempSync(join(tmpdir(), "gem-arc-"));
-    const runDir = mkdtempSync(join(tmpdir(), "gem-run-"));
+    const runDir = join(agentgemHomeDir, ".agentgem", "runs", "qa-gem"); // server-derived from gem.name
     writeArchiveDir(archiveDir, writeGemArchive(gem).files);
     setRunConnectFnForTests(fakeRun);
     try {
       const r = await client.post("/api/gem/run").send({
         archivePath: archiveDir,
-        runDir,
         task: "run qa",
         expectations: { expectTools: ["qa"], expectText: "done" },
       }).expect(200);
+      expect(r.body.dir).toBe(runDir);
       expect(r.body.run.ok).toBe(true);
       expect(r.body.run.result.toolCalls[0].title).toBe("Skill(qa)");
       expect(r.body.materialized.written.some((w: { name: string }) => w.name === "qa")).toBe(true);
@@ -102,12 +102,30 @@ describe("POST /api/gem/run", () => {
     }
   });
 
+  it("ignores a client-supplied runDir (path-injection guard) and uses the server-derived dir", async () => {
+    const archiveDir = mkdtempSync(join(tmpdir(), "gem-arc-"));
+    const evil = join(tmpdir(), "agem-evil-injection-target"); // attacker-chosen path: must never be written
+    const serverDir = join(agentgemHomeDir, ".agentgem", "runs", "qa-gem");
+    writeArchiveDir(archiveDir, writeGemArchive(gem).files);
+    setRunConnectFnForTests(fakeRun);
+    try {
+      const r = await client.post("/api/gem/run").send({ archivePath: archiveDir, runDir: evil, task: "x" }).expect(200);
+      expect(r.body.dir).toBe(serverDir);  // server-derived, NOT the attacker-supplied path
+      expect(existsSync(evil)).toBe(false); // nothing materialized into the injected path
+    } finally {
+      setRunConnectFnForTests(null);
+      rmSync(archiveDir, { recursive: true, force: true });
+      rmSync(serverDir, { recursive: true, force: true });
+      rmSync(evil, { recursive: true, force: true });
+    }
+  });
+
   it("POST /api/gem/run/prepare materializes and returns an opaque runId mapping to the dir", async () => {
     const archiveDir = mkdtempSync(join(tmpdir(), "gem-arc-"));
-    const runDir = mkdtempSync(join(tmpdir(), "gem-prep-"));
+    const runDir = join(agentgemHomeDir, ".agentgem", "runs", "qa-gem"); // server-derived from gem.name
     writeArchiveDir(archiveDir, writeGemArchive(gem).files);
     try {
-      const r = await client.post("/api/gem/run/prepare").send({ archivePath: archiveDir, runDir }).expect(200);
+      const r = await client.post("/api/gem/run/prepare").send({ archivePath: archiveDir }).expect(200);
       expect(typeof r.body.runId).toBe("string");
       expect(r.body.runDir).toBe(runDir);
       expect(r.body.materialized.written.some((w: { name: string }) => w.name === "qa")).toBe(true);
@@ -121,16 +139,16 @@ describe("POST /api/gem/run", () => {
   });
 
   it("builds the gem from a selection (no archive) and runs it", async () => {
-    const runDir = mkdtempSync(join(tmpdir(), "gem-run-sel-"));
+    const runDir = join(agentgemHomeDir, ".agentgem", "runs", "gem"); // default gem name -> "gem"
     setRunConnectFnForTests(fakeRun);
     try {
       const r = await client.post("/api/gem/run").send({
         selection: { skills: ["review"] },
         dir,                       // the test's global config home (has the "review" skill)
-        runDir,
         task: "run review",
         agent: "claude",
       }).expect(200);
+      expect(r.body.dir).toBe(runDir);
       expect(r.body.run.ok).toBe(true);
       expect(r.body.materialized.written.some((w: { name: string }) => w.name === "review")).toBe(true);
       expect(existsSync(join(runDir, ".claude", "skills", "review", "SKILL.md"))).toBe(true);
