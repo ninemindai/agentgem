@@ -24,5 +24,18 @@ describe("channel materialize", () => {
     const r = materialize(gemWith("slack"), "flue");
     expect(Object.keys(r.files).some((p) => p.includes("channels/slack"))).toBe(false);
     expect(r.skipped).toContainEqual(expect.objectContaining({ artifact: "slack", type: "channel" }));
+    expect(r.skipped.find((s) => s.artifact === "slack" && s.type === "channel")?.reason).toBe("channel unsupported on flue");
+  });
+
+  it("skips a declared channel named 'eve' (reserved) but still emits the web channel", () => {
+    const gem = { name: "demo", createdFrom: "test", checks: [], requiredSecrets: [], artifacts: [makeChannelArtifact("slack", "eve")] };
+    const r = materialize(gem, "eve");
+    // the always-on web channel from compose is still present...
+    expect(r.files["agent/channels/eve.ts"]).toBeDefined();
+    // ...and it is the eveChannel web scaffold, NOT the slack scaffold (the declared channel did not clobber it)
+    expect(r.files["agent/channels/eve.ts"]).not.toContain("slackChannel");
+    // the reserved declared channel is reported skipped with a reason mentioning 'reserved'
+    expect(r.skipped).toContainEqual(expect.objectContaining({ artifact: "eve", type: "channel" }));
+    expect(r.skipped.find((s) => s.artifact === "eve" && s.type === "channel")?.reason).toMatch(/reserved/i);
   });
 });
