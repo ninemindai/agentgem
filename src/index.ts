@@ -19,6 +19,7 @@ import { GemController } from "./gem.controller.js";
 import { GemTools } from "./gem.tools.js";
 import { streamWorkflowAnalyze } from "./workflowStream.js";
 import { streamGemRun } from "./gemRunStream.js";
+import { originGuard } from "./originGuard.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 function pageHtml(): string {
@@ -35,6 +36,10 @@ export async function createApp(port: number): Promise<RestApplication> {
   app.configure("servers.MCPServer").to({ name: "agentgem", version: "0.1.0", transports: { stdio: false } });
   app.restController(GemController);
   app.service(GemTools);
+  // CSRF / drive-by guard: reject browser-initiated cross-site requests to the loopback API
+  // (controller routes). Same-origin UI and non-browser clients (CLI/MCP/tests) pass. Mounted in
+  // the framework middleware chain so it runs before controller dispatch.
+  app.expressMiddleware("middleware.originGuard", originGuard);
   await installExplorer(app, { title: "agentgem API" });
   await installMcpHttp(app);
   const server = await app.restServer;
@@ -42,11 +47,12 @@ export async function createApp(port: number): Promise<RestApplication> {
   server.expressApp.get("/", (_req, res) => res.type("html").send(html));
   // SSE progress stream for workflow analysis (raw Express — the decorator
   // framework only returns single JSON bodies). The POST /api/workflow/analyze
-  // route stays for programmatic/test callers.
-  server.expressApp.get("/api/workflow/analyze/stream", streamWorkflowAnalyze);
+  // route stays for programmatic/test callers. originGuard is applied per-route because these raw
+  // routes are registered directly on expressApp, outside the controller dispatch chain.
+  server.expressApp.get("/api/workflow/analyze/stream", originGuard, streamWorkflowAnalyze);
   // SSE progress stream for running a Gem with a local ACP agent (materialize →
   // run → tool/token deltas → done). POST /api/gem/run stays for programmatic callers.
-  server.expressApp.get("/api/gem/run/stream", streamGemRun);
+  server.expressApp.get("/api/gem/run/stream", originGuard, streamGemRun);
   return app;
 }
 

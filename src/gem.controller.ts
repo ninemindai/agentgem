@@ -1,6 +1,6 @@
 // src/gem.controller.ts
 import { existsSync, writeFileSync, readFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, resolve, sep } from "node:path";
 import type { z } from "zod";
 import { api, get, post } from "@agentback/openapi";
 import { introspectConfig, introspectProject } from "./gem/introspect.js";
@@ -66,6 +66,19 @@ import { searchIndex } from "./gem/search.js";
 import { githubRegistrySource, githubRegistryPublisher, registryConfigFromEnv, registryReady } from "./gem/registryGithub.js";
 import { resolveDirs, resolveProject, agentgemHome } from "./resolveDir.js";
 import { pickFolder } from "./pickFolder.js";
+
+// Server-derived run directory for a Gem. NEVER taken from client input: a caller-controlled path is
+// a path-injection sink, and the ACP agent then runs there with tool permissions. The gem name is
+// sanitized to one path segment; the sanitizer keeps '.', so a name of ".." must not escape — we
+// assert the resolved path stays inside the runs root.
+function deriveRunDir(gemName: string): string {
+  let safeName = gemName.replace(/[^A-Za-z0-9._-]/g, "-");
+  if (safeName === "" || safeName === "." || safeName === "..") safeName = "gem";
+  const runsRoot = resolve(agentgemHome(), ".agentgem", "runs");
+  const runDir = resolve(runsRoot, safeName);
+  if (!runDir.startsWith(runsRoot + sep)) throw new Error("derived run dir escaped the runs root");
+  return runDir;
+}
 
 @api({ basePath: "/api" })
 export class GemController {
@@ -337,8 +350,7 @@ export class GemController {
       ? readGemArchive(readArchiveDir(b.archivePath))
       : buildGem(introspectAll(b.dir, b.projects), b.selection!, { name: b.name ?? "gem", createdFrom: resolveDirs(b.dir).claudeDir });
     const agent = (b.agent ?? "claude") as AgentId;
-    const safeName = gem.name.replace(/[^A-Za-z0-9._-]/g, "-");
-    const runDir = b.runDir ?? join(agentgemHome(), ".agentgem", "runs", safeName);
+    const runDir = deriveRunDir(gem.name);
     const out = await materializeAndRunGem({ gem, dir: runDir, task: b.task, agent, expectations: b.expectations });
     return { dir: runDir, agent: out.agent, materialized: out.materialized, run: out.run, verification: out.verification };
   }
@@ -352,8 +364,7 @@ export class GemController {
       ? readGemArchive(readArchiveDir(b.archivePath))
       : buildGem(introspectAll(b.dir, b.projects), b.selection!, { name: b.name ?? "gem", createdFrom: resolveDirs(b.dir).claudeDir });
     const agent = (b.agent ?? "claude") as AgentId;
-    const safeName = gem.name.replace(/[^A-Za-z0-9._-]/g, "-");
-    const runDir = b.runDir ?? join(agentgemHome(), ".agentgem", "runs", safeName);
+    const runDir = deriveRunDir(gem.name);
     const materialized = materializeGemToTestbed(gem, runDir, AGENT_ADAPTERS[agent].flavor);
     const runId = registerRun(runDir, agent);
     return { runId, runDir, agent, materialized };

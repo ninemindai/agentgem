@@ -485,7 +485,9 @@ export const GemRunRequestSchema = z.object({
   dir: z.string().optional(),                              // introspect home (selection mode), like /materialize
   projects: z.array(z.string()).optional(),
   task: z.string(),
-  runDir: z.string().optional(),                          // where to materialize + run; defaults under AGENTGEM_HOME
+  // runDir is intentionally NOT accepted from the client: a caller-controlled path is a path-injection
+  // sink (and the agent runs there with tool permissions). The server always derives it under
+  // AGENTGEM_HOME from the gem name. See gem.controller runGem/prepareGemRun.
   agent: z.enum(["claude", "codex"]).optional(),           // which local ACP adapter to drive
   expectations: GemExpectationsSchema.optional(),
 }).refine((d) => d.selection !== undefined || d.archivePath !== undefined, {
@@ -507,7 +509,7 @@ export const GemRunPrepareRequestSchema = z.object({
   name: z.string().optional(),
   dir: z.string().optional(),
   projects: z.array(z.string()).optional(),
-  runDir: z.string().optional(),
+  // runDir is intentionally NOT accepted from the client (see GemRunRequestSchema). Server-derived only.
   agent: z.enum(["claude", "codex"]).optional(),
 }).refine((d) => d.selection !== undefined || d.archivePath !== undefined, {
   message: "provide either selection or archivePath",
