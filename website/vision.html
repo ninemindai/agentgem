@@ -98,6 +98,91 @@
 </section>
 
 <section class="wrap" style="padding:64px 0 8px">
+  <p class="eyebrow">Render vs. distill</p>
+  <h2 class="sec-title">Claude renders your session. A Gem distills it.</h2>
+  <p class="lead" style="max-width:680px;margin:0 auto 4px;text-align:center;color:var(--ink-2);font-size:16px">Anthropic's new <a href="https://code.claude.com/docs/en/artifacts">artifacts</a> turn a session into a page on their servers — <em>"a capture of work,"</em> viewable only inside your org. Useful to look at; it leaves the agent behind. A Gem distills the same session into the <b>capability itself</b> — and you choose how far it travels.</p>
+  <div class="artifact-stage reveal-host">
+    <svg viewBox="0 0 1080 560" role="img" aria-labelledby="agt agd">
+      <title id="agt">The rings of reach</title>
+      <desc id="agd">A gem core radiating three rings — your team, your infrastructure, the world. Anthropic's artifact stops at the innermost boundary.</desc>
+      <defs>
+        <radialGradient id="ag-gem" cx="50%" cy="42%" r="65%">
+          <stop offset="0%" stop-color="#f7e6bb"/><stop offset="44%" stop-color="#d9a441"/><stop offset="100%" stop-color="#9a6e1d"/>
+        </radialGradient>
+        <filter id="ag-soft" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="9"/></filter>
+      </defs>
+      <g>
+        <circle class="ag-glow" cx="340" cy="280" r="250" fill="none" stroke="#d9a441" stroke-width="1" opacity="0.2" filter="url(#ag-soft)"/>
+        <!-- Ring 3 — the world / roadmap (gold, dashed, rotating) -->
+        <g id="ag-r3" class="reveal">
+          <g class="ag-spin"><circle cx="340" cy="280" r="250" fill="none" stroke="#d9a441" stroke-width="1.5" stroke-dasharray="2 9" opacity="0.85"/></g>
+          <circle cx="340" cy="30" r="4" fill="#d9a441"/>
+        </g>
+        <!-- Ring 2 — your infra (green, shipped) -->
+        <g id="ag-r2" class="reveal">
+          <circle cx="340" cy="280" r="185" fill="none" stroke="#8fc7a0" stroke-width="1.75" opacity="0.85"/>
+          <circle cx="340" cy="95" r="4.5" fill="#8fc7a0"/>
+        </g>
+        <!-- Ring 1 — your team (green, shipped) -->
+        <g id="ag-r1" class="reveal">
+          <circle cx="340" cy="280" r="125" fill="none" stroke="#8fc7a0" stroke-width="2"/>
+          <circle cx="340" cy="155" r="5" fill="#8fc7a0"/>
+        </g>
+        <!-- Anthropic's wall + left callout -->
+        <g id="ag-wall" class="reveal">
+          <circle cx="340" cy="280" r="92" fill="none" stroke="#e08a6f" stroke-width="2.5" stroke-dasharray="7 6" opacity="0.95"/>
+          <g font-family="JetBrains Mono, monospace">
+            <line id="ag-ldw" class="ag-leader" x1="222" y1="282" x2="247" y2="280" stroke="#e08a6f" stroke-width="1.25" opacity="0.75"/>
+            <circle cx="248" cy="280" r="2.5" fill="#e08a6f"/>
+            <rect x="22" y="244" width="194" height="78" rx="8" fill="rgba(20,17,13,0.72)" stroke="rgba(224,138,111,0.32)"/>
+            <rect x="22" y="244" width="3" height="78" rx="1.5" fill="#e08a6f"/>
+            <text x="40" y="266" fill="#e08a6f" font-size="11.5" letter-spacing="0.10em">ANTHROPIC'S ARTIFACT</text>
+            <text x="40" y="283" fill="#e08a6f" font-size="11.5" letter-spacing="0.10em">STOPS AT THE CORE</text>
+            <text x="40" y="305" fill="#c08977" font-size="9.5">"sharing stops at your</text>
+            <text x="40" y="317" fill="#c08977" font-size="9.5">organization"</text>
+          </g>
+        </g>
+        <!-- Gem core -->
+        <g id="ag-core" class="reveal">
+          <circle cx="340" cy="280" r="62" fill="url(#ag-gem)" opacity="0.45" filter="url(#ag-soft)"/>
+          <g transform="translate(340 280)">
+            <polygon points="0,-46 40,-14 24,40 -24,40 -40,-14" fill="url(#ag-gem)" stroke="#fbeec4" stroke-width="1.1"/>
+            <polygon points="0,-46 40,-14 0,-2" fill="#fbeec4" opacity="0.6"/>
+            <polygon points="0,-46 -40,-14 0,-2" fill="#fff6e0" opacity="0.85"/>
+            <polygon points="-40,-14 -24,40 0,-2" fill="#e0b25e" opacity="0.7"/>
+            <polygon points="40,-14 24,40 0,-2" fill="#c1922f" opacity="0.85"/>
+            <polygon points="-24,40 24,40 0,-2" fill="#a07620" opacity="0.92"/>
+          </g>
+          <text x="340" y="348" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" letter-spacing="0.18em" fill="#e8c887">YOUR GEM</text>
+        </g>
+        <!-- Right-hand labels -->
+        <g>
+          <line id="ag-ld1" class="ag-leader" x1="465" y1="280" x2="690" y2="155" stroke="#8fc7a0" stroke-width="1.25" opacity="0.55"/>
+          <g id="ag-l1" class="ag-lbl reveal" transform="translate(708 130)" font-family="JetBrains Mono, monospace">
+            <text x="0" y="0" font-family="Fraunces, serif" font-size="21" font-weight="600" fill="#efe7d4">Your team</text>
+            <text x="0" y="22" font-size="12.5" fill="#9c907a">They run it — not read a page.</text>
+            <text x="0" y="41" font-size="10.5" letter-spacing="0.14em" fill="#8fc7a0">● SHIPPED</text>
+          </g>
+          <line id="ag-ld2" class="ag-leader" x1="525" y1="280" x2="690" y2="265" stroke="#8fc7a0" stroke-width="1.25" opacity="0.55"/>
+          <g id="ag-l2" class="ag-lbl reveal" transform="translate(708 248)" font-family="JetBrains Mono, monospace">
+            <text x="0" y="0" font-family="Fraunces, serif" font-size="21" font-weight="600" fill="#efe7d4">Your infra</text>
+            <text x="0" y="22" font-size="12.5" fill="#9c907a">Your servers. Your boundary.</text>
+            <text x="0" y="41" font-size="10.5" letter-spacing="0.14em" fill="#8fc7a0">● SHIPPED</text>
+          </g>
+          <line id="ag-ld3" class="ag-leader" x1="585" y1="280" x2="690" y2="378" stroke="#d9a441" stroke-width="1.25" opacity="0.5"/>
+          <g id="ag-l3" class="ag-lbl reveal" transform="translate(708 362)" font-family="JetBrains Mono, monospace">
+            <text x="0" y="0" font-family="Fraunces, serif" font-size="21" font-weight="600" fill="#efe7d4">The world</text>
+            <text x="0" y="22" font-size="12.5" fill="#9c907a">Publish it. Get paid.</text>
+            <text x="0" y="41" font-size="10.5" letter-spacing="0.14em" fill="#d9a441">◌ ROADMAP — AgentGem Cloud</text>
+          </g>
+        </g>
+      </g>
+    </svg>
+    <p class="artifact-cap">Artifacts <b>render</b> so you understand · Gems <b>distill</b> so you can run, share &amp; sell.</p>
+  </div>
+</section>
+
+<section class="wrap" style="padding:64px 0 8px">
   <p class="eyebrow">Why this works</p>
   <h2 class="sec-title">The primitives are already half-built.</h2>
   <div class="cards">
@@ -154,6 +239,20 @@
     <span class="note">built on <a href="https://agentback.dev">AgentBack</a></span>
   </div>
 </footer>
+
+<script>
+/* Play the rings diagram when it scrolls into view (not on page load — it sits mid-page). */
+(function(){
+  var s=document.querySelector('.artifact-stage');
+  if(!s)return;
+  if(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches){s.classList.add('in');return;}
+  if(!('IntersectionObserver'in window)){s.classList.add('in');return;}
+  var io=new IntersectionObserver(function(es){
+    es.forEach(function(e){if(e.isIntersecting){s.classList.add('in');io.disconnect();}});
+  },{threshold:0.35});
+  io.observe(s);
+})();
+</script>
 
 </body>
 </html>
