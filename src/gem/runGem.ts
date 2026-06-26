@@ -40,7 +40,7 @@ export function resolveRun(id: string): { dir: string; agent: AgentId } | undefi
 export interface AgentAdapter { id: AgentId; descriptor: AgentDescriptor; flavor: TestbedFlavorId; validated: boolean }
 export const AGENT_ADAPTERS: Record<AgentId, AgentAdapter> = {
   claude: { id: "claude", descriptor: CLAUDE_RUN_AGENT, flavor: "claude", validated: true },
-  codex: { id: "codex", descriptor: { id: "codex", name: "Codex", command: ["codex-agent-acp"] }, flavor: "codex", validated: false },
+  codex: { id: "codex", descriptor: { id: "codex", name: "Codex", command: ["codex-acp"] }, flavor: "codex", validated: true },
 };
 
 // Partition a Gem's flat artifact list into the inventory shape importArtifacts wants.

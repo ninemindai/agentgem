@@ -459,7 +459,7 @@ export const GemRunRequestSchema = z.object({
   projects: z.array(z.string()).optional(),
   task: z.string(),
   runDir: z.string().optional(),                          // where to materialize + run; defaults under AGENTGEM_HOME
-  agent: z.enum(["claude", "codex"]).optional(),           // which local ACP adapter to drive (codex unvalidated)
+  agent: z.enum(["claude", "codex"]).optional(),           // which local ACP adapter to drive
   expectations: GemExpectationsSchema.optional(),
 }).refine((d) => d.selection !== undefined || d.archivePath !== undefined, {
   message: "provide either selection or archivePath",

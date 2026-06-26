@@ -100,7 +100,7 @@ describe("materializeAndRunGem", () => {
     const dir = tmp();
     const { connectFn, calls } = fakeAgent({ text: "", toolCalls: [] });
     await materializeAndRunGem({ gem, dir, task: "go", agent: "codex", connectFn });
-    expect(calls.command).toBe("codex-agent-acp");
+    expect(calls.command).toBe("codex-acp");
     // codex flavor writes skills under .agents/skills, not .claude/skills
     expect(existsSync(join(dir, ".agents", "skills", "qa", "SKILL.md"))).toBe(true);
   });
@@ -127,11 +127,12 @@ describe("run registry", () => {
 });
 
 describe("AGENT_ADAPTERS", () => {
-  it("maps each agent id to a descriptor + testbed flavor; only claude is validated", () => {
+  it("maps each agent id to a descriptor + testbed flavor; both adapters validated", () => {
     expect(AGENT_ADAPTERS.claude.flavor).toBe("claude");
     expect(AGENT_ADAPTERS.claude.descriptor.command).toContain("claude-agent-acp");
     expect(AGENT_ADAPTERS.claude.validated).toBe(true);
     expect(AGENT_ADAPTERS.codex.flavor).toBe("codex");
-    expect(AGENT_ADAPTERS.codex.validated).toBe(false);
+    expect(AGENT_ADAPTERS.codex.descriptor.command).toContain("codex-acp");
+    expect(AGENT_ADAPTERS.codex.validated).toBe(true);
   });
 });

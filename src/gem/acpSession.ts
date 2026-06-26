@@ -39,7 +39,7 @@ export async function connectAcpAdapter(
   descriptor: AgentDescriptor,
   opts: ConnectAdapterOptions,
 ): Promise<RawAcpConnection> {
-  const { client, ndJsonStream } = await import("@agentclientprotocol/sdk");
+  const { client, ndJsonStream, PROTOCOL_VERSION } = await import("@agentclientprotocol/sdk");
   const [bin, ...args] = descriptor.command;
   const child = spawn(bin, args, { stdio: ["pipe", "pipe", "inherit"], env: process.env });
   await new Promise<void>((resolve, reject) => {
@@ -55,6 +55,11 @@ export async function connectAcpAdapter(
   const output = Writable.toWeb(child.stdin!) as WritableStream<Uint8Array>;
   const connection: any = app.connect(ndJsonStream(output, input));
   const agentCtx: any = connection.agent;
+  // ACP requires an `initialize` handshake before any session/new. claude-agent-acp
+  // tolerated skipping it; codex-acp strictly rejects session/new with "Not
+  // initialized" (-32603) without it. We advertise no client capabilities we don't
+  // implement (no fs/terminal handlers) — both adapters write files directly.
+  await agentCtx.request("initialize", { protocolVersion: PROTOCOL_VERSION });
 
   return {
     async open(cwd: string) {
