@@ -1,6 +1,6 @@
 # Proposal: Skill distillation from session transcripts
 
-- **Status:** Proposal (draft for review)
+- **Status:** Proposal (draft for review — both H review blockers F1/F2 designed out; see §12)
 - **Date:** 2026-06-26
 - **Area:** workflow-aware Gem recommendation (`src/gem/workflowScan.ts`, `src/gem/acpRecommender.ts`, `src/workflowStream.ts`)
 - **Depends on:** the shipped Analyze pipeline (deterministic scan + ACP recommender); see [analyze.md](../analyze.md)
@@ -112,52 +112,82 @@ export interface ScanOptions {
 export function scanWorkflow(paths, inv, opts: ScanOptions = {}): WorkflowSignal
 ```
 
-When `retainSequences` is on, accumulate per session a capped, ordered list:
+When `retainSequences` is on, accumulate per session a capped, ordered list. Each
+step is scrubbed by the **field-aware scrubber** (§3a), which returns both a
+coarse `verb` (the safe, low-cardinality procedure token, e.g. `Bash:git commit`)
+and a minimal scrubbed `arg`:
 
 ```ts
 // in the assistant tool_use loop, the `else` branch (currently line 190-192):
 } else {
   bumpUnresolved(unresolved, name, "builtin");   // keep — count still useful
   if (opts.retainSequences && seq.length < SEQ_CAP_PER_SESSION) {
-    seq.push({ tool: name, arg: (opts.redact ?? redactDefault)(block.input) });
+    const { verb, arg } = (opts.scrub ?? scrubStep)(name, block.input);
+    seq.push({ tool: name, verb, arg });
   }
 }
 ```
 
-Add to `WorkflowSignal` (gated — empty when the option is off):
+Add to `WorkflowSignal` (both gated — empty when the option is off):
 
 ```ts
 sequences?: {
   root: string;
   sessions: {
-    steps: { tool: string; arg: string }[];
-    missionHint?: { task: string; outcome: string };   // §3b — redacted first-user / last-assistant
+    steps: { tool: string; verb: string; arg: string }[];
+    missionHint?: { task: string; outcome: string };   // §3b — scrubbed first-user / last-assistant
   }[];
 };
+// Builtin-aware recurrence — the distillation analogue of `shapes`, computed from
+// procedure verbs (NOT resolved inventory), so builtin-only sessions count (§3c).
+procedures?: { key: string; verbs: string[]; sessions: number; sampleSessionIdx: number }[];
 ```
 
 `SEQ_CAP_PER_SESSION` (~40) and a global cap bound prompt size on noisy sessions.
-Stays pure/total — a redactor that throws is caught and the step dropped + noted.
+Stays pure/total — a scrubber that throws is caught and the step dropped + noted.
 
-### 3a. Redaction (hard requirement)
+### 3a. The scrubber (resolves review finding F2)
 
-Builtin inputs contain bash commands, absolute paths, and pasted secrets. Route
-every retained `block.input` through a redactor BEFORE it lands in the signal —
-so it is redacted before it ever reaches the ACP agent or a written draft. The
-redactor is injected (testable) and defaults to the project redactor.
+Builtin inputs contain bash commands, absolute paths, file contents, and pasted
+secrets. The naive approach — feed `block.input` to `redactMcpConfig` — fails:
+it over-redacts (whole-string) yet under-detects (only `>=32`-char/keyword
+tokens), so it both destroys the procedure and leaks short secrets, URLs with
+`user:pass@host`, and file contents. **You cannot safely scrub arbitrary free
+text by blocklist.** So we invert it.
 
-> **Open risk (verified in review):** `src/gem/redact.ts` exports
-> `redactMcpConfig(config)`, which walks a structured object and redacts string
-> *values* that are high-entropy (`>=32` chars, `[A-Za-z0-9_-]` only) or sit under
-> secret-ish keys. `block.input` is object-shaped, so it *can* be fed through it —
-> BUT the fit is poor for transcript content:
-> - **Over-redacts**: a multi-word string containing one secret token is replaced
->   *whole* (`<redacted>`), destroying the surrounding command — i.e. the very
->   procedure we are trying to capture (`redact.ts:24-30`).
-> - **Under-detects**: misses secrets `<32` chars, secrets with `/ . :` (URLs,
->   `user:pass@host`), file *contents* read into context, and PII in paths.
-> This is genuinely new redaction surface — a free-text scrubber, not a reuse of
-> the config helper. Resolve before track 1.
+**Field-aware, default-deny extraction.** Instead of scrubbing whatever a tool
+sent, `scrubStep(tool, input)` keeps only an allowlisted, structural slice per
+known builtin and **drops everything else**. Output is `{ verb, arg }` — a coarse
+low-cardinality `verb` for recurrence (§3c) and a minimal scrubbed `arg` for the
+agent. Content fields are never retained.
+
+| tool | `verb` | `arg` kept | dropped (default-deny) |
+|------|--------|-----------|------------------------|
+| `Bash` | `Bash:<argv0> <subcmd>` (e.g. `Bash:git commit`) | command line, **token-scrubbed** + `$HOME`→`~` | — (command is the value; scrub in place) |
+| `Read`/`Grep`/`Glob` | `Read` / `Grep` / `Glob` | path/pattern, **path-redacted** | file contents, output |
+| `Edit`/`Write`/`NotebookEdit` | `Edit` / `Write` | `file_path`, **path-redacted** | `old_string` / `new_string` / `content` → `<N chars>` |
+| `Task`/agent spawns | `Task:<subagent_type>` | `description` (short), token-scrubbed | `prompt` (may carry pasted secrets) |
+| anything else | `<ToolName>` | — | entire input |
+
+The three primitives the scrubber composes, in order of safety:
+1. **Field allowlist** (above) — the load-bearing defense: unknown fields and all
+   content fields are dropped, not scrubbed. Removes the file-contents/PII class
+   entirely rather than hoping a regex catches it.
+2. **Path redaction** — rewrite `/Users/<u>/…` and other `$HOME` prefixes to `~/…`
+   and collapse to a repo-relative or basename form, so paths never carry a
+   username.
+3. **Token scrub** — a *token-level* (not whole-string) pass over the kept `arg`:
+   split on whitespace, replace any token that is high-entropy or matches the
+   secret keyword set with `<redacted>`, keeping the surrounding command intact.
+   This is `redact.ts`'s detector reused at token granularity — the one piece of
+   the existing helper that ports cleanly.
+
+Lives in a new `src/gem/scrub.ts` (not `redact.ts`, which stays the config-value
+redactor). Injected as `opts.scrub` for testing; pure/total; on any throw the step
+is dropped + noted. Residual risk: a secret pasted *inside* a Bash command that is
+neither high-entropy nor keyword-matched (e.g. a 12-char password) can survive in
+`arg` — mitigated by truncation, by `arg` being optional to the agent (the `verb`
+carries the procedure), and ultimately by the draft-only/human-review gate (§7).
 
 ### 3b. Mission orientation: cluster by intent, not just frequency
 
@@ -167,9 +197,11 @@ frequency (`workflowScan.ts:249,262`), which is blind to intent. Two sessions
 with the same artifact-set may be different missions; one mission may span several
 shapes. To capture *meaningful* Gem candidates we add a light intent signal:
 
-- When `retainSequences` is on, also capture per session a redacted **mission
+- When `retainSequences` is on, also capture per session a scrubbed **mission
   hint**: the first *genuine* user message (the task statement) and the last
-  assistant message (the outcome). Redact via the same redactor path.
+  assistant message (the outcome). Mission text is prose, so it gets the token
+  scrub + path redaction + hard truncation (§3a primitives 2–3) — the one place
+  free text is retained, kept short and low-detail on purpose.
 
 > **Open risk (verified against 232 real transcripts for this project):** "first
 > user message = the task" is wrong for most sessions. Empirically, 3 of 4 recent
@@ -184,15 +216,50 @@ shapes. To capture *meaningful* Gem candidates we add a light intent signal:
 > just without intent framing. Note `claudeTranscriptsForCwd` already excludes the
 > nested `subagents/` dir (non-recursive `readdirSync`), so most sidechains never
 > reach the scan — but defensively filtering `isSidechain` is still required.
-- The generative step receives `{ missionHint, redactedSequence, recurrence }`
+- The generative step receives `{ missionHint, scrubbedSequence, recurrence }`
   per candidate, so it distills the workflow *around the stated goal* rather than
-  around a co-occurrence cluster. The frequency `shapes` still drive the Phase-0
-  pre-filter (§4) — intent refines what a candidate *means*, frequency decides
-  whether it *recurs*.
+  around a co-occurrence cluster. The **procedure recurrence** (§3c) drives the
+  Phase-0 pre-filter (§4) — intent refines what a candidate *means*, recurrence
+  decides whether it *recurs*.
 
 This keeps the cheap deterministic gate intact while letting the agent name and
 scope each Gem by the mission it accomplished ("ship a sandboxed Gem-run
 backend") instead of by its tool fingerprint ("uses Bash + Edit + vitest").
+
+### 3c. Procedure recurrence (resolves review finding F1)
+
+The existing `shapes` / `coOccurrence` signals key on **resolved inventory names**
+only — `sessionNames` never includes builtins, so a session that did all its work
+in `Bash`/`Edit`/`Read` has `names.size === 0` and is dropped at
+`workflowScan.ts:253`. Those are precisely the sessions richest in distillable
+procedure. Driving Phase-0 off `shapes` would make distillation fire *only* on
+sessions that also happened to use a skill/MCP — defeating the motivation.
+
+Fix: a **separate recurrence signal computed from procedure verbs**, independent
+of inventory. For each session with a retained sequence, derive a canonical
+`procedureKey` from its ordered `verb` list:
+
+```ts
+// collapse consecutive duplicate verbs, drop pure-navigation noise (Read/Grep/Glob
+// runs), keep the action spine (Bash verbs, Edit/Write), then join.
+function procedureKey(steps: Step[]): string {
+  const spine = dedupeConsecutive(steps.map(s => s.verb))
+    .filter(v => !/^(Read|Grep|Glob)$/.test(v));
+  return spine.join(" > ");           // e.g. "Bash:git checkout > Edit > Bash:vitest > Bash:git commit"
+}
+```
+
+Group sessions by `procedureKey`, count frequency → `signal.procedures`. This is
+the builtin-aware analogue of `shapes`: `{ key, verbs, sessions, sampleSessionIdx }`,
+frequency-sorted, capped. Phase-0 (§4) filters on `procedure.sessions`, not
+`shape.sessions`.
+
+Cardinality is controlled by the coarse `verb` (`Bash:git commit`, not the full
+command), so genuinely-repeated procedures collapse to the same key while one-offs
+stay singletons. Exact-key grouping is deliberately simple and may under-cluster
+near-identical procedures (`vitest` vs `vitest run`); that is acceptable for a
+first cut — the ACP step merges near-duplicates, and a similarity-based clusterer
+(shingle + Jaccard) is a noted future refinement, not a blocker.
 
 ## 4. Phase-0 viability gate (deterministic pre-filter)
 
@@ -201,29 +268,26 @@ Phase-0 gate. Two of its three criteria are deterministic from the signal:
 
 | skillify criterion | deterministic check |
 |---|---|
-| "Will this be invoked 2+ times?" | `shape.sessions >= MIN_RECURRENCE` (default 2) — this is already a fact in `signal.shapes` |
-| ">20 lines of logic?" | retained sequence length ≥ `MIN_STEPS` (default ~4 distinct steps) |
+| "Will this be invoked 2+ times?" | `procedure.sessions >= MIN_RECURRENCE` (default 2) — from the builtin-aware `signal.procedures` (§3c), so builtin-only sessions count |
+| ">20 lines of logic?" | procedure spine length ≥ `MIN_STEPS` (default ~4 distinct verbs) |
 | "clear trigger phrase?" | deferred to the generative step (the agent proposes triggers; a candidate with none is dropped in validation) |
 
 ```ts
-export function distillCandidates(signal: WorkflowSignal): ShapeCandidate[] {
-  if (!signal.sequences) return [];
-  return signal.shapes
-    .filter(s => s.sessions >= MIN_RECURRENCE)
-    .map(s => attachSequences(s, signal.sequences))   // representative redacted run
-    .filter(c => c.steps.length >= MIN_STEPS);
+export function distillCandidates(signal: WorkflowSignal): ProcedureCandidate[] {
+  if (!signal.procedures || !signal.sequences) return [];
+  return signal.procedures
+    .filter(p => p.sessions >= MIN_RECURRENCE)
+    .filter(p => p.verbs.length >= MIN_STEPS)
+    .map(p => ({                                       // attach one representative scrubbed run + its mission hint
+      ...p,
+      sample: signal.sequences.sessions[p.sampleSessionIdx],
+    }));
 }
 ```
 
-A shape with `sessions: 1` never reaches the agent. Cheap, principled, and reuses
-data the scan already produces.
-
-> **Open risk (see review):** `signal.shapes` keys on *resolved inventory
-> artifacts* only — a session that did its work entirely in builtins
-> (`Bash`/`Edit`/`Read`) produces an **empty** shape and is dropped at
-> `workflowScan.ts:253`. Those are precisely the sessions richest in distillable
-> procedure. The Phase-0 recurrence signal therefore needs a builtin-aware shape
-> key, or distillation will mostly fire on sessions that *also* used skills/MCP.
+A procedure seen in only one session never reaches the agent. Cheap, principled,
+and — unlike the original `shapes`-based gate — fires on the builtin-only sessions
+that carry the most procedure (F1).
 
 ## 5. Generative ACP step
 
@@ -351,14 +415,17 @@ Leave behind (gbrain-specific overhead):
 
 ## 10. Build sequence
 
-1. Redaction: a free-text transcript scrubber (NOT a reuse of `redact.ts`'s
-   config-value redactor — see §3a). (tests)
-2. `scanWorkflow` `retainSequences` mode → `sequences` + per-session `missionHint`
-   (§3b) on `WorkflowSignal`, with a builtin-aware shape key (§4 risk). (tests:
-   extend `workflowScan.test.ts` — cap, redaction, mission-hint extraction,
-   builtin-only sessions, total/pure on bad redactor)
-3. `distillCandidates` Phase-0 filter (carries mission hint through). (tests:
-   recurrence + step thresholds)
+1. `src/gem/scrub.ts` — the field-aware, default-deny `scrubStep(tool, input)`
+   returning `{ verb, arg }` (§3a). (tests: per-tool allowlist, content fields
+   dropped, path redaction, token scrub leaves command intact, throw → drop)
+2. `scanWorkflow` `retainSequences` mode → `sequences` (with `verb`) + per-session
+   `missionHint` (§3b) + the builtin-aware `procedures` recurrence signal (§3c)
+   on `WorkflowSignal`. (tests: extend `workflowScan.test.ts` — cap, scrub wiring,
+   mission-hint extraction skipping wrappers/sidechains, **builtin-only session
+   forms a procedure**, total/pure on bad scrubber)
+3. `distillCandidates` Phase-0 filter over `signal.procedures` (carries the sample
+   run + mission hint through). (tests: recurrence + spine-length thresholds,
+   builtin-only procedure passes the gate)
 4. `DistilledSkill` type (`status: "draft"`) + `distilled: []` in both fallbacks.
 5. `DISTILL` prompt + second ACP run wired into `recommendWorkflow` (or a sibling
    `distillWorkflow`). (tests: extend `acpRecommender.test.ts` with fake agent)
@@ -385,19 +452,20 @@ reuses the existing `setConnectFnForTests` seam (`acpRecommender.ts:63`).
 
 Severity: **H** blocks track 1 · **M** changes the design · **L** polish.
 
-| # | Sev | Finding | Resolution |
-|---|-----|---------|------------|
-| F1 | **H** | **Builtin-only sessions produce no signal.** `shapes` (and `coOccurrence`) only key on *resolved inventory* names; `workflowScan.ts:253` drops sessions with `names.size === 0`. The sessions richest in distillable procedure (pure `Bash`/`Edit`/`Read` work) are exactly the ones with no skill/MCP, so they never form a shape and never reach Phase-0. As written, distillation mostly fires only on sessions that *also* used a skill — defeating the motivation. | Add a **builtin-aware shape key** (include retained-sequence signature), or drive Phase-0 off the sequences directly, not off `shapes`. |
-| F2 | **H** | **Redaction is new surface, not a reuse.** `redactMcpConfig` over-redacts (whole-string) and under-detects (`>=32`-char/keyword only) on free text — see §3a. Capturing raw `block.input` + mission text without a real scrubber risks leaking secrets into a draft skill that may later be published. | Build a free-text scrubber first (track 1); treat `redact.ts` as defense-in-depth, not the primary. |
-| F3 | **M** | **Mission-hint extraction ≈ wrong on most sessions.** 3/4 sampled main sessions open with `<local-command-caveat>`/slash-command or `<system-reminder>` wrappers, not a human task — see §3b. Naive "first user message" captures boilerplate. | Skip wrappers + `isSidechain` + `isCompactSummary` + `tool_result`-only; tolerate "no mission hint" (sequence-only distill). |
-| F4 | **M** | **The new seam is at inventory assembly, not `buildGem`.** `buildGem` resolves names in-memory and throws on miss (`buildGem.ts:39,58`); it reads no files. §7b originally mislocated the change. | Materialize staged drafts into the `ConfigInventory.skills[]` upstream; `buildGem` unchanged (corrected in §7b). |
-| F5 | **M** | **Body is unverifiable.** Evidence-grounding checks `tools[]`, not the prose `body`, which can hallucinate steps or reconstruct redacted detail (§6). | Reinforces draft-only + human-review-before-promote; never auto-promote. A future "verify distilled skill" pass (run the body, compare outcome) is the real check. |
-| F6 | **L** | **Cache has no schema version.** Token is content-blind `count:mtime`; old entries shadow the new `distilled` field until transcripts change (§8). | Version the token (`v2:…`). |
-| F7 | **L** | **Second ACP run doubles latency/cost.** Analyze is already ~15-20s (`analysisCache.ts` header); a second 60s-timeout agent run compounds it. | Run the two ACP calls concurrently; or gate distillation behind an explicit "distill" action rather than every Analyze. |
+| # | Sev | Finding | Status |
+|---|-----|---------|--------|
+| F1 | **H** | **Builtin-only sessions produce no signal.** `shapes`/`coOccurrence` key on *resolved inventory* names; `workflowScan.ts:253` drops `names.size === 0` sessions — exactly the pure-builtin sessions richest in procedure. Distillation would fire only on sessions that *also* used a skill, defeating the motivation. | **Resolved (§3c).** New `procedures` recurrence signal computed from coarse procedure *verbs*, independent of inventory; Phase-0 (§4) filters on it. Builtin-only sessions now form procedures and pass the gate. |
+| F2 | **H** | **Redaction is new surface, not a reuse.** `redactMcpConfig` over-redacts (whole-string) yet under-detects (`>=32`-char/keyword only) on free text; capturing raw `block.input` risks leaking secrets/file-contents into a publishable draft. | **Resolved (§3a).** New field-aware, **default-deny** `scrub.ts`: allowlist a structural slice per builtin, drop all content fields, then path-redact + token-scrub. Removes the file-contents/PII class by construction rather than by blocklist. |
+| F3 | **M** | **Mission-hint extraction ≈ wrong on most sessions.** 3/4 sampled main sessions open with `<local-command-caveat>`/`<system-reminder>` wrappers, not a human task. | **Resolved (§3b).** Skip wrappers + `isSidechain` + `isCompactSummary` + `tool_result`-only; tolerate "no mission hint" (procedure-only distill). |
+| F4 | **M** | **The new seam is at inventory assembly, not `buildGem`.** `buildGem` resolves names in-memory and throws on miss (`buildGem.ts:39,58`); reads no files. | **Resolved (§7b).** Materialize staged drafts into `ConfigInventory.skills[]` upstream; `buildGem` unchanged. |
+| F5 | **M** | **Body is unverifiable.** Evidence-grounding checks `tools[]`, not the prose `body`, which can hallucinate steps. | **Accepted/mitigated (§6, §7).** Draft-only + human-review-before-promote; never auto-promote. A future "verify distilled skill" pass (run body, compare outcome) is the real check — out of scope. |
+| F6 | **L** | **Cache has no schema version.** Content-blind `count:mtime` token shadows the new `distilled` field. | **Resolved (§8).** Version the token (`v2:…`). |
+| F7 | **L** | **Second ACP run doubles latency/cost.** Analyze is already ~15-20s; a second 60s-timeout run compounds it. | **Open (§11).** Run the two ACP calls concurrently, or gate distillation behind an explicit action. Decision deferred. |
 
-**Net assessment:** the architecture is sound and the trust-boundary discipline
-(draft-only, evidence-grounded validation, degrade-to-empty) is right. F1 and F2
-are real blockers that must be designed out before track 1 — F1 because the
-feature would silently under-fire on its best inputs, F2 because it is a
-secret-leak path into a publishable artifact. F3-F7 are tractable within the
-existing design.
+**Net assessment:** the architecture and trust discipline (draft-only,
+evidence-grounded validation, degrade-to-empty) are sound. The two H blockers are
+now designed out: **F1** via the inventory-independent procedure-recurrence signal
+(§3c), and **F2** via the default-deny field-aware scrubber (§3a) that removes the
+secret/file-content class structurally instead of by blocklist. F3/F4/F6 are
+resolved in-design; F5 is accepted under the draft-only gate; F7 is the only open
+performance decision and does not block track 1.
