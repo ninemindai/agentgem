@@ -9,17 +9,18 @@
 // produced by the testbed import writer — so we adapt the Gem's self-contained
 // artifacts into a ConfigInventory and reuse that tested writer.
 import { randomUUID } from "node:crypto";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import type { Gem, ConfigInventory } from "./types.js";
 import { scaffoldTestbed, importArtifacts, type ImportedRef, type ImportSkip } from "./testbed.js";
 import type { TestbedFlavorId } from "./testbedFlavors.js";
-import { runGemWithAgent, CLAUDE_RUN_AGENT, type RunConnectFn, type GemRunOutcome, type ToolInvocation, type AgentDescriptor } from "./acpRun.js";
+import { runGemWithAgent, type RunConnectFn, type GemRunOutcome, type ToolInvocation, type AgentDescriptor } from "./acpRun.js";
 import { verifyGemRun, type GemExpectations, type VerificationReport } from "./gemVerify.js";
 
 // Which local coding agent to drive. Each maps an ACP adapter (the binary to
 // spawn) to the testbed flavor that lays skills/instructions where that agent
-// discovers them. `validated` records whether the adapter has been run live:
-// only Claude has — codex-agent-acp isn't published/installed, so the codex
-// adapter is wired but unproven.
+// discovers them. Both adapters are validated live. Their packages can be local
+// (optional) deps OR globally installed — resolveAdapterCommand handles both.
 export type AgentId = "claude" | "codex";
 
 // ── Opaque run registry ──────────────────────────────────────────────────────
@@ -38,9 +39,36 @@ export function resolveRun(id: string): { dir: string; agent: AgentId } | undefi
   return RUN_REGISTRY.get(id);
 }
 export interface AgentAdapter { id: AgentId; descriptor: AgentDescriptor; flavor: TestbedFlavorId; validated: boolean }
+
+const require = createRequire(import.meta.url);
+
+// Resolve an ACP adapter to a spawnable command WITHOUT requiring a global install:
+// if the package is on agentgem's module path (a local/optional dep), spawn its bin
+// with the current node (`[node, <pkg>/<bin>]`); otherwise fall back to the bare
+// binary name so a globally-installed adapter on PATH still works.
+export function resolveAdapterCommand(pkg: string, binName: string): string[] {
+  try {
+    const pkgJsonPath = require.resolve(`${pkg}/package.json`);
+    const pkgJson = require(pkgJsonPath) as { bin?: string | Record<string, string> };
+    const binRel = typeof pkgJson.bin === "string" ? pkgJson.bin : pkgJson.bin?.[binName];
+    if (binRel) return [process.execPath, join(dirname(pkgJsonPath), binRel)];
+  } catch { /* not installed locally — fall back to PATH */ }
+  return [binName];
+}
+
 export const AGENT_ADAPTERS: Record<AgentId, AgentAdapter> = {
-  claude: { id: "claude", descriptor: CLAUDE_RUN_AGENT, flavor: "claude", validated: true },
-  codex: { id: "codex", descriptor: { id: "codex", name: "Codex", command: ["codex-acp"] }, flavor: "codex", validated: true },
+  claude: {
+    id: "claude",
+    descriptor: { id: "claude-code", name: "Claude Code", command: resolveAdapterCommand("@agentclientprotocol/claude-agent-acp", "claude-agent-acp") },
+    flavor: "claude",
+    validated: true,
+  },
+  codex: {
+    id: "codex",
+    descriptor: { id: "codex", name: "Codex", command: resolveAdapterCommand("@agentclientprotocol/codex-acp", "codex-acp") },
+    flavor: "codex",
+    validated: true,
+  },
 };
 
 // Partition a Gem's flat artifact list into the inventory shape importArtifacts wants.

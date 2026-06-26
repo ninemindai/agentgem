@@ -3,7 +3,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { materializeGemToTestbed, materializeAndRunGem, AGENT_ADAPTERS, registerRun, resolveRun } from "../runGem.js";
+import { materializeGemToTestbed, materializeAndRunGem, AGENT_ADAPTERS, registerRun, resolveRun, resolveAdapterCommand } from "../runGem.js";
 import type { RunConnectFn, RunResult } from "../acpRun.js";
 import type { Gem } from "../types.js";
 
@@ -100,7 +100,7 @@ describe("materializeAndRunGem", () => {
     const dir = tmp();
     const { connectFn, calls } = fakeAgent({ text: "", toolCalls: [] });
     await materializeAndRunGem({ gem, dir, task: "go", agent: "codex", connectFn });
-    expect(calls.command).toBe("codex-acp");
+    expect(calls.command).toContain("codex-acp"); // bare PATH name, or resolved [node, …/codex-acp/…]
     // codex flavor writes skills under .agents/skills, not .claude/skills
     expect(existsSync(join(dir, ".agents", "skills", "qa", "SKILL.md"))).toBe(true);
   });
@@ -126,13 +126,31 @@ describe("run registry", () => {
   });
 });
 
+describe("resolveAdapterCommand", () => {
+  it("falls back to the bare binary name (PATH) when the package isn't installed locally", () => {
+    expect(resolveAdapterCommand("@agentclientprotocol/does-not-exist", "ghost-acp")).toEqual(["ghost-acp"]);
+  });
+
+  it("resolves an installed package to [node, <bin path>] so no global install is needed", () => {
+    // The SDK is always a local dep and ships a bin-less package, so use a package
+    // we know resolves; assert the shape: either [node, path-with-name] or PATH fallback.
+    const cmd = resolveAdapterCommand("@agentclientprotocol/codex-acp", "codex-acp");
+    if (cmd.length === 2) {
+      expect(cmd[0]).toBe(process.execPath);
+      expect(cmd[1]).toContain("codex-acp");
+    } else {
+      expect(cmd).toEqual(["codex-acp"]); // not installed locally in this env → PATH fallback
+    }
+  });
+});
+
 describe("AGENT_ADAPTERS", () => {
   it("maps each agent id to a descriptor + testbed flavor; both adapters validated", () => {
     expect(AGENT_ADAPTERS.claude.flavor).toBe("claude");
-    expect(AGENT_ADAPTERS.claude.descriptor.command).toContain("claude-agent-acp");
+    expect(AGENT_ADAPTERS.claude.descriptor.command.join(" ")).toContain("claude-agent-acp");
     expect(AGENT_ADAPTERS.claude.validated).toBe(true);
     expect(AGENT_ADAPTERS.codex.flavor).toBe("codex");
-    expect(AGENT_ADAPTERS.codex.descriptor.command).toContain("codex-acp");
+    expect(AGENT_ADAPTERS.codex.descriptor.command.join(" ")).toContain("codex-acp");
     expect(AGENT_ADAPTERS.codex.validated).toBe(true);
   });
 });
