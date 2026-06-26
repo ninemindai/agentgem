@@ -3,7 +3,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { materializeGemToTestbed, materializeAndRunGem, AGENT_ADAPTERS } from "../runGem.js";
+import { materializeGemToTestbed, materializeAndRunGem, AGENT_ADAPTERS, registerRun, resolveRun } from "../runGem.js";
 import type { RunConnectFn, RunResult } from "../acpRun.js";
 import type { Gem } from "../types.js";
 
@@ -103,6 +103,26 @@ describe("materializeAndRunGem", () => {
     expect(calls.command).toBe("codex-agent-acp");
     // codex flavor writes skills under .agents/skills, not .claude/skills
     expect(existsSync(join(dir, ".agents", "skills", "qa", "SKILL.md"))).toBe(true);
+  });
+});
+
+describe("run registry", () => {
+  it("registers a runDir + agent under an opaque id and resolves it", () => {
+    const id = registerRun("/tmp/some-run-dir", "claude");
+    expect(typeof id).toBe("string");
+    expect(id.length).toBeGreaterThanOrEqual(8);
+    expect(resolveRun(id)).toEqual({ dir: "/tmp/some-run-dir", agent: "claude" });
+  });
+
+  it("returns undefined for an unknown id (no path leaks through)", () => {
+    expect(resolveRun("not-a-real-id")).toBeUndefined();
+  });
+
+  it("issues distinct ids for distinct runs", () => {
+    const a = registerRun("/tmp/a", "claude");
+    const b = registerRun("/tmp/b", "codex");
+    expect(a).not.toBe(b);
+    expect(resolveRun(b)).toEqual({ dir: "/tmp/b", agent: "codex" });
   });
 });
 

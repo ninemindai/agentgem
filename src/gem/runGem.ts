@@ -8,6 +8,7 @@
 // skills at runtime. The runnable layout (`.claude/skills/<n>/SKILL.md`, etc.) is
 // produced by the testbed import writer — so we adapt the Gem's self-contained
 // artifacts into a ConfigInventory and reuse that tested writer.
+import { randomUUID } from "node:crypto";
 import type { Gem, ConfigInventory } from "./types.js";
 import { scaffoldTestbed, importArtifacts, type ImportedRef, type ImportSkip } from "./testbed.js";
 import type { TestbedFlavorId } from "./testbedFlavors.js";
@@ -20,6 +21,22 @@ import { verifyGemRun, type GemExpectations, type VerificationReport } from "./g
 // only Claude has — codex-agent-acp isn't published/installed, so the codex
 // adapter is wired but unproven.
 export type AgentId = "claude" | "codex";
+
+// ── Opaque run registry ──────────────────────────────────────────────────────
+// The streaming UI prepares a run (materialize) over POST, then streams it over a
+// GET. We hand the client an opaque runId — NOT the raw runDir — so a crafted GET
+// can't point the agent at an arbitrary path; the id maps server-side to the dir
+// (always under AGENTGEM_HOME) and the agent chosen at prepare time.
+const RUN_REGISTRY = new Map<string, { dir: string; agent: AgentId }>();
+
+export function registerRun(dir: string, agent: AgentId): string {
+  const id = randomUUID();
+  RUN_REGISTRY.set(id, { dir, agent });
+  return id;
+}
+export function resolveRun(id: string): { dir: string; agent: AgentId } | undefined {
+  return RUN_REGISTRY.get(id);
+}
 export interface AgentAdapter { id: AgentId; descriptor: AgentDescriptor; flavor: TestbedFlavorId; validated: boolean }
 export const AGENT_ADAPTERS: Record<AgentId, AgentAdapter> = {
   claude: { id: "claude", descriptor: CLAUDE_RUN_AGENT, flavor: "claude", validated: true },

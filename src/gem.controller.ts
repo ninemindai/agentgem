@@ -46,6 +46,7 @@ import {
   UndeployRequestSchema, UndeployResponseSchema, DeployRecordQuerySchema, DeployRecordResponseSchema,
   WorkflowAnalyzeRequestSchema, WorkflowAnalyzeResponseSchema,
   GemRunRequestSchema, GemRunResponseSchema,
+  GemRunPrepareRequestSchema, GemRunPrepareResponseSchema,
 } from "./schemas.js";
 import { claudeTranscriptsForCwd, scanWorkflow } from "./gem/workflowScan.js";
 import { recommendWorkflow, recommendationToSelection } from "./gem/acpRecommender.js";
@@ -53,7 +54,7 @@ import { runReadiness, startLocal, stopLocal, getRunStatus, deployVercel, deploy
 import { setCredential } from "./gem/credentials.js";
 import { agentcoreReadiness, deployAgentcore, getAgentcoreStatus } from "./gem/agentcoreRun.js";
 import { scaffoldTestbed, importArtifacts } from "./gem/testbed.js";
-import { materializeAndRunGem, type AgentId } from "./gem/runGem.js";
+import { materializeAndRunGem, materializeGemToTestbed, registerRun, AGENT_ADAPTERS, type AgentId } from "./gem/runGem.js";
 import { detectFlavor, suggestTestbed, discoverProjects } from "./gem/testbedFlavors.js";
 import type { TestbedFlavorId } from "./gem/testbedFlavors.js";
 import { readRecents, upsertRecent } from "./gem/recents.js";
@@ -328,6 +329,22 @@ export class GemController {
     const runDir = b.runDir ?? join(agentgemHome(), ".agentgem", "runs", safeName);
     const out = await materializeAndRunGem({ gem, dir: runDir, task: b.task, agent, expectations: b.expectations });
     return { dir: runDir, agent: out.agent, materialized: out.materialized, run: out.run, verification: out.verification };
+  }
+
+  // Step 1 of the streaming flow: materialize the Gem (carries the full selection
+  // over POST) and hand back an opaque runId. GET /api/gem/run/stream then runs it.
+  @post("/gem/run/prepare", { body: GemRunPrepareRequestSchema, response: GemRunPrepareResponseSchema })
+  async prepareGemRun(input: { body: z.infer<typeof GemRunPrepareRequestSchema> }): Promise<z.infer<typeof GemRunPrepareResponseSchema>> {
+    const b = input.body;
+    const gem: Gem = b.archivePath
+      ? readGemArchive(readArchiveDir(b.archivePath))
+      : buildGem(introspectAll(b.dir, b.projects), b.selection!, { name: b.name ?? "gem", createdFrom: resolveDirs(b.dir).claudeDir });
+    const agent = (b.agent ?? "claude") as AgentId;
+    const safeName = gem.name.replace(/[^A-Za-z0-9._-]/g, "-");
+    const runDir = b.runDir ?? join(agentgemHome(), ".agentgem", "runs", safeName);
+    const materialized = materializeGemToTestbed(gem, runDir, AGENT_ADAPTERS[agent].flavor);
+    const runId = registerRun(runDir, agent);
+    return { runId, runDir, agent, materialized };
   }
 
   // Resolve the configured registry source, or throw a clear error the UI can surface.

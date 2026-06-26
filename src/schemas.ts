@@ -472,6 +472,26 @@ export const GemRunResponseSchema = z.object({
   verification: VerificationReportSchema.optional(),
 });
 
+// Streaming split: prepare (POST, carries the selection) materializes and hands
+// back an opaque runId; the GET stream then runs it with simple query params.
+export const GemRunPrepareRequestSchema = z.object({
+  selection: GemSelectionSchema.optional(),
+  archivePath: z.string().optional(),
+  name: z.string().optional(),
+  dir: z.string().optional(),
+  projects: z.array(z.string()).optional(),
+  runDir: z.string().optional(),
+  agent: z.enum(["claude", "codex"]).optional(),
+}).refine((d) => d.selection !== undefined || d.archivePath !== undefined, {
+  message: "provide either selection or archivePath",
+});
+export const GemRunPrepareResponseSchema = z.object({
+  runId: z.string(),
+  runDir: z.string(),
+  agent: z.string(),
+  materialized: TestbedImportResponseSchema,
+});
+
 // ── AgentCore deploy (Phase 2) ──
 export const AgentcoreReadyResponseSchema = z.object({ cli: z.boolean(), awsCreds: z.boolean() });
 export const AgentcoreDeployRequestSchema = z.object({ name: z.string() });

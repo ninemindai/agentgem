@@ -10,6 +10,7 @@ import { unpackTar } from "../gem/archiveTar.js";
 import { writeGemArchive } from "../gem/archive.js";
 import { writeArchiveDir } from "../gem/archiveFs.js";
 import { setRunConnectFnForTests, type RunConnectFn } from "../gem/acpRun.js";
+import { resolveRun } from "../gem/runGem.js";
 import type { Gem } from "../gem/types.js";
 
 let app: RestApplication;
@@ -95,6 +96,24 @@ describe("POST /api/gem/run", () => {
       expect(r.body.agent).toBe("claude");
     } finally {
       setRunConnectFnForTests(null);
+      rmSync(archiveDir, { recursive: true, force: true });
+      rmSync(runDir, { recursive: true, force: true });
+    }
+  });
+
+  it("POST /api/gem/run/prepare materializes and returns an opaque runId mapping to the dir", async () => {
+    const archiveDir = mkdtempSync(join(tmpdir(), "gem-arc-"));
+    const runDir = mkdtempSync(join(tmpdir(), "gem-prep-"));
+    writeArchiveDir(archiveDir, writeGemArchive(gem).files);
+    try {
+      const r = await client.post("/api/gem/run/prepare").send({ archivePath: archiveDir, runDir }).expect(200);
+      expect(typeof r.body.runId).toBe("string");
+      expect(r.body.runDir).toBe(runDir);
+      expect(r.body.materialized.written.some((w: { name: string }) => w.name === "qa")).toBe(true);
+      expect(existsSync(join(runDir, ".claude", "skills", "qa", "SKILL.md"))).toBe(true);
+      // The opaque id resolves server-side to the real dir + agent (raw path never trusted from the client).
+      expect(resolveRun(r.body.runId)).toEqual({ dir: runDir, agent: "claude" });
+    } finally {
       rmSync(archiveDir, { recursive: true, force: true });
       rmSync(runDir, { recursive: true, force: true });
     }
