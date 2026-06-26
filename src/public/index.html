@@ -157,6 +157,13 @@
   .prow .pm{margin-left:auto;color:var(--muted);font-size:12px;white-space:nowrap;font-family:var(--mono)}
   .redtag{color:var(--accent);font-size:11px}
   pre.json{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px;font:12px/1.6 var(--mono);white-space:pre-wrap;word-break:break-word;margin:0}
+  /* ── channel picker ── */
+  #channelPicker{border:1px solid var(--line);border-radius:var(--r);padding:10px 13px;margin-bottom:12px;background:var(--card)}
+  #channelPicker legend{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted);padding:0 4px}
+  #channelPicker legend .d{color:var(--muted);font-size:10px;font-weight:400;text-transform:none;letter-spacing:0}
+  #channelPicker .ch-labels{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:6px}
+  #channelPicker label{display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer}
+  #channelPicker input[type=checkbox]{accent-color:var(--accent);margin:0}
   /* ── filters ── */
   #filterPanel{border:1px solid var(--line);border-radius:var(--r);padding:11px 13px;margin-bottom:12px;background:var(--accent-soft)}
   #filterPanel[hidden]{display:none}
@@ -244,6 +251,17 @@
     <div class="bar" id="selbar"><strong style="flex:1;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)">Selection</strong><button id="all" class="ghost">Select all shown</button><button id="none" class="ghost">Clear</button></div>
     <div class="bar"><button id="importBtn" class="ghost">⬇ Import from machine…</button><button id="getBtn" class="ghost">🔗 Get gems…</button><span class="d" id="importStatus" style="margin-left:8px"></span></div>
     <div id="inventory">Loading…</div>
+    <fieldset id="channelPicker" class="pgroup">
+      <legend>Channels <span class="d">(how this Gem is reached)</span></legend>
+      <div class="ch-labels">
+        <label><input type="checkbox" class="ch" value="slack"> Slack</label>
+        <label><input type="checkbox" class="ch" value="telegram"> Telegram</label>
+        <label><input type="checkbox" class="ch" value="discord"> Discord</label>
+        <label><input type="checkbox" class="ch" value="teams"> Teams</label>
+        <label><input type="checkbox" class="ch" value="twilio"> Twilio</label>
+        <label><input type="checkbox" class="ch" value="github"> GitHub</label>
+      </div>
+    </fieldset>
     <div id="testdrive" class="testdrive" hidden>
       <div class="hd">▶ Test-drive this agent <span class="pill" id="tdPill">Claude Code</span></div>
       <div class="cmd"><span class="dollar">$</span> <code id="tdCmd"></code> <button id="tdCopy" class="ghost">Copy</button></div>
@@ -803,7 +821,9 @@ function buildSelectionBody(){
   const selection = { skills, mcpServers, includeInstructions: sel.includeInstructions };
   if (hooks.length) selection.hooks = hooks;
   if (Object.keys(projectsSel).length) selection.projects = projectsSel;
+  const channels = Array.from(document.querySelectorAll("#channelPicker .ch:checked")).map((el) => ({ platform: el.value }));
   const reqBody = { selection, name: document.getElementById("name").value || "gem" };
+  if (channels.length) reqBody.channels = channels;
   if (projects.length) reqBody.projects = projects;
   return reqBody;
 }
@@ -1234,6 +1254,7 @@ document.getElementById("none").addEventListener("click", () => {
   });
 });
 document.getElementById("name").addEventListener("input", () => { nameEdited = true; refresh(); });
+document.getElementById("channelPicker").addEventListener("change", () => refresh());
 document.getElementById("dl").addEventListener("click", () => {
   const blob = new Blob([JSON.stringify(window.__gem || {}, null, 2)], { type: "application/json" });
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = (document.getElementById("name").value || "gem") + ".json"; a.click();
