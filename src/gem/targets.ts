@@ -4,9 +4,10 @@
 // artifacts are skipped with a reason. Materialize re-renders an already-redacted Gem; the
 // runner rebinds real secrets from gem.requiredSecrets at install.
 import type {
-  Gem, ArtifactType, SecretRequirement, SecretRef,
+  Gem, ArtifactType, SecretRequirement, SecretRef, ChannelArtifact,
   SkillArtifact, McpServerArtifact, InstructionsArtifact, HookArtifact,
 } from "./types.js";
+import { channelScaffold } from "./channels.js";
 import { tomlMcpServers } from "./toml.js";
 import { stdioProxyRunner, PROXY_BASE_PORT, PROXY_HOST } from "./mcpProxy.js";
 
@@ -27,6 +28,7 @@ interface TargetSpec {
   mcp?: (servers: McpServerArtifact[]) => MaterializeResult;
   instructions?: (all: InstructionsArtifact[]) => FileTree;
   hook?: (hooks: HookArtifact[]) => FileTree;
+  channel?: (channels: ChannelArtifact[]) => MaterializeResult;
   compose?: (gem: Gem, opts: MaterializeOpts) => MaterializeResult; // cross-cutting file(s) that see the whole gem (runs last)
 }
 
@@ -557,6 +559,21 @@ const eveComposeProject = (gem: Gem, opts: MaterializeOpts = {}): MaterializeRes
   return rendered(files);
 };
 
+// Eve channel files: one agent/channels/<name>.ts per declared channel, from the platform registry
+// scaffold. "eve" is reserved for the always-on web/auth channel that eveComposeProject emits.
+const channelEve = (channels: ChannelArtifact[]): MaterializeResult => {
+  const files: FileTree = {};
+  const skipped: SkippedArtifact[] = [];
+  for (const c of channels) {
+    const seg = eveSegment(c.name);
+    const path = `agent/channels/${seg}.ts`;
+    if (seg === "eve") { skipped.push({ artifact: c.name, type: "channel", reason: "channel name 'eve' is reserved for the web channel" }); continue; }
+    if (path in files) { skipped.push({ artifact: c.name, type: "channel", reason: `path collision with an earlier channel at ${path}` }); continue; }
+    files[path] = channelScaffold(c.platform);
+  }
+  return { files, skipped };
+};
+
 // ── A2A (Agent2Agent) target ──
 // Card primitive: materialize(gem, "a2a") emits a runtime-free Agent Card derived from the gem — the
 // A2A discovery surface, publishable to the registry. The Card is the part native to AgentGem's
@@ -805,7 +822,7 @@ export const TARGET_REGISTRY: Record<TargetId, TargetSpec> = {
   agents: { id: "agents", label: "Agents", skill: skillSkillMd,       instructions: instructionsAgentsMd },
   hermes: { id: "hermes", label: "Hermes", skill: skillDescriptionMd, instructions: instructionsSoulMd },
   // Eve project layout (agent/...). Hooks are event-reacting code in Eve, not config -> unsupported.
-  eve:    { id: "eve",    label: "Eve",    skill: skillEveMd,         instructions: concatInstructions("agent/instructions.md"), mcp: mcpEveConnections, compose: eveComposeProject },
+  eve:    { id: "eve",    label: "Eve",    skill: skillEveMd,         instructions: concatInstructions("agent/instructions.md"), mcp: mcpEveConnections, channel: channelEve, compose: eveComposeProject },
   // Flue project layout. Skills reuse SKILL.md; instructions fold into the composed agent file (no
   // standalone file -> the empty instructions renderer marks them handled, not skipped). MCP added in Task 2.
   flue:   { id: "flue",   label: "Flue",   skill: skillFlueMd,        instructions: () => ({}), mcp: mcpFlueConnections, compose: flueComposeAgent },
@@ -838,6 +855,7 @@ export function materialize(gem: Gem, target: TargetId, opts: MaterializeOpts = 
   const mcp = gem.artifacts.filter((a): a is McpServerArtifact => a.type === "mcp_server");
   const instr = gem.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions");
   const hooks = gem.artifacts.filter((a): a is HookArtifact => a.type === "hook");
+  const channels = gem.artifacts.filter((a): a is ChannelArtifact => a.type === "channel");
 
   if (spec.skill) for (const s of skills) merge(spec.skill(s), s.name, "skill");
   else skipAll(skills, "skill");
@@ -857,6 +875,14 @@ export function materialize(gem: Gem, target: TargetId, opts: MaterializeOpts = 
   if (hooks.length) {
     if (spec.hook) merge(spec.hook(hooks), hooks.map((h) => h.name).join(", "), "hook");
     else skipAll(hooks, "hook");
+  }
+  if (channels.length) {
+    if (spec.channel) {
+      const result = spec.channel(channels);
+      merge(result.files, channels.map((c) => c.name).join(", "), "channel");
+      skipped.push(...result.skipped);
+    }
+    else skipAll(channels, "channel");
   }
 
   if (spec.compose) {
