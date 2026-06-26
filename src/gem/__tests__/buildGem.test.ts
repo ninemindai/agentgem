@@ -90,4 +90,20 @@ describe("buildGem", () => {
     expect(env.GH_TOKEN).toBe("<redacted>");
     expect(gem.requiredSecrets).toEqual([{ name: "GH_TOKEN", artifact: "gh", location: "env.GH_TOKEN" }]); // no dup
   });
+
+  describe("declared channels", () => {
+    const emptyInv = { skills: [], mcpServers: [], instructions: [], hooks: [] };
+
+    it("adds a channel artifact and aggregates its secrets into requiredSecrets", () => {
+      const gem = buildGem(emptyInv, { all: false }, { channels: [{ platform: "slack" }] });
+      const ch = gem.artifacts.find((a) => a.type === "channel");
+      expect(ch).toMatchObject({ type: "channel", platform: "slack", name: "slack" });
+      expect(gem.requiredSecrets).toContainEqual({ name: "SLACK_BOT_TOKEN", artifact: "slack", location: "env.SLACK_BOT_TOKEN" });
+    });
+
+    it("adds no channels when none are declared", () => {
+      const gem = buildGem(emptyInv, { all: false }, {});
+      expect(gem.artifacts.some((a) => a.type === "channel")).toBe(false);
+    });
+  });
 });

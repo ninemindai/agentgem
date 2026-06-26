@@ -39,11 +39,27 @@ export const HookArtifactSchema = z.object({
   secretRefs: z.array(z.object({ name: z.string(), location: z.string() })).optional(),
 });
 
+export const ChannelPlatformSchema = z.enum(["slack", "telegram", "discord", "teams", "twilio", "github"]);
+
+export const ChannelArtifactSchema = z.object({
+  type: z.literal("channel"),
+  name: z.string(),
+  platform: ChannelPlatformSchema,
+  secretRefs: z.array(z.object({ name: z.string(), location: z.string() })),
+  description: z.string().optional(),
+});
+
+// Declared channels on a request body. Shared by every endpoint that builds a Gem from a selection
+// (gem preview, materialize, archive, create-workspace, publish) so channels are never dropped on one
+// path while present on another. Each platform entry becomes a channel artifact via buildGem.
+export const ChannelDeclSchema = z.array(z.object({ platform: ChannelPlatformSchema, name: z.string().optional() })).optional();
+
 export const GemArtifactSchema = z.discriminatedUnion("type", [
   SkillArtifactSchema,
   McpServerArtifactSchema,
   InstructionsArtifactSchema,
   HookArtifactSchema,
+  ChannelArtifactSchema,
 ]);
 
 export const SecretRequirementSchema = z.object({
@@ -129,6 +145,7 @@ export const GemRequestSchema = z.object({
   dir: z.string().optional(),
   projects: z.array(z.string()).optional(),
   checks: z.array(GemCheckSchema).optional(),
+  channels: ChannelDeclSchema,
 });
 
 export const ScaffoldChecksRequestSchema = z.object({
@@ -145,7 +162,7 @@ export const TargetIdSchema = z.enum(TARGET_IDS);
 
 export const SkippedArtifactSchema = z.object({
   artifact: z.string(),
-  type: z.enum(["skill", "mcp_server", "instructions", "hook"]),
+  type: z.enum(["skill", "mcp_server", "instructions", "hook", "channel"]),
   reason: z.string(),
 });
 
@@ -165,7 +182,7 @@ export const GemLockSchema = z.object({
 });
 
 export const GemManifestArtifactSchema = z.object({
-  type: z.enum(["skill", "mcp_server", "instructions", "hook"]),
+  type: z.enum(["skill", "mcp_server", "instructions", "hook", "channel"]),
   name: z.string(),
   path: z.string(),
   description: z.string().optional(),
@@ -191,6 +208,7 @@ export const ArchiveRequestSchema = z.object({
   outDir: z.string().optional(), // when set, write the tree here and return its path
   outFile: z.string().optional(), // when set, write one portable .gem (tar.gz) here
   tar: z.boolean().optional(),   // when true, also return the tree as a base64 .tar.gz
+  channels: ChannelDeclSchema,
 });
 
 export const ArchiveResponseSchema = z.object({
@@ -212,6 +230,7 @@ export const MaterializeRequestSchema = z.object({
   dir: z.string().optional(),
   projects: z.array(z.string()).optional(),
   a2aServer: z.boolean().optional(), // a2a target: also emit the runnable server, not just the Agent Card
+  channels: ChannelDeclSchema, // applied only when building from `selection` (ignored for archive/gem sources)
 }).refine((d) => d.selection !== undefined || d.archivePath !== undefined || d.gemPath !== undefined || d.gemUrl !== undefined, {
   message: "provide one of selection, archivePath, gemPath, or gemUrl",
 });
@@ -229,6 +248,7 @@ export const PublishPreviewRequestSchema = z.object({
   dir: z.string().optional(),
   projects: z.array(z.string()).optional(),
   target: DeployTargetIdSchema.optional(),
+  channels: ChannelDeclSchema,
 });
 export const PublishRequestSchema = PublishPreviewRequestSchema.extend({ requestId: z.string().min(8).max(128), wsName: z.string().optional() });
 
@@ -285,7 +305,8 @@ export const WorkflowAnalyzeRequestSchema = z.object({
   root: z.string(),             // the project root to analyze (one of the discovered cwds)
 });
 const RecommendedItemSchema = z.object({
-  type: z.enum(["skill", "mcp_server", "instructions", "hook"]),
+  // mirrors ArtifactType (incl. "channel") — RecommendedItem.type is ArtifactType, so this must stay in sync
+  type: z.enum(["skill", "mcp_server", "instructions", "hook", "channel"]),
   name: z.string(),
   reason: z.string(),
   root: z.string().nullable(),   // project root, or null for a global/plugin artifact
@@ -344,6 +365,7 @@ export const CreateWorkspaceRequestSchema = z.object({
   dir: z.string().optional(),
   projects: z.array(z.string()).optional(),
   version: z.string().optional(),
+  channels: ChannelDeclSchema,
 });
 export const WorkspaceQuerySchema = z.object({ name: z.string() });
 export const RenderRequestSchema = z.object({ name: z.string(), target: TargetIdSchema, a2aServer: z.boolean().optional() });
@@ -420,7 +442,8 @@ export const TestbedImportRequestSchema = z.object({
   flavor: TestbedFlavorIdSchema.optional(),
 });
 export const ImportedRefSchema = z.object({
-  type: z.enum(["skill", "mcp_server", "instructions", "hook"]),
+  // mirrors ArtifactType (incl. "channel") — ImportedRef.type is ArtifactType, so this must stay in sync
+  type: z.enum(["skill", "mcp_server", "instructions", "hook", "channel"]),
   name: z.string(),
   overwritten: z.boolean(),
 });

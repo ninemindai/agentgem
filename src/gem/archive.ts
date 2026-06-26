@@ -3,6 +3,7 @@ import type { FileTree, SkippedArtifact } from "./targets.js";
 import type {
   Gem, GemArtifact, ArtifactType,
   SkillArtifact, McpServerArtifact, HookArtifact, GemCheck,
+  ChannelArtifact, SecretRef,
 } from "./types.js";
 import { safePathSegment } from "./targets.js";
 
@@ -109,6 +110,11 @@ export function writeGemArchive(gem: Gem, opts: { version?: string; dependencies
       if (a.source !== undefined) body.source = a.source;
       if (a.secretRefs !== undefined) body.secretRefs = a.secretRefs;
       if (place(path, JSON.stringify(body, null, 2), a.name, "mcp_server")) artifacts.push({ type: "mcp_server", name: a.name, path });
+    } else if (a.type === "channel") {
+      const path = `channels/${withExt(seg, ".json")}`;
+      const body: Record<string, unknown> = { platform: a.platform, secretRefs: a.secretRefs };
+      if (a.description !== undefined) body.description = a.description;
+      if (place(path, JSON.stringify(body, null, 2), a.name, "channel")) artifacts.push({ type: "channel", name: a.name, path });
     } else {
       const path = `hooks/${withExt(seg, ".json")}`;
       const body: Record<string, unknown> = { event: a.event, config: a.config };
@@ -179,6 +185,13 @@ export function readGemArchive(files: FileTree): Gem {
       if (o.secretRefs !== undefined) a.secretRefs = o.secretRefs;
       return a;
     }
+    if (e.type === "channel") {
+      const o = JSON.parse(body(e.path)) as { platform: ChannelArtifact["platform"]; secretRefs: SecretRef[]; description?: string };
+      const a: ChannelArtifact = { type: "channel", name: e.name, platform: o.platform, secretRefs: o.secretRefs };
+      if (o.description !== undefined) a.description = o.description;
+      return a;
+    }
+    if (e.type !== "hook") throw new Error(`unknown artifact type '${e.type}' in manifest`);
     const o = JSON.parse(body(e.path)) as { event: string; matcher?: string; config: Record<string, unknown>; source?: string; secretRefs?: HookArtifact["secretRefs"] };
     const a: HookArtifact = { type: "hook", name: e.name, event: o.event, config: o.config };
     if (o.matcher !== undefined) a.matcher = o.matcher;

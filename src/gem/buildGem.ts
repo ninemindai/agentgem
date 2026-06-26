@@ -1,6 +1,7 @@
 // src/gem/buildGem.ts
-import type { ConfigInventory, Gem, GemArtifact, GemCheck, SecretRequirement } from "./types.js";
+import type { ConfigInventory, Gem, GemArtifact, GemCheck, SecretRequirement, ChannelPlatform } from "./types.js";
 import { redactMcpConfig } from "./redact.js";
+import { makeChannelArtifact } from "./channels.js";
 
 export interface ProjectSelection {
   skills?: string[];
@@ -23,7 +24,7 @@ export type GemSelection =
 export function buildGem(
   inventory: ConfigInventory,
   selection: GemSelection,
-  opts: { name?: string; createdFrom?: string; checks?: GemCheck[] } = {},
+  opts: { name?: string; createdFrom?: string; checks?: GemCheck[]; channels?: { platform: ChannelPlatform; name?: string }[] } = {},
 ): Gem {
   const artifacts: GemArtifact[] = [];
   const projects = inventory.projects ?? [];
@@ -84,10 +85,11 @@ export function buildGem(
   });
   artifacts.length = 0;
   artifacts.push(...guarded);
+  for (const ch of opts.channels ?? []) artifacts.push(makeChannelArtifact(ch.platform, ch.name));
 
   const requiredSecrets: SecretRequirement[] = [];
   for (const a of artifacts) {
-    if ((a.type === "mcp_server" || a.type === "hook") && a.secretRefs) {
+    if ((a.type === "mcp_server" || a.type === "hook" || a.type === "channel") && a.secretRefs) {
       for (const ref of a.secretRefs) requiredSecrets.push({ name: ref.name, artifact: a.name, location: ref.location });
     }
   }

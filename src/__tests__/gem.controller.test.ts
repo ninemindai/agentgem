@@ -235,6 +235,15 @@ describe("GemController", () => {
     expect(JSON.stringify(r.body)).not.toContain("ghp_secret"); // secret value never present
   });
 
+  it("POST /api/materialize threads declared channels into the Eve render", async () => {
+    const r = await client
+      .post("/api/materialize")
+      .send({ dir, selection: {}, target: "eve", channels: [{ platform: "slack" }] })
+      .expect(200);
+    expect(r.body.files["agent/channels/slack.ts"]).toContain("slackChannel"); // declared channel materialized
+    expect(r.body.files["agent/channels/eve.ts"]).toBeDefined(); // always-on web channel still present
+  });
+
   it("POST /api/undeploy with target=codex returns 422", async () => {
     const r = await client.post("/api/undeploy").send({ name: "x", target: "codex" });
     expect(r.status).toBe(422);
@@ -300,6 +309,16 @@ describe("POST /api/archive", () => {
     expect(unpacked).toEqual(r.body.files); // round-trips the exact archive tree
     expect(unpacked["mcp/gh.json"]).toContain("<redacted>");
     expect(JSON.stringify(unpacked)).not.toContain("ghp_secret"); // tarball is secret-safe too
+  });
+
+  it("threads declared channels into the .gem archive (export path)", async () => {
+    const r = await client.post("/api/archive")
+      .send({ dir, selection: {}, name: "demo", channels: [{ platform: "slack" }] })
+      .expect(200);
+    expect(r.body.files["channels/slack.json"]).toBeDefined(); // channel artifact lands in the shared archive
+    expect(JSON.parse(r.body.files["channels/slack.json"]).platform).toBe("slack");
+    const manifest = JSON.parse(r.body.files["gem.json"]);
+    expect(manifest.requiredSecrets.some((s: { name: string }) => s.name === "SLACK_BOT_TOKEN")).toBe(true);
   });
 });
 
@@ -650,6 +669,16 @@ describe("testbed import flavor wiring", () => {
       expect(existsSync(join(tb, ".agents", "skills", "review", "SKILL.md"))).toBe(true);
       expect(readFileSync(join(tb, ".codex", "config.toml"), "utf8")).toContain("[mcp_servers.gh]");
     } finally { rmSync(tb, { recursive: true, force: true }); }
+  });
+});
+
+describe("POST /api/gem with channels", () => {
+  it("includes a declared channel artifact and its requiredSecrets", async () => {
+    const r = await client.post("/api/gem")
+      .send({ dir, selection: { all: false }, channels: [{ platform: "slack" }] })
+      .expect(200);
+    expect(r.body.artifacts.some((a: any) => a.type === "channel" && a.platform === "slack")).toBe(true);
+    expect(r.body.requiredSecrets.some((s: any) => s.name === "SLACK_BOT_TOKEN")).toBe(true);
   });
 });
 
