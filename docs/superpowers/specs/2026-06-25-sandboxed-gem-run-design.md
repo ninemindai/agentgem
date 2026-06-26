@@ -70,22 +70,26 @@ spawn time.
 ## The isolated backends (v1)
 
 ### macOS — `macos-seatbelt`
-Wrap: `sandbox-exec -f <profile.sb> <agent…>`. Generated SBPL profile:
+Wrap: `sandbox-exec -p <policy> <agent…>` (inline policy via `-p`, no temp file).
+Generated SBPL policy is **write-deny**, not deny-default: allow everything, then deny
+all writes, then re-allow writes only under `runDir` + temp + the std dev nodes. This
+contains the blast radius (writes) while leaving reads/exec/network working — and avoids
+the agentOS-spike trap where a naive `(deny default)` killed the agent's own runtime
+before it could start.
 
 ```
 (version 1)
-(deny default)
-(allow process*)
-(allow file-read*)
+(allow default)
+(deny file-write*)
 (allow file-write*
   (subpath "<runDir>")
   (subpath "<TMPDIR>")
-  (literal "/dev/null") (literal "/dev/dtracehelper") (subpath "/dev/tty"))
-(allow network*)            ; v1: network open (agent must reach the model API)
-(allow sysctl-read) (allow mach-lookup)
+  (literal "/dev/null") (literal "/dev/stdout") (literal "/dev/stderr")
+  (subpath "/dev/tty") (regex #"^/dev/fd/"))
 ```
 
-`available()` = `process.platform === "darwin"` and `/usr/bin/sandbox-exec` resolves.
+Network stays open (covered by `allow default`). `available()` = `process.platform ===
+"darwin"` and `/usr/bin/sandbox-exec` exists.
 
 ### Linux — `linux-bubblewrap`
 Wrap: `bwrap --ro-bind / / --bind <runDir> <runDir> --bind <TMPDIR> <TMPDIR> --dev /dev --proc /proc --unshare-pid -- <agent…>`.
