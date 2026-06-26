@@ -42,8 +42,10 @@ channel only adapts a platform onto it.
    same place the current `eveChannelTs` scaffold lives).
 4. **All Eve platforms in v1**: slack, telegram, discord, teams, twilio, github.
    (`web`/`eve` stays the always-on auth entry point — see below.)
-5. **`formatVersion` stays 1** — additive within this repo; all readers are
-   updated together.
+5. **`formatVersion` stays 1**, with a documented cross-version limitation
+   (see "Cross-version compatibility" below). Bumping is deferred because
+   `readGemArchive` does not currently validate `formatVersion`, so a bump
+   protects no existing client.
 
 ## Data model
 
@@ -99,6 +101,22 @@ explicitly at every site or it will misparse:
   branch **before** the hook fallthrough; tighten the fallthrough so an unknown
   type throws rather than silently becoming a hook.
 
+### Cross-version compatibility (known limitation)
+
+AgentGem is published (`@ninemind/agentgem`) and Gems travel via the registry, so
+older installed clients exist in the wild. Today `readGemArchive` falls through to
+`hook` for any unrecognized artifact type, so an **older client reading a new
+channel-bearing Gem misparses the channel as a broken hook** (`{platform,
+secretRefs}` has no `event`), silently.
+
+This is accepted as a v1 limitation: channels are a forward-only feature, so
+near-zero shared Gems use them yet, and a `formatVersion` bump does **not** help —
+`readGemArchive` never validates `formatVersion`, so existing clients ignore the
+field and misparse regardless. The fix that would actually help future clients is a
+`formatVersion` **reject-check** on read (throw if the archive's version exceeds the
+reader's known max). That is filed as a separate hardening task, not part of this
+feature. New clients are safe immediately via the strict fallthrough above.
+
 ## Channel registry (new — the core of the feature)
 
 A built-in map, keyed by platform, that is the single place that knows how a
@@ -121,6 +139,16 @@ export const CHANNEL_REGISTRY: Record<ChannelPlatform, ChannelPlatformSpec>;
   channel secrets come from environment variables). These are the names copied
   into a `ChannelArtifact.secretRefs` at build time.
 - Adding a platform later = one registry entry. No archive/schema change.
+
+**Verification gate (do before finalizing the registry):** the factory *names* and
+*call shape* are not yet confirmed against the `eve` package. The design assumes
+each platform exports `<platform>Channel` and is callable zero-arg
+(`slackChannel()`), with secrets read from the environment. Some platforms
+(Slack/Twilio/Teams) may require a config argument. Before writing the registry
+scaffolds, resolve the real factory signatures from the `eve` package types (add
+`eve` as a devDependency, or read `vercel/eve` source) and shape `channelScaffold`
+to match. The registry is the single place that absorbs whatever shape is required;
+the scaffold must be **confirmed to compile** in a real Eve project, not guessed.
 - Per-platform secret sketch (to be confirmed against Eve factory signatures
   during implementation):
   - slack → `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`
@@ -155,9 +183,16 @@ export const CHANNEL_REGISTRY: Record<ChannelPlatform, ChannelPlatformSpec>;
 
 - flue, a2a, openai-sandbox, claude, codex, agents, agentcore, hermes: each
   `channel` artifact is recorded in `skipped` with a reason like
-  `"channel:slack not supported by target flue"`, using the existing skip
-  mechanism. No silent drops.
+  `"channel unsupported on flue"`, using the existing `skipAll` mechanism. No
+  silent drops.
 - Future (not v1): A2A could surface channels as Agent Card metadata.
+
+**Compatibility-matrix semantics shift (intended):** `compatibility()` counts
+supported vs. skipped artifacts per target, so a channel-bearing Gem will report as
+*less compatible* with every non-Eve target. This is correct — a Claude/Codex/Flue
+materialization genuinely cannot expose the Gem over Slack — but it does change what
+the matrix communicates for channel-bearing Gems. Called out so it reads as
+intentional, not a regression.
 
 ## Secrets & deploy
 
@@ -166,13 +201,25 @@ export const CHANNEL_REGISTRY: Record<ChannelPlatform, ChannelPlatformSpec>;
 - The deployer wires `SLACK_BOT_TOKEN` etc. at deploy time through the flow that
   already exists.
 
+**`secretRefs.location` is declarative for channels.** For mcp/hook artifacts,
+`location` (e.g. `headers.authorization`) is a *re-injection target* — the runner
+rebinds the real secret into the artifact config at install. A channel has no config
+to inject into; Eve's factory reads the env var directly. So `location:
+env.SLACK_BOT_TOKEN` is informational (it names the env var), not a rebinding path.
+Nothing re-injects it. Documented so a future reader does not hunt for re-injection
+that intentionally does not exist for channels.
+
 ## UI
 
 - Live preview (`src/public/index.html`) gains a **Channels** picker in the
   gem-build stage, alongside skills/MCP/hooks.
 - Materialize summary counts channels.
-- `.gem` export and registry discovery already serialize manifest artifacts, so
-  "speaks Slack" travels with the Gem for free.
+- The channel **rides in the manifest**, so `.gem` export and `install` carry it
+  end-to-end automatically. Note: surfacing "this Gem speaks Slack" as a *discovery
+  facet* (search filter / badge on the index) is **separate indexing work, not in
+  this feature** — the discovery/search path is not verified to read artifact types.
+  In scope here: the channel travels with the Gem. Out of scope: discovery surfaces
+  or filters on it.
 
 ## Testing
 

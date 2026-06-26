@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- `formatVersion` stays **1** — additive; all readers live in this repo and are updated together (spec §Decisions).
+- `formatVersion` stays **1**. New clients are safe via the strict unknown-type guard (Task 2). Known limitation: an *older* published client reading a new channel-bearing Gem misparses the channel as a hook; a `formatVersion` reject-check is filed as separate hardening, not this feature (spec §Cross-version compatibility). Do not bump the version or add a version check in this plan.
 - Channel artifact shape is **minimal**: `{ type, name, platform, secretRefs, description? }`. No per-channel config blob is frozen into the archive (spec decision A).
 - v1 platforms: **slack, telegram, discord, teams, twilio, github**. `web`/`eve` is NOT a `ChannelPlatform` — the existing always-on `agent/channels/eve.ts` auth file is untouched.
 - Channels are **declared**, never introspected. Nothing is scanned from the source dir.
@@ -51,6 +51,29 @@ Tests live beside their module in `src/gem/__tests__/*.test.ts` and `src/__tests
   - `const CHANNEL_REGISTRY: Record<ChannelPlatform, ChannelPlatformSpec>`
   - `function channelScaffold(platform: ChannelPlatform): string`
   - `function makeChannelArtifact(platform: ChannelPlatform, name?: string): ChannelArtifact`
+
+- [ ] **Step 0: Verify the Eve channel factory signatures (gate — do this first)**
+
+The registry scaffolds below assume each platform exports `<platform>Channel` and is
+callable zero-arg (`slackChannel()`), reading secrets from the environment. This is
+**not yet confirmed** and some platforms may require a config argument. Confirm before
+writing the registry:
+
+Run: `npm view eve dist-tags.latest && npm view eve` to confirm the package, then add it
+as a devDependency for type resolution: `pnpm add -D eve` and inspect the channel exports:
+
+```bash
+ls node_modules/eve/dist/channels 2>/dev/null || find node_modules/eve -name '*.d.ts' -path '*channels*'
+grep -rn "export function .*Channel\|export const .*Channel" node_modules/eve 2>/dev/null | grep -iE "slack|telegram|discord|teams|twilio|github"
+```
+
+For each platform, record the **exact exported factory name** and whether it takes a
+required config argument. If a factory requires config (e.g. Slack signing secret, Twilio
+numbers), adjust that platform's `channelScaffold` output in Step 4 to pass the minimal
+config reading from `process.env[...]`, and keep the env-var names in `secrets`. If the
+`eve` package cannot be resolved (private/unpublished), fall back to the `vercel/eve`
+GitHub source for the same signatures and note in the registry comment that the shapes are
+source-derived. Do not proceed to Step 4 with unconfirmed factory names.
 
 - [ ] **Step 1: Extend the artifact type union in `src/gem/types.ts`**
 
@@ -218,9 +241,16 @@ import type {
 
 - [ ] **Step 2: Write the failing test (append to `src/gem/__tests__/archive.test.ts`)**
 
+This repo is ESM (`"type":"module"`); use a top-of-file `import`, never `require`. The
+unknown-type test needs `computeLock` to re-derive the lock after tampering with the
+manifest — check it is exported first: `grep -n "computeLock" src/gem/archive.ts`. If it
+is declared but not exported, add `export` to its declaration as part of this task, then
+import it here.
+
 ```ts
 import { makeChannelArtifact } from "../channels.js";
-// (add alongside existing imports; writeGemArchive/readGemArchive are already imported in this file)
+import { computeLock } from "../archive.js"; // add `export` to its declaration if missing
+// (writeGemArchive/readGemArchive are already imported at the top of this file)
 
 describe("channel artifact round-trip", () => {
   it("writes channels/<name>.json and reads it back as a ChannelArtifact", () => {
@@ -246,14 +276,11 @@ describe("channel artifact round-trip", () => {
     manifest.artifacts[0].type = "bogus";
     files["gem.json"] = JSON.stringify(manifest, null, 2);
     // re-lock so verification passes and we reach the artifact dispatch
-    const { computeLock } = require("../archive.js");
     files["gem.lock"] = JSON.stringify(computeLock(files), null, 2);
     expect(() => readGemArchive(files)).toThrow(/unknown artifact type/i);
   });
 });
 ```
-
-If `computeLock` is not exported, instead build the bogus-type archive by hand-editing both `gem.json` and re-deriving the lock through `writeGemArchive` on a stub then swapping the type — but prefer exporting `computeLock` if needed (it already exists in archive.ts). Check first: `grep -n "computeLock" src/gem/archive.ts`. If it's not exported, add `export` to its declaration in this task.
 
 - [ ] **Step 3: Run the test to verify it fails**
 
@@ -730,6 +757,6 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - All six platforms in v1 → Task 1 registry has all six. ✓
 - `formatVersion` stays 1 → no change to `ARCHIVE_FORMAT_VERSION`. ✓
 
-**Placeholder scan:** No "TBD"/"add error handling"/"write tests for the above". Every code step shows the code. The one external uncertainty (exact Eve factory names/config for teams/twilio/github) is committed to a concrete, documented default in the registry — the single place to adjust if Eve's signatures differ — not left as a placeholder.
+**Placeholder scan:** No "TBD"/"add error handling"/"write tests for the above". Every code step shows the code. The one external uncertainty — exact Eve factory names/config across the six platforms — is handled by the **Task 1 Step 0 verification gate** (resolve real signatures from the `eve` package/source before writing the registry) plus a concrete documented default in the registry as the single point of adjustment. Not a placeholder; a gated verification.
 
 **Type consistency:** `ChannelArtifact`, `ChannelPlatform`, `CHANNEL_REGISTRY`, `channelScaffold`, `makeChannelArtifact` are defined in Task 1 and consumed with the same names/signatures in Tasks 2/4/5/6. `TargetSpec.channel` (Task 5) matches the `channelEve` signature. `secretRefs` location format `env.<NAME>` is identical in Task 1 (`makeChannelArtifact`) and asserted in Tasks 1/2/4.
