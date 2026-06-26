@@ -77,6 +77,20 @@ The agent-facing surface: read and plan. The same helper functions back the REST
 | POST | `/testbed/scaffold` | Create / initialize a testbed (idempotent) |
 | POST | `/testbed/import` | Import artifacts (skills, MCP, hooks) from global config into a testbed |
 
+### Analyze & distillation
+
+See [Analyze](analyze.md).
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| POST | `/workflow/analyze` | Scan a project's transcripts → candidate Gems + distilled draft skills (`WorkflowAnalysis`) |
+| GET | `/workflow/analyze/stream` | Same analysis as an SSE stream (`phase` / `delta` / `done` / `failed`); cached per project |
+| POST | `/workflow/draft` | Accept a distilled draft → write `~/.agentgem/distilled/<name>/SKILL.md` (kebab name, path-safe) |
+
+`POST /gem` and `/scaffold-checks` accept an optional `distilledDrafts` array; each is staged into
+the inventory (by `evidence.root`) before resolution, so a selection can include an accepted draft
+by name.
+
 ### Registry
 
 | Method | Path | Purpose |

@@ -26,9 +26,13 @@ There are four horizontal bands:
 
 An optional **workflow-aware recommendation** path sits in front of the core: `POST
 /workflow/analyze` (plus an SSE progress stream) scans a project's Claude transcripts into a
-deterministic `WorkflowSignal`, asks a local ACP agent to cluster and name a Gem (degrading to a
-frequency ranking if the agent is unavailable), and emits a pre-checked `GemSelection` that feeds
-`buildGem`. It only ranks and explains what introspection already found — see [Analyze](analyze.md).
+deterministic `WorkflowSignal`, then runs two local ACP agents **concurrently** — one clusters
+and names candidate Gems (degrading to a frequency ranking if the agent is unavailable), the
+other **distills new draft skills** from the recurring builtin procedure the scan would otherwise
+discard. It emits a `WorkflowAnalysis` of pre-checked `GemCandidate[]` plus `DistilledSkill[]`
+drafts; both feed `buildGem` (an accepted draft is staged into the inventory by name). The
+recommender only ranks what introspection already found; distillation is the deliberate exception
+— brand-new drafts behind a human-review gate. See [Analyze](analyze.md).
 
 Server-side state lives under `~/.agentgem` (workspaces, recents, credentials, deploy
 records) — never inside a Gem.
@@ -82,6 +86,17 @@ governs all of it is in [Redaction](redaction.md).
 | `archiveFs.ts` / `archiveTar.ts` | Serialize the file tree to a directory or a deterministic `.tar.gz` |
 | `checks.ts` | Scaffold behavioral + external (`skillspector`) checks |
 | `types.ts` | The core types: `Gem`, `GemArtifact`, `ConfigInventory`, `GemCheck`, … |
+
+The optional **Analyze / workflow-aware** path (see [Analyze](analyze.md)) adds, also under
+`src/gem/`:
+
+| Module | Responsibility |
+| --- | --- |
+| `workflowScan.ts` | Scan transcripts → `WorkflowSignal`: artifact usage + co-occurrence, plus (opt-in) the redacted builtin **procedure**, **mission hints**, and frequent-n-gram **procedure recurrence** |
+| `scrub.ts` | Field-aware, **default-deny** scrubbing of builtin tool inputs (free text) — distinct from `redact.ts`'s config-value redaction |
+| `acpRecommender.ts` | Cluster usage into `GemCandidate[]`; validate against the inventory; degrade to a deterministic ranking |
+| `distill.ts` | Phase-0 gate over recurring procedures → a generative ACP run → evidence-grounded `DistilledSkill[]` drafts |
+| `draftStage.ts` | Stage a draft into the `ConfigInventory` (so `buildGem` can include it) and write `~/.agentgem/distilled/<name>/SKILL.md` |
 
 ## Distribution
 

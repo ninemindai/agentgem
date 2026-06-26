@@ -15,8 +15,8 @@ OpenAPI 3.1 document — so the web page and your local agent call exactly the s
   your first Gem.
 - **[Desktop app](desktop.md)** — the native macOS/Windows/Linux build, in addition to
   the `npx` CLI.
-- **[Analyze](analyze.md)** — scan your agent's session history and get workflow-aware
-  Gem recommendations.
+- **[Analyze](analyze.md)** — scan your agent's session history for workflow-aware Gem
+  recommendations, and **distill new draft skills** from the procedures you repeat by hand.
 - **[Concepts](concepts.md)** — what a Gem is, the archive format, the redaction trust
   boundary, and the AgentBack one-contract model.
 

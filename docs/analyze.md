@@ -10,6 +10,13 @@ Instead of a flat checklist of everything you have, you get a short list of
 candidate Gems — each a coherent recurring flow ("code review", "web scraping",
 "diagram generation") — and one click pre-selects exactly the artifacts it contains.
 
+Analyze also does something the inventory alone can't: it **distills brand-new
+skills** from the work you did *by hand*. A lot of your expertise never becomes an
+installed artifact — it lives in the raw `Bash → Edit → test → commit` procedure you
+repeat across sessions. Analyze recovers those recurring procedures and proposes them
+as **draft skills** you can review and fold straight into the Gem. See
+[Distilled skills](#distilled-skills) below.
+
 ## Run an analysis
 
 Open the testbed dialog (**Create / open testbed…** in the header). Every recent and
@@ -25,6 +32,10 @@ rationale, and the artifacts it includes (with the reason each was chosen — e.
 project as your testbed and pre-check exactly that Gem's artifacts — then refine the
 selection by hand if you like and build as usual.
 
+Below the candidates, any **distilled skill drafts** appear in their own section — new
+skills synthesized from your recurring hand-work, each with an **Add to build** and a
+**write SKILL.md only** action. See [Distilled skills](#distilled-skills).
+
 ## What it reads
 
 Analyze is grounded in a deterministic **transcript scan** before any AI is involved:
@@ -37,11 +48,17 @@ Analyze is grounded in a deterministic **transcript scan** before any AI is invo
   it appeared in, and recency.
 - It records which artifacts **co-occur** in the same session, which is how a single
   project gets split into multiple workflow candidates rather than one big bundle.
+- For distillation, it also keeps each session's **builtin tool procedure** in order,
+  passed through a **field-aware scrubber** ([`src/gem/scrub.ts`](redaction.md)) that
+  keeps only a structural slice per tool (a command's verb, a file path) and **drops
+  everything else** — file contents, pasted prompts, secrets — before the procedure
+  is ever stored or sent to the agent.
 
-Only artifacts that exist in your real inventory are ever named — the scan is the
-source of truth, so a recommendation can't invent a skill you don't have. Artifacts
-that show up in transcripts but aren't installed are surfaced separately as **gaps**
-("used but not in inventory").
+Only artifacts that exist in your real inventory are ever *named* in a recommendation —
+the scan is the source of truth, so it can't invent a skill you don't have. (Distilled
+skills are the deliberate exception: they're brand-new drafts, gated behind review, not
+recommendations of installed artifacts.) Artifacts that show up in transcripts but
+aren't installed are surfaced separately as **gaps** ("used but not in inventory").
 
 ## How the recommendation is made
 
@@ -59,6 +76,42 @@ get a recommendation.
 
 Candidates are labelled by confidence: **high** when Claude proposed the grouping,
 **medium** for the deterministic fallback.
+
+## Distilled skills
+
+The recommendation above only ever names artifacts you already have. But the actual
+*how* — the procedure that got the task done — usually isn't an installed skill at
+all; it's the sequence of builtin tool calls (`Bash`, `Edit`, `Read`, `Write`) that
+the recommendation throws away. **Distillation** recovers it.
+
+Alongside the deterministic scan, Analyze keeps the **ordered, redacted builtin
+procedure** for each session and finds the runs that **recur across sessions** — not
+whole sessions (those are never identical) but the shared sub-patterns, e.g.
+`Edit → git add → vitest → git commit`. A second local Claude agent runs
+**concurrently** with the recommender and turns each recurring procedure into a draft
+skill, named and scoped by the **mission** it accomplished (drawn from the session's
+opening task and outcome) rather than by its tools.
+
+Each draft is a complete `SKILL.md` — frontmatter (`name`, `description`, `triggers`,
+`tools`, `mutating`) plus a body of **Contract → Phases → Output Format** that
+reproduces the steps the agent followed. Drafts are validated the only way unverified
+content can be: structurally (kebab name, real triggers, a body), for **uniqueness**
+(a draft never collides with an installed skill), and by **evidence-grounding** (every
+tool it claims must actually appear in the captured procedure). A draft that fails is
+dropped; if nothing recurs, you simply get no drafts.
+
+A distilled skill is a **draft, never an install.** In the results you can:
+
+- **Add to build ▸** — fold the draft into the Gem you're assembling. It's bundled
+  with its full body and a reviewable `SKILL.md` is written under
+  `~/.agentgem/distilled/<name>/`.
+- **write SKILL.md only** — just save the draft to `~/.agentgem/distilled/<name>/`
+  to edit and promote into `.claude/skills/` yourself, on your terms.
+
+Nothing is ever written into your `.claude/skills/` automatically — the body is
+agent-authored prose, so it stays behind a human review gate. Once you promote a
+draft, the next Analyze sees it as a real installed skill and tracks its usage like
+any other: the loop closes.
 
 ## Caching and re-analyzing
 

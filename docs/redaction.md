@@ -75,6 +75,33 @@ The secrets above are **artifact** secrets and are always redacted. Separately, 
 `~/.agentgem/.env` (mode `0600`) via `credentials.ts` and loaded at startup — they are
 server config, never part of a Gem. See [Testbed & run](testbed-and-run.md).
 
+## Transcript scrubbing — a second, stricter scrubber
+
+`redactMcpConfig` is the right tool for **structured config** (it knows the keys). It is the
+wrong tool for **free transcript text** — the builtin tool calls that
+[Analyze distillation](analyze.md#distilled-skills) captures (bash command lines, file paths,
+pasted prompts, file contents). Scrubbing arbitrary prose by blocklist both over-redacts
+(one secret token nukes the whole command) and under-detects (short secrets, `user:pass@host`
+URLs, PII in paths). So distillation uses a separate, **default-deny** scrubber,
+`src/gem/scrub.ts` — distinct from `redact.ts`:
+
+- **`scrubStep(tool, input)`** keeps only an *allowlisted structural slice* per builtin — a
+  `Bash` command's coarse verb (`Bash:git commit`), an `Edit`/`Write` `file_path`, a
+  `Read`/`Grep` path, a `Task` description — and **drops everything else** (file contents,
+  `old_string`/`new_string`/`content`, agent prompts, unknown fields). The
+  file-content/PII class is removed *by construction*, not by pattern match.
+- What survives is then **path-redacted** (`$HOME`/`/Users/<name>/` → `~/`) and
+  **token-scrubbed** at the *token* level. The token rule here is intentionally narrower than
+  the config rule above: only **high-entropy** tokens or known **prefixes** (`ghp_`, `sk-`,
+  `AKIA`, `glpat-`, …) — never bare keywords — so a filename like `secret.env` survives while
+  a real `ghp_…` token is replaced in place.
+- **`scrubProse`** applies the same token scrub + path redaction + a hard length cap to the
+  one piece of genuine prose distillation keeps: the redacted mission hint (first task +
+  outcome).
+
+Residual risk (a short, keyword-less secret pasted mid-command) is accepted because distilled
+output is a **draft behind a human-review gate** — it is never auto-installed.
+
 ## Related
 
 - [The build pipeline](pipeline.md) — where redaction sits in the flow

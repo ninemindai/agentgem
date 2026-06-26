@@ -39,7 +39,9 @@ call exactly the same thing.
   larger agents with a single re-resolved lock, not a pile of overlapping config.
 - **Workflow-aware recommendations** — [Analyze](docs/analyze.md) scans your agent's
   session history to see which skills, MCP servers, and hooks you actually use, and
-  suggests ready-to-build Gems grouped by recurring workflow.
+  suggests ready-to-build Gems grouped by recurring workflow. It also **distills brand-new
+  draft skills** from the procedures you repeat by hand — review them and fold them
+  straight into a Gem.
 - **Deploy targets** — Eve and OpenAI Sandbox (code-gen), Flue (materialize, deployable to
   Cloudflare), and Bedrock AgentCore (managed backend); code-gen targets share a common
   `compose` step.
