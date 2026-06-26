@@ -28,6 +28,13 @@ describe("channelScaffold", () => {
     expect(out).toContain("export default slackChannel()");
     expect(out).toContain("SLACK_BOT_TOKEN");
   });
+
+  it("emits the required config arg for twilio (allowFrom)", () => {
+    const out = channelScaffold("twilio");
+    expect(out).toContain('from "eve/channels/twilio"');
+    expect(out).toContain("twilioChannel({");
+    expect(out).toContain("allowFrom");
+  });
 });
 
 describe("makeChannelArtifact", () => {
