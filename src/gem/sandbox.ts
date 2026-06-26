@@ -47,6 +47,6 @@ export function selectRunBackend(
   runDir: string,
   registry: SandboxBackend[] = RUN_BACKENDS,
 ): { backend: SandboxBackend; connectFn: RunConnectFn } {
-  const backend = registry.find((b) => b.isolated && b.available()) ?? childSpawnBackend;
+  const backend = registry.find((b) => b.isolated && b.available()) ?? registry[registry.length - 1] ?? childSpawnBackend;
   return { backend, connectFn: backend.connectFn(runDir) };
 }

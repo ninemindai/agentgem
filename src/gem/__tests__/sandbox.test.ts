@@ -16,6 +16,7 @@ describe("selectRunBackend", () => {
   it("falls back to child-spawn when no isolated backend is available", () => {
     const reg = [fake("iso-a", true, false), fake("child-spawn", false, true)];
     expect(selectRunBackend("/runs/g", reg).backend.id).toBe("child-spawn");
+    expect(selectRunBackend("/runs/g", reg).backend).toBe(reg[reg.length - 1]);
   });
 });
 
