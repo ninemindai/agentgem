@@ -1,6 +1,6 @@
 # Proposal: Skill distillation from session transcripts
 
-- **Status:** Proposal (draft for review — both H review blockers F1/F2 designed out; see §12)
+- **Status:** IMPLEMENTED on branch `feat/distill-skills-spec` (tracks 1–9, TDD, full suite green). Review blockers F1/F2/F4/F7 resolved; F5 accepted under the draft-only gate. See §12.
 - **Date:** 2026-06-26
 - **Area:** workflow-aware Gem recommendation (`src/gem/workflowScan.ts`, `src/gem/acpRecommender.ts`, `src/workflowStream.ts`)
 - **Depends on:** the shipped Analyze pipeline (deterministic scan + ACP recommender); see [analyze.md](../analyze.md)
