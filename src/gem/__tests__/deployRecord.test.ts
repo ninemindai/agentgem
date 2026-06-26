@@ -30,4 +30,14 @@ describe("deploy record", () => {
     expect(readDeployRecord("w", "eve")).toBeNull();
     expect(readDeployRecord("w", "flue")?.worker).toBe("w");
   });
+
+  // Containment guard for the `name`/`wsName` fields that reach deploy records from
+  // POST /api/undeploy and POST /api/publish: the record path is workspaceDir(name),
+  // so a separator/traversal name must be rejected (no record outside the workspace store).
+  it("rejects a traversal name on read/write/clear (workspaceName containment)", () => {
+    expect(() => writeDeployRecord("../escape", { backend: "eve", at: "t", project: "p" }))
+      .toThrow(/invalid workspace name/i);
+    expect(() => readDeployRecord("a/b", "eve")).toThrow(/invalid workspace name/i);
+    expect(() => clearDeployRecord("..", "eve")).toThrow(/invalid workspace name/i);
+  });
 });

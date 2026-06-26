@@ -28,6 +28,8 @@ OpenAPI 3.1 document — so the web page and your local agent call exactly the s
 - **[Archive format](archive-format.md)** — the manifest + lock spec, hashing, and
   serialization.
 - **[Redaction](redaction.md)** — the trust boundary and its rules.
+- **[Input containment](input-containment.md)** — how outward-facing POST routes confine
+  filesystem/network inputs (workspace-name, run-dir, SSRF, and credential guards).
 - **[API reference](api-reference.md)** — every REST endpoint and MCP tool.
 
 ## Distribution

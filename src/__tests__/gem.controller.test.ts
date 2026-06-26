@@ -439,6 +439,17 @@ describe("run ops", () => {
     const r = await client.post("/api/credential").send({ key: "AWS_SECRET_ACCESS_KEY", value: "x" });
     expect(r.status).toBe(422); // schema rejects keys outside the allowlist
   });
+
+  // Containment guard: the `name` field flows startLocal -> ensureRunProject -> workspaceDir ->
+  // workspaceName(), which rejects any non-[A-Za-z0-9._-] segment. A traversal name must not
+  // escape the workspace store; the run fails closed (no spawn, no directory outside the root).
+  it("POST /api/run mode=local confines a traversal name (no fs escape)", async () => {
+    const res = await client.post("/api/run").send({ name: "../../../tmp/pwned", target: "eve", mode: "local" });
+    expect(res.status).toBe(200);
+    expect(res.body.state).toBe("failed");
+    expect(res.body.logTail.join("\n")).toMatch(/invalid workspace name/i);
+    expect(existsSync(join(tmpdir(), "pwned"))).toBe(false);
+  });
 });
 
 describe("workspace ops", () => {
