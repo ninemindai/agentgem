@@ -58,6 +58,8 @@ describe("fetchGemBytes", () => {
 
   it("blocks a loopback URL by default (SSRF guard)", async () => {
     await expect(fetchGemBytes("http://127.0.0.1:1/x.gem")).rejects.toThrow(/non-public|private|address/i);
+    // A blocked URL is a client-input error (400) so the reason reaches the caller, not a 500.
+    await expect(fetchGemBytes("http://127.0.0.1:1/x.gem")).rejects.toThrow(expect.objectContaining({ statusCode: 400 }));
   });
 
   it("fetches bytes when private access is explicitly allowed (test/escape hatch)", async () => {

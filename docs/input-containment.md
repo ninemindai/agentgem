@@ -12,6 +12,16 @@ test) or **safe by design** (a local path/URL the user explicitly supplies, the 
 trust model as the rest of a local-first tool — see the out-of-scope note in
 [`SECURITY.md`](../SECURITY.md)).
 
+## How a rejection is reported
+
+A guard that refuses a caller-supplied value throws
+[`InvalidInputError`](../src/gem/inputError.ts), which carries `statusCode: 400`.
+`@agentback/rest` hides the message of any `>= 500` error (returning a generic
+`Internal Server Error`) but surfaces a `4xx` message verbatim — so a blocked request
+returns `400 { code: "invalid_input", message: "<the violated rule>" }` instead of an
+opaque 500. This matches how the zod body/param validators already report bad input,
+and applies on both the REST and MCP surfaces (the error envelope is shared).
+
 The canonical confinement helpers are:
 
 - [`workspaceName(name)`](../src/gem/workspaces.ts) — rejects any name that is not a
