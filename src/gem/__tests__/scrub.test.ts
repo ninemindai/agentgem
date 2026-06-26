@@ -1,6 +1,6 @@
 // src/gem/__tests__/scrub.test.ts
 import { describe, it, expect } from "vitest";
-import { scrubStep } from "../scrub.js";
+import { scrubStep, scrubProse } from "../scrub.js";
 
 describe("scrubStep — Bash", () => {
   it("derives a verb from argv0 + subcommand and keeps the command", () => {
@@ -74,5 +74,28 @@ describe("scrubStep — field allowlist (default-deny)", () => {
     expect(() => scrubStep("Bash", null)).not.toThrow();
     expect(() => scrubStep("Edit", undefined)).not.toThrow();
     expect(scrubStep("Bash", null)).toEqual({ verb: "Bash", arg: "" });
+  });
+});
+
+describe("scrubProse — mission-hint text", () => {
+  it("redacts secret tokens, de-homes paths, and truncates", () => {
+    const home = process.env.HOME ?? "/Users/me";
+    const r = scrubProse(`ship the feature using ghp_abcdefghijklmnopqrstuvwxyz0123456789 in ${home}/app`, 280);
+    expect(r).toContain("ship the feature");
+    expect(r).not.toContain("ghp_abcdefghijklmnopqrstuvwxyz0123456789");
+    expect(r).toContain("<redacted>");
+    expect(r).not.toContain(home);
+    expect(r).toContain("~/app");
+  });
+
+  it("truncates to maxLen with an ellipsis", () => {
+    const r = scrubProse("ship the feature ".repeat(50), 50);
+    expect(r.length).toBeLessThanOrEqual(51); // 50 + ellipsis char
+    expect(r.endsWith("…")).toBe(true);
+  });
+
+  it("handles empty/whitespace input", () => {
+    expect(scrubProse("", 280)).toBe("");
+    expect(scrubProse("   ", 280)).toBe("");
   });
 });

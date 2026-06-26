@@ -56,6 +56,15 @@ function redactToken(tok: string): string {
     .join("");
 }
 
+// Scrub free-text prose (mission-hint task/outcome). Same token scrub + de-home as
+// command args, plus a hard length cap — this is the one place free text is kept,
+// so it is deliberately short and low-detail (proposal §3b).
+export function scrubProse(s: string, maxLen = 280): string {
+  const scrubbed = scrubText(s).trim();
+  if (scrubbed.length <= maxLen) return scrubbed;
+  return scrubbed.slice(0, maxLen) + "…";
+}
+
 // "git commit -m fix" -> "git commit" ; "ls -la" -> "ls" ; "" -> ""
 function bashVerb(command: string): string {
   const toks = command.trim().split(/\s+/).filter(Boolean);
