@@ -297,7 +297,7 @@ export const WorkflowAnalyzeRequestSchema = z.object({
   root: z.string(),             // the project root to analyze (one of the discovered cwds)
 });
 const RecommendedItemSchema = z.object({
-  type: z.enum(["skill", "mcp_server", "instructions", "hook", "channel"]),
+  type: z.enum(["skill", "mcp_server", "instructions", "hook"]),
   name: z.string(),
   reason: z.string(),
   root: z.string().nullable(),   // project root, or null for a global/plugin artifact
@@ -432,7 +432,7 @@ export const TestbedImportRequestSchema = z.object({
   flavor: TestbedFlavorIdSchema.optional(),
 });
 export const ImportedRefSchema = z.object({
-  type: z.enum(["skill", "mcp_server", "instructions", "hook", "channel"]),
+  type: z.enum(["skill", "mcp_server", "instructions", "hook"]),
   name: z.string(),
   overwritten: z.boolean(),
 });
