@@ -562,6 +562,16 @@ describe("testbed import flavor wiring", () => {
   });
 });
 
+describe("POST /api/gem with channels", () => {
+  it("includes a declared channel artifact and its requiredSecrets", async () => {
+    const r = await client.post("/api/gem")
+      .send({ dir, selection: { all: false }, channels: [{ platform: "slack" }] })
+      .expect(200);
+    expect(r.body.artifacts.some((a: any) => a.type === "channel" && a.platform === "slack")).toBe(true);
+    expect(r.body.requiredSecrets.some((s: any) => s.name === "SLACK_BOT_TOKEN")).toBe(true);
+  });
+});
+
 describe("testbed flavors", () => {
   it("detect returns the flavor for a codex-shaped dir and scaffolds a hermes testbed", async () => {
     const cx = mkdtempSync(join(tmpdir(), "cx-")); mkdirSync(join(cx, ".codex"), { recursive: true });

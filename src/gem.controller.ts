@@ -79,6 +79,7 @@ export class GemController {
       name: input.body.name ?? "gem",
       createdFrom: dirs.claudeDir,
       checks: input.body.checks,
+      channels: input.body.channels,
     });
   }
 

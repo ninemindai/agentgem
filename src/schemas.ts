@@ -140,6 +140,7 @@ export const GemRequestSchema = z.object({
   dir: z.string().optional(),
   projects: z.array(z.string()).optional(),
   checks: z.array(GemCheckSchema).optional(),
+  channels: z.array(z.object({ platform: ChannelPlatformSchema, name: z.string().optional() })).optional(),
 });
 
 export const ScaffoldChecksRequestSchema = z.object({
