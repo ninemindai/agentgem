@@ -62,10 +62,6 @@
     "vercel": "^54.14.2",
     "zod": "^4.4.3"
   },
-  "optionalDependencies": {
-    "@agentclientprotocol/claude-agent-acp": "^0.51.0",
-    "@agentclientprotocol/codex-acp": "^1.0.0"
-  },
   "devDependencies": {
     "@types/node": "^24",
     "@types/supertest": "^6",

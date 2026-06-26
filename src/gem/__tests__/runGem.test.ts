@@ -1,11 +1,21 @@
 // src/gem/__tests__/runGem.test.ts
 import { describe, it, expect, afterEach } from "vitest";
-import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { materializeGemToTestbed, materializeAndRunGem, AGENT_ADAPTERS, registerRun, resolveRun, resolveAdapterCommand } from "../runGem.js";
+import { materializeGemToTestbed, materializeAndRunGem, AGENT_ADAPTERS, registerRun, resolveRun, resolveAdapterCommand, resolveOrFetchAdapter, adapterCacheDir, type AgentAdapter, type AdapterInstaller } from "../runGem.js";
 import type { RunConnectFn, RunResult } from "../acpRun.js";
 import type { Gem } from "../types.js";
+
+// A fake adapter whose package is neither on PATH nor a real dep, so resolution
+// always reaches the fetch tier (driven by an injected installer — never network).
+const FAKE_ADAPTER: AgentAdapter = { id: "codex", name: "Fake", pkg: "fake-acp-pkg", bin: "fake-acp-bin", version: "9.9.9", flavor: "codex", validated: true };
+function installFakeInto(prefixDir: string): void {
+  const dir = join(prefixDir, "node_modules", "fake-acp-pkg");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "fake-acp-pkg", version: "9.9.9", bin: { "fake-acp-bin": "index.js" } }));
+  writeFileSync(join(dir, "index.js"), "");
+}
 
 const tmps: string[] = [];
 const tmp = () => { const d = mkdtempSync(join(tmpdir(), "rungem-")); tmps.push(d); return d; };
@@ -144,13 +154,66 @@ describe("resolveAdapterCommand", () => {
   });
 });
 
+describe("resolveOrFetchAdapter", () => {
+  const tmps2: string[] = [];
+  let prevHome: string | undefined;
+  function tmpHome() {
+    const h = mkdtempSync(join(tmpdir(), "agh-adapt-"));
+    tmps2.push(h);
+    prevHome = process.env.AGENTGEM_HOME;
+    process.env.AGENTGEM_HOME = h;
+    return h;
+  }
+  afterEach(() => {
+    if (prevHome !== undefined) process.env.AGENTGEM_HOME = prevHome; else delete process.env.AGENTGEM_HOME;
+    for (const d of tmps2.splice(0)) rmSync(d, { recursive: true, force: true });
+  });
+
+  it("fetches on demand into the AGENTGEM_HOME cache, then resolves the bin", async () => {
+    tmpHome();
+    let calls = 0;
+    const installer: AdapterInstaller = async (_p, _v, prefix) => { calls++; installFakeInto(prefix); };
+    let fetched = false;
+    const cmd = await resolveOrFetchAdapter(FAKE_ADAPTER, { installer, onFetch: () => { fetched = true; } });
+    expect(calls).toBe(1);
+    expect(fetched).toBe(true);
+    expect(cmd[0]).toBe(process.execPath);
+    expect(cmd[1]).toContain("fake-acp-pkg");
+  });
+
+  it("uses the cache without re-fetching on the next call", async () => {
+    tmpHome();
+    installFakeInto(adapterCacheDir());
+    let calls = 0;
+    const cmd = await resolveOrFetchAdapter(FAKE_ADAPTER, { installer: async () => { calls++; } });
+    expect(calls).toBe(0);
+    expect(cmd[1]).toContain("fake-acp-pkg");
+  });
+
+  it("dedupes concurrent fetches — the installer runs once", async () => {
+    tmpHome();
+    let calls = 0;
+    const installer: AdapterInstaller = async (_p, _v, prefix) => { calls++; await new Promise((r) => setTimeout(r, 20)); installFakeInto(prefix); };
+    const [a, b] = await Promise.all([resolveOrFetchAdapter(FAKE_ADAPTER, { installer }), resolveOrFetchAdapter(FAKE_ADAPTER, { installer })]);
+    expect(calls).toBe(1);
+    expect(a).toEqual(b);
+  });
+
+  it("throws instead of fetching when allowFetch is false (offline)", async () => {
+    tmpHome();
+    await expect(resolveOrFetchAdapter(FAKE_ADAPTER, { allowFetch: false })).rejects.toThrow(/not installed/i);
+  });
+});
+
 describe("AGENT_ADAPTERS", () => {
-  it("maps each agent id to a descriptor + testbed flavor; both adapters validated", () => {
+  it("maps each agent id to an adapter package + testbed flavor; both validated", () => {
     expect(AGENT_ADAPTERS.claude.flavor).toBe("claude");
-    expect(AGENT_ADAPTERS.claude.descriptor.command.join(" ")).toContain("claude-agent-acp");
+    expect(AGENT_ADAPTERS.claude.pkg).toContain("claude-agent-acp");
+    expect(AGENT_ADAPTERS.claude.bin).toBe("claude-agent-acp");
     expect(AGENT_ADAPTERS.claude.validated).toBe(true);
     expect(AGENT_ADAPTERS.codex.flavor).toBe("codex");
-    expect(AGENT_ADAPTERS.codex.descriptor.command.join(" ")).toContain("codex-acp");
+    expect(AGENT_ADAPTERS.codex.pkg).toContain("codex-acp");
+    expect(AGENT_ADAPTERS.codex.bin).toBe("codex-acp");
     expect(AGENT_ADAPTERS.codex.validated).toBe(true);
   });
 });

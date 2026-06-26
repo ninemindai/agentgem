@@ -142,6 +142,8 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 // without spawning a real coding agent.
 let testConnectFn: RunConnectFn | null = null;
 export function setRunConnectFnForTests(fn: RunConnectFn | null): void { testConnectFn = fn; }
+/** True when a fake agent is injected — callers skip adapter resolution/fetch. */
+export function hasTestConnectFn(): boolean { return testConnectFn !== null; }
 
 export interface RunGemOptions {
   dir: string;
