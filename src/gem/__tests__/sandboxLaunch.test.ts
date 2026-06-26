@@ -11,6 +11,7 @@ describe("seatbeltPolicy", () => {
     expect(p).toContain('(subpath "/tmp")');
     // write-allow must come AFTER the blanket deny so it wins
     expect(p.indexOf("(deny file-write*)")).toBeLessThan(p.indexOf('(subpath "/runs/g")'));
+    expect(p.indexOf("(deny file-write*)")).toBeLessThan(p.indexOf("(allow file-write*"));
   });
 });
 
@@ -21,6 +22,8 @@ describe("bwrapArgs", () => {
     // writable bind for the run dir
     const i = a.indexOf("--bind");
     expect(a.slice(i, i + 3)).toEqual(["--bind", "/runs/g", "/runs/g"]);
+    const j = a.indexOf("--bind", i + 1);
+    expect(a.slice(j, j + 3)).toEqual(["--bind", "/tmp", "/tmp"]);
     expect(a).toContain("--die-with-parent");
   });
 });
@@ -38,6 +41,7 @@ describe("wrapWithSandbox", () => {
     const cmd = wrapWithSandbox("linux-bubblewrap", "/runs/g", ["claude-agent-acp"]);
     expect(cmd[0]).toBe("bwrap");
     const sep = cmd.indexOf("--");
+    expect(sep).toBeGreaterThan(0);
     expect(cmd.slice(sep + 1)).toEqual(["claude-agent-acp"]);
   });
 });
