@@ -63,8 +63,10 @@ export const CLAUDE_AGENT: AgentDescriptor = { id: "claude-code", name: "Claude 
 export function analysisWorkspace(): string { return join(agentgemHome(), ".agentgem", "analysis"); }
 
 let testConnectFn: AcpConnectFn | null = null;
-/** Test-only seam: route recommendWorkflow through an in-process fake agent. */
+/** Test-only seam: route recommendWorkflow + distillWorkflow through an in-process fake agent. */
 export function setConnectFnForTests(fn: AcpConnectFn | null): void { testConnectFn = fn; }
+/** The active test connect fn (or null). distillWorkflow shares this seam. */
+export function currentTestConnectFn(): AcpConnectFn | null { return testConnectFn; }
 
 // ── Deterministic analysis (fallback + the agent's baseline) ─────────────────
 // One frequency-based candidate. Multi-candidate splitting is the agent's value-add;

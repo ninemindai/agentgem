@@ -321,9 +321,27 @@ const GemCandidateSchema = z.object({
   confidence: z.enum(["high", "medium", "low"]),
   selection: z.record(z.string(), z.unknown()), // a GemSelection; buildGem validates structurally at /api/gem
 });
+// A draft skill distilled from the builtin procedure (proposal §2). status is
+// always "draft" — never installed by this pipeline.
+const DistilledSkillSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  triggers: z.array(z.string()),
+  tools: z.array(z.string()),
+  mutating: z.boolean(),
+  body: z.string(),
+  evidence: z.object({
+    sessions: z.number(),
+    exampleSequence: z.array(z.string()),
+    root: z.string(),
+  }),
+  status: z.literal("draft"),
+  confidence: z.enum(["high", "medium", "low"]),
+});
 export const WorkflowAnalyzeResponseSchema = z.object({
   candidates: z.array(GemCandidateSchema),
   gaps: z.array(z.string()),                     // project-level: used but absent from inventory
+  distilled: z.array(DistilledSkillSchema),      // draft skills distilled from the builtin procedure
   signalSummary: z.object({
     sessionsScanned: z.number(),
     spanDays: z.number(),

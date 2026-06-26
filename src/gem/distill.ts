@@ -4,7 +4,7 @@
 // skills folded back into Gem candidates. See
 // docs/proposals/skill-distillation-from-transcripts.md.
 import type { WorkflowSignal, ProcedureGroup, SessionSequence, ScanInventory } from "./workflowScan.js";
-import { CLAUDE_AGENT, analysisWorkspace, defaultConnectFn, type AcpConnectFn } from "./acpRecommender.js";
+import { CLAUDE_AGENT, analysisWorkspace, defaultConnectFn, currentTestConnectFn, type AcpConnectFn } from "./acpRecommender.js";
 
 // skillify Phase-0 thresholds (proposal §4): "invoked 2+ times" and ">20 lines of
 // logic" (~4 distinct action verbs). The third criterion (clear trigger phrase) is
@@ -157,7 +157,7 @@ export async function distillWorkflow(
   const candidates = distillCandidates(signal, opts);
   if (!candidates.length) return { distilled: [], degraded: false };
 
-  const connectFn = opts.connectFn ?? defaultConnectFn;
+  const connectFn = opts.connectFn ?? currentTestConnectFn() ?? defaultConnectFn;
   const timeoutMs = opts.timeoutMs ?? 60_000;
   let conn: { ctx: { open(cwd: string): Promise<{ setMode(m: string): Promise<void>; promptText(t: string): Promise<string>; dispose(): void }> }; close: () => void } | null = null;
   let handle: { setMode(m: string): Promise<void>; promptText(t: string): Promise<string>; dispose(): void } | null = null;

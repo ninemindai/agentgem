@@ -53,6 +53,7 @@ import {
 } from "./schemas.js";
 import { claudeTranscriptsForCwd, scanWorkflow } from "./gem/workflowScan.js";
 import { recommendWorkflow, recommendationToSelection } from "./gem/acpRecommender.js";
+import { distillWorkflow } from "./gem/distill.js";
 import { runReadiness, startLocal, stopLocal, getRunStatus, deployVercel, deployCloudflare, undeployVercel, undeployCloudflare } from "./gem/run.js";
 import { setCredential } from "./gem/credentials.js";
 import { agentcoreReadiness, deployAgentcore, getAgentcoreStatus } from "./gem/agentcoreRun.js";
@@ -449,12 +450,18 @@ export class GemController {
     // The top-level inventory IS the global/plugin inventory; the project section
     // is namespaced separately. Scan + recommend over both.
     const scanInv = { project, global: { skills: inventory.skills, mcpServers: inventory.mcpServers, hooks: inventory.hooks } };
-    const signal = scanWorkflow(paths, scanInv);
-    const { analysis, degraded } = await recommendWorkflow(signal, scanInv);
+    const signal = scanWorkflow(paths, scanInv, { retainSequences: true });
+    // Selective recommendation + skill distillation run concurrently — both
+    // never throw, so wall-clock stays max(...) not sum (proposal §5).
+    const [{ analysis, degraded }, distill] = await Promise.all([
+      recommendWorkflow(signal, scanInv),
+      distillWorkflow(signal, scanInv),
+    ]);
     const candidates = analysis.candidates.map((c) => ({ ...c, selection: recommendationToSelection(c) as Record<string, unknown> }));
     return {
       candidates,
       gaps: analysis.gaps,
+      distilled: distill.distilled,
       signalSummary: { sessionsScanned: signal.sessions.scanned, spanDays: signal.sessions.spanDays, notes: signal.notes },
       degraded,
     };

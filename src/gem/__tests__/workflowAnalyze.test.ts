@@ -47,5 +47,7 @@ describe("POST /api/workflow/analyze", () => {
     expect(res.candidates[0].include.map((i) => i.name)).toContain("qa");
     expect((res.candidates[0].selection as any).projects[projectRoot].skills).toContain("qa");
     expect(res.signalSummary.sessionsScanned).toBe(1);
+    // distillation track present (empty here — the transcript has no builtin procedure)
+    expect(res.distilled).toEqual([]);
   });
 });
