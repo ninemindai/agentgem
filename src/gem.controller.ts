@@ -105,7 +105,7 @@ export class GemController {
     } else {
       const dirs = resolveDirs(input.body.dir);
       const inventory = introspectAll(input.body.dir, input.body.projects);
-      gem = buildGem(inventory, input.body.selection!, { name: input.body.name ?? "gem", createdFrom: dirs.claudeDir });
+      gem = buildGem(inventory, input.body.selection!, { name: input.body.name ?? "gem", createdFrom: dirs.claudeDir, channels: input.body.channels });
     }
     return { target, ...materialize(gem, target, { a2aServer: input.body.a2aServer }), compatibility: compatibility(gem) };
   }
@@ -114,7 +114,7 @@ export class GemController {
   async archive(input: { body: z.infer<typeof ArchiveRequestSchema> }): Promise<z.infer<typeof ArchiveResponseSchema>> {
     const dirs = resolveDirs(input.body.dir);
     const inventory = introspectAll(input.body.dir, input.body.projects);
-    const gem = buildGem(inventory, input.body.selection, { name: input.body.name ?? "gem", createdFrom: dirs.claudeDir });
+    const gem = buildGem(inventory, input.body.selection, { name: input.body.name ?? "gem", createdFrom: dirs.claudeDir, channels: input.body.channels });
     const { files, skipped } = writeGemArchive(gem, { version: input.body.version });
     const lock = JSON.parse(files["gem.lock"]) as GemLock;
     let path: string | null = null;
@@ -129,7 +129,7 @@ export class GemController {
   async createWorkspace(input: { body: z.infer<typeof CreateWorkspaceRequestSchema> }): Promise<z.infer<typeof WorkspaceSummarySchema>> {
     const dirs = resolveDirs(input.body.dir);
     const inventory = introspectAll(input.body.dir, input.body.projects);
-    const gem = buildGem(inventory, input.body.selection, { name: input.body.name, createdFrom: dirs.claudeDir });
+    const gem = buildGem(inventory, input.body.selection, { name: input.body.name, createdFrom: dirs.claudeDir, channels: input.body.channels });
     return createWorkspace(input.body.name, gem, { version: input.body.version });
   }
 
@@ -212,7 +212,7 @@ export class GemController {
   async publishPreview(input: { body: z.infer<typeof PublishPreviewRequestSchema> }): Promise<z.infer<typeof PublishPreviewResponseSchema>> {
     const dirs = resolveDirs(input.body.dir);
     const inventory = introspectAll(input.body.dir, input.body.projects);
-    const gem = buildGem(inventory, input.body.selection, { name: input.body.name ?? "gem", createdFrom: dirs.claudeDir });
+    const gem = buildGem(inventory, input.body.selection, { name: input.body.name ?? "gem", createdFrom: dirs.claudeDir, channels: input.body.channels });
     const target = (input.body.target ?? "claude-managed") as DeployTargetId;
     return DEPLOY_REGISTRY[target].preview(gem);
   }
@@ -230,7 +230,7 @@ export class GemController {
   async publish(input: { body: z.infer<typeof PublishRequestSchema> }): Promise<z.infer<typeof PublishResultSchema>> {
     const dirs = resolveDirs(input.body.dir);
     const inventory = introspectAll(input.body.dir, input.body.projects);
-    const gem = buildGem(inventory, input.body.selection, { name: input.body.name ?? "gem", createdFrom: dirs.claudeDir });
+    const gem = buildGem(inventory, input.body.selection, { name: input.body.name ?? "gem", createdFrom: dirs.claudeDir, channels: input.body.channels });
     const target = (input.body.target ?? "claude-managed") as DeployTargetId;
     const result = await DEPLOY_REGISTRY[target].deploy(gem, input.body.requestId);
     if (input.body.wsName) {
