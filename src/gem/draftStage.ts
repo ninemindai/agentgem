@@ -34,6 +34,25 @@ export function distilledToArtifact(s: DistilledSkill): SkillArtifact {
 }
 
 /**
+ * Stage every draft into the project named by its own `evidence.root` (drafts may
+ * span projects). Pure; no-op (same reference) when there are no drafts. Used by the
+ * build path so a candidate can include an accepted draft the server hasn't installed.
+ */
+export function stageDraftsByEvidence(inv: ConfigInventory, drafts: DistilledSkill[]): ConfigInventory {
+  if (!drafts.length) return inv;
+  const byRoot = new Map<string, DistilledSkill[]>();
+  for (const d of drafts) {
+    const r = d.evidence.root;
+    const list = byRoot.get(r) ?? [];
+    list.push(d);
+    byRoot.set(r, list);
+  }
+  let out = inv;
+  for (const [root, list] of byRoot) out = stageDistilledDrafts(out, list, root);
+  return out;
+}
+
+/**
  * Persist an accepted draft to `<base>/.agentgem/distilled/<name>/SKILL.md` for the
  * user to review and promote (proposal §7) — NOT into `.claude/skills/`. Returns the
  * written path. `name` is a validated kebab slug (validateDistilled), so path-safe.

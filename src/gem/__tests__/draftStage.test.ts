@@ -81,3 +81,25 @@ describe("writeDistilledDraft", () => {
     rmSync(base, { recursive: true, force: true });
   });
 });
+
+import { stageDraftsByEvidence } from "../draftStage.js";
+describe("stageDraftsByEvidence", () => {
+  it("stages each draft into the project named by its evidence.root", () => {
+    const inv = {
+      skills: [], mcpServers: [], instructions: [], hooks: [],
+      projects: [
+        { root: "/a", name: "a", skills: [], mcpServers: [], instructions: [], hooks: [] },
+        { root: "/b", name: "b", skills: [], mcpServers: [], instructions: [], hooks: [] },
+      ],
+    };
+    const dA = { ...draft, name: "draft-a", evidence: { ...draft.evidence, root: "/a" } };
+    const dB = { ...draft, name: "draft-b", evidence: { ...draft.evidence, root: "/b" } };
+    const out = stageDraftsByEvidence(inv, [dA, dB]);
+    const gem = buildGem(out, { projects: { "/a": { skills: ["draft-a"] }, "/b": { skills: ["draft-b"] } } });
+    expect(gem.artifacts.map(a => a.name).sort()).toEqual(["draft-a", "draft-b"]);
+  });
+  it("is a no-op for no drafts", () => {
+    const inv = { skills: [], mcpServers: [], instructions: [], hooks: [], projects: [] };
+    expect(stageDraftsByEvidence(inv, [])).toBe(inv);
+  });
+});

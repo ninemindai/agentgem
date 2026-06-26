@@ -55,7 +55,7 @@ import {
 import { claudeTranscriptsForCwd, scanWorkflow } from "./gem/workflowScan.js";
 import { recommendWorkflow, recommendationToSelection } from "./gem/acpRecommender.js";
 import { distillWorkflow } from "./gem/distill.js";
-import { writeDistilledDraft } from "./gem/draftStage.js";
+import { writeDistilledDraft, stageDraftsByEvidence } from "./gem/draftStage.js";
 import { runReadiness, startLocal, stopLocal, getRunStatus, deployVercel, deployCloudflare, undeployVercel, undeployCloudflare } from "./gem/run.js";
 import { setCredential } from "./gem/credentials.js";
 import { agentcoreReadiness, deployAgentcore, getAgentcoreStatus } from "./gem/agentcoreRun.js";
@@ -93,7 +93,9 @@ export class GemController {
   @post("/gem", { body: GemRequestSchema, response: GemSchema })
   async gem(input: { body: z.infer<typeof GemRequestSchema> }): Promise<z.infer<typeof GemSchema>> {
     const dirs = resolveDirs(input.body.dir);
-    const inventory = introspectAll(input.body.dir, input.body.projects);
+    // Fold any accepted distilled drafts into the inventory (by evidence.root)
+    // before resolution, so a selection can reference one by name (proposal §7b).
+    const inventory = stageDraftsByEvidence(introspectAll(input.body.dir, input.body.projects), input.body.distilledDrafts ?? []);
     return buildGem(inventory, input.body.selection, {
       name: input.body.name ?? "gem",
       createdFrom: dirs.claudeDir,
@@ -105,7 +107,7 @@ export class GemController {
   @post("/scaffold-checks", { body: ScaffoldChecksRequestSchema, response: ScaffoldChecksResponseSchema })
   async scaffoldChecks(input: { body: z.infer<typeof ScaffoldChecksRequestSchema> }): Promise<z.infer<typeof ScaffoldChecksResponseSchema>> {
     const dirs = resolveDirs(input.body.dir);
-    const inventory = introspectAll(input.body.dir, input.body.projects);
+    const inventory = stageDraftsByEvidence(introspectAll(input.body.dir, input.body.projects), input.body.distilledDrafts ?? []);
     const gem = buildGem(inventory, input.body.selection, { name: input.body.name ?? "gem", createdFrom: dirs.claudeDir });
     return { checks: scaffoldChecks(gem) };
   }

@@ -139,6 +139,25 @@ export const GemSelectionSchema = z.union([
   }),
 ]);
 
+// A draft skill distilled from the builtin procedure (proposal §2). status is
+// always "draft" — never installed by this pipeline. Defined before the build
+// request schemas that reference it (module load order).
+export const DistilledSkillSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  triggers: z.array(z.string()),
+  tools: z.array(z.string()),
+  mutating: z.boolean(),
+  body: z.string(),
+  evidence: z.object({
+    sessions: z.number(),
+    exampleSequence: z.array(z.string()),
+    root: z.string(),
+  }),
+  status: z.literal("draft"),
+  confidence: z.enum(["high", "medium", "low"]),
+});
+
 export const GemRequestSchema = z.object({
   selection: GemSelectionSchema,
   name: z.string().optional(),
@@ -146,6 +165,9 @@ export const GemRequestSchema = z.object({
   projects: z.array(z.string()).optional(),
   checks: z.array(GemCheckSchema).optional(),
   channels: ChannelDeclSchema,
+  // Accepted distilled drafts to fold into the build — staged into the inventory
+  // (by evidence.root) before resolution, so a selection can reference one by name.
+  distilledDrafts: z.array(DistilledSkillSchema).optional(),
 });
 
 export const ScaffoldChecksRequestSchema = z.object({
@@ -153,6 +175,7 @@ export const ScaffoldChecksRequestSchema = z.object({
   name: z.string().optional(),
   dir: z.string().optional(),
   projects: z.array(z.string()).optional(),
+  distilledDrafts: z.array(DistilledSkillSchema).optional(),
 });
 
 export const ScaffoldChecksResponseSchema = z.object({ checks: z.array(GemCheckSchema) });
@@ -320,23 +343,6 @@ const GemCandidateSchema = z.object({
   include: z.array(RecommendedItemSchema),
   confidence: z.enum(["high", "medium", "low"]),
   selection: z.record(z.string(), z.unknown()), // a GemSelection; buildGem validates structurally at /api/gem
-});
-// A draft skill distilled from the builtin procedure (proposal §2). status is
-// always "draft" — never installed by this pipeline.
-export const DistilledSkillSchema = z.object({
-  name: z.string(),
-  description: z.string(),
-  triggers: z.array(z.string()),
-  tools: z.array(z.string()),
-  mutating: z.boolean(),
-  body: z.string(),
-  evidence: z.object({
-    sessions: z.number(),
-    exampleSequence: z.array(z.string()),
-    root: z.string(),
-  }),
-  status: z.literal("draft"),
-  confidence: z.enum(["high", "medium", "low"]),
 });
 export const WorkflowAnalyzeResponseSchema = z.object({
   candidates: z.array(GemCandidateSchema),

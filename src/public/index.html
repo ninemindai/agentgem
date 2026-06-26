@@ -525,6 +525,7 @@ function renderAnError(view, msg){
 // just that candidate's selection.
 let anCandidates = [];   // stash so a card's button can grab its candidate
 let anDistilled = [];    // stash distilled drafts for the accept buttons
+let acceptedDrafts = []; // distilled drafts the user folded into the build
 function renderAnView(view, path, flavor, name, res){
   anCandidates = res.candidates || [];
   anDistilled = res.distilled || [];
@@ -559,7 +560,8 @@ function renderAnView(view, path, flavor, name, res){
       + `<div class="d" style="margin-bottom:6px">tools: ${esc((d.tools || []).join(", ") || "—")} · seen in ${d.evidence?.sessions ?? "?"} session(s)</div>`
       + `<details style="margin-bottom:8px"><summary class="d" style="cursor:pointer">view workflow body</summary>`
       + `<pre style="white-space:pre-wrap;font-size:12px;background:var(--bg2,#0001);padding:8px;border-radius:6px;overflow:auto">${esc(d.body || "")}</pre></details>`
-      + `<button type="button" class="anAccept" data-i="${i}" style="margin-top:2px">Accept → write SKILL.md draft ▸</button>`
+      + `<button type="button" class="anFold" data-i="${i}" style="margin-top:2px">Add to build ▸</button>`
+      + ` <button type="button" class="ghost anAccept" data-i="${i}" style="margin-top:2px">write SKILL.md only</button>`
       + ` <span class="anAcceptMsg d" data-i="${i}"></span>`
       + `</div>`;
   }).join("");
@@ -587,6 +589,29 @@ function renderAnView(view, path, flavor, name, res){
   view.querySelectorAll(".anAccept").forEach(btn => {
     btn.onclick = (e) => { e.preventDefault(); acceptDraft(view, +btn.dataset.i, btn); };
   });
+  view.querySelectorAll(".anFold").forEach(btn => {
+    btn.onclick = (e) => { e.preventDefault(); addDraftToBuild(+btn.dataset.i); };
+  });
+}
+
+// Fold a distilled draft into the active build: adopt the analyzed project as the
+// testbed, inject the draft as a project skill (so it renders + selects like any
+// other), and stash it so buildSelectionBody ships it as `distilledDrafts` — the
+// server stages it into the inventory before resolving the selection.
+async function addDraftToBuild(i){
+  const skill = anDistilled[i];
+  const root = skill.evidence.root;
+  document.getElementById("recentModal").hidden = true; showPicker();
+  await useTestbed(root, "claude", skill.name);   // adopts + loads + renders the project's inventory
+  let p = (inv.projects || []).find(x => x.root === root);
+  if (!p) { p = { root, name: root.replace(/^.*\//, ""), skills: [], mcpServers: [], instructions: [], hooks: [] }; (inv.projects = inv.projects || []).push(p); }
+  if (!p.skills.some(s => s.name === skill.name)) p.skills.push({ type: "skill", name: skill.name, description: skill.description, source: "distilled-draft", content: skill.body });
+  if (!acceptedDrafts.some(d => d.name === skill.name)) acceptedDrafts.push(skill);
+  projSel(root).skills.add(skill.name);
+  fetch("/api/workflow/draft", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(skill) }).catch(() => {});  // also persist a reviewable SKILL.md (best-effort)
+  renderInventoryPane();           // re-render so the injected draft shows as a checked skill
+  restoreChecks(); refresh();
+  ensureAnalyzeBanner().innerHTML = `<b>${esc(skill.name)}</b> <span class="d">(distilled draft)</span> added to the build — it's bundled into the Gem and a SKILL.md draft is written under <code>.agentgem/distilled/</code> on build.`;
 }
 
 // Accept a distilled draft: POST it; the server writes the SKILL.md draft and
@@ -719,6 +744,12 @@ async function load() {
   const qs = `?projects=${encodeURIComponent(JSON.stringify(projects))}`;
   inv = await (await fetch("/api/inventory" + qs)).json();
   inv.projects = inv.projects || [];
+  renderInventoryPane();
+}
+
+// Render the active testbed's project groups from the current `inv` (re-runnable so
+// an injected distilled draft skill can appear without a re-fetch).
+function renderInventoryPane(){
   // Render ONLY the active testbed's project groups (global groups are reached via Import).
   const proj = inv.projects.find(p => p.root === activeTestbed) || { root: activeTestbed, name: activeTestbed.replace(/^.*\//, ""), skills: [], mcpServers: [], instructions: [], hooks: [] };
   let html = group("Skills", proj.skills, "projectSkills", proj.root)
@@ -872,6 +903,10 @@ function buildSelectionBody(){
   const reqBody = { selection, name: document.getElementById("name").value || "gem" };
   if (channels.length) reqBody.channels = channels;
   if (projects.length) reqBody.projects = projects;
+  // Ship the distilled drafts that are actually selected so the server can stage
+  // them into the inventory before resolving the selection (proposal §7b).
+  const drafts = acceptedDrafts.filter(d => (projectsSel[d.evidence.root]?.skills || []).includes(d.name));
+  if (drafts.length) reqBody.distilledDrafts = drafts;
   return reqBody;
 }
 async function build(){

@@ -81,3 +81,27 @@ describe("POST /api/workflow/draft", () => {
     await expect(new GemController().writeWorkflowDraft({ body: { ...draft, name: "../evil" } })).rejects.toThrow();
   });
 });
+
+describe("POST /api/gem folds in a distilled draft", () => {
+  const draft = {
+    name: "tdd-feature-loop", description: "Run the TDD loop.",
+    triggers: ["add a feature with tests"], tools: ["Bash", "Edit"], mutating: true,
+    body: "## Contract\nx\n## Phases\n1\n## Output Format\ny",
+    evidence: { sessions: 3, exampleSequence: ["Bash:git commit"], root: "" },
+    status: "draft" as const, confidence: "high" as const,
+  };
+  it("includes a draft skill in the built Gem by name", async () => {
+    const ctl = new GemController();
+    const d = { ...draft, evidence: { ...draft.evidence, root: projectRoot } };
+    const gem = await ctl.gem({ body: {
+      dir: join(home, ".claude"),
+      projects: [projectRoot],
+      selection: { projects: { [projectRoot]: { skills: ["tdd-feature-loop"] } } },
+      channels: [],
+      distilledDrafts: [d],
+    } });
+    const art = gem.artifacts.find((a) => a.name === "tdd-feature-loop");
+    expect(art?.type).toBe("skill");
+    expect(art && art.type === "skill" ? art.content : "").toContain("## Phases");
+  });
+});
