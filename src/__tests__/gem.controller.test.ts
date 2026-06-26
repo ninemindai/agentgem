@@ -8,6 +8,11 @@ import { RestApplication } from "@agentback/rest";
 import { GemController } from "../gem.controller.js";
 import { createServer } from "node:http";
 import { packTar, unpackTar } from "../gem/archiveTar.js";
+import { writeGemArchive } from "../gem/archive.js";
+import { writeArchiveDir } from "../gem/archiveFs.js";
+import { setRunConnectFnForTests, type RunConnectFn } from "../gem/acpRun.js";
+import { resolveRun } from "../gem/runGem.js";
+import type { Gem } from "../gem/types.js";
 
 let app: RestApplication;
 let client: ReturnType<typeof supertest>;
@@ -48,6 +53,92 @@ afterAll(async () => {
   rmSync(agentgemHomeDir, { recursive: true, force: true });
   if (prevAgentgemHome !== undefined) process.env.AGENTGEM_HOME = prevAgentgemHome;
   else delete process.env.AGENTGEM_HOME;
+});
+
+describe("POST /api/gem/run", () => {
+  const gem: Gem = {
+    name: "qa-gem",
+    createdFrom: "test",
+    artifacts: [{ type: "skill", name: "qa", source: "project", content: "# QA\nRun the tests." }],
+    checks: [],
+    requiredSecrets: [],
+  };
+  // Inject a fake agent so the endpoint never spawns a real coding agent.
+  const fakeRun: RunConnectFn = async () => ({
+    ctx: {
+      async open() {
+        return {
+          async setMode() {},
+          async prompt() { return { text: "qa done", toolCalls: [{ toolCallId: "t1", title: "Skill(qa)", status: "completed" }] }; },
+          dispose() {},
+        };
+      },
+    },
+    close() {},
+  });
+
+  it("materializes the gem and returns the agent run + verification", async () => {
+    const archiveDir = mkdtempSync(join(tmpdir(), "gem-arc-"));
+    const runDir = mkdtempSync(join(tmpdir(), "gem-run-"));
+    writeArchiveDir(archiveDir, writeGemArchive(gem).files);
+    setRunConnectFnForTests(fakeRun);
+    try {
+      const r = await client.post("/api/gem/run").send({
+        archivePath: archiveDir,
+        runDir,
+        task: "run qa",
+        expectations: { expectTools: ["qa"], expectText: "done" },
+      }).expect(200);
+      expect(r.body.run.ok).toBe(true);
+      expect(r.body.run.result.toolCalls[0].title).toBe("Skill(qa)");
+      expect(r.body.materialized.written.some((w: { name: string }) => w.name === "qa")).toBe(true);
+      expect(existsSync(join(runDir, ".claude", "skills", "qa", "SKILL.md"))).toBe(true);
+      expect(r.body.verification.passed).toBe(true);
+      expect(r.body.agent).toBe("claude");
+    } finally {
+      setRunConnectFnForTests(null);
+      rmSync(archiveDir, { recursive: true, force: true });
+      rmSync(runDir, { recursive: true, force: true });
+    }
+  });
+
+  it("POST /api/gem/run/prepare materializes and returns an opaque runId mapping to the dir", async () => {
+    const archiveDir = mkdtempSync(join(tmpdir(), "gem-arc-"));
+    const runDir = mkdtempSync(join(tmpdir(), "gem-prep-"));
+    writeArchiveDir(archiveDir, writeGemArchive(gem).files);
+    try {
+      const r = await client.post("/api/gem/run/prepare").send({ archivePath: archiveDir, runDir }).expect(200);
+      expect(typeof r.body.runId).toBe("string");
+      expect(r.body.runDir).toBe(runDir);
+      expect(r.body.materialized.written.some((w: { name: string }) => w.name === "qa")).toBe(true);
+      expect(existsSync(join(runDir, ".claude", "skills", "qa", "SKILL.md"))).toBe(true);
+      // The opaque id resolves server-side to the real dir + agent (raw path never trusted from the client).
+      expect(resolveRun(r.body.runId)).toEqual({ dir: runDir, agent: "claude" });
+    } finally {
+      rmSync(archiveDir, { recursive: true, force: true });
+      rmSync(runDir, { recursive: true, force: true });
+    }
+  });
+
+  it("builds the gem from a selection (no archive) and runs it", async () => {
+    const runDir = mkdtempSync(join(tmpdir(), "gem-run-sel-"));
+    setRunConnectFnForTests(fakeRun);
+    try {
+      const r = await client.post("/api/gem/run").send({
+        selection: { skills: ["review"] },
+        dir,                       // the test's global config home (has the "review" skill)
+        runDir,
+        task: "run review",
+        agent: "claude",
+      }).expect(200);
+      expect(r.body.run.ok).toBe(true);
+      expect(r.body.materialized.written.some((w: { name: string }) => w.name === "review")).toBe(true);
+      expect(existsSync(join(runDir, ".claude", "skills", "review", "SKILL.md"))).toBe(true);
+    } finally {
+      setRunConnectFnForTests(null);
+      rmSync(runDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("GemController", () => {

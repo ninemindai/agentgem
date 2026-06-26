@@ -429,6 +429,73 @@ export const TestbedImportResponseSchema = z.object({
   skipped: z.array(z.object({ artifact: z.string(), reason: z.string() })),
 });
 
+// ── Run a Gem with a local ACP coding agent ──
+export const ToolInvocationSchema = z.object({
+  toolCallId: z.string(),
+  title: z.string(),
+  kind: z.string().optional(),
+  status: z.string().optional(),
+});
+export const RunResultSchema = z.object({
+  text: z.string(),
+  toolCalls: z.array(ToolInvocationSchema),
+});
+export const GemRunOutcomeSchema = z.object({
+  ok: z.boolean(),
+  error: z.string().optional(),
+  result: RunResultSchema,
+});
+export const GemExpectationsSchema = z.object({
+  expectTools: z.array(z.string()).optional(),
+  expectText: z.string().optional(),
+  forbidToolFailures: z.boolean().optional(),
+});
+export const VerificationReportSchema = z.object({
+  passed: z.boolean(),
+  checks: z.array(z.object({ name: z.string(), passed: z.boolean(), detail: z.string() })),
+});
+export const GemRunRequestSchema = z.object({
+  // The Gem: either a built selection (like /materialize) or a .gem archive dir.
+  selection: GemSelectionSchema.optional(),
+  archivePath: z.string().optional(),
+  name: z.string().optional(),
+  dir: z.string().optional(),                              // introspect home (selection mode), like /materialize
+  projects: z.array(z.string()).optional(),
+  task: z.string(),
+  runDir: z.string().optional(),                          // where to materialize + run; defaults under AGENTGEM_HOME
+  agent: z.enum(["claude", "codex"]).optional(),           // which local ACP adapter to drive
+  expectations: GemExpectationsSchema.optional(),
+}).refine((d) => d.selection !== undefined || d.archivePath !== undefined, {
+  message: "provide either selection or archivePath",
+});
+export const GemRunResponseSchema = z.object({
+  dir: z.string(),
+  agent: z.string(),
+  materialized: TestbedImportResponseSchema,
+  run: GemRunOutcomeSchema,
+  verification: VerificationReportSchema.optional(),
+});
+
+// Streaming split: prepare (POST, carries the selection) materializes and hands
+// back an opaque runId; the GET stream then runs it with simple query params.
+export const GemRunPrepareRequestSchema = z.object({
+  selection: GemSelectionSchema.optional(),
+  archivePath: z.string().optional(),
+  name: z.string().optional(),
+  dir: z.string().optional(),
+  projects: z.array(z.string()).optional(),
+  runDir: z.string().optional(),
+  agent: z.enum(["claude", "codex"]).optional(),
+}).refine((d) => d.selection !== undefined || d.archivePath !== undefined, {
+  message: "provide either selection or archivePath",
+});
+export const GemRunPrepareResponseSchema = z.object({
+  runId: z.string(),
+  runDir: z.string(),
+  agent: z.string(),
+  materialized: TestbedImportResponseSchema,
+});
+
 // ── AgentCore deploy (Phase 2) ──
 export const AgentcoreReadyResponseSchema = z.object({ cli: z.boolean(), awsCreds: z.boolean() });
 export const AgentcoreDeployRequestSchema = z.object({ name: z.string() });

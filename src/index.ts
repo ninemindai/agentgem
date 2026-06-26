@@ -18,6 +18,7 @@ import { installMcpHttp } from "@agentback/mcp-http";
 import { GemController } from "./gem.controller.js";
 import { GemTools } from "./gem.tools.js";
 import { streamWorkflowAnalyze } from "./workflowStream.js";
+import { streamGemRun } from "./gemRunStream.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 function pageHtml(): string {
@@ -43,6 +44,9 @@ export async function createApp(port: number): Promise<RestApplication> {
   // framework only returns single JSON bodies). The POST /api/workflow/analyze
   // route stays for programmatic/test callers.
   server.expressApp.get("/api/workflow/analyze/stream", streamWorkflowAnalyze);
+  // SSE progress stream for running a Gem with a local ACP agent (materialize →
+  // run → tool/token deltas → done). POST /api/gem/run stays for programmatic callers.
+  server.expressApp.get("/api/gem/run/stream", streamGemRun);
   return app;
 }
 

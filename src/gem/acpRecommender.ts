@@ -5,11 +5,10 @@
 // cluster/name/justify a Gem. The agent only ranks and explains — its output is
 // re-validated against the inventory (the source of truth), and any failure
 // degrades to a deterministic frequency-based recommendation. Never throws.
-import { spawn } from "node:child_process";
-import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { Readable, Writable } from "node:stream";
 import { agentgemHome } from "../resolveDir.js";
+import { connectAcpAdapter, type AgentDescriptor } from "./acpSession.js";
+export type { AgentDescriptor } from "./acpSession.js";
 import type { ArtifactType } from "./types.js";
 import type { WorkflowSignal, ScanInventory } from "./workflowScan.js";
 import type { GemSelection, ProjectSelection } from "./buildGem.js";
@@ -39,9 +38,8 @@ export interface WorkflowAnalysis {
 const SELECTABLE: ArtifactType[] = ["skill", "mcp_server", "hook"];
 
 // ── ACP façade ─────────────────────────────────────────────────────────────
-// Thin seam over @agentclientprotocol/sdk so tests inject a plain object and the
-// SDK details live in exactly one place (defaultConnectFn).
-export interface AgentDescriptor { id: string; name: string; command: string[] }
+// Thin seam over the shared adapter plumbing so tests inject a plain object.
+// AgentDescriptor now lives in acpSession (re-exported above).
 export interface AcpSessionHandle {
   setMode(mode: string): Promise<void>;
   promptText(text: string, onDelta?: (chunk: string) => void): Promise<string>;
@@ -247,60 +245,31 @@ export async function recommendWorkflow(
 }
 
 /**
- * Real connect: spawn the ACP adapter and bridge stdio via the SDK. Wrapped so
- * the rest of the module is SDK-agnostic. Mirrors agentback console-chat's
- * defaultConnectFn, minus the workspace PATH walk and permission routing — this
- * agent runs in plan mode and we auto-deny any permission request.
- *
- * NEEDS LIVE VALIDATION: stdio bridging + set_mode against claude-agent-acp.
+ * Real connect: route through the shared adapter plumbing in plan mode with
+ * permissions auto-denied (the recommender must never run tools), aggregating
+ * only the agent's message text into a string.
  */
 export const defaultConnectFn: AcpConnectFn = async (descriptor) => {
-  const { client, ndJsonStream } = await import("@agentclientprotocol/sdk");
-  const [bin, ...args] = descriptor.command;
-  const child = spawn(bin, args, { stdio: ["pipe", "pipe", "inherit"], env: process.env });
-  await new Promise<void>((resolve, reject) => {
-    child.once("spawn", () => resolve());
-    child.once("error", (e) => reject(new Error(`failed to spawn ${bin}: ${e.message}`)));
-  });
-  const app: any = client({ name: "agentgem-workflow-recommender" });
-  // Auto-deny any permission request — the recommender must not run tools.
-  app.onRequest?.("session/request_permission", async () => ({ outcome: { outcome: "cancelled" } }));
-  const input = Readable.toWeb(child.stdout!) as ReadableStream<Uint8Array>;
-  const output = Writable.toWeb(child.stdin!) as WritableStream<Uint8Array>;
-  const connection: any = app.connect(ndJsonStream(output, input));
-  const agentCtx: any = connection.agent;
-
+  const raw = await connectAcpAdapter(descriptor, { clientName: "agentgem-workflow-recommender", permission: "deny" });
   const ctx: AcpCtx = {
     async open(cwd: string) {
-      try { mkdirSync(cwd, { recursive: true }); } catch { /* best-effort */ }
-      const session: any = await agentCtx.buildSession(cwd).start();
-      const sessionId = session.sessionId as string;
+      const session = await raw.open(cwd);
       return {
-        async setMode(mode: string) {
-          try { await agentCtx.request("session/set_mode", { sessionId, modeId: mode }); } catch { /* best-effort */ }
-        },
+        setMode: (mode: string) => session.setMode(mode),
         async promptText(text: string, onDelta?: (chunk: string) => void) {
           let out = "";
-          void session.prompt(text);
-          for (;;) {
-            const msg: any = await session.nextUpdate();
-            if (msg.kind === "stop") break;
-            if (msg.kind === "session_update" && msg.update?.sessionUpdate === "agent_message_chunk") {
-              const block = msg.update.content;
+          await session.prompt(text, (u) => {
+            const update = u as { sessionUpdate?: string; content?: { type?: string; text?: string } };
+            if (update?.sessionUpdate === "agent_message_chunk") {
+              const block = update.content;
               if (block?.type === "text" && typeof block.text === "string") { out += block.text; onDelta?.(block.text); }
             }
-          }
+          });
           return out;
         },
-        dispose() { try { session.dispose?.(); } catch { /* ignore */ } },
+        dispose: () => session.dispose(),
       };
     },
   };
-  return {
-    ctx,
-    close: () => {
-      try { connection.close(); } catch { /* ignore */ }
-      try { child.kill(); } catch { /* ignore */ }
-    },
-  };
+  return { ctx, close: raw.close };
 };
