@@ -48,11 +48,14 @@ import {
   RegistryPublishRequestSchema, RegistryPublishResponseSchema,
   UndeployRequestSchema, UndeployResponseSchema, DeployRecordQuerySchema, DeployRecordResponseSchema,
   WorkflowAnalyzeRequestSchema, WorkflowAnalyzeResponseSchema,
+  DistilledSkillSchema, WorkflowDraftWriteResponseSchema,
   GemRunRequestSchema, GemRunResponseSchema,
   GemRunPrepareRequestSchema, GemRunPrepareResponseSchema,
 } from "./schemas.js";
 import { claudeTranscriptsForCwd, scanWorkflow } from "./gem/workflowScan.js";
 import { recommendWorkflow, recommendationToSelection } from "./gem/acpRecommender.js";
+import { distillWorkflow } from "./gem/distill.js";
+import { writeDistilledDraft, stageDraftsByEvidence } from "./gem/draftStage.js";
 import { runReadiness, startLocal, stopLocal, getRunStatus, deployVercel, deployCloudflare, undeployVercel, undeployCloudflare } from "./gem/run.js";
 import { setCredential } from "./gem/credentials.js";
 import { agentcoreReadiness, deployAgentcore, getAgentcoreStatus } from "./gem/agentcoreRun.js";
@@ -90,7 +93,9 @@ export class GemController {
   @post("/gem", { body: GemRequestSchema, response: GemSchema })
   async gem(input: { body: z.infer<typeof GemRequestSchema> }): Promise<z.infer<typeof GemSchema>> {
     const dirs = resolveDirs(input.body.dir);
-    const inventory = introspectAll(input.body.dir, input.body.projects);
+    // Fold any accepted distilled drafts into the inventory (by evidence.root)
+    // before resolution, so a selection can reference one by name (proposal §7b).
+    const inventory = stageDraftsByEvidence(introspectAll(input.body.dir, input.body.projects), input.body.distilledDrafts ?? []);
     return buildGem(inventory, input.body.selection, {
       name: input.body.name ?? "gem",
       createdFrom: dirs.claudeDir,
@@ -102,7 +107,7 @@ export class GemController {
   @post("/scaffold-checks", { body: ScaffoldChecksRequestSchema, response: ScaffoldChecksResponseSchema })
   async scaffoldChecks(input: { body: z.infer<typeof ScaffoldChecksRequestSchema> }): Promise<z.infer<typeof ScaffoldChecksResponseSchema>> {
     const dirs = resolveDirs(input.body.dir);
-    const inventory = introspectAll(input.body.dir, input.body.projects);
+    const inventory = stageDraftsByEvidence(introspectAll(input.body.dir, input.body.projects), input.body.distilledDrafts ?? []);
     const gem = buildGem(inventory, input.body.selection, { name: input.body.name ?? "gem", createdFrom: dirs.claudeDir });
     return { checks: scaffoldChecks(gem) };
   }
@@ -449,15 +454,31 @@ export class GemController {
     // The top-level inventory IS the global/plugin inventory; the project section
     // is namespaced separately. Scan + recommend over both.
     const scanInv = { project, global: { skills: inventory.skills, mcpServers: inventory.mcpServers, hooks: inventory.hooks } };
-    const signal = scanWorkflow(paths, scanInv);
-    const { analysis, degraded } = await recommendWorkflow(signal, scanInv);
+    const signal = scanWorkflow(paths, scanInv, { retainSequences: true });
+    // Selective recommendation + skill distillation run concurrently — both
+    // never throw, so wall-clock stays max(...) not sum (proposal §5).
+    const [{ analysis, degraded }, distill] = await Promise.all([
+      recommendWorkflow(signal, scanInv),
+      distillWorkflow(signal, scanInv),
+    ]);
     const candidates = analysis.candidates.map((c) => ({ ...c, selection: recommendationToSelection(c) as Record<string, unknown> }));
     return {
       candidates,
       gaps: analysis.gaps,
+      distilled: distill.distilled,
       signalSummary: { sessionsScanned: signal.sessions.scanned, spanDays: signal.sessions.spanDays, notes: signal.notes },
       degraded,
     };
+  }
+
+  // Accept a distilled draft: persist it to .agentgem/distilled/<name>/SKILL.md for
+  // the user to review/promote (proposal §7) — NOT into .claude/skills/. The name is
+  // re-validated as a kebab slug here (defense in depth) since it composes a path.
+  @post("/workflow/draft", { body: DistilledSkillSchema, response: WorkflowDraftWriteResponseSchema })
+  async writeWorkflowDraft(input: { body: z.infer<typeof DistilledSkillSchema> }): Promise<z.infer<typeof WorkflowDraftWriteResponseSchema>> {
+    const skill = input.body;
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(skill.name)) throw new Error(`invalid draft name '${skill.name}'`);
+    return { path: writeDistilledDraft(skill) };
   }
 }
 

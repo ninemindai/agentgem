@@ -12,6 +12,7 @@ export type { AgentDescriptor } from "./acpSession.js";
 import type { ArtifactType } from "./types.js";
 import type { WorkflowSignal, ScanInventory } from "./workflowScan.js";
 import type { GemSelection, ProjectSelection } from "./buildGem.js";
+import type { DistilledSkill } from "./distill.js";
 
 // `root` is the namespace: a project root path, or null for a global/plugin artifact.
 export interface RecommendedItem { type: ArtifactType; name: string; reason: string; root: string | null }
@@ -32,6 +33,9 @@ export interface GemCandidate {
 export interface WorkflowAnalysis {
   candidates: GemCandidate[];
   gaps: string[];
+  // Draft skills distilled from the builtin procedure, referenced by candidates
+  // (proposal §2). Empty on the selective-only path and on every fallback.
+  distilled: DistilledSkill[];
 }
 
 // Instructions are a boolean on ProjectSelection, not a named include.
@@ -59,8 +63,10 @@ export const CLAUDE_AGENT: AgentDescriptor = { id: "claude-code", name: "Claude 
 export function analysisWorkspace(): string { return join(agentgemHome(), ".agentgem", "analysis"); }
 
 let testConnectFn: AcpConnectFn | null = null;
-/** Test-only seam: route recommendWorkflow through an in-process fake agent. */
+/** Test-only seam: route recommendWorkflow + distillWorkflow through an in-process fake agent. */
 export function setConnectFnForTests(fn: AcpConnectFn | null): void { testConnectFn = fn; }
+/** The active test connect fn (or null). distillWorkflow shares this seam. */
+export function currentTestConnectFn(): AcpConnectFn | null { return testConnectFn; }
 
 // ── Deterministic analysis (fallback + the agent's baseline) ─────────────────
 // One frequency-based candidate. Multi-candidate splitting is the agent's value-add;
@@ -83,7 +89,7 @@ export function deterministicAnalysis(signal: WorkflowSignal): WorkflowAnalysis 
     include,
     confidence: "medium",
   }] : [];
-  return { candidates, gaps };
+  return { candidates, gaps, distilled: [] };
 }
 
 /**
@@ -171,7 +177,7 @@ export function validateAnalysis(raw: unknown, inv: ScanInventory, signal: Workf
   }
   if (!candidates.length) return fallback;
   const gaps = Array.isArray(obj.gaps) ? obj.gaps.filter((g: unknown) => typeof g === "string") : fallback.gaps;
-  return { candidates, gaps };
+  return { candidates, gaps, distilled: [] };
 }
 
 // ── The agent run ────────────────────────────────────────────────────────────

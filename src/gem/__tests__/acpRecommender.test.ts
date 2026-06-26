@@ -154,3 +154,13 @@ describe("recommendWorkflow", () => {
     expect(analysis.candidates[0].include.map((i) => i.name)).toEqual(["qa"]);
   });
 });
+
+describe("WorkflowAnalysis.distilled (track 4)", () => {
+  it("deterministicAnalysis carries an empty distilled track", () => {
+    expect(deterministicAnalysis(signal).distilled).toEqual([]);
+  });
+  it("validateAnalysis falls back with distilled: []", () => {
+    const out = validateAnalysis("not json at all", scanInv, signal);
+    expect(out.distilled).toEqual([]);
+  });
+});

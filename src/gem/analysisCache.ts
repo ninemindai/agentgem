@@ -12,11 +12,16 @@ import { agentgemHome } from "../resolveDir.js";
 const MAX_ENTRIES = 50;
 function cachePath(): string { return join(agentgemHome(), ".agentgem", "analysis-cache.json"); }
 
-/** A cheap validity token: transcript count + newest mtime. New/updated session → new token. */
+// Bump on any change to what an analysis result contains (the token is otherwise
+// content-blind). v2 = the payload now carries the `distilled` track, so v1 entries
+// (which lack it) must not be served (proposal §8).
+const TOKEN_VERSION = "v2";
+
+/** A cheap validity token: version + transcript count + newest mtime. New/updated session → new token. */
 export function transcriptToken(paths: string[]): string {
   let maxMs = 0;
   for (const p of paths) { try { const m = statSync(p).mtimeMs; if (m > maxMs) maxMs = m; } catch { /* gone — ignore */ } }
-  return `${paths.length}:${Math.round(maxMs)}`;
+  return `${TOKEN_VERSION}:${paths.length}:${Math.round(maxMs)}`;
 }
 
 interface Entry { root: string; token: string; result: unknown; ts: number }

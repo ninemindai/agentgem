@@ -8,6 +8,7 @@ import { introspectConfig, introspectProject } from "./gem/introspect.js";
 import { resolveDirs, resolveProject } from "./resolveDir.js";
 import { claudeTranscriptsForCwd, scanWorkflow } from "./gem/workflowScan.js";
 import { recommendWorkflow, recommendationToSelection } from "./gem/acpRecommender.js";
+import { distillWorkflow } from "./gem/distill.js";
 import { transcriptToken, readAnalysisCache, writeAnalysisCache } from "./gem/analysisCache.js";
 
 // Minimal structural types for the Express req/res we use — avoids a hard
@@ -54,19 +55,24 @@ export async function streamWorkflowAnalyze(req: SseReq, res: SseRes): Promise<v
       if (cached) { send("done", { ...(cached as object), cached: true }); return; }
     }
 
-    const signal = scanWorkflow(paths, scanInv);
+    const signal = scanWorkflow(paths, scanInv, { retainSequences: true });
     send("phase", { phase: "scanned", transcripts: paths.length, sessions: signal.sessions.scanned });
 
     send("phase", { phase: "thinking" });
-    const { analysis, degraded } = await recommendWorkflow(signal, scanInv, {
-      onDelta: (chunk) => send("delta", { text: chunk }),
-    });
+    // Selective recommendation streams its tokens; distillation runs concurrently
+    // but SILENT — two delta streams would interleave and garble the display
+    // (proposal §5). Both never throw, so wall-clock is max(...), not the sum.
+    const [{ analysis, degraded }, distill] = await Promise.all([
+      recommendWorkflow(signal, scanInv, { onDelta: (chunk) => send("delta", { text: chunk }) }),
+      distillWorkflow(signal, scanInv),
+    ]);
 
     send("phase", { phase: "validating" });
     const candidates = analysis.candidates.map((c) => ({ ...c, selection: recommendationToSelection(c) }));
     const payload = {
       candidates,
       gaps: analysis.gaps,
+      distilled: distill.distilled,
       signalSummary: { sessionsScanned: signal.sessions.scanned, spanDays: signal.sessions.spanDays, notes: signal.notes },
       degraded,
     };
