@@ -8,7 +8,8 @@ describe("seatbeltPolicy", () => {
     expect(p).toContain("(allow default)");
     expect(p).toContain("(deny file-write*)");
     expect(p).toContain('(subpath "/runs/g")');
-    expect(p).toContain('(subpath "/tmp")');
+    // /tmp on macOS resolves to /private/tmp via symlink; accept either form.
+    expect(p.includes('(subpath "/tmp")') || p.includes('(subpath "/private/tmp")')).toBe(true);
     // write-allow must come AFTER the blanket deny so it wins
     expect(p.indexOf("(deny file-write*)")).toBeLessThan(p.indexOf('(subpath "/runs/g")'));
     expect(p.indexOf("(deny file-write*)")).toBeLessThan(p.indexOf("(allow file-write*"));

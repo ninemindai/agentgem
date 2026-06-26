@@ -4,17 +4,28 @@
 // "write-deny" shape (allow-all, then deny writes, then re-allow under runDir) avoids
 // the deny-default trap that kills the agent's own runtime before it can start.
 import { tmpdir } from "node:os";
+import { realpathSync } from "node:fs";
+
+// Resolve symlinks when the path exists; fall back to the original string otherwise.
+function tryRealpath(p: string): string {
+  try { return realpathSync(p); } catch { return p; }
+}
 
 export type SandboxKind = "macos-seatbelt" | "linux-bubblewrap";
 
 export function seatbeltPolicy(runDir: string, tmpDir: string = tmpdir()): string {
+  // Resolve symlinks so the SBPL subpath clause matches the kernel's canonical path.
+  // On macOS, tmpdir() returns /var/folders/... but the kernel sees /private/var/folders/...
+  // Fall back to the original path if the directory doesn't exist yet.
+  const realRun = tryRealpath(runDir);
+  const realTmp = tryRealpath(tmpDir);
   return [
     "(version 1)",
     "(allow default)",
     "(deny file-write*)",
     "(allow file-write*",
-    `  (subpath ${q(runDir)})`,
-    `  (subpath ${q(tmpDir)})`,
+    `  (subpath ${q(realRun)})`,
+    `  (subpath ${q(realTmp)})`,
     '  (literal "/dev/null") (literal "/dev/stdout") (literal "/dev/stderr")',
     '  (subpath "/dev/tty") (regex #"^/dev/fd/"))',
   ].join("\n");
