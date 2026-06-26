@@ -533,10 +533,10 @@ const evePackageJson = (gemName: string): string =>
     type: "module",
     imports: { "#*": "./agent/*", "#evals/*": "./evals/*" },
     scripts: { build: "eve build", dev: "eve dev", start: "eve start", typecheck: "tsgo" },
-    dependencies: { "@vercel/connect": "0.2.2", ai: "7.0.0-beta.178", eve: "^0.11.7", microsandbox: "^0.5.0", zod: "4.4.3" },
+    dependencies: { "@vercel/connect": "0.2.2", ai: "7.0.2", eve: "^0.15.0", microsandbox: "^0.5.0", zod: "4.4.3" },
     devDependencies: { "@types/node": "24.x", "@typescript/native-preview": "7.0.0-dev.20260523.1" },
-    overrides: { ai: "7.0.0-beta.178" },
-    resolutions: { ai: "7.0.0-beta.178" },
+    overrides: { ai: "7.0.2" },
+    resolutions: { ai: "7.0.2" },
     engines: { node: "24.x" },
   }, null, 2) + "\n";
 
@@ -667,8 +667,8 @@ const a2aSecretsMd = (secrets: SecretRequirement[]): string => {
 const a2aPackageJson = (gemName: string): string => JSON.stringify({
   name: safePathSegment(gemName).toLowerCase(), version: "0.1.0", private: true, type: "module",
   scripts: { build: "tsc", start: "node dist/server.js", dev: "tsx src/server.ts" },
-  // Verified pins: ai v7 beta pairs with @ai-sdk/mcp v2 beta; @a2a-js/sdk 0.3.x.
-  dependencies: { "@a2a-js/sdk": "^0.3.13", ai: "7.0.0-beta.178", "@ai-sdk/mcp": "2.0.0-beta.67", express: "^5", uuid: "^11" },
+  // Verified pins: ai v7 GA pairs with @ai-sdk/mcp v2 GA (both on @ai-sdk/provider@4); @a2a-js/sdk 0.3.x.
+  dependencies: { "@a2a-js/sdk": "^0.3.13", ai: "7.0.2", "@ai-sdk/mcp": "2.0.0", express: "^5", uuid: "^11" },
   devDependencies: { "@types/express": "^5", "@types/node": "^24", tsx: "^4", typescript: "^5" },
 }, null, 2) + "\n";
 
