@@ -91,6 +91,7 @@ describe("POST /api/gem/run", () => {
       expect(r.body.dir).toBe(runDir);
       expect(r.body.run.ok).toBe(true);
       expect(r.body.run.result.toolCalls[0].title).toBe("Skill(qa)");
+      expect(r.body.run.sandbox).toEqual({ backend: "injected", isolated: false });
       expect(r.body.materialized.written.some((w: { name: string }) => w.name === "qa")).toBe(true);
       expect(existsSync(join(runDir, ".claude", "skills", "qa", "SKILL.md"))).toBe(true);
       expect(r.body.verification.passed).toBe(true);

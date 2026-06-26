@@ -467,6 +467,7 @@ export const GemRunOutcomeSchema = z.object({
   ok: z.boolean(),
   error: z.string().optional(),
   result: RunResultSchema,
+  sandbox: z.object({ backend: z.string(), isolated: z.boolean() }),
 });
 export const GemExpectationsSchema = z.object({
   expectTools: z.array(z.string()).optional(),

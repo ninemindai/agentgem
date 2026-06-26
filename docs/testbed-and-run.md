@@ -55,6 +55,26 @@ log buffer keeps the last ~200 lines. Vercel/Cloudflare deploys persist a
 [deploy record](targets.md) so they can be undeployed later; `undeployVercel` /
 `undeployCloudflare` reverse them.
 
+### Sandboxed Gem runs
+
+When `acpRun.ts` drives a Gem, it auto-selects an OS-native sandbox:
+
+| Platform | Backend | Isolated |
+| --- | --- | --- |
+| macOS | `macos-seatbelt` (sandbox-exec) | yes |
+| Linux + bwrap | `linux-bubblewrap` | yes |
+| Fallback | `child-spawn` | no |
+
+The sandbox confines filesystem **writes** to the run directory, so any file the
+agent touches outside that directory is rejected at the kernel level. On the
+sandboxed path, agent tool calls are **auto-approved** — the FS boundary bounds
+the blast radius. On the unsandboxed fallback (e.g. Windows, or no sandbox
+binary), tool calls require approval as usual, unless the environment variable
+`AGENTGEM_GEM_RUN_AUTOALLOW=1` is set.
+
+> **v1 scope:** only write access is confined. Reads and outbound network
+> connections are unrestricted in this release.
+
 ### Managed & AWS backends
 
 Distinct from local/edge runs are the managed publish backends — Anthropic Managed Agents

@@ -149,6 +149,20 @@ describe("runGemWithAgent", () => {
       setRunConnectFnForTests(null);
     }
   });
+
+  it("reports the sandbox backend in the outcome (injected connectFn => not isolated)", async () => {
+    setRunConnectFnForTests(async () => ({
+      ctx: { open: async () => ({ setMode: async () => {}, prompt: async () => ({ text: "ok", toolCalls: [] }), dispose: () => {} }) },
+      close: () => {},
+    }));
+    try {
+      const out = await runGemWithAgent({ dir: "/tmp/whatever", task: "do" });
+      expect(out.ok).toBe(true);
+      expect(out.sandbox).toEqual({ backend: "injected", isolated: false });
+    } finally {
+      setRunConnectFnForTests(null);
+    }
+  });
 });
 
 describe("applyUpdate (session-update reducer)", () => {
