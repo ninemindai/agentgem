@@ -39,11 +39,20 @@ export const HookArtifactSchema = z.object({
   secretRefs: z.array(z.object({ name: z.string(), location: z.string() })).optional(),
 });
 
+export const ChannelArtifactSchema = z.object({
+  type: z.literal("channel"),
+  name: z.string(),
+  platform: z.enum(["slack", "telegram", "discord", "teams", "twilio", "github"]),
+  secretRefs: z.array(z.object({ name: z.string(), location: z.string() })),
+  description: z.string().optional(),
+});
+
 export const GemArtifactSchema = z.discriminatedUnion("type", [
   SkillArtifactSchema,
   McpServerArtifactSchema,
   InstructionsArtifactSchema,
   HookArtifactSchema,
+  ChannelArtifactSchema,
 ]);
 
 export const SecretRequirementSchema = z.object({
@@ -145,7 +154,7 @@ export const TargetIdSchema = z.enum(TARGET_IDS);
 
 export const SkippedArtifactSchema = z.object({
   artifact: z.string(),
-  type: z.enum(["skill", "mcp_server", "instructions", "hook"]),
+  type: z.enum(["skill", "mcp_server", "instructions", "hook", "channel"]),
   reason: z.string(),
 });
 
@@ -165,7 +174,7 @@ export const GemLockSchema = z.object({
 });
 
 export const GemManifestArtifactSchema = z.object({
-  type: z.enum(["skill", "mcp_server", "instructions", "hook"]),
+  type: z.enum(["skill", "mcp_server", "instructions", "hook", "channel"]),
   name: z.string(),
   path: z.string(),
   description: z.string().optional(),
@@ -285,7 +294,7 @@ export const WorkflowAnalyzeRequestSchema = z.object({
   root: z.string(),             // the project root to analyze (one of the discovered cwds)
 });
 const RecommendedItemSchema = z.object({
-  type: z.enum(["skill", "mcp_server", "instructions", "hook"]),
+  type: z.enum(["skill", "mcp_server", "instructions", "hook", "channel"]),
   name: z.string(),
   reason: z.string(),
   root: z.string().nullable(),   // project root, or null for a global/plugin artifact
@@ -420,7 +429,7 @@ export const TestbedImportRequestSchema = z.object({
   flavor: TestbedFlavorIdSchema.optional(),
 });
 export const ImportedRefSchema = z.object({
-  type: z.enum(["skill", "mcp_server", "instructions", "hook"]),
+  type: z.enum(["skill", "mcp_server", "instructions", "hook", "channel"]),
   name: z.string(),
   overwritten: z.boolean(),
 });

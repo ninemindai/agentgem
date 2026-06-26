@@ -1,5 +1,5 @@
 // src/gem/types.ts
-export type ArtifactType = "skill" | "mcp_server" | "instructions" | "hook";
+export type ArtifactType = "skill" | "mcp_server" | "instructions" | "hook" | "channel";
 
 export interface SecretRef {
   name: string;     // leaf key, e.g. "OPENAI_API_KEY"
@@ -41,7 +41,19 @@ export interface HookArtifact {
   secretRefs?: SecretRef[]; // names+locations redaction stripped from `config`
 }
 
-export type GemArtifact = SkillArtifact | McpServerArtifact | InstructionsArtifact | HookArtifact;
+export type ChannelPlatform = "slack" | "telegram" | "discord" | "teams" | "twilio" | "github";
+
+// A channel declares how the Gem wants to be reached by end users. Neutral + minimal: the
+// platform plus the env-var secrets it needs. The "how it's wired" lives in CHANNEL_REGISTRY.
+export interface ChannelArtifact {
+  type: "channel";
+  name: string;             // path segment -> agent/channels/<name>.ts on the Eve target
+  platform: ChannelPlatform;
+  secretRefs: SecretRef[];  // resolved from the registry at build time (env-var names)
+  description?: string;     // optional; for discovery / Card
+}
+
+export type GemArtifact = SkillArtifact | McpServerArtifact | InstructionsArtifact | HookArtifact | ChannelArtifact;
 
 export interface ProjectInventory {
   root: string;
