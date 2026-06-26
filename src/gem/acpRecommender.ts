@@ -12,6 +12,7 @@ export type { AgentDescriptor } from "./acpSession.js";
 import type { ArtifactType } from "./types.js";
 import type { WorkflowSignal, ScanInventory } from "./workflowScan.js";
 import type { GemSelection, ProjectSelection } from "./buildGem.js";
+import type { DistilledSkill } from "./distill.js";
 
 // `root` is the namespace: a project root path, or null for a global/plugin artifact.
 export interface RecommendedItem { type: ArtifactType; name: string; reason: string; root: string | null }
@@ -32,6 +33,9 @@ export interface GemCandidate {
 export interface WorkflowAnalysis {
   candidates: GemCandidate[];
   gaps: string[];
+  // Draft skills distilled from the builtin procedure, referenced by candidates
+  // (proposal §2). Empty on the selective-only path and on every fallback.
+  distilled: DistilledSkill[];
 }
 
 // Instructions are a boolean on ProjectSelection, not a named include.
@@ -83,7 +87,7 @@ export function deterministicAnalysis(signal: WorkflowSignal): WorkflowAnalysis 
     include,
     confidence: "medium",
   }] : [];
-  return { candidates, gaps };
+  return { candidates, gaps, distilled: [] };
 }
 
 /**
@@ -171,7 +175,7 @@ export function validateAnalysis(raw: unknown, inv: ScanInventory, signal: Workf
   }
   if (!candidates.length) return fallback;
   const gaps = Array.isArray(obj.gaps) ? obj.gaps.filter((g: unknown) => typeof g === "string") : fallback.gaps;
-  return { candidates, gaps };
+  return { candidates, gaps, distilled: [] };
 }
 
 // ── The agent run ────────────────────────────────────────────────────────────
