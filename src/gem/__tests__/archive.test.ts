@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { computeLock, verifyLock, writeGemArchive, readGemArchive } from "../archive.js";
+import { makeChannelArtifact } from "../channels.js";
 import type { Gem, GemArtifact } from "../types.js";
 
 describe("computeLock", () => {
@@ -136,5 +137,34 @@ describe("readGemArchive", () => {
     const edited = { ...files, "skills/code_review/SKILL.md": "# Review EDITED" } as typeof files;
     (edited as Record<string, string>)["gem.lock"] = JSON.stringify(computeLock(edited), null, 2);
     expect(readGemArchive(edited).artifacts[0]).toMatchObject({ type: "skill", content: "# Review EDITED" });
+  });
+});
+
+describe("channel artifact round-trip", () => {
+  it("writes channels/<name>.json and reads it back as a ChannelArtifact", () => {
+    const gem = {
+      name: "demo", createdFrom: "test", checks: [], requiredSecrets: [],
+      artifacts: [makeChannelArtifact("slack")],
+    };
+    const { files } = writeGemArchive(gem);
+    expect(files["channels/slack.json"]).toBeDefined();
+    const back = readGemArchive(files);
+    const ch = back.artifacts.find((a) => a.type === "channel");
+    expect(ch).toMatchObject({ type: "channel", name: "slack", platform: "slack" });
+    expect((ch as any).secretRefs).toContainEqual({ name: "SLACK_BOT_TOKEN", location: "env.SLACK_BOT_TOKEN" });
+  });
+
+  it("throws on an unknown artifact type instead of misparsing it as a hook", () => {
+    const gem = {
+      name: "demo", createdFrom: "test", checks: [], requiredSecrets: [],
+      artifacts: [makeChannelArtifact("slack")],
+    };
+    const { files } = writeGemArchive(gem);
+    const manifest = JSON.parse(files["gem.json"]);
+    manifest.artifacts[0].type = "bogus";
+    files["gem.json"] = JSON.stringify(manifest, null, 2);
+    // re-lock so verification passes and we reach the artifact dispatch
+    files["gem.lock"] = JSON.stringify(computeLock(files), null, 2);
+    expect(() => readGemArchive(files)).toThrow(/unknown artifact type/i);
   });
 });

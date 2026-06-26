@@ -3,6 +3,7 @@ import type { FileTree, SkippedArtifact } from "./targets.js";
 import type {
   Gem, GemArtifact, ArtifactType,
   SkillArtifact, McpServerArtifact, HookArtifact, GemCheck,
+  ChannelArtifact, SecretRef,
 } from "./types.js";
 import { safePathSegment } from "./targets.js";
 
@@ -184,6 +185,13 @@ export function readGemArchive(files: FileTree): Gem {
       if (o.secretRefs !== undefined) a.secretRefs = o.secretRefs;
       return a;
     }
+    if (e.type === "channel") {
+      const o = JSON.parse(body(e.path)) as { platform: ChannelArtifact["platform"]; secretRefs: SecretRef[]; description?: string };
+      const a: ChannelArtifact = { type: "channel", name: e.name, platform: o.platform, secretRefs: o.secretRefs };
+      if (o.description !== undefined) a.description = o.description;
+      return a;
+    }
+    if (e.type !== "hook") throw new Error(`unknown artifact type '${e.type}' in manifest`);
     const o = JSON.parse(body(e.path)) as { event: string; matcher?: string; config: Record<string, unknown>; source?: string; secretRefs?: HookArtifact["secretRefs"] };
     const a: HookArtifact = { type: "hook", name: e.name, event: o.event, config: o.config };
     if (o.matcher !== undefined) a.matcher = o.matcher;
