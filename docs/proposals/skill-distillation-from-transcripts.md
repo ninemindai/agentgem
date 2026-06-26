@@ -325,9 +325,26 @@ const DISTILL = (candidatesJson, installedSkillsJson) =>
   `"mutating":bool,"body","confidence":"high"|"medium"|"low"}]}.`;
 ```
 
-Run it alongside the existing recommender. Either run failing degrades only its
-own track (selective failure → deterministic candidates; distill failure →
-`distilled: []`). Never throws.
+Run it **concurrently** with the existing recommender (resolves F7):
+
+```ts
+const [rec, distill] = await Promise.all([
+  recommendWorkflow(signal, scanInv, { onDelta }),        // streams the user-facing phase
+  distillWorkflow(signal, scanInv, { /* no onDelta */ }), // silent — see below
+]);
+```
+
+Wall-clock is `max(~60s, ~60s)`, not the sum. `Promise.all` is safe because both
+functions catch-and-degrade internally and never throw — a failed track yields its
+own empty result (selective → deterministic candidates; distill → `distilled: []`)
+without touching the other.
+
+**Streaming gotcha:** only the selective recommender passes `onDelta`. If both
+streamed into the SSE `delta` channel their token streams would interleave and
+garble the "thinking" display, so distillation runs silent and surfaces its result
+at the `done` event. **Cost note:** concurrency fixes latency, not token cost —
+every Analyze now spends two agent runs. If cost matters, the orthogonal lever is
+gating distillation behind an explicit action (§11); the two are composable.
 
 ## 6. Validation of distilled output
 
@@ -441,8 +458,10 @@ Tracks 1–6 are pure/total and unit-testable with no live agent. The ACP wiring
 reuses the existing `setConnectFnForTests` seam (`acpRecommender.ts:63`).
 
 ## 11. Open questions for review
-- One ACP run emitting both tracks, or two independent runs? (Two = cleaner
-  failure isolation + smaller prompts; one = half the agent latency.) Leaning two.
+- ~~One ACP run vs two?~~ **Decided: two, run concurrently** (§5) — cleaner failure
+  isolation + smaller prompts, and `Promise.all` keeps wall-clock flat. Distillation
+  may still be gated behind an explicit action later if token *cost* (not latency)
+  becomes the concern; that gate composes with concurrency.
 - `MIN_RECURRENCE` default — 2 (skillify's literal threshold) or higher to cut
   noise on chatty projects?
 - Draft location — `.agentgem/distilled/` vs. surfacing in the Lapidary Ledger UI
@@ -460,12 +479,12 @@ Severity: **H** blocks track 1 · **M** changes the design · **L** polish.
 | F4 | **M** | **The new seam is at inventory assembly, not `buildGem`.** `buildGem` resolves names in-memory and throws on miss (`buildGem.ts:39,58`); reads no files. | **Resolved (§7b).** Materialize staged drafts into `ConfigInventory.skills[]` upstream; `buildGem` unchanged. |
 | F5 | **M** | **Body is unverifiable.** Evidence-grounding checks `tools[]`, not the prose `body`, which can hallucinate steps. | **Accepted/mitigated (§6, §7).** Draft-only + human-review-before-promote; never auto-promote. A future "verify distilled skill" pass (run body, compare outcome) is the real check — out of scope. |
 | F6 | **L** | **Cache has no schema version.** Content-blind `count:mtime` token shadows the new `distilled` field. | **Resolved (§8).** Version the token (`v2:…`). |
-| F7 | **L** | **Second ACP run doubles latency/cost.** Analyze is already ~15-20s; a second 60s-timeout run compounds it. | **Open (§11).** Run the two ACP calls concurrently, or gate distillation behind an explicit action. Decision deferred. |
+| F7 | **L** | **Second ACP run doubles latency/cost.** Analyze is already ~15-20s; a second 60s-timeout run compounds it. | **Resolved (§5).** Run the two ACP calls concurrently via `Promise.all` (both never-throw) → wall-clock stays `max`, not sum. Distillation streams silent to avoid SSE delta interleaving. Cost (two runs) unchanged; gating behind an explicit action remains a composable future lever. |
 
 **Net assessment:** the architecture and trust discipline (draft-only,
 evidence-grounded validation, degrade-to-empty) are sound. The two H blockers are
 now designed out: **F1** via the inventory-independent procedure-recurrence signal
 (§3c), and **F2** via the default-deny field-aware scrubber (§3a) that removes the
 secret/file-content class structurally instead of by blocklist. F3/F4/F6 are
-resolved in-design; F5 is accepted under the draft-only gate; F7 is the only open
-performance decision and does not block track 1.
+resolved in-design; F5 is accepted under the draft-only gate; F7 is resolved by
+running the two ACP calls concurrently (§5). No blockers remain for track 1.
