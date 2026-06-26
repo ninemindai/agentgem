@@ -39,10 +39,12 @@ export const HookArtifactSchema = z.object({
   secretRefs: z.array(z.object({ name: z.string(), location: z.string() })).optional(),
 });
 
+export const ChannelPlatformSchema = z.enum(["slack", "telegram", "discord", "teams", "twilio", "github"]);
+
 export const ChannelArtifactSchema = z.object({
   type: z.literal("channel"),
   name: z.string(),
-  platform: z.enum(["slack", "telegram", "discord", "teams", "twilio", "github"]),
+  platform: ChannelPlatformSchema,
   secretRefs: z.array(z.object({ name: z.string(), location: z.string() })),
   description: z.string().optional(),
 });

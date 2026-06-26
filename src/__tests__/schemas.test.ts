@@ -7,6 +7,7 @@ import {
   WorkspaceSummarySchema, CreateWorkspaceRequestSchema, RenderRequestSchema, RenderResultSchema,
   DeployTargetIdSchema, DeployReadyQuerySchema, DeployTargetsResponseSchema,
   RegistryResolveRequestSchema, RegistryInstallRequestSchema, RegistryPublishRequestSchema,
+  GemArtifactSchema, SkippedArtifactSchema,
 } from "../schemas.js";
 
 describe("wire schemas", () => {
@@ -165,5 +166,24 @@ describe("registry schemas", () => {
   it("requires scope + version on a publish request", () => {
     expect(() => RegistryPublishRequestSchema.parse({ refs: [] })).toThrow();
     expect(RegistryPublishRequestSchema.parse({ workspace: "w", scope: "acme", version: "1.0.0" }).scope).toBe("acme");
+  });
+});
+
+describe("channel schema", () => {
+  it("GemArtifactSchema parses a channel artifact", () => {
+    const ok = GemArtifactSchema.safeParse({
+      type: "channel", name: "slack", platform: "slack",
+      secretRefs: [{ name: "SLACK_BOT_TOKEN", location: "env.SLACK_BOT_TOKEN" }],
+    });
+    expect(ok.success).toBe(true);
+  });
+
+  it("rejects an unknown platform", () => {
+    const bad = GemArtifactSchema.safeParse({ type: "channel", name: "x", platform: "myspace", secretRefs: [] });
+    expect(bad.success).toBe(false);
+  });
+
+  it("SkippedArtifactSchema accepts a channel skip", () => {
+    expect(SkippedArtifactSchema.safeParse({ artifact: "slack", type: "channel", reason: "unsupported" }).success).toBe(true);
   });
 });
