@@ -143,6 +143,38 @@ a.hero-kicker:hover{text-decoration:none;border-color:var(--accent);transform:tr
 .vs.new li::marker{color:var(--gem)}
 @media(max-width:820px){.compare{grid-template-columns:1fr}}
 
+/* ── artifact spotlight (dark band: Claude artifact vs AgentGem Gem) ─────── */
+.artifact-stage{position:relative;margin:34px auto 6px;max-width:980px;border-radius:16px;padding:30px 30px 16px;
+  background:radial-gradient(120% 90% at 28% 12%,#26201a 0%,#1f1b15 60%,#171410 100%);
+  border:1px solid #322a1f;overflow:hidden;
+  box-shadow:0 30px 70px -34px rgba(33,28,21,.75),0 1px 0 rgba(255,255,255,.04) inset}
+.artifact-stage svg{width:100%;height:auto;display:block}
+.artifact-cap{font-family:var(--mono);font-size:11.5px;color:#9c907a;text-align:center;margin:8px 0 2px;letter-spacing:.01em}
+.artifact-cap b{color:#d9a441;font-weight:600}
+/* motion: rings bloom outward from the shared center; roadmap ring rotates. Gated on .in (scroll-triggered). */
+@keyframes ag-expand{from{opacity:0;transform:scale(.05)}to{opacity:1;transform:scale(1)}}
+@keyframes ag-spin{to{transform:rotate(360deg)}}
+@keyframes ag-fade{from{opacity:0}to{opacity:1}}
+@keyframes ag-rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@keyframes ag-draw{from{opacity:0;stroke-dashoffset:var(--len)}to{opacity:1;stroke-dashoffset:0}}
+@keyframes ag-pulse{0%,100%{opacity:.28}50%{opacity:.65}}
+.artifact-stage .reveal{opacity:0}
+.artifact-stage #ag-r1,.artifact-stage #ag-r2,.artifact-stage #ag-r3{transform-box:view-box;transform-origin:340px 280px}
+.artifact-stage .ag-spin{transform-box:view-box;transform-origin:340px 280px;animation:ag-spin 80s linear infinite}
+.artifact-stage .ag-glow{animation:ag-pulse 4s ease-in-out infinite}
+.artifact-stage.in #ag-core{transform-box:fill-box;transform-origin:center;animation:ag-expand .7s .15s cubic-bezier(.2,.8,.2,1) forwards}
+.artifact-stage.in #ag-r1{animation:ag-expand .85s .38s cubic-bezier(.16,.84,.3,1.05) forwards}
+.artifact-stage.in #ag-r2{animation:ag-expand .92s .62s cubic-bezier(.16,.84,.3,1.05) forwards}
+.artifact-stage.in #ag-r3{animation:ag-expand 1s .86s cubic-bezier(.16,.84,.3,1.05) forwards}
+.artifact-stage.in #ag-wall{animation:ag-rise .8s 1.12s ease forwards}
+.artifact-stage.in #ag-ldw{--len:60;animation:ag-draw .5s 1.3s ease forwards}
+.artifact-stage.in .ag-lbl{animation:ag-fade .7s ease forwards}
+.artifact-stage.in #ag-l1{animation-delay:1.3s}.artifact-stage.in #ag-l2{animation-delay:1.46s}.artifact-stage.in #ag-l3{animation-delay:1.62s}
+.artifact-stage.in #ag-ld1{--len:200;animation-delay:1.32s}.artifact-stage.in #ag-ld2{--len:200;animation-delay:1.48s}.artifact-stage.in #ag-ld3{--len:200;animation-delay:1.64s}
+.artifact-stage.in .ag-leader{stroke-dasharray:var(--len);stroke-dashoffset:var(--len);animation:ag-draw .6s ease forwards}
+@media(prefers-reduced-motion:reduce){.artifact-stage *{animation:none!important;opacity:1!important;stroke-dashoffset:0!important}}
+@media(max-width:820px){.artifact-stage{padding:18px 12px 12px}}
+
 /* ── footer ───────────────────────────────────────────────────────────── */
 .foot{margin-top:64px;border-top:1px solid var(--line);background:linear-gradient(180deg,transparent,var(--paper-2))}
 .foot-in{max-width:var(--maxw);margin:0 auto;padding:34px 24px;display:flex;flex-wrap:wrap;gap:24px;align-items:center;justify-content:space-between}
