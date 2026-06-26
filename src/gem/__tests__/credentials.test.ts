@@ -44,5 +44,7 @@ describe("server credential store", () => {
   it("rejects empty or multi-line values", () => {
     expect(() => setCredential("VERCEL_TOKEN", "   ", home)).toThrow();
     expect(() => setCredential("VERCEL_TOKEN", "a\nb", home)).toThrow();
+    // Reported as a client-input error (400) so the caller learns the rule, not a 500.
+    expect(() => setCredential("VERCEL_TOKEN", "a\nb", home)).toThrow(expect.objectContaining({ statusCode: 400 }));
   });
 });

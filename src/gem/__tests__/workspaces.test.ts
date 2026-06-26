@@ -24,6 +24,9 @@ describe("workspaces", () => {
   it("workspaceDir rejects names with separators or traversal", () => {
     expect(() => workspaceDir("../escape")).toThrow(/invalid workspace name/i);
     expect(() => workspaceDir("a/b")).toThrow(/invalid workspace name/i);
+    // The rejection is a client-input error (400), so its reason reaches the caller
+    // instead of being hidden behind an opaque 500.
+    expect(() => workspaceDir("../escape")).toThrow(expect.objectContaining({ statusCode: 400 }));
     expect(workspaceDir("my-gem")).toBe(join(home, "workspaces", "my-gem"));
   });
 

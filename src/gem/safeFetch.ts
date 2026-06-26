@@ -7,6 +7,7 @@
 // validation and the connect cannot swing the request onto a blocked address.
 import { lookup } from "node:dns/promises";
 import { Agent } from "undici";
+import { InvalidInputError } from "./inputError.js";
 
 interface LookupAddress { address: string; family: number }
 
@@ -38,16 +39,16 @@ export interface SafeFetchOpts { allowPrivate?: boolean; maxRedirects?: number; 
 // Returns the URL plus the validated addresses (null when allowPrivate skips resolution).
 async function validatePublic(raw: string, opts: SafeFetchOpts): Promise<{ url: URL; validated: LookupAddress[] | null }> {
   let u: URL;
-  try { u = new URL(raw); } catch { throw new Error(`invalid gem URL: ${raw}`); }
+  try { u = new URL(raw); } catch { throw new InvalidInputError(`invalid gem URL: ${raw}`); }
   if (u.protocol !== "http:" && u.protocol !== "https:") {
-    throw new Error(`gem URL must be http(s), got ${u.protocol}`);
+    throw new InvalidInputError(`gem URL must be http(s), got ${u.protocol}`);
   }
   if (opts.allowPrivate) return { url: u, validated: null };
   const host = u.hostname.replace(/^\[/, "").replace(/\]$/, "");
   const results = await lookup(host, { all: true });
-  if (results.length === 0) throw new Error(`could not resolve gem URL host: ${host}`);
+  if (results.length === 0) throw new InvalidInputError(`could not resolve gem URL host: ${host}`);
   for (const r of results) {
-    if (isBlockedAddress(r.address)) throw new Error(`refusing to fetch gem from non-public address ${r.address} (${host})`);
+    if (isBlockedAddress(r.address)) throw new InvalidInputError(`refusing to fetch gem from non-public address ${r.address} (${host})`);
   }
   return { url: u, validated: results };
 }

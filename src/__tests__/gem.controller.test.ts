@@ -290,9 +290,12 @@ describe("share loop: .gem file + install from file/URL", () => {
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const port = (server.address() as { port: number }).port;
     try {
-      await client.post("/api/materialize")
+      // The SSRF guard is an input rejection, so it surfaces as a 400 whose message
+      // names the blocked address — not an opaque 500 (issue #3 observability fix).
+      const res = await client.post("/api/materialize")
         .send({ gemUrl: `http://127.0.0.1:${port}/demo.gem`, target: "eve" })
-        .expect(500);
+        .expect(400);
+      expect(res.body.error.message).toMatch(/non-public|private|address/i);
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
       rmSync(out, { recursive: true, force: true });
@@ -438,6 +441,14 @@ describe("run ops", () => {
   it("POST /api/credential rejects a non-allowlisted key", async () => {
     const r = await client.post("/api/credential").send({ key: "AWS_SECRET_ACCESS_KEY", value: "x" });
     expect(r.status).toBe(422); // schema rejects keys outside the allowlist
+  });
+
+  // A confined-by-throw input (multi-line value would corrupt the .env) must report WHY:
+  // a 400 carrying the rule, not an opaque 500 (issue #3 observability fix).
+  it("POST /api/credential rejects a multi-line value with a 400 and a reason", async () => {
+    const r = await client.post("/api/credential").send({ key: "VERCEL_TOKEN", value: "good\nEVIL=1" });
+    expect(r.status).toBe(400);
+    expect(r.body.error.message).toMatch(/single line/i);
   });
 
   // Containment guard: the `name` field flows startLocal -> ensureRunProject -> workspaceDir ->

@@ -10,6 +10,7 @@ import type { TargetId, SkippedArtifact, MaterializeOpts } from "./targets.js";
 import { materialize, compatibility, TARGET_REGISTRY, safePathSegment } from "./targets.js";
 import { writeGemArchive, readGemArchive } from "./archive.js";
 import { writeArchiveDir, readArchiveDir } from "./archiveFs.js";
+import { InvalidInputError } from "./inputError.js";
 
 const TARGETS_DIR = ".targets";
 
@@ -41,7 +42,7 @@ export function workspacesRoot(): string {
 // no `.`/`..`), so two distinct requests never collide to one directory and nothing escapes the root.
 export function workspaceName(name: string): string {
   const seg = safePathSegment(name);
-  if (seg !== name) throw new Error(`invalid workspace name '${name}' — use only [A-Za-z0-9._-], no separators`);
+  if (seg !== name) throw new InvalidInputError(`invalid workspace name '${name}' — use only [A-Za-z0-9._-], no separators`);
   return seg;
 }
 export function workspaceDir(name: string): string {

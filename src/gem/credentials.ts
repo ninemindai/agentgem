@@ -6,6 +6,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { agentgemHome } from "../resolveDir.js";
+import { InvalidInputError } from "./inputError.js";
 
 // Only these keys may be set/persisted via the API — never arbitrary env vars.
 export const CREDENTIAL_KEYS = ["ANTHROPIC_API_KEY", "VERCEL_TOKEN", "CLOUDFLARE_API_TOKEN"] as const;
@@ -19,8 +20,8 @@ export function credentialsEnvPath(home: string = agentgemHome()): string {
 // deploy picks it up without a restart. Rejects empty/multi-line values (would corrupt the .env).
 export function setCredential(key: CredentialKey, value: string, home: string = agentgemHome()): void {
   const v = value.trim();
-  if (!v) throw new Error("credential value is empty");
-  if (/[\r\n]/.test(v)) throw new Error("credential value must be a single line");
+  if (!v) throw new InvalidInputError("credential value is empty");
+  if (/[\r\n]/.test(v)) throw new InvalidInputError("credential value must be a single line");
   process.env[key] = v;
   const abs = credentialsEnvPath(home);
   const kept = (existsSync(abs) ? readFileSync(abs, "utf8") : "")
