@@ -35,12 +35,17 @@ export function seatbeltPolicy(runDir: string, tmpDir: string = tmpdir()): strin
 function q(p: string): string { return `"${p}"`; }
 
 export function bwrapArgs(runDir: string, tmpDir: string = tmpdir()): string[] {
+  // Resolve symlinks so the writable bind matches the kernel's canonical path
+  // (mirrors seatbeltPolicy); fall back to the original if the dir doesn't exist yet.
+  const realRun = tryRealpath(runDir);
+  const realTmp = tryRealpath(tmpDir);
   return [
-    "--ro-bind", "/", "/",        // everything readable, nothing writable…
-    "--bind", runDir, runDir,     // …except the run dir…
-    "--bind", tmpDir, tmpDir,     // …and temp.
+    "--ro-bind", "/", "/",            // everything readable, nothing writable…
+    "--bind", realRun, realRun,       // …except the run dir…
+    "--bind", realTmp, realTmp,       // …and temp.
     "--dev", "/dev",
-    "--proc", "/proc",
+    "--unshare-pid",                  // own PID namespace: the agent can't see/signal host processes
+    "--proc", "/proc",                // fresh procfs for that namespace (must follow --unshare-pid)
     "--die-with-parent",
   ];
 }

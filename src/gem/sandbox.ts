@@ -3,10 +3,10 @@
 // produces a RunConnectFn pre-scoped to a run dir. Auto-allow is capability-gated:
 // isolated backends run permission:"allow" (the FS boundary bounds blast radius);
 // the child-spawn fallback stays deny unless AGENTGEM_GEM_RUN_AUTOALLOW=1.
-import { existsSync } from "node:fs";
 import { connectRunSession } from "./acpRun.js";          // value used at call-time (safe ESM cycle)
 import type { RunConnectFn, AgentDescriptor } from "./acpRun.js";
 import { wrapWithSandbox, type SandboxKind } from "./sandboxLaunch.js";
+import { binOnPath } from "./binPath.js";
 
 export interface SandboxBackend {
   id: string;
@@ -20,11 +20,13 @@ export function envPermission(env: NodeJS.ProcessEnv = process.env): "allow" | "
 }
 
 // An isolated backend: wrap the agent command with the OS sandbox launcher (so the
-// agent AND its child shells inherit the jail) and auto-allow tool calls.
+// agent AND its child shells inherit the jail) and auto-allow tool calls. `bin` is the
+// launcher resolved on PATH (not a hard-coded absolute path — distros place bwrap in
+// /usr/bin or /usr/local/bin), matching the bare name `wrapWithSandbox` actually spawns.
 function isolatedBackend(id: string, kind: SandboxKind, bin: string, supported: () => boolean): SandboxBackend {
   return {
     id, isolated: true,
-    available: () => supported() && existsSync(bin),
+    available: () => supported() && binOnPath(bin),
     connectFn: (runDir) => (descriptor: AgentDescriptor, app) =>
       connectRunSession({ ...descriptor, command: wrapWithSandbox(kind, runDir, descriptor.command) }, "allow", app),
   };
@@ -38,8 +40,8 @@ export const childSpawnBackend: SandboxBackend = {
 };
 
 export const RUN_BACKENDS: SandboxBackend[] = [
-  isolatedBackend("macos-seatbelt", "macos-seatbelt", "/usr/bin/sandbox-exec", () => process.platform === "darwin"),
-  isolatedBackend("linux-bubblewrap", "linux-bubblewrap", "/usr/bin/bwrap", () => process.platform === "linux"),
+  isolatedBackend("macos-seatbelt", "macos-seatbelt", "sandbox-exec", () => process.platform === "darwin"),
+  isolatedBackend("linux-bubblewrap", "linux-bubblewrap", "bwrap", () => process.platform === "linux"),
   childSpawnBackend,
 ];
 

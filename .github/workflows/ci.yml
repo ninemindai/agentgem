@@ -20,6 +20,12 @@ jobs:
         node-version: [22, 24, 26]
     steps:
       - uses: actions/checkout@v6
+      # bubblewrap so the linux-bubblewrap sandbox boundary test actually runs here (it
+      # self-skips if unprivileged user namespaces are unavailable). Relax the Ubuntu
+      # 24.04 AppArmor restriction on unprivileged userns so bwrap can start.
+      - run: |
+          sudo apt-get update && sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:

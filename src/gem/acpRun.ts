@@ -19,7 +19,7 @@
 // unified into a shared acpSession module.
 import { connectAcpAdapter, type AgentDescriptor } from "./acpSession.js";
 export type { AgentDescriptor } from "./acpSession.js";
-import { selectRunBackend } from "./sandbox.js";          // value used at call-time (safe ESM cycle)
+import { selectRunBackend, envPermission } from "./sandbox.js";   // values used at call-time (safe ESM cycle)
 
 // One tool the agent invoked during the run. Mirrors the fields of an ACP
 // `tool_call` session update that matter for verification/observability.
@@ -225,6 +225,7 @@ export async function connectRunSession(
   return { ctx, close: raw.close };
 }
 
-// Back-compat: the unsandboxed child-spawn connect, env-gated like before.
+// Back-compat: the unsandboxed child-spawn connect, env-gated via the single source of
+// truth for the auto-allow flag (shared with sandbox.ts's child-spawn backend).
 export const defaultRunConnectFn: RunConnectFn = (descriptor, app) =>
-  connectRunSession(descriptor, process.env.AGENTGEM_GEM_RUN_AUTOALLOW === "1" ? "allow" : "deny", app);
+  connectRunSession(descriptor, envPermission(), app);

@@ -20,11 +20,16 @@ describe("bwrapArgs", () => {
   it("read-only-binds the root and writable-binds only runDir + tmp", () => {
     const a = bwrapArgs("/runs/g", "/tmp");
     expect(a).toEqual(expect.arrayContaining(["--ro-bind", "/", "/"]));
-    // writable bind for the run dir
+    // run dir doesn't exist -> realpath falls back to the original
     const i = a.indexOf("--bind");
     expect(a.slice(i, i + 3)).toEqual(["--bind", "/runs/g", "/runs/g"]);
+    // tmp bind: /tmp resolves to /private/tmp on macOS, stays /tmp on Linux; src === dest
     const j = a.indexOf("--bind", i + 1);
-    expect(a.slice(j, j + 3)).toEqual(["--bind", "/tmp", "/tmp"]);
+    expect(["/tmp", "/private/tmp"]).toContain(a[j + 1]);
+    expect(a[j + 2]).toBe(a[j + 1]);
+    // own PID namespace, with a fresh procfs mounted AFTER --unshare-pid
+    expect(a).toContain("--unshare-pid");
+    expect(a.indexOf("--unshare-pid")).toBeLessThan(a.indexOf("--proc"));
     expect(a).toContain("--die-with-parent");
   });
 });

@@ -11,9 +11,10 @@
 import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
-import { dirname, join, delimiter } from "node:path";
+import { mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { agentgemHome } from "../resolveDir.js";
+import { binOnPath } from "./binPath.js";
 import type { Gem, ConfigInventory } from "./types.js";
 import { scaffoldTestbed, importArtifacts, type ImportedRef, type ImportSkip } from "./testbed.js";
 import type { TestbedFlavorId } from "./testbedFlavors.js";
@@ -70,10 +71,6 @@ function resolveBinFrom(pkg: string, binName: string, fromDir?: string): string[
     if (binRel) return [process.execPath, join(dirname(pkgJsonPath), binRel)];
   } catch { /* not resolvable here */ }
   return null;
-}
-
-function binOnPath(binName: string): boolean {
-  return (process.env.PATH ?? "").split(delimiter).some((d) => d && existsSync(join(d, binName)));
 }
 
 // Where on-demand-fetched adapters are cached (under AGENTGEM_HOME, never global).
