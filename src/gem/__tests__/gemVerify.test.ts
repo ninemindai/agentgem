@@ -11,6 +11,7 @@ function outcome(over: Partial<GemRunOutcome> & { toolCalls?: GemRunOutcome["res
       text: over.text ?? "",
       toolCalls: over.toolCalls ?? [],
     },
+    sandbox: over.sandbox ?? { backend: "child-spawn", isolated: false },
   };
 }
 

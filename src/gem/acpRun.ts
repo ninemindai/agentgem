@@ -19,6 +19,7 @@
 // unified into a shared acpSession module.
 import { connectAcpAdapter, type AgentDescriptor } from "./acpSession.js";
 export type { AgentDescriptor } from "./acpSession.js";
+import { selectRunBackend } from "./sandbox.js";          // value used at call-time (safe ESM cycle)
 
 // One tool the agent invoked during the run. Mirrors the fields of an ACP
 // `tool_call` session update that matter for verification/observability.
@@ -112,10 +113,12 @@ export type RunConnectFn = (descriptor: AgentDescriptor, app: unknown) => Promis
 
 // The outcome of a run. `ok:false` carries the failure reason; `result` is always
 // present (empty on failure) so callers don't have to null-check.
+// `sandbox` reports which backend drove this run and whether it was OS-isolated.
 export interface GemRunOutcome {
   ok: boolean;
   result: RunResult;
   error?: string;
+  sandbox: { backend: string; isolated: boolean };
 }
 
 // Pinned Claude ACP adapter, same binary the recommender spawns.
@@ -162,7 +165,12 @@ export interface RunGemOptions {
  * { ok:false, error }.
  */
 export async function runGemWithAgent(opts: RunGemOptions): Promise<GemRunOutcome> {
-  const connectFn = opts.connectFn ?? testConnectFn ?? defaultRunConnectFn;
+  const explicit = opts.connectFn ?? testConnectFn;
+  const selected = explicit ? null : selectRunBackend(opts.dir);
+  const connectFn = explicit ?? selected!.connectFn;
+  const sandbox = selected
+    ? { backend: selected.backend.id, isolated: selected.backend.isolated }
+    : { backend: "injected", isolated: false };
   const mode = opts.mode ?? DEFAULT_RUN_MODE;
   const timeoutMs = opts.timeoutMs ?? DEFAULT_RUN_TIMEOUT_MS;
   let conn: { ctx: RunCtx; close: () => void } | null = null;
@@ -172,9 +180,9 @@ export async function runGemWithAgent(opts: RunGemOptions): Promise<GemRunOutcom
     handle = await conn.ctx.open(opts.dir);   // the testbed dir — NOT a neutral one
     await handle.setMode(mode);               // tool-capable — the agent uses the Gem
     const result = await withTimeout(handle.prompt(opts.task, opts.onDelta, opts.onToolCall), timeoutMs);
-    return { ok: true, result };
+    return { ok: true, result, sandbox };
   } catch (err) {
-    return { ok: false, result: { text: "", toolCalls: [] }, error: (err as Error).message };
+    return { ok: false, result: { text: "", toolCalls: [] }, error: (err as Error).message, sandbox };
   } finally {
     try { handle?.dispose(); } catch { /* ignore */ }
     try { conn?.close(); } catch { /* ignore */ }
@@ -182,19 +190,23 @@ export async function runGemWithAgent(opts: RunGemOptions): Promise<GemRunOutcom
 }
 
 /**
- * Real connect: route through the shared adapter plumbing and fold each update into a RunResult via
- * applyUpdate, capturing the tool trace.
+ * The shared run-session façade: connect the ACP adapter with an explicit permission
+ * policy and fold each update into a RunResult via applyUpdate, capturing the tool
+ * trace. Backends in sandbox.ts call this with a wrapped descriptor (isolated => "allow")
+ * or the raw descriptor (child-spawn => env policy).
  *
- * SECURITY: permission is "deny" by default. Auto-allow grants the agent's tool calls — including
- * shell — which run with the user's full privileges (the run dir is only the cwd, NOT a sandbox, so
- * it does NOT bound the blast radius). Auto-allow is therefore opt-in: set AGENTGEM_GEM_RUN_AUTOALLOW=1
- * to enable it for a trusted local session. Combined with the loopback origin guard (cross-site
- * requests are rejected) and the server-derived run dir, this keeps a malicious browser tab from
- * driving a fully-permissioned local agent. A real isolation boundary (container/sandbox) is the
- * stronger follow-up that would let auto-allow be safe by default.
+ * SECURITY: On the isolated path (macos-seatbelt / linux-bubblewrap), auto-allow is
+ * safe by default — the OS-native FS boundary bounds the blast radius to the run dir
+ * and temp. On the child-spawn fallback, permission is "deny" unless
+ * AGENTGEM_GEM_RUN_AUTOALLOW=1 is set (env escape hatch, retained for trusted local
+ * sessions). Combined with the loopback origin guard and the server-derived run dir,
+ * this keeps a malicious browser tab from driving a fully-permissioned local agent.
  */
-export const defaultRunConnectFn: RunConnectFn = async (descriptor) => {
-  const permission = process.env.AGENTGEM_GEM_RUN_AUTOALLOW === "1" ? "allow" : "deny";
+export async function connectRunSession(
+  descriptor: AgentDescriptor,
+  permission: "allow" | "deny",
+  _app?: unknown,
+): Promise<{ ctx: RunCtx; close: () => void }> {
   const raw = await connectAcpAdapter(descriptor, { clientName: "agentgem-gem-runner", permission });
   const ctx: RunCtx = {
     async open(cwd: string) {
@@ -211,4 +223,8 @@ export const defaultRunConnectFn: RunConnectFn = async (descriptor) => {
     },
   };
   return { ctx, close: raw.close };
-};
+}
+
+// Back-compat: the unsandboxed child-spawn connect, env-gated like before.
+export const defaultRunConnectFn: RunConnectFn = (descriptor, app) =>
+  connectRunSession(descriptor, process.env.AGENTGEM_GEM_RUN_AUTOALLOW === "1" ? "allow" : "deny", app);
