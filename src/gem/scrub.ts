@@ -65,12 +65,16 @@ export function scrubProse(s: string, maxLen = 280): string {
   return scrubbed.slice(0, maxLen) + "…";
 }
 
-// "git commit -m fix" -> "git commit" ; "ls -la" -> "ls" ; "" -> ""
+// Coarse procedure verb: "git commit -m fix" -> "Bash:git commit", "cd /x" ->
+// "Bash:cd", "/usr/bin/npx vitest" -> "Bash:npx vitest". argv0 is basenamed; the
+// 2nd token counts as a subcommand ONLY if it's a clean lowercase word — a path,
+// filename, flag, or quoted arg is NOT a subcommand, so it never inflates the verb.
 function bashVerb(command: string): string {
   const toks = command.trim().split(/\s+/).filter(Boolean);
-  const argv0 = toks[0] ?? "";
+  if (!toks.length) return "Bash";
+  const argv0 = (toks[0].split("/").pop() || toks[0]).replace(/[;|&]+$/, "");
   if (!argv0) return "Bash";
-  const sub = toks[1] && !toks[1].startsWith("-") ? ` ${toks[1]}` : "";
+  const sub = toks[1] && /^[a-z][a-z0-9-]*$/.test(toks[1]) ? ` ${toks[1]}` : "";
   return `Bash:${argv0}${sub}`;
 }
 

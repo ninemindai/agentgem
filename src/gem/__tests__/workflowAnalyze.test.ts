@@ -51,3 +51,33 @@ describe("POST /api/workflow/analyze", () => {
     expect(res.distilled).toEqual([]);
   });
 });
+
+import { existsSync, readFileSync as rf } from "node:fs";
+describe("POST /api/workflow/draft", () => {
+  const draft = {
+    name: "tdd-feature-loop", description: "Run the TDD loop.",
+    triggers: ["add a feature with tests"], tools: ["Bash", "Edit"], mutating: true,
+    body: "## Contract\nx\n## Phases\n1. test\n## Output Format\ny",
+    evidence: { sessions: 3, exampleSequence: ["Bash:git commit"], root: "/r" },
+    status: "draft" as const, confidence: "high" as const,
+  };
+  it("writes the draft SKILL.md and returns its path", async () => {
+    const base = mkdtempSync(join(tmpdir(), "wfdraft-"));
+    const prev = process.env.AGENTGEM_HOME;
+    process.env.AGENTGEM_HOME = base;
+    try {
+      const ctl = new GemController();
+      const res = await ctl.writeWorkflowDraft({ body: draft });
+      expect(res.path).toBe(join(base, ".agentgem", "distilled", "tdd-feature-loop", "SKILL.md"));
+      expect(existsSync(res.path)).toBe(true);
+      expect(rf(res.path, "utf8")).toContain("name: tdd-feature-loop");
+    } finally {
+      if (prev === undefined) delete process.env.AGENTGEM_HOME; else process.env.AGENTGEM_HOME = prev;
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a path-traversal name", async () => {
+    await expect(new GemController().writeWorkflowDraft({ body: { ...draft, name: "../evil" } })).rejects.toThrow();
+  });
+});

@@ -182,3 +182,59 @@ describe("scanWorkflow retainSequences / procedures / missionHint", () => {
     expect(hint.outcome).toContain("shipped the distillation feature");
   });
 });
+
+describe("scanWorkflow procedure spine excludes navigation noise", () => {
+  function write(lines: string[]): string {
+    const dir = mkdtempSync(join(tmpdir(), "wfnav-"));
+    const file = join(dir, "s.jsonl");
+    writeFileSync(file, lines.join("\n") + "\n");
+    return file;
+  }
+  // cd / ls noise around a stable action spine; two identical sessions must group.
+  const NOISY = [
+    assistantToolUse("Bash", { command: "cd /Users/me/app" }),
+    assistantToolUse("Bash", { command: "ls -la" }),
+    assistantToolUse("Edit", { file_path: "/a.ts", new_string: "x" }),
+    assistantToolUse("Bash", { command: "git add -A" }),
+    assistantToolUse("Bash", { command: "npx vitest run" }),
+    assistantToolUse("Bash", { command: "git commit -m done" }),
+  ];
+
+  it("groups two sessions by action spine, dropping Bash:cd/Bash:ls", () => {
+    const sig = scanWorkflow([write(NOISY), write(NOISY)], { project: inventory }, { retainSequences: true });
+    const top = sig.procedures![0];
+    expect(top.sessions).toBe(2);
+    expect(top.verbs).not.toContain("Bash:cd");
+    expect(top.verbs).not.toContain("Bash:ls");
+    expect(top.verbs).toContain("Bash:git commit");
+    expect(top.verbs.length).toBeGreaterThanOrEqual(4);
+  });
+});
+
+describe("scanWorkflow mines recurring SUB-patterns (n-grams) across differing sessions", () => {
+  function write(lines: string[]): string {
+    const dir = mkdtempSync(join(tmpdir(), "wfgram-"));
+    const file = join(dir, "s.jsonl");
+    writeFileSync(file, lines.join("\n") + "\n");
+    return file;
+  }
+  const COMMON = [
+    assistantToolUse("Edit", { file_path: "/a.ts" }),
+    assistantToolUse("Bash", { command: "git add -A" }),
+    assistantToolUse("Bash", { command: "npx vitest run" }),
+    assistantToolUse("Bash", { command: "git commit -m x" }),
+  ];
+  // three sessions share the COMMON 4-gram but have different surrounding steps —
+  // whole-session keys would never collide; n-gram mining must find the shared run.
+  const A = [assistantToolUse("Write", { file_path: "/n.ts" }), ...COMMON];
+  const B = [...COMMON, assistantToolUse("Bash", { command: "gh pr create" })];
+  const C = [assistantToolUse("Bash", { command: "tsc -b" }), ...COMMON];
+
+  it("surfaces the shared 4-gram with support 3", () => {
+    const sig = scanWorkflow([write(A), write(B), write(C)], { project: inventory }, { retainSequences: true });
+    const shared = sig.procedures!.find((p) => p.verbs.includes("Bash:git commit") && p.verbs.includes("Bash:npx vitest"));
+    expect(shared).toBeDefined();
+    expect(shared!.sessions).toBe(3);
+    expect(shared!.verbs.length).toBeGreaterThanOrEqual(4);
+  });
+});

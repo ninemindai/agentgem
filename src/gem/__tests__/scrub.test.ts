@@ -9,6 +9,17 @@ describe("scrubStep — Bash", () => {
     expect(r.arg).toContain("git commit");
   });
 
+  it("coarsens the verb — no subcommand for path/filename/quoted args", () => {
+    expect(scrubStep("Bash", { command: "cd /Users/me/proj" }).verb).toBe("Bash:cd");
+    expect(scrubStep("Bash", { command: "cat package.json" }).verb).toBe("Bash:cat");
+    expect(scrubStep("Bash", { command: 'echo "==="' }).verb).toBe("Bash:echo");
+    expect(scrubStep("Bash", { command: "git commit -m x" }).verb).toBe("Bash:git commit");
+    expect(scrubStep("Bash", { command: "npm run build" }).verb).toBe("Bash:npm run");
+  });
+  it("basenames an absolute argv0", () => {
+    expect(scrubStep("Bash", { command: "/usr/local/bin/npx vitest" }).verb).toBe("Bash:npx vitest");
+  });
+
   it("redacts a secret token in place but keeps the surrounding command", () => {
     const secret = "ghp_abcdefghijklmnopqrstuvwxyz0123456789";
     const r = scrubStep("Bash", { command: `git push https://${secret}@github.com main` });

@@ -323,7 +323,7 @@ const GemCandidateSchema = z.object({
 });
 // A draft skill distilled from the builtin procedure (proposal §2). status is
 // always "draft" — never installed by this pipeline.
-const DistilledSkillSchema = z.object({
+export const DistilledSkillSchema = z.object({
   name: z.string(),
   description: z.string(),
   triggers: z.array(z.string()),
@@ -349,6 +349,9 @@ export const WorkflowAnalyzeResponseSchema = z.object({
   }),
   degraded: z.boolean(),
 });
+
+// Accept a distilled draft → write it to .agentgem/distilled/<name>/SKILL.md.
+export const WorkflowDraftWriteResponseSchema = z.object({ path: z.string() });
 
 export const GemSchema = z.object({
   name: z.string(),

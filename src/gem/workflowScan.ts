@@ -150,18 +150,68 @@ export interface ScanInventory {
  */
 const SEQ_CAP_PER_SESSION = 40;
 const PROCEDURES_CAP = 25;
+// Recurrence is mined as frequent contiguous n-grams of the action spine, NOT as
+// whole-session keys: real sessions never share a byte-identical spine, but they
+// DO share sub-runs like `Edit > Bash:git add > Bash:npx vitest > Bash:git commit`
+// (validated against 230 real transcripts — §3c).
+const MIN_GRAM = 3, MAX_GRAM = 6, MIN_SUPPORT = 2;
 
-// Procedure spine: drop consecutive-duplicate verbs and pure-navigation steps
-// (Read/Grep/Glob), keep the action verbs (Bash:*, Edit, Write). Empty => no
-// distillable procedure (§3c).
-function procedureKey(steps: ProcedureStep[]): string {
+// Action spine: drop consecutive-duplicate verbs and pure navigation/inspection
+// steps (Read/Grep/Glob and Bash cd/ls/cat/echo/find/grep/…), keeping the action
+// verbs (Bash:git/npm/…, Edit, Write).
+const NAV_TOOL_RE = /^(Read|Grep|Glob)$/;
+const BASH_NAV_RE = /^Bash:(cd|ls|cat|pwd|echo|find|which|head|tail|export|source|sleep|clear|env|true|grep|rg)$/;
+function actionSpine(steps: ProcedureStep[]): string[] {
   const spine: string[] = [];
   for (const { verb } of steps) {
-    if (/^(Read|Grep|Glob)$/.test(verb)) continue;
+    const base = verb.split(" ")[0];        // "Bash:echo hi" -> "Bash:echo"
+    if (NAV_TOOL_RE.test(verb) || BASH_NAV_RE.test(base)) continue;
     if (spine[spine.length - 1] === verb) continue;
     spine.push(verb);
   }
-  return spine.join(" > ");
+  return spine;
+}
+
+// Is `needle` a contiguous subsequence of `hay`?
+function containsRun(hay: string[], needle: string[]): boolean {
+  for (let i = 0; i + needle.length <= hay.length; i++) {
+    let ok = true;
+    for (let j = 0; j < needle.length; j++) if (hay[i + j] !== needle[j]) { ok = false; break; }
+    if (ok) return true;
+  }
+  return false;
+}
+
+// Mine maximal frequent n-grams of the action spine. Each kept group = a sub-run
+// seen in >= MIN_SUPPORT distinct sessions; a shorter run contained in a kept
+// longer run of >= support is dropped as redundant (keep the maximal procedure).
+function mineProcedures(sessions: SessionSequence[]): ProcedureGroup[] {
+  const spines = sessions.map((s) => actionSpine(s.steps));
+  const grams = new Map<string, { verbs: string[]; sess: Set<number> }>();
+  spines.forEach((sp, idx) => {
+    const seen = new Set<string>();
+    for (let n = MIN_GRAM; n <= MAX_GRAM; n++) {
+      for (let i = 0; i + n <= sp.length; i++) {
+        const verbs = sp.slice(i, i + n);
+        const key = verbs.join(" > ");
+        if (seen.has(key)) continue;        // count each session once per distinct gram
+        seen.add(key);
+        let e = grams.get(key);
+        if (!e) { e = { verbs, sess: new Set() }; grams.set(key, e); }
+        e.sess.add(idx);
+      }
+    }
+  });
+  const frequent = [...grams.entries()]
+    .map(([key, v]) => ({ key, verbs: v.verbs, sessions: v.sess.size, sampleSessionIdx: [...v.sess][0] }))
+    .filter((g) => g.sessions >= MIN_SUPPORT)
+    .sort((a, b) => b.verbs.length - a.verbs.length || b.sessions - a.sessions);
+  const kept: ProcedureGroup[] = [];
+  for (const g of frequent) {
+    if (kept.some((k) => k.sessions >= g.sessions && containsRun(k.verbs, g.verbs))) continue;
+    kept.push(g);
+  }
+  return kept.sort((a, b) => b.sessions - a.sessions || b.verbs.length - a.verbs.length).slice(0, PROCEDURES_CAP);
 }
 
 // Plain text from a message's content (string, or the text blocks of an array).
@@ -296,15 +346,7 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
   let procedures: WorkflowSignal["procedures"];
   if (opts.retainSequences) {
     sequences = { root: project.root, sessions: seqSessions };
-    const procMap = new Map<string, ProcedureGroup>();
-    seqSessions.forEach((s, idx) => {
-      const key = procedureKey(s.steps);
-      if (!key) return;
-      const e = procMap.get(key);
-      if (e) e.sessions++;
-      else procMap.set(key, { key, verbs: key.split(" > "), sessions: 1, sampleSessionIdx: idx });
-    });
-    procedures = [...procMap.values()].sort((a, b) => b.sessions - a.sessions).slice(0, PROCEDURES_CAP);
+    procedures = mineProcedures(seqSessions);
   }
 
   // Assemble artifacts. Every PROJECT item appears (0 = installed, unused). For

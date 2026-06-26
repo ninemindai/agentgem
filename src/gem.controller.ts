@@ -48,12 +48,14 @@ import {
   RegistryPublishRequestSchema, RegistryPublishResponseSchema,
   UndeployRequestSchema, UndeployResponseSchema, DeployRecordQuerySchema, DeployRecordResponseSchema,
   WorkflowAnalyzeRequestSchema, WorkflowAnalyzeResponseSchema,
+  DistilledSkillSchema, WorkflowDraftWriteResponseSchema,
   GemRunRequestSchema, GemRunResponseSchema,
   GemRunPrepareRequestSchema, GemRunPrepareResponseSchema,
 } from "./schemas.js";
 import { claudeTranscriptsForCwd, scanWorkflow } from "./gem/workflowScan.js";
 import { recommendWorkflow, recommendationToSelection } from "./gem/acpRecommender.js";
 import { distillWorkflow } from "./gem/distill.js";
+import { writeDistilledDraft } from "./gem/draftStage.js";
 import { runReadiness, startLocal, stopLocal, getRunStatus, deployVercel, deployCloudflare, undeployVercel, undeployCloudflare } from "./gem/run.js";
 import { setCredential } from "./gem/credentials.js";
 import { agentcoreReadiness, deployAgentcore, getAgentcoreStatus } from "./gem/agentcoreRun.js";
@@ -465,6 +467,16 @@ export class GemController {
       signalSummary: { sessionsScanned: signal.sessions.scanned, spanDays: signal.sessions.spanDays, notes: signal.notes },
       degraded,
     };
+  }
+
+  // Accept a distilled draft: persist it to .agentgem/distilled/<name>/SKILL.md for
+  // the user to review/promote (proposal §7) — NOT into .claude/skills/. The name is
+  // re-validated as a kebab slug here (defense in depth) since it composes a path.
+  @post("/workflow/draft", { body: DistilledSkillSchema, response: WorkflowDraftWriteResponseSchema })
+  async writeWorkflowDraft(input: { body: z.infer<typeof DistilledSkillSchema> }): Promise<z.infer<typeof WorkflowDraftWriteResponseSchema>> {
+    const skill = input.body;
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(skill.name)) throw new Error(`invalid draft name '${skill.name}'`);
+    return { path: writeDistilledDraft(skill) };
   }
 }
 

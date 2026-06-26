@@ -236,30 +236,38 @@ procedure. Driving Phase-0 off `shapes` would make distillation fire *only* on
 sessions that also happened to use a skill/MCP — defeating the motivation.
 
 Fix: a **separate recurrence signal computed from procedure verbs**, independent
-of inventory. For each session with a retained sequence, derive a canonical
-`procedureKey` from its ordered `verb` list:
+of inventory. Each session's steps reduce to an **action spine** — drop consecutive
+duplicates and pure navigation/inspection (`Read`/`Grep`/`Glob` and Bash
+`cd`/`ls`/`cat`/`echo`/`find`/`grep`/…), keep the action verbs (`Bash:git commit`,
+`Edit`, `Write`). The verb is coarse (`Bash:git commit`, not the full command):
+argv0 is basenamed and the 2nd token counts as a subcommand only if it is a clean
+lowercase word — a path/filename/flag never inflates the verb.
+
+> **Revised after the live run (was: whole-session exact key).** The original
+> design keyed recurrence on the *entire* ordered spine. Validated against 230 real
+> transcripts, that produced **zero** qualifying procedures: real sessions never
+> share a byte-identical spine (only 22/230 even have a ≥4 spine). The recurrence
+> lives in **shared sub-runs**, not whole sessions — e.g. `Edit > Bash:git add >
+> Bash:npx vitest > Bash:git commit` recurs across sessions whose overall spines
+> differ entirely.
+
+So `procedures` is mined as **maximal frequent contiguous n-grams** of the spine:
 
 ```ts
-// collapse consecutive duplicate verbs, drop pure-navigation noise (Read/Grep/Glob
-// runs), keep the action spine (Bash verbs, Edit/Write), then join.
-function procedureKey(steps: Step[]): string {
-  const spine = dedupeConsecutive(steps.map(s => s.verb))
-    .filter(v => !/^(Read|Grep|Glob)$/.test(v));
-  return spine.join(" > ");           // e.g. "Bash:git checkout > Edit > Bash:vitest > Bash:git commit"
-}
+// n in [MIN_GRAM=3 .. MAX_GRAM=6]; count DISTINCT sessions each n-gram appears in;
+// keep n-grams with support >= MIN_SUPPORT; drop a shorter run contained in a kept
+// longer run of >= support (keep the maximal procedure). One representative session
+// per kept run becomes its `sampleSessionIdx`.
+mineProcedures(sessions) -> ProcedureGroup[]  // { key, verbs, sessions, sampleSessionIdx }
 ```
 
-Group sessions by `procedureKey`, count frequency → `signal.procedures`. This is
-the builtin-aware analogue of `shapes`: `{ key, verbs, sessions, sampleSessionIdx }`,
-frequency-sorted, capped. Phase-0 (§4) filters on `procedure.sessions`, not
-`shape.sessions`.
-
-Cardinality is controlled by the coarse `verb` (`Bash:git commit`, not the full
-command), so genuinely-repeated procedures collapse to the same key while one-offs
-stay singletons. Exact-key grouping is deliberately simple and may under-cluster
-near-identical procedures (`vitest` vs `vitest run`); that is acceptable for a
-first cut — the ACP step merges near-duplicates, and a similarity-based clusterer
-(shingle + Jaccard) is a noted future refinement, not a blocker.
+`ProcedureGroup` stays the builtin-aware analogue of `shapes`, frequency-sorted and
+capped. Phase-0 (§4) filters on `procedure.sessions` and `verbs.length` (≥3, since
+n-grams start at 3). On this project's history the miner yields ~11 recurring
+procedures and the agent distilled real, mission-named skills from them
+(`fix-unsigned-macos-app-launch`, `build-markdown-docs-website`,
+`author-open-source-readme`). A Jaccard/shingle clusterer over near-identical
+n-grams remains a future refinement, not a blocker.
 
 ## 4. Phase-0 viability gate (deterministic pre-filter)
 

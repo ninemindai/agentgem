@@ -10,7 +10,7 @@ import { CLAUDE_AGENT, analysisWorkspace, defaultConnectFn, currentTestConnectFn
 // logic" (~4 distinct action verbs). The third criterion (clear trigger phrase) is
 // deferred to the agent + validation.
 export const MIN_RECURRENCE = 2;
-export const MIN_STEPS = 4;
+export const MIN_STEPS = 3;   // procedures are mined as >=3-gram action runs (§3c)
 
 // A procedure that passed the deterministic Phase-0 gate, with one representative
 // scrubbed run (+ its mission hint) attached for the generative step.
