@@ -109,6 +109,11 @@ export function writeGemArchive(gem: Gem, opts: { version?: string; dependencies
       if (a.source !== undefined) body.source = a.source;
       if (a.secretRefs !== undefined) body.secretRefs = a.secretRefs;
       if (place(path, JSON.stringify(body, null, 2), a.name, "mcp_server")) artifacts.push({ type: "mcp_server", name: a.name, path });
+    } else if (a.type === "channel") {
+      const path = `channels/${withExt(seg, ".json")}`;
+      const body: Record<string, unknown> = { platform: a.platform, secretRefs: a.secretRefs };
+      if (a.description !== undefined) body.description = a.description;
+      if (place(path, JSON.stringify(body, null, 2), a.name, "channel")) artifacts.push({ type: "channel", name: a.name, path });
     } else {
       const path = `hooks/${withExt(seg, ".json")}`;
       const body: Record<string, unknown> = { event: a.event, config: a.config };

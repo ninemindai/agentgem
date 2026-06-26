@@ -66,6 +66,7 @@
   "devDependencies": {
     "@types/node": "^24",
     "@types/supertest": "^6",
+    "eve": "^0.15.0",
     "highlight.js": "^11.11.1",
     "marked": "^18.0.5",
     "marked-highlight": "^2.2.4",
