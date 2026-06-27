@@ -15,4 +15,9 @@ describe("identity", () => {
     const id2 = loadOrCreateIdentity(dir); // reloads, does not regenerate
     expect(id2.publicKey).toBe(id1.publicKey);
   });
+
+  it("verify returns false (no throw) on malformed key after the prefix", () => {
+    expect(verify("ed25519:!!!not-base64-DER!!!", "data", "c2ln")).toBe(false);
+    expect(verify("not-a-key", "data", "c2ln")).toBe(false);
+  });
 });
