@@ -4,7 +4,8 @@
   "description": "A local web UI that introspects your coding-agent config, redacts secrets at capture, and builds a portable, composable Gem.",
   "license": "MIT",
   "bin": {
-    "agentgem": "dist/cli.js"
+    "agentgem": "dist/cli.js",
+    "agentgem-distill": "dist/distill/mcpServer.js"
   },
   "files": [
     "dist",
@@ -57,6 +58,7 @@
     "@agentclientprotocol/sdk": "^0.28.1",
     "@anthropic-ai/sdk": "^0.104.2",
     "@aws-sdk/client-bedrock-agentcore-control": "^3.1073.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "dotenv": "^17.4.2",
     "tslib": "^2.8.1",
     "undici": "^6.27.0",

@@ -23,6 +23,7 @@ function signalWith(
   return {
     root: "/r", flavor: "claude",
     sessions: { scanned: sessions.length, firstMs: 0, lastMs: 0, spanDays: 0 },
+    models: [],
     artifacts: [], unresolved: [], coOccurrence: [], shapes: [], notes: [],
     sequences: { root: "/r", sessions },
     procedures,
@@ -34,6 +35,7 @@ describe("distillCandidates — Phase-0 gate", () => {
     const sig: WorkflowSignal = {
       root: "/r", flavor: "claude",
       sessions: { scanned: 0, firstMs: 0, lastMs: 0, spanDays: 0 },
+      models: [],
       artifacts: [], unresolved: [], coOccurrence: [], shapes: [], notes: [],
     };
     expect(distillCandidates(sig)).toEqual([]);
@@ -146,6 +148,7 @@ function fakeConnect(canned: string | (() => Promise<string>)): AcpConnectFn {
 const SIG: WorkflowSignal = {
   root: "/r", flavor: "claude",
   sessions: { scanned: 3, firstMs: 0, lastMs: 0, spanDays: 0 },
+  models: [],
   artifacts: [], unresolved: [], coOccurrence: [], shapes: [], notes: [],
   sequences: { root: "/r", sessions: [CANDIDATES[0].sample] },
   procedures: [{ key: CANDIDATES[0].key, verbs: CANDIDATES[0].verbs, sessions: 3, sampleSessionIdx: 0 }],
