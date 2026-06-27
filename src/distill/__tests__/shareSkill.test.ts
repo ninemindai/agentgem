@@ -8,5 +8,7 @@ describe("agentgem-share skill", () => {
     const md = readFileSync(join(process.cwd(), "assets/skills/agentgem-share/SKILL.md"), "utf8");
     expect(md).toContain("self-reported telemetry");
     expect(md.toLowerCase()).toContain("privacy gate");
+    expect(md.toLowerCase()).toContain("verified");  // SKILL must address the "verified" prohibition
+    expect(md.toLowerCase()).toContain("inflate");   // SKILL must address refusing to inflate counts
   });
 });

@@ -4,7 +4,6 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { signAndPublishTool, buildAttestationTool } from "../mcpServer.js";
-import { verify } from "../../gem/identity.js";
 
 const inventory = { skills: [], mcpServers: [
   { type: "mcp_server" as const, name: "secret", transport: "stdio" as const, config: { command: "node", args: ["/Users/me/private/srv.js"], env: { API_KEY: "sk-deadbeef" } } },
