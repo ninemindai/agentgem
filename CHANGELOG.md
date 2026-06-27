@@ -7,6 +7,21 @@ All notable changes to AgentGem are documented here. The format follows
 The npm core (`@ninemind/agentgem`) and the desktop app are versioned separately:
 core releases are tagged `v*`, desktop releases `desktop-v*`.
 
+## [0.3.1] — `@ninemind/agentgem` (npm core) — 2026-06-26
+
+### Fixed
+
+- **Workflow analysis no longer reads as a hang.** The first analysis of a project
+  runs the live ACP agent, which could sit silent for 30–60s before its first
+  token. The **Analyze** view now ticks an elapsed-seconds counter onto the active
+  phase during that wait, switches to "drafting…" and reveals the live token stream
+  on the first delta, and always clears the timer on teardown.
+- **Bounded the whole ACP run, not just the prompt.** `recommendWorkflow` and
+  `distillWorkflow` now bound every step — connect, session open, `setMode`, and
+  prompt — against one shared deadline. The ACP `initialize` handshake and session
+  start were previously unbounded, so a stalled adapter or auth wait could hang past
+  the prompt-only timeout instead of degrading to the deterministic fallback.
+
 ## [0.3.0] — `@ninemind/agentgem` (npm core) — 2026-06-26
 
 ### Added
