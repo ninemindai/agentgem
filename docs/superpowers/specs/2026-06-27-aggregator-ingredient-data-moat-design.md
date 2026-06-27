@@ -4,6 +4,15 @@
 **Status:** Approved design, pre-implementation
 **Part of:** the three-subsystem vision — A. Producer ([Spec A](2026-06-26-distill-usage-attestation-design.md)), **B. Aggregator (this spec)**, C. Trust spine. Spec B decomposes into **B1 — ingredient data moat (this doc)** and **B2 — Gem marketplace (fast-follow)**.
 
+> **Amendment 2026-06-27 (Codex adversarial debate):** baseline attestations are signed *self-reported telemetry*, not proof of real use (see [Spec A 2026-06-27 #2](2026-06-26-distill-usage-attestation-design.md)). B1 must therefore treat trust as **reputation, not cryptography**:
+> - **k-anonymity and every "distinct producers" count are over TRUSTED producers, not raw accounts.** Self-minted keys + cheap OAuth accounts give continuity, not scarcity, so a raw-account K is pumpable *and* (worse) suppresses exactly the long-tail co-occurrences that are most valuable. A producer earns trust weight from aged account, verified org/domain, payment method on file, package ownership, and prior reputation; apply **velocity caps per account/org/time bucket**. Seed the graph with first-party/customer cohorts and expose only broad categories until trusted volume exists.
+> - **Statistical detection is abuse triage, NOT trust.** Plausibility checks are shapeable across sybils, so they only gate abuse review; trust comes from reputation + (future) receipts.
+> - **Honest tiers in ranking.** Only receipt-backed records may power trust-sensitive rankings (and royalties later). Baseline (self-reported) records build aggregate insights but are labeled and reputation-weighted.
+> - **Dedup + separate metrics.** Dedup near-identical Gems by normalized content/procedure fingerprint; cap per account/org/time. Report **"Gem popularity"** and **"ingredient mention volume"** as separate metrics so one can't inflate the other.
+> - **No split-brain.** Ingest requires the archive bytes or a server-fetched registry ref; an attestation without a resolvable Gem is stored as **low-trust telemetry, not counted Gem usage.**
+> - **Graph engine.** Default is relational tables + materialized aggregates + **batch-computed PageRank out of the request path**; Apache AGE is *not assumed* (managed-Postgres / Vercel constraints) and is deferred until traversal genuinely hurts.
+> - **Verified-tier input is now minimal salted tuples** (`{ saltedSessionId, ingredientId, count, coarseTimeBucket }`), renamed **"recomputable"** — see the Spec A amendment. The full `WorkflowSignal` is never ingested.
+
 ## North star
 
 Same priority order as Spec A: **data moat first**, trust second, acquisition third. B1 is the data moat made real — it ingests the [Spec A](2026-06-26-distill-usage-attestation-design.md) usage attestations and turns them into a queryable graph of *real AI usage* (harnesses × models × skills × MCP servers/tools). B2 (the public Gem leaderboard + social + selling) reuses B1's ingest and graph but is a separate spec.
