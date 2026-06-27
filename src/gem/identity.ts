@@ -33,7 +33,11 @@ export function loadOrCreateIdentity(dir = join(homedir(), ".agentgem")): Identi
 
 export function verify(publicKey: string, data: string, signatureB64: string): boolean {
   if (!publicKey.startsWith("ed25519:")) return false;
-  const der = Buffer.from(publicKey.slice("ed25519:".length), "base64");
-  const pub = createPublicKey({ key: der, format: "der", type: "spki" });
-  return edVerify(null, Buffer.from(data, "utf8"), pub, Buffer.from(signatureB64, "base64"));
+  try {
+    const der = Buffer.from(publicKey.slice("ed25519:".length), "base64");
+    const pub = createPublicKey({ key: der, format: "der", type: "spki" });
+    return edVerify(null, Buffer.from(data, "utf8"), pub, Buffer.from(signatureB64, "base64"));
+  } catch {
+    return false;
+  }
 }
