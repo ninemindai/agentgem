@@ -1,6 +1,6 @@
 // src/gem/identity.ts
 import { generateKeyPairSync, sign as edSign, verify as edVerify, createPublicKey, createPrivateKey } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync, existsSync, lstatSync, chmodSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -12,17 +12,29 @@ function pubToToken(derB64: string): string { return `ed25519:${derB64}`; }
 
 export function loadOrCreateIdentity(dir = join(homedir(), ".agentgem")): Identity {
   const file = join(dir, "identity.json");
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
   let kf: KeyFile;
+  const readHardened = () => {
+    const st = lstatSync(file);
+    if (st.isSymbolicLink()) throw new Error("identity file is a symlink; refusing to read");
+    if (st.mode & 0o077) chmodSync(file, 0o600);
+    return JSON.parse(readFileSync(file, "utf8")) as KeyFile;
+  };
   if (existsSync(file)) {
-    kf = JSON.parse(readFileSync(file, "utf8")) as KeyFile;
+    kf = readHardened();
   } else {
     const { publicKey, privateKey } = generateKeyPairSync("ed25519");
     kf = {
       publicKeyDerB64: publicKey.export({ format: "der", type: "spki" }).toString("base64"),
       privateKeyPkcs8B64: privateKey.export({ format: "der", type: "pkcs8" }).toString("base64"),
     };
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(file, JSON.stringify(kf), { mode: 0o600 });
+    try {
+      writeFileSync(file, JSON.stringify(kf), { mode: 0o600, flag: "wx" });
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+      // Race: another process created the file between existsSync and writeFileSync; read it.
+      kf = readHardened();
+    }
   }
   const priv = createPrivateKey({ key: Buffer.from(kf.privateKeyPkcs8B64, "base64"), format: "der", type: "pkcs8" });
   return {
