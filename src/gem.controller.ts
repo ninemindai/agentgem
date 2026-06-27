@@ -51,9 +51,9 @@ import {
   DistilledSkillSchema, WorkflowDraftWriteResponseSchema,
   GemRunRequestSchema, GemRunResponseSchema,
   GemRunPrepareRequestSchema, GemRunPrepareResponseSchema,
-  UsageSchema,
+  UsageSchema, UsageQuerySchema,
 } from "./schemas.js";
-import { claudeTranscriptsForCwd, scanWorkflow } from "./gem/workflowScan.js";
+import { claudeTranscriptsForCwd, scanWorkflow, allClaudeTranscripts } from "./gem/workflowScan.js";
 import { recommendWorkflow, recommendationToSelection } from "./gem/acpRecommender.js";
 import { distillWorkflow } from "./gem/distill.js";
 import { writeDistilledDraft, stageDraftsByEvidence } from "./gem/draftStage.js";
@@ -91,9 +91,20 @@ export class GemController {
     return introspectAll(input.query.dir, parseProjectsQuery(input.query.projects));
   }
 
-  @get("/usage", { query: DirQuerySchema, response: UsageSchema })
-  async usage(input: { query: z.infer<typeof DirQuerySchema> }): Promise<z.infer<typeof UsageSchema>> {
+  @get("/usage", { query: UsageQuerySchema, response: UsageSchema })
+  async usage(input: { query: z.infer<typeof UsageQuerySchema> }): Promise<z.infer<typeof UsageSchema>> {
     try {
+      if (input.query.scope === "global") {
+        const dirs = resolveDirs(input.query.dir);
+        const paths = allClaudeTranscripts(dirs.claudeDir);
+        const globalInv = introspectConfig(dirs);
+        const emptyProject = { root: "", name: "", skills: [], mcpServers: [], instructions: [], hooks: [] };
+        const scanInv = { project: emptyProject, global: { skills: globalInv.skills, mcpServers: globalInv.mcpServers, hooks: globalInv.hooks } };
+        const signal = scanWorkflow(paths, scanInv);
+        return { artifacts: signal.artifacts
+          .filter((a) => a.root === null)
+          .map((a) => ({ type: a.type, name: a.name, root: a.root, invocations: a.invocations, sessionsUsedIn: a.sessionsUsedIn, lastUsedMs: a.lastUsedMs })) };
+      }
       const roots = parseProjectsQuery(input.query.projects);
       const root = roots[0];
       if (!root) return { artifacts: [] };

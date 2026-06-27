@@ -328,6 +328,11 @@ export const PublishResultSchema = z.discriminatedUnion("kind", [ManagedAgentRes
 
 // `projects` is a JSON-encoded string array of root paths (query params can't carry arrays cleanly).
 export const DirQuerySchema = z.object({ dir: z.string().optional(), projects: z.string().optional() });
+export const UsageQuerySchema = z.object({
+  dir: z.string().optional(),
+  projects: z.string().optional(),
+  scope: z.enum(["global"]).optional(),
+});
 
 export const PickQuerySchema = z.object({});
 export const PickFolderSchema = z.object({ path: z.string().nullable() });

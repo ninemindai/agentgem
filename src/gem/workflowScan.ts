@@ -88,6 +88,22 @@ export function claudeTranscriptsForCwd(claudeDir: string, cwd: string): string[
   return out;
 }
 
+/** Every Claude transcript under ~/.claude/projects, regardless of cwd. */
+export function allClaudeTranscripts(claudeDir: string): string[] {
+  const projectsDir = join(claudeDir, "projects");
+  let folders: import("node:fs").Dirent[];
+  try { folders = readdirSync(projectsDir, { withFileTypes: true }); } catch { return []; }
+  const out: string[] = [];
+  for (const folder of folders) {
+    if (!folder.isDirectory()) continue;
+    const dir = join(projectsDir, folder.name);
+    let files: string[];
+    try { files = readdirSync(dir); } catch { continue; }
+    for (const f of files) if (f.endsWith(".jsonl")) out.push(join(dir, f));
+  }
+  return out;
+}
+
 export function safeMtime(file: string): number {
   try { return statSync(file).mtimeMs; } catch { return 0; }
 }
