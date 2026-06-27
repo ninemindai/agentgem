@@ -2,6 +2,8 @@
 
 **Date:** 2026-06-26
 **Status:** Approved design, pre-implementation
+
+> **Amendment 2026-06-26 (from Spec B/B1 brainstorm):** the envelope gains an **optional** `evidence.signal` — the *full redacted `WorkflowSignal`* the profile was derived from. It is **opt-in**: when omitted, `evidence.signalDigest` is a tamper-evident commitment only and the aggregator relies on cross-record statistical detection (baseline tier); when included, the aggregator deterministically recomputes counts and grants the record a **"verified" badge** (verified tier). `scrub.ts` must be airtight on the shipped signal since it carries more detail than the summary metrics. See §The attestation envelope, §MCP tool contracts (`build_attestation` gains `includeSignal?`), and §Privacy.
 **Part of:** a three-subsystem vision — **A. Producer** (this spec), **B. Aggregator** (hosted leaderboard + usage graph + data API), **C. Trust spine** (anti-fraud + PageRank ranking). C is a constraint woven through A and B, not a standalone phase.
 
 ## North star
@@ -69,7 +71,10 @@ A new signed `attestation.json` in the Gem archive, anchored to the Gem's digest
                   "transport": "stdio", "sessions": 6,
                   "tools": [ { "name": "create_issue", "invocations": 7 } ] } ]
   },
-  "evidence": { "signalDigest": "sha256:…" },  // hash of the redacted WorkflowSignal it derived from
+  "evidence": {
+    "signalDigest": "sha256:…",                // always present: tamper-evident commitment
+    "signal": { /* full redacted WorkflowSignal — OPTIONAL, opt-in → "verified" tier */ }
+  },
   "signedAt": 0,
   "signature": "ed25519:…"                      // over the canonical doc minus this field
 }
@@ -99,7 +104,7 @@ All read-only except `sign_and_publish`:
 
 - **`scan_workflow({ cwd?, scope? })`** → `{ signal: RedactedWorkflowSignal, signalDigest }`. Wraps `scanWorkflow`. Pure read.
 - **`inspect_ingredients({ cwd? })`** → `{ harness, models[], skills[], mcps[] }` with canonical ids + `idKind`. Joins the scan against the introspected inventory. Pure read.
-- **`build_attestation({ gemSelection })`** → `{ attestation /* unsigned */, gemPreview, willPublish }`. Calls `buildGem` + `writeGemArchive`, computes the usage profile from the scan, returns the **unsigned** envelope plus a human-readable "what will leave your machine" preview. No writes, no network.
+- **`build_attestation({ gemSelection, includeSignal? })`** → `{ attestation /* unsigned */, gemPreview, willPublish }`. Calls `buildGem` + `writeGemArchive`, computes the usage profile from the scan, returns the **unsigned** envelope plus a human-readable "what will leave your machine" preview. `includeSignal: true` embeds the full redacted `WorkflowSignal` in `evidence.signal` (opt-in "verified" tier; the preview must show it). No writes, no network.
 - **`sign_and_publish({ attestation, ref })`** → `{ publishedRef, gemDigest, signature }`. Signs with the local keypair (generating one at `~/.agentgem/identity.json` on first use), writes `attestation.json` into the archive, populates `gem.lock.signature`, calls `publishGem`. The only tool that touches the network.
 
 The split guarantees the skill's privacy gate runs on the *final* bytes before anything is signed or published.
@@ -115,7 +120,7 @@ The split guarantees the skill's privacy gate runs on the *final* bytes before a
 
 ## Privacy
 
-Reuses `scrub.ts` (transcript steps) + `redact.ts` (config secrets). The envelope carries only canonical ids, counts, and coarse metrics — no prompts, file contents, outputs, or paths. The step-3 gate is a hard stop.
+Reuses `scrub.ts` (transcript steps) + `redact.ts` (config secrets). The envelope carries only canonical ids, counts, and coarse metrics — no prompts, file contents, outputs, or paths. The step-3 gate is a hard stop. **When a producer opts into `includeSignal`, the embedded `evidence.signal` carries more detail than the summary metrics, so `scrub` must be airtight on it and the privacy gate must render it in full before signing.**
 
 ## Trust posture (Spec A scope)
 
