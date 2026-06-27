@@ -59,9 +59,9 @@ export function buildAttestation(args: {
   }
 
   const skills = gem.artifacts.filter((a): a is SkillArtifact => a.type === "skill")
-    .map((s) => mkRow(canonicalSkill(s), `skill:${s.name}`));
+    .map((s) => mkRow(canonicalSkill(s, salt), `skill:${s.name}`));
   const mcps = gem.artifacts.filter((a): a is McpServerArtifact => a.type === "mcp_server")
-    .map((m) => mkRow(canonicalMcpServer(m), `mcp_server:${m.name}`));
+    .map((m) => mkRow(canonicalMcpServer(m, salt), `mcp_server:${m.name}`));
 
   const att: UsageAttestation = {
     formatVersion: 1,
