@@ -33,8 +33,8 @@
 
 **Files:**
 - Create: `src/aggregator/schema.ts`, `src/aggregator/testDb.ts`
-- Delete: `src/aggregator/db.ts` (replaced)
-- Test: `src/aggregator/__tests__/schema.test.ts` (replaces `db.test.ts` — delete the old one)
+- Test: `src/aggregator/__tests__/schema.test.ts`
+- **Do NOT delete `db.ts` yet** — `tsc -b` is all-or-nothing and Tasks 2–5 still import `./db.js`; deleting it now breaks the whole build. `db.ts`/`db.test.ts` are removed in Task 6 after every importer has migrated. Add the new files **alongside** the old `db.ts` (which stays green).
 
 **Interfaces produced:**
 - `producers`, `attestations`, `ingredients`, `usageEdges` (Drizzle `pgTable`s)
@@ -140,7 +140,7 @@ export async function makeTestDb(): Promise<AppDb> {
 }
 ```
 
-Delete `src/aggregator/db.ts` and `src/aggregator/__tests__/db.test.ts`.
+Leave `src/aggregator/db.ts` and `src/aggregator/__tests__/db.test.ts` in place (they're deleted in Task 6 once nothing imports them) — adding the new files alongside keeps the build green.
 
 (If `PgDatabase<any, typeof schema>` does not accept the pglite client at the `makeTestDb` cast site or at a core call site, the `as unknown as AppDb` cast in `testDb.ts` localizes it; do NOT loosen the core function signatures beyond `AppDb`.)
 
