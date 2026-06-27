@@ -12,7 +12,8 @@ beforeAll(async () => {
 
 describe("decryptGem (browser parity with seal.open)", () => {
   it("round-trips seal() output across sizes incl. a padding boundary", async () => {
-    for (const n of [0, 10, 255, 256, 257, 5000]) {
+    // 252 -> 256-byte bucket, 253 -> 512-byte bucket: straddles a real padding edge.
+    for (const n of [0, 10, 252, 253, 256, 5000]) {
       const pt = randomBytes(n);
       const { ciphertext, key } = seal(pt);
       const out = await decryptGem(new Uint8Array(ciphertext), new Uint8Array(key));

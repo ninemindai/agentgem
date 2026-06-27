@@ -51,7 +51,11 @@ export async function createApp(port: number): Promise<RestApplication> {
   server.expressApp.get("/", (_req, res) => res.type("html").send(html));
   // Serve the client-side decrypt ES module for the web-receiver's private redeem.
   const transferDecryptJs = publicAsset("transfer-decrypt.js");
-  server.expressApp.get("/transfer-decrypt.js", (_req, res) => res.type("application/javascript").send(transferDecryptJs));
+  server.expressApp.get("/transfer-decrypt.js", (_req, res) =>
+    transferDecryptJs
+      ? res.type("application/javascript").send(transferDecryptJs)
+      : res.status(404).send("// transfer-decrypt.js not found"), // fail loud, not an empty 200
+  );
   // SSE progress stream for workflow analysis (raw Express — the decorator
   // framework only returns single JSON bodies). The POST /api/workflow/analyze
   // route stays for programmatic/test callers. originGuard is applied per-route because these raw
