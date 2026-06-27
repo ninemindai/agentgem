@@ -18,7 +18,10 @@ export interface Ingredient { id: string; idKind: IdKind; public: boolean }
 function pluginCoord(source: string | undefined): string | null {
   if (!source || !source.startsWith("plugin:")) return null;
   const key = source.slice("plugin:".length).trim().toLowerCase();
-  return key || null;
+  // Bound the coord to the intended `<plugin>[@<marketplace>]` token shape — a
+  // path-like or otherwise malformed source falls through to private-salted
+  // rather than surfacing extra hierarchy/detail in a public id.
+  return /^[a-z0-9][a-z0-9._-]*(@[a-z0-9][a-z0-9._-]*)?$/.test(key) ? key : null;
 }
 
 function sha256(s: string): string { return createHash("sha256").update(s).digest("hex"); }
@@ -51,7 +54,7 @@ export function canonicalHarness(flavor: "claude" | "codex"): Ingredient {
 
 export function canonicalSkill(s: SkillArtifact, salt: string): Ingredient {
   const plug = pluginCoord(s.source);
-  if (plug) return { id: `skill:${plug}/${s.name.toLowerCase()}`, idKind: "plugin", public: true };
+  if (plug) return { id: `skill:${plug}/${s.name.trim().toLowerCase()}`, idKind: "plugin", public: true };
   if (s.source && s.source.startsWith("@") && s.source.includes("/")) {
     const scope = s.source.split("/")[0];
     if (PUBLIC_SCOPES.has(scope)) return { id: s.source, idKind: "registry", public: true };
@@ -107,7 +110,7 @@ export function canonicalMcpServer(m: McpServerArtifact, salt: string): Ingredie
   }
   // Distributable via a plugin -> public (source-type heuristic).
   const plug = pluginCoord(m.source);
-  if (plug) return { id: `mcp:${plug}/${m.name.toLowerCase()}`, idKind: "plugin", public: true };
+  if (plug) return { id: `mcp:${plug}/${m.name.trim().toLowerCase()}`, idKind: "plugin", public: true };
   // Otherwise the config (a local command/path or private/internal URL) is salted.
   return { id: `private:${saltedHash(salt, stableStr(m.config))}`, idKind: "private", public: false };
 }
