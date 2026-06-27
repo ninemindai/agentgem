@@ -1,6 +1,10 @@
 // src/distill/__tests__/tools.test.ts
 import { describe, it, expect } from "vitest";
-import { inspectIngredientsTool, buildAttestationTool, dispatchTool } from "../mcpServer.js";
+import { inspectIngredientsTool, buildAttestationTool, dispatchTool, scanInventoryFor } from "../mcpServer.js";
+import { scanWorkflow } from "../../gem/workflowScan.js";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const inventory = { skills: [{ type: "skill" as const, name: "qa", source: "@acme/qa", content: "B" }],
   mcpServers: [{ type: "mcp_server" as const, name: "gh", transport: "stdio" as const, config: { command: "npx", args: ["@modelcontextprotocol/server-github"] } }],
@@ -70,5 +74,32 @@ describe("distill tools", () => {
     const fresh = buildAttestationTool({ inventory, signal, selection: { mcpServers: ["gh"] }, salt: "S" });
     expect(publishedAttestation!.ingredients).toEqual(fresh.attestation.ingredients);
     expect(JSON.stringify(publishedAttestation)).not.toContain("evil");
+  });
+});
+
+describe("scan inventory resolution (regression: global ingredients must resolve)", () => {
+  it("scanInventoryFor wires global skills/mcps into the scan inventory", () => {
+    const globalInv = { skills: [{ type: "skill" as const, name: "brainstorming", source: "x", content: "y" }],
+      mcpServers: [{ type: "mcp_server" as const, name: "context7", transport: "stdio" as const, config: {} }],
+      instructions: [], hooks: [] };
+    const project = { root: "/p", name: "p", skills: [], mcpServers: [], instructions: [], hooks: [] };
+    const inv = scanInventoryFor(globalInv, project);
+    expect(inv.global.skills.map((s) => s.name)).toContain("brainstorming");
+    expect(inv.global.mcpServers.map((m) => m.name)).toContain("context7");
+  });
+
+  it("resolves a GLOBAL skill invocation to a counted artifact (the empty-counts bug)", () => {
+    // A real transcript invoking a plugin-namespaced global skill.
+    const dir = mkdtempSync(join(tmpdir(), "ag-scan-"));
+    const file = join(dir, "s.jsonl");
+    writeFileSync(file, JSON.stringify({ cwd: "/p",
+      message: { role: "assistant", content: [{ type: "tool_use", name: "Skill", input: { skill: "superpowers:brainstorming" } }] } }) + "\n");
+    const globalInv = { skills: [{ type: "skill" as const, name: "brainstorming", source: "x", content: "y" }],
+      mcpServers: [], instructions: [], hooks: [] };
+    const project = { root: "/p", name: "p", skills: [], mcpServers: [], instructions: [], hooks: [] };
+    const signal = scanWorkflow([file], scanInventoryFor(globalInv, project), {});
+    const art = signal.artifacts.find((a) => a.name === "brainstorming");
+    expect(art).toBeDefined();
+    expect(art!.invocations).toBe(1); // would be 0 (unresolved) if global were not wired
   });
 });
