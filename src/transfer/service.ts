@@ -17,12 +17,23 @@ export type StoreFactory = () => Promise<ManagedStore>;
 
 const DEFAULT_BUCKET = "agentgem-transfer";
 
+function natsServersOrThrow(): string {
+  const servers = process.env.NATS_URL;
+  if (!servers) throw new Error("transfer is not configured — set NATS_URL (and optionally NATS_TOKEN)");
+  return servers;
+}
+
+// Fail-fast guard for callers that do expensive work (e.g. building a gem) before
+// they'd otherwise reach the store factory. Throws the same "not configured" error.
+export function assertConfigured(): void {
+  natsServersOrThrow();
+}
+
 // The production factory: a NATS-backed store from env. Throws (without opening a
 // connection) when NATS_URL is unset, so callers get a clear "not configured".
 export function natsStoreFromEnv(): StoreFactory {
   return async () => {
-    const servers = process.env.NATS_URL;
-    if (!servers) throw new Error("transfer is not configured — set NATS_URL (and optionally NATS_TOKEN)");
+    const servers = natsServersOrThrow();
     return NatsObjectStore.connect({ servers, token: process.env.NATS_TOKEN });
   };
 }

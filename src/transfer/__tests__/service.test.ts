@@ -38,6 +38,7 @@ describe("transfer service", () => {
     const { bytes } = exportGem(demoGem);
     const { ticket } = await sendBytes(bytes, make);
     expect(closes).toBe(1);
+    expect(ticket.startsWith("agentgem://gem/b/")).toBe(true); // store.bucket flows into the ticket
     await receiveTicket(ticket, make);
     expect(closes).toBe(2);
   });
