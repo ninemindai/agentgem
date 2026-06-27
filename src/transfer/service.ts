@@ -33,6 +33,29 @@ export function assertConfigured(): void {
   natsServersOrThrow();
 }
 
+// Test seam: when set, the ciphertext relay uses this store factory instead of NATS,
+// so it can be tested hermetically without a broker.
+let testStoreFactory: StoreFactory | undefined;
+export function setStoreFactoryForTests(f: StoreFactory | undefined): void {
+  testStoreFactory = f;
+}
+function activeStoreFactory(): StoreFactory {
+  return testStoreFactory ?? natsStoreFromEnv();
+}
+
+// Fetch a ciphertext object and burn it. The server handles ciphertext only — the
+// decryption key never reaches it (the browser withholds the ticket fragment).
+export async function fetchAndBurnCiphertext(object: string, makeStore: StoreFactory = activeStoreFactory()): Promise<Buffer> {
+  const store = await makeStore();
+  try {
+    const bytes = await store.get(object); // throws if missing / already burned
+    await store.del(object);               // burn-after-fetch
+    return bytes;
+  } finally {
+    await store.close?.();
+  }
+}
+
 // Mint scoped, short-lived creds for an untrusted client (the browser web-receiver).
 // Separate config path from NATS_URL/NATS_TOKEN. 400 (InvalidInputError) if unset.
 export async function mintCredsFromEnv(scope: TransferScope): Promise<{ creds: string; wsUrl: string; expiresAt: number }> {
