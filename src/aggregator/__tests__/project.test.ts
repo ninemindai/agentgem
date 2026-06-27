@@ -34,6 +34,8 @@ describe("projectAttestation (drizzle)", () => {
     expect(edge).toEqual({ invocations: 15, sessions: 4 });
     const harnessEdge = (await db.execute(sql`select invocations, sessions from usage_edges where ingredient_id='claude-code'`)).rows[0];
     expect(harnessEdge).toEqual({ invocations: 4, sessions: 4 }); // scan.sessions proxy
+    const modelEdge = (await db.execute(sql`select invocations, sessions from usage_edges where ingredient_id='claude-opus-4-8'`)).rows[0];
+    expect(modelEdge).toEqual({ invocations: 4, sessions: 4 }); // model edge also = scan.sessions proxy
     const a = (await db.select().from(attestations))[0];
     expect(a.privateCount).toBe(1);
     const p = (await db.select().from(producers))[0];
