@@ -852,9 +852,11 @@ async function decorateUsage(){
       host.insertAdjacentHTML("beforeend", ` <span class="usebadge d">· ${inv} use${inv===1?"":"s"}${day}</span>`);
     }
   });
+  usageLoaded = true;
   sortRows();
   filterRows();
 }
+let usageLoaded = false;   // true once decorateUsage() has stamped data-invocations
 let sortState = { key: null, dir: "desc" };
 function sortRows(){
   document.querySelectorAll("#inventory .group").forEach(g => {
@@ -975,7 +977,7 @@ function filterRows() {
     const rowAgents = (row.getAttribute("data-agent") || "").split(" ").filter(Boolean);
     const matchAgent = agentBoxes.length === 0 || rowAgents.length === 0 || rowAgents.some(a => agents.has(a));
     const matchType = typeBoxes.length === 0 || types.has(row.getAttribute("data-type"));
-    const matchUsed = !usedOnly || row.dataset.passive === "1" || Number(row.dataset.invocations || 0) > 0;
+    const matchUsed = !usedOnly || !usageLoaded || row.dataset.passive === "1" || Number(row.dataset.invocations || 0) > 0;
     row.style.display = matchQ && matchSrc && matchAgent && matchType && matchUsed ? "" : "none";
   });
   const active = q || src || agentFilterActive || typeFilterActive || usedOnly;
