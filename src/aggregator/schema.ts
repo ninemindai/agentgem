@@ -4,7 +4,7 @@ import type { PgDatabase } from "drizzle-orm/pg-core";
 
 export const producers = pgTable("producers", {
   pubkey: text("pubkey").primaryKey(),
-  firstSeen: timestamp("first_seen").notNull().defaultNow(),
+  firstSeen: timestamp("first_seen", { withTimezone: true }).notNull().defaultNow(),
   attestCount: integer("attest_count").notNull().default(0),
 });
 export const attestations = pgTable("attestations", {
@@ -20,22 +20,22 @@ export const attestations = pgTable("attestations", {
   privateCount: integer("private_count").notNull().default(0),
   trustScore: real("trust_score").notNull().default(1),
   quarantined: boolean("quarantined").notNull().default(false),
-  ingestedAt: timestamp("ingested_at").notNull().defaultNow(),
+  ingestedAt: timestamp("ingested_at", { withTimezone: true }).notNull().defaultNow(),
 });
 export const ingredients = pgTable("ingredients", {
   id: text("id").primaryKey(),
   kind: text("kind").notNull(),
   idKind: text("id_kind").notNull(),
   displayName: text("display_name"),
-  firstSeen: timestamp("first_seen").notNull().defaultNow(),
-  lastSeen: timestamp("last_seen").notNull().defaultNow(),
+  firstSeen: timestamp("first_seen", { withTimezone: true }).notNull().defaultNow(),
+  lastSeen: timestamp("last_seen", { withTimezone: true }).notNull().defaultNow(),
 });
 export const usageEdges = pgTable("usage_edges", {
   attestationId: uuid("attestation_id").notNull().references(() => attestations.id),
   ingredientId: text("ingredient_id").notNull().references(() => ingredients.id),
   invocations: integer("invocations").notNull(),
   sessions: integer("sessions").notNull(),
-}, (t) => ({ pk: primaryKey({ columns: [t.attestationId, t.ingredientId] }) }));
+}, (t) => [primaryKey({ columns: [t.attestationId, t.ingredientId] })]);
 
 export const schema = { producers, attestations, ingredients, usageEdges };
 export type AppDb = PgDatabase<any, typeof schema>;
