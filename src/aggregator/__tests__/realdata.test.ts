@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createDb } from "../db.js";
+import { makeTestDb } from "../testDb.js";
 import { ingestAttestation } from "../ingest.js";
 import { seedSynthetic } from "../seed.js";
 import { popularity } from "../aggregates.js";
@@ -19,7 +19,7 @@ const signal = { root: "/p", flavor: "claude" as const, sessions: { scanned: 3, 
 
 describe("seeding + real signed attestation", () => {
   it("a real attestation's public ingredient surfaces in popularity once k-anon is met via seeding", async () => {
-    const db = await createDb();
+    const db = await makeTestDb();
     const id = loadOrCreateIdentity(mkdtempSync(join(tmpdir(), "agg-id-")));
     const att = signAttestation(buildAttestation({ gem, signal, gemDigest: "sha256:real", salt: "S" }), id, 1);
     const ing = att.ingredients.skills.find((s) => s.public)!.id; // e.g. skill:superpowers@.../brainstorming

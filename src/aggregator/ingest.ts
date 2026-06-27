@@ -1,7 +1,8 @@
 // src/aggregator/ingest.ts
+import { sql } from "drizzle-orm";
 import { verify } from "../gem/identity.js";
 import { canonicalJSON, type UsageAttestation } from "../gem/attestation.js";
-import type { DB } from "./db.js";
+import type { AppDb } from "./schema.js";
 import { projectAttestation } from "./project.js";
 
 export type VerifyResult = { ok: true } | { ok: false; reason: "bad-signature" | "inconsistent" };
@@ -22,14 +23,15 @@ export type IngestResult =
   | { accepted: true; id: string; publicIngredients: number; privateCount: number; idempotent: boolean }
   | { accepted: false; rejected: "bad-signature" | "inconsistent" };
 
-export async function ingestAttestation(db: DB, att: UsageAttestation): Promise<IngestResult> {
+export async function ingestAttestation(db: AppDb, att: UsageAttestation): Promise<IngestResult> {
   const v = verifyAttestation(att);
   if (!v.ok) return { accepted: false, rejected: v.reason };
-  const prior = await db.query<{ id: string; private_count: number }>(
-    "select id, private_count from attestations where gem_digest = $1", [att.gem.digest]);
+  const prior = await db.execute<{ id: string; private_count: number }>(
+    sql`select id, private_count from attestations where gem_digest = ${att.gem.digest}`);
   if (prior.rows.length > 0) {
     const row = prior.rows[0];
-    const pub = await db.query<{ c: number }>("select count(*)::int as c from usage_edges where attestation_id = $1", [row.id]);
+    const pub = await db.execute<{ c: number }>(
+      sql`select count(*)::int as c from usage_edges where attestation_id = ${row.id}`);
     return { accepted: true, id: row.id, publicIngredients: pub.rows[0].c, privateCount: row.private_count, idempotent: true };
   }
   const p = await projectAttestation(db, att);
