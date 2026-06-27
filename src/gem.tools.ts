@@ -14,6 +14,7 @@ import { readWorkspace } from "./gem/workspaces.js";
 import { readGemArchive } from "./gem/archive.js";
 import { exportGem, importGem } from "./gem/share.js";
 import { fetchGemBytes } from "./gem/safeFetch.js";
+import { sendBytes, receiveTicket, natsStoreFromEnv } from "./transfer/service.js";
 import { readFileSync } from "node:fs";
 
 const InventoryInput = z.object({ dir: z.string().optional(), projects: z.array(z.string()).optional() });
@@ -23,6 +24,8 @@ const RegistryPublishInput = z.object({ workspace: z.string(), scope: z.string()
 const RegistrySearchInput = z.object({ q: z.string().optional(), kind: z.string().optional(), tag: z.string().optional(), limit: z.number().int().positive().max(100).optional() });
 const GemExportInput = z.object({ selection: GemSelectionSchema, name: z.string().optional(), version: z.string().optional(), dir: z.string().optional(), projects: z.array(z.string()).optional() });
 const GemInstallInput = z.object({ gemUrl: z.string().optional(), gemPath: z.string().optional(), bytesBase64: z.string().optional() });
+const TransferSendInput = z.object({ selection: GemSelectionSchema, name: z.string().optional(), version: z.string().optional(), dir: z.string().optional(), projects: z.array(z.string()).optional() });
+const TransferReceiveInput = z.object({ ticket: z.string() });
 
 function registrySourceOrThrow() {
   const cfg = registryConfigFromEnv();
@@ -77,6 +80,27 @@ export class GemTools {
       : input.bytesBase64 ? Buffer.from(input.bytesBase64, "base64")
       : (() => { throw new Error("provide one of gemUrl, gemPath, or bytesBase64"); })();
     return importGem(bytes);
+  }
+
+  @tool("transfer_send", {
+    description: "Share a Gem (built from a selection of the local config) store-and-forward: encrypts it client-side and stashes the ciphertext in the configured NATS Object Store, returning a one-time `agentgem://` ticket. Hand the ticket to a friend/coworker or your other device; they redeem it with transfer_receive. The broker never sees plaintext. Requires NATS_URL.",
+    input: TransferSendInput,
+  })
+  async transferSend(input: z.infer<typeof TransferSendInput>) {
+    const dirs = resolveDirs(input.dir);
+    const gem = buildGem(introspectAll(input.dir, input.projects), input.selection, { name: input.name ?? "gem", createdFrom: dirs.claudeDir });
+    const { bytes } = exportGem(gem, { version: input.version });
+    const { ticket } = await sendBytes(bytes, natsStoreFromEnv());
+    return { ticket };
+  }
+
+  @tool("transfer_receive", {
+    description: "Redeem an `agentgem://` ticket: fetches the ciphertext from the configured NATS Object Store, decrypts it with the key carried in the ticket, verifies integrity (gem.lock), and returns the verified Gem + manifest meta. The object is burned after the first successful fetch. Requires NATS_URL. Disk placement is performed via the REST /materialize endpoint.",
+    input: TransferReceiveInput,
+  })
+  async transferReceive(input: z.infer<typeof TransferReceiveInput>) {
+    const { gem, meta } = await receiveTicket(input.ticket, natsStoreFromEnv());
+    return { gem, meta };
   }
 
   @tool("registry_index", { description: "List the gems available in the configured registry (names, versions, dependencies).", input: z.object({}) })
