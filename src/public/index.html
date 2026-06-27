@@ -191,6 +191,10 @@
 </style>
 </head>
 <body>
+<!-- Pinned when the server can't be reached; auto-clears on the next OK request. -->
+<div id="serverDown" role="alert" hidden style="position:sticky;top:0;z-index:100;background:var(--accent);color:#fff;font-size:13px;padding:8px 16px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.2)">
+  Server unreachable — is agentgem still running? <span style="opacity:.8">Actions are paused; this clears automatically once it reconnects.</span>
+</div>
 <header>
   <svg class="mark" viewBox="0 0 40 40" fill="none" aria-hidden="true">
     <path d="M20 2 L36 14 L20 38 L4 14 Z" fill="#9a3324"/>
@@ -340,6 +344,21 @@
   </div>
 </div>
 <script>
+// ── Server-reachability banner ───────────────────────────────────────────────
+// One choke point for all 50+ fetch sites: wrap window.fetch so a network-level
+// failure (server stopped / unreachable — fetch rejects with a TypeError) pins a
+// banner and still rejects, so callers abort exactly as before. The banner clears
+// on the next successful request. HTTP 4xx/5xx responses are NOT touched here —
+// fetch resolves for those, so each call keeps its own handling.
+(() => {
+  const setDown = (down) => { const el = document.getElementById("serverDown"); if (el) el.hidden = !down; };
+  const real = window.fetch.bind(window);
+  window.fetch = async (...args) => {
+    try { const res = await real(...args); setDown(false); return res; }
+    catch (err) { setDown(true); throw err; }   // network failure — surface it, then rethrow
+  };
+})();
+
 let inv = { skills: [], mcpServers: [], instructions: [], projects: [] };
 let projects = []; // chosen project root paths (mirrors inv.projects[].root after each load)
 let activeTestbed = localStorage.getItem("agentgem.testbed") || null;
