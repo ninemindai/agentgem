@@ -3,7 +3,6 @@ import { createHash } from "node:crypto";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { z } from "zod";
 import type { ConfigInventory, Gem } from "../gem/types.js";
 import type { WorkflowSignal } from "../gem/workflowScan.js";
 import { buildGem, type GemSelection } from "../gem/buildGem.js";
@@ -37,8 +36,6 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { introspectConfig, introspectProject } from "../gem/introspect.js";
 import { scanWorkflow, claudeTranscriptsForCwd } from "../gem/workflowScan.js";
-import { registryConfigFromEnv, githubRegistryPublisher } from "../gem/registryGithub.js";
-import { publishGem } from "../gem/registry.js";
 
 export interface ToolDeps {
   loadContext: (cwd: string) => { inventory: ConfigInventory; signal: WorkflowSignal };
@@ -55,14 +52,12 @@ export function realDeps(): ToolDeps {
       const paths = claudeTranscriptsForCwd(join(homedir(), ".claude"), cwd);
       return { inventory, signal: scanWorkflow(paths, scanInv, { retainSequences: false }) };
     },
-    // Mirror the existing CLI publish path for loading the current registry index before publishing.
-    publish: registryConfigFromEnv()
-      ? async (gem) => {
-          const cfg = registryConfigFromEnv()!;
-          const res = await publishGem({ gem, scope: process.env.AGENTGEM_SCOPE ?? "@me", version: "0.1.0", index: { formatVersion: 1, items: {} }, publisher: githubRegistryPublisher(cfg) });
-          return { ref: res.ref };
-        }
-      : undefined,
+    // Distribution-publish to the GitHub registry is intentionally NOT wired here yet.
+    // It must first fetch the LIVE registry index — publishing against an empty index
+    // would overwrite and erase other published gems (data loss). Until that lands,
+    // sign_and_publish performs only the data-critical ingest POST; registry
+    // distribution is a tracked follow-up.
+    publish: undefined,
     token: process.env.AGENTGEM_INGEST_TOKEN,
   };
 }
