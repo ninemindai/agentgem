@@ -16,10 +16,21 @@ export function readGlobalUsageCache(token: string): { artifacts: unknown[] } | 
   } catch { return null; }
 }
 
-export function writeGlobalUsageCache(token: string, result: { artifacts: unknown[] }): void {
+export function writeGlobalUsageCache(token: string, result: { artifacts: unknown[] }, claudeDir?: string): void {
   try {
     const path = cachePath();
     mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, JSON.stringify({ token, result }), "utf8");
+    writeFileSync(path, JSON.stringify({ token, result, claudeDir }), "utf8");
   } catch { /* best-effort */ }
+}
+
+/** The stored result regardless of token (for stale-while-revalidate). null if no cache file.
+ *  If claudeDir is provided, returns null when the cached entry is for a different claudeDir. */
+export function readGlobalUsageCacheStale(claudeDir?: string): { artifacts: unknown[] } | null {
+  try {
+    const j = JSON.parse(readFileSync(cachePath(), "utf8")) as { claudeDir?: string; result?: { artifacts: unknown[] } };
+    if (!j || !j.result) return null;
+    if (claudeDir !== undefined && j.claudeDir !== claudeDir) return null;
+    return j.result;
+  } catch { return null; }
 }

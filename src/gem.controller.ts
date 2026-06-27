@@ -21,7 +21,8 @@ import type { Gem } from "./gem/types.js";
 import { readDeployRecord, writeDeployRecord, clearDeployRecord } from "./gem/deployRecord.js";
 import type { DeployBackend } from "./gem/deployRecord.js";
 import { transcriptToken } from "./gem/analysisCache.js";
-import { readGlobalUsageCache, writeGlobalUsageCache } from "./gem/usageCache.js";
+import { readGlobalUsageCache, writeGlobalUsageCache, readGlobalUsageCacheStale } from "./gem/usageCache.js";
+import { computeGlobalUsage } from "./gem/globalUsage.js";
 import { undeployManagedAgent, anthropicPublishClient } from "./publish.js";
 import { undeployAgentcoreHarness, realAgentcoreControlClient } from "./gem/agentcorePublish.js";
 
@@ -73,6 +74,8 @@ import { githubRegistrySource, githubRegistryPublisher, registryConfigFromEnv, r
 import { resolveDirs, resolveProject, agentgemHome } from "./resolveDir.js";
 import { pickFolder } from "./pickFolder.js";
 
+let globalUsageRefreshing = false;
+
 // Server-derived run directory for a Gem. NEVER taken from client input: a caller-controlled path is
 // a path-injection sink, and the ACP agent then runs there with tool permissions. The gem name is
 // sanitized to one path segment; the sanitizer keeps '.', so a name of ".." must not escape — we
@@ -100,16 +103,22 @@ export class GemController {
         const dirs = resolveDirs(input.query.dir);
         const paths = allClaudeTranscripts(dirs.claudeDir);
         const token = transcriptToken(paths);
-        const cached = readGlobalUsageCache(token);
-        if (cached) return cached as z.infer<typeof UsageSchema>;
-        const globalInv = introspectConfig(dirs);
-        const emptyProject = { root: "", name: "", skills: [], mcpServers: [], instructions: [], hooks: [] };
-        const scanInv = { project: emptyProject, global: { skills: globalInv.skills, mcpServers: globalInv.mcpServers, hooks: globalInv.hooks } };
-        const signal = scanWorkflow(paths, scanInv);
-        const result = { artifacts: signal.artifacts
-          .filter((a) => a.root === null)
-          .map((a) => ({ type: a.type, name: a.name, root: a.root, invocations: a.invocations, sessionsUsedIn: a.sessionsUsedIn, lastUsedMs: a.lastUsedMs })) };
-        writeGlobalUsageCache(token, result);
+        const exact = readGlobalUsageCache(token);
+        if (exact) return exact as z.infer<typeof UsageSchema>;
+        const stale = readGlobalUsageCacheStale(dirs.claudeDir);
+        if (stale) {
+          if (!globalUsageRefreshing) {
+            globalUsageRefreshing = true;
+            void Promise.resolve().then(() => {
+              try { writeGlobalUsageCache(token, computeGlobalUsage(dirs, paths), dirs.claudeDir); }
+              catch (e) { console.error("[usage] bg refresh failed:", e); }
+              finally { globalUsageRefreshing = false; }
+            });
+          }
+          return stale as z.infer<typeof UsageSchema>;
+        }
+        const result = computeGlobalUsage(dirs, paths);
+        writeGlobalUsageCache(token, result, dirs.claudeDir);
         return result;
       }
       const roots = parseProjectsQuery(input.query.projects);
