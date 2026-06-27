@@ -273,7 +273,7 @@
     </div>
   </section>
   <section class="pane right">
-    <div class="bar"><strong style="flex:1">Gem (live)</strong><select id="target" title="materialize target" style="margin-left:auto"><option value="claude">Claude</option><option value="codex">Codex</option><option value="agents">Agents</option><option value="hermes">Hermes</option><option value="eve">Eve</option><option value="flue">Flue</option><option value="openai-sandbox">OpenAI Sandbox</option><option value="agentcore">AgentCore</option><option value="a2a">A2A</option></select><span class="seg" id="preview-modes"><button type="button" data-pmode="summary">Summary</button><button type="button" data-pmode="json">JSON</button><button type="button" data-pmode="materialize">Materialize</button><button type="button" data-pmode="run">Run</button><button type="button" data-pmode="managed">Managed Agents</button></span><span class="exportwrap"><button id="exportBtn">Export ▾</button><div id="exportMenu" class="exportmenu" hidden><button id="dlgem" class="menuitem" title="download one portable, self-verifying .gem file to share">🔗 Download .gem (share)</button><button id="dltar" class="menuitem" title="download the gem archive as a .tar.gz">⬇ Download .tar.gz</button><button id="save" class="menuitem" title="write the gem archive (manifest + lock + files) to a folder">💾 Save to folder…</button><button id="dl" class="menuitem">⬇ Download JSON</button><button id="copy" class="menuitem">⧉ Copy JSON</button></div></span><span class="d" id="archiveStatus" style="margin-left:6px"></span></div>
+    <div class="bar"><strong style="flex:1">Gem (live)</strong><select id="target" title="materialize target" style="margin-left:auto"><option value="claude">Claude</option><option value="codex">Codex</option><option value="agents">Agents</option><option value="hermes">Hermes</option><option value="eve">Eve</option><option value="flue">Flue</option><option value="openai-sandbox">OpenAI Sandbox</option><option value="agentcore">AgentCore</option><option value="a2a">A2A</option></select><span class="seg" id="preview-modes"><button type="button" data-pmode="summary">Summary</button><button type="button" data-pmode="json">JSON</button><button type="button" data-pmode="materialize">Materialize</button><button type="button" data-pmode="run">Run</button><button type="button" data-pmode="managed">Managed Agents</button></span><span class="exportwrap"><button id="exportBtn">Export ▾</button><div id="exportMenu" class="exportmenu" hidden><button id="dlgem" class="menuitem" title="download one portable, self-verifying .gem file to share">🔗 Download .gem (share)</button><button id="sendticket" class="menuitem" title="encrypt + stash over NATS; get a one-time agentgem:// ticket to hand off">📡 Send via ticket…</button><button id="dltar" class="menuitem" title="download the gem archive as a .tar.gz">⬇ Download .tar.gz</button><button id="save" class="menuitem" title="write the gem archive (manifest + lock + files) to a folder">💾 Save to folder…</button><button id="dl" class="menuitem">⬇ Download JSON</button><button id="copy" class="menuitem">⧉ Copy JSON</button></div></span><span class="d" id="archiveStatus" style="margin-left:6px"></span></div>
     <div id="preview"></div>
     <p class="note">MCP server &amp; hook config secrets are shown as <code>&lt;redacted&gt;</code> and never exported. Skill, CLAUDE.md, rules bodies &amp; hook commands are bundled as written — don't keep secrets in them.</p>
     <div id="checksPanel" class="group" style="margin-top:14px">
@@ -298,10 +298,25 @@
         <span class="d" id="installStatus"></span>
       </div>
       <div>
+        <div class="bar"><strong style="flex:1;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)">Redeem a transfer ticket</strong></div>
+        <div class="bar"><input id="recvTicket" type="text" placeholder="agentgem://gem/…#…" style="flex:1" /><select id="recvTarget" title="materialize target"></select><button id="recvBtn">Redeem</button></div>
+        <span class="d" id="recvStatus"></span>
+      </div>
+      <div>
         <div class="bar"><strong style="flex:1;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)">Search the registry</strong></div>
         <div class="bar"><input id="regSearch" type="text" placeholder="search names, tags, descriptions…" style="flex:1" /><button id="regSearchBtn" class="ghost">Search</button></div>
         <div id="regResults"></div>
       </div>
+    </div>
+  </div>
+</div>
+<div id="ticketModal" class="modal-bg" hidden>
+  <div class="modal">
+    <div class="modal-h"><strong class="t">Share via ticket</strong><span class="src">one-time · end-to-end encrypted</span><button id="ticketClose" class="ghost" style="margin-left:auto">✕ Close</button></div>
+    <div style="padding:14px;display:flex;flex-direction:column;gap:10px">
+      <span class="d" id="ticketStatus">Building…</span>
+      <div class="bar" id="ticketRow" hidden><input id="ticketVal" type="text" readonly style="flex:1" /><button id="ticketCopy">⧉ Copy</button></div>
+      <p class="note">Hand this to a friend, coworker, or your other device — they redeem it under <strong>Get gems → Redeem a transfer ticket</strong> (or <code>agentgem receive</code>). The broker only ever holds ciphertext, and the ticket works once.</p>
     </div>
   </div>
 </div>
@@ -1480,6 +1495,28 @@ document.getElementById("dlgem").addEventListener("click", async () => {
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = (document.getElementById("name").value || "gem") + ".gem"; a.click();
   status.textContent = `Downloaded ${a.download} — share it; install it with “Get gems”.`;
 });
+// Send via ticket: encrypt + stash over NATS, then show a one-time agentgem:// ticket.
+document.getElementById("sendticket").addEventListener("click", async () => {
+  document.getElementById("exportMenu").hidden = true;
+  const tm = document.getElementById("ticketModal");
+  const row = document.getElementById("ticketRow");
+  const st = document.getElementById("ticketStatus");
+  row.hidden = true; st.textContent = "Encrypting & stashing…"; tm.hidden = false;
+  try {
+    const r = await (await fetch("/api/transfer/send", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(buildSelectionBody()) })).json();
+    if (r.error || !r.ticket) { st.textContent = "Failed: " + ((r.error && r.error.message) || r.error || "no ticket — is NATS_URL set?"); return; }
+    st.textContent = "Ready — share this one-time ticket:";
+    document.getElementById("ticketVal").value = r.ticket;
+    row.hidden = false;
+  } catch (e) { st.textContent = "Failed: " + (e && e.message || e); }
+});
+document.getElementById("ticketClose").addEventListener("click", () => { document.getElementById("ticketModal").hidden = true; });
+document.getElementById("ticketModal").addEventListener("click", e => { if (e.target.id === "ticketModal") document.getElementById("ticketModal").hidden = true; });
+document.getElementById("ticketCopy").addEventListener("click", async () => {
+  const v = document.getElementById("ticketVal"); v.select();
+  const btn = document.getElementById("ticketCopy");
+  try { await navigator.clipboard.writeText(v.value); btn.textContent = "✓ Copied"; setTimeout(() => btn.textContent = "⧉ Copy", 1500); } catch {}
+});
 // Download the gem archive as a single .tar.gz (the transport/shipping form).
 document.getElementById("dltar").addEventListener("click", async () => {
   const status = document.getElementById("archiveStatus");
@@ -1496,6 +1533,7 @@ document.getElementById("dltar").addEventListener("click", async () => {
   const modal = document.getElementById("getModal");
   const open = () => {
     document.getElementById("installTarget").innerHTML = document.getElementById("target").innerHTML;
+    document.getElementById("recvTarget").innerHTML = document.getElementById("target").innerHTML;
     modal.hidden = false;
   };
   document.getElementById("getBtn").addEventListener("click", open);
@@ -1514,6 +1552,24 @@ document.getElementById("dltar").addEventListener("click", async () => {
       if (m.error) { status.textContent = "Failed: " + m.error; return; }
       window.__materialize = m;
       status.textContent = `Installed — ${Object.keys(m.files || {}).length} files for ${m.target}. Switch the preview to Materialize to inspect.`;
+    } catch (e) { status.textContent = "Failed: " + (e && e.message || e); }
+  });
+
+  // Redeem a transfer ticket: fetch+decrypt+verify, then materialize the received gem.
+  document.getElementById("recvBtn").addEventListener("click", async () => {
+    const ticket = document.getElementById("recvTicket").value.trim();
+    const status = document.getElementById("recvStatus");
+    if (!ticket) { status.textContent = "Paste an agentgem:// ticket."; return; }
+    status.textContent = "Redeeming…";
+    try {
+      const rec = await (await fetch("/api/transfer/receive", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ticket }) })).json();
+      if (rec.error || !rec.bytesBase64) { status.textContent = "Failed: " + ((rec.error && rec.error.message) || rec.error || "no gem — ticket expired/used, or NATS_URL unset?"); return; }
+      status.textContent = `✓ Received ${rec.meta.name}@${rec.meta.version} — installing…`;
+      const body = { bytesBase64: rec.bytesBase64, target: document.getElementById("recvTarget").value };
+      const m = await (await fetch("/api/materialize", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })).json();
+      if (m.error) { status.textContent = `Verified ${rec.meta.name}@${rec.meta.version}, but install failed: ` + ((m.error && m.error.message) || m.error); return; }
+      window.__materialize = m;
+      status.textContent = `✓ Installed ${rec.meta.name}@${rec.meta.version} — ${Object.keys(m.files || {}).length} files for ${m.target}. Switch the preview to Materialize to inspect.`;
     } catch (e) { status.textContent = "Failed: " + (e && e.message || e); }
   });
 

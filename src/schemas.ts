@@ -248,14 +248,15 @@ export const MaterializeRequestSchema = z.object({
   archivePath: z.string().optional(),
   gemPath: z.string().optional(), // install from a single .gem (tar.gz) file on disk
   gemUrl: z.string().optional(),  // install from a .gem fetched over http(s)
+  bytesBase64: z.string().optional(), // install from in-memory .gem bytes (e.g. a redeemed transfer ticket)
   target: TargetIdSchema,
   name: z.string().optional(),
   dir: z.string().optional(),
   projects: z.array(z.string()).optional(),
   a2aServer: z.boolean().optional(), // a2a target: also emit the runnable server, not just the Agent Card
   channels: ChannelDeclSchema, // applied only when building from `selection` (ignored for archive/gem sources)
-}).refine((d) => d.selection !== undefined || d.archivePath !== undefined || d.gemPath !== undefined || d.gemUrl !== undefined, {
-  message: "provide one of selection, archivePath, gemPath, or gemUrl",
+}).refine((d) => d.selection !== undefined || d.archivePath !== undefined || d.gemPath !== undefined || d.gemUrl !== undefined || d.bytesBase64 !== undefined, {
+  message: "provide one of selection, archivePath, gemPath, gemUrl, or bytesBase64",
 });
 
 export const DeployTargetIdSchema = z.enum(deployTargetIds);
@@ -365,6 +366,33 @@ export const GemSchema = z.object({
   artifacts: z.array(GemArtifactSchema),
   checks: z.array(GemCheckSchema),
   requiredSecrets: z.array(SecretRequirementSchema),
+});
+
+// --- Transfer (store-and-forward ticket sharing) ---
+// readGemMeta's shape: identity + integrity digest of a received gem.
+export const GemMetaSchema = z.object({
+  name: z.string(),
+  version: z.string(),
+  dependencies: z.array(z.string()),
+  gemDigest: z.string(),
+});
+
+export const TransferSendRequestSchema = z.object({
+  selection: GemSelectionSchema,
+  name: z.string().optional(),
+  version: z.string().optional(),
+  dir: z.string().optional(),
+  projects: z.array(z.string()).optional(),
+  channels: ChannelDeclSchema,
+  distilledDrafts: z.array(DistilledSkillSchema).optional(),
+});
+export const TransferSendResponseSchema = z.object({ ticket: z.string() });
+
+export const TransferReceiveRequestSchema = z.object({ ticket: z.string() });
+export const TransferReceiveResponseSchema = z.object({
+  gem: GemSchema,
+  meta: GemMetaSchema,
+  bytesBase64: z.string(), // the verified .gem bytes, for materializing via /materialize
 });
 
 // ── Workspaces ──

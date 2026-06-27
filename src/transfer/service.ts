@@ -6,6 +6,7 @@
 import { sendGemBytes, receiveGem, type SendResult, type ReceiveResult } from "./index.js";
 import type { ObjectStore } from "./objectStore.js";
 import { NatsObjectStore } from "./natsObjectStore.js";
+import { InvalidInputError } from "../gem/inputError.js";
 
 // An ObjectStore that may be backed by a remote broker — it carries a bucket name
 // and a close(). The in-memory store satisfies this with both omitted.
@@ -19,7 +20,9 @@ const DEFAULT_BUCKET = "agentgem-transfer";
 
 function natsServersOrThrow(): string {
   const servers = process.env.NATS_URL;
-  if (!servers) throw new Error("transfer is not configured — set NATS_URL (and optionally NATS_TOKEN)");
+  // InvalidInputError (400) so the framework surfaces this actionable message
+  // verbatim instead of masking it as a generic 500 "Internal Server Error".
+  if (!servers) throw new InvalidInputError("transfer is not configured — set NATS_URL (and optionally NATS_TOKEN)");
   return servers;
 }
 
