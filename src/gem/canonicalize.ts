@@ -1,6 +1,5 @@
 // src/gem/canonicalize.ts
 import { createHash } from "node:crypto";
-import { basename } from "node:path";
 import type { McpServerArtifact, SkillArtifact } from "./types.js";
 
 export const CANONICALIZER_VERSION = 2;
@@ -16,12 +15,13 @@ function stableStr(v: unknown): string {
   if (v === null || typeof v !== "object") return JSON.stringify(v);
   if (Array.isArray(v)) return "[" + v.map(stableStr).join(",") + "]";
   const o = v as Record<string, unknown>;
-  return "{" + Object.keys(o).sort().map(k => JSON.stringify(k) + ":" + stableStr(o[k])).join(",") + "}";
+  return "{" + Object.keys(o).sort().filter(k => o[k] !== undefined).map(k => JSON.stringify(k) + ":" + stableStr(o[k])).join(",") + "}";
 }
 
-/** Last path segment of a command, lowercased — never leaks directory. */
+/** Last path segment of a command, lowercased — never leaks directory (handles POSIX and Windows paths). */
 function runnerName(command: string): string {
-  return basename(command).toLowerCase();
+  const seg = command.split(/[/\\]/).pop() || command;
+  return seg.toLowerCase();
 }
 
 /**
@@ -41,7 +41,7 @@ export function canonicalSkill(s: SkillArtifact, salt: string): Ingredient {
     if (PUBLIC_SCOPES.has(scope)) return { id: s.source, idKind: "registry", public: true };
     // Non-public scope: fall back to content-hash to avoid leaking the scope name.
   }
-  return { id: `skill:sha256:${sha256(s.content)}`, idKind: "contentHash", public: false };
+  return { id: `private:${saltedHash(salt, stableStr(s))}`, idKind: "private", public: false };
 }
 
 function firstPackageArg(args: unknown): string | null {
