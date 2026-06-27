@@ -312,7 +312,14 @@
 <div id="importModal" class="modal-bg" hidden>
   <div class="modal">
     <div class="modal-h"><strong class="t">Import from machine</strong><span class="src">~/.claude · ~/.agents · ~/.codex · ~/.hermes</span><button id="importClose" class="ghost" style="margin-left:auto">✕ Close</button></div>
-    <div class="modal-body" style="padding:14px"><div id="importInventory">Loading…</div></div>
+    <div class="modal-body" style="padding:14px">
+      <div class="bar" style="margin-bottom:8px">
+        <button type="button" id="impSortUses" class="sortbtn" title="sort by usage count">Uses</button>
+        <button type="button" id="impSortLast" class="sortbtn" title="sort by last used">Last used</button>
+        <label class="chk"><input type="checkbox" id="impUsedOnly" checked> Used only</label>
+      </div>
+      <div id="importInventory">Loading…</div>
+    </div>
     <div class="modal-h" style="border-top:1px solid var(--line);border-bottom:0">
       <span class="d">Writes real secrets into this testbed so it runs — don't commit <code>.mcp.json</code>/<code>settings.json</code>.</span>
       <button id="importApply" style="margin-left:auto">Add to testbed</button>
@@ -889,6 +896,66 @@ document.getElementById("sortUses").addEventListener("click", () => cycleSort("u
 document.getElementById("sortLast").addEventListener("click", () => cycleSort("last"));
 const usedOnlyEl = document.getElementById("usedOnly");
 if (usedOnlyEl) usedOnlyEl.addEventListener("change", filterRows);
+const IKIND_TO_USAGE_TYPE = { skills: "skill", mcpServers: "mcp_server", hooks: "hook", instructions: "instructions" };
+let impUsageLoaded = false;
+let impSortState = { key: null, dir: "desc" };
+
+async function decorateImportUsage(){
+  let artifacts = [];
+  try { artifacts = (await (await fetch("/api/usage?scope=global")).json()).artifacts || []; }
+  catch { artifacts = []; }
+  const map = new Map();                              // globals: key on type|name (root always null)
+  for (const a of artifacts) map.set(`${a.type}|${a.name}`, a);
+  document.querySelectorAll("#importInventory label.row").forEach(row => {
+    const cb = row.querySelector("input[type=checkbox]");
+    const type = IKIND_TO_USAGE_TYPE[cb && cb.dataset.ikind];
+    const passive = type === "instructions" || type === "hook";
+    if (passive) row.dataset.passive = "1"; else delete row.dataset.passive;
+    const u = type ? map.get(`${type}|${(cb.dataset.name)||""}`) : null;
+    const inv = u ? u.invocations : 0;
+    row.dataset.invocations = String(inv);
+    row.dataset.lastused = u && u.lastUsedMs ? String(u.lastUsedMs) : "";
+    const host = row.querySelector("span");
+    const old = host && host.querySelector(".usebadge"); if (old) old.remove();
+    if (host && !passive && inv > 0) host.insertAdjacentHTML("beforeend", usageBadgeHtml(inv, u.lastUsedMs));
+  });
+  impUsageLoaded = true;
+  sortRowsIn("#importInventory", impSortState);
+  filterImportRows();
+}
+
+function cycleImportSort(key){
+  if (impSortState.key !== key) { impSortState = { key, dir: "desc" }; }
+  else if (impSortState.dir === "desc") { impSortState.dir = "asc"; }
+  else { impSortState = { key: null, dir: "desc" }; }
+  const map = { uses: "impSortUses", last: "impSortLast" };
+  for (const k of Object.keys(map)) {
+    const el = document.getElementById(map[k]);
+    if (impSortState.key === k) el.dataset.dir = impSortState.dir; else el.removeAttribute("data-dir");
+  }
+  sortRowsIn("#importInventory", impSortState);
+}
+
+function filterImportRows(){
+  const usedOnly = (document.getElementById("impUsedOnly") || {}).checked;
+  document.querySelectorAll("#importInventory label.row").forEach(row => {
+    const cbx = row.querySelector("input[type=checkbox]");
+    const matchUsed = !usedOnly || !impUsageLoaded || row.dataset.passive === "1"
+      || (cbx && cbx.checked) || Number(row.dataset.invocations || 0) > 0;
+    row.style.display = matchUsed ? "" : "none";
+  });
+  document.querySelectorAll("#importInventory .group").forEach(g => {
+    const all = g.querySelectorAll("label.row");
+    const shown = [...all].filter(r => r.style.display !== "none").length;
+    const h2 = g.querySelector("h2");
+    if (h2 && !h2.dataset.base) h2.dataset.base = h2.textContent;
+    if (h2) h2.textContent = usedOnly ? `${h2.dataset.base} — showing ${shown}` : h2.dataset.base;
+  });
+}
+document.getElementById("impSortUses").addEventListener("click", () => cycleImportSort("uses"));
+document.getElementById("impSortLast").addEventListener("click", () => cycleImportSort("last"));
+const impUsedOnlyEl = document.getElementById("impUsedOnly");
+if (impUsedOnlyEl) impUsedOnlyEl.addEventListener("change", filterImportRows);
 function hayForRow(kind, name, projRoot) {
   if (kind === "skills") { const a = inv.skills.find(s => s.name === name); return a ? `${a.name} ${a.description || ""} ${a.source || ""} ${a.content || ""}` : ""; }
   if (kind === "mcpServers") { const a = inv.mcpServers.find(s => s.name === name); return a ? `${a.name} ${a.transport || ""} ${a.source || ""} ${JSON.stringify(a.config || {})}` : ""; }
@@ -1829,6 +1896,7 @@ const importSel = { skills: new Set(), mcpServers: new Set(), hooks: new Set(), 
 async function openImport(){
   if(!activeTestbed){ alert("Create or open a testbed first."); return; }
   if(!FLAVORS[activeFlavor].importSupported){ alert(`Import into ${FLAVORS[activeFlavor].label} testbeds isn't supported yet — hand-edit the project, then it'll be picked up.`); return; }
+  impUsageLoaded = false;   // suppress Used-only until global usage lands (no flash)
   importSel.skills.clear(); importSel.mcpServers.clear(); importSel.hooks.clear(); importSel.includeInstructions = false;
   document.getElementById("importModal").hidden = false;
   const gi = await (await fetch("/api/inventory")).json();
@@ -1842,6 +1910,10 @@ async function openImport(){
     if(k === "instructions"){ importSel.includeInstructions = e.target.checked; return; }
     const set = importSel[k]; if(e.target.checked) set.add(n); else set.delete(n);
   }));
+  document.querySelectorAll("#importInventory .group").forEach(g => {
+    [...g.querySelectorAll("label.row")].forEach((r, i) => { r.dataset.order = String(i); });
+  });
+  await decorateImportUsage();
 }
 async function applyImport(){
   const selection = { skills:[...importSel.skills], mcpServers:[...importSel.mcpServers], hooks:[...importSel.hooks], includeInstructions: importSel.includeInstructions };
