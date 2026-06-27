@@ -7,6 +7,16 @@ export interface NatsConfig {
   servers: string;
   bucket?: string;
   token?: string;
+  ttlHours?: number; // unclaimed objects expire after this; default DEFAULT_TTL_HOURS
+}
+
+export const DEFAULT_TTL_HOURS = 24;
+
+// Hours → NATS Nanos. Stays within Number.MAX_SAFE_INTEGER for any sane TTL
+// (24h ≈ 8.6e13 ≪ 9e15). A non-positive TTL means "no expiry" (0 nanos).
+export function ttlNanos(hours: number): number {
+  if (!(hours > 0)) return 0;
+  return Math.round(hours * 3600 * 1_000_000_000);
 }
 
 export class NatsObjectStore implements ObjectStore {
@@ -19,8 +29,10 @@ export class NatsObjectStore implements ObjectStore {
   static async connect(cfg: NatsConfig): Promise<NatsObjectStore> {
     const nc = await connect({ servers: cfg.servers, token: cfg.token });
     const bucket = cfg.bucket ?? "agentgem-transfer";
+    const ttl = ttlNanos(cfg.ttlHours ?? DEFAULT_TTL_HOURS);
     try {
-      const os = await new Objm(nc).create(bucket, { storage: StorageType.File });
+      // ttl on the bucket expires unclaimed tickets; burn-after-fetch handles claimed ones.
+      const os = await new Objm(nc).create(bucket, ttl > 0 ? { storage: StorageType.File, ttl } : { storage: StorageType.File });
       return new NatsObjectStore(nc, os, bucket);
     } catch (err) {
       await nc.close().catch(() => {}); // best-effort; don't mask the original error
