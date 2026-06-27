@@ -9,6 +9,13 @@
 lands on `main` — it is intentionally NOT implemented in the prototype. Treat those
 provenance references as roadmap, not shipped behavior.
 **Branch (impl):** built in a dedicated worktree off `main`
+**UX surfaces (implemented):** beyond the prototype CLI, the feature is exposed via
+(1) **MCP tools** `transfer_send` / `transfer_receive` (the agent-facing surface)
+and (2) **CLI subcommands** `agentgem send <file.gem>` / `agentgem receive
+<ticket> [out.gem]`. All surfaces share one DI seam (`src/transfer/service.ts`:
+`natsStoreFromEnv` + `sendBytes` / `receiveTicket`), so the tested core is reused
+everywhere. **Deferred:** REST endpoints + a web-UI "Share" button (no web
+consumer wired yet) and the browser web-receiver.
 
 ## Summary
 
