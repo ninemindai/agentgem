@@ -23,7 +23,7 @@ export class NatsObjectStore implements ObjectStore {
       const os = await new Objm(nc).create(bucket, { storage: StorageType.File });
       return new NatsObjectStore(nc, os, bucket);
     } catch (err) {
-      await nc.close();
+      await nc.close().catch(() => {}); // best-effort; don't mask the original error
       throw err;
     }
   }

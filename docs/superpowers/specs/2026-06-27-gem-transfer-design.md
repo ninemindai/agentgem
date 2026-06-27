@@ -1,8 +1,14 @@
 # Gem transfer (ticket + NATS Object Store) — design
 
 **Date:** 2026-06-27
-**Status:** Draft design, pending user review → implementation plan
-**Branch (impl):** to be built in a dedicated worktree off `main`
+**Status:** Implemented on branch `worktree-gem-transfer` (off `main`).
+**Implementation note:** the prototype verifies **integrity only** (`gem.lock` via
+`importGem`). The **ed25519 provenance** described below (decision 8, flow step 4,
+"Three independent integrity layers", and the "verify ed25519 signature" / "✓ from
+…" elements in the architecture diagram) is **deferred** until the attestation work
+lands on `main` — it is intentionally NOT implemented in the prototype. Treat those
+provenance references as roadmap, not shipped behavior.
+**Branch (impl):** built in a dedicated worktree off `main`
 
 ## Summary
 
