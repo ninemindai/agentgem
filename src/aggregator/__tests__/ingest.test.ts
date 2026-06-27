@@ -3,7 +3,8 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createDb } from "../db.js";
+import { sql } from "drizzle-orm";
+import { makeTestDb } from "../testDb.js";
 import { ingestAttestation } from "../ingest.js";
 import { buildAttestation, signAttestation } from "../../gem/attestation.js";
 import { loadOrCreateIdentity } from "../../gem/identity.js";
@@ -21,19 +22,19 @@ function make(digest: string) {
 
 describe("ingestAttestation", () => {
   it("accepts, projects, and is idempotent on gem_digest", async () => {
-    const db = await createDb();
+    const db = await makeTestDb();
     const a = make("sha256:unique1");
     const r1 = await ingestAttestation(db, a);
     expect(r1.accepted).toBe(true);
     const r2 = await ingestAttestation(db, a); // re-POST same record
     expect(r2).toMatchObject({ accepted: true, idempotent: true });
-    const n = (await db.query<{ c: number }>("select count(*)::int as c from attestations")).rows[0].c;
+    const n = (await db.execute<{ c: number }>(sql`select count(*)::int as c from attestations`)).rows[0].c;
     expect(n).toBe(1); // no duplicate
   });
   it("rejects a tampered signature without writing", async () => {
-    const db = await createDb();
+    const db = await makeTestDb();
     const r = await ingestAttestation(db, { ...make("sha256:u2"), signature: "AAAA" });
     expect(r).toEqual({ accepted: false, rejected: "bad-signature" });
-    expect((await db.query<{ c: number }>("select count(*)::int as c from attestations")).rows[0].c).toBe(0);
+    expect((await db.execute<{ c: number }>(sql`select count(*)::int as c from attestations`)).rows[0].c).toBe(0);
   });
 });

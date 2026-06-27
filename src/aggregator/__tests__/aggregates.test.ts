@@ -1,6 +1,6 @@
 // src/aggregator/__tests__/aggregates.test.ts
 import { describe, it, expect } from "vitest";
-import { createDb } from "../db.js";
+import { makeTestDb } from "../testDb.js";
 import { projectAttestation } from "../project.js";
 import { popularity, coOccurrence, DEFAULT_K } from "../aggregates.js";
 
@@ -14,7 +14,7 @@ function att(pubkey: string, digest: string, skills: string[]) {
 
 describe("aggregates + k-anon", () => {
   it("popularity counts distinct producers and enforces k-anon in SQL", async () => {
-    const db = await createDb();
+    const db = await makeTestDb();
     await projectAttestation(db, att("ed25519:p1", "d1", ["skill:a", "skill:b"]));
     await projectAttestation(db, att("ed25519:p2", "d2", ["skill:a"]));
     await projectAttestation(db, att("ed25519:p3", "d3", ["skill:a"]));
@@ -30,7 +30,7 @@ describe("aggregates + k-anon", () => {
     expect(await popularity(db, { kind: "skill" })).toEqual([]); // 3 producers < DEFAULT_K
   });
   it("coOccurrence finds partners sharing a producer, k-anon enforced", async () => {
-    const db = await createDb();
+    const db = await makeTestDb();
     await projectAttestation(db, att("ed25519:p1", "d1", ["skill:a", "skill:x"]));
     await projectAttestation(db, att("ed25519:p2", "d2", ["skill:a", "skill:x"]));
     const co = await coOccurrence(db, { id: "skill:a", k: 2 });

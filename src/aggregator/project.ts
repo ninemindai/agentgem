@@ -1,6 +1,8 @@
 // src/aggregator/project.ts
 import { randomUUID } from "node:crypto";
-import type { DB } from "./db.js";
+import { sql } from "drizzle-orm";
+import type { AppDb } from "./schema.js";
+import { producers, attestations, ingredients, usageEdges } from "./schema.js";
 import type { UsageAttestation } from "../gem/attestation.js";
 
 interface Node { id: string; kind: string; idKind: string; invocations: number; sessions: number }
@@ -17,22 +19,21 @@ function publicNodes(att: UsageAttestation): { nodes: Node[]; privateCount: numb
   return { nodes, privateCount };
 }
 
-export async function projectAttestation(db: DB, att: UsageAttestation): Promise<{ id: string; publicIngredients: number; privateCount: number }> {
+export async function projectAttestation(db: AppDb, att: UsageAttestation): Promise<{ id: string; publicIngredients: number; privateCount: number }> {
   const { nodes, privateCount } = publicNodes(att);
   const id = randomUUID();
-  await db.query("insert into producers(pubkey, attest_count) values ($1, 1) on conflict (pubkey) do update set attest_count = producers.attest_count + 1", [att.producer.publicKey]);
-  await db.query(
-    `insert into attestations(id, gem_name, gem_digest, producer_pubkey, harness_id, models, scan_sessions, scan_span_days, signal_digest, private_count)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-    [id, att.gem.name, att.gem.digest, att.producer.publicKey, att.source.harness.id, att.source.models,
-     att.source.scan.sessions, att.source.scan.spanDays, att.evidence.signalDigest, privateCount]);
+  await db.insert(producers).values({ pubkey: att.producer.publicKey, attestCount: 1 })
+    .onConflictDoUpdate({ target: producers.pubkey, set: { attestCount: sql`${producers.attestCount} + 1` } });
+  await db.insert(attestations).values({
+    id, gemName: att.gem.name, gemDigest: att.gem.digest, producerPubkey: att.producer.publicKey,
+    harnessId: att.source.harness.id, models: att.source.models, scanSessions: att.source.scan.sessions,
+    scanSpanDays: att.source.scan.spanDays, signalDigest: att.evidence.signalDigest, privateCount,
+  });
   for (const n of nodes) {
-    await db.query(
-      "insert into ingredients(id, kind, id_kind) values ($1,$2,$3) on conflict (id) do update set last_seen = now()",
-      [n.id, n.kind, n.idKind]);
-    await db.query(
-      "insert into usage_edges(attestation_id, ingredient_id, invocations, sessions) values ($1,$2,$3,$4) on conflict do nothing",
-      [id, n.id, n.invocations, n.sessions]);
+    await db.insert(ingredients).values({ id: n.id, kind: n.kind, idKind: n.idKind })
+      .onConflictDoUpdate({ target: ingredients.id, set: { lastSeen: sql`now()` } });
+    await db.insert(usageEdges).values({ attestationId: id, ingredientId: n.id, invocations: n.invocations, sessions: n.sessions })
+      .onConflictDoNothing();
   }
   return { id, publicIngredients: nodes.length, privateCount };
 }
