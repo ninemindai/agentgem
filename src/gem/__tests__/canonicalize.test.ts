@@ -42,4 +42,11 @@ describe("canonicalize", () => {
   });
 
   it("exposes a version", () => { expect(CANONICALIZER_VERSION).toBe(1); });
+
+  it("classifies cloud-metadata and IPv4-mapped-IPv6 hosts as private", () => {
+    expect(canonicalMcpServer({ type: "mcp_server", name: "meta", transport: "http",
+      config: { url: "http://169.254.169.254/mcp" } }).public).toBe(false);
+    expect(canonicalMcpServer({ type: "mcp_server", name: "v6", transport: "http",
+      config: { url: "http://[::ffff:192.168.1.1]/mcp" } }).public).toBe(false);
+  });
 });

@@ -15,9 +15,6 @@ export function canonicalHarness(flavor: "claude" | "codex"): Ingredient {
   return { id: flavor === "claude" ? "claude-code" : "codex", idKind: "known", public: true };
 }
 
-// A registry coordinate looks like "@scope/name" or "name" with no path separators / dots-as-paths.
-function isRegistryCoord(s: string): boolean { return /^@?[a-z0-9][a-z0-9._-]*\/?[a-z0-9._-]*$/i.test(s) && !s.includes("/Users") && !s.startsWith("/"); }
-
 export function canonicalSkill(s: SkillArtifact): Ingredient {
   if (s.source && s.source.startsWith("@") && s.source.includes("/")) return { id: s.source, idKind: "registry", public: true };
   return { id: `skill:sha256:${sha256(s.content)}`, idKind: "contentHash", public: false };
@@ -37,7 +34,8 @@ function isPublicPackage(pkg: string): boolean {
   return /^@?[a-z0-9][a-z0-9._-]*(\/[a-z0-9._-]+)?$/i.test(pkg);
 }
 function isPublicHost(host: string): boolean {
-  if (/^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host)) return false;
+  if (host.startsWith(":")) return false; // any IPv6 literal (e.g. ::1, ::ffff:192.168.x.x)
+  if (/^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.)/.test(host)) return false;
   if (host === "localhost" || host.endsWith(".internal") || host.endsWith(".local")) return false;
   return host.includes(".");
 }
