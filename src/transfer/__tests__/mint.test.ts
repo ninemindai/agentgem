@@ -10,10 +10,11 @@ function testAccountSeed(): string {
 }
 
 describe("scopeSubjects", () => {
-  it("scopes to the bucket's object-store subjects and an inbox", () => {
-    const { pub, sub } = scopeSubjects("agentgem-transfer", "receive");
+  it("scopes to the bucket subjects and a PER-MINT inbox (not account-wide)", () => {
+    const { pub, sub } = scopeSubjects("agentgem-transfer", "receive", "_INBOX.UABC");
     expect(sub).toContain("$O.agentgem-transfer.>");
-    expect(sub).toContain("_INBOX.>");
+    expect(sub).toContain("_INBOX.UABC.>");
+    expect(sub).not.toContain("_INBOX.>"); // must NOT grant the account-wide inbox
     expect(pub.every((s) => !s.endsWith("$JS.API.>"))).toBe(true);
     expect(pub.some((s) => s.includes("OBJ_agentgem-transfer"))).toBe(true);
   });
@@ -42,5 +43,19 @@ describe("mintScopedCreds", () => {
     const issuedAt = 1_700_000_000;
     const { expiresAt } = await mintScopedCreds({ accountSeed: testAccountSeed(), scope: "receive", issuedAt });
     expect(expiresAt).toBe(issuedAt + 60);
+  });
+
+  it("scopes the JWT to a per-mint inbox, never the account-wide _INBOX.>", async () => {
+    const { creds } = await mintScopedCreds({ accountSeed: testAccountSeed(), scope: "receive" });
+    const jwt = creds.match(/BEGIN NATS USER JWT-+\s*([\s\S]*?)\s*-+END NATS USER JWT/)?.[1]?.trim();
+    const claims = decode<{ sub?: { allow: string[] } }>(jwt!);
+    const subs = claims.nats.sub?.allow ?? [];
+    expect(subs).not.toContain("_INBOX.>");
+    expect(subs.some((s) => /^_INBOX\.U[A-Z0-9]+\.>$/.test(s))).toBe(true); // per-mint, keyed by user pubkey
+  });
+
+  it("rejects a malformed account seed with a clear 400-style error", async () => {
+    await expect(mintScopedCreds({ accountSeed: "not-a-seed", scope: "receive" }))
+      .rejects.toThrow(/valid account nkey seed/i);
   });
 });
