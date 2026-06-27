@@ -22,11 +22,15 @@ import { streamGemRun } from "./gemRunStream.js";
 import { originGuard } from "./originGuard.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
-function pageHtml(): string {
-  for (const p of [join(here, "public", "index.html"), join(here, "..", "src", "public", "index.html")]) {
+// Read a static UI asset from dist/public (built) or src/public (dev fallback).
+function publicAsset(name: string): string {
+  for (const p of [join(here, "public", name), join(here, "..", "src", "public", name)]) {
     try { return readFileSync(p, "utf8"); } catch { /* try next */ }
   }
-  return "<!doctype html><p>index.html not found</p>";
+  return "";
+}
+function pageHtml(): string {
+  return publicAsset("index.html") || "<!doctype html><p>index.html not found</p>";
 }
 
 export async function createApp(port: number): Promise<RestApplication> {
@@ -45,6 +49,9 @@ export async function createApp(port: number): Promise<RestApplication> {
   const server = await app.restServer;
   const html = pageHtml();
   server.expressApp.get("/", (_req, res) => res.type("html").send(html));
+  // Serve the client-side decrypt ES module for the web-receiver's private redeem.
+  const transferDecryptJs = publicAsset("transfer-decrypt.js");
+  server.expressApp.get("/transfer-decrypt.js", (_req, res) => res.type("application/javascript").send(transferDecryptJs));
   // SSE progress stream for workflow analysis (raw Express — the decorator
   // framework only returns single JSON bodies). The POST /api/workflow/analyze
   // route stays for programmatic/test callers. originGuard is applied per-route because these raw
