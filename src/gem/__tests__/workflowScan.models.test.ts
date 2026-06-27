@@ -18,4 +18,11 @@ describe("collectModels", () => {
   it("ignores records with no model", () => {
     expect(collectModels([[{ message: { role: "user" } }]])).toEqual([]);
   });
+
+  it("filters synthetic/placeholder model markers", () => {
+    const sessions = [
+      [{ message: { role: "assistant", model: "<synthetic>" } }, { message: { role: "assistant", model: "claude-opus-4-8" } }],
+    ];
+    expect(collectModels(sessions)).toEqual([{ id: "claude-opus-4-8", sessions: 1 }]);
+  });
 });
