@@ -8,11 +8,12 @@ describe("runCli", () => {
     const store = new InMemoryObjectStore();
     const files = new Map<string, Buffer>();
     const out: string[] = [];
+    const errs: string[] = [];
     const io = {
       readFile: async (p: string) => files.get(p)!,
       writeFile: async (p: string, b: Buffer) => void files.set(p, b),
       log: (s: string) => out.push(s),
-      err: (_s: string) => {},
+      err: (s: string) => errs.push(s),
     };
     // a real .gem to send
     const { exportGem } = await import("../../gem/share.js");
@@ -24,6 +25,14 @@ describe("runCli", () => {
     const ticket = out[0];
     expect(ticket.startsWith("agentgem://gem/")).toBe(true);
 
+    // the key fragment (after #) must not appear in any err line separately
+    const fragment = ticket.includes("#") ? ticket.slice(ticket.indexOf("#") + 1) : "";
+    expect(out).toHaveLength(1);
+    expect(out[0]).toBe(ticket); // ticket logged exactly once via log
+    for (const line of errs) {
+      expect(line).not.toBe(fragment); // key not logged separately to err
+    }
+
     expect(await runCli(["receive", ticket, "out.gem"], store, io)).toBe(0);
     expect(files.get("out.gem")).toEqual(files.get("in.gem"));
   });
@@ -32,5 +41,18 @@ describe("runCli", () => {
     const store = new InMemoryObjectStore();
     const io = { readFile: async () => Buffer.alloc(0), writeFile: async () => {}, log: () => {}, err: () => {} };
     expect(await runCli(["bogus"], store, io)).toBe(2);
+  });
+
+  it("receive with malformed ticket returns exit code 1 and writes an error message", async () => {
+    const store = new InMemoryObjectStore();
+    const errs: string[] = [];
+    const io = {
+      readFile: async () => Buffer.alloc(0),
+      writeFile: async () => {},
+      log: () => {},
+      err: (s: string) => errs.push(s),
+    };
+    expect(await runCli(["receive", "not-a-ticket"], store, io)).toBe(1);
+    expect(errs.length).toBeGreaterThan(0);
   });
 });

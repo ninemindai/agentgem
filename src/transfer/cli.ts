@@ -24,18 +24,28 @@ export async function runCli(argv: string[], store: ObjectStore, io: CliIO = def
   const bucket = (store as { bucket?: string }).bucket ?? "agentgem-transfer";
   if (cmd === "send") {
     if (!rest[0]) { io.err("usage: send <file.gem>"); return 2; }
-    const bytes = await io.readFile(rest[0]);
-    const { ticket } = await sendGemBytes(bytes, store, bucket);
-    io.log(ticket);
-    return 0;
+    try {
+      const bytes = await io.readFile(rest[0]);
+      const { ticket } = await sendGemBytes(bytes, store, bucket);
+      io.log(ticket);
+      return 0;
+    } catch (e) {
+      io.err(e instanceof Error ? e.message : String(e));
+      return 1;
+    }
   }
   if (cmd === "receive") {
     if (!rest[0]) { io.err("usage: receive <ticket> [out.gem]"); return 2; }
-    const { gem, meta, bytes } = await receiveGem(rest[0], store);
-    const outPath = rest[1] ?? `${gem.name}.gem`;
-    await io.writeFile(outPath, bytes);
-    io.err(`✓ verified integrity · ${meta.name}@${meta.version} → ${outPath}`);
-    return 0;
+    try {
+      const { gem, meta, bytes } = await receiveGem(rest[0], store);
+      const outPath = rest[1] ?? `${gem.name}.gem`;
+      await io.writeFile(outPath, bytes);
+      io.err(`✓ verified integrity · ${meta.name}@${meta.version} → ${outPath}`);
+      return 0;
+    } catch (e) {
+      io.err(e instanceof Error ? e.message : String(e));
+      return 1;
+    }
   }
   io.err("usage: agentgem-transfer send <file.gem> | receive <ticket> [out.gem]");
   return 2;
