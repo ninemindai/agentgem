@@ -6,6 +6,7 @@
 import { sendGemBytes, receiveGem, type SendResult, type ReceiveResult } from "./index.js";
 import type { ObjectStore } from "./objectStore.js";
 import { NatsObjectStore } from "./natsObjectStore.js";
+import { mintScopedCreds, type TransferScope } from "./mint.js";
 import { InvalidInputError } from "../gem/inputError.js";
 
 // An ObjectStore that may be backed by a remote broker — it carries a bucket name
@@ -30,6 +31,18 @@ function natsServersOrThrow(): string {
 // they'd otherwise reach the store factory. Throws the same "not configured" error.
 export function assertConfigured(): void {
   natsServersOrThrow();
+}
+
+// Mint scoped, short-lived creds for an untrusted client (the browser web-receiver).
+// Separate config path from NATS_URL/NATS_TOKEN. 400 (InvalidInputError) if unset.
+export async function mintCredsFromEnv(scope: TransferScope): Promise<{ creds: string; wsUrl: string; expiresAt: number }> {
+  const accountSeed = process.env.NATS_ACCOUNT_SEED;
+  const wsUrl = process.env.NATS_WS_URL;
+  if (!accountSeed || !wsUrl) {
+    throw new InvalidInputError("ephemeral tokens are not configured — set NATS_ACCOUNT_SEED and NATS_WS_URL");
+  }
+  const { creds, expiresAt } = await mintScopedCreds({ accountSeed, scope });
+  return { creds, wsUrl, expiresAt };
 }
 
 // Parse $NATS_TTL_HOURS. Fail fast on a non-numeric value rather than silently

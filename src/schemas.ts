@@ -395,6 +395,14 @@ export const TransferReceiveResponseSchema = z.object({
   bytesBase64: z.string(), // the verified .gem bytes, for materializing via /materialize
 });
 
+// Ephemeral, subject-scoped NATS creds for an untrusted client (the browser web-receiver).
+export const TransferTokenRequestSchema = z.object({ scope: z.literal("receive").optional() });
+export const TransferTokenResponseSchema = z.object({
+  creds: z.string(),
+  wsUrl: z.string(),
+  expiresAt: z.number(), // unix seconds
+});
+
 // ── Workspaces ──
 export const WorkspaceSummarySchema = z.object({
   name: z.string(),

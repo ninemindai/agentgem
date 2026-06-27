@@ -17,7 +17,7 @@ import { writeArchiveDir, readArchiveDir } from "./gem/archiveFs.js";
 import { packTar } from "./gem/archiveTar.js";
 import { exportGem, importGem } from "./gem/share.js";
 import { fetchGemBytes } from "./gem/safeFetch.js";
-import { sendBytes, receiveTicket, natsStoreFromEnv, assertConfigured } from "./transfer/service.js";
+import { sendBytes, receiveTicket, natsStoreFromEnv, assertConfigured, mintCredsFromEnv } from "./transfer/service.js";
 import type { Gem } from "./gem/types.js";
 import { readDeployRecord, writeDeployRecord, clearDeployRecord } from "./gem/deployRecord.js";
 import type { DeployBackend } from "./gem/deployRecord.js";
@@ -30,6 +30,7 @@ import {
   ScaffoldChecksRequestSchema, ScaffoldChecksResponseSchema,
   MaterializeRequestSchema, MaterializeResponseSchema,
   TransferSendRequestSchema, TransferSendResponseSchema, TransferReceiveRequestSchema, TransferReceiveResponseSchema,
+  TransferTokenRequestSchema, TransferTokenResponseSchema,
   PublishPreviewRequestSchema, PublishRequestSchema, PublishPreviewResponseSchema, PublishReadyResponseSchema, PublishResultSchema,
   DeployTargetsResponseSchema, DeployReadyQuerySchema,
   ArchiveRequestSchema, ArchiveResponseSchema,
@@ -150,6 +151,11 @@ export class GemController {
   async transferReceive(input: { body: z.infer<typeof TransferReceiveRequestSchema> }): Promise<z.infer<typeof TransferReceiveResponseSchema>> {
     const { gem, meta, bytes } = await receiveTicket(input.body.ticket, natsStoreFromEnv());
     return { gem, meta, bytesBase64: bytes.toString("base64") };
+  }
+
+  @post("/transfer/token", { body: TransferTokenRequestSchema, response: TransferTokenResponseSchema })
+  async transferToken(input: { body: z.infer<typeof TransferTokenRequestSchema> }): Promise<z.infer<typeof TransferTokenResponseSchema>> {
+    return mintCredsFromEnv(input.body.scope ?? "receive");
   }
 
   @post("/archive", { body: ArchiveRequestSchema, response: ArchiveResponseSchema })
