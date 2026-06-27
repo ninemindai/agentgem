@@ -32,5 +32,10 @@ describe("aggregates + k-anon", () => {
     const co = await coOccurrence(db, { id: "skill:a", k: 2 });
     expect(co.map((r) => r.id)).toContain("skill:x");
     expect(co.find((r) => r.id === "skill:x")!.producers).toBe(2);
+    // k-anon suppression on the coOccurrence query: a partner used by only 1 producer is hidden at K=2.
+    await projectAttestation(db, att("ed25519:p3", "d3", ["skill:a", "skill:y"])); // skill:y: only 1 producer
+    const co2 = await coOccurrence(db, { id: "skill:a", k: 2 });
+    expect(co2.map((r) => r.id)).toContain("skill:x");     // 2 producers -> visible
+    expect(co2.map((r) => r.id)).not.toContain("skill:y"); // 1 producer -> suppressed at K=2 (k-anon in SQL)
   });
 });
