@@ -9,7 +9,7 @@ import { popularity, coOccurrence } from "./aggregator/aggregates.js";
 import type { UsageAttestation } from "./gem/attestation.js";
 
 // Loose body schema — the real gate is the core's verifyAttestation (ed25519 + consistency).
-const IngestBody = z.object({ producer: z.object({ publicKey: z.string() }).passthrough(), signature: z.string(), gem: z.object({ digest: z.string() }).passthrough() }).passthrough();
+const IngestBody = z.object({ producer: z.object({ publicKey: z.string() }).loose(), signature: z.string(), gem: z.object({ digest: z.string() }).loose() }).loose();
 const IngestResult = z.union([
   z.object({ accepted: z.literal(true), id: z.string(), publicIngredients: z.number(), privateCount: z.number(), idempotent: z.boolean() }),
   z.object({ accepted: z.literal(false), rejected: z.string() }),

@@ -24,14 +24,17 @@ describe("AggregatorController", () => {
     const ing = att.ingredients.skills.find((s) => s.public)!.id;
 
     expect((await c.ingest({ body: att as never })).accepted).toBe(true);
-    await seedSynthetic(db, 2, [ing]); // 3 producers total -> clears DEFAULT_K? only if DEFAULT_K<=3; assert below
-    // The route applies DEFAULT_K and ignores any caller k: a malicious ?k=1 must NOT surface a 1-producer ingredient.
+    // Put `ing` clearly ABOVE the floor (1 real + 4 synthetic = 5 = DEFAULT_K) and add a 1-producer `solo`.
+    await seedSynthetic(db, 4, [ing]);
     const onlyOneProducer = signAttestation(buildAttestation({ gem: { ...gem, artifacts: [{ type: "skill", name: "solo", source: "plugin:x@m", content: "c" }] },
       signal: { ...signal, artifacts: [{ type: "skill", name: "solo", root: null, invocations: 1, sessionsUsedIn: 1, lastUsedMs: 0, confidence: "high" }] } as never, gemDigest: "sha256:solo", salt: "S" }), id, 1);
-    await c.ingest({ body: onlyOneProducer as never });
+    expect((await c.ingest({ body: onlyOneProducer as never })).accepted).toBe(true); // the solo ingredient really exists
     const soloId = onlyOneProducer.ingredients.skills.find((s) => s.public)!.id;
-    const pop = await c.popularity({ query: { k: 1 } as never }); // caller tries k=1
-    expect(pop.map((r) => r.id)).not.toContain(soloId); // still floored by DEFAULT_K — caller k ignored
+    // The route applies DEFAULT_K and IGNORES any caller k: a malicious ?k=1 must NOT surface the 1-producer ingredient,
+    // while the 5-producer ingredient (above the floor) IS returned — proving the response isn't just empty.
+    const pop = await c.popularity({ query: { k: 1 } as never });
+    expect(pop.map((r) => r.id)).toContain(ing);        // 5 producers >= DEFAULT_K -> visible
+    expect(pop.map((r) => r.id)).not.toContain(soloId); // 1 producer < DEFAULT_K -> hidden despite caller k=1
   });
 
   it("rejects a tampered attestation", async () => {
