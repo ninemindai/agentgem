@@ -20,7 +20,7 @@ function publicNodes(att: UsageAttestation): { nodes: Node[]; privateCount: numb
 export async function projectAttestation(db: DB, att: UsageAttestation): Promise<{ id: string; publicIngredients: number; privateCount: number }> {
   const { nodes, privateCount } = publicNodes(att);
   const id = randomUUID();
-  await db.query("insert into producers(pubkey) values ($1) on conflict (pubkey) do update set attest_count = producers.attest_count + 1", [att.producer.publicKey]);
+  await db.query("insert into producers(pubkey, attest_count) values ($1, 1) on conflict (pubkey) do update set attest_count = producers.attest_count + 1", [att.producer.publicKey]);
   await db.query(
     `insert into attestations(id, gem_name, gem_digest, producer_pubkey, harness_id, models, scan_sessions, scan_span_days, signal_digest, private_count)
      values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,

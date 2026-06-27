@@ -38,5 +38,13 @@ describe("projectAttestation", () => {
     expect(edge).toEqual({ invocations: 15, sessions: 4 });
     const pc = (await db.query<{ private_count: number }>("select private_count from attestations")).rows[0];
     expect(pc.private_count).toBe(1);
+    const harnessEdge = (await db.query<{ invocations: number; sessions: number }>(
+      "select e.invocations, e.sessions from usage_edges e where e.ingredient_id = 'claude-code'")).rows[0];
+    expect(harnessEdge).toEqual({ invocations: 4, sessions: 4 });
+    const modelEdge = (await db.query<{ invocations: number; sessions: number }>(
+      "select e.invocations, e.sessions from usage_edges e where e.ingredient_id = 'claude-opus-4-8'")).rows[0];
+    expect(modelEdge).toEqual({ invocations: 4, sessions: 4 });
+    const ac = (await db.query<{ attest_count: number }>("select attest_count from producers")).rows[0];
+    expect(ac.attest_count).toBe(1);
   });
 });
