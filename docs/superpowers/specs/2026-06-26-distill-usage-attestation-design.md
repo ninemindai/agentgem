@@ -3,9 +3,15 @@
 **Date:** 2026-06-26
 **Status:** Approved design, pre-implementation
 
+> **Amendment 2026-06-27 #2 (Codex adversarial debate — honest trust reframe):** An adversarial review established that "scan-grounded ⇒ hard to fake" is **overclaimed**. The transcript, scanner, keypair, and archive all run on attacker-controlled hardware, so a baseline attestation is **signed, self-reported telemetry — not proof of real use.** Corrections, superseding earlier claims in this doc:
+> - **Relabel, don't overclaim.** Drop "cannot be faked"; the honest claim is "tamper-evident and attributable." Baseline records still build the data moat, but only **reputation-weighted and rate-limited** (enforced in Spec B1).
+> - **The full-signal "verified" tier is removed** (supersedes the 2026-06-26 amendment below). Shipping the full redacted `WorkflowSignal` both fails to prove real use (a self-consistent fake passes recompute) *and* leaks more than intended (`scrub` retains Bash args, paths, filenames, repo/branch/ticket names, prose hints). Replace `evidence.signal` with **minimal salted event tuples** — `{ saltedSessionId, ingredientId, count, coarseTimeBucket }` — and rename the recompute tier **"recomputable"** (audit-visible), *not* "verified." Reserve the word **verified** for a future **harness/provider-signed run receipt** — the only artifact that proves a real run.
+> - **Counted facts are deterministic + versioned.** The host agent may choose *what to share* (scope/UX) but must never define counted numbers; the usage profile and canonical ids come from a deterministic, **versioned canonicalizer** in the MCP layer, so the graph doesn't fragment by agent/model/prompt.
+> - **Fingerprint privacy.** Only **public package coordinates** (with resolved version/checksum when available) become public graph nodes; private URLs/packages become **salted hashes excluded from public aggregates** unless explicitly allowlisted. Record the canonicalizer version; weight low-confidence ids sharply lower.
+
 > **Amendment 2026-06-27 (from Spec B1 brainstorm — ingest substrate):** usage attestations are ingested via a **hosted ingest endpoint the producer POSTs to** (verified at the door), *not* by piggybacking on the GitHub registry push. Consequences for Spec A: (a) **account-attestation moves from "the commit author" to OAuth** (Sign in with Vercel / GitHub OAuth) performed at the ingest endpoint — the "free commit-author binding" in Decision 3 is **superseded**; (b) `sign_and_publish` **POSTs the signed attestation to the hosted ingest API** (the data-critical step) in addition to publishing the Gem archive to the registry **for distribution only**. The GitHub registry remains the durable, content-addressed *distribution* store for installable Gems; it is no longer the data-ingest path. See Decision 3, §The attestation envelope (`account`), and §MCP tool contracts (`sign_and_publish`).
 
-> **Amendment 2026-06-26 (from Spec B/B1 brainstorm):** the envelope gains an **optional** `evidence.signal` — the *full redacted `WorkflowSignal`* the profile was derived from. It is **opt-in**: when omitted, `evidence.signalDigest` is a tamper-evident commitment only and the aggregator relies on cross-record statistical detection (baseline tier); when included, the aggregator deterministically recomputes counts and grants the record a **"verified" badge** (verified tier). `scrub.ts` must be airtight on the shipped signal since it carries more detail than the summary metrics. See §The attestation envelope, §MCP tool contracts (`build_attestation` gains `includeSignal?`), and §Privacy.
+> **Amendment 2026-06-26 (from Spec B/B1 brainstorm) — SUPERSEDED by 2026-06-27 #2 above (full-signal shipping dropped for minimal salted tuples; tier renamed "recomputable"):** the envelope gains an **optional** `evidence.signal` — the *full redacted `WorkflowSignal`* the profile was derived from. It is **opt-in**: when omitted, `evidence.signalDigest` is a tamper-evident commitment only and the aggregator relies on cross-record statistical detection (baseline tier); when included, the aggregator deterministically recomputes counts and grants the record a **"verified" badge** (verified tier). `scrub.ts` must be airtight on the shipped signal since it carries more detail than the summary metrics. See §The attestation envelope, §MCP tool contracts (`build_attestation` gains `includeSignal?`), and §Privacy.
 **Part of:** a three-subsystem vision — **A. Producer** (this spec), **B. Aggregator** (hosted leaderboard + usage graph + data API), **C. Trust spine** (anti-fraud + PageRank ranking). C is a constraint woven through A and B, not a standalone phase.
 
 ## North star
@@ -124,13 +130,15 @@ The split guarantees the skill's privacy gate runs on the *final* bytes before a
 
 Reuses `scrub.ts` (transcript steps) + `redact.ts` (config secrets). The envelope carries only canonical ids, counts, and coarse metrics — no prompts, file contents, outputs, or paths. The step-3 gate is a hard stop. **When a producer opts into `includeSignal`, the embedded `evidence.signal` carries more detail than the summary metrics, so `scrub` must be airtight on it and the privacy gate must render it in full before signing.**
 
-## Trust posture (Spec A scope)
+## Trust posture (Spec A scope) — honest framing
 
-- **Grounded** — profile derived from a real scan, not typed in.
+Per the 2026-06-27 #2 amendment: a baseline attestation is **signed, self-reported telemetry**. It is *tamper-evident and attributable*, not *proof of real use* (the producer controls the machine the scan runs on). What Spec A actually provides:
+
 - **Integrity** — ed25519 over the canonical doc; tamper breaks verification.
-- **Continuity** — a stable producer key ties submissions together.
-- **Sybil cost** — account = the publish (GitHub) identity.
-- **Deferred to B/later** — PageRank ranking, fork/dependency edges, content-hash edge inference, statistical anomaly detection, harness-signed run receipts.
+- **Attribution + continuity** — a stable producer key ties submissions together; OAuth binds them to an account.
+- **Recomputable (not "verified")** — minimal salted event tuples let the aggregator recompute declared counts and catch inflation against a committed digest. This raises the cost of *inconsistency*, not of *fabrication*.
+- **NOT claimed** — that the run actually happened. Real-use proof requires a future **harness/provider-signed run receipt**.
+- **Deferred to B/later** — reputation weighting + rate limits (the actual sybil control), PageRank ranking, fork/dependency edges, content-hash edge inference, and harness-signed receipts. Abuse-triage anomaly detection lives in B1 but does **not** confer trust.
 
 ## Testing
 
