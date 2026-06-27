@@ -20,6 +20,8 @@ import { fetchGemBytes } from "./gem/safeFetch.js";
 import type { Gem } from "./gem/types.js";
 import { readDeployRecord, writeDeployRecord, clearDeployRecord } from "./gem/deployRecord.js";
 import type { DeployBackend } from "./gem/deployRecord.js";
+import { transcriptToken } from "./gem/analysisCache.js";
+import { readGlobalUsageCache, writeGlobalUsageCache } from "./gem/usageCache.js";
 import { undeployManagedAgent, anthropicPublishClient } from "./publish.js";
 import { undeployAgentcoreHarness, realAgentcoreControlClient } from "./gem/agentcorePublish.js";
 
@@ -97,13 +99,18 @@ export class GemController {
       if (input.query.scope === "global") {
         const dirs = resolveDirs(input.query.dir);
         const paths = allClaudeTranscripts(dirs.claudeDir);
+        const token = transcriptToken(paths);
+        const cached = readGlobalUsageCache(token);
+        if (cached) return cached as z.infer<typeof UsageSchema>;
         const globalInv = introspectConfig(dirs);
         const emptyProject = { root: "", name: "", skills: [], mcpServers: [], instructions: [], hooks: [] };
         const scanInv = { project: emptyProject, global: { skills: globalInv.skills, mcpServers: globalInv.mcpServers, hooks: globalInv.hooks } };
         const signal = scanWorkflow(paths, scanInv);
-        return { artifacts: signal.artifacts
+        const result = { artifacts: signal.artifacts
           .filter((a) => a.root === null)
           .map((a) => ({ type: a.type, name: a.name, root: a.root, invocations: a.invocations, sessionsUsedIn: a.sessionsUsedIn, lastUsedMs: a.lastUsedMs })) };
+        writeGlobalUsageCache(token, result);
+        return result;
       }
       const roots = parseProjectsQuery(input.query.projects);
       const root = roots[0];
