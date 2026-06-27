@@ -4,12 +4,12 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { seatbeltPolicy } from "../sandboxLaunch.js";
+import { seatbeltPolicy, type DeniedPath } from "../sandboxLaunch.js";
 
 const onMac = process.platform === "darwin" && existsSync("/usr/bin/sandbox-exec");
 
 // Run `sh -c <script>` under the generated policy; return true if it exited 0.
-function runJailed(runDir: string, script: string, extraWritable: string[] = [], denied: string[] = []): boolean {
+function runJailed(runDir: string, script: string, extraWritable: string[] = [], denied: DeniedPath[] = []): boolean {
   try {
     execFileSync("/usr/bin/sandbox-exec", ["-p", seatbeltPolicy(runDir, undefined, extraWritable, denied), "/bin/sh", "-c", script], { stdio: "pipe" });
     return true;
@@ -44,7 +44,7 @@ describe.skipIf(!onMac)("seatbelt boundary (macOS)", () => {
     // Config dir under /tmp (→ /private/tmp), NOT covered by the tmp clause — so writes there
     // succeed ONLY because it's passed as extra-writable, isolating the allow/deny behavior.
     const cfg = mkdtempSync("/tmp/sbx-cfg-");
-    const denied = [join(cfg, "settings.json"), join(cfg, "skills")];
+    const denied: DeniedPath[] = [{ path: join(cfg, "settings.json"), kind: "file" }, { path: join(cfg, "skills"), kind: "dir" }];
     try {
       const scratch = join(cfg, "session-env", "abc123", "marker");
       const hook = join(cfg, "settings.json");

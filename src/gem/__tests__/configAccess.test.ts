@@ -13,14 +13,14 @@ describe("claudeJsonPath", () => {
 });
 
 describe("sensitiveConfigPaths", () => {
-  it("covers the host code-exec / credential-theft vectors under the config dir", () => {
+  it("covers the host code-exec / credential-theft vectors with their file/dir kind", () => {
     const s = sensitiveConfigPaths("/cfg");
     expect(s).toEqual([
-      join("/cfg", "settings.json"),
-      join("/cfg", "settings.local.json"),
-      join("/cfg", ".credentials.json"),
-      join("/cfg", "skills"),
-      join("/cfg", "plugins"),
+      { path: join("/cfg", "settings.json"), kind: "file" },
+      { path: join("/cfg", "settings.local.json"), kind: "file" },
+      { path: join("/cfg", ".credentials.json"), kind: "file" },
+      { path: join("/cfg", "skills"), kind: "dir" },
+      { path: join("/cfg", "plugins"), kind: "dir" },
     ]);
   });
 });
@@ -34,6 +34,7 @@ describe("configWriteAccess", () => {
 
   it("a sensitive path is never also writable (deny must win at the policy layer)", () => {
     const a = configWriteAccess("/cfg", {}, "/Users/x");
-    for (const d of a.denied) expect(a.writable).not.toContain(d);
+    const writable = new Set(a.writable);
+    for (const d of a.denied) expect(writable.has(d.path)).toBe(false);
   });
 });

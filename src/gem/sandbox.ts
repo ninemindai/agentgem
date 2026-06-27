@@ -3,9 +3,12 @@
 // produces a RunConnectFn pre-scoped to a run dir. Auto-allow is capability-gated:
 // isolated backends run permission:"allow" (the FS boundary bounds blast radius);
 // the child-spawn fallback stays deny unless AGENTGEM_GEM_RUN_AUTOALLOW=1.
+import { mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { connectRunSession } from "./acpRun.js";          // value used at call-time (safe ESM cycle)
 import type { RunConnectFn, AgentDescriptor } from "./acpRun.js";
-import { wrapWithSandbox, type SandboxKind } from "./sandboxLaunch.js";
+import { wrapWithSandbox, type SandboxKind, type MaskPlaceholders } from "./sandboxLaunch.js";
 import { configWriteAccess } from "./configAccess.js";
 import { binOnPath } from "./binPath.js";
 
@@ -18,6 +21,19 @@ export interface SandboxBackend {
 
 export function envPermission(env: NodeJS.ProcessEnv = process.env): "allow" | "deny" {
   return env.AGENTGEM_GEM_RUN_AUTOALLOW === "1" ? "allow" : "deny";
+}
+
+// Read-only stand-ins bind-mounted over absent sensitive paths under bubblewrap (which can't
+// deny a path that doesn't exist) so the agent can't CREATE them: `file` is an empty-JSON file
+// (a reader like settings.json parses cleanly), `dir` an empty directory. Shared + idempotent
+// (inert content), so runs don't accumulate placeholder dirs.
+export function ensureMaskPlaceholders(): MaskPlaceholders {
+  const base = join(tmpdir(), "agentgem-sandbox-mask");
+  const dir = join(base, "empty");
+  mkdirSync(dir, { recursive: true });
+  const file = join(base, "empty.json");
+  writeFileSync(file, "{}");
+  return { file, dir };
 }
 
 // An isolated backend: wrap the agent command with the OS sandbox launcher (so the
@@ -33,8 +49,11 @@ function isolatedBackend(id: string, kind: SandboxKind, bin: string, supported: 
       // re-allows writes there so its startup state (session-env/transcripts) succeeds, but
       // carves the escalation vectors (hooks/skills/plugins/credentials) back out read-only.
       const { writable, denied } = configWriteAccess();
+      // bubblewrap can't deny a not-yet-existing path with a bind, so absent sensitive paths
+      // are masked read-only with placeholders; seatbelt denies by path pattern and needs none.
+      const masks = kind === "linux-bubblewrap" ? ensureMaskPlaceholders() : undefined;
       return connectRunSession(
-        { ...descriptor, command: wrapWithSandbox(kind, runDir, descriptor.command, writable, denied) },
+        { ...descriptor, command: wrapWithSandbox(kind, runDir, descriptor.command, writable, denied, masks) },
         "allow",
         app,
       );

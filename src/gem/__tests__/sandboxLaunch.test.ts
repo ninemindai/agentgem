@@ -1,5 +1,7 @@
 // src/gem/__tests__/sandboxLaunch.test.ts
 import { describe, it, expect } from "vitest";
+import { tmpdir } from "node:os";
+import { realpathSync } from "node:fs";
 import { seatbeltPolicy, bwrapArgs, wrapWithSandbox } from "../sandboxLaunch.js";
 
 describe("seatbeltPolicy", () => {
@@ -28,7 +30,7 @@ describe("seatbeltPolicy extra writable", () => {
 describe("seatbeltPolicy denied", () => {
   it("appends a deny block AFTER the allow so denied paths lose write access (last match wins)", () => {
     const denied = "/home/.claude/settings.json";
-    const p = seatbeltPolicy("/runs/g", "/tmp", ["/home/.claude"], [denied]);
+    const p = seatbeltPolicy("/runs/g", "/tmp", ["/home/.claude"], [{ path: denied, kind: "file" }]);
     expect(p).toContain(`(subpath "${denied}")`);
     // the denied entry's LAST occurrence must be inside a deny block that follows the allow block
     expect(p.indexOf("(allow file-write*")).toBeLessThan(p.lastIndexOf("(deny file-write*"));
@@ -73,15 +75,41 @@ describe("bwrapArgs extra writable", () => {
 });
 
 describe("bwrapArgs denied", () => {
-  it("read-only-binds (try) denied paths AFTER the writable binds so they win", () => {
+  it("without masks, falls back to --ro-bind-try AFTER the writable binds (best-effort)", () => {
     const home = "/home/.claude";
-    const denied = "/home/.claude/settings.json";
-    const a = bwrapArgs("/runs/g", "/tmp", [home], [denied]);
-    // the writable bind of the config dir must come BEFORE the ro-bind-try of the denied file
+    const denied = "/home/.claude/settings.json";   // absent on this host
+    const a = bwrapArgs("/runs/g", "/tmp", [home], [{ path: denied, kind: "file" }]);
     const rwIdx = a.findIndex((x, i) => x === "--bind" && a[i + 1] === home);
     const roIdx = a.findIndex((x, i) => x === "--ro-bind-try" && a[i + 1] === denied && a[i + 2] === denied);
     expect(rwIdx).toBeGreaterThanOrEqual(0);
     expect(roIdx).toBeGreaterThan(rwIdx);
+  });
+
+  it("masks an ABSENT denied FILE with a read-only bind of the file placeholder (no --try, so it can't be skipped)", () => {
+    const denied = "/home/.claude/settings.json";   // absent
+    const masks = { file: "/masks/empty.json", dir: "/masks/empty" };
+    const a = bwrapArgs("/runs/g", "/tmp", ["/home/.claude"], [{ path: denied, kind: "file" }], masks);
+    // placeholder file mounted RO at the denied dest; NOT a --ro-bind-try
+    const idx = a.findIndex((x, i) => x === "--ro-bind" && a[i + 1] === masks.file && a[i + 2] === denied);
+    expect(idx).toBeGreaterThan(0);
+    expect(a).not.toContain("--ro-bind-try");
+  });
+
+  it("masks an ABSENT denied DIR with the dir placeholder", () => {
+    const denied = "/home/.claude/skills";          // absent
+    const masks = { file: "/masks/empty.json", dir: "/masks/empty" };
+    const a = bwrapArgs("/runs/g", "/tmp", ["/home/.claude"], [{ path: denied, kind: "dir" }], masks);
+    const idx = a.findIndex((x, i) => x === "--ro-bind" && a[i + 1] === masks.dir && a[i + 2] === denied);
+    expect(idx).toBeGreaterThan(0);
+  });
+
+  it("read-only-binds an EXISTING denied path to ITSELF (real, readable, not writable) — not the placeholder", () => {
+    const real = realpathSync(tmpdir());   // exists → resolved
+    const masks = { file: "/masks/empty.json", dir: "/masks/empty" };
+    const a = bwrapArgs("/runs/g", "/tmp", ["/home/.claude"], [{ path: real, kind: "dir" }], masks);
+    const idx = a.findIndex((x, i) => x === "--ro-bind" && a[i + 1] === real && a[i + 2] === real);
+    expect(idx).toBeGreaterThan(0);
+    expect(a).not.toContain(masks.dir);
   });
 });
 
@@ -116,14 +144,15 @@ describe("wrapWithSandbox", () => {
 
   it("threads denied paths into the seatbelt policy", () => {
     const denied = "/home/.claude/settings.json";
-    const cmd = wrapWithSandbox("macos-seatbelt", "/runs/g", ["claude-agent-acp"], ["/home/.claude"], [denied]);
+    const cmd = wrapWithSandbox("macos-seatbelt", "/runs/g", ["claude-agent-acp"], ["/home/.claude"], [{ path: denied, kind: "file" }]);
     expect(cmd[2]).toContain(`(subpath "${denied}")`);
     expect(cmd[2].lastIndexOf("(deny file-write*")).toBeLessThan(cmd[2].lastIndexOf(`(subpath "${denied}")`));
   });
 
-  it("threads denied paths into the bwrap ro-binds", () => {
-    const denied = "/home/.claude/settings.json";
-    const cmd = wrapWithSandbox("linux-bubblewrap", "/runs/g", ["claude-agent-acp"], ["/home/.claude"], [denied]);
-    expect(cmd).toEqual(expect.arrayContaining(["--ro-bind-try", denied, denied]));
+  it("threads denied paths + masks into the bwrap ro-binds", () => {
+    const denied = "/home/.claude/settings.json";   // absent → masked
+    const masks = { file: "/masks/empty.json", dir: "/masks/empty" };
+    const cmd = wrapWithSandbox("linux-bubblewrap", "/runs/g", ["claude-agent-acp"], ["/home/.claude"], [{ path: denied, kind: "file" }], masks);
+    expect(cmd).toEqual(expect.arrayContaining(["--ro-bind", masks.file, denied]));
   });
 });

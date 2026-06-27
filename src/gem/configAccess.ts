@@ -9,6 +9,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { resolveDir } from "../resolveDir.js";
+import type { DeniedPath } from "./sandboxLaunch.js";
 
 // Where Claude Code keeps its top-level identity file: $CLAUDE_CONFIG_DIR/.claude.json when
 // set, else ~/.claude.json (in HOME — a sibling of ~/.claude, NOT inside it). The agent
@@ -17,17 +18,18 @@ export function claudeJsonPath(env: NodeJS.ProcessEnv = process.env, home: strin
   return env.CLAUDE_CONFIG_DIR ? join(env.CLAUDE_CONFIG_DIR, ".claude.json") : join(home, ".claude.json");
 }
 
-// Files/dirs in the config dir a sandboxed run must NOT be able to write:
+// Files/dirs in the config dir a sandboxed run must NOT be able to write (with their kind,
+// which the bubblewrap launcher needs to mask an absent path with the right placeholder):
 //   settings.json / settings.local.json — `hooks` run arbitrary host commands
 //   .credentials.json                   — stored auth token
 //   skills/ , plugins/                  — code/instructions auto-loaded by future sessions
-export function sensitiveConfigPaths(configDir: string = resolveDir()): string[] {
+export function sensitiveConfigPaths(configDir: string = resolveDir()): DeniedPath[] {
   return [
-    join(configDir, "settings.json"),
-    join(configDir, "settings.local.json"),
-    join(configDir, ".credentials.json"),
-    join(configDir, "skills"),
-    join(configDir, "plugins"),
+    { path: join(configDir, "settings.json"), kind: "file" },
+    { path: join(configDir, "settings.local.json"), kind: "file" },
+    { path: join(configDir, ".credentials.json"), kind: "file" },
+    { path: join(configDir, "skills"), kind: "dir" },
+    { path: join(configDir, "plugins"), kind: "dir" },
   ];
 }
 
@@ -37,7 +39,7 @@ export function configWriteAccess(
   configDir: string = resolveDir(),
   env: NodeJS.ProcessEnv = process.env,
   home: string = homedir(),
-): { writable: string[]; denied: string[] } {
+): { writable: string[]; denied: DeniedPath[] } {
   return {
     writable: [configDir, claudeJsonPath(env, home)],
     denied: sensitiveConfigPaths(configDir),

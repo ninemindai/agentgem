@@ -1,6 +1,7 @@
 // src/gem/__tests__/sandbox.test.ts
 import { describe, it, expect } from "vitest";
-import { selectRunBackend, envPermission, type SandboxBackend } from "../sandbox.js";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { selectRunBackend, envPermission, ensureMaskPlaceholders, type SandboxBackend } from "../sandbox.js";
 
 const fake = (id: string, isolated: boolean, available: boolean): SandboxBackend => ({
   id, isolated, available: () => available,
@@ -17,6 +18,18 @@ describe("selectRunBackend", () => {
     const reg = [fake("iso-a", true, false), fake("child-spawn", false, true)];
     expect(selectRunBackend("/runs/g", reg).backend.id).toBe("child-spawn");
     expect(selectRunBackend("/runs/g", reg).backend).toBe(reg[reg.length - 1]);
+  });
+});
+
+describe("ensureMaskPlaceholders", () => {
+  it("creates an empty-JSON file and an empty dir to mask absent sensitive paths", () => {
+    const m = ensureMaskPlaceholders();
+    expect(existsSync(m.file)).toBe(true);
+    expect(readFileSync(m.file, "utf8")).toBe("{}");   // valid empty JSON so a reader parses cleanly
+    expect(statSync(m.dir).isDirectory()).toBe(true);
+  });
+  it("is idempotent (safe to call every run, no accumulation)", () => {
+    expect(ensureMaskPlaceholders()).toEqual(ensureMaskPlaceholders());
   });
 });
 
