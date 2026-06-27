@@ -9,13 +9,18 @@
 lands on `main` — it is intentionally NOT implemented in the prototype. Treat those
 provenance references as roadmap, not shipped behavior.
 **Branch (impl):** built in a dedicated worktree off `main`
-**UX surfaces (implemented):** beyond the prototype CLI, the feature is exposed via
-(1) **MCP tools** `transfer_send` / `transfer_receive` (the agent-facing surface)
-and (2) **CLI subcommands** `agentgem send <file.gem>` / `agentgem receive
-<ticket> [out.gem]`. All surfaces share one DI seam (`src/transfer/service.ts`:
-`natsStoreFromEnv` + `sendBytes` / `receiveTicket`), so the tested core is reused
-everywhere. **Deferred:** REST endpoints + a web-UI "Share" button (no web
-consumer wired yet) and the browser web-receiver.
+**UX surfaces (implemented):** the feature is exposed via (1) **MCP tools**
+`transfer_send` / `transfer_receive` (agent-facing); (2) **CLI subcommands**
+`agentgem send <file.gem>` / `agentgem receive <ticket> [out.gem]`; (3) **REST**
+`POST /api/transfer/send` and `/api/transfer/receive` (the latter returns the
+verified gem + meta + `bytesBase64`, materialized via `/api/materialize`'s new
+`bytesBase64` source); and (4) **web UI** in `src/public/index.html` — Export →
+"Send via ticket" (one-time ticket modal with copy) and Get gems → "Redeem a
+transfer ticket" (fetch → verify → install). All surfaces share one DI seam
+(`src/transfer/service.ts`: `natsStoreFromEnv` + `sendBytes` / `receiveTicket`),
+so the tested core is reused everywhere; "not configured" surfaces as an
+`InvalidInputError` (400) with an actionable message. **Deferred:** a hosted
+browser web-receiver (client-side decrypt) and ed25519 provenance display.
 
 ## Summary
 

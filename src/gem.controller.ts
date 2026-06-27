@@ -17,7 +17,7 @@ import { writeArchiveDir, readArchiveDir } from "./gem/archiveFs.js";
 import { packTar } from "./gem/archiveTar.js";
 import { exportGem, importGem } from "./gem/share.js";
 import { fetchGemBytes } from "./gem/safeFetch.js";
-import { sendBytes, receiveTicket, natsStoreFromEnv } from "./transfer/service.js";
+import { sendBytes, receiveTicket, natsStoreFromEnv, assertConfigured } from "./transfer/service.js";
 import type { Gem } from "./gem/types.js";
 import { readDeployRecord, writeDeployRecord, clearDeployRecord } from "./gem/deployRecord.js";
 import type { DeployBackend } from "./gem/deployRecord.js";
@@ -137,6 +137,7 @@ export class GemController {
 
   @post("/transfer/send", { body: TransferSendRequestSchema, response: TransferSendResponseSchema })
   async transferSend(input: { body: z.infer<typeof TransferSendRequestSchema> }): Promise<z.infer<typeof TransferSendResponseSchema>> {
+    assertConfigured(); // 400 before any filesystem/build work if NATS_URL is unset
     const dirs = resolveDirs(input.body.dir);
     const inventory = stageDraftsByEvidence(introspectAll(input.body.dir, input.body.projects), input.body.distilledDrafts ?? []);
     const gem = buildGem(inventory, input.body.selection, { name: input.body.name ?? "gem", createdFrom: dirs.claudeDir, channels: input.body.channels });

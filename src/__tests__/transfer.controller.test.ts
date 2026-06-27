@@ -44,9 +44,16 @@ describe("POST /api/materialize (bytesBase64 source)", () => {
 });
 
 describe("POST /api/transfer/* (NATS unconfigured)", () => {
-  it("transfer/receive fails clearly when NATS is not configured", async () => {
+  it("transfer/receive returns 400 with an actionable message when NATS is not configured", async () => {
     const ticket = "agentgem://gem/b/o#" + Buffer.alloc(32).toString("base64url");
     const r = await client.post("/api/transfer/receive").send({ ticket });
-    expect(r.status >= 400 || (r.body && r.body.error)).toBeTruthy();
+    expect(r.status).toBe(400);
+    expect(r.body.error.message).toMatch(/not configured/);
+  });
+
+  it("transfer/send returns 400 (before building) when NATS is not configured", async () => {
+    const r = await client.post("/api/transfer/send").send({ selection: { all: true } });
+    expect(r.status).toBe(400);
+    expect(r.body.error.message).toMatch(/not configured/);
   });
 });
