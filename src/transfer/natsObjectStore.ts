@@ -19,8 +19,13 @@ export class NatsObjectStore implements ObjectStore {
   static async connect(cfg: NatsConfig): Promise<NatsObjectStore> {
     const nc = await connect({ servers: cfg.servers, token: cfg.token });
     const bucket = cfg.bucket ?? "agentgem-transfer";
-    const os = await new Objm(nc).create(bucket, { storage: StorageType.File });
-    return new NatsObjectStore(nc, os, bucket);
+    try {
+      const os = await new Objm(nc).create(bucket, { storage: StorageType.File });
+      return new NatsObjectStore(nc, os, bucket);
+    } catch (err) {
+      await nc.close();
+      throw err;
+    }
   }
 
   async put(bytes: Buffer): Promise<string> {
