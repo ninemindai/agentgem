@@ -109,11 +109,15 @@ export class GemController {
         if (stale) {
           if (!globalUsageRefreshing) {
             globalUsageRefreshing = true;
-            void Promise.resolve().then(() => {
+            // Defer with a macrotask (setTimeout), NOT a microtask: a microtask
+            // (Promise.then) drains before the HTTP response flushes, so the
+            // synchronous ~4s scan would block this very response. setTimeout(0)
+            // lets the stale response flush first, then the rescan runs.
+            setTimeout(() => {
               try { writeGlobalUsageCache(token, computeGlobalUsage(dirs, paths), dirs.claudeDir); }
               catch (e) { console.error("[usage] bg refresh failed:", e); }
               finally { globalUsageRefreshing = false; }
-            });
+            }, 0);
           }
           return stale as z.infer<typeof UsageSchema>;
         }
