@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import type { ConfigInventory, Gem } from "../gem/types.js";
+import type { ConfigInventory, Gem, ProjectInventory } from "../gem/types.js";
 import type { WorkflowSignal } from "../gem/workflowScan.js";
 import { buildGem, type GemSelection } from "../gem/buildGem.js";
 import { canonicalHarness, canonicalModel, canonicalMcpServer, canonicalSkill } from "../gem/canonicalize.js";
@@ -51,11 +51,19 @@ export interface ToolDeps {
   token?: string;
 }
 
+// The scan resolves a Skill/mcp__ invocation against BOTH project-local and
+// GLOBAL artifacts. Real usage is dominated by global skills/MCPs, so the scan
+// MUST receive the global inventory or every global ingredient falls to
+// `unresolved` and the attestation counts come back empty (mirrors workflowStream).
+export function scanInventoryFor(globalInv: ConfigInventory, project: ProjectInventory) {
+  return { project, global: { skills: globalInv.skills, mcpServers: globalInv.mcpServers, hooks: globalInv.hooks } };
+}
+
 export function realDeps(): ToolDeps {
   return {
     loadContext(cwd) {
       const inventory = introspectConfig();
-      const scanInv = { project: introspectProject(cwd) };
+      const scanInv = scanInventoryFor(inventory, introspectProject(cwd));
       const paths = claudeTranscriptsForCwd(join(homedir(), ".claude"), cwd);
       return { inventory, signal: scanWorkflow(paths, scanInv, { retainSequences: false }) };
     },
