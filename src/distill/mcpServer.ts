@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 // src/distill/mcpServer.ts
 import { createHash } from "node:crypto";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -8,6 +9,7 @@ import type { WorkflowSignal } from "../gem/workflowScan.js";
 import { buildGem, type GemSelection } from "../gem/buildGem.js";
 import { canonicalHarness, canonicalModel, canonicalMcpServer, canonicalSkill } from "../gem/canonicalize.js";
 import { buildAttestation, signAttestation, canonicalJSON, type UsageAttestation } from "../gem/attestation.js";
+import { writeGemArchive, computeLock } from "../gem/archive.js";
 import { writeAttestedArchive } from "../gem/attestationArchive.js";
 import { loadOrCreateIdentity } from "../gem/identity.js";
 import { postAttestation } from "../gem/ingestClient.js";
@@ -25,7 +27,12 @@ export function inspectIngredientsTool(input: { inventory: ConfigInventory; sign
 
 export function buildAttestationTool(input: { inventory: ConfigInventory; signal: WorkflowSignal; selection: GemSelection; salt: string; account?: { provider: string; login: string } | null }) {
   const gem: Gem = buildGem(input.inventory, input.selection, { createdFrom: input.signal.flavor });
-  const gemDigest = `sha256:${createHash("sha256").update(canonicalJSON(gem)).digest("hex")}`;
+  // attestation.gem.digest ties to the PUBLISHED archive: it is the pre-attestation archive
+  // payload digest (computeLock over the gem archive WITHOUT attestation.json). writeAttestedArchive
+  // later adds attestation.json and recomputes the FULL lock (= the archive digest); the two are
+  // intentionally different and reconcilable — remove attestation.json, recompute computeLock.
+  const { files } = writeGemArchive(gem);
+  const gemDigest = computeLock(files).gemDigest;
   const attestation = buildAttestation({ gem, signal: input.signal, gemDigest, salt: input.salt, account: input.account ?? null });
   const ids = [...attestation.ingredients.skills, ...attestation.ingredients.mcps].map((i) => i.id);
   return { attestation, gemPreview: gem, willPublish: ids };
@@ -79,9 +86,13 @@ export async function dispatchTool(name: string, args: Record<string, unknown>, 
       return buildAttestationTool({ inventory, signal, selection: (args.selection ?? { all: true }) as GemSelection, salt, account: (args.account as { provider: string; login: string } | null) ?? null });
     }
     case "sign_and_publish": {
+      if (!args.selection) throw new Error("sign_and_publish requires an explicit selection");
       const { inventory, signal } = deps.loadContext(cwd);
-      const gem = buildGem(inventory, (args.selection ?? { all: true }) as GemSelection, { createdFrom: signal.flavor });
-      return signAndPublishTool({ gem, attestation: args.attestation as UsageAttestation, token: deps.token }, { publish: deps.publish ? (files) => deps.publish!(gem, files) : undefined });
+      const salt = deps.salt ?? randomBytes(16).toString("hex");
+      // Rebuild the attestation server-side from the real scan + the reviewed selection.
+      // The caller does NOT author counts; any caller-supplied args.attestation is ignored.
+      const { attestation, gemPreview } = buildAttestationTool({ inventory, signal, selection: args.selection as GemSelection, salt, account: (args.account as { provider: string; login: string } | null) ?? null });
+      return signAndPublishTool({ gem: gemPreview, attestation, token: deps.token }, { publish: deps.publish ? (files) => deps.publish!(gemPreview, files) : undefined });
     }
     default:
       throw new Error(`unknown tool ${name}`);
@@ -92,7 +103,7 @@ const TOOLS = [
   { name: "scan_workflow", description: "Scan local transcripts into a redacted workflow signal.", inputSchema: { type: "object", properties: { cwd: { type: "string" } } } },
   { name: "inspect_ingredients", description: "Canonical fingerprints of available harness/models/skills/mcps.", inputSchema: { type: "object", properties: { cwd: { type: "string" } } } },
   { name: "build_attestation", description: "Build the unsigned usage attestation + a 'what will leave your machine' preview.", inputSchema: { type: "object", properties: { selection: { type: "object" }, cwd: { type: "string" } }, required: ["selection"] } },
-  { name: "sign_and_publish", description: "Sign the attestation, embed it in the Gem archive, and POST it to the ingest endpoint (skipped if unconfigured). Registry distribution is currently disabled; do not report a published distribution unless a publishedRef is returned.", inputSchema: { type: "object", properties: { attestation: { type: "object" }, selection: { type: "object" } }, required: ["attestation"] } },
+  { name: "sign_and_publish", description: "Sign + publish from the reviewed selection. The attestation is REBUILT server-side from the local scan; the host agent supplies only the selection, never the counts (any caller-supplied attestation is ignored). Embeds it in the Gem archive and POSTs to the ingest endpoint (skipped if unconfigured). Registry distribution is currently disabled; do not report a published distribution unless a publishedRef is returned.", inputSchema: { type: "object", properties: { selection: { type: "object" }, cwd: { type: "string" } }, required: ["selection"] } },
 ];
 
 export async function main(): Promise<void> {
