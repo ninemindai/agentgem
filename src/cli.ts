@@ -27,7 +27,11 @@ Options:
   -h, --help       Show this help
 
 Once running, open the printed URL (default http://127.0.0.1:4317/). Append
-?dir=/path/to/.claude to introspect a config directory other than ~/.claude.`;
+?dir=/path/to/.claude to introspect a config directory other than ~/.claude.
+
+Sharing a Gem (store-and-forward over NATS; set $NATS_URL, default nats://127.0.0.1:4222):
+  agentgem send <file.gem>              Encrypt + stash; prints a one-time agentgem:// ticket
+  agentgem receive <ticket> [out.gem]   Fetch, decrypt, verify; writes the .gem`;
 
 async function main(argv: string[]): Promise<void> {
   const has = (...names: string[]) => names.some((n) => argv.includes(n));
@@ -41,6 +45,13 @@ async function main(argv: string[]): Promise<void> {
 
   if (has("-h", "--help")) return void console.log(HELP);
   if (has("-v", "--version")) return void console.log(version());
+
+  // `agentgem send|receive ...` — the store-and-forward Gem transfer subcommands.
+  // Delegated to the transfer CLI, which wires a NATS store from $NATS_URL.
+  if (argv[0] === "send" || argv[0] === "receive") {
+    const { main: transferMain } = await import("./transfer/cli.js");
+    return transferMain(argv);
+  }
 
   const portArg = opt("-p", "--port");
   const port = Number(portArg ?? process.env.PORT ?? 4317);

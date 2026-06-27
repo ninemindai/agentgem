@@ -47,12 +47,20 @@ export async function runCli(argv: string[], store: ObjectStore, io: CliIO = def
       return 1;
     }
   }
-  io.err("usage: agentgem-transfer send <file.gem> | receive <ticket> [out.gem]");
+  io.err("usage: agentgem send <file.gem> | agentgem receive <ticket> [out.gem]");
   return 2;
 }
 
 // bin shim: wire a NATS store from env. NATS_URL defaults to local dev broker.
 export async function main(argv: string[]): Promise<void> {
+  // Report usage errors before opening a connection, so `agentgem send` (no file)
+  // prints usage instead of failing on the broker.
+  const [cmd, arg] = argv;
+  if ((cmd === "send" || cmd === "receive") && !arg) {
+    console.error(cmd === "send" ? "usage: agentgem send <file.gem>" : "usage: agentgem receive <ticket> [out.gem]");
+    process.exitCode = 2;
+    return;
+  }
   const servers = process.env.NATS_URL ?? "nats://127.0.0.1:4222";
   const store = await NatsObjectStore.connect({ servers, token: process.env.NATS_TOKEN });
   try {
