@@ -69,6 +69,7 @@
   .sortbtn[data-dir]{border-color:var(--accent);color:var(--accent);font-weight:600}
   .sortbtn[data-dir=desc]::after{content:" ↓"}
   .sortbtn[data-dir=asc]::after{content:" ↑"}
+  .sortbtn:disabled,.bar .chk input:disabled{opacity:.5;cursor:default}
   label.row{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;cursor:pointer;border:1px solid transparent;border-radius:8px;transition:background .14s,border-color .14s;position:relative}
   label.row:hover{background:var(--card);border-color:var(--line)}
   label.row:has(input:checked){background:var(--card);border-color:var(--line)}
@@ -317,6 +318,7 @@
         <button type="button" id="impSortUses" class="sortbtn" title="sort by usage count">Uses</button>
         <button type="button" id="impSortLast" class="sortbtn" title="sort by last used">Last used</button>
         <label class="chk"><input type="checkbox" id="impUsedOnly" checked> Used only</label>
+        <span id="impLoading" class="d" hidden style="margin-left:8px">Loading usage…</span>
       </div>
       <div id="importInventory">Loading…</div>
     </div>
@@ -1913,7 +1915,11 @@ async function openImport(){
   document.querySelectorAll("#importInventory .group").forEach(g => {
     [...g.querySelectorAll("label.row")].forEach((r, i) => { r.dataset.order = String(i); });
   });
-  await decorateImportUsage();
+  const impLoad = document.getElementById("impLoading");
+  const impCtrls = [...document.querySelectorAll("#importModal .bar .sortbtn"), document.getElementById("impUsedOnly")];
+  impLoad.hidden = false; impCtrls.forEach(el => { if (el) el.disabled = true; });
+  try { await decorateImportUsage(); }
+  finally { impLoad.hidden = true; impCtrls.forEach(el => { if (el) el.disabled = false; }); }
 }
 async function applyImport(){
   const selection = { skills:[...importSel.skills], mcpServers:[...importSel.mcpServers], hooks:[...importSel.hooks], includeInstructions: importSel.includeInstructions };
