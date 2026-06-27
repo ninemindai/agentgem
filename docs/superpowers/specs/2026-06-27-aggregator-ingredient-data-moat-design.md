@@ -10,7 +10,7 @@ Same priority order as Spec A: **data moat first**, trust second, acquisition th
 
 ## Key decisions (resolved during brainstorming)
 
-1. **Source-of-truth relationship: hybrid (Decision = 3).** The GitHub-backed registry stays the durable archive store; a hosted **webhook/Action fires on each registry push**, and the service verifies + projects archives into its DB near-real-time. The producer path (Spec A) is **unchanged**. The aggregator cannot *prevent* a bad archive existing in git, but it can **quarantine** (withhold from all aggregates) — which, with later PageRank, is sufficient.
+1. **Ingest substrate: a hosted ingest endpoint (revised — was hybrid).** Producers **POST the signed attestation to a hosted ingest API** that verifies *at the door* and projects into the DB; identity is established via **OAuth** (Sign in with Vercel / GitHub OAuth). The GitHub-backed registry remains the durable, content-addressed store for **distributing installable Gems only** — it is *not* the data-ingest path. Rationale: a git repo is a poor high-write ingest substrate (serialized commits, repo bloat, API rate limits) exactly when the data moat starts working, it couples producer identity to GitHub-repo write access, and a push-then-quarantine model can never reject at the door. Decoupling data ingest from Gem distribution removes all three. Cost: this reopens Spec A's publish path (`sign_and_publish` now also POSTs to the API) and replaces the free commit-author binding with OAuth — captured in the [Spec A 2026-06-27 amendment](2026-06-26-distill-usage-attestation-design.md). Deterministic verification failures are **rejected (4xx) at the door**; records that pass but look anomalous are **quarantined** (withheld from aggregates).
 2. **Ranked surfaces: both, ingredient-first.** B1 ships the **ingredient/insights view** (the defensible asset); the **Gem marketplace leaderboard** is B2. They share one graph.
 3. **Storage: Postgres now; graph-native later only if needed.** Day-one queries are aggregations over a mostly *bipartite* graph (Gem ↔ ingredient), which Postgres handles well. If/when fork-graph PageRank needs real traversal, add the **Apache AGE / pgGraph** extension *inside* Postgres rather than standing up a separate engine — so "graph-native later" need not mean "new infra later."
 4. **Trust: tiered (Decision = 3).** Universal **statistical detection** baseline + an opt-in **"verified" badge** for records that ship `evidence.signal` (deterministic recompute). This drove the [Spec A amendment](2026-06-26-distill-usage-attestation-design.md) adding optional `evidence.signal`.
@@ -19,41 +19,42 @@ Same priority order as Spec A: **data moat first**, trust second, acquisition th
 ## Architecture
 
 ```
-registry git push ──webhook/Action──► Vercel Queue ──► ingest worker
-                                                          │ readGemArchive + verifyLock
-                                                          │ ed25519 signature
-                                                          │ account = commit author
-                                                          │ verified? recompute vs evidence.signal
-                                                          │ statistical trust_score → quarantine?
-                                                          ▼
-                                               Postgres (usage graph)
-                                                          │ cron refresh
-                                               materialized aggregates (k-anon ≥ K)
-                                                  │                         │
-                                       public teaser UI            gated/billed data API
-                                       (headline trends)           (auth + rate limit, k-anon)
+producer ──POST signed attestation (OAuth)──► hosted ingest API
+GitHub registry = distribution only            │ verify at the door:
+(installable Gems, separate channel)           │   ed25519 signature
+                                               │   account = OAuth identity
+                                               │   verified? recompute vs evidence.signal
+                                               │   deterministic fail → 4xx REJECT
+                                               │ statistical trust_score → quarantine?
+                                               ▼
+                                       Postgres (usage graph)
+                                               │ cron refresh
+                                    materialized aggregates (k-anon ≥ K)
+                                       │                         │
+                            public teaser UI            gated/billed data API
+                            (headline trends)           (auth + rate limit, k-anon)
 ```
 
-Next.js App Router on Vercel (Fluid Compute), Postgres via Vercel Marketplace, Vercel Queues for at-least-once ingest, cron for aggregate refresh + periodic statistical sweeps. No AI Gateway needed.
+Next.js App Router on Vercel (Fluid Compute), Postgres via Vercel Marketplace, Vercel Blob for the stored attestation/archive bytes, cron for aggregate refresh + periodic statistical sweeps. No AI Gateway needed.
 
-## Ingest pipeline (hybrid)
+## Ingest pipeline (hosted endpoint)
 
-On each registry push, the webhook enqueues changed archive paths. The ingest worker, per archive:
+The producer (Spec A `sign_and_publish`) POSTs the signed attestation to the ingest API over an OAuth session. Per request, synchronously enough to return a verdict:
 
-1. `readGemArchive` + `verifyLock` — integrity of manifest + files.
-2. Verify the ed25519 `signature` over the canonical attestation; record `producer.publicKey`.
-3. Bind account: the registry **commit author** must match `attestation.producer.account`.
-4. **Verified tier** — if `evidence.signal` is present: recompute `signalDigest`, recompute ingredient counts from the signal, **reject any record whose declared counts exceed the signal**; mark `tier = verified`, high trust weight.
+1. **Authn** — resolve the OAuth identity; it must match `attestation.producer.account`. Mismatch → `401/403`.
+2. **Signature** — verify ed25519 over the canonical attestation; record `producer.publicKey`. Invalid → `400`.
+3. **Integrity** — if the archive bytes are included, `readGemArchive` + `verifyLock`; `attestation.gem.digest` must match. Mismatch → `400`.
+4. **Verified tier** — if `evidence.signal` is present: recompute `signalDigest`, recompute ingredient counts from the signal, **reject (`422`) any record whose declared counts exceed the signal**; else mark `tier = verified`, high weight.
 5. **Baseline tier** — otherwise `signalDigest` is a tamper-evident commitment only; `tier = baseline`.
-6. **Statistical detection** (see below) → `trust_score`; below threshold → `quarantined = true` (excluded from all aggregates).
-7. Upsert canonical `ingredients`; insert the `attestation` row + its `usage_edges`.
+6. **Statistical detection** (see below) → `trust_score`; below threshold → `quarantined = true` (accepted but excluded from all aggregates).
+7. Upsert canonical `ingredients`; insert the `attestation` row + its `usage_edges`; persist bytes to Blob. Return `{ ingestId, tier, accepted | quarantined }`.
 8. Aggregates refresh incrementally (or via cron).
 
-Ingest is idempotent on `gem.digest` (re-processing a push is safe).
+Ingest is **idempotent on `gem.digest`** (re-POSTing the same record is safe and returns the prior verdict). Steps 1–4 are door-rejections (the producer gets a hard error); only step 6 results in silent quarantine.
 
 ## Schema (the usage graph)
 
-- **`attestations`** — one row per ingested record: `gem_name`, `gem_version`, `gem_digest` (unique), `producer_pubkey`, `account_provider`, `account_login`, `harness_id`, `harness_version`, `scan_sessions`, `scan_span_days`, `scan_first_ms`, `scan_last_ms`, `signal_digest`, `tier` (`baseline`|`verified`), `trust_score`, `quarantined`, `archive_ref` (git path+sha), `ingested_at`.
+- **`attestations`** — one row per ingested record: `gem_name`, `gem_version`, `gem_digest` (unique), `producer_pubkey`, `account_provider`, `account_login`, `harness_id`, `harness_version`, `scan_sessions`, `scan_span_days`, `scan_first_ms`, `scan_last_ms`, `signal_digest`, `tier` (`baseline`|`verified`), `trust_score`, `quarantined`, `blob_ref` (stored attestation/archive bytes in Vercel Blob), `registry_ref` (nullable — set when the Gem was also published for distribution), `ingested_at`.
 - **`ingredients`** — canonical node per ingredient: `id` (canonical PK), `kind` (`harness`|`model`|`skill`|`mcp`|`tool`), `id_kind` (confidence: `registry`/`contentHash`/`name`/`package`/`url`/`known`/`unknown`), `display_name`, `parent_id` (tool → its server), `first_seen`, `last_seen`.
 - **`usage_edges`** — bipartite edges: `attestation_id`, `ingredient_id`, `invocations`, `sessions`. (Unique on the pair.)
 - **Materialized aggregates** (all k-anon-filtered, refreshed by cron):
@@ -65,7 +66,7 @@ Quarantined attestations and their edges are excluded from every aggregate. **Fo
 
 ## Trust at ingest
 
-- **Deterministic (both tiers):** `verifyLock` + ed25519 signature + account-binding.
+- **Deterministic (both tiers), enforced at the door as 4xx rejections:** OAuth identity = `producer.account`, ed25519 signature, `verifyLock` + `gem.digest` match.
 - **Verified tier:** recompute counts vs `evidence.signal`; inflation is rejected outright.
 - **Baseline tier — statistical detection** producing `trust_score`:
   - ingredient `invocations`/`sessions` exceeding what `scan.sessions` plausibly supports;
@@ -83,8 +84,8 @@ The **k-anonymity floor (≥ K distinct producers) is enforced server-side on ev
 
 ## Testing
 
-- **Ingest worker** — fixtures for valid baseline, valid verified, tampered signature, mismatched account, and an **injected fabricated record → quarantined**.
-- **Verified-tier recompute** — inflated counts vs `evidence.signal` are rejected.
+- **Ingest endpoint** — fixtures for valid baseline (accepted), valid verified (accepted), tampered signature (`400`), mismatched OAuth identity (`401/403`), `gem.digest` mismatch (`400`), and an **injected fabricated record that passes door checks → quarantined**. Re-POST of the same `gem.digest` → idempotent, same verdict.
+- **Verified-tier recompute** — inflated counts vs `evidence.signal` → `422`.
 - **k-anon enforcement** — property test: no aggregate endpoint ever emits a cell with `< K` distinct producers (UI and API).
 - **Aggregate correctness** — popularity/co-occurrence/adoption match hand-computed fixtures.
 - **API contract + rate limit** — auth required, shapes stable, limits enforced.
