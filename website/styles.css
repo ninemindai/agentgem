@@ -111,6 +111,15 @@ a.chip:hover{text-decoration:none;background:var(--gem);color:#fff}
 a.hero-kicker:hover{text-decoration:none;border-color:var(--accent);transform:translateY(-1px)}
 .hero-kicker .dot{width:6px;height:6px;border-radius:99px;background:var(--accent);flex:none}
 
+/* ── 60-second reel (self-hosted, click-to-play) ──────────────────────── */
+.reel{padding:8px 24px 44px;text-align:center}
+.reel-frame{position:relative;max-width:960px;margin:24px auto 0;border-radius:14px;overflow:hidden;border:1px solid var(--line);box-shadow:var(--shadow);background:var(--card);aspect-ratio:16/9}
+.reel-video{display:block;width:100%;height:100%;object-fit:cover;background:var(--paper)}
+.reel-play{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;border:0;cursor:pointer;background:rgba(244,239,227,.18);font-family:var(--ui)}
+.reel-play-dot{display:grid;place-items:center;width:78px;height:78px;padding-left:5px;border-radius:99px;background:var(--accent);color:#fff;box-shadow:0 10px 24px -12px rgba(154,51,36,.8);transition:.15s ease}
+.reel-play:hover .reel-play-dot{transform:scale(1.06);background:var(--accent-ink)}
+.reel-play-label{font-size:14px;font-weight:600;color:var(--ink);background:var(--card);padding:7px 16px;border-radius:99px;border:1px solid var(--line-2);box-shadow:var(--shadow)}
+
 /* ── north-star band + ladder ─────────────────────────────────────────── */
 .band{background:var(--paper-2);border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:66px 0}
 .band .lead{max-width:620px;margin:0 auto;text-align:center;color:var(--ink-2);font-size:16px}

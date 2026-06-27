@@ -95,6 +95,31 @@
   </script>
 </section>
 
+<section class="reel wrap" aria-label="AgentGem in 60 seconds">
+  <p class="eyebrow">Watch · 60 seconds</p>
+  <h2 class="sec-title">See a Gem come to life.</h2>
+  <figure class="reel-frame">
+    <video id="reelVid" class="reel-video" controls preload="none" playsinline
+           poster="assets/agentgem-reel-poster.jpg" width="1920" height="1080">
+      <source src="assets/agentgem-reel.mp4" type="video/mp4" />
+      Your browser can’t play embedded video — <a href="assets/agentgem-reel.mp4">download the reel</a>.
+    </video>
+    <button id="reelPlay" class="reel-play" type="button" aria-label="Play the 60-second reel">
+      <span class="reel-play-dot"><svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg></span>
+      <span class="reel-play-label">Play the 60-second reel</span>
+    </button>
+  </figure>
+  <script>
+  (function () {
+    var v = document.getElementById('reelVid'), b = document.getElementById('reelPlay');
+    if (!v || !b) return;
+    b.addEventListener('click', function () { b.style.display = 'none'; v.play(); });
+    v.addEventListener('play', function () { b.style.display = 'none'; });
+    v.addEventListener('ended', function () { b.style.display = ''; v.load(); });
+  })();
+  </script>
+</section>
+
 <section class="flow wrap">
   <p class="eyebrow">Four steps</p>
   <h2 class="sec-title">You're already sitting on a goldmine.</h2>

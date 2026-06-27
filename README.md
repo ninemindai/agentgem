@@ -11,6 +11,14 @@
   <a href="docs/concepts.md"><img src="https://img.shields.io/badge/MCP-native-211c15" alt="MCP-native"></a>
 </p>
 
+<p align="center">
+  <a href="https://agentgem.ninemind.ai/assets/agentgem-reel.mp4" title="Watch the 60-second AgentGem reel">
+    <img src="website/assets/agentgem-reel-poster.jpg" alt="Watch the 60-second AgentGem reel — your agent works locally, Gem it." width="640">
+  </a>
+  <br>
+  <a href="https://agentgem.ninemind.ai/assets/agentgem-reel.mp4"><b>▶&nbsp; Watch the 60-second reel</b></a>
+</p>
+
 > A local web UI that introspects your coding-agent config, redacts secrets at
 > capture, and builds a portable, composable **Gem**.
 >
