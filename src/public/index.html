@@ -651,6 +651,7 @@ async function addDraftToBuild(i){
   projSel(root).skills.add(skill.name);
   fetch("/api/workflow/draft", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(skill) }).catch(() => {});  // also persist a reviewable SKILL.md (best-effort)
   renderInventoryPane();           // re-render so the injected draft shows as a checked skill
+  await decorateUsage();           // re-stamp usage data-* + badges wiped by the re-render
   restoreChecks(); refresh();
   ensureAnalyzeBanner().innerHTML = `<b>${esc(skill.name)}</b> <span class="d">(distilled draft)</span> added to the build — it's bundled into the Gem and a SKILL.md draft is written under <code>.agentgem/distilled/</code> on build.`;
 }
@@ -977,7 +978,8 @@ function filterRows() {
     const rowAgents = (row.getAttribute("data-agent") || "").split(" ").filter(Boolean);
     const matchAgent = agentBoxes.length === 0 || rowAgents.length === 0 || rowAgents.some(a => agents.has(a));
     const matchType = typeBoxes.length === 0 || types.has(row.getAttribute("data-type"));
-    const matchUsed = !usedOnly || !usageLoaded || row.dataset.passive === "1" || Number(row.dataset.invocations || 0) > 0;
+    const cbx = row.querySelector("input[type=checkbox]");
+    const matchUsed = !usedOnly || !usageLoaded || row.dataset.passive === "1" || (cbx && cbx.checked) || Number(row.dataset.invocations || 0) > 0;
     row.style.display = matchQ && matchSrc && matchAgent && matchType && matchUsed ? "" : "none";
   });
   const active = q || src || agentFilterActive || typeFilterActive || usedOnly;
