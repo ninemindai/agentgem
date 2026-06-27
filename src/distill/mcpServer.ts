@@ -15,13 +15,12 @@ import { loadOrCreateIdentity } from "../gem/identity.js";
 import { postAttestation } from "../gem/ingestClient.js";
 
 // ---- pure handlers (unit-tested) ----
-export function inspectIngredientsTool(input: { inventory: ConfigInventory; signal: WorkflowSignal }) {
+export function inspectIngredientsTool(input: { inventory: ConfigInventory; signal: WorkflowSignal; salt: string }) {
   return {
     harness: canonicalHarness(input.signal.flavor),
     models: input.signal.models.map((m) => canonicalModel(m.id).id),
-    // Preview ids use an empty salt — these are never published, only shown to the user.
-    skills: input.inventory.skills.map((s) => canonicalSkill(s, "")),
-    mcps: input.inventory.mcpServers.map((m) => canonicalMcpServer(m, "")),
+    skills: input.inventory.skills.map((s) => canonicalSkill(s, input.salt)),
+    mcps: input.inventory.mcpServers.map((m) => canonicalMcpServer(m, input.salt)),
   };
 }
 
@@ -78,12 +77,15 @@ export async function dispatchTool(name: string, args: Record<string, unknown>, 
       const { signal } = deps.loadContext(cwd);
       return { signal, signalDigest: `sha256:${createHash("sha256").update(canonicalJSON(signal)).digest("hex")}` };
     }
-    case "inspect_ingredients":
-      return inspectIngredientsTool(deps.loadContext(cwd));
+    case "inspect_ingredients": {
+      const salt = deps.salt ?? randomBytes(16).toString("hex");
+      return inspectIngredientsTool({ ...deps.loadContext(cwd), salt });
+    }
     case "build_attestation": {
+      if (!args.selection) throw new Error("build_attestation requires an explicit selection");
       const { inventory, signal } = deps.loadContext(cwd);
       const salt = deps.salt ?? randomBytes(16).toString("hex");
-      return buildAttestationTool({ inventory, signal, selection: (args.selection ?? { all: true }) as GemSelection, salt, account: (args.account as { provider: string; login: string } | null) ?? null });
+      return buildAttestationTool({ inventory, signal, selection: args.selection as GemSelection, salt, account: (args.account as { provider: string; login: string } | null) ?? null });
     }
     case "sign_and_publish": {
       if (!args.selection) throw new Error("sign_and_publish requires an explicit selection");

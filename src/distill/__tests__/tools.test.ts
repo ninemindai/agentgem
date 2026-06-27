@@ -11,9 +11,19 @@ const signal = { root: "/p", flavor: "claude" as const, sessions: { scanned: 1, 
 
 describe("distill tools", () => {
   it("inspect_ingredients returns canonical ids", () => {
-    const r = inspectIngredientsTool({ inventory, signal });
+    const r = inspectIngredientsTool({ inventory, signal, salt: "S" });
     expect(r.mcps[0].id).toBe("npx:@modelcontextprotocol/server-github");
     expect(r.models).toEqual(["claude-opus-4-8"]);
+  });
+  it("inspect_ingredients: private mcp id changes when salt changes", () => {
+    const privateInventory = {
+      ...inventory,
+      mcpServers: [{ type: "mcp_server" as const, name: "local", transport: "stdio" as const, config: { command: "/usr/local/bin/my-mcp", args: [] } }],
+    };
+    const rA = inspectIngredientsTool({ inventory: privateInventory, signal, salt: "A" });
+    const rB = inspectIngredientsTool({ inventory: privateInventory, signal, salt: "B" });
+    expect(rA.mcps[0].idKind).toBe("private");
+    expect(rA.mcps[0].id).not.toBe(rB.mcps[0].id);
   });
   it("build_attestation returns an unsigned, aggregate-only envelope + preview", () => {
     const r = buildAttestationTool({ inventory, signal, selection: { mcpServers: ["gh"] }, salt: "S" });
@@ -30,6 +40,10 @@ describe("distill tools", () => {
     const ins = (await dispatchTool("inspect_ingredients", {}, deps)) as { models: string[] };
     expect(ins.models).toEqual(["claude-opus-4-8"]);
     await expect(dispatchTool("nope", {}, deps)).rejects.toThrow("unknown tool nope");
+  });
+  it("build_attestation rejects missing selection", async () => {
+    const deps = { loadContext: () => ({ inventory, signal }), salt: "S" };
+    await expect(dispatchTool("build_attestation", {}, deps)).rejects.toThrow("requires an explicit selection");
   });
   it("sign_and_publish rejects a missing selection (privacy-gate, no bypass to all)", async () => {
     const deps = { loadContext: () => ({ inventory, signal }), salt: "S" };
