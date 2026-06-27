@@ -757,7 +757,7 @@ Add to `package.json` `bin`:
 ```typescript
 // src/distill/__tests__/tools.test.ts
 import { describe, it, expect } from "vitest";
-import { inspectIngredientsTool, buildAttestationTool } from "../mcpServer.js";
+import { inspectIngredientsTool, buildAttestationTool, dispatchTool } from "../mcpServer.js";
 
 const inventory = { skills: [{ type: "skill" as const, name: "qa", source: "@acme/qa", content: "B" }],
   mcpServers: [{ type: "mcp_server" as const, name: "gh", transport: "stdio" as const, config: { command: "npx", args: ["@modelcontextprotocol/server-github"] } }],
@@ -776,6 +776,14 @@ describe("distill tools", () => {
     const r = buildAttestationTool({ inventory, signal, selection: { mcpServers: ["gh"] }, salt: "S" });
     expect(r.attestation.signature).toBe("");
     expect(r.willPublish.includes("npx:@modelcontextprotocol/server-github")).toBe(true);
+  });
+  it("dispatchTool routes scan_workflow through injected deps", async () => {
+    const deps = { loadContext: () => ({ inventory, signal }), salt: "S" };
+    const r = (await dispatchTool("scan_workflow", { cwd: "/p" }, deps)) as { signalDigest: string };
+    expect(r.signalDigest.startsWith("sha256:")).toBe(true);
+    const ins = (await dispatchTool("inspect_ingredients", {}, deps)) as { models: string[] };
+    expect(ins.models).toEqual(["claude-opus-4-8"]);
+    await expect(dispatchTool("nope", {}, deps)).rejects.toThrow("unknown tool nope");
   });
 });
 ```
@@ -821,21 +829,81 @@ export function buildAttestationTool(input: { inventory: ConfigInventory; signal
   return { attestation, gemPreview: gem, willPublish: ids };
 }
 
-// ---- server wiring (entrypoint; not unit-tested) ----
+// ---- runtime context loader (real env) ----
+import { randomBytes } from "node:crypto";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { introspectConfig, introspectProject } from "../gem/introspect.js";
+import { scanWorkflow, claudeTranscriptsForCwd } from "../gem/workflowScan.js";
+import { registryConfigFromEnv, githubRegistryPublisher } from "../gem/registryGithub.js";
+import { publishGem } from "../gem/registry.js";
+
+export interface ToolDeps {
+  loadContext: (cwd: string) => { inventory: ConfigInventory; signal: WorkflowSignal };
+  publish?: (gem: Gem, files: Record<string, string>) => Promise<{ ref: string }>;
+  salt?: string; // fixed salt for reproducible builds/tests; else random per call
+  token?: string;
+}
+
+export function realDeps(): ToolDeps {
+  return {
+    loadContext(cwd) {
+      const inventory = introspectConfig();
+      const scanInv = { project: introspectProject(cwd) };
+      const paths = claudeTranscriptsForCwd(join(homedir(), ".claude"), cwd);
+      return { inventory, signal: scanWorkflow(paths, scanInv, { retainSequences: false }) };
+    },
+    // Mirror the existing CLI publish path for loading the current registry index before publishing.
+    publish: registryConfigFromEnv()
+      ? async (gem) => {
+          const cfg = registryConfigFromEnv()!;
+          const res = await publishGem({ gem, scope: process.env.AGENTGEM_SCOPE ?? "@me", version: "0.1.0", index: { formatVersion: 1, items: {} }, publisher: githubRegistryPublisher(cfg) });
+          return { ref: res.ref };
+        }
+      : undefined,
+    token: process.env.AGENTGEM_INGEST_TOKEN,
+  };
+}
+
+// ---- dispatch (unit-tested with injected deps) ----
+export async function dispatchTool(name: string, args: Record<string, unknown>, deps: ToolDeps): Promise<unknown> {
+  const cwd = typeof args.cwd === "string" ? args.cwd : process.cwd();
+  switch (name) {
+    case "scan_workflow": {
+      const { signal } = deps.loadContext(cwd);
+      return { signal, signalDigest: `sha256:${createHash("sha256").update(canonicalJSON(signal)).digest("hex")}` };
+    }
+    case "inspect_ingredients":
+      return inspectIngredientsTool(deps.loadContext(cwd));
+    case "build_attestation": {
+      const { inventory, signal } = deps.loadContext(cwd);
+      const salt = deps.salt ?? randomBytes(16).toString("hex");
+      return buildAttestationTool({ inventory, signal, selection: (args.selection ?? { all: true }) as GemSelection, salt, account: (args.account as { provider: string; login: string } | null) ?? null });
+    }
+    case "sign_and_publish": {
+      const { inventory, signal } = deps.loadContext(cwd);
+      const gem = buildGem(inventory, (args.selection ?? { all: true }) as GemSelection, { createdFrom: signal.flavor });
+      return signAndPublishTool({ gem, attestation: args.attestation as UsageAttestation, token: deps.token }, { publish: deps.publish ? (files) => deps.publish!(gem, files) : undefined });
+    }
+    default:
+      throw new Error(`unknown tool ${name}`);
+  }
+}
+
 const TOOLS = [
   { name: "scan_workflow", description: "Scan local transcripts into a redacted workflow signal.", inputSchema: { type: "object", properties: { cwd: { type: "string" } } } },
   { name: "inspect_ingredients", description: "Canonical fingerprints of available harness/models/skills/mcps.", inputSchema: { type: "object", properties: { cwd: { type: "string" } } } },
-  { name: "build_attestation", description: "Build the unsigned usage attestation + a 'what will leave your machine' preview.", inputSchema: { type: "object", properties: { selection: { type: "object" } }, required: ["selection"] } },
-  { name: "sign_and_publish", description: "Sign, embed into archive, publish for distribution, and POST to the ingest endpoint.", inputSchema: { type: "object", properties: { attestation: { type: "object" } }, required: ["attestation"] } },
+  { name: "build_attestation", description: "Build the unsigned usage attestation + a 'what will leave your machine' preview.", inputSchema: { type: "object", properties: { selection: { type: "object" }, cwd: { type: "string" } }, required: ["selection"] } },
+  { name: "sign_and_publish", description: "Sign, embed into archive, publish for distribution, and POST to the ingest endpoint.", inputSchema: { type: "object", properties: { attestation: { type: "object" }, selection: { type: "object" } }, required: ["attestation"] } },
 ];
 
 export async function main(): Promise<void> {
   const server = new Server({ name: "agentgem-distill", version: "0.1.0" }, { capabilities: { tools: {} } });
+  const deps = realDeps();
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
-    // Real wiring delegates to introspectConfig()/scanWorkflow()/signAndPublishTool();
-    // kept thin here because the data logic is covered by the pure handlers above.
-    throw new Error(`tool ${req.params.name} wiring is environment-specific`);
+    const result = await dispatchTool(req.params.name, (req.params.arguments ?? {}) as Record<string, unknown>, deps);
+    return { content: [{ type: "text", text: JSON.stringify(result) }] };
   });
   await server.connect(new StdioServerTransport());
 }
@@ -1010,8 +1078,8 @@ git commit -m "feat(distill): agentgem-share skill + end-to-end sign/publish + p
 
 **Deferred (correctly out of this plan):** hosted aggregator/DB/graph/leaderboard/data-API (Spec B1), fork edges + PageRank, harness-signed "verified" receipts, OAuth provider implementation (Spec A consumes a token; the OAuth *server* is B1).
 
-**Placeholder scan:** the `CallToolRequestSchema` handler in Task 7 intentionally throws — the data logic lives in the pure handlers (unit-tested) and `signAndPublishTool` (integration-tested); full stdio wiring is an environment concern validated manually, not a placeholder for counted logic. All counted/crypto/privacy paths have real code + tests.
+**Placeholder scan:** none. Task 7's `dispatchTool` is fully wired (delegates to the pure handlers + `realDeps()` for env loading) and unit-tested with injected deps; the stdio `CallToolRequestSchema` handler is a one-line delegation to `dispatchTool`. All counted/crypto/privacy paths have real code + tests. `realDeps().publish` mirrors the existing CLI publish path; the implementer must load the live registry index the same way the current publish flow does (the inline `{ items: {} }` is a starting point, not a final — confirm against the existing publish call site).
 
 **Type consistency:** `Ingredient`/`IdKind` (Task 2) consumed unchanged in Tasks 4/7; `UsageAttestation`/`canonicalJSON` (Task 4) consumed in Tasks 5/6/7; `Identity` (Task 3) consumed in Tasks 4/5/7; `signAndPublishTool` signature defined in Task 7 and exercised in Task 8.
 
-**Manual verification step (post-Task 8):** run the server over stdio (`node dist/distill/mcpServer.js`) wired into a coding agent and confirm `scan_workflow`/`inspect_ingredients` return real data on this repo — the one path not covered by unit tests.
+**Manual verification step (post-Task 8):** run the server over stdio (`node dist/distill/mcpServer.js`) wired into a coding agent and confirm `scan_workflow`/`inspect_ingredients` return real data on this repo — the only path not covered by unit tests (stdio transport + `realDeps()` against the live `~/.claude`).
