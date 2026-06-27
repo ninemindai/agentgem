@@ -107,7 +107,8 @@ export class GemController {
         type: a.type, name: a.name, root: a.root,
         invocations: a.invocations, sessionsUsedIn: a.sessionsUsedIn, lastUsedMs: a.lastUsedMs,
       })) };
-    } catch {
+    } catch (e) {
+      console.error("[usage] scan failed:", e);
       return { artifacts: [] };
     }
   }

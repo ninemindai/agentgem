@@ -27,7 +27,8 @@ describe("GET /api/usage", () => {
     const qa = res.artifacts.find((a) => a.type === "skill" && a.name === "qa");
     expect(qa).toBeTruthy();
     expect(qa!.invocations).toBeGreaterThan(0);
-    expect(qa!.lastUsedMs == null).toBe(false);
+    expect(qa!.lastUsedMs).not.toBeNull();
+    expect(qa!.sessionsUsedIn).toBe(1);
   });
 
   it("returns empty artifacts (no throw) when no project is given", async () => {
