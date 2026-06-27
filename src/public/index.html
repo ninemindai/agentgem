@@ -303,6 +303,12 @@
         <span class="d" id="recvStatus"></span>
       </div>
       <div>
+        <div class="bar"><strong style="flex:1;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)">Redeem privately (download)</strong></div>
+        <div class="bar"><input id="recvPrivTicket" type="text" placeholder="agentgem://gem/…#…" style="flex:1" /><button id="recvPrivBtn">Decrypt &amp; download</button></div>
+        <span class="d" id="recvPrivStatus"></span>
+        <p class="note">Decrypts in your browser — the server only relays ciphertext and never sees the key or contents. Downloads the verified <code>.gem</code>; install it with “Install a .gem”.</p>
+      </div>
+      <div>
         <div class="bar"><strong style="flex:1;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)">Search the registry</strong></div>
         <div class="bar"><input id="regSearch" type="text" placeholder="search names, tags, descriptions…" style="flex:1" /><button id="regSearchBtn" class="ghost">Search</button></div>
         <div id="regResults"></div>
@@ -1988,6 +1994,46 @@ document.getElementById("rail").addEventListener("click", e => {
 });
 document.getElementById("wsSelect").addEventListener("change", renderRail);
 renderRail();
+</script>
+<script type="module">
+  // Private redeem: decrypt in the browser, server only relays ciphertext.
+  import { decryptGem } from "/transfer-decrypt.js";
+
+  const b64urlToBytes = (s) => {
+    const b64 = s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4);
+    return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  };
+
+  document.getElementById("recvPrivBtn").addEventListener("click", async () => {
+    const status = document.getElementById("recvPrivStatus");
+    const raw = document.getElementById("recvPrivTicket").value.trim();
+    if (!raw) { status.textContent = "Paste an agentgem:// ticket."; return; }
+    let object, keyB64url;
+    try {
+      const u = new URL(raw);
+      if (u.protocol !== "agentgem:" || u.host !== "gem") throw new Error("not an agentgem gem ticket");
+      const parts = u.pathname.replace(/^\//, "").split("/");
+      if (parts.length !== 2 || !parts[1]) throw new Error("malformed ticket path");
+      object = decodeURIComponent(parts[1]);
+      keyB64url = u.hash.replace(/^#/, "");
+      if (!keyB64url) throw new Error("ticket has no key");
+    } catch (e) { status.textContent = "Bad ticket: " + (e && e.message || e); return; }
+
+    status.textContent = "Fetching ciphertext…";
+    try {
+      const r = await (await fetch("/api/transfer/ciphertext", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ object }) })).json();
+      if (r.error || !r.ciphertextBase64) { status.textContent = "Failed: " + ((r.error && r.error.message) || r.error || "ticket expired or already used?"); return; }
+      const ciphertext = Uint8Array.from(atob(r.ciphertextBase64), (c) => c.charCodeAt(0));
+      status.textContent = "Decrypting in your browser…";
+      const gem = await decryptGem(ciphertext, b64urlToBytes(keyB64url));
+      const blob = new Blob([gem], { type: "application/gzip" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "received.gem";
+      a.click();
+      status.textContent = "✓ Decrypted locally — downloaded received.gem. Install it with “Install a .gem”.";
+    } catch (e) { status.textContent = "Failed: " + (e && e.message || e); }
+  });
 </script>
 </body>
 </html>
