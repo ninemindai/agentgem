@@ -32,13 +32,22 @@ export function assertConfigured(): void {
   natsServersOrThrow();
 }
 
+// Parse $NATS_TTL_HOURS. Fail fast on a non-numeric value rather than silently
+// falling through to "no expiry" (a misconfigured typo must not disable ticket TTL).
+function ttlHoursFromEnv(): number | undefined {
+  const raw = process.env.NATS_TTL_HOURS;
+  if (raw === undefined || raw === "") return undefined;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) throw new Error(`invalid NATS_TTL_HOURS: ${JSON.stringify(raw)} (expected a number of hours)`);
+  return n;
+}
+
 // The production factory: a NATS-backed store from env. Throws (without opening a
 // connection) when NATS_URL is unset, so callers get a clear "not configured".
 export function natsStoreFromEnv(): StoreFactory {
   return async () => {
     const servers = natsServersOrThrow();
-    const ttlHours = process.env.NATS_TTL_HOURS ? Number(process.env.NATS_TTL_HOURS) : undefined;
-    return NatsObjectStore.connect({ servers, token: process.env.NATS_TOKEN, ttlHours });
+    return NatsObjectStore.connect({ servers, token: process.env.NATS_TOKEN, ttlHours: ttlHoursFromEnv() });
   };
 }
 
