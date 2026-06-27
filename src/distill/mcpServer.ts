@@ -17,8 +17,9 @@ export function inspectIngredientsTool(input: { inventory: ConfigInventory; sign
   return {
     harness: canonicalHarness(input.signal.flavor),
     models: input.signal.models.map((m) => canonicalModel(m.id).id),
-    skills: input.inventory.skills.map(canonicalSkill),
-    mcps: input.inventory.mcpServers.map(canonicalMcpServer),
+    // Preview ids use an empty salt — these are never published, only shown to the user.
+    skills: input.inventory.skills.map((s) => canonicalSkill(s, "")),
+    mcps: input.inventory.mcpServers.map((m) => canonicalMcpServer(m, "")),
   };
 }
 
