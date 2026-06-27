@@ -15,6 +15,11 @@ import { RestApplication } from "@agentback/rest";
 import { installExplorer } from "@agentback/rest-explorer";
 import { MCPComponent } from "@agentback/mcp";
 import { installMcpHttp } from "@agentback/mcp-http";
+import { Pool } from "pg";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { registerDrizzle } from "@agentback/drizzle";
+import { schema, ensureSchema } from "./aggregator/schema.js";
+import { AggregatorController } from "./aggregator.controller.js";
 import { GemController } from "./gem.controller.js";
 import { GemTools } from "./gem.tools.js";
 import { streamWorkflowAnalyze } from "./workflowStream.js";
@@ -35,6 +40,13 @@ export async function createApp(port: number): Promise<RestApplication> {
   app.component(MCPComponent);
   app.configure("servers.MCPServer").to({ name: "agentgem", version: "0.1.0", transports: { stdio: false } });
   app.restController(GemController);
+  if (process.env.DATABASE_URL) {
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    const db = drizzle(pool, { schema });
+    await ensureSchema(db as never);
+    registerDrizzle(app, db, { onStop: () => pool.end() });
+    app.restController(AggregatorController);
+  }
   app.service(GemTools);
   // CSRF / drive-by guard: reject browser-initiated cross-site requests to the loopback API
   // (controller routes). Same-origin UI and non-browser clients (CLI/MCP/tests) pass. Mounted in
