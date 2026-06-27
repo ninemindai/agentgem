@@ -149,6 +149,15 @@ export const GemSelectionSchema = z.union([
   }),
 ]);
 
+// Coordinates-only source location for a distilled skill (privacy boundary).
+const OccurrenceSchema = z.object({
+  sessionId: z.string(),
+  transcript: z.string(),
+  messageIndices: z.array(z.number()),
+  atMs: z.number(),
+});
+const ProvenanceSchema = z.object({ occurrences: z.array(OccurrenceSchema) });
+
 // A draft skill distilled from the builtin procedure (proposal §2). status is
 // always "draft" — never installed by this pipeline. Defined before the build
 // request schemas that reference it (module load order).
@@ -163,9 +172,11 @@ export const DistilledSkillSchema = z.object({
     sessions: z.number(),
     exampleSequence: z.array(z.string()),
     root: z.string(),
+    provenance: ProvenanceSchema,
   }),
   status: z.literal("draft"),
   confidence: z.enum(["high", "medium", "low"]),
+  origin: z.enum(["llm", "heuristic"]),
 });
 
 export const GemRequestSchema = z.object({
