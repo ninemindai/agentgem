@@ -20,11 +20,13 @@ describe("signAndPublish + privacy", () => {
     expect(r.signature).toBeTruthy();
     expect(r.ingestId).toBeUndefined(); // no AGENTGEM_INGEST_URL
   });
-  it("never leaks secrets, private paths, or home dirs into the attestation", () => {
+  it("never leaks secrets, private paths, or home dirs into the attestation (aggregate-only, no tuples/salt)", () => {
     const { attestation } = buildAttestationTool({ inventory, signal, selection: { mcpServers: ["secret"] }, salt: "S" });
     const blob = JSON.stringify(attestation);
     expect(blob).not.toContain("sk-deadbeef");
     expect(blob).not.toContain("/Users/me");
+    expect(blob).not.toContain("\"salt\"");
+    expect((attestation.evidence as unknown as Record<string, unknown>).tuples).toBeUndefined();
     expect(attestation.ingredients.mcps[0].idKind).toBe("private"); // path-based → salted, not plaintext
     expect(attestation.ingredients.mcps[0].public).toBe(false);
   });
