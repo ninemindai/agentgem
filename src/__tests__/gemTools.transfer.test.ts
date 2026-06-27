@@ -15,4 +15,9 @@ describe("transfer MCP tools", () => {
     const ticket = "agentgem://gem/b/o#" + Buffer.alloc(32).toString("base64url");
     await expect(tools.transferReceive({ ticket })).rejects.toThrow(/NATS_URL|not configured/i);
   });
+
+  it("transfer_send fails fast when NATS is not configured (before building the gem)", async () => {
+    const tools = new GemTools();
+    await expect(tools.transferSend({ selection: {} })).rejects.toThrow(/NATS_URL|not configured/i);
+  });
 });

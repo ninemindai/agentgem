@@ -14,7 +14,7 @@ import { readWorkspace } from "./gem/workspaces.js";
 import { readGemArchive } from "./gem/archive.js";
 import { exportGem, importGem } from "./gem/share.js";
 import { fetchGemBytes } from "./gem/safeFetch.js";
-import { sendBytes, receiveTicket, natsStoreFromEnv } from "./transfer/service.js";
+import { sendBytes, receiveTicket, natsStoreFromEnv, assertConfigured } from "./transfer/service.js";
 import { readFileSync } from "node:fs";
 
 const InventoryInput = z.object({ dir: z.string().optional(), projects: z.array(z.string()).optional() });
@@ -87,6 +87,7 @@ export class GemTools {
     input: TransferSendInput,
   })
   async transferSend(input: z.infer<typeof TransferSendInput>) {
+    assertConfigured(); // fail fast before building/exporting the gem
     const dirs = resolveDirs(input.dir);
     const gem = buildGem(introspectAll(input.dir, input.projects), input.selection, { name: input.name ?? "gem", createdFrom: dirs.claudeDir });
     const { bytes } = exportGem(gem, { version: input.version });
