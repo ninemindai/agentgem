@@ -27,18 +27,42 @@ describe("canonicalize", () => {
       config: { url: "http://127.0.0.1:8080/mcp" } }, "S").public).toBe(false);
   });
 
-  it("skill with public-scope source returns registry id; non-public scope falls back to content hash", () => {
+  it("skill with public-scope source returns registry id; non-public scope falls back to salted private hash", () => {
     // @modelcontextprotocol is allowlisted — would be public if a skill used it
-    // @acme is not allowlisted → private content hash
+    // @acme is not allowlisted → private salted hash
     const privateSkill = canonicalSkill({ type: "skill", name: "qa", source: "@acme/qa", content: "x" }, "S");
-    expect(privateSkill.idKind).toBe("contentHash");
+    expect(privateSkill.idKind).toBe("private");
     expect(privateSkill.public).toBe(false);
-    expect(privateSkill.id.startsWith("skill:sha256:")).toBe(true);
-    // Standalone (no scoped source) → content hash
+    expect(privateSkill.id.startsWith("private:sha256:")).toBe(true);
+    expect(privateSkill.id).not.toContain("qa");
+    expect(privateSkill.id).not.toContain("acme");
+    // Standalone (no scoped source) → private salted hash
     const h = canonicalSkill({ type: "skill", name: "qa", source: "standalone", content: "BODY" }, "S");
-    expect(h.idKind).toBe("contentHash");
-    expect(h.id.startsWith("skill:sha256:")).toBe(true);
+    expect(h.idKind).toBe("private");
+    expect(h.id.startsWith("private:sha256:")).toBe(true);
     expect(h.public).toBe(false);
+    expect(h.id).not.toContain("qa");
+    expect(h.id).not.toContain("BODY");
+  });
+
+  it("skill salt determinism: same skill + same salt → same id; different salt → different id", () => {
+    const skill = { type: "skill" as const, name: "foo", source: "standalone", content: "do thing" };
+    const id1 = canonicalSkill(skill, "salt-A").id;
+    const id2 = canonicalSkill(skill, "salt-A").id;
+    const id3 = canonicalSkill(skill, "salt-B").id;
+    expect(id1).toBe(id2);         // deterministic
+    expect(id1).not.toBe(id3);     // different salt → different id
+  });
+
+  it("runnerName Windows path: backslash-separated command basename is used, no path segments leak", () => {
+    const r = canonicalMcpServer({ type: "mcp_server", name: "x", transport: "stdio",
+      config: { command: "C:\\Users\\me\\bin\\uvx.exe", args: ["some-public-pkg"] } }, "S");
+    expect(r.public).toBe(true);
+    expect(r.id).not.toContain("Users");
+    expect(r.id).not.toContain("\\");
+    expect(r.id.endsWith(":some-public-pkg")).toBe(true);
+    // runner basename should be uvx.exe
+    expect(r.id.startsWith("uvx.exe:")).toBe(true);
   });
 
   it("model and harness are known + public", () => {
