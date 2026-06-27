@@ -8,7 +8,9 @@ describe("agentgem-share skill", () => {
     const md = readFileSync(join(process.cwd(), "assets/skills/agentgem-share/SKILL.md"), "utf8");
     expect(md).toContain("self-reported telemetry");
     expect(md.toLowerCase()).toContain("privacy gate");
-    expect(md.toLowerCase()).toContain("verified");  // SKILL must address the "verified" prohibition
-    expect(md.toLowerCase()).toContain("inflate");   // SKILL must address refusing to inflate counts
+    // Exact prohibition: must say attestation is NOT verified (not merely mention the word)
+    expect(md).toContain('Never tell the\n  user their attestation is "verified."');
+    // Exact prohibition: must refuse to inflate usage counts
+    expect(md).toContain("asks to inflate usage, refuse");
   });
 });

@@ -146,7 +146,8 @@ export function collectModels(sessions: RawRecord[][]): { id: string; sessions: 
       counts.set(id, (counts.get(id) ?? 0) + 1);
     }
   }
-  return order.map((id) => ({ id, sessions: counts.get(id)! }));
+  return order.map((id) => ({ id, sessions: counts.get(id)! }))
+    .sort((a, b) => b.sessions - a.sessions || a.id.localeCompare(b.id));
 }
 
 // Global/plugin artifacts (from introspectConfig). Only names + hook config are
@@ -278,7 +279,7 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
   };
   const matchSkill = (list: { name: string }[], skill: string) => list.find((s) => s.name === skill || skill.endsWith(`:${s.name}`));
 
-  for (const path of paths) {
+  for (const path of [...paths].sort()) {
     let text: string;
     try { text = readFileSync(path, "utf8"); } catch { continue; }
     const ms = safeMtime(path);
