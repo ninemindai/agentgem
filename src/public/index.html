@@ -822,6 +822,10 @@ const KIND_TO_USAGE_TYPE = {
   projectHooks: "hook", projectInstructions: "instructions",
 };
 function fmtDay(ms){ try { return new Date(ms).toISOString().slice(0,10); } catch { return ""; } }
+function usageBadgeHtml(inv, lastUsedMs){
+  const day = lastUsedMs ? ` · ${esc(fmtDay(lastUsedMs))}` : "";
+  return ` <span class="usebadge d">· ${inv} use${inv===1?"":"s"}${day}</span>`;
+}
 
 // Join /api/usage onto the freshly rendered rows: stamp data-* and append a badge.
 async function decorateUsage(){
@@ -848,10 +852,7 @@ async function decorateUsage(){
     const host = row.querySelector("span");
     const old = host && host.querySelector(".usebadge");
     if (old) old.remove();
-    if (host && !passive && inv > 0) {
-      const day = u && u.lastUsedMs ? ` · ${esc(fmtDay(u.lastUsedMs))}` : "";
-      host.insertAdjacentHTML("beforeend", ` <span class="usebadge d">· ${inv} use${inv===1?"":"s"}${day}</span>`);
-    }
+    if (host && !passive && inv > 0) host.insertAdjacentHTML("beforeend", usageBadgeHtml(inv, u.lastUsedMs));
   });
   usageLoaded = true;
   sortRows();
@@ -859,18 +860,19 @@ async function decorateUsage(){
 }
 let usageLoaded = false;   // true once decorateUsage() has stamped data-invocations
 let sortState = { key: null, dir: "desc" };
-function sortRows(){
-  document.querySelectorAll("#inventory .group").forEach(g => {
+function sortRowsIn(containerSel, state){
+  document.querySelectorAll(containerSel + " .group").forEach(g => {
     const rows = [...g.querySelectorAll("label.row")];
     rows.sort((a, b) => {
-      if (!sortState.key) return Number(a.dataset.order) - Number(b.dataset.order);
-      const f = sortState.key === "uses" ? "invocations" : "lastused";
+      if (!state.key) return Number(a.dataset.order) - Number(b.dataset.order);
+      const f = state.key === "uses" ? "invocations" : "lastused";
       const av = Number(a.dataset[f] || 0), bv = Number(b.dataset[f] || 0);
-      return sortState.dir === "desc" ? bv - av : av - bv;
+      return state.dir === "desc" ? bv - av : av - bv;
     });
     rows.forEach(r => g.appendChild(r));   // re-append in sorted order
   });
 }
+function sortRows(){ sortRowsIn("#inventory", sortState); }
 function cycleSort(key){
   if (sortState.key !== key) { sortState = { key, dir: "desc" }; }
   else if (sortState.dir === "desc") { sortState.dir = "asc"; }
