@@ -24,6 +24,7 @@ const inventory: ProjectInventory = {
 const signal: WorkflowSignal = {
   root: ROOT, flavor: "claude",
   sessions: { scanned: 3, firstMs: 1, lastMs: 2, spanDays: 1 },
+  models: [],
   artifacts: [
     { type: "skill", name: "qa", root: ROOT, invocations: 5, sessionsUsedIn: 3, lastUsedMs: 2, confidence: "high" },
     { type: "mcp_server", name: "context7", root: ROOT, invocations: 4, sessionsUsedIn: 2, lastUsedMs: 2, confidence: "high" },
