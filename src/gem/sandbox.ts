@@ -6,6 +6,7 @@
 import { connectRunSession } from "./acpRun.js";          // value used at call-time (safe ESM cycle)
 import type { RunConnectFn, AgentDescriptor } from "./acpRun.js";
 import { wrapWithSandbox, type SandboxKind } from "./sandboxLaunch.js";
+import { configWriteAccess } from "./configAccess.js";
 import { binOnPath } from "./binPath.js";
 
 export interface SandboxBackend {
@@ -27,8 +28,17 @@ function isolatedBackend(id: string, kind: SandboxKind, bin: string, supported: 
   return {
     id, isolated: true,
     available: () => supported() && binOnPath(bin),
-    connectFn: (runDir) => (descriptor: AgentDescriptor, app) =>
-      connectRunSession({ ...descriptor, command: wrapWithSandbox(kind, runDir, descriptor.command) }, "allow", app),
+    connectFn: (runDir) => (descriptor: AgentDescriptor, app) => {
+      // The agent runs against its REAL config dir (so Keychain/OAuth auth works); the jail
+      // re-allows writes there so its startup state (session-env/transcripts) succeeds, but
+      // carves the escalation vectors (hooks/skills/plugins/credentials) back out read-only.
+      const { writable, denied } = configWriteAccess();
+      return connectRunSession(
+        { ...descriptor, command: wrapWithSandbox(kind, runDir, descriptor.command, writable, denied) },
+        "allow",
+        app,
+      );
+    },
   };
 }
 

@@ -9,9 +9,9 @@ import { seatbeltPolicy } from "../sandboxLaunch.js";
 const onMac = process.platform === "darwin" && existsSync("/usr/bin/sandbox-exec");
 
 // Run `sh -c <script>` under the generated policy; return true if it exited 0.
-function runJailed(runDir: string, script: string): boolean {
+function runJailed(runDir: string, script: string, extraWritable: string[] = [], denied: string[] = []): boolean {
   try {
-    execFileSync("/usr/bin/sandbox-exec", ["-p", seatbeltPolicy(runDir), "/bin/sh", "-c", script], { stdio: "pipe" });
+    execFileSync("/usr/bin/sandbox-exec", ["-p", seatbeltPolicy(runDir, undefined, extraWritable, denied), "/bin/sh", "-c", script], { stdio: "pipe" });
     return true;
   } catch { return false; }
 }
@@ -33,6 +33,33 @@ describe.skipIf(!onMac)("seatbelt boundary (macOS)", () => {
     } finally {
       rmSync(run, { recursive: true, force: true });
       rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  // Regression for the original failure: the agent runs against its REAL config dir, so the
+  // jail must allow its startup writes (e.g. session-env) there, while carving the escalation
+  // vectors (settings.json hook, skills/) back out read-only via the deny block.
+  it("allows config writes (session-env) but denies the sensitive paths (settings.json, skills)", () => {
+    const run = mkdtempSync(join(tmpdir(), "sbx-run-"));
+    // Config dir under /tmp (→ /private/tmp), NOT covered by the tmp clause — so writes there
+    // succeed ONLY because it's passed as extra-writable, isolating the allow/deny behavior.
+    const cfg = mkdtempSync("/tmp/sbx-cfg-");
+    const denied = [join(cfg, "settings.json"), join(cfg, "skills")];
+    try {
+      const scratch = join(cfg, "session-env", "abc123", "marker");
+      const hook = join(cfg, "settings.json");
+      const skill = join(cfg, "skills", "evil", "SKILL.md");
+      // scratch write under the config dir → allowed
+      expect(runJailed(run, `mkdir -p ${join(cfg, "session-env", "abc123")} && echo hi > ${scratch}`, [cfg], denied)).toBe(true);
+      expect(readFileSync(scratch, "utf8")).toBe("hi\n");
+      // hook + skill writes → denied even though the config dir is writable
+      expect(runJailed(run, `echo pwned > ${hook}`, [cfg], denied)).toBe(false);
+      expect(existsSync(hook)).toBe(false);
+      expect(runJailed(run, `mkdir -p ${join(cfg, "skills", "evil")} && echo x > ${skill}`, [cfg], denied)).toBe(false);
+      expect(existsSync(skill)).toBe(false);
+    } finally {
+      rmSync(run, { recursive: true, force: true });
+      rmSync(cfg, { recursive: true, force: true });
     }
   });
 });

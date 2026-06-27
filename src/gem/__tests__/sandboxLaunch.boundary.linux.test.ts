@@ -6,7 +6,7 @@
 // when the kernel won't allow one. CI installs bubblewrap so this runs there.
 import { describe, it, expect } from "vitest";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, rmSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, delimiter } from "node:path";
 import { bwrapArgs } from "../sandboxLaunch.js";
@@ -21,9 +21,9 @@ function bwrapWorks(): boolean {
 const onLinux = process.platform === "linux" && onPath("bwrap") && bwrapWorks();
 
 // Run `sh -c <script>` under the generated bwrap argv; true iff it exited 0.
-function runJailed(runDir: string, script: string): boolean {
+function runJailed(runDir: string, script: string, extraWritable: string[] = [], denied: string[] = []): boolean {
   try {
-    execFileSync("bwrap", [...bwrapArgs(runDir), "/bin/sh", "-c", script], { stdio: "pipe" });
+    execFileSync("bwrap", [...bwrapArgs(runDir, undefined, extraWritable, denied), "/bin/sh", "-c", script], { stdio: "pipe" });
     return true;
   } catch { return false; }
 }
@@ -44,6 +44,32 @@ describe.skipIf(!onLinux)("bubblewrap boundary (Linux)", () => {
     } finally {
       rmSync(run, { recursive: true, force: true });
       rmSync(outside, { force: true });
+    }
+  });
+
+  // Regression for the original failure: the agent runs against its REAL config dir, so the
+  // jail allows its startup writes (session-env) there while re-binding the escalation vectors
+  // (settings.json, skills/) read-only via --ro-bind-try.
+  it("allows config writes (session-env) but denies the sensitive paths (settings.json, skills)", () => {
+    const run = mkdtempSync(join(homedir(), "bwx-run-"));
+    const cfg = mkdtempSync(join(homedir(), "bwx-cfg-"));     // stands in for ~/.claude
+    // The sensitive paths must EXIST for --ro-bind-try to re-bind them read-only.
+    mkdirSync(join(cfg, "skills"), { recursive: true });
+    writeFileSync(join(cfg, "settings.json"), "{}");
+    const denied = [join(cfg, "settings.json"), join(cfg, "skills")];
+    try {
+      const scratch = join(cfg, "session-env", "abc123", "marker");
+      const hook = join(cfg, "settings.json");
+      const skill = join(cfg, "skills", "evil", "SKILL.md");
+      expect(runJailed(run, `mkdir -p ${join(cfg, "session-env", "abc123")} && echo hi > ${scratch}`, [cfg], denied)).toBe(true);
+      expect(readFileSync(scratch, "utf8")).toBe("hi\n");
+      expect(runJailed(run, `echo pwned > ${hook}`, [cfg], denied)).toBe(false);
+      expect(readFileSync(hook, "utf8")).toBe("{}");   // unchanged
+      expect(runJailed(run, `mkdir -p ${join(cfg, "skills", "evil")} && echo x > ${skill}`, [cfg], denied)).toBe(false);
+      expect(existsSync(skill)).toBe(false);
+    } finally {
+      rmSync(run, { recursive: true, force: true });
+      rmSync(cfg, { recursive: true, force: true });
     }
   });
 });
