@@ -1,6 +1,6 @@
 // src/gem/__tests__/identity.test.ts
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, chmodSync, statSync } from "node:fs";
+import { mkdtempSync, chmodSync, statSync, renameSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadOrCreateIdentity, verify } from "../identity.js";
@@ -29,5 +29,23 @@ describe("identity", () => {
     const id2 = loadOrCreateIdentity(dir);
     expect(statSync(file).mode & 0o077).toBe(0);
     expect(id2.publicKey).toBe(id1.publicKey);
+  });
+
+  it("rejects key file that is a symlink (TOCTOU guard via O_NOFOLLOW)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ag-id-sym-"));
+    const file = join(dir, "identity.json");
+    const realFile = join(dir, "identity.json.real");
+    // Create identity (creates the key file at `file`)
+    loadOrCreateIdentity(dir);
+    // Move the real file aside and replace it with a symlink pointing to it
+    renameSync(file, realFile);
+    try {
+      symlinkSync(realFile, file);
+    } catch {
+      // Symlink creation not permitted in this test environment; skip.
+      return;
+    }
+    // loadOrCreateIdentity must refuse to follow the symlink
+    expect(() => loadOrCreateIdentity(dir)).toThrow();
   });
 });
