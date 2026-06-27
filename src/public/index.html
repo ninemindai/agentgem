@@ -65,6 +65,10 @@
   .group{margin-bottom:18px}
   .group h2{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.16em;color:var(--muted);margin:0 0 8px;display:flex;align-items:center;gap:9px}
   .group h2::after{content:"";flex:1;height:1px;background:var(--line)}
+  .sortbtn{font:inherit;cursor:pointer;border:1px solid var(--line);background:transparent;border-radius:6px;padding:2px 8px}
+  .sortbtn[data-dir]{border-color:var(--accent);font-weight:600}
+  .sortbtn[data-dir=desc]::after{content:" ↓"}
+  .sortbtn[data-dir=asc]::after{content:" ↑"}
   label.row{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;cursor:pointer;border:1px solid transparent;border-radius:8px;transition:background .14s,border-color .14s;position:relative}
   label.row:hover{background:var(--card);border-color:var(--line)}
   label.row:has(input:checked){background:var(--card);border-color:var(--line)}
@@ -246,7 +250,7 @@
       <div id="acUrl" style="margin:4px 0"></div>
       <pre id="acLog" style="max-height:200px;overflow:auto;background:#111;color:#ddd;padding:8px;font-size:12px"></pre>
     </div>
-    <div class="bar"><input id="search" type="text" placeholder="search names, descriptions, contents…" style="flex:1" /><button id="filtersToggle" class="ghost">Filters ▾</button></div>
+    <div class="bar"><input id="search" type="text" placeholder="search names, descriptions, contents…" style="flex:1" /><button id="filtersToggle" class="ghost">Filters ▾</button><button type="button" id="sortUses" class="sortbtn" title="sort by usage count">Uses</button><button type="button" id="sortLast" class="sortbtn" title="sort by last used">Last used</button><label class="chk"><input type="checkbox" id="usedOnly" checked> Used only</label></div>
     <div id="filterPanel" hidden>
       <div class="bar"><span class="flabel d">Source</span><select id="srcFilter" style="flex:1"><option value="">All sources</option></select></div>
       <div class="bar" id="agentBar"></div>
@@ -647,6 +651,7 @@ async function addDraftToBuild(i){
   projSel(root).skills.add(skill.name);
   fetch("/api/workflow/draft", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(skill) }).catch(() => {});  // also persist a reviewable SKILL.md (best-effort)
   renderInventoryPane();           // re-render so the injected draft shows as a checked skill
+  await decorateUsage();           // re-stamp usage data-* + badges wiped by the re-render
   restoreChecks(); refresh();
   ensureAnalyzeBanner().innerHTML = `<b>${esc(skill.name)}</b> <span class="d">(distilled draft)</span> added to the build — it's bundled into the Gem and a SKILL.md draft is written under <code>.agentgem/distilled/</code> on build.`;
 }
@@ -782,6 +787,7 @@ async function load() {
   inv = await (await fetch("/api/inventory" + qs)).json();
   inv.projects = inv.projects || [];
   renderInventoryPane();
+  await decorateUsage();   // best-effort usage join; never blocks the ledger
 }
 
 // Render the active testbed's project groups from the current `inv` (re-runnable so
@@ -800,6 +806,7 @@ function renderInventoryPane(){
   document.querySelectorAll("#inventory label.row").forEach(row => {
     const cb = row.querySelector("input[type=checkbox]");
     row._hay = hayForRow(cb && cb.dataset.kind, cb && cb.dataset.name, cb && cb.dataset.project).toLowerCase();
+    row.dataset.order = String([...row.parentNode.querySelectorAll("label.row")].indexOf(row));
   });
   populateSources(); populateAgents(); populateTypes();
   document.querySelectorAll('#inventory input[type=checkbox]').forEach(cb => cb.addEventListener("change", onToggle));
@@ -809,6 +816,77 @@ function renderInventoryPane(){
   renderTestDrive();
   renderRail();
 }
+// Map a ledger checkbox kind to the usage artifact type from /api/usage.
+const KIND_TO_USAGE_TYPE = {
+  projectSkills: "skill", projectMcpServers: "mcp_server",
+  projectHooks: "hook", projectInstructions: "instructions",
+};
+function fmtDay(ms){ try { return new Date(ms).toISOString().slice(0,10); } catch { return ""; } }
+
+// Join /api/usage onto the freshly rendered rows: stamp data-* and append a badge.
+async function decorateUsage(){
+  let artifacts = [];
+  try {
+    const qs = `?projects=${encodeURIComponent(JSON.stringify(projects))}`;
+    const r = await fetch("/api/usage" + qs);
+    artifacts = (await r.json()).artifacts || [];
+  } catch { artifacts = []; }   // best-effort: rows keep zero usage
+  const map = new Map();        // `${type}|${name}|${root}` -> {invocations,lastUsedMs}
+  for (const a of artifacts) map.set(`${a.type}|${a.name}|${a.root}`, a);
+
+  document.querySelectorAll("#inventory label.row").forEach(row => {
+    const cb = row.querySelector("input[type=checkbox]");
+    const kind = cb && cb.dataset.kind;
+    const type = KIND_TO_USAGE_TYPE[kind];
+    const passive = type === "instructions" || type === "hook";
+    if (passive) row.dataset.passive = "1";
+    const u = type ? map.get(`${type}|${(cb.dataset.name)||""}|${activeTestbed}`) : null;
+    const inv = u ? u.invocations : 0;
+    row.dataset.invocations = String(inv);
+    row.dataset.lastused = u && u.lastUsedMs ? String(u.lastUsedMs) : "";
+    // badge: only for non-passive, used artifacts
+    const host = row.querySelector("span");
+    const old = host && host.querySelector(".usebadge");
+    if (old) old.remove();
+    if (host && !passive && inv > 0) {
+      const day = u && u.lastUsedMs ? ` · ${esc(fmtDay(u.lastUsedMs))}` : "";
+      host.insertAdjacentHTML("beforeend", ` <span class="usebadge d">· ${inv} use${inv===1?"":"s"}${day}</span>`);
+    }
+  });
+  usageLoaded = true;
+  sortRows();
+  filterRows();
+}
+let usageLoaded = false;   // true once decorateUsage() has stamped data-invocations
+let sortState = { key: null, dir: "desc" };
+function sortRows(){
+  document.querySelectorAll("#inventory .group").forEach(g => {
+    const rows = [...g.querySelectorAll("label.row")];
+    rows.sort((a, b) => {
+      if (!sortState.key) return Number(a.dataset.order) - Number(b.dataset.order);
+      const f = sortState.key === "uses" ? "invocations" : "lastused";
+      const av = Number(a.dataset[f] || 0), bv = Number(b.dataset[f] || 0);
+      return sortState.dir === "desc" ? bv - av : av - bv;
+    });
+    rows.forEach(r => g.appendChild(r));   // re-append in sorted order
+  });
+}
+function cycleSort(key){
+  if (sortState.key !== key) { sortState = { key, dir: "desc" }; }
+  else if (sortState.dir === "desc") { sortState.dir = "asc"; }
+  else { sortState = { key: null, dir: "desc" }; }   // desc -> asc -> off
+  // reflect button state (mutually exclusive)
+  const map = { uses: "sortUses", last: "sortLast" };
+  for (const k of Object.keys(map)) {
+    const el = document.getElementById(map[k]);
+    if (sortState.key === k) el.dataset.dir = sortState.dir; else el.removeAttribute("data-dir");
+  }
+  sortRows();
+}
+document.getElementById("sortUses").addEventListener("click", () => cycleSort("uses"));
+document.getElementById("sortLast").addEventListener("click", () => cycleSort("last"));
+const usedOnlyEl = document.getElementById("usedOnly");
+if (usedOnlyEl) usedOnlyEl.addEventListener("change", filterRows);
 function hayForRow(kind, name, projRoot) {
   if (kind === "skills") { const a = inv.skills.find(s => s.name === name); return a ? `${a.name} ${a.description || ""} ${a.source || ""} ${a.content || ""}` : ""; }
   if (kind === "mcpServers") { const a = inv.mcpServers.find(s => s.name === name); return a ? `${a.name} ${a.transport || ""} ${a.source || ""} ${JSON.stringify(a.config || {})}` : ""; }
@@ -892,6 +970,7 @@ function filterRows() {
   const typeBoxes = [...document.querySelectorAll(".typeChk")];
   const types = new Set(typeBoxes.filter(c => c.checked).map(c => c.value));
   const typeFilterActive = typeBoxes.length > 0 && typeBoxes.some(c => !c.checked);
+  const usedOnly = (document.getElementById("usedOnly") || {}).checked;
   document.querySelectorAll("#inventory label.row").forEach(row => {
     const hay = row._hay || "";
     const matchQ = tokens.every(t => hay.includes(t)); // order-independent AND; [] => true
@@ -899,9 +978,11 @@ function filterRows() {
     const rowAgents = (row.getAttribute("data-agent") || "").split(" ").filter(Boolean);
     const matchAgent = agentBoxes.length === 0 || rowAgents.length === 0 || rowAgents.some(a => agents.has(a));
     const matchType = typeBoxes.length === 0 || types.has(row.getAttribute("data-type"));
-    row.style.display = matchQ && matchSrc && matchAgent && matchType ? "" : "none";
+    const cbx = row.querySelector("input[type=checkbox]");
+    const matchUsed = !usedOnly || !usageLoaded || row.dataset.passive === "1" || (cbx && cbx.checked) || Number(row.dataset.invocations || 0) > 0;
+    row.style.display = matchQ && matchSrc && matchAgent && matchType && matchUsed ? "" : "none";
   });
-  const active = q || src || agentFilterActive || typeFilterActive;
+  const active = q || src || agentFilterActive || typeFilterActive || usedOnly;
   document.querySelectorAll("#inventory .group").forEach(g => {
     const all = g.querySelectorAll("label.row");
     const shown = [...all].filter(r => r.style.display !== "none").length;

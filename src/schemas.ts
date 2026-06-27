@@ -116,6 +116,16 @@ export const InventorySchema = z.object({
   projects: z.array(ProjectInventorySchema).optional(),
 });
 
+export const UsageItemSchema = z.object({
+  type: z.string(),
+  name: z.string(),
+  root: z.string().nullable(),
+  invocations: z.number(),
+  sessionsUsedIn: z.number(),
+  lastUsedMs: z.number().nullable(),
+});
+export const UsageSchema = z.object({ artifacts: z.array(UsageItemSchema) });
+
 // Per-project selection is keyed by the project's root path so a same-named artifact in
 // two projects never collides.
 const ProjectSelectionSchema = z.record(

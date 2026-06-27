@@ -51,6 +51,7 @@ import {
   DistilledSkillSchema, WorkflowDraftWriteResponseSchema,
   GemRunRequestSchema, GemRunResponseSchema,
   GemRunPrepareRequestSchema, GemRunPrepareResponseSchema,
+  UsageSchema,
 } from "./schemas.js";
 import { claudeTranscriptsForCwd, scanWorkflow } from "./gem/workflowScan.js";
 import { recommendWorkflow, recommendationToSelection } from "./gem/acpRecommender.js";
@@ -88,6 +89,28 @@ export class GemController {
   @get("/inventory", { query: DirQuerySchema, response: InventorySchema })
   async inventory(input: { query: z.infer<typeof DirQuerySchema> }): Promise<z.infer<typeof InventorySchema>> {
     return introspectAll(input.query.dir, parseProjectsQuery(input.query.projects));
+  }
+
+  @get("/usage", { query: DirQuerySchema, response: UsageSchema })
+  async usage(input: { query: z.infer<typeof DirQuerySchema> }): Promise<z.infer<typeof UsageSchema>> {
+    try {
+      const roots = parseProjectsQuery(input.query.projects);
+      const root = roots[0];
+      if (!root) return { artifacts: [] };
+      const dirs = resolveDirs(input.query.dir);
+      const project = introspectProject(resolveProject(root));
+      const globalInv = introspectConfig(dirs);
+      const scanInv = { project, global: { skills: globalInv.skills, mcpServers: globalInv.mcpServers, hooks: globalInv.hooks } };
+      const paths = claudeTranscriptsForCwd(dirs.claudeDir, root);
+      const signal = scanWorkflow(paths, scanInv);
+      return { artifacts: signal.artifacts.map((a) => ({
+        type: a.type, name: a.name, root: a.root,
+        invocations: a.invocations, sessionsUsedIn: a.sessionsUsedIn, lastUsedMs: a.lastUsedMs,
+      })) };
+    } catch (e) {
+      console.error("[usage] scan failed:", e);
+      return { artifacts: [] };
+    }
   }
 
   @post("/gem", { body: GemRequestSchema, response: GemSchema })
