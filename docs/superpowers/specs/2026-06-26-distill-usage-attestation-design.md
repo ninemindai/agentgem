@@ -3,6 +3,8 @@
 **Date:** 2026-06-26
 **Status:** Approved design, pre-implementation
 
+> **Amendment 2026-06-27 (from Spec B1 brainstorm — ingest substrate):** usage attestations are ingested via a **hosted ingest endpoint the producer POSTs to** (verified at the door), *not* by piggybacking on the GitHub registry push. Consequences for Spec A: (a) **account-attestation moves from "the commit author" to OAuth** (Sign in with Vercel / GitHub OAuth) performed at the ingest endpoint — the "free commit-author binding" in Decision 3 is **superseded**; (b) `sign_and_publish` **POSTs the signed attestation to the hosted ingest API** (the data-critical step) in addition to publishing the Gem archive to the registry **for distribution only**. The GitHub registry remains the durable, content-addressed *distribution* store for installable Gems; it is no longer the data-ingest path. See Decision 3, §The attestation envelope (`account`), and §MCP tool contracts (`sign_and_publish`).
+
 > **Amendment 2026-06-26 (from Spec B/B1 brainstorm):** the envelope gains an **optional** `evidence.signal` — the *full redacted `WorkflowSignal`* the profile was derived from. It is **opt-in**: when omitted, `evidence.signalDigest` is a tamper-evident commitment only and the aggregator relies on cross-record statistical detection (baseline tier); when included, the aggregator deterministically recomputes counts and grants the record a **"verified" badge** (verified tier). `scrub.ts` must be airtight on the shipped signal since it carries more detail than the summary metrics. See §The attestation envelope, §MCP tool contracts (`build_attestation` gains `includeSignal?`), and §Privacy.
 **Part of:** a three-subsystem vision — **A. Producer** (this spec), **B. Aggregator** (hosted leaderboard + usage graph + data API), **C. Trust spine** (anti-fraud + PageRank ranking). C is a constraint woven through A and B, not a standalone phase.
 
@@ -26,7 +28,7 @@ Without that record there is no usage graph (defeats #1), and without grounding 
 
 1. **Graph shape: layered, usage-layer first.** A *usage graph* (ingredient nodes: harness, model, skill, MCP, tool; edges: "this Gem used that ingredient") sits under a future *dependency/fork graph* (Gem→Gem edges) that PageRank will run on. Spec A builds the usage layer only; fork edges + PageRank are a later spec.
 2. **Attestation location: inside the Gem archive (Decision 1 = A).** A signed `attestation.json` is written into the archive alongside `gem.json`/`gem.lock`, anchored to the Gem digest. Every usage claim is tied to a concrete shared Gem. A standalone "usage report with no Gem" is explicitly **deferred** (revisit when acquisition/volume becomes the priority).
-3. **Trust anchor: local keypair + account-attestation.** An ed25519 keypair signs the attestation (integrity + cross-submission continuity). The publishing identity binds it to a real account — and because publishing to the GitHub registry already requires a GitHub token, **the commit author *is* the account binding, with no new auth in Spec A**. Harness-signed run receipts are a future "verified" tier. PageRank handles ranking-level sybil resistance later.
+3. **Trust anchor: local keypair + account-attestation.** An ed25519 keypair signs the attestation (integrity + cross-submission continuity). The publishing identity binds it to a real account via **OAuth (Sign in with Vercel / GitHub OAuth) at the hosted ingest endpoint** (per the 2026-06-27 amendment; the earlier "commit author is the binding" shortcut is superseded). Harness-signed run receipts are a future "verified" tier. PageRank handles ranking-level sybil resistance later.
 4. **Anti-fabrication via grounding.** The usage profile is *extracted from real transcripts by the existing scan*, not self-declared. The envelope carries `evidence.signalDigest` (a hash of the redacted `WorkflowSignal` it derived from) so the Spec-B aggregator can later re-verify that declared counts never exceed what the signal supports.
 5. **Ingredient identity: canonical fingerprint with graceful fallback.** Cross-user node-merging is the whole point of the moat, so ingredients get stable global ids (see §Ingredient canonicalization). `redact.ts` scrubs command/args before any fingerprint is computed.
 6. **MCP/skill division of labor.** The MCP server is a deterministic, side-effect-light **data layer**; the skill is the **procedure** that drives the *host* coding agent to make judgment calls. The generative judgment that today runs in a nested ACP agent moves up to the host agent — less plumbing, cleaner MCP surface.
@@ -58,7 +60,7 @@ A new signed `attestation.json` in the Gem archive, anchored to the Gem's digest
   "gem": { "name": "...", "version": "...", "digest": "sha256:…" },   // binds to gem.lock
   "producer": {
     "publicKey": "ed25519:…",                          // local keypair (continuity)
-    "account": { "provider": "github", "login": "…" }  // from the publish commit identity
+    "account": { "provider": "github", "login": "…" }  // from the OAuth session at the hosted ingest endpoint
   },
   "source": {
     "harness": { "id": "claude-code", "version": "…" }, // canonical
@@ -105,7 +107,7 @@ All read-only except `sign_and_publish`:
 - **`scan_workflow({ cwd?, scope? })`** → `{ signal: RedactedWorkflowSignal, signalDigest }`. Wraps `scanWorkflow`. Pure read.
 - **`inspect_ingredients({ cwd? })`** → `{ harness, models[], skills[], mcps[] }` with canonical ids + `idKind`. Joins the scan against the introspected inventory. Pure read.
 - **`build_attestation({ gemSelection, includeSignal? })`** → `{ attestation /* unsigned */, gemPreview, willPublish }`. Calls `buildGem` + `writeGemArchive`, computes the usage profile from the scan, returns the **unsigned** envelope plus a human-readable "what will leave your machine" preview. `includeSignal: true` embeds the full redacted `WorkflowSignal` in `evidence.signal` (opt-in "verified" tier; the preview must show it). No writes, no network.
-- **`sign_and_publish({ attestation, ref })`** → `{ publishedRef, gemDigest, signature }`. Signs with the local keypair (generating one at `~/.agentgem/identity.json` on first use), writes `attestation.json` into the archive, populates `gem.lock.signature`, calls `publishGem`. The only tool that touches the network.
+- **`sign_and_publish({ attestation, ref })`** → `{ publishedRef, gemDigest, signature, ingestId }`. Signs with the local keypair (generating one at `~/.agentgem/identity.json` on first use), writes `attestation.json` into the archive, populates `gem.lock.signature`, then **(a)** publishes the archive to the GitHub registry via `publishGem` (distribution) and **(b)** POSTs the signed attestation to the hosted ingest endpoint over an OAuth session (the data-critical step; verified at the door). The only tool that touches the network. The OAuth flow runs on first publish and the token is cached locally.
 
 The split guarantees the skill's privacy gate runs on the *final* bytes before anything is signed or published.
 
