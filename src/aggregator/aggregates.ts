@@ -1,10 +1,16 @@
 // src/aggregator/aggregates.ts
 import type { DB } from "./db.js";
 
+/** Safe-by-default k-anonymity floor: a caller that forgets to pass `k` must NOT
+ *  get un-anonymized single-producer rows. Callers wanting a lower floor (e.g. local
+ *  dev with few producers) pass `k` explicitly. The production floor is a config
+ *  decision for the hosted slice. */
+export const DEFAULT_K = 5;
+
 export async function popularity(
   db: DB, opts: { kind?: string; limit?: number; k?: number } = {},
 ): Promise<{ id: string; kind: string; producers: number; invocations: number; sessions: number }[]> {
-  const k = opts.k ?? 1, limit = opts.limit ?? 100;
+  const k = opts.k ?? DEFAULT_K, limit = opts.limit ?? 100;
   const r = await db.query<{ id: string; kind: string; producers: number; invocations: number; sessions: number }>(
     `select e.ingredient_id as id, i.kind,
             count(distinct a.producer_pubkey)::int as producers,
@@ -24,7 +30,7 @@ export async function popularity(
 export async function coOccurrence(
   db: DB, opts: { id: string; limit?: number; k?: number },
 ): Promise<{ id: string; producers: number }[]> {
-  const k = opts.k ?? 1, limit = opts.limit ?? 50;
+  const k = opts.k ?? DEFAULT_K, limit = opts.limit ?? 50;
   const r = await db.query<{ id: string; producers: number }>(
     `select e2.ingredient_id as id, count(distinct a.producer_pubkey)::int as producers
      from usage_edges e1

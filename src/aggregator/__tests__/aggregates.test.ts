@@ -2,7 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { createDb } from "../db.js";
 import { projectAttestation } from "../project.js";
-import { popularity, coOccurrence } from "../aggregates.js";
+import { popularity, coOccurrence, DEFAULT_K } from "../aggregates.js";
 
 function att(pubkey: string, digest: string, skills: string[]) {
   return { formatVersion: 1, canonicalizerVersion: 3, gem: { name: "g", digest },
@@ -24,6 +24,10 @@ describe("aggregates + k-anon", () => {
     expect(k2[0].producers).toBe(3);
     const k1 = await popularity(db, { kind: "skill", k: 1 });
     expect(k1.map((r) => r.id).sort()).toEqual(["skill:a", "skill:b"]);
+    // SAFE DEFAULT: omitting k applies DEFAULT_K (>=5), so 3-producer skill:a is suppressed —
+    // a forgetful caller never gets un-anonymized rows.
+    expect(DEFAULT_K).toBeGreaterThanOrEqual(5);
+    expect(await popularity(db, { kind: "skill" })).toEqual([]); // 3 producers < DEFAULT_K
   });
   it("coOccurrence finds partners sharing a producer, k-anon enforced", async () => {
     const db = await createDb();
