@@ -37,7 +37,8 @@ export function assertConfigured(): void {
 export function natsStoreFromEnv(): StoreFactory {
   return async () => {
     const servers = natsServersOrThrow();
-    return NatsObjectStore.connect({ servers, token: process.env.NATS_TOKEN });
+    const ttlHours = process.env.NATS_TTL_HOURS ? Number(process.env.NATS_TTL_HOURS) : undefined;
+    return NatsObjectStore.connect({ servers, token: process.env.NATS_TOKEN, ttlHours });
   };
 }
 
