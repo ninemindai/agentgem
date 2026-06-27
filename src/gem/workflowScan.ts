@@ -137,7 +137,10 @@ export function collectModels(sessions: RawRecord[][]): { id: string; sessions: 
     const seen = new Set<string>();
     for (const r of records) {
       const m = r.message?.model;
-      if (!m) continue;
+      // Skip synthetic/placeholder model markers (Claude Code emits "<synthetic>"
+      // on injected/sidechain records) — they are not real models and must not be
+      // published as usage in the signed attestation.
+      if (!m || m.startsWith("<")) continue;
       const id = m.toLowerCase();
       if (!seen.has(id)) seen.add(id);
     }
