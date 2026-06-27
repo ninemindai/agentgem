@@ -1030,7 +1030,7 @@ function onToggle(e){
   else { e.target.checked ? sel[kind].add(name) : sel[kind].delete(name); }
   refresh();
 }
-let t; function refresh(){ clearTimeout(t); t = setTimeout(build, 120); }
+let refreshTimer; function refresh(){ clearTimeout(refreshTimer); refreshTimer = setTimeout(build, 120); }
 function filterRows() {
   const q = (document.getElementById("search").value || "").trim().toLowerCase();
   const tokens = q ? q.split(/\s+/) : [];
