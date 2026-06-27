@@ -403,6 +403,10 @@ export const TransferTokenResponseSchema = z.object({
   expiresAt: z.number(), // unix seconds
 });
 
+// Web-receiver: the browser asks for ciphertext only (key withheld) and decrypts locally.
+export const TransferCiphertextRequestSchema = z.object({ object: z.string() });
+export const TransferCiphertextResponseSchema = z.object({ ciphertextBase64: z.string() });
+
 // ── Workspaces ──
 export const WorkspaceSummarySchema = z.object({
   name: z.string(),
