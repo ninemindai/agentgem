@@ -52,4 +52,17 @@ describe("transfer service", () => {
       if (prev !== undefined) process.env.NATS_URL = prev;
     }
   });
+
+  it("natsStoreFromEnv() fails fast on a non-numeric NATS_TTL_HOURS (before connecting)", async () => {
+    const prevUrl = process.env.NATS_URL;
+    const prevTtl = process.env.NATS_TTL_HOURS;
+    process.env.NATS_URL = "nats://127.0.0.1:4222"; // passes the configured check
+    process.env.NATS_TTL_HOURS = "abc"; // typo: must throw, NOT silently disable TTL
+    try {
+      await expect(natsStoreFromEnv()()).rejects.toThrow(/invalid NATS_TTL_HOURS/i);
+    } finally {
+      if (prevUrl !== undefined) process.env.NATS_URL = prevUrl; else delete process.env.NATS_URL;
+      if (prevTtl !== undefined) process.env.NATS_TTL_HOURS = prevTtl; else delete process.env.NATS_TTL_HOURS;
+    }
+  });
 });

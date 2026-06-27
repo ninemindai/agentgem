@@ -32,7 +32,9 @@ export class NatsObjectStore implements ObjectStore {
     const ttl = ttlNanos(cfg.ttlHours ?? DEFAULT_TTL_HOURS);
     try {
       // ttl on the bucket expires unclaimed tickets; burn-after-fetch handles claimed ones.
-      const os = await new Objm(nc).create(bucket, ttl > 0 ? { storage: StorageType.File, ttl } : { storage: StorageType.File });
+      // Omit ttl entirely when 0 ("no expiry") — don't pass ttl: 0 to the library.
+      const opts = ttl > 0 ? { storage: StorageType.File, ttl } : { storage: StorageType.File };
+      const os = await new Objm(nc).create(bucket, opts);
       return new NatsObjectStore(nc, os, bucket);
     } catch (err) {
       await nc.close().catch(() => {}); // best-effort; don't mask the original error
