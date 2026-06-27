@@ -91,7 +91,7 @@ const TOOLS = [
   { name: "scan_workflow", description: "Scan local transcripts into a redacted workflow signal.", inputSchema: { type: "object", properties: { cwd: { type: "string" } } } },
   { name: "inspect_ingredients", description: "Canonical fingerprints of available harness/models/skills/mcps.", inputSchema: { type: "object", properties: { cwd: { type: "string" } } } },
   { name: "build_attestation", description: "Build the unsigned usage attestation + a 'what will leave your machine' preview.", inputSchema: { type: "object", properties: { selection: { type: "object" }, cwd: { type: "string" } }, required: ["selection"] } },
-  { name: "sign_and_publish", description: "Sign, embed into archive, publish for distribution, and POST to the ingest endpoint.", inputSchema: { type: "object", properties: { attestation: { type: "object" }, selection: { type: "object" } }, required: ["attestation"] } },
+  { name: "sign_and_publish", description: "Sign the attestation, embed it in the Gem archive, and POST it to the ingest endpoint (skipped if unconfigured). Registry distribution is currently disabled; do not report a published distribution unless a publishedRef is returned.", inputSchema: { type: "object", properties: { attestation: { type: "object" }, selection: { type: "object" } }, required: ["attestation"] } },
 ];
 
 export async function main(): Promise<void> {
