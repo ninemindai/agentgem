@@ -35,6 +35,9 @@ importers:
       '@aws-sdk/client-bedrock-agentcore-control':
         specifier: ^3.1073.0
         version: 3.1073.0
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.29.0
+        version: 1.29.0(zod@4.4.3)
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2
