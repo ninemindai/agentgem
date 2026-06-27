@@ -78,6 +78,17 @@ describe("canonicalize", () => {
     expect(canonicalSkill({ type: "skill", name: "Frontend-Design", source: "plugin:frontend-design@claude-plugins-official", content: "x" }, "OTHER").id).toBe(sk.id);
     const mc = canonicalMcpServer({ type: "mcp_server", name: "Context7", transport: "stdio", config: { command: "npx", args: ["@upstash/context7-mcp"] }, source: "plugin:context7@claude-plugins-official" }, "S");
     expect(mc).toEqual({ id: "mcp:context7@claude-plugins-official/context7", idKind: "plugin", public: true });
+    // a private-host http server with a plugin source is still plugin-public (private host falls through)
+    expect(canonicalMcpServer({ type: "mcp_server", name: "internal", transport: "http", config: { url: "http://10.0.0.5/mcp" }, source: "plugin:thing@mkt" }, "S"))
+      .toEqual({ id: "mcp:thing@mkt/internal", idKind: "plugin", public: true });
+    // a public npm package wins its precise id even when a plugin source is present (ordering)
+    expect(canonicalMcpServer({ type: "mcp_server", name: "gh", transport: "stdio", config: { command: "npx", args: ["@modelcontextprotocol/server-github"] }, source: "plugin:whatever@mkt" }, "S").idKind).toBe("package");
+  });
+
+  it("a path-like/malformed plugin source falls through to private (M1 guard)", () => {
+    const r = canonicalSkill({ type: "skill", name: "x", source: "plugin:internal-corp/secret@internal", content: "c" }, "S");
+    expect(r.idKind).toBe("private");
+    expect(r.id).not.toContain("secret");
   });
 
   it("keeps standalone/local skills private even with the broader policy", () => {
