@@ -3,7 +3,7 @@ import { canonicalJSON, type UsageAttestation } from "./attestation.js";
 export type IngestHttp = (url: string, init: { method: string; headers: Record<string, string>; body: string }) => Promise<{ status: number; json(): Promise<unknown> }>;
 
 const defaultHttp: IngestHttp = async (url, init) => {
-  const res = await fetch(url, init);
+  const res = await fetch(url, { ...init, signal: AbortSignal.timeout(10_000) });
   return { status: res.status, json: () => res.json() };
 };
 
@@ -20,5 +20,6 @@ export async function postAttestation(args: {
   });
   if (res.status < 200 || res.status >= 300) throw new Error(`ingest ${res.status}`);
   const body = (await res.json()) as { ingestId?: string };
-  return { ingestId: body.ingestId ?? "" };
+  if (!body.ingestId) throw new Error("ingest: response missing ingestId");
+  return { ingestId: body.ingestId };
 }

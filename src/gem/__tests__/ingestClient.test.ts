@@ -21,4 +21,8 @@ describe("postAttestation", () => {
     const http = async () => ({ status: 422, json: async () => ({}) });
     await expect(postAttestation({ attestation: att, endpoint: "https://x/ingest", token: "T", http })).rejects.toThrow("ingest 422");
   });
+  it("throws when 200 response is missing ingestId", async () => {
+    const http = async () => ({ status: 200, json: async () => ({}) });
+    await expect(postAttestation({ attestation: att, endpoint: "https://x/ingest", token: "T", http })).rejects.toThrow(/missing ingestId/);
+  });
 });
