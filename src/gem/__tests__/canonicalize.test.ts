@@ -70,7 +70,22 @@ describe("canonicalize", () => {
     expect(canonicalHarness("claude")).toEqual({ id: "claude-code", idKind: "known", public: true });
   });
 
-  it("exposes version 2", () => { expect(CANONICALIZER_VERSION).toBe(2); });
+  it("exposes version 3", () => { expect(CANONICALIZER_VERSION).toBe(3); });
+
+  it("treats plugin-distributed skills/mcps as public by their plugin coordinate (source-type heuristic)", () => {
+    const sk = canonicalSkill({ type: "skill", name: "Frontend-Design", source: "plugin:frontend-design@claude-plugins-official", content: "x" }, "S");
+    expect(sk).toEqual({ id: "skill:frontend-design@claude-plugins-official/frontend-design", idKind: "plugin", public: true });
+    expect(canonicalSkill({ type: "skill", name: "Frontend-Design", source: "plugin:frontend-design@claude-plugins-official", content: "x" }, "OTHER").id).toBe(sk.id);
+    const mc = canonicalMcpServer({ type: "mcp_server", name: "Context7", transport: "stdio", config: { command: "npx", args: ["@upstash/context7-mcp"] }, source: "plugin:context7@claude-plugins-official" }, "S");
+    expect(mc).toEqual({ id: "mcp:context7@claude-plugins-official/context7", idKind: "plugin", public: true });
+  });
+
+  it("keeps standalone/local skills private even with the broader policy", () => {
+    const r = canonicalSkill({ type: "skill", name: "my-secret", source: "standalone", content: "x" }, "S");
+    expect(r.idKind).toBe("private");
+    expect(r.public).toBe(false);
+    expect(r.id).not.toContain("my-secret");
+  });
 
   it("classifies cloud-metadata and IPv4-mapped-IPv6 hosts as private", () => {
     expect(canonicalMcpServer({ type: "mcp_server", name: "meta", transport: "http",

@@ -2,10 +2,24 @@
 import { createHash } from "node:crypto";
 import type { McpServerArtifact, SkillArtifact } from "./types.js";
 
-export const CANONICALIZER_VERSION = 2;
+export const CANONICALIZER_VERSION = 3;
 
-export type IdKind = "known" | "registry" | "contentHash" | "package" | "url" | "private" | "name" | "unknown";
+export type IdKind = "known" | "registry" | "contentHash" | "package" | "url" | "plugin" | "private" | "name" | "unknown";
 export interface Ingredient { id: string; idKind: IdKind; public: boolean }
+
+/**
+ * Source-type heuristic: an ingredient distributed via a plugin is treated as
+ * public, keyed by its stable `<plugin>@<marketplace>` coordinate (e.g.
+ * "context7@claude-plugins-official"). This populates the cross-producer moat
+ * with publicly-distributed ingredients. Accepted trade-off: a private/internal
+ * plugin's name would surface as public — a known limitation of the broad policy
+ * (refine later with a public-marketplace allowlist or registry-existence check).
+ */
+function pluginCoord(source: string | undefined): string | null {
+  if (!source || !source.startsWith("plugin:")) return null;
+  const key = source.slice("plugin:".length).trim().toLowerCase();
+  return key || null;
+}
 
 function sha256(s: string): string { return createHash("sha256").update(s).digest("hex"); }
 export function saltedHash(salt: string, value: string): string { return `sha256:${sha256(salt + "\n" + value)}`; }
@@ -36,6 +50,8 @@ export function canonicalHarness(flavor: "claude" | "codex"): Ingredient {
 }
 
 export function canonicalSkill(s: SkillArtifact, salt: string): Ingredient {
+  const plug = pluginCoord(s.source);
+  if (plug) return { id: `skill:${plug}/${s.name.toLowerCase()}`, idKind: "plugin", public: true };
   if (s.source && s.source.startsWith("@") && s.source.includes("/")) {
     const scope = s.source.split("/")[0];
     if (PUBLIC_SCOPES.has(scope)) return { id: s.source, idKind: "registry", public: true };
@@ -81,13 +97,17 @@ export function canonicalMcpServer(m: McpServerArtifact, salt: string): Ingredie
       const runner = runnerName(command) || "stdio";
       return { id: `${runner}:${pkg}`, idKind: "package", public: true };
     }
-    return { id: `private:${saltedHash(salt, stableStr(m.config))}`, idKind: "private", public: false };
+  } else {
+    // http / sse — URL path may carry PII (usernames, tenant ids); emit hostname only.
+    const url = typeof (m.config as { url?: unknown }).url === "string" ? (m.config as { url: string }).url : "";
+    try {
+      const u = new URL(url);
+      if (isPublicHost(u.hostname)) return { id: `url:${u.hostname}`, idKind: "url", public: true };
+    } catch { /* fall through */ }
   }
-  // http / sse — URL path may carry PII (usernames, tenant ids); emit hostname only.
-  const url = typeof (m.config as { url?: unknown }).url === "string" ? (m.config as { url: string }).url : "";
-  try {
-    const u = new URL(url);
-    if (isPublicHost(u.hostname)) return { id: `url:${u.hostname}`, idKind: "url", public: true };
-  } catch { /* fall through */ }
+  // Distributable via a plugin -> public (source-type heuristic).
+  const plug = pluginCoord(m.source);
+  if (plug) return { id: `mcp:${plug}/${m.name.toLowerCase()}`, idKind: "plugin", public: true };
+  // Otherwise the config (a local command/path or private/internal URL) is salted.
   return { id: `private:${saltedHash(salt, stableStr(m.config))}`, idKind: "private", public: false };
 }
