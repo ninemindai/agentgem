@@ -492,28 +492,46 @@ function analyzeWorkflow(path, flavor, name, fresh){
     + `<div style="margin-top:10px"><b>${esc(name)}</b></div>`
     + `<div class="d" id="anPhase" style="margin-top:8px">Starting…</div>`
     + `<pre id="anStream" style="margin-top:8px;max-height:140px;overflow:auto;white-space:pre-wrap;word-break:break-word;font-size:11px;color:var(--muted);background:rgba(127,127,127,.06);padding:8px;border-radius:6px;display:none"></pre>`;
-  view.querySelector(".anBack").onclick = (e) => { e.preventDefault(); finished = true; if (es) es.close(); showPicker(); };
   showAnView();
   const phaseEl = view.querySelector("#anPhase");
   const streamEl = view.querySelector("#anStream");
 
+  // The first analysis of a project runs a live agent and can sit silent for
+  // 30–60s before the first token. Tick an elapsed counter onto the current
+  // phase so the wait reads as "working", not "frozen". Cleared once the agent
+  // starts streaming (the stream box then carries the motion) and on teardown.
+  let phaseBase = "Starting…", waitStart = Date.now(), tick = null;
+  const stopTick = () => { if (tick) { clearInterval(tick); tick = null; } };
+  const setPhase = (text, ticking) => {
+    phaseBase = text; phaseEl.textContent = text; stopTick();
+    if (ticking) {
+      waitStart = Date.now();
+      tick = setInterval(() => { phaseEl.textContent = `${phaseBase} (${Math.round((Date.now() - waitStart) / 1000)}s)`; }, 1000);
+    }
+  };
+  const teardown = () => { finished = true; stopTick(); if (es) es.close(); };
+
+  view.querySelector(".anBack").onclick = (e) => { e.preventDefault(); teardown(); showPicker(); };
+
   es = new EventSource(`/api/workflow/analyze/stream?root=${encodeURIComponent(path)}${fresh ? "&fresh=1" : ""}`);
   es.addEventListener("phase", (ev) => {
     const d = JSON.parse(ev.data);
-    if (d.phase === "scanning") phaseEl.textContent = "Scanning session history…";
-    else if (d.phase === "scanned") phaseEl.textContent = `Scanned ${d.transcripts} transcript(s) · ${d.sessions} session(s). Asking Claude…`;
-    else if (d.phase === "thinking") phaseEl.textContent = "Claude is clustering a Gem from your usage…";
-    else if (d.phase === "validating") phaseEl.textContent = "Validating against your inventory…";
+    if (d.phase === "scanning") setPhase("Scanning session history…");
+    else if (d.phase === "scanned") setPhase(`Scanned ${d.transcripts} transcript(s) · ${d.sessions} session(s). Asking Claude…`, true);
+    else if (d.phase === "thinking") setPhase("Claude is clustering a Gem from your usage…", true);
+    else if (d.phase === "validating") setPhase("Validating against your inventory…");
   });
   es.addEventListener("delta", (ev) => {
+    stopTick();                                       // first token arrived — the stream box now shows progress
+    phaseEl.textContent = "Claude is drafting the recommendation…";
     acc += JSON.parse(ev.data).text;
     streamEl.style.display = "block";
     streamEl.textContent = acc.slice(-1200);          // tail of the agent's live output
     streamEl.scrollTop = streamEl.scrollHeight;
   });
-  es.addEventListener("done", (ev) => { finished = true; es.close(); renderAnView(view, path, flavor, name, JSON.parse(ev.data)); });
-  es.addEventListener("failed", (ev) => { finished = true; es.close(); renderAnError(view, esc(JSON.parse(ev.data).message || "unknown error")); });
-  es.onerror = () => { if (finished) return; finished = true; es.close(); renderAnError(view, "connection lost"); };
+  es.addEventListener("done", (ev) => { teardown(); renderAnView(view, path, flavor, name, JSON.parse(ev.data)); });
+  es.addEventListener("failed", (ev) => { teardown(); renderAnError(view, esc(JSON.parse(ev.data).message || "unknown error")); });
+  es.onerror = () => { if (finished) return; teardown(); renderAnError(view, "connection lost"); };
 }
 
 function renderAnError(view, msg){

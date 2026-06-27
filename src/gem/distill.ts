@@ -163,10 +163,15 @@ export async function distillWorkflow(
   let handle: { setMode(m: string): Promise<void>; promptText(t: string): Promise<string>; dispose(): void } | null = null;
   try {
     const prompt = DISTILL(JSON.stringify(candidates.map(trimCandidate)), JSON.stringify(installedSkillNames(inv)));
-    conn = await connectFn(CLAUDE_AGENT, null);
-    handle = await conn.ctx.open(analysisWorkspace());   // neutral cwd — don't pollute the project
-    await handle.setMode("plan");                          // explicit — never edits files
-    const text = await withTimeout(handle.promptText(prompt), timeoutMs);
+    // Bound EVERY step against one shared deadline — connect + session open +
+    // setMode + prompt — since the ACP handshake/session start are otherwise
+    // unbounded (acpSession) and would hang past the prompt-only timeout.
+    const deadline = Date.now() + timeoutMs;
+    const left = () => Math.max(0, deadline - Date.now());
+    conn = await withTimeout(connectFn(CLAUDE_AGENT, null), left());
+    handle = await withTimeout(conn.ctx.open(analysisWorkspace()), left());   // neutral cwd — don't pollute the project
+    await withTimeout(handle.setMode("plan"), left());                          // explicit — never edits files
+    const text = await withTimeout(handle.promptText(prompt), left());
     return { distilled: validateDistilled(text, inv, candidates), degraded: false };
   } catch (err) {
     console.error("distill: fell back to empty:", (err as Error).message);
