@@ -213,3 +213,22 @@ describe("distillWorkflow resilience", () => {
     expect(out).toEqual({ distilled: [], degraded: false });
   });
 });
+
+import { extractReflections } from "../extract.js";
+
+describe("analyze wiring", () => {
+  it("high-importance reflections fold into gaps", () => {
+    const verbs = ["Edit", "Write", "Bash:npm run build"];   // edits, no commit → unresolved-task (high)
+    const steps = verbs.map((verb, i) => ({ tool: verb.split(":")[0], verb, arg: "", msgIndex: i }));
+    const signal = {
+      root: "/r", flavor: "claude", sessions: { scanned: 2, firstMs: 0, lastMs: 0, spanDays: 0 },
+      artifacts: [], unresolved: [], coOccurrence: [], shapes: [], notes: [],
+      sequences: { root: "/r", sessions: [0, 1].map((i) => ({ steps, sessionId: `s${i}`, transcript: `s${i}.jsonl`, atMs: 0 })) },
+      procedures: [{ key: verbs.join(" > "), verbs, sessions: 2, sampleSessionIdx: 0, sessionIdxs: [0, 1] }],
+    } as WorkflowSignal;
+    const reflections = extractReflections(signal);
+    const baseGaps: string[] = [];
+    const gaps = [...baseGaps, ...reflections.filter((r) => r.importance === "high").map((r) => r.detail)];
+    expect(gaps.length).toBeGreaterThan(0);
+  });
+});

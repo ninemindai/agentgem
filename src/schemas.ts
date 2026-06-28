@@ -179,6 +179,13 @@ export const DistilledSkillSchema = z.object({
   origin: z.enum(["llm", "heuristic"]),
 });
 
+export const ReflectionSchema = z.object({
+  kind: z.enum(["unresolved-task", "recurring-pattern", "recurring-decision"]),
+  detail: z.string(),
+  importance: z.enum(["high", "medium"]),
+  provenance: ProvenanceSchema,
+});
+
 export const GemRequestSchema = z.object({
   selection: GemSelectionSchema,
   name: z.string().optional(),
@@ -374,6 +381,7 @@ export const WorkflowAnalyzeResponseSchema = z.object({
   candidates: z.array(GemCandidateSchema),
   gaps: z.array(z.string()),                     // project-level: used but absent from inventory
   distilled: z.array(DistilledSkillSchema),      // draft skills distilled from the builtin procedure
+  reflections: z.array(ReflectionSchema),
   signalSummary: z.object({
     sessionsScanned: z.number(),
     spanDays: z.number(),

@@ -9,6 +9,8 @@ import { resolveDirs, resolveProject } from "./resolveDir.js";
 import { claudeTranscriptsForCwd, scanWorkflow } from "./gem/workflowScan.js";
 import { recommendWorkflow, recommendationToSelection } from "./gem/acpRecommender.js";
 import { distillWorkflow } from "./gem/distill.js";
+import { extractReflections } from "./gem/extract.js";
+import { writeReflections } from "./gem/reflectionStore.js";
 import { transcriptToken, readAnalysisCache, writeAnalysisCache } from "./gem/analysisCache.js";
 
 // Minimal structural types for the Express req/res we use — avoids a hard
@@ -68,11 +70,15 @@ export async function streamWorkflowAnalyze(req: SseReq, res: SseRes): Promise<v
     ]);
 
     send("phase", { phase: "validating" });
+    const reflections = extractReflections(signal);
+    writeReflections(reflections, root);   // best-effort; ignore the path
+    const gaps = [...analysis.gaps, ...reflections.filter((r) => r.importance === "high").map((r) => r.detail)];
     const candidates = analysis.candidates.map((c) => ({ ...c, selection: recommendationToSelection(c) }));
     const payload = {
       candidates,
-      gaps: analysis.gaps,
+      gaps,
       distilled: distill.distilled,
+      reflections,
       signalSummary: { sessionsScanned: signal.sessions.scanned, spanDays: signal.sessions.spanDays, notes: signal.notes },
       degraded,
     };

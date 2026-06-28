@@ -59,6 +59,8 @@ import {
 import { claudeTranscriptsForCwd, scanWorkflow, allClaudeTranscripts } from "./gem/workflowScan.js";
 import { recommendWorkflow, recommendationToSelection } from "./gem/acpRecommender.js";
 import { distillWorkflow } from "./gem/distill.js";
+import { extractReflections } from "./gem/extract.js";
+import { writeReflections } from "./gem/reflectionStore.js";
 import { writeDistilledDraft, stageDraftsByEvidence } from "./gem/draftStage.js";
 import { runReadiness, startLocal, stopLocal, getRunStatus, deployVercel, deployCloudflare, undeployVercel, undeployCloudflare } from "./gem/run.js";
 import { setCredential } from "./gem/credentials.js";
@@ -515,11 +517,15 @@ export class GemController {
       recommendWorkflow(signal, scanInv),
       distillWorkflow(signal, scanInv),
     ]);
+    const reflections = extractReflections(signal);
+    writeReflections(reflections, root);   // best-effort; ignore the path
+    const gaps = [...analysis.gaps, ...reflections.filter((r) => r.importance === "high").map((r) => r.detail)];
     const candidates = analysis.candidates.map((c) => ({ ...c, selection: recommendationToSelection(c) as Record<string, unknown> }));
     return {
       candidates,
-      gaps: analysis.gaps,
+      gaps,
       distilled: distill.distilled,
+      reflections,
       signalSummary: { sessionsScanned: signal.sessions.scanned, spanDays: signal.sessions.spanDays, notes: signal.notes },
       degraded,
     };
