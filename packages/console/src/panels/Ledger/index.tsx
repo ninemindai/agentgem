@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
-import { inventoryRoute, usageRoute, buildGemRoute, archiveRoute, makeClient, type Usage, type Gem } from "../../api/routes.js";
+import { inventoryRoute, usageRoute, buildGemRoute, archiveRoute, createWorkspaceRoute, makeClient, type Usage, type Gem } from "../../api/routes.js";
 import { groupInventory, mergeUsage, applyView, DEFAULT_VIEW, type LedgerGroup, type SortKey } from "./data.js";
 import { selKey, visibleKeys, buildSelection, type GemSelection } from "./selection.js";
 import { base64ToBytes, downloadBlob, copyText } from "./exporters.js";
@@ -17,6 +17,8 @@ export function Ledger({ apiBase }: { apiBase: string }) {
   const [builtSel, setBuiltSel] = useState<GemSelection | null>(null);
   const [building, setBuilding] = useState(false);
   const [buildError, setBuildError] = useState<string | null>(null);
+  const [wsName, setWsName] = useState("");
+  const [wsNote, setWsNote] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -59,6 +61,20 @@ export function Ledger({ apiBase }: { apiBase: string }) {
       setBuildError(e instanceof Error ? e.message : String(e));
     } finally {
       setBuilding(false);
+    }
+  };
+
+  const saveWorkspace = async () => {
+    const name = wsName.trim();
+    if (!name || selected.size === 0) return;
+    setWsNote(null);
+    setBuildError(null);
+    try {
+      await createWorkspaceRoute.call(makeClient(apiBase), { body: { name, selection: buildSelection(selected) } });
+      setWsNote(`saved workspace “${name}”`);
+      setWsName("");
+    } catch (e) {
+      setBuildError(e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -120,6 +136,21 @@ export function Ledger({ apiBase }: { apiBase: string }) {
           disabled={selected.size === 0 || building}
           onClick={build}
         >{building ? "Building…" : "Build Gem"}</button>
+        <input
+          className="ledger-search ws-name-input"
+          type="text"
+          aria-label="workspace name"
+          placeholder="workspace name…"
+          value={wsName}
+          onChange={(e) => setWsName(e.target.value)}
+        />
+        <button
+          type="button"
+          className="ledger-sort"
+          disabled={!wsName.trim() || selected.size === 0}
+          onClick={saveWorkspace}
+        >Save workspace</button>
+        {wsNote && <span className="ws-note">{wsNote}</span>}
         {buildError && <span className="ledger-error">{buildError}</span>}
       </div>
 

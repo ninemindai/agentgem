@@ -28,6 +28,17 @@ export type Usage = z.infer<typeof UsageSchema>;
 export const inventoryRoute = defineRoute("GET", "/api/inventory", { response: InventorySchema });
 export const usageRoute = defineRoute("GET", "/api/usage", { response: UsageSchema });
 
+// Selection shape shared by build/archive/materialize/run/workspace routes.
+const GemSelectionSchema = z.union([
+  z.object({ all: z.literal(true) }),
+  z.object({
+    skills: z.array(z.string()).optional(),
+    mcpServers: z.array(z.string()).optional(),
+    includeInstructions: z.boolean().optional(),
+    hooks: z.array(z.string()).optional(),
+  }),
+]);
+
 const WorkspaceSummarySchema = z.object({
   name: z.string(),
   gemName: z.string(),
@@ -45,18 +56,20 @@ export const WorkspacesSchema = z.object({ workspaces: z.array(WorkspaceSummaryS
 export type WorkspaceSummary = z.infer<typeof WorkspaceSummarySchema>;
 
 export const workspacesRoute = defineRoute("GET", "/api/workspaces", { response: WorkspacesSchema });
+export const createWorkspaceRoute = defineRoute("POST", "/api/workspaces", {
+  body: z.object({ name: z.string(), selection: GemSelectionSchema }),
+  response: z.object({ name: z.string() }),
+});
+export const deleteWorkspaceRoute = defineRoute("POST", "/api/workspace/delete", {
+  body: z.object({ name: z.string() }),
+  response: z.object({ deleted: z.string() }),
+});
+export const renderWorkspaceRoute = defineRoute("POST", "/api/workspace/render", {
+  body: z.object({ name: z.string(), target: z.string() }),
+  response: z.object({ target: z.string(), path: z.string() }),
+});
 
 // POST /api/gem — build a gem from a selection. Request mirrors the server's
-// GemRequestSchema (only the fields the UI sends; channels/dir/etc. are optional).
-const GemSelectionSchema = z.union([
-  z.object({ all: z.literal(true) }),
-  z.object({
-    skills: z.array(z.string()).optional(),
-    mcpServers: z.array(z.string()).optional(),
-    includeInstructions: z.boolean().optional(),
-    hooks: z.array(z.string()).optional(),
-  }),
-]);
 export const GemRequestSchema = z.object({
   selection: GemSelectionSchema,
   name: z.string().optional(),

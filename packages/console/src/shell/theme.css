@@ -107,3 +107,9 @@ body { margin: 0; background: var(--paper); color: var(--ink);
   border: 1px solid var(--accent); border-radius: 4px; padding: 1px 7px; }
 .getgems-desc { color: var(--ink); font-size: 13px; margin: 6px 0; }
 .getgems-done { color: #2f6b3a; font-size: 12px; }
+.ws-actions { display: flex; align-items: center; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.ws-delete { background: var(--raised); border: 1px solid var(--line); border-radius: 6px;
+  padding: 6px 11px; color: var(--accent); cursor: pointer; font: inherit; font-size: 12px; }
+.ws-delete:hover { border-color: var(--accent); }
+.ws-note { color: #2f6b3a; font-size: 12px; }
+.ws-name-input { flex: 0 1 180px; min-width: 140px; }

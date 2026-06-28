@@ -19,6 +19,8 @@ function mockFetch() {
         { type: "skill", name: "pdf", invocations: 7, lastUsedMs: 100 },
         { type: "skill", name: "zip", invocations: 3, lastUsedMs: 900 },
       ] });
+    if (u.includes("/api/workspaces"))
+      return res({ name: "my-selection" });
     if (u.includes("/api/archive"))
       return res({ tarGz: btoa("fake-gem-bytes") });
     if (u.includes("/api/gem"))
@@ -93,6 +95,16 @@ describe("Ledger", () => {
     await waitFor(() =>
       expect(fetchSpy.mock.calls.some((c) => String(c[0]).includes("/api/archive"))).toBe(true),
     );
+  });
+
+  it("saves the current selection as a workspace", async () => {
+    vi.stubGlobal("fetch", mockFetch());
+    render(<Ledger apiBase="" />);
+    await screen.findByText("pdf");
+    fireEvent.click(screen.getByLabelText("pdf"));
+    fireEvent.change(screen.getByLabelText("workspace name"), { target: { value: "my-selection" } });
+    fireEvent.click(screen.getByText("Save workspace"));
+    await waitFor(() => expect(screen.getByText(/saved workspace .my-selection./)).toBeTruthy());
   });
 
   it("clears the selection", async () => {
