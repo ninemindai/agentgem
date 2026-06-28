@@ -3,8 +3,8 @@ import { defineConsolePage } from "../../registry.js";
 import { inventoryRoute, usageRoute, createWorkspaceRoute, scaffoldChecksRoute, makeClient, type Usage, type GemCheck } from "../../api/routes.js";
 import { groupInventory, mergeUsage, applyView, relativeTime, DEFAULT_VIEW, type LedgerGroup, type SortKey } from "./data.js";
 import { selKey, visibleKeys, buildSelection } from "./selection.js";
-import { takeRecommendedSelection } from "../../recommendation.js";
 import { useActiveGem, setKeys, toggleKey as toggleKeyStore, clearKeys, setName as setNameStore } from "../../activeGem.js";
+import { Analyze } from "./Analyze.js";
 import { Checks } from "./Checks.js";
 import { ContentView } from "./ContentView.js";
 
@@ -38,16 +38,6 @@ export function Curate({ apiBase }: { apiBase: string }) {
     })();
     return () => { alive = false; };
   }, [apiBase]);
-
-  // Consume a recommendation handed over from the Testbed analyze (once, on mount):
-  // pre-select its artifacts and reveal all so unused recommendations are visible.
-  useEffect(() => {
-    const keys = takeRecommendedSelection();
-    if (keys && keys.length) {
-      setKeys(new Set(keys));
-      setView((v) => ({ ...v, usedOnly: false }));
-    }
-  }, []);
 
   const visible = useMemo(() => (groups ? applyView(groups, view) : []), [groups, view]);
   const total = useMemo(() => (groups ?? []).reduce((n, g) => n + g.items.length, 0), [groups]);
@@ -160,6 +150,8 @@ export function Curate({ apiBase }: { apiBase: string }) {
         {wsNote && <span className="ws-note">{wsNote}</span>}
         {buildError && <span className="ledger-error">{buildError}</span>}
       </div>
+
+      <Analyze apiBase={apiBase} onPick={(picked) => { setKeys(new Set(picked)); setView((v) => ({ ...v, usedOnly: false })); }} />
 
       {selected.size > 0 && (
         <Checks suggested={suggested} included={included} busy={checksBusy} error={checksError} onSuggest={suggestChecks} onToggle={toggleCheck} />

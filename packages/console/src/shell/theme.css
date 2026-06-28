@@ -337,3 +337,13 @@ body::before {
 .cv-front th { background: var(--paper); color: var(--gold); font: 600 10.5px/1.5 var(--font-ui);
   text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; width: 1%; }
 .cv-front td { color: var(--ink-soft); }
+.analyze { margin: 0 0 16px; }
+.analyze-disclosure { background: none; border: 0; padding: 4px 0; color: var(--ink-soft);
+  font: 600 13px/1 var(--font-ui); cursor: pointer; }
+.analyze-disclosure:hover { color: var(--accent); }
+.analyze-body { margin-top: 8px; }
+.analyze-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.analyze-row { display: flex; align-items: center; gap: 10px; padding: 5px 10px;
+  border: 1px solid var(--line-soft); border-radius: 7px; background: var(--raised); }
+.analyze-name { flex: 1; font: 12px/1.4 var(--font-mono); color: var(--ink-soft); word-break: break-all; }
+.analyze-candidate { margin-top: 8px; }
