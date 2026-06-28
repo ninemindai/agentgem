@@ -4,7 +4,7 @@ import { distillCandidates } from "../distill.js";
 import type { WorkflowSignal, ProcedureStep, SessionSequence } from "../workflowScan.js";
 
 function step(tool: string, verb: string): ProcedureStep {
-  return { tool, verb, arg: "" };
+  return { tool, verb, arg: "", msgIndex: 0 };
 }
 const SPINE = [
   step("Bash", "Bash:git checkout"),
@@ -13,7 +13,7 @@ const SPINE = [
   step("Bash", "Bash:git commit"),
 ];
 function sessionSeq(steps: ProcedureStep[]): SessionSequence {
-  return { steps };
+  return { steps, sessionId: "", transcript: "", atMs: 0 };
 }
 
 function signalWith(
@@ -42,7 +42,7 @@ describe("distillCandidates — Phase-0 gate", () => {
   it("keeps a recurring, long-enough procedure and attaches its sample run", () => {
     const sessions = [sessionSeq(SPINE), sessionSeq(SPINE)];
     const verbs = SPINE.map((s) => s.verb);
-    const sig = signalWith(sessions, [{ key: verbs.join(" > "), verbs, sessions: 2, sampleSessionIdx: 1 }]);
+    const sig = signalWith(sessions, [{ key: verbs.join(" > "), verbs, sessions: 2, sampleSessionIdx: 1, sessionIdxs: [0, 1] }]);
     const out = distillCandidates(sig);
     expect(out).toHaveLength(1);
     expect(out[0].sessions).toBe(2);
@@ -51,14 +51,14 @@ describe("distillCandidates — Phase-0 gate", () => {
 
   it("drops a one-off procedure (sessions < MIN_RECURRENCE)", () => {
     const verbs = SPINE.map((s) => s.verb);
-    const sig = signalWith([sessionSeq(SPINE)], [{ key: verbs.join(" > "), verbs, sessions: 1, sampleSessionIdx: 0 }]);
+    const sig = signalWith([sessionSeq(SPINE)], [{ key: verbs.join(" > "), verbs, sessions: 1, sampleSessionIdx: 0, sessionIdxs: [0] }]);
     expect(distillCandidates(sig)).toEqual([]);
   });
 
   it("drops a too-short procedure (verbs < MIN_STEPS)", () => {
     const short = [step("Bash", "Bash:ls"), step("Bash", "Bash:cat")];
     const verbs = short.map((s) => s.verb);
-    const sig = signalWith([sessionSeq(short), sessionSeq(short)], [{ key: verbs.join(" > "), verbs, sessions: 2, sampleSessionIdx: 0 }]);
+    const sig = signalWith([sessionSeq(short), sessionSeq(short)], [{ key: verbs.join(" > "), verbs, sessions: 2, sampleSessionIdx: 0, sessionIdxs: [0, 1] }]);
     expect(distillCandidates(sig)).toEqual([]);
   });
 });
@@ -74,12 +74,12 @@ const INV = {
   },
 };
 const CANDIDATES: ProcedureCandidate[] = [{
-  key: "k", verbs: ["Bash:git checkout", "Edit", "Bash:npx vitest", "Bash:git commit"], sessions: 3, sampleSessionIdx: 0,
+  key: "k", verbs: ["Bash:git checkout", "Edit", "Bash:npx vitest", "Bash:git commit"], sessions: 3, sampleSessionIdx: 0, sessionIdxs: [0],
   sample: { steps: [
-    { tool: "Bash", verb: "Bash:git checkout", arg: "git checkout -b feat" },
-    { tool: "Edit", verb: "Edit", arg: "/r/a.ts" },
-    { tool: "Bash", verb: "Bash:npx vitest", arg: "npx vitest run" },
-  ] },
+    { tool: "Bash", verb: "Bash:git checkout", arg: "git checkout -b feat", msgIndex: 0 },
+    { tool: "Edit", verb: "Edit", arg: "/r/a.ts", msgIndex: 1 },
+    { tool: "Bash", verb: "Bash:npx vitest", arg: "npx vitest run", msgIndex: 2 },
+  ], sessionId: "", transcript: "", atMs: 0 },
 }];
 const good = {
   name: "tdd-feature-loop", description: "Run the TDD loop for a feature.",
@@ -148,7 +148,7 @@ const SIG: WorkflowSignal = {
   sessions: { scanned: 3, firstMs: 0, lastMs: 0, spanDays: 0 },
   artifacts: [], unresolved: [], coOccurrence: [], shapes: [], notes: [],
   sequences: { root: "/r", sessions: [CANDIDATES[0].sample] },
-  procedures: [{ key: CANDIDATES[0].key, verbs: CANDIDATES[0].verbs, sessions: 3, sampleSessionIdx: 0 }],
+  procedures: [{ key: CANDIDATES[0].key, verbs: CANDIDATES[0].verbs, sessions: 3, sampleSessionIdx: 0, sessionIdxs: [0] }],
 };
 
 describe("distillWorkflow", () => {

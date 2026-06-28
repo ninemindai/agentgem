@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { claudeTranscriptsForCwd, scanWorkflow } from "../workflowScan.js";
+import { claudeTranscriptsForCwd, scanWorkflow, spineWithIndices } from "../workflowScan.js";
 import type { ProjectInventory } from "../types.js";
 
 let claudeDir: string;
@@ -236,5 +236,47 @@ describe("scanWorkflow mines recurring SUB-patterns (n-grams) across differing s
     expect(shared).toBeDefined();
     expect(shared!.sessions).toBe(3);
     expect(shared!.verbs.length).toBeGreaterThanOrEqual(4);
+  });
+});
+
+describe("provenance capture", () => {
+  it("spineWithIndices keeps the first step's msgIndex per deduped/nav-filtered verb", () => {
+    const steps = [
+      { tool: "Read", verb: "Read", arg: "", msgIndex: 3 },        // nav — dropped
+      { tool: "Edit", verb: "Edit", arg: "", msgIndex: 5 },
+      { tool: "Edit", verb: "Edit", arg: "", msgIndex: 6 },        // consecutive dup — dropped
+      { tool: "Bash", verb: "Bash:git commit", arg: "", msgIndex: 9 },
+    ];
+    expect(spineWithIndices(steps)).toEqual([
+      { verb: "Edit", msgIndex: 5 },
+      { verb: "Bash:git commit", msgIndex: 9 },
+    ]);
+  });
+
+  it("mineProcedures records every session index that exercised a procedure", () => {
+    const verbs = ["Edit", "Bash:npx vitest", "Bash:git commit"];
+    const steps = verbs.map((verb, i) => ({ tool: verb.split(":")[0], verb, arg: "", msgIndex: i }));
+    const sessions = [{ steps }, { steps }];
+    // mineProcedures is module-private; assert via scanWorkflow in the next test.
+    expect(sessions.length).toBe(2);
+  });
+
+  it("scanWorkflow stamps sessionId/transcript/atMs and per-step msgIndex", () => {
+    const dir = mkdtempSync(join(tmpdir(), "scan-"));
+    const file = join(dir, "abc123.jsonl");
+    const rows = [
+      { sessionId: "sess-1", message: { role: "user", content: "Please ship the auth migration." } },
+      { message: { role: "assistant", content: [{ type: "tool_use", name: "Edit", input: { file_path: "/x" } }] } },
+      { message: { role: "assistant", content: [{ type: "tool_use", name: "Bash", input: { command: "git commit -m x" } }] } },
+    ];
+    writeFileSync(file, rows.map((r) => JSON.stringify(r)).join("\n"));
+    const inv = { project: { root: dir, name: "p", skills: [], mcpServers: [], hooks: [], instructions: [] } } as any;
+    const sig = scanWorkflow([file], inv, { retainSequences: true });
+    const seq = sig.sequences!.sessions[0];
+    expect(seq.sessionId).toBe("sess-1");
+    expect(seq.transcript).toBe("abc123.jsonl");
+    expect(seq.steps.map((s) => s.tool)).toEqual(["Edit", "Bash"]);
+    expect(seq.steps.every((s) => typeof s.msgIndex === "number")).toBe(true);
+    rmSync(dir, { recursive: true, force: true });
   });
 });

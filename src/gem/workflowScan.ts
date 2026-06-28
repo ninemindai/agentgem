@@ -21,12 +21,16 @@ export interface ArtifactUsage {
   evidence?: string;          // tiny excerpt for rationale display, e.g. "Skill(qa)"
 }
 
-// One captured builtin tool call: the tool name plus its scrubbed { verb, arg }.
-export interface ProcedureStep extends ScrubbedStep { tool: string }
+// One captured builtin tool call: the tool name, its scrubbed { verb, arg }, and
+// the JSONL line index it was parsed from (provenance coordinate).
+export interface ProcedureStep extends ScrubbedStep { tool: string; msgIndex: number }
 export interface MissionHint { task: string; outcome: string }
-export interface SessionSequence { steps: ProcedureStep[]; missionHint?: MissionHint }
-// A recurring procedure (verb spine) and how many sessions exercised it (§3c).
-export interface ProcedureGroup { key: string; verbs: string[]; sessions: number; sampleSessionIdx: number }
+// `sessionId`/`transcript`/`atMs` are provenance coordinates: which transcript a
+// run came from and when. `transcript` is a basename, never an absolute path.
+export interface SessionSequence { steps: ProcedureStep[]; missionHint?: MissionHint; sessionId: string; transcript: string; atMs: number }
+// A recurring procedure (verb spine), the sessions exercising it, a representative
+// sample index, and ALL exercising session indices (for provenance fan-out).
+export interface ProcedureGroup { key: string; verbs: string[]; sessions: number; sampleSessionIdx: number; sessionIdxs: number[] }
 
 export interface ScanOptions {
   retainSequences?: boolean;                       // default false — selective track stays cheap
@@ -177,15 +181,20 @@ const MIN_GRAM = 3, MAX_GRAM = 6, MIN_SUPPORT = 2;
 // verbs (Bash:git/npm/…, Edit, Write).
 const NAV_TOOL_RE = /^(Read|Grep|Glob)$/;
 const BASH_NAV_RE = /^Bash:(cd|ls|cat|pwd|echo|find|which|head|tail|export|source|sleep|clear|env|true|grep|rg)$/;
-function actionSpine(steps: ProcedureStep[]): string[] {
-  const spine: string[] = [];
-  for (const { verb } of steps) {
-    const base = verb.split(" ")[0];        // "Bash:echo hi" -> "Bash:echo"
+// Action spine WITH source indices: drop consecutive-duplicate verbs and pure
+// navigation/inspection steps, keeping each surviving verb's first msgIndex.
+export function spineWithIndices(steps: ProcedureStep[]): { verb: string; msgIndex: number }[] {
+  const spine: { verb: string; msgIndex: number }[] = [];
+  for (const { verb, msgIndex } of steps) {
+    const base = verb.split(" ")[0];
     if (NAV_TOOL_RE.test(verb) || BASH_NAV_RE.test(base)) continue;
-    if (spine[spine.length - 1] === verb) continue;
-    spine.push(verb);
+    if (spine[spine.length - 1]?.verb === verb) continue;
+    spine.push({ verb, msgIndex });
   }
   return spine;
+}
+function actionSpine(steps: ProcedureStep[]): string[] {
+  return spineWithIndices(steps).map((e) => e.verb);
 }
 
 // Is `needle` a contiguous subsequence of `hay`?
@@ -219,7 +228,7 @@ function mineProcedures(sessions: SessionSequence[]): ProcedureGroup[] {
     }
   });
   const frequent = [...grams.entries()]
-    .map(([key, v]) => ({ key, verbs: v.verbs, sessions: v.sess.size, sampleSessionIdx: [...v.sess][0] }))
+    .map(([key, v]) => ({ key, verbs: v.verbs, sessions: v.sess.size, sampleSessionIdx: [...v.sess][0], sessionIdxs: [...v.sess] }))
     .filter((g) => g.sessions >= MIN_SUPPORT)
     .sort((a, b) => b.verbs.length - a.verbs.length || b.sessions - a.sessions);
   const kept: ProcedureGroup[] = [];
@@ -280,11 +289,16 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
     const steps: ProcedureStep[] = [];     // ordered scrubbed builtin calls (retainSequences)
     let firstUserText: string | null = null;
     let lastAssistantText = "";
+    const basename = path.split("/").pop() ?? path;
+    let sessionId = "";   // first record's sessionId, else synthesized below
     let bad = 0;
-    for (const line of text.split("\n")) {
+    const lines = text.split("\n");
+    for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+      const line = lines[lineIdx];
       if (!line.trim()) continue;
       let rec: any;
       try { rec = JSON.parse(line); } catch { bad++; continue; }
+      if (!sessionId && typeof rec?.sessionId === "string") sessionId = rec.sessionId;
 
       // Only ASSISTANT messages carry real tool_use invocations. The system-prompt
       // tool catalog also lists mcp__ names but is NOT an assistant message, so it
@@ -323,7 +337,7 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
             bumpUnresolved(unresolved, name, "builtin");
             // Capture the ordered scrubbed builtin step for distillation (§3a/§3c).
             if (opts.retainSequences && !rec?.isSidechain && steps.length < SEQ_CAP_PER_SESSION) {
-              try { steps.push({ tool: name, ...scrub(name, block.input) }); }
+              try { steps.push({ tool: name, msgIndex: lineIdx, ...scrub(name, block.input) }); }
               catch { notes.push(`scrub failed for a ${name} step in ${path.split("/").pop()}`); }
             }
           }
@@ -352,7 +366,8 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
     if (opts.retainSequences && steps.length > 0) {
       const missionHint: MissionHint | undefined =
         firstUserText !== null ? { task: scrubProse(firstUserText), outcome: scrubProse(lastAssistantText) } : undefined;
-      seqSessions.push(missionHint ? { steps, missionHint } : { steps });
+      const coords = { sessionId: sessionId || basename.replace(/\.jsonl$/, ""), transcript: basename, atMs: ms };
+      seqSessions.push(missionHint ? { steps, missionHint, ...coords } : { steps, ...coords });
     }
   }
 
