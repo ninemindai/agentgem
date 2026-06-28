@@ -7,7 +7,7 @@ import { sendGemBytes, receiveGem, type SendResult, type ReceiveResult } from ".
 import type { ObjectStore } from "./objectStore.js";
 import { NatsObjectStore } from "./natsObjectStore.js";
 import { mintScopedCreds, type TransferScope } from "./mint.js";
-import { loadOrCreateIdentity } from "../gem/identity.js";
+import { loadOrCreateIdentity, type Identity } from "../gem/identity.js";
 import { InvalidInputError } from "../gem/inputError.js";
 
 // An ObjectStore that may be backed by a remote broker — it carries a bucket name
@@ -89,12 +89,18 @@ export function natsStoreFromEnv(): StoreFactory {
 }
 
 // Seal + stash .gem bytes, returning a one-time ticket. Always closes the store.
+// The server's signing identity, loaded once (not on every request).
+let serverIdentity: Identity | undefined;
+function getServerIdentity(): Identity {
+  return (serverIdentity ??= loadOrCreateIdentity());
+}
+
 export async function sendBytes(gemBytes: Buffer, makeStore: StoreFactory): Promise<SendResult> {
   const store = await makeStore();
   try {
     // Sign with the server's local identity so REST/MCP recipients get provenance,
     // matching the CLI send edge.
-    return await sendGemBytes(gemBytes, store, store.bucket ?? DEFAULT_BUCKET, { identity: loadOrCreateIdentity() });
+    return await sendGemBytes(gemBytes, store, store.bucket ?? DEFAULT_BUCKET, { identity: getServerIdentity() });
   } finally {
     await store.close?.();
   }
