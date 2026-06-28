@@ -14,8 +14,9 @@ export interface Provenance { signed: boolean; verified: boolean; publicKey?: st
 export interface SendOpts { identity?: Identity | null }
 
 // Encrypt .gem bytes, stash the ciphertext, mint a ticket. Unsigned by default; pass
-// an identity (the CLI does, via loadOrCreateIdentity) to sign the gem digest so the
-// recipient can verify who sent it. The key + producer live only in the ticket fragment.
+// an identity (the CLI and the service layer do, via loadOrCreateIdentity) to sign the
+// gem digest so the recipient can verify who sent it. Receivers without a producer get
+// signed:false. The key + producer live only in the ticket fragment.
 export async function sendGemBytes(gemBytes: Buffer, store: ObjectStore, bucket: string, opts: SendOpts = {}): Promise<SendResult> {
   const { ciphertext, key } = seal(gemBytes);
   const object = await store.put(ciphertext);
