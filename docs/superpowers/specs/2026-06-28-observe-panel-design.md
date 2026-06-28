@@ -65,10 +65,9 @@ interface SessionStat {
   startMs: number;          // first record timestamp
   endMs: number;            // last record timestamp
   msgs: number;             // user + assistant message records
-  tokensIn: number;         // input (+ cache-read folded in for Claude? see decisions)
+  tokensIn: number;         // fresh input, cache excluded (both agents)
   tokensOut: number;        // output (+ reasoning for Codex)
   tokensCache: number;      // cache creation/read (Claude); cached_input (Codex)
-  firstReplyMs: number | null; // median user→assistant latency proxy (TTF for Codex)
 }
 ```
 
