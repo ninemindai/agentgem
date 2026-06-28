@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
-import { inventoryRoute, usageRoute, createWorkspaceRoute, scaffoldChecksRoute, testbedImportRoute, makeClient, type Usage, type GemCheck } from "../../api/routes.js";
+import { inventoryRoute, usageRoute, createWorkspaceRoute, scaffoldChecksRoute, makeClient, type Usage, type GemCheck } from "../../api/routes.js";
 import { groupInventory, mergeUsage, applyView, relativeTime, DEFAULT_VIEW, type LedgerGroup, type SortKey } from "./data.js";
 import { selKey, visibleKeys, buildSelection } from "./selection.js";
 import { takeRecommendedSelection } from "../../recommendation.js";
@@ -8,15 +8,13 @@ import { useActiveGem, setKeys, toggleKey as toggleKeyStore, clearKeys, setName 
 import { Checks } from "./Checks.js";
 import { ContentView } from "./ContentView.js";
 
-export function Ledger({ apiBase }: { apiBase: string }) {
+export function Curate({ apiBase }: { apiBase: string }) {
   const [groups, setGroups] = useState<LedgerGroup[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState(DEFAULT_VIEW);
   const { keys: selected, name: wsName } = useActiveGem();
   const [wsNote, setWsNote] = useState<string | null>(null);
   const [buildError, setBuildError] = useState<string | null>(null);
-  const [importRoot, setImportRoot] = useState("");
-  const [importNote, setImportNote] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [suggested, setSuggested] = useState<GemCheck[] | null>(null);
   const [included, setIncluded] = useState<Set<string>>(new Set());
@@ -101,19 +99,6 @@ export function Ledger({ apiBase }: { apiBase: string }) {
     return n;
   });
 
-  const importToTestbed = async () => {
-    const root = importRoot.trim();
-    if (!root || selected.size === 0) return;
-    setImportNote(null);
-    try {
-      const r = await testbedImportRoute.call(makeClient(apiBase), { body: { root, selection: buildSelection(selected) } });
-      setImportNote(`imported ${r.written.length} → ${root}${r.skipped.length ? ` (${r.skipped.length} skipped)` : ""}`);
-    } catch (e) {
-      setImportNote(null);
-      setBuildError(e instanceof Error ? e.message : String(e));
-    }
-  };
-
   if (error) return <p className="ledger-error">Could not load inventory: {error}</p>;
   if (!groups) return <p className="ledger-loading">Loading…</p>;
 
@@ -177,22 +162,6 @@ export function Ledger({ apiBase }: { apiBase: string }) {
       </div>
 
       {selected.size > 0 && (
-        <div className="ledger-selbar">
-          <span className="targets-label">Import to testbed</span>
-          <input
-            className="ledger-search"
-            type="text"
-            aria-label="testbed import root"
-            placeholder="/path/to/testbed"
-            value={importRoot}
-            onChange={(e) => setImportRoot(e.target.value)}
-          />
-          <button type="button" className="ledger-sort" disabled={!importRoot.trim()} onClick={importToTestbed}>Import</button>
-          {importNote && <span className="ws-note">{importNote}</span>}
-        </div>
-      )}
-
-      {selected.size > 0 && (
         <Checks suggested={suggested} included={included} busy={checksBusy} error={checksError} onSuggest={suggestChecks} onToggle={toggleCheck} />
       )}
 
@@ -236,12 +205,12 @@ export function Ledger({ apiBase }: { apiBase: string }) {
   );
 }
 
-export const ledgerPage = defineConsolePage({
-  id: "ledger",
-  title: "Ledger",
+export const curatePage = defineConsolePage({
+  id: "curate",
+  title: "Curate",
   icon: "◆",
   order: 10,
   group: "build",
-  route: "#/ledger",
-  component: ({ apiBase }) => <Ledger apiBase={apiBase} />,
+  route: "#/curate",
+  component: ({ apiBase }) => <Curate apiBase={apiBase} />,
 });

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { defineConsolePage } from "../../registry.js";
 import { buildGemRoute, archiveRoute, makeClient, type Gem } from "../../api/routes.js";
-import { buildSelection } from "../Ledger/selection.js";
+import { buildSelection } from "../Curate/selection.js";
 import { useActiveGem } from "../../activeGem.js";
 import { base64ToBytes, downloadBlob, copyText } from "./exporters.js";
 import { Preview } from "./Preview.js";

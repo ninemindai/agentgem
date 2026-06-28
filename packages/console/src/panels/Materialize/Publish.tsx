@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import {
   publishReadyRoute, publishRoute, undeployRoute, PUBLISH_TARGETS, makeClient,
 } from "../../api/routes.js";
-import type { GemSelection } from "../Ledger/selection.js";
+import type { GemSelection } from "../Curate/selection.js";
 
 type Result = { kind: string; agentId?: string; environmentId?: string; version?: string; harnessId?: string };
 

@@ -49,7 +49,7 @@ describe("Testbed", () => {
     await waitFor(() => expect(screen.getByText(/created testbed at \/tmp\/new-tb/)).toBeTruthy());
   });
 
-  it("analyzes and hands the chosen candidate's selection to the Ledger", async () => {
+  it("analyzes and hands the chosen candidate's selection to the Curate panel", async () => {
     vi.stubGlobal("fetch", mockFetch());
     vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
     window.location.hash = "";
@@ -66,7 +66,7 @@ describe("Testbed", () => {
 
     expect(await screen.findByText("Spec Loop")).toBeTruthy();
     fireEvent.click(screen.getByText(/Use this selection/));
-    expect(window.location.hash).toBe("#/ledger");
+    expect(window.location.hash).toBe("#/curate");
     expect(takeRecommendedSelection()).toEqual(["skills::brainstorming", "skills::writing-plans"]);
   });
 });

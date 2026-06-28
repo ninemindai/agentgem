@@ -5,7 +5,7 @@ import {
   makeClient, type RecentEntry, type ProjectCandidate,
 } from "../../api/routes.js";
 import { openAnalyzeStream, type AnalyzeCandidate } from "./analyzeStream.js";
-import { includeToKeys } from "../Ledger/selection.js";
+import { includeToKeys } from "../Curate/selection.js";
 import { setRecommendedSelection } from "../../recommendation.js";
 
 function short(path: string): string {
@@ -55,7 +55,7 @@ export function Testbed({ apiBase }: { apiBase: string }) {
   // Hand the chosen candidate's artifacts to the Ledger (pre-selected) and jump there.
   const useCandidate = (c: AnalyzeCandidate) => {
     setRecommendedSelection(includeToKeys(c.include));
-    window.location.hash = "#/ledger";
+    window.location.hash = "#/curate";
   };
 
   const scaffold = async () => {

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { prepareRunRoute, makeClient } from "../../api/routes.js";
-import type { GemSelection } from "../Ledger/selection.js";
+import type { GemSelection } from "../Curate/selection.js";
 import { openRunStream } from "./runStream.js";
 
 type Status = "idle" | "preparing" | "running" | "done" | "failed";

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
-import { Ledger } from "./index.js";
+import { Curate } from "./index.js";
 
 afterEach(cleanup);
 
@@ -19,8 +19,6 @@ function mockFetch() {
         { type: "skill", name: "pdf", invocations: 7, lastUsedMs: 100 },
         { type: "skill", name: "zip", invocations: 3, lastUsedMs: 900 },
       ] });
-    if (u.includes("/api/testbed/import"))
-      return res({ written: [{ ref: "skill:pdf" }], skipped: [] });
     if (u.includes("/api/scaffold-checks"))
       return res({ checks: [{ kind: "behavioral", name: "smoke-test", task: "does it load" }] });
     if (u.includes("/api/workspaces"))
@@ -38,10 +36,10 @@ const usedOnly = () => screen.getByLabelText(/used only/i);
 const names = (c: HTMLElement) =>
   Array.from(c.querySelectorAll(".ledger-item-name")).map((n) => n.textContent);
 
-describe("Ledger", () => {
+describe("Curate", () => {
   it("shows used items by default, sorted by uses desc (zero-use hidden)", async () => {
     vi.stubGlobal("fetch", mockFetch());
-    const { container } = render(<Ledger apiBase="" />);
+    const { container } = render(<Curate apiBase="" />);
     expect(await screen.findByText("pdf")).toBeTruthy();
     expect(await screen.findByText("7")).toBeTruthy();
     expect(names(container)).toEqual(["pdf", "zip"]);
@@ -49,7 +47,7 @@ describe("Ledger", () => {
 
   it("reveals zero-use items when 'Used only' is unchecked", async () => {
     vi.stubGlobal("fetch", mockFetch());
-    const { container } = render(<Ledger apiBase="" />);
+    const { container } = render(<Curate apiBase="" />);
     await screen.findByText("pdf");
     fireEvent.click(usedOnly());
     await waitFor(() => expect(names(container)).toEqual(["pdf", "zip", "csv"]));
@@ -57,7 +55,7 @@ describe("Ledger", () => {
 
   it("filters by search query", async () => {
     vi.stubGlobal("fetch", mockFetch());
-    const { container } = render(<Ledger apiBase="" />);
+    const { container } = render(<Curate apiBase="" />);
     await screen.findByText("pdf");
     fireEvent.change(screen.getByLabelText("search"), { target: { value: "zip" } });
     await waitFor(() => expect(names(container)).toEqual(["zip"]));
@@ -65,7 +63,7 @@ describe("Ledger", () => {
 
   it("sorts by last used desc when 'Last used' is clicked", async () => {
     vi.stubGlobal("fetch", mockFetch());
-    const { container } = render(<Ledger apiBase="" />);
+    const { container } = render(<Curate apiBase="" />);
     await screen.findByText("pdf");
     fireEvent.click(screen.getByText("Last used"));
     await waitFor(() => expect(names(container)).toEqual(["zip", "pdf"]));
@@ -73,7 +71,7 @@ describe("Ledger", () => {
 
   it("views an artifact's content inline", async () => {
     vi.stubGlobal("fetch", mockFetch());
-    render(<Ledger apiBase="" />);
+    render(<Curate apiBase="" />);
     await screen.findByText("pdf");
     expect(screen.queryByText("PDF-SKILL-BODY")).toBeNull();
     fireEvent.click(screen.getByText("view"));
@@ -82,7 +80,7 @@ describe("Ledger", () => {
 
   it("suggests checks for the selection", async () => {
     vi.stubGlobal("fetch", mockFetch());
-    render(<Ledger apiBase="" />);
+    render(<Curate apiBase="" />);
     await screen.findByText("pdf");
     fireEvent.click(screen.getByLabelText("pdf"));
     fireEvent.click(screen.getByText("Suggest checks"));
@@ -92,7 +90,7 @@ describe("Ledger", () => {
 
   it("saves the current selection as a workspace", async () => {
     vi.stubGlobal("fetch", mockFetch());
-    render(<Ledger apiBase="" />);
+    render(<Curate apiBase="" />);
     await screen.findByText("pdf");
     fireEvent.click(screen.getByLabelText("pdf"));
     fireEvent.change(screen.getByLabelText("workspace name"), { target: { value: "my-selection" } });
@@ -100,19 +98,9 @@ describe("Ledger", () => {
     await waitFor(() => expect(screen.getByText(/saved workspace .my-selection./)).toBeTruthy());
   });
 
-  it("imports the selection into a testbed", async () => {
-    vi.stubGlobal("fetch", mockFetch());
-    render(<Ledger apiBase="" />);
-    await screen.findByText("pdf");
-    fireEvent.click(screen.getByLabelText("pdf"));
-    fireEvent.change(screen.getByLabelText("testbed import root"), { target: { value: "/tmp/tb" } });
-    fireEvent.click(screen.getByText("Import"));
-    await waitFor(() => expect(screen.getByText(/imported 1 → \/tmp\/tb/)).toBeTruthy());
-  });
-
   it("clears the selection", async () => {
     vi.stubGlobal("fetch", mockFetch());
-    render(<Ledger apiBase="" />);
+    render(<Curate apiBase="" />);
     await screen.findByText("pdf");
     fireEvent.click(screen.getByLabelText("pdf"));
     expect(screen.getByText("1 selected")).toBeTruthy();
@@ -128,7 +116,7 @@ describe("Ledger", () => {
       if (u.includes("/api/usage")) return res({ artifacts: [] });
       throw new Error(`unexpected url ${u}`);
     }));
-    render(<Ledger apiBase="" />);
+    render(<Curate apiBase="" />);
     expect(await screen.findByText(/uncheck .Used only. to browse all 1/i)).toBeTruthy();
   });
 });
