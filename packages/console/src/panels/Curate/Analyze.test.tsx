@@ -38,4 +38,22 @@ describe("Analyze", () => {
     fireEvent.click(await screen.findByText(/Use this selection/));
     expect(picked).toEqual([["skills::brainstorming"]]);
   });
+
+  it("filters the project list by the search query", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+      const u = String(url);
+      if (u.includes("/api/testbed/recents")) return res({ recents: [] });
+      if (u.includes("/api/testbed/projects")) return res({ projects: [
+        { path: "/home/me/alpha", flavor: "claude", lastUsed: null, exists: true },
+        { path: "/home/me/beta", flavor: "claude", lastUsed: null, exists: true },
+      ] });
+      throw new Error("unexpected " + u);
+    }));
+    render(<Analyze apiBase="" onPick={() => {}} />);
+    expect(await screen.findByText(/alpha/)).toBeTruthy();
+    expect(screen.getByText(/beta/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("search projects"), { target: { value: "alpha" } });
+    await waitFor(() => expect(screen.queryByText(/beta/)).toBeNull());
+    expect(screen.getByText(/alpha/)).toBeTruthy();
+  });
 });

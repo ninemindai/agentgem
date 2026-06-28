@@ -17,6 +17,7 @@ export function Analyze({ apiBase, onPick }: { apiBase: string; onPick: (keys: s
   const [phase, setPhase] = useState("");
   const [candidates, setCandidates] = useState<AnalyzeCandidate[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
   const closeRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -36,20 +37,34 @@ export function Analyze({ apiBase, onPick }: { apiBase: string; onPick: (keys: s
     });
   };
 
-  // Merge recents + discovered projects into one de-duped, compact list.
+  // Merge recents + discovered projects into one de-duped, compact list, then
+  // filter by the search query (matches the display label OR the full path).
   const rows = (() => {
     const seen = new Set<string>();
     const out: { path: string; flavor: string; label: string }[] = [];
     for (const r of recents ?? []) { if (!seen.has(r.path)) { seen.add(r.path); out.push({ path: r.path, flavor: r.flavor, label: r.name }); } }
     for (const p of projects ?? []) { if (!seen.has(p.path)) { seen.add(p.path); out.push({ path: p.path, flavor: p.flavor, label: short(p.path) }); } }
-    return out.slice(0, 40);
+    const q = query.trim().toLowerCase();
+    const matched = q ? out.filter((r) => r.label.toLowerCase().includes(q) || r.path.toLowerCase().includes(q)) : out;
+    return matched.slice(0, 40);
   })();
 
   return (
     <section className="analyze">
       <p className="analyze-intro">Pick a project — agentgem reads its sessions and suggests the artifacts that did the work.</p>
+      {(projects || recents) && (
+        <input
+          className="ledger-search"
+          type="text"
+          placeholder="search projects…"
+          aria-label="search projects"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          style={{ marginBottom: 12 }}
+        />
+      )}
       {!projects && !recents ? <p className="ledger-loading">Loading…</p>
-        : rows.length === 0 ? <p className="ledger-empty">No projects with session history found.</p>
+        : rows.length === 0 ? <p className="ledger-empty">{query ? "No projects match." : "No projects with session history found."}</p>
         : (
           <ul className="analyze-list">
             {rows.map((r) => (
