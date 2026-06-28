@@ -25,7 +25,7 @@ export function formatSource(source?: string): string | undefined {
 /** Inventory category -> usage `type` + sidebar label, in display order. */
 const CATEGORIES: { key: InventoryCategory; type: string; label: string }[] = [
   { key: "skills", type: "skill", label: "Skills" },
-  { key: "mcpServers", type: "mcpServer", label: "MCP Servers" },
+  { key: "mcpServers", type: "mcp_server", label: "MCP Servers" }, // /api/usage types MCP rows as "mcp_server"
   { key: "instructions", type: "instructions", label: "Instructions" },
   { key: "hooks", type: "hook", label: "Hooks" },
 ];
