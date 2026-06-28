@@ -27,6 +27,7 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
             {p.title}
           </button>
         ))}
+        <a className="console-legacy" href="/legacy">Classic UI ↗</a>
       </nav>
       <main className="console-main">{active?.component({ apiBase })}</main>
     </div>

@@ -55,12 +55,14 @@ export async function createApp(port: number): Promise<RestApplication> {
   await installExplorer(app, { title: "agentgem API" });
   await installMcpHttp(app);
   const server = await app.restServer;
-  const html = pageHtml();
-  server.expressApp.get("/", (_req, res) => res.type("html").send(html));
-  // The new React console SPA, served in parallel to the vanilla UI at `/`, behind
-  // the same originGuard. Built into dist/public/console by `pnpm build`.
+  // Cutover (2026-06): the React console (`dist/public/console`) is the default UI
+  // at `/`. The original vanilla UI is preserved at `/legacy` for surfaces not yet
+  // ported to the console (deploy, publish, import, registry, testbed, …).
   const consolePage = consoleHtml();
-  server.expressApp.get("/console", originGuard, (_req, res) => res.type("html").send(consolePage));
+  const legacyHtml = pageHtml();
+  server.expressApp.get("/", (_req, res) => res.type("html").send(consolePage));
+  server.expressApp.get("/console", (_req, res) => res.type("html").send(consolePage));
+  server.expressApp.get("/legacy", (_req, res) => res.type("html").send(legacyHtml));
   // SSE progress stream for workflow analysis (raw Express — the decorator
   // framework only returns single JSON bodies). The POST /api/workflow/analyze
   // route stays for programmatic/test callers. originGuard is applied per-route because these raw
@@ -79,7 +81,7 @@ export async function run(port: number = Number(process.env.PORT ?? 4317)): Prom
   await app.start();
   const server = await app.restServer;
   console.log(`agentgem listening at ${server.url}`);
-  console.log(`  UI:       ${server.url}/`);
+  console.log(`  UI:       ${server.url}/  (console)  ·  classic: ${server.url}/legacy`);
   console.log(`  API:      ${server.url}/api/inventory  ·  POST ${server.url}/api/gem`);
   console.log(`  Explorer: ${server.url}/explorer/`);
   console.log(`  MCP:      ${server.url}/mcp`);

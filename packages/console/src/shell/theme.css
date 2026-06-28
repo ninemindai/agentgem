@@ -18,6 +18,9 @@ body { margin: 0; background: var(--paper); color: var(--ink);
   color: var(--ink); cursor: pointer; font: inherit; }
 .console-nav-item:hover { background: rgba(0,0,0,.04); }
 .console-nav-item.is-active { background: var(--paper); color: var(--accent); font-weight: 600; }
+.console-legacy { margin-top: auto; padding: 8px; color: var(--muted); font-size: 12px;
+  text-decoration: none; border-radius: 6px; }
+.console-legacy:hover { background: rgba(0,0,0,.04); color: var(--accent); }
 .console-main { padding: 24px 28px; }
 .ledger-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
 .ledger-search { flex: 1; min-width: 180px; padding: 7px 10px; border: 1px solid var(--line);
