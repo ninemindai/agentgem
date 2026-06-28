@@ -16,8 +16,9 @@ rendering live data, served at `/console` **in parallel** with the untouched van
 
 Explicit non-goals for this increment:
 - No cutover. Vanilla UI keeps serving `/`. No deletion of `src/public/index.html`.
-- No backend refactoring. The console imports nothing from `src/gem`; it is an HTTP client of
-  the existing REST API. (Backend/kernel extraction deferred — see `monorepo-deferred`.)
+- No backend refactoring. The console imports nothing from `src/gem`; it reaches the existing
+  REST API through `@agentback/client` (schema-typed `fetch` wrapper, published 0.6.0,
+  browser-safe). (Backend/kernel extraction deferred — see `monorepo-deferred`.)
 - No porting of the other screens yet (import, analyze, run, workspaces) — those are follow-on
   `ConsolePage`s in later efforts.
 
@@ -150,8 +151,11 @@ server.expressApp.get("/console", originGuard, (_req, res) =>
 
 ## First panel — Ledger
 
-`src/panels/Ledger/` fetches `/api/inventory` (grouped gem inventory) and overlays usage badges
-from `/api/usage`, rendered in warm-paper styling. **Read-only** for this increment — no
+`src/panels/Ledger/` calls `/api/inventory` (grouped gem inventory) and overlays usage badges
+from `/api/usage` via `@agentback/client` `defineRoute`/`createClient` (minimal client-side Zod
+response schemas — validate only the fields the UI reads; collapse to a shared contract package
+when the backend extraction happens). Rendered in warm-paper styling. **Read-only** for this
+increment — no
 selection, no mutation, no export. It exists to prove the full vertical slice end to end:
 workspace build → SPA bundle → static mount → real API → npx/desktop packaging, at the smallest
 surface. Selection/build/export and the stage rail come with later panels.
