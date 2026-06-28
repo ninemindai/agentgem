@@ -2,5 +2,6 @@
 import type { ConsolePage } from "./registry.js";
 import { ledgerPage } from "./panels/Ledger/index.js";
 import { workspacesPage } from "./panels/Workspaces/index.js";
+import { getGemsPage } from "./panels/GetGems/index.js";
 
-export const pages: ConsolePage[] = [ledgerPage, workspacesPage];
+export const pages: ConsolePage[] = [ledgerPage, workspacesPage, getGemsPage];

@@ -128,4 +128,33 @@ export const prepareRunRoute = defineRoute("POST", "/api/gem/run/prepare", {
   response: PrepareRunResponseSchema,
 });
 
+// Registry (GitHub-backed). ready → search → install-to-workspace.
+export const registryReadyRoute = defineRoute("GET", "/api/registry/ready", {
+  response: z.object({ ready: z.boolean() }),
+});
+const RegistryResultSchema = z.object({
+  key: z.string(),
+  latest: z.string(),
+  score: z.number(),
+  description: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  author: z.string().optional(),
+  artifactKinds: z.array(z.string()).optional(),
+});
+export type RegistryResult = z.infer<typeof RegistryResultSchema>;
+export const registrySearchRoute = defineRoute("GET", "/api/registry/search", {
+  query: z.object({ q: z.string().optional() }),
+  response: z.object({ results: z.array(RegistryResultSchema) }),
+});
+export const registryInstallRoute = defineRoute("POST", "/api/registry/install", {
+  body: z.object({
+    refs: z.array(z.string()).min(1),
+    mode: z.enum(["materialize", "workspace"]),
+    workspaceName: z.string().optional(),
+  }),
+  response: z.object({
+    applied: z.object({ mode: z.string(), workspace: z.string().optional(), dest: z.string().optional() }),
+  }),
+});
+
 export const makeClient = (apiBase: string): Client => createClient({ baseURL: apiBase });

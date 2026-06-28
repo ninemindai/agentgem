@@ -105,3 +105,5 @@ body { margin: 0; background: var(--paper); color: var(--ink);
 .ws-targets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .ws-target { font-size: 11px; color: var(--accent); background: var(--paper);
   border: 1px solid var(--accent); border-radius: 4px; padding: 1px 7px; }
+.getgems-desc { color: var(--ink); font-size: 13px; margin: 6px 0; }
+.getgems-done { color: #2f6b3a; font-size: 12px; }
