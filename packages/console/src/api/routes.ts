@@ -46,4 +46,35 @@ export type WorkspaceSummary = z.infer<typeof WorkspaceSummarySchema>;
 
 export const workspacesRoute = defineRoute("GET", "/api/workspaces", { response: WorkspacesSchema });
 
+// POST /api/gem — build a gem from a selection. Request mirrors the server's
+// GemRequestSchema (only the fields the UI sends; channels/dir/etc. are optional).
+const GemSelectionSchema = z.union([
+  z.object({ all: z.literal(true) }),
+  z.object({
+    skills: z.array(z.string()).optional(),
+    mcpServers: z.array(z.string()).optional(),
+    includeInstructions: z.boolean().optional(),
+    hooks: z.array(z.string()).optional(),
+  }),
+]);
+export const GemRequestSchema = z.object({
+  selection: GemSelectionSchema,
+  name: z.string().optional(),
+});
+const GemArtifactSchema = z.object({ type: z.string(), name: z.string() });
+const SecretRequirementSchema = z.object({ name: z.string() });
+export const GemSchema = z.object({
+  name: z.string(),
+  createdFrom: z.string(),
+  artifacts: z.array(GemArtifactSchema),
+  checks: z.array(z.unknown()),
+  requiredSecrets: z.array(SecretRequirementSchema),
+});
+export type Gem = z.infer<typeof GemSchema>;
+
+export const buildGemRoute = defineRoute("POST", "/api/gem", {
+  body: GemRequestSchema,
+  response: GemSchema,
+});
+
 export const makeClient = (apiBase: string): Client => createClient({ baseURL: apiBase });
