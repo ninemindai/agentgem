@@ -26,4 +26,18 @@ describe("Materialize", () => {
     fireEvent.click(screen.getByText("Build Gem"));
     expect(await screen.findByText("1 artifacts")).toBeTruthy();
   });
+
+  it("shareViaTransfer sends selection and displays the returned ticket", async () => {
+    setKeys(new Set(["skills::pdf"]));
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+      const u = String(url);
+      if (u.includes("/api/transfer/send"))
+        return res({ ticket: "agentgem://gem/abc#key~prod" });
+      throw new Error("unexpected " + u);
+    }));
+    render(<Materialize apiBase="" />);
+    fireEvent.click(screen.getByText("Send via ticket"));
+    const input = await screen.findByLabelText("transfer ticket");
+    expect((input as HTMLInputElement).value).toBe("agentgem://gem/abc#key~prod");
+  });
 });
