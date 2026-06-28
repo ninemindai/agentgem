@@ -29,6 +29,18 @@ function pageHtml(): string {
   return "<!doctype html><p>index.html not found</p>";
 }
 
+// The React console SPA (one self-contained file). dist build path first, then a
+// dev fallback to the console package's own dist; finally a placeholder.
+function consoleHtml(): string {
+  for (const p of [
+    join(here, "public", "console", "index.html"),
+    join(here, "..", "packages", "console", "dist", "index.html"),
+  ]) {
+    try { return readFileSync(p, "utf8"); } catch { /* try next */ }
+  }
+  return '<!doctype html><div id="root"></div><p>console not built — run pnpm build</p>';
+}
+
 export async function createApp(port: number): Promise<RestApplication> {
   const app = new RestApplication({});
   app.configure("servers.RestServer").to({ port, host: "127.0.0.1" });
@@ -45,6 +57,10 @@ export async function createApp(port: number): Promise<RestApplication> {
   const server = await app.restServer;
   const html = pageHtml();
   server.expressApp.get("/", (_req, res) => res.type("html").send(html));
+  // The new React console SPA, served in parallel to the vanilla UI at `/`, behind
+  // the same originGuard. Built into dist/public/console by `pnpm build`.
+  const consolePage = consoleHtml();
+  server.expressApp.get("/console", originGuard, (_req, res) => res.type("html").send(consolePage));
   // SSE progress stream for workflow analysis (raw Express — the decorator
   // framework only returns single JSON bodies). The POST /api/workflow/analyze
   // route stays for programmatic/test callers. originGuard is applied per-route because these raw

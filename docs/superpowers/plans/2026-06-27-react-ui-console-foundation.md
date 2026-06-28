@@ -877,11 +877,11 @@ describe("GET /console", () => {
 });
 ```
 
-Note: this is a root-suite test — it compiles to `dist/src/__tests__/consoleMount.test.js` and runs under the root vitest `include`. It requires `dist/public/console/index.html`, produced by Task 6's build. Run the root build before this test (the `test` script's `tsc -b` does not run `build-console`, so build first).
+Note: this is a root-suite test — it compiles to `dist/__tests__/consoleMount.test.js` and runs under the root vitest `include`. It requires `dist/public/console/index.html`, produced by Task 6's build. Run the root build before this test (the `test` script's `tsc -b` does not run `build-console`, so build first).
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `pnpm build && pnpm vitest run dist/src/__tests__/consoleMount.test.js`
+Run: `pnpm build && pnpm vitest run dist/__tests__/consoleMount.test.js`
 Expected: FAIL — 404 (no `/console` route yet).
 
 - [ ] **Step 3: Add the loader + route to `src/index.ts`**
@@ -907,7 +907,7 @@ server.expressApp.get("/console", originGuard, (_req, res) => res.type("html").s
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `pnpm build && pnpm vitest run dist/src/__tests__/consoleMount.test.js`
+Run: `pnpm build && pnpm vitest run dist/__tests__/consoleMount.test.js`
 Expected: PASS.
 
 - [ ] **Step 5: Run the full root suite to check for regressions**
