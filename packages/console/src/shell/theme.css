@@ -27,6 +27,27 @@ body { margin: 0; background: var(--paper); color: var(--ink);
 .ledger-sort.is-active { color: var(--accent); border-color: var(--accent); font-weight: 600; }
 .ledger-usedonly { display: flex; align-items: center; gap: 6px; color: var(--muted);
   font-size: 13px; cursor: pointer; }
+.ledger-selbar { display: flex; align-items: center; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
+.ledger-selcount { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.ledger-build { background: var(--accent); color: #fff; border: 1px solid var(--accent);
+  border-radius: 6px; padding: 7px 14px; cursor: pointer; font: inherit; font-weight: 600; }
+.ledger-build:disabled { opacity: .45; cursor: not-allowed; }
+.ledger-item-main { display: flex; align-items: center; gap: 10px; flex: 1; cursor: pointer; }
+.preview { border: 1px solid var(--accent); border-radius: 8px; background: var(--raised);
+  padding: 14px 16px; margin-bottom: 22px; }
+.preview-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.preview-name { color: var(--accent); }
+.preview-modes button { background: none; border: 1px solid var(--line); border-radius: 6px;
+  padding: 3px 10px; margin-left: 6px; color: var(--muted); cursor: pointer; font: inherit; font-size: 12px; }
+.preview-modes button.is-active { color: var(--accent); border-color: var(--accent); font-weight: 600; }
+.preview-from { color: var(--muted); font-size: 12px; margin: 0 0 8px; }
+.preview-stats { display: flex; gap: 6px; margin-bottom: 10px; }
+.preview-artifacts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.preview-artifacts li { font-size: 13px; }
+.preview-atype { display: inline-block; min-width: 92px; color: var(--muted); font-size: 11px;
+  text-transform: uppercase; letter-spacing: .04em; }
+.preview-json { background: var(--paper); border: 1px solid var(--line); border-radius: 6px;
+  padding: 10px; overflow: auto; font-size: 12px; max-height: 320px; }
 .ledger-group { margin-bottom: 24px; }
 .ledger-group-label { font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
   color: var(--muted); margin: 0 0 8px; }

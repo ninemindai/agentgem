@@ -19,9 +19,13 @@ function mockFetch() {
         { type: "skill", name: "pdf", invocations: 7, lastUsedMs: 100 },
         { type: "skill", name: "zip", invocations: 3, lastUsedMs: 900 },
       ] });
+    if (u.includes("/api/gem"))
+      return res({ name: "gem", createdFrom: "/x/.claude", artifacts: [{ type: "skill", name: "pdf" }], checks: [], requiredSecrets: [] });
     throw new Error(`unexpected url ${u}`);
   });
 }
+
+const usedOnly = () => screen.getByLabelText(/used only/i);
 
 const names = (c: HTMLElement) =>
   Array.from(c.querySelectorAll(".ledger-item-name")).map((n) => n.textContent);
@@ -39,7 +43,7 @@ describe("Ledger", () => {
     vi.stubGlobal("fetch", mockFetch());
     const { container } = render(<Ledger apiBase="" />);
     await screen.findByText("pdf");
-    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(usedOnly());
     await waitFor(() => expect(names(container)).toEqual(["pdf", "zip", "csv"]));
   });
 
@@ -57,6 +61,29 @@ describe("Ledger", () => {
     await screen.findByText("pdf");
     fireEvent.click(screen.getByText("Last used"));
     await waitFor(() => expect(names(container)).toEqual(["zip", "pdf"]));
+  });
+
+  it("builds a gem from a selection and shows the preview", async () => {
+    vi.stubGlobal("fetch", mockFetch());
+    render(<Ledger apiBase="" />);
+    await screen.findByText("pdf");
+    expect((screen.getByText("Build Gem") as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByLabelText("pdf"));
+    expect(screen.getByText("1 selected")).toBeTruthy();
+    expect((screen.getByText("Build Gem") as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(screen.getByText("Build Gem"));
+    expect(await screen.findByText("1 artifacts")).toBeTruthy();
+    expect(screen.getByText("from /x/.claude")).toBeTruthy();
+  });
+
+  it("clears the selection", async () => {
+    vi.stubGlobal("fetch", mockFetch());
+    render(<Ledger apiBase="" />);
+    await screen.findByText("pdf");
+    fireEvent.click(screen.getByLabelText("pdf"));
+    expect(screen.getByText("1 selected")).toBeTruthy();
+    fireEvent.click(screen.getByText("Clear"));
+    expect(screen.getByText("0 selected")).toBeTruthy();
   });
 
   it("points at the 'Used only' toggle when usage is empty but artifacts exist", async () => {
