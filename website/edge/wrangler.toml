@@ -11,15 +11,25 @@ main = "src/markdown-negotiation.js"
 compatibility_date = "2026-06-23"
 account_id = "8c60d6f6b0408a55768ec315042db967"
 
-# No *.workers.dev URL — this Worker only runs on the custom domain.
+# No *.workers.dev URL — this Worker only runs on its custom domains.
 workers_dev = false
 
-# Workers Custom Domain. Unlike agentback.dev (an apex that already had a
-# proxied DNS record, so it used a zone_name route), agentgem.ninemind.ai is a
-# fresh subdomain with no record. custom_domain = true makes `wrangler deploy`
-# provision the proxied DNS record AND the edge TLS cert as part of the deploy —
-# no manual DNS step. The ninemind.ai zone must be in this account.
+# Workers Custom Domains. custom_domain = true makes `wrangler deploy` provision
+# the proxied DNS record AND the edge TLS cert for each pattern — no manual DNS
+# step. Every listed zone must be in this account.
+#
+# agentgem.ai is the canonical host the Worker serves. agentgem.ninemind.ai is
+# an alias the Worker 301-redirects to agentgem.ai (see
+# src/markdown-negotiation.js, CANONICAL_HOST). Both are declared here so they
+# stay attached: detaching a Custom Domain makes Cloudflare's system actor
+# delete its record + cert, which is what took the apex offline once before.
+#
+# agentgem.dev is NOT a route here: that zone already has its own proxied apex
+# records, so a Worker Custom Domain would 409-conflict on every deploy. It is
+# redirected to agentgem.ai with a Single Redirect rule in the agentgem.dev
+# zone instead (same approach as www.agentgem.ai).
 routes = [
+  {pattern = "agentgem.ai", custom_domain = true},
   {pattern = "agentgem.ninemind.ai", custom_domain = true},
 ]
 

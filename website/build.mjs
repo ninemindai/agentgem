@@ -21,7 +21,7 @@ const websiteDir = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(websiteDir, '..');
 const out = path.join(websiteDir, 'dist');
 const GITHUB = 'https://github.com/ninemindai/agentgem';
-const DOMAIN = 'agentgem.ninemind.ai';
+const DOMAIN = 'agentgem.ai';
 const SITE = `https://${DOMAIN}`;
 
 // Build-time syntax highlighting: highlight.js emits `hljs-*` class spans into

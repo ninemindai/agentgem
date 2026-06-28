@@ -2,8 +2,9 @@
 // This file is licensed under the MIT License.
 // License text available at https://opensource.org/license/mit/
 
-// agentgem.ninemind.ai served from Cloudflare Workers Static Assets, with
-// markdown content negotiation.
+// agentgem.ai served from Cloudflare Workers Static Assets, with markdown
+// content negotiation. Alias hosts (agentgem.ninemind.ai, agentgem.dev) are
+// attached to this Worker as Custom Domains and 301-redirected to agentgem.ai.
 //
 // The build (website/build.mjs → website/dist) emits an authored `.md` twin
 // next to every docs page plus `/llms.txt` and `/llms-full.txt`. Cloudflare
@@ -55,8 +56,23 @@ async function serveMarkdown(request, env) {
   return new Response(asset.body, {status: 200, headers});
 }
 
+// The one canonical host. Every alias Custom Domain on this Worker redirects
+// here, so the canonical URL lives in exactly one place.
+const CANONICAL_HOST = 'agentgem.ai';
+
 export default {
   async fetch(request, env) {
+    // 301 any alias host (agentgem.ninemind.ai, agentgem.dev, …) to the
+    // canonical host, preserving path + query. The aliases hit this Worker
+    // because they are attached as Custom Domains.
+    const url = new URL(request.url);
+    if (url.hostname !== CANONICAL_HOST) {
+      url.hostname = CANONICAL_HOST;
+      url.protocol = 'https:';
+      url.port = '';
+      return Response.redirect(url.toString(), 301);
+    }
+
     try {
       if (request.method === 'GET') {
         const accept = (request.headers.get('Accept') || '').toLowerCase();
