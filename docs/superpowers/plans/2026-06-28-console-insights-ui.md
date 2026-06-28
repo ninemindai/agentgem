@@ -425,9 +425,10 @@ Expected: FAIL — cannot find `./Leaderboard.js`.
 import type { AggIngredient } from "../../api/routes.js";
 import { prettifyId, kindLabel, verifiedShare, barWidths } from "./data.js";
 
+// Tools-only (product decision): Insights ranks shareable ingredients — skills + MCPs.
+// "All" maps to no `kind` param, which the backend popularity() defaults to skill+mcp.
 const KINDS: { value: string; label: string }[] = [
-  { value: "all", label: "All" }, { value: "skill", label: "Skill" },
-  { value: "mcp", label: "MCP" }, { value: "model", label: "Model" }, { value: "harness", label: "Harness" },
+  { value: "all", label: "All" }, { value: "skill", label: "Skill" }, { value: "mcp", label: "MCP" },
 ];
 
 export function Leaderboard({ rows, kind, onKind, selectedId, onSelect }: {
