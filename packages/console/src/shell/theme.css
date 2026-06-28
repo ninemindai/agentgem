@@ -373,3 +373,12 @@ body::before {
 .analyze-row.is-active { border-color: var(--accent); background: var(--paper); }
 .analyze-row .ledger-view:disabled { opacity: .55; cursor: default; }
 .run-badge.run-running { animation: pulse 1.2s ease-in-out infinite; }
+
+/* Analyze candidate: header row + previewed artifact list */
+.analyze-candidate { margin-top: 10px; padding: 10px; border: 1px solid var(--line-soft);
+  border-radius: 8px; background: var(--paper); }
+.analyze-candidate-head { display: flex; align-items: center; gap: 8px; }
+.analyze-candidate-desc { margin: 6px 0 0; color: var(--ink-soft); font: 13px/1.5 var(--font-ui); }
+.analyze-include { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.analyze-include li { display: flex; align-items: center; gap: 8px; }
+.analyze-include-name { font: 12px/1.4 var(--font-mono); color: var(--ink-soft); }

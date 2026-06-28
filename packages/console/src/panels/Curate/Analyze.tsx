@@ -8,6 +8,9 @@ function short(path: string): string {
   return parts.length > 3 ? "…/" + parts.slice(-3).join("/") : path;
 }
 
+const TYPE_LABEL: Record<string, string> = { skill: "skill", mcp_server: "mcp", instructions: "instructions", hook: "hook", channel: "channel" };
+const prettyType = (t: string): string => TYPE_LABEL[t] ?? t;
+
 /** "Suggest a gem from a project": discovered projects, each analyzed in one click;
  *  picking a suggestion hands recommended keys to onPick (Curate flips to Compose). */
 export function Analyze({ apiBase, onPick }: { apiBase: string; onPick: (keys: string[]) => void }) {
@@ -92,15 +95,26 @@ export function Analyze({ apiBase, onPick }: { apiBase: string; onPick: (keys: s
                         </span>
                       </div>
                       {error && <p className="ledger-error">{error}</p>}
-                      {out && <pre className="run-transcript">{out}</pre>}
+                      {out && candidates.length === 0 && <pre className="run-transcript">{out}</pre>}
                       {!running && !error && phase === "done" && candidates.length === 0 && (
                         <p className="ledger-empty">No recurring workflow found in this project's sessions — nothing to suggest yet.</p>
                       )}
                       {candidates.map((c) => (
                         <div className="analyze-candidate" key={c.name}>
-                          <strong>{c.name}</strong> <span className="ws-chip">{c.confidence}</span>{" "}
-                          <span className="targets-label">{c.include.length} artifacts</span>{" "}
-                          <button type="button" className="ledger-build" onClick={() => onPick(includeToKeys(c.include))}>Use this selection →</button>
+                          <div className="analyze-candidate-head">
+                            <strong>{c.name}</strong> <span className="ws-chip">{c.confidence}</span>{" "}
+                            <span className="targets-label">{c.include.length} artifacts</span>
+                            <button type="button" className="ledger-build" style={{ marginLeft: "auto" }} onClick={() => onPick(includeToKeys(c.include))}>Use this selection →</button>
+                          </div>
+                          {c.description && <p className="analyze-candidate-desc">{c.description}</p>}
+                          <ul className="analyze-include">
+                            {c.include.map((a) => (
+                              <li key={a.type + "::" + a.name}>
+                                <span className="ledger-source">{prettyType(a.type)}</span>
+                                <span className="analyze-include-name">{a.name}</span>
+                              </li>
+                            ))}
+                          </ul>
                         </div>
                       ))}
                     </div>
