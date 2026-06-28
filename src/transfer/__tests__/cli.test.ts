@@ -76,7 +76,8 @@ describe("runCli", () => {
     const { ticket } = await sendGemBytes(exportGem(demo as never).bytes, store, "b", { identity: id });
 
     expect(await runCli(["receive", ticket, "out.gem"], store, io)).toBe(0);
-    expect(errs.join("\n")).toContain("from " + id.publicKey.slice(0, 12));
+    const fp = "ed25519:" + id.publicKey.replace(/^ed25519:/, "").slice(0, 16);
+    expect(errs.join("\n")).toContain("from " + fp);
   });
 
   it("returns exit code 2 on bad usage", async () => {

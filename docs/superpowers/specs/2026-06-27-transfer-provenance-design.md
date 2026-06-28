@@ -109,8 +109,22 @@ Install proceeds in all cases (integrity is independent).
   - send with `identity: null` → `signed === false`; gem still round-trips.
 - Reuses `identity.ts` `verify`; tests inject a generated identity (no home writes).
 
+## Threat model note
+
+The producer signature authenticates **the signer of the gem bytes**, not the
+transport: it covers `gemDigest` only. Anyone who can rewrite the ticket fragment in
+transit could substitute their own `{publicKey, signature}` over the same digest. This
+is acceptable because the fragment is private and travels human-to-human, and the
+recipient is expected to recognize the producer key — provenance is an authenticity
+*aid*, not a transport-integrity guarantee (that's the AES-GCM tag + `gem.lock`).
+
 ## Out of scope (named)
 
+- **Signing on the REST / MCP / web send paths.** v1 signs only on the **CLI** send
+  edge (`agentgem send` → `loadOrCreateIdentity`); `sendGemBytes`/`sendGem` are
+  unsigned by default (this keeps non-CLI callers and tests from writing
+  `~/.agentgem`). A gem sent via REST/MCP/web therefore shows `(unsigned)` on
+  receive. Wiring those edges to sign is a follow-up.
 - `account` (provider/login) resolution — v1 shows the public key.
 - **Browser-side** provenance verification (needs in-browser `gemDigest` derivation) —
   the web download defers provenance to install.
