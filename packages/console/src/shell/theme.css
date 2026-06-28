@@ -122,3 +122,8 @@ body { margin: 0; background: var(--paper); color: var(--ink);
 .tb-path { font-size: 12px; color: var(--muted); margin: 6px 0 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
 .tb-missing { color: var(--accent); }
+.deploy-badge { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; padding: 1px 9px;
+  border-radius: 999px; border: 1px solid var(--line); }
+.deploy-badge.is-ready { color: #2f6b3a; border-color: #2f6b3a; }
+.deploy-badge.is-unready { color: var(--muted); }
+.deploy-hint { color: var(--muted); font-size: 12px; margin-top: 12px; }

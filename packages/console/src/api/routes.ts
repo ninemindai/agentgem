@@ -209,4 +209,16 @@ export const testbedScaffoldRoute = defineRoute("POST", "/api/testbed/scaffold",
   response: z.object({ root: z.string(), created: z.array(z.string()) }),
 });
 
+// Deploy: backend readiness + credential management.
+export const CREDENTIAL_KEYS = ["ANTHROPIC_API_KEY", "VERCEL_TOKEN", "CLOUDFLARE_API_TOKEN"] as const;
+export const deployTargetsRoute = defineRoute("GET", "/api/deploy-targets", {
+  response: z.object({
+    targets: z.array(z.object({ id: z.string(), label: z.string(), ready: z.boolean() })),
+  }),
+});
+export const setCredentialRoute = defineRoute("POST", "/api/credential", {
+  body: z.object({ key: z.enum(CREDENTIAL_KEYS), value: z.string().min(1) }),
+  response: z.object({ ok: z.boolean() }),
+});
+
 export const makeClient = (apiBase: string): Client => createClient({ baseURL: apiBase });
