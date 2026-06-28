@@ -1,8 +1,18 @@
 // src/gem.controller.ts
 import { existsSync, writeFileSync, readFileSync } from "node:fs";
 import { basename, resolve, sep } from "node:path";
-import type { z } from "zod";
+import { z } from "zod";
 import { api, get, post } from "@agentback/openapi";
+import { scanSessions, aggregateObserve } from "./gem/observeScan.js";
+
+const ObserveQuerySchema = z.object({ range: z.enum(["today", "7d", "30d", "all"]).optional() });
+const ObservePayloadSchema = z.object({
+  pulse: z.object({ sessions: z.number(), msgs: z.number(), tokens: z.number(), activeMs: z.number() }),
+  daily: z.array(z.object({ date: z.string(), sessions: z.number(), msgs: z.number(), tokensIn: z.number(), tokensOut: z.number(), tokensCache: z.number() })),
+  sessions: z.array(z.object({ agent: z.enum(["claude", "codex"]), sessionId: z.string(), project: z.string().nullable(), model: z.string().nullable(), durationMs: z.number(), msgs: z.number(), tokens: z.number(), endMs: z.number() })),
+  models: z.array(z.object({ model: z.string(), agent: z.enum(["claude", "codex"]), sessions: z.number(), tokens: z.number() })),
+  range: z.enum(["today", "7d", "30d", "all"]),
+});
 import { introspectConfig, introspectProject } from "./gem/introspect.js";
 import { buildGem } from "./gem/buildGem.js";
 import { scaffoldChecks } from "./gem/checks.js";
@@ -149,6 +159,12 @@ export class GemController {
       console.error("[usage] scan failed:", e);
       return { artifacts: [] };
     }
+  }
+
+  @get("/observe", { query: ObserveQuerySchema, response: ObservePayloadSchema })
+  async observe(input: { query: z.infer<typeof ObserveQuerySchema> }): Promise<z.infer<typeof ObservePayloadSchema>> {
+    const range = input.query.range ?? "7d";
+    return aggregateObserve(scanSessions(), range, Date.now());
   }
 
   @post("/gem", { body: GemRequestSchema, response: GemSchema })
