@@ -58,4 +58,16 @@ describe("Ledger", () => {
     fireEvent.click(screen.getByText("Last used"));
     await waitFor(() => expect(names(container)).toEqual(["zip", "pdf"]));
   });
+
+  it("points at the 'Used only' toggle when usage is empty but artifacts exist", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+      const u = String(url);
+      if (u.includes("/api/inventory"))
+        return res({ skills: [{ name: "pdf" }], mcpServers: [], instructions: [], hooks: [] });
+      if (u.includes("/api/usage")) return res({ artifacts: [] });
+      throw new Error(`unexpected url ${u}`);
+    }));
+    render(<Ledger apiBase="" />);
+    expect(await screen.findByText(/uncheck .Used only. to browse all 1/i)).toBeTruthy();
+  });
 });

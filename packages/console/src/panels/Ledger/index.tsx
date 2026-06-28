@@ -25,10 +25,17 @@ export function Ledger({ apiBase }: { apiBase: string }) {
   }, [apiBase]);
 
   const visible = useMemo(() => (groups ? applyView(groups, view) : []), [groups, view]);
+  const total = useMemo(() => (groups ?? []).reduce((n, g) => n + g.items.length, 0), [groups]);
   const setSort = (sort: SortKey) => setView((v) => ({ ...v, sort }));
 
   if (error) return <p className="ledger-error">Could not load inventory: {error}</p>;
   if (!groups) return <p className="ledger-loading">Loading…</p>;
+
+  // "Used only" hiding everything (e.g. no usage analyzed yet) is the common
+  // empty case — point at the toggle rather than implying the ledger is empty.
+  const emptyMsg = view.usedOnly && !view.query && total > 0
+    ? `No used artifacts yet — uncheck “Used only” to browse all ${total}.`
+    : "No matching artifacts.";
 
   return (
     <div className="ledger">
@@ -61,7 +68,7 @@ export function Ledger({ apiBase }: { apiBase: string }) {
       </div>
 
       {visible.length === 0 ? (
-        <p className="ledger-empty">No matching artifacts.</p>
+        <p className="ledger-empty">{emptyMsg}</p>
       ) : visible.map((g) => (
         <section className="ledger-group" key={g.key}>
           <h2 className="ledger-group-label">{g.label}</h2>
