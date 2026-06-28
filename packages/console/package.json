@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@agentback/client": "^0.6.0",
+    "dompurify": "^3.4.11",
+    "marked": "^18.0.5",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "zod": "^4.4.3"

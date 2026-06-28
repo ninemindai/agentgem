@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { materializeRoute, makeClient, TARGET_IDS, type MaterializeResult } from "../../api/routes.js";
 import type { GemSelection } from "./selection.js";
+import { ContentView } from "./ContentView.js";
 
 /** File paths in a stable, directory-friendly order. */
 export function sortedFiles(files: Record<string, string>): string[] {
@@ -57,7 +58,11 @@ export function Targets({ apiBase, selection, name }: { apiBase: string; selecti
                 >{f}</li>
               ))}
             </ul>
-            <pre className="targets-content">{active ? result.files[active] : ""}</pre>
+            <div className="targets-content-wrap">
+              {active && active.endsWith(".md")
+                ? <ContentView text={result.files[active]} />
+                : <pre className="targets-content">{active ? result.files[active] : ""}</pre>}
+            </div>
           </div>
           {result.skipped.length > 0 && (
             <p className="targets-skipped">{result.skipped.length} artifact(s) skipped for {result.target}.</p>

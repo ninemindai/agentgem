@@ -9,6 +9,7 @@ import { Preview } from "./Preview.js";
 import { Targets } from "./Targets.js";
 import { Run } from "./Run.js";
 import { Checks } from "./Checks.js";
+import { ContentView } from "./ContentView.js";
 import { Publish } from "./Publish.js";
 
 export function Ledger({ apiBase }: { apiBase: string }) {
@@ -270,7 +271,11 @@ export function Ledger({ apiBase }: { apiBase: string }) {
                     )}
                     <span className="ledger-badge" title="invocations">{i.invocations}</span>
                   </div>
-                  {i.detail && expanded.has(key) && <pre className="ledger-detail">{i.detail}</pre>}
+                  {i.detail && expanded.has(key) && (
+                    g.key === "skills" || g.key === "instructions"
+                      ? <ContentView text={i.detail} />
+                      : <pre className="ledger-detail">{i.detail}</pre>
+                  )}
                 </li>
               );
             })}

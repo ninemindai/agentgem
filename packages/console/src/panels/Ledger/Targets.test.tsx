@@ -30,8 +30,8 @@ describe("Targets", () => {
     fireEvent.change(screen.getByLabelText("target"), { target: { value: "codex" } });
     fireEvent.click(screen.getByText("Materialize"));
     expect(await screen.findByText("AGENTS.md")).toBeTruthy();
-    // first file selected by default; its content renders
-    await waitFor(() => expect(screen.getByText("# hello agents")).toBeTruthy());
+    // .md content renders as markdown by default ("# hello agents" -> <h1>hello agents</h1>)
+    await waitFor(() => expect(screen.getByText("hello agents")).toBeTruthy());
     fireEvent.click(screen.getByText("skills/pdf/SKILL.md"));
     expect(screen.getByText("pdf skill")).toBeTruthy();
   });
