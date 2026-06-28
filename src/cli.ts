@@ -31,7 +31,8 @@ Once running, open the printed URL (default http://127.0.0.1:4317/). Append
 
 Sharing a Gem (store-and-forward over NATS; set $NATS_URL, default nats://127.0.0.1:4222):
   agentgem send <file.gem>              Encrypt + stash; prints a one-time agentgem:// ticket
-  agentgem receive <ticket> [out.gem]   Fetch, decrypt, verify; writes the .gem`;
+  agentgem receive <ticket> [out.gem]   Fetch, decrypt, verify; writes the .gem
+  agentgem bind                         Bind this machine's key to your GitHub account`;
 
 async function main(argv: string[]): Promise<void> {
   const has = (...names: string[]) => names.some((n) => argv.includes(n));
@@ -51,6 +52,12 @@ async function main(argv: string[]): Promise<void> {
   if (argv[0] === "send" || argv[0] === "receive") {
     const { main: transferMain } = await import("./transfer/cli.js");
     return transferMain(argv);
+  }
+
+  // `agentgem bind` — bind this machine's signing key to a GitHub account (anti-sybil identity).
+  if (argv[0] === "bind") {
+    const { main: bindMain } = await import("./bind/cli.js");
+    return bindMain(argv);
   }
 
   const portArg = opt("-p", "--port");
