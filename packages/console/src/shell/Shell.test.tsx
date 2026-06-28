@@ -58,10 +58,12 @@ describe("Shell", () => {
     expect(screen.getByText(/New Gem/)).toBeTruthy();
   });
 
-  it("clicking the active-gem switcher navigates to your-gems", () => {
+  it("clicking the active-gem switcher opens its dropdown menu", () => {
     render(<Shell pages={pages} apiBase="" />);
+    expect(screen.queryByRole("menu")).toBeNull();
     fireEvent.click(screen.getByText(/New Gem/));
-    expect(window.location.hash).toBe("#/your-gems");
+    expect(screen.getByRole("menu")).toBeTruthy();
+    expect(screen.getByText("Browse all →")).toBeTruthy();
   });
 
   it("renders group labels and places items under them", () => {

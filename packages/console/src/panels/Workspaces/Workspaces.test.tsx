@@ -15,6 +15,7 @@ const ws = {
   artifactCounts: { skill: 3, mcp_server: 1, instructions: 2, hook: 0 },
   // (counts and this representative list are independent test concerns)
   artifacts: [{ type: "skill", name: "pdf" }, { type: "mcp_server", name: "context7" }],
+  modifiedMs: 1_700_000_000_000,
   checks: 4,
   renderedTargets: ["claude", "codex"],
 };

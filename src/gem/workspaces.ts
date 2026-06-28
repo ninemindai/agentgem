@@ -20,6 +20,7 @@ export interface WorkspaceSummary {
   version: string;
   artifactCounts: { skill: number; mcp_server: number; instructions: number; hook: number };
   artifacts: { type: string; name: string }[];
+  modifiedMs: number; // dir mtime — for recency ordering (most-recent first)
   checks: number;
   renderedTargets: TargetId[];
 }
@@ -72,6 +73,7 @@ function summary(name: string, manifestJson: string, dir: string): WorkspaceSumm
     // The artifact (type, name) list lets a consumer reconstruct the selection
     // that built this workspace (e.g. the console's "Open" → re-curate).
     artifacts: m.artifacts.map((a) => ({ type: a.type, name: a.name })),
+    modifiedMs: statSync(dir).mtimeMs,
     checks: m.checks.length,
     renderedTargets: renderedTargets(dir),
   };
@@ -91,7 +93,8 @@ export function listWorkspaces(): WorkspaceSummary[] {
   if (!existsSync(root)) return [];
   return readdirSync(root)
     .filter((n) => statSync(join(root, n)).isDirectory() && existsSync(join(root, n, "gem.json")))
-    .map((n) => summary(n, readFileSync(join(root, n, "gem.json"), "utf8"), join(root, n)));
+    .map((n) => summary(n, readFileSync(join(root, n, "gem.json"), "utf8"), join(root, n)))
+    .sort((a, b) => b.modifiedMs - a.modifiedMs); // most-recent first
 }
 
 export function readWorkspace(name: string): WorkspaceDetail {

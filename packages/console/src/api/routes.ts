@@ -60,6 +60,7 @@ const WorkspaceSummarySchema = z.object({
   }),
   // (type, name) of each artifact — lets "Open" restore the gem's selection.
   artifacts: z.array(z.object({ type: z.string(), name: z.string() })),
+  modifiedMs: z.number(), // dir mtime — recency ordering for the switcher dropdown
   checks: z.number(),
   renderedTargets: z.array(z.string()),
 });

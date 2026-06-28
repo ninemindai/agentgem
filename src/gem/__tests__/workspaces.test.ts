@@ -1,6 +1,6 @@
 // src/gem/__tests__/workspaces.test.ts
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -51,6 +51,15 @@ describe("workspaces", () => {
   it("create throws on a duplicate name", () => {
     createWorkspace("dup", gem([skill("a")]));
     expect(() => createWorkspace("dup", gem([skill("b")]))).toThrow(/already exists/i);
+  });
+
+  it("listWorkspaces returns most-recently-modified first", () => {
+    createWorkspace("older", gem([skill("a")]));
+    createWorkspace("newer", gem([skill("b")]));
+    // pin distinct mtimes so the ordering is deterministic (creation can collide within one tick)
+    utimesSync(join(home, "workspaces", "older"), 1_700_000_000, 1_700_000_000);
+    utimesSync(join(home, "workspaces", "newer"), 1_700_000_100, 1_700_000_100);
+    expect(listWorkspaces().map((w) => w.name)).toEqual(["newer", "older"]);
   });
 
   it("renderTarget threads MaterializeOpts so a2a server mode reaches disk (not just card-only)", () => {
