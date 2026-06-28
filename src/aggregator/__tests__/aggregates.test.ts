@@ -46,6 +46,17 @@ describe("aggregates + k-anon", () => {
     expect(skillOnly.map((r) => r.id)).toContain("skill:x");
     expect(skillOnly.map((r) => r.kind)).not.toContain("harness");
   });
+  it("coOccurrence partners are tools-only: harness/model excluded", async () => {
+    const db = await makeTestDb();
+    // att() seeds a harness ingredient "claude-code" on every attestation.
+    // Give 2 producers so both skill:a and the harness would clear k=2 if unfiltered.
+    await projectAttestation(db, att("ed25519:h1", "f1", ["skill:a", "skill:partner"]));
+    await projectAttestation(db, att("ed25519:h2", "f2", ["skill:a", "skill:partner"]));
+    const co = await coOccurrence(db, { id: "skill:a", k: 2 });
+    // skill:partner (a tool) must appear; claude-code (harness) must not.
+    expect(co.map((r) => r.id)).toContain("skill:partner");
+    expect(co.find((r) => r.id === "claude-code")).toBeUndefined();
+  });
   it("coOccurrence finds partners sharing a producer, k-anon enforced", async () => {
     const db = await makeTestDb();
     await projectAttestation(db, att("ed25519:p1", "d1", ["skill:a", "skill:x"]));

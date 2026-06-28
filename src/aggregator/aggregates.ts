@@ -41,6 +41,7 @@ export async function coOccurrence(
            count(distinct b.provider || ':' || b.account_id)::int as "verifiedProducers"
     from usage_edges e1
     join usage_edges e2 on e2.attestation_id = e1.attestation_id and e2.ingredient_id <> e1.ingredient_id
+    join ingredients i2 on i2.id = e2.ingredient_id and i2.kind in ('skill','mcp')
     join attestations a on a.id = e1.attestation_id and not a.quarantined
     left join account_bindings b on b.pubkey = a.producer_pubkey
     where e1.ingredient_id = ${opts.id}
