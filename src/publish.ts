@@ -94,8 +94,19 @@ export async function publishManagedAgent(gem: Gem, client: PublishClient): Prom
 // (and the user) learns the teardown was partial. Mirrors publishManagedAgent's rollback contract.
 export async function undeployManagedAgent(rec: DeployRecord, client: PublishClient): Promise<void> {
   const errors: Error[] = [];
+  // Deletes are idempotent: a 404 means the resource is already gone (e.g. deleting
+  // the agent cascades to its environment), which is success, not a failure.
+  const isAlreadyGone = (cause: unknown): boolean => {
+    const status = (cause as { status?: number })?.status;
+    if (status === 404) return true;
+    const msg = String((cause as { message?: unknown })?.message ?? cause);
+    return /not[_ ]found|404/i.test(msg);
+  };
   const attempt = async (what: string, fn: () => Promise<void>) => {
-    try { await fn(); } catch (cause) { errors.push(new Error(`failed to delete ${what}`, { cause })); }
+    try { await fn(); } catch (cause) {
+      if (isAlreadyGone(cause)) return;
+      errors.push(new Error(`failed to delete ${what}`, { cause }));
+    }
   };
   if (rec.agentId) await attempt(`agent ${rec.agentId}`, async () => {
     if (!client.deleteAgent) throw new Error("client does not support deleting agents");
@@ -122,7 +133,19 @@ export function anthropicPublishClient(apiKey: string): PublishClient {
       const created = await client.beta.skills.create({ display_title: name, files: [file] });
       return { skillId: created.id, version: created.latest_version ?? "latest" };
     },
-    async deleteSkill(skillId) { await client.beta.skills.delete(skillId); },
+    async deleteSkill(skillId) {
+      // The API rejects deleting a skill that still has versions ("Delete all
+      // versions first"), so remove each version before the skill itself.
+      const raw = client as unknown as { delete(path: string, opts?: unknown): Promise<unknown> };
+      const betaHeader = { headers: { "anthropic-beta": "skills-2025-10-02" } };
+      try {
+        const versions = (await client.beta.skills.versions.list(skillId)) as unknown as { data?: { version: string }[] };
+        for (const v of versions.data ?? []) {
+          await raw.delete(`/v1/skills/${skillId}/versions/${v.version}`, betaHeader);
+        }
+      } catch { /* best-effort: still attempt the skill delete below */ }
+      await client.beta.skills.delete(skillId);
+    },
     async createEnvironment(name) {
       const environment = await client.beta.environments.create({
         name,
