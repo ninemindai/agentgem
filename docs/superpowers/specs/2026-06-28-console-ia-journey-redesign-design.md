@@ -89,9 +89,16 @@ Assembles the active Gem's contents. Top: a **scope picker** — the only remnan
 Two ways to fill the Gem, side by side:
 1. **Hand-pick** — the inventory list (filter, sort, view-content with Markdown⇄Raw, usage
    badges). Checking items adds them to the active Gem.
-2. **Analyze** — only with a Project selected: distills that project's sessions → recommended
-   workflow + artifacts and **pre-checks them** (the existing analyze → "Use this selection"
-   flow, now inside Curate).
+2. **Analyze** — **per-project, one click**: the discovered projects are a compact list
+   (a dropdown / collapsed list of recents + discovered projects), and **each project row carries
+   its own "Analyze" button**. Clicking it distills THAT project's sessions → recommended workflow
+   + artifacts and **pre-checks them** in the active Gem (the existing analyze → "Use this
+   selection" flow, now inside Curate). This replaces the old two-step "select a project scope,
+   then press a separate Analyze button" — analyze is initiated directly from the project you want.
+   *(User feedback, 2026-06-28, while testing Phase 1.)*
+
+Note the scope dropdown (Global ⇄ Project) still governs what the **hand-pick** inventory list is
+sourced from; the **Analyze** action is decoupled and lives on the project rows themselves.
 
 Also in Curate, on the active Gem: **Suggest checks**, **name the Gem**, **Save to Library**.
 
