@@ -37,3 +37,14 @@ body { margin: 0; background: var(--paper); color: var(--ink);
   background: var(--paper); border: 1px solid var(--line); border-radius: 999px; padding: 0 8px; }
 .ledger-loading, .ledger-empty, .ledger-error { color: var(--muted); }
 .ledger-error { color: var(--accent); }
+.ws-list { display: flex; flex-direction: column; gap: 12px; }
+.ws-card { border: 1px solid var(--line); border-radius: 8px; background: var(--raised); padding: 14px 16px; }
+.ws-head { display: flex; align-items: baseline; gap: 10px; }
+.ws-name { font-weight: 600; }
+.ws-gem { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.ws-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.ws-chip { font-size: 12px; color: var(--muted); background: var(--paper);
+  border: 1px solid var(--line); border-radius: 999px; padding: 1px 9px; font-variant-numeric: tabular-nums; }
+.ws-targets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.ws-target { font-size: 11px; color: var(--accent); background: var(--paper);
+  border: 1px solid var(--accent); border-radius: 4px; padding: 1px 7px; }

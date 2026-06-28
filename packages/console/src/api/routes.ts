@@ -28,4 +28,22 @@ export type Usage = z.infer<typeof UsageSchema>;
 export const inventoryRoute = defineRoute("GET", "/api/inventory", { response: InventorySchema });
 export const usageRoute = defineRoute("GET", "/api/usage", { response: UsageSchema });
 
+const WorkspaceSummarySchema = z.object({
+  name: z.string(),
+  gemName: z.string(),
+  version: z.string(),
+  artifactCounts: z.object({
+    skill: z.number(),
+    mcp_server: z.number(),
+    instructions: z.number(),
+    hook: z.number(),
+  }),
+  checks: z.number(),
+  renderedTargets: z.array(z.string()),
+});
+export const WorkspacesSchema = z.object({ workspaces: z.array(WorkspaceSummarySchema) });
+export type WorkspaceSummary = z.infer<typeof WorkspaceSummarySchema>;
+
+export const workspacesRoute = defineRoute("GET", "/api/workspaces", { response: WorkspacesSchema });
+
 export const makeClient = (apiBase: string): Client => createClient({ baseURL: apiBase });
