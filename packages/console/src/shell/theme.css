@@ -52,6 +52,22 @@ body { margin: 0; background: var(--paper); color: var(--ink);
   text-transform: uppercase; letter-spacing: .04em; }
 .preview-json { background: var(--paper); border: 1px solid var(--line); border-radius: 6px;
   padding: 10px; overflow: auto; font-size: 12px; max-height: 320px; }
+.targets { margin-bottom: 22px; }
+.targets-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.targets-label { color: var(--muted); font-size: 13px; }
+.targets-select { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--raised); color: var(--ink); font: inherit; }
+.targets-result { display: grid; grid-template-columns: minmax(180px, 260px) 1fr; gap: 12px;
+  border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.targets-files { list-style: none; margin: 0; padding: 8px; background: var(--raised);
+  border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; overflow: auto; max-height: 360px; }
+.targets-file { padding: 4px 8px; border-radius: 5px; cursor: pointer; font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
+.targets-file:hover { background: rgba(0,0,0,.04); }
+.targets-file.is-active { background: var(--paper); color: var(--accent); font-weight: 600; }
+.targets-content { margin: 0; padding: 12px; overflow: auto; max-height: 360px; font-size: 12px;
+  background: var(--paper); white-space: pre-wrap; }
+.targets-skipped { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
 .ledger-group { margin-bottom: 24px; }
 .ledger-group-label { font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
   color: var(--muted); margin: 0 0 8px; }

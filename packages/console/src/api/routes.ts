@@ -90,4 +90,29 @@ export const archiveRoute = defineRoute("POST", "/api/archive", {
   response: ArchiveResponseSchema,
 });
 
+// Materialize targets (registry keys on the server). Stable enum; mirrors the
+// vanilla UI's target select.
+export const TARGET_IDS = [
+  "claude", "codex", "agents", "hermes", "eve", "flue", "openai-sandbox", "agentcore", "a2a",
+] as const;
+export type TargetId = (typeof TARGET_IDS)[number];
+
+const MaterializeRequestSchema = z.object({
+  selection: GemSelectionSchema,
+  target: z.string(),
+  name: z.string().optional(),
+});
+export const MaterializeResponseSchema = z.object({
+  target: z.string(),
+  files: z.record(z.string(), z.string()),
+  skipped: z.array(z.object({ artifact: z.string(), type: z.string(), reason: z.string() })),
+  compatibility: z.record(z.string(), z.object({ supported: z.number(), skipped: z.number() })),
+});
+export type MaterializeResult = z.infer<typeof MaterializeResponseSchema>;
+
+export const materializeRoute = defineRoute("POST", "/api/materialize", {
+  body: MaterializeRequestSchema,
+  response: MaterializeResponseSchema,
+});
+
 export const makeClient = (apiBase: string): Client => createClient({ baseURL: apiBase });
