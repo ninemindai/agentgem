@@ -122,25 +122,4 @@ describe("Curate", () => {
     expect(await screen.findByText(/uncheck .Used only. to browse all 1/i)).toBeTruthy();
   });
 
-  it("refetches inventory scoped to a project when the scope changes", async () => {
-    const calls: string[] = [];
-    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
-      const u = String(url); calls.push(u);
-      if (u.includes("/api/inventory")) return ({ ok: true, status: 200, text: async () => JSON.stringify(
-        u.includes("projects=") ? { skills: [{ name: "proj-skill" }], mcpServers: [], instructions: [], hooks: [] }
-                                : { skills: [{ name: "global-skill" }], mcpServers: [], instructions: [], hooks: [] }) }) as unknown as Response;
-      if (u.includes("/api/usage")) return ({ ok: true, status: 200, text: async () => JSON.stringify({
-        artifacts: [
-          { type: "skill", name: "global-skill", invocations: 1, lastUsedMs: 100 },
-          { type: "skill", name: "proj-skill", invocations: 1, lastUsedMs: 100 },
-        ],
-      }) }) as unknown as Response;
-      if (u.includes("/api/testbed/projects")) return ({ ok: true, status: 200, text: async () => JSON.stringify({ projects: [{ path: "/home/me/proj", flavor: "claude", lastUsed: null, exists: true }] }) }) as unknown as Response;
-      return ({ ok: true, status: 200, text: async () => "{}" }) as unknown as Response;
-    }));
-    render(<Curate apiBase="" />);
-    expect(await screen.findByText("global-skill")).toBeTruthy();
-    fireEvent.change(screen.getByLabelText("scope"), { target: { value: "/home/me/proj" } });
-    expect(await screen.findByText("proj-skill")).toBeTruthy();
-  });
 });

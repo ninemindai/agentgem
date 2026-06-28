@@ -30,10 +30,7 @@ export type Inventory = z.infer<typeof InventorySchema>;
 export type UsageItem = z.infer<typeof UsageItemSchema>;
 export type Usage = z.infer<typeof UsageSchema>;
 
-export const inventoryRoute = defineRoute("GET", "/api/inventory", {
-  query: z.object({ projects: z.string().optional() }),
-  response: InventorySchema,
-});
+export const inventoryRoute = defineRoute("GET", "/api/inventory", { response: InventorySchema });
 export const usageRoute = defineRoute("GET", "/api/usage", {
   query: z.object({ scope: z.enum(["global"]).optional() }),
   response: UsageSchema,
