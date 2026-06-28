@@ -2,6 +2,7 @@
 // Strip secret VALUES from an MCP/hook config while preserving its shape, and record the
 // NAME + LOCATION of every value stripped so a runtime can re-inject by name. Values never leave.
 import type { SecretRef } from "./types.js";
+import { redactStrongCredentials } from "./secretPatterns.js";
 
 const SECRET_RE = /(api[_-]?key|token|secret|password|passwd|bearer|sk-|ghp_|gho_|xox[a-z]-|credential)/i;
 
@@ -14,29 +15,6 @@ const SECRET_CONTAINER_KEYS = new Set(["env", "environment", "headers", "auth", 
 // certainly a secret; long sentences/paths/urls contain those characters.
 function isHighEntropyToken(s: string): boolean {
   return s.length >= 32 && /^[A-Za-z0-9_-]+$/.test(s);
-}
-
-// Egress backstop — structure-INDEPENDENT credential patterns. The heuristics above key off
-// key-name / container / high-entropy charset, so they miss credentials stored under a benign
-// key whose value carries special characters (JWT dots, a `scheme://user:pass@` connection
-// string, a PEM block). These patterns catch those by content alone, as a fail-closed net, and
-// redact only the matched span so the surrounding shape (host, path, key kind) survives.
-const PEM_RE = /-----BEGIN[A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END[A-Z0-9 ]*PRIVATE KEY-----/g;
-const JWT_RE = /\beyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\b/g;
-// Provider-prefixed tokens that can appear mid-string (e.g. a pasted CLI line or a header value).
-const PROVIDER_TOKEN_RE =
-  /\b(?:github_pat_|ghp_|gho_|ghu_|ghs_|glpat-|xox[a-z]-)[A-Za-z0-9_-]{8,}|\bAKIA[0-9A-Z]{16}\b|\bASIA[0-9A-Z]{16}\b/g;
-// `scheme://user:password@host` — redact ONLY the password segment, keep userinfo/host shape.
-// (A URL with no `user:pass@`, e.g. https://mcp.example.com/sse, never matches.)
-const URL_CRED_RE = /([a-zA-Z][a-zA-Z0-9+.-]*:\/\/[^/\s:@]+:)[^/\s:@]+(@)/g;
-
-// Apply the strong-pattern net to one string; returns the (possibly) redacted string.
-function applyEgressBackstop(s: string): string {
-  return s
-    .replace(PEM_RE, "<redacted>")
-    .replace(JWT_RE, "<redacted>")
-    .replace(PROVIDER_TOKEN_RE, "<redacted>")
-    .replace(URL_CRED_RE, (_m, prefix, at) => `${prefix}<redacted>${at}`);
 }
 
 function redactNode(node: unknown, underSecretMap: boolean, path: string, key: string | undefined, secrets: SecretRef[]): unknown {
@@ -58,7 +36,8 @@ function redactNode(node: unknown, underSecretMap: boolean, path: string, key: s
     }
     // Backstop: catch JWTs, PEM private keys, provider tokens, and URL-embedded passwords that
     // slip past the heuristics above (special chars in the value defeat the high-entropy charset).
-    const backstopped = applyEgressBackstop(node);
+    // The strong-pattern net is shared with the pre-publish leak canary (secretPatterns.ts).
+    const backstopped = redactStrongCredentials(node);
     if (backstopped !== node) {
       secrets.push({ name: key ?? path, location: path });
       return backstopped;
