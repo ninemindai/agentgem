@@ -19,6 +19,8 @@ function mockFetch() {
         { type: "skill", name: "pdf", invocations: 7, lastUsedMs: 100 },
         { type: "skill", name: "zip", invocations: 3, lastUsedMs: 900 },
       ] });
+    if (u.includes("/api/scaffold-checks"))
+      return res({ checks: [{ kind: "behavioral", name: "smoke-test", task: "does it load" }] });
     if (u.includes("/api/workspaces"))
       return res({ name: "my-selection" });
     if (u.includes("/api/archive"))
@@ -95,6 +97,16 @@ describe("Ledger", () => {
     await waitFor(() =>
       expect(fetchSpy.mock.calls.some((c) => String(c[0]).includes("/api/archive"))).toBe(true),
     );
+  });
+
+  it("suggests checks for the selection", async () => {
+    vi.stubGlobal("fetch", mockFetch());
+    render(<Ledger apiBase="" />);
+    await screen.findByText("pdf");
+    fireEvent.click(screen.getByLabelText("pdf"));
+    fireEvent.click(screen.getByText("Suggest checks"));
+    expect(await screen.findByText("smoke-test")).toBeTruthy();
+    expect(screen.getByText("behavioral")).toBeTruthy();
   });
 
   it("saves the current selection as a workspace", async () => {

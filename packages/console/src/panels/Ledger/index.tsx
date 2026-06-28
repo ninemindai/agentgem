@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
-import { inventoryRoute, usageRoute, buildGemRoute, archiveRoute, createWorkspaceRoute, makeClient, type Usage, type Gem } from "../../api/routes.js";
+import { inventoryRoute, usageRoute, buildGemRoute, archiveRoute, createWorkspaceRoute, scaffoldChecksRoute, makeClient, type Usage, type Gem, type GemCheck } from "../../api/routes.js";
 import { groupInventory, mergeUsage, applyView, DEFAULT_VIEW, type LedgerGroup, type SortKey } from "./data.js";
 import { selKey, visibleKeys, buildSelection, type GemSelection } from "./selection.js";
 import { base64ToBytes, downloadBlob, copyText } from "./exporters.js";
 import { Preview } from "./Preview.js";
 import { Targets } from "./Targets.js";
 import { Run } from "./Run.js";
+import { Checks } from "./Checks.js";
 
 export function Ledger({ apiBase }: { apiBase: string }) {
   const [groups, setGroups] = useState<LedgerGroup[] | null>(null);
@@ -19,6 +20,10 @@ export function Ledger({ apiBase }: { apiBase: string }) {
   const [buildError, setBuildError] = useState<string | null>(null);
   const [wsName, setWsName] = useState("");
   const [wsNote, setWsNote] = useState<string | null>(null);
+  const [suggested, setSuggested] = useState<GemCheck[] | null>(null);
+  const [included, setIncluded] = useState<Set<string>>(new Set());
+  const [checksBusy, setChecksBusy] = useState(false);
+  const [checksError, setChecksError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -54,7 +59,8 @@ export function Ledger({ apiBase }: { apiBase: string }) {
     try {
       const client = makeClient(apiBase);
       const sel = buildSelection(selected);
-      const g = await buildGemRoute.call(client, { body: { selection: sel, name: "gem" } });
+      const checks = (suggested ?? []).filter((c) => included.has(c.name));
+      const g = await buildGemRoute.call(client, { body: { selection: sel, name: "gem", checks: checks.length ? checks : undefined } });
       setGem(g);
       setBuiltSel(sel);
     } catch (e) {
@@ -77,6 +83,25 @@ export function Ledger({ apiBase }: { apiBase: string }) {
       setBuildError(e instanceof Error ? e.message : String(e));
     }
   };
+
+  const suggestChecks = async () => {
+    setChecksBusy(true);
+    setChecksError(null);
+    try {
+      const { checks } = await scaffoldChecksRoute.call(makeClient(apiBase), { body: { selection: buildSelection(selected), name: "gem" } });
+      setSuggested(checks);
+      setIncluded(new Set(checks.map((c) => c.name)));
+    } catch (e) {
+      setChecksError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setChecksBusy(false);
+    }
+  };
+  const toggleCheck = (name: string) => setIncluded((s) => {
+    const n = new Set(s);
+    if (n.has(name)) n.delete(name); else n.add(name);
+    return n;
+  });
 
   const copyJson = () => { if (gem) void copyText(JSON.stringify(gem, null, 2)); };
   const downloadJson = () => { if (gem) downloadBlob(`${gem.name}.json`, "application/json", JSON.stringify(gem, null, 2)); };
@@ -153,6 +178,10 @@ export function Ledger({ apiBase }: { apiBase: string }) {
         {wsNote && <span className="ws-note">{wsNote}</span>}
         {buildError && <span className="ledger-error">{buildError}</span>}
       </div>
+
+      {selected.size > 0 && (
+        <Checks suggested={suggested} included={included} busy={checksBusy} error={checksError} onSuggest={suggestChecks} onToggle={toggleCheck} />
+      )}
 
       {gem && (
         <Preview gem={gem} onDownloadGem={downloadGem} onDownloadJson={downloadJson} onCopyJson={copyJson} />

@@ -70,9 +70,15 @@ export const renderWorkspaceRoute = defineRoute("POST", "/api/workspace/render",
 });
 
 // POST /api/gem — build a gem from a selection. Request mirrors the server's
+// A gem check, kept loose so the full object round-trips back into the build
+// unchanged (the server validates it strictly).
+export const GemCheckSchema = z.looseObject({ kind: z.string(), name: z.string() });
+export type GemCheck = z.infer<typeof GemCheckSchema>;
+
 export const GemRequestSchema = z.object({
   selection: GemSelectionSchema,
   name: z.string().optional(),
+  checks: z.array(GemCheckSchema).optional(),
 });
 const GemArtifactSchema = z.object({ type: z.string(), name: z.string() });
 const SecretRequirementSchema = z.object({ name: z.string() });
@@ -139,6 +145,12 @@ const PrepareRunResponseSchema = z.object({ runId: z.string(), agent: z.string()
 export const prepareRunRoute = defineRoute("POST", "/api/gem/run/prepare", {
   body: PrepareRunRequestSchema,
   response: PrepareRunResponseSchema,
+});
+
+// POST /api/scaffold-checks — suggest behavioral/external checks for a selection.
+export const scaffoldChecksRoute = defineRoute("POST", "/api/scaffold-checks", {
+  body: z.object({ selection: GemSelectionSchema, name: z.string().optional() }),
+  response: z.object({ checks: z.array(GemCheckSchema) }),
 });
 
 // Registry (GitHub-backed). ready → search → install-to-workspace.
