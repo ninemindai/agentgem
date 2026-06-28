@@ -39,7 +39,7 @@
   "type": "module",
   "packageManager": "pnpm@10.29.2",
   "scripts": {
-    "build": "tsc -b && node scripts/check-inline-js.mjs && node scripts/copy-public.mjs && node scripts/build-console.mjs",
+    "build": "tsc -b && node scripts/build-console.mjs",
     "dev": "pnpm build && node dist/index.js",
     "start": "node dist/index.js",
     "build:site": "node website/build.mjs",

@@ -22,12 +22,6 @@ import { streamGemRun } from "./gemRunStream.js";
 import { originGuard } from "./originGuard.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
-function pageHtml(): string {
-  for (const p of [join(here, "public", "index.html"), join(here, "..", "src", "public", "index.html")]) {
-    try { return readFileSync(p, "utf8"); } catch { /* try next */ }
-  }
-  return "<!doctype html><p>index.html not found</p>";
-}
 
 // The React console SPA (one self-contained file). dist build path first, then a
 // dev fallback to the console package's own dist; finally a placeholder.
@@ -55,14 +49,11 @@ export async function createApp(port: number): Promise<RestApplication> {
   await installExplorer(app, { title: "agentgem API" });
   await installMcpHttp(app);
   const server = await app.restServer;
-  // Cutover (2026-06): the React console (`dist/public/console`) is the default UI
-  // at `/`. The original vanilla UI is preserved at `/legacy` for surfaces not yet
-  // ported to the console (deploy, publish, import, registry, testbed, …).
+  // The React console (`dist/public/console`) is the UI, served at `/` (and `/console`).
+  // It replaced the original vanilla UI, now removed (history in git).
   const consolePage = consoleHtml();
-  const legacyHtml = pageHtml();
   server.expressApp.get("/", (_req, res) => res.type("html").send(consolePage));
   server.expressApp.get("/console", (_req, res) => res.type("html").send(consolePage));
-  server.expressApp.get("/legacy", (_req, res) => res.type("html").send(legacyHtml));
   // SSE progress stream for workflow analysis (raw Express — the decorator
   // framework only returns single JSON bodies). The POST /api/workflow/analyze
   // route stays for programmatic/test callers. originGuard is applied per-route because these raw
@@ -81,7 +72,7 @@ export async function run(port: number = Number(process.env.PORT ?? 4317)): Prom
   await app.start();
   const server = await app.restServer;
   console.log(`agentgem listening at ${server.url}`);
-  console.log(`  UI:       ${server.url}/  (console)  ·  classic: ${server.url}/legacy`);
+  console.log(`  UI:       ${server.url}/`);
   console.log(`  API:      ${server.url}/api/inventory  ·  POST ${server.url}/api/gem`);
   console.log(`  Explorer: ${server.url}/explorer/`);
   console.log(`  MCP:      ${server.url}/mcp`);
