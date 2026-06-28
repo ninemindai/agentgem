@@ -24,6 +24,7 @@ function signalWith(
   return {
     root: "/r", flavor: "claude",
     sessions: { scanned: sessions.length, firstMs: 0, lastMs: 0, spanDays: 0 },
+    models: [],
     artifacts: [], unresolved: [], coOccurrence: [], shapes: [], notes: [],
     sequences: { root: "/r", sessions },
     procedures,
@@ -35,6 +36,7 @@ describe("distillCandidates — Phase-0 gate", () => {
     const sig: WorkflowSignal = {
       root: "/r", flavor: "claude",
       sessions: { scanned: 0, firstMs: 0, lastMs: 0, spanDays: 0 },
+      models: [],
       artifacts: [], unresolved: [], coOccurrence: [], shapes: [], notes: [],
     };
     expect(distillCandidates(sig)).toEqual([]);
@@ -151,6 +153,7 @@ function fakeConnect(canned: string | (() => Promise<string>)): AcpConnectFn {
 const SIG: WorkflowSignal = {
   root: "/r", flavor: "claude",
   sessions: { scanned: 3, firstMs: 0, lastMs: 0, spanDays: 0 },
+  models: [],
   artifacts: [], unresolved: [], coOccurrence: [], shapes: [], notes: [],
   sequences: { root: "/r", sessions: [CANDIDATES[0].sample] },
   procedures: [{ key: CANDIDATES[0].key, verbs: CANDIDATES[0].verbs, sessions: 3, sampleSessionIdx: 0, sessionIdxs: [0] }],
@@ -192,7 +195,7 @@ function signalTwoSessions(): WorkflowSignal {
   const mk = (id: string) => ({ steps, sessionId: id, transcript: `${id}.jsonl`, atMs: 0, missionHint: { task: "Fix and ship the failing test", outcome: "shipped" } });
   return {
     root: "/r", flavor: "claude", sessions: { scanned: 2, firstMs: 0, lastMs: 0, spanDays: 0 },
-    artifacts: [], unresolved: [], coOccurrence: [], shapes: [], notes: [],
+    artifacts: [], unresolved: [], coOccurrence: [], shapes: [], notes: [], models: [],
     sequences: { root: "/r", sessions: [mk("a"), mk("b")] },
     procedures: [{ key: verbs.join(" > "), verbs, sessions: 2, sampleSessionIdx: 0, sessionIdxs: [0, 1] }],
   } as WorkflowSignal;
@@ -231,7 +234,7 @@ describe("analyze wiring", () => {
     const steps = verbs.map((verb, i) => ({ tool: verb.split(":")[0], verb, arg: "", msgIndex: i }));
     const signal = {
       root: "/r", flavor: "claude", sessions: { scanned: 2, firstMs: 0, lastMs: 0, spanDays: 0 },
-      artifacts: [], unresolved: [], coOccurrence: [], shapes: [], notes: [],
+      artifacts: [], unresolved: [], coOccurrence: [], shapes: [], notes: [], models: [],
       sequences: { root: "/r", sessions: [0, 1].map((i) => ({ steps, sessionId: `s${i}`, transcript: `s${i}.jsonl`, atMs: 0 })) },
       procedures: [{ key: verbs.join(" > "), verbs, sessions: 2, sampleSessionIdx: 0, sessionIdxs: [0, 1] }],
     } as WorkflowSignal;

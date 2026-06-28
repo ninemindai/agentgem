@@ -15,8 +15,9 @@ import { writeGemArchive, readGemArchive } from "./gem/archive.js";
 import type { GemLock } from "./gem/archive.js";
 import { writeArchiveDir, readArchiveDir } from "./gem/archiveFs.js";
 import { packTar } from "./gem/archiveTar.js";
-import { importGem } from "./gem/share.js";
+import { exportGem, importGem } from "./gem/share.js";
 import { fetchGemBytes } from "./gem/safeFetch.js";
+import { sendBytes, receiveTicket, natsStoreFromEnv, assertConfigured, mintCredsFromEnv, fetchAndBurnCiphertext } from "./transfer/service.js";
 import type { Gem } from "./gem/types.js";
 import { readDeployRecord, writeDeployRecord, clearDeployRecord } from "./gem/deployRecord.js";
 import type { DeployBackend } from "./gem/deployRecord.js";
@@ -31,6 +32,9 @@ import {
   InventorySchema, GemSchema, GemRequestSchema, DirQuerySchema, PickQuerySchema, PickFolderSchema,
   ScaffoldChecksRequestSchema, ScaffoldChecksResponseSchema,
   MaterializeRequestSchema, MaterializeResponseSchema,
+  TransferSendRequestSchema, TransferSendResponseSchema, TransferReceiveRequestSchema, TransferReceiveResponseSchema,
+  TransferTokenRequestSchema, TransferTokenResponseSchema,
+  TransferCiphertextRequestSchema, TransferCiphertextResponseSchema,
   PublishPreviewRequestSchema, PublishRequestSchema, PublishPreviewResponseSchema, PublishReadyResponseSchema, PublishResultSchema,
   DeployTargetsResponseSchema, DeployReadyQuerySchema,
   ArchiveRequestSchema, ArchiveResponseSchema,
@@ -172,9 +176,11 @@ export class GemController {
   async materialize(input: { body: z.infer<typeof MaterializeRequestSchema> }): Promise<z.infer<typeof MaterializeResponseSchema>> {
     const target = input.body.target as TargetId;
     let gem: Gem;
-    if (input.body.gemPath || input.body.gemUrl) {
+    if (input.body.gemPath || input.body.gemUrl || input.body.bytesBase64) {
       const bytes = input.body.gemUrl
         ? await fetchGemBytes(input.body.gemUrl) // SSRF-guarded: rejects non-public hosts
+        : input.body.bytesBase64
+        ? Buffer.from(input.body.bytesBase64, "base64") // in-memory bytes (e.g. a redeemed ticket)
         : readFileSync(input.body.gemPath!);
       gem = importGem(bytes).gem; // unpack + verify gem.lock; throws on tampering
     } else if (input.body.archivePath) {
@@ -185,6 +191,34 @@ export class GemController {
       gem = buildGem(inventory, input.body.selection!, { name: input.body.name ?? "gem", createdFrom: dirs.claudeDir, channels: input.body.channels });
     }
     return { target, ...materialize(gem, target, { a2aServer: input.body.a2aServer }), compatibility: compatibility(gem) };
+  }
+
+  @post("/transfer/send", { body: TransferSendRequestSchema, response: TransferSendResponseSchema })
+  async transferSend(input: { body: z.infer<typeof TransferSendRequestSchema> }): Promise<z.infer<typeof TransferSendResponseSchema>> {
+    assertConfigured(); // 400 before any filesystem/build work if NATS_URL is unset
+    const dirs = resolveDirs(input.body.dir);
+    const inventory = stageDraftsByEvidence(introspectAll(input.body.dir, input.body.projects), input.body.distilledDrafts ?? []);
+    const gem = buildGem(inventory, input.body.selection, { name: input.body.name ?? "gem", createdFrom: dirs.claudeDir, channels: input.body.channels });
+    const { bytes } = exportGem(gem, { version: input.body.version });
+    const { ticket } = await sendBytes(bytes, natsStoreFromEnv());
+    return { ticket };
+  }
+
+  @post("/transfer/receive", { body: TransferReceiveRequestSchema, response: TransferReceiveResponseSchema })
+  async transferReceive(input: { body: z.infer<typeof TransferReceiveRequestSchema> }): Promise<z.infer<typeof TransferReceiveResponseSchema>> {
+    const { gem, meta, bytes } = await receiveTicket(input.body.ticket, natsStoreFromEnv());
+    return { gem, meta, bytesBase64: bytes.toString("base64") };
+  }
+
+  @post("/transfer/token", { body: TransferTokenRequestSchema, response: TransferTokenResponseSchema })
+  async transferToken(input: { body: z.infer<typeof TransferTokenRequestSchema> }): Promise<z.infer<typeof TransferTokenResponseSchema>> {
+    return mintCredsFromEnv(input.body.scope ?? "receive");
+  }
+
+  @post("/transfer/ciphertext", { body: TransferCiphertextRequestSchema, response: TransferCiphertextResponseSchema })
+  async transferCiphertext(input: { body: z.infer<typeof TransferCiphertextRequestSchema> }): Promise<z.infer<typeof TransferCiphertextResponseSchema>> {
+    const bytes = await fetchAndBurnCiphertext(input.body.object);
+    return { ciphertextBase64: bytes.toString("base64") };
   }
 
   @post("/archive", { body: ArchiveRequestSchema, response: ArchiveResponseSchema })

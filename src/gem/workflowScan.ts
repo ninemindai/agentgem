@@ -42,6 +42,7 @@ export interface WorkflowSignal {
   flavor: "claude" | "codex";
   sessions: { scanned: number; firstMs: number; lastMs: number; spanDays: number };
   artifacts: ArtifactUsage[];
+  models: { id: string; sessions: number }[];
   unresolved: { name: string; kind: ArtifactType | "builtin"; count: number }[];
   coOccurrence: { a: string; b: string; sessions: number }[];
   // Distillation signal (only when retainSequences is on — undefined otherwise).
@@ -146,6 +147,31 @@ function bumpUnresolved(
 }
 
 interface Acc { invocations: number; sessions: Set<string>; lastMs: number; evidence?: string }
+
+type RawRecord = { message?: { role?: string; model?: string } };
+
+export function collectModels(sessions: RawRecord[][]): { id: string; sessions: number }[] {
+  const order: string[] = [];
+  const counts = new Map<string, number>();
+  for (const records of sessions) {
+    const seen = new Set<string>();
+    for (const r of records) {
+      const m = r.message?.model;
+      // Skip synthetic/placeholder model markers (Claude Code emits "<synthetic>"
+      // on injected/sidechain records) — they are not real models and must not be
+      // published as usage in the signed attestation.
+      if (!m || m.startsWith("<")) continue;
+      const id = m.toLowerCase();
+      if (!seen.has(id)) seen.add(id);
+    }
+    for (const id of seen) {
+      if (!counts.has(id)) order.push(id);
+      counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
+  }
+  return order.map((id) => ({ id, sessions: counts.get(id)! }))
+    .sort((a, b) => b.sessions - a.sessions || a.id.localeCompare(b.id));
+}
 
 // Global/plugin artifacts (from introspectConfig). Only names + hook config are
 // needed for resolution; usage of these produces candidate-eligible artifacts
@@ -267,6 +293,7 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
   const used = new Map<string, { type: ArtifactType; acc: Acc }>();
   const unresolved = new Map<string, { kind: ArtifactType | "builtin"; count: number }>();
   const perSession: { ms: number; names: Set<string> }[] = [];
+  const sessionRecords: RawRecord[][] = [];
   const notes: string[] = [];
   let firstMs = Infinity, lastMs = 0;
 
@@ -280,12 +307,13 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
   };
   const matchSkill = (list: { name: string }[], skill: string) => list.find((s) => s.name === skill || skill.endsWith(`:${s.name}`));
 
-  for (const path of paths) {
+  for (const path of [...paths].sort()) {
     let text: string;
     try { text = readFileSync(path, "utf8"); } catch { continue; }
     const ms = safeMtime(path);
     firstMs = Math.min(firstMs, ms); lastMs = Math.max(lastMs, ms);
     const sessionNames = new Set<string>();
+    const currentSessionRecords: RawRecord[] = [];
     const steps: ProcedureStep[] = [];     // ordered scrubbed builtin calls (retainSequences)
     let firstUserText: string | null = null;
     let lastAssistantText = "";
@@ -299,6 +327,7 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
       let rec: any;
       try { rec = JSON.parse(line); } catch { bad++; continue; }
       if (!sessionId && typeof rec?.sessionId === "string") sessionId = rec.sessionId;
+      currentSessionRecords.push(rec as RawRecord);
 
       // Only ASSISTANT messages carry real tool_use invocations. The system-prompt
       // tool catalog also lists mcp__ names but is NOT an assistant message, so it
@@ -363,6 +392,7 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
     }
     if (bad) notes.push(`${bad} unparseable line(s) skipped in ${path.split("/").pop()}`);
     perSession.push({ ms, names: sessionNames });
+    sessionRecords.push(currentSessionRecords);
     if (opts.retainSequences && steps.length > 0) {
       const missionHint: MissionHint | undefined =
         firstUserText !== null ? { task: scrubProse(firstUserText), outcome: scrubProse(lastAssistantText) } : undefined;
@@ -449,6 +479,7 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
       lastMs,
       spanDays: lastMs && firstMs !== Infinity ? Math.round((lastMs - firstMs) / 86_400_000) : 0,
     },
+    models: collectModels(sessionRecords),
     artifacts,
     unresolved: [...unresolved.entries()].map(([name, v]) => ({ name, kind: v.kind, count: v.count })),
     coOccurrence,

@@ -1,0 +1,116 @@
+// src/gem/canonicalize.ts
+import { createHash } from "node:crypto";
+import type { McpServerArtifact, SkillArtifact } from "./types.js";
+
+export const CANONICALIZER_VERSION = 3;
+
+export type IdKind = "known" | "registry" | "contentHash" | "package" | "url" | "plugin" | "private" | "name" | "unknown";
+export interface Ingredient { id: string; idKind: IdKind; public: boolean }
+
+/**
+ * Source-type heuristic: an ingredient distributed via a plugin is treated as
+ * public, keyed by its stable `<plugin>@<marketplace>` coordinate (e.g.
+ * "context7@claude-plugins-official"). This populates the cross-producer moat
+ * with publicly-distributed ingredients. Accepted trade-off: a private/internal
+ * plugin's name would surface as public — a known limitation of the broad policy
+ * (refine later with a public-marketplace allowlist or registry-existence check).
+ */
+function pluginCoord(source: string | undefined): string | null {
+  if (!source || !source.startsWith("plugin:")) return null;
+  const key = source.slice("plugin:".length).trim().toLowerCase();
+  // Bound the coord to the intended `<plugin>[@<marketplace>]` token shape — a
+  // path-like or otherwise malformed source falls through to private-salted
+  // rather than surfacing extra hierarchy/detail in a public id.
+  return /^[a-z0-9][a-z0-9._-]*(@[a-z0-9][a-z0-9._-]*)?$/.test(key) ? key : null;
+}
+
+function sha256(s: string): string { return createHash("sha256").update(s).digest("hex"); }
+export function saltedHash(salt: string, value: string): string { return `sha256:${sha256(salt + "\n" + value)}`; }
+
+/** Stable sorted-key JSON stringify — prevents key-order variance in private ids. */
+function stableStr(v: unknown): string {
+  if (v === null || typeof v !== "object") return JSON.stringify(v);
+  if (Array.isArray(v)) return "[" + v.map(stableStr).join(",") + "]";
+  const o = v as Record<string, unknown>;
+  return "{" + Object.keys(o).sort().filter(k => o[k] !== undefined).map(k => JSON.stringify(k) + ":" + stableStr(o[k])).join(",") + "}";
+}
+
+/** Last path segment of a command, lowercased — never leaks directory (handles POSIX and Windows paths). */
+function runnerName(command: string): string {
+  const seg = command.split(/[/\\]/).pop() || command;
+  return seg.toLowerCase();
+}
+
+/**
+ * Scopes explicitly known to publish to the public npm registry.
+ * Extension point: replace with a live registry-existence check in the future.
+ */
+const PUBLIC_SCOPES = new Set(["@modelcontextprotocol"]);
+
+export function canonicalModel(id: string): Ingredient { return { id: id.toLowerCase(), idKind: "known", public: true }; }
+export function canonicalHarness(flavor: "claude" | "codex"): Ingredient {
+  return { id: flavor === "claude" ? "claude-code" : "codex", idKind: "known", public: true };
+}
+
+export function canonicalSkill(s: SkillArtifact, salt: string): Ingredient {
+  const plug = pluginCoord(s.source);
+  if (plug) return { id: `skill:${plug}/${s.name.trim().toLowerCase()}`, idKind: "plugin", public: true };
+  if (s.source && s.source.startsWith("@") && s.source.includes("/")) {
+    const scope = s.source.split("/")[0];
+    if (PUBLIC_SCOPES.has(scope)) return { id: s.source, idKind: "registry", public: true };
+    // Non-public scope: fall back to content-hash to avoid leaking the scope name.
+  }
+  return { id: `private:${saltedHash(salt, stableStr(s))}`, idKind: "private", public: false };
+}
+
+function firstPackageArg(args: unknown): string | null {
+  if (!Array.isArray(args)) return null;
+  for (const a of args) {
+    if (typeof a !== "string") continue;
+    if (a.startsWith("-")) continue;            // skip flags like -y
+    return a;
+  }
+  return null;
+}
+
+function isPublicPackage(pkg: string): boolean {
+  if (pkg.startsWith("/") || pkg.startsWith(".") || pkg.includes("\\")) return false; // filesystem path
+  if (pkg.startsWith("@")) {
+    // Scoped packages default to private unless the scope is allowlisted.
+    const scope = pkg.split("/")[0];
+    return PUBLIC_SCOPES.has(scope);
+  }
+  // Unscoped bare names are in the public npm default namespace.
+  return /^[a-z0-9][a-z0-9._-]*$/i.test(pkg);
+}
+
+function isPublicHost(host: string): boolean {
+  if (host.startsWith(":")) return false; // any IPv6 literal (e.g. ::1, ::ffff:192.168.x.x)
+  if (/^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.)/.test(host)) return false;
+  if (host === "localhost" || host.endsWith(".internal") || host.endsWith(".local")) return false;
+  return host.includes(".");
+}
+
+export function canonicalMcpServer(m: McpServerArtifact, salt: string): Ingredient {
+  if (m.transport === "stdio") {
+    const cfg = m.config as { command?: unknown; args?: unknown };
+    const command = typeof cfg.command === "string" ? cfg.command : "";
+    const pkg = firstPackageArg(cfg.args);
+    if (pkg && isPublicPackage(pkg)) {
+      const runner = runnerName(command) || "stdio";
+      return { id: `${runner}:${pkg}`, idKind: "package", public: true };
+    }
+  } else {
+    // http / sse — URL path may carry PII (usernames, tenant ids); emit hostname only.
+    const url = typeof (m.config as { url?: unknown }).url === "string" ? (m.config as { url: string }).url : "";
+    try {
+      const u = new URL(url);
+      if (isPublicHost(u.hostname)) return { id: `url:${u.hostname}`, idKind: "url", public: true };
+    } catch { /* fall through */ }
+  }
+  // Distributable via a plugin -> public (source-type heuristic).
+  const plug = pluginCoord(m.source);
+  if (plug) return { id: `mcp:${plug}/${m.name.trim().toLowerCase()}`, idKind: "plugin", public: true };
+  // Otherwise the config (a local command/path or private/internal URL) is salted.
+  return { id: `private:${saltedHash(salt, stableStr(m.config))}`, idKind: "private", public: false };
+}

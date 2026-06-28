@@ -17,18 +17,35 @@
 //
 // req/res are duck-typed (Express shape) so this carries no @types/express dependency, matching the
 // raw SSE handlers (workflowStream / gemRunStream).
-interface GuardReq { method: string; get(name: string): string | undefined }
-interface GuardRes { status(code: number): GuardRes; type(t: string): GuardRes; send(body: string): unknown }
+interface GuardReq { method: string; path: string; get(name: string): string | undefined }
+interface GuardRes { status(code: number): GuardRes; type(t: string): GuardRes; send(body: string): unknown; set(name: string, value: string): GuardRes }
 type GuardNext = () => void;
 
 // Methods with no side effect — a direct navigation (Sec-Fetch-Site: none) to one of these is benign.
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+// Public, side-effect-free, k-anonymized data reads — designed for cross-origin consumption (the
+// marketing site, third-party clients, the console app on another origin). They carry no credentials
+// and have no side effect, so the CSRF rationale above does NOT apply: serve them to any origin with
+// permissive CORS and exempt them from the cross-site block. Safe methods only — the POST /ingest
+// write (and every other route) stays guarded.
+const PUBLIC_READ_PATHS = new Set(["/api/aggregator/popularity", "/api/aggregator/co-occurrence", "/api/aggregator/adoption"]);
 
 function block(res: GuardRes): void {
   res.status(403).type("application/json").send(JSON.stringify({ error: "cross-site request blocked" }));
 }
 
 export function originGuard(req: GuardReq, res: GuardRes, next: GuardNext): void {
+  if (SAFE_METHODS.has(req.method.toUpperCase()) && PUBLIC_READ_PATHS.has(req.path)) {
+    res.set("Access-Control-Allow-Origin", "*"); // public, credential-less data — any origin may read it
+    if (req.method.toUpperCase() === "OPTIONS") {
+      res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+      res.status(204).send(""); // answer the preflight; never dispatch the route
+      return;
+    }
+    next();
+    return;
+  }
   const site = req.get("sec-fetch-site");
   if (site !== undefined) {
     if (site === "same-origin") { next(); return; }
