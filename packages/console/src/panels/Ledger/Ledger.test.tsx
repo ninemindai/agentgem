@@ -19,6 +19,8 @@ function mockFetch() {
         { type: "skill", name: "pdf", invocations: 7, lastUsedMs: 100 },
         { type: "skill", name: "zip", invocations: 3, lastUsedMs: 900 },
       ] });
+    if (u.includes("/api/archive"))
+      return res({ tarGz: btoa("fake-gem-bytes") });
     if (u.includes("/api/gem"))
       return res({ name: "gem", createdFrom: "/x/.claude", artifacts: [{ type: "skill", name: "pdf" }], checks: [], requiredSecrets: [] });
     throw new Error(`unexpected url ${u}`);
@@ -74,6 +76,23 @@ describe("Ledger", () => {
     fireEvent.click(screen.getByText("Build Gem"));
     expect(await screen.findByText("1 artifacts")).toBeTruthy();
     expect(screen.getByText("from /x/.claude")).toBeTruthy();
+  });
+
+  it("downloads a .gem via the archive endpoint after building", async () => {
+    const fetchSpy = mockFetch();
+    vi.stubGlobal("fetch", fetchSpy);
+    (URL as unknown as { createObjectURL: unknown }).createObjectURL = vi.fn(() => "blob:x");
+    (URL as unknown as { revokeObjectURL: unknown }).revokeObjectURL = vi.fn();
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {}); // jsdom can't navigate
+    render(<Ledger apiBase="" />);
+    await screen.findByText("pdf");
+    fireEvent.click(screen.getByLabelText("pdf"));
+    fireEvent.click(screen.getByText("Build Gem"));
+    await screen.findByText("1 artifacts");
+    fireEvent.click(screen.getByText("Download .gem"));
+    await waitFor(() =>
+      expect(fetchSpy.mock.calls.some((c) => String(c[0]).includes("/api/archive"))).toBe(true),
+    );
   });
 
   it("clears the selection", async () => {

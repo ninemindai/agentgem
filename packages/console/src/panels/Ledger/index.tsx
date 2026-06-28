@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
-import { inventoryRoute, usageRoute, buildGemRoute, makeClient, type Usage, type Gem } from "../../api/routes.js";
+import { inventoryRoute, usageRoute, buildGemRoute, archiveRoute, makeClient, type Usage, type Gem } from "../../api/routes.js";
 import { groupInventory, mergeUsage, applyView, DEFAULT_VIEW, type LedgerGroup, type SortKey } from "./data.js";
-import { selKey, visibleKeys, buildSelection } from "./selection.js";
+import { selKey, visibleKeys, buildSelection, type GemSelection } from "./selection.js";
+import { base64ToBytes, downloadBlob, copyText } from "./exporters.js";
 import { Preview } from "./Preview.js";
 
 export function Ledger({ apiBase }: { apiBase: string }) {
@@ -11,6 +12,7 @@ export function Ledger({ apiBase }: { apiBase: string }) {
   const [view, setView] = useState(DEFAULT_VIEW);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [gem, setGem] = useState<Gem | null>(null);
+  const [builtSel, setBuiltSel] = useState<GemSelection | null>(null);
   const [building, setBuilding] = useState(false);
   const [buildError, setBuildError] = useState<string | null>(null);
 
@@ -47,13 +49,24 @@ export function Ledger({ apiBase }: { apiBase: string }) {
     setBuildError(null);
     try {
       const client = makeClient(apiBase);
-      const g = await buildGemRoute.call(client, { body: { selection: buildSelection(selected), name: "gem" } });
+      const sel = buildSelection(selected);
+      const g = await buildGemRoute.call(client, { body: { selection: sel, name: "gem" } });
       setGem(g);
+      setBuiltSel(sel);
     } catch (e) {
       setBuildError(e instanceof Error ? e.message : String(e));
     } finally {
       setBuilding(false);
     }
+  };
+
+  const copyJson = () => { if (gem) void copyText(JSON.stringify(gem, null, 2)); };
+  const downloadJson = () => { if (gem) downloadBlob(`${gem.name}.json`, "application/json", JSON.stringify(gem, null, 2)); };
+  const downloadGem = async () => {
+    if (!gem || !builtSel) return;
+    const client = makeClient(apiBase);
+    const { tarGz } = await archiveRoute.call(client, { body: { selection: builtSel, name: gem.name, tar: true } });
+    if (tarGz) downloadBlob(`${gem.name}.gem`, "application/gzip", base64ToBytes(tarGz));
   };
 
   if (error) return <p className="ledger-error">Could not load inventory: {error}</p>;
@@ -108,7 +121,9 @@ export function Ledger({ apiBase }: { apiBase: string }) {
         {buildError && <span className="ledger-error">{buildError}</span>}
       </div>
 
-      {gem && <Preview gem={gem} />}
+      {gem && (
+        <Preview gem={gem} onDownloadGem={downloadGem} onDownloadJson={downloadJson} onCopyJson={copyJson} />
+      )}
 
       {visible.length === 0 ? (
         <p className="ledger-empty">{emptyMsg}</p>

@@ -1,8 +1,14 @@
 import { useState } from "react";
 import type { Gem } from "../../api/routes.js";
 
+export interface PreviewActions {
+  onDownloadGem?: () => void;
+  onDownloadJson?: () => void;
+  onCopyJson?: () => void;
+}
+
 /** Shows a built gem: a summary (counts + artifact list) with a raw-JSON toggle. */
-export function Preview({ gem }: { gem: Gem }) {
+export function Preview({ gem, onDownloadGem, onDownloadJson, onCopyJson }: { gem: Gem } & PreviewActions) {
   const [json, setJson] = useState(false);
   return (
     <div className="preview">
@@ -13,6 +19,13 @@ export function Preview({ gem }: { gem: Gem }) {
           <button type="button" className={json ? "is-active" : ""} onClick={() => setJson(true)}>JSON</button>
         </span>
       </div>
+      {(onDownloadGem || onDownloadJson || onCopyJson) && (
+        <div className="preview-actions">
+          {onDownloadGem && <button type="button" className="preview-export primary" onClick={onDownloadGem}>Download .gem</button>}
+          {onDownloadJson && <button type="button" className="preview-export" onClick={onDownloadJson}>Download JSON</button>}
+          {onCopyJson && <button type="button" className="preview-export" onClick={onCopyJson}>Copy JSON</button>}
+        </div>
+      )}
       {json ? (
         <pre className="preview-json">{JSON.stringify(gem, null, 2)}</pre>
       ) : (
