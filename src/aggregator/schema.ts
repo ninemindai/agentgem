@@ -37,7 +37,15 @@ export const usageEdges = pgTable("usage_edges", {
   sessions: integer("sessions").notNull(),
 }, (t) => [primaryKey({ columns: [t.attestationId, t.ingredientId] })]);
 
-export const schema = { producers, attestations, ingredients, usageEdges };
+export const accountBindings = pgTable("account_bindings", {
+  pubkey: text("pubkey").primaryKey().references(() => producers.pubkey),
+  provider: text("provider").notNull(),
+  accountId: text("account_id").notNull(),
+  accountLogin: text("account_login").notNull(),
+  boundAt: timestamp("bound_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const schema = { producers, attestations, ingredients, usageEdges, accountBindings };
 export type AppDb = PgDatabase<any, typeof schema>;
 
 // Idempotent DDL. (Schema-as-tables above is the query source of truth; this DDL
@@ -48,4 +56,5 @@ export async function ensureSchema(db: AppDb): Promise<void> {
   await db.execute(sql`create table if not exists attestations (id uuid primary key, gem_name text not null, gem_digest text not null unique, producer_pubkey text not null references producers(pubkey), harness_id text not null, models text[] not null default '{}', scan_sessions int not null, scan_span_days int not null, signal_digest text not null, private_count int not null default 0, trust_score real not null default 1, quarantined boolean not null default false, ingested_at timestamptz not null default now())`);
   await db.execute(sql`create table if not exists ingredients (id text primary key, kind text not null, id_kind text not null, display_name text, first_seen timestamptz not null default now(), last_seen timestamptz not null default now())`);
   await db.execute(sql`create table if not exists usage_edges (attestation_id uuid not null references attestations(id), ingredient_id text not null references ingredients(id), invocations int not null, sessions int not null, primary key (attestation_id, ingredient_id))`);
+  await db.execute(sql`create table if not exists account_bindings (pubkey text primary key references producers(pubkey), provider text not null, account_id text not null, account_login text not null, bound_at timestamptz not null default now())`);
 }
