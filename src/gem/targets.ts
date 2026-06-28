@@ -76,13 +76,47 @@ function stripYamlFrontmatter(content: string): string {
   const m = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/.exec(content);
   return m ? content.slice(m[0].length) : content;
 }
-// Eve authored-skill shape allows only description/metadata/license. Re-emit a clean description
-// (from the artifact) over the original body; omit frontmatter entirely when there's no description
-// (eve falls back to the first body line). JSON.stringify yields a safe double-quoted YAML scalar.
+// The inner YAML of a leading frontmatter block, or null if there is none.
+function frontmatterBlock(content: string): string | null {
+  const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(content);
+  return m ? m[1] : null;
+}
+// Split frontmatter YAML into top-level `key:` blocks, each carrying its original
+// text verbatim (the key line plus any indented continuation — inline values,
+// nested maps, multi-line block scalars). Lets us keep specific keys without
+// re-serializing (which would mangle quoting and block scalars).
+function topLevelFrontmatterBlocks(fm: string): { key: string; text: string }[] {
+  const out: { key: string; text: string }[] = [];
+  let cur: { key: string; lines: string[] } | null = null;
+  for (const line of fm.split(/\r?\n/)) {
+    const m = /^([A-Za-z0-9_.-]+):/.exec(line);
+    if (m && !/^\s/.test(line)) {
+      if (cur) out.push({ key: cur.key, text: cur.lines.join("\n") });
+      cur = { key: m[1], lines: [line] };
+    } else if (cur) {
+      cur.lines.push(line); // indented value / nested map / block-scalar line
+    }
+  }
+  if (cur) out.push({ key: cur.key, text: cur.lines.join("\n") });
+  return out;
+}
+// Eve authored-skill shape allows only description/metadata/license. Keep those keys
+// from the original frontmatter VERBATIM (preserving quoting + multi-line block
+// scalars) and drop the rest (name/version/triggers/allowed-tools/…). If the
+// frontmatter carried no description, synthesize one from the artifact's. Omit
+// frontmatter entirely when nothing remains (eve falls back to the first body line).
+const EVE_ALLOWED_SKILL_KEYS = new Set(["description", "metadata", "license"]);
 const skillEveMd = (a: SkillArtifact): FileTree => {
   const body = stripYamlFrontmatter(a.content);
-  const desc = a.description?.trim();
-  const out = desc ? `---\ndescription: ${JSON.stringify(desc)}\n---\n${body}` : body;
+  const fm = frontmatterBlock(a.content);
+  const kept = fm ? topLevelFrontmatterBlocks(fm).filter((b) => EVE_ALLOWED_SKILL_KEYS.has(b.key)) : [];
+  const lines: string[] = [];
+  if (!kept.some((b) => b.key === "description")) {
+    const desc = a.description?.trim();
+    if (desc) lines.push(`description: ${JSON.stringify(desc)}`);
+  }
+  lines.push(...kept.map((b) => b.text));
+  const out = lines.length ? `---\n${lines.join("\n")}\n---\n${body}` : body;
   return { [`agent/skills/${eveSegment(a.name)}.md`]: out };
 };
 // AgentCore path-skills live on the harness filesystem; emit each skill body under .agents/skills/<seg>/.

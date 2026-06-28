@@ -79,14 +79,52 @@ describe("materialize", () => {
     expect(compatibility(gem([first, collision, invalid])).eve).toEqual({ supported: 1, skipped: 2 });
   });
 
-  it("eve: strips disallowed skill frontmatter, keeps only description + body", () => {
+  it("eve: keeps Eve-allowed frontmatter (description/metadata/license) verbatim, strips the rest", () => {
     const messy: SkillArtifact = {
       type: "skill", name: "gst", source: "standalone", description: "Use for QA",
-      content: "---\nname: gst\npreamble-tier: 1\nallowed-tools:\n  - Bash\nmetadata:\n  priority: 1\n---\n# Body\n\nDo the thing.\n",
+      content: "---\nname: gst\npreamble-tier: 1\nversion: 1.1.0\nallowed-tools:\n  - Bash\nmetadata:\n  priority: 1\nlicense: MIT\n---\n# Body\n\nDo the thing.\n",
     };
     const out = materialize(gem([messy]), "eve").files["agent/skills/gst.md"];
-    expect(out).toBe('---\ndescription: "Use for QA"\n---\n# Body\n\nDo the thing.\n');
+    // Eve-allowed keys preserved verbatim (metadata block + license were dropped before)
+    expect(out).toContain("metadata:\n  priority: 1");
+    expect(out).toContain("license: MIT");
+    // disallowed keys stripped
     expect(out).not.toContain("preamble-tier");
+    expect(out).not.toContain("allowed-tools");
+    expect(out).not.toContain("version:");
+    expect(out).not.toMatch(/^name:/m);
+    expect(out.endsWith("---\n# Body\n\nDo the thing.\n")).toBe(true);
+  });
+
+  it("eve: preserves an existing description verbatim — no double-quoting", () => {
+    const s: SkillArtifact = {
+      type: "skill", name: "browse", source: "standalone",
+      description: "Fast headless browser for QA testing and site dogfooding. (gstack)",
+      content: "---\nname: browse\nversion: 1.1.0\ndescription: Fast headless browser for QA testing and site dogfooding. (gstack)\nallowed-tools:\n  - Bash\n---\n# Browse\n",
+    };
+    const out = materialize(gem([s]), "eve").files["agent/skills/browse.md"];
+    expect(out).toContain("description: Fast headless browser for QA testing and site dogfooding. (gstack)");
+    expect(out).not.toContain('\\"');      // not double-quoted/escaped
+    expect(out).not.toContain("allowed-tools");
+  });
+
+  it("eve: preserves a multi-line block-scalar description", () => {
+    const s: SkillArtifact = {
+      type: "skill", name: "human-edit", source: "standalone", description: "Remove signs of AI writing.",
+      content: "---\nname: human-edit\ndescription: |\n  Remove signs of AI-generated writing from text.\n  Use when editing or revising.\nallowed-tools:\n  - Read\n---\n# Human Edit\n",
+    };
+    const out = materialize(gem([s]), "eve").files["agent/skills/human-edit.md"];
+    expect(out).toContain("description: |\n  Remove signs of AI-generated writing from text.\n  Use when editing or revising.");
+    expect(out).not.toContain("allowed-tools");
+  });
+
+  it("eve: injects description from the artifact when the frontmatter has none", () => {
+    const s: SkillArtifact = {
+      type: "skill", name: "n", source: "standalone", description: "Use for QA",
+      content: "---\nname: n\nallowed-tools:\n  - Bash\n---\n# Body\n",
+    };
+    const out = materialize(gem([s]), "eve").files["agent/skills/n.md"];
+    expect(out).toContain('description: "Use for QA"');
     expect(out).not.toContain("allowed-tools");
   });
 
