@@ -1,5 +1,6 @@
 // The composable seam: add a screen with one import + one array entry.
 import type { ConsolePage } from "./registry.js";
+import { observePage } from "./panels/Observe/index.js";
 import { curatePage } from "./panels/Curate/index.js";
 import { materializePage } from "./panels/Materialize/index.js";
 import { workspacesPage } from "./panels/Workspaces/index.js";
@@ -8,4 +9,4 @@ import { settingsPage } from "./panels/Settings/index.js";
 import { receivedPage } from "./panels/Received/index.js";
 import { deployPage } from "./panels/Deploy/index.js";
 
-export const pages: ConsolePage[] = [curatePage, materializePage, workspacesPage, getGemsPage, settingsPage, receivedPage, deployPage];
+export const pages: ConsolePage[] = [observePage, curatePage, materializePage, workspacesPage, getGemsPage, settingsPage, receivedPage, deployPage];
