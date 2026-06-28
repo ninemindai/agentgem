@@ -16,6 +16,21 @@ import { Readable, Writable } from "node:stream";
 // An ACP adapter to spawn: a display id/name plus the argv to launch it.
 export interface AgentDescriptor { id: string; name: string; command: string[] }
 
+// Provider credentials agentgem stores (in ~/.agentgem/.env) for publish/deploy.
+// They must NOT leak into a spawned local agent: every coding-agent CLI (Claude Code,
+// codex, …) prefers an explicit API key over its own subscription/ChatGPT login, so an
+// inherited key forces pay-as-you-go API billing — hence "credit balance too low" when
+// that account is empty. Stripping them makes the local agent authenticate with the
+// user's own login, exactly like a normal local invocation. Applies to every ACP
+// adapter since they all spawn through connectAcpAdapter.
+const AGENT_CREDENTIAL_VARS = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY"] as const;
+
+export function localAgentEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const out = { ...env };
+  for (const k of AGENT_CREDENTIAL_VARS) delete out[k];
+  return out;
+}
+
 // A live session over a connected adapter. `prompt` sends one turn and dispatches
 // each session_update's `.update` payload to `onUpdate` until the turn stops.
 export interface RawAcpSession {
@@ -41,7 +56,7 @@ export async function connectAcpAdapter(
 ): Promise<RawAcpConnection> {
   const { client, ndJsonStream, PROTOCOL_VERSION } = await import("@agentclientprotocol/sdk");
   const [bin, ...args] = descriptor.command;
-  const child = spawn(bin, args, { stdio: ["pipe", "pipe", "inherit"], env: process.env });
+  const child = spawn(bin, args, { stdio: ["pipe", "pipe", "inherit"], env: localAgentEnv() });
   await new Promise<void>((resolve, reject) => {
     child.once("spawn", () => resolve());
     child.once("error", (e) => reject(new Error(`failed to spawn ${bin}: ${e.message}`)));
