@@ -90,7 +90,10 @@ describe("aggregateObserve", () => {
     ], "all", NOW);
     const d28 = p.daily.find((d) => d.date === "2026-06-28")!;
     expect(d28.sessions).toBe(2);
-    expect(d28.tokensIn).toBe(300);
+    expect(d28.tokensIn).toBe(300);  // 100+200
+    expect(d28.tokensOut).toBe(100); // 40+60
+    expect(d28.tokensCache).toBe(10); // 10+0
+    expect(d28.msgs).toBe(8);        // 4+4 (mk default msgs=4 each)
     expect(p.daily.map((d) => d.date)).toContain("2026-06-27");
   });
 
@@ -100,8 +103,16 @@ describe("aggregateObserve", () => {
     const today = aggregateObserve([recent, old], "today", NOW);
     expect(today.sessions.map((s) => s.sessionId)).toEqual(["r"]);
     expect(today.pulse.sessions).toBe(1);
+    // pulse fields for the single in-range session (mk defaults: msgs=4, tokensIn=100, tokensOut=40, tokensCache=10)
+    expect(today.pulse.tokens).toBe(150);   // 100+40+10
+    expect(today.pulse.msgs).toBe(4);
+    expect(today.pulse.activeMs).toBe(60_000); // endMs-startMs
     const all = aggregateObserve([recent, old], "all", NOW);
     expect(all.pulse.sessions).toBe(2);
+    // both sessions have the same mk defaults → doubled
+    expect(all.pulse.tokens).toBe(300);
+    expect(all.pulse.msgs).toBe(8);
+    expect(all.pulse.activeMs).toBe(120_000);
   });
 
   it("model-share groups by model+agent", () => {
@@ -113,5 +124,44 @@ describe("aggregateObserve", () => {
     const opus = p.models.find((m) => m.model === "claude-opus-4-8")!;
     expect(opus.sessions).toBe(2);
     expect(opus.tokens).toBe(200);
+  });
+
+  it("7d and 30d ranges filter sessions by recency boundary", () => {
+    // DAY_MS = 86_400_000; NOW = Date.parse("2026-06-28T12:00:00.000Z")
+    const nearEnd = NOW - 3 * 86_400_000;   // 3 days ago  → inside 7d AND 30d
+    const midEnd  = NOW - 10 * 86_400_000;  // 10 days ago → outside 7d, inside 30d
+    const farEnd  = NOW - 40 * 86_400_000;  // 40 days ago → outside both
+    const stats = [
+      mk({ sessionId: "near", startMs: nearEnd - 60_000, endMs: nearEnd }),
+      mk({ sessionId: "mid",  startMs: midEnd  - 60_000, endMs: midEnd  }),
+      mk({ sessionId: "far",  startMs: farEnd  - 60_000, endMs: farEnd  }),
+    ];
+    const r7 = aggregateObserve(stats, "7d", NOW);
+    expect(r7.pulse.sessions).toBe(1);
+    expect(r7.sessions.map((s) => s.sessionId)).toEqual(["near"]);
+
+    const r30 = aggregateObserve(stats, "30d", NOW);
+    expect(r30.pulse.sessions).toBe(2);
+    expect(r30.sessions.map((s) => s.sessionId).sort()).toEqual(["mid", "near"]);
+  });
+
+  it("sessions sorted by endMs desc; daily by date asc; models by tokens desc", () => {
+    const D1 = Date.parse("2026-06-26T10:00:00.000Z");
+    const D2 = Date.parse("2026-06-27T10:00:00.000Z");
+    const D3 = Date.parse("2026-06-28T10:00:00.000Z");
+    const stats = [
+      mk({ sessionId: "c3", model: "big",   startMs: D3, endMs: D3 + 60_000, tokensIn: 300, tokensOut: 0, tokensCache: 0 }),
+      mk({ sessionId: "a1", model: "small",  startMs: D1, endMs: D1 + 60_000, tokensIn: 50,  tokensOut: 0, tokensCache: 0 }),
+      mk({ sessionId: "b2", model: "big",   startMs: D2, endMs: D2 + 60_000, tokensIn: 100, tokensOut: 0, tokensCache: 0 }),
+    ];
+    const p = aggregateObserve(stats, "all", NOW);
+    // sessions: endMs desc → c3 (D3+60k), b2 (D2+60k), a1 (D1+60k)
+    expect(p.sessions.map((s) => s.sessionId)).toEqual(["c3", "b2", "a1"]);
+    // daily: date asc → 2026-06-26, 2026-06-27, 2026-06-28
+    expect(p.daily.map((d) => d.date)).toEqual(["2026-06-26", "2026-06-27", "2026-06-28"]);
+    // models: tokens desc → big (300+100=400), small (50)
+    expect(p.models.map((m) => m.model)).toEqual(["big", "small"]);
+    expect(p.models[0].tokens).toBe(400);
+    expect(p.models[1].tokens).toBe(50);
   });
 });
