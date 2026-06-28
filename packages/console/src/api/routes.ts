@@ -293,4 +293,23 @@ export const setCredentialRoute = defineRoute("POST", "/api/credential", {
   response: z.object({ ok: z.boolean() }),
 });
 
+// Transfer: send a selection (returns an opaque ticket), receive a gem by ticket,
+// and encrypt an object (returns ciphertextBase64 for the transfer payload).
+export const transferSendRoute = defineRoute("POST", "/api/transfer/send", {
+  body: z.object({ selection: GemSelectionSchema, name: z.string().optional() }),
+  response: z.object({ ticket: z.string() }),
+});
+export const transferReceiveRoute = defineRoute("POST", "/api/transfer/receive", {
+  body: z.object({ ticket: z.string() }),
+  response: z.object({
+    gem: z.looseObject({ name: z.string() }),
+    meta: z.looseObject({ name: z.string(), version: z.string() }),
+    bytesBase64: z.string(),
+  }),
+});
+export const transferCiphertextRoute = defineRoute("POST", "/api/transfer/ciphertext", {
+  body: z.object({ object: z.string() }),
+  response: z.object({ ciphertextBase64: z.string() }),
+});
+
 export const makeClient = (apiBase: string): Client => createClient({ baseURL: apiBase });

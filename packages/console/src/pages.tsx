@@ -5,5 +5,6 @@ import { ledgerPage } from "./panels/Ledger/index.js";
 import { workspacesPage } from "./panels/Workspaces/index.js";
 import { getGemsPage } from "./panels/GetGems/index.js";
 import { deployPage } from "./panels/Deploy/index.js";
+import { transferPage } from "./panels/Transfer/index.js";
 
-export const pages: ConsolePage[] = [testbedPage, ledgerPage, workspacesPage, getGemsPage, deployPage];
+export const pages: ConsolePage[] = [testbedPage, ledgerPage, workspacesPage, getGemsPage, deployPage, transferPage];
