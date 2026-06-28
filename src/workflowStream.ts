@@ -74,15 +74,16 @@ export async function streamWorkflowAnalyze(req: SseReq, res: SseRes): Promise<v
     writeReflections(reflections, root);   // best-effort; ignore the path
     const gaps = [...analysis.gaps, ...reflections.filter((r) => r.importance === "high").map((r) => r.detail)];
     const candidates = analysis.candidates.map((c) => ({ ...c, selection: recommendationToSelection(c) }));
+    const anyDegraded = degraded || distill.degraded;
     const payload = {
       candidates,
       gaps,
       distilled: distill.distilled,
       reflections,
       signalSummary: { sessionsScanned: signal.sessions.scanned, spanDays: signal.sessions.spanDays, notes: signal.notes },
-      degraded,
+      degraded: anyDegraded,
     };
-    if (!degraded) writeAnalysisCache(root, token, payload, Date.now());   // don't cache fallbacks
+    if (!anyDegraded) writeAnalysisCache(root, token, payload, Date.now());   // don't cache fallbacks
     send("done", { ...payload, cached: false });
   } catch (err) {
     send("failed", { message: (err as Error)?.message ?? String(err) });

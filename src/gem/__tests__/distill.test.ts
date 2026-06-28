@@ -213,6 +213,16 @@ describe("distillWorkflow resilience", () => {
     const out = await distillWorkflow(empty, inv, { connectFn: (async () => { throw new Error("x"); }) as any });
     expect(out).toEqual({ distilled: [], degraded: false });
   });
+
+  it("degrades to heuristic skeletons when LLM returns empty distilled array", async () => {
+    // The agent "succeeds" but produces no usable skills → validateDistilled → []
+    // → distillWorkflow must fall back to skeletons with degraded:true.
+    const emptyDistilledFn = fakeConnect(JSON.stringify({ distilled: [] }));
+    const out = await distillWorkflow(signalTwoSessions(), inv, { connectFn: emptyDistilledFn });
+    expect(out.degraded).toBe(true);
+    expect(out.distilled.length).toBeGreaterThan(0);
+    expect(out.distilled.every((d) => d.origin === "heuristic")).toBe(true);
+  });
 });
 
 describe("analyze wiring", () => {

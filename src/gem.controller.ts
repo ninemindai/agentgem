@@ -521,13 +521,14 @@ export class GemController {
     writeReflections(reflections, root);   // best-effort; ignore the path
     const gaps = [...analysis.gaps, ...reflections.filter((r) => r.importance === "high").map((r) => r.detail)];
     const candidates = analysis.candidates.map((c) => ({ ...c, selection: recommendationToSelection(c) as Record<string, unknown> }));
+    const anyDegraded = degraded || distill.degraded;
     return {
       candidates,
       gaps,
       distilled: distill.distilled,
       reflections,
       signalSummary: { sessionsScanned: signal.sessions.scanned, spanDays: signal.sessions.spanDays, notes: signal.notes },
-      degraded,
+      degraded: anyDegraded,
     };
   }
 

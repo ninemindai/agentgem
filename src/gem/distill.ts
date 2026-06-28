@@ -8,15 +8,11 @@ import { CLAUDE_AGENT, analysisWorkspace, defaultConnectFn, currentTestConnectFn
 import type { GatedCandidate, ProcedureCandidate, DistilledSkill, Provenance, Occurrence } from "./distillTypes.js";
 import { extractCandidates } from "./extract.js";
 
-// Back-compat re-export: existing importers (draftStage.ts, acpRecommender.ts)
-// import these from "./distill.js".
+// Back-compat re-exports: existing importers (draftStage.ts, acpRecommender.ts,
+// tests) import these from "./distill.js". The authoritative definitions now live
+// in extract.ts so the import DAG is a clean one-way extract → distill.
 export type { ProcedureCandidate, DistilledSkill } from "./distillTypes.js";
-
-// skillify Phase-0 thresholds (proposal §4): "invoked 2+ times" and ">20 lines of
-// logic" (~4 distinct action verbs). The third criterion (clear trigger phrase) is
-// deferred to the agent + validation.
-export const MIN_RECURRENCE = 2;
-export const MIN_STEPS = 3;   // procedures are mined as >=3-gram action runs (§3c)
+export { distillCandidates, MIN_RECURRENCE, MIN_STEPS } from "./extract.js";
 
 const KEBAB_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MUTATING_TOOL_RE = /^(Bash|Edit|Write|NotebookEdit)$/;
@@ -91,20 +87,6 @@ export function poolProvenance(candidates: { provenance: Provenance }[]): Proven
     occurrences.push(o);
   }
   return { occurrences };
-}
-
-export function distillCandidates(
-  signal: WorkflowSignal,
-  opts: { minRecurrence?: number; minSteps?: number } = {},
-): GatedCandidate[] {
-  const minRecurrence = opts.minRecurrence ?? MIN_RECURRENCE;
-  const minSteps = opts.minSteps ?? MIN_STEPS;
-  const sessions = signal.sequences?.sessions;
-  if (!signal.procedures || !sessions) return [];
-  return signal.procedures
-    .filter((p) => p.sessions >= minRecurrence && p.verbs.length >= minSteps)
-    .map((p) => ({ ...p, sample: sessions[p.sampleSessionIdx] }))
-    .filter((c): c is GatedCandidate => c.sample !== undefined);
 }
 
 // ── The generative ACP step (proposal §5) ───────────────────────────────────
