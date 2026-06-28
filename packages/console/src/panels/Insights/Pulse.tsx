@@ -9,7 +9,7 @@ export function Pulse({ data, loading }: { data: AggOverview | null; loading: bo
     <div className="ins-pulse">
       <span className="ins-pulse-label">Network pulse</span>
       <strong className="ins-stat">{data.ingredients.toLocaleString()}</strong><span className="ins-stat-unit">ingredients</span>
-      <span className="ins-stat-producers">{data.producers.toLocaleString()} producers</span>
+      <strong className="ins-stat">{data.producers.toLocaleString()}</strong><span className="ins-stat-unit">producers</span>
       <span className="ins-pulse-verified">{data.verifiedProducers.toLocaleString()} verified ✓ · {pct}%</span>
       <span className="ins-vshare ins-vshare-lg"><span className="ins-vshare-fill" style={{ width: `${pct}%` }} /></span>
       <span className="ins-stat-unit">{data.invocations.toLocaleString()} invocations</span>

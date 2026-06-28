@@ -8,7 +8,8 @@ describe("Pulse", () => {
   it("renders totals and a verified percentage", () => {
     render(<Pulse data={{ ingredients: 120, producers: 50, verifiedProducers: 20, invocations: 999, sessions: 300 }} loading={false} />);
     expect(screen.getByText(/120/)).toBeTruthy();
-    expect(screen.getByText(/50 producers/i)).toBeTruthy();
+    expect(screen.getByText("50")).toBeTruthy();
+    expect(screen.getByText("producers")).toBeTruthy();
     expect(screen.getByText(/40%/)).toBeTruthy(); // 20/50 verified
   });
   it("shows a below-floor message when the network has no exposable producers", () => {
