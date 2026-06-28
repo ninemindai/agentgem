@@ -66,28 +66,6 @@ export function Analyze({ apiBase, onPick }: { apiBase: string; onPick: (keys: s
           style={{ marginBottom: 12 }}
         />
       )}
-      {activePath && (
-        <div className="run-out">
-          <div className="run-status">
-            <span className={"run-badge " + (error ? "run-failed" : running ? "run-running" : "run-done")}>
-              {error ? "failed" : phase || (running ? "Analyzing…" : "done")}
-            </span>
-            <span className="run-phase">{short(activePath)}</span>
-          </div>
-          {error && <p className="ledger-error">{error}</p>}
-          {out && <pre className="run-transcript">{out}</pre>}
-          {!running && !error && phase === "done" && candidates.length === 0 && (
-            <p className="ledger-empty">No recurring workflow found in this project's sessions — nothing to suggest yet.</p>
-          )}
-          {candidates.map((c) => (
-            <div className="analyze-candidate" key={c.name}>
-              <strong>{c.name}</strong> <span className="ws-chip">{c.confidence}</span>{" "}
-              <span className="targets-label">{c.include.length} artifacts</span>{" "}
-              <button type="button" className="ledger-build" onClick={() => onPick(includeToKeys(c.include))}>Use this selection →</button>
-            </div>
-          ))}
-        </div>
-      )}
       {!projects && !recents ? <p className="ledger-loading">Loading…</p>
         : rows.length === 0 ? <p className="ledger-empty">{query ? "No projects match." : "No projects with session history found."}</p>
         : (
@@ -96,14 +74,37 @@ export function Analyze({ apiBase, onPick }: { apiBase: string; onPick: (keys: s
               const active = activePath === r.path;
               return (
                 <li className={"analyze-row" + (active ? " is-active" : "")} key={r.path}>
-                  <span className="analyze-name">{r.label}</span>
-                  <span className="ws-chip">{r.flavor}</span>
-                  <button
-                    type="button"
-                    className="ledger-view"
-                    disabled={running}
-                    onClick={() => analyze(r.path)}
-                  >{active && running ? "Analyzing…" : "Analyze →"}</button>
+                  <div className="analyze-row-head">
+                    <span className="analyze-name">{r.label}</span>
+                    <span className="ws-chip">{r.flavor}</span>
+                    <button
+                      type="button"
+                      className="ledger-view"
+                      disabled={running}
+                      onClick={() => analyze(r.path)}
+                    >{active && running ? "Analyzing…" : "Analyze →"}</button>
+                  </div>
+                  {active && (
+                    <div className="run-out analyze-status">
+                      <div className="run-status">
+                        <span className={"run-badge " + (error ? "run-failed" : running ? "run-running" : "run-done")}>
+                          {error ? "failed" : phase || (running ? "Analyzing…" : "done")}
+                        </span>
+                      </div>
+                      {error && <p className="ledger-error">{error}</p>}
+                      {out && <pre className="run-transcript">{out}</pre>}
+                      {!running && !error && phase === "done" && candidates.length === 0 && (
+                        <p className="ledger-empty">No recurring workflow found in this project's sessions — nothing to suggest yet.</p>
+                      )}
+                      {candidates.map((c) => (
+                        <div className="analyze-candidate" key={c.name}>
+                          <strong>{c.name}</strong> <span className="ws-chip">{c.confidence}</span>{" "}
+                          <span className="targets-label">{c.include.length} artifacts</span>{" "}
+                          <button type="button" className="ledger-build" onClick={() => onPick(includeToKeys(c.include))}>Use this selection →</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </li>
               );
             })}
