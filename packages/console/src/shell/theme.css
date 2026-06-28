@@ -338,10 +338,6 @@ body::before {
   text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; width: 1%; }
 .cv-front td { color: var(--ink-soft); }
 .analyze { margin: 0 0 16px; }
-.analyze-disclosure { background: none; border: 0; padding: 4px 0; color: var(--ink-soft);
-  font: 600 13px/1 var(--font-ui); cursor: pointer; }
-.analyze-disclosure:hover { color: var(--accent); }
-.analyze-body { margin-top: 8px; }
 .analyze-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .analyze-row { display: flex; align-items: center; gap: 10px; padding: 5px 10px;
   border: 1px solid var(--line-soft); border-radius: 7px; background: var(--raised); }
@@ -369,3 +365,9 @@ body::before {
 .ledger-source { font: 500 10.5px/1 var(--font-ui); color: var(--gold);
   background: var(--paper); border: 1px solid var(--line-soft); border-radius: 999px;
   padding: 3px 8px; white-space: nowrap; }
+
+/* Analyze: active project row + live status feedback (run-badge/run-* + reduced-motion
+ * are already defined above; reuse the existing `pulse` keyframe). */
+.analyze-row.is-active { border-color: var(--accent); background: var(--paper); }
+.analyze-row .ledger-view:disabled { opacity: .55; cursor: default; }
+.run-badge.run-running { animation: pulse 1.2s ease-in-out infinite; }

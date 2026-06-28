@@ -39,6 +39,25 @@ describe("Analyze", () => {
     expect(picked).toEqual([["skills::brainstorming"]]);
   });
 
+  it("gives immediate feedback and streams the agent's output", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+      const u = String(url);
+      if (u.includes("/api/testbed/recents")) return res({ recents: [] });
+      if (u.includes("/api/testbed/projects")) return res({ projects: [{ path: "/home/me/proj", flavor: "claude", lastUsed: null, exists: true }] });
+      throw new Error("unexpected " + u);
+    }));
+    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
+    render(<Analyze apiBase="" onPick={() => {}} />);
+    fireEvent.click(await screen.findByText("Analyze →"));
+    // immediate feedback before any stream event: badge + the active row's button both read "Analyzing…"
+    expect(screen.getAllByText("Analyzing…").length).toBeGreaterThanOrEqual(2);
+    // agent tokens stream into a transcript
+    FakeES.last!.emit("delta", { text: "scanning sessions…" });
+    expect(await screen.findByText(/scanning sessions/)).toBeTruthy();
+    FakeES.last!.emit("done", { cached: false, candidates: [] });
+    expect(await screen.findByText(/No recurring workflow found/i)).toBeTruthy();
+  });
+
   it("filters the project list by the search query", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
       const u = String(url);

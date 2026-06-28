@@ -18,6 +18,8 @@ export function Analyze({ apiBase, onPick }: { apiBase: string; onPick: (keys: s
   const [candidates, setCandidates] = useState<AnalyzeCandidate[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [running, setRunning] = useState(false);
+  const [out, setOut] = useState("");
   const closeRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -29,11 +31,12 @@ export function Analyze({ apiBase, onPick }: { apiBase: string; onPick: (keys: s
 
   const analyze = (path: string) => {
     closeRef.current?.();
-    setActivePath(path); setPhase(""); setCandidates([]); setError(null);
+    setActivePath(path); setPhase(""); setCandidates([]); setError(null); setOut(""); setRunning(true);
     closeRef.current = openAnalyzeStream(apiBase, path, false, (e) => {
       if (e.type === "phase") setPhase(e.sessions != null ? `${e.phase} (${e.sessions} sessions)` : e.phase);
-      else if (e.type === "done") { setPhase("done"); setCandidates(e.candidates); }
-      else if (e.type === "failed") { setError(e.message); }
+      else if (e.type === "delta") setOut((o) => o + e.text);
+      else if (e.type === "done") { setPhase("done"); setCandidates(e.candidates); setRunning(false); }
+      else if (e.type === "failed") { setError(e.message); setRunning(false); }
     });
   };
 
@@ -63,26 +66,19 @@ export function Analyze({ apiBase, onPick }: { apiBase: string; onPick: (keys: s
           style={{ marginBottom: 12 }}
         />
       )}
-      {!projects && !recents ? <p className="ledger-loading">Loading…</p>
-        : rows.length === 0 ? <p className="ledger-empty">{query ? "No projects match." : "No projects with session history found."}</p>
-        : (
-          <ul className="analyze-list">
-            {rows.map((r) => (
-              <li className="analyze-row" key={r.path}>
-                <span className="analyze-name">{r.label}</span>
-                <span className="ws-chip">{r.flavor}</span>
-                <button type="button" className="ledger-view" onClick={() => analyze(r.path)}>Analyze →</button>
-              </li>
-            ))}
-          </ul>
-        )}
       {activePath && (
         <div className="run-out">
           <div className="run-status">
-            {phase && <span className={"run-badge " + (phase === "done" ? "run-done" : "run-running")}>{phase}</span>}
+            <span className={"run-badge " + (error ? "run-failed" : running ? "run-running" : "run-done")}>
+              {error ? "failed" : phase || (running ? "Analyzing…" : "done")}
+            </span>
             <span className="run-phase">{short(activePath)}</span>
           </div>
           {error && <p className="ledger-error">{error}</p>}
+          {out && <pre className="run-transcript">{out}</pre>}
+          {!running && !error && phase === "done" && candidates.length === 0 && (
+            <p className="ledger-empty">No recurring workflow found in this project's sessions — nothing to suggest yet.</p>
+          )}
           {candidates.map((c) => (
             <div className="analyze-candidate" key={c.name}>
               <strong>{c.name}</strong> <span className="ws-chip">{c.confidence}</span>{" "}
@@ -92,6 +88,27 @@ export function Analyze({ apiBase, onPick }: { apiBase: string; onPick: (keys: s
           ))}
         </div>
       )}
+      {!projects && !recents ? <p className="ledger-loading">Loading…</p>
+        : rows.length === 0 ? <p className="ledger-empty">{query ? "No projects match." : "No projects with session history found."}</p>
+        : (
+          <ul className="analyze-list">
+            {rows.map((r) => {
+              const active = activePath === r.path;
+              return (
+                <li className={"analyze-row" + (active ? " is-active" : "")} key={r.path}>
+                  <span className="analyze-name">{r.label}</span>
+                  <span className="ws-chip">{r.flavor}</span>
+                  <button
+                    type="button"
+                    className="ledger-view"
+                    disabled={running}
+                    onClick={() => analyze(r.path)}
+                  >{active && running ? "Analyzing…" : "Analyze →"}</button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
     </section>
   );
 }
