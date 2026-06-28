@@ -8,12 +8,14 @@ export interface SweepOpts {
   minShape?: number;       // S: the shape must have >= this many skill/mcp ingredients (specificity guard)
   freshMaxAttest?: number; // a producer with attest_count <= this is "fresh" (single/low-use sybil key)
   freshFraction?: number;  // F: >= this fraction of the cluster's producers must be fresh (freshness guard)
+  dryRun?: boolean;        // if true, compute targets but do not UPDATE — counts reflect what would happen
 }
 
 export interface SweepReport {
   clustersFound: number;          // coordinated clusters matching all three conditions
   attestationsQuarantined: number;
   producersFlagged: number;
+  dryRun: boolean;                // mirrors opts.dryRun — false means updates were applied
 }
 
 const num = (v: string | undefined, d: number): number => {
@@ -39,6 +41,19 @@ export async function sweepQuarantine(db: AppDb, opts: SweepOpts = {}): Promise<
   const freshMax = opts.freshMaxAttest ?? num(process.env.DETECT_FRESH_MAX, 2);
   const freshFraction = opts.freshFraction ?? num(process.env.DETECT_FRESH_FRACTION, 0.8);
 
+  const dryRun = opts.dryRun ?? false;
+  // Quarantine targets: attestations in a flagged shape that are not already quarantined
+  // AND whose producer is NOT GitHub-bound (verified producers are the anti-sybil anchor).
+  // Real mode UPDATEs them; dry-run just counts them.
+  const updCte = dryRun
+    ? sql``
+    : sql`, upd as (
+        update attestations set quarantined = true, trust_score = 0
+        where id in (select id from targets) returning id, producer_pubkey
+      )`;
+  const countFrom = dryRun ? sql`targets` : sql`upd`;
+  const pkCol = dryRun ? sql`pk` : sql`producer_pubkey`;
+
   const r = await db.execute<{ clusters_found: number; attestations_quarantined: number; producers_flagged: number }>(sql`
     with shapes as (
       select e.attestation_id as aid, a.producer_pubkey as pk,
@@ -63,19 +78,23 @@ export async function sweepQuarantine(db: AppDb, opts: SweepOpts = {}): Promise<
       select fp from clusters
       where producers >= ${minProducers} and shape_size >= ${minShape} and fresh_frac >= ${freshFraction}
     ),
-    upd as (
-      update attestations set quarantined = true, trust_score = 0
-      where id in (select s.aid from shapes s join bad b on b.fp = s.fp) and not quarantined
-      returning id, producer_pubkey
-    )
+    targets as (
+      select s.aid as id, a.producer_pubkey as pk
+      from shapes s
+      join bad b on b.fp = s.fp
+      join attestations a on a.id = s.aid
+      where not a.quarantined
+        and not exists (select 1 from account_bindings ab where ab.pubkey = a.producer_pubkey)
+    )${updCte}
     select (select count(*) from bad)::int as clusters_found,
-           (select count(*) from upd)::int as attestations_quarantined,
-           (select count(distinct producer_pubkey) from upd)::int as producers_flagged
+           (select count(*) from ${countFrom})::int as attestations_quarantined,
+           (select count(distinct ${pkCol}) from ${countFrom})::int as producers_flagged
   `);
   const row = r.rows[0];
   return {
     clustersFound: Number(row.clusters_found),
     attestationsQuarantined: Number(row.attestations_quarantined),
     producersFlagged: Number(row.producers_flagged),
+    dryRun,
   };
 }

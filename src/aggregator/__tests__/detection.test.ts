@@ -1,5 +1,6 @@
 // src/aggregator/__tests__/detection.test.ts
 import { describe, it, expect } from "vitest";
+import { sql } from "drizzle-orm";
 import { makeTestDb } from "../testDb.js";
 import { projectAttestation } from "../project.js";
 import { popularity } from "../aggregates.js";
@@ -22,7 +23,7 @@ describe("sweepQuarantine (detection -> quarantine)", () => {
     for (const i of [1, 2, 3]) await projectAttestation(db, att(`ed25519:f${i}`, `d${i}`, shape)); // 3 fresh producers (attest_count=1)
     expect((await popularity(db, { kind: "skill", k: 3 })).map((r) => r.id)).toContain("skill:a"); // visible pre-sweep
     const rep = await sweepQuarantine(db, OPTS);
-    expect(rep).toEqual({ clustersFound: 1, attestationsQuarantined: 3, producersFlagged: 3 });
+    expect(rep).toEqual({ clustersFound: 1, attestationsQuarantined: 3, producersFlagged: 3, dryRun: false });
     expect((await popularity(db, { kind: "skill", k: 1 })).map((r) => r.id)).not.toContain("skill:a"); // excluded post-sweep
   });
 
@@ -55,6 +56,31 @@ describe("sweepQuarantine (detection -> quarantine)", () => {
     const shape = ["skill:a", "skill:b", "skill:c"];
     for (const i of [1, 2, 3]) await projectAttestation(db, att(`ed25519:k${i}`, `m${i}`, shape));
     expect((await sweepQuarantine(db, OPTS)).attestationsQuarantined).toBe(3);
-    expect(await sweepQuarantine(db, OPTS)).toEqual({ clustersFound: 0, attestationsQuarantined: 0, producersFlagged: 0 });
+    expect(await sweepQuarantine(db, OPTS)).toEqual({ clustersFound: 0, attestationsQuarantined: 0, producersFlagged: 0, dryRun: false });
+  });
+
+  it("dry-run reports what WOULD be quarantined but changes nothing", async () => {
+    const db = await makeTestDb();
+    const shape = ["skill:a", "skill:b"];
+    for (const i of [1, 2, 3]) await projectAttestation(db, att(`ed25519:f${i}`, `d${i}`, shape));
+    const dry = await sweepQuarantine(db, { ...OPTS, dryRun: true });
+    expect(dry).toEqual({ clustersFound: 1, attestationsQuarantined: 3, producersFlagged: 3, dryRun: true });
+    // nothing was quarantined — skill:a is still visible in aggregates
+    expect((await popularity(db, { kind: "skill", k: 1 })).map((r) => r.id)).toContain("skill:a");
+    // a real run still finds + quarantines the same 3 (proving dry-run was a no-op)
+    const real = await sweepQuarantine(db, OPTS);
+    expect(real).toEqual({ clustersFound: 1, attestationsQuarantined: 3, producersFlagged: 3, dryRun: false });
+  });
+
+  it("never quarantines a GitHub-verified (bound) producer, even inside a flagged cluster", async () => {
+    const db = await makeTestDb();
+    const shape = ["skill:a", "skill:b"];
+    for (const i of [1, 2, 3]) await projectAttestation(db, att(`ed25519:f${i}`, `d${i}`, shape));
+    // bind producer f1 (the #28 anti-sybil anchor); the producer row already exists from projectAttestation
+    await db.execute(sql`insert into account_bindings(pubkey, provider, account_id, account_login)
+      values ('ed25519:f1', 'github', '42', 'octocat')`);
+    const rep = await sweepQuarantine(db, OPTS); // apply
+    expect(rep.attestationsQuarantined).toBe(2); // f2 + f3 quarantined; f1 exempt
+    expect(rep.producersFlagged).toBe(2);
   });
 });
