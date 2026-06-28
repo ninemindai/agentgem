@@ -75,6 +75,28 @@ export async function overview(
   return row;
 }
 
+export async function coOccurrenceMatrix(
+  db: AppDb, opts: { limit?: number; k?: number } = {},
+): Promise<{ a: string; b: string; producers: number; verifiedProducers: number }[]> {
+  const k = opts.k ?? DEFAULT_K, limit = opts.limit ?? 500;
+  const r = await db.execute<{ a: string; b: string; producers: number; verifiedProducers: number }>(sql`
+    select e1.ingredient_id as a, e2.ingredient_id as b,
+           count(distinct at.producer_pubkey)::int as producers,
+           count(distinct bnd.provider || ':' || bnd.account_id)::int as "verifiedProducers"
+    from usage_edges e1
+    join usage_edges e2 on e2.attestation_id = e1.attestation_id and e1.ingredient_id < e2.ingredient_id
+    join ingredients i1 on i1.id = e1.ingredient_id and i1.kind in ('skill','mcp')
+    join ingredients i2 on i2.id = e2.ingredient_id and i2.kind in ('skill','mcp')
+    join attestations at on at.id = e1.attestation_id and not at.quarantined
+    left join account_bindings bnd on bnd.pubkey = at.producer_pubkey
+    group by e1.ingredient_id, e2.ingredient_id
+    having count(distinct at.producer_pubkey) >= ${k}
+    order by producers desc, a, b
+    limit ${limit}
+  `);
+  return r.rows as { a: string; b: string; producers: number; verifiedProducers: number }[];
+}
+
 export async function adoption(
   db: AppDb, opts: { id: string; bucket?: "week" | "month"; k?: number },
 ): Promise<{ bucket: string; producers: number; verifiedProducers: number; invocations: number }[]> {

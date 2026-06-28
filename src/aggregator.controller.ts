@@ -6,7 +6,7 @@ import { inject } from "@agentback/core";
 import { DrizzleBindings } from "@agentback/drizzle";
 import type { AppDb } from "./aggregator/schema.js";
 import { ingestAttestation } from "./aggregator/ingest.js";
-import { popularity, coOccurrence, adoption, overview } from "./aggregator/aggregates.js";
+import { popularity, coOccurrence, adoption, overview, coOccurrenceMatrix } from "./aggregator/aggregates.js";
 import type { UsageAttestation } from "./gem/attestation.js";
 import { recordBinding } from "./aggregator/binding.js";
 import { GitHubVerifier } from "./aggregator/accountVerifier.js";
@@ -22,6 +22,8 @@ const PopQuery = z.object({ kind: z.string().optional(), limit: z.coerce.number(
 const PopResult = z.array(z.object({ id: z.string(), kind: z.string(), producers: z.number(), verifiedProducers: z.number(), invocations: z.number(), sessions: z.number() }));
 const CoQuery = z.object({ id: z.string(), limit: z.coerce.number().optional() }); // NOTE: no `k`
 const CoResult = z.array(z.object({ id: z.string(), producers: z.number(), verifiedProducers: z.number() }));
+const CoMatrixQuery = z.object({ limit: z.coerce.number().optional() }); // NOTE: no `k`
+const CoMatrixResult = z.array(z.object({ a: z.string(), b: z.string(), producers: z.number(), verifiedProducers: z.number() }));
 const AdoptQuery = z.object({ id: z.string(), bucket: z.enum(["week", "month"]).optional() }); // NOTE: no `k`
 const AdoptResult = z.array(z.object({ bucket: z.string(), producers: z.number(), verifiedProducers: z.number(), invocations: z.number() }));
 const OverviewResult = z.object({ ingredients: z.number(), producers: z.number(), verifiedProducers: z.number(), invocations: z.number(), sessions: z.number() });
@@ -64,6 +66,12 @@ export class AggregatorController {
   @get("/co-occurrence", { query: CoQuery, response: CoResult })
   async coOccurrence(input: { query: z.infer<typeof CoQuery> }): Promise<z.infer<typeof CoResult>> {
     return coOccurrence(this.db, { id: input.query.id, limit: input.query.limit });
+  }
+
+  @get("/co-occurrence-matrix", { query: CoMatrixQuery, response: CoMatrixResult })
+  async coOccurrenceMatrix(input: { query: z.infer<typeof CoMatrixQuery> }): Promise<z.infer<typeof CoMatrixResult>> {
+    // k is server policy (DEFAULT_K), never caller-supplied.
+    return coOccurrenceMatrix(this.db, { limit: input.query.limit });
   }
 
   @get("/adoption", { query: AdoptQuery, response: AdoptResult })
