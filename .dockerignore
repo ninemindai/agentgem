@@ -1,0 +1,24 @@
+# Keep the build context small and the image clean/safe.
+# Host node_modules carry host-platform binaries — never copy them in.
+node_modules
+**/node_modules
+# Build outputs are produced inside the image by `pnpm build`.
+dist
+**/dist
+*.tsbuildinfo
+**/*.tsbuildinfo
+# VCS + scratch
+.git
+.gitignore
+.superpowers
+docs/superpowers
+# Secrets must never enter the image.
+.env
+.env.*
+**/.env
+**/.env.*
+# Noise
+*.log
+.DS_Store
+videos
+.playwright-mcp
