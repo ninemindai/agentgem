@@ -12,7 +12,12 @@ export const InventorySchema = z.object({
   hooks: z.array(ArtifactSchema),
   projects: z.array(z.unknown()).optional(),
 });
-const UsageItemSchema = z.object({ type: z.string(), name: z.string(), invocations: z.number() });
+const UsageItemSchema = z.object({
+  type: z.string(),
+  name: z.string(),
+  invocations: z.number(),
+  lastUsedMs: z.number().nullable().optional(),
+});
 export const UsageSchema = z.object({ artifacts: z.array(UsageItemSchema) });
 
 export type Artifact = z.infer<typeof ArtifactSchema>;
