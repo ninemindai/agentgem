@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
 import { inventoryRoute, usageRoute, buildGemRoute, archiveRoute, createWorkspaceRoute, scaffoldChecksRoute, testbedImportRoute, makeClient, type Usage, type Gem, type GemCheck } from "../../api/routes.js";
-import { groupInventory, mergeUsage, applyView, DEFAULT_VIEW, type LedgerGroup, type SortKey } from "./data.js";
+import { groupInventory, mergeUsage, applyView, relativeTime, DEFAULT_VIEW, type LedgerGroup, type SortKey } from "./data.js";
 import { selKey, visibleKeys, buildSelection, type GemSelection } from "./selection.js";
 import { base64ToBytes, downloadBlob, copyText } from "./exporters.js";
 import { Preview } from "./Preview.js";
@@ -49,7 +49,11 @@ export function Ledger({ apiBase }: { apiBase: string }) {
 
   const visible = useMemo(() => (groups ? applyView(groups, view) : []), [groups, view]);
   const total = useMemo(() => (groups ?? []).reduce((n, g) => n + g.items.length, 0), [groups]);
-  const setSort = (sort: SortKey) => setView((v) => ({ ...v, sort }));
+  // Clicking the active sort flips its direction; clicking the other switches to it (desc).
+  const setSort = (sort: SortKey) => setView((v) =>
+    v.sort === sort ? { ...v, dir: v.dir === "desc" ? "asc" : "desc" } : { ...v, sort, dir: "desc" },
+  );
+  const arrow = (key: SortKey) => (view.sort === key ? (view.dir === "desc" ? " ↓" : " ↑") : "");
 
   const toggle = (key: string) => setSelected((s) => {
     const n = new Set(s);
@@ -160,12 +164,12 @@ export function Ledger({ apiBase }: { apiBase: string }) {
           type="button"
           className={"ledger-sort" + (view.sort === "uses" ? " is-active" : "")}
           onClick={() => setSort("uses")}
-        >Uses</button>
+        >Uses{arrow("uses")}</button>
         <button
           type="button"
           className={"ledger-sort" + (view.sort === "last" ? " is-active" : "")}
           onClick={() => setSort("last")}
-        >Last used</button>
+        >Last used{arrow("last")}</button>
         <label className="ledger-usedonly">
           <input
             type="checkbox"
@@ -249,6 +253,9 @@ export function Ledger({ apiBase }: { apiBase: string }) {
                       <button type="button" className="ledger-view" onClick={() => toggleExpand(key)}>
                         {expanded.has(key) ? "hide" : "view"}
                       </button>
+                    )}
+                    {i.lastUsedMs != null && (
+                      <span className="ledger-last" title="last used">{relativeTime(i.lastUsedMs)}</span>
                     )}
                     <span className="ledger-badge" title="invocations">{i.invocations}</span>
                   </div>

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { groupInventory, mergeUsage, applyView, type LedgerGroup } from "./data.js";
+import { groupInventory, mergeUsage, applyView, relativeTime, type LedgerGroup } from "./data.js";
 
 const inv = {
   skills: [{ name: "pdf" }, { name: "csv" }],
@@ -47,27 +47,41 @@ describe("applyView", () => {
   ];
 
   it("filters by case-insensitive name substring", () => {
-    const out = applyView(groups, { query: "PD", sort: "uses", usedOnly: false });
+    const out = applyView(groups, { query: "PD", sort: "uses", dir: "desc", usedOnly: false });
     expect(out[0].items.map((i) => i.name)).toEqual(["pdf"]);
   });
 
   it("drops zero-use items when usedOnly", () => {
-    const out = applyView(groups, { query: "", sort: "uses", usedOnly: true });
+    const out = applyView(groups, { query: "", sort: "uses", dir: "desc", usedOnly: true });
     expect(out[0].items.map((i) => i.name)).toEqual(["pdf", "zip"]);
   });
 
   it("sorts by uses desc", () => {
-    const out = applyView(groups, { query: "", sort: "uses", usedOnly: false });
+    const out = applyView(groups, { query: "", sort: "uses", dir: "desc", usedOnly: false });
     expect(out[0].items.map((i) => i.name)).toEqual(["pdf", "zip", "csv"]);
   });
 
+  it("sorts by uses asc when dir is asc", () => {
+    const out = applyView(groups, { query: "", sort: "uses", dir: "asc", usedOnly: false });
+    expect(out[0].items.map((i) => i.name)).toEqual(["csv", "zip", "pdf"]);
+  });
+
   it("sorts by last used desc, nulls last", () => {
-    const out = applyView(groups, { query: "", sort: "last", usedOnly: false });
+    const out = applyView(groups, { query: "", sort: "last", dir: "desc", usedOnly: false });
     expect(out[0].items.map((i) => i.name)).toEqual(["zip", "pdf", "csv"]);
   });
 
   it("drops groups that become empty", () => {
-    const out = applyView(groups, { query: "nomatch", sort: "uses", usedOnly: false });
+    const out = applyView(groups, { query: "nomatch", sort: "uses", dir: "desc", usedOnly: false });
     expect(out).toEqual([]);
   });
+});
+
+describe("relativeTime", () => {
+  const now = 1_000_000_000_000;
+  it("returns '' for null", () => expect(relativeTime(null, now)).toBe(""));
+  it("'just now' under 45s", () => expect(relativeTime(now - 10_000, now)).toBe("just now"));
+  it("minutes", () => expect(relativeTime(now - 5 * 60_000, now)).toBe("5m ago"));
+  it("hours", () => expect(relativeTime(now - 3 * 3_600_000, now)).toBe("3h ago"));
+  it("days", () => expect(relativeTime(now - 2 * 86_400_000, now)).toBe("2d ago"));
 });

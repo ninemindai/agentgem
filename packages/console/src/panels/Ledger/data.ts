@@ -4,8 +4,9 @@ export interface LedgerItem { name: string; invocations: number; lastUsedMs: num
 export interface LedgerGroup { key: string; label: string; items: LedgerItem[] }
 
 export type SortKey = "uses" | "last";
-export interface LedgerView { query: string; sort: SortKey; usedOnly: boolean }
-export const DEFAULT_VIEW: LedgerView = { query: "", sort: "uses", usedOnly: true };
+export type SortDir = "desc" | "asc";
+export interface LedgerView { query: string; sort: SortKey; dir: SortDir; usedOnly: boolean }
+export const DEFAULT_VIEW: LedgerView = { query: "", sort: "uses", dir: "desc", usedOnly: true };
 
 type InventoryCategory = "skills" | "mcpServers" | "instructions" | "hooks";
 
@@ -47,13 +48,30 @@ export function mergeUsage(groups: LedgerGroup[], usage: Usage): LedgerGroup[] {
   });
 }
 
+/** Compact relative time for a last-used timestamp; "" when unknown. */
+export function relativeTime(ms: number | null, now: number = Date.now()): string {
+  if (ms == null) return "";
+  const s = Math.max(0, Math.floor((now - ms) / 1000));
+  if (s < 45) return "just now";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d ago`;
+  const mo = Math.floor(d / 30);
+  if (mo < 12) return `${mo}mo ago`;
+  return `${Math.floor(d / 365)}y ago`;
+}
+
 // Client-side search/sort/filter over the merged groups. Pure: same inputs ->
 // same output. Empty groups (all items filtered out) are dropped.
 export function applyView(groups: LedgerGroup[], view: LedgerView): LedgerGroup[] {
   const q = view.query.trim().toLowerCase();
+  const dir = view.dir === "asc" ? -1 : 1;
   const cmp = view.sort === "last"
-    ? (a: LedgerItem, b: LedgerItem) => (b.lastUsedMs ?? -1) - (a.lastUsedMs ?? -1)
-    : (a: LedgerItem, b: LedgerItem) => b.invocations - a.invocations;
+    ? (a: LedgerItem, b: LedgerItem) => dir * ((b.lastUsedMs ?? -1) - (a.lastUsedMs ?? -1))
+    : (a: LedgerItem, b: LedgerItem) => dir * (b.invocations - a.invocations);
   return groups
     .map((g) => {
       const items = g.items
