@@ -2,7 +2,6 @@ import { useState } from "react";
 import { defineConsolePage } from "../../registry.js";
 import {
   makeClient,
-  transferSendRoute,
   transferReceiveRoute,
   transferCiphertextRoute,
 } from "../../api/routes.js";
@@ -13,26 +12,9 @@ const b64urlToBytes = (s: string): Uint8Array => {
   return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 };
 
-export function Transfer({ apiBase }: { apiBase: string }) {
-  const [ticket, setTicket] = useState("");
-  const [sendStatus, setSendStatus] = useState("");
+export function Received({ apiBase }: { apiBase: string }) {
   const [recv, setRecv] = useState("");
   const [recvStatus, setRecvStatus] = useState("");
-
-  async function send() {
-    setSendStatus("Encrypting & stashing…");
-    setTicket("");
-    try {
-      const client = makeClient(apiBase);
-      const { ticket: t } = await transferSendRoute.call(client, {
-        body: { selection: { all: true } },
-      });
-      setTicket(t);
-      setSendStatus("Ready — share this one-time ticket:");
-    } catch (e) {
-      setSendStatus("Failed: " + (e instanceof Error ? e.message : String(e)));
-    }
-  }
 
   async function redeem() {
     if (!recv.trim()) {
@@ -97,25 +79,6 @@ export function Transfer({ apiBase }: { apiBase: string }) {
   return (
     <div className="transfer">
       <section className="transfer-section">
-        <h3 className="transfer-heading">Send your config</h3>
-        <div className="ledger-bar">
-          <button type="button" className="ledger-sort" onClick={() => void send()}>
-            Send via ticket
-          </button>
-        </div>
-        {sendStatus && <p className="transfer-status">{sendStatus}</p>}
-        {ticket && (
-          <input
-            className="transfer-ticket"
-            readOnly
-            value={ticket}
-            aria-label="transfer ticket"
-            onClick={(e) => (e.target as HTMLInputElement).select()}
-          />
-        )}
-      </section>
-
-      <section className="transfer-section">
         <h3 className="transfer-heading">Receive</h3>
         <div className="ledger-bar">
           <input
@@ -144,12 +107,12 @@ export function Transfer({ apiBase }: { apiBase: string }) {
   );
 }
 
-export const transferPage = defineConsolePage({
-  id: "transfer",
-  title: "Transfer",
-  icon: "↔",
-  order: 45,
+export const receivedPage = defineConsolePage({
+  id: "received",
+  title: "Received",
+  icon: "↓",
+  order: 46,
   group: "library",
-  route: "#/transfer",
-  component: ({ apiBase }) => <Transfer apiBase={apiBase} />,
+  route: "#/received",
+  component: ({ apiBase }) => <Received apiBase={apiBase} />,
 });

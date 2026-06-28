@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { defineConsolePage } from "../../registry.js";
-import { buildGemRoute, archiveRoute, makeClient, type Gem } from "../../api/routes.js";
+import { buildGemRoute, archiveRoute, makeClient, transferSendRoute, type Gem } from "../../api/routes.js";
 import { buildSelection } from "../Curate/selection.js";
 import { useActiveGem } from "../../activeGem.js";
 import { base64ToBytes, downloadBlob, copyText } from "./exporters.js";
@@ -12,6 +12,8 @@ export function Materialize({ apiBase }: { apiBase: string }) {
   const [gem, setGem] = useState<Gem | null>(null);
   const [building, setBuilding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [ticket, setTicket] = useState("");
+  const [sendStatus, setSendStatus] = useState("");
 
   const sel = buildSelection(keys);
 
@@ -44,6 +46,20 @@ export function Materialize({ apiBase }: { apiBase: string }) {
     if (tarGz) downloadBlob(`${gem.name}.gem`, "application/gzip", base64ToBytes(tarGz));
   };
 
+  const shareViaTransfer = async () => {
+    setSendStatus("Encrypting & stashing…");
+    setTicket("");
+    try {
+      const { ticket: t } = await transferSendRoute.call(makeClient(apiBase), {
+        body: { selection: sel, name: name.trim() || "gem" },
+      });
+      setTicket(t);
+      setSendStatus("Ready — share this one-time ticket:");
+    } catch (e) {
+      setSendStatus("Failed: " + (e instanceof Error ? e.message : String(e)));
+    }
+  };
+
   return (
     <div className="materialize">
       <div className="ledger-selbar">
@@ -56,6 +72,24 @@ export function Materialize({ apiBase }: { apiBase: string }) {
       {gem && <Preview gem={gem} onDownloadGem={downloadGem} onDownloadJson={downloadJson} onCopyJson={copyJson} />}
       <Targets apiBase={apiBase} selection={sel} name={name.trim() || "gem"} />
       <Run apiBase={apiBase} selection={sel} name={name.trim() || "gem"} />
+      <section className="transfer-section">
+        <h3 className="transfer-heading">Share via transfer</h3>
+        <div className="ledger-bar">
+          <button type="button" className="ledger-sort" onClick={() => void shareViaTransfer()}>
+            Send via ticket
+          </button>
+        </div>
+        {sendStatus && <p className="transfer-status">{sendStatus}</p>}
+        {ticket && (
+          <input
+            className="transfer-ticket"
+            readOnly
+            value={ticket}
+            aria-label="transfer ticket"
+            onClick={(e) => (e.target as HTMLInputElement).select()}
+          />
+        )}
+      </section>
     </div>
   );
 }
