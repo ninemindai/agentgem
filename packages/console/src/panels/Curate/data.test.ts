@@ -1,5 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { groupInventory, mergeUsage, applyView, relativeTime, type LedgerGroup } from "./data.js";
+import { groupInventory, mergeUsage, applyView, relativeTime, formatSource, type LedgerGroup } from "./data.js";
+
+describe("formatSource", () => {
+  it("extracts the plugin name from a plugin source", () =>
+    expect(formatSource("plugin:superpowers@claude-plugins-official")).toBe("superpowers"));
+  it("passes through standalone/user/project", () => {
+    expect(formatSource("standalone")).toBe("standalone");
+    expect(formatSource("user")).toBe("user");
+  });
+  it("returns undefined for no source", () => expect(formatSource(undefined)).toBeUndefined());
+});
 
 const inv = {
   skills: [{ name: "pdf" }, { name: "csv" }],

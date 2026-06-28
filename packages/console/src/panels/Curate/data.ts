@@ -1,6 +1,6 @@
 import type { Inventory, Usage } from "../../api/routes.js";
 
-export interface LedgerItem { name: string; invocations: number; lastUsedMs: number | null; detail?: string }
+export interface LedgerItem { name: string; invocations: number; lastUsedMs: number | null; detail?: string; source?: string }
 export interface LedgerGroup { key: string; label: string; items: LedgerItem[] }
 
 export type SortKey = "uses" | "last";
@@ -13,6 +13,14 @@ export interface LedgerView { query: string; sort: SortKey; dir: SortDir; usedOn
 export const DEFAULT_VIEW: LedgerView = { query: "", sort: "uses", dir: "desc", usedOnly: false };
 
 type InventoryCategory = "skills" | "mcpServers" | "instructions" | "hooks";
+
+/** Friendly provenance label for a chip: "plugin:superpowers@repo" → "superpowers";
+ * "standalone"/"user"/"project" pass through. */
+export function formatSource(source?: string): string | undefined {
+  if (!source) return undefined;
+  const m = /^plugin:([^@]+)/.exec(source);
+  return m ? m[1] : source;
+}
 
 /** Inventory category -> usage `type` + sidebar label, in display order. */
 const CATEGORIES: { key: InventoryCategory; type: string; label: string }[] = [
@@ -32,6 +40,7 @@ export function groupInventory(inv: Inventory): LedgerGroup[] {
         invocations: 0,
         lastUsedMs: null,
         detail: a.content ?? (a.config ? JSON.stringify(a.config, null, 2) : undefined),
+        source: a.source,
       })),
     }))
     .filter((g) => g.items.length > 0);

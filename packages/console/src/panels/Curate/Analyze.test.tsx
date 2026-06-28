@@ -30,8 +30,7 @@ describe("Analyze", () => {
     const picked: string[][] = [];
     render(<Analyze apiBase="" onPick={(k) => picked.push(k)} />);
 
-    // open the disclosure, then click the project's Analyze
-    fireEvent.click(await screen.findByText(/suggest a gem from a project/i));
+    // the project list renders immediately (no disclosure); click the project's Analyze
     fireEvent.click(await screen.findByText("Analyze →"));
     FakeES.last!.emit("done", { cached: false, candidates: [
       { name: "Spec Loop", description: "", confidence: "high", include: [{ type: "skill", name: "brainstorming" }] },

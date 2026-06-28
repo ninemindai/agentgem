@@ -356,3 +356,16 @@ body::before {
 .ledger-group-count { margin-left: 8px; font: 600 11px/1 var(--font-ui);
   color: var(--muted); background: var(--raised); border: 1px solid var(--line-soft);
   border-radius: 999px; padding: 2px 8px; }
+
+/* Curate two-tab switcher (Compose from artifacts | Suggest from a project) */
+.curate-tabs { display: flex; gap: 2px; margin: 0 0 16px; border-bottom: 1px solid var(--line); }
+.curate-tab { background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  padding: 8px 14px; cursor: pointer; color: var(--muted); font: 600 13px/1 var(--font-ui); }
+.curate-tab:hover { color: var(--ink-soft); }
+.curate-tab.is-active { color: var(--accent); border-bottom-color: var(--accent); }
+.analyze-intro { margin: 0 0 14px; color: var(--ink-soft); font: 14px/1.5 var(--font-ui); max-width: 60ch; }
+
+/* Artifact provenance chip (plugin name / standalone / user / project) */
+.ledger-source { font: 500 10.5px/1 var(--font-ui); color: var(--gold);
+  background: var(--paper); border: 1px solid var(--line-soft); border-radius: 999px;
+  padding: 3px 8px; white-space: nowrap; }

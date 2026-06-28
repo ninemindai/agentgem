@@ -9,6 +9,7 @@ const ArtifactSchema = z.looseObject({
   description: z.string().optional(),
   content: z.string().optional(),
   config: z.record(z.string(), z.unknown()).optional(),
+  source: z.string().optional(), // "standalone", a plugin name, "user"/"project", …
 });
 export const InventorySchema = z.object({
   skills: z.array(ArtifactSchema),

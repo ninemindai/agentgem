@@ -45,6 +45,16 @@ describe("Curate", () => {
     expect(names(container)).toEqual(["pdf", "zip", "csv"]);
   });
 
+  it("defaults to the Compose tab and switches to the Suggest tab", async () => {
+    vi.stubGlobal("fetch", mockFetch());
+    render(<Curate apiBase="" />);
+    await screen.findByText("pdf"); // compose inventory visible by default
+    expect((screen.getByRole("tab", { name: "Compose from artifacts" }) as HTMLElement).getAttribute("aria-selected")).toBe("true");
+    fireEvent.click(screen.getByRole("tab", { name: "Suggest from a project" }));
+    expect(await screen.findByText(/agentgem reads its sessions/i)).toBeTruthy(); // analyze intro
+    expect(screen.queryByText("pdf")).toBeNull(); // compose inventory hidden
+  });
+
   it("hides zero-use items when 'Used only' is checked", async () => {
     vi.stubGlobal("fetch", mockFetch());
     const { container } = render(<Curate apiBase="" />);

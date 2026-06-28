@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
 import { inventoryRoute, usageRoute, createWorkspaceRoute, scaffoldChecksRoute, makeClient, type Usage, type GemCheck } from "../../api/routes.js";
-import { groupInventory, mergeUsage, applyView, relativeTime, DEFAULT_VIEW, type LedgerGroup, type SortKey } from "./data.js";
+import { groupInventory, mergeUsage, applyView, relativeTime, formatSource, DEFAULT_VIEW, type LedgerGroup, type SortKey } from "./data.js";
 import { selKey, visibleKeys, buildSelection } from "./selection.js";
 import { useActiveGem, setKeys, toggleKey as toggleKeyStore, clearKeys, setName as setNameStore } from "../../activeGem.js";
 import { Analyze } from "./Analyze.js";
@@ -17,6 +17,7 @@ export function Curate({ apiBase }: { apiBase: string }) {
   const [buildError, setBuildError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [tab, setTab] = useState<"compose" | "suggest">("compose");
   const [suggested, setSuggested] = useState<GemCheck[] | null>(null);
   const [included, setIncluded] = useState<Set<string>>(new Set());
   const [checksBusy, setChecksBusy] = useState(false);
@@ -107,6 +108,28 @@ export function Curate({ apiBase }: { apiBase: string }) {
 
   return (
     <div className="ledger">
+      <div className="curate-tabs" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          className={"curate-tab" + (tab === "compose" ? " is-active" : "")}
+          aria-selected={tab === "compose"}
+          onClick={() => setTab("compose")}
+        >Compose from artifacts</button>
+        <button
+          type="button"
+          role="tab"
+          className={"curate-tab" + (tab === "suggest" ? " is-active" : "")}
+          aria-selected={tab === "suggest"}
+          onClick={() => setTab("suggest")}
+        >Suggest from a project</button>
+      </div>
+
+      {tab === "suggest" && (
+        <Analyze apiBase={apiBase} onPick={(picked) => { setKeys(new Set(picked)); setView((v) => ({ ...v, usedOnly: false })); setTab("compose"); }} />
+      )}
+
+      {tab === "compose" && (<>
       <div className="ledger-bar">
         <input
           className="ledger-search"
@@ -158,8 +181,6 @@ export function Curate({ apiBase }: { apiBase: string }) {
         {buildError && <span className="ledger-error">{buildError}</span>}
       </div>
 
-      <Analyze apiBase={apiBase} onPick={(picked) => { setKeys(new Set(picked)); setView((v) => ({ ...v, usedOnly: false })); }} />
-
       {selected.size > 0 && (
         <Checks suggested={suggested} included={included} busy={checksBusy} error={checksError} onSuggest={suggestChecks} onToggle={toggleCheck} />
       )}
@@ -189,6 +210,7 @@ export function Curate({ apiBase }: { apiBase: string }) {
                       <input type="checkbox" checked={selected.has(key)} onChange={() => toggle(key)} />
                       <span className="ledger-item-name">{i.name}</span>
                     </label>
+                    {i.source && <span className="ledger-source" title={i.source}>{formatSource(i.source)}</span>}
                     {i.detail && (
                       <button type="button" className="ledger-view" onClick={() => toggleExpand(key)}>
                         {expanded.has(key) ? "hide" : "view"}
@@ -211,6 +233,7 @@ export function Curate({ apiBase }: { apiBase: string }) {
           )}
         </section>
       ))}
+      </>)}
     </div>
   );
 }
