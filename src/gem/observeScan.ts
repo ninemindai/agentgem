@@ -93,6 +93,59 @@ export function parseCodexTranscript(path: string): SessionStat | null {
   return { agent: "codex", sessionId, project: cwd ? basename(cwd) : null, model, startMs, endMs, msgs, tokensIn, tokensOut, tokensCache: cached };
 }
 
+export type ObserveRange = "today" | "7d" | "30d" | "all";
+
+export interface ObservePayload {
+  pulse: { sessions: number; msgs: number; tokens: number; activeMs: number };
+  daily: { date: string; sessions: number; msgs: number; tokensIn: number; tokensOut: number; tokensCache: number }[];
+  sessions: { agent: "claude" | "codex"; sessionId: string; project: string | null; model: string | null; durationMs: number; msgs: number; tokens: number; endMs: number }[];
+  models: { model: string; agent: "claude" | "codex"; sessions: number; tokens: number }[];
+  range: ObserveRange;
+}
+
+const DAY_MS = 86_400_000;
+const tokensOf = (s: SessionStat) => s.tokensIn + s.tokensOut + s.tokensCache;
+const utcDate = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+
+function sinceMs(range: ObserveRange, nowMs: number): number {
+  if (range === "all") return -Infinity;
+  if (range === "today") return Date.parse(utcDate(nowMs) + "T00:00:00.000Z");
+  return nowMs - (range === "7d" ? 7 : 30) * DAY_MS;
+}
+
+export function aggregateObserve(stats: SessionStat[], range: ObserveRange, nowMs: number): ObservePayload {
+  const since = sinceMs(range, nowMs);
+  const inRange = stats.filter((s) => s.endMs >= since);
+
+  const byDay = new Map<string, ObservePayload["daily"][number]>();
+  const byModel = new Map<string, ObservePayload["models"][number]>();
+  let pTokens = 0, pMsgs = 0, pActive = 0;
+  for (const s of inRange) {
+    const date = utcDate(s.startMs);
+    const d = byDay.get(date) ?? { date, sessions: 0, msgs: 0, tokensIn: 0, tokensOut: 0, tokensCache: 0 };
+    d.sessions++; d.msgs += s.msgs; d.tokensIn += s.tokensIn; d.tokensOut += s.tokensOut; d.tokensCache += s.tokensCache;
+    byDay.set(date, d);
+
+    const modelKey = `${s.agent}:${s.model ?? "unknown"}`;
+    const m = byModel.get(modelKey) ?? { model: s.model ?? "unknown", agent: s.agent, sessions: 0, tokens: 0 };
+    m.sessions++; m.tokens += tokensOf(s);
+    byModel.set(modelKey, m);
+
+    pTokens += tokensOf(s); pMsgs += s.msgs; pActive += Math.max(0, s.endMs - s.startMs);
+  }
+
+  return {
+    pulse: { sessions: inRange.length, msgs: pMsgs, tokens: pTokens, activeMs: pActive },
+    daily: [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date)),
+    sessions: inRange
+      .map((s) => ({ agent: s.agent, sessionId: s.sessionId, project: s.project, model: s.model, durationMs: Math.max(0, s.endMs - s.startMs), msgs: s.msgs, tokens: tokensOf(s), endMs: s.endMs }))
+      .sort((a, b) => b.endMs - a.endMs)
+      .slice(0, 200),
+    models: [...byModel.values()].sort((a, b) => b.tokens - a.tokens),
+    range,
+  };
+}
+
 export function scanSessions(dirs?: { claudeDir?: string; codexDir?: string }): SessionStat[] {
   const resolved = resolveDirs();
   const claudeDir = dirs?.claudeDir ?? resolved.claudeDir;

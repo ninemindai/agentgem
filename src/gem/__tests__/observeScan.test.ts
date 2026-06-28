@@ -69,3 +69,49 @@ describe("scanSessions", () => {
     expect(missing.map((s) => s.sessionId)).toEqual(["s1"]);
   });
 });
+
+import { aggregateObserve, type ObservePayload } from "../observeScan.js";
+
+const mk = (over: Partial<SessionStat>): SessionStat => ({
+  agent: "claude", sessionId: "s", project: "app", model: "claude-opus-4-8",
+  startMs: 0, endMs: 60_000, msgs: 4, tokensIn: 100, tokensOut: 40, tokensCache: 10, ...over,
+});
+
+describe("aggregateObserve", () => {
+  const NOW = Date.parse("2026-06-28T12:00:00.000Z");
+  const day = (iso: string, over: Partial<SessionStat> = {}) =>
+    mk({ startMs: Date.parse(iso), endMs: Date.parse(iso) + 60_000, ...over });
+
+  it("buckets by UTC date and totals tokens per day", () => {
+    const p = aggregateObserve([
+      day("2026-06-28T09:00:00.000Z", { sessionId: "a", tokensIn: 100, tokensOut: 40, tokensCache: 10 }),
+      day("2026-06-28T10:00:00.000Z", { sessionId: "b", tokensIn: 200, tokensOut: 60, tokensCache: 0 }),
+      day("2026-06-27T10:00:00.000Z", { sessionId: "c" }),
+    ], "all", NOW);
+    const d28 = p.daily.find((d) => d.date === "2026-06-28")!;
+    expect(d28.sessions).toBe(2);
+    expect(d28.tokensIn).toBe(300);
+    expect(p.daily.map((d) => d.date)).toContain("2026-06-27");
+  });
+
+  it("pulse sums the range; range filters by recency", () => {
+    const recent = day("2026-06-28T09:00:00.000Z", { sessionId: "r" });
+    const old = day("2026-05-01T09:00:00.000Z", { sessionId: "o" });
+    const today = aggregateObserve([recent, old], "today", NOW);
+    expect(today.sessions.map((s) => s.sessionId)).toEqual(["r"]);
+    expect(today.pulse.sessions).toBe(1);
+    const all = aggregateObserve([recent, old], "all", NOW);
+    expect(all.pulse.sessions).toBe(2);
+  });
+
+  it("model-share groups by model+agent", () => {
+    const p = aggregateObserve([
+      mk({ sessionId: "a", model: "claude-opus-4-8", tokensIn: 100, tokensOut: 0, tokensCache: 0 }),
+      mk({ sessionId: "b", model: "claude-opus-4-8", tokensIn: 100, tokensOut: 0, tokensCache: 0 }),
+      mk({ sessionId: "c", agent: "codex", model: "gpt-5.5", tokensIn: 50, tokensOut: 0, tokensCache: 0 }),
+    ], "all", NOW);
+    const opus = p.models.find((m) => m.model === "claude-opus-4-8")!;
+    expect(opus.sessions).toBe(2);
+    expect(opus.tokens).toBe(200);
+  });
+});
