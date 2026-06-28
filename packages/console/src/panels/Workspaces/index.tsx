@@ -4,6 +4,7 @@ import {
   workspacesRoute, deleteWorkspaceRoute, renderWorkspaceRoute,
   makeClient, TARGET_IDS, type WorkspaceSummary,
 } from "../../api/routes.js";
+import { setName, resetGem } from "../../activeGem.js";
 
 /** Count chips shown per workspace, in display order. */
 export function countChips(ws: WorkspaceSummary): { label: string; n: number }[] {
@@ -34,13 +35,28 @@ export function Workspaces({ apiBase }: { apiBase: string }) {
 
   if (error) return <p className="ledger-error">Could not load workspaces: {error}</p>;
   if (!items) return <p className="ledger-loading">Loading…</p>;
-  if (items.length === 0) return <p className="ledger-empty">No saved workspaces yet.</p>;
+
+  const handleNewGem = () => { resetGem(); window.location.hash = "#/curate"; };
+
+  if (items.length === 0) return (
+    <div>
+      <div className="ledger-bar">
+        <button type="button" className="ledger-build" onClick={handleNewGem}>＋ New Gem</button>
+      </div>
+      <p className="ledger-empty">No saved workspaces yet.</p>
+    </div>
+  );
 
   return (
-    <div className="ws-list">
-      {items.map((ws) => (
-        <WorkspaceCard key={ws.name} apiBase={apiBase} ws={ws} onChange={reload} />
-      ))}
+    <div>
+      <div className="ledger-bar">
+        <button type="button" className="ledger-build" onClick={handleNewGem}>＋ New Gem</button>
+      </div>
+      <div className="ws-list">
+        {items.map((ws) => (
+          <WorkspaceCard key={ws.name} apiBase={apiBase} ws={ws} onChange={reload} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -96,6 +112,7 @@ function WorkspaceCard({ apiBase, ws, onChange }: { apiBase: string; ws: Workspa
         <select className="targets-select" aria-label={`render target for ${ws.name}`} value={target} onChange={(e) => setTarget(e.target.value)}>
           {TARGET_IDS.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
+        <button type="button" className="ledger-build" onClick={() => { setName(ws.name); window.location.hash = "#/curate"; }}>Open</button>
         <button type="button" className="ledger-sort" disabled={busy} onClick={render}>Render</button>
         <button type="button" className="ws-delete" disabled={busy} onClick={remove}>Delete</button>
       </div>

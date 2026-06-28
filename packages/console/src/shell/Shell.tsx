@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { groupedPages, sortedPages, type ConsolePage } from "../registry.js";
+import { useActiveGem } from "../activeGem.js";
 
 export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: string }) {
   const groups = groupedPages(pages);
   const ordered = sortedPages(pages);
   const [hash, setHash] = useState(() => window.location.hash);
+  const { keys, name } = useActiveGem();
 
   useEffect(() => {
     const onHash = () => setHash(window.location.hash);
@@ -13,6 +15,7 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
   }, []);
 
   const active = ordered.find((p) => p.route === hash) ?? ordered[0];
+  const gemLabel = name || `New Gem · ${keys.size}`;
 
   const item = (p: ConsolePage) => (
     <button
@@ -36,6 +39,12 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
           </svg>
           AgentGem
         </div>
+        <button
+          className="console-activegem"
+          onClick={() => { window.location.hash = "#/your-gems"; }}
+        >
+          {gemLabel}
+        </button>
         <div className="console-group-label">Build</div>
         {groups.build.map(item)}
         {groups.library.length > 0 && <div className="console-group-label">Library</div>}

@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { Workspaces, countChips } from "./index.js";
+import { getName, resetGem } from "../../activeGem.js";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); resetGem(); window.location.hash = ""; });
 
 const res = (body: unknown) =>
   ({ ok: true, status: 200, text: async () => JSON.stringify(body) }) as unknown as Response;
@@ -55,6 +56,30 @@ describe("Workspaces", () => {
     await screen.findByText("my-ws");
     fireEvent.click(screen.getByText("Render"));
     await waitFor(() => expect(screen.getByText(/rendered claude → \/runs\/my-ws\/claude/)).toBeTruthy());
+  });
+
+  it("Open sets the active gem name and navigates to curate", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => res({ workspaces: [ws] })));
+    render(<Workspaces apiBase="" />);
+    await screen.findByText("my-ws");
+    fireEvent.click(screen.getByText("Open"));
+    expect(getName()).toBe("my-ws");
+    expect(window.location.hash).toBe("#/curate");
+  });
+
+  it("＋ New Gem resets the active gem and navigates to curate", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => res({ workspaces: [ws] })));
+    render(<Workspaces apiBase="" />);
+    await screen.findByText("my-ws");
+    fireEvent.click(screen.getByText("＋ New Gem"));
+    expect(getName()).toBe("");
+    expect(window.location.hash).toBe("#/curate");
+  });
+
+  it("＋ New Gem is shown in the empty state too", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => res({ workspaces: [] })));
+    render(<Workspaces apiBase="" />);
+    expect(await screen.findByText("＋ New Gem")).toBeTruthy();
   });
 
   it("deletes a workspace and refreshes", async () => {

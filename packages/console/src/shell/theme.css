@@ -90,6 +90,14 @@ body::before {
   background: var(--accent); border-radius: 0 3px 3px 0;
 }
 .console-nav-icon { font-size: 14px; line-height: 1; opacity: .85; width: 16px; text-align: center; }
+.console-activegem {
+  display: flex; align-items: center; width: 100%; text-align: left;
+  background: var(--paper-2); border: 1px solid var(--line); border-radius: 7px;
+  padding: 7px 11px; margin-bottom: 4px;
+  color: var(--muted); cursor: pointer; font: 600 12px/1 var(--font-ui); letter-spacing: .01em;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.console-activegem:hover { background: rgba(154, 51, 36, .06); border-color: var(--accent); color: var(--accent); }
 .console-group-label { margin: 14px 8px 4px; font: 700 10px/1 var(--font-ui);
   text-transform: uppercase; letter-spacing: .16em; color: var(--muted); }
 .console-group-label:first-of-type { margin-top: 6px; }

@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
 import { Shell } from "./Shell.js";
 import { defineConsolePage, groupedPages } from "../registry.js";
+import { setKeys, setName, resetGem } from "../activeGem.js";
 
 describe("groupedPages", () => {
   const p = (id: string, order: number, group?: "build" | "library" | "settings") =>
@@ -15,7 +16,7 @@ describe("groupedPages", () => {
   });
 });
 
-afterEach(() => { cleanup(); window.location.hash = ""; });
+afterEach(() => { cleanup(); window.location.hash = ""; resetGem(); });
 
 const pages = [
   defineConsolePage({ id: "a", title: "Alpha", order: 10, route: "#/a", component: () => <p>panel-a</p> }),
@@ -25,8 +26,11 @@ const pages = [
 describe("Shell", () => {
   it("lists nav items in order and renders the first panel by default", () => {
     render(<Shell pages={pages} apiBase="" />);
-    const labels = screen.getAllByRole("button").map((b) => b.textContent);
-    expect(labels).toEqual(["Alpha", "Beta"]);
+    // getAllByRole("button") includes the active-gem switcher; filter it out
+    const navLabels = screen.getAllByRole("button")
+      .filter((b) => b.classList.contains("console-nav-item"))
+      .map((b) => b.textContent);
+    expect(navLabels).toEqual(["Alpha", "Beta"]);
     expect(screen.getByText("panel-a")).toBeTruthy();
   });
 
@@ -40,6 +44,24 @@ describe("Shell", () => {
     render(<Shell pages={pages} apiBase="" />);
     fireEvent.click(screen.getByText("Beta"));
     expect(window.location.hash).toBe("#/b");
+  });
+
+  it("shows the active gem name in the switcher when one is set", () => {
+    setName("My Gem"); setKeys(new Set(["a", "b"]));
+    render(<Shell pages={pages} apiBase="" />);
+    expect(screen.getByText("My Gem")).toBeTruthy();
+  });
+
+  it("shows 'New Gem' fallback in the switcher when no active gem is set", () => {
+    resetGem();
+    render(<Shell pages={pages} apiBase="" />);
+    expect(screen.getByText(/New Gem/)).toBeTruthy();
+  });
+
+  it("clicking the active-gem switcher navigates to your-gems", () => {
+    render(<Shell pages={pages} apiBase="" />);
+    fireEvent.click(screen.getByText(/New Gem/));
+    expect(window.location.hash).toBe("#/your-gems");
   });
 
   it("renders group labels and places items under them", () => {
