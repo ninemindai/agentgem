@@ -20,6 +20,7 @@ export function Ledger({ apiBase }: { apiBase: string }) {
   const [buildError, setBuildError] = useState<string | null>(null);
   const [wsName, setWsName] = useState("");
   const [wsNote, setWsNote] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [suggested, setSuggested] = useState<GemCheck[] | null>(null);
   const [included, setIncluded] = useState<Set<string>>(new Set());
   const [checksBusy, setChecksBusy] = useState(false);
@@ -52,6 +53,11 @@ export function Ledger({ apiBase }: { apiBase: string }) {
   });
   const selectAllShown = () => setSelected((s) => new Set([...s, ...visibleKeys(visible)]));
   const clearSelection = () => setSelected(new Set());
+  const toggleExpand = (key: string) => setExpanded((s) => {
+    const n = new Set(s);
+    if (n.has(key)) n.delete(key); else n.add(key);
+    return n;
+  });
 
   const build = async () => {
     setBuilding(true);
@@ -198,12 +204,20 @@ export function Ledger({ apiBase }: { apiBase: string }) {
             {g.items.map((i) => {
               const key = selKey(g.key, i.name);
               return (
-                <li className="ledger-item" key={i.name}>
-                  <label className="ledger-item-main">
-                    <input type="checkbox" checked={selected.has(key)} onChange={() => toggle(key)} />
-                    <span className="ledger-item-name">{i.name}</span>
-                  </label>
-                  <span className="ledger-badge" title="invocations">{i.invocations}</span>
+                <li className="ledger-item-wrap" key={i.name}>
+                  <div className="ledger-item">
+                    <label className="ledger-item-main">
+                      <input type="checkbox" checked={selected.has(key)} onChange={() => toggle(key)} />
+                      <span className="ledger-item-name">{i.name}</span>
+                    </label>
+                    {i.detail && (
+                      <button type="button" className="ledger-view" onClick={() => toggleExpand(key)}>
+                        {expanded.has(key) ? "hide" : "view"}
+                      </button>
+                    )}
+                    <span className="ledger-badge" title="invocations">{i.invocations}</span>
+                  </div>
+                  {i.detail && expanded.has(key) && <pre className="ledger-detail">{i.detail}</pre>}
                 </li>
               );
             })}

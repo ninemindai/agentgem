@@ -13,7 +13,7 @@ function mockFetch() {
   return vi.fn(async (url: string | URL) => {
     const u = String(url);
     if (u.includes("/api/inventory"))
-      return res({ skills: [{ name: "pdf" }, { name: "csv" }, { name: "zip" }], mcpServers: [], instructions: [], hooks: [] });
+      return res({ skills: [{ name: "pdf", content: "PDF-SKILL-BODY" }, { name: "csv" }, { name: "zip" }], mcpServers: [], instructions: [], hooks: [] });
     if (u.includes("/api/usage"))
       return res({ artifacts: [
         { type: "skill", name: "pdf", invocations: 7, lastUsedMs: 100 },
@@ -97,6 +97,15 @@ describe("Ledger", () => {
     await waitFor(() =>
       expect(fetchSpy.mock.calls.some((c) => String(c[0]).includes("/api/archive"))).toBe(true),
     );
+  });
+
+  it("views an artifact's content inline", async () => {
+    vi.stubGlobal("fetch", mockFetch());
+    render(<Ledger apiBase="" />);
+    await screen.findByText("pdf");
+    expect(screen.queryByText("PDF-SKILL-BODY")).toBeNull();
+    fireEvent.click(screen.getByText("view"));
+    expect(await screen.findByText("PDF-SKILL-BODY")).toBeTruthy();
   });
 
   it("suggests checks for the selection", async () => {

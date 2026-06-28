@@ -1,6 +1,6 @@
 import type { Inventory, Usage } from "../../api/routes.js";
 
-export interface LedgerItem { name: string; invocations: number; lastUsedMs: number | null }
+export interface LedgerItem { name: string; invocations: number; lastUsedMs: number | null; detail?: string }
 export interface LedgerGroup { key: string; label: string; items: LedgerItem[] }
 
 export type SortKey = "uses" | "last";
@@ -22,7 +22,12 @@ export function groupInventory(inv: Inventory): LedgerGroup[] {
     .map(({ key, label }) => ({
       key,
       label,
-      items: (inv[key] ?? []).map((a) => ({ name: a.name, invocations: 0, lastUsedMs: null })),
+      items: (inv[key] ?? []).map((a) => ({
+        name: a.name,
+        invocations: 0,
+        lastUsedMs: null,
+        detail: a.content ?? (a.config ? JSON.stringify(a.config, null, 2) : undefined),
+      })),
     }))
     .filter((g) => g.items.length > 0);
 }

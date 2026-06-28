@@ -129,3 +129,9 @@ body { margin: 0; background: var(--paper); color: var(--ink);
 .deploy-hint { color: var(--muted); font-size: 12px; margin-top: 12px; }
 .tb-clickable { cursor: pointer; }
 .tb-clickable:hover { border-color: var(--accent); }
+.ledger-item-wrap { list-style: none; }
+.ledger-view { background: none; border: 0; color: var(--muted); cursor: pointer; font: inherit;
+  font-size: 11px; text-decoration: underline; padding: 0 8px; }
+.ledger-view:hover { color: var(--accent); }
+.ledger-detail { margin: 2px 0 6px; padding: 10px; background: var(--paper); border: 1px solid var(--line);
+  border-radius: 6px; max-height: 280px; overflow: auto; font-size: 12px; white-space: pre-wrap; }

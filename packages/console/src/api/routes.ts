@@ -4,7 +4,12 @@ import { createClient, defineRoute, type Client } from "@agentback/client";
 // Minimal client-side schemas: validate ONLY what the UI reads. Zod strips the
 // server's extra artifact fields. When a shared browser-safe contract package is
 // extracted later, replace these with imports from it.
-const ArtifactSchema = z.object({ name: z.string() });
+const ArtifactSchema = z.looseObject({
+  name: z.string(),
+  description: z.string().optional(),
+  content: z.string().optional(),
+  config: z.record(z.string(), z.unknown()).optional(),
+});
 export const InventorySchema = z.object({
   skills: z.array(ArtifactSchema),
   mcpServers: z.array(ArtifactSchema),
