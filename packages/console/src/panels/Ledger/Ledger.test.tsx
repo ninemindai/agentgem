@@ -19,6 +19,8 @@ function mockFetch() {
         { type: "skill", name: "pdf", invocations: 7, lastUsedMs: 100 },
         { type: "skill", name: "zip", invocations: 3, lastUsedMs: 900 },
       ] });
+    if (u.includes("/api/testbed/import"))
+      return res({ written: [{ ref: "skill:pdf" }], skipped: [] });
     if (u.includes("/api/scaffold-checks"))
       return res({ checks: [{ kind: "behavioral", name: "smoke-test", task: "does it load" }] });
     if (u.includes("/api/workspaces"))
@@ -126,6 +128,16 @@ describe("Ledger", () => {
     fireEvent.change(screen.getByLabelText("workspace name"), { target: { value: "my-selection" } });
     fireEvent.click(screen.getByText("Save workspace"));
     await waitFor(() => expect(screen.getByText(/saved workspace .my-selection./)).toBeTruthy());
+  });
+
+  it("imports the selection into a testbed", async () => {
+    vi.stubGlobal("fetch", mockFetch());
+    render(<Ledger apiBase="" />);
+    await screen.findByText("pdf");
+    fireEvent.click(screen.getByLabelText("pdf"));
+    fireEvent.change(screen.getByLabelText("testbed import root"), { target: { value: "/tmp/tb" } });
+    fireEvent.click(screen.getByText("Import"));
+    await waitFor(() => expect(screen.getByText(/imported 1 → \/tmp\/tb/)).toBeTruthy());
   });
 
   it("clears the selection", async () => {

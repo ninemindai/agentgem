@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
-import { inventoryRoute, usageRoute, buildGemRoute, archiveRoute, createWorkspaceRoute, scaffoldChecksRoute, makeClient, type Usage, type Gem, type GemCheck } from "../../api/routes.js";
+import { inventoryRoute, usageRoute, buildGemRoute, archiveRoute, createWorkspaceRoute, scaffoldChecksRoute, testbedImportRoute, makeClient, type Usage, type Gem, type GemCheck } from "../../api/routes.js";
 import { groupInventory, mergeUsage, applyView, DEFAULT_VIEW, type LedgerGroup, type SortKey } from "./data.js";
 import { selKey, visibleKeys, buildSelection, type GemSelection } from "./selection.js";
 import { base64ToBytes, downloadBlob, copyText } from "./exporters.js";
@@ -21,6 +21,8 @@ export function Ledger({ apiBase }: { apiBase: string }) {
   const [buildError, setBuildError] = useState<string | null>(null);
   const [wsName, setWsName] = useState("");
   const [wsNote, setWsNote] = useState<string | null>(null);
+  const [importRoot, setImportRoot] = useState("");
+  const [importNote, setImportNote] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [suggested, setSuggested] = useState<GemCheck[] | null>(null);
   const [included, setIncluded] = useState<Set<string>>(new Set());
@@ -110,6 +112,19 @@ export function Ledger({ apiBase }: { apiBase: string }) {
     return n;
   });
 
+  const importToTestbed = async () => {
+    const root = importRoot.trim();
+    if (!root || selected.size === 0) return;
+    setImportNote(null);
+    try {
+      const r = await testbedImportRoute.call(makeClient(apiBase), { body: { root, selection: buildSelection(selected) } });
+      setImportNote(`imported ${r.written.length} → ${root}${r.skipped.length ? ` (${r.skipped.length} skipped)` : ""}`);
+    } catch (e) {
+      setImportNote(null);
+      setBuildError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   const copyJson = () => { if (gem) void copyText(JSON.stringify(gem, null, 2)); };
   const downloadJson = () => { if (gem) downloadBlob(`${gem.name}.json`, "application/json", JSON.stringify(gem, null, 2)); };
   const downloadGem = async () => {
@@ -185,6 +200,22 @@ export function Ledger({ apiBase }: { apiBase: string }) {
         {wsNote && <span className="ws-note">{wsNote}</span>}
         {buildError && <span className="ledger-error">{buildError}</span>}
       </div>
+
+      {selected.size > 0 && (
+        <div className="ledger-selbar">
+          <span className="targets-label">Import to testbed</span>
+          <input
+            className="ledger-search"
+            type="text"
+            aria-label="testbed import root"
+            placeholder="/path/to/testbed"
+            value={importRoot}
+            onChange={(e) => setImportRoot(e.target.value)}
+          />
+          <button type="button" className="ledger-sort" disabled={!importRoot.trim()} onClick={importToTestbed}>Import</button>
+          {importNote && <span className="ws-note">{importNote}</span>}
+        </div>
+      )}
 
       {selected.size > 0 && (
         <Checks suggested={suggested} included={included} busy={checksBusy} error={checksError} onSuggest={suggestChecks} onToggle={toggleCheck} />

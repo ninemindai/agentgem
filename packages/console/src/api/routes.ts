@@ -238,6 +238,17 @@ export const testbedScaffoldRoute = defineRoute("POST", "/api/testbed/scaffold",
   body: z.object({ root: z.string(), name: z.string() }),
   response: z.object({ root: z.string(), created: z.array(z.string()) }),
 });
+// Import selected machine configs into a testbed dir.
+const TestbedImportSelectionSchema = z.object({
+  skills: z.array(z.string()).optional(),
+  mcpServers: z.array(z.string()).optional(),
+  hooks: z.array(z.string()).optional(),
+  includeInstructions: z.boolean().optional(),
+});
+export const testbedImportRoute = defineRoute("POST", "/api/testbed/import", {
+  body: z.object({ root: z.string(), selection: TestbedImportSelectionSchema }),
+  response: z.object({ written: z.array(z.unknown()), skipped: z.array(z.unknown()) }),
+});
 
 // Publish a selection to a managed backend (claude-managed / agentcore-managed),
 // then undeploy by the workspace-record name.
