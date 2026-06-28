@@ -1,5 +1,6 @@
 // src/aggregator.controller.ts
 import { z } from "zod";
+import { timingSafeEqual } from "node:crypto";
 import { api, get, post } from "@agentback/openapi";
 import { inject } from "@agentback/core";
 import { DrizzleBindings } from "@agentback/drizzle";
@@ -9,6 +10,7 @@ import { popularity, coOccurrence, adoption, overview } from "./aggregator/aggre
 import type { UsageAttestation } from "./gem/attestation.js";
 import { recordBinding } from "./aggregator/binding.js";
 import { GitHubVerifier } from "./aggregator/accountVerifier.js";
+import { sweepQuarantine } from "./aggregator/detection.js";
 
 // Loose body schema — the real gate is the core's verifyAttestation (ed25519 + consistency).
 const IngestBody = z.object({ producer: z.object({ publicKey: z.string() }).loose(), signature: z.string(), gem: z.object({ digest: z.string() }).loose() }).loose();
@@ -28,6 +30,21 @@ const BindResultSchema = z.union([
   z.object({ bound: z.literal(true), provider: z.string(), login: z.string(), accountId: z.string() }),
   z.object({ bound: z.literal(false), rejected: z.string() }),
 ]);
+
+const SweepBody = z.object({ apply: z.boolean().optional(), token: z.string() });
+const SweepReportSchema = z.object({
+  clustersFound: z.number(), attestationsQuarantined: z.number(), producersFlagged: z.number(), dryRun: z.boolean(),
+});
+const SweepResult = z.union([
+  z.object({ ok: z.literal(true), report: SweepReportSchema }),
+  z.object({ ok: z.literal(false), rejected: z.string() }),
+]);
+
+// Constant-time token compare (length-guarded so timingSafeEqual never throws on mismatched lengths).
+function tokenEq(a: string, b: string): boolean {
+  const ab = Buffer.from(a), bb = Buffer.from(b);
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
+}
 
 @api({ basePath: "/api/aggregator" })
 export class AggregatorController {
@@ -64,5 +81,16 @@ export class AggregatorController {
   async bind(input: { body: z.infer<typeof BindBody> }): Promise<z.infer<typeof BindResultSchema>> {
     // GitHubVerifier is the live provider; recordBinding does signature + freshness + producer checks.
     return recordBinding(this.db, input.body as z.infer<typeof BindBody>, new GitHubVerifier());
+  }
+
+  // Admin-only: run the anti-sybil quarantine sweep. Dry-run by default; apply=true is
+  // destructive and requires AGGREGATOR_ADMIN_TOKEN. Do NOT log input.body (it has the token).
+  @post("/sweep", { body: SweepBody, response: SweepResult })
+  async sweep(input: { body: z.infer<typeof SweepBody> }): Promise<z.infer<typeof SweepResult>> {
+    const expected = process.env.AGGREGATOR_ADMIN_TOKEN;
+    if (!expected) return { ok: false, rejected: "sweep-disabled" };
+    if (!tokenEq(input.body.token, expected)) return { ok: false, rejected: "unauthorized" };
+    const report = await sweepQuarantine(this.db, { dryRun: !input.body.apply });
+    return { ok: true, report };
   }
 }
