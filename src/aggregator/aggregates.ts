@@ -51,6 +51,28 @@ export async function coOccurrence(
   return r.rows as { id: string; producers: number; verifiedProducers: number }[];
 }
 
+export async function overview(
+  db: AppDb, opts: { k?: number } = {},
+): Promise<{ ingredients: number; producers: number; verifiedProducers: number; invocations: number; sessions: number }> {
+  const k = opts.k ?? DEFAULT_K;
+  const r = await db.execute<{ ingredients: number; producers: number; verifiedProducers: number; invocations: number; sessions: number }>(sql`
+    select
+      count(distinct e.ingredient_id)::int                   as ingredients,
+      count(distinct a.producer_pubkey)::int                 as producers,
+      count(distinct b.provider || ':' || b.account_id)::int as "verifiedProducers",
+      coalesce(sum(e.invocations), 0)::int                   as invocations,
+      coalesce(sum(e.sessions), 0)::int                      as sessions
+    from usage_edges e
+    join attestations a on a.id = e.attestation_id and not a.quarantined
+    join ingredients i on i.id = e.ingredient_id and i.kind in ('skill', 'mcp')
+    left join account_bindings b on b.pubkey = a.producer_pubkey
+  `);
+  const row = r.rows[0] ?? { ingredients: 0, producers: 0, verifiedProducers: 0, invocations: 0, sessions: 0 };
+  // Safe-by-default: a whole network below the floor exposes nothing (mirrors popularity's HAVING).
+  if (row.producers < k) return { ingredients: 0, producers: 0, verifiedProducers: 0, invocations: 0, sessions: 0 };
+  return row;
+}
+
 export async function adoption(
   db: AppDb, opts: { id: string; bucket?: "week" | "month"; k?: number },
 ): Promise<{ bucket: string; producers: number; verifiedProducers: number; invocations: number }[]> {

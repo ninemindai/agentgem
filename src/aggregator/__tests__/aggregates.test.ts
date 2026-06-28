@@ -2,7 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { makeTestDb } from "../testDb.js";
 import { projectAttestation } from "../project.js";
-import { popularity, coOccurrence, DEFAULT_K } from "../aggregates.js";
+import { popularity, coOccurrence, overview, DEFAULT_K } from "../aggregates.js";
 
 function att(pubkey: string, digest: string, skills: string[]) {
   return { formatVersion: 1, canonicalizerVersion: 3, gem: { name: "g", digest },
@@ -41,5 +41,31 @@ describe("aggregates + k-anon", () => {
     const co2 = await coOccurrence(db, { id: "skill:a", k: 2 });
     expect(co2.map((r) => r.id)).toContain("skill:x");     // 2 producers -> visible
     expect(co2.map((r) => r.id)).not.toContain("skill:y"); // 1 producer -> suppressed at K=2 (k-anon in SQL)
+  });
+});
+
+describe("overview totals", () => {
+  it("aggregates distinct ingredients/producers/verified + sums, k-anon safe", async () => {
+    const db = await makeTestDb();
+    // 5 producers so the network clears DEFAULT_K (>=5); two ingredients
+    await projectAttestation(db, att("ed25519:p1", "d1", ["skill:a", "skill:b"]));
+    await projectAttestation(db, att("ed25519:p2", "d2", ["skill:a"]));
+    await projectAttestation(db, att("ed25519:p3", "d3", ["skill:a"]));
+    await projectAttestation(db, att("ed25519:p4", "d4", ["skill:b"]));
+    await projectAttestation(db, att("ed25519:p5", "d5", ["skill:b"]));
+    const o = await overview(db, {});
+    expect(o.ingredients).toBe(2);   // skill:a, skill:b
+    expect(o.producers).toBe(5);     // p1..p5 distinct
+    expect(o.verifiedProducers).toBe(0); // no account_bindings
+    expect(o.invocations).toBeGreaterThan(0);
+    expect(o.sessions).toBeGreaterThan(0);
+  });
+
+  it("returns all zeros when the whole network is below the k-anon floor", async () => {
+    const db = await makeTestDb();
+    await projectAttestation(db, att("ed25519:p1", "d1", ["skill:a"]));
+    await projectAttestation(db, att("ed25519:p2", "d2", ["skill:a"]));
+    const o = await overview(db, {}); // 2 producers < DEFAULT_K
+    expect(o).toEqual({ ingredients: 0, producers: 0, verifiedProducers: 0, invocations: 0, sessions: 0 });
   });
 });

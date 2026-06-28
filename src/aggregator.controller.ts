@@ -5,7 +5,7 @@ import { inject } from "@agentback/core";
 import { DrizzleBindings } from "@agentback/drizzle";
 import type { AppDb } from "./aggregator/schema.js";
 import { ingestAttestation } from "./aggregator/ingest.js";
-import { popularity, coOccurrence, adoption } from "./aggregator/aggregates.js";
+import { popularity, coOccurrence, adoption, overview } from "./aggregator/aggregates.js";
 import type { UsageAttestation } from "./gem/attestation.js";
 import { recordBinding } from "./aggregator/binding.js";
 import { GitHubVerifier } from "./aggregator/accountVerifier.js";
@@ -22,6 +22,7 @@ const CoQuery = z.object({ id: z.string(), limit: z.coerce.number().optional() }
 const CoResult = z.array(z.object({ id: z.string(), producers: z.number(), verifiedProducers: z.number() }));
 const AdoptQuery = z.object({ id: z.string(), bucket: z.enum(["week", "month"]).optional() }); // NOTE: no `k`
 const AdoptResult = z.array(z.object({ bucket: z.string(), producers: z.number(), verifiedProducers: z.number(), invocations: z.number() }));
+const OverviewResult = z.object({ ingredients: z.number(), producers: z.number(), verifiedProducers: z.number(), invocations: z.number(), sessions: z.number() });
 const BindBody = z.object({ pubkey: z.string(), token: z.string(), signedAt: z.number(), signature: z.string() });
 const BindResultSchema = z.union([
   z.object({ bound: z.literal(true), provider: z.string(), login: z.string(), accountId: z.string() }),
@@ -51,6 +52,12 @@ export class AggregatorController {
   @get("/adoption", { query: AdoptQuery, response: AdoptResult })
   async adoption(input: { query: z.infer<typeof AdoptQuery> }): Promise<z.infer<typeof AdoptResult>> {
     return adoption(this.db, { id: input.query.id, bucket: input.query.bucket });
+  }
+
+  @get("/overview", { response: OverviewResult })
+  async overview(): Promise<z.infer<typeof OverviewResult>> {
+    // No query params; k is server policy (DEFAULT_K), never caller-supplied.
+    return overview(this.db, {});
   }
 
   @post("/bind", { body: BindBody, response: BindResultSchema })
