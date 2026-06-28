@@ -69,6 +69,49 @@ describe("heuristicSkeleton", () => {
   });
 });
 
+import { extractReflections } from "../extract.js";
+import { writeReflections } from "../reflectionStore.js";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+function reflSignal(verbs: string[], sessions = 2): any {
+  const steps = verbs.map((verb, i) => ({ tool: verb.split(":")[0], verb, arg: "", msgIndex: i }));
+  return {
+    root: "/r", flavor: "claude", sessions: { scanned: sessions, firstMs: 0, lastMs: 0, spanDays: 0 },
+    artifacts: [], unresolved: [], coOccurrence: [], shapes: [], notes: [],
+    sequences: { root: "/r", sessions: Array.from({ length: sessions }, (_, i) => ({ steps, sessionId: `s${i}`, transcript: `s${i}.jsonl`, atMs: 0 })) },
+    procedures: [{ key: verbs.join(" > "), verbs, sessions, sampleSessionIdx: 0, sessionIdxs: Array.from({ length: sessions }, (_, i) => i) }],
+  };
+}
+
+describe("extractReflections", () => {
+  it("flags repeated edits with no terminal commit/push as unresolved-task", () => {
+    const refl = extractReflections(reflSignal(["Edit", "Write", "Bash:npm run build"]));
+    expect(refl.some((r) => r.kind === "unresolved-task")).toBe(true);
+    expect(refl[0].provenance.occurrences.length).toBeGreaterThan(0);
+  });
+  it("flags a highly recurrent procedure as recurring-pattern", () => {
+    const refl = extractReflections(reflSignal(["Edit", "Bash:npx vitest", "Bash:git commit"], 4));
+    expect(refl.some((r) => r.kind === "recurring-pattern")).toBe(true);
+  });
+});
+
+describe("writeReflections", () => {
+  it("writes a sidecar JSON and returns its path", () => {
+    const base = mkdtempSync(join(tmpdir(), "refl-"));
+    const refl = extractReflections(reflSignal(["Edit", "Write", "Bash:npm run build"]));
+    const path = writeReflections(refl, "/some/root", base);
+    expect(path).toBeTruthy();
+    const parsed = JSON.parse(readFileSync(path!, "utf8"));
+    expect(parsed.root).toBe("/some/root");
+    expect(Array.isArray(parsed.reflections)).toBe(true);
+  });
+  it("returns null when there is nothing to persist", () => {
+    expect(writeReflections([], "/r", mkdtempSync(join(tmpdir(), "refl-")))).toBeNull();
+  });
+});
+
 describe("scoreCandidate + extractCandidates junk filter", () => {
   it("scores a strong-mission, high-recurrence candidate high", () => {
     expect(scoreCandidate(gated(["Edit", "Bash:git commit"], { sessions: 5 }), 2)).toBe("high");

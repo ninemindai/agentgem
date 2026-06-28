@@ -110,5 +110,33 @@ export function extractCandidates(
   // Strongest priors first, so a downstream prompt cap keeps the best candidates.
   const rank = { high: 0, medium: 1, low: 2 } as const;
   candidates.sort((a, b) => rank[a.priorConfidence] - rank[b.priorConfidence] || b.sessions - a.sessions);
-  return { candidates, reflections: [] };
+  return { candidates, reflections: extractReflections(signal) };
+}
+
+const TERMINAL_RE = /^Bash:git (commit|push)$|^Bash:gh pr/;
+const WORK_RE = /^(Edit|Write|NotebookEdit)$/;
+const RECURRING_PATTERN_MIN = 3;   // "you do this a lot" threshold (above Phase-0 floor)
+
+// Second stream, derived ONLY from already-mined procedures (no new pass):
+//  - unresolved-task: a recurring procedure that does real work (Edit/Write) but
+//    never reaches a terminal commit/push/PR verb.
+//  - recurring-pattern: a procedure exercised in >= RECURRING_PATTERN_MIN sessions.
+export function extractReflections(signal: WorkflowSignal): Reflection[] {
+  const procedures = signal.procedures ?? [];
+  const sessions = signal.sequences?.sessions ?? [];
+  const out: Reflection[] = [];
+  for (const p of procedures) {
+    const provenance = buildProvenance(p.verbs, sessions, p.sessionIdxs ?? [p.sampleSessionIdx]);
+    const doesWork = p.verbs.some((v) => WORK_RE.test(v));
+    const reachesTerminal = p.verbs.some((v) => TERMINAL_RE.test(v));
+    if (doesWork && !reachesTerminal) {
+      out.push({ kind: "unresolved-task", importance: "high",
+        detail: `Repeated workflow edits files but never commits/pushes: ${p.verbs.join(" → ")} (${p.sessions} sessions).`, provenance });
+    }
+    if (p.sessions >= RECURRING_PATTERN_MIN) {
+      out.push({ kind: "recurring-pattern", importance: "medium",
+        detail: `Frequently repeated flow (${p.sessions} sessions): ${p.verbs.join(" → ")}.`, provenance });
+    }
+  }
+  return out;
 }
