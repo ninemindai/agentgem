@@ -74,6 +74,9 @@ export async function createApp(port: number): Promise<RestApplication> {
   // It replaced the original vanilla UI, now removed (history in git). The gem-transfer
   // feature's backend (/api/transfer/*) ships, but its web redeem UI is not yet ported to
   // the console — use the `agentgem receive` CLI until then.
+  // Liveness probe for deploy orchestrators (Cloud Run / ECS / Fly / k8s). Unauthenticated
+  // and origin-less by design — registered as a raw route, so it's outside originGuard.
+  server.expressApp.get("/healthz", (_req, res) => res.json({ status: "ok" }));
   const consolePage = consoleHtml();
   server.expressApp.get("/", (_req, res) => res.type("html").send(consolePage));
   server.expressApp.get("/console", (_req, res) => res.type("html").send(consolePage));
