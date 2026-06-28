@@ -45,3 +45,22 @@ export async function coOccurrence(
   `);
   return r.rows as { id: string; producers: number }[];
 }
+
+export async function adoption(
+  db: AppDb, opts: { id: string; bucket?: "week" | "month"; k?: number },
+): Promise<{ bucket: string; producers: number; invocations: number }[]> {
+  const k = opts.k ?? DEFAULT_K;
+  const bucket = opts.bucket === "month" ? "month" : "week"; // whitelist; never a raw caller value
+  const r = await db.execute<{ bucket: string; producers: number; invocations: number }>(sql`
+    select to_char(date_trunc(${bucket}, a.ingested_at), 'YYYY-MM-DD') as bucket,
+           count(distinct a.producer_pubkey)::int as producers,
+           sum(e.invocations)::int as invocations
+    from usage_edges e
+    join attestations a on a.id = e.attestation_id and not a.quarantined
+    where e.ingredient_id = ${opts.id}
+    group by 1
+    having count(distinct a.producer_pubkey) >= ${k}
+    order by 1
+  `);
+  return r.rows as { bucket: string; producers: number; invocations: number }[];
+}
