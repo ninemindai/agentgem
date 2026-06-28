@@ -47,6 +47,15 @@ src/aggregator/detection.ts
 
 All thresholds are bound `${}` params (no string concat).
 
+## Known limitations of this first-tier heuristic (from independent review)
+
+This is the **lazy-sybil tier** — it catches naive farms (many fresh keys, one identical fabricated attestation each). Two known gaps, both deferred:
+
+- **Padding evasion.** Because the fingerprint is the *exact* ingredient set, a sophisticated sybil can give each key the same core set plus one unique throwaway public ingredient (or drop one), so no exact shape reaches `C`. Defeating this needs **fuzzy clustering** — common-core / Jaccard-similarity grouping, ignoring low-prevalence padding ids. Real follow-up, not a tweak.
+- **Onboarding false-positives.** A benign burst of new users all attesting the same popular 4+ ingredient "starter pack" satisfies all three predicates and would be quarantined. Mitigations: a template **allowlist/baseline**, a **review state** distinct from hard quarantine, an **account-age / repeat-use** signal. The current blast radius is bounded: quarantine is a **reversible flag** (rows kept, `trust_score` recorded), so a false-positive is "temporarily excluded pending review," not data loss — but the discriminators should be strengthened before this runs on real traffic at the default thresholds.
+
+These keep the slice honest: it raises the cost of the cheapest sybil attack, but is not a complete trust system on its own (it pairs with account-binding + weighted reputation).
+
 ## Out of scope (deferred follow-ups)
 
 - **Triggering** — a cron / admin endpoint to run the sweep (this slice ships the function + tests only).
