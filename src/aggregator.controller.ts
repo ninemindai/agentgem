@@ -7,6 +7,8 @@ import type { AppDb } from "./aggregator/schema.js";
 import { ingestAttestation } from "./aggregator/ingest.js";
 import { popularity, coOccurrence, adoption } from "./aggregator/aggregates.js";
 import type { UsageAttestation } from "./gem/attestation.js";
+import { recordBinding } from "./aggregator/binding.js";
+import { GitHubVerifier } from "./aggregator/accountVerifier.js";
 
 // Loose body schema — the real gate is the core's verifyAttestation (ed25519 + consistency).
 const IngestBody = z.object({ producer: z.object({ publicKey: z.string() }).loose(), signature: z.string(), gem: z.object({ digest: z.string() }).loose() }).loose();
@@ -15,11 +17,16 @@ const IngestResult = z.union([
   z.object({ accepted: z.literal(false), rejected: z.string() }),
 ]);
 const PopQuery = z.object({ kind: z.string().optional(), limit: z.coerce.number().optional() }); // NOTE: no `k`
-const PopResult = z.array(z.object({ id: z.string(), kind: z.string(), producers: z.number(), invocations: z.number(), sessions: z.number() }));
+const PopResult = z.array(z.object({ id: z.string(), kind: z.string(), producers: z.number(), verifiedProducers: z.number(), invocations: z.number(), sessions: z.number() }));
 const CoQuery = z.object({ id: z.string(), limit: z.coerce.number().optional() }); // NOTE: no `k`
-const CoResult = z.array(z.object({ id: z.string(), producers: z.number() }));
+const CoResult = z.array(z.object({ id: z.string(), producers: z.number(), verifiedProducers: z.number() }));
 const AdoptQuery = z.object({ id: z.string(), bucket: z.enum(["week", "month"]).optional() }); // NOTE: no `k`
-const AdoptResult = z.array(z.object({ bucket: z.string(), producers: z.number(), invocations: z.number() }));
+const AdoptResult = z.array(z.object({ bucket: z.string(), producers: z.number(), verifiedProducers: z.number(), invocations: z.number() }));
+const BindBody = z.object({ pubkey: z.string(), token: z.string(), signedAt: z.number(), signature: z.string() });
+const BindResultSchema = z.union([
+  z.object({ bound: z.literal(true), provider: z.string(), login: z.string(), accountId: z.string() }),
+  z.object({ bound: z.literal(false), rejected: z.string() }),
+]);
 
 @api({ basePath: "/api/aggregator" })
 export class AggregatorController {
@@ -44,5 +51,11 @@ export class AggregatorController {
   @get("/adoption", { query: AdoptQuery, response: AdoptResult })
   async adoption(input: { query: z.infer<typeof AdoptQuery> }): Promise<z.infer<typeof AdoptResult>> {
     return adoption(this.db, { id: input.query.id, bucket: input.query.bucket });
+  }
+
+  @post("/bind", { body: BindBody, response: BindResultSchema })
+  async bind(input: { body: z.infer<typeof BindBody> }): Promise<z.infer<typeof BindResultSchema>> {
+    // GitHubVerifier is the live provider; recordBinding does signature + freshness + producer checks.
+    return recordBinding(this.db, input.body as z.infer<typeof BindBody>, new GitHubVerifier());
   }
 }

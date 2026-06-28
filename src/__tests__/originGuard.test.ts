@@ -106,4 +106,9 @@ describe("originGuard — public aggregator reads (CORS + cross-site exemption)"
     const r = run({ "sec-fetch-site": "same-origin" }, "agg.example", "GET", POP);
     expect(r.nexted).toBe(true);
   });
+  it("does NOT exempt the bind write — cross-site POST to /api/aggregator/bind stays guarded", () => {
+    const r = run({ "sec-fetch-site": "cross-site" }, "agg.example", "POST", "/api/aggregator/bind");
+    expect(r.blocked).toBe(true);
+    expect(r.status).toBe(403);
+  });
 });
