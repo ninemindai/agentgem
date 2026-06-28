@@ -2,6 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { distillCandidates } from "../distill.js";
 import type { WorkflowSignal, ProcedureStep, SessionSequence } from "../workflowScan.js";
+import { extractReflections } from "../extract.js";
 
 function step(tool: string, verb: string): ProcedureStep {
   return { tool, verb, arg: "", msgIndex: 0 };
@@ -213,8 +214,6 @@ describe("distillWorkflow resilience", () => {
     expect(out).toEqual({ distilled: [], degraded: false });
   });
 });
-
-import { extractReflections } from "../extract.js";
 
 describe("analyze wiring", () => {
   it("high-importance reflections fold into gaps", () => {
