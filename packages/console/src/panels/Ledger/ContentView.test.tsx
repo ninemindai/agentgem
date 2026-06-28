@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
-import { ContentView, renderMarkdown } from "./ContentView.js";
+import { ContentView, renderMarkdown, parseFrontmatter } from "./ContentView.js";
 
 afterEach(cleanup);
 
@@ -24,9 +24,23 @@ describe("renderMarkdown", () => {
     expect(html).toMatch(/ok/);
   });
 
-  it("drops leading YAML frontmatter", () => {
-    const html = renderMarkdown("---\nname: pdf\ndescription: x\n---\n\n# Heading\n\nbody");
-    expect(html).not.toMatch(/name: pdf/);
+  it("renders leading YAML frontmatter as a metadata table above the prose", () => {
+    const html = renderMarkdown('---\nname: pdf\ndescription: "x"\n---\n\n# Heading\n\nbody');
+    // frontmatter becomes a table, not a heading
+    expect(html).toMatch(/<table class="cv-front">/);
+    expect(html).toMatch(/<th>name<\/th><td>pdf<\/td>/);
+    expect(html).toMatch(/<th>description<\/th><td>x<\/td>/);
+    // body still renders
     expect(html).toMatch(/<h1[^>]*>Heading<\/h1>/);
+  });
+});
+
+describe("parseFrontmatter", () => {
+  it("parses top-level scalars (quotes stripped) and one nesting level", () => {
+    expect(parseFrontmatter('name: pdf\ndesc: "a b"\nmeta:\n  type: skill')).toEqual([
+      { key: "name", value: "pdf" },
+      { key: "desc", value: "a b" },
+      { key: "meta.type", value: "skill" },
+    ]);
   });
 });

@@ -331,3 +331,10 @@ body::before {
 .cv-md th, .cv-md td { border: 1px solid var(--line); padding: 5px 10px; text-align: left; }
 .cv-md th { background: var(--paper); font-weight: 600; }
 .cv-md img { max-width: 100%; border-radius: 6px; }
+.cv-front { border-collapse: collapse; margin: 0 0 1em; font-size: .9em;
+  border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.cv-front th, .cv-front td { border-bottom: 1px solid var(--line-soft); padding: 4px 10px; text-align: left; vertical-align: top; }
+.cv-front tr:last-child th, .cv-front tr:last-child td { border-bottom: 0; }
+.cv-front th { background: var(--paper); color: var(--gold); font: 600 10.5px/1.5 var(--font-ui);
+  text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; width: 1%; }
+.cv-front td { color: var(--ink-soft); }
