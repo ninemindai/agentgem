@@ -40,9 +40,16 @@ function consoleHtml(): string {
   return '<!doctype html><div id="root"></div><p>console not built — run pnpm build</p>';
 }
 
+// The bind address. Defaults to loopback so local runs stay loopback-only (the
+// security model assumes 127.0.0.1); a deploy sets HOST=0.0.0.0 to accept external
+// traffic, where originGuard + the public-read allowlist are the real boundary.
+export function serverHost(): string {
+  return process.env.HOST ?? "127.0.0.1";
+}
+
 export async function createApp(port: number): Promise<RestApplication> {
   const app = new RestApplication({});
-  app.configure("servers.RestServer").to({ port, host: "127.0.0.1" });
+  app.configure("servers.RestServer").to({ port, host: serverHost() });
   app.component(MCPComponent);
   app.configure("servers.MCPServer").to({ name: "agentgem", version: "0.1.0", transports: { stdio: false } });
   app.restController(GemController);
