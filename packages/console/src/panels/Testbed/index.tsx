@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
 import {
   testbedRecentsRoute, testbedProjectsRoute, testbedScaffoldRoute,
   makeClient, type RecentEntry, type ProjectCandidate,
 } from "../../api/routes.js";
+import { openAnalyzeStream } from "./analyzeStream.js";
 
 function short(path: string): string {
   const parts = path.split("/").filter(Boolean);
@@ -18,11 +19,34 @@ export function Testbed({ apiBase }: { apiBase: string }) {
   const [root, setRoot] = useState("");
   const [note, setNote] = useState<string | null>(null);
 
+  const [analyzeRoot, setAnalyzeRoot] = useState("");
+  const [phase, setPhase] = useState<string>("");
+  const [analyzeOut, setAnalyzeOut] = useState("");
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+  const closeRef = useRef<(() => void) | null>(null);
+
   useEffect(() => {
     const client = makeClient(apiBase);
     testbedRecentsRoute.call(client).then((r) => setRecents(r.recents)).catch((e) => setError(String(e)));
     testbedProjectsRoute.call(client).then((r) => setProjects(r.projects)).catch(() => setProjects([]));
+    return () => closeRef.current?.();
   }, [apiBase]);
+
+  const analyze = (fresh: boolean) => {
+    if (!analyzeRoot.trim()) return;
+    closeRef.current?.();
+    setAnalyzing(true);
+    setPhase("");
+    setAnalyzeOut("");
+    setAnalyzeError(null);
+    closeRef.current = openAnalyzeStream(apiBase, analyzeRoot.trim(), fresh, (e) => {
+      if (e.type === "phase") setPhase(e.sessions != null ? `${e.phase} (${e.sessions} sessions)` : e.phase);
+      else if (e.type === "delta") setAnalyzeOut((o) => o + e.text);
+      else if (e.type === "done") { setPhase("done"); setAnalyzing(false); }
+      else if (e.type === "failed") { setAnalyzeError(e.message); setAnalyzing(false); }
+    });
+  };
 
   const scaffold = async () => {
     setNote(null);
@@ -51,6 +75,24 @@ export function Testbed({ apiBase }: { apiBase: string }) {
       </section>
 
       <section className="ledger-group">
+        <h2 className="ledger-group-label">Analyze sessions → suggest a gem</h2>
+        <div className="ledger-bar">
+          <input className="ledger-search" aria-label="analyze root" placeholder="/path/to/project (or click one below)" value={analyzeRoot} onChange={(e) => setAnalyzeRoot(e.target.value)} />
+          <button type="button" className="ledger-build" disabled={analyzing || !analyzeRoot.trim()} onClick={() => analyze(false)}>{analyzing ? "Analyzing…" : "Analyze"}</button>
+          <button type="button" className="ledger-sort" disabled={analyzing || !analyzeRoot.trim()} onClick={() => analyze(true)}>Re-analyze</button>
+        </div>
+        {(phase || analyzeOut || analyzeError) && (
+          <div className="run-out">
+            <div className="run-status">
+              {phase && <span className={"run-badge " + (phase === "done" ? "run-done" : "run-running")}>{phase}</span>}
+            </div>
+            {analyzeError && <p className="ledger-error">{analyzeError}</p>}
+            {analyzeOut && <pre className="run-transcript">{analyzeOut}</pre>}
+          </div>
+        )}
+      </section>
+
+      <section className="ledger-group">
         <h2 className="ledger-group-label">Recent testbeds</h2>
         {!recents ? <p className="ledger-loading">Loading…</p>
           : recents.length === 0 ? <p className="ledger-empty">No recent testbeds.</p>
@@ -76,7 +118,7 @@ export function Testbed({ apiBase }: { apiBase: string }) {
           : (
             <div className="ws-list">
               {projects.slice(0, 40).map((p) => (
-                <article className="ws-card" key={p.path}>
+                <article className="ws-card tb-clickable" key={p.path} onClick={() => setAnalyzeRoot(p.path)} title="use as analyze root">
                   <p className="tb-path">{short(p.path)} <span className="ws-chip">{p.flavor}</span></p>
                 </article>
               ))}

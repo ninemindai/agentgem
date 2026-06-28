@@ -127,3 +127,5 @@ body { margin: 0; background: var(--paper); color: var(--ink);
 .deploy-badge.is-ready { color: #2f6b3a; border-color: #2f6b3a; }
 .deploy-badge.is-unready { color: var(--muted); }
 .deploy-hint { color: var(--muted); font-size: 12px; margin-top: 12px; }
+.tb-clickable { cursor: pointer; }
+.tb-clickable:hover { border-color: var(--accent); }
