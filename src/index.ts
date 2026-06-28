@@ -42,7 +42,11 @@ function consoleHtml(): string {
 
 export async function createApp(port: number): Promise<RestApplication> {
   const app = new RestApplication({});
-  app.configure("servers.RestServer").to({ port, host: "127.0.0.1" });
+  // Raise the JSON body limit above express's 100kb default: routes that carry a whole gem
+  // archive in the request body (/gem/apply, /materialize with bytesBase64) send base64 that
+  // routinely exceeds 100kb. Loopback-only server, so a generous ceiling is safe. bodyParser
+  // lives on the RestServer config (alongside port/host), not the top-level app config.
+  app.configure("servers.RestServer").to({ port, host: "127.0.0.1", bodyParser: { json: { limit: "25mb" } } });
   app.component(MCPComponent);
   app.configure("servers.MCPServer").to({ name: "agentgem", version: "0.1.0", transports: { stdio: false } });
   app.restController(GemController);

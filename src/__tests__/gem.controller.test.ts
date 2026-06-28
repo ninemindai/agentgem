@@ -1,6 +1,7 @@
 // src/__tests__/gem.controller.test.ts
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import supertest from "supertest";
@@ -40,7 +41,8 @@ beforeAll(async () => {
   writeFileSync(join(projRoot, "CLAUDE.md"), "project instructions");
 
   app = new RestApplication({});
-  app.configure("servers.RestServer").to({ port: 0, host: "127.0.0.1" });
+  // mirror production (src/index.ts): raise the json body limit so gem bytes (>100kb) are accepted
+  app.configure("servers.RestServer").to({ port: 0, host: "127.0.0.1", bodyParser: { json: { limit: "25mb" } } });
   app.restController(GemController);
   await app.start();
   const server = await app.restServer;
@@ -364,6 +366,66 @@ describe("POST /api/materialize from an archive", () => {
     writeFileSync(join(out, "skills", "review", "SKILL.md"), "# tampered");
     await client.post("/api/materialize").send({ archivePath: out, target: "claude" }).expect(500);
     rmSync(out, { recursive: true, force: true });
+  });
+});
+
+describe("POST /api/gem/apply installs a received .gem into a picked dir", () => {
+  it("unpacks + lock-verifies the bytes and materializes into the chosen dir", async () => {
+    const out = mkdtempSync(join(tmpdir(), "apply-src-"));
+    const gemFile = join(out, "demo.gem");
+    await client.post("/api/archive")
+      .send({ dir, selection: { skills: ["review"], includeInstructions: true }, name: "demo", outFile: gemFile })
+      .expect(200);
+    const bytesBase64 = readFileSync(gemFile).toString("base64");
+    const target = mkdtempSync(join(tmpdir(), "apply-dst-"));
+    try {
+      const r = await client.post("/api/gem/apply").send({ bytesBase64, dir: target }).expect(200);
+      expect(r.body.name).toBe("demo");
+      expect(r.body.dir).toBe(target); // explicit folder selection, honored as-is (resolveProject canonicalizes only)
+      expect(r.body.written.some((w: { name: string }) => w.name === "review")).toBe(true);
+      expect(existsSync(join(target, ".claude", "skills", "review", "SKILL.md"))).toBe(true);
+    } finally {
+      rmSync(out, { recursive: true, force: true });
+      rmSync(target, { recursive: true, force: true });
+    }
+  });
+
+  it("accepts a gem whose body exceeds express's 100kb default (raised body limit)", async () => {
+    const src = mkdtempSync(join(tmpdir(), "apply-big-src-"));
+    mkdirSync(join(src, "skills", "big"), { recursive: true });
+    // Incompressible body (random hex) so the gzipped .gem stays large -> base64 request
+    // body well over express's 100kb default. Repeated chars would gzip away to nothing.
+    const filler = randomBytes(200_000).toString("hex");
+    writeFileSync(join(src, "skills", "big", "SKILL.md"), `---\nname: big\ndescription: Big skill\n---\n${filler}\n`);
+    const gemFile = join(src, "big.gem");
+    await client.post("/api/archive").send({ dir: src, selection: { skills: ["big"] }, name: "big", outFile: gemFile }).expect(200);
+    const bytesBase64 = readFileSync(gemFile).toString("base64");
+    expect(bytesBase64.length).toBeGreaterThan(100_000); // would 413 under the default limit
+    const target = mkdtempSync(join(tmpdir(), "apply-big-dst-"));
+    try {
+      const r = await client.post("/api/gem/apply").send({ bytesBase64, dir: target }).expect(200);
+      expect(r.body.written.some((w: { name: string }) => w.name === "big")).toBe(true);
+    } finally {
+      rmSync(src, { recursive: true, force: true });
+      rmSync(target, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a tampered .gem and writes nothing", async () => {
+    const out = mkdtempSync(join(tmpdir(), "apply-bad-"));
+    const gemFile = join(out, "demo.gem");
+    await client.post("/api/archive").send({ dir, selection: { skills: ["review"] }, outFile: gemFile }).expect(200);
+    const files = unpackTar(readFileSync(gemFile));
+    files["skills/review/SKILL.md"] = "# tampered"; // corrupt content after the lock was computed
+    const bytesBase64 = packTar(files).toString("base64");
+    const target = mkdtempSync(join(tmpdir(), "apply-bad-dst-"));
+    try {
+      await client.post("/api/gem/apply").send({ bytesBase64, dir: target }).expect(500);
+      expect(existsSync(join(target, ".claude", "skills", "review", "SKILL.md"))).toBe(false);
+    } finally {
+      rmSync(out, { recursive: true, force: true });
+      rmSync(target, { recursive: true, force: true });
+    }
   });
 });
 

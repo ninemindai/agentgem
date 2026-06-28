@@ -39,5 +39,12 @@ describe("Materialize", () => {
     fireEvent.click(screen.getByText("Send via ticket"));
     const input = await screen.findByLabelText("transfer ticket");
     expect((input as HTMLInputElement).value).toBe("agentgem://gem/abc#key~prod");
+
+    // copy button writes the full ticket to the clipboard
+    const writeText = vi.fn(async () => {});
+    vi.stubGlobal("navigator", { clipboard: { writeText } } as unknown as Navigator);
+    fireEvent.click(screen.getByLabelText("copy ticket"));
+    expect(writeText).toHaveBeenCalledWith("agentgem://gem/abc#key~prod");
+    expect(await screen.findByText(/copied/i)).toBeTruthy();
   });
 });

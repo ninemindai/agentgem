@@ -33,6 +33,41 @@ describe("Received", () => {
     URL.createObjectURL = origCreateObjectURL;
   });
 
+  it("apply redeems then POSTs the bytes + chosen dir to /api/gem/apply", async () => {
+    const requests: Array<{ url: string; body: string }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL, init?: RequestInit) => {
+        requests.push({ url: String(url), body: typeof init?.body === "string" ? init.body : "" });
+        if (String(url).includes("/api/transfer/receive"))
+          return res({ gem: { name: "my-gem" }, meta: { name: "my-gem", version: "1.0.0" }, bytesBase64: btoa("GEMBYTES") });
+        if (String(url).includes("/api/gem/apply"))
+          return res({ dir: "/tmp/from-alice", name: "my-gem", written: [{ type: "skill", name: "qa", overwritten: false }], skipped: [] });
+        throw new Error("unexpected " + url);
+      }),
+    );
+    render(<Received apiBase="" />);
+    fireEvent.change(screen.getByPlaceholderText(/agentgem:\/\/gem/i), { target: { value: "agentgem://gem/b/o#KEY" } });
+    fireEvent.change(screen.getByPlaceholderText(/target directory/i), { target: { value: "/tmp/from-alice" } });
+    fireEvent.click(screen.getByRole("button", { name: /apply to machine/i }));
+    await waitFor(() => expect(screen.getByText(/Applied my-gem → \/tmp\/from-alice — 1 written/i)).toBeTruthy());
+    const applyReq = requests.find((r) => r.url.includes("/api/gem/apply"));
+    expect(applyReq).toBeTruthy();
+    if (applyReq) {
+      expect(JSON.parse(applyReq.body)).toEqual({ bytesBase64: btoa("GEMBYTES"), dir: "/tmp/from-alice" });
+    }
+  });
+
+  it("apply requires a target directory before redeeming", async () => {
+    const fetchMock = vi.fn(async () => res({}));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<Received apiBase="" />);
+    fireEvent.change(screen.getByPlaceholderText(/agentgem:\/\/gem/i), { target: { value: "agentgem://gem/b/o#KEY" } });
+    fireEvent.click(screen.getByRole("button", { name: /apply to machine/i }));
+    await waitFor(() => expect(screen.getByText(/Choose a target directory/i)).toBeTruthy());
+    expect(fetchMock).not.toHaveBeenCalled(); // must not burn the ticket without a destination
+  });
+
   it("redeem privately parses the ticket and never sends the key to the server", async () => {
     const requests: Array<{ url: string; body: string }> = [];
     vi.stubGlobal(

@@ -47,6 +47,7 @@ import {
   TestbedProjectsQuerySchema, TestbedProjectsResponseSchema,
   TestbedScaffoldRequestSchema, TestbedScaffoldResponseSchema,
   TestbedImportRequestSchema, TestbedImportResponseSchema,
+  GemApplyRequestSchema, GemApplyResponseSchema,
   AgentcoreReadyResponseSchema, AgentcoreDeployRequestSchema, AgentcoreStatusQuerySchema, AgentcoreDeployStateSchema,
   RegistryReadyResponseSchema, RegistryIndexResponseSchema,
   RegistrySearchQuerySchema, RegistrySearchResponseSchema,
@@ -208,6 +209,18 @@ export class GemController {
   async transferReceive(input: { body: z.infer<typeof TransferReceiveRequestSchema> }): Promise<z.infer<typeof TransferReceiveResponseSchema>> {
     const { gem, meta, bytes } = await receiveTicket(input.body.ticket, natsStoreFromEnv());
     return { gem, meta, bytesBase64: bytes.toString("base64") };
+  }
+
+  // Apply a received .gem onto the local machine: unpack + lock-verify the archive bytes,
+  // then materialize the gem into a user-picked testbed dir (a .claude-style layout). `dir`
+  // is an explicit folder selection — the same trust model as /testbed/import — so it is
+  // honored as-is, unlike /gem/run which derives its dir server-side.
+  @post("/gem/apply", { body: GemApplyRequestSchema, response: GemApplyResponseSchema })
+  async applyGem(input: { body: z.infer<typeof GemApplyRequestSchema> }): Promise<z.infer<typeof GemApplyResponseSchema>> {
+    const { gem } = importGem(Buffer.from(input.body.bytesBase64, "base64")); // unpack + verify gem.lock; throws on tampering
+    const dir = resolveProject(input.body.dir);
+    const { written, skipped } = materializeGemToTestbed(gem, dir, (input.body.flavor ?? "claude") as TestbedFlavorId);
+    return { dir, name: gem.name, written, skipped };
   }
 
   @post("/transfer/token", { body: TransferTokenRequestSchema, response: TransferTokenResponseSchema })

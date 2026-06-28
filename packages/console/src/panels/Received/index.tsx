@@ -4,6 +4,7 @@ import {
   makeClient,
   transferReceiveRoute,
   transferCiphertextRoute,
+  gemApplyRoute,
 } from "../../api/routes.js";
 import { decryptGem } from "./decrypt.js";
 
@@ -15,6 +16,8 @@ const b64urlToBytes = (s: string): Uint8Array => {
 export function Received({ apiBase }: { apiBase: string }) {
   const [recv, setRecv] = useState("");
   const [recvStatus, setRecvStatus] = useState("");
+  const [applyDir, setApplyDir] = useState("");
+  const [applyStatus, setApplyStatus] = useState("");
 
   async function redeem() {
     if (!recv.trim()) {
@@ -76,6 +79,35 @@ export function Received({ apiBase }: { apiBase: string }) {
     }
   }
 
+  // Apply a received ticket straight onto the machine: redeem server-side (burns the
+  // single-use ticket, yields the gem bytes) then materialize into the chosen dir. The
+  // server writes the files, so it necessarily sees the gem — the private path adds nothing
+  // here, so apply uses the simpler server-side redeem.
+  async function applyToMachine() {
+    if (!recv.trim()) {
+      setApplyStatus("Paste a ticket.");
+      return;
+    }
+    if (!applyDir.trim()) {
+      setApplyStatus("Choose a target directory.");
+      return;
+    }
+    setApplyStatus("Redeeming & applying…");
+    try {
+      const client = makeClient(apiBase);
+      const { bytesBase64 } = await transferReceiveRoute.call(client, {
+        body: { ticket: recv.trim() },
+      });
+      const { dir, name, written, skipped } = await gemApplyRoute.call(client, {
+        body: { bytesBase64, dir: applyDir.trim() },
+      });
+      const skip = skipped.length ? ` (${skipped.length} skipped)` : "";
+      setApplyStatus(`✓ Applied ${name} → ${dir} — ${written.length} written${skip}`);
+    } catch (e) {
+      setApplyStatus("Failed: " + (e instanceof Error ? e.message : String(e)));
+    }
+  }
+
   return (
     <div className="transfer">
       <section className="transfer-section">
@@ -102,6 +134,32 @@ export function Received({ apiBase }: { apiBase: string }) {
           </button>
         </div>
         {recvStatus && <p className="transfer-status">{recvStatus}</p>}
+      </section>
+
+      <section className="transfer-section">
+        <h3 className="transfer-heading">Apply to machine</h3>
+        <div className="ledger-bar">
+          <input
+            className="ledger-search"
+            type="text"
+            placeholder="target directory (e.g. ~/agentgem-testbeds/from-alice)"
+            value={applyDir}
+            onChange={(e) => setApplyDir(e.target.value)}
+            aria-label="apply target directory"
+          />
+        </div>
+        <div className="transfer-actions">
+          <div>
+            <button type="button" className="ledger-sort" onClick={() => void applyToMachine()}>
+              Redeem + Apply to machine
+            </button>
+            <p className="transfer-note">
+              Redeems the ticket and unpacks the gem into the chosen dir (a .claude-style
+              layout). Your live ~/.claude is untouched.
+            </p>
+          </div>
+        </div>
+        {applyStatus && <p className="transfer-status">{applyStatus}</p>}
       </section>
     </div>
   );

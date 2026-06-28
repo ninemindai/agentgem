@@ -14,6 +14,7 @@ export function Materialize({ apiBase }: { apiBase: string }) {
   const [error, setError] = useState<string | null>(null);
   const [ticket, setTicket] = useState("");
   const [sendStatus, setSendStatus] = useState("");
+  const [copied, setCopied] = useState(false);
 
   const sel = buildSelection(keys);
 
@@ -81,13 +82,28 @@ export function Materialize({ apiBase }: { apiBase: string }) {
         </div>
         {sendStatus && <p className="transfer-status">{sendStatus}</p>}
         {ticket && (
-          <input
-            className="transfer-ticket"
-            readOnly
-            value={ticket}
-            aria-label="transfer ticket"
-            onClick={(e) => (e.target as HTMLInputElement).select()}
-          />
+          <div className="transfer-ticket-row">
+            <input
+              className="transfer-ticket"
+              readOnly
+              value={ticket}
+              aria-label="transfer ticket"
+              onClick={(e) => (e.target as HTMLInputElement).select()}
+            />
+            <button
+              type="button"
+              className="transfer-copy"
+              aria-label="copy ticket"
+              title="Copy ticket"
+              onClick={() => {
+                void copyText(ticket);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1500);
+              }}
+            >
+              {copied ? "✓ Copied" : "⧉ Copy"}
+            </button>
+          </div>
         )}
       </section>
     </div>

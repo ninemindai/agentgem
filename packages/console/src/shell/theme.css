@@ -441,3 +441,26 @@ body::before {
 .analyze-include { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
 .analyze-include li { display: flex; align-items: center; gap: 8px; }
 .analyze-include-name { font: 12px/1.4 var(--font-mono); color: var(--ink-soft); }
+
+/* Transfer: share-via-ticket (Materialize) + receive/apply (Received) */
+.transfer-section { margin: 18px 0 0; }
+.transfer-section:first-child { margin-top: 0; }
+.transfer-heading { margin: 0 0 8px; font: 600 13px/1 var(--font-ui); color: var(--ink); letter-spacing: .01em; }
+.transfer-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px; margin-top: 8px; }
+.transfer-status { margin: 8px 0 0; font: 12.5px/1.5 var(--font-ui); color: var(--ink-soft); word-break: break-word; }
+.transfer-note { margin: 6px 0 0; font: 11.5px/1.45 var(--font-ui); color: var(--muted); max-width: 38ch; }
+.transfer-ticket-row { display: flex; gap: 8px; align-items: stretch; margin-top: 10px; }
+.transfer-ticket {
+  flex: 1; min-width: 0; padding: 8px 11px; border: 1px solid var(--line); border-radius: 7px;
+  background: var(--raised); color: var(--ink-soft); font: 12px/1.5 var(--font-mono);
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.transfer-ticket:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
+.transfer-copy {
+  flex: none; background: var(--raised); border: 1px solid var(--line); border-radius: 7px;
+  padding: 7px 13px; color: var(--ink-soft); cursor: pointer; white-space: nowrap;
+  font: 500 12.5px/1 var(--font-ui); letter-spacing: .01em;
+  transition: border-color .15s ease, color .15s ease, transform .1s ease;
+}
+.transfer-copy:hover { border-color: var(--accent); color: var(--accent); }
+.transfer-copy:active { transform: translateY(1px); }

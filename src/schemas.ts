@@ -555,6 +555,21 @@ export const TestbedImportResponseSchema = z.object({
   skipped: z.array(z.object({ artifact: z.string(), reason: z.string() })),
 });
 
+// Apply a received .gem (in-memory archive bytes) into a user-picked testbed dir.
+// `dir` is an explicit, trusted folder selection (same trust model as testbed import);
+// the gem is unpacked + lock-verified before anything is written.
+export const GemApplyRequestSchema = z.object({
+  bytesBase64: z.string(),
+  dir: z.string(),
+  flavor: TestbedFlavorIdSchema.optional(),
+});
+export const GemApplyResponseSchema = z.object({
+  dir: z.string(),
+  name: z.string(),
+  written: z.array(ImportedRefSchema),
+  skipped: z.array(z.object({ artifact: z.string(), reason: z.string() })),
+});
+
 // ── Run a Gem with a local ACP coding agent ──
 export const ToolInvocationSchema = z.object({
   toolCallId: z.string(),

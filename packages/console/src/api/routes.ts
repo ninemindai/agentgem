@@ -315,5 +315,14 @@ export const transferCiphertextRoute = defineRoute("POST", "/api/transfer/cipher
   body: z.object({ object: z.string() }),
   response: z.object({ ciphertextBase64: z.string() }),
 });
+export const gemApplyRoute = defineRoute("POST", "/api/gem/apply", {
+  body: z.object({ bytesBase64: z.string(), dir: z.string(), flavor: z.string().optional() }),
+  response: z.object({
+    dir: z.string(),
+    name: z.string(),
+    written: z.array(z.looseObject({ type: z.string(), name: z.string(), overwritten: z.boolean() })),
+    skipped: z.array(z.looseObject({ artifact: z.string(), reason: z.string() })),
+  }),
+});
 
 export const makeClient = (apiBase: string): Client => createClient({ baseURL: apiBase });
