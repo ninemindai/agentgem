@@ -149,6 +149,7 @@ export const transferPage = defineConsolePage({
   title: "Transfer",
   icon: "↔",
   order: 45,
+  group: "library",
   route: "#/transfer",
   component: ({ apiBase }) => <Transfer apiBase={apiBase} />,
 });

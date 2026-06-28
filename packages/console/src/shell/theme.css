@@ -90,11 +90,10 @@ body::before {
   background: var(--accent); border-radius: 0 3px 3px 0;
 }
 .console-nav-icon { font-size: 14px; line-height: 1; opacity: .85; width: 16px; text-align: center; }
-.console-legacy {
-  margin-top: auto; padding: 9px 11px; color: var(--muted); font-size: 12px;
-  text-decoration: none; border-radius: 7px; letter-spacing: .01em;
-}
-.console-legacy:hover { background: rgba(0,0,0,.04); color: var(--accent); }
+.console-group-label { margin: 14px 8px 4px; font: 700 10px/1 var(--font-ui);
+  text-transform: uppercase; letter-spacing: .16em; color: var(--muted); }
+.console-group-label:first-of-type { margin-top: 6px; }
+.console-footer { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--line-soft); }
 
 .console-main { padding: 30px 36px 56px; max-width: 1100px; animation: fade .5s ease both; }
 

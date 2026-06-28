@@ -11,3 +11,18 @@ export function sortedPages(pages: ConsolePage[]): ConsolePage[] {
   }
   return [...pages].sort((a, b) => a.order - b.order);
 }
+
+/** Bucket pages into the three sidebar sections, each sorted by order. */
+export function groupedPages(pages: ConsolePage[]): {
+  build: ConsolePage[];
+  library: ConsolePage[];
+  settings: ConsolePage[];
+} {
+  // Reuse sortedPages for its duplicate-id guard, then bucket.
+  const ordered = sortedPages(pages);
+  return {
+    build: ordered.filter((p) => (p.group ?? "build") === "build"),
+    library: ordered.filter((p) => p.group === "library"),
+    settings: ordered.filter((p) => p.group === "settings"),
+  };
+}

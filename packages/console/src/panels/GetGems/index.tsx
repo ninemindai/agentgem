@@ -114,6 +114,7 @@ export const getGemsPage = defineConsolePage({
   title: "Get Gems",
   icon: "⬇",
   order: 30,
+  group: "library",
   route: "#/get-gems",
   component: ({ apiBase }) => <GetGems apiBase={apiBase} />,
 });

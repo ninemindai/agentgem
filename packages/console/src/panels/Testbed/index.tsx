@@ -161,6 +161,7 @@ export const testbedPage = defineConsolePage({
   title: "Testbed",
   icon: "✛",
   order: 5,
+  group: "build",
   route: "#/testbed",
   component: ({ apiBase }) => <Testbed apiBase={apiBase} />,
 });

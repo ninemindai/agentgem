@@ -112,6 +112,7 @@ export const workspacesPage = defineConsolePage({
   title: "Workspaces",
   icon: "▦",
   order: 20,
+  group: "library",
   route: "#/workspaces",
   component: ({ apiBase }) => <Workspaces apiBase={apiBase} />,
 });

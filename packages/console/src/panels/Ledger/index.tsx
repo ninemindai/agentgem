@@ -291,6 +291,7 @@ export const ledgerPage = defineConsolePage({
   title: "Ledger",
   icon: "◆",
   order: 10,
+  group: "build",
   route: "#/ledger",
   component: ({ apiBase }) => <Ledger apiBase={apiBase} />,
 });

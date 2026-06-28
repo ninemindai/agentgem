@@ -75,6 +75,7 @@ export const deployPage = defineConsolePage({
   title: "Deploy",
   icon: "▲",
   order: 40,
+  group: "settings",
   route: "#/deploy",
   component: ({ apiBase }) => <Deploy apiBase={apiBase} />,
 });

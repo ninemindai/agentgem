@@ -5,6 +5,8 @@ export interface ConsolePage {
   title: string;
   icon?: string;
   order: number;
+  /** Sidebar group; defaults to "build". */
+  group?: "build" | "library" | "settings";
   /** Hash route, e.g. '#/ledger'. */
   route: string;
   component: (props: { apiBase: string }) => ReactNode;
