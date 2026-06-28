@@ -4,6 +4,7 @@ import {
   workspacesRoute, deleteWorkspaceRoute, renderWorkspaceRoute,
   makeClient, TARGET_IDS, type WorkspaceSummary,
 } from "../../api/routes.js";
+import { WorkspaceDeploy } from "./WorkspaceDeploy.js";
 
 /** Count chips shown per workspace, in display order. */
 export function countChips(ws: WorkspaceSummary): { label: string; n: number }[] {
@@ -101,6 +102,7 @@ function WorkspaceCard({ apiBase, ws, onChange }: { apiBase: string; ws: Workspa
       </div>
       {note && <p className="ws-note">{note}</p>}
       {error && <p className="ledger-error">{error}</p>}
+      <WorkspaceDeploy apiBase={apiBase} name={ws.name} />
     </article>
   );
 }

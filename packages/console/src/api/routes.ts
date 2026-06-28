@@ -74,6 +74,31 @@ export const renderWorkspaceRoute = defineRoute("POST", "/api/workspace/render",
   response: z.object({ target: z.string(), path: z.string() }),
 });
 
+// Run / deploy a rendered workspace target (local / vercel / cloudflare).
+export const runReadyRoute = defineRoute("GET", "/api/run-ready", {
+  query: z.object({ name: z.string(), target: z.string() }),
+  response: z.object({ local: z.boolean(), vercel: z.boolean(), cloudflare: z.boolean() }),
+});
+const RunStateSchema = z.object({
+  mode: z.enum(["local", "vercel", "cloudflare"]),
+  state: z.enum(["idle", "installing", "building", "running", "deploying", "failed"]),
+  url: z.string().optional(),
+  logTail: z.array(z.string()),
+});
+export type RunState = z.infer<typeof RunStateSchema>;
+export const runRoute = defineRoute("POST", "/api/run", {
+  body: z.object({ name: z.string(), target: z.string(), mode: z.enum(["local", "vercel", "cloudflare"]) }),
+  response: RunStateSchema,
+});
+export const runStatusRoute = defineRoute("GET", "/api/run-status", {
+  query: z.object({ name: z.string(), target: z.string() }),
+  response: RunStateSchema,
+});
+export const runStopRoute = defineRoute("POST", "/api/run/stop", {
+  body: z.object({ name: z.string(), target: z.string() }),
+  response: z.object({ stopped: z.boolean() }),
+});
+
 // POST /api/gem — build a gem from a selection. Request mirrors the server's
 // A gem check, kept loose so the full object round-trips back into the build
 // unchanged (the server validates it strictly).
