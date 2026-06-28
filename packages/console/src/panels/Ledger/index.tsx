@@ -4,6 +4,7 @@ import { inventoryRoute, usageRoute, buildGemRoute, archiveRoute, createWorkspac
 import { groupInventory, mergeUsage, applyView, relativeTime, DEFAULT_VIEW, type LedgerGroup, type SortKey } from "./data.js";
 import { selKey, visibleKeys, buildSelection, type GemSelection } from "./selection.js";
 import { takeRecommendedSelection } from "../../recommendation.js";
+import { useActiveGem, setKeys, toggleKey as toggleKeyStore, clearKeys, setName as setNameStore } from "../../activeGem.js";
 import { base64ToBytes, downloadBlob, copyText } from "./exporters.js";
 import { Preview } from "./Preview.js";
 import { Targets } from "./Targets.js";
@@ -16,12 +17,11 @@ export function Ledger({ apiBase }: { apiBase: string }) {
   const [groups, setGroups] = useState<LedgerGroup[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState(DEFAULT_VIEW);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const { keys: selected, name: wsName } = useActiveGem();
   const [gem, setGem] = useState<Gem | null>(null);
   const [builtSel, setBuiltSel] = useState<GemSelection | null>(null);
   const [building, setBuilding] = useState(false);
   const [buildError, setBuildError] = useState<string | null>(null);
-  const [wsName, setWsName] = useState("");
   const [wsNote, setWsNote] = useState<string | null>(null);
   const [importRoot, setImportRoot] = useState("");
   const [importNote, setImportNote] = useState<string | null>(null);
@@ -54,7 +54,7 @@ export function Ledger({ apiBase }: { apiBase: string }) {
   useEffect(() => {
     const keys = takeRecommendedSelection();
     if (keys && keys.length) {
-      setSelected(new Set(keys));
+      setKeys(new Set(keys));
       setView((v) => ({ ...v, usedOnly: false }));
     }
   }, []);
@@ -67,13 +67,9 @@ export function Ledger({ apiBase }: { apiBase: string }) {
   );
   const arrow = (key: SortKey) => (view.sort === key ? (view.dir === "desc" ? " ↓" : " ↑") : "");
 
-  const toggle = (key: string) => setSelected((s) => {
-    const n = new Set(s);
-    if (n.has(key)) n.delete(key); else n.add(key);
-    return n;
-  });
-  const selectAllShown = () => setSelected((s) => new Set([...s, ...visibleKeys(visible)]));
-  const clearSelection = () => setSelected(new Set());
+  const toggle = (key: string) => toggleKeyStore(key);
+  const selectAllShown = () => setKeys(new Set([...selected, ...visibleKeys(visible)]));
+  const clearSelection = () => clearKeys();
   const toggleExpand = (key: string) => setExpanded((s) => {
     const n = new Set(s);
     if (n.has(key)) n.delete(key); else n.add(key);
@@ -104,8 +100,8 @@ export function Ledger({ apiBase }: { apiBase: string }) {
     setBuildError(null);
     try {
       await createWorkspaceRoute.call(makeClient(apiBase), { body: { name, selection: buildSelection(selected) } });
-      setWsNote(`saved workspace “${name}”`);
-      setWsName("");
+      setWsNote(`saved workspace "${name}"`);
+      setNameStore("");
     } catch (e) {
       setBuildError(e instanceof Error ? e.message : String(e));
     }
@@ -158,7 +154,7 @@ export function Ledger({ apiBase }: { apiBase: string }) {
   // "Used only" hiding everything (e.g. no usage analyzed yet) is the common
   // empty case — point at the toggle rather than implying the ledger is empty.
   const emptyMsg = view.usedOnly && !view.query && total > 0
-    ? `No used artifacts yet — uncheck “Used only” to browse all ${total}.`
+    ? `No used artifacts yet — uncheck "Used only" to browse all ${total}.`
     : "No matching artifacts.";
 
   return (
@@ -207,7 +203,7 @@ export function Ledger({ apiBase }: { apiBase: string }) {
           aria-label="workspace name"
           placeholder="workspace name…"
           value={wsName}
-          onChange={(e) => setWsName(e.target.value)}
+          onChange={(e) => setNameStore(e.target.value)}
         />
         <button
           type="button"
