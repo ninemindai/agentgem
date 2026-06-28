@@ -415,7 +415,10 @@ body::before {
 .ledger-search-clear:hover { color: var(--accent); }
 
 /* Per-section sortable column headers */
-.ledger-col-headers { display: flex; justify-content: flex-end; gap: 2px; margin: 4px 0 4px; }
+.ledger-col-headers { display: flex; align-items: center; gap: 2px; margin: 4px 0 4px; }
+/* "Name" sits over the left-aligned artifact names (clears the row's checkbox+padding);
+   Uses/Last-used stay clustered on the right over their columns. */
+.ledger-col-btn:first-child { margin-right: auto; padding-left: 36px; }
 .ledger-col-btn { background: none; border: 0; color: var(--muted); cursor: pointer;
   font: 500 11px/1 var(--font-ui); letter-spacing: .01em; padding: 3px 6px; border-radius: 4px;
   transition: color .12s ease, background .12s ease; }
