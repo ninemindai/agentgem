@@ -137,3 +137,4 @@ body { margin: 0; background: var(--paper); color: var(--ink);
   border-radius: 6px; max-height: 280px; overflow: auto; font-size: 12px; white-space: pre-wrap; }
 .ws-deploy { margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 10px; }
 .ws-deploy-url { color: var(--accent); font-size: 12px; word-break: break-all; }
+.publish { margin-bottom: 22px; }

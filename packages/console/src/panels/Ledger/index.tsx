@@ -8,6 +8,7 @@ import { Preview } from "./Preview.js";
 import { Targets } from "./Targets.js";
 import { Run } from "./Run.js";
 import { Checks } from "./Checks.js";
+import { Publish } from "./Publish.js";
 
 export function Ledger({ apiBase }: { apiBase: string }) {
   const [groups, setGroups] = useState<LedgerGroup[] | null>(null);
@@ -194,6 +195,7 @@ export function Ledger({ apiBase }: { apiBase: string }) {
       )}
       {gem && builtSel && <Targets apiBase={apiBase} selection={builtSel} name={gem.name} />}
       {gem && builtSel && <Run apiBase={apiBase} selection={builtSel} name={gem.name} />}
+      {gem && builtSel && <Publish apiBase={apiBase} selection={builtSel} name={gem.name} />}
 
       {visible.length === 0 ? (
         <p className="ledger-empty">{emptyMsg}</p>

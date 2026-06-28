@@ -239,6 +239,34 @@ export const testbedScaffoldRoute = defineRoute("POST", "/api/testbed/scaffold",
   response: z.object({ root: z.string(), created: z.array(z.string()) }),
 });
 
+// Publish a selection to a managed backend (claude-managed / agentcore-managed),
+// then undeploy by the workspace-record name.
+export const PUBLISH_TARGETS = ["claude-managed", "agentcore-managed"] as const;
+export const publishReadyRoute = defineRoute("GET", "/api/publish-ready", {
+  query: z.object({ target: z.string() }),
+  response: z.object({ ready: z.boolean() }),
+});
+export const publishRoute = defineRoute("POST", "/api/publish", {
+  body: z.object({
+    selection: GemSelectionSchema,
+    name: z.string().optional(),
+    target: z.enum(PUBLISH_TARGETS),
+    requestId: z.string().min(8).max(128),
+    wsName: z.string().optional(),
+  }),
+  response: z.looseObject({
+    kind: z.string(),
+    agentId: z.string().optional(),
+    environmentId: z.string().optional(),
+    version: z.string().optional(),
+    harnessId: z.string().optional(),
+  }),
+});
+export const undeployRoute = defineRoute("POST", "/api/undeploy", {
+  body: z.object({ name: z.string(), target: z.enum(["eve", "flue", "claude-managed", "agentcore"]) }),
+  response: z.object({ removed: z.boolean() }),
+});
+
 // Deploy: backend readiness + credential management.
 export const CREDENTIAL_KEYS = ["ANTHROPIC_API_KEY", "VERCEL_TOKEN", "CLOUDFLARE_API_TOKEN"] as const;
 export const deployTargetsRoute = defineRoute("GET", "/api/deploy-targets", {
