@@ -188,20 +188,42 @@ Remove the standalone Transfer panel. Its **Send** (share-via-ticket) becomes an
 
 ---
 
-### Task 5: Active-Gem pin + landing on Curate
+### Task 5: Active-Gem switcher + land on Your Gems
 
-Pin the active Gem name atop the sidebar, and default the landing route to `#/curate`.
+Pin the active Gem atop the sidebar AS A SWITCHER (click → Your Gems + ＋ New Gem), and land first-time/no-active-gem on Your Gems (the picker). Opening a gem from Your Gems sets the active Gem (name + selection); the BUILD stages then operate on it.
 
 **Files:**
 - Modify: `packages/console/src/shell/Shell.tsx`, `packages/console/src/shell/theme.css`
-- Modify: `packages/console/src/main.tsx` (or wherever the initial hash is set) for landing
+- Modify: `packages/console/src/main.tsx` (initial hash / landing)
+- Modify: `packages/console/src/panels/Workspaces/index.tsx` ("Open" sets the active Gem)
+- Modify: `packages/console/src/activeGem.ts` (add `loadGem(name, keys)` if a single setter is cleaner)
 - Test: extend `packages/console/src/shell/Shell.test.tsx`
 
-- [ ] **Step 1:** In `Shell.tsx`, read `useActiveGem()` and render a pinned indicator above the BUILD group: the gem name (or "New Gem · N artifacts") — e.g. `<div className="console-activegem">{name || \`New Gem · ${keys.size}\`}</div>`. (Import `useActiveGem` from `../activeGem.js`.)
-- [ ] **Step 2:** Landing: if `window.location.hash` is empty on load, set it to `#/curate` (in `main.tsx` before render, or in `Shell` via an effect). Add the `.console-activegem` CSS (small, muted, the seal accent).
-- [ ] **Step 3:** Shell test: with an active gem set, the pin shows its name; with none, shows "New Gem". Landing: empty hash → active page is Curate.
-- [ ] **Step 4:** Typecheck + full suite + build → green.
-- [ ] **Step 5:** Commit `feat(console): active-Gem pin in the sidebar + land on Curate`.
+- [ ] **Step 1:** Active-Gem switcher in `Shell.tsx`: a button atop the BUILD group showing the active gem (name, or "New Gem · N artifacts"). Clicking it navigates to Your Gems (`#/your-gems`) — the picker. (Import `useActiveGem`.) A full dropdown is optional; the minimum is the pinned label + click-through to the picker.
+- [ ] **Step 2:** Landing: on load, if `window.location.hash` is empty, route to `#/your-gems` when there are saved gems (the picker) else `#/curate` with a fresh New Gem. (Simplest: always land on `#/your-gems`; its empty-state offers "＋ New Gem" → `#/curate`.)
+- [ ] **Step 3:** "Open" in Your Gems (`Workspaces/index.tsx`) sets the active Gem — `setName(ws.name)` + `setKeys(...)` from the workspace's selection — then `window.location.hash = "#/curate"`. (If the saved workspace doesn't persist the original selection, Open at minimum sets the name + navigates; note the limitation.)
+- [ ] **Step 4:** "＋ New Gem" control (in Your Gems and/or the switcher) calls `resetGem()` then `#/curate`.
+- [ ] **Step 5:** Add `.console-activegem` CSS (small, muted, seal accent; hover affordance since it's clickable).
+- [ ] **Step 6:** Shell test: active gem set → switcher shows its name; none → "New Gem"; empty hash → lands on Your Gems (or Curate when no saved gems).
+- [ ] **Step 7:** Typecheck + full suite + build → green.
+- [ ] **Step 8:** Commit `feat(console): active-Gem switcher + land on Your Gems; Open sets the active Gem`.
+
+---
+
+### Task 6: Curate Compose-tab polish (clear search, eye icon, sortable columns)
+
+Three Compose-tab refinements from testing. Keep the grouped, collapsible sections; turn each section's rows into a column-aligned table with sortable headers and the action at the end.
+
+**Files:**
+- Modify: `packages/console/src/panels/Curate/index.tsx`, `packages/console/src/panels/Curate/data.ts` (per-section sort), `packages/console/src/shell/theme.css`
+- Test: extend `packages/console/src/panels/Curate/Curate.test.tsx` + `data.test.ts`
+
+- [ ] **Step 1 (clear search):** Wrap the search input in a relative container; when `view.query` is non-empty, render an `×` icon button (`aria-label="clear search"`) that sets `query: ""`. Reuse a small button styled `.ledger-search-clear`.
+- [ ] **Step 2 (eye icon):** Replace the row action text `"view"/"hide"` with an eye / eye-off inline SVG (`aria-label={expanded ? "hide" : "view"}`), keep the `.ledger-view` class + toggle behavior. Move this action to the END of the row (after the count), so columns align: `[☐] name · source · uses · last-used · [eye]`.
+- [ ] **Step 3 (per-section sortable columns):** Give each `LedgerGroup` its own sort. Add per-section sort state keyed by group (`Record<groupKey, {sort, dir}>`, default `{sort:"uses",dir:"desc"}`). Render a column-header row inside each section (Name · Uses · Last used) where clicking a header sets that section's sort (toggle dir on re-click); apply per-section sort in `applyView` (or a new `sortGroup(items, sort, dir)` in `data.ts`). Drop the global `Uses`/`Last used` buttons from the top bar (search + Used-only remain). Keep collapse. (Sections ARE the "type"; no per-section type sort.)
+- [ ] **Step 4:** Tests — `data.test.ts`: a `sortGroup` unit covering name/uses/last asc+desc. `Curate.test.tsx`: clear-× empties the query; clicking a section's "Name" header reorders that section; the eye toggle still reveals content.
+- [ ] **Step 5:** Typecheck + full suite + build → green; browser-verify column alignment + per-section sort.
+- [ ] **Step 6:** Commit `feat(console): Curate Compose polish — clear search, eye icon, per-section sortable columns`.
 
 ---
 
