@@ -3,6 +3,7 @@ import { readFile as fsReadFile, writeFile as fsWriteFile } from "node:fs/promis
 import { sendGemBytes, receiveGem } from "./index.js";
 import type { ObjectStore } from "./objectStore.js";
 import { NatsObjectStore } from "./natsObjectStore.js";
+import { loadOrCreateIdentity } from "../gem/identity.js";
 
 export interface CliIO {
   readFile: (p: string) => Promise<Buffer>;
@@ -26,7 +27,8 @@ export async function runCli(argv: string[], store: ObjectStore, io: CliIO = def
     if (!rest[0]) { io.err("usage: send <file.gem>"); return 2; }
     try {
       const bytes = await io.readFile(rest[0]);
-      const { ticket } = await sendGemBytes(bytes, store, bucket);
+      // The CLI signs with the local identity so the recipient sees who sent it.
+      const { ticket } = await sendGemBytes(bytes, store, bucket, { identity: loadOrCreateIdentity() });
       io.log(ticket);
       return 0;
     } catch (e) {
@@ -37,10 +39,13 @@ export async function runCli(argv: string[], store: ObjectStore, io: CliIO = def
   if (cmd === "receive") {
     if (!rest[0]) { io.err("usage: receive <ticket> [out.gem]"); return 2; }
     try {
-      const { gem, meta, bytes } = await receiveGem(rest[0], store);
+      const { gem, meta, bytes, provenance } = await receiveGem(rest[0], store);
       const outPath = rest[1] ?? `${gem.name}.gem`;
       await io.writeFile(outPath, bytes);
-      io.err(`✓ verified integrity · ${meta.name}@${meta.version} → ${outPath}`);
+      const origin = provenance.signed
+        ? (provenance.verified ? `✓ from ${provenance.publicKey!.slice(0, 12)}…` : "⚠ unverified origin (signature did not verify)")
+        : "(unsigned)";
+      io.err(`✓ verified integrity · ${meta.name}@${meta.version} · ${origin} → ${outPath}`);
       return 0;
     } catch (e) {
       io.err(e instanceof Error ? e.message : String(e));
