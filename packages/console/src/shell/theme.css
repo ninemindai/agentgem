@@ -347,3 +347,12 @@ body::before {
   border: 1px solid var(--line-soft); border-radius: 7px; background: var(--raised); }
 .analyze-name { flex: 1; font: 12px/1.4 var(--font-mono); color: var(--ink-soft); word-break: break-all; }
 .analyze-candidate { margin-top: 8px; }
+
+/* Collapsible Curate inventory groups: the group label is now a toggle button. */
+.ledger-group-toggle { display: flex; align-items: center; gap: 8px; width: 100%;
+  background: none; border: 0; padding: 4px 0; cursor: pointer; text-align: left; }
+.ledger-group-caret { color: var(--gold); font-size: 11px; width: 12px; }
+.ledger-group-toggle:hover { color: var(--accent); }
+.ledger-group-count { margin-left: 8px; font: 600 11px/1 var(--font-ui);
+  color: var(--muted); background: var(--raised); border: 1px solid var(--line-soft);
+  border-radius: 999px; padding: 2px 8px; }

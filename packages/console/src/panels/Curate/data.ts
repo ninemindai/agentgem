@@ -6,7 +6,11 @@ export interface LedgerGroup { key: string; label: string; items: LedgerItem[] }
 export type SortKey = "uses" | "last";
 export type SortDir = "desc" | "asc";
 export interface LedgerView { query: string; sort: SortKey; dir: SortDir; usedOnly: boolean }
-export const DEFAULT_VIEW: LedgerView = { query: "", sort: "uses", dir: "desc", usedOnly: true };
+// Show every artifact type by default (MCP servers / instructions often have no
+// recorded usage; the old `usedOnly` default silently hid those whole categories).
+// "Used only" is now an opt-in focus filter. Collapsible groups keep the long
+// Skills list manageable.
+export const DEFAULT_VIEW: LedgerView = { query: "", sort: "uses", dir: "desc", usedOnly: false };
 
 type InventoryCategory = "skills" | "mcpServers" | "instructions" | "hooks";
 

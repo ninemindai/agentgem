@@ -37,20 +37,20 @@ const names = (c: HTMLElement) =>
   Array.from(c.querySelectorAll(".ledger-item-name")).map((n) => n.textContent);
 
 describe("Curate", () => {
-  it("shows used items by default, sorted by uses desc (zero-use hidden)", async () => {
+  it("shows all items by default, sorted by uses desc (including zero-use)", async () => {
     vi.stubGlobal("fetch", mockFetch());
     const { container } = render(<Curate apiBase="" />);
     expect(await screen.findByText("pdf")).toBeTruthy();
     expect(await screen.findByText("7")).toBeTruthy();
-    expect(names(container)).toEqual(["pdf", "zip"]);
+    expect(names(container)).toEqual(["pdf", "zip", "csv"]);
   });
 
-  it("reveals zero-use items when 'Used only' is unchecked", async () => {
+  it("hides zero-use items when 'Used only' is checked", async () => {
     vi.stubGlobal("fetch", mockFetch());
     const { container } = render(<Curate apiBase="" />);
     await screen.findByText("pdf");
     fireEvent.click(usedOnly());
-    await waitFor(() => expect(names(container)).toEqual(["pdf", "zip", "csv"]));
+    await waitFor(() => expect(names(container)).toEqual(["pdf", "zip"]));
   });
 
   it("filters by search query", async () => {
@@ -66,7 +66,7 @@ describe("Curate", () => {
     const { container } = render(<Curate apiBase="" />);
     await screen.findByText("pdf");
     fireEvent.click(screen.getByText("Last used"));
-    await waitFor(() => expect(names(container)).toEqual(["zip", "pdf"]));
+    await waitFor(() => expect(names(container)).toEqual(["zip", "pdf", "csv"]));
   });
 
   it("views an artifact's content inline", async () => {
@@ -117,6 +117,8 @@ describe("Curate", () => {
       throw new Error(`unexpected url ${u}`);
     }));
     render(<Curate apiBase="" />);
+    await screen.findByText("pdf");
+    fireEvent.click(usedOnly()); // turn the focus filter ON; pdf has no usage → category empties
     expect(await screen.findByText(/uncheck .Used only. to browse all 1/i)).toBeTruthy();
   });
 

@@ -50,7 +50,7 @@ export function Analyze({ apiBase, onPick }: { apiBase: string; onPick: (keys: s
   return (
     <section className="analyze">
       <button type="button" className="analyze-disclosure" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        {open ? "▾" : "▸"} Analyze a project's history
+        {open ? "▾" : "▸"} Suggest a gem from a project
       </button>
       {open && (
         <div className="analyze-body">

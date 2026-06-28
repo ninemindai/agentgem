@@ -16,6 +16,7 @@ export function Curate({ apiBase }: { apiBase: string }) {
   const [wsNote, setWsNote] = useState<string | null>(null);
   const [buildError, setBuildError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [suggested, setSuggested] = useState<GemCheck[] | null>(null);
   const [included, setIncluded] = useState<Set<string>>(new Set());
   const [checksBusy, setChecksBusy] = useState(false);
@@ -75,6 +76,12 @@ export function Curate({ apiBase }: { apiBase: string }) {
       setBuildError(e instanceof Error ? e.message : String(e));
     }
   };
+
+  const toggleCollapse = (key: string) => setCollapsed((s) => {
+    const n = new Set(s);
+    if (n.has(key)) n.delete(key); else n.add(key);
+    return n;
+  });
 
   const suggestChecks = async () => {
     setChecksBusy(true);
@@ -171,7 +178,17 @@ export function Curate({ apiBase }: { apiBase: string }) {
         <p className="ledger-empty">{emptyMsg}</p>
       ) : visible.map((g) => (
         <section className="ledger-group" key={g.key}>
-          <h2 className="ledger-group-label">{g.label}</h2>
+          <button
+            type="button"
+            className="ledger-group-label ledger-group-toggle"
+            aria-expanded={!collapsed.has(g.key)}
+            onClick={() => toggleCollapse(g.key)}
+          >
+            <span className="ledger-group-caret">{collapsed.has(g.key) ? "▸" : "▾"}</span>
+            {g.label}
+            <span className="ledger-group-count">{g.items.length}</span>
+          </button>
+          {!collapsed.has(g.key) && (
           <ul className="ledger-items">
             {g.items.map((i) => {
               const key = selKey(g.key, i.name);
@@ -201,6 +218,7 @@ export function Curate({ apiBase }: { apiBase: string }) {
               );
             })}
           </ul>
+          )}
         </section>
       ))}
     </div>
