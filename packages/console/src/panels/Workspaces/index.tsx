@@ -4,7 +4,6 @@ import {
   workspacesRoute, deleteWorkspaceRoute, renderWorkspaceRoute,
   makeClient, TARGET_IDS, type WorkspaceSummary,
 } from "../../api/routes.js";
-import { WorkspaceDeploy } from "../Deploy/WorkspaceDeploy.js";
 
 /** Count chips shown per workspace, in display order. */
 export function countChips(ws: WorkspaceSummary): { label: string; n: number }[] {
@@ -102,17 +101,16 @@ function WorkspaceCard({ apiBase, ws, onChange }: { apiBase: string; ws: Workspa
       </div>
       {note && <p className="ws-note">{note}</p>}
       {error && <p className="ledger-error">{error}</p>}
-      <WorkspaceDeploy apiBase={apiBase} name={ws.name} />
     </article>
   );
 }
 
 export const workspacesPage = defineConsolePage({
-  id: "workspaces",
-  title: "Workspaces",
+  id: "your-gems",
+  title: "Your Gems",
   icon: "▦",
   order: 20,
   group: "library",
-  route: "#/workspaces",
+  route: "#/your-gems",
   component: ({ apiBase }) => <Workspaces apiBase={apiBase} />,
 });
