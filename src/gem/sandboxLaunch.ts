@@ -71,9 +71,11 @@ export function bwrapArgs(runDir: string, tmpDir: string = tmpdir(), extraWritab
   const extra = extraWritable.flatMap((p) => { const r = tryRealpath(p); return ["--bind", r, r]; });
   // Sensitive paths re-bound read-only AFTER the writable binds (last bind wins). A bind can
   // only cover something that exists, so for a path that DOESN'T exist yet we mask it with a
-  // read-only placeholder of its kind — otherwise the agent could create it under the writable
-  // config bind. Without masks we fall back to --ro-bind-try (skips an absent path), which is
-  // why callers that want the no-creation guarantee must pass masks.
+  // read-only placeholder of its kind — otherwise the agent could write content into it under
+  // the writable config bind (a settings.json hook, a skill). bwrap materializes an inert empty
+  // mountpoint for the mask on the real config dir, so the path may exist afterward, but it
+  // stays empty/read-only. Without masks we fall back to --ro-bind-try (skips an absent path),
+  // which is why callers that want the no-injection guarantee must pass masks.
   const deny = denied.flatMap((d) => {
     const dest = realpathLeaf(d.path);
     if (existsSync(d.path)) return ["--ro-bind", dest, dest];          // real file/dir, readable, RO

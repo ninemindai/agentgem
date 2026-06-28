@@ -24,9 +24,11 @@ export function envPermission(env: NodeJS.ProcessEnv = process.env): "allow" | "
 }
 
 // Read-only stand-ins bind-mounted over absent sensitive paths under bubblewrap (which can't
-// deny a path that doesn't exist) so the agent can't CREATE them: `file` is an empty-JSON file
-// (a reader like settings.json parses cleanly), `dir` an empty directory. Shared + idempotent
-// (inert content), so runs don't accumulate placeholder dirs.
+// deny a path that doesn't exist) so the agent can't INJECT into them — write a settings.json
+// hook or drop a skill. `file` is an empty-JSON file (a reader like settings.json parses
+// cleanly), `dir` an empty directory. (bwrap materializes an inert empty mountpoint for the
+// bind, so an absent path may exist afterward, but it stays empty/read-only.) Shared +
+// idempotent (inert content), so runs don't accumulate placeholder dirs.
 export function ensureMaskPlaceholders(): MaskPlaceholders {
   const base = join(tmpdir(), "agentgem-sandbox-mask");
   const dir = join(base, "empty");

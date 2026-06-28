@@ -81,8 +81,13 @@ describe.skipIf(!onLinux)("bubblewrap boundary (Linux)", () => {
   });
 
   // The follow-up fix: when a sensitive path does NOT exist yet, a read-only placeholder is
-  // masked over it so the agent cannot CREATE it (the --ro-bind-try fallback would have let it).
-  it("masks an ABSENT sensitive path so the agent cannot create it", () => {
+  // masked over it so the agent cannot INJECT into it — write a settings.json hook or drop a
+  // functional skill. (The --ro-bind-try fallback would have left the path writable.) bwrap
+  // must materialize a mountpoint for the mask, and because the config dir is a real read-write
+  // bind that inert 0-byte file lands on the host, so the path may EXIST afterward — but it
+  // stays empty/read-only, which is the guarantee that matters: no host-code-exec hook, no
+  // auto-loaded SKILL.md. ("No inode at all" is unachievable while the config root is writable.)
+  it("masks an ABSENT sensitive path read-only so the agent cannot inject into it", () => {
     const run = mkdtempSync(join(homedir(), "bwx-run-"));
     const cfg = mkdtempSync(join(homedir(), "bwx-cfg-"));   // ~/.claude with NO settings.json / skills yet
     const m = masks(cfg);
@@ -92,8 +97,11 @@ describe.skipIf(!onLinux)("bubblewrap boundary (Linux)", () => {
       const skill = join(cfg, "skills", "evil", "SKILL.md");
       // config dir is writable (scratch ok) but the absent sensitive paths are masked read-only
       expect(runJailed(run, `echo hi > ${join(cfg, "ok.txt")}`, [cfg], denied, m)).toBe(true);
+      // the hook write fails (placeholder is read-only) and the payload never reaches the host —
+      // any inert mountpoint bwrap leaves behind is empty, not the attacker's "pwned".
       expect(runJailed(run, `echo pwned > ${hook}`, [cfg], denied, m)).toBe(false);
-      expect(existsSync(hook)).toBe(false);
+      expect(existsSync(hook) ? readFileSync(hook, "utf8") : "").not.toContain("pwned");
+      // skills/ is masked read-only, so no entry can be created under it: no SKILL.md gets auto-loaded.
       expect(runJailed(run, `mkdir -p ${join(cfg, "skills", "evil")} && echo x > ${skill}`, [cfg], denied, m)).toBe(false);
       expect(existsSync(skill)).toBe(false);
     } finally {
