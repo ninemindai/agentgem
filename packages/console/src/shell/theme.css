@@ -68,6 +68,19 @@ body { margin: 0; background: var(--paper); color: var(--ink);
 .targets-content { margin: 0; padding: 12px; overflow: auto; max-height: 360px; font-size: 12px;
   background: var(--paper); white-space: pre-wrap; }
 .targets-skipped { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
+.run { margin-bottom: 22px; }
+.run-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.run-task { flex: 1; min-width: 220px; }
+.run-out { border: 1px solid var(--line); border-radius: 8px; background: var(--raised); padding: 12px; }
+.run-status { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.run-badge { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; padding: 1px 9px;
+  border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.run-badge.run-running, .run-badge.run-preparing { color: var(--accent); border-color: var(--accent); }
+.run-badge.run-done { color: #2f6b3a; border-color: #2f6b3a; }
+.run-badge.run-failed { color: var(--accent); border-color: var(--accent); }
+.run-phase { color: var(--muted); font-size: 12px; }
+.run-transcript { margin: 0; padding: 10px; background: var(--paper); border: 1px solid var(--line);
+  border-radius: 6px; overflow: auto; max-height: 320px; font-size: 12px; white-space: pre-wrap; }
 .ledger-group { margin-bottom: 24px; }
 .ledger-group-label { font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
   color: var(--muted); margin: 0 0 8px; }

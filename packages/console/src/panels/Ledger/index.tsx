@@ -6,6 +6,7 @@ import { selKey, visibleKeys, buildSelection, type GemSelection } from "./select
 import { base64ToBytes, downloadBlob, copyText } from "./exporters.js";
 import { Preview } from "./Preview.js";
 import { Targets } from "./Targets.js";
+import { Run } from "./Run.js";
 
 export function Ledger({ apiBase }: { apiBase: string }) {
   const [groups, setGroups] = useState<LedgerGroup[] | null>(null);
@@ -126,6 +127,7 @@ export function Ledger({ apiBase }: { apiBase: string }) {
         <Preview gem={gem} onDownloadGem={downloadGem} onDownloadJson={downloadJson} onCopyJson={copyJson} />
       )}
       {gem && builtSel && <Targets apiBase={apiBase} selection={builtSel} name={gem.name} />}
+      {gem && builtSel && <Run apiBase={apiBase} selection={builtSel} name={gem.name} />}
 
       {visible.length === 0 ? (
         <p className="ledger-empty">{emptyMsg}</p>
