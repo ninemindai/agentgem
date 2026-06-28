@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { groupInventory, mergeUsage, applyView, relativeTime, formatSource, type LedgerGroup } from "./data.js";
+import { groupInventory, mergeUsage, applyView, sortGroupItems, relativeTime, formatSource, type LedgerGroup } from "./data.js";
 
 describe("formatSource", () => {
   it("extracts the plugin name from a plugin source", () =>
@@ -57,33 +57,56 @@ describe("applyView", () => {
   ];
 
   it("filters by case-insensitive name substring", () => {
-    const out = applyView(groups, { query: "PD", sort: "uses", dir: "desc", usedOnly: false });
+    const out = applyView(groups, { query: "PD", usedOnly: false });
     expect(out[0].items.map((i) => i.name)).toEqual(["pdf"]);
   });
 
   it("drops zero-use items when usedOnly", () => {
-    const out = applyView(groups, { query: "", sort: "uses", dir: "desc", usedOnly: true });
+    const out = applyView(groups, { query: "", usedOnly: true });
     expect(out[0].items.map((i) => i.name)).toEqual(["pdf", "zip"]);
   });
 
-  it("sorts by uses desc", () => {
-    const out = applyView(groups, { query: "", sort: "uses", dir: "desc", usedOnly: false });
-    expect(out[0].items.map((i) => i.name)).toEqual(["pdf", "zip", "csv"]);
-  });
-
-  it("sorts by uses asc when dir is asc", () => {
-    const out = applyView(groups, { query: "", sort: "uses", dir: "asc", usedOnly: false });
-    expect(out[0].items.map((i) => i.name)).toEqual(["csv", "zip", "pdf"]);
-  });
-
-  it("sorts by last used desc, nulls last", () => {
-    const out = applyView(groups, { query: "", sort: "last", dir: "desc", usedOnly: false });
-    expect(out[0].items.map((i) => i.name)).toEqual(["zip", "pdf", "csv"]);
-  });
-
   it("drops groups that become empty", () => {
-    const out = applyView(groups, { query: "nomatch", sort: "uses", dir: "desc", usedOnly: false });
+    const out = applyView(groups, { query: "nomatch", usedOnly: false });
     expect(out).toEqual([]);
+  });
+});
+
+describe("sortGroupItems", () => {
+  const items = [
+    { name: "pdf", invocations: 5, lastUsedMs: 100 },
+    { name: "csv", invocations: 0, lastUsedMs: null },
+    { name: "zip", invocations: 2, lastUsedMs: 900 },
+  ];
+
+  it("sorts by uses desc", () => {
+    expect(sortGroupItems(items, "uses", "desc").map((i) => i.name)).toEqual(["pdf", "zip", "csv"]);
+  });
+
+  it("sorts by uses asc", () => {
+    expect(sortGroupItems(items, "uses", "asc").map((i) => i.name)).toEqual(["csv", "zip", "pdf"]);
+  });
+
+  it("sorts by last desc (most recent first), nulls last", () => {
+    expect(sortGroupItems(items, "last", "desc").map((i) => i.name)).toEqual(["zip", "pdf", "csv"]);
+  });
+
+  it("sorts by last asc (oldest first), nulls last", () => {
+    expect(sortGroupItems(items, "last", "asc").map((i) => i.name)).toEqual(["pdf", "zip", "csv"]);
+  });
+
+  it("sorts by name asc (A→Z)", () => {
+    expect(sortGroupItems(items, "name", "asc").map((i) => i.name)).toEqual(["csv", "pdf", "zip"]);
+  });
+
+  it("sorts by name desc (Z→A)", () => {
+    expect(sortGroupItems(items, "name", "desc").map((i) => i.name)).toEqual(["zip", "pdf", "csv"]);
+  });
+
+  it("does not mutate the input array", () => {
+    const orig = [...items];
+    sortGroupItems(items, "name", "asc");
+    expect(items).toEqual(orig);
   });
 });
 

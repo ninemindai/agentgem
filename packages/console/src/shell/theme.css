@@ -371,6 +371,22 @@ body::before {
 .curate-tab.is-active { color: var(--accent); border-bottom-color: var(--accent); }
 .analyze-intro { margin: 0 0 14px; color: var(--ink-soft); font: 14px/1.5 var(--font-ui); max-width: 60ch; }
 
+/* Search-bar clear (×) button — appears inside the search-wrap when query is non-empty */
+.ledger-search-wrap { position: relative; flex: 1; min-width: 190px; display: flex; }
+.ledger-search-wrap .ledger-search { flex: 1; min-width: 0; }
+.ledger-search-clear { position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 15px;
+  padding: 0 2px; line-height: 1; transition: color .12s ease; }
+.ledger-search-clear:hover { color: var(--accent); }
+
+/* Per-section sortable column headers */
+.ledger-col-headers { display: flex; justify-content: flex-end; gap: 2px; margin: 4px 0 4px; }
+.ledger-col-btn { background: none; border: 0; color: var(--muted); cursor: pointer;
+  font: 500 11px/1 var(--font-ui); letter-spacing: .01em; padding: 3px 6px; border-radius: 4px;
+  transition: color .12s ease, background .12s ease; }
+.ledger-col-btn:hover { color: var(--ink-soft); background: var(--paper); }
+.ledger-col-btn.is-active { color: var(--accent); font-weight: 600; }
+
 /* Artifact provenance chip (plugin name / standalone / user / project) */
 .ledger-source { font: 500 10.5px/1 var(--font-ui); color: var(--gold);
   background: var(--paper); border: 1px solid var(--line-soft); border-radius: 999px;

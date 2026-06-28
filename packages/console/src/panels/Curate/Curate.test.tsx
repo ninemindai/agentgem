@@ -71,7 +71,7 @@ describe("Curate", () => {
     await waitFor(() => expect(names(container)).toEqual(["zip"]));
   });
 
-  it("sorts by last used desc when 'Last used' is clicked", async () => {
+  it("sorts by last used desc when the section 'Last used' header is clicked", async () => {
     vi.stubGlobal("fetch", mockFetch());
     const { container } = render(<Curate apiBase="" />);
     await screen.findByText("pdf");
@@ -79,12 +79,34 @@ describe("Curate", () => {
     await waitFor(() => expect(names(container)).toEqual(["zip", "pdf", "csv"]));
   });
 
-  it("views an artifact's content inline", async () => {
+  it("sorts a section by Name when the 'Name' column header is clicked", async () => {
+    vi.stubGlobal("fetch", mockFetch());
+    const { container } = render(<Curate apiBase="" />);
+    await screen.findByText("pdf");
+    fireEvent.click(screen.getByText("Name"));
+    // desc (Z→A): zip, pdf, csv
+    await waitFor(() => expect(names(container)).toEqual(["zip", "pdf", "csv"]));
+    // click again → asc (A→Z)
+    fireEvent.click(screen.getByText(/^Name/));
+    await waitFor(() => expect(names(container)).toEqual(["csv", "pdf", "zip"]));
+  });
+
+  it("clears the search query with the × button", async () => {
+    vi.stubGlobal("fetch", mockFetch());
+    const { container } = render(<Curate apiBase="" />);
+    await screen.findByText("pdf");
+    fireEvent.change(screen.getByLabelText("search"), { target: { value: "zip" } });
+    await waitFor(() => expect(names(container)).toEqual(["zip"]));
+    fireEvent.click(screen.getByLabelText("clear search"));
+    await waitFor(() => expect(names(container)).toHaveLength(3));
+  });
+
+  it("views an artifact's content inline via the eye button", async () => {
     vi.stubGlobal("fetch", mockFetch());
     render(<Curate apiBase="" />);
     await screen.findByText("pdf");
     expect(screen.queryByText("PDF-SKILL-BODY")).toBeNull();
-    fireEvent.click(screen.getByText("view"));
+    fireEvent.click(screen.getByLabelText("view"));
     expect(await screen.findByText("PDF-SKILL-BODY")).toBeTruthy();
   });
 

@@ -3,14 +3,14 @@ import type { Inventory, Usage } from "../../api/routes.js";
 export interface LedgerItem { name: string; invocations: number; lastUsedMs: number | null; detail?: string; source?: string }
 export interface LedgerGroup { key: string; label: string; items: LedgerItem[] }
 
-export type SortKey = "uses" | "last";
+export type SortKey = "uses" | "last" | "name";
 export type SortDir = "desc" | "asc";
-export interface LedgerView { query: string; sort: SortKey; dir: SortDir; usedOnly: boolean }
+export interface LedgerView { query: string; usedOnly: boolean }
 // Show every artifact type by default (MCP servers / instructions often have no
 // recorded usage; the old `usedOnly` default silently hid those whole categories).
 // "Used only" is now an opt-in focus filter. Collapsible groups keep the long
 // Skills list manageable.
-export const DEFAULT_VIEW: LedgerView = { query: "", sort: "uses", dir: "desc", usedOnly: false };
+export const DEFAULT_VIEW: LedgerView = { query: "", usedOnly: false };
 
 type InventoryCategory = "skills" | "mcpServers" | "instructions" | "hooks";
 
@@ -77,21 +77,32 @@ export function relativeTime(ms: number | null, now: number = Date.now()): strin
   return `${Math.floor(d / 365)}y ago`;
 }
 
-// Client-side search/sort/filter over the merged groups. Pure: same inputs ->
-// same output. Empty groups (all items filtered out) are dropped.
+/** Sort a group's items by the given key and direction. Nulls are always last for "last". Pure. */
+export function sortGroupItems(items: LedgerItem[], sort: SortKey, dir: SortDir): LedgerItem[] {
+  const sign = dir === "desc" ? 1 : -1;
+  return [...items].sort((a, b) => {
+    if (sort === "name") return sign * b.name.localeCompare(a.name);
+    if (sort === "last") {
+      if (a.lastUsedMs == null && b.lastUsedMs == null) return 0;
+      if (a.lastUsedMs == null) return 1;   // null → last regardless of dir
+      if (b.lastUsedMs == null) return -1;
+      return sign * (b.lastUsedMs - a.lastUsedMs);
+    }
+    // "uses"
+    return sign * (b.invocations - a.invocations);
+  });
+}
+
+// Client-side search/filter over the merged groups (sorting is handled per-section
+// in the component via sortGroupItems). Pure: same inputs -> same output.
+// Empty groups (all items filtered out) are dropped.
 export function applyView(groups: LedgerGroup[], view: LedgerView): LedgerGroup[] {
   const q = view.query.trim().toLowerCase();
-  const dir = view.dir === "asc" ? -1 : 1;
-  const cmp = view.sort === "last"
-    ? (a: LedgerItem, b: LedgerItem) => dir * ((b.lastUsedMs ?? -1) - (a.lastUsedMs ?? -1))
-    : (a: LedgerItem, b: LedgerItem) => dir * (b.invocations - a.invocations);
   return groups
     .map((g) => {
       const items = g.items
         .filter((i) => (q ? i.name.toLowerCase().includes(q) : true))
-        .filter((i) => (view.usedOnly ? i.invocations > 0 : true))
-        .slice()
-        .sort(cmp);
+        .filter((i) => (view.usedOnly ? i.invocations > 0 : true));
       return { ...g, items };
     })
     .filter((g) => g.items.length > 0);
