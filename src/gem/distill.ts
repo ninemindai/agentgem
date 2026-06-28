@@ -6,6 +6,7 @@
 import type { WorkflowSignal, ScanInventory } from "./workflowScan.js";
 import { CLAUDE_AGENT, analysisWorkspace, defaultConnectFn, currentTestConnectFn, type AcpConnectFn } from "./acpRecommender.js";
 import type { GatedCandidate, ProcedureCandidate, DistilledSkill, Provenance, Occurrence } from "./distillTypes.js";
+import { extractCandidates } from "./extract.js";
 
 // Back-compat re-export: existing importers (draftStage.ts, acpRecommender.ts)
 // import these from "./distill.js".
@@ -148,15 +149,17 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 /**
  * Distil draft skills from a WorkflowSignal. Total: never throws. Short-circuits to
  * an empty (non-degraded) result when no procedure clears Phase-0 — the agent is
- * not even spawned. Any agent error/timeout/junk → { distilled: [], degraded: true }.
+ * not even spawned. Any agent error/timeout/junk → heuristic skeletons (degraded:true)
+ * so a failed call always returns something useful when candidates exist.
  */
 export async function distillWorkflow(
   signal: WorkflowSignal,
   inv: ScanInventory,
   opts: { connectFn?: AcpConnectFn; timeoutMs?: number; minRecurrence?: number; minSteps?: number } = {},
 ): Promise<{ distilled: DistilledSkill[]; degraded: boolean }> {
-  const candidates = distillCandidates(signal, opts);
+  const { candidates } = extractCandidates(signal, inv, opts);
   if (!candidates.length) return { distilled: [], degraded: false };
+  const skeletons = candidates.map((c) => c.skeleton);
 
   const connectFn = opts.connectFn ?? currentTestConnectFn() ?? defaultConnectFn;
   const timeoutMs = opts.timeoutMs ?? 60_000;
@@ -173,11 +176,13 @@ export async function distillWorkflow(
     handle = await withTimeout(conn.ctx.open(analysisWorkspace()), left());   // neutral cwd — don't pollute the project
     await withTimeout(handle.setMode("plan"), left());                          // explicit — never edits files
     const text = await withTimeout(handle.promptText(prompt), left());
-    // TODO(Task 5): replace cast with enriched ProcedureCandidate[] from extractCandidates.
-    return { distilled: validateDistilled(text, inv, candidates as ProcedureCandidate[]), degraded: false };
+    const distilled = validateDistilled(text, inv, candidates);
+    // The LLM ran but produced nothing usable → fall back to skeletons (degraded).
+    if (!distilled.length) return { distilled: skeletons, degraded: true };
+    return { distilled, degraded: false };
   } catch (err) {
-    console.error("distill: fell back to empty:", (err as Error).message);
-    return { distilled: [], degraded: true };
+    console.error("distill: agent unavailable, returning heuristic skeletons:", (err as Error).message);
+    return { distilled: skeletons, degraded: true };
   } finally {
     try { handle?.dispose(); } catch { /* ignore */ }
     try { conn?.close(); } catch { /* ignore */ }

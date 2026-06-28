@@ -64,7 +64,11 @@ describe("distillCandidates — Phase-0 gate", () => {
 });
 
 import { validateDistilled } from "../distill.js";
-import type { ProcedureCandidate } from "../distill.js";
+import type { GatedCandidate, ProcedureCandidate } from "../distillTypes.js";
+
+function enrich(g: GatedCandidate): ProcedureCandidate {
+  return { ...g, provenance: { occurrences: [] }, priorConfidence: "medium", skeleton: undefined as any };
+}
 
 const INV = {
   project: {
@@ -73,7 +77,7 @@ const INV = {
     mcpServers: [], instructions: [], hooks: [],
   },
 };
-const CANDIDATES: ProcedureCandidate[] = [{
+const CANDIDATES: GatedCandidate[] = [{
   key: "k", verbs: ["Bash:git checkout", "Edit", "Bash:npx vitest", "Bash:git commit"], sessions: 3, sampleSessionIdx: 0, sessionIdxs: [0],
   sample: { steps: [
     { tool: "Bash", verb: "Bash:git checkout", arg: "git checkout -b feat", msgIndex: 0 },
@@ -89,7 +93,7 @@ const good = {
 
 describe("validateDistilled", () => {
   it("accepts a well-formed skill, stamps draft, forces mutating for Bash/Edit", () => {
-    const out = validateDistilled(JSON.stringify({ distilled: [good] }), INV, CANDIDATES);
+    const out = validateDistilled(JSON.stringify({ distilled: [good] }), INV, CANDIDATES.map(enrich));
     expect(out).toHaveLength(1);
     expect(out[0].status).toBe("draft");
     expect(out[0].mutating).toBe(true); // Bash/Edit in evidence → forced
@@ -97,26 +101,26 @@ describe("validateDistilled", () => {
   });
 
   it("returns [] on non-JSON", () => {
-    expect(validateDistilled("totally not json", INV, CANDIDATES)).toEqual([]);
+    expect(validateDistilled("totally not json", INV, CANDIDATES.map(enrich))).toEqual([]);
   });
 
   it("drops a non-kebab name", () => {
-    const out = validateDistilled(JSON.stringify({ distilled: [{ ...good, name: "Not Kebab!" }] }), INV, CANDIDATES);
+    const out = validateDistilled(JSON.stringify({ distilled: [{ ...good, name: "Not Kebab!" }] }), INV, CANDIDATES.map(enrich));
     expect(out).toEqual([]);
   });
 
   it("drops a skill with empty triggers", () => {
-    const out = validateDistilled(JSON.stringify({ distilled: [{ ...good, triggers: [] }] }), INV, CANDIDATES);
+    const out = validateDistilled(JSON.stringify({ distilled: [{ ...good, triggers: [] }] }), INV, CANDIDATES.map(enrich));
     expect(out).toEqual([]);
   });
 
   it("drops a slug colliding with an installed skill", () => {
-    const out = validateDistilled(JSON.stringify({ distilled: [{ ...good, name: "existing-skill" }] }), INV, CANDIDATES);
+    const out = validateDistilled(JSON.stringify({ distilled: [{ ...good, name: "existing-skill" }] }), INV, CANDIDATES.map(enrich));
     expect(out).toEqual([]);
   });
 
   it("drops a skill claiming a tool absent from the evidence", () => {
-    const out = validateDistilled(JSON.stringify({ distilled: [{ ...good, tools: ["Bash", "WebFetch"] }] }), INV, CANDIDATES);
+    const out = validateDistilled(JSON.stringify({ distilled: [{ ...good, tools: ["Bash", "WebFetch"] }] }), INV, CANDIDATES.map(enrich));
     expect(out).toEqual([]);
   });
 });
@@ -169,11 +173,43 @@ describe("distillWorkflow", () => {
     expect(degraded).toBe(false);
   });
 
-  it("degrades to empty (never throws) on agent error", async () => {
+  it("degrades to heuristic skeletons (never throws) on agent error", async () => {
     const { distilled, degraded } = await distillWorkflow(SIG, INV, {
       connectFn: async () => { throw new Error("no binary"); },
     });
-    expect(distilled).toEqual([]);
     expect(degraded).toBe(true);
+    expect(distilled.length).toBeGreaterThan(0);
+    expect(distilled.every((d) => d.origin === "heuristic")).toBe(true);
+  });
+});
+
+const inv = { project: { root: "/r", name: "r", skills: [], mcpServers: [], hooks: [], instructions: [] } } as any;
+
+function signalTwoSessions(): WorkflowSignal {
+  const verbs = ["Edit", "Bash:npx vitest", "Bash:git commit"];
+  const steps = verbs.map((verb, i) => ({ tool: verb.split(":")[0], verb, arg: "", msgIndex: i }));
+  const mk = (id: string) => ({ steps, sessionId: id, transcript: `${id}.jsonl`, atMs: 0, missionHint: { task: "Fix and ship the failing test", outcome: "shipped" } });
+  return {
+    root: "/r", flavor: "claude", sessions: { scanned: 2, firstMs: 0, lastMs: 0, spanDays: 0 },
+    artifacts: [], unresolved: [], coOccurrence: [], shapes: [], notes: [],
+    sequences: { root: "/r", sessions: [mk("a"), mk("b")] },
+    procedures: [{ key: verbs.join(" > "), verbs, sessions: 2, sampleSessionIdx: 0, sessionIdxs: [0, 1] }],
+  } as WorkflowSignal;
+}
+
+describe("distillWorkflow resilience", () => {
+  it("returns heuristic skeletons (non-empty) when the agent connect fails", async () => {
+    const failing = async () => { throw new Error("no creds"); };
+    const out = await distillWorkflow(signalTwoSessions(), inv, { connectFn: failing as any });
+    expect(out.degraded).toBe(true);
+    expect(out.distilled.length).toBeGreaterThan(0);
+    expect(out.distilled.every((d) => d.origin === "heuristic")).toBe(true);
+    expect(out.distilled[0].evidence.provenance.occurrences.length).toBe(2);
+  });
+
+  it("still short-circuits to empty (non-degraded) when nothing clears Phase-0", async () => {
+    const empty = { ...signalTwoSessions(), procedures: [], sequences: { root: "/r", sessions: [] } } as WorkflowSignal;
+    const out = await distillWorkflow(empty, inv, { connectFn: (async () => { throw new Error("x"); }) as any });
+    expect(out).toEqual({ distilled: [], degraded: false });
   });
 });

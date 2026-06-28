@@ -58,8 +58,8 @@ describe("POST /api/workflow/draft", () => {
     name: "tdd-feature-loop", description: "Run the TDD loop.",
     triggers: ["add a feature with tests"], tools: ["Bash", "Edit"], mutating: true,
     body: "## Contract\nx\n## Phases\n1. test\n## Output Format\ny",
-    evidence: { sessions: 3, exampleSequence: ["Bash:git commit"], root: "/r" },
-    status: "draft" as const, confidence: "high" as const,
+    evidence: { sessions: 3, exampleSequence: ["Bash:git commit"], root: "/r", provenance: { occurrences: [] } },
+    status: "draft" as const, confidence: "high" as const, origin: "llm" as const,
   };
   it("writes the draft SKILL.md and returns its path", async () => {
     const base = mkdtempSync(join(tmpdir(), "wfdraft-"));
@@ -87,8 +87,8 @@ describe("POST /api/gem folds in a distilled draft", () => {
     name: "tdd-feature-loop", description: "Run the TDD loop.",
     triggers: ["add a feature with tests"], tools: ["Bash", "Edit"], mutating: true,
     body: "## Contract\nx\n## Phases\n1\n## Output Format\ny",
-    evidence: { sessions: 3, exampleSequence: ["Bash:git commit"], root: "" },
-    status: "draft" as const, confidence: "high" as const,
+    evidence: { sessions: 3, exampleSequence: ["Bash:git commit"], root: "", provenance: { occurrences: [] } },
+    status: "draft" as const, confidence: "high" as const, origin: "llm" as const,
   };
   it("includes a draft skill in the built Gem by name", async () => {
     const ctl = new GemController();
