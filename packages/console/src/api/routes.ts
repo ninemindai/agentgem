@@ -31,7 +31,10 @@ export type UsageItem = z.infer<typeof UsageItemSchema>;
 export type Usage = z.infer<typeof UsageSchema>;
 
 export const inventoryRoute = defineRoute("GET", "/api/inventory", { response: InventorySchema });
-export const usageRoute = defineRoute("GET", "/api/usage", { response: UsageSchema });
+export const usageRoute = defineRoute("GET", "/api/usage", {
+  query: z.object({ scope: z.enum(["global"]).optional() }),
+  response: UsageSchema,
+});
 
 // Selection shape shared by build/archive/materialize/run/workspace routes.
 const GemSelectionSchema = z.union([

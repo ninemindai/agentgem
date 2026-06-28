@@ -36,7 +36,9 @@ export function Ledger({ apiBase }: { apiBase: string }) {
       try {
         const inv = await inventoryRoute.call(client);
         let usage: Usage = { artifacts: [] };
-        try { usage = await usageRoute.call(client); } catch { /* usage badges are optional */ }
+        // scope:global aggregates usage across all projects; without it the count
+        // is scoped to the server's cwd (usually empty for global artifacts).
+        try { usage = await usageRoute.call(client, { query: { scope: "global" } }); } catch { /* usage badges are optional */ }
         if (alive) setGroups(mergeUsage(groupInventory(inv), usage));
       } catch (e) {
         if (alive) setError(e instanceof Error ? e.message : String(e));
