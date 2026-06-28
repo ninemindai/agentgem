@@ -19,6 +19,14 @@ body { margin: 0; background: var(--paper); color: var(--ink);
 .console-nav-item:hover { background: rgba(0,0,0,.04); }
 .console-nav-item.is-active { background: var(--paper); color: var(--accent); font-weight: 600; }
 .console-main { padding: 24px 28px; }
+.ledger-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+.ledger-search { flex: 1; min-width: 180px; padding: 7px 10px; border: 1px solid var(--line);
+  border-radius: 6px; background: var(--raised); color: var(--ink); font: inherit; }
+.ledger-sort { background: var(--raised); border: 1px solid var(--line); border-radius: 6px;
+  padding: 7px 12px; color: var(--muted); cursor: pointer; font: inherit; }
+.ledger-sort.is-active { color: var(--accent); border-color: var(--accent); font-weight: 600; }
+.ledger-usedonly { display: flex; align-items: center; gap: 6px; color: var(--muted);
+  font-size: 13px; cursor: pointer; }
 .ledger-group { margin-bottom: 24px; }
 .ledger-group-label { font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
   color: var(--muted); margin: 0 0 8px; }

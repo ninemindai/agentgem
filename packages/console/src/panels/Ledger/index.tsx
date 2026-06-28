@@ -1,11 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
 import { inventoryRoute, usageRoute, makeClient, type Usage } from "../../api/routes.js";
-import { groupInventory, mergeUsage, type LedgerGroup } from "./data.js";
+import { groupInventory, mergeUsage, applyView, DEFAULT_VIEW, type LedgerGroup, type SortKey } from "./data.js";
 
 export function Ledger({ apiBase }: { apiBase: string }) {
   const [groups, setGroups] = useState<LedgerGroup[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState(DEFAULT_VIEW);
 
   useEffect(() => {
     let alive = true;
@@ -23,13 +24,45 @@ export function Ledger({ apiBase }: { apiBase: string }) {
     return () => { alive = false; };
   }, [apiBase]);
 
+  const visible = useMemo(() => (groups ? applyView(groups, view) : []), [groups, view]);
+  const setSort = (sort: SortKey) => setView((v) => ({ ...v, sort }));
+
   if (error) return <p className="ledger-error">Could not load inventory: {error}</p>;
   if (!groups) return <p className="ledger-loading">Loading…</p>;
-  if (groups.length === 0) return <p className="ledger-empty">No artifacts found.</p>;
 
   return (
     <div className="ledger">
-      {groups.map((g) => (
+      <div className="ledger-bar">
+        <input
+          className="ledger-search"
+          type="text"
+          placeholder="search names…"
+          aria-label="search"
+          value={view.query}
+          onChange={(e) => setView((v) => ({ ...v, query: e.target.value }))}
+        />
+        <button
+          type="button"
+          className={"ledger-sort" + (view.sort === "uses" ? " is-active" : "")}
+          onClick={() => setSort("uses")}
+        >Uses</button>
+        <button
+          type="button"
+          className={"ledger-sort" + (view.sort === "last" ? " is-active" : "")}
+          onClick={() => setSort("last")}
+        >Last used</button>
+        <label className="ledger-usedonly">
+          <input
+            type="checkbox"
+            checked={view.usedOnly}
+            onChange={(e) => setView((v) => ({ ...v, usedOnly: e.target.checked }))}
+          /> Used only
+        </label>
+      </div>
+
+      {visible.length === 0 ? (
+        <p className="ledger-empty">No matching artifacts.</p>
+      ) : visible.map((g) => (
         <section className="ledger-group" key={g.key}>
           <h2 className="ledger-group-label">{g.label}</h2>
           <ul className="ledger-items">
