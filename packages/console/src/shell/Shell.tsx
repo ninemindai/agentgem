@@ -38,6 +38,8 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
           AgentGem
         </div>
         <ActiveGemSwitcher apiBase={apiBase} />
+        {groups.observe.length > 0 && <div className="console-group-label">Observe</div>}
+        {groups.observe.map(item)}
         <div className="console-group-label">Build</div>
         {groups.build.map(item)}
         {groups.library.length > 0 && <div className="console-group-label">Library</div>}
