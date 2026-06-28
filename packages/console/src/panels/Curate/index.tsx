@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
-import { inventoryRoute, usageRoute, createWorkspaceRoute, scaffoldChecksRoute, makeClient, type Usage, type GemCheck } from "../../api/routes.js";
+import { inventoryRoute, usageRoute, createWorkspaceRoute, scaffoldChecksRoute, testbedProjectsRoute, makeClient, type Usage, type GemCheck } from "../../api/routes.js";
 import { groupInventory, mergeUsage, applyView, relativeTime, DEFAULT_VIEW, type LedgerGroup, type SortKey } from "./data.js";
 import { selKey, visibleKeys, buildSelection } from "./selection.js";
 import { useActiveGem, setKeys, toggleKey as toggleKeyStore, clearKeys, setName as setNameStore } from "../../activeGem.js";
@@ -20,13 +20,19 @@ export function Curate({ apiBase }: { apiBase: string }) {
   const [included, setIncluded] = useState<Set<string>>(new Set());
   const [checksBusy, setChecksBusy] = useState(false);
   const [checksError, setChecksError] = useState<string | null>(null);
+  const [scope, setScope] = useState<string>("");
+  const [projects, setProjects] = useState<{ path: string; flavor: string }[]>([]);
+
+  useEffect(() => {
+    testbedProjectsRoute.call(makeClient(apiBase)).then((r) => setProjects(r.projects)).catch(() => setProjects([]));
+  }, [apiBase]);
 
   useEffect(() => {
     let alive = true;
     const client = makeClient(apiBase);
     (async () => {
       try {
-        const inv = await inventoryRoute.call(client);
+        const inv = await inventoryRoute.call(client, { query: scope ? { projects: JSON.stringify([scope]) } : {} });
         let usage: Usage = { artifacts: [] };
         // scope:global aggregates usage across all projects; without it the count
         // is scoped to the server's cwd (usually empty for global artifacts).
@@ -37,7 +43,7 @@ export function Curate({ apiBase }: { apiBase: string }) {
       }
     })();
     return () => { alive = false; };
-  }, [apiBase]);
+  }, [apiBase, scope]);
 
   const visible = useMemo(() => (groups ? applyView(groups, view) : []), [groups, view]);
   const total = useMemo(() => (groups ?? []).reduce((n, g) => n + g.items.length, 0), [groups]);
@@ -126,6 +132,10 @@ export function Curate({ apiBase }: { apiBase: string }) {
             onChange={(e) => setView((v) => ({ ...v, usedOnly: e.target.checked }))}
           /> Used only
         </label>
+        <select className="targets-select" aria-label="scope" value={scope} onChange={(e) => setScope(e.target.value)} style={{ marginLeft: "auto" }}>
+          <option value="">Global</option>
+          {projects.map((p) => <option key={p.path} value={p.path}>{p.path.split("/").slice(-2).join("/")}</option>)}
+        </select>
       </div>
 
       <div className="ledger-selbar">
