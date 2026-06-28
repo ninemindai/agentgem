@@ -42,8 +42,11 @@ export async function runCli(argv: string[], store: ObjectStore, io: CliIO = def
       const { gem, meta, bytes, provenance } = await receiveGem(rest[0], store);
       const outPath = rest[1] ?? `${gem.name}.gem`;
       await io.writeFile(outPath, bytes);
+      // Fingerprint the key material (publicKey is "ed25519:<derB64>"); show enough
+      // to distinguish senders, not just the constant scheme prefix.
+      const fp = provenance.publicKey ? "ed25519:" + provenance.publicKey.replace(/^ed25519:/, "").slice(0, 16) + "…" : "";
       const origin = provenance.signed
-        ? (provenance.verified ? `✓ from ${provenance.publicKey!.slice(0, 12)}…` : "⚠ unverified origin (signature did not verify)")
+        ? (provenance.verified ? `✓ from ${fp}` : "⚠ unverified origin (signature did not verify)")
         : "(unsigned)";
       io.err(`✓ verified integrity · ${meta.name}@${meta.version} · ${origin} → ${outPath}`);
       return 0;
