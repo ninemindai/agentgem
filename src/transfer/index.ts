@@ -1,7 +1,7 @@
 // src/transfer/index.ts
 import { exportGem, importGem } from "../gem/share.js";
 import type { Gem } from "../gem/types.js";
-import { loadOrCreateIdentity, verify, type Identity } from "../gem/identity.js";
+import { verify, type Identity } from "../gem/identity.js";
 import { seal, open } from "./seal.js";
 import { encodeTicket, parseTicket } from "./ticket.js";
 import type { ObjectStore } from "./objectStore.js";
@@ -13,13 +13,13 @@ export interface SendResult { ticket: string; object: string }
 export interface Provenance { signed: boolean; verified: boolean; publicKey?: string }
 export interface SendOpts { identity?: Identity | null }
 
-// Encrypt .gem bytes, stash the ciphertext, mint a ticket. Signs the gem digest with
-// the sender's identity (default: loadOrCreateIdentity; null = unsigned) so the
+// Encrypt .gem bytes, stash the ciphertext, mint a ticket. Unsigned by default; pass
+// an identity (the CLI does, via loadOrCreateIdentity) to sign the gem digest so the
 // recipient can verify who sent it. The key + producer live only in the ticket fragment.
 export async function sendGemBytes(gemBytes: Buffer, store: ObjectStore, bucket: string, opts: SendOpts = {}): Promise<SendResult> {
   const { ciphertext, key } = seal(gemBytes);
   const object = await store.put(ciphertext);
-  const identity = opts.identity === undefined ? loadOrCreateIdentity() : opts.identity;
+  const identity = opts.identity ?? null;
   let producer: { publicKey: string; signature: string } | undefined;
   if (identity) {
     const { meta } = importGem(gemBytes); // derive the gem digest (also validates bytes)

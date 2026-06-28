@@ -1,7 +1,30 @@
 // src/transfer/__tests__/cli.test.ts
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { mkdtempSync } from "node:fs";
+import { tmpdir, homedir } from "node:os";
+import { join } from "node:path";
 import { InMemoryObjectStore } from "../objectStore.js";
 import { runCli } from "../cli.js";
+import { sendGemBytes } from "../index.js";
+import { loadOrCreateIdentity } from "../../gem/identity.js";
+import { exportGem } from "../../gem/share.js";
+
+// The CLI send path signs via loadOrCreateIdentity(), which writes ~/.agentgem.
+// Redirect HOME to a temp dir so the suite never touches the real home.
+let prevHome: string | undefined;
+let prevUserProfile: string | undefined;
+beforeAll(() => {
+  prevHome = process.env.HOME;
+  prevUserProfile = process.env.USERPROFILE;
+  const tmp = mkdtempSync(join(tmpdir(), "agem-home-"));
+  process.env.HOME = tmp;
+  process.env.USERPROFILE = tmp;
+});
+afterAll(() => {
+  if (prevHome !== undefined) process.env.HOME = prevHome; else delete process.env.HOME;
+  if (prevUserProfile !== undefined) process.env.USERPROFILE = prevUserProfile; else delete process.env.USERPROFILE;
+  void homedir; // (imported to document the redirected lookup)
+});
 
 describe("runCli", () => {
   it("send writes a ticket to stdout; receive verifies and writes bytes", async () => {
@@ -35,6 +58,25 @@ describe("runCli", () => {
 
     expect(await runCli(["receive", ticket, "out.gem"], store, io)).toBe(0);
     expect(files.get("out.gem")).toEqual(files.get("in.gem"));
+  });
+
+  it("receive prints the verified producer for a signed ticket", async () => {
+    const store = new InMemoryObjectStore();
+    const errs: string[] = [];
+    const files = new Map<string, Buffer>();
+    const io = {
+      readFile: async (p: string) => files.get(p)!,
+      writeFile: async (p: string, b: Buffer) => void files.set(p, b),
+      log: () => {},
+      err: (s: string) => errs.push(s),
+    };
+    const id = loadOrCreateIdentity(mkdtempSync(join(tmpdir(), "agem-id-")));
+    const demo = { name: "x", createdFrom: "/tmp/.claude", checks: [], requiredSecrets: [],
+      artifacts: [{ type: "skill", name: "s", source: "standalone", content: "# s\n" }] } as const;
+    const { ticket } = await sendGemBytes(exportGem(demo as never).bytes, store, "b", { identity: id });
+
+    expect(await runCli(["receive", ticket, "out.gem"], store, io)).toBe(0);
+    expect(errs.join("\n")).toContain("from " + id.publicKey.slice(0, 12));
   });
 
   it("returns exit code 2 on bad usage", async () => {

@@ -2015,7 +2015,7 @@ renderRail();
       const parts = u.pathname.replace(/^\//, "").split("/");
       if (parts.length !== 2 || !parts[1]) throw new Error("malformed ticket path");
       object = decodeURIComponent(parts[1]);
-      keyB64url = u.hash.replace(/^#/, "");
+      keyB64url = u.hash.replace(/^#/, "").split("~")[0]; // ignore the producer segment (verified on install)
       if (!keyB64url) throw new Error("ticket has no key");
     } catch (e) { status.textContent = "Bad ticket: " + (e && e.message || e); return; }
 
