@@ -182,4 +182,31 @@ export const registryInstallRoute = defineRoute("POST", "/api/registry/install",
   }),
 });
 
+// Testbed: discovery (recents + project candidates) + scaffold a new one.
+const RecentEntrySchema = z.object({
+  path: z.string(),
+  flavor: z.string(),
+  name: z.string(),
+  lastUsed: z.string(),
+  exists: z.boolean(),
+});
+export type RecentEntry = z.infer<typeof RecentEntrySchema>;
+export const testbedRecentsRoute = defineRoute("GET", "/api/testbed/recents", {
+  response: z.object({ recents: z.array(RecentEntrySchema) }),
+});
+const ProjectCandidateSchema = z.object({
+  path: z.string(),
+  flavor: z.string(),
+  lastUsed: z.string().nullable(),
+  exists: z.boolean(),
+});
+export type ProjectCandidate = z.infer<typeof ProjectCandidateSchema>;
+export const testbedProjectsRoute = defineRoute("GET", "/api/testbed/projects", {
+  response: z.object({ projects: z.array(ProjectCandidateSchema) }),
+});
+export const testbedScaffoldRoute = defineRoute("POST", "/api/testbed/scaffold", {
+  body: z.object({ root: z.string(), name: z.string() }),
+  response: z.object({ root: z.string(), created: z.array(z.string()) }),
+});
+
 export const makeClient = (apiBase: string): Client => createClient({ baseURL: apiBase });

@@ -5,7 +5,7 @@ import { sortedPages } from "./registry.js";
 describe("pages registry", () => {
   it("registers ledger + workspaces with unique ids, sortable by order", () => {
     const ordered = sortedPages(pages);
-    expect(ordered.map((p) => p.id)).toEqual(["ledger", "workspaces", "get-gems"]);
+    expect(ordered.map((p) => p.id)).toEqual(["testbed", "ledger", "workspaces", "get-gems"]);
   });
 
   it("every page has a hash route", () => {
