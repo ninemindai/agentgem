@@ -12,9 +12,10 @@ const draft: DistilledSkill = {
   tools: ["Bash", "Edit"],
   mutating: true,
   body: "## Contract\nGuarantees X.\n## Phases\n1. write test\n## Output Format\nA passing suite.",
-  evidence: { sessions: 3, exampleSequence: ["Bash:git commit"], root: "/r" },
+  evidence: { sessions: 3, exampleSequence: ["Bash:git commit"], root: "/r", provenance: { occurrences: [] } },
   status: "draft",
   confidence: "high",
+  origin: "llm",
 };
 
 function emptyInv(): ConfigInventory {

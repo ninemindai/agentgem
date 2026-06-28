@@ -3,35 +3,16 @@
 // Distillation track: turn the builtin procedure recovered by the scan into draft
 // skills folded back into Gem candidates. See
 // docs/proposals/skill-distillation-from-transcripts.md.
-import type { WorkflowSignal, ProcedureGroup, SessionSequence, ScanInventory } from "./workflowScan.js";
+import type { WorkflowSignal, ScanInventory } from "./workflowScan.js";
 import { CLAUDE_AGENT, analysisWorkspace, defaultConnectFn, currentTestConnectFn, type AcpConnectFn } from "./acpRecommender.js";
+import type { GatedCandidate, ProcedureCandidate, DistilledSkill, Provenance, Occurrence } from "./distillTypes.js";
+import { extractCandidates } from "./extract.js";
 
-// skillify Phase-0 thresholds (proposal §4): "invoked 2+ times" and ">20 lines of
-// logic" (~4 distinct action verbs). The third criterion (clear trigger phrase) is
-// deferred to the agent + validation.
-export const MIN_RECURRENCE = 2;
-export const MIN_STEPS = 3;   // procedures are mined as >=3-gram action runs (§3c)
-
-// A procedure that passed the deterministic Phase-0 gate, with one representative
-// scrubbed run (+ its mission hint) attached for the generative step.
-export interface ProcedureCandidate extends ProcedureGroup {
-  sample: SessionSequence;
-}
-
-// A distilled skill: the workflow capture, as a DRAFT a Gem candidate references
-// (proposal §2). Body = Contract → Phases → Output Format. Never "installed" by
-// this pipeline.
-export interface DistilledSkill {
-  name: string;                 // kebab slug, unique vs installed skills
-  description: string;
-  triggers: string[];
-  tools: string[];             // builtin tools the workflow uses (grounded in evidence)
-  mutating: boolean;
-  body: string;
-  evidence: { sessions: number; exampleSequence: string[]; root: string };
-  status: "draft";
-  confidence: "high" | "medium" | "low";
-}
+// Back-compat re-exports: existing importers (draftStage.ts, acpRecommender.ts,
+// tests) import these from "./distill.js". The authoritative definitions now live
+// in extract.ts so the import DAG is a clean one-way extract → distill.
+export type { ProcedureCandidate, DistilledSkill } from "./distillTypes.js";
+export { distillCandidates, MIN_RECURRENCE, MIN_STEPS } from "./extract.js";
 
 const KEBAB_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MUTATING_TOOL_RE = /^(Bash|Edit|Write|NotebookEdit)$/;
@@ -58,13 +39,17 @@ export function validateDistilled(raw: unknown, inv: ScanInventory, candidates: 
     ...inv.project.skills.map((s) => s.name),
     ...(inv.global?.skills ?? []).map((s) => s.name),
   ]);
-  // Evidence pool: tools that actually appear in any candidate's sampled run.
   const evidenceTools = new Set<string>();
   for (const c of candidates) for (const st of c.sample.steps) evidenceTools.add(st.tool);
   const evidenceIsMutating = [...evidenceTools].some((t) => MUTATING_TOOL_RE.test(t));
   const sessions = candidates.reduce((m, c) => Math.max(m, c.sessions), 0);
   const exampleSequence = candidates[0]?.verbs ?? [];
   const root = inv.project.root;
+  // Pooled provenance: the union of every candidate's occurrences (deduped by
+  // sessionId). The LLM output cannot be mapped 1:1 back to a single candidate,
+  // so we attach the evidence pool the distillation drew from. (Skeletons, by
+  // contrast, carry their own candidate's exact provenance — see extract.ts.)
+  const provenance = poolProvenance(candidates);
 
   const out: DistilledSkill[] = [];
   for (const it of obj.distilled) {
@@ -83,26 +68,25 @@ export function validateDistilled(raw: unknown, inv: ScanInventory, candidates: 
       tools,
       mutating: evidenceIsMutating || tools.some((t: string) => MUTATING_TOOL_RE.test(t)),
       body: it.body,
-      evidence: { sessions, exampleSequence, root },
+      evidence: { sessions, exampleSequence, root, provenance },
       status: "draft",
       confidence: ["high", "medium", "low"].includes(it.confidence) ? it.confidence : "medium",
+      origin: "llm",
     });
   }
   return out;
 }
 
-export function distillCandidates(
-  signal: WorkflowSignal,
-  opts: { minRecurrence?: number; minSteps?: number } = {},
-): ProcedureCandidate[] {
-  const minRecurrence = opts.minRecurrence ?? MIN_RECURRENCE;
-  const minSteps = opts.minSteps ?? MIN_STEPS;
-  const sessions = signal.sequences?.sessions;
-  if (!signal.procedures || !sessions) return [];
-  return signal.procedures
-    .filter((p) => p.sessions >= minRecurrence && p.verbs.length >= minSteps)
-    .map((p) => ({ ...p, sample: sessions[p.sampleSessionIdx] }))
-    .filter((c): c is ProcedureCandidate => c.sample !== undefined);
+// Union the occurrences of every candidate, deduped by sessionId (first wins).
+export function poolProvenance(candidates: { provenance: Provenance }[]): Provenance {
+  const seen = new Set<string>();
+  const occurrences: Occurrence[] = [];
+  for (const c of candidates) for (const o of c.provenance.occurrences) {
+    if (seen.has(o.sessionId)) continue;
+    seen.add(o.sessionId);
+    occurrences.push(o);
+  }
+  return { occurrences };
 }
 
 // ── The generative ACP step (proposal §5) ───────────────────────────────────
@@ -127,7 +111,7 @@ export const DISTILL = (candidatesJson: string, installedSkillsJson: string): st
 
 // Bound the prompt: send each candidate's verbs, recurrence, mission hint, and a
 // capped slice of its sampled steps.
-function trimCandidate(c: ProcedureCandidate) {
+function trimCandidate(c: GatedCandidate) {
   return {
     verbs: c.verbs,
     sessions: c.sessions,
@@ -147,15 +131,17 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 /**
  * Distil draft skills from a WorkflowSignal. Total: never throws. Short-circuits to
  * an empty (non-degraded) result when no procedure clears Phase-0 — the agent is
- * not even spawned. Any agent error/timeout/junk → { distilled: [], degraded: true }.
+ * not even spawned. Any agent error/timeout/junk → heuristic skeletons (degraded:true)
+ * so a failed call always returns something useful when candidates exist.
  */
 export async function distillWorkflow(
   signal: WorkflowSignal,
   inv: ScanInventory,
   opts: { connectFn?: AcpConnectFn; timeoutMs?: number; minRecurrence?: number; minSteps?: number } = {},
 ): Promise<{ distilled: DistilledSkill[]; degraded: boolean }> {
-  const candidates = distillCandidates(signal, opts);
+  const { candidates } = extractCandidates(signal, inv, opts);
   if (!candidates.length) return { distilled: [], degraded: false };
+  const skeletons = candidates.map((c) => c.skeleton);
 
   const connectFn = opts.connectFn ?? currentTestConnectFn() ?? defaultConnectFn;
   const timeoutMs = opts.timeoutMs ?? 60_000;
@@ -172,10 +158,13 @@ export async function distillWorkflow(
     handle = await withTimeout(conn.ctx.open(analysisWorkspace()), left());   // neutral cwd — don't pollute the project
     await withTimeout(handle.setMode("plan"), left());                          // explicit — never edits files
     const text = await withTimeout(handle.promptText(prompt), left());
-    return { distilled: validateDistilled(text, inv, candidates), degraded: false };
+    const distilled = validateDistilled(text, inv, candidates);
+    // The LLM ran but produced nothing usable → fall back to skeletons (degraded).
+    if (!distilled.length) return { distilled: skeletons, degraded: true };
+    return { distilled, degraded: false };
   } catch (err) {
-    console.error("distill: fell back to empty:", (err as Error).message);
-    return { distilled: [], degraded: true };
+    console.error("distill: agent unavailable, returning heuristic skeletons:", (err as Error).message);
+    return { distilled: skeletons, degraded: true };
   } finally {
     try { handle?.dispose(); } catch { /* ignore */ }
     try { conn?.close(); } catch { /* ignore */ }
