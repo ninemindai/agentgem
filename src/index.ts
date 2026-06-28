@@ -91,11 +91,39 @@ export async function createApp(port: number): Promise<RestApplication> {
   return app;
 }
 
+// Graceful shutdown: orchestrators (k8s / Cloud Run / ECS / Fly) send SIGTERM and
+// expect the process to drain in-flight work (and close the pg pool — see createApp)
+// then exit within the grace period. Without this, Node exits immediately on SIGTERM,
+// dropping connections. Hooks are injectable so it's unit-testable without spawning.
+export function installGracefulShutdown(
+  app: { stop: () => Promise<void> },
+  opts: {
+    on?: (signal: "SIGTERM" | "SIGINT", cb: () => void) => void;
+    exit?: (code: number) => void;
+    log?: (msg: string) => void;
+  } = {},
+): void {
+  const on = opts.on ?? ((sig, cb) => { process.once(sig, cb); });
+  const exit = opts.exit ?? ((code) => process.exit(code));
+  const log = opts.log ?? ((msg) => console.log(msg));
+  let stopping = false;
+  const shutdown = async (sig: string): Promise<void> => {
+    if (stopping) return; // a second signal mid-drain must not double-stop
+    stopping = true;
+    log(`agentgem received ${sig}, draining…`);
+    try { await app.stop(); exit(0); }
+    catch (err) { console.error(err); exit(1); }
+  };
+  on("SIGTERM", () => void shutdown("SIGTERM"));
+  on("SIGINT", () => void shutdown("SIGINT"));
+}
+
 // Start the server and print where its surfaces live. Shared by the default
 // entry point (below) and the `agentgem` CLI (src/cli.ts).
 export async function run(port: number = Number(process.env.PORT ?? 4317)): Promise<RestApplication> {
   const app = await createApp(port);
   await app.start();
+  installGracefulShutdown(app);
   const server = await app.restServer;
   console.log(`agentgem listening at ${server.url}`);
   console.log(`  UI:       ${server.url}/`);
