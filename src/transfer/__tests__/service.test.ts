@@ -1,9 +1,28 @@
 // src/transfer/__tests__/service.test.ts
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { exportGem } from "../../gem/share.js";
 import { InMemoryObjectStore } from "../objectStore.js";
 import { sendBytes, receiveTicket, natsStoreFromEnv } from "../service.js";
 import type { Gem } from "../../gem/types.js";
+
+// sendBytes signs via loadOrCreateIdentity() (REST/MCP send edge), which writes
+// ~/.agentgem. Redirect HOME to a temp dir so the suite never touches the real home.
+let prevHome: string | undefined;
+let prevUserProfile: string | undefined;
+beforeAll(() => {
+  prevHome = process.env.HOME;
+  prevUserProfile = process.env.USERPROFILE;
+  const tmp = mkdtempSync(join(tmpdir(), "agem-home-"));
+  process.env.HOME = tmp;
+  process.env.USERPROFILE = tmp;
+});
+afterAll(() => {
+  if (prevHome !== undefined) process.env.HOME = prevHome; else delete process.env.HOME;
+  if (prevUserProfile !== undefined) process.env.USERPROFILE = prevUserProfile; else delete process.env.USERPROFILE;
+});
 
 const demoGem: Gem = {
   name: "github-search",
@@ -19,9 +38,12 @@ describe("transfer service", () => {
     const make = async () => store;
     const { bytes } = exportGem(demoGem, { version: "1.0.0" });
     const { ticket } = await sendBytes(bytes, make);
-    const { gem, meta } = await receiveTicket(ticket, make);
+    const { gem, meta, provenance } = await receiveTicket(ticket, make);
     expect(gem).toEqual(demoGem);
     expect(meta).toMatchObject({ name: "github-search", version: "1.0.0" });
+    // sendBytes signs with the server identity, so the REST/MCP path carries verified provenance.
+    expect(provenance).toMatchObject({ signed: true, verified: true });
+    expect(provenance.publicKey).toMatch(/^ed25519:/);
   });
 
   it("closes a managed store after both send and receive", async () => {
