@@ -115,4 +115,17 @@ export const materializeRoute = defineRoute("POST", "/api/materialize", {
   response: MaterializeResponseSchema,
 });
 
+// POST /api/gem/run/prepare — stage a run (materialize into a server-derived
+// runDir) and get an opaque runId; the SSE GET /api/gem/run/stream then runs it.
+const PrepareRunRequestSchema = z.object({
+  selection: GemSelectionSchema,
+  name: z.string().optional(),
+  agent: z.enum(["claude", "codex"]).optional(),
+});
+const PrepareRunResponseSchema = z.object({ runId: z.string(), agent: z.string() });
+export const prepareRunRoute = defineRoute("POST", "/api/gem/run/prepare", {
+  body: PrepareRunRequestSchema,
+  response: PrepareRunResponseSchema,
+});
+
 export const makeClient = (apiBase: string): Client => createClient({ baseURL: apiBase });
