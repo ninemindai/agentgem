@@ -51,6 +51,32 @@ describe("sweepQuarantine (detection -> quarantine)", () => {
     expect((await sweepQuarantine(db, OPTS)).attestationsQuarantined).toBe(0);
   });
 
+  // KNOWN GAP (documented, not yet fixed): the freshness guard keys off `attest_count`, which a
+  // sybil can inflate for free. By "warming" each key with one throwaway attestation of an
+  // unrelated shape before submitting the coordinated payload, every key crosses freshMax, the
+  // cluster's fresh_frac falls below F, and the SAME coordinated shape that IS quarantined when
+  // submitted cold escapes entirely. This contrast test pins the asymmetry so a future
+  // reputation-based freshness signal (account age / verified org, not attest_count) has a target.
+  it("KNOWN GAP: key-warming defeats the freshness guard — same cluster escapes quarantine", async () => {
+    const shape = ["skill:a", "skill:b"]; // specific enough to be quarantined cold (>= minShape)
+
+    // Cold: 3 fresh keys, identical specific shape -> quarantined (the attack we DO catch).
+    const cold = await makeTestDb();
+    for (const i of [1, 2, 3]) await projectAttestation(cold, att(`ed25519:cold${i}`, `c${i}`, shape));
+    expect((await sweepQuarantine(cold, OPTS)).attestationsQuarantined).toBe(3);
+
+    // Warmed: the SAME coordinated shape, but each key first submits one throwaway attestation of
+    // an unrelated shape, pushing attest_count past freshMax. Cluster now escapes — 0 quarantined.
+    const warmed = await makeTestDb();
+    for (const i of [1, 2, 3]) {
+      await projectAttestation(warmed, att(`ed25519:warm${i}`, `w${i}a`, [`skill:noise${i}`])); // warm-up
+      await projectAttestation(warmed, att(`ed25519:warm${i}`, `w${i}b`, shape)); // coordinated payload
+    }
+    expect((await sweepQuarantine(warmed, OPTS)).attestationsQuarantined).toBe(0); // <-- the bypass
+    // And the fabricated shape stays visible in the public aggregate despite being coordinated.
+    expect((await popularity(warmed, { kind: "skill", k: 3 })).map((r) => r.id)).toContain("skill:a");
+  });
+
   it("is idempotent", async () => {
     const db = await makeTestDb();
     const shape = ["skill:a", "skill:b", "skill:c"];
