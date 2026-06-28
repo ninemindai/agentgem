@@ -10,57 +10,64 @@ export const DEFAULT_K = 5;
 
 export async function popularity(
   db: AppDb, opts: { kind?: string; limit?: number; k?: number } = {},
-): Promise<{ id: string; kind: string; producers: number; invocations: number; sessions: number }[]> {
+): Promise<{ id: string; kind: string; producers: number; verifiedProducers: number; invocations: number; sessions: number }[]> {
   const k = opts.k ?? DEFAULT_K, limit = opts.limit ?? 100;
-  const r = await db.execute<{ id: string; kind: string; producers: number; invocations: number; sessions: number }>(sql`
+  const r = await db.execute<{ id: string; kind: string; producers: number; verifiedProducers: number; invocations: number; sessions: number }>(sql`
     select e.ingredient_id as id, i.kind,
            count(distinct a.producer_pubkey)::int as producers,
+           count(distinct b.provider || ':' || b.account_id)::int as "verifiedProducers",
            sum(e.invocations)::int as invocations, sum(e.sessions)::int as sessions
     from usage_edges e
     join attestations a on a.id = e.attestation_id and not a.quarantined
     join ingredients  i on i.id = e.ingredient_id
+    left join account_bindings b on b.pubkey = a.producer_pubkey
     where (${opts.kind ?? null}::text is null or i.kind = ${opts.kind ?? null})
     group by e.ingredient_id, i.kind
     having count(distinct a.producer_pubkey) >= ${k}
     order by producers desc, invocations desc
     limit ${limit}
   `);
-  return r.rows as { id: string; kind: string; producers: number; invocations: number; sessions: number }[];
+  return r.rows as { id: string; kind: string; producers: number; verifiedProducers: number; invocations: number; sessions: number }[];
 }
 
 export async function coOccurrence(
   db: AppDb, opts: { id: string; limit?: number; k?: number },
-): Promise<{ id: string; producers: number }[]> {
+): Promise<{ id: string; producers: number; verifiedProducers: number }[]> {
   const k = opts.k ?? DEFAULT_K, limit = opts.limit ?? 50;
-  const r = await db.execute<{ id: string; producers: number }>(sql`
-    select e2.ingredient_id as id, count(distinct a.producer_pubkey)::int as producers
+  const r = await db.execute<{ id: string; producers: number; verifiedProducers: number }>(sql`
+    select e2.ingredient_id as id,
+           count(distinct a.producer_pubkey)::int as producers,
+           count(distinct b.provider || ':' || b.account_id)::int as "verifiedProducers"
     from usage_edges e1
     join usage_edges e2 on e2.attestation_id = e1.attestation_id and e2.ingredient_id <> e1.ingredient_id
     join attestations a on a.id = e1.attestation_id and not a.quarantined
+    left join account_bindings b on b.pubkey = a.producer_pubkey
     where e1.ingredient_id = ${opts.id}
     group by e2.ingredient_id
     having count(distinct a.producer_pubkey) >= ${k}
     order by producers desc
     limit ${limit}
   `);
-  return r.rows as { id: string; producers: number }[];
+  return r.rows as { id: string; producers: number; verifiedProducers: number }[];
 }
 
 export async function adoption(
   db: AppDb, opts: { id: string; bucket?: "week" | "month"; k?: number },
-): Promise<{ bucket: string; producers: number; invocations: number }[]> {
+): Promise<{ bucket: string; producers: number; verifiedProducers: number; invocations: number }[]> {
   const k = opts.k ?? DEFAULT_K;
   const bucket = opts.bucket === "month" ? "month" : "week"; // whitelist; never a raw caller value
-  const r = await db.execute<{ bucket: string; producers: number; invocations: number }>(sql`
+  const r = await db.execute<{ bucket: string; producers: number; verifiedProducers: number; invocations: number }>(sql`
     select to_char(date_trunc(${bucket}, a.ingested_at), 'YYYY-MM-DD') as bucket,
            count(distinct a.producer_pubkey)::int as producers,
+           count(distinct b.provider || ':' || b.account_id)::int as "verifiedProducers",
            sum(e.invocations)::int as invocations
     from usage_edges e
     join attestations a on a.id = e.attestation_id and not a.quarantined
+    left join account_bindings b on b.pubkey = a.producer_pubkey
     where e.ingredient_id = ${opts.id}
     group by 1
     having count(distinct a.producer_pubkey) >= ${k}
     order by 1
   `);
-  return r.rows as { bucket: string; producers: number; invocations: number }[];
+  return r.rows as { bucket: string; producers: number; verifiedProducers: number; invocations: number }[];
 }
