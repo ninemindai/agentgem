@@ -29,6 +29,23 @@ describe("aggregates + k-anon", () => {
     expect(DEFAULT_K).toBeGreaterThanOrEqual(5);
     expect(await popularity(db, { kind: "skill" })).toEqual([]); // 3 producers < DEFAULT_K
   });
+  it("popularity tools-only default: harness excluded, skills included", async () => {
+    const db = await makeTestDb();
+    // att() always seeds a harness ingredient ("claude-code"); give 3 producers so skills
+    // clear k=1 but harness would too if not filtered.
+    await projectAttestation(db, att("ed25519:q1", "e1", ["skill:x"]));
+    await projectAttestation(db, att("ed25519:q2", "e2", ["skill:x"]));
+    await projectAttestation(db, att("ed25519:q3", "e3", ["skill:x"]));
+    // No kind → tools-only default: skill:x visible, harness "claude-code" excluded.
+    const noKind = await popularity(db, { k: 1 });
+    expect(noKind.map((r) => r.id)).toContain("skill:x");
+    expect(noKind.map((r) => r.kind)).not.toContain("harness");
+    expect(noKind.find((r) => r.id === "claude-code")).toBeUndefined();
+    // Explicit kind: "skill" still works as before.
+    const skillOnly = await popularity(db, { kind: "skill", k: 1 });
+    expect(skillOnly.map((r) => r.id)).toContain("skill:x");
+    expect(skillOnly.map((r) => r.kind)).not.toContain("harness");
+  });
   it("coOccurrence finds partners sharing a producer, k-anon enforced", async () => {
     const db = await makeTestDb();
     await projectAttestation(db, att("ed25519:p1", "d1", ["skill:a", "skill:x"]));
@@ -57,8 +74,9 @@ describe("overview totals", () => {
     expect(o.ingredients).toBe(2);   // skill:a, skill:b
     expect(o.producers).toBe(5);     // p1..p5 distinct
     expect(o.verifiedProducers).toBe(0); // no account_bindings
-    expect(o.invocations).toBeGreaterThan(0);
-    expect(o.sessions).toBeGreaterThan(0);
+    // p1 seeds 2 skills (inv:2+2=4, sess:1+1=2); p2-p5 each seed 1 skill (inv:2, sess:1 each)
+    expect(o.invocations).toBe(12); // 4 + 2 + 2 + 2 + 2
+    expect(o.sessions).toBe(6);    // 2 + 1 + 1 + 1 + 1
   });
 
   it("returns all zeros when the whole network is below the k-anon floor", async () => {

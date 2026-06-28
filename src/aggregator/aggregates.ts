@@ -22,6 +22,7 @@ export async function popularity(
     join ingredients  i on i.id = e.ingredient_id
     left join account_bindings b on b.pubkey = a.producer_pubkey
     where (${opts.kind ?? null}::text is null or i.kind = ${opts.kind ?? null})
+      and (${opts.kind ?? null}::text is not null or i.kind in ('skill','mcp'))
     group by e.ingredient_id, i.kind
     having count(distinct a.producer_pubkey) >= ${k}
     order by producers desc, invocations desc
