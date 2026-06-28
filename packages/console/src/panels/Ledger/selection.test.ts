@@ -33,3 +33,16 @@ describe("buildSelection", () => {
     expect(buildSelection(new Set())).toEqual({});
   });
 });
+
+describe("includeToKeys", () => {
+  it("maps recommendation include items to ledger selection keys (channels skipped)", async () => {
+    const { includeToKeys } = await import("./selection.js");
+    expect(includeToKeys([
+      { type: "skill", name: "pdf" },
+      { type: "mcp_server", name: "github" },
+      { type: "hook", name: "Stop" },
+      { type: "instructions", name: "CLAUDE.md" },
+      { type: "channel", name: "x" },
+    ])).toEqual(["skills::pdf", "mcpServers::github", "hooks::Stop", "instructions::CLAUDE.md"]);
+  });
+});

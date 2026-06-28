@@ -10,6 +10,21 @@ export interface GemSelection {
   hooks?: string[];
 }
 
+/** Map a recommendation artifact `type` to the Ledger group key. */
+const GROUP_OF: Record<string, string> = {
+  skill: "skills",
+  mcp_server: "mcpServers",
+  instructions: "instructions",
+  hook: "hooks",
+};
+
+/** Selection keys for an analyze recommendation's `include` list (channels skipped). */
+export function includeToKeys(include: { type: string; name: string }[]): string[] {
+  return include
+    .map((i) => (GROUP_OF[i.type] ? selKey(GROUP_OF[i.type], i.name) : null))
+    .filter((k): k is string => k !== null);
+}
+
 /** All selectable keys across the (already filtered) visible groups. */
 export function visibleKeys(groups: LedgerGroup[]): string[] {
   return groups.flatMap((g) => g.items.map((i) => selKey(g.key, i.name)));

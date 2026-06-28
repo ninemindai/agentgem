@@ -4,7 +4,9 @@ import {
   testbedRecentsRoute, testbedProjectsRoute, testbedScaffoldRoute,
   makeClient, type RecentEntry, type ProjectCandidate,
 } from "../../api/routes.js";
-import { openAnalyzeStream } from "./analyzeStream.js";
+import { openAnalyzeStream, type AnalyzeCandidate } from "./analyzeStream.js";
+import { includeToKeys } from "../Ledger/selection.js";
+import { setRecommendedSelection } from "../../recommendation.js";
 
 function short(path: string): string {
   const parts = path.split("/").filter(Boolean);
@@ -24,6 +26,7 @@ export function Testbed({ apiBase }: { apiBase: string }) {
   const [analyzeOut, setAnalyzeOut] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+  const [candidates, setCandidates] = useState<AnalyzeCandidate[]>([]);
   const closeRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -40,12 +43,19 @@ export function Testbed({ apiBase }: { apiBase: string }) {
     setPhase("");
     setAnalyzeOut("");
     setAnalyzeError(null);
+    setCandidates([]);
     closeRef.current = openAnalyzeStream(apiBase, analyzeRoot.trim(), fresh, (e) => {
       if (e.type === "phase") setPhase(e.sessions != null ? `${e.phase} (${e.sessions} sessions)` : e.phase);
       else if (e.type === "delta") setAnalyzeOut((o) => o + e.text);
-      else if (e.type === "done") { setPhase("done"); setAnalyzing(false); }
+      else if (e.type === "done") { setPhase("done"); setAnalyzing(false); setCandidates(e.candidates); }
       else if (e.type === "failed") { setAnalyzeError(e.message); setAnalyzing(false); }
     });
+  };
+
+  // Hand the chosen candidate's artifacts to the Ledger (pre-selected) and jump there.
+  const useCandidate = (c: AnalyzeCandidate) => {
+    setRecommendedSelection(includeToKeys(c.include));
+    window.location.hash = "#/ledger";
   };
 
   const scaffold = async () => {
@@ -88,6 +98,23 @@ export function Testbed({ apiBase }: { apiBase: string }) {
             </div>
             {analyzeError && <p className="ledger-error">{analyzeError}</p>}
             {analyzeOut && <pre className="run-transcript">{analyzeOut}</pre>}
+          </div>
+        )}
+        {candidates.length > 0 && (
+          <div className="ws-list" style={{ marginTop: 14 }}>
+            {candidates.map((c) => (
+              <article className="ws-card" key={c.name}>
+                <header className="ws-head">
+                  <span className="ws-name">{c.name}</span>
+                  <span className="ws-chip">{c.confidence}</span>
+                </header>
+                {c.description && <p className="getgems-desc">{c.description}</p>}
+                <div className="ws-actions">
+                  <span className="targets-label">{c.include.length} artifacts</span>
+                  <button type="button" className="ledger-build" onClick={() => useCandidate(c)}>Use this selection →</button>
+                </div>
+              </article>
+            ))}
           </div>
         )}
       </section>

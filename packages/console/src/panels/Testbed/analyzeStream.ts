@@ -1,10 +1,17 @@
 // Session-analysis workflow stream (named SSE events: phase/delta/done/failed),
 // consumed via native EventSource — same shape as the run stream.
 
+export interface AnalyzeCandidate {
+  name: string;
+  description: string;
+  confidence: string;
+  include: { type: string; name: string }[];
+}
+
 export type AnalyzeEvent =
   | { type: "phase"; phase: string; transcripts?: number; sessions?: number }
   | { type: "delta"; text: string }
-  | { type: "done"; cached: boolean }
+  | { type: "done"; cached: boolean; candidates: AnalyzeCandidate[] }
   | { type: "failed"; message: string };
 
 export function openAnalyzeStream(
@@ -23,7 +30,11 @@ export function openAnalyzeStream(
     onEvent({ type: "phase", phase: d.phase, transcripts: d.transcripts, sessions: d.sessions });
   });
   es.addEventListener("delta", (m) => onEvent({ type: "delta", text: data(m).text }));
-  es.addEventListener("done", (m) => { onEvent({ type: "done", cached: !!data(m).cached }); es.close(); });
+  es.addEventListener("done", (m) => {
+    const d = data(m);
+    onEvent({ type: "done", cached: !!d.cached, candidates: Array.isArray(d.candidates) ? d.candidates : [] });
+    es.close();
+  });
   es.addEventListener("failed", (m) => { onEvent({ type: "failed", message: data(m).message }); es.close(); });
   es.addEventListener("error", () => onEvent({ type: "failed", message: "stream connection error" }));
 

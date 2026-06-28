@@ -3,6 +3,7 @@ import { defineConsolePage } from "../../registry.js";
 import { inventoryRoute, usageRoute, buildGemRoute, archiveRoute, createWorkspaceRoute, scaffoldChecksRoute, testbedImportRoute, makeClient, type Usage, type Gem, type GemCheck } from "../../api/routes.js";
 import { groupInventory, mergeUsage, applyView, relativeTime, DEFAULT_VIEW, type LedgerGroup, type SortKey } from "./data.js";
 import { selKey, visibleKeys, buildSelection, type GemSelection } from "./selection.js";
+import { takeRecommendedSelection } from "../../recommendation.js";
 import { base64ToBytes, downloadBlob, copyText } from "./exporters.js";
 import { Preview } from "./Preview.js";
 import { Targets } from "./Targets.js";
@@ -46,6 +47,16 @@ export function Ledger({ apiBase }: { apiBase: string }) {
     })();
     return () => { alive = false; };
   }, [apiBase]);
+
+  // Consume a recommendation handed over from the Testbed analyze (once, on mount):
+  // pre-select its artifacts and reveal all so unused recommendations are visible.
+  useEffect(() => {
+    const keys = takeRecommendedSelection();
+    if (keys && keys.length) {
+      setSelected(new Set(keys));
+      setView((v) => ({ ...v, usedOnly: false }));
+    }
+  }, []);
 
   const visible = useMemo(() => (groups ? applyView(groups, view) : []), [groups, view]);
   const total = useMemo(() => (groups ?? []).reduce((n, g) => n + g.items.length, 0), [groups]);

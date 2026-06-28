@@ -31,7 +31,7 @@ describe("openAnalyzeStream", () => {
       { type: "phase", phase: "scanning", transcripts: undefined, sessions: undefined },
       { type: "phase", phase: "scanned", transcripts: 4, sessions: 2 },
       { type: "delta", text: "thinking…" },
-      { type: "done", cached: false },
+      { type: "done", cached: false, candidates: [] },
     ]);
     expect(es.closed).toBe(true);
   });
