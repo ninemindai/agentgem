@@ -6,5 +6,6 @@ import { workspacesPage } from "./panels/Workspaces/index.js";
 import { getGemsPage } from "./panels/GetGems/index.js";
 import { settingsPage } from "./panels/Settings/index.js";
 import { transferPage } from "./panels/Transfer/index.js";
+import { deployPage } from "./panels/Deploy/index.js";
 
-export const pages: ConsolePage[] = [curatePage, materializePage, workspacesPage, getGemsPage, settingsPage, transferPage];
+export const pages: ConsolePage[] = [curatePage, materializePage, workspacesPage, getGemsPage, settingsPage, transferPage, deployPage];

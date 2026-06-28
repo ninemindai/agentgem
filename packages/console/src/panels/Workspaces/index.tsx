@@ -4,7 +4,7 @@ import {
   workspacesRoute, deleteWorkspaceRoute, renderWorkspaceRoute,
   makeClient, TARGET_IDS, type WorkspaceSummary,
 } from "../../api/routes.js";
-import { WorkspaceDeploy } from "./WorkspaceDeploy.js";
+import { WorkspaceDeploy } from "../Deploy/WorkspaceDeploy.js";
 
 /** Count chips shown per workspace, in display order. */
 export function countChips(ws: WorkspaceSummary): { label: string; n: number }[] {

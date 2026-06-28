@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { Materialize } from "./index.js";
 import { setKeys, resetGem } from "../../activeGem.js";
 
@@ -18,7 +18,6 @@ describe("Materialize", () => {
     setKeys(new Set(["skills::pdf"]));
     vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
       const u = String(url);
-      if (u.includes("/api/publish-ready")) return res({ ready: false }); // Publish fetches this on mount
       if (u.includes("/api/gem"))
         return res({ name: "gem", createdFrom: "/x", artifacts: [{ type: "skill", name: "pdf" }], checks: [], requiredSecrets: [] });
       throw new Error("unexpected " + u);

@@ -7,8 +7,6 @@ import { base64ToBytes, downloadBlob, copyText } from "./exporters.js";
 import { Preview } from "./Preview.js";
 import { Targets } from "./Targets.js";
 import { Run } from "./Run.js";
-import { Publish } from "./Publish.js";
-
 export function Materialize({ apiBase }: { apiBase: string }) {
   const { keys, name } = useActiveGem();
   const [gem, setGem] = useState<Gem | null>(null);
@@ -58,7 +56,6 @@ export function Materialize({ apiBase }: { apiBase: string }) {
       {gem && <Preview gem={gem} onDownloadGem={downloadGem} onDownloadJson={downloadJson} onCopyJson={copyJson} />}
       <Targets apiBase={apiBase} selection={sel} name={name.trim() || "gem"} />
       <Run apiBase={apiBase} selection={sel} name={name.trim() || "gem"} />
-      <Publish apiBase={apiBase} selection={sel} name={name.trim() || "gem"} />
     </div>
   );
 }
