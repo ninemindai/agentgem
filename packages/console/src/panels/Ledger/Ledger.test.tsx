@@ -71,36 +71,6 @@ describe("Ledger", () => {
     await waitFor(() => expect(names(container)).toEqual(["zip", "pdf"]));
   });
 
-  it("builds a gem from a selection and shows the preview", async () => {
-    vi.stubGlobal("fetch", mockFetch());
-    render(<Ledger apiBase="" />);
-    await screen.findByText("pdf");
-    expect((screen.getByText("Build Gem") as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(screen.getByLabelText("pdf"));
-    expect(screen.getByText("1 selected")).toBeTruthy();
-    expect((screen.getByText("Build Gem") as HTMLButtonElement).disabled).toBe(false);
-    fireEvent.click(screen.getByText("Build Gem"));
-    expect(await screen.findByText("1 artifacts")).toBeTruthy();
-    expect(screen.getByText("from /x/.claude")).toBeTruthy();
-  });
-
-  it("downloads a .gem via the archive endpoint after building", async () => {
-    const fetchSpy = mockFetch();
-    vi.stubGlobal("fetch", fetchSpy);
-    (URL as unknown as { createObjectURL: unknown }).createObjectURL = vi.fn(() => "blob:x");
-    (URL as unknown as { revokeObjectURL: unknown }).revokeObjectURL = vi.fn();
-    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {}); // jsdom can't navigate
-    render(<Ledger apiBase="" />);
-    await screen.findByText("pdf");
-    fireEvent.click(screen.getByLabelText("pdf"));
-    fireEvent.click(screen.getByText("Build Gem"));
-    await screen.findByText("1 artifacts");
-    fireEvent.click(screen.getByText("Download .gem"));
-    await waitFor(() =>
-      expect(fetchSpy.mock.calls.some((c) => String(c[0]).includes("/api/archive"))).toBe(true),
-    );
-  });
-
   it("views an artifact's content inline", async () => {
     vi.stubGlobal("fetch", mockFetch());
     render(<Ledger apiBase="" />);

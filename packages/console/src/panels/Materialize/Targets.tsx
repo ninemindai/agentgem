@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { materializeRoute, makeClient, TARGET_IDS, type MaterializeResult } from "../../api/routes.js";
-import type { GemSelection } from "./selection.js";
-import { ContentView } from "./ContentView.js";
+import type { GemSelection } from "../Ledger/selection.js";
+import { ContentView } from "../Ledger/ContentView.js";
 
 /** File paths in a stable, directory-friendly order. */
 export function sortedFiles(files: Record<string, string>): string[] {

@@ -2,9 +2,10 @@
 import type { ConsolePage } from "./registry.js";
 import { testbedPage } from "./panels/Testbed/index.js";
 import { ledgerPage } from "./panels/Ledger/index.js";
+import { materializePage } from "./panels/Materialize/index.js";
 import { workspacesPage } from "./panels/Workspaces/index.js";
 import { getGemsPage } from "./panels/GetGems/index.js";
 import { deployPage } from "./panels/Deploy/index.js";
 import { transferPage } from "./panels/Transfer/index.js";
 
-export const pages: ConsolePage[] = [testbedPage, ledgerPage, workspacesPage, getGemsPage, deployPage, transferPage];
+export const pages: ConsolePage[] = [testbedPage, ledgerPage, materializePage, workspacesPage, getGemsPage, deployPage, transferPage];
