@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
-import { Deploy } from "./index.js";
+import { Settings } from "./index.js";
 
 afterEach(cleanup);
 
@@ -20,10 +20,10 @@ function mockFetch() {
   });
 }
 
-describe("Deploy", () => {
+describe("Settings", () => {
   it("lists deploy backends with readiness", async () => {
     vi.stubGlobal("fetch", mockFetch());
-    render(<Deploy apiBase="" />);
+    render(<Settings apiBase="" />);
     expect(await screen.findByText("Claude Managed Agents")).toBeTruthy();
     expect(screen.getByText("ready")).toBeTruthy();
     expect(screen.getByText("needs credentials")).toBeTruthy();
@@ -31,7 +31,7 @@ describe("Deploy", () => {
 
   it("saves a credential", async () => {
     vi.stubGlobal("fetch", mockFetch());
-    render(<Deploy apiBase="" />);
+    render(<Settings apiBase="" />);
     await screen.findByText("Claude Managed Agents");
     fireEvent.change(screen.getByLabelText("credential value"), { target: { value: "sk-test" } });
     fireEvent.click(screen.getByText("Save"));

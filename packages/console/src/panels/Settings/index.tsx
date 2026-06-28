@@ -6,7 +6,7 @@ import {
 
 type Backend = { id: string; label: string; ready: boolean };
 
-export function Deploy({ apiBase }: { apiBase: string }) {
+export function Settings({ apiBase }: { apiBase: string }) {
   const [targets, setTargets] = useState<Backend[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [credKey, setCredKey] = useState<(typeof CREDENTIAL_KEYS)[number]>(CREDENTIAL_KEYS[0]);
@@ -70,12 +70,12 @@ export function Deploy({ apiBase }: { apiBase: string }) {
   );
 }
 
-export const deployPage = defineConsolePage({
-  id: "deploy",
-  title: "Deploy",
-  icon: "▲",
-  order: 40,
+export const settingsPage = defineConsolePage({
+  id: "settings",
+  title: "Settings",
+  icon: "⚙",
+  order: 10,
   group: "settings",
-  route: "#/deploy",
-  component: ({ apiBase }) => <Deploy apiBase={apiBase} />,
+  route: "#/settings",
+  component: ({ apiBase }) => <Settings apiBase={apiBase} />,
 });

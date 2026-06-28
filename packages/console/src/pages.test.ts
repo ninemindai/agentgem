@@ -5,7 +5,7 @@ import { sortedPages, groupedPages } from "./registry.js";
 describe("pages registry", () => {
   it("registers curate + workspaces with unique ids, sortable by order", () => {
     const ordered = sortedPages(pages);
-    expect(ordered.map((p) => p.id)).toEqual(["curate", "materialize", "workspaces", "get-gems", "deploy", "transfer"]);
+    expect(ordered.map((p) => p.id)).toEqual(["curate", "settings", "materialize", "workspaces", "get-gems", "transfer"]);
   });
 
   it("every page has a hash route", () => {
@@ -16,6 +16,6 @@ describe("pages registry", () => {
     const g = groupedPages(pages);
     expect(g.build.map((p) => p.id)).toEqual(["curate", "materialize"]);
     expect(g.library.map((p) => p.id)).toEqual(["workspaces", "get-gems", "transfer"]);
-    expect(g.settings.map((p) => p.id)).toEqual(["deploy"]);
+    expect(g.settings.map((p) => p.id)).toEqual(["settings"]);
   });
 });
