@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { scanSessions, parseClaudeTranscript, parseCodexTranscript, type SessionStat } from "../observeScan.js";
+import { scanSessions, parseClaudeTranscript, parseCodexTranscript, scanSessionsCached, clearScanCache, type SessionStat } from "../observeScan.js";
 
 let home: string, claudeDir: string, codexDir: string;
 
@@ -13,6 +13,11 @@ beforeAll(() => {
   // Claude: ~/.claude/projects/<folder>/<session>.jsonl
   const cproj = join(claudeDir, "projects", "proj-a");
   mkdirSync(cproj, { recursive: true });
+  // gitBranch fixture
+  writeFileSync(join(cproj, "s-branch.jsonl"), [
+    JSON.stringify({ type: "user", sessionId: "s-branch", cwd: "/work/app", gitBranch: "feat/x", timestamp: "2026-06-28T09:00:00.000Z", message: { role: "user" } }),
+    JSON.stringify({ type: "assistant", sessionId: "s-branch", cwd: "/work/app", timestamp: "2026-06-28T09:00:05.000Z", message: { role: "assistant", model: "claude-opus-4-8", usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } }),
+  ].join("\n") + "\n");
   writeFileSync(join(cproj, "s1.jsonl"), [
     JSON.stringify({ type: "user", sessionId: "s1", cwd: "/work/app", timestamp: "2026-06-28T10:00:00.000Z", message: { role: "user" } }),
     JSON.stringify({ type: "assistant", sessionId: "s1", cwd: "/work/app", timestamp: "2026-06-28T10:00:05.000Z", message: { role: "assistant", model: "claude-opus-4-8", usage: { input_tokens: 100, output_tokens: 40, cache_read_input_tokens: 10, cache_creation_input_tokens: 5 } } }),
@@ -64,9 +69,9 @@ describe("parseCodexTranscript", () => {
 describe("scanSessions", () => {
   it("returns both agents and skips a missing codex dir without throwing", () => {
     const stats = scanSessions({ claudeDir, codexDir });
-    expect(stats.map((s) => s.sessionId).sort()).toEqual(["s1", "x1"]);
+    expect(stats.map((s) => s.sessionId).sort()).toEqual(["s-branch", "s1", "x1"]);
     const missing = scanSessions({ claudeDir, codexDir: join(home, "nope") });
-    expect(missing.map((s) => s.sessionId)).toEqual(["s1"]);
+    expect(missing.map((s) => s.sessionId).sort()).toEqual(["s-branch", "s1"]);
   });
 });
 
@@ -74,7 +79,7 @@ import { aggregateObserve, type ObservePayload } from "../observeScan.js";
 
 const mk = (over: Partial<SessionStat>): SessionStat => ({
   agent: "claude", sessionId: "s", project: "app", model: "claude-opus-4-8",
-  startMs: 0, endMs: 60_000, msgs: 4, tokensIn: 100, tokensOut: 40, tokensCache: 10, ...over,
+  gitBranch: null, startMs: 0, endMs: 60_000, msgs: 4, tokensIn: 100, tokensOut: 40, tokensCache: 10, ...over,
 });
 
 describe("aggregateObserve", () => {
@@ -163,5 +168,100 @@ describe("aggregateObserve", () => {
     expect(p.models.map((m) => m.model)).toEqual(["big", "small"]);
     expect(p.models[0].tokens).toBe(400);
     expect(p.models[1].tokens).toBe(50);
+  });
+
+  it("session rows carry startMs, tokensIn/Out/Cache, gitBranch", () => {
+    const s = mk({ sessionId: "detail", gitBranch: "feat/y", tokensIn: 111, tokensOut: 22, tokensCache: 33 });
+    const p = aggregateObserve([s], "all", NOW);
+    const row = p.sessions[0]!;
+    expect(row.startMs).toBe(s.startMs);
+    expect(row.tokensIn).toBe(111);
+    expect(row.tokensOut).toBe(22);
+    expect(row.tokensCache).toBe(33);
+    expect(row.gitBranch).toBe("feat/y");
+  });
+});
+
+describe("aggregateObserve filters", () => {
+  const NOW = Date.parse("2026-06-28T12:00:00.000Z");
+  // 2 agents × 2 projects × 2 models
+  const stats: SessionStat[] = [
+    mk({ sessionId: "c-a-m1", agent: "claude", project: "proj-a", model: "m1", msgs: 5, tokensIn: 10, tokensOut: 5, tokensCache: 0 }),
+    mk({ sessionId: "c-b-m2", agent: "claude", project: "proj-b", model: "m2", msgs: 2, tokensIn: 20, tokensOut: 8, tokensCache: 0 }),
+    mk({ sessionId: "x-a-m1", agent: "codex",  project: "proj-a", model: "m1", msgs: 3, tokensIn: 30, tokensOut: 10, tokensCache: 0 }),
+    mk({ sessionId: "x-b-m2", agent: "codex",  project: "proj-b", model: "m2", msgs: 1, tokensIn: 40, tokensOut: 12, tokensCache: 0 }),
+  ];
+
+  it("filter.agent keeps only that agent", () => {
+    const p = aggregateObserve(stats, "all", NOW, { agent: "codex" });
+    expect(p.sessions.map((s) => s.sessionId).sort()).toEqual(["x-a-m1", "x-b-m2"]);
+    expect(p.pulse.sessions).toBe(2);
+  });
+
+  it("filter.project keeps only that project", () => {
+    const p = aggregateObserve(stats, "all", NOW, { project: "proj-a" });
+    expect(p.sessions.map((s) => s.sessionId).sort()).toEqual(["c-a-m1", "x-a-m1"]);
+    expect(p.pulse.sessions).toBe(2);
+  });
+
+  it("filter.model keeps only that model", () => {
+    const p = aggregateObserve(stats, "all", NOW, { model: "m2" });
+    expect(p.sessions.map((s) => s.sessionId).sort()).toEqual(["c-b-m2", "x-b-m2"]);
+  });
+
+  it("filter.minMsgs drops sessions below the threshold", () => {
+    const p = aggregateObserve(stats, "all", NOW, { minMsgs: 3 });
+    // msgs: c-a-m1=5, c-b-m2=2, x-a-m1=3, x-b-m2=1 → keep 5 and 3
+    expect(p.sessions.map((s) => s.sessionId).sort()).toEqual(["c-a-m1", "x-a-m1"]);
+  });
+
+  it("facets are computed PRE-filter: filtering by agent still shows all agents in facets", () => {
+    const p = aggregateObserve(stats, "all", NOW, { agent: "codex" });
+    // Only codex sessions remain in pulse/daily/sessions, but facets show both
+    expect(p.facets.agents.sort()).toEqual(["claude", "codex"]);
+    expect(p.facets.projects.sort()).toEqual(["proj-a", "proj-b"]);
+    expect(p.facets.models.sort()).toEqual(["m1", "m2"]);
+    // filtered view only contains codex sessions
+    expect(p.pulse.sessions).toBe(2);
+  });
+});
+
+describe("parseClaudeTranscript gitBranch", () => {
+  it("captures gitBranch from a record carrying it", () => {
+    const s = parseClaudeTranscript(join(claudeDir, "projects", "proj-a", "s-branch.jsonl"))!;
+    expect(s).not.toBeNull();
+    expect(s.gitBranch).toBe("feat/x");
+  });
+
+  it("codex transcript always has gitBranch null", () => {
+    const s = parseCodexTranscript(join(codexDir, "sessions", "2026", "06", "28", "rollout-x1.jsonl"))!;
+    expect(s).not.toBeNull();
+    expect(s.gitBranch).toBeNull();
+  });
+});
+
+describe("scanSessionsCached", () => {
+  beforeEach(() => clearScanCache());
+
+  it("returns the same array reference on second call within TTL", () => {
+    const nowMs = Date.now();
+    const first = scanSessionsCached(nowMs, { claudeDir, codexDir });
+    const second = scanSessionsCached(nowMs + 1_000, { claudeDir, codexDir }); // +1s < 15s TTL
+    expect(second).toBe(first);
+  });
+
+  it("re-scans when nowMs exceeds TTL", () => {
+    const nowMs = Date.now();
+    const first = scanSessionsCached(nowMs, { claudeDir, codexDir });
+    const second = scanSessionsCached(nowMs + 20_000, { claudeDir, codexDir }); // +20s > 15s TTL
+    expect(second).not.toBe(first);
+  });
+
+  it("re-scans after clearScanCache()", () => {
+    const nowMs = Date.now();
+    const first = scanSessionsCached(nowMs, { claudeDir, codexDir });
+    clearScanCache();
+    const second = scanSessionsCached(nowMs + 100, { claudeDir, codexDir }); // same ts, but cache cleared
+    expect(second).not.toBe(first);
   });
 });

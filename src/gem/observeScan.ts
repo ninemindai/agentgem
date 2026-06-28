@@ -14,6 +14,7 @@ export interface SessionStat {
   sessionId: string;
   project: string | null;   // basename of session cwd, or null
   model: string | null;
+  gitBranch: string | null; // top-level gitBranch from Claude records; null for Codex
   startMs: number;
   endMs: number;
   msgs: number;
@@ -44,12 +45,13 @@ function listFiles(dir: string, suffix: string): string[] {
 }
 
 export function parseClaudeTranscript(path: string): SessionStat | null {
-  let sessionId = "", cwd: string | null = null, model: string | null = null;
+  let sessionId = "", cwd: string | null = null, model: string | null = null, gitBranch: string | null = null;
   let startMs = Infinity, endMs = -Infinity, msgs = 0, tokensIn = 0, tokensOut = 0, tokensCache = 0;
   for (const rec of jsonLines(path)) {
     const type = rec.type as string | undefined;
     if (typeof rec.sessionId === "string") sessionId = rec.sessionId;
     if (typeof rec.cwd === "string") cwd = rec.cwd;
+    if (typeof rec.gitBranch === "string" && rec.gitBranch) gitBranch = rec.gitBranch;
     const ts = typeof rec.timestamp === "string" ? Date.parse(rec.timestamp) : NaN;
     if (!Number.isNaN(ts)) { startMs = Math.min(startMs, ts); endMs = Math.max(endMs, ts); }
     if (type === "user" || type === "assistant") msgs++;
@@ -63,7 +65,7 @@ export function parseClaudeTranscript(path: string): SessionStat | null {
     }
   }
   if (!sessionId || endMs < startMs) return null;
-  return { agent: "claude", sessionId, project: cwd ? basename(cwd) : null, model, startMs, endMs, msgs, tokensIn, tokensOut, tokensCache };
+  return { agent: "claude", sessionId, project: cwd ? basename(cwd) : null, model, gitBranch, startMs, endMs, msgs, tokensIn, tokensOut, tokensCache };
 }
 
 export function parseCodexTranscript(path: string): SessionStat | null {
@@ -90,16 +92,19 @@ export function parseCodexTranscript(path: string): SessionStat | null {
   const input = total?.input_tokens ?? 0, cached = total?.cached_input_tokens ?? 0;
   const tokensIn = Math.max(0, input - cached);
   const tokensOut = (total?.output_tokens ?? 0) + (total?.reasoning_output_tokens ?? 0);
-  return { agent: "codex", sessionId, project: cwd ? basename(cwd) : null, model, startMs, endMs, msgs, tokensIn, tokensOut, tokensCache: cached };
+  return { agent: "codex", sessionId, project: cwd ? basename(cwd) : null, model, gitBranch: null, startMs, endMs, msgs, tokensIn, tokensOut, tokensCache: cached };
 }
 
 export type ObserveRange = "today" | "7d" | "30d" | "all";
 
+export interface ObserveFilter { agent?: string; project?: string; model?: string; minMsgs?: number }
+
 export interface ObservePayload {
   pulse: { sessions: number; msgs: number; tokens: number; activeMs: number };
   daily: { date: string; sessions: number; msgs: number; tokensIn: number; tokensOut: number; tokensCache: number }[];
-  sessions: { agent: "claude" | "codex"; sessionId: string; project: string | null; model: string | null; durationMs: number; msgs: number; tokens: number; endMs: number }[];
+  sessions: { agent: "claude" | "codex"; sessionId: string; project: string | null; model: string | null; startMs: number; endMs: number; durationMs: number; msgs: number; tokens: number; tokensIn: number; tokensOut: number; tokensCache: number; gitBranch: string | null }[];
   models: { model: string; agent: "claude" | "codex"; sessions: number; tokens: number }[];
+  facets: { agents: string[]; projects: string[]; models: string[] };
   range: ObserveRange;
 }
 
@@ -113,14 +118,28 @@ function sinceMs(range: ObserveRange, nowMs: number): number {
   return nowMs - (range === "7d" ? 7 : 30) * DAY_MS;
 }
 
-export function aggregateObserve(stats: SessionStat[], range: ObserveRange, nowMs: number): ObservePayload {
+export function aggregateObserve(stats: SessionStat[], range: ObserveRange, nowMs: number, filter?: ObserveFilter): ObservePayload {
   const since = sinceMs(range, nowMs);
-  const inRange = stats.filter((s) => s.endMs >= since);
+  const rangeStats = stats.filter((s) => s.endMs >= since);
+
+  // Facets computed from rangeStats BEFORE attribute filters.
+  const facets: ObservePayload["facets"] = {
+    agents: [...new Set(rangeStats.map((s) => s.agent))].sort(),
+    projects: [...new Set(rangeStats.map((s) => s.project).filter((p): p is string => p !== null))].sort(),
+    models: [...new Set(rangeStats.map((s) => s.model).filter((m): m is string => m !== null))].sort(),
+  };
+
+  // Apply attribute filters.
+  let filtered = rangeStats;
+  if (filter?.agent !== undefined) filtered = filtered.filter((s) => s.agent === filter.agent);
+  if (filter?.project !== undefined) filtered = filtered.filter((s) => s.project === filter.project);
+  if (filter?.model !== undefined) filtered = filtered.filter((s) => s.model === filter.model);
+  if (filter?.minMsgs !== undefined) filtered = filtered.filter((s) => s.msgs >= filter.minMsgs!);
 
   const byDay = new Map<string, ObservePayload["daily"][number]>();
   const byModel = new Map<string, ObservePayload["models"][number]>();
   let pTokens = 0, pMsgs = 0, pActive = 0;
-  for (const s of inRange) {
+  for (const s of filtered) {
     const date = utcDate(s.startMs);
     const d = byDay.get(date) ?? { date, sessions: 0, msgs: 0, tokensIn: 0, tokensOut: 0, tokensCache: 0 };
     d.sessions++; d.msgs += s.msgs; d.tokensIn += s.tokensIn; d.tokensOut += s.tokensOut; d.tokensCache += s.tokensCache;
@@ -135,16 +154,29 @@ export function aggregateObserve(stats: SessionStat[], range: ObserveRange, nowM
   }
 
   return {
-    pulse: { sessions: inRange.length, msgs: pMsgs, tokens: pTokens, activeMs: pActive },
+    pulse: { sessions: filtered.length, msgs: pMsgs, tokens: pTokens, activeMs: pActive },
     daily: [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date)),
-    sessions: inRange
-      .map((s) => ({ agent: s.agent, sessionId: s.sessionId, project: s.project, model: s.model, durationMs: Math.max(0, s.endMs - s.startMs), msgs: s.msgs, tokens: tokensOf(s), endMs: s.endMs }))
+    sessions: filtered
+      .map((s) => ({ agent: s.agent, sessionId: s.sessionId, project: s.project, model: s.model, startMs: s.startMs, endMs: s.endMs, durationMs: Math.max(0, s.endMs - s.startMs), msgs: s.msgs, tokens: tokensOf(s), tokensIn: s.tokensIn, tokensOut: s.tokensOut, tokensCache: s.tokensCache, gitBranch: s.gitBranch }))
       .sort((a, b) => b.endMs - a.endMs)
       .slice(0, 200),
     models: [...byModel.values()].sort((a, b) => b.tokens - a.tokens),
+    facets,
     range,
   };
 }
+
+let _cache: { atMs: number; stats: SessionStat[] } | null = null;
+const SCAN_TTL_MS = 15_000;
+/** Cached scan for the request path: re-scans at most every SCAN_TTL_MS. nowMs injected for testability. */
+export function scanSessionsCached(nowMs: number, dirs?: { claudeDir?: string; codexDir?: string }): SessionStat[] {
+  if (_cache && nowMs - _cache.atMs < SCAN_TTL_MS) return _cache.stats;
+  const stats = scanSessions(dirs);
+  _cache = { atMs: nowMs, stats };
+  return stats;
+}
+/** Test seam: drop the cache. */
+export function clearScanCache(): void { _cache = null; }
 
 export function scanSessions(dirs?: { claudeDir?: string; codexDir?: string }): SessionStat[] {
   const resolved = resolveDirs();

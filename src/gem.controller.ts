@@ -3,14 +3,21 @@ import { existsSync, writeFileSync, readFileSync } from "node:fs";
 import { basename, resolve, sep } from "node:path";
 import { z } from "zod";
 import { api, get, post } from "@agentback/openapi";
-import { scanSessions, aggregateObserve } from "./gem/observeScan.js";
+import { scanSessionsCached, aggregateObserve } from "./gem/observeScan.js";
 
-const ObserveQuerySchema = z.object({ range: z.enum(["today", "7d", "30d", "all"]).optional() });
+const ObserveQuerySchema = z.object({
+  range: z.enum(["today", "7d", "30d", "all"]).optional(),
+  agent: z.string().optional(),
+  project: z.string().optional(),
+  model: z.string().optional(),
+  minMsgs: z.coerce.number().int().nonnegative().optional(),
+});
 const ObservePayloadSchema = z.object({
   pulse: z.object({ sessions: z.number(), msgs: z.number(), tokens: z.number(), activeMs: z.number() }),
   daily: z.array(z.object({ date: z.string(), sessions: z.number(), msgs: z.number(), tokensIn: z.number(), tokensOut: z.number(), tokensCache: z.number() })),
-  sessions: z.array(z.object({ agent: z.enum(["claude", "codex"]), sessionId: z.string(), project: z.string().nullable(), model: z.string().nullable(), durationMs: z.number(), msgs: z.number(), tokens: z.number(), endMs: z.number() })),
+  sessions: z.array(z.object({ agent: z.enum(["claude", "codex"]), sessionId: z.string(), project: z.string().nullable(), model: z.string().nullable(), startMs: z.number(), endMs: z.number(), durationMs: z.number(), msgs: z.number(), tokens: z.number(), tokensIn: z.number(), tokensOut: z.number(), tokensCache: z.number(), gitBranch: z.string().nullable() })),
   models: z.array(z.object({ model: z.string(), agent: z.enum(["claude", "codex"]), sessions: z.number(), tokens: z.number() })),
+  facets: z.object({ agents: z.array(z.string()), projects: z.array(z.string()), models: z.array(z.string()) }),
   range: z.enum(["today", "7d", "30d", "all"]),
 });
 import { introspectConfig, introspectProject } from "./gem/introspect.js";
@@ -164,7 +171,8 @@ export class GemController {
   @get("/observe", { query: ObserveQuerySchema, response: ObservePayloadSchema })
   async observe(input: { query: z.infer<typeof ObserveQuerySchema> }): Promise<z.infer<typeof ObservePayloadSchema>> {
     const range = input.query.range ?? "7d";
-    return aggregateObserve(scanSessions(), range, Date.now());
+    const { agent, project, model, minMsgs } = input.query;
+    return aggregateObserve(scanSessionsCached(Date.now()), range, Date.now(), { agent, project, model, minMsgs });
   }
 
   @post("/gem", { body: GemRequestSchema, response: GemSchema })

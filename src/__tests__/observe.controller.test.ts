@@ -17,4 +17,13 @@ describe("GemController.observe", () => {
     const out = await c.observe({ query: {} });
     expect(out.range).toBe("7d");
   });
+
+  it("accepts filter params and returns facets with array fields", async () => {
+    const c = new GemController();
+    const out = await c.observe({ query: { range: "all", agent: "claude" } });
+    expect(out.facets).toBeDefined();
+    expect(Array.isArray(out.facets.agents)).toBe(true);
+    expect(Array.isArray(out.facets.projects)).toBe(true);
+    expect(Array.isArray(out.facets.models)).toBe(true);
+  });
 });
