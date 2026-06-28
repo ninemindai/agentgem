@@ -77,4 +77,17 @@ export const buildGemRoute = defineRoute("POST", "/api/gem", {
   response: GemSchema,
 });
 
+// POST /api/archive — with `tar:true` the server returns the portable .gem
+// (tar.gz) as base64 in `tarGz`. We only send/read those fields.
+export const ArchiveRequestSchema = z.object({
+  selection: GemSelectionSchema,
+  name: z.string().optional(),
+  tar: z.boolean().optional(),
+});
+const ArchiveResponseSchema = z.object({ tarGz: z.string().nullable() });
+export const archiveRoute = defineRoute("POST", "/api/archive", {
+  body: ArchiveRequestSchema,
+  response: ArchiveResponseSchema,
+});
+
 export const makeClient = (apiBase: string): Client => createClient({ baseURL: apiBase });
