@@ -325,4 +325,23 @@ export const gemApplyRoute = defineRoute("POST", "/api/gem/apply", {
   }),
 });
 
+// Observe: session telemetry from the local aggregator.
+const ObservePayloadSchema = z.object({
+  pulse: z.object({ sessions: z.number(), msgs: z.number(), tokens: z.number(), activeMs: z.number() }),
+  daily: z.array(z.object({ date: z.string(), sessions: z.number(), msgs: z.number(), tokensIn: z.number(), tokensOut: z.number(), tokensCache: z.number() })),
+  sessions: z.array(z.object({ agent: z.enum(["claude", "codex"]), sessionId: z.string(), project: z.string().nullable(), model: z.string().nullable(), durationMs: z.number(), msgs: z.number(), tokens: z.number(), endMs: z.number() })),
+  models: z.array(z.object({ model: z.string(), agent: z.enum(["claude", "codex"]), sessions: z.number(), tokens: z.number() })),
+  range: z.enum(["today", "7d", "30d", "all"]),
+});
+export type ObservePayload = z.infer<typeof ObservePayloadSchema>;
+export type ObserveRange = ObservePayload["range"];
+export type SessionRow = ObservePayload["sessions"][number];
+export type DailyPoint = ObservePayload["daily"][number];
+export type ModelSlice = ObservePayload["models"][number];
+
+export const observeRoute = defineRoute("GET", "/api/observe", {
+  query: z.object({ range: z.enum(["today", "7d", "30d", "all"]).optional() }),
+  response: ObservePayloadSchema,
+});
+
 export const makeClient = (apiBase: string): Client => createClient({ baseURL: apiBase });
