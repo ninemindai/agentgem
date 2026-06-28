@@ -74,7 +74,8 @@ LIBRARY
 | Workspace deploy (run local/vercel/cloudflare) + Publish (managed/agentcore) | **③ Deploy** |
 | Get Gems (registry) | **Library → Get Gems** |
 | Deploy panel (credentials + readiness) | **⚙ Settings** |
-| (future) transfer redeem UI | **Library → Received** |
+| Transfer panel → **Send** (share via ticket) | **② Materialize → Export** (a share option) |
+| Transfer panel → **Redeem / Redeem privately** | **Library → Received** |
 
 ## Stage detail
 
@@ -117,7 +118,8 @@ Also in Curate, on the active Gem: **Suggest checks**, **name the Gem**, **Save 
 - **Your Gems** — saved Gems (name · `gemName@version` · count chips · rendered targets). Actions:
   **Open** (→ active Gem, jump to Build), **Render**, **Delete**.
 - **Get Gems** — registry search/install; installs land in Your Gems.
-- **Received** — transfer-receive UI home (other session); received Gems land in Your Gems.
+- **Received** — the existing Transfer panel's **Redeem / Redeem-privately** flows; received Gems
+  land in Your Gems. (Its **Send** flow moves to ② Materialize → Export.)
 - **⚙ Settings** — credential management (ANTHROPIC_API_KEY, VERCEL_TOKEN, CLOUDFLARE_API_TOKEN) +
   backend-readiness dashboard; drives Deploy gating.
 
@@ -165,14 +167,14 @@ grouped, with stages as sub-nav**:
 - No backend/API changes required for the IA itself (it re-arranges existing calls). The one
   possible exception is persisting selection for re-Curate (Open Item above).
 - Not changing the warm-letterpress visual theme — only structure/navigation.
-- Not porting the transfer redeem UI (separate session); this spec only reserves its home
-  (Library → Received).
+- The transfer UI already exists (`panels/Transfer/`, merged); the IA *absorbs* it (Send →
+  Materialize/Export, Redeem → Library/Received) rather than rebuilding it.
 
 ## Coordination
 
-Implementation touches `packages/console` shell + page registry — the **same package a
-concurrent session is editing for the transfer UI**. Sequence the IA implementation **after that
-work merges** to avoid restructuring files mid-flight. This spec is safe to land now (docs only).
+The concurrent transfer-UI work has **merged to main** (`panels/Transfer/`), so the blocker is
+cleared and implementation can proceed. The IA absorbs that panel (see migration map). No other
+known concurrent edits to `packages/console`.
 
 ## Testing
 
