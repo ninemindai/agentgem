@@ -4,7 +4,8 @@ import {
   workspacesRoute, deleteWorkspaceRoute, renderWorkspaceRoute,
   makeClient, TARGET_IDS, type WorkspaceSummary,
 } from "../../api/routes.js";
-import { setName, resetGem } from "../../activeGem.js";
+import { setName, setKeys, resetGem } from "../../activeGem.js";
+import { includeToKeys } from "../Curate/selection.js";
 
 /** Count chips shown per workspace, in display order. */
 export function countChips(ws: WorkspaceSummary): { label: string; n: number }[] {
@@ -112,7 +113,7 @@ function WorkspaceCard({ apiBase, ws, onChange }: { apiBase: string; ws: Workspa
         <select className="targets-select" aria-label={`render target for ${ws.name}`} value={target} onChange={(e) => setTarget(e.target.value)}>
           {TARGET_IDS.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
-        <button type="button" className="ledger-build" onClick={() => { setName(ws.name); window.location.hash = "#/curate"; }}>Open</button>
+        <button type="button" className="ledger-build" onClick={() => { setName(ws.name); setKeys(new Set(includeToKeys(ws.artifacts))); window.location.hash = "#/curate"; }}>Open</button>
         <button type="button" className="ledger-sort" disabled={busy} onClick={render}>Render</button>
         <button type="button" className="ws-delete" disabled={busy} onClick={remove}>Delete</button>
       </div>

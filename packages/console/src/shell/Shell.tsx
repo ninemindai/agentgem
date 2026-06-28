@@ -15,7 +15,9 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
   }, []);
 
   const active = ordered.find((p) => p.route === hash) ?? ordered[0];
-  const gemLabel = name || `New Gem · ${keys.size}`;
+  // Active-Gem label: a saved gem's name, else "New Gem" — with an artifact
+  // count only once something is selected (a bare "· 0" reads as cryptic).
+  const gemLabel = name || (keys.size > 0 ? `New Gem · ${keys.size} artifact${keys.size === 1 ? "" : "s"}` : "New Gem");
 
   const item = (p: ConsolePage) => (
     <button

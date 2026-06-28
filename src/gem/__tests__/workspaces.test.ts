@@ -34,6 +34,9 @@ describe("workspaces", () => {
     const s = createWorkspace("mp", gem([skill("review"), instr()]));
     expect(s.name).toBe("mp");
     expect(s.artifactCounts.skill).toBe(1);
+    // the (type, name) artifact list is exposed so a consumer can restore the selection
+    expect(s.artifacts).toContainEqual({ type: "skill", name: "review" });
+    expect(s.artifacts.some((a) => a.type === "instructions")).toBe(true);
     expect(s.renderedTargets).toEqual([]);
     expect(existsSync(join(home, "workspaces", "mp", "gem.json"))).toBe(true);
 

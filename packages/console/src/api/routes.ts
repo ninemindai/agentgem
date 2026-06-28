@@ -58,6 +58,8 @@ const WorkspaceSummarySchema = z.object({
     instructions: z.number(),
     hook: z.number(),
   }),
+  // (type, name) of each artifact — lets "Open" restore the gem's selection.
+  artifacts: z.array(z.object({ type: z.string(), name: z.string() })),
   checks: z.number(),
   renderedTargets: z.array(z.string()),
 });

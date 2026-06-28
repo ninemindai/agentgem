@@ -19,6 +19,7 @@ export interface WorkspaceSummary {
   gemName: string;
   version: string;
   artifactCounts: { skill: number; mcp_server: number; instructions: number; hook: number };
+  artifacts: { type: string; name: string }[];
   checks: number;
   renderedTargets: TargetId[];
 }
@@ -62,12 +63,15 @@ function renderedTargets(dir: string): TargetId[] {
 }
 
 function summary(name: string, manifestJson: string, dir: string): WorkspaceSummary {
-  const m = JSON.parse(manifestJson) as { name: string; version: string; artifacts: { type: string }[]; checks: unknown[] };
+  const m = JSON.parse(manifestJson) as { name: string; version: string; artifacts: { type: string; name: string }[]; checks: unknown[] };
   return {
     name,
     gemName: m.name,
     version: m.version,
     artifactCounts: countArtifacts(m.artifacts),
+    // The artifact (type, name) list lets a consumer reconstruct the selection
+    // that built this workspace (e.g. the console's "Open" → re-curate).
+    artifacts: m.artifacts.map((a) => ({ type: a.type, name: a.name })),
     checks: m.checks.length,
     renderedTargets: renderedTargets(dir),
   };

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { Workspaces, countChips } from "./index.js";
-import { getName, resetGem } from "../../activeGem.js";
+import { getName, getKeys, resetGem } from "../../activeGem.js";
 
 afterEach(() => { cleanup(); resetGem(); window.location.hash = ""; });
 
@@ -13,6 +13,8 @@ const ws = {
   gemName: "starter",
   version: "1.2.0",
   artifactCounts: { skill: 3, mcp_server: 1, instructions: 2, hook: 0 },
+  // (counts and this representative list are independent test concerns)
+  artifacts: [{ type: "skill", name: "pdf" }, { type: "mcp_server", name: "context7" }],
   checks: 4,
   renderedTargets: ["claude", "codex"],
 };
@@ -58,12 +60,14 @@ describe("Workspaces", () => {
     await waitFor(() => expect(screen.getByText(/rendered claude → \/runs\/my-ws\/claude/)).toBeTruthy());
   });
 
-  it("Open sets the active gem name and navigates to curate", async () => {
+  it("Open restores the gem's name AND selection, then navigates to curate", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => res({ workspaces: [ws] })));
     render(<Workspaces apiBase="" />);
     await screen.findByText("my-ws");
     fireEvent.click(screen.getByText("Open"));
     expect(getName()).toBe("my-ws");
+    // the saved gem's artifacts are restored as the active selection (not just the name)
+    expect([...getKeys()].sort()).toEqual(["mcpServers::context7", "skills::pdf"]);
     expect(window.location.hash).toBe("#/curate");
   });
 
