@@ -83,4 +83,40 @@ describe("sweepQuarantine (detection -> quarantine)", () => {
     expect(rep.attestationsQuarantined).toBe(2); // f2 + f3 quarantined; f1 exempt
     expect(rep.producersFlagged).toBe(2);
   });
+
+  it("DEFEATS padding evasion: unique junk per attestation no longer splits a coordinated cluster", async () => {
+    const db = await makeTestDb();
+    const core = ["skill:a", "skill:b"]; // the shared coordinated core (>= minShape)
+    // 3 fresh producers, each padding their attestation with a DISTINCT unique junk skill
+    for (const i of [1, 2, 3]) {
+      await projectAttestation(db, att(`ed25519:p${i}`, `d${i}`, [...core, `skill:junk${i}`]));
+    }
+    // v1-equivalent (junk retained): every fingerprint differs -> NO cluster -> nothing flagged
+    const v1 = await sweepQuarantine(db, { ...OPTS, coreMinProducers: 1, dryRun: true });
+    expect(v1.attestationsQuarantined).toBe(0);
+    // v2 (default prefilter, junk freq=1 dropped): cores match -> cluster of 3 -> flagged
+    const v2 = await sweepQuarantine(db, { ...OPTS, coreMinProducers: 2, dryRun: true });
+    expect(v2).toEqual({ clustersFound: 1, attestationsQuarantined: 3, producersFlagged: 3, dryRun: true });
+  });
+
+  it("does not merge two distinct cores into one bogus cluster", async () => {
+    const db = await makeTestDb();
+    for (const i of [1, 2, 3]) await projectAttestation(db, att(`ed25519:a${i}`, `da${i}`, ["skill:a", "skill:b"]));
+    for (const i of [1, 2, 3]) await projectAttestation(db, att(`ed25519:c${i}`, `dc${i}`, ["skill:c", "skill:d"]));
+    // both cores survive the prefilter (each ingredient used by its 3-producer group), and stay SEPARATE
+    const rep = await sweepQuarantine(db, { ...OPTS, coreMinProducers: 2, dryRun: true });
+    expect(rep.clustersFound).toBe(2);          // two distinct clusters, not one merged mega-cluster
+    expect(rep.attestationsQuarantined).toBe(6);
+  });
+
+  it("padded cluster still exempts a GitHub-verified producer (verified-exemption survives the prefilter)", async () => {
+    const db = await makeTestDb();
+    const core = ["skill:a", "skill:b"];
+    for (const i of [1, 2, 3]) await projectAttestation(db, att(`ed25519:p${i}`, `d${i}`, [...core, `skill:junk${i}`]));
+    await db.execute(sql`insert into account_bindings(pubkey, provider, account_id, account_login)
+      values ('ed25519:p1', 'github', '42', 'octocat')`);
+    const rep = await sweepQuarantine(db, { ...OPTS, coreMinProducers: 2 }); // apply (real)
+    expect(rep.attestationsQuarantined).toBe(2); // p2 + p3; p1 exempt (bound)
+    expect(rep.producersFlagged).toBe(2);
+  });
 });
