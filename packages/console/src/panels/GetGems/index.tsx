@@ -7,7 +7,6 @@ import {
   makeClient,
   type RegistryResult,
 } from "../../api/routes.js";
-import { takePendingQuery } from "./intent.js";
 
 export function GetGems({ apiBase }: { apiBase: string }) {
   const [ready, setReady] = useState<boolean | null>(null);
@@ -16,7 +15,6 @@ export function GetGems({ apiBase }: { apiBase: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [installed, setInstalled] = useState<Record<string, string>>({});
-  const [pending] = useState<string | null>(() => takePendingQuery()); // one-shot, captured at mount
 
   useEffect(() => {
     let alive = true;
@@ -41,14 +39,6 @@ export function GetGems({ apiBase }: { apiBase: string }) {
       setBusy(false);
     }
   };
-
-  useEffect(() => {
-    if (!pending) return;
-    setQ(pending);
-    if (ready) void search(pending);
-    // run only when `ready` flips; `pending` is captured once at mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready]);
 
   const install = async (key: string) => {
     setError(null);

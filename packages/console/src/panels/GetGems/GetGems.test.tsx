@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { GetGems } from "./index.js";
-import { setPendingQuery, takePendingQuery } from "./intent.js";
 
-afterEach(() => { cleanup(); takePendingQuery(); });
+afterEach(() => { cleanup(); });
 
 const res = (body: unknown) =>
   ({ ok: true, status: 200, text: async () => JSON.stringify(body) }) as unknown as Response;
@@ -35,34 +34,16 @@ describe("GetGems", () => {
     fireEvent.click(screen.getByText("Install to workspace"));
     await waitFor(() => expect(screen.getByText(/installed → acme-starter/i)).toBeTruthy());
   });
-});
 
-it("auto-runs a search from a pending cross-panel query", async () => {
-  const calls: string[] = [];
-  vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
-    const u = String(url);
-    if (u.includes("/api/registry/ready")) return res({ ready: true });
-    if (u.includes("/api/registry/search")) {
-      calls.push(u);
-      return res({ results: [{ key: "acme/brainstorming-kit", latest: "1.0.0", score: 1, description: "kit", tags: [] }] });
-    }
-    throw new Error(`unexpected ${u}`);
-  }));
-  setPendingQuery("brainstorming");
-  render(<GetGems apiBase="" />);
-  expect(await screen.findByText("acme/brainstorming-kit")).toBeTruthy();
-  expect((screen.getByLabelText("search registry") as HTMLInputElement).value).toBe("brainstorming");
-  expect(calls.some((u) => u.includes("brainstorming"))).toBe(true);
-});
-
-it("does not auto-search on a normal visit (no pending query)", async () => {
-  vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
-    const u = String(url);
-    if (u.includes("/api/registry/ready")) return res({ ready: true });
-    if (u.includes("/api/registry/search")) throw new Error("should not search");
-    throw new Error(`unexpected ${u}`);
-  }));
-  render(<GetGems apiBase="" />);
-  expect(await screen.findByText("Search")).toBeTruthy();
-  expect((screen.getByLabelText("search registry") as HTMLInputElement).value).toBe("");
+  it("does not auto-search on mount", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+      const u = String(url);
+      if (u.includes("/api/registry/ready")) return res({ ready: true });
+      if (u.includes("/api/registry/search")) throw new Error("should not search");
+      throw new Error(`unexpected ${u}`);
+    }));
+    render(<GetGems apiBase="" />);
+    expect(await screen.findByText("Search")).toBeTruthy();
+    expect((screen.getByLabelText("search registry") as HTMLInputElement).value).toBe("");
+  });
 });
