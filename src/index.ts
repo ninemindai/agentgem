@@ -24,6 +24,7 @@ import { originGuard } from "./originGuard.js";
 import { registerDrizzle } from "@agentback/drizzle";
 import { AggregatorController } from "./aggregator.controller.js";
 import { ShareController } from "./share.controller.js";
+import { requireShareOriginSecret } from "./originSecret.js";
 import { ShareProxyController } from "./share.proxy.controller.js";
 import { resolveAggregatorDb } from "./aggregator/localDb.js";
 import { mountGating } from "./gating.js";
@@ -72,7 +73,10 @@ export async function createApp(port: number): Promise<RestApplication> {
     app.restController(AggregatorController);
     app.restController(ShareController);
     // POST /api/aggregator/share (anonymous create) is rate-limited by mountGating's anon per-IP
-    // bucket below (keyed on CLIENT_IP_HEADER) — no separate share-specific limiter needed.
+    // bucket below (keyed on CLIENT_IP_HEADER). That IP is only trustworthy if the request came
+    // through Cloudflare, so require a CF-injected origin secret on the create (no-op until
+    // ORIGIN_SHARED_SECRET is set). Public reads + /healthz are never gated.
+    app.expressMiddleware("middleware.shareOriginSecret", requireShareOriginSecret);
     await mountGating(app, db);
     console.log(`aggregator: ${mode}${mode === "pglite" ? " (set DATABASE_URL for Postgres)" : ""}`);
   }
