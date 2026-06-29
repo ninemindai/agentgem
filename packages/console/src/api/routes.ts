@@ -354,4 +354,25 @@ export const observeRoute = defineRoute("GET", "/api/observe", {
   response: ObservePayloadSchema,
 });
 
+export const ScorecardSchema = z.object({
+  breadth: z.number(),
+  battleTested: z.number(),
+  portable: z.number(),
+  gaps: z.array(z.string()),
+  projects: z.array(z.object({
+    root: z.string(), label: z.string(),
+    breadth: z.number(), battleTested: z.number(), portable: z.number(),
+    topCandidates: z.array(z.object({ name: z.string(), confidence: z.enum(["high", "medium", "low"]) })),
+  })),
+  generatedAtMs: z.number(),
+  degraded: z.boolean(),
+});
+export type Scorecard = z.infer<typeof ScorecardSchema>;
+export type ProjectGoldmine = Scorecard["projects"][number];
+
+export const scorecardRoute = defineRoute("GET", "/api/scorecard", {
+  query: z.object({ dir: z.string().optional(), projects: z.string().optional() }),
+  response: ScorecardSchema,
+});
+
 export const makeClient = (apiBase: string): Client => createClient({ baseURL: apiBase });
