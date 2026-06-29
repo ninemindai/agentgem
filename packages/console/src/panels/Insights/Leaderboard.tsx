@@ -23,14 +23,14 @@ export function Leaderboard({ rows, kind, onKind, selectedId, onSelect, search, 
             onClick={() => onKind(k.value)}>{k.label}</button>
         ))}
       </div>
-      <input
+      {rows.length > 0 && <input
         className="ins-search"
-        type="text"
+        type="search"
         aria-label="search ingredients"
         placeholder="filter the leaderboard…"
         value={search}
         onChange={(e) => onSearch(e.target.value)}
-      />
+      />}
       {rows.length === 0 && <div className="ins-empty">No ingredients above the k-anonymity floor yet.</div>}
       {rows.length > 0 && visible.length === 0 && <div className="ins-empty">No ingredients match "{search}".</div>}
       <ol className="ins-rows">
