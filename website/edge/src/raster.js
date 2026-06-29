@@ -8,7 +8,17 @@ async function ensureWasm() {
   if (!ready) {
     const { readFile } = await import("node:fs/promises");
     const { fileURLToPath } = await import("node:url");
-    const wasmUrl = new URL("../../../node_modules/@resvg/resvg-wasm/index_bg.wasm", import.meta.url);
+
+    // import.meta.resolve available in Node 24+ but not available in Vite transform.
+    // Attempt resolution, fallback to relative path if needed (tests/Vite environments).
+    let wasmUrl;
+    try {
+      const resolve = import.meta.resolve;
+      wasmUrl = resolve("@resvg/resvg-wasm/index_bg.wasm");
+    } catch {
+      wasmUrl = new URL("../../../node_modules/@resvg/resvg-wasm/index_bg.wasm", import.meta.url).toString();
+    }
+
     const wasmBytes = await readFile(fileURLToPath(wasmUrl));
     ready = initWasm(wasmBytes.buffer);
   }
