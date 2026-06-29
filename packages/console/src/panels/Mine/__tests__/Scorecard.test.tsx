@@ -42,8 +42,8 @@ describe("ScorecardHero share", () => {
     render(<ScorecardHero data={data} createShare={createShare} />);
     fireEvent.click(screen.getByText(/share your goldmine/i));
     await waitFor(() => expect(createShare).toHaveBeenCalledWith({ counts: { breadth: 14, battleTested: 3, portable: 5 }, generatedAtMs: 7 }));
-    const link = await screen.findByText(/share on x/i);
-    expect(link.closest("a")!.getAttribute("href")).toContain(encodeURIComponent("https://agentgem.ai/share/abc"));
+    const link = await screen.findByRole("link", { name: "X" });
+    expect(link.getAttribute("href")).toContain(encodeURIComponent("https://agentgem.ai/share/abc"));
   });
 });
 
