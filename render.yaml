@@ -1,0 +1,34 @@
+# Render Blueprint — deploy the agentgem server as a Docker web service.
+#
+# Pair this with a Neon Postgres (free) for DURABLE data — Render's own free
+# Postgres self-deletes after 30 days, which would wipe the aggregator's moat.
+# Set DATABASE_URL (below) to your Neon connection string.
+#
+# Full runbook: docs/deploy/render-neon.md
+services:
+  - name: agentgem
+    type: web
+    runtime: docker
+    plan: free            # free web service SLEEPS after 15 min idle (30-50s cold start).
+                          # Bump to `starter` (~$7/mo) for an always-on instance.
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthz   # the server's unauthenticated liveness route (src/index.ts)
+    envVars:
+      - key: HOST
+        value: 0.0.0.0          # bind all interfaces (the Dockerfile also sets this)
+      - key: TRUST_PROXY
+        value: "1"              # trust the proxy hop for req.protocol/secure (TLS terminated upstream)
+      - key: CLIENT_IP_HEADER
+        value: cf-connecting-ip # Render is fronted by Cloudflare; trust-proxy hop-counting is
+                                # unreliable here (rotating edge IPs), so key the per-IP rate limits
+                                # on Cloudflare's real-client-IP header instead. CF overwrites it, so
+                                # it can't be spoofed on this deployment.
+      - key: AGGREGATOR_ADMIN_TOKEN
+        generateValue: true     # Render generates a random secret; read it from the dashboard
+                                # to mint/revoke API keys via POST /api/aggregator/keys
+      - key: DATABASE_URL
+        sync: false             # set manually = your Neon connection string (include ?sslmode=require)
+    # PORT is intentionally NOT set here — Render injects its own PORT and the
+    # server binds to it (src/index.ts reads process.env.PORT).

@@ -37,6 +37,34 @@ export const usageRoute = defineRoute("GET", "/api/usage", {
   response: UsageSchema,
 });
 
+// ── Aggregator insights (public-read; k-anon enforced server-side) ──
+const AggIngredientSchema = z.object({
+  id: z.string(), kind: z.string(), producers: z.number(),
+  verifiedProducers: z.number(), invocations: z.number(), sessions: z.number(),
+});
+const AggCoOccurrenceSchema = z.object({ id: z.string(), producers: z.number(), verifiedProducers: z.number() });
+const AdoptionPointSchema = z.object({ bucket: z.string(), producers: z.number(), verifiedProducers: z.number(), invocations: z.number() });
+const AggOverviewSchema = z.object({ ingredients: z.number(), producers: z.number(), verifiedProducers: z.number(), invocations: z.number(), sessions: z.number() });
+
+export const popularityRoute = defineRoute("GET", "/api/aggregator/popularity", {
+  query: z.object({ kind: z.string().optional(), limit: z.number().optional() }),
+  response: z.array(AggIngredientSchema),
+});
+export const coOccurrenceRoute = defineRoute("GET", "/api/aggregator/co-occurrence", {
+  query: z.object({ id: z.string(), limit: z.number().optional() }),
+  response: z.array(AggCoOccurrenceSchema),
+});
+export const adoptionRoute = defineRoute("GET", "/api/aggregator/adoption", {
+  query: z.object({ id: z.string(), bucket: z.enum(["week", "month"]).optional() }),
+  response: z.array(AdoptionPointSchema),
+});
+export const overviewRoute = defineRoute("GET", "/api/aggregator/overview", { response: AggOverviewSchema });
+
+export type AggIngredient = z.infer<typeof AggIngredientSchema>;
+export type AggCoOccurrence = z.infer<typeof AggCoOccurrenceSchema>;
+export type AdoptionPoint = z.infer<typeof AdoptionPointSchema>;
+export type AggOverview = z.infer<typeof AggOverviewSchema>;
+
 // Selection shape shared by build/archive/materialize/run/workspace routes.
 const GemSelectionSchema = z.union([
   z.object({ all: z.literal(true) }),

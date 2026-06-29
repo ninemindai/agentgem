@@ -57,6 +57,52 @@ describe("redactMcpConfig", () => {
     expect(out.command).toBe("npx");
   });
 
+  // Egress backstop: credentials whose value carries special characters (so the high-entropy
+  // charset check fails) and whose key is benign (so the key-name check fails) used to leak.
+  it("redacts a JWT stored under a benign key", () => {
+    const jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U";
+    const { config: out } = redactMcpConfig({ token_hint: jwt, label: "ok" });
+    expect(out.token_hint).toBe("<redacted>");
+    expect(out.label).toBe("ok");
+    expect(JSON.stringify(out)).not.toContain("dozjgNry");
+  });
+
+  it("redacts the password inside a connection string, preserving the rest of the shape", () => {
+    const { config: out } = redactMcpConfig({ database: "postgres://app:Hunter2@db.host:5432/prod" });
+    expect(out.database).toBe("postgres://app:<redacted>@db.host:5432/prod");
+    expect(JSON.stringify(out)).not.toContain("Hunter2");
+  });
+
+  it("does not touch a plain URL with no embedded credentials", () => {
+    const { config: out } = redactMcpConfig({ url: "https://mcp.example.com/sse" });
+    expect(out.url).toBe("https://mcp.example.com/sse");
+  });
+
+  it("redacts provider-prefixed tokens embedded in free text", () => {
+    // Short enough (<32 chars) that the high-entropy heuristic misses it; only the prefix net catches it.
+    const { config: out } = redactMcpConfig({ note: "run with ghp_abcd1234efgh5678 then retry" });
+    expect(out.note).toBe("run with <redacted> then retry");
+  });
+
+  it("redacts a PEM private key block", () => {
+    const pem = "-----BEGIN PRIVATE KEY-----\nMIIBVAIBADANBg+kqh/kiG9w0=\n-----END PRIVATE KEY-----";
+    const { config: out } = redactMcpConfig({ key_pem: pem });
+    expect(out.key_pem).toBe("<redacted>");
+    expect(JSON.stringify(out)).not.toContain("MIIBVAIBADAN");
+  });
+
+  it("redacts secret-named scalars and values under extended credential containers", () => {
+    const { config: out } = redactMcpConfig({
+      password: 123456, // numeric secret under a secret-named key
+      environment: { DB_PASS: "s3cr3t", COUNT: 5 }, // non-standard env container -> default-deny
+      port: 8080, // benign scalar, untouched
+    });
+    expect(out.password).toBe("<redacted>");
+    expect((out.environment as Record<string, unknown>).DB_PASS).toBe("<redacted>");
+    expect((out.environment as Record<string, unknown>).COUNT).toBe("<redacted>");
+    expect(out.port).toBe(8080);
+  });
+
   it("records the name + location of every redacted value, never the value", () => {
     const { config, secrets } = redactMcpConfig({
       command: "npx",

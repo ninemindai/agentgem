@@ -41,6 +41,24 @@ describe("Shell", () => {
     expect(screen.getByText("panel-b")).toBeTruthy();
   });
 
+  it("switches between panels with different hook counts without crashing", () => {
+    // Each panel must get its own fiber: a panel that uses hooks (Hooky) and one that
+    // uses none (Plain). If Shell renders the panel by CALLING it instead of as an
+    // element, both panels' hooks collapse into Shell's fiber and the hook count changes
+    // across the transition → React throws "Rendered fewer/more hooks than expected".
+    const Hooky = () => { const [n] = useState("hooky-panel"); return <p>{n}</p>; };
+    const Plain = () => <p>plain-panel</p>;
+    const hookPages = [
+      defineConsolePage({ id: "h", title: "Hooky", order: 10, route: "#/h", component: Hooky }),
+      defineConsolePage({ id: "p", title: "Plain", order: 20, route: "#/p", component: Plain }),
+    ];
+    window.location.hash = "#/h";
+    render(<Shell pages={hookPages} apiBase="" />);
+    expect(screen.getByText("hooky-panel")).toBeTruthy();
+    act(() => { window.location.hash = "#/p"; window.dispatchEvent(new HashChangeEvent("hashchange")); });
+    expect(screen.getByText("plain-panel")).toBeTruthy();
+  });
+
   it("navigates when a nav button is clicked", () => {
     render(<Shell pages={pages} apiBase="" />);
     fireEvent.click(screen.getByText("Beta"));

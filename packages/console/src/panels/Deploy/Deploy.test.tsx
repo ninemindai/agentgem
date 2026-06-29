@@ -22,5 +22,7 @@ describe("Deploy", () => {
     }));
     render(<Deploy apiBase="" />);
     expect(await screen.findAllByText(/Publish/i)).toBeTruthy();
+    // WorkspaceDeploy also renders — its run-ready "local" mode surfaces "Run locally".
+    expect(await screen.findByText(/Run locally/i)).toBeTruthy();
   });
 });

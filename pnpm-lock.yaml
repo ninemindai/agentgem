@@ -14,6 +14,9 @@ importers:
       '@agentback/drizzle':
         specifier: ~0.5.2
         version: 0.5.2(drizzle-orm@0.45.2(@electric-sql/pglite@0.5.3)(@types/pg@8.20.0)(pg@8.22.0))(drizzle-zod@0.8.3(drizzle-orm@0.45.2(@electric-sql/pglite@0.5.3)(@types/pg@8.20.0)(pg@8.22.0))(zod@4.4.3))
+      '@agentback/extension-rate-limit':
+        specifier: ^0.5.2
+        version: 0.5.2(cors@2.8.6)(express@5.2.1)(hono@4.12.25)
       '@agentback/mcp':
         specifier: ^0.5.2
         version: 0.5.2
@@ -201,6 +204,10 @@ packages:
     peerDependenciesMeta:
       drizzle-zod:
         optional: true
+
+  '@agentback/extension-rate-limit@0.5.2':
+    resolution: {integrity: sha512-8vSFvlwiJXoI2RiJDN6sQwgMLMabOrSbTBz6vovR/tEzy5jxWja44vaMB0ThFWYSeZB535viPHsYrbo3kHRpuw==}
+    engines: {node: '>=22.13'}
 
   '@agentback/files@0.5.2':
     resolution: {integrity: sha512-5dj/K99YgDWexg2OVMYwuni4ntQ5ScubKYYW2YzeFvsk7Go5Q/Dt+kc+gL30/C4S1l7LT/HaY3SmpAzvUg0w3Q==}
@@ -4208,6 +4215,19 @@ snapshots:
     optionalDependencies:
       drizzle-zod: 0.8.3(drizzle-orm@0.45.2(@electric-sql/pglite@0.5.3)(@types/pg@8.20.0)(pg@8.22.0))(zod@4.4.3)
     transitivePeerDependencies:
+      - supports-color
+
+  '@agentback/extension-rate-limit@0.5.2(cors@2.8.6)(express@5.2.1)(hono@4.12.25)':
+    dependencies:
+      '@agentback/rest': 0.5.2(cors@2.8.6)(express@5.2.1)(hono@4.12.25)
+      '@types/express': 5.0.6
+      rate-limiter-flexible: 11.2.0
+      tslib: 2.8.1
+    transitivePeerDependencies:
+      - cors
+      - express
+      - hono
+      - multer
       - supports-color
 
   '@agentback/files@0.5.2':

@@ -7,6 +7,7 @@ import {
   makeClient,
   type RegistryResult,
 } from "../../api/routes.js";
+import { takePendingQuery } from "./intent.js";
 
 export function GetGems({ apiBase }: { apiBase: string }) {
   const [ready, setReady] = useState<boolean | null>(null);
@@ -15,6 +16,7 @@ export function GetGems({ apiBase }: { apiBase: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [installed, setInstalled] = useState<Record<string, string>>({});
+  const [pending] = useState<string | null>(() => takePendingQuery()); // one-shot, captured at mount
 
   useEffect(() => {
     let alive = true;
@@ -25,12 +27,13 @@ export function GetGems({ apiBase }: { apiBase: string }) {
     return () => { alive = false; };
   }, [apiBase]);
 
-  const search = async () => {
+  const search = async (term?: string) => {
     setBusy(true);
     setError(null);
     try {
       const client = makeClient(apiBase);
-      const { results: r } = await registrySearchRoute.call(client, { query: { q: q.trim() || undefined } });
+      const query = (term ?? q).trim();
+      const { results: r } = await registrySearchRoute.call(client, { query: { q: query || undefined } });
       setResults(r);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -38,6 +41,14 @@ export function GetGems({ apiBase }: { apiBase: string }) {
       setBusy(false);
     }
   };
+
+  useEffect(() => {
+    if (!pending) return;
+    setQ(pending);
+    if (ready) void search(pending);
+    // run only when `ready` flips; `pending` is captured once at mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready]);
 
   const install = async (key: string) => {
     setError(null);
@@ -71,7 +82,7 @@ export function GetGems({ apiBase }: { apiBase: string }) {
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") void search(); }}
         />
-        <button type="button" className="ledger-sort" disabled={busy} onClick={search}>
+        <button type="button" className="ledger-sort" disabled={busy} onClick={() => void search()}>
           {busy ? "Searching…" : "Search"}
         </button>
       </div>

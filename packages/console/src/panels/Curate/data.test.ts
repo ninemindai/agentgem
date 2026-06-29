@@ -21,7 +21,8 @@ const inv = {
 const usage = {
   artifacts: [
     { type: "skill", name: "pdf", root: null, invocations: 5, sessionsUsedIn: 2, lastUsedMs: 1 },
-    { type: "mcpServer", name: "github", root: null, invocations: 9, sessionsUsedIn: 3, lastUsedMs: 2 },
+    // The /api/usage contract types MCP rows as "mcp_server" (snake_case), not "mcpServer".
+    { type: "mcp_server", name: "github", root: null, invocations: 9, sessionsUsedIn: 3, lastUsedMs: 2 },
   ],
 };
 

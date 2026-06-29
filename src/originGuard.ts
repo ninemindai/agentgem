@@ -29,7 +29,7 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 // and have no side effect, so the CSRF rationale above does NOT apply: serve them to any origin with
 // permissive CORS and exempt them from the cross-site block. Safe methods only — the POST /ingest
 // write (and every other route) stays guarded.
-const PUBLIC_READ_PATHS = new Set(["/api/aggregator/popularity", "/api/aggregator/co-occurrence", "/api/aggregator/adoption"]);
+const PUBLIC_READ_PATHS = new Set(["/api/aggregator/popularity", "/api/aggregator/co-occurrence", "/api/aggregator/adoption", "/api/aggregator/co-occurrence-matrix"]);
 
 function block(res: GuardRes): void {
   res.status(403).type("application/json").send(JSON.stringify({ error: "cross-site request blocked" }));
