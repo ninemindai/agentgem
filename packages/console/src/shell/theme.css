@@ -479,6 +479,25 @@ body::before {
 .obs-range-btn:hover { border-color: var(--accent); color: var(--accent); }
 .obs-range-btn.is-active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
 
+.obs-filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
+.obs-filters select, .obs-filters input[type="number"] {
+  background: var(--paper-2); border: 1px solid var(--line); border-radius: 6px;
+  padding: 4px 8px; font: 12.5px/1.5 var(--font-ui); color: var(--ink-soft);
+  cursor: pointer; outline: none;
+}
+.obs-filters select:focus, .obs-filters input[type="number"]:focus {
+  border-color: var(--accent); color: var(--ink);
+}
+.obs-filters input[type="number"] { width: 90px; }
+
+.obs-sort-btn {
+  background: none; border: none; padding: 0; cursor: pointer;
+  font: 600 10.5px/1 var(--font-ui); text-transform: uppercase;
+  letter-spacing: .09em; color: var(--muted); white-space: nowrap;
+}
+.obs-sort-btn:hover { color: var(--accent); }
+.obs-sort-btn.is-active { color: var(--ink); }
+
 .obs-pulse { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
 .obs-stat {
   flex: 1 1 100px; min-width: 100px; background: var(--raised);

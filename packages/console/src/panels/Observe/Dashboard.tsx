@@ -1,4 +1,5 @@
 // packages/console/src/panels/Observe/Dashboard.tsx
+import { useState } from "react";
 import {
   ResponsiveContainer, BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, CartesianGrid,
@@ -10,20 +11,59 @@ const RANGES: ObserveRange[] = ["today", "7d", "30d", "all"];
 const RANGE_LABEL: Record<ObserveRange, string> = { today: "Today", "7d": "7d", "30d": "30d", all: "All" };
 const SLICE_COLORS = ["var(--accent)", "var(--emerald, #34d399)", "#f59e0b", "#8b5cf6", "#ec4899", "#64748b"];
 
-export function Dashboard({ data, range, onRange }: { data: ObservePayload; range: ObserveRange; onRange: (r: ObserveRange) => void }) {
+type Filter = { agent?: string; project?: string; model?: string; minMsgs?: number };
+type SortKey = "tokens" | "msgs" | "durationMs" | "endMs";
+
+export function Dashboard({ data, range, onRange, filter, onFilter }: {
+  data: ObservePayload; range: ObserveRange; onRange: (r: ObserveRange) => void;
+  filter: Filter; onFilter: (f: Filter) => void;
+}) {
+  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "endMs", dir: "desc" });
+
   const empty = data.pulse.sessions === 0;
+
+  function toggleSort(key: SortKey) {
+    setSort(prev => prev.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "desc" });
+  }
+
+  const rows = [...data.sessions].sort((a, b) => {
+    const av = a[sort.key], bv = b[sort.key];
+    return sort.dir === "asc" ? av - bv : bv - av;
+  });
+
   return (
     <div className="obs">
       <div className="obs-head">
         <h2 className="obs-title">Observe</h2>
         <div className="obs-range" role="tablist" aria-label="time range">
           {RANGES.map((r) => (
-            <button key={r} type="button" role="tab" aria-selected={r === range}
+            <button key={r} type="button" role="tab" aria-selected={r === range} tabIndex={r === range ? 0 : -1}
               className={"obs-range-btn" + (r === range ? " is-active" : "")} onClick={() => onRange(r)}>
               {RANGE_LABEL[r]}
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="obs-filters">
+        <select aria-label="agent" value={filter.agent ?? ""}
+          onChange={e => onFilter({ ...filter, agent: e.target.value || undefined })}>
+          <option value="">All agents</option>
+          {data.facets.agents.map(a => <option key={a} value={a}>{a}</option>)}
+        </select>
+        <select aria-label="project" value={filter.project ?? ""}
+          onChange={e => onFilter({ ...filter, project: e.target.value || undefined })}>
+          <option value="">All projects</option>
+          {data.facets.projects.map(p => <option key={p} value={p}>{p}</option>)}
+        </select>
+        <select aria-label="model" value={filter.model ?? ""}
+          onChange={e => onFilter({ ...filter, model: e.target.value || undefined })}>
+          <option value="">All models</option>
+          {data.facets.models.map(m => <option key={m} value={m}>{m}</option>)}
+        </select>
+        <input type="number" min={0} aria-label="min messages" placeholder="min msgs"
+          value={filter.minMsgs ?? ""}
+          onChange={e => onFilter({ ...filter, minMsgs: e.target.value === "" ? undefined : Number(e.target.value) })} />
       </div>
 
       <div className="obs-pulse">
@@ -68,16 +108,16 @@ export function Dashboard({ data, range, onRange }: { data: ObservePayload; rang
               <ResponsiveContainer width="100%" height={160}>
                 <PieChart>
                   <Pie data={data.models} dataKey="tokens" nameKey="model" innerRadius={36} outerRadius={60} paddingAngle={2}>
-                    {data.models.map((_, i) => <Cell key={i} fill={SLICE_COLORS[i % SLICE_COLORS.length]} />)}
+                    {data.models.map((m, i) => <Cell key={m.agent + "|" + m.model} fill={SLICE_COLORS[i % SLICE_COLORS.length]} />)}
                   </Pie>
                   <Tooltip formatter={(v: number) => fmtTokens(v)} />
                 </PieChart>
               </ResponsiveContainer>
               <ul className="obs-legend">
                 {data.models.map((m, i) => (
-                  <li key={m.agent + m.model}>
+                  <li key={m.agent + "|" + m.model}>
                     <span className="obs-dot" style={{ background: SLICE_COLORS[i % SLICE_COLORS.length] }} />
-                    {m.model} <span className="obs-muted">({m.sessions})</span>
+                    {m.model} · {m.agent} <span className="obs-muted">({m.sessions})</span>
                   </li>
                 ))}
               </ul>
@@ -86,16 +126,27 @@ export function Dashboard({ data, range, onRange }: { data: ObservePayload; rang
 
           <div className="obs-table-wrap">
             <table className="obs-table">
-              <thead><tr><th>project</th><th>agent</th><th>model</th><th>dur</th><th>msgs</th><th>tokens</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>project</th>
+                  <th>agent</th>
+                  <th>model</th>
+                  <SortTh label="dur" col="durationMs" sort={sort} onSort={toggleSort} />
+                  <SortTh label="msgs" col="msgs" sort={sort} onSort={toggleSort} />
+                  <SortTh label="tokens" col="tokens" sort={sort} onSort={toggleSort} />
+                  <SortTh label="recency" col="endMs" sort={sort} onSort={toggleSort} />
+                </tr>
+              </thead>
               <tbody>
-                {data.sessions.map((s) => (
-                  <tr key={s.agent + s.sessionId}>
+                {rows.map((s) => (
+                  <tr key={s.agent + "|" + s.sessionId}>
                     <td>{s.project ?? "—"}</td>
                     <td><span className="obs-chip">{s.agent}</span></td>
                     <td className="obs-muted">{s.model ?? "—"}</td>
                     <td>{fmtDuration(s.durationMs)}</td>
                     <td>{s.msgs}</td>
                     <td>{fmtTokens(s.tokens)}</td>
+                    <td className="obs-muted">{s.endMs ? new Date(s.endMs).toLocaleDateString() : "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -104,6 +155,21 @@ export function Dashboard({ data, range, onRange }: { data: ObservePayload; rang
         </>
       )}
     </div>
+  );
+}
+
+function SortTh({ label, col, sort, onSort }: {
+  label: string; col: SortKey;
+  sort: { key: SortKey; dir: "asc" | "desc" };
+  onSort: (k: SortKey) => void;
+}) {
+  const active = sort.key === col;
+  return (
+    <th aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}>
+      <button type="button" className={"obs-sort-btn" + (active ? " is-active" : "")} onClick={() => onSort(col)}>
+        {label}{active ? (sort.dir === "asc" ? " ▲" : " ▼") : ""}
+      </button>
+    </th>
   );
 }
 
