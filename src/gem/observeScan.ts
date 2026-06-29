@@ -5,7 +5,8 @@
 // boundary: reads usage, timestamps, model, type, cwd/id ONLY — never message
 // text (mirrors workflowScan.ts). Total functions: missing dirs / malformed
 // lines degrade to empty/skip, never throw.
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join, basename } from "node:path";
 import { resolveDirs } from "../resolveDir.js";
 
@@ -23,9 +24,7 @@ export interface SessionStat {
   tokensCache: number;      // cache read+creation (claude) / cached_input (codex)
 }
 
-function* jsonLines(path: string): Generator<Record<string, unknown>> {
-  let text: string;
-  try { text = readFileSync(path, "utf8"); } catch { return; }
+function* jsonLines(text: string): Generator<Record<string, unknown>> {
   for (const line of text.split("\n")) {
     if (!line.trim()) continue;
     try { yield JSON.parse(line) as Record<string, unknown>; } catch { /* skip malformed */ }
@@ -44,13 +43,13 @@ function listFiles(dir: string, suffix: string): string[] {
   return out;
 }
 
-export function parseClaudeTranscript(path: string): SessionStat | null {
+export function parseClaudeTranscript(text: string, path: string): SessionStat | null {
   // Fix 1: canonical sessionId comes from the transcript filename (the UUID), not inline record fields.
   // Subagent/sidechain records carry a shared parent sessionId which would cause collisions.
   const sessionId = basename(path).replace(/\.jsonl$/, "");
   let cwd: string | null = null, model: string | null = null, gitBranch: string | null = null;
   let startMs = Infinity, endMs = -Infinity, msgs = 0, tokensIn = 0, tokensOut = 0, tokensCache = 0;
-  for (const rec of jsonLines(path)) {
+  for (const rec of jsonLines(text)) {
     const type = rec.type as string | undefined;
     if (typeof rec.cwd === "string") cwd = rec.cwd;
     if (typeof rec.gitBranch === "string" && rec.gitBranch) gitBranch = rec.gitBranch;
@@ -71,11 +70,11 @@ export function parseClaudeTranscript(path: string): SessionStat | null {
   return { agent: "claude", sessionId, project: cwd ? basename(cwd) : null, model, gitBranch, startMs, endMs, msgs, tokensIn, tokensOut, tokensCache };
 }
 
-export function parseCodexTranscript(path: string): SessionStat | null {
+export function parseCodexTranscript(text: string, path: string): SessionStat | null {
   let sessionId = "", cwd: string | null = null, model: string | null = null;
   let startMs = Infinity, endMs = -Infinity, msgs = 0;
   let total: Record<string, number> | null = null;   // cumulative; keep the last seen
-  for (const rec of jsonLines(path)) {
+  for (const rec of jsonLines(text)) {
     const ts = typeof rec.timestamp === "string" ? Date.parse(rec.timestamp) : NaN;
     if (!Number.isNaN(ts)) { startMs = Math.min(startMs, ts); endMs = Math.max(endMs, ts); }
     const payload = rec.payload as Record<string, unknown> | undefined;
@@ -173,27 +172,29 @@ let _cache: { atMs: number; stats: SessionStat[] } | null = null;
 const SCAN_TTL_MS = 15_000;
 /** Cached scan for the request path: re-scans at most every SCAN_TTL_MS. nowMs injected for testability.
  *  Fix 4: when custom dirs are provided the result is never cached — only the default path is cacheable. */
-export function scanSessionsCached(nowMs: number, dirs?: { claudeDir?: string; codexDir?: string }): SessionStat[] {
+export async function scanSessionsCached(nowMs: number, dirs?: { claudeDir?: string; codexDir?: string }): Promise<SessionStat[]> {
   if (dirs) return scanSessions(dirs);                       // custom dirs are never cached
   if (_cache && nowMs - _cache.atMs < SCAN_TTL_MS) return _cache.stats;
-  const stats = scanSessions();
+  const stats = await scanSessions();
   _cache = { atMs: nowMs, stats };
   return stats;
 }
 /** Test seam: drop the cache. */
 export function clearScanCache(): void { _cache = null; }
 
-export function scanSessions(dirs?: { claudeDir?: string; codexDir?: string }): SessionStat[] {
+export async function scanSessions(dirs?: { claudeDir?: string; codexDir?: string }): Promise<SessionStat[]> {
   const resolved = resolveDirs();
   const claudeDir = dirs?.claudeDir ?? resolved.claudeDir;
   const codexDir = dirs?.codexDir ?? resolved.codexDir;
   const out: SessionStat[] = [];
   for (const f of listFiles(join(claudeDir, "projects"), ".jsonl")) {
-    const s = parseClaudeTranscript(f); if (s) out.push(s);
+    let text: string; try { text = await readFile(f, "utf8"); } catch { continue; }
+    const s = parseClaudeTranscript(text, f); if (s) out.push(s);
   }
   for (const f of listFiles(join(codexDir, "sessions"), ".jsonl")) {
     if (!basename(f).startsWith("rollout-")) continue;   // skip history.jsonl etc.
-    const s = parseCodexTranscript(f); if (s) out.push(s);
+    let text: string; try { text = await readFile(f, "utf8"); } catch { continue; }
+    const s = parseCodexTranscript(text, f); if (s) out.push(s);
   }
   return out;
 }

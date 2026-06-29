@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { scanSessions, parseClaudeTranscript, parseCodexTranscript, scanSessionsCached, clearScanCache, type SessionStat } from "../observeScan.js";
@@ -54,7 +54,8 @@ afterAll(() => rmSync(home, { recursive: true, force: true }));
 
 describe("parseClaudeTranscript", () => {
   it("normalizes tokens (fresh in / cache / out), timing, msgs, model", () => {
-    const s = parseClaudeTranscript(join(claudeDir, "projects", "proj-a", "s1.jsonl"))!;
+    const p = join(claudeDir, "projects", "proj-a", "s1.jsonl");
+    const s = parseClaudeTranscript(readFileSync(p, "utf8"), p)!;
     expect(s.agent).toBe("claude");
     expect(s.sessionId).toBe("s1");
     expect(s.project).toBe("app");          // basename of cwd
@@ -69,7 +70,8 @@ describe("parseClaudeTranscript", () => {
 
 describe("parseCodexTranscript", () => {
   it("uses cumulative total_token_usage, session_meta id/cwd, found model", () => {
-    const s = parseCodexTranscript(join(codexDir, "sessions", "2026", "06", "28", "rollout-x1.jsonl"))!;
+    const p = join(codexDir, "sessions", "2026", "06", "28", "rollout-x1.jsonl");
+    const s = parseCodexTranscript(readFileSync(p, "utf8"), p)!;
     expect(s.agent).toBe("codex");
     expect(s.sessionId).toBe("x1");
     expect(s.project).toBe("web");
@@ -82,8 +84,8 @@ describe("parseCodexTranscript", () => {
 });
 
 describe("scanSessions", () => {
-  it("returns both agents and skips a missing codex dir without throwing", () => {
-    const stats = scanSessions({ claudeDir, codexDir });
+  it("returns both agents and skips a missing codex dir without throwing", async () => {
+    const stats = await scanSessions({ claudeDir, codexDir });
     expect(stats.map((s) => s.sessionId).sort()).toEqual([
       "9f1b2c3d-aaaa-bbbb-cccc-000000000001",
       "s-branch",
@@ -92,7 +94,7 @@ describe("scanSessions", () => {
       "synth-only",
       "x1",
     ]);
-    const missing = scanSessions({ claudeDir, codexDir: join(home, "nope") });
+    const missing = await scanSessions({ claudeDir, codexDir: join(home, "nope") });
     expect(missing.map((s) => s.sessionId).sort()).toEqual([
       "9f1b2c3d-aaaa-bbbb-cccc-000000000001",
       "s-branch",
@@ -256,13 +258,15 @@ describe("aggregateObserve filters", () => {
 
 describe("parseClaudeTranscript gitBranch", () => {
   it("captures gitBranch from a record carrying it", () => {
-    const s = parseClaudeTranscript(join(claudeDir, "projects", "proj-a", "s-branch.jsonl"))!;
+    const p = join(claudeDir, "projects", "proj-a", "s-branch.jsonl");
+    const s = parseClaudeTranscript(readFileSync(p, "utf8"), p)!;
     expect(s).not.toBeNull();
     expect(s.gitBranch).toBe("feat/x");
   });
 
   it("codex transcript always has gitBranch null", () => {
-    const s = parseCodexTranscript(join(codexDir, "sessions", "2026", "06", "28", "rollout-x1.jsonl"))!;
+    const p = join(codexDir, "sessions", "2026", "06", "28", "rollout-x1.jsonl");
+    const s = parseCodexTranscript(readFileSync(p, "utf8"), p)!;
     expect(s).not.toBeNull();
     expect(s.gitBranch).toBeNull();
   });
@@ -271,7 +275,7 @@ describe("parseClaudeTranscript gitBranch", () => {
 describe("parseClaudeTranscript sessionId from filename (Fix 1)", () => {
   it("uses the transcript filename basename as sessionId, ignoring inline record sessionId", () => {
     const path = join(claudeDir, "projects", "proj-a", "9f1b2c3d-aaaa-bbbb-cccc-000000000001.jsonl");
-    const s = parseClaudeTranscript(path)!;
+    const s = parseClaudeTranscript(readFileSync(path, "utf8"), path)!;
     expect(s).not.toBeNull();
     // Must be the filename, NOT the inline "parent-shared-id" from records
     expect(s.sessionId).toBe("9f1b2c3d-aaaa-bbbb-cccc-000000000001");
@@ -281,14 +285,14 @@ describe("parseClaudeTranscript sessionId from filename (Fix 1)", () => {
 describe("parseClaudeTranscript model sentinel (Fix 2)", () => {
   it("does not overwrite a real model with a later <synthetic> record", () => {
     const path = join(claudeDir, "projects", "proj-a", "synth-after-real.jsonl");
-    const s = parseClaudeTranscript(path)!;
+    const s = parseClaudeTranscript(readFileSync(path, "utf8"), path)!;
     expect(s).not.toBeNull();
     expect(s.model).toBe("claude-opus-4-8");
   });
 
   it("leaves model null when the only model record is <synthetic>", () => {
     const path = join(claudeDir, "projects", "proj-a", "synth-only.jsonl");
-    const s = parseClaudeTranscript(path)!;
+    const s = parseClaudeTranscript(readFileSync(path, "utf8"), path)!;
     expect(s).not.toBeNull();
     expect(s.model).toBeNull();
   });
@@ -297,34 +301,34 @@ describe("parseClaudeTranscript model sentinel (Fix 2)", () => {
 describe("scanSessionsCached", () => {
   beforeEach(() => clearScanCache());
 
-  it("returns the same array reference on second call within TTL (no custom dirs)", () => {
+  it("returns the same array reference on second call within TTL (no custom dirs)", async () => {
     // Use no-dirs path so the cache is populated and hit
     const nowMs = Date.now();
-    const first = scanSessionsCached(nowMs);
-    const second = scanSessionsCached(nowMs + 1_000); // +1s < 15s TTL
+    const first = await scanSessionsCached(nowMs);
+    const second = await scanSessionsCached(nowMs + 1_000); // +1s < 15s TTL
     expect(second).toBe(first);
   });
 
-  it("re-scans when nowMs exceeds TTL (no custom dirs)", () => {
+  it("re-scans when nowMs exceeds TTL (no custom dirs)", async () => {
     const nowMs = Date.now();
-    const first = scanSessionsCached(nowMs);
-    const second = scanSessionsCached(nowMs + 20_000); // +20s > 15s TTL
+    const first = await scanSessionsCached(nowMs);
+    const second = await scanSessionsCached(nowMs + 20_000); // +20s > 15s TTL
     expect(second).not.toBe(first);
   });
 
-  it("re-scans after clearScanCache() (no custom dirs)", () => {
+  it("re-scans after clearScanCache() (no custom dirs)", async () => {
     const nowMs = Date.now();
-    const first = scanSessionsCached(nowMs);
+    const first = await scanSessionsCached(nowMs);
     clearScanCache();
-    const second = scanSessionsCached(nowMs + 100); // same ts, but cache cleared
+    const second = await scanSessionsCached(nowMs + 100); // same ts, but cache cleared
     expect(second).not.toBe(first);
   });
 
-  it("bypasses the cache when custom dirs are passed (Fix 4)", () => {
+  it("bypasses the cache when custom dirs are passed (Fix 4)", async () => {
     const nowMs = Date.now();
     // Two calls with dirs within TTL must NOT share reference
-    const first = scanSessionsCached(nowMs, { claudeDir, codexDir });
-    const second = scanSessionsCached(nowMs + 1_000, { claudeDir, codexDir }); // +1s < 15s TTL
+    const first = await scanSessionsCached(nowMs, { claudeDir, codexDir });
+    const second = await scanSessionsCached(nowMs + 1_000, { claudeDir, codexDir }); // +1s < 15s TTL
     expect(second).not.toBe(first);
   });
 });

@@ -172,7 +172,7 @@ export class GemController {
   async observe(input: { query: z.infer<typeof ObserveQuerySchema> }): Promise<z.infer<typeof ObservePayloadSchema>> {
     const range = input.query.range ?? "7d";
     const { agent, project, model, minMsgs } = input.query;
-    return aggregateObserve(scanSessionsCached(Date.now()), range, Date.now(), { agent, project, model, minMsgs });
+    return aggregateObserve(await scanSessionsCached(Date.now()), range, Date.now(), { agent, project, model, minMsgs });
   }
 
   @post("/gem", { body: GemRequestSchema, response: GemSchema })
