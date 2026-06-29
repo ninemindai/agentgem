@@ -17,20 +17,23 @@ export function ScorecardHero({ data, apiBase = "", createShare }: { data: Score
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [slow, setSlow] = useState(false);
   const svg = renderCardSvg(counts);
   const svgDataUri = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 
-  // Mint the hosted certificate URL and reveal the share options inline. No native share sheet —
-  // the console is a desktop app, where the inline copy + platform links are the clearer path (and
-  // a dismissed OS share sheet shouldn't read as an error).
+  // Mint the hosted certificate URL and reveal the share options inline. The card itself is already
+  // rendered client-side; the only wait here is the network create (which can be a cold start on the
+  // hosted backend), so we show a spinner and, past ~3s, a "waking the server" hint instead of a
+  // silent "Sharing…". No native share sheet — desktop app; inline links are the path.
   const onShare = async () => {
-    setBusy(true); setErr(null);
+    setBusy(true); setErr(null); setSlow(false);
+    const slowTimer = setTimeout(() => setSlow(true), 3000);
     try {
       const { url } = await doCreate({ counts, generatedAtMs: data.generatedAtMs });
       setShareUrl(url);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Couldn't create a share link — try again.");
-    } finally { setBusy(false); }
+    } finally { clearTimeout(slowTimer); setBusy(false); setSlow(false); }
   };
 
   const copyLink = () => {
@@ -65,9 +68,12 @@ export function ScorecardHero({ data, apiBase = "", createShare }: { data: Score
       {data.gaps.length > 0 && <p className="scorecard-gaps">Next: {data.gaps.join(" · ")}</p>}
       <img className="scorecard-card" src={svgDataUri} alt="Goldmine certificate" width={480} />
       <div className="scorecard-actions">
-        <button className="scorecard-share" onClick={onShare} disabled={busy}>{busy ? "Sharing…" : "Share your goldmine"}</button>
+        <button className="scorecard-share" onClick={onShare} disabled={busy}>
+          {busy ? <><span className="scorecard-spin" aria-hidden="true" />Creating link…</> : "Share your goldmine"}
+        </button>
         <button className="scorecard-download" onClick={downloadPng}>Download PNG</button>
       </div>
+      {busy && slow && <p className="scorecard-pending">Waking the server — the first share after a while can take up to ~30s.</p>}
       {err && <p className="scorecard-error">{err}</p>}
       {shareUrl && intents && (
         <div className="scorecard-share-links">
