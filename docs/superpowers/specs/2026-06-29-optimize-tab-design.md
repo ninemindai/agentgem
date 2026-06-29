@@ -80,8 +80,20 @@ Joins two local data sources:
 
 **Pruning candidate** = installed ∧ contextTokens > 0 ∧ `uses === 0` over the range.
 Sorted by contextTokens desc (largest savings first). Each candidate carries a
-deactivation hint: artifact type → `{ file, key }` (e.g. MCP → `~/.claude.json →
-mcpServers.<name>`; skill → the skill's source location).
+**reversible** deactivation hint (no folder deletion — disable in place so the user can
+re-enable later), mapped by the artifact's source:
+
+| Artifact (source) | Reversible disable | File |
+|---|---|---|
+| Standalone skill (`~/.claude/skills/<name>`, `~/.agents`, `~/.hermes`) | `skillOverrides["<name>"] = "off"` | `settings.json` |
+| Plugin skill / MCP / hook (`source = plugin:<key>`) | `enabledPlugins["<key>"] = false` (or `/plugin disable`) | `settings.json` |
+| User MCP (`settings.json → mcpServers.<name>`) | remove key, or add to `deniedMcpServers` blocklist | `settings.json` / `~/.claude.json` |
+| Codex skill (`~/.codex/skills/<name>`) | move/remove folder (no override flag) | filesystem |
+| Codex MCP | `enabled = false` | `~/.codex/config.toml` |
+
+Plugin-provided artifacts collapse to a single `enabledPlugins` toggle — so an unused
+plugin is reported once (its biggest-saving artifact), not per child, to avoid telling the
+user to disable the same plugin five times.
 
 **Response shape** (Zod in `packages/console/src/api/routes.ts`, mirrored in backend):
 
@@ -161,6 +173,10 @@ Write tests first, per project + global rules. vitest runs from compiled `dist/`
    in transcripts — confirm against real fixtures.
 3. **Context-cost is an estimate** (`chars/4`) — must be labeled as such in the UI to avoid
    implying precision we don't have.
+4. **Disable-key names are docs-research-sourced**, not yet verified against code. Before
+   the UI tells a user to type `skillOverrides` / `enabledPlugins` / `deniedMcpServers`,
+   confirm each key against the live Claude Code settings schema (and `~/.codex/config.toml`
+   for Codex). If a key turns out not to exist, fall back to "remove from `<file>`".
 
 ## Concurrency note
 
