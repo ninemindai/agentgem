@@ -557,6 +557,13 @@ body::before {
 .scorecard-share { font: 500 12.5px var(--font-ui); color: var(--raised); background: var(--accent); border: none;
   border-radius: 7px; padding: 6px 14px; cursor: pointer; box-shadow: var(--shadow-sm); transition: background .14s; }
 .scorecard-share:hover { background: var(--accent-2); }
+.scorecard-share:disabled { opacity: .82; cursor: default; }
+.scorecard-spin { display: inline-block; width: 11px; height: 11px; margin-right: 7px; vertical-align: -1px;
+  border: 2px solid rgba(251, 247, 238, .4); border-top-color: var(--raised); border-radius: 50%;
+  animation: scorecard-spin .6s linear infinite; }
+@keyframes scorecard-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .scorecard-spin { animation: none; } }
+.scorecard-pending { font-size: 12px; color: var(--muted); margin: 8px 0 0; animation: fade .2s ease both; }
 .scorecard-actions { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; }
 .scorecard-download { font: 500 12.5px var(--font-ui); color: var(--ink-soft); background: transparent;
   border: 1px solid var(--line); border-radius: 7px; padding: 6px 14px; cursor: pointer;
