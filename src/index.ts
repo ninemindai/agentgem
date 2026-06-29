@@ -19,6 +19,7 @@ import { GemController } from "./gem.controller.js";
 import { GemTools } from "./gem.tools.js";
 import { streamWorkflowAnalyze } from "./workflowStream.js";
 import { streamGemRun } from "./gemRunStream.js";
+import { streamScorecard } from "./scorecardStream.js";
 import { originGuard } from "./originGuard.js";
 import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -82,6 +83,9 @@ export async function createApp(port: number): Promise<RestApplication> {
   // SSE progress stream for running a Gem with a local ACP agent (materialize →
   // run → tool/token deltas → done). POST /api/gem/run stays for programmatic callers.
   server.expressApp.get("/api/gem/run/stream", originGuard, streamGemRun);
+  // SSE scorecard scan: per-project progress with live-climbing counts, then the
+  // final aggregate scorecard. GET /api/scorecard/stream?projects=[...]&dir=...
+  server.expressApp.get("/api/scorecard/stream", originGuard, (req, res) => streamScorecard(req as never, res as never));
   return app;
 }
 
