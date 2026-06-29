@@ -84,8 +84,9 @@ Leaderboard search box
 ## Error handling
 
 - Search: no I/O, nothing to fail. Blank/whitespace query is a no-op (full list).
-- Deep-link: if Get Gems' registry is not configured, the existing "Registry not configured"
-  state already handles it; the prefilled `q` is harmless (search simply won't run usefully).
+- Deep-link: if Get Gems' registry is not configured, the term IS prefilled into the search
+  box (so the user sees what they clicked), but only the search call is gated on readiness;
+  the existing "Registry not configured" message is shown beneath it.
 - `takePendingQuery()` returning `null` (normal navigation) leaves Get Gems behavior unchanged.
 
 ## Testing

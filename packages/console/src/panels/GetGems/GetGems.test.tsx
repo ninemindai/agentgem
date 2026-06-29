@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { GetGems } from "./index.js";
-import { setPendingQuery } from "./intent.js";
+import { setPendingQuery, takePendingQuery } from "./intent.js";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); takePendingQuery(); });
 
 const res = (body: unknown) =>
   ({ ok: true, status: 200, text: async () => JSON.stringify(body) }) as unknown as Response;
@@ -39,7 +39,7 @@ describe("GetGems", () => {
 
 it("auto-runs a search from a pending cross-panel query", async () => {
   const calls: string[] = [];
-  vi.stubGlobal("fetch", vi.fn(async (url: string | URL, init?: RequestInit) => {
+  vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
     const u = String(url);
     if (u.includes("/api/registry/ready")) return res({ ready: true });
     if (u.includes("/api/registry/search")) {

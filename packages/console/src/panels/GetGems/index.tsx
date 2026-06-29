@@ -43,7 +43,9 @@ export function GetGems({ apiBase }: { apiBase: string }) {
   };
 
   useEffect(() => {
-    if (ready && pending) { setQ(pending); void search(pending); }
+    if (!pending) return;
+    setQ(pending);
+    if (ready) void search(pending);
     // run only when `ready` flips; `pending` is captured once at mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
