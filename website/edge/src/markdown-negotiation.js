@@ -83,15 +83,20 @@ export default {
     if (request.method === 'GET' && url.pathname.startsWith('/share/')) {
       try {
         const cache = caches.default;
-        const hit = await cache.match(request);
+        // Key on origin+pathname only: these cards attract social/crawler traffic that appends
+        // ?fbclid=/?utm_* etc., and keying on the full URL would miss the cache (and re-rasterize)
+        // for every such variant. og.png vs HTML still differ by pathname, so they stay distinct.
+        const cacheKey = new Request(`${url.origin}${url.pathname}`, request);
+        const hit = await cache.match(cacheKey);
         if (hit) return hit;
         await initRaster({ wasm: resvgWasm, font: cardFont });
         const shared = await handleShare(request, env);
         if (shared) {
+          // Cache out-of-band; a put failure must never drop the computed response.
           if (isCacheable(shared)) {
-            const toCache = shared.clone();
-            if (ctx && ctx.waitUntil) ctx.waitUntil(cache.put(request, toCache));
-            else await cache.put(request, toCache);
+            const put = cache.put(cacheKey, shared.clone());
+            if (ctx && ctx.waitUntil) ctx.waitUntil(put);
+            else put.catch((e) => console.warn("share cache.put failed:", e));
           }
           return shared;
         }
