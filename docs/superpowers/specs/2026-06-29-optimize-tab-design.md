@@ -234,6 +234,40 @@ Write tests first, per project + global rules. vitest runs from compiled `dist/`
    confirm each key against the live Claude Code settings schema (and `~/.codex/config.toml`
    for Codex). If a key turns out not to exist, fall back to "remove from `<file>`".
 
+## Integration with the built-in `/insights` command
+
+Claude Code's built-in `/insights` analyzes local session transcripts and writes structured
+data to `~/.claude/usage-data/`:
+
+- `session-meta/<session>.json` — quantitative per session: `tool_counts`, `tool_errors`,
+  `tool_error_categories`, `uses_mcp`, `lines_added/removed`, `files_modified`,
+  `git_commits/pushes`, `user_response_times`, `languages`, `input/output_tokens`.
+- `facets/<session>.json` — **LLM-derived** per session: `underlying_goal`,
+  `goal_categories` (e.g. debugging / architecture_planning / documentation), `outcome`,
+  `friction_counts`, `friction_detail`, `claude_helpfulness`, `brief_summary`.
+- `report-*.html` — the rendered dashboard. Section titles: *Top Tools Used*, *Suggested
+  CLAUDE.md Additions*, *Existing CC Features to Try*, *New Ways to Use Claude Code*,
+  *Where Things Go Wrong* (friction/errors).
+
+These sections map almost 1:1 onto this design, so we **borrow** rather than duplicate:
+
+- **Validates Plan 1.** `tool_counts` records MCP servers by full name but skills only as a
+  generic `Skill` bucket (no per-skill breakdown). So `/insights` data **cannot** replace
+  our per-skill prune scan — it confirms `scanWorkflow` (which reads `input.skill`) is the
+  right engine for skill-level usage.
+- **Enriches Plan 2 (Discover).** When `facets/*.json` is present, use its
+  `goal_categories` / `underlying_goal` as the workflow-topic signal for relevance ranking
+  (already LLM-distilled — cleaner than raw transcript topics), with **graceful fallback to
+  `workflowScan` when absent**. Treat this as optional enrichment, never a dependency — the
+  data is a timestamped snapshot that only exists if the user ran `/insights`.
+- **Aligns Plan 3.** Anthropic's report already frames CLAUDE.md tuning as a first-class
+  output ("Suggested CLAUDE.md Additions"). Plan 3's ACP critique should emit the same
+  shape of add/trim/fix suggestion; cite this as prior-art validation.
+- **Positioning.** `/insights` is the *qualitative* report (goals, satisfaction, friction);
+  Optimize is the *quantitative + actionable* complement (token cost, prune-this,
+  install-that). Do not re-render goals/satisfaction. A future "Friction" optimization
+  section could read `friction_counts` to suggest fixes — noted, not built now.
+
 ## Concurrency note
 
 Built in the dedicated worktree `../agentgem-optimize` (`feat/optimize-tab`, off
