@@ -15,6 +15,7 @@ export function Insights({ apiBase }: { apiBase: string }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     let alive = true;
@@ -41,7 +42,7 @@ export function Insights({ apiBase }: { apiBase: string }) {
         <div className="ins-left">
           {error && <p className="ins-error">Couldn't load insights: {error}</p>}
           {loading && rows.length === 0 ? <div className="ins-empty">Loading…</div>
-            : <Leaderboard rows={rows} kind={kind} onKind={setKind} selectedId={selectedId} onSelect={setSelectedId} />}
+            : <Leaderboard rows={rows} kind={kind} onKind={setKind} selectedId={selectedId} onSelect={setSelectedId} search={search} onSearch={setSearch} />}
         </div>
         <div className="ins-right">
           {selectedId ? <Detail id={selectedId} apiBase={apiBase} />
