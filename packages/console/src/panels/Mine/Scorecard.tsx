@@ -23,6 +23,22 @@ export function ScorecardHero({ data, onDistill }: { data: Scorecard; onDistill:
   );
 }
 
+// Live scanning progress shown between the initial skeleton and the finished hero.
+export function ScorecardScanning({ progress }: { progress: { done: number; total: number; label: string; partial: { breadth: number; battleTested: number; portable: number } } | null }) {
+  const pct = progress && progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0;
+  return (
+    <section className="scorecard-hero scorecard-scanning" aria-busy="true" aria-label="Scoring your goldmine">
+      <h2>Scoring your goldmine…{progress ? ` ${progress.done}/${progress.total}` : ""}{progress?.label ? ` · ${progress.label}` : ""}</h2>
+      <div className="scorecard-bar"><div className="scorecard-bar-fill" style={{ width: `${pct}%` }} /></div>
+      <ul className="scorecard-counts scorecard-counts-live">
+        <li>{progress?.partial.breadth ?? 0} reusable workflows</li>
+        <li>{progress?.partial.battleTested ?? 0} battle-tested</li>
+        <li>{progress?.partial.portable ?? 0} worth sharing</li>
+      </ul>
+    </section>
+  );
+}
+
 // Shimmer placeholder shown while the scorecard is computed (the scan over recent
 // projects takes a while). Mirrors the hero's shape so the swap-in is calm.
 export function ScorecardHeroSkeleton() {

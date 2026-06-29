@@ -621,3 +621,8 @@ body::before {
 /* caret */
 .obs-caret { display: inline-block; transition: transform 0.15s; margin-right: 4px; color: var(--muted); font-size: 0.7rem; }
 .obs-caret.open { transform: rotate(90deg); }
+
+/* scorecard progress bar */
+.scorecard-bar { height: 7px; background: var(--paper-2); border: 1px solid var(--line); border-radius: 999px; overflow: hidden; margin: 4px 0 14px; }
+.scorecard-bar-fill { height: 100%; background: var(--accent); border-radius: 999px; transition: width .3s ease; }
+.scorecard-counts-live li { font-variant-numeric: tabular-nums; }
