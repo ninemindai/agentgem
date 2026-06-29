@@ -95,16 +95,24 @@ type ProjectGoldmine = {
 |---|---|---|
 | **breadth** | distinct gated procedure candidates across all projects, deduped by verb-spine | `extractCandidates().candidates` |
 | **battleTested** | candidates with `priorConfidence === "high"` | `scoreCandidate()` (`extract.ts:103`) |
-| **portable** | `battleTested` ∩ general: workflow whose artifacts aren't all project-local — uses portable skills/MCP tools (`ArtifactUsage.root === null`), not just repo-only `Edit`/`Bash` | `ArtifactUsage.root` |
+| **portable** | `battleTested` ∩ general: a candidate that uses ≥1 tool **beyond the repo-local edit set** `{Read,Edit,Write,Bash,Grep,Glob,LS}` (web, sub-agents, orchestration) | `candidate.skeleton.tools` |
 | **gaps** | v1 deterministic from `extractReflections()`; upgraded to `WorkflowAnalysis.gaps` on drill-in | `extract.ts` / `acpRecommender.ts` |
 
 **On "portable" (the key reframe):** the third tier is not "sellable" but **"travels beyond the
 repo it was born in"** — which is what makes a workflow worth sharing, showing off, *or* selling.
 This matches the strategy ladder **reuse → share → sell** (`liberating-story` "selfish first
-rung"; rings of reach: team → infra → world). The `root === null` proxy literally measures
-portability, so it is honest to display, not a sellability guess. The CTA fans out to the whole
+rung"; rings of reach: team → infra → world). The CTA fans out to the whole
 ladder (distill → reuse locally · share with team · later list), keeping v1 in the
 "value-before-monetization" tone the `recommendation-engine` doc requires.
+
+**Portability proxy — final (implementation reality):** the spec originally proposed
+`ArtifactUsage.root === null`, then the plan refined to `skeleton.tools` matching
+`/^(Skill|mcp__)/`. Manual verification on real sessions showed **both collapse to ~0**: skill/MCP
+usage is recorded as signal *artifacts* but never appears in a candidate's step `tool` tokens
+(those are `Read/Edit/Write/Bash/Agent/AskUserQuestion/WebFetch/…`). The shipped proxy is therefore
+"uses ≥1 **non-local** tool" — present in the data, deterministic, a true subset of `battleTested`
+(verified live: 20 battle-tested → 16 portable). A precise candidate→artifact portability signal
+(recording Skill/MCP in step tools) is a follow-up.
 
 ## UI — Observe hero
 
@@ -152,7 +160,7 @@ Phase-4 social-share work pulled into v1 as an aggregate-only, local, opt-in exp
 
 - **`scorecard.ts` aggregator** (the heart): unit-tested against synthetic `WorkflowSignal[]`
   fixtures — breadth dedup across projects, `battleTested` from `priorConfidence`, `portable`
-  from the `root === null` proxy, `degraded` flag propagation.
+  from the non-local-tool proxy, `degraded` flag propagation.
 - **`/api/scorecard` route**: composition test with `discoverProjects` stubbed; asserts it
   threads discover → scan → aggregate and shape-validates the response.
 - **Trophy**: the data → label mapping function is unit-tested; the `<canvas>` pixel draw is
@@ -162,8 +170,23 @@ Phase-4 social-share work pulled into v1 as an aggregate-only, local, opt-in exp
 - **Repo note:** vitest runs compiled tests from `dist/`; clean `dist` after any file
   rename/move before running.
 
+## v1 performance bound (shipped)
+
+`collectScorecard`'s discover-all path scans each project's transcripts, and
+`claudeTranscriptsForCwd` re-reads the whole `~/.claude` store per project — O(store × projects).
+Measured at **85 projects → endpoint hangs (>90s)**. v1 therefore **caps the discover-all path to
+the 12 most-recently-used projects** (by `lastUsed`), logging what was dropped (`[scorecard] N
+projects discovered; scanning the 12 most recent`). Explicit `?projects=` queries are uncapped.
+Bounded all-projects call verified at ~24s (breadth 53 / battle-tested 20 / portable 16).
+
 ## Out of scope / follow-ups
 
+- **Scan-once + bucket-by-cwd + TTL cache** — read the transcript store ONCE, group by cwd, scan
+  per bucket (O(store) not O(store × projects)); make it async (the Observe event-loop lesson) and
+  cache. This removes the 12-project cap and the ~24s latency. **The priority follow-up.**
+- Precise candidate→artifact portability signal (record Skill/MCP in step tools) — see the
+  portability-proxy note above.
+- A "across your N most recent projects" label on the hero (honesty for the v1 cap).
 - Dollar/latent-$ valuation (needs marketplace price data).
 - Comparative / percentile / leaderboard scoring (needs data moat + proof-of-paid-use gate).
 - Polished/themeable trophy (would justify revisiting the `html-to-image` dep decision).
