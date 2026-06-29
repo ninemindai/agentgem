@@ -12,12 +12,13 @@ export function Ingredient({ api, id }: { api: ReturnType<typeof makeApi>; id: s
 
   useEffect(() => {
     let alive = true;
-    setError(null);
+    setError(null); setCo([]); setSeries([]);
     Promise.all([api.getCoOccurrence({ id }), api.getAdoption({ id, bucket })])
       .then(([c, a]) => { if (!alive) return; setCo(c); setSeries(a); })
       .catch((e) => { if (alive) setError(String(e?.message ?? e)); });
     return () => { alive = false; };
-  }, [api, id, bucket]);
+    // api is a stable module-level singleton (App.tsx) — excluded so re-renders don't refetch.
+  }, [id, bucket]);
 
   const head = prettifyId(id, "skill");
   if (error) return <div className="ex-detail"><p className="ex-error">Couldn't load this ingredient: {error}</p></div>;

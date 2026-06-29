@@ -24,7 +24,8 @@ export function Leaderboard({ api }: { api: ReturnType<typeof makeApi> }) {
       .catch((e) => { if (alive) setError(String(e?.message ?? e)); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [api, kind]);
+    // api is a stable module-level singleton (App.tsx) — excluded so re-renders don't refetch.
+  }, [kind]);
 
   const widths = barWidths(rows.map((r) => r.producers));
   const visible = filterRows(rows, search);
