@@ -38,9 +38,13 @@ exception.
 - **Branch off freshly-fetched `origin/main`**, not local `main`, so your diff is
   against the real trunk.
 - **Finish with a local merge (default):** in the one checkout that holds `main`,
-  sync it (`git merge --ff-only origin/main`), `git merge <branch>`, run tests,
-  then `git push`. Don't check `main` out where it's already checked out in
-  another worktree.
+  `git fetch` then **sync down** (`git merge --ff-only origin/main` — local only,
+  *no push*; it just advances local `main` up to the remote), `git merge <branch>`
+  (new commits, now ahead of the remote), run tests, then **push up**
+  (`git push` — this is the step that publishes the merge to `origin/main`). The
+  ff-only sync and the push move in opposite directions; only the push leaves your
+  machine. Don't check `main` out where it's already checked out in another
+  worktree.
 - **Reach for a PR only when** integrations may overlap (two sessions merging at
   once — git won't let `main` be checked out in two worktrees, so they'd serialize
   anyway and the remote is the safer rendezvous) or when you want CI/review before
