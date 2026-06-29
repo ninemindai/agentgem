@@ -118,12 +118,23 @@ export function extractCandidates(
   const gated = distillCandidates(signal, opts);
   const sessions = signal.sequences?.sessions ?? [];
   const candidates: ProcedureCandidate[] = [];
+  const usedNames = new Set<string>();
   for (const g of gated) {
     const priorConfidence = scoreCandidate(g, minRecurrence);
     // Junk filter: empty-mission candidates at exactly the floor waste LLM spend.
     if (priorConfidence === "low" && !g.sample.missionHint && g.sessions <= minRecurrence) continue;
     const provenance = buildProvenance(g.verbs, sessions, g.sessionIdxs ?? [g.sampleSessionIdx]);
     const skeleton = heuristicSkeleton(g, provenance, inv);
+    // heuristicSkeleton only dedups vs installed inventory; siblings from same-titled
+    // sessions still collide. Make each candidate's name unique within this pass so the
+    // scorecard list is unambiguous and the gem build keys (skeleton.name) don't clash.
+    if (usedNames.has(skeleton.name)) {
+      const base = skeleton.name;
+      let n = 2;
+      while (usedNames.has(`${base}-${n}`)) n++;
+      skeleton.name = `${base}-${n}`;
+    }
+    usedNames.add(skeleton.name);
     candidates.push({ ...g, provenance, priorConfidence, skeleton });
   }
   // Strongest priors first, so a downstream prompt cap keeps the best candidates.

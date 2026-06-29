@@ -126,4 +126,32 @@ describe("scoreCandidate + extractCandidates junk filter", () => {
     // No missionHint on the only session → empty-mission + min recurrence → dropped.
     expect(extractCandidates(sig, inv).candidates).toHaveLength(0);
   });
+
+  it("assigns unique names when multiple procedures produce the same slug (no list dups, no gem-build collision)", () => {
+    // Two procedures whose samples share the same missionHint.task → same slugify() output.
+    const sharedTask = "user installs coding";
+    const steps = [
+      { tool: "Edit", verb: "Edit", arg: "", msgIndex: 0 },
+      { tool: "Bash", verb: "Bash:npm install", arg: "", msgIndex: 1 },
+      { tool: "Bash", verb: "Bash:git commit", arg: "", msgIndex: 2 },
+    ];
+    const session0 = { steps, sessionId: "s0", transcript: "s0.jsonl", atMs: 0, missionHint: { task: sharedTask, outcome: "done" } };
+    const session1 = { steps, sessionId: "s1", transcript: "s1.jsonl", atMs: 1, missionHint: { task: sharedTask, outcome: "done" } };
+    const sig = {
+      root: "/r", flavor: "claude", sessions: { scanned: 2, firstMs: 0, lastMs: 1, spanDays: 0 },
+      artifacts: [], unresolved: [], coOccurrence: [], shapes: [], notes: [],
+      sequences: { root: "/r", sessions: [session0, session1] },
+      procedures: [
+        { key: "p0", verbs: ["Edit", "Bash:npm install", "Bash:git commit"], sessions: 3, sampleSessionIdx: 0, sessionIdxs: [0] },
+        { key: "p1", verbs: ["Edit", "Bash:npm install", "Bash:git commit"], sessions: 3, sampleSessionIdx: 1, sessionIdxs: [1] },
+      ],
+    } as any;
+    const { candidates } = extractCandidates(sig, inv);
+    expect(candidates.length).toBeGreaterThanOrEqual(2);
+    const names = candidates.map((c) => c.skeleton.name);
+    // No duplicates within this extraction pass.
+    expect(new Set(names).size).toBe(names.length);
+    // The collision resolves to a -2 suffix on the second.
+    expect(names[1]).toBe(`${names[0]}-2`);
+  });
 });
