@@ -102,9 +102,16 @@ export async function createApp(port: number): Promise<RestApplication> {
   // Liveness probe for deploy orchestrators (Cloud Run / ECS / Fly / k8s). Unauthenticated
   // and origin-less by design — registered as a raw route, so it's outside originGuard.
   server.expressApp.get("/healthz", (_req, res) => res.json({ status: "ok" }));
-  const consolePage = consoleHtml();
-  server.expressApp.get("/", (_req, res) => res.type("html").send(consolePage));
-  server.expressApp.get("/console", (_req, res) => res.type("html").send(consolePage));
+  // The desktop console UI is served at `/` (and `/console`) for LOCAL runs only. The hosted
+  // public deployment (app.agentgem.ai) is API-only — the console is a local desktop app, not a
+  // public surface — so SERVE_CONSOLE=false disables it there and redirects `/` to the site.
+  if (process.env.SERVE_CONSOLE !== "false") {
+    const consolePage = consoleHtml();
+    server.expressApp.get("/", (_req, res) => res.type("html").send(consolePage));
+    server.expressApp.get("/console", (_req, res) => res.type("html").send(consolePage));
+  } else {
+    server.expressApp.get("/", (_req, res) => res.redirect(302, "https://agentgem.ai"));
+  }
   // SSE progress stream for workflow analysis (raw Express — the decorator
   // framework only returns single JSON bodies). The POST /api/workflow/analyze
   // route stays for programmatic/test callers. originGuard is applied per-route because these raw

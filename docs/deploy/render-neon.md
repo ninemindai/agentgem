@@ -102,6 +102,7 @@ spoofed here). If the burst does **not** 429, check that `CLIENT_IP_HEADER` is s
 | --- | --- | --- |
 | `DATABASE_URL` | you (`sync: false`) | Neon Postgres connection string (`?sslmode=require`) |
 | `AGGREGATOR_ADMIN_TOKEN` | Render (`generateValue`) | gates `POST /api/aggregator/keys*` + `/sweep` |
+| `SERVE_CONSOLE` | Blueprint (`false`) | API-only: don't serve the desktop console UI on the public host; `/` redirects to the marketing site. Unset (default) locally so the console serves at `/`. |
 | `TRUST_PROXY` | Blueprint (`1`) | trust the proxy hop for `req.protocol`/`secure` (TLS terminated upstream) |
 | `CLIENT_IP_HEADER` | Blueprint (`cf-connecting-ip`) | key per-IP rate limits on this header (the real client IP) instead of `req.ip` — required behind Render's Cloudflare front, where `req.ip` is a rotating edge IP |
 | `HOST` | Blueprint (`0.0.0.0`) | bind all interfaces (also in the Dockerfile) |
@@ -124,7 +125,7 @@ The same `render.yaml` defines a second service, `explore`: a Vite/React **stati
 
 | Domain | Render service | Serves |
 | --- | --- | --- |
-| `app.agentgem.ai` | `agentgem` (Docker web) | the **API** (`/api/*`) **and** the desktop console UI (`/`) |
+| `app.agentgem.ai` | `agentgem` (Docker web) | the **API** (`/api/*`) only; `/` redirects to the marketing site. The desktop console UI is a **local** app and is disabled here via `SERVE_CONSOLE=false`. |
 | `explore.agentgem.ai` | `explore` (static) | the **public marketplace UI** |
 
 How it deploys (the Blueprint handles it automatically when applied):
