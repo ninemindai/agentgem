@@ -13,11 +13,12 @@ import { extractCandidates } from "./extract.js";
 import type { WorkflowSignal } from "./workflowScan.js";
 import type { ProcedureCandidate, Reflection } from "./distillTypes.js";
 
-// A workflow "travels" when it leans on portable capability (a Skill or an MCP
-// tool) rather than only repo-local edits (Bash/Edit/Write). This is the
-// implementable form of the spec's `ArtifactUsage.root === null` portability
-// proxy, computed from the candidate's own tool list.
-const PORTABLE_TOOL_RE = /^(Skill|mcp__)/;
+// A workflow "travels" when it does more than hand-edit one repo — i.e. it uses
+// at least one tool beyond the repo-local edit set. (Skill/MCP usage is NOT
+// recorded in a candidate's step tools, so an earlier Skill|mcp regex collapsed
+// to 0 on real data; non-local tools — web, sub-agents, orchestration — are the
+// reliable portability signal that's actually present.)
+const LOCAL_TOOLS = new Set(["Read", "Edit", "Write", "Bash", "Grep", "Glob", "LS"]);
 const MAX_GAPS = 5;
 const TOP_CANDIDATES = 5;
 
@@ -49,7 +50,7 @@ export type Scorecard = {
 };
 
 export function isPortable(c: ProcedureCandidate): boolean {
-  return c.priorConfidence === "high" && c.skeleton.tools.some((t) => PORTABLE_TOOL_RE.test(t));
+  return c.priorConfidence === "high" && c.skeleton.tools.some((t) => !LOCAL_TOOLS.has(t));
 }
 
 export function scoreProject(load: ProjectLoad): ProjectGoldmine {

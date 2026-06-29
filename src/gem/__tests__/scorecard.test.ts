@@ -24,13 +24,14 @@ function sig(root: string): WorkflowSignal {
 }
 
 describe("isPortable", () => {
-  it("is true for a high-confidence candidate using a Skill or mcp tool", () => {
-    expect(isPortable(cand({ key: "k1", priorConfidence: "high", skeleton: { name: "k1", tools: ["Skill", "Bash"] } as any }))).toBe(true);
+  it("is true for a high-confidence candidate using any non-local tool", () => {
+    expect(isPortable(cand({ key: "k1", priorConfidence: "high", skeleton: { name: "k1", tools: ["WebFetch", "Edit"] } as any }))).toBe(true);
     expect(isPortable(cand({ key: "k2", priorConfidence: "high", skeleton: { name: "k2", tools: ["mcp__pw__click"] } as any }))).toBe(true);
+    expect(isPortable(cand({ key: "k3", priorConfidence: "high", skeleton: { name: "k3", tools: ["AskUserQuestion", "Bash"] } as any }))).toBe(true);
   });
   it("is false when not battle-tested, or tools are repo-local only", () => {
-    expect(isPortable(cand({ key: "k3", priorConfidence: "medium", skeleton: { name: "k3", tools: ["Skill"] } as any }))).toBe(false);
-    expect(isPortable(cand({ key: "k4", priorConfidence: "high", skeleton: { name: "k4", tools: ["Edit", "Bash"] } as any }))).toBe(false);
+    expect(isPortable(cand({ key: "k4", priorConfidence: "medium", skeleton: { name: "k4", tools: ["WebFetch"] } as any }))).toBe(false);
+    expect(isPortable(cand({ key: "k5", priorConfidence: "high", skeleton: { name: "k5", tools: ["Edit", "Bash", "Read"] } as any }))).toBe(false);
   });
 });
 
