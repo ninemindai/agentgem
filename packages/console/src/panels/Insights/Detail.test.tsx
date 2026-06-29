@@ -3,7 +3,7 @@ import { render, screen, cleanup, waitFor, fireEvent } from "@testing-library/re
 import { Detail } from "./Detail.js";
 import { takePendingQuery } from "../GetGems/intent.js";
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.location.hash = ""; });
 
 const res = (body: unknown) =>
   ({ ok: true, status: 200, text: async () => JSON.stringify(body) }) as unknown as Response;
