@@ -1,0 +1,12 @@
+:root { color-scheme: light; font-family: system-ui, sans-serif; }
+.ex-tabs { display: flex; gap: 8px; margin-bottom: 8px; }
+.ex-tab { padding: 4px 10px; border: 1px solid #ddd; border-radius: 6px; background: #fff; cursor: pointer; }
+.ex-tab.is-active { background: #efe9df; }
+.ex-search { width: 100%; box-sizing: border-box; padding: 6px 10px; margin: 8px 0; }
+.ex-rows { list-style: none; padding: 0; margin: 0; }
+.ex-row { display: grid; grid-template-columns: 2ch 1fr auto; gap: 8px; align-items: center; padding: 8px; text-decoration: none; color: inherit; }
+.ex-scope { color: #888; margin-left: 6px; font-size: .85em; }
+.ex-bar, .ex-vshare { background: #eee; height: 6px; border-radius: 3px; overflow: hidden; }
+.ex-bar-fill { display: block; height: 100%; background: #b4543a; }
+.ex-vshare-fill { display: block; height: 100%; background: #3a7d44; }
+.ex-empty, .ex-error { color: #777; padding: 16px 8px; }
