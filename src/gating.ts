@@ -1,6 +1,7 @@
-// Two-tier rate limiting for the aggregator: anonymous callers are limited per-IP at a low
-// ceiling; callers presenting a valid API key are limited per-key at a high ceiling. The
-// extension can't vary `points` per request, so each tier is a separate mount, routed by `skip`.
+// Three-bucket rate limiting for the aggregator: anonymous reads (per-IP, low ceiling), keyed
+// reads (per-key, high ceiling), and a separate ingest bucket (per-IP, 120/min by default) so
+// publish bursts and read traffic never share a budget. Each bucket is a separate mount, routed
+// by `skip`. Admin endpoints (/keys*, /sweep) are excluded from all three buckets.
 import { installRateLimit } from "@agentback/extension-rate-limit";
 import { makeApiKeyIdentity } from "./apiKeyIdentity.js";
 import type { AppDb } from "./aggregator/schema.js";
@@ -16,6 +17,7 @@ export function posIntEnv(name: string, def: number): number {
 
 export const ANON_POINTS = posIntEnv("AGG_ANON_POINTS", 60);
 export const KEYED_POINTS = posIntEnv("AGG_KEYED_POINTS", 600);
+export const INGEST_POINTS = posIntEnv("AGG_INGEST_POINTS", 120);
 
 type GReq = {
   ip?: string;
@@ -25,6 +27,11 @@ type GReq = {
   baseUrl?: string;
   path?: string;
 };
+
+function isIngestPath(req: GReq): boolean {
+  const full = req.originalUrl ? req.originalUrl.split("?")[0] : (req.baseUrl ?? "") + (req.path ?? "");
+  return full === `${AGG_PATH}/ingest`;
+}
 
 // Admin paths (key management + sweep) must not consume the public rate-limit buckets.
 // When the limiter is mounted at AGG_PATH the skip callback may receive a path already
@@ -43,7 +50,7 @@ export function anonRateLimitOptions(points: number = ANON_POINTS) {
     points,
     durationSecs: WINDOW_SECS,
     keyGenerator: (req: GReq) => req.ip ?? "anon",
-    skip: (req: GReq) => isAdminPath(req) || req.gemTier === "keyed",
+    skip: (req: GReq) => isAdminPath(req) || isIngestPath(req) || req.gemTier === "keyed",
   };
 }
 
@@ -56,7 +63,17 @@ export function keyedRateLimitOptions(points: number = KEYED_POINTS) {
     // optional, so the ?? "anon" fallback is kept to satisfy tsc (removing it causes a
     // TS2322: Type 'string | undefined' is not assignable to 'string').
     keyGenerator: (req: GReq) => req.gemKeyId ?? "anon",
-    skip: (req: GReq) => isAdminPath(req) || req.gemTier !== "keyed",
+    skip: (req: GReq) => isAdminPath(req) || isIngestPath(req) || req.gemTier !== "keyed",
+  };
+}
+
+export function ingestRateLimitOptions(points: number = INGEST_POINTS) {
+  return {
+    path: AGG_PATH,
+    points,
+    durationSecs: WINDOW_SECS,
+    keyGenerator: (req: GReq) => req.ip ?? "anon",
+    skip: (req: GReq) => !isIngestPath(req), // this mount applies ONLY to /ingest
   };
 }
 
@@ -67,4 +84,5 @@ export async function mountGating(app: import("@agentback/rest").RestApplication
   server.expressApp.use(AGG_PATH, makeApiKeyIdentity(db));
   await installRateLimit(app, anonRateLimitOptions());
   await installRateLimit(app, keyedRateLimitOptions());
+  await installRateLimit(app, ingestRateLimitOptions());
 }
