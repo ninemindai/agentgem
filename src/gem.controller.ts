@@ -20,6 +20,19 @@ const ObservePayloadSchema = z.object({
   facets: z.object({ agents: z.array(z.string()), projects: z.array(z.string()), models: z.array(z.string()) }),
   range: z.enum(["today", "7d", "30d", "all"]),
 });
+const ScorecardSchema = z.object({
+  breadth: z.number(),
+  battleTested: z.number(),
+  portable: z.number(),
+  gaps: z.array(z.string()),
+  projects: z.array(z.object({
+    root: z.string(), label: z.string(),
+    breadth: z.number(), battleTested: z.number(), portable: z.number(),
+    topCandidates: z.array(z.object({ name: z.string(), confidence: z.enum(["high", "medium", "low"]) })),
+  })),
+  generatedAtMs: z.number(),
+  degraded: z.boolean(),
+}) satisfies z.ZodType<Scorecard>;
 import { introspectConfig, introspectProject } from "./gem/introspect.js";
 import { buildGem } from "./gem/buildGem.js";
 import { scaffoldChecks } from "./gem/checks.js";
@@ -78,6 +91,7 @@ import {
   GemRunPrepareRequestSchema, GemRunPrepareResponseSchema,
   UsageSchema, UsageQuerySchema,
 } from "./schemas.js";
+import { collectScorecard, type Scorecard } from "./gem/scorecard.js";
 import { claudeTranscriptsForCwd, scanWorkflow, allClaudeTranscripts } from "./gem/workflowScan.js";
 import { recommendWorkflow, recommendationToSelection } from "./gem/acpRecommender.js";
 import { distillWorkflow } from "./gem/distill.js";
@@ -173,6 +187,11 @@ export class GemController {
     const range = input.query.range ?? "7d";
     const { agent, project, model, minMsgs } = input.query;
     return aggregateObserve(await scanSessionsCached(Date.now()), range, Date.now(), { agent, project, model, minMsgs });
+  }
+
+  @get("/scorecard", { query: DirQuerySchema, response: ScorecardSchema })
+  async scorecard(input: { query: z.infer<typeof DirQuerySchema> }): Promise<z.infer<typeof ScorecardSchema>> {
+    return collectScorecard(input.query.dir, parseProjectsQuery(input.query.projects), Date.now());
   }
 
   @post("/gem", { body: GemRequestSchema, response: GemSchema })
