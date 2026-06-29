@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
 import type { Scorecard } from "../../api/routes.js";
+import { scorecardBuildRoute, makeClient } from "../../api/routes.js";
 import { ScorecardHero, ScorecardHeroSkeleton, ScorecardScanning } from "./Scorecard.js";
 import { openScorecardStream, type ScorecardStreamEvent } from "./scorecardStream.js";
+import { MineWorkflows } from "./Workflows.js";
 
 type Progress = { done: number; total: number; label: string; partial: { breadth: number; battleTested: number; portable: number } };
 
@@ -10,6 +12,9 @@ export function Mine({ apiBase, openStream = openScorecardStream }: { apiBase: s
   const [scorecard, setScorecard] = useState<Scorecard | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [phase, setPhase] = useState<"loading" | "scanning" | "done" | "failed">("loading");
+  const [building, setBuilding] = useState(false);
+  const [buildResult, setBuildResult] = useState<{ name: string; skills: string[] } | null>(null);
+  const [buildError, setBuildError] = useState<string | null>(null);
 
   useEffect(() => {
     setScorecard(null); setProgress(null); setPhase("loading");
@@ -24,10 +29,28 @@ export function Mine({ apiBase, openStream = openScorecardStream }: { apiBase: s
 
   const onDistill = (_root: string) => { window.location.hash = "#/curate"; };
 
+  const onBuild = async (selections: { root: string; keys: string[] }[], name: string) => {
+    setBuilding(true);
+    setBuildResult(null);
+    setBuildError(null);
+    try {
+      const gem = await scorecardBuildRoute.call(makeClient(apiBase), { body: { selections, name } });
+      const skills = gem.artifacts.filter((a) => a.type === "skill").map((a) => a.name);
+      setBuildResult({ name: gem.name, skills });
+    } catch (err) {
+      setBuildError(err instanceof Error ? err.message : "Build failed");
+    } finally {
+      setBuilding(false);
+    }
+  };
+
   return (
     <div className="obs mine">
       {phase === "done" && scorecard
-        ? <ScorecardHero data={scorecard} onDistill={onDistill} />
+        ? <>
+            <ScorecardHero data={scorecard} onDistill={onDistill} />
+            <MineWorkflows data={scorecard} onBuild={onBuild} building={building} result={buildResult} error={buildError} />
+          </>
         : phase === "failed"
           ? <p className="obs-empty">Couldn't compute your goldmine right now — try again shortly.</p>
           : phase === "scanning"

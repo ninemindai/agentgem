@@ -44,6 +44,7 @@ describe("Mine panel", () => {
     ]);
     render(<Mine apiBase="http://localhost:0" openStream={stream} />);
     expect(screen.getByText(/10 reusable workflows/i)).toBeTruthy();
+    expect(screen.getByText(/pick workflows to distill into a gem/i)).toBeTruthy();
   });
 
   it("shows error state after failed event", () => {

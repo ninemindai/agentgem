@@ -133,6 +133,16 @@ export const buildGemRoute = defineRoute("POST", "/api/gem", {
   response: GemSchema,
 });
 
+export const ScorecardBuildRequestSchema = z.object({
+  dir: z.string().optional(),
+  name: z.string().optional(),
+  selections: z.array(z.object({ root: z.string(), keys: z.array(z.string()) })),
+});
+export const scorecardBuildRoute = defineRoute("POST", "/api/scorecard/build", {
+  body: ScorecardBuildRequestSchema,
+  response: GemSchema,
+});
+
 // POST /api/archive — with `tar:true` the server returns the portable .gem
 // (tar.gz) as base64 in `tarGz`. We only send/read those fields.
 export const ArchiveRequestSchema = z.object({
