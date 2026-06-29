@@ -32,7 +32,7 @@ const OptimizeInstructionSchema = z.object({
   name: z.string(), source: z.string(), contextTokens: z.number(), lines: z.number(),
   flags: z.array(z.enum(["oversized", "very-long", "duplicate-lines"])),
 });
-const OptimizePayloadSchema = z.object({
+export const OptimizePayloadSchema = z.object({
   range: z.enum(["today", "7d", "30d", "all"]),
   artifacts: z.array(OptimizeArtifactSchema),
   instructions: z.array(OptimizeInstructionSchema),

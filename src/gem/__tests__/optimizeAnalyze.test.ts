@@ -145,14 +145,24 @@ describe("buildOptimizePayload — instructions health", () => {
     expect(insFlag.flags).toContain("duplicate-lines");
   });
 
-  it("includes per-project instructions and sorts by contextTokens desc", () => {
+  it("v1 global-only: ignores inv.projects; returns only global instructions, sorted by contextTokens desc", () => {
+    // inv.projects is populated but must be silently ignored in v1
     const c = inv({
-      instructions: [{ type: "instructions", name: "CLAUDE.md", content: "short" }],
+      instructions: [
+        { type: "instructions", name: "AGENTS.md", content: "x".repeat(8000) },
+        { type: "instructions", name: "CLAUDE.md", content: "short" },
+      ],
       projects: [{ root: "/p", name: "p", skills: [], mcpServers: [], hooks: [],
-        instructions: [{ type: "instructions", name: "p/CLAUDE.md", content: "x".repeat(8000) }] }],
+        instructions: [{ type: "instructions", name: "p/CLAUDE.md", content: "x".repeat(12000) }] }],
     });
-    const names = buildOptimizePayload(c, usage([]), "all", NOW).instructions.map((i) => i.name);
-    expect(names[0]).toBe("p/CLAUDE.md");
+    const result = buildOptimizePayload(c, usage([]), "all", NOW).instructions;
+    const names = result.map((i) => i.name);
+    // only global instructions should appear
+    expect(names).toContain("AGENTS.md");
     expect(names).toContain("CLAUDE.md");
+    // per-project instruction must NOT appear (inv.projects is ignored)
+    expect(names).not.toContain("p/CLAUDE.md");
+    // global sort order: bigger one first
+    expect(names[0]).toBe("AGENTS.md");
   });
 });

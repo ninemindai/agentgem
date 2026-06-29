@@ -50,7 +50,7 @@ export function Dashboard({ data, range, onRange, pending }: {
       </section>
 
       <section className="opt-section">
-        <h3>Instructions health <span className="obs-muted">(loaded every session)</span></h3>
+        <h3>Instructions health <span className="obs-muted">global · loaded every session</span></h3>
         <table className="obs-table">
           <thead><tr><th>file</th><th>source</th><th>est. ctx / session</th><th>lines</th><th>flags</th></tr></thead>
           <tbody>
