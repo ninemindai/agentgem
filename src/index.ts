@@ -55,7 +55,8 @@ export async function createApp(port: number): Promise<RestApplication> {
   app.service(GemTools);
   // Aggregator (B1) + gating: always registered now — Postgres when DATABASE_URL is set, else
   // embedded pglite for local runs (ephemeral). mountGating adds the api-key identity middleware
-  // + the two-tier rate limiters over /api/aggregator.
+  // + the two-tier rate limiters over /api/aggregator. Public read endpoints are CORS-open and
+  // originGuard-exempt; auth boundary is apiKeyIdentity + rate limiters.
   {
     const { db, onStop, mode } = await resolveAggregatorDb();
     registerDrizzle(app, db as never, { onStop });
@@ -70,6 +71,15 @@ export async function createApp(port: number): Promise<RestApplication> {
   await installExplorer(app, { title: "agentgem API" });
   await installMcpHttp(app);
   const server = await app.restServer;
+  // Behind a proxy/LB, req.ip is the proxy's address unless we trust the forwarding header.
+  // Off by default (loopback dev). Deploys set TRUST_PROXY to the hop count (e.g. "1"), a
+  // boolean, or a subnet string — see Express "trust proxy". Trusting all proxies blindly
+  // lets clients spoof X-Forwarded-For, so this is opt-in via env, not "true" by default.
+  const trustProxy = process.env.TRUST_PROXY;
+  if (trustProxy) {
+    const n = Number(trustProxy);
+    server.expressApp.set("trust proxy", Number.isFinite(n) ? n : trustProxy);
+  }
   // The React console (`dist/public/console`) is the UI, served at `/` (and `/console`).
   // It replaced the original vanilla UI, now removed (history in git). The gem-transfer
   // feature's backend (/api/transfer/*) ships, but its web redeem UI is not yet ported to

@@ -30,7 +30,10 @@ This builds on `@agentback`'s native security stack (confirmed via the `agentbac
    `api_keys` with `@electric-sql/pglite` so the whole gated flow runs locally.
 5. **Defaults (env-overridable later, hardcoded now):** bad key → **401** (not silent
    anonymous fallback); **60 req/min** anonymous (per IP), **600 req/min** keyed (per key);
-   rate limit scopes **all of `/api/aggregator`** (so `/ingest` writes are covered too).
+   rate limit scopes the aggregator reads + writes (`/ingest`, `/bind`) but **excludes** admin
+   endpoints (`/keys*`, `/sweep`) — minting keys or sweeping must not be throttled by the
+   public anon bucket. `TRUST_PROXY` env (Express "trust proxy") configures correct per-IP
+   limiting behind a proxy/LB; off by default.
 6. **One keyed tier.** Per-key tiers/plans deferred — every valid key gets the same elevated
    limit. The `api_keys.label` field carries attribution for later.
 
