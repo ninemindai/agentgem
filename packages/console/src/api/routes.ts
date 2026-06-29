@@ -433,4 +433,37 @@ export const createShareRoute = defineRoute("POST", "/api/share", {
   response: z.object({ id: z.string(), url: z.string() }),
 });
 
+// ── Optimize (Plan 1: local prune + instructions health) ──
+const OptimizeArtifactSchema = z.object({
+  name: z.string(),
+  type: z.enum(["skill", "mcp"]),
+  source: z.string(),
+  contextTokens: z.number(),
+  uses: z.number(),
+  lastUsedMs: z.number().nullable(),
+  prune: z.boolean(),
+  change: z.object({ file: z.string(), key: z.string() }),
+});
+const OptimizeInstructionSchema = z.object({
+  name: z.string(),
+  source: z.string(),
+  contextTokens: z.number(),
+  lines: z.number(),
+  flags: z.array(z.enum(["oversized", "very-long", "duplicate-lines"])),
+});
+const OptimizePayloadSchema = z.object({
+  range: z.enum(["today", "7d", "30d", "all"]),
+  artifacts: z.array(OptimizeArtifactSchema),
+  instructions: z.array(OptimizeInstructionSchema),
+});
+export type OptimizeArtifact = z.infer<typeof OptimizeArtifactSchema>;
+export type OptimizeInstruction = z.infer<typeof OptimizeInstructionSchema>;
+export type OptimizePayload = z.infer<typeof OptimizePayloadSchema>;
+export type OptimizeRange = OptimizePayload["range"];
+
+export const optimizeRoute = defineRoute("GET", "/api/optimize", {
+  query: z.object({ range: z.enum(["today", "7d", "30d", "all"]).optional() }),
+  response: OptimizePayloadSchema,
+});
+
 export const makeClient = (apiBase: string): Client => createClient({ baseURL: apiBase });
