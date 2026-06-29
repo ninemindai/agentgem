@@ -5,7 +5,9 @@ import {
   XAxis, YAxis, Tooltip, CartesianGrid,
 } from "recharts";
 import type { ObservePayload, ObserveRange, ObserveFilter } from "../../api/routes.js";
-import { fmtTokens, fmtDuration, tokenSeries, fmtTime, flameLevel, heatmapCells, utcDay } from "./data.js";
+import { fmtTokens, fmtDuration, tokenSeries, fmtTime, flameLevel, heatmapCells, heatmapMonths, utcDay } from "./data.js";
+
+const WEEKDAY_LABELS = ["", "Mon", "", "Wed", "", "Fri", ""];
 
 const RANGES: ObserveRange[] = ["today", "7d", "30d", "all"];
 const RANGE_LABEL: Record<ObserveRange, string> = { today: "Today", "7d": "7d", "30d": "30d", all: "All" };
@@ -34,6 +36,8 @@ export function Dashboard({ data, range, onRange, filter, onFilter, pending }: {
 
   const maxTok = Math.max(0, ...rows.map(r => r.tokens));
   const heatCells = heatmapCells(data.daily, heatMetric);
+  const colCount = heatCells.length > 0 ? Math.max(...heatCells.map(c => c.week)) + 1 : 0;
+  const months = heatmapMonths(heatCells);
   const COL_COUNT = 8; // caret + project, agent, model, dur, msgs, tokens, recency
 
   return (
@@ -144,21 +148,52 @@ export function Dashboard({ data, range, onRange, filter, onFilter, pending }: {
                       onClick={() => setHeatMetric("sessions")}>Sessions</button>
                   </div>
                 </div>
-                <div
-                  className="obs-heat"
-                  style={{
-                    gridTemplateRows: "repeat(7, 1fr)",
-                    gridTemplateColumns: `repeat(${Math.max(...heatCells.map(c => c.week)) + 1}, 1fr)`,
-                  }}
-                >
-                  {heatCells.map((cell) => (
+                <div className="obs-heat-wrap">
+                  {/* Month X-axis markers above the grid */}
+                  <div className="obs-heat-months-row">
+                    <div className="obs-heat-weekday-gutter" />
+                    <div className="obs-heat-months" style={{ gridTemplateColumns: `repeat(${colCount}, 1fr)` }}>
+                      {months.map(({ week, label }) => (
+                        <div key={week} className="obs-heat-month-label" style={{ gridColumn: week + 1 }}>
+                          {label}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {/* Weekday Y-axis labels + heat grid */}
+                  <div className="obs-heat-main">
+                    <div className="obs-heat-weekdays" aria-hidden="true">
+                      {WEEKDAY_LABELS.map((label, i) => (
+                        <div key={i} className="obs-heat-weekday-label">{label}</div>
+                      ))}
+                    </div>
                     <div
-                      key={cell.date}
-                      className={"obs-heat-cell lvl-" + cell.level}
-                      style={{ gridRow: cell.weekday + 1, gridColumn: cell.week + 1 }}
-                      title={`${cell.date}: ${cell.sessions} sessions · ${fmtTokens(cell.tokens)} tokens`}
-                    />
-                  ))}
+                      className="obs-heat"
+                      style={{
+                        gridTemplateRows: "repeat(7, 1fr)",
+                        gridTemplateColumns: `repeat(${colCount}, 1fr)`,
+                      }}
+                    >
+                      {heatCells.map((cell) => (
+                        <div
+                          key={cell.date}
+                          className={"obs-heat-cell lvl-" + cell.level}
+                          style={{ gridRow: cell.weekday + 1, gridColumn: cell.week + 1 }}
+                          title={`${cell.date}: ${cell.sessions} sessions · ${fmtTokens(cell.tokens)} tokens`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  {/* Less → More legend */}
+                  <div className="obs-heat-legend">
+                    <span>Less</span>
+                    <span className="obs-heat-swatch lvl-1" />
+                    <span className="obs-heat-swatch lvl-2" />
+                    <span className="obs-heat-swatch lvl-3" />
+                    <span className="obs-heat-swatch lvl-4" />
+                    <span>More</span>
+                    <span className="obs-muted">&nbsp;·&nbsp;by {heatMetric}</span>
+                  </div>
                 </div>
               </div>
             )}

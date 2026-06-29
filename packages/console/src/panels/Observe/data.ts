@@ -1,5 +1,7 @@
 import type { DailyPoint } from "../../api/routes.js";
 
+const MONTH_LABELS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
 export function fmtTokens(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
   if (n >= 1_000) return Math.round(n / 1_000) + "k";
@@ -57,5 +59,26 @@ export function heatmapCells(daily: DailyPoint[], metric: "tokens" | "sessions" 
     const r = v / max;
     const level = (v === 0 ? 0 : r >= 0.75 ? 4 : r >= 0.5 ? 3 : r >= 0.25 ? 2 : 1) as HeatCell["level"];
     return { date: d.date, sessions: d.sessions, tokens: d.tokensIn + d.tokensOut + d.tokensCache, level, weekday, week };
+  });
+}
+
+/** For each week column in the heatmap, return a month label (3-letter) only when the month
+ *  changes from the previous week; otherwise an empty string. One entry per week. */
+export function heatmapMonths(cells: HeatCell[]): { week: number; label: string }[] {
+  if (cells.length === 0) return [];
+  const weekMap = new Map<number, string[]>();
+  for (const cell of cells) {
+    const bucket = weekMap.get(cell.week) ?? [];
+    bucket.push(cell.date);
+    weekMap.set(cell.week, bucket);
+  }
+  const weeks = [...weekMap.keys()].sort((a, b) => a - b);
+  let lastMonth = -1;
+  return weeks.map((week) => {
+    const earliest = weekMap.get(week)!.slice().sort()[0]; // YYYY-MM-DD, lexical sort is fine
+    const month = parseInt(earliest.slice(5, 7), 10) - 1;
+    const label = month !== lastMonth ? MONTH_LABELS[month] : "";
+    lastMonth = month;
+    return { week, label };
   });
 }

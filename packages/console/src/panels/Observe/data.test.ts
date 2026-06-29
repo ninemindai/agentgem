@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fmtTokens, fmtDuration, tokenSeries, fmtTime, flameLevel, heatmapCells, utcDay } from "./data.js";
+import { fmtTokens, fmtDuration, tokenSeries, fmtTime, flameLevel, heatmapCells, heatmapMonths, utcDay } from "./data.js";
 
 describe("formatters", () => {
   it("fmtTokens scales", () => {
@@ -126,6 +126,42 @@ describe("heatmapCells", () => {
     const dayB = cells.find(c => c.date === "2026-06-28")!;
     expect(dayB.level).toBe(4); // 5/5 = 1.0 → level 4
     expect(dayA.level).toBeLessThan(4); // 1/5 = 0.2 → level 1
+  });
+});
+
+describe("heatmapMonths", () => {
+  it("returns [] for empty input", () => {
+    expect(heatmapMonths([])).toEqual([]);
+  });
+
+  it("labels only the first week of each month at a month boundary", () => {
+    // 2026-06-27 = Sat (week 0), 2026-06-28 = Sun (week 1, still Jun), 2026-07-05 = Sun (week 2, Jul)
+    const daily = [
+      { date: "2026-06-27", sessions: 1, msgs: 1, tokensIn: 0, tokensOut: 0, tokensCache: 0 },
+      { date: "2026-06-28", sessions: 1, msgs: 1, tokensIn: 0, tokensOut: 0, tokensCache: 0 },
+      { date: "2026-07-05", sessions: 1, msgs: 1, tokensIn: 0, tokensOut: 0, tokensCache: 0 },
+    ];
+    const cells = heatmapCells(daily);
+    const months = heatmapMonths(cells);
+
+    const m0 = months.find(m => m.week === 0)!;
+    const m1 = months.find(m => m.week === 1)!;
+    const m2 = months.find(m => m.week === 2)!;
+
+    expect(m0.label).toBe("Jun"); // first occurrence of Jun
+    expect(m1.label).toBe("");    // same month as previous week
+    expect(m2.label).toBe("Jul"); // first occurrence of Jul
+  });
+
+  it("emits one entry per week", () => {
+    const daily = [
+      { date: "2026-06-27", sessions: 1, msgs: 1, tokensIn: 0, tokensOut: 0, tokensCache: 0 },
+      { date: "2026-06-28", sessions: 1, msgs: 1, tokensIn: 0, tokensOut: 0, tokensCache: 0 },
+    ];
+    const cells = heatmapCells(daily);
+    const months = heatmapMonths(cells);
+    // two distinct weeks (0 and 1) → two entries
+    expect(months).toHaveLength(2);
   });
 });
 

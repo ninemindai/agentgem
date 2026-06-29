@@ -103,4 +103,21 @@ describe("Observe Dashboard", () => {
     fireEvent.keyDown(rowBtn, { key: "Enter" });
     expect(screen.queryByText(/branch/)).toBeNull();
   });
+
+  it("renders weekday Y-axis label Mon", () => {
+    render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} />);
+    expect(screen.getAllByText("Mon").length).toBeGreaterThan(0);
+  });
+
+  it("renders heatmap legend with Less and More", () => {
+    render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} />);
+    expect(screen.getByText("Less")).toBeDefined();
+    expect(screen.getByText("More")).toBeDefined();
+  });
+
+  it("min-msgs filter input shows value 100 when filter.minMsgs is 100", () => {
+    render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{ minMsgs: 100 }} onFilter={() => {}} />);
+    const input = screen.getByLabelText(/min messages/i) as HTMLInputElement;
+    expect(input.value).toBe("100");
+  });
 });

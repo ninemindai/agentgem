@@ -7,7 +7,7 @@ import { Dashboard } from "./Dashboard.js";
 export function Observe({ apiBase }: { apiBase: string }) {
   const [data, setData] = useState<ObservePayload | null>(null);
   const [range, setRange] = useState<ObserveRange>("7d");
-  const [filter, setFilter] = useState<ObserveFilter>({});
+  const [filter, setFilter] = useState<ObserveFilter>({ minMsgs: 100 });
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
