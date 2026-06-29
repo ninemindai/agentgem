@@ -73,6 +73,18 @@ describe("buildOptimizePayload — prune", () => {
     expect(mcp.change).toEqual({ file: "settings.json", key: "mcpServers.coingecko (remove, or add to deniedMcpServers)" });
   });
 
+  it("maps a codex skill to a filesystem hint and a codex MCP to a config.toml hint", () => {
+    const c = inv({
+      skills: [{ type: "skill", name: "my-skill", description: "d", source: "codex", content: "x" }],
+      mcpServers: [{ type: "mcp_server", name: "my-mcp", transport: "stdio", config: { command: "x" }, source: "codex" }],
+    });
+    const p = buildOptimizePayload(c, usage([]), "all", NOW);
+    const skill = p.artifacts.find((a) => a.type === "skill" && a.name === "my-skill")!;
+    const mcp = p.artifacts.find((a) => a.type === "mcp" && a.name === "my-mcp")!;
+    expect(skill.change).toEqual({ file: "filesystem", key: "~/.codex/skills/my-skill (move/remove)" });
+    expect(mcp.change).toEqual({ file: "~/.codex/config.toml", key: "set enabled = false for my-mcp" });
+  });
+
   it("sorts artifacts by contextTokens desc", () => {
     const c = inv({
       skills: [
@@ -113,6 +125,24 @@ describe("buildOptimizePayload — instructions health", () => {
     const ins = buildOptimizePayload(c, usage([]), "all", NOW).instructions[0];
     expect(ins.flags).toContain("very-long");
     expect(ins.lines).toBe(320);
+  });
+
+  it("flags duplicate-lines only when a SINGLE line repeats >= DUP_LINE_MIN times, not from summed duplicates", () => {
+    // 4 distinct lines × 2 occurrences = 8 total repeated appearances, but no single line hits 5
+    // Old summing logic: dupTotal = 2+2+2+2 = 8 >= 5 → wrongly fires
+    // Correct logic: no single line has count >= 5 → must NOT fire
+    const fourLinesEachTwice = ["alpha", "beta", "gamma", "delta"]
+      .flatMap((l) => [l, l])
+      .join("\n");
+    const cNoFlag = inv({ instructions: [{ type: "instructions", name: "CLAUDE.md", content: fourLinesEachTwice }] });
+    const insNoFlag = buildOptimizePayload(cNoFlag, usage([]), "all", NOW).instructions[0];
+    expect(insNoFlag.flags).not.toContain("duplicate-lines");
+
+    // One line repeated 5 times → MUST fire
+    const oneLineFiveTimes = "repeat this line\n".repeat(5).trim();
+    const cFlag = inv({ instructions: [{ type: "instructions", name: "CLAUDE.md", content: oneLineFiveTimes }] });
+    const insFlag = buildOptimizePayload(cFlag, usage([]), "all", NOW).instructions[0];
+    expect(insFlag.flags).toContain("duplicate-lines");
   });
 
   it("includes per-project instructions and sorts by contextTokens desc", () => {

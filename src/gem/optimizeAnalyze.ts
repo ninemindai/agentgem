@@ -3,7 +3,7 @@
 // Pure (no IO) payload builder for GET /api/optimize. Joins the installed inventory
 // with per-artifact usage to flag installed-but-unused skills/MCP, and derives a
 // deterministic weight/health view of instructions (CLAUDE.md / AGENTS.md).
-import type { ConfigInventory, McpServerArtifact, SkillArtifact } from "./types.js";
+import type { ConfigInventory, InstructionsArtifact, McpServerArtifact, ProjectInventory, SkillArtifact } from "./types.js";
 import type { ArtifactUsage } from "./workflowScan.js";
 
 export type OptimizeRange = "today" | "7d" | "30d" | "all";
@@ -114,7 +114,7 @@ function buildArtifacts(inv: ConfigInventory, usage: Map<string, ArtifactUsage>,
   return kept.sort((a, b) => b.contextTokens - a.contextTokens);
 }
 
-function instructionHealth(name: string, source: string, content: string): OptimizeInstruction {
+function instructionHealth(name: string, source: string, content: InstructionsArtifact["content"]): OptimizeInstruction {
   const lines = content.split("\n");
   const nonEmpty = lines.filter((l) => l.trim().length > 0);
   const contextTokens = estTokens(content);
@@ -123,18 +123,19 @@ function instructionHealth(name: string, source: string, content: string): Optim
     const t = l.trim();
     counts.set(t, (counts.get(t) ?? 0) + 1);
   }
-  const dupTotal = [...counts.values()].filter((n) => n > 1).reduce((acc, n) => acc + n, 0);
+  const hasDup = [...counts.values()].some((n) => n >= DUP_LINE_MIN);
   const flags: OptimizeInstruction["flags"] = [];
   if (contextTokens > OVERSIZED_TOKENS) flags.push("oversized");
   if (nonEmpty.length > VERY_LONG_LINES) flags.push("very-long");
-  if (dupTotal >= DUP_LINE_MIN) flags.push("duplicate-lines");
+  if (hasDup) flags.push("duplicate-lines");
   return { name, source, contextTokens, lines: nonEmpty.length, flags };
 }
 
 function buildInstructions(inv: ConfigInventory): OptimizeInstruction[] {
   const out: OptimizeInstruction[] = [];
   for (const i of inv.instructions) out.push(instructionHealth(i.name, "user", i.content));
-  for (const p of inv.projects ?? []) {
+  const projects: ProjectInventory[] = inv.projects ?? [];
+  for (const p of projects) {
     for (const i of p.instructions) out.push(instructionHealth(i.name, p.root, i.content));
   }
   return out.sort((a, b) => b.contextTokens - a.contextTokens);
