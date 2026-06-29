@@ -1,6 +1,9 @@
 /** Pure formatting + chart-math for the Insights panel. */
 
+import type { AggIngredient } from "../../api/routes.js";
+
 export interface PrettyId { name: string; scope?: string }
+export interface RankedRow { row: AggIngredient; rank: number }
 
 /** Public ingredient ids are self-describing — strip the prefix into name (+ scope). */
 export function prettifyId(id: string, _kind: string): PrettyId {
@@ -36,4 +39,20 @@ export function sparkPoints(values: number[], w: number, h: number, max = Math.m
   if (values.length === 1) { const y = (h - (values[0] / max) * h).toFixed(0); return `0,${y} ${w},${y}`; }
   const step = w / (values.length - 1);
   return values.map((v, i) => `${(i * step).toFixed(1)},${(h - (v / max) * h).toFixed(1)}`).join(" ");
+}
+
+/** Filter the leaderboard by a case-insensitive substring over name/scope/raw id.
+ *  Rank is the row's 1-based position in the full (unfiltered) list, so ranks stay honest. */
+export function filterRows(rows: AggIngredient[], query: string): RankedRow[] {
+  const q = query.trim().toLowerCase();
+  const ranked = rows.map((row, i) => ({ row, rank: i + 1 }));
+  if (q === "") return ranked;
+  return ranked.filter(({ row }) => {
+    const p = prettifyId(row.id, row.kind);
+    return (
+      p.name.toLowerCase().includes(q) ||
+      (p.scope?.toLowerCase().includes(q) ?? false) ||
+      row.id.toLowerCase().includes(q)
+    );
+  });
 }
