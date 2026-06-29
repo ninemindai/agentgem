@@ -1,7 +1,7 @@
 import resvgWasm from "@resvg/resvg-wasm/index_bg.wasm";   // wrangler -> WebAssembly.Module
 import cardFont from "../assets/card-font.ttf";            // wrangler Data rule -> bytes
 import { initRaster } from "./raster.js";
-import { handleShare } from "./share.js";
+import { handleShare, isCacheable } from "./share.js";
 // Copyright ninemind.ai 2026. All Rights Reserved.
 // This file is licensed under the MIT License.
 // License text available at https://opensource.org/license/mit/
@@ -65,7 +65,7 @@ async function serveMarkdown(request, env) {
 const CANONICAL_HOST = 'agentgem.ai';
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     // 301 any alias host (agentgem.ninemind.ai, agentgem.dev, …) to the
     // canonical host, preserving path + query. The aliases hit this Worker
     // because they are attached as Custom Domains.
@@ -77,13 +77,28 @@ export default {
       return Response.redirect(url.toString(), 301);
     }
 
-    try {
-      await initRaster({ wasm: resvgWasm, font: cardFont });
-      const shared = await handleShare(request, env);
-      if (shared) return shared;
-    } catch (e) {
-      console.error("share route error:", e);
-      // Never let sharing break the site — fall through to assets.
+    // Share routes only — gate the rasterizer init + share handling here so they
+    // never run for docs/assets, and serve from the edge cache so og.png is not
+    // re-rasterized on every hit (run_worker_first means the Worker runs every time).
+    if (request.method === 'GET' && url.pathname.startsWith('/share/')) {
+      try {
+        const cache = caches.default;
+        const hit = await cache.match(request);
+        if (hit) return hit;
+        await initRaster({ wasm: resvgWasm, font: cardFont });
+        const shared = await handleShare(request, env);
+        if (shared) {
+          if (isCacheable(shared)) {
+            const toCache = shared.clone();
+            if (ctx && ctx.waitUntil) ctx.waitUntil(cache.put(request, toCache));
+            else await cache.put(request, toCache);
+          }
+          return shared;
+        }
+      } catch (e) {
+        console.error("share route error:", e);
+        // Never let sharing break the site — fall through to assets.
+      }
     }
 
     try {
