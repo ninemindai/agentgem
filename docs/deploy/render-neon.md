@@ -115,3 +115,32 @@ spoofed here). If the burst does **not** 429, check that `CLIENT_IP_HEADER` is s
   `store` option (deferred follow-up) before scaling horizontally.
 - **Different host:** the same container runs on Koyeb or Cloudflare Containers (paid); only
   Vercel/Cloudflare-Workers would require the agentback edge build instead of this Dockerfile.
+
+## Explore — the public marketplace UI (second service, same Blueprint)
+
+The same `render.yaml` defines a second service, `explore`: a Vite/React **static site**
+(`packages/marketplace`) for the public ingredient-discovery app. Static sites on Render are
+**free, CDN-served, and don't sleep** (unlike the free web service). Topology:
+
+| Domain | Render service | Serves |
+| --- | --- | --- |
+| `app.agentgem.ai` | `agentgem` (Docker web) | the **API** (`/api/*`) **and** the desktop console UI (`/`) |
+| `explore.agentgem.ai` | `explore` (static) | the **public marketplace UI** |
+
+How it deploys (the Blueprint handles it automatically when applied):
+- **Build:** `corepack enable && pnpm install --frozen-lockfile && pnpm --filter @agentgem/marketplace build`
+- **Publish dir:** `packages/marketplace/dist`
+- **SPA fallback:** `routes` rewrites `/*` → `/index.html` so `/ingredient/:id` deep-links resolve.
+- **Build env:** `VITE_API_BASE=https://app.agentgem.ai` — the marketplace reads the API there.
+  The aggregator's public reads are CORS-open (`Access-Control-Allow-Origin: *`), so the
+  cross-origin call from `explore.agentgem.ai` → `app.agentgem.ai/api/aggregator/*` works.
+
+Steps:
+1. Apply/sync the Blueprint — Render creates the `explore` static site alongside `agentgem`.
+2. In the `explore` service → **Settings → Custom Domains**, add `explore.agentgem.ai` (CNAME
+   to the Render target it shows).
+3. Verify: open `https://explore.agentgem.ai` → leaderboard loads from the live API (or its
+   k-anon empty state); click a row → `/ingredient/:id` deep-links and reloads cleanly.
+
+> The marketplace reads ONLY the public CORS-open aggregate endpoints — no admin token, no
+> writes. Nothing in this service needs a secret.
