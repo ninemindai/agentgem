@@ -65,7 +65,8 @@ export async function streamScorecard(req: SseReq, res: SseRes, deps: ScorecardS
 
   try {
     const roots = selectScorecardRoots(dir, projects, deps);
-    const paths = scorecardTranscriptPaths(roots, dir, deps);
+    const bucket = deps.bucketTranscripts(dir);
+    const paths = scorecardTranscriptPaths(roots, bucket);
     const token = transcriptToken(paths);
 
     // Cache hit (unless Re-scan): return the prior result instantly so the user
@@ -80,7 +81,7 @@ export async function streamScorecard(req: SseReq, res: SseRes, deps: ScorecardS
     let degraded = false;
     for (let i = 0; i < roots.length; i++) {
       await yieldToLoop();   // yield so each progress frame actually flushes
-      const loaded = deps.loadProject(roots[i], dir);
+      const loaded = deps.loadProject(roots[i], dir, bucket.get(roots[i]) ?? []);
       if (!loaded) degraded = true;
       else loads.push({ root: roots[i], label: basename(roots[i]), ...loaded });
       const partial = aggregateScorecard(loads, Date.now(), degraded);

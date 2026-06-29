@@ -99,7 +99,7 @@ import {
   UsageSchema, UsageQuerySchema,
 } from "./schemas.js";
 import { collectScorecard, selectScorecardRoots, scorecardTranscriptPaths, defaultScorecardDeps, type Scorecard } from "./gem/scorecard.js";
-import { claudeTranscriptsForCwd, scanWorkflow, allClaudeTranscripts } from "./gem/workflowScan.js";
+import { claudeTranscriptsForCwd, scanWorkflow, allClaudeTranscripts, bucketTranscriptsByCwd } from "./gem/workflowScan.js";
 import { recommendWorkflow, recommendationToSelection } from "./gem/acpRecommender.js";
 import { distillWorkflow, type DistilledSkill } from "./gem/distill.js";
 import { extractReflections } from "./gem/extract.js";
@@ -201,10 +201,11 @@ export class GemController {
     const dir = input.query.dir;
     const projects = parseProjectsQuery(input.query.projects);
     const roots = selectScorecardRoots(dir, projects);
-    const token = transcriptToken(scorecardTranscriptPaths(roots, dir));
+    const bucket = bucketTranscriptsByCwd(resolveDirs(dir).claudeDir);
+    const token = transcriptToken(scorecardTranscriptPaths(roots, bucket));
     const cached = readAnalysisCache("__scorecard__", token) as z.infer<typeof ScorecardSchema> | null;
     if (cached) return cached;
-    const sc = collectScorecard(dir, roots, Date.now());
+    const sc = collectScorecard(dir, roots, Date.now(), { bucket });
     if (!sc.degraded) writeAnalysisCache("__scorecard__", token, sc, Date.now());
     return sc;
   }

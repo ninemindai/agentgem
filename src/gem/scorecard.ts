@@ -10,7 +10,7 @@ import { basename } from "node:path";
 import { discoverProjects } from "./testbedFlavors.js";
 import { resolveDirs, resolveProject } from "../resolveDir.js";
 import { introspectProject, introspectConfig } from "./introspect.js";
-import { claudeTranscriptsForCwd, scanWorkflow } from "./workflowScan.js";
+import { claudeTranscriptsForCwd, scanWorkflow, bucketTranscriptsByCwd } from "./workflowScan.js";
 import { extractCandidates } from "./extract.js";
 import type { WorkflowSignal } from "./workflowScan.js";
 import type { ProcedureCandidate, Reflection } from "./distillTypes.js";
@@ -108,22 +108,23 @@ export function aggregateScorecard(loads: ProjectLoad[], nowMs: number, degraded
 
 export interface ScorecardDeps {
   discover(dir?: string): { path: string; lastUsed?: string | null }[];
-  loadProject(root: string, dir?: string): { signal: WorkflowSignal; candidates: ProcedureCandidate[]; reflections: Reflection[] } | null;
+  loadProject(root: string, dir?: string, paths?: string[]): { signal: WorkflowSignal; candidates: ProcedureCandidate[]; reflections: Reflection[] } | null;
   transcriptsFor(root: string, dir?: string): string[];
+  bucketTranscripts(dir?: string): Map<string, string[]>;
 }
 
 // Default deps run the real, shipped analyze pipeline — the same wiring as
 // src/workflowStream.ts, minus the LLM (deterministic only).
 export const defaultScorecardDeps: ScorecardDeps = {
   discover: (dir) => discoverProjects(resolveDirs(dir)).map((p) => ({ path: p.path, lastUsed: p.lastUsed })),
-  loadProject: (root, dir) => {
+  loadProject: (root, dir, paths) => {
     try {
       const dirs = resolveDirs(dir);
       const project = introspectProject(resolveProject(root));
       const globalInv = introspectConfig(dirs);
       const scanInv = { project, global: { skills: globalInv.skills, mcpServers: globalInv.mcpServers, hooks: globalInv.hooks } };
-      const paths = claudeTranscriptsForCwd(dirs.claudeDir, root);
-      const signal = scanWorkflow(paths, scanInv, { retainSequences: true });
+      const transcripts = paths ?? claudeTranscriptsForCwd(dirs.claudeDir, root);
+      const signal = scanWorkflow(transcripts, scanInv, { retainSequences: true });
       const { candidates, reflections } = extractCandidates(signal, scanInv);
       return { signal, candidates, reflections };
     } catch {
@@ -131,6 +132,7 @@ export const defaultScorecardDeps: ScorecardDeps = {
     }
   },
   transcriptsFor: (root, dir) => claudeTranscriptsForCwd(resolveDirs(dir).claudeDir, root),
+  bucketTranscripts: (dir) => bucketTranscriptsByCwd(resolveDirs(dir).claudeDir),
 };
 
 export function selectScorecardRoots(dir: string | undefined, projects: string[] | undefined, deps: ScorecardDeps = defaultScorecardDeps): string[] {
@@ -142,23 +144,24 @@ export function selectScorecardRoots(dir: string | undefined, projects: string[]
   return discovered.slice(0, MAX_PROJECTS).map((p) => p.path);
 }
 
-export function scorecardTranscriptPaths(roots: string[], dir: string | undefined, deps: ScorecardDeps = defaultScorecardDeps): string[] {
-  return roots.flatMap((r) => deps.transcriptsFor(r, dir));
+export function scorecardTranscriptPaths(roots: string[], bucket: Map<string, string[]>): string[] {
+  return roots.flatMap((r) => bucket.get(r) ?? []);
 }
 
 export function collectScorecard(
   dir: string | undefined,
   projects: string[] | undefined,
   nowMs: number,
-  opts: { deps?: ScorecardDeps; onProgress?: (p: ScorecardProgress) => void } = {},
+  opts: { deps?: ScorecardDeps; onProgress?: (p: ScorecardProgress) => void; bucket?: Map<string, string[]> } = {},
 ): Scorecard {
   const deps = opts.deps ?? defaultScorecardDeps;
   const roots = selectScorecardRoots(dir, projects, deps);
+  const bucket = opts.bucket ?? deps.bucketTranscripts(dir);
   const loads: ProjectLoad[] = [];
   let degraded = false;
   for (let i = 0; i < roots.length; i++) {
     const root = roots[i];
-    const loaded = deps.loadProject(root, dir);
+    const loaded = deps.loadProject(root, dir, bucket.get(root) ?? []);
     if (!loaded) { degraded = true; }
     else loads.push({ root, label: basename(root), ...loaded });
     if (opts.onProgress) {

@@ -93,6 +93,20 @@ export function claudeTranscriptsForCwd(claudeDir: string, cwd: string): string[
   return out;
 }
 
+/** One pass over the whole store: map each transcript to its session cwd. Lets a
+ * multi-project scan read every transcript's cwd ONCE instead of per project. */
+export function bucketTranscriptsByCwd(claudeDir: string): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const path of allClaudeTranscripts(claudeDir)) {
+    const cwd = sessionCwd(path);
+    if (cwd === null) continue;
+    const list = out.get(cwd) ?? [];
+    list.push(path);
+    out.set(cwd, list);
+  }
+  return out;
+}
+
 /** Every Claude transcript under ~/.claude/projects, regardless of cwd. */
 export function allClaudeTranscripts(claudeDir: string): string[] {
   const projectsDir = join(claudeDir, "projects");

@@ -77,6 +77,7 @@ describe("selectScorecardRoots", () => {
       discover: () => [],
       loadProject: () => null,
       transcriptsFor: () => [],
+      bucketTranscripts: () => new Map(),
     };
     const roots = Array.from({ length: 15 }, (_, i) => `/r/e${i}`);
     expect(selectScorecardRoots(undefined, roots, deps)).toEqual(roots);
@@ -88,6 +89,7 @@ describe("selectScorecardRoots", () => {
       discover: () => many,
       loadProject: () => null,
       transcriptsFor: () => [],
+      bucketTranscripts: () => new Map(),
     };
     const roots = selectScorecardRoots(undefined, undefined, deps);
     expect(roots).toHaveLength(12);
@@ -106,6 +108,7 @@ describe("collectScorecard", () => {
         candidates: [cand({ key: `${root}-k`, priorConfidence: "high", skeleton: { name: "k", tools: ["Skill"] } as any })],
       }),
       transcriptsFor: () => [],
+      bucketTranscripts: () => new Map(),
     };
     const sc = collectScorecard(undefined, undefined, 99, { deps });
     expect(sc.projects.map((p) => p.root)).toEqual(["/r/a", "/r/b"]);
@@ -120,6 +123,7 @@ describe("collectScorecard", () => {
       discover: () => [{ path: "/r/a" }, { path: "/r/b" }],
       loadProject: (root) => (root === "/r/a" ? { signal: sig(root), reflections: [], candidates: [] } : null),
       transcriptsFor: () => [],
+      bucketTranscripts: () => new Map(),
     };
     const sc = collectScorecard(undefined, ["/r/a"], 1, { deps });
     expect(sc.projects.map((p) => p.root)).toEqual(["/r/a"]);
@@ -134,6 +138,7 @@ describe("collectScorecard", () => {
       discover: () => many,
       loadProject: (root) => ({ signal: sig(root), reflections: [], candidates: [] }),
       transcriptsFor: () => [],
+      bucketTranscripts: () => new Map(),
     };
     const sc = collectScorecard(undefined, undefined, 1, { deps });
     expect(sc.projects).toHaveLength(12);
@@ -148,6 +153,7 @@ describe("collectScorecard", () => {
       discover: () => [],
       loadProject: (root) => ({ signal: sig(root), reflections: [], candidates: [] }),
       transcriptsFor: () => [],
+      bucketTranscripts: () => new Map(),
     };
     const sc = collectScorecard(undefined, roots, 1, { deps });
     expect(sc.projects).toHaveLength(15);
@@ -165,6 +171,7 @@ describe("collectScorecard", () => {
       discover: () => [{ path: "/r/a" }, { path: "/r/b" }, { path: "/r/c" }],
       loadProject: (root) => makeLoad(root),
       transcriptsFor: () => [],
+      bucketTranscripts: () => new Map(),
     };
     const spy = vi.fn<(p: ScorecardProgress) => void>();
     collectScorecard(undefined, undefined, 1, { deps, onProgress: spy });

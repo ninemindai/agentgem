@@ -37,6 +37,7 @@ describe("streamScorecard", () => {
       discover: () => [],
       loadProject: () => mkLoad(`k${callCount++}`) as never,
       transcriptsFor: () => [],
+      bucketTranscripts: () => new Map(),
       readCache: () => null,
       writeCache: vi.fn(),
     };
@@ -63,6 +64,7 @@ describe("streamScorecard", () => {
       discover: () => [],
       loadProject,
       transcriptsFor: () => [],
+      bucketTranscripts: () => new Map(),
       readCache: () => ({ breadth: 9, battleTested: 0, portable: 0, gaps: [], projects: [], generatedAtMs: 0, degraded: false }),
       writeCache: vi.fn(),
     };
