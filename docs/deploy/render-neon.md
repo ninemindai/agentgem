@@ -31,7 +31,14 @@ step).
 3. Ensure the string includes **`?sslmode=require`** (Neon requires TLS). Example shape:
    `postgresql://USER:PASSWORD@ep-xxxx.us-west-2.aws.neon.tech/neondb?sslmode=require`
 
+   > Note: recent `node-postgres` treats `sslmode=require` as `verify-full` (it validates the
+   > server cert + hostname). This works against Neon out of the box (Neon's cert is
+   > CA-signed) and emits a one-time startup warning you can ignore. To silence it / get
+   > classic libpq `require` semantics, use `?uselibpqcompat=true&sslmode=require`.
+
 No tables to create — the server runs `ensureSchema` on first boot.
+(Verified locally against a real Neon database: schema bootstraps, an API key minted via the
+admin endpoint persists and reads back through `/keys/list`, and the rate-limit tiers behave.)
 
 ## Step 2 — Render: deploy the Blueprint
 
