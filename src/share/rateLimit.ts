@@ -79,6 +79,12 @@ export function makeShareRateLimit(opts: { max: number; windowMs: number; now?: 
 }
 
 // The app-wired middleware: limits read from env with sane defaults (10 creates / 10 min / IP).
-const MAX = Number(process.env.SHARE_RATELIMIT_MAX ?? 10);
-const WINDOW_MS = Number(process.env.SHARE_RATELIMIT_WINDOW_MS ?? 600_000);
-export const shareRateLimit = makeShareRateLimit({ max: MAX, windowMs: WINDOW_MS });
+// A malformed env value (NaN, <1) silently mis-limits, so fall back to the default instead.
+function envInt(name: string, def: number): number {
+  const v = Number(process.env[name]);
+  return Number.isFinite(v) && v >= 1 ? v : def;
+}
+export const shareRateLimit = makeShareRateLimit({
+  max: envInt("SHARE_RATELIMIT_MAX", 10),
+  windowMs: envInt("SHARE_RATELIMIT_WINDOW_MS", 600_000),
+});
