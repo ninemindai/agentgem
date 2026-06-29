@@ -42,9 +42,9 @@ routes = [
 # first on every request, then serves the asset via env.ASSETS for the normal
 # case.
 [vars]
-# Hosted aggregator base URL (the share record store). Empty/unset -> /share
-# serves a graceful placeholder. Set to the #38 deploy origin when live.
-AGGREGATOR_API = ""
+# Hosted aggregator base URL (the share record store), no trailing slash. Empty/unset -> /share
+# serves a graceful placeholder. The Worker only does server-to-server GET reads against it.
+AGGREGATOR_API = "https://agentgem.onrender.com"
 
 [[rules]]
 type = "Data"
