@@ -44,7 +44,11 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
         {groups.library.map(item)}
         <div className="console-footer">{groups.settings.map(item)}</div>
       </nav>
-      <main className="console-main">{active?.component({ apiBase })}</main>
+      {/* Render the panel as an element (not active.component({apiBase})) so each panel
+          gets its own fiber + hook scope. Calling it inline folds the panel's hooks into
+          Shell's, which crashes (React #300) when switching between panels with different
+          hook counts. */}
+      <main className="console-main">{active ? <active.component apiBase={apiBase} /> : null}</main>
     </div>
   );
 }
