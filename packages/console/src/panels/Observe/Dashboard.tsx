@@ -1,11 +1,11 @@
 // packages/console/src/panels/Observe/Dashboard.tsx
-import { useState } from "react";
+import React, { useState } from "react";
 import {
   ResponsiveContainer, BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, CartesianGrid,
 } from "recharts";
 import type { ObservePayload, ObserveRange } from "../../api/routes.js";
-import { fmtTokens, fmtDuration, tokenSeries } from "./data.js";
+import { fmtTokens, fmtDuration, tokenSeries, fmtTime, flameLevel, heatmapCells } from "./data.js";
 
 const RANGES: ObserveRange[] = ["today", "7d", "30d", "all"];
 const RANGE_LABEL: Record<ObserveRange, string> = { today: "Today", "7d": "7d", "30d": "30d", all: "All" };
@@ -19,6 +19,7 @@ export function Dashboard({ data, range, onRange, filter, onFilter }: {
   filter: Filter; onFilter: (f: Filter) => void;
 }) {
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "endMs", dir: "desc" });
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const empty = data.pulse.sessions === 0;
 
@@ -30,6 +31,10 @@ export function Dashboard({ data, range, onRange, filter, onFilter }: {
     const av = a[sort.key], bv = b[sort.key];
     return sort.dir === "asc" ? av - bv : bv - av;
   });
+
+  const maxTok = Math.max(0, ...rows.map(r => r.tokens));
+  const heatCells = heatmapCells(data.daily);
+  const COL_COUNT = 8; // caret + project, agent, model, dur, msgs, tokens, recency
 
   return (
     <div className="obs">
@@ -124,10 +129,33 @@ export function Dashboard({ data, range, onRange, filter, onFilter }: {
             </Card>
           </div>
 
+          {heatCells.length > 0 && (
+            <div className="obs-card obs-heatmap-card">
+              <div className="obs-card-title">Activity heatmap</div>
+              <div
+                className="obs-heat"
+                style={{
+                  gridTemplateRows: "repeat(7, 1fr)",
+                  gridTemplateColumns: `repeat(${Math.max(...heatCells.map(c => c.week)) + 1}, 1fr)`,
+                }}
+              >
+                {heatCells.map((cell) => (
+                  <div
+                    key={cell.date}
+                    className={"obs-heat-cell lvl-" + cell.level}
+                    style={{ gridRow: cell.weekday + 1, gridColumn: cell.week + 1 }}
+                    title={`${cell.date}: ${cell.sessions} sessions`}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="obs-table-wrap">
             <table className="obs-table">
               <thead>
                 <tr>
+                  <th style={{ width: 24 }} />
                   <th>project</th>
                   <th>agent</th>
                   <th>model</th>
@@ -138,17 +166,56 @@ export function Dashboard({ data, range, onRange, filter, onFilter }: {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((s) => (
-                  <tr key={s.agent + "|" + s.sessionId}>
-                    <td>{s.project ?? "—"}</td>
-                    <td><span className="obs-chip">{s.agent}</span></td>
-                    <td className="obs-muted">{s.model ?? "—"}</td>
-                    <td>{fmtDuration(s.durationMs)}</td>
-                    <td>{s.msgs}</td>
-                    <td>{fmtTokens(s.tokens)}</td>
-                    <td className="obs-muted">{s.endMs ? new Date(s.endMs).toLocaleDateString() : "—"}</td>
-                  </tr>
-                ))}
+                {rows.map((s) => {
+                  const rowId = s.agent + "|" + s.sessionId;
+                  const isOpen = openId === rowId;
+                  const flames = flameLevel(s.tokens, maxTok);
+                  return (
+                    <React.Fragment key={rowId}>
+                      <tr
+                        role="button"
+                        tabIndex={0}
+                        style={{ cursor: "pointer" }}
+                        onClick={() => setOpenId(isOpen ? null : rowId)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setOpenId(isOpen ? null : rowId);
+                          }
+                        }}
+                      >
+                        <td><span className={"obs-caret" + (isOpen ? " open" : "")}>▸</span></td>
+                        <td>
+                          {s.project ?? "—"}
+                          {flames > 0 && <span className="obs-flame" aria-hidden="true">{"🔥".repeat(flames)}</span>}
+                        </td>
+                        <td><span className="obs-chip">{s.agent}</span></td>
+                        <td className="obs-muted">{s.model ?? "—"}</td>
+                        <td>{fmtDuration(s.durationMs)}</td>
+                        <td>{s.msgs}</td>
+                        <td>{fmtTokens(s.tokens)}</td>
+                        <td className="obs-muted">{s.endMs ? new Date(s.endMs).toLocaleDateString() : "—"}</td>
+                      </tr>
+                      {isOpen && (
+                        <tr key={rowId + ":detail"} className="obs-detail">
+                          <td colSpan={COL_COUNT}>
+                            <span>in {fmtTokens(s.tokensIn)} · out {fmtTokens(s.tokensOut)} · cache {fmtTokens(s.tokensCache)}</span>
+                            <span className="obs-detail-sep"> · </span>
+                            <span>{fmtTime(s.startMs)} → {fmtTime(s.endMs)} ({fmtDuration(s.durationMs)})</span>
+                            <span className="obs-detail-sep"> · </span>
+                            <span>branch <strong>{s.gitBranch ?? "—"}</strong></span>
+                            <span className="obs-detail-sep"> · </span>
+                            <span>model <strong>{s.model ?? "—"}</strong></span>
+                            <span className="obs-detail-sep"> · </span>
+                            <span>agent <strong>{s.agent}</strong></span>
+                            <span className="obs-detail-sep"> · </span>
+                            <span>session <code>{s.sessionId.slice(0, 8)}…</code></span>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>

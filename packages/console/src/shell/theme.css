@@ -537,3 +537,24 @@ body::before {
 
 .obs-empty, .obs-error, .obs-loading { color: var(--muted); font-size: 13px; font-style: italic; margin: 24px 0; }
 .obs-error { color: var(--accent); font-style: normal; font-weight: 500; }
+
+/* heatmap */
+.obs-heat { display: grid; grid-auto-flow: column; gap: 3px; margin-top: 8px; }
+.obs-heat-cell { width: 12px; height: 12px; border-radius: 2px; }
+.lvl-0 { background: var(--obs-heat-0, #ebedf0); }
+.lvl-1 { background: var(--obs-heat-1, #9be9a8); }
+.lvl-2 { background: var(--obs-heat-2, #40c463); }
+.lvl-3 { background: var(--obs-heat-3, #30a14e); }
+.lvl-4 { background: var(--obs-heat-4, #216e39); }
+.obs-heatmap-card { margin-bottom: 24px; overflow-x: auto; }
+
+/* flame badge */
+.obs-flame { font-size: 0.75rem; margin-left: 4px; }
+
+/* detail row */
+.obs-detail td { padding: 8px 16px; font-size: 0.85rem; background: var(--panel-bg-alt, #f9f9f9); }
+.obs-detail-sep { color: var(--muted); }
+
+/* caret */
+.obs-caret { display: inline-block; transition: transform 0.15s; margin-right: 4px; color: var(--muted); font-size: 0.7rem; }
+.obs-caret.open { transform: rotate(90deg); }
