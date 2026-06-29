@@ -42,6 +42,29 @@ describe("buildGem", () => {
     expect(() => buildGem(inv, { skills: ["nope"] })).toThrow(/Available: review, plan/);
   });
 
+  it("rejects a selection referencing a missing artifact as 400 InvalidInputError, not a 500", () => {
+    // A selection that names an artifact absent from the inventory is a bad REQUEST
+    // (e.g. suggest-from-a-project offered a skill that isn't materializable for that
+    // project), so it must surface as a 400 with the actionable message — not an opaque 500.
+    const expect400 = (fn: () => unknown) => {
+      let err: any;
+      try { fn(); } catch (e) { err = e; }
+      expect(err, "expected a throw").toBeDefined();
+      expect(err.name).toBe("InvalidInputError");
+      expect(err.statusCode).toBe(400);
+      return err;
+    };
+    expect400(() => buildGem(inv, { skills: ["nope"] }));
+    expect400(() => buildGem(inv, { mcpServers: ["nope"] }));
+    expect400(() => buildGem(inv, { hooks: ["nope"] }));
+    // The reproduced agentback case: a project-scoped skill absent from the project's inventory.
+    const withProj: ConfigInventory = { ...inv, projects: [{ root: "/p/agentback", name: "agentback", skills: [], mcpServers: [], instructions: [], hooks: [] }] };
+    const e = expect400(() => buildGem(withProj, { projects: { "/p/agentback": { skills: ["agentback"] } } }));
+    expect(e.message).toMatch(/No skill 'agentback' in project 'agentback'/);
+    // Unknown project root is also a bad request.
+    expect400(() => buildGem(inv, { projects: { "/nope": { skills: ["x"] } } }));
+  });
+
   it("embeds operator checks and defaults to empty when none given", () => {
     const withChecks = buildGem(inv, { skills: ["review"] }, {
       checks: [{ kind: "behavioral", name: "smoke", task: "do it", assertions: [] }],
