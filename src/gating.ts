@@ -37,6 +37,6 @@ export function keyedRateLimitOptions(points: number = KEYED_POINTS) {
 export async function mountGating(app: import("@agentback/rest").RestApplication, db: AppDb): Promise<void> {
   const server = await app.restServer;
   server.expressApp.use(AGG_PATH, makeApiKeyIdentity(db));
-  await installRateLimit(app as never, anonRateLimitOptions() as never);
-  await installRateLimit(app as never, keyedRateLimitOptions() as never);
+  await installRateLimit(app, anonRateLimitOptions());
+  await installRateLimit(app, keyedRateLimitOptions());
 }
