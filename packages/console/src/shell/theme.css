@@ -743,3 +743,15 @@ body::before {
   padding: 0;
 }
 .ins-find-gems:hover { text-decoration: underline; }
+
+/* Optimize panel */
+.opt { padding: 16px; }
+.opt-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.opt-ranges { display: flex; gap: 4px; }
+.opt-section { margin-bottom: 28px; }
+.opt-section h3 { margin: 0 0 6px; font-size: 14px; }
+.opt-note { margin: 0 0 10px; font-size: 12px; }
+.opt-prune td { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.opt-change { font-size: 11px; color: var(--accent); }
+.opt-flag { display: inline-block; padding: 1px 6px; margin-right: 4px; border-radius: 4px; font-size: 11px; background: var(--raised); border: 1px solid var(--line); }
+.opt-soon { opacity: 0.7; }
