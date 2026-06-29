@@ -64,6 +64,7 @@ describe("openScorecardStream", () => {
     for (const cb of es.listeners["error"] ?? []) cb({});
 
     expect(events).toEqual([{ type: "failed", message: "stream connection error" }]);
+    expect(es.closed).toBe(true);
   });
 
   it("close function returned by openScorecardStream closes the EventSource", () => {

@@ -30,7 +30,7 @@ export function openScorecardStream(
     es.close();
   });
   es.addEventListener("failed", (m) => { onEvent({ type: "failed", message: data(m).message }); es.close(); });
-  es.addEventListener("error", () => onEvent({ type: "failed", message: "stream connection error" }));
+  es.addEventListener("error", () => { es.close(); onEvent({ type: "failed", message: "stream connection error" }); });
 
   return () => es.close();
 }
