@@ -113,20 +113,21 @@ range — i.e. `lastUsedMs == null` (never used) **or** `lastUsedMs < rangeStart
 this from all-time `lastUsedMs` rather than a per-range re-scan; the UI shows total `uses`
 + `lastUsed`, not an in-range count, to stay honest about what the cheap scan supports.)
 Sorted by contextTokens desc (largest savings first). Each candidate carries a
-**reversible** deactivation hint (no folder deletion — disable in place so the user can
-re-enable later), mapped by the artifact's source:
+deactivation hint, mapped by the artifact's source. **Verified against the live Claude Code
+settings docs during Task-6 e2e (risk #4): the earlier docs-research key `skillOverrides`
+does NOT exist, and `deniedMcpServers` is managed-settings-only — both were removed.**
 
-| Artifact (source) | Reversible disable | File |
+| Artifact (source) | Disable hint | File |
 |---|---|---|
-| Standalone skill (`~/.claude/skills/<name>`, `~/.agents`, `~/.hermes`) | `skillOverrides["<name>"] = "off"` | `settings.json` |
-| Plugin skill / MCP / hook (`source = plugin:<key>`) | `enabledPlugins["<key>"] = false` (or `/plugin disable`) | `settings.json` |
-| User MCP (`settings.json → mcpServers.<name>`) | remove key, or add to `deniedMcpServers` blocklist | `settings.json` / `~/.claude.json` |
-| Codex skill (`~/.codex/skills/<name>`) | move/remove folder (no override flag) | filesystem |
+| Plugin skill / MCP / hook (`source = plugin:<key>`) | `enabledPlugins["<key>"] = false` (or `/plugin disable`) — **verified real** (read by `introspect.ts`, present in real settings) | `settings.json` |
+| Standalone / agent / hermes / codex skill | **no in-place disable flag exists** → remove or move the skill folder | `~/.claude/skills/<name>` (·`~/.agents`·`~/.hermes`·`~/.codex` per source) |
+| User MCP (`mcpServers.<name>`) | remove the entry; or `disabledMcpjsonServers: ["<name>"]` if the server is defined via `.mcp.json` | `settings.json` / `~/.claude.json` |
 | Codex MCP | `enabled = false` | `~/.codex/config.toml` |
 
 Plugin-provided artifacts collapse to a single `enabledPlugins` toggle — so an unused
 plugin is reported once (its biggest-saving artifact), not per child, to avoid telling the
-user to disable the same plugin five times.
+user to disable the same plugin five times. Skills have no settings toggle, so their hint is
+honestly "remove the folder" rather than a fake in-place key.
 
 **Response shape** (Zod in `packages/console/src/api/routes.ts`, mirrored in backend):
 
@@ -229,10 +230,11 @@ Write tests first, per project + global rules. vitest runs from compiled `dist/`
    in transcripts — confirm against real fixtures.
 3. **Context-cost is an estimate** (`chars/4`) — must be labeled as such in the UI to avoid
    implying precision we don't have.
-4. **Disable-key names are docs-research-sourced**, not yet verified against code. Before
-   the UI tells a user to type `skillOverrides` / `enabledPlugins` / `deniedMcpServers`,
-   confirm each key against the live Claude Code settings schema (and `~/.codex/config.toml`
-   for Codex). If a key turns out not to exist, fall back to "remove from `<file>`".
+4. **Disable-key names — RESOLVED in Task 6.** Verified against the live Claude Code settings
+   docs: `enabledPlugins` is real; `skillOverrides` does **not** exist and `deniedMcpServers`
+   is managed-settings-only — both removed. Hints now: plugins → `enabledPlugins`; skills →
+   "remove the folder" (no toggle exists); user MCP → remove entry or `disabledMcpjsonServers`
+   (for `.mcp.json` servers); codex MCP → `config.toml enabled=false`. See the hint table above.
 
 ## Integration with the built-in `/insights` command
 
