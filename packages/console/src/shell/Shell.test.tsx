@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
+import { useState } from "react";
 import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
 import { Shell } from "./Shell.js";
 import { defineConsolePage, groupedPages } from "../registry.js";
@@ -44,6 +45,25 @@ describe("Shell", () => {
     render(<Shell pages={pages} apiBase="" />);
     fireEvent.click(screen.getByText("Beta"));
     expect(window.location.hash).toBe("#/b");
+  });
+
+  // Regression: pages must render as ELEMENTS, not be called as functions. Calling
+  // `active.component({...})` inlines the page's hooks into Shell's hook list, so
+  // switching to a page with a different hook count throws React's "rendered fewer
+  // hooks than expected". Switching from a hook-using page to a hook-less one must not crash.
+  it("isolates page hooks (switching between different hook counts does not crash)", () => {
+    const Hooky = () => { useState(0); useState(0); useState(0); return <p>hooky-panel</p>; };
+    const Plain = () => <p>plain-panel</p>;
+    const hookPages = [
+      defineConsolePage({ id: "hooky", title: "Hooky", order: 10, route: "#/hooky", component: Hooky }),
+      defineConsolePage({ id: "plain", title: "Plain", order: 20, route: "#/plain", component: Plain }),
+    ];
+    render(<Shell pages={hookPages} apiBase="" />);
+    expect(screen.getByText("hooky-panel")).toBeTruthy();
+    act(() => { window.location.hash = "#/plain"; window.dispatchEvent(new HashChangeEvent("hashchange")); });
+    expect(screen.getByText("plain-panel")).toBeTruthy();
+    act(() => { window.location.hash = "#/hooky"; window.dispatchEvent(new HashChangeEvent("hashchange")); });
+    expect(screen.getByText("hooky-panel")).toBeTruthy();
   });
 
   it("shows the active gem name in the switcher when one is set", () => {

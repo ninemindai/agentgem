@@ -14,6 +14,11 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
   }, []);
 
   const active = ordered.find((p) => p.route === hash) ?? ordered[0];
+  // Render the active page as a real element (not `active.component({...})`).
+  // Calling it as a function inlines the page's hooks into Shell's own hook
+  // list, so switching pages changes Shell's hook count and React throws
+  // "rendered fewer hooks than expected". An element gives each page its own fiber.
+  const ActivePage = active?.component;
 
   const item = (p: ConsolePage) => (
     <button
@@ -46,7 +51,7 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
         {groups.library.map(item)}
         <div className="console-footer">{groups.settings.map(item)}</div>
       </nav>
-      <main className="console-main">{active?.component({ apiBase })}</main>
+      <main className="console-main">{ActivePage ? <ActivePage apiBase={apiBase} /> : null}</main>
     </div>
   );
 }
