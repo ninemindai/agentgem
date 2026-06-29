@@ -21,6 +21,10 @@ import type { ProcedureCandidate, Reflection } from "./distillTypes.js";
 const LOCAL_TOOLS = new Set(["Read", "Edit", "Write", "Bash", "Grep", "Glob", "LS"]);
 const MAX_GAPS = 5;
 const TOP_CANDIDATES = 5;
+// Perf bound: scanning a project re-reads the whole transcript store, so the
+// default (discover-all) path is capped to the most-recently-used projects.
+// Explicit `projects` queries bypass the cap.
+const MAX_PROJECTS = 12;
 
 export type ProjectLoad = {
   root: string;
@@ -91,14 +95,14 @@ export function aggregateScorecard(loads: ProjectLoad[], nowMs: number, degraded
 }
 
 export interface ScorecardDeps {
-  discover(dir?: string): { path: string }[];
+  discover(dir?: string): { path: string; lastUsed?: string | null }[];
   loadProject(root: string, dir?: string): { signal: WorkflowSignal; candidates: ProcedureCandidate[]; reflections: Reflection[] } | null;
 }
 
 // Default deps run the real, shipped analyze pipeline — the same wiring as
 // src/workflowStream.ts, minus the LLM (deterministic only).
 export const defaultScorecardDeps: ScorecardDeps = {
-  discover: (dir) => discoverProjects(resolveDirs(dir)),
+  discover: (dir) => discoverProjects(resolveDirs(dir)).map((p) => ({ path: p.path, lastUsed: p.lastUsed })),
   loadProject: (root, dir) => {
     try {
       const dirs = resolveDirs(dir);
@@ -121,7 +125,16 @@ export function collectScorecard(
   nowMs: number,
   deps: ScorecardDeps = defaultScorecardDeps,
 ): Scorecard {
-  const roots = projects?.length ? projects : deps.discover(dir).map((p) => p.path);
+  let roots: string[];
+  if (projects?.length) {
+    roots = projects;
+  } else {
+    const discovered = [...deps.discover(dir)].sort((a, b) => (b.lastUsed ?? "").localeCompare(a.lastUsed ?? ""));
+    if (discovered.length > MAX_PROJECTS) {
+      console.warn(`[scorecard] ${discovered.length} projects discovered; scanning the ${MAX_PROJECTS} most recent (perf bound).`);
+    }
+    roots = discovered.slice(0, MAX_PROJECTS).map((p) => p.path);
+  }
   const loads: ProjectLoad[] = [];
   let degraded = false;
   for (const root of roots) {

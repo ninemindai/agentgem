@@ -97,4 +97,27 @@ describe("collectScorecard", () => {
     const sc2 = collectScorecard(undefined, undefined, 1, deps);
     expect(sc2.degraded).toBe(true);   // /r/b load returned null
   });
+
+  it("caps the discover-all path to the 12 most-recently-used projects", () => {
+    const many = Array.from({ length: 15 }, (_, i) => ({ path: `/r/p${i}`, lastUsed: `2026-06-${String(i + 1).padStart(2, "0")}T00:00:00Z` }));
+    const deps: ScorecardDeps = {
+      discover: () => many,
+      loadProject: (root) => ({ signal: sig(root), reflections: [], candidates: [] }),
+    };
+    const sc = collectScorecard(undefined, undefined, 1, deps);
+    expect(sc.projects).toHaveLength(12);
+    // newest (p14, 2026-06-15) included; oldest (p0, 2026-06-01) dropped
+    expect(sc.projects.map((p) => p.root)).toContain("/r/p14");
+    expect(sc.projects.map((p) => p.root)).not.toContain("/r/p0");
+  });
+
+  it("does NOT cap an explicit projects list", () => {
+    const roots = Array.from({ length: 15 }, (_, i) => `/r/e${i}`);
+    const deps: ScorecardDeps = {
+      discover: () => [],
+      loadProject: (root) => ({ signal: sig(root), reflections: [], candidates: [] }),
+    };
+    const sc = collectScorecard(undefined, roots, 1, deps);
+    expect(sc.projects).toHaveLength(15);
+  });
 });
