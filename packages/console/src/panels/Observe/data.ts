@@ -33,14 +33,19 @@ export function flameLevel(tokens: number, maxTokens: number): 0 | 1 | 2 | 3 {
   return 0;
 }
 
+/** UTC date string (YYYY-MM-DD) for a timestamp, matching the UTC daily/heatmap buckets. */
+export const utcDay = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
+
 /** A calendar-heatmap cell: the day, its activity counts, and a 0\u20134 intensity level. */
 export interface HeatCell { date: string; sessions: number; tokens: number; level: 0 | 1 | 2 | 3 | 4; weekday: number; week: number }
 
-/** Turn daily points into heatmap cells. `level` buckets `sessions` against the max in the set.
- *  `weekday` = UTC day-of-week (0=Sun). `week` = integer week index from the earliest date (for column layout). */
-export function heatmapCells(daily: DailyPoint[]): HeatCell[] {
+/** Turn daily points into heatmap cells. `metric` controls what drives the intensity level.
+ *  Defaults to `"tokens"`. Cells always carry both sessions and tokens for tooltip use.
+ *  `weekday` = UTC day-of-week (0=Sun). `week` = integer week index from the earliest date. */
+export function heatmapCells(daily: DailyPoint[], metric: "tokens" | "sessions" = "tokens"): HeatCell[] {
   if (daily.length === 0) return [];
-  const maxSessions = Math.max(1, ...daily.map((d) => d.sessions));
+  const valueOf = (d: DailyPoint) => metric === "tokens" ? (d.tokensIn + d.tokensOut + d.tokensCache) : d.sessions;
+  const max = Math.max(1, ...daily.map(valueOf));
   const parse = (date: string) => Date.parse(date + "T00:00:00.000Z");
   const first = Math.min(...daily.map((d) => parse(d.date)));
   const firstSunday = first - (new Date(first).getUTCDay()) * 86_400_000;
@@ -48,8 +53,9 @@ export function heatmapCells(daily: DailyPoint[]): HeatCell[] {
     const ms = parse(d.date);
     const weekday = new Date(ms).getUTCDay();
     const week = Math.floor((ms - firstSunday) / (7 * 86_400_000));
-    const r = d.sessions / maxSessions;
-    const level = (d.sessions === 0 ? 0 : r >= 0.75 ? 4 : r >= 0.5 ? 3 : r >= 0.25 ? 2 : 1) as HeatCell["level"];
+    const v = valueOf(d);
+    const r = v / max;
+    const level = (v === 0 ? 0 : r >= 0.75 ? 4 : r >= 0.5 ? 3 : r >= 0.25 ? 2 : 1) as HeatCell["level"];
     return { date: d.date, sessions: d.sessions, tokens: d.tokensIn + d.tokensOut + d.tokensCache, level, weekday, week };
   });
 }

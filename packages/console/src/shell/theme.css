@@ -547,6 +547,29 @@ body::before {
 .lvl-3 { background: var(--obs-heat-3, #30a14e); }
 .lvl-4 { background: var(--obs-heat-4, #216e39); }
 .obs-heatmap-card { margin-bottom: 24px; overflow-x: auto; }
+.obs-heatmap-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.obs-heat-toggle { display: flex; gap: 2px; }
+.obs-heat-toggle-btn {
+  padding: 2px 8px; font: 500 10.5px/1 var(--font-ui); border-radius: 4px;
+  border: 1px solid var(--line); background: transparent; color: var(--ink-soft);
+  cursor: pointer; transition: background 0.1s, color 0.1s;
+}
+.obs-heat-toggle-btn:hover { border-color: var(--accent); color: var(--accent); }
+.obs-heat-toggle-btn.is-active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* transition indicator */
+.obs-pending-pill {
+  display: inline-block; padding: 2px 10px; border-radius: 999px;
+  font: 500 11px/1.5 var(--font-ui); background: var(--line); color: var(--ink-soft);
+  animation: obs-pulse-fade 1s ease-in-out infinite alternate;
+}
+@keyframes obs-pulse-fade { from { opacity: 0.6; } to { opacity: 1; } }
+
+/* body dimming while refetch is in flight */
+.obs-body.is-updating { opacity: 0.55; pointer-events: none; transition: opacity 0.15s; }
+
+/* N-of-M hint above table */
+.obs-table-hint { font: 11.5px/1.4 var(--font-ui); margin: 0 0 6px; }
 
 /* flame badge */
 .obs-flame { font-size: 0.75rem; margin-left: 4px; }

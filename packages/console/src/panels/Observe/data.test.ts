@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fmtTokens, fmtDuration, tokenSeries, fmtTime, flameLevel, heatmapCells } from "./data.js";
+import { fmtTokens, fmtDuration, tokenSeries, fmtTime, flameLevel, heatmapCells, utcDay } from "./data.js";
 
 describe("formatters", () => {
   it("fmtTokens scales", () => {
@@ -90,5 +90,57 @@ describe("heatmapCells", () => {
     const daily = [{ date: "2026-06-28", sessions: 0, msgs: 0, tokensIn: 0, tokensOut: 0, tokensCache: 0 }];
     const cells = heatmapCells(daily);
     expect(cells[0].level).toBe(0);
+  });
+
+  it("default (no metric arg) uses tokens", () => {
+    // day A: low sessions (1), high tokens (900k). day B: high sessions (5), low tokens (50k).
+    // token-max → day A level=4; session-max → day B level=4.
+    const daily = [
+      { date: "2026-06-27", sessions: 1, msgs: 2, tokensIn: 600_000, tokensOut: 200_000, tokensCache: 100_000 },
+      { date: "2026-06-28", sessions: 5, msgs: 20, tokensIn: 30_000, tokensOut: 15_000, tokensCache: 5_000 },
+    ];
+    const cells = heatmapCells(daily); // default = "tokens"
+    const dayA = cells.find(c => c.date === "2026-06-27")!;
+    const dayB = cells.find(c => c.date === "2026-06-28")!;
+    expect(dayA.level).toBe(4); // 900k / 900k = 1.0 → level 4
+    expect(dayB.level).toBeLessThan(4); // 50k / 900k ≈ 0.055 → level 1
+  });
+
+  it("metric=tokens levels track token totals", () => {
+    const daily = [
+      { date: "2026-06-27", sessions: 1, msgs: 2, tokensIn: 600_000, tokensOut: 200_000, tokensCache: 100_000 },
+      { date: "2026-06-28", sessions: 5, msgs: 20, tokensIn: 30_000, tokensOut: 15_000, tokensCache: 5_000 },
+    ];
+    const cells = heatmapCells(daily, "tokens");
+    const dayA = cells.find(c => c.date === "2026-06-27")!;
+    expect(dayA.level).toBe(4);
+  });
+
+  it("metric=sessions levels track session counts", () => {
+    const daily = [
+      { date: "2026-06-27", sessions: 1, msgs: 2, tokensIn: 600_000, tokensOut: 200_000, tokensCache: 100_000 },
+      { date: "2026-06-28", sessions: 5, msgs: 20, tokensIn: 30_000, tokensOut: 15_000, tokensCache: 5_000 },
+    ];
+    const cells = heatmapCells(daily, "sessions");
+    const dayA = cells.find(c => c.date === "2026-06-27")!;
+    const dayB = cells.find(c => c.date === "2026-06-28")!;
+    expect(dayB.level).toBe(4); // 5/5 = 1.0 → level 4
+    expect(dayA.level).toBeLessThan(4); // 1/5 = 0.2 → level 1
+  });
+});
+
+describe("utcDay", () => {
+  it("returns YYYY-MM-DD in UTC regardless of local timezone", () => {
+    // 2026-06-28T00:00:00.000Z → "2026-06-28"
+    const ms = Date.parse("2026-06-28T00:00:00.000Z");
+    expect(utcDay(ms)).toBe("2026-06-28");
+  });
+
+  it("uses UTC not local date", () => {
+    // Parse an ISO string to get the exact UTC ms, then verify utcDay round-trips it.
+    const ms = Date.parse("2026-06-28T00:00:00.000Z");
+    const result = utcDay(ms);
+    expect(result).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(result).toBe("2026-06-28");
   });
 });

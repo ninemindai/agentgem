@@ -341,6 +341,8 @@ export type DailyPoint = ObservePayload["daily"][number];
 export type ModelSlice = ObservePayload["models"][number];
 export type ObserveFacets = ObservePayload["facets"];
 
+export type ObserveFilter = { agent?: string; project?: string; model?: string; minMsgs?: number };
+
 export const observeRoute = defineRoute("GET", "/api/observe", {
   query: z.object({
     range: z.enum(["today", "7d", "30d", "all"]).optional(),

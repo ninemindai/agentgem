@@ -68,6 +68,33 @@ describe("Observe Dashboard", () => {
     expect(cell).not.toBeNull();
   });
 
+  it("shows 'Updating…' pill when pending=true, hides it when pending=false", () => {
+    const { rerender } = render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} pending={true} />);
+    expect(screen.getByText("Updating…")).toBeDefined();
+    rerender(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} pending={false} />);
+    expect(screen.queryByText("Updating…")).toBeNull();
+  });
+
+  it("shows N-of-M hint when pulse.sessions > visible rows", () => {
+    const bigPayload = {
+      ...payload,
+      pulse: { ...payload.pulse, sessions: 500 },
+    };
+    render(<Dashboard data={bigPayload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} />);
+    // 1 session row, pulse.sessions=500
+    expect(screen.getByText(/Showing 1 of 500 sessions/)).toBeDefined();
+  });
+
+  it("does not show N-of-M hint when pulse.sessions equals visible rows", () => {
+    const exactPayload = {
+      ...payload,
+      pulse: { ...payload.pulse, sessions: 1 },
+    };
+    render(<Dashboard data={exactPayload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} />);
+    // pulse.sessions=1, rows.length=1 → no hint
+    expect(screen.queryByText(/Showing \d+ of \d+ sessions/)).toBeNull();
+  });
+
   it("keyboard Enter on session row toggles detail", () => {
     const { container } = render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} />);
     const rowBtn = container.querySelector('tr[role="button"]') as HTMLElement;
