@@ -1,7 +1,9 @@
 // src/gem/scorecard.ts
 //
 // Deterministic "goldmine scorecard": rolls the existing analyze pipeline's
-// per-project candidates up into asset-framed counts. Pure — no fs, no LLM.
+// per-project candidates up into asset-framed counts. The aggregate/score
+// functions (isPortable/scoreProject/aggregateScorecard) are pure — no fs, no
+// LLM; `defaultScorecardDeps` runs the real pipeline (fs, still no LLM).
 // breadth = distinct reusable workflows; battleTested = mature (priorConfidence
 // "high"); portable = mature AND general enough to travel beyond its origin repo.
 import { basename } from "node:path";
@@ -81,6 +83,7 @@ export function aggregateScorecard(loads: ProjectLoad[], nowMs: number, degraded
       if (c.priorConfidence === "high") battleTested++;
       if (isPortable(c)) portable++;
     }
+    // Only high-importance reflections become headline gaps (medium ones are noise here).
     for (const r of load.reflections) if (r.importance === "high" && !gaps.includes(r.detail)) gaps.push(r.detail);
   }
   return {
