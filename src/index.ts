@@ -26,6 +26,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { registerDrizzle } from "@agentback/drizzle";
 import { schema, ensureSchema } from "./aggregator/schema.js";
 import { AggregatorController } from "./aggregator.controller.js";
+import { ShareController } from "./share.controller.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -60,6 +61,7 @@ export async function createApp(port: number): Promise<RestApplication> {
     await ensureSchema(db as never);
     registerDrizzle(app, db, { onStop: () => pool.end() });
     app.restController(AggregatorController);
+    app.restController(ShareController);
   }
   // CSRF / drive-by guard: reject browser-initiated cross-site requests to the loopback API
   // (controller routes). Same-origin UI and non-browser clients (CLI/MCP/tests) pass. Mounted in
