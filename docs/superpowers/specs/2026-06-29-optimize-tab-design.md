@@ -239,12 +239,14 @@ Write tests first, per project + global rules. vitest runs from compiled `dist/`
 Claude Code's built-in `/insights` analyzes local session transcripts and writes structured
 data to `~/.claude/usage-data/`:
 
-- `session-meta/<session>.json` — quantitative per session: `tool_counts`, `tool_errors`,
+- `session-meta/<session>.json` — quantitative, deterministic, **census** over all recent
+  sessions (parsed locally, no model): `tool_counts`, `tool_errors`,
   `tool_error_categories`, `uses_mcp`, `lines_added/removed`, `files_modified`,
   `git_commits/pushes`, `user_response_times`, `languages`, `input/output_tokens`.
-- `facets/<session>.json` — **LLM-derived** per session: `underlying_goal`,
-  `goal_categories` (e.g. debugging / architecture_planning / documentation), `outcome`,
-  `friction_counts`, `friction_detail`, `claude_helpfulness`, `brief_summary`.
+- `facets/<session>.json` — **LLM-judged on a small SAMPLE** of sessions (e.g. 35 of
+  1,432), not a census: `underlying_goal`, `goal_categories` (e.g. debugging /
+  architecture_planning / documentation), `outcome`, `friction_counts`, `friction_detail`,
+  `claude_helpfulness`, `brief_summary`. Treat as sampled inference, not fact.
 - `report-*.html` — the rendered dashboard. Section titles: *Top Tools Used*, *Suggested
   CLAUDE.md Additions*, *Existing CC Features to Try*, *New Ways to Use Claude Code*,
   *Where Things Go Wrong* (friction/errors).
@@ -255,11 +257,12 @@ These sections map almost 1:1 onto this design, so we **borrow** rather than dup
   generic `Skill` bucket (no per-skill breakdown). So `/insights` data **cannot** replace
   our per-skill prune scan — it confirms `scanWorkflow` (which reads `input.skill`) is the
   right engine for skill-level usage.
-- **Enriches Plan 2 (Discover).** When `facets/*.json` is present, use its
-  `goal_categories` / `underlying_goal` as the workflow-topic signal for relevance ranking
-  (already LLM-distilled — cleaner than raw transcript topics), with **graceful fallback to
-  `workflowScan` when absent**. Treat this as optional enrichment, never a dependency — the
-  data is a timestamped snapshot that only exists if the user ran `/insights`.
+- **Enriches Plan 2 (Discover).** `workflowScan` (every transcript) stays the **primary**
+  topic signal. When `facets/*.json` is present, use its `goal_categories` /
+  `underlying_goal` as *qualitative enrichment over the sampled sessions only* — it is a
+  ~2% LLM sample, not a census, so it can sharpen but must not drive relevance ranking.
+  Graceful fallback to `workflowScan` when absent. Optional enrichment, never a dependency —
+  a timestamped snapshot that only exists if the user ran `/insights`.
 - **Aligns Plan 3.** Anthropic's report already frames CLAUDE.md tuning as a first-class
   output ("Suggested CLAUDE.md Additions"). Plan 3's ACP critique should emit the same
   shape of add/trim/fix suggestion; cite this as prior-art validation.
