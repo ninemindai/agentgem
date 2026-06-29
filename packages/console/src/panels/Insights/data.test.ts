@@ -53,3 +53,31 @@ describe("sparkPoints", () => {
     expect(sparkPoints([5], 100, 40, 10)).toBe("0,20 100,20");
   });
 });
+
+import { filterRows } from "./data.js";
+
+describe("filterRows", () => {
+  const rows = [
+    { id: "skill:superpowers/brainstorming", kind: "skill", producers: 80, verifiedProducers: 40, invocations: 200, sessions: 90 },
+    { id: "npx:@modelcontextprotocol/server-github", kind: "mcp", producers: 30, verifiedProducers: 9, invocations: 50, sessions: 25 },
+    { id: "claude-opus-4-8", kind: "model", producers: 12, verifiedProducers: 3, invocations: 18, sessions: 10 },
+  ];
+
+  it("returns all rows with 1-based original ranks when the query is blank", () => {
+    expect(filterRows(rows, "   ")).toEqual([
+      { row: rows[0], rank: 1 }, { row: rows[1], rank: 2 }, { row: rows[2], rank: 3 },
+    ]);
+  });
+  it("matches on the prettified name, case-insensitively", () => {
+    expect(filterRows(rows, "BRAINSTORM")).toEqual([{ row: rows[0], rank: 1 }]);
+  });
+  it("matches on the scope", () => {
+    expect(filterRows(rows, "superpowers")).toEqual([{ row: rows[0], rank: 1 }]);
+  });
+  it("matches on the raw id and preserves original rank", () => {
+    expect(filterRows(rows, "opus")).toEqual([{ row: rows[2], rank: 3 }]);
+  });
+  it("returns empty when nothing matches", () => {
+    expect(filterRows(rows, "zzz")).toEqual([]);
+  });
+});
