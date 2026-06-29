@@ -89,9 +89,12 @@ Joins two local data sources:
     `mcp__<server>__*` tool calls (`workflowScan.ts:300-373`) and resolves them against an
     inventory, producing `ArtifactUsage[]` with `invocations`, `sessionsUsedIn`,
     `lastUsedMs`.
-  - Calls `scanWorkflow(allClaudeTranscripts(claudeDir), { project: <empty>, global:
-    { skills, mcpServers, hooks } })` once over **all** Claude transcripts (global view),
-    so usage is attributed to the global inventory.
+  - Calls `scanWorkflow(allClaudeTranscripts(claudeDir), { project: <installed inventory
+    as a synthetic project>, global: { skills: [], mcpServers: [], hooks: [] } })` once
+    over **all** Claude transcripts. The installed inventory is passed as the `project`
+    inventory (not `global`) because scanWorkflow emits **every project artifact including
+    unused ones** (`invocations: 0`), whereas it drops unused *global* artifacts —
+    and unused is exactly what we need.
   - Returns `Map<artifactKey, ArtifactUsage>` keyed by `type + ":" + name`.
   - TTL-cached (15s) like `scanSessionsCached`.
   - **v1 scope:** Claude transcripts only (Codex tool-call parsing is a follow-up — Codex
