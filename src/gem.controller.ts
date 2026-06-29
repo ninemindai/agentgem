@@ -20,6 +20,12 @@ const ObservePayloadSchema = z.object({
   facets: z.object({ agents: z.array(z.string()), projects: z.array(z.string()), models: z.array(z.string()) }),
   range: z.enum(["today", "7d", "30d", "all"]),
 });
+const ScorecardBuildRequestSchema = z.object({
+  dir: z.string().optional(),
+  name: z.string().optional(),
+  selections: z.array(z.object({ root: z.string(), keys: z.array(z.string()).min(1) })).min(1),
+});
+
 const ScorecardSchema = z.object({
   breadth: z.number(),
   battleTested: z.number(),
@@ -35,6 +41,7 @@ const ScorecardSchema = z.object({
 }) satisfies z.ZodType<Scorecard>;
 import { introspectConfig, introspectProject } from "./gem/introspect.js";
 import { buildGem } from "./gem/buildGem.js";
+import { InvalidInputError } from "./gem/inputError.js";
 import { scaffoldChecks } from "./gem/checks.js";
 import { materialize, compatibility } from "./gem/targets.js";
 import type { TargetId } from "./gem/targets.js";
@@ -91,10 +98,10 @@ import {
   GemRunPrepareRequestSchema, GemRunPrepareResponseSchema,
   UsageSchema, UsageQuerySchema,
 } from "./schemas.js";
-import { collectScorecard, selectScorecardRoots, scorecardTranscriptPaths, type Scorecard } from "./gem/scorecard.js";
+import { collectScorecard, selectScorecardRoots, scorecardTranscriptPaths, defaultScorecardDeps, type Scorecard } from "./gem/scorecard.js";
 import { claudeTranscriptsForCwd, scanWorkflow, allClaudeTranscripts } from "./gem/workflowScan.js";
 import { recommendWorkflow, recommendationToSelection } from "./gem/acpRecommender.js";
-import { distillWorkflow } from "./gem/distill.js";
+import { distillWorkflow, type DistilledSkill } from "./gem/distill.js";
 import { extractReflections } from "./gem/extract.js";
 import { writeReflections } from "./gem/reflectionStore.js";
 import { writeDistilledDraft, stageDraftsByEvidence } from "./gem/draftStage.js";
@@ -200,6 +207,29 @@ export class GemController {
     const sc = collectScorecard(dir, roots, Date.now());
     if (!sc.degraded) writeAnalysisCache("__scorecard__", token, sc, Date.now());
     return sc;
+  }
+
+  @post("/scorecard/build", { body: ScorecardBuildRequestSchema, response: GemSchema })
+  async scorecardBuild(input: { body: z.infer<typeof ScorecardBuildRequestSchema> }): Promise<z.infer<typeof GemSchema>> {
+    const dir = input.body.dir;
+    const drafts: DistilledSkill[] = [];
+    const projSel: Record<string, { skills: string[] }> = {};
+    const roots: string[] = [];
+    for (const sel of input.body.selections) {
+      const canonRoot = resolveProject(sel.root);
+      roots.push(canonRoot);
+      const loaded = defaultScorecardDeps.loadProject(sel.root, dir);
+      if (!loaded) throw new InvalidInputError(`Could not scan project '${sel.root}'.`);
+      const chosen = loaded.candidates.filter((c) => sel.keys.includes(c.key));
+      if (!chosen.length) throw new InvalidInputError(`No matching workflows in '${sel.root}' for the given keys.`);
+      for (const c of chosen) {
+        drafts.push(c.skeleton);
+        (projSel[c.skeleton.evidence.root] ??= { skills: [] }).skills.push(c.skeleton.name);
+      }
+    }
+    const inventory = stageDraftsByEvidence(introspectAll(dir, roots), drafts);
+    const gem = buildGem(inventory, { projects: projSel }, { name: input.body.name ?? "goldmine-gem", createdFrom: resolveDirs(dir).claudeDir });
+    return gem;
   }
 
   @post("/gem", { body: GemRequestSchema, response: GemSchema })
