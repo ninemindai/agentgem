@@ -20,26 +20,30 @@ worktree when the work is merged or abandoned:
 git worktree remove ../agentgem-<task>
 ```
 
-## Integration: PR against `origin/main`, never merge to local `main`
+## Integration: keep local `main` a clean mirror
 
-`origin/main` is the shared trunk — every change lands there via a Pull Request
-(this is how the merged PRs in history landed). The **local `main` branch is not
-the trunk**: with many concurrent worktrees it drifts (commits made in one
-worktree, partial experiments) and routinely diverges from `origin/main` (both
-ahead and behind), so it is *not* fast-forwardable and is often **checked out in
-another worktree** (e.g. `../agentgem-run`) that you must not disturb.
+Worktrees isolate each session's working tree — that part is automatic. The thing
+that actually bites is a **divergent local `main`**: with many concurrent
+worktrees, `main` drifts if it's committed to directly or left stale, and ends up
+both ahead of and behind `origin/main` (not fast-forwardable) — and it's often
+**checked out in another worktree** (e.g. `../agentgem-run`) you must not disturb.
+Keep `main` clean and **local merge is the default integration path**; a PR is the
+exception.
 
-Therefore:
-
-- **Branch from `origin/main`** (fetch first), not `main` — your work starts from
-  the real trunk, so the eventual diff and PR are clean.
-- **Finish by pushing the branch and opening a PR against `origin/main`.** Do
-  **not** `git checkout main && git merge <branch>`: it writes into another
-  session's working tree and merges onto a divergent main no one shares.
-- **Don't try to "merge to local main locally"** as a shortcut. If you genuinely
-  need a local trunk, fast-forward a *fresh* checkout to `origin/main` first — but
-  the default is always the PR.
-
-Before starting, sanity-check you're current: `git fetch origin` then branch off
-`origin/main`. Before finishing, confirm the branch is ahead of `origin/main`
-only (not based on a stale local main).
+- **Never commit directly to `main`.** Treat it as a read-only mirror of
+  `origin/main` — only ever fast-forward it
+  (`git fetch && git checkout main && git merge --ff-only origin/main`). Do all
+  work on feature branches. Direct commits are what make `main` diverge "ahead"
+  and stop fast-forwarding.
+- **Branch off freshly-fetched `origin/main`**, not local `main`, so your diff is
+  against the real trunk.
+- **Finish with a local merge (default):** in the one checkout that holds `main`,
+  sync it (`git merge --ff-only origin/main`), `git merge <branch>`, run tests,
+  then `git push`. Don't check `main` out where it's already checked out in
+  another worktree.
+- **Reach for a PR only when** integrations may overlap (two sessions merging at
+  once — git won't let `main` be checked out in two worktrees, so they'd serialize
+  anyway and the remote is the safer rendezvous) or when you want CI/review before
+  it lands.
+- **Before finishing, confirm** your branch is ahead of `origin/main` *only* (not
+  built on a stale/divergent local `main`).
