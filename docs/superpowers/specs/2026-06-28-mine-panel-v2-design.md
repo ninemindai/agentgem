@@ -103,13 +103,20 @@ the existing build path).
 
 ## Milestone C — share the built Gem via an OG card (user decision, 2026-06-28)
 
-Sharing is reframed: not a scorecard badge, but **the Gem built in Milestone B**, presented as an
-OpenGraph/Twitter-Card so X / Facebook / LinkedIn auto-render a rich preview. The card carries:
-**a generated image, the Gem's value framing, a link to the Gem (install/try), and an "invite to
-try" CTA.** This wires the goldmine on-ramp into AgentGem's existing Gem distribution.
+Sharing is reframed from a local badge to a hosted OpenGraph/Twitter-Card so X / Facebook /
+LinkedIn auto-render a rich preview. The card subject can be **either of two things** (user
+decision 2026-06-28):
 
-Depends on Milestone B (a built Gem to point at). Replaces the local-only canvas trophy as the
-primary share path (the trophy can remain a fallback / no-link image).
+1. **A Gem** (the Milestone-B artifact) — card = generated image + the Gem's value framing +
+   **link to the Gem (install/try)** + invite CTA. Drives *supply/usage* virality. Depends on B.
+2. **A report card / certificate** (the goldmine achievement itself) — card = generated image +
+   the asset-framed counts/credential ("distilled from N battle-tested workflows") + invite CTA.
+   Drives *identity/status* virality. **Independent of B** — it shares the scorecard, so it can
+   ship first. Revives the deferred "certificate" follow-up from the base scorecard spec.
+
+Both share the same OG-card + social-intent mechanism (below); they differ only in subject and
+whether a Gem install-link is present. Replaces the local-only canvas trophy as the primary share
+path (trophy stays as an offline fallback image).
 
 Open design points (to detail when B is near):
 - **Hosting:** OG cards require a public URL. Reuse/extend the existing Gem share/registry +
