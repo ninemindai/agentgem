@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import type { Scorecard, ProjectGoldmine, WorkflowDetail } from "../../api/routes.js";
 import { scorecardWorkflowRoute, makeClient } from "../../api/routes.js";
 import type { WorkflowFilter } from "./Scorecard.js";
+import { drawWorkflowCard, drawGemCard, shareCanvas } from "./shareCard.js";
 
 type WorkflowEntry = ProjectGoldmine["workflows"][number];
 
@@ -21,6 +22,7 @@ export function MineWorkflows({ data, filter, onFilter, onBuild, building, resul
   const [details, setDetails] = useState<Record<string, WorkflowDetail>>({});
   const [detailLoading, setDetailLoading] = useState<Record<string, boolean>>({});
   const [detailError, setDetailError] = useState<Record<string, string>>({});
+  const shareCanvasRef = useRef<HTMLCanvasElement>(null);
 
   const toggle = (root: string, key: string) => setSelected((s) => {
     const set = new Set(s[root] ?? []);
@@ -49,6 +51,31 @@ export function MineWorkflows({ data, filter, onFilter, onBuild, building, resul
   };
 
   const toggleFilter = (f: WorkflowFilter) => onFilter(filter === f ? "all" : f);
+
+  const shareWorkflow = async (root: string, key: string, wfName: string) => {
+    const cacheKey = `${root}:${key}`;
+    let detail = details[cacheKey];
+    if (!detail) {
+      try {
+        detail = await scorecardWorkflowRoute.call(makeClient(apiBase), { query: { root, key } });
+        setDetails((prev) => ({ ...prev, [cacheKey]: detail! }));
+      } catch {
+        return;
+      }
+    }
+    const c = shareCanvasRef.current;
+    if (!c) return;
+    drawWorkflowCard(c, detail);
+    void shareCanvas(c, `${wfName}.png`, wfName);
+  };
+
+  const shareGem = () => {
+    if (!result) return;
+    const c = shareCanvasRef.current;
+    if (!c) return;
+    drawGemCard(c, result);
+    void shareCanvas(c, `${result.name}.png`, result.name);
+  };
 
   const match = (w: WorkflowEntry) => filter === "all" || (filter === "battleTested" ? w.confidence === "high" : w.portable);
   const visibleProjects = data.projects
@@ -104,16 +131,21 @@ export function MineWorkflows({ data, filter, onFilter, onBuild, building, resul
               return (
               <li key={w.key}>
                 <label>
-                  <input type="checkbox" checked={selected[p.root]?.has(w.key) ?? false} onChange={() => toggle(p.root, w.key)} />
-                  <span className="mine-wf-name">{w.name}</span>
-                  {w.confidence === "high" && <span className="mine-badge mine-badge-bt">battle-tested</span>}
-                  {w.portable && <span className="mine-badge mine-badge-portable">portable</span>}
+                  <input type="checkbox" aria-label={w.name} checked={selected[p.root]?.has(w.key) ?? false} onChange={() => toggle(p.root, w.key)} />
                 </label>
                 <button
                   className="mine-wf-view"
                   aria-label={expanded[cacheKey] ? "Collapse detail" : "Expand detail"}
                   onClick={() => toggleExpand(p.root, w.key)}
                 >{expanded[cacheKey] ? "▾" : "▸"}</button>
+                <span className="mine-wf-name">{w.name}</span>
+                {w.confidence === "high" && <span className="mine-badge mine-badge-bt">battle-tested</span>}
+                {w.portable && <span className="mine-badge mine-badge-portable">portable</span>}
+                <button
+                  className="mine-wf-share"
+                  aria-label={`Share ${w.name}`}
+                  onClick={() => void shareWorkflow(p.root, w.key, w.name)}
+                >Share</button>
                 {expanded[cacheKey] && (
                   <div className="mine-wf-detail">
                     {detailLoading[cacheKey] && <span>Loading…</span>}
@@ -161,9 +193,11 @@ export function MineWorkflows({ data, filter, onFilter, onBuild, building, resul
       {result && (
         <p className="mine-build-ok">
           ✓ Built <strong>{result.name}</strong> — {result.skills.length} skill{result.skills.length === 1 ? "" : "s"}: {result.skills.join(", ")}
+          {" "}<button className="mine-wf-share" aria-label={`Share ${result.name} gem`} onClick={shareGem}>Share gem</button>
         </p>
       )}
       {error && <p className="obs-error">{error}</p>}
+      <canvas ref={shareCanvasRef} style={{ display: "none" }} />
     </section>
   );
 }

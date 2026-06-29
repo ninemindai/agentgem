@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
 
 afterEach(cleanup);
@@ -246,6 +246,131 @@ describe("MineWorkflows", () => {
     expect(screen.getByText("Beta-specific deploy pipeline")).toBeTruthy();
 
     spy.mockRestore();
+  });
+
+  // ── Per-row Share button ────────────────────────────────────────────────────
+
+  describe("per-row Share button", () => {
+    beforeEach(() => {
+      // Stub canvas APIs for jsdom
+      vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
+      vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation(function (cb) { cb(new Blob()); });
+      vi.stubGlobal("URL", { createObjectURL: vi.fn().mockReturnValue("blob:mock"), revokeObjectURL: vi.fn() });
+      Object.defineProperty(navigator, "share", {
+        value: undefined,
+        configurable: true,
+        writable: true,
+      });
+      Object.defineProperty(navigator, "canShare", {
+        value: undefined,
+        configurable: true,
+        writable: true,
+      });
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      vi.unstubAllGlobals();
+    });
+
+    it("renders a Share button on each workflow row", () => {
+      render(<MineWorkflows {...defaultProps} />);
+      // There are 3 workflows → 3 Share buttons
+      const shareBtns = screen.getAllByRole("button", { name: /^share /i });
+      expect(shareBtns.length).toBe(3);
+    });
+
+    it("clicking Share triggers detail fetch if not cached", async () => {
+      const detail: WorkflowDetail = {
+        key: "wf-a", name: "Deploy workflow", description: "desc",
+        triggers: [], tools: [], mutating: false, steps: [], sessions: 1,
+        confidence: "high", portable: true,
+      };
+      const spy = vi.spyOn(routes.scorecardWorkflowRoute, "call").mockResolvedValue(detail);
+
+      render(<MineWorkflows {...defaultProps} />);
+      const shareBtn = screen.getAllByRole("button", { name: /^share deploy workflow/i })[0];
+      fireEvent.click(shareBtn);
+
+      await waitFor(() => {
+        expect(spy).toHaveBeenCalledWith(
+          expect.anything(),
+          { query: { root: "/projects/alpha", key: "wf-a" } },
+        );
+      });
+      spy.mockRestore();
+    });
+
+    it("does not refetch detail on share if already cached via expander", async () => {
+      const detail: WorkflowDetail = {
+        key: "wf-a", name: "Deploy workflow", description: "cached",
+        triggers: [], tools: [], mutating: false, steps: [], sessions: 2,
+        confidence: "high", portable: true,
+      };
+      const spy = vi.spyOn(routes.scorecardWorkflowRoute, "call").mockResolvedValue(detail);
+
+      render(<MineWorkflows {...defaultProps} />);
+      // First open via expander to populate cache
+      const expandBtns = screen.getAllByRole("button", { name: /expand detail/i });
+      fireEvent.click(expandBtns[0]);
+      await waitFor(() => { expect(spy).toHaveBeenCalledTimes(1); });
+
+      // Now click Share — should NOT make a second fetch
+      const shareBtn = screen.getAllByRole("button", { name: /^share deploy workflow/i })[0];
+      fireEvent.click(shareBtn);
+      await waitFor(() => { /* let any async work settle */ });
+      expect(spy).toHaveBeenCalledTimes(1);
+      spy.mockRestore();
+    });
+
+    it("toggle button and workflow name are in the same li container", () => {
+      render(<MineWorkflows {...defaultProps} />);
+      // Find the toggle for the first workflow
+      const toggleBtn = screen.getAllByRole("button", { name: /expand detail/i })[0];
+      const nameEl = screen.getByText("Deploy workflow");
+      // Both should share the same parent <li>
+      expect(toggleBtn.parentElement).toBe(nameEl.parentElement);
+    });
+  });
+
+  // ── Build-result Share button ────────────────────────────────────────────────
+
+  describe("build-result Share button", () => {
+    beforeEach(() => {
+      vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
+      vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation(function (cb) { cb(new Blob()); });
+      vi.stubGlobal("URL", { createObjectURL: vi.fn().mockReturnValue("blob:mock"), revokeObjectURL: vi.fn() });
+      Object.defineProperty(navigator, "share", {
+        value: undefined,
+        configurable: true,
+        writable: true,
+      });
+      Object.defineProperty(navigator, "canShare", {
+        value: undefined,
+        configurable: true,
+        writable: true,
+      });
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      vi.unstubAllGlobals();
+    });
+
+    it("renders a Share gem button when result is set", () => {
+      render(
+        <MineWorkflows
+          {...defaultProps}
+          result={{ name: "my-gem", skills: ["deploy", "lint"] }}
+        />,
+      );
+      expect(screen.getByRole("button", { name: /share my-gem gem/i })).toBeTruthy();
+    });
+
+    it("does not render Share gem button when result is null", () => {
+      render(<MineWorkflows {...defaultProps} result={null} />);
+      expect(screen.queryByRole("button", { name: /share .* gem/i })).toBeNull();
+    });
   });
 
   // Stale-selection note test
