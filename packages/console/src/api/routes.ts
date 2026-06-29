@@ -385,4 +385,16 @@ export const scorecardRoute = defineRoute("GET", "/api/scorecard", {
   response: ScorecardSchema,
 });
 
+export const WorkflowDetailSchema = z.object({
+  key: z.string(), name: z.string(), description: z.string(),
+  triggers: z.array(z.string()), tools: z.array(z.string()), mutating: z.boolean(),
+  steps: z.array(z.string()), sessions: z.number(),
+  confidence: z.enum(["high", "medium", "low"]), portable: z.boolean(),
+});
+export type WorkflowDetail = z.infer<typeof WorkflowDetailSchema>;
+export const scorecardWorkflowRoute = defineRoute("GET", "/api/scorecard/workflow", {
+  query: z.object({ dir: z.string().optional(), root: z.string(), key: z.string() }),
+  response: WorkflowDetailSchema,
+});
+
 export const makeClient = (apiBase: string): Client => createClient({ baseURL: apiBase });

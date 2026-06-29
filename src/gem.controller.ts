@@ -25,6 +25,13 @@ const ScorecardBuildRequestSchema = z.object({
   name: z.string().optional(),
   selections: z.array(z.object({ root: z.string(), keys: z.array(z.string()).min(1) })).min(1),
 });
+const ScorecardWorkflowQuerySchema = z.object({ dir: z.string().optional(), root: z.string(), key: z.string() });
+const WorkflowDetailSchema = z.object({
+  key: z.string(), name: z.string(), description: z.string(),
+  triggers: z.array(z.string()), tools: z.array(z.string()), mutating: z.boolean(),
+  steps: z.array(z.string()), sessions: z.number(),
+  confidence: z.enum(["high", "medium", "low"]), portable: z.boolean(),
+});
 
 const ScorecardSchema = z.object({
   breadth: z.number(),
@@ -98,7 +105,7 @@ import {
   GemRunPrepareRequestSchema, GemRunPrepareResponseSchema,
   UsageSchema, UsageQuerySchema,
 } from "./schemas.js";
-import { collectScorecard, selectScorecardRoots, scorecardTranscriptPaths, defaultScorecardDeps, type Scorecard } from "./gem/scorecard.js";
+import { collectScorecard, selectScorecardRoots, scorecardTranscriptPaths, defaultScorecardDeps, isPortable, type Scorecard } from "./gem/scorecard.js";
 import { claudeTranscriptsForCwd, scanWorkflow, allClaudeTranscripts, bucketTranscriptsByCwd } from "./gem/workflowScan.js";
 import { recommendWorkflow, recommendationToSelection } from "./gem/acpRecommender.js";
 import { distillWorkflow, type DistilledSkill } from "./gem/distill.js";
@@ -231,6 +238,16 @@ export class GemController {
     const inventory = stageDraftsByEvidence(introspectAll(dir, roots), drafts);
     const gem = buildGem(inventory, { projects: projSel }, { name: input.body.name ?? "goldmine-gem", createdFrom: resolveDirs(dir).claudeDir });
     return gem;
+  }
+
+  @get("/scorecard/workflow", { query: ScorecardWorkflowQuerySchema, response: WorkflowDetailSchema })
+  async scorecardWorkflow(input: { query: z.infer<typeof ScorecardWorkflowQuerySchema> }): Promise<z.infer<typeof WorkflowDetailSchema>> {
+    const { dir, root, key } = input.query;
+    const loaded = defaultScorecardDeps.loadProject(root, dir);
+    if (!loaded) throw new InvalidInputError(`Could not scan project '${root}'.`);
+    const c = loaded.candidates.find((x) => x.key === key);
+    if (!c) throw new InvalidInputError(`No workflow '${key}' in '${root}'.`);
+    return { key: c.key, name: c.skeleton.name, description: c.skeleton.description, triggers: c.skeleton.triggers, tools: c.skeleton.tools, mutating: c.skeleton.mutating, steps: c.verbs, sessions: c.sessions, confidence: c.priorConfidence, portable: isPortable(c) };
   }
 
   @post("/gem", { body: GemRequestSchema, response: GemSchema })
