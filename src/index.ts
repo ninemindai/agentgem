@@ -24,7 +24,6 @@ import { originGuard } from "./originGuard.js";
 import { registerDrizzle } from "@agentback/drizzle";
 import { AggregatorController } from "./aggregator.controller.js";
 import { ShareController } from "./share.controller.js";
-import { shareRateLimit } from "./share/rateLimit.js";
 import { ShareProxyController } from "./share.proxy.controller.js";
 import { resolveAggregatorDb } from "./aggregator/localDb.js";
 import { mountGating } from "./gating.js";
@@ -72,10 +71,8 @@ export async function createApp(port: number): Promise<RestApplication> {
     registerDrizzle(app, db as never, { onStop });
     app.restController(AggregatorController);
     app.restController(ShareController);
-    // The anonymous create endpoint (POST /api/aggregator/share) has no auth, so cap it by client
-    // IP — originGuard intentionally lets non-browser clients through, so this is the only guard
-    // against scripted row-insertion abuse. In-memory fixed window (per-instance).
-    app.expressMiddleware("middleware.shareRateLimit", shareRateLimit);
+    // POST /api/aggregator/share (anonymous create) is rate-limited by mountGating's anon per-IP
+    // bucket below (keyed on CLIENT_IP_HEADER) — no separate share-specific limiter needed.
     await mountGating(app, db);
     console.log(`aggregator: ${mode}${mode === "pglite" ? " (set DATABASE_URL for Postgres)" : ""}`);
   }
