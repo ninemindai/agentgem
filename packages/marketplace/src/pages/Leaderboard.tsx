@@ -18,7 +18,7 @@ export function Leaderboard({ api }: { api: ReturnType<typeof makeApi> }) {
 
   useEffect(() => {
     let alive = true;
-    setLoading(true); setError(null);
+    setLoading(true); setError(null); setRows([]);
     api.getPopularity(kind === "all" ? {} : { kind })
       .then((r) => { if (alive) setRows(r); })
       .catch((e) => { if (alive) setError(String(e?.message ?? e)); })
