@@ -513,3 +513,14 @@ body::before {
   border-radius: 6px;
 }
 .ins-search:focus { outline: none; border-color: var(--accent, #6ea8fe); }
+.ins-find-gems {
+  margin-left: auto;
+  font: inherit;
+  font-size: 0.85em;
+  color: var(--accent, #6ea8fe);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+.ins-find-gems:hover { text-decoration: underline; }

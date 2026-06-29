@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup, waitFor } from "@testing-library/react";
+import { render, screen, cleanup, waitFor, fireEvent } from "@testing-library/react";
 import { Detail } from "./Detail.js";
+import { takePendingQuery } from "../GetGems/intent.js";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
@@ -32,5 +33,18 @@ describe("Detail", () => {
     stub([], []);
     render(<Detail id="skill:x" apiBase="" />);
     await waitFor(() => expect(screen.getByText(/not enough data yet/i)).toBeTruthy());
+  });
+
+  it("deep-links to Get Gems with the ingredient name as the pending query", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.includes("/co-occurrence")) return res([]);
+      if (url.includes("/adoption")) return res([]);
+      throw new Error("unexpected " + url);
+    }));
+    window.location.hash = "";
+    render(<Detail id="skill:superpowers/brainstorming" apiBase="" />);
+    fireEvent.click(await screen.findByRole("button", { name: /find gems using this/i }));
+    expect(window.location.hash).toBe("#/get-gems");
+    expect(takePendingQuery()).toBe("brainstorming");
   });
 });
