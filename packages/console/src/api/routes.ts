@@ -397,4 +397,12 @@ export const scorecardWorkflowRoute = defineRoute("GET", "/api/scorecard/workflo
   response: WorkflowDetailSchema,
 });
 
+export const createShareRoute = defineRoute("POST", "/api/share", {
+  body: z.object({
+    counts: z.object({ breadth: z.number(), battleTested: z.number(), portable: z.number() }),
+    generatedAtMs: z.number(),
+  }),
+  response: z.object({ id: z.string(), url: z.string() }),
+});
+
 export const makeClient = (apiBase: string): Client => createClient({ baseURL: apiBase });

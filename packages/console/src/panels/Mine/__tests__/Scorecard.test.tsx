@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { describe, it, expect, afterEach, vi } from "vitest";
+import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 
 afterEach(cleanup);
 import { ScorecardHero, ScorecardHeroSkeleton } from "../Scorecard.js";
@@ -26,10 +26,24 @@ describe("ScorecardHero", () => {
   });
   it("has no interactive filter chip buttons in the hero", () => {
     const { container } = render(<ScorecardHero data={sc} />);
-    // Only the share button should be present — no chip toggles
+    // Only share + download buttons — no chip toggles
     const buttons = container.querySelectorAll("button");
-    expect(buttons.length).toBe(1);
+    expect(buttons.length).toBe(2);
     expect(buttons[0].textContent).toMatch(/share your goldmine/i);
+    expect(buttons[1].textContent).toMatch(/download png/i);
+  });
+});
+
+const data = { breadth: 14, battleTested: 3, portable: 5, gaps: [], projects: [], generatedAtMs: 7, degraded: false } as never;
+
+describe("ScorecardHero share", () => {
+  it("mints a hosted url and shows share intents", async () => {
+    const createShare = vi.fn(async () => ({ id: "abc", url: "https://agentgem.ai/share/abc" }));
+    render(<ScorecardHero data={data} createShare={createShare} />);
+    fireEvent.click(screen.getByText(/share your goldmine/i));
+    await waitFor(() => expect(createShare).toHaveBeenCalledWith({ counts: { breadth: 14, battleTested: 3, portable: 5 }, generatedAtMs: 7 }));
+    const link = await screen.findByText(/share on x/i);
+    expect(link.closest("a")!.getAttribute("href")).toContain(encodeURIComponent("https://agentgem.ai/share/abc"));
   });
 });
 
