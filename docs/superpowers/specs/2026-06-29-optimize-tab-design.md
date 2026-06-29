@@ -14,6 +14,10 @@ React console. It helps a user tune their local agent setup along two axes:
   that burn context/token budget on every session.
 - **Discover (B):** recommend *new* skills, ranked by relevance to the user's actual
   workflows, sourced from a trusted registry (skills.sh via the `find-skills` skill).
+- **Instructions health (C):** CLAUDE.md / AGENTS.md and similar instructions load into
+  **every** session, so they can't be "unused" — their lever is *weight*. Surface each
+  instructions artifact's context-token cost and deterministic bloat flags so the user can
+  trim what silently taxes every session.
 
 The Observe tab answers *"what happened"* (telemetry). Optimize answers *"what should I
 change"* (actionable recommendations).
@@ -27,6 +31,18 @@ change"* (actionable recommendations).
 | MCP external recs | **Out of scope** — skills.sh is skills-only. MCP appears only in the local prune half. External MCP discovery deferred. |
 | Relevance ranking | Hybrid: deterministic topic scan → ACP agent re-rank, reusing the existing analyze/`acpRecommender` pattern. |
 | Discover engine | An ACP agent **loaded with the `find-skills` skill** (`vercel-labs/skills`), which drives `npx skills find` + skills.sh leaderboard. No hand-rolled HTTP client. |
+| Instructions health depth | **Deterministic now** (weight + bloat flags, local, in Plan 1). LLM-driven semantic critique (redundant/stale/contradictory rules, rewrite suggestions) is deferred to a later ACP plan. |
+
+## Plan decomposition
+
+Three independent, separately-shippable plans (this spec covers all three; Plan 1 is
+written first and is fully shippable on its own):
+
+- **Plan 1 — Optimize panel + local analysis (no LLM, no tools).** Panel shell + Prune
+  (skills/MCP usage) + Instructions health (weight/bloat). Endpoint `GET /api/optimize`.
+- **Plan 2 — Discover (ACP + `find-skills`).** Endpoint `POST /api/optimize/discover`.
+- **Plan 3 — Semantic instructions critique (ACP).** LLM reads CLAUDE.md → flags
+  redundant/stale/contradictory rules + rewrite suggestions.
 
 ## Placement & frontend
 
@@ -41,16 +57,20 @@ New panel `packages/console/src/panels/Optimize/`:
 - Reuses the shared `ObserveFilter` (agent / project / range) and `fmtTokens` from the
   Observe panel's `data.ts`.
 
-UI has two sections:
+UI has three sections:
 
 1. **Prune — installed but unused.** Table sorted by estimated context savings
    (biggest first). Each row: artifact name, type (skill / MCP), source, est. context
-   tokens (labeled *estimate*), uses-in-range, last-used. Expand shows the **exact change
+   tokens (labeled *estimate*), uses, last-used. Expand shows the **exact change
    to make** (file + key) with a copy button. Recommend-only — no mutation.
-2. **Discover — recommended for you.** Loads on demand via a button (token-costing).
-   Renders ranked cards: skill name, `source` (owner/repo), `installs` count, relevance
-   reason, and `npx skills add owner/repo` install command (copy). Graceful empty/degraded
-   states.
+2. **Instructions health.** Table of every instructions artifact (global + per-project
+   CLAUDE.md / AGENTS.md). Each row: name/source, est. context tokens loaded **every
+   session** (labeled *estimate*), line count, and deterministic bloat flags
+   (`oversized`, `very-long`, `duplicate-lines`). Sorted by context tokens desc. Plan 1.
+3. **Discover — recommended for you.** *(Plan 2)* Loads on demand via a button
+   (token-costing). Renders ranked cards: skill name, `source` (owner/repo), `installs`
+   count, relevance reason, and `npx skills add owner/repo` install command (copy).
+   Graceful empty/degraded states.
 
 ## Backend
 
@@ -60,16 +80,23 @@ Two paths, split by cost so the cheap local view is always instant.
 
 Joins two local data sources:
 
-- **Installed:** `introspectAll()` (`src/gem/introspect.ts`) → skills, MCP servers,
-  instructions, hooks with name / description / source / content / config.
-- **Used:** new module `src/gem/optimizeScan.ts`, `scanArtifactUsage(range, filter)`:
-  - Reuses observeScan's transcript file discovery (Claude + Codex local JSONL).
-  - Counts, per artifact:
-    - **skills:** Skill-tool activations (skill-name occurrences in tool calls).
-    - **MCP servers:** tool calls whose name matches `mcp__<server>__*`, grouped by
-      `<server>`.
-  - Returns `Map<artifactKey, { uses, lastUsedMs, sessions }>`.
-  - TTL-cached like `scanSessionsCached` (15s).
+- **Installed:** `introspectConfig()` (`src/gem/introspect.ts`) → `ConfigInventory`
+  (`skills`, `mcpServers`, `instructions`, `hooks`) with name / description / source /
+  content / config.
+- **Used:** new module `src/gem/optimizeScan.ts`, `scanArtifactUsage(opts)`:
+  - **Reuses the existing `scanWorkflow()`** (`src/gem/workflowScan.ts`) rather than
+    re-parsing transcripts — it already detects `Skill(...)` activations and
+    `mcp__<server>__*` tool calls (`workflowScan.ts:300-373`) and resolves them against an
+    inventory, producing `ArtifactUsage[]` with `invocations`, `sessionsUsedIn`,
+    `lastUsedMs`.
+  - Calls `scanWorkflow(allClaudeTranscripts(claudeDir), { project: <empty>, global:
+    { skills, mcpServers, hooks } })` once over **all** Claude transcripts (global view),
+    so usage is attributed to the global inventory.
+  - Returns `Map<artifactKey, ArtifactUsage>` keyed by `type + ":" + name`.
+  - TTL-cached (15s) like `scanSessionsCached`.
+  - **v1 scope:** Claude transcripts only (Codex tool-call parsing is a follow-up — Codex
+    skills/MCP are reported with `uses: 0` and a "usage not tracked for Codex yet" note
+    rather than being mis-flagged as unused).
 
 **Context-cost estimate** (per installed artifact, the part loaded into *every* session):
 
@@ -78,7 +105,10 @@ Joins two local data sources:
 - Estimate via cheap `chars / 4` heuristic (no tokenizer dependency). **Surfaced in the UI
   as an estimate**, not an exact count.
 
-**Pruning candidate** = installed ∧ contextTokens > 0 ∧ `uses === 0` over the range.
+**Pruning candidate** = installed ∧ contextTokens > 0 ∧ not used within the selected
+range — i.e. `lastUsedMs == null` (never used) **or** `lastUsedMs < rangeStart`. (We derive
+this from all-time `lastUsedMs` rather than a per-range re-scan; the UI shows total `uses`
++ `lastUsed`, not an in-range count, to stay honest about what the cheap scan supports.)
 Sorted by contextTokens desc (largest savings first). Each candidate carries a
 **reversible** deactivation hint (no folder deletion — disable in place so the user can
 re-enable later), mapped by the artifact's source:
@@ -103,16 +133,33 @@ type OptimizePayload = {
   artifacts: Array<{
     name: string;
     type: "skill" | "mcp";
-    source?: string;
-    contextTokens: number;     // estimate
-    uses: number;              // in range
-    lastUsedMs?: number;
-    prune: boolean;            // candidate flag
-    change?: { file: string; key: string };  // exact deactivation target
+    source: string;
+    contextTokens: number;     // estimate (chars/4)
+    uses: number;              // all-time invocations
+    lastUsedMs: number | null;
+    prune: boolean;            // candidate flag (see rule above)
+    change: { file: string; key: string };  // exact reversible deactivation target
+  }>;
+  instructions: Array<{
+    name: string;
+    source: string;            // "user" | project root | import source
+    contextTokens: number;     // estimate, loaded EVERY session
+    lines: number;
+    flags: Array<"oversized" | "very-long" | "duplicate-lines">;
   }>;
   facets: { agents: string[]; projects: string[] };
 };
 ```
+
+**Instructions health (C)** — deterministic, derived from `ConfigInventory.instructions`
+(global + each `ProjectInventory.instructions`):
+
+- `contextTokens` = `chars/4` of `content` (same estimator as skills/MCP).
+- `lines` = non-empty line count.
+- Flags (tunable constants): `oversized` if `contextTokens > 2000`; `very-long` if
+  `lines > 300`; `duplicate-lines` if ≥ 5 identical non-blank trimmed lines repeat.
+- No usage join — instructions always load, so there is nothing to "prune"; the section is
+  pure weight/health. Sorted by `contextTokens` desc.
 
 ### ② `POST /api/optimize/discover` — Discover (token-costing, opt-in)
 
@@ -149,6 +196,10 @@ Controller methods land in `src/gem.controller.ts` next to the existing `observe
 - **v2 apply/undo:** one-click Disable (prune) / Install (discover) behind explicit confirm
   + undo, via guarded config-write endpoints.
 - **External MCP discovery:** a second trusted MCP registry source (no skills.sh equivalent).
+- **Semantic instructions critique (Plan 3):** LLM reads CLAUDE.md → flags redundant / stale
+  / contradictory rules and proposes rewrites. ACP/token-costing, separate plan.
+- **Codex usage parsing:** v1 counts Claude tool-calls only; Codex artifacts show
+  `uses: 0` with an explicit "not tracked yet" note (never auto-flagged as prunable).
 
 ## Testing (TDD)
 
@@ -156,13 +207,15 @@ Write tests first, per project + global rules. vitest runs from compiled `dist/`
 (clean `dist/` after renames/moves).
 
 - `optimizeScan`: usage counting from fixture transcripts — skill activations and
-  `mcp__server__*` grouping; range filtering; last-used.
+  `mcp__server__*` grouping; `lastUsedMs`; map keying by `type:name`.
 - context-cost estimate: deterministic for known input.
-- prune candidate selection: installed × usage join, threshold, sort order, change-hint
-  mapping per type.
-- discover: ACP agent invocation mocked; structured-output parsing; **exclude-installed**
-  logic; degraded path when `npx skills` is unavailable.
-- routes: Zod schema round-trips for both payloads.
+- prune candidate selection: installed × usage join, range rule (`lastUsedMs` vs
+  `rangeStart`), sort order, change-hint mapping per source type, plugin de-duplication.
+- instructions health: token estimate, line count, each bloat flag (`oversized`,
+  `very-long`, `duplicate-lines`) at/around its threshold.
+- routes: Zod schema round-trip for `OptimizePayload`.
+- (Plan 2) discover: ACP agent invocation mocked; structured-output parsing;
+  **exclude-installed** logic; degraded path when `npx skills` is unavailable.
 
 ## Risks / verify during implementation
 
