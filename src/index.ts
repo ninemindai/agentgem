@@ -27,6 +27,7 @@ import { registerDrizzle } from "@agentback/drizzle";
 import { schema, ensureSchema } from "./aggregator/schema.js";
 import { AggregatorController } from "./aggregator.controller.js";
 import { ShareController } from "./share.controller.js";
+import { shareRateLimit } from "./share/rateLimit.js";
 import { ShareProxyController } from "./share.proxy.controller.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -64,6 +65,10 @@ export async function createApp(port: number): Promise<RestApplication> {
     registerDrizzle(app, db, { onStop: () => pool.end() });
     app.restController(AggregatorController);
     app.restController(ShareController);
+    // The anonymous create endpoint (POST /api/aggregator/share) has no auth, so cap it by client
+    // IP — originGuard intentionally lets non-browser clients through, so this is the only guard
+    // against scripted row-insertion abuse. In-memory fixed window (per-instance).
+    app.expressMiddleware("middleware.shareRateLimit", shareRateLimit);
   }
   // CSRF / drive-by guard: reject browser-initiated cross-site requests to the loopback API
   // (controller routes). Same-origin UI and non-browser clients (CLI/MCP/tests) pass. Mounted in
