@@ -11,6 +11,7 @@ import type { UsageAttestation } from "./gem/attestation.js";
 import { recordBinding } from "./aggregator/binding.js";
 import { GitHubVerifier } from "./aggregator/accountVerifier.js";
 import { sweepQuarantine } from "./aggregator/detection.js";
+import { issueKey, revokeKey, listKeys } from "./aggregator/apiKeys.js";
 
 // Loose body schema — the real gate is the core's verifyAttestation (ed25519 + consistency).
 const IngestBody = z.object({ producer: z.object({ publicKey: z.string() }).loose(), signature: z.string(), gem: z.object({ digest: z.string() }).loose() }).loose();
@@ -39,6 +40,22 @@ const SweepReportSchema = z.object({
 });
 const SweepResult = z.union([
   z.object({ ok: z.literal(true), report: SweepReportSchema }),
+  z.object({ ok: z.literal(false), rejected: z.string() }),
+]);
+
+const KeyIssueBody = z.object({ token: z.string(), label: z.string().min(1).max(120) });
+const KeyIssueResult = z.union([
+  z.object({ ok: z.literal(true), id: z.string(), key: z.string(), label: z.string() }),
+  z.object({ ok: z.literal(false), rejected: z.string() }),
+]);
+const KeyRevokeBody = z.object({ token: z.string(), id: z.string() });
+const KeyRevokeResult = z.union([
+  z.object({ ok: z.literal(true), revoked: z.boolean() }),
+  z.object({ ok: z.literal(false), rejected: z.string() }),
+]);
+const KeyListBody = z.object({ token: z.string() });
+const KeyListResult = z.union([
+  z.object({ ok: z.literal(true), keys: z.array(z.object({ id: z.string(), label: z.string(), createdAt: z.string(), revokedAt: z.string().nullable() })) }),
   z.object({ ok: z.literal(false), rejected: z.string() }),
 ]);
 
@@ -100,5 +117,36 @@ export class AggregatorController {
     if (!tokenEq(input.body.token, expected)) return { ok: false, rejected: "unauthorized" };
     const report = await sweepQuarantine(this.db, { dryRun: !input.body.apply });
     return { ok: true, report };
+  }
+
+  // Admin-only: mint an API key. Gated by AGGREGATOR_ADMIN_TOKEN (like /sweep). The plaintext
+  // is returned ONCE; only its hash is stored. Do NOT log input.body (it has the token).
+  @post("/keys", { body: KeyIssueBody, response: KeyIssueResult })
+  async issueKey(input: { body: z.infer<typeof KeyIssueBody> }): Promise<z.infer<typeof KeyIssueResult>> {
+    const expected = process.env.AGGREGATOR_ADMIN_TOKEN;
+    if (!expected) return { ok: false, rejected: "keys-disabled" };
+    if (!tokenEq(input.body.token, expected)) return { ok: false, rejected: "unauthorized" };
+    const { id, plaintext, label } = await issueKey(this.db, input.body.label);
+    return { ok: true, id, key: plaintext, label };
+  }
+
+  @post("/keys/revoke", { body: KeyRevokeBody, response: KeyRevokeResult })
+  async revokeKey(input: { body: z.infer<typeof KeyRevokeBody> }): Promise<z.infer<typeof KeyRevokeResult>> {
+    const expected = process.env.AGGREGATOR_ADMIN_TOKEN;
+    if (!expected) return { ok: false, rejected: "keys-disabled" };
+    if (!tokenEq(input.body.token, expected)) return { ok: false, rejected: "unauthorized" };
+    return { ok: true, revoked: await revokeKey(this.db, input.body.id) };
+  }
+
+  // POST (not GET) so the admin token travels in the body, never a URL/query that lands in logs.
+  @post("/keys/list", { body: KeyListBody, response: KeyListResult })
+  async listKeys(input: { body: z.infer<typeof KeyListBody> }): Promise<z.infer<typeof KeyListResult>> {
+    const expected = process.env.AGGREGATOR_ADMIN_TOKEN;
+    if (!expected) return { ok: false, rejected: "keys-disabled" };
+    if (!tokenEq(input.body.token, expected)) return { ok: false, rejected: "unauthorized" };
+    const keys = (await listKeys(this.db)).map((k) => ({
+      id: k.id, label: k.label, createdAt: k.createdAt.toISOString(), revokedAt: k.revokedAt ? k.revokedAt.toISOString() : null,
+    }));
+    return { ok: true, keys };
   }
 }
