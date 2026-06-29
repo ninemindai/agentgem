@@ -1,19 +1,26 @@
 import { useState } from "react";
-import type { Scorecard, ProjectGoldmine } from "../../api/routes.js";
+import type { Scorecard, ProjectGoldmine, WorkflowDetail } from "../../api/routes.js";
+import { scorecardWorkflowRoute, makeClient } from "../../api/routes.js";
 import type { WorkflowFilter } from "./Scorecard.js";
 
 type WorkflowEntry = ProjectGoldmine["workflows"][number];
 
-export function MineWorkflows({ data, filter, onBuild, building, result, error }: {
+export function MineWorkflows({ data, filter, onFilter, onBuild, building, result, error, apiBase }: {
   data: Scorecard;
   filter: WorkflowFilter;
+  onFilter: (f: WorkflowFilter) => void;
   onBuild: (selections: { root: string; keys: string[] }[], name: string) => void;
   building: boolean;
   result: { name: string; skills: string[] } | null;
   error: string | null;
+  apiBase: string;
 }) {
   const [selected, setSelected] = useState<Record<string, Set<string>>>({});
   const [name, setName] = useState("");
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [details, setDetails] = useState<Record<string, WorkflowDetail>>({});
+  const [detailLoading, setDetailLoading] = useState<Record<string, boolean>>({});
+  const [detailError, setDetailError] = useState<Record<string, string>>({});
 
   const toggle = (root: string, key: string) => setSelected((s) => {
     const set = new Set(s[root] ?? []);
@@ -21,19 +28,72 @@ export function MineWorkflows({ data, filter, onBuild, building, result, error }
     return { ...s, [root]: set };
   });
 
+  const toggleExpand = (root: string, key: string) => {
+    const isOpen = expanded[key];
+    setExpanded((e) => ({ ...e, [key]: !isOpen }));
+    if (!isOpen && !details[key] && !detailLoading[key]) {
+      setDetailLoading((l) => ({ ...l, [key]: true }));
+      scorecardWorkflowRoute.call(makeClient(apiBase), { query: { root, key } })
+        .then((d) => {
+          setDetails((prev) => ({ ...prev, [key]: d }));
+          setDetailError((prev) => { const next = { ...prev }; delete next[key]; return next; });
+        })
+        .catch((e: unknown) => {
+          setDetailError((prev) => ({ ...prev, [key]: e instanceof Error ? e.message : "Failed to load detail" }));
+        })
+        .finally(() => {
+          setDetailLoading((l) => { const next = { ...l }; delete next[key]; return next; });
+        });
+    }
+  };
+
+  const toggleFilter = (f: WorkflowFilter) => onFilter(filter === f ? "all" : f);
+
   const match = (w: WorkflowEntry) => filter === "all" || (filter === "battleTested" ? w.confidence === "high" : w.portable);
   const visibleProjects = data.projects
     .map((p) => ({ ...p, workflows: p.workflows.filter(match) }))
     .filter((p) => p.workflows.length);
+
+  // Build a set of visible keys per root for stale-selection detection
+  const visibleKeys: Record<string, Set<string>> = {};
+  for (const p of visibleProjects) {
+    visibleKeys[p.root] = new Set(p.workflows.map((w) => w.key));
+  }
 
   const selections = Object.entries(selected)
     .map(([root, set]) => ({ root, keys: [...set] }))
     .filter((x) => x.keys.length);
   const count = selections.reduce((n, s) => n + s.keys.length, 0);
 
+  // Count selected keys hidden by the current filter
+  const hiddenCount = Object.entries(selected).reduce((acc, [root, set]) => {
+    const visible = visibleKeys[root] ?? new Set();
+    for (const key of set) {
+      if (!visible.has(key)) acc++;
+    }
+    return acc;
+  }, 0);
+
   return (
     <section className="mine-workflows" aria-label="Discovered workflows">
       <h3>Pick workflows to distill into a Gem</h3>
+      <div className="mine-filter-bar">
+        <button
+          className={filter === "all" ? "is-active" : ""}
+          aria-pressed={filter === "all"}
+          onClick={() => onFilter("all")}
+        >All</button>
+        <button
+          className={filter === "battleTested" ? "is-active" : ""}
+          aria-pressed={filter === "battleTested"}
+          onClick={() => toggleFilter("battleTested")}
+        >Battle-tested ({data.battleTested})</button>
+        <button
+          className={filter === "portable" ? "is-active" : ""}
+          aria-pressed={filter === "portable"}
+          onClick={() => toggleFilter("portable")}
+        >Worth sharing ({data.portable})</button>
+      </div>
       {visibleProjects.map((p) => (
         <div className="mine-project" key={p.root}>
           <div className="mine-project-label">{p.label}</div>
@@ -46,6 +106,33 @@ export function MineWorkflows({ data, filter, onBuild, building, result, error }
                   {w.confidence === "high" && <span className="mine-badge mine-badge-bt">battle-tested</span>}
                   {w.portable && <span className="mine-badge mine-badge-portable">portable</span>}
                 </label>
+                <button
+                  className="mine-wf-view"
+                  aria-label={expanded[w.key] ? "Collapse detail" : "Expand detail"}
+                  onClick={() => toggleExpand(p.root, w.key)}
+                >{expanded[w.key] ? "▾" : "▸"}</button>
+                {expanded[w.key] && (
+                  <div className="mine-wf-detail">
+                    {detailLoading[w.key] && <span>Loading…</span>}
+                    {detailError[w.key] && <span className="obs-error">{detailError[w.key]}</span>}
+                    {details[w.key] && (() => {
+                      const d = details[w.key];
+                      return (
+                        <>
+                          {d.description && <p>{d.description}</p>}
+                          {d.triggers.length > 0 && <p><strong>Triggers:</strong> {d.triggers.join(", ")}</p>}
+                          {d.tools.length > 0 && <p><strong>Tools:</strong> {d.tools.join(", ")}</p>}
+                          {d.steps.length > 0 && (
+                            <ol className="steps">
+                              {d.steps.map((step, i) => <li key={i}>{step}</li>)}
+                            </ol>
+                          )}
+                          <p className="mine-wf-sessions">from {d.sessions} session{d.sessions === 1 ? "" : "s"}</p>
+                        </>
+                      );
+                    })()}
+                  </div>
+                )}
               </li>
             ))}
           </ul>
@@ -65,6 +152,7 @@ export function MineWorkflows({ data, filter, onBuild, building, result, error }
         >
           {building ? "Building…" : `Build Gem${count ? ` (${count})` : ""}`}
         </button>
+        {hiddenCount > 0 && <span className="mine-hidden-note">({hiddenCount} selected hidden by filter)</span>}
       </div>
       {result && (
         <p className="mine-build-ok">

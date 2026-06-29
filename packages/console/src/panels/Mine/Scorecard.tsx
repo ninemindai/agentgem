@@ -2,22 +2,17 @@ import { useRef } from "react";
 import type { Scorecard } from "../../api/routes.js";
 import { drawTrophy, shareTrophy } from "./trophy.js";
 
-// Asset-framed hero. Count chips are filter toggles — clicking one narrows the
-// workflow list below; clicking the active chip resets it to "all".
+// Asset-framed hero. Count stats are now plain text (filter chips moved to MineWorkflows).
 // The share button exports the aggregate-only trophy (unchanged).
 export type WorkflowFilter = "all" | "battleTested" | "portable";
 
-export function ScorecardHero({ data, filter, onFilter }: { data: Scorecard; filter: WorkflowFilter; onFilter: (f: WorkflowFilter) => void }) {
+export function ScorecardHero({ data }: { data: Scorecard }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const onShare = () => { const c = canvasRef.current; if (!c) return; drawTrophy(c, data); void shareTrophy(c); };
-  const toggle = (f: WorkflowFilter) => onFilter(filter === f ? "all" : f);
   return (
     <section className="scorecard-hero" aria-label="Goldmine scorecard">
       <h2>Your log holds <strong>{data.breadth} reusable workflows</strong></h2>
-      <ul className="scorecard-counts">
-        <li><button className={filter === "battleTested" ? "is-active" : ""} aria-pressed={filter === "battleTested"} onClick={() => toggle("battleTested")}>{data.battleTested} battle-tested</button></li>
-        <li><button className={filter === "portable" ? "is-active" : ""} aria-pressed={filter === "portable"} onClick={() => toggle("portable")}>{data.portable} worth sharing</button></li>
-      </ul>
+      <p className="scorecard-stats">{data.battleTested} battle-tested · {data.portable} worth sharing</p>
       {data.gaps.length > 0 && <p className="scorecard-gaps">Next: {data.gaps.join(" · ")}</p>}
       <button className="scorecard-share" onClick={onShare}>Share your goldmine</button>
       <canvas ref={canvasRef} style={{ display: "none" }} />

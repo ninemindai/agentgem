@@ -48,8 +48,8 @@ export function Mine({ apiBase, openStream = openScorecardStream }: { apiBase: s
     <div className="obs mine">
       {phase === "done" && scorecard
         ? <>
-            <ScorecardHero data={scorecard} filter={filter} onFilter={setFilter} />
-            <MineWorkflows data={scorecard} filter={filter} onBuild={onBuild} building={building} result={buildResult} error={buildError} />
+            <ScorecardHero data={scorecard} />
+            <MineWorkflows data={scorecard} filter={filter} onFilter={setFilter} onBuild={onBuild} building={building} result={buildResult} error={buildError} apiBase={apiBase} />
           </>
         : phase === "failed"
           ? <p className="obs-empty">Couldn't compute your goldmine right now — try again shortly.</p>

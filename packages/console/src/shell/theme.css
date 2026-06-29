@@ -644,3 +644,15 @@ body::before {
 .mine-gem-name { flex: 1; background: var(--raised); border: 1px solid var(--line); border-radius: 6px; padding: 0.4rem 0.65rem; font-size: 0.875rem; color: var(--ink); outline: none; }
 .mine-gem-name:focus { border-color: var(--accent); }
 .mine-build-ok { margin-top: 0.75rem; color: var(--emerald); font-size: 0.875rem; }
+.scorecard-stats { font-size: 0.8rem; color: var(--ink-soft); margin: 0 0 13px; }
+.mine-filter-bar { display: flex; flex-wrap: wrap; gap: 7px; margin: 0 0 1rem; }
+.mine-filter-bar button { font: 500 12px var(--font-ui); color: var(--accent); background: rgba(154, 51, 36, .06); border: 1px solid rgba(154, 51, 36, .2); border-radius: 999px; padding: 0.2rem 0.65rem; cursor: pointer; transition: background 0.15s, color 0.15s; }
+.mine-filter-bar button:hover { background: rgba(154, 51, 36, .1); border-color: var(--accent); color: var(--accent-2); }
+.mine-filter-bar button.is-active { background: var(--accent); color: var(--raised); border-color: var(--accent); }
+.mine-wf-view { background: none; border: none; cursor: pointer; font-size: 0.7rem; color: var(--muted); padding: 0 0.25rem; line-height: 1; }
+.mine-wf-view:hover { color: var(--ink); }
+.mine-wf-detail { margin: 0.25rem 0 0.5rem 1.5rem; padding: 0.5rem 0.75rem; border-left: 2px solid var(--line); font-size: 0.8rem; color: var(--ink-soft); }
+.mine-wf-detail p { margin: 0.2rem 0; }
+.mine-wf-detail ol.steps { margin: 0.25rem 0; padding-left: 1.25rem; }
+.mine-wf-detail ol.steps li { margin-bottom: 0.15rem; }
+.mine-hidden-note { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }

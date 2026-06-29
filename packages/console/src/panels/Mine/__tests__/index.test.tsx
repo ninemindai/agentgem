@@ -69,17 +69,34 @@ describe("Mine panel", () => {
     expect(screen.getByText(/couldn't compute/i)).toBeTruthy();
   });
 
-  it("clicking a hero count chip filters the workflow list", () => {
+  it("clicking a filter chip in the workflow list filters the workflow list", () => {
     const stream = syncStream([{ type: "done", scorecard: SCORECARD_WITH_WORKFLOWS, cached: false }]);
     render(<Mine apiBase="http://localhost:0" openStream={stream} />);
     // both workflows are visible before filtering
     expect(screen.getByText("Deploy workflow")).toBeTruthy();
     expect(screen.getByText("Test workflow")).toBeTruthy();
-    // click the "battle-tested" chip
-    fireEvent.click(screen.getByText(/battle-tested/i, { selector: "button" }));
+    // click the "battle-tested" chip in MineWorkflows
+    fireEvent.click(screen.getByRole("button", { name: /battle-tested \(1\)/i }));
     // low-confidence workflow should now be hidden
     expect(screen.queryByText("Test workflow")).toBeNull();
     // high-confidence workflow stays visible
     expect(screen.getByText("Deploy workflow")).toBeTruthy();
+  });
+
+  it("ScorecardHero does not receive filter/onFilter — stats are plain text", () => {
+    const stream = syncStream([{ type: "done", scorecard: SCORECARD_WITH_WORKFLOWS, cached: false }]);
+    render(<Mine apiBase="http://localhost:0" openStream={stream} />);
+    // Stats text appears in the hero as a plain paragraph (not a button)
+    const statsEl = screen.getByText(/1 battle-tested · 1 worth sharing/i);
+    expect(statsEl.tagName.toLowerCase()).not.toBe("button");
+  });
+
+  it("MineWorkflows receives filter, onFilter, and apiBase", () => {
+    const stream = syncStream([{ type: "done", scorecard: SCORECARD_WITH_WORKFLOWS, cached: false }]);
+    render(<Mine apiBase="http://localhost:0" openStream={stream} />);
+    // Filter chips are rendered inside MineWorkflows
+    expect(screen.getByRole("button", { name: /^all$/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /battle-tested \(1\)/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /worth sharing \(1\)/i })).toBeTruthy();
   });
 });
