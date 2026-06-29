@@ -16,19 +16,28 @@ export function ScorecardHero({ data, apiBase = "", createShare }: { data: Score
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const svg = renderCardSvg(counts);
   const svgDataUri = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 
+  // Mint the hosted certificate URL and reveal the share options inline. No native share sheet —
+  // the console is a desktop app, where the inline copy + platform links are the clearer path (and
+  // a dismissed OS share sheet shouldn't read as an error).
   const onShare = async () => {
     setBusy(true); setErr(null);
     try {
       const { url } = await doCreate({ counts, generatedAtMs: data.generatedAtMs });
       setShareUrl(url);
-      const nav = navigator as Navigator & { share?: (d: { url: string; title: string }) => Promise<void> };
-      if (nav.share) await nav.share({ url, title: "My Agent Goldmine" });
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Share failed");
+      setErr(e instanceof Error ? e.message : "Couldn't create a share link — try again.");
     } finally { setBusy(false); }
+  };
+
+  const copyLink = () => {
+    if (!shareUrl) return;
+    void navigator.clipboard?.writeText(shareUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1600);
   };
 
   const downloadPng = () => {
@@ -62,11 +71,16 @@ export function ScorecardHero({ data, apiBase = "", createShare }: { data: Score
       {err && <p className="scorecard-error">{err}</p>}
       {shareUrl && intents && (
         <div className="scorecard-share-links">
-          <input readOnly value={shareUrl} onFocus={(e) => e.currentTarget.select()} />
-          <button onClick={() => void navigator.clipboard?.writeText(shareUrl)}>Copy link</button>
-          <a href={intents.x} target="_blank" rel="noreferrer">Share on X</a>
-          <a href={intents.linkedin} target="_blank" rel="noreferrer">Share on LinkedIn</a>
-          <a href={intents.facebook} target="_blank" rel="noreferrer">Share on Facebook</a>
+          <div className="scorecard-share-copy">
+            <input readOnly value={shareUrl} aria-label="Share link" onFocus={(e) => e.currentTarget.select()} />
+            <button type="button" className="is-copy" onClick={copyLink}>{copied ? "Copied" : "Copy link"}</button>
+          </div>
+          <div className="scorecard-share-intents">
+            <span className="scorecard-share-on">Share to</span>
+            <a className="scorecard-intent" href={intents.x} target="_blank" rel="noreferrer">X</a>
+            <a className="scorecard-intent" href={intents.linkedin} target="_blank" rel="noreferrer">LinkedIn</a>
+            <a className="scorecard-intent" href={intents.facebook} target="_blank" rel="noreferrer">Facebook</a>
+          </div>
         </div>
       )}
       {data.degraded && <span className="scorecard-degraded" title="Some projects could not be fully scanned">partial</span>}
