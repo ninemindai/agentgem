@@ -76,6 +76,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@resvg/resvg-wasm": "^2.6.2",
     "@types/node": "^24",
     "@types/pg": "^8.20.0",
     "@types/supertest": "^6",
