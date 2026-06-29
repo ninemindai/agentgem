@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseShareId, renderShareHtml, handleShare } from "./share.js";
+import { parseShareId, renderShareHtml, handleShare, isCacheable } from "./share.js";
 
 const record = { kind: "certificate", counts: { breadth: 14, battleTested: 3, portable: 5 }, generatedAtMs: 1, createdAtMs: 2 };
 
@@ -48,5 +48,17 @@ describe("handleShare", () => {
     const res = await handleShare(new Request("https://agentgem.ai/share/x"), {});
     expect(res.status).toBe(200);
     expect(await res.text()).toContain("coming soon");
+  });
+});
+
+describe("isCacheable", () => {
+  it("is true for responses with a Cache-Control header (HTML / og.png)", () => {
+    expect(isCacheable(new Response("x", { headers: { "cache-control": "public, max-age=300" } }))).toBe(true);
+    expect(isCacheable(new Response("x", { headers: { "cache-control": "public, max-age=31536000, immutable" } }))).toBe(true);
+  });
+  it("is false for the placeholder, the 404, and null (no Cache-Control)", () => {
+    expect(isCacheable(new Response("coming soon", { headers: { "content-type": "text/html" } }))).toBe(false);
+    expect(isCacheable(new Response("Card not found", { status: 404, headers: { "content-type": "text/plain" } }))).toBe(false);
+    expect(isCacheable(null)).toBe(false);
   });
 });

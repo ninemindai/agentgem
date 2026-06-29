@@ -41,6 +41,13 @@ export function renderShareHtml(record, { ogImageUrl, shareUrl }) {
     `</body></html>`;
 }
 
+// Edge-cacheable responses are exactly the ones that carry a Cache-Control header — the rendered
+// HTML (max-age=300) and og.png (immutable). The placeholder and the 404 set none, so they are
+// never cached (the placeholder must stop serving the moment the backend is wired).
+export function isCacheable(res) {
+  return Boolean(res && res.headers && res.headers.get && res.headers.get("cache-control"));
+}
+
 async function fetchRecord(env, id) {
   const f = env.fetch || fetch;
   const res = await f(`${env.AGGREGATOR_API}/api/aggregator/share?id=${encodeURIComponent(id)}`);
