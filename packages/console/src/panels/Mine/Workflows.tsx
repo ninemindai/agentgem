@@ -59,7 +59,8 @@ export function MineWorkflows({ data, filter, onFilter, onBuild, building, resul
       try {
         detail = await scorecardWorkflowRoute.call(makeClient(apiBase), { query: { root, key } });
         setDetails((prev) => ({ ...prev, [cacheKey]: detail! }));
-      } catch {
+      } catch (e: unknown) {
+        setDetailError((prev) => ({ ...prev, [cacheKey]: e instanceof Error ? e.message : "Share failed" }));
         return;
       }
     }
@@ -138,7 +139,13 @@ export function MineWorkflows({ data, filter, onFilter, onBuild, building, resul
                   aria-label={expanded[cacheKey] ? "Collapse detail" : "Expand detail"}
                   onClick={() => toggleExpand(p.root, w.key)}
                 >{expanded[cacheKey] ? "▾" : "▸"}</button>
-                <span className="mine-wf-name">{w.name}</span>
+                <span
+                  className="mine-wf-name"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => toggleExpand(p.root, w.key)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleExpand(p.root, w.key); } }}
+                >{w.name}</span>
                 {w.confidence === "high" && <span className="mine-badge mine-badge-bt">battle-tested</span>}
                 {w.portable && <span className="mine-badge mine-badge-portable">portable</span>}
                 <button

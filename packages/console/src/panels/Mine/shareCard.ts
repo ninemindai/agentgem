@@ -13,6 +13,17 @@ const INK         = "#1a1208";
 const INK_SOFT    = "#5c4a3a";
 const MUTED       = "#9a8070";
 
+// ── Canvas helpers ────────────────────────────────────────────────────────────
+
+/** Truncate `text` with an ellipsis so it fits within `maxWidth` canvas pixels.
+ * Returns text unchanged when measureText gives 0 (jsdom / uninitialized context). */
+function fit(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
+  if (!maxWidth || ctx.measureText(text).width === 0 || ctx.measureText(text).width <= maxWidth) return text;
+  let t = text;
+  while (t.length > 1 && ctx.measureText(t + "…").width > maxWidth) t = t.slice(0, -1);
+  return t + "…";
+}
+
 // ── Workflow card ────────────────────────────────────────────────────────────
 
 export function workflowCardLines(d: WorkflowDetail): {
@@ -24,7 +35,12 @@ export function workflowCardLines(d: WorkflowDetail): {
   return {
     title: d.name,
     steps: d.steps.slice(0, 5),
-    meta: `${d.sessions} session${d.sessions === 1 ? "" : "s"} · ${d.confidence} confidence${d.portable ? " · portable" : ""}`,
+    meta: [
+      `${d.sessions} session${d.sessions === 1 ? "" : "s"}`,
+      `${d.confidence} confidence`,
+      ...(d.portable ? ["portable"] : []),
+      ...(d.tools.length ? [d.tools.slice(0, 4).join(", ")] : []),
+    ].join(" · "),
     invite: "Valued with AgentGem",
   };
 }
@@ -43,13 +59,13 @@ export function drawWorkflowCard(canvas: HTMLCanvasElement, d: WorkflowDetail): 
   // Title
   ctx.fillStyle = INK; ctx.textBaseline = "top";
   ctx.font = "700 52px system-ui, sans-serif";
-  ctx.fillText(title, 80, 80);
+  ctx.fillText(fit(ctx, title, W - 160), 80, 80);
 
   // Steps (up to 5)
   ctx.font = "400 30px system-ui, sans-serif";
   ctx.fillStyle = INK_SOFT;
   steps.forEach((step, i) => {
-    ctx.fillText(`${i + 1}. ${step}`, 80, 180 + i * 56);
+    ctx.fillText(fit(ctx, `${i + 1}. ${step}`, W - 160), 80, 180 + i * 56);
   });
 
   // Footer meta
@@ -89,7 +105,7 @@ export function drawGemCard(canvas: HTMLCanvasElement, result: { name: string; s
 
   ctx.fillStyle = INK; ctx.textBaseline = "top";
   ctx.font = "700 52px system-ui, sans-serif";
-  ctx.fillText(title, 80, 80);
+  ctx.fillText(fit(ctx, title, W - 160), 80, 80);
 
   ctx.font = "700 80px system-ui, sans-serif";
   ctx.fillStyle = TERRACOTTA;
@@ -98,7 +114,7 @@ export function drawGemCard(canvas: HTMLCanvasElement, result: { name: string; s
   if (skills) {
     ctx.font = "400 32px system-ui, sans-serif";
     ctx.fillStyle = INK_SOFT;
-    ctx.fillText(skills, 80, 320);
+    ctx.fillText(fit(ctx, skills, W - 160), 80, 320);
   }
 
   ctx.fillStyle = MUTED; ctx.font = "400 22px system-ui, sans-serif";

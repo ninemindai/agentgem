@@ -323,6 +323,29 @@ describe("MineWorkflows", () => {
       spy.mockRestore();
     });
 
+    it("clicking the workflow name expands the detail", async () => {
+      const detail: WorkflowDetail = {
+        key: "wf-a", name: "Deploy workflow",
+        description: "Name-click triggered description",
+        triggers: [], tools: [], mutating: false, steps: [], sessions: 3,
+        confidence: "high", portable: true,
+      };
+      const spy = vi.spyOn(routes.scorecardWorkflowRoute, "call").mockResolvedValue(detail);
+
+      render(<MineWorkflows {...defaultProps} />);
+      const nameEl = screen.getByText("Deploy workflow");
+      fireEvent.click(nameEl);
+
+      await waitFor(() => {
+        expect(screen.getByText("Name-click triggered description")).toBeTruthy();
+      });
+      expect(spy).toHaveBeenCalledWith(
+        expect.anything(),
+        { query: { root: "/projects/alpha", key: "wf-a" } },
+      );
+      spy.mockRestore();
+    });
+
     it("toggle button and workflow name are in the same li container", () => {
       render(<MineWorkflows {...defaultProps} />);
       // Find the toggle for the first workflow

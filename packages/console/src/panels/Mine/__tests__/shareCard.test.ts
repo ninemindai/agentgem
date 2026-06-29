@@ -33,6 +33,26 @@ describe("workflowCardLines", () => {
     expect(lines.meta).toMatch(/12 session/);
   });
 
+  it("meta includes top tools when tools are present", () => {
+    const lines = workflowCardLines(detail);
+    expect(lines.meta).toContain("docker");
+    expect(lines.meta).toContain("gh");
+  });
+
+  it("meta omits tools section when tools array is empty", () => {
+    const lines = workflowCardLines({ ...detail, tools: [] });
+    expect(lines.meta).toMatch(/session/);
+    expect(lines.meta).not.toContain(",");
+  });
+
+  it("meta caps tools at 4", () => {
+    const manyTools = ["a", "b", "c", "d", "e", "f"];
+    const lines = workflowCardLines({ ...detail, tools: manyTools });
+    const toolSegment = lines.meta.split(" · ").find((s) => s.includes(","));
+    expect(toolSegment).toBeDefined();
+    expect(toolSegment!.split(", ").length).toBe(4);
+  });
+
   it("meta singular session count", () => {
     const lines = workflowCardLines({ ...detail, sessions: 1 });
     expect(lines.meta).toMatch(/1 session[^s]/);
