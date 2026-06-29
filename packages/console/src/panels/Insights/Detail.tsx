@@ -5,6 +5,7 @@ import {
 } from "../../api/routes.js";
 import { prettifyId } from "./data.js";
 import { Sparkline } from "./Sparkline.js";
+import { setPendingQuery } from "../GetGems/intent.js";
 
 export function Detail({ id, apiBase }: { id: string; apiBase: string }) {
   const [co, setCo] = useState<AggCoOccurrence[]>([]);
@@ -34,6 +35,13 @@ export function Detail({ id, apiBase }: { id: string; apiBase: string }) {
       <div className="ins-detail-head">
         <span className="ins-detail-name">{head.name}</span>
         {head.scope && <span className="ins-scope">{head.scope}</span>}
+        <button
+          type="button"
+          className="ins-find-gems"
+          onClick={() => { setPendingQuery(head.name); window.location.hash = "#/get-gems"; }}
+        >
+          Find Gems using this →
+        </button>
       </div>
 
       <section className="ins-card">
