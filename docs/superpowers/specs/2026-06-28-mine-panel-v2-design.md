@@ -98,3 +98,25 @@ the existing build path).
   still the priority perf follow-up from the base scorecard spec; orthogonal to streaming.
 - Precise candidate→artifact portability via provenance (the spec's portability follow-up).
 - Multi-project Gem naming/curation polish; trophy unchanged.
+
+---
+
+## Milestone C — share the built Gem via an OG card (user decision, 2026-06-28)
+
+Sharing is reframed: not a scorecard badge, but **the Gem built in Milestone B**, presented as an
+OpenGraph/Twitter-Card so X / Facebook / LinkedIn auto-render a rich preview. The card carries:
+**a generated image, the Gem's value framing, a link to the Gem (install/try), and an "invite to
+try" CTA.** This wires the goldmine on-ramp into AgentGem's existing Gem distribution.
+
+Depends on Milestone B (a built Gem to point at). Replaces the local-only canvas trophy as the
+primary share path (the trophy can remain a fallback / no-link image).
+
+Open design points (to detail when B is near):
+- **Hosting:** OG cards require a public URL. Reuse/extend the existing Gem share/registry +
+  publish infra for the landing + OG image; needs a deploy to verify real previews (localhost
+  can't be fetched by the platforms). A privacy pass on what the public Gem page exposes.
+- **Card content:** Gem name + what-it-does + provenance ("distilled from N battle-tested
+  workflows") + generated image + install link + invite CTA. Aggregate/curated — not the raw log.
+- **Channels:** per-platform share intents (x.com/intent, linkedin sharing, facebook sharer)
+  pointing at the hosted Gem page; native `navigator.share` fallback.
+- **Roadmap:** this is the Phase-4 social-share / viral-acquisition loop pulled forward.
