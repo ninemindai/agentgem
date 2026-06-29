@@ -1,6 +1,8 @@
-# Render Blueprint — deploy the agentgem server as a Docker web service.
+# Render Blueprint — ONE blueprint, TWO services:
+#   1. agentgem  — the API (Docker web service), backed by a Neon Postgres (free).
+#   2. explore   — the public marketplace UI (static site, free, CDN-served, no sleep).
 #
-# Pair this with a Neon Postgres (free) for DURABLE data — Render's own free
+# Pair the API with a Neon Postgres (free) for DURABLE data — Render's own free
 # Postgres self-deletes after 30 days, which would wipe the aggregator's moat.
 # Set DATABASE_URL (below) to your Neon connection string.
 #
@@ -32,3 +34,20 @@ services:
         sync: false             # set manually = your Neon connection string (include ?sslmode=require)
     # PORT is intentionally NOT set here — Render injects its own PORT and the
     # server binds to it (src/index.ts reads process.env.PORT).
+
+  # The public marketplace UI (packages/marketplace) — a Vite/React SPA served as a
+  # Render static site. Static sites are free, CDN-served, and DON'T sleep (unlike the
+  # free web service above). It reads the agentgem API's public CORS-open endpoints.
+  - name: explore
+    type: web
+    runtime: static
+    plan: free
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @agentgem/marketplace build
+    staticPublishPath: packages/marketplace/dist
+    envVars:
+      - key: VITE_API_BASE
+        value: https://app.agentgem.ai          # the agentgem service's custom domain (serves the API at /api/* AND the desktop UI at /)
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html               # SPA fallback so /ingredient/:id deep-links resolve
