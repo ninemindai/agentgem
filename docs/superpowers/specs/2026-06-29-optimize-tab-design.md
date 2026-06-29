@@ -63,10 +63,12 @@ UI has three sections:
    (biggest first). Each row: artifact name, type (skill / MCP), source, est. context
    tokens (labeled *estimate*), uses, last-used. Expand shows the **exact change
    to make** (file + key) with a copy button. Recommend-only — no mutation.
-2. **Instructions health.** Table of every instructions artifact (global + per-project
-   CLAUDE.md / AGENTS.md). Each row: name/source, est. context tokens loaded **every
-   session** (labeled *estimate*), line count, and deterministic bloat flags
+2. **Instructions health.** Table of every **global** instructions artifact (user
+   CLAUDE.md / AGENTS.md / codex rules / hermes). Each row: name/source, est. context tokens
+   loaded **every session** (labeled *estimate*), line count, and deterministic bloat flags
    (`oversized`, `very-long`, `duplicate-lines`). Sorted by context tokens desc. Plan 1.
+   *(v1 is global-only — `introspectConfig()` returns no project inventories; per-project
+   CLAUDE.md is a fast-follow.)*
 3. **Discover — recommended for you.** *(Plan 2)* Loads on demand via a button
    (token-costing). Renders ranked cards: skill name, `source` (owner/repo), `installs`
    count, relevance reason, and `npx skills add owner/repo` install command (copy).
@@ -108,7 +110,7 @@ Joins two local data sources:
 - Estimate via cheap `chars / 4` heuristic (no tokenizer dependency). **Surfaced in the UI
   as an estimate**, not an exact count.
 
-**Pruning candidate** = installed ∧ contextTokens > 0 ∧ not used within the selected
+**Pruning candidate** = installed ∧ not used within the selected
 range — i.e. `lastUsedMs == null` (never used) **or** `lastUsedMs < rangeStart`. (We derive
 this from all-time `lastUsedMs` rather than a per-range re-scan; the UI shows total `uses`
 + `lastUsed`, not an in-range count, to stay honest about what the cheap scan supports.)
@@ -156,7 +158,8 @@ type OptimizePayload = {
 ```
 
 **Instructions health (C)** — deterministic, derived from `ConfigInventory.instructions`
-(global + each `ProjectInventory.instructions`):
+(**global only** in v1; `introspectConfig()` returns no `projects`, so per-project
+instructions are a fast-follow that enriches the handler's inventory):
 
 - `contextTokens` = `chars/4` of `content` (same estimator as skills/MCP).
 - `lines` = non-empty line count.
@@ -204,6 +207,9 @@ Controller methods land in `src/gem.controller.ts` next to the existing `observe
   / contradictory rules and proposes rewrites. ACP/token-costing, separate plan.
 - **Codex usage parsing:** v1 counts Claude tool-calls only; Codex artifacts show
   `uses: 0` with an explicit "not tracked yet" note (never auto-flagged as prunable).
+- **Per-project instructions health:** v1 is global-only (`introspectConfig()` has no
+  `projects`). Fast-follow: enrich the handler's inventory with `introspectProject(root)`
+  for relevant roots (e.g. from recent sessions) so per-project CLAUDE.md/AGENTS.md render.
 
 ## Testing (TDD)
 
