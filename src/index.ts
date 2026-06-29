@@ -20,11 +20,10 @@ import { GemTools } from "./gem.tools.js";
 import { streamWorkflowAnalyze } from "./workflowStream.js";
 import { streamGemRun } from "./gemRunStream.js";
 import { originGuard } from "./originGuard.js";
-import { Pool } from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
 import { registerDrizzle } from "@agentback/drizzle";
-import { schema, ensureSchema } from "./aggregator/schema.js";
 import { AggregatorController } from "./aggregator.controller.js";
+import { resolveAggregatorDb } from "./aggregator/localDb.js";
+import { mountGating } from "./gating.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -54,14 +53,15 @@ export async function createApp(port: number): Promise<RestApplication> {
   app.configure("servers.MCPServer").to({ name: "agentgem", version: "0.1.0", transports: { stdio: false } });
   app.restController(GemController);
   app.service(GemTools);
-  // Aggregator (B1): registered only when a Postgres DATABASE_URL is configured. The public read
-  // routes are CORS-open + originGuard-exempt; POST /ingest stays guarded. Drains the pool on stop.
-  if (process.env.DATABASE_URL) {
-    const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-    const db = drizzle(pool, { schema });
-    await ensureSchema(db as never);
-    registerDrizzle(app, db, { onStop: () => pool.end() });
+  // Aggregator (B1) + gating: always registered now — Postgres when DATABASE_URL is set, else
+  // embedded pglite for local runs (ephemeral). mountGating adds the api-key identity middleware
+  // + the two-tier rate limiters over /api/aggregator.
+  {
+    const { db, onStop, mode } = await resolveAggregatorDb();
+    registerDrizzle(app, db as never, { onStop });
     app.restController(AggregatorController);
+    await mountGating(app, db);
+    console.log(`aggregator: ${mode}${mode === "pglite" ? " (set DATABASE_URL for Postgres)" : ""}`);
   }
   // CSRF / drive-by guard: reject browser-initiated cross-site requests to the loopback API
   // (controller routes). Same-origin UI and non-browser clients (CLI/MCP/tests) pass. Mounted in
