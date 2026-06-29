@@ -22,11 +22,13 @@ import type { ProcedureCandidate, Reflection } from "./distillTypes.js";
 // reliable portability signal that's actually present.)
 const LOCAL_TOOLS = new Set(["Read", "Edit", "Write", "Bash", "Grep", "Glob", "LS"]);
 const MAX_GAPS = 5;
-const TOP_CANDIDATES = 5;
+const WORKFLOWS_PER_PROJECT = 12;
 // Perf bound: scanning a project re-reads the whole transcript store, so the
 // default (discover-all) path is capped to the most-recently-used projects.
 // Explicit `projects` queries bypass the cap.
 const MAX_PROJECTS = 12;
+
+export type WorkflowItem = { key: string; name: string; confidence: "high" | "medium" | "low"; portable: boolean };
 
 export type ProjectLoad = {
   root: string;
@@ -42,7 +44,7 @@ export type ProjectGoldmine = {
   breadth: number;
   battleTested: number;
   portable: number;
-  topCandidates: { name: string; confidence: "high" | "medium" | "low" }[];
+  workflows: WorkflowItem[];
 };
 
 export type Scorecard = {
@@ -61,13 +63,18 @@ export function isPortable(c: ProcedureCandidate): boolean {
 
 export function scoreProject(load: ProjectLoad): ProjectGoldmine {
   const cs = load.candidates;
+  const rank = { high: 0, medium: 1, low: 2 } as const;
+  const workflows: WorkflowItem[] = [...cs]
+    .sort((a, b) => rank[a.priorConfidence] - rank[b.priorConfidence] || b.sessions - a.sessions)
+    .slice(0, WORKFLOWS_PER_PROJECT)
+    .map((c) => ({ key: c.key, name: c.skeleton.name, confidence: c.priorConfidence, portable: isPortable(c) }));
   return {
     root: load.root,
     label: load.label || basename(load.root),
     breadth: new Set(cs.map((c) => c.key)).size,
     battleTested: cs.filter((c) => c.priorConfidence === "high").length,
     portable: cs.filter(isPortable).length,
-    topCandidates: cs.slice(0, TOP_CANDIDATES).map((c) => ({ name: c.skeleton.name, confidence: c.priorConfidence })),
+    workflows,
   };
 }
 

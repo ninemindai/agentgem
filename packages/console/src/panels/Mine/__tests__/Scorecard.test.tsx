@@ -5,7 +5,7 @@ import type { Scorecard } from "../../../api/routes.js";
 
 const sc: Scorecard = {
   breadth: 14, battleTested: 3, portable: 5, gaps: ["wire up CI"], generatedAtMs: 0, degraded: false,
-  projects: [{ root: "/r/a", label: "alpha", breadth: 14, battleTested: 3, portable: 5, topCandidates: [] }],
+  projects: [{ root: "/r/a", label: "alpha", breadth: 14, battleTested: 3, portable: 5, workflows: [] }],
 };
 
 describe("ScorecardHero", () => {

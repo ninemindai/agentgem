@@ -28,7 +28,7 @@ const ScorecardSchema = z.object({
   projects: z.array(z.object({
     root: z.string(), label: z.string(),
     breadth: z.number(), battleTested: z.number(), portable: z.number(),
-    topCandidates: z.array(z.object({ name: z.string(), confidence: z.enum(["high", "medium", "low"]) })),
+    workflows: z.array(z.object({ key: z.string(), name: z.string(), confidence: z.enum(["high", "medium", "low"]), portable: z.boolean() })),
   })),
   generatedAtMs: z.number(),
   degraded: z.boolean(),

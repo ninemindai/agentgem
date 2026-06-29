@@ -47,7 +47,10 @@ describe("scoreProject", () => {
     };
     const p = scoreProject(load);
     expect(p).toMatchObject({ root: "/r/alpha", label: "alpha", breadth: 3, battleTested: 2, portable: 1 });
-    expect(p.topCandidates[0]).toEqual({ name: "k1", confidence: "high" });
+    // workflows sorted high-before-low; first entry is the high-confidence k1
+    expect(p.workflows[0]).toEqual({ key: "k1", name: "k1", confidence: "high", portable: true });
+    expect(p.workflows[1]).toEqual({ key: "k2", name: "k2", confidence: "high", portable: false });
+    expect(p.workflows[2]).toEqual({ key: "k3", name: "k3", confidence: "low", portable: false });
   });
 });
 

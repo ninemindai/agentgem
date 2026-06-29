@@ -4,7 +4,7 @@ import type { Scorecard } from "../../../api/routes.js";
 
 const sc: Scorecard = {
   breadth: 14, battleTested: 3, portable: 5, gaps: [], generatedAtMs: 0, degraded: false,
-  projects: [{ root: "/secret/repo", label: "secret-repo", breadth: 14, battleTested: 3, portable: 5, topCandidates: [{ name: "deploy-flow", confidence: "high" }] }],
+  projects: [{ root: "/secret/repo", label: "secret-repo", breadth: 14, battleTested: 3, portable: 5, workflows: [{ key: "deploy-flow", name: "deploy-flow", confidence: "high", portable: true }] }],
 };
 
 describe("trophyLines", () => {
