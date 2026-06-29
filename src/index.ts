@@ -27,6 +27,7 @@ import { registerDrizzle } from "@agentback/drizzle";
 import { schema, ensureSchema } from "./aggregator/schema.js";
 import { AggregatorController } from "./aggregator.controller.js";
 import { ShareController } from "./share.controller.js";
+import { ShareProxyController } from "./share.proxy.controller.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -52,6 +53,7 @@ export async function createApp(port: number): Promise<RestApplication> {
   app.component(MCPComponent);
   app.configure("servers.MCPServer").to({ name: "agentgem", version: "0.1.0", transports: { stdio: false } });
   app.restController(GemController);
+  app.restController(ShareProxyController);
   app.service(GemTools);
   // Aggregator (B1): registered only when a Postgres DATABASE_URL is configured. The public read
   // routes are CORS-open + originGuard-exempt; POST /ingest stays guarded. Drains the pool on stop.
