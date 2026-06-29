@@ -1,5 +1,5 @@
 import { afterEach, describe, it, expect } from "vitest";
-import { ANON_POINTS, KEYED_POINTS, anonRateLimitOptions, keyedRateLimitOptions, posIntEnv } from "../gating.js";
+import { ANON_POINTS, KEYED_POINTS, INGEST_POINTS, anonRateLimitOptions, keyedRateLimitOptions, ingestRateLimitOptions, posIntEnv } from "../gating.js";
 
 const keyed = { ip: "1.2.3.4", gemTier: "keyed", gemKeyId: "key-1" } as any;
 const anon = { ip: "1.2.3.4", gemTier: "anonymous" } as any;
@@ -56,6 +56,59 @@ describe("keyedRateLimitOptions", () => {
     const o = keyedRateLimitOptions();
     const adminSweep = { originalUrl: "/api/aggregator/sweep", gemTier: "anonymous" } as any;
     expect(o.skip(adminSweep)).toBe(true);
+  });
+});
+
+describe("ingestRateLimitOptions", () => {
+  it("applies ONLY to /api/aggregator/ingest (skip returns false for ingest)", () => {
+    const o = ingestRateLimitOptions();
+    const ingestReq = { originalUrl: "/api/aggregator/ingest", ip: "1.2.3.4" } as any;
+    expect(o.skip(ingestReq)).toBe(false); // applies to ingest
+  });
+
+  it("skips non-ingest paths (e.g. /overview)", () => {
+    const o = ingestRateLimitOptions();
+    const readReq = { originalUrl: "/api/aggregator/overview", ip: "1.2.3.4" } as any;
+    expect(o.skip(readReq)).toBe(true);
+  });
+
+  it("skips admin paths (e.g. /keys)", () => {
+    const o = ingestRateLimitOptions();
+    const adminReq = { originalUrl: "/api/aggregator/keys", ip: "1.2.3.4" } as any;
+    expect(o.skip(adminReq)).toBe(true);
+  });
+
+  it("uses ip as the key generator", () => {
+    const o = ingestRateLimitOptions();
+    expect(o.keyGenerator({ ip: "1.2.3.4" } as any)).toBe("1.2.3.4");
+  });
+
+  it("defaults points to INGEST_POINTS", () => {
+    expect(ingestRateLimitOptions().points).toBe(INGEST_POINTS);
+  });
+
+  it("honors an explicit points override", () => {
+    expect(ingestRateLimitOptions(7).points).toBe(7);
+  });
+});
+
+describe("read buckets skip ingest", () => {
+  it("anonRateLimitOptions skips /ingest", () => {
+    const o = anonRateLimitOptions();
+    const ingestReq = { originalUrl: "/api/aggregator/ingest", gemTier: "anonymous" } as any;
+    expect(o.skip(ingestReq)).toBe(true);
+  });
+
+  it("keyedRateLimitOptions skips /ingest", () => {
+    const o = keyedRateLimitOptions();
+    const ingestReq = { originalUrl: "/api/aggregator/ingest", gemTier: "keyed", gemKeyId: "key-1" } as any;
+    expect(o.skip(ingestReq)).toBe(true);
+  });
+
+  it("anonRateLimitOptions still limits normal anon reads", () => {
+    const o = anonRateLimitOptions();
+    const readReq = { originalUrl: "/api/aggregator/overview", ip: "1.2.3.4", gemTier: "anonymous" } as any;
+    expect(o.skip(readReq)).toBe(false);
   });
 });
 

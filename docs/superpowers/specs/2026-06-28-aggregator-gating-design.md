@@ -29,20 +29,27 @@ This builds on `@agentback`'s native security stack (confirmed via the `agentbac
 4. **Embedded pglite for local runs.** When `DATABASE_URL` is unset, back the aggregator +
    `api_keys` with `@electric-sql/pglite` so the whole gated flow runs locally.
 5. **Defaults (env-overridable later, hardcoded now):** bad key → **401** (not silent
-   anonymous fallback); **60 req/min** anonymous (per IP), **600 req/min** keyed (per key);
-   rate limit scopes the aggregator reads + writes (`/ingest`, `/bind`) but **excludes** admin
-   endpoints (`/keys*`, `/sweep`) — minting keys or sweeping must not be throttled by the
-   public anon bucket. `TRUST_PROXY` env (Express "trust proxy") configures correct per-IP
-   limiting behind a proxy/LB; off by default.
+   anonymous fallback); **three separate rate-limit buckets**: anonymous reads (per-IP,
+   **60 req/min** `AGG_ANON_POINTS`), keyed reads (per-key, **600 req/min**
+   `AGG_KEYED_POINTS`), and a dedicated **ingest bucket** (per-IP, **120 req/min**
+   `AGG_INGEST_POINTS`) — `/ingest` is excluded from both read buckets so a producer
+   publish burst never consumes reader quota (or vice-versa). Admin endpoints (`/keys*`,
+   `/sweep`) are excluded from all three buckets. Per-pubkey ingest keying (for
+   velocity/reputation caps) is a deferred follow-up; this slice keys ingest per-IP.
+   `TRUST_PROXY` env (Express "trust proxy") configures correct per-IP limiting behind a
+   proxy/LB; off by default.
 6. **One keyed tier.** Per-key tiers/plans deferred — every valid key gets the same elevated
    limit. The `api_keys.label` field carries attribution for later.
 
 ## Architecture
 
 ```
-request → originGuard (existing) → apiKeyIdentity (new) → rate limiters (new, 2x) → controller
+request → originGuard (existing) → apiKeyIdentity (new) → rate limiters (new, 3x) → controller
                                          │                        │
                               x-api-key → sha256 → api_keys   skip/keyGenerator read req.tier
+                                                         anon reads (per-IP, 60/min)
+                                                         keyed reads (per-key, 600/min)
+                                                         ingest (per-IP, 120/min) ← /ingest only
 ```
 
 The sync/async split is the crux: `rate-limiter-flexible`'s `keyGenerator`/`skip` are
@@ -100,16 +107,20 @@ scoped to `/api/aggregator`:
 
 ### 5. Rate limiting (`@agentback/extension-rate-limit`, wired in `src/index.ts`)
 
-Two `installRateLimit` mounts, both `path: "/api/aggregator"`, `durationSecs: 60`, headers on:
+Three `installRateLimit` mounts, all `path: "/api/aggregator"`, `durationSecs: 60`, headers on:
 
-- **anonymous:** `points: ANON_POINTS` (60), `keyGenerator: req => req.ip ?? "anon"`,
-  `skip: req => req.gemTier === "keyed"`.
-- **keyed:** `points: KEYED_POINTS` (600), `keyGenerator: req => req.gemKeyId ?? "anon"`,
-  `skip: req => req.gemTier !== "keyed"`.
+- **anonymous reads:** `points: ANON_POINTS` (60), `keyGenerator: req => req.ip ?? "anon"`,
+  `skip: req => isAdminPath(req) || isIngestPath(req) || req.gemTier === "keyed"`.
+- **keyed reads:** `points: KEYED_POINTS` (600), `keyGenerator: req => req.gemKeyId ?? "anon"`,
+  `skip: req => isAdminPath(req) || isIngestPath(req) || req.gemTier !== "keyed"`.
+- **ingest:** `points: INGEST_POINTS` (120), `keyGenerator: req => req.ip ?? "anon"`,
+  `skip: req => !isIngestPath(req)` — applies ONLY to `/api/aggregator/ingest`, keeping
+  publish and read budgets fully independent.
 
-`ANON_POINTS`/`KEYED_POINTS` are module constants (env override is a later nicety). In-memory
-store now; the Redis `store` option is the multi-instance deploy path (deferred). Mount order
-in `createApp`: existing `originGuard` → `apiKeyIdentity` → the two limiters → controllers.
+`ANON_POINTS`/`KEYED_POINTS`/`INGEST_POINTS` are module constants (env override is a later
+nicety). In-memory store now; the Redis `store` option is the multi-instance deploy path
+(deferred). Mount order in `createApp`: existing `originGuard` → `apiKeyIdentity` → the three
+limiters → controllers.
 
 ### 6. Local pglite mode (`src/index.ts`)
 
@@ -142,9 +153,10 @@ Drizzle-pglite, in-process (reuse the existing `makeTestDb`):
   issues); revoke + list round-trip; body never logged (assert via a spy if feasible).
 - **identity middleware:** absent key → anonymous + next; valid → keyed + keyId; invalid →
   401 and no next.
-- **two-tier limiter (integration):** anonymous caller exceeds `ANON_POINTS` → 429 with
-  `RateLimit-*` headers; a valid key raises the ceiling to `KEYED_POINTS`; the two tiers use
-  independent buckets. (Small `points` in the test config to keep it fast.)
+- **three-bucket limiter (integration):** anonymous caller exceeds `ANON_POINTS` → 429 with
+  `RateLimit-*` headers; a valid key raises the ceiling to `KEYED_POINTS`; the `/ingest`
+  endpoint uses its own `INGEST_POINTS` budget so publish bursts and reads never share a
+  bucket. (Small `points` in the test config to keep it fast.)
 
 Live local validation (manual, after the suite): run the server with no `DATABASE_URL`
 (pglite), `POST /api/aggregator/keys` with the admin token to mint a key, curl `popularity`
