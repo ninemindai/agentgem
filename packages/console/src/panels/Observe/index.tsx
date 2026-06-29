@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
 import { observeRoute, scorecardRoute, makeClient, type ObservePayload, type ObserveRange, type ObserveFilter, type Scorecard } from "../../api/routes.js";
 import { Dashboard } from "./Dashboard.js";
-import { ScorecardHero } from "./Scorecard.js";
+import { ScorecardHero, ScorecardHeroSkeleton } from "./Scorecard.js";
 
 export function Observe({ apiBase }: { apiBase: string }) {
   const [data, setData] = useState<ObservePayload | null>(null);
@@ -12,6 +12,7 @@ export function Observe({ apiBase }: { apiBase: string }) {
   const [filter, setFilter] = useState<ObserveFilter>({ minMsgs: 100 });
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [scoring, setScoring] = useState(true);
 
   useEffect(() => {
     let alive = true;
@@ -26,9 +27,11 @@ export function Observe({ apiBase }: { apiBase: string }) {
 
   useEffect(() => {
     let alive = true;
+    setScoring(true);
     scorecardRoute.call(makeClient(apiBase), { query: {} })
       .then((sc) => { if (alive) setScorecard(sc); })
-      .catch(() => { /* degrade gracefully — scorecard is optional */ });
+      .catch(() => { /* degrade gracefully — scorecard is optional */ })
+      .finally(() => { if (alive) setScoring(false); });
     return () => { alive = false; };
   }, [apiBase]);
 
@@ -41,7 +44,7 @@ export function Observe({ apiBase }: { apiBase: string }) {
   if (!data) return <div className="obs"><p className="obs-loading">Loading…</p></div>;
   return (
     <div className="obs">
-      {scorecard && <ScorecardHero data={scorecard} onDistill={onDistill} />}
+      {scorecard ? <ScorecardHero data={scorecard} onDistill={onDistill} /> : scoring ? <ScorecardHeroSkeleton /> : null}
       <Dashboard data={data} range={range} onRange={setRange} filter={filter} onFilter={setFilter} pending={pending} />
     </div>
   );

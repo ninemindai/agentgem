@@ -538,6 +538,34 @@ body::before {
 .obs-empty, .obs-error, .obs-loading { color: var(--muted); font-size: 13px; font-style: italic; margin: 24px 0; }
 .obs-error { color: var(--accent); font-style: normal; font-weight: 500; }
 
+/* goldmine scorecard hero */
+.scorecard-hero { position: relative; background: var(--raised); border: 1px solid var(--line);
+  border-radius: var(--radius); box-shadow: var(--shadow-sm); padding: 18px 22px; margin: 0 0 22px;
+  animation: fade .4s ease both; }
+.scorecard-hero h2 { font: 500 19px/1.3 var(--font-display); color: var(--ink-soft); margin: 0 0 13px; letter-spacing: .2px; }
+.scorecard-hero h2 strong { color: var(--ink); font-weight: 600; }
+.scorecard-counts { display: flex; flex-wrap: wrap; gap: 9px; list-style: none; margin: 0 0 13px; padding: 0; }
+.scorecard-counts button { font: 500 13px var(--font-ui); color: var(--accent); background: rgba(154, 51, 36, .06);
+  border: 1px solid var(--line); border-radius: 7px; padding: 5px 12px; cursor: pointer;
+  transition: background .14s, border-color .14s, color .14s; }
+.scorecard-counts button:hover { background: rgba(154, 51, 36, .1); border-color: var(--accent); color: var(--accent-2); }
+.scorecard-gaps { font-size: 12.5px; color: var(--muted); margin: 0 0 13px; }
+.scorecard-share { font: 500 12.5px var(--font-ui); color: var(--raised); background: var(--accent); border: none;
+  border-radius: 7px; padding: 6px 14px; cursor: pointer; box-shadow: var(--shadow-sm); transition: background .14s; }
+.scorecard-share:hover { background: var(--accent-2); }
+.scorecard-degraded { position: absolute; top: 15px; right: 17px; font-size: 11px; color: var(--muted); font-style: italic; }
+
+/* scorecard loading skeleton */
+.scorecard-skel-line, .scorecard-skel-pill { background: linear-gradient(100deg,
+  var(--paper-2) 30%, var(--line-soft) 50%, var(--paper-2) 70%); background-size: 220% 100%;
+  animation: scorecard-shimmer 1.4s ease-in-out infinite; }
+.scorecard-skel-title { height: 22px; width: 300px; max-width: 72%; border-radius: 6px; margin-bottom: 15px; }
+.scorecard-skel-row { display: flex; gap: 9px; margin-bottom: 14px; }
+.scorecard-skel-pill { height: 28px; width: 124px; border-radius: 7px; }
+.scorecard-skel-note { font-size: 12.5px; color: var(--muted); font-style: italic; margin: 0; }
+@keyframes scorecard-shimmer { from { background-position: 220% 0; } to { background-position: -120% 0; } }
+@media (prefers-reduced-motion: reduce) { .scorecard-skel-line, .scorecard-skel-pill { animation: none; } }
+
 /* heatmap */
 .obs-heat { display: grid; grid-auto-flow: column; gap: 3px; margin-top: 8px; }
 .obs-heat-cell { width: 12px; height: 12px; border-radius: 2px; }

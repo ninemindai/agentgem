@@ -22,3 +22,18 @@ export function ScorecardHero({ data, onDistill }: { data: Scorecard; onDistill:
     </section>
   );
 }
+
+// Shimmer placeholder shown while the scorecard is computed (the scan over recent
+// projects takes a while). Mirrors the hero's shape so the swap-in is calm.
+export function ScorecardHeroSkeleton() {
+  return (
+    <section className="scorecard-hero scorecard-skel" aria-label="Scoring your goldmine" aria-busy="true">
+      <div className="scorecard-skel-line scorecard-skel-title" />
+      <div className="scorecard-skel-row">
+        <div className="scorecard-skel-pill" />
+        <div className="scorecard-skel-pill" />
+      </div>
+      <p className="scorecard-skel-note">Scoring your goldmine…</p>
+    </section>
+  );
+}

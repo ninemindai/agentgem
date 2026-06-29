@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { ScorecardHero } from "../Scorecard.js";
+import { ScorecardHero, ScorecardHeroSkeleton } from "../Scorecard.js";
 import type { Scorecard } from "../../../api/routes.js";
 
 const sc: Scorecard = {
@@ -18,5 +18,13 @@ describe("ScorecardHero", () => {
   it("never renders a dollar figure", () => {
     const { container } = render(<ScorecardHero data={sc} onDistill={vi.fn()} />);
     expect(container.textContent).not.toMatch(/\$/);
+  });
+});
+
+describe("ScorecardHeroSkeleton", () => {
+  it("shows a busy loading placeholder while scoring", () => {
+    const { container } = render(<ScorecardHeroSkeleton />);
+    expect(screen.getByText(/scoring your goldmine/i)).toBeTruthy();
+    expect(container.querySelector('[aria-busy="true"]')).toBeTruthy();
   });
 });
