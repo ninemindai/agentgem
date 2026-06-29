@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { api, get, post } from "@agentback/openapi";
+import { api, get, post, AgentError } from "@agentback/openapi";
 import { inject } from "@agentback/core";
 import { DrizzleBindings } from "@agentback/drizzle";
 import type { AppDb } from "./aggregator/schema.js";
@@ -28,7 +28,10 @@ export class ShareController {
   @get("/", { query: ReadQuery, response: ReadResult })
   async read(input: { query: z.infer<typeof ReadQuery> }): Promise<z.infer<typeof ReadResult>> {
     const rec = await getShareCard(this.db, input.query.id);
-    if (!rec) throw new Error("share card not found");
+    // A missing card is a clean 404, not a 500 — a plain Error would be redacted to a generic 500,
+    // and the Worker can't then tell "no such card" from a real backend fault. AgentError carries
+    // the status + a stable code through buildErrorEnvelope.
+    if (!rec) throw new AgentError("share card not found", { status: 404, code: "share_not_found", retryable: false });
     return rec;
   }
 }
