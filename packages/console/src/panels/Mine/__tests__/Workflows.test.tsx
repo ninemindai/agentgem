@@ -28,31 +28,31 @@ const SCORECARD: Scorecard = {
 
 describe("MineWorkflows", () => {
   it("renders workflow names", () => {
-    render(<MineWorkflows data={SCORECARD} onBuild={vi.fn()} building={false} result={null} error={null} />);
+    render(<MineWorkflows data={SCORECARD} filter="all" onBuild={vi.fn()} building={false} result={null} error={null} />);
     expect(screen.getByText("Deploy workflow")).toBeTruthy();
     expect(screen.getByText("Test workflow")).toBeTruthy();
     expect(screen.getByText("Lint workflow")).toBeTruthy();
   });
 
   it("renders battle-tested badge for high confidence workflows", () => {
-    render(<MineWorkflows data={SCORECARD} onBuild={vi.fn()} building={false} result={null} error={null} />);
+    render(<MineWorkflows data={SCORECARD} filter="all" onBuild={vi.fn()} building={false} result={null} error={null} />);
     expect(screen.getByText("battle-tested")).toBeTruthy();
   });
 
   it("renders portable badge for portable workflows", () => {
-    render(<MineWorkflows data={SCORECARD} onBuild={vi.fn()} building={false} result={null} error={null} />);
+    render(<MineWorkflows data={SCORECARD} filter="all" onBuild={vi.fn()} building={false} result={null} error={null} />);
     expect(screen.getByText("portable")).toBeTruthy();
   });
 
   it("Build button is disabled when nothing is selected", () => {
-    render(<MineWorkflows data={SCORECARD} onBuild={vi.fn()} building={false} result={null} error={null} />);
+    render(<MineWorkflows data={SCORECARD} filter="all" onBuild={vi.fn()} building={false} result={null} error={null} />);
     const btn = screen.getByRole("button", { name: /build gem/i });
     expect((btn as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("calls onBuild with correct selections after toggling a checkbox", () => {
     const onBuild = vi.fn();
-    render(<MineWorkflows data={SCORECARD} onBuild={onBuild} building={false} result={null} error={null} />);
+    render(<MineWorkflows data={SCORECARD} filter="all" onBuild={onBuild} building={false} result={null} error={null} />);
     const checkbox = screen.getByRole("checkbox", { name: /deploy workflow/i });
     fireEvent.click(checkbox);
     const btn = screen.getByRole("button", { name: /build gem \(1\)/i });
@@ -68,6 +68,7 @@ describe("MineWorkflows", () => {
     render(
       <MineWorkflows
         data={SCORECARD}
+        filter="all"
         onBuild={vi.fn()}
         building={false}
         result={{ name: "my-gem", skills: ["deploy", "lint"] }}
@@ -77,5 +78,16 @@ describe("MineWorkflows", () => {
     expect(screen.getByText(/built/i)).toBeTruthy();
     expect(screen.getByText("my-gem")).toBeTruthy();
     expect(screen.getByText(/2 skills/i)).toBeTruthy();
+  });
+
+  it("filter='battleTested' shows only high-confidence workflows and hides projects with no matches", () => {
+    render(<MineWorkflows data={SCORECARD} filter="battleTested" onBuild={vi.fn()} building={false} result={null} error={null} />);
+    // high-confidence "Deploy workflow" should be visible
+    expect(screen.getByText("Deploy workflow")).toBeTruthy();
+    // medium-confidence "Test workflow" and low-confidence "Lint workflow" should be hidden
+    expect(screen.queryByText("Test workflow")).toBeNull();
+    expect(screen.queryByText("Lint workflow")).toBeNull();
+    // beta project has no high-confidence workflows, so its label should not appear
+    expect(screen.queryByText("beta")).toBeNull();
   });
 });

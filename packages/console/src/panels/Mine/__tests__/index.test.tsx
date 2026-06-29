@@ -1,5 +1,7 @@
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, afterEach } from "vitest";
+import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+
+afterEach(cleanup);
 import { Mine } from "../index.js";
 import type { ScorecardStreamEvent } from "../scorecardStream.js";
 import type { Scorecard } from "../../../api/routes.js";
@@ -7,6 +9,20 @@ import type { Scorecard } from "../../../api/routes.js";
 const FAKE_SCORECARD: Scorecard = {
   breadth: 10, battleTested: 5, portable: 3,
   gaps: [], projects: [], degraded: false, generatedAtMs: 0,
+};
+
+const SCORECARD_WITH_WORKFLOWS: Scorecard = {
+  breadth: 3, battleTested: 1, portable: 1, gaps: [], degraded: false, generatedAtMs: 0,
+  projects: [
+    {
+      root: "/projects/alpha", label: "alpha",
+      breadth: 3, battleTested: 1, portable: 1,
+      workflows: [
+        { key: "wf-a", name: "Deploy workflow", confidence: "high", portable: true },
+        { key: "wf-b", name: "Test workflow", confidence: "low", portable: false },
+      ],
+    },
+  ],
 };
 
 // openStream that emits nothing — panel stays in loading/skeleton state.
@@ -51,5 +67,19 @@ describe("Mine panel", () => {
     const stream = syncStream([{ type: "failed", message: "oops" }]);
     render(<Mine apiBase="http://localhost:0" openStream={stream} />);
     expect(screen.getByText(/couldn't compute/i)).toBeTruthy();
+  });
+
+  it("clicking a hero count chip filters the workflow list", () => {
+    const stream = syncStream([{ type: "done", scorecard: SCORECARD_WITH_WORKFLOWS, cached: false }]);
+    render(<Mine apiBase="http://localhost:0" openStream={stream} />);
+    // both workflows are visible before filtering
+    expect(screen.getByText("Deploy workflow")).toBeTruthy();
+    expect(screen.getByText("Test workflow")).toBeTruthy();
+    // click the "battle-tested" chip
+    fireEvent.click(screen.getByText(/battle-tested/i, { selector: "button" }));
+    // low-confidence workflow should now be hidden
+    expect(screen.queryByText("Test workflow")).toBeNull();
+    // high-confidence workflow stays visible
+    expect(screen.getByText("Deploy workflow")).toBeTruthy();
   });
 });

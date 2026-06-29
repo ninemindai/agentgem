@@ -1,8 +1,12 @@
 import { useState } from "react";
-import type { Scorecard } from "../../api/routes.js";
+import type { Scorecard, ProjectGoldmine } from "../../api/routes.js";
+import type { WorkflowFilter } from "./Scorecard.js";
 
-export function MineWorkflows({ data, onBuild, building, result, error }: {
+type WorkflowEntry = ProjectGoldmine["workflows"][number];
+
+export function MineWorkflows({ data, filter, onBuild, building, result, error }: {
   data: Scorecard;
+  filter: WorkflowFilter;
   onBuild: (selections: { root: string; keys: string[] }[], name: string) => void;
   building: boolean;
   result: { name: string; skills: string[] } | null;
@@ -17,6 +21,11 @@ export function MineWorkflows({ data, onBuild, building, result, error }: {
     return { ...s, [root]: set };
   });
 
+  const match = (w: WorkflowEntry) => filter === "all" || (filter === "battleTested" ? w.confidence === "high" : w.portable);
+  const visibleProjects = data.projects
+    .map((p) => ({ ...p, workflows: p.workflows.filter(match) }))
+    .filter((p) => p.workflows.length);
+
   const selections = Object.entries(selected)
     .map(([root, set]) => ({ root, keys: [...set] }))
     .filter((x) => x.keys.length);
@@ -25,7 +34,7 @@ export function MineWorkflows({ data, onBuild, building, result, error }: {
   return (
     <section className="mine-workflows" aria-label="Discovered workflows">
       <h3>Pick workflows to distill into a Gem</h3>
-      {data.projects.filter((p) => p.workflows.length).map((p) => (
+      {visibleProjects.map((p) => (
         <div className="mine-project" key={p.root}>
           <div className="mine-project-label">{p.label}</div>
           <ul className="mine-wf-list">

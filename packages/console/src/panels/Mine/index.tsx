@@ -3,6 +3,7 @@ import { defineConsolePage } from "../../registry.js";
 import type { Scorecard } from "../../api/routes.js";
 import { scorecardBuildRoute, makeClient } from "../../api/routes.js";
 import { ScorecardHero, ScorecardHeroSkeleton, ScorecardScanning } from "./Scorecard.js";
+import type { WorkflowFilter } from "./Scorecard.js";
 import { openScorecardStream, type ScorecardStreamEvent } from "./scorecardStream.js";
 import { MineWorkflows } from "./Workflows.js";
 
@@ -12,12 +13,13 @@ export function Mine({ apiBase, openStream = openScorecardStream }: { apiBase: s
   const [scorecard, setScorecard] = useState<Scorecard | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [phase, setPhase] = useState<"loading" | "scanning" | "done" | "failed">("loading");
+  const [filter, setFilter] = useState<WorkflowFilter>("all");
   const [building, setBuilding] = useState(false);
   const [buildResult, setBuildResult] = useState<{ name: string; skills: string[] } | null>(null);
   const [buildError, setBuildError] = useState<string | null>(null);
 
   useEffect(() => {
-    setScorecard(null); setProgress(null); setPhase("loading");
+    setScorecard(null); setProgress(null); setPhase("loading"); setFilter("all");
     const close = openStream(apiBase, (e: ScorecardStreamEvent) => {
       if (e.type === "start") setPhase("scanning");
       else if (e.type === "progress") { setPhase("scanning"); setProgress({ done: e.done, total: e.total, label: e.label, partial: e.partial }); }
@@ -26,8 +28,6 @@ export function Mine({ apiBase, openStream = openScorecardStream }: { apiBase: s
     });
     return close;
   }, [apiBase, openStream]);
-
-  const onDistill = (_root: string) => { window.location.hash = "#/curate"; };
 
   const onBuild = async (selections: { root: string; keys: string[] }[], name: string) => {
     setBuilding(true);
@@ -48,8 +48,8 @@ export function Mine({ apiBase, openStream = openScorecardStream }: { apiBase: s
     <div className="obs mine">
       {phase === "done" && scorecard
         ? <>
-            <ScorecardHero data={scorecard} onDistill={onDistill} />
-            <MineWorkflows data={scorecard} onBuild={onBuild} building={building} result={buildResult} error={buildError} />
+            <ScorecardHero data={scorecard} filter={filter} onFilter={setFilter} />
+            <MineWorkflows data={scorecard} filter={filter} onBuild={onBuild} building={building} result={buildResult} error={buildError} />
           </>
         : phase === "failed"
           ? <p className="obs-empty">Couldn't compute your goldmine right now — try again shortly.</p>

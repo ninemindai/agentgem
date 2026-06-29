@@ -1,19 +1,22 @@
 import { useRef } from "react";
-import type { Scorecard, ProjectGoldmine } from "../../api/routes.js";
+import type { Scorecard } from "../../api/routes.js";
 import { drawTrophy, shareTrophy } from "./trophy.js";
 
-// Asset-framed hero. Counts link into the existing Curate>Analyze distill flow
-// via onDistill(root); the share button exports the aggregate-only trophy.
-export function ScorecardHero({ data, onDistill }: { data: Scorecard; onDistill: (root: string) => void }) {
+// Asset-framed hero. Count chips are filter toggles — clicking one narrows the
+// workflow list below; clicking the active chip resets it to "all".
+// The share button exports the aggregate-only trophy (unchanged).
+export type WorkflowFilter = "all" | "battleTested" | "portable";
+
+export function ScorecardHero({ data, filter, onFilter }: { data: Scorecard; filter: WorkflowFilter; onFilter: (f: WorkflowFilter) => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const top: ProjectGoldmine | undefined = data.projects[0];
   const onShare = () => { const c = canvasRef.current; if (!c) return; drawTrophy(c, data); void shareTrophy(c); };
+  const toggle = (f: WorkflowFilter) => onFilter(filter === f ? "all" : f);
   return (
     <section className="scorecard-hero" aria-label="Goldmine scorecard">
       <h2>Your log holds <strong>{data.breadth} reusable workflows</strong></h2>
       <ul className="scorecard-counts">
-        <li><button onClick={() => top && onDistill(top.root)}>{data.battleTested} battle-tested</button></li>
-        <li><button onClick={() => top && onDistill(top.root)}>{data.portable} worth sharing</button></li>
+        <li><button className={filter === "battleTested" ? "is-active" : ""} aria-pressed={filter === "battleTested"} onClick={() => toggle("battleTested")}>{data.battleTested} battle-tested</button></li>
+        <li><button className={filter === "portable" ? "is-active" : ""} aria-pressed={filter === "portable"} onClick={() => toggle("portable")}>{data.portable} worth sharing</button></li>
       </ul>
       {data.gaps.length > 0 && <p className="scorecard-gaps">Next: {data.gaps.join(" · ")}</p>}
       <button className="scorecard-share" onClick={onShare}>Share your goldmine</button>

@@ -549,6 +549,7 @@ body::before {
   border: 1px solid var(--line); border-radius: 7px; padding: 5px 12px; cursor: pointer;
   transition: background .14s, border-color .14s, color .14s; }
 .scorecard-counts button:hover { background: rgba(154, 51, 36, .1); border-color: var(--accent); color: var(--accent-2); }
+.scorecard-counts button.is-active { background: var(--accent); color: var(--raised); border-color: var(--accent); }
 .scorecard-gaps { font-size: 12.5px; color: var(--muted); margin: 0 0 13px; }
 .scorecard-share { font: 500 12.5px var(--font-ui); color: var(--raised); background: var(--accent); border: none;
   border-radius: 7px; padding: 6px 14px; cursor: pointer; box-shadow: var(--shadow-sm); transition: background .14s; }
