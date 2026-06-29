@@ -26,6 +26,6 @@ describe("ShareController", () => {
   it("404s an unknown id", async () => {
     const db = await makeTestDb();
     const c = new ShareController(db);
-    await expect(c.read({ query: { id: "nope000000" } })).rejects.toThrow(/not found/i);
+    await expect(c.read({ query: { id: "nope000000" } })).rejects.toMatchObject({ statusCode: 404, code: "share_not_found" });
   });
 });
