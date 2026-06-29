@@ -45,18 +45,21 @@ function listFiles(dir: string, suffix: string): string[] {
 }
 
 export function parseClaudeTranscript(path: string): SessionStat | null {
-  let sessionId = "", cwd: string | null = null, model: string | null = null, gitBranch: string | null = null;
+  // Fix 1: canonical sessionId comes from the transcript filename (the UUID), not inline record fields.
+  // Subagent/sidechain records carry a shared parent sessionId which would cause collisions.
+  const sessionId = basename(path).replace(/\.jsonl$/, "");
+  let cwd: string | null = null, model: string | null = null, gitBranch: string | null = null;
   let startMs = Infinity, endMs = -Infinity, msgs = 0, tokensIn = 0, tokensOut = 0, tokensCache = 0;
   for (const rec of jsonLines(path)) {
     const type = rec.type as string | undefined;
-    if (typeof rec.sessionId === "string") sessionId = rec.sessionId;
     if (typeof rec.cwd === "string") cwd = rec.cwd;
     if (typeof rec.gitBranch === "string" && rec.gitBranch) gitBranch = rec.gitBranch;
     const ts = typeof rec.timestamp === "string" ? Date.parse(rec.timestamp) : NaN;
     if (!Number.isNaN(ts)) { startMs = Math.min(startMs, ts); endMs = Math.max(endMs, ts); }
     if (type === "user" || type === "assistant") msgs++;
     const msg = rec.message as Record<string, unknown> | undefined;
-    if (msg && typeof msg.model === "string") model = msg.model;
+    // Fix 2: skip the <synthetic> sentinel — it is not a real model name.
+    if (msg && typeof msg.model === "string" && msg.model !== "<synthetic>") model = msg.model;
     const u = msg?.usage as Record<string, number> | undefined;
     if (u) {
       tokensIn += u.input_tokens ?? 0;
@@ -168,10 +171,12 @@ export function aggregateObserve(stats: SessionStat[], range: ObserveRange, nowM
 
 let _cache: { atMs: number; stats: SessionStat[] } | null = null;
 const SCAN_TTL_MS = 15_000;
-/** Cached scan for the request path: re-scans at most every SCAN_TTL_MS. nowMs injected for testability. */
+/** Cached scan for the request path: re-scans at most every SCAN_TTL_MS. nowMs injected for testability.
+ *  Fix 4: when custom dirs are provided the result is never cached — only the default path is cacheable. */
 export function scanSessionsCached(nowMs: number, dirs?: { claudeDir?: string; codexDir?: string }): SessionStat[] {
+  if (dirs) return scanSessions(dirs);                       // custom dirs are never cached
   if (_cache && nowMs - _cache.atMs < SCAN_TTL_MS) return _cache.stats;
-  const stats = scanSessions(dirs);
+  const stats = scanSessions();
   _cache = { atMs: nowMs, stats };
   return stats;
 }

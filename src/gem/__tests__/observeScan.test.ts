@@ -24,6 +24,21 @@ beforeAll(() => {
     JSON.stringify({ type: "assistant", sessionId: "s1", cwd: "/work/app", timestamp: "2026-06-28T10:01:00.000Z", message: { role: "assistant", model: "claude-opus-4-8", usage: { input_tokens: 200, output_tokens: 60, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } }),
     "{ not json",
   ].join("\n") + "\n");
+  // Fix 1: sidechain fixture — filename UUID differs from inline sessionId (parent-shared-id)
+  writeFileSync(join(cproj, "9f1b2c3d-aaaa-bbbb-cccc-000000000001.jsonl"), [
+    JSON.stringify({ type: "user", sessionId: "parent-shared-id", cwd: "/work/app", timestamp: "2026-06-28T11:30:00.000Z", message: { role: "user" } }),
+    JSON.stringify({ type: "assistant", sessionId: "parent-shared-id", cwd: "/work/app", timestamp: "2026-06-28T11:30:05.000Z", message: { role: "assistant", model: "claude-sonnet-4-5", usage: { input_tokens: 50, output_tokens: 20, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } }),
+  ].join("\n") + "\n");
+  // Fix 2: synthetic model fixtures
+  writeFileSync(join(cproj, "synth-after-real.jsonl"), [
+    JSON.stringify({ type: "user", sessionId: "synth-after-real", cwd: "/work/app", timestamp: "2026-06-28T12:00:00.000Z", message: { role: "user" } }),
+    JSON.stringify({ type: "assistant", sessionId: "synth-after-real", cwd: "/work/app", timestamp: "2026-06-28T12:00:05.000Z", message: { role: "assistant", model: "claude-opus-4-8", usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } }),
+    JSON.stringify({ type: "assistant", sessionId: "synth-after-real", cwd: "/work/app", timestamp: "2026-06-28T12:00:10.000Z", message: { role: "assistant", model: "<synthetic>", usage: { input_tokens: 0, output_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } }),
+  ].join("\n") + "\n");
+  writeFileSync(join(cproj, "synth-only.jsonl"), [
+    JSON.stringify({ type: "user", sessionId: "synth-only", cwd: "/work/app", timestamp: "2026-06-28T12:01:00.000Z", message: { role: "user" } }),
+    JSON.stringify({ type: "assistant", sessionId: "synth-only", cwd: "/work/app", timestamp: "2026-06-28T12:01:05.000Z", message: { role: "assistant", model: "<synthetic>", usage: { input_tokens: 5, output_tokens: 3, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } }),
+  ].join("\n") + "\n");
   // Codex: ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl
   const xdir = join(codexDir, "sessions", "2026", "06", "28");
   mkdirSync(xdir, { recursive: true });
@@ -69,9 +84,22 @@ describe("parseCodexTranscript", () => {
 describe("scanSessions", () => {
   it("returns both agents and skips a missing codex dir without throwing", () => {
     const stats = scanSessions({ claudeDir, codexDir });
-    expect(stats.map((s) => s.sessionId).sort()).toEqual(["s-branch", "s1", "x1"]);
+    expect(stats.map((s) => s.sessionId).sort()).toEqual([
+      "9f1b2c3d-aaaa-bbbb-cccc-000000000001",
+      "s-branch",
+      "s1",
+      "synth-after-real",
+      "synth-only",
+      "x1",
+    ]);
     const missing = scanSessions({ claudeDir, codexDir: join(home, "nope") });
-    expect(missing.map((s) => s.sessionId).sort()).toEqual(["s-branch", "s1"]);
+    expect(missing.map((s) => s.sessionId).sort()).toEqual([
+      "9f1b2c3d-aaaa-bbbb-cccc-000000000001",
+      "s-branch",
+      "s1",
+      "synth-after-real",
+      "synth-only",
+    ]);
   });
 });
 
@@ -240,28 +268,63 @@ describe("parseClaudeTranscript gitBranch", () => {
   });
 });
 
+describe("parseClaudeTranscript sessionId from filename (Fix 1)", () => {
+  it("uses the transcript filename basename as sessionId, ignoring inline record sessionId", () => {
+    const path = join(claudeDir, "projects", "proj-a", "9f1b2c3d-aaaa-bbbb-cccc-000000000001.jsonl");
+    const s = parseClaudeTranscript(path)!;
+    expect(s).not.toBeNull();
+    // Must be the filename, NOT the inline "parent-shared-id" from records
+    expect(s.sessionId).toBe("9f1b2c3d-aaaa-bbbb-cccc-000000000001");
+  });
+});
+
+describe("parseClaudeTranscript model sentinel (Fix 2)", () => {
+  it("does not overwrite a real model with a later <synthetic> record", () => {
+    const path = join(claudeDir, "projects", "proj-a", "synth-after-real.jsonl");
+    const s = parseClaudeTranscript(path)!;
+    expect(s).not.toBeNull();
+    expect(s.model).toBe("claude-opus-4-8");
+  });
+
+  it("leaves model null when the only model record is <synthetic>", () => {
+    const path = join(claudeDir, "projects", "proj-a", "synth-only.jsonl");
+    const s = parseClaudeTranscript(path)!;
+    expect(s).not.toBeNull();
+    expect(s.model).toBeNull();
+  });
+});
+
 describe("scanSessionsCached", () => {
   beforeEach(() => clearScanCache());
 
-  it("returns the same array reference on second call within TTL", () => {
+  it("returns the same array reference on second call within TTL (no custom dirs)", () => {
+    // Use no-dirs path so the cache is populated and hit
     const nowMs = Date.now();
-    const first = scanSessionsCached(nowMs, { claudeDir, codexDir });
-    const second = scanSessionsCached(nowMs + 1_000, { claudeDir, codexDir }); // +1s < 15s TTL
+    const first = scanSessionsCached(nowMs);
+    const second = scanSessionsCached(nowMs + 1_000); // +1s < 15s TTL
     expect(second).toBe(first);
   });
 
-  it("re-scans when nowMs exceeds TTL", () => {
+  it("re-scans when nowMs exceeds TTL (no custom dirs)", () => {
     const nowMs = Date.now();
-    const first = scanSessionsCached(nowMs, { claudeDir, codexDir });
-    const second = scanSessionsCached(nowMs + 20_000, { claudeDir, codexDir }); // +20s > 15s TTL
+    const first = scanSessionsCached(nowMs);
+    const second = scanSessionsCached(nowMs + 20_000); // +20s > 15s TTL
     expect(second).not.toBe(first);
   });
 
-  it("re-scans after clearScanCache()", () => {
+  it("re-scans after clearScanCache() (no custom dirs)", () => {
     const nowMs = Date.now();
-    const first = scanSessionsCached(nowMs, { claudeDir, codexDir });
+    const first = scanSessionsCached(nowMs);
     clearScanCache();
-    const second = scanSessionsCached(nowMs + 100, { claudeDir, codexDir }); // same ts, but cache cleared
+    const second = scanSessionsCached(nowMs + 100); // same ts, but cache cleared
+    expect(second).not.toBe(first);
+  });
+
+  it("bypasses the cache when custom dirs are passed (Fix 4)", () => {
+    const nowMs = Date.now();
+    // Two calls with dirs within TTL must NOT share reference
+    const first = scanSessionsCached(nowMs, { claudeDir, codexDir });
+    const second = scanSessionsCached(nowMs + 1_000, { claudeDir, codexDir }); // +1s < 15s TTL
     expect(second).not.toBe(first);
   });
 });
