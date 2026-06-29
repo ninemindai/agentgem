@@ -10,7 +10,7 @@ export function App() {
       const a = (e.target as HTMLElement).closest("a");
       if (!a) return;
       const href = a.getAttribute("href");
-      if (!href || !href.startsWith("/") || a.target === "_blank" || e.metaKey || e.ctrlKey) return;
+      if (!href || !href.startsWith("/") || href.startsWith("//") || a.target === "_blank" || e.metaKey || e.ctrlKey || e.shiftKey) return;
       e.preventDefault();
       window.history.pushState({}, "", href);
       window.dispatchEvent(new PopStateEvent("popstate"));
