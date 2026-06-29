@@ -70,12 +70,17 @@ function changeHint(type: "skill" | "mcp", name: string, source: string): { file
   const plugin = pluginKey(source);
   if (plugin) return { file: "settings.json", key: `enabledPlugins["${plugin}"] = false` };
   if (type === "skill") {
-    if (source === "codex") return { file: "filesystem", key: `~/.codex/skills/${name} (move/remove)` };
-    return { file: "settings.json", key: `skillOverrides["${name}"] = "off"` };
+    // No in-place disable flag exists for standalone skills; direct user to the folder.
+    const root =
+      source === "agent" ? "~/.agents/skills" :
+      source === "codex" ? "~/.codex/skills" :
+      source === "hermes" ? "~/.hermes/skills" :
+      "~/.claude/skills";
+    return { file: `${root}/${name}`, key: "remove or move this folder (no in-place disable flag exists)" };
   }
   // mcp
   if (source === "codex") return { file: "~/.codex/config.toml", key: `set enabled = false for ${name}` };
-  return { file: "settings.json", key: `mcpServers.${name} (remove, or add to deniedMcpServers)` };
+  return { file: "settings.json / ~/.claude.json", key: `remove mcpServers.${name} (or add "${name}" to disabledMcpjsonServers if defined via .mcp.json)` };
 }
 
 function buildArtifacts(inv: ConfigInventory, usage: Map<string, ArtifactUsage>, range: OptimizeRange, nowMs: number): OptimizeArtifact[] {
