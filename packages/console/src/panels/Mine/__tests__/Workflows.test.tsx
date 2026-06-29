@@ -196,6 +196,58 @@ describe("MineWorkflows", () => {
     spy.mockRestore();
   });
 
+  // Cross-project same-key collision test
+  it("two projects sharing the same workflow key expand to distinct details", async () => {
+    const SHARED_KEY_SCORECARD: Scorecard = {
+      breadth: 2, battleTested: 0, portable: 0, gaps: [], degraded: false, generatedAtMs: 0,
+      projects: [
+        {
+          root: "/projects/alpha", label: "alpha",
+          breadth: 1, battleTested: 0, portable: 0,
+          workflows: [{ key: "deploy", name: "Alpha Deploy", confidence: "medium", portable: false }],
+        },
+        {
+          root: "/projects/beta", label: "beta",
+          breadth: 1, battleTested: 0, portable: 0,
+          workflows: [{ key: "deploy", name: "Beta Deploy", confidence: "medium", portable: false }],
+        },
+      ],
+    };
+
+    const alphaDetail: WorkflowDetail = {
+      key: "deploy", name: "Alpha Deploy", description: "Alpha-specific deploy pipeline",
+      triggers: [], tools: [], mutating: false, steps: [], sessions: 3,
+      confidence: "medium", portable: false,
+    };
+    const betaDetail: WorkflowDetail = {
+      key: "deploy", name: "Beta Deploy", description: "Beta-specific deploy pipeline",
+      triggers: [], tools: [], mutating: false, steps: [], sessions: 7,
+      confidence: "medium", portable: false,
+    };
+
+    const spy = vi.spyOn(routes.scorecardWorkflowRoute, "call").mockImplementation(
+      (_client, input) => {
+        const { root } = (input as { query: { root: string; key: string } }).query;
+        return Promise.resolve(root === "/projects/alpha" ? alphaDetail : betaDetail);
+      },
+    );
+
+    render(<MineWorkflows {...defaultProps} data={SHARED_KEY_SCORECARD} />);
+    const expandBtns = screen.getAllByRole("button", { name: /expand detail/i });
+    // Expand alpha row (index 0) then beta row (index 1)
+    fireEvent.click(expandBtns[0]);
+    await waitFor(() => { expect(screen.getByText("Alpha-specific deploy pipeline")).toBeTruthy(); });
+
+    fireEvent.click(expandBtns[1]);
+    await waitFor(() => { expect(screen.getByText("Beta-specific deploy pipeline")).toBeTruthy(); });
+
+    // Both details must be visible simultaneously (distinct cache entries)
+    expect(screen.getByText("Alpha-specific deploy pipeline")).toBeTruthy();
+    expect(screen.getByText("Beta-specific deploy pipeline")).toBeTruthy();
+
+    spy.mockRestore();
+  });
+
   // Stale-selection note test
   it("shows stale-selection note when selected key is hidden by filter", () => {
     render(<MineWorkflows {...defaultProps} />);

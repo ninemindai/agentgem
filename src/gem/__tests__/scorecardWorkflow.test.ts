@@ -86,6 +86,22 @@ describe("GET /api/scorecard/workflow handler", () => {
     expect(typeof detail.portable).toBe("boolean");
   });
 
+  it("sanitizes URL in description before returning", async () => {
+    const c = mkCandidate("k-url", "url-skill");
+    c.skeleton.description = "See https://internal.example.com/docs for details";
+    vi.spyOn(defaultScorecardDeps, "loadProject").mockReturnValue({
+      signal: MINIMAL_SIGNAL,
+      candidates: [c],
+      reflections: [],
+    });
+
+    const ctrl = new GemController();
+    const detail = await ctrl.scorecardWorkflow({ query: { root: ROOT, key: "k-url" } });
+
+    expect(detail.description).not.toContain("http");
+    expect(detail.description).toContain("for details");
+  });
+
   it("throws InvalidInputError for an unknown workflow key", async () => {
     const c = mkCandidate("k1", "synthetic-skill-one");
     vi.spyOn(defaultScorecardDeps, "loadProject").mockReturnValue({

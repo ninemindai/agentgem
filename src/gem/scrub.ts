@@ -56,6 +56,19 @@ function redactToken(tok: string): string {
     .join("");
 }
 
+/** Share-time cleanup for human-facing description text: strip URLs + absolute
+ * paths and cap length, so a shared gem's skill descriptions don't leak links or
+ * internal context. NOT a secret scrubber (scrubProse already handles secrets). */
+export function sanitizeShareText(s: string, max = 160): string {
+  let out = s
+    .replace(/https?:\/\/\S+/g, "")          // URLs
+    .replace(/\b(?:\/[\w.-]+){2,}\b/g, "")    // absolute-ish file paths
+    .replace(/\s+/g, " ")
+    .trim();
+  if (out.length > max) out = out.slice(0, max - 1).trimEnd() + "…";
+  return out;
+}
+
 // Scrub free-text prose (mission-hint task/outcome). Same token scrub + de-home as
 // command args, plus a hard length cap — this is the one place free text is kept,
 // so it is deliberately short and low-detail (proposal §3b).

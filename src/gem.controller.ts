@@ -106,6 +106,7 @@ import {
   UsageSchema, UsageQuerySchema,
 } from "./schemas.js";
 import { collectScorecard, selectScorecardRoots, scorecardTranscriptPaths, defaultScorecardDeps, isPortable, type Scorecard } from "./gem/scorecard.js";
+import { sanitizeShareText } from "./gem/scrub.js";
 import { claudeTranscriptsForCwd, scanWorkflow, allClaudeTranscripts, bucketTranscriptsByCwd } from "./gem/workflowScan.js";
 import { recommendWorkflow, recommendationToSelection } from "./gem/acpRecommender.js";
 import { distillWorkflow, type DistilledSkill } from "./gem/distill.js";
@@ -231,7 +232,7 @@ export class GemController {
       const chosen = loaded.candidates.filter((c) => sel.keys.includes(c.key));
       if (!chosen.length) throw new InvalidInputError(`No matching workflows in '${sel.root}' for the given keys.`);
       for (const c of chosen) {
-        drafts.push(c.skeleton);
+        drafts.push({ ...c.skeleton, description: sanitizeShareText(c.skeleton.description) });
         (projSel[c.skeleton.evidence.root] ??= { skills: [] }).skills.push(c.skeleton.name);
       }
     }
@@ -247,7 +248,7 @@ export class GemController {
     if (!loaded) throw new InvalidInputError(`Could not scan project '${root}'.`);
     const c = loaded.candidates.find((x) => x.key === key);
     if (!c) throw new InvalidInputError(`No workflow '${key}' in '${root}'.`);
-    return { key: c.key, name: c.skeleton.name, description: c.skeleton.description, triggers: c.skeleton.triggers, tools: c.skeleton.tools, mutating: c.skeleton.mutating, steps: c.verbs, sessions: c.sessions, confidence: c.priorConfidence, portable: isPortable(c) };
+    return { key: c.key, name: c.skeleton.name, description: sanitizeShareText(c.skeleton.description), triggers: c.skeleton.triggers, tools: c.skeleton.tools, mutating: c.skeleton.mutating, steps: c.verbs, sessions: c.sessions, confidence: c.priorConfidence, portable: isPortable(c) };
   }
 
   @post("/gem", { body: GemRequestSchema, response: GemSchema })

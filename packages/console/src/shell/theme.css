@@ -655,4 +655,5 @@ body::before {
 .mine-wf-detail p { margin: 0.2rem 0; }
 .mine-wf-detail ol.steps { margin: 0.25rem 0; padding-left: 1.25rem; }
 .mine-wf-detail ol.steps li { margin-bottom: 0.15rem; }
+.mine-wf-sessions { font-size: 0.75rem; color: var(--muted); margin-top: 0.35rem; }
 .mine-hidden-note { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }

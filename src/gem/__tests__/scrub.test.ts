@@ -1,6 +1,6 @@
 // src/gem/__tests__/scrub.test.ts
 import { describe, it, expect } from "vitest";
-import { scrubStep, scrubProse } from "../scrub.js";
+import { scrubStep, scrubProse, sanitizeShareText } from "../scrub.js";
 
 describe("scrubStep — Bash", () => {
   it("derives a verb from argv0 + subcommand and keeps the command", () => {
@@ -85,6 +85,38 @@ describe("scrubStep — field allowlist (default-deny)", () => {
     expect(() => scrubStep("Bash", null)).not.toThrow();
     expect(() => scrubStep("Edit", undefined)).not.toThrow();
     expect(scrubStep("Bash", null)).toEqual({ verb: "Bash", arg: "" });
+  });
+});
+
+describe("sanitizeShareText — share-time description cleanup", () => {
+  it("strips URLs", () => {
+    const r = sanitizeShareText("see https://internal.example.com/path for details");
+    expect(r).not.toContain("http");
+    expect(r).toContain("see");
+    expect(r).toContain("for details");
+  });
+
+  it("strips absolute-ish file paths", () => {
+    const r = sanitizeShareText("generated from /Users/alice/projects/agentgem/src/foo.ts");
+    expect(r).not.toContain("/Users/alice");
+    expect(r).toContain("generated from");
+  });
+
+  it("collapses extra whitespace after stripping", () => {
+    const r = sanitizeShareText("a  https://x.com/y   b");
+    expect(r).not.toMatch(/\s{2,}/);
+    expect(r).toBe("a b");
+  });
+
+  it("caps at max length with ellipsis", () => {
+    const r = sanitizeShareText("a".repeat(200), 160);
+    expect(r.length).toBeLessThanOrEqual(160);
+    expect(r.endsWith("…")).toBe(true);
+  });
+
+  it("leaves ordinary text intact", () => {
+    const r = sanitizeShareText("Edit a file then run git commit.");
+    expect(r).toBe("Edit a file then run git commit.");
   });
 });
 

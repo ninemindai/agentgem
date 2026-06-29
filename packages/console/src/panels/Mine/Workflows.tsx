@@ -29,20 +29,21 @@ export function MineWorkflows({ data, filter, onFilter, onBuild, building, resul
   });
 
   const toggleExpand = (root: string, key: string) => {
-    const isOpen = expanded[key];
-    setExpanded((e) => ({ ...e, [key]: !isOpen }));
-    if (!isOpen && !details[key] && !detailLoading[key]) {
-      setDetailLoading((l) => ({ ...l, [key]: true }));
+    const cacheKey = `${root}:${key}`;
+    const isOpen = expanded[cacheKey];
+    setExpanded((e) => ({ ...e, [cacheKey]: !isOpen }));
+    if (!isOpen && !details[cacheKey] && !detailLoading[cacheKey]) {
+      setDetailLoading((l) => ({ ...l, [cacheKey]: true }));
       scorecardWorkflowRoute.call(makeClient(apiBase), { query: { root, key } })
         .then((d) => {
-          setDetails((prev) => ({ ...prev, [key]: d }));
-          setDetailError((prev) => { const next = { ...prev }; delete next[key]; return next; });
+          setDetails((prev) => ({ ...prev, [cacheKey]: d }));
+          setDetailError((prev) => { const next = { ...prev }; delete next[cacheKey]; return next; });
         })
         .catch((e: unknown) => {
-          setDetailError((prev) => ({ ...prev, [key]: e instanceof Error ? e.message : "Failed to load detail" }));
+          setDetailError((prev) => ({ ...prev, [cacheKey]: e instanceof Error ? e.message : "Failed to load detail" }));
         })
         .finally(() => {
-          setDetailLoading((l) => { const next = { ...l }; delete next[key]; return next; });
+          setDetailLoading((l) => { const next = { ...l }; delete next[cacheKey]; return next; });
         });
     }
   };
@@ -98,7 +99,9 @@ export function MineWorkflows({ data, filter, onFilter, onBuild, building, resul
         <div className="mine-project" key={p.root}>
           <div className="mine-project-label">{p.label}</div>
           <ul className="mine-wf-list">
-            {p.workflows.map((w) => (
+            {p.workflows.map((w) => {
+              const cacheKey = `${p.root}:${w.key}`;
+              return (
               <li key={w.key}>
                 <label>
                   <input type="checkbox" checked={selected[p.root]?.has(w.key) ?? false} onChange={() => toggle(p.root, w.key)} />
@@ -108,15 +111,15 @@ export function MineWorkflows({ data, filter, onFilter, onBuild, building, resul
                 </label>
                 <button
                   className="mine-wf-view"
-                  aria-label={expanded[w.key] ? "Collapse detail" : "Expand detail"}
+                  aria-label={expanded[cacheKey] ? "Collapse detail" : "Expand detail"}
                   onClick={() => toggleExpand(p.root, w.key)}
-                >{expanded[w.key] ? "▾" : "▸"}</button>
-                {expanded[w.key] && (
+                >{expanded[cacheKey] ? "▾" : "▸"}</button>
+                {expanded[cacheKey] && (
                   <div className="mine-wf-detail">
-                    {detailLoading[w.key] && <span>Loading…</span>}
-                    {detailError[w.key] && <span className="obs-error">{detailError[w.key]}</span>}
-                    {details[w.key] && (() => {
-                      const d = details[w.key];
+                    {detailLoading[cacheKey] && <span>Loading…</span>}
+                    {detailError[cacheKey] && <span className="obs-error">{detailError[cacheKey]}</span>}
+                    {details[cacheKey] && (() => {
+                      const d = details[cacheKey];
                       return (
                         <>
                           {d.description && <p>{d.description}</p>}
@@ -134,7 +137,8 @@ export function MineWorkflows({ data, filter, onFilter, onBuild, building, resul
                   </div>
                 )}
               </li>
-            ))}
+              );
+            })}
           </ul>
         </div>
       ))}

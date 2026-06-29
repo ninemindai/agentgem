@@ -88,6 +88,28 @@ describe("POST /api/scorecard/build handler", () => {
     expect(JSON.stringify(gem)).not.toMatch(/\$|latentValue|dollars/);
   });
 
+  it("sanitizes URL in skill description before including in gem artifact", async () => {
+    const c = mkCandidate("k-url", "url-skill");
+    c.skeleton.description = "See https://internal.example.com/docs for details";
+    vi.spyOn(defaultScorecardDeps, "loadProject").mockReturnValue({
+      signal: MINIMAL_SIGNAL,
+      candidates: [c],
+      reflections: [],
+    });
+
+    const ctrl = new GemController();
+    const gem = await ctrl.scorecardBuild({
+      body: { name: "url-gem", selections: [{ root: ROOT, keys: ["k-url"] }] },
+    });
+
+    const skillArtifact = gem.artifacts.find((a) => a.type === "skill" && a.name === "url-skill");
+    expect(skillArtifact).toBeTruthy();
+    // description on artifact must not contain the URL
+    expect((skillArtifact as { description?: string }).description).not.toContain("http");
+    // the raw skeleton must be untouched (description still has URL if we re-read from candidate)
+    expect(c.skeleton.description).toContain("https://");
+  });
+
   it("throws 400 for unknown workflow keys", async () => {
     const ctrl = new GemController();
     await expect(
