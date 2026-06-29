@@ -28,6 +28,8 @@ const WORKFLOWS_PER_PROJECT = 12;
 // Explicit `projects` queries bypass the cap.
 const MAX_PROJECTS = 12;
 
+export type ScorecardProgress = { done: number; total: number; label: string; partial: { breadth: number; battleTested: number; portable: number } };
+
 export type WorkflowItem = { key: string; name: string; confidence: "high" | "medium" | "low"; portable: boolean };
 
 export type ProjectLoad = {
@@ -107,6 +109,7 @@ export function aggregateScorecard(loads: ProjectLoad[], nowMs: number, degraded
 export interface ScorecardDeps {
   discover(dir?: string): { path: string; lastUsed?: string | null }[];
   loadProject(root: string, dir?: string): { signal: WorkflowSignal; candidates: ProcedureCandidate[]; reflections: Reflection[] } | null;
+  transcriptsFor(root: string, dir?: string): string[];
 }
 
 // Default deps run the real, shipped analyze pipeline — the same wiring as
@@ -127,30 +130,41 @@ export const defaultScorecardDeps: ScorecardDeps = {
       return null;
     }
   },
+  transcriptsFor: (root, dir) => claudeTranscriptsForCwd(resolveDirs(dir).claudeDir, root),
 };
+
+export function selectScorecardRoots(dir: string | undefined, projects: string[] | undefined, deps: ScorecardDeps = defaultScorecardDeps): string[] {
+  if (projects?.length) return projects;
+  const discovered = [...deps.discover(dir)].sort((a, b) => (b.lastUsed ?? "").localeCompare(a.lastUsed ?? ""));
+  if (discovered.length > MAX_PROJECTS) {
+    console.warn(`[scorecard] ${discovered.length} projects discovered; scanning the ${MAX_PROJECTS} most recent (perf bound).`);
+  }
+  return discovered.slice(0, MAX_PROJECTS).map((p) => p.path);
+}
+
+export function scorecardTranscriptPaths(roots: string[], dir: string | undefined, deps: ScorecardDeps = defaultScorecardDeps): string[] {
+  return roots.flatMap((r) => deps.transcriptsFor(r, dir));
+}
 
 export function collectScorecard(
   dir: string | undefined,
   projects: string[] | undefined,
   nowMs: number,
-  deps: ScorecardDeps = defaultScorecardDeps,
+  opts: { deps?: ScorecardDeps; onProgress?: (p: ScorecardProgress) => void } = {},
 ): Scorecard {
-  let roots: string[];
-  if (projects?.length) {
-    roots = projects;
-  } else {
-    const discovered = [...deps.discover(dir)].sort((a, b) => (b.lastUsed ?? "").localeCompare(a.lastUsed ?? ""));
-    if (discovered.length > MAX_PROJECTS) {
-      console.warn(`[scorecard] ${discovered.length} projects discovered; scanning the ${MAX_PROJECTS} most recent (perf bound).`);
-    }
-    roots = discovered.slice(0, MAX_PROJECTS).map((p) => p.path);
-  }
+  const deps = opts.deps ?? defaultScorecardDeps;
+  const roots = selectScorecardRoots(dir, projects, deps);
   const loads: ProjectLoad[] = [];
   let degraded = false;
-  for (const root of roots) {
+  for (let i = 0; i < roots.length; i++) {
+    const root = roots[i];
     const loaded = deps.loadProject(root, dir);
-    if (!loaded) { degraded = true; continue; }
-    loads.push({ root, label: basename(root), ...loaded });
+    if (!loaded) { degraded = true; }
+    else loads.push({ root, label: basename(root), ...loaded });
+    if (opts.onProgress) {
+      const partial = aggregateScorecard(loads, nowMs, degraded);
+      opts.onProgress({ done: i + 1, total: roots.length, label: basename(root), partial: { breadth: partial.breadth, battleTested: partial.battleTested, portable: partial.portable } });
+    }
   }
   return aggregateScorecard(loads, nowMs, degraded);
 }

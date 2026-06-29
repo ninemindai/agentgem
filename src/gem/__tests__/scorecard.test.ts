@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { isPortable, scoreProject, aggregateScorecard, collectScorecard, type ProjectLoad, type ScorecardDeps } from "../scorecard.js";
+import { describe, it, expect, vi } from "vitest";
+import { isPortable, scoreProject, aggregateScorecard, collectScorecard, selectScorecardRoots, type ProjectLoad, type ScorecardDeps, type ScorecardProgress } from "../scorecard.js";
 import type { ProcedureCandidate } from "../distillTypes.js";
 import type { WorkflowSignal } from "../workflowScan.js";
 
@@ -71,6 +71,31 @@ describe("aggregateScorecard", () => {
   });
 });
 
+describe("selectScorecardRoots", () => {
+  it("returns explicit projects as-is without capping", () => {
+    const deps: ScorecardDeps = {
+      discover: () => [],
+      loadProject: () => null,
+      transcriptsFor: () => [],
+    };
+    const roots = Array.from({ length: 15 }, (_, i) => `/r/e${i}`);
+    expect(selectScorecardRoots(undefined, roots, deps)).toEqual(roots);
+  });
+
+  it("caps discover path to the 12 most-recently-used", () => {
+    const many = Array.from({ length: 15 }, (_, i) => ({ path: `/r/p${i}`, lastUsed: `2026-06-${String(i + 1).padStart(2, "0")}T00:00:00Z` }));
+    const deps: ScorecardDeps = {
+      discover: () => many,
+      loadProject: () => null,
+      transcriptsFor: () => [],
+    };
+    const roots = selectScorecardRoots(undefined, undefined, deps);
+    expect(roots).toHaveLength(12);
+    expect(roots).toContain("/r/p14");
+    expect(roots).not.toContain("/r/p0");
+  });
+});
+
 describe("collectScorecard", () => {
   it("composes discover + per-project load into a Scorecard via injected deps", () => {
     const deps: ScorecardDeps = {
@@ -80,8 +105,9 @@ describe("collectScorecard", () => {
         reflections: [],
         candidates: [cand({ key: `${root}-k`, priorConfidence: "high", skeleton: { name: "k", tools: ["Skill"] } as any })],
       }),
+      transcriptsFor: () => [],
     };
-    const sc = collectScorecard(undefined, undefined, 99, deps);
+    const sc = collectScorecard(undefined, undefined, 99, { deps });
     expect(sc.projects.map((p) => p.root)).toEqual(["/r/a", "/r/b"]);
     expect(sc.breadth).toBe(2);
     expect(sc.battleTested).toBe(2);
@@ -93,11 +119,12 @@ describe("collectScorecard", () => {
     const deps: ScorecardDeps = {
       discover: () => [{ path: "/r/a" }, { path: "/r/b" }],
       loadProject: (root) => (root === "/r/a" ? { signal: sig(root), reflections: [], candidates: [] } : null),
+      transcriptsFor: () => [],
     };
-    const sc = collectScorecard(undefined, ["/r/a"], 1, deps);
+    const sc = collectScorecard(undefined, ["/r/a"], 1, { deps });
     expect(sc.projects.map((p) => p.root)).toEqual(["/r/a"]);
     expect(sc.degraded).toBe(false);
-    const sc2 = collectScorecard(undefined, undefined, 1, deps);
+    const sc2 = collectScorecard(undefined, undefined, 1, { deps });
     expect(sc2.degraded).toBe(true);   // /r/b load returned null
   });
 
@@ -106,8 +133,9 @@ describe("collectScorecard", () => {
     const deps: ScorecardDeps = {
       discover: () => many,
       loadProject: (root) => ({ signal: sig(root), reflections: [], candidates: [] }),
+      transcriptsFor: () => [],
     };
-    const sc = collectScorecard(undefined, undefined, 1, deps);
+    const sc = collectScorecard(undefined, undefined, 1, { deps });
     expect(sc.projects).toHaveLength(12);
     // newest (p14, 2026-06-15) included; oldest (p0, 2026-06-01) dropped
     expect(sc.projects.map((p) => p.root)).toContain("/r/p14");
@@ -119,8 +147,34 @@ describe("collectScorecard", () => {
     const deps: ScorecardDeps = {
       discover: () => [],
       loadProject: (root) => ({ signal: sig(root), reflections: [], candidates: [] }),
+      transcriptsFor: () => [],
     };
-    const sc = collectScorecard(undefined, roots, 1, deps);
+    const sc = collectScorecard(undefined, roots, 1, { deps });
     expect(sc.projects).toHaveLength(15);
+  });
+
+  it("calls onProgress after each project with running aggregate", () => {
+    const makeLoad = (root: string) => ({
+      signal: sig(root),
+      reflections: [],
+      candidates: [
+        cand({ key: `${root}-k1`, priorConfidence: "high", skeleton: { name: "k1", tools: ["Skill"] } as any }),
+      ],
+    });
+    const deps: ScorecardDeps = {
+      discover: () => [{ path: "/r/a" }, { path: "/r/b" }, { path: "/r/c" }],
+      loadProject: (root) => makeLoad(root),
+      transcriptsFor: () => [],
+    };
+    const spy = vi.fn<(p: ScorecardProgress) => void>();
+    collectScorecard(undefined, undefined, 1, { deps, onProgress: spy });
+    expect(spy).toHaveBeenCalledTimes(3);
+    expect(spy.mock.calls[0][0].done).toBe(1);
+    expect(spy.mock.calls[1][0].done).toBe(2);
+    expect(spy.mock.calls[2][0].done).toBe(3);
+    expect(spy.mock.calls[0][0].total).toBe(3);
+    expect(spy.mock.calls[0][0].partial.breadth).toBeGreaterThanOrEqual(1);
+    expect(spy.mock.calls[1][0].partial.breadth).toBeGreaterThanOrEqual(2);
+    expect(spy.mock.calls[2][0].partial.breadth).toBeGreaterThanOrEqual(3);
   });
 });

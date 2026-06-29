@@ -51,7 +51,7 @@ import { sendBytes, receiveTicket, natsStoreFromEnv, assertConfigured, mintCreds
 import type { Gem } from "./gem/types.js";
 import { readDeployRecord, writeDeployRecord, clearDeployRecord } from "./gem/deployRecord.js";
 import type { DeployBackend } from "./gem/deployRecord.js";
-import { transcriptToken } from "./gem/analysisCache.js";
+import { transcriptToken, readAnalysisCache, writeAnalysisCache } from "./gem/analysisCache.js";
 import { readGlobalUsageCache, writeGlobalUsageCache, readGlobalUsageCacheStale } from "./gem/usageCache.js";
 import { computeGlobalUsage } from "./gem/globalUsage.js";
 import { undeployManagedAgent, anthropicPublishClient } from "./publish.js";
@@ -91,7 +91,7 @@ import {
   GemRunPrepareRequestSchema, GemRunPrepareResponseSchema,
   UsageSchema, UsageQuerySchema,
 } from "./schemas.js";
-import { collectScorecard, type Scorecard } from "./gem/scorecard.js";
+import { collectScorecard, selectScorecardRoots, scorecardTranscriptPaths, type Scorecard } from "./gem/scorecard.js";
 import { claudeTranscriptsForCwd, scanWorkflow, allClaudeTranscripts } from "./gem/workflowScan.js";
 import { recommendWorkflow, recommendationToSelection } from "./gem/acpRecommender.js";
 import { distillWorkflow } from "./gem/distill.js";
@@ -191,7 +191,15 @@ export class GemController {
 
   @get("/scorecard", { query: DirQuerySchema, response: ScorecardSchema })
   async scorecard(input: { query: z.infer<typeof DirQuerySchema> }): Promise<z.infer<typeof ScorecardSchema>> {
-    return collectScorecard(input.query.dir, parseProjectsQuery(input.query.projects), Date.now());
+    const dir = input.query.dir;
+    const projects = parseProjectsQuery(input.query.projects);
+    const roots = selectScorecardRoots(dir, projects);
+    const token = transcriptToken(scorecardTranscriptPaths(roots, dir));
+    const cached = readAnalysisCache("__scorecard__", token) as z.infer<typeof ScorecardSchema> | null;
+    if (cached) return cached;
+    const sc = collectScorecard(dir, roots, Date.now());
+    if (!sc.degraded) writeAnalysisCache("__scorecard__", token, sc, Date.now());
+    return sc;
   }
 
   @post("/gem", { body: GemRequestSchema, response: GemSchema })
