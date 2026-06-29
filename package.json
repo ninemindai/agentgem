@@ -51,6 +51,7 @@
   "dependencies": {
     "@agentback/core": "^0.5.2",
     "@agentback/drizzle": "~0.5.2",
+    "@agentback/extension-rate-limit": "^0.6.0",
     "@agentback/mcp": "^0.5.2",
     "@agentback/mcp-http": "^0.5.2",
     "@agentback/openapi": "^0.5.2",
