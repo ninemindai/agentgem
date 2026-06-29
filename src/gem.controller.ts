@@ -4,6 +4,8 @@ import { basename, resolve, sep } from "node:path";
 import { z } from "zod";
 import { api, get, post } from "@agentback/openapi";
 import { scanSessionsCached, aggregateObserve } from "./gem/observeScan.js";
+import { scanArtifactUsageCached } from "./gem/optimizeScan.js";
+import { buildOptimizePayload, type OptimizeRange } from "./gem/optimizeAnalyze.js";
 
 const ObserveQuerySchema = z.object({
   range: z.enum(["today", "7d", "30d", "all"]).optional(),
@@ -19,6 +21,21 @@ const ObservePayloadSchema = z.object({
   models: z.array(z.object({ model: z.string(), agent: z.enum(["claude", "codex"]), sessions: z.number(), tokens: z.number() })),
   facets: z.object({ agents: z.array(z.string()), projects: z.array(z.string()), models: z.array(z.string()) }),
   range: z.enum(["today", "7d", "30d", "all"]),
+});
+const OptimizeQuerySchema = z.object({ range: z.enum(["today", "7d", "30d", "all"]).optional() });
+const OptimizeArtifactSchema = z.object({
+  name: z.string(), type: z.enum(["skill", "mcp"]), source: z.string(),
+  contextTokens: z.number(), uses: z.number(), lastUsedMs: z.number().nullable(),
+  prune: z.boolean(), change: z.object({ file: z.string(), key: z.string() }),
+});
+const OptimizeInstructionSchema = z.object({
+  name: z.string(), source: z.string(), contextTokens: z.number(), lines: z.number(),
+  flags: z.array(z.enum(["oversized", "very-long", "duplicate-lines"])),
+});
+const OptimizePayloadSchema = z.object({
+  range: z.enum(["today", "7d", "30d", "all"]),
+  artifacts: z.array(OptimizeArtifactSchema),
+  instructions: z.array(OptimizeInstructionSchema),
 });
 const ScorecardBuildRequestSchema = z.object({
   dir: z.string().optional(),
@@ -202,6 +219,15 @@ export class GemController {
     const range = input.query.range ?? "7d";
     const { agent, project, model, minMsgs } = input.query;
     return aggregateObserve(await scanSessionsCached(Date.now()), range, Date.now(), { agent, project, model, minMsgs });
+  }
+
+  @get("/optimize", { query: OptimizeQuerySchema, response: OptimizePayloadSchema })
+  async optimize(input: { query: z.infer<typeof OptimizeQuerySchema> }): Promise<z.infer<typeof OptimizePayloadSchema>> {
+    const range: OptimizeRange = input.query.range ?? "30d";
+    const now = Date.now();
+    const inv = introspectConfig();
+    const usage = await scanArtifactUsageCached(inv, now);
+    return buildOptimizePayload(inv, usage, range, now);
   }
 
   @get("/scorecard", { query: DirQuerySchema, response: ScorecardSchema })
