@@ -1,18 +1,15 @@
 // packages/console/src/panels/Observe/index.tsx
 import { useEffect, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
-import { observeRoute, scorecardRoute, makeClient, type ObservePayload, type ObserveRange, type ObserveFilter, type Scorecard } from "../../api/routes.js";
+import { observeRoute, makeClient, type ObservePayload, type ObserveRange, type ObserveFilter } from "../../api/routes.js";
 import { Dashboard } from "./Dashboard.js";
-import { ScorecardHero, ScorecardHeroSkeleton } from "./Scorecard.js";
 
 export function Observe({ apiBase }: { apiBase: string }) {
   const [data, setData] = useState<ObservePayload | null>(null);
-  const [scorecard, setScorecard] = useState<Scorecard | null>(null);
   const [range, setRange] = useState<ObserveRange>("7d");
   const [filter, setFilter] = useState<ObserveFilter>({ minMsgs: 100 });
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const [scoring, setScoring] = useState(true);
 
   useEffect(() => {
     let alive = true;
@@ -25,32 +22,16 @@ export function Observe({ apiBase }: { apiBase: string }) {
     return () => { alive = false; };
   }, [apiBase, range, filter.agent, filter.project, filter.model, filter.minMsgs]);
 
-  useEffect(() => {
-    let alive = true;
-    setScoring(true);
-    scorecardRoute.call(makeClient(apiBase), { query: {} })
-      .then((sc) => { if (alive) setScorecard(sc); })
-      .catch(() => { /* degrade gracefully — scorecard is optional */ })
-      .finally(() => { if (alive) setScoring(false); });
-    return () => { alive = false; };
-  }, [apiBase]);
-
-  const onDistill = (root: string) => {
-    void root; // root available for future deep-link; v1 hops to curate panel
-    window.location.hash = "#/curate";
-  };
-
-  if (error) return <div className="obs"><p className="obs-error">Couldn't load Observe: {error}</p></div>;
+  if (error) return <div className="obs"><p className="obs-error">Couldn't load Inspect: {error}</p></div>;
   if (!data) return <div className="obs"><p className="obs-loading">Loading…</p></div>;
   return (
     <div className="obs">
-      {scorecard ? <ScorecardHero data={scorecard} onDistill={onDistill} /> : scoring ? <ScorecardHeroSkeleton /> : null}
       <Dashboard data={data} range={range} onRange={setRange} filter={filter} onFilter={setFilter} pending={pending} />
     </div>
   );
 }
 
 export const observePage = defineConsolePage({
-  id: "observe", title: "Observe", icon: "👁", order: 5, group: "observe",
+  id: "observe", title: "Inspect", icon: "👁", order: 5, group: "observe",
   route: "#/observe", component: Observe,
 });
