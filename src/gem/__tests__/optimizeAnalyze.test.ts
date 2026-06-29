@@ -35,14 +35,14 @@ describe("rangeStartMs", () => {
 });
 
 describe("buildOptimizePayload — prune", () => {
-  it("flags a never-used standalone skill as prunable with a skillOverrides change hint", () => {
+  it("flags a never-used standalone skill as prunable with a folder-removal change hint", () => {
     const c = inv({ skills: [{ type: "skill", name: "pdf-tools", description: "work with pdfs", source: "standalone", content: "x" }] });
     const p = buildOptimizePayload(c, usage([]), "30d", NOW);
     expect(p.artifacts).toHaveLength(1);
     const a = p.artifacts[0];
     expect(a).toMatchObject({ name: "pdf-tools", type: "skill", source: "standalone", uses: 0, lastUsedMs: null, prune: true });
     expect(a.contextTokens).toBe(estTokens("pdf-tools\nwork with pdfs"));
-    expect(a.change).toEqual({ file: "settings.json", key: 'skillOverrides["pdf-tools"] = "off"' });
+    expect(a.change).toEqual({ file: "~/.claude/skills/pdf-tools", key: "remove or move this folder (no in-place disable flag exists)" });
   });
 
   it("does NOT prune a skill used within the range, and reports its usage", () => {
@@ -70,7 +70,7 @@ describe("buildOptimizePayload — prune", () => {
     const skill = p.artifacts.find((a) => a.type === "skill")!;
     const mcp = p.artifacts.find((a) => a.type === "mcp")!;
     expect(skill.change).toEqual({ file: "settings.json", key: 'enabledPlugins["brooks-lint"] = false' });
-    expect(mcp.change).toEqual({ file: "settings.json", key: "mcpServers.coingecko (remove, or add to deniedMcpServers)" });
+    expect(mcp.change).toEqual({ file: "settings.json / ~/.claude.json", key: 'remove mcpServers.coingecko (or add "coingecko" to disabledMcpjsonServers if defined via .mcp.json)' });
   });
 
   it("maps a codex skill to a filesystem hint and a codex MCP to a config.toml hint", () => {
@@ -81,7 +81,7 @@ describe("buildOptimizePayload — prune", () => {
     const p = buildOptimizePayload(c, usage([]), "all", NOW);
     const skill = p.artifacts.find((a) => a.type === "skill" && a.name === "my-skill")!;
     const mcp = p.artifacts.find((a) => a.type === "mcp" && a.name === "my-mcp")!;
-    expect(skill.change).toEqual({ file: "filesystem", key: "~/.codex/skills/my-skill (move/remove)" });
+    expect(skill.change).toEqual({ file: "~/.codex/skills/my-skill", key: "remove or move this folder (no in-place disable flag exists)" });
     expect(mcp.change).toEqual({ file: "~/.codex/config.toml", key: "set enabled = false for my-mcp" });
   });
 
