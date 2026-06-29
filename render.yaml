@@ -1,6 +1,6 @@
 # Render Blueprint — ONE blueprint, TWO services:
 #   1. agentgem  — the API (Docker web service), backed by a Neon Postgres (free).
-#   2. explore   — the public marketplace UI (static site, free, CDN-served, no sleep).
+#   2. agentgem-explore — the public marketplace UI (static site, free, CDN-served, no sleep).
 #
 # Pair the API with a Neon Postgres (free) for DURABLE data — Render's own free
 # Postgres self-deletes after 30 days, which would wipe the aggregator's moat.
@@ -41,10 +41,10 @@ services:
   # The public marketplace UI (packages/marketplace) — a Vite/React SPA served as a
   # Render static site. Static sites are free, CDN-served, and DON'T sleep (unlike the
   # free web service above). It reads the agentgem API's public CORS-open endpoints.
-  - name: explore
+  - name: agentgem-explore        # globally-unique name → clean agentgem-explore.onrender.com URL
     type: web
     runtime: static            # static sites have no plan tier (always free, CDN-served) — do NOT set `plan`
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @agentgem/marketplace build
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @agentgem/marketplace build   # Render's build image already ships pnpm; `corepack enable` crashes on its read-only /usr/bin
     staticPublishPath: packages/marketplace/dist
     envVars:
       - key: VITE_API_BASE
