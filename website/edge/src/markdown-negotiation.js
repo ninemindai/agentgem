@@ -1,3 +1,7 @@
+import resvgWasm from "@resvg/resvg-wasm/index_bg.wasm";   // wrangler -> WebAssembly.Module
+import cardFont from "./assets/card-font.ttf";             // wrangler Data rule -> bytes
+import { initRaster } from "./raster.js";
+import { handleShare } from "./share.js";
 // Copyright ninemind.ai 2026. All Rights Reserved.
 // This file is licensed under the MIT License.
 // License text available at https://opensource.org/license/mit/
@@ -71,6 +75,14 @@ export default {
       url.protocol = 'https:';
       url.port = '';
       return Response.redirect(url.toString(), 301);
+    }
+
+    try {
+      await initRaster({ wasm: resvgWasm, font: cardFont });
+      const shared = await handleShare(request, env);
+      if (shared) return shared;
+    } catch {
+      // Never let sharing break the site — fall through to assets.
     }
 
     try {

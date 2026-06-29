@@ -25,6 +25,13 @@ async function ensureWasm() {
   return ready;
 }
 
+// Worker runtime injects wasm (a WebAssembly.Module) + font bytes; node tests fall back to fs.
+export async function initRaster({ wasm, font: fontArg } = {}) {
+  if (wasm && !ready) ready = initWasm(wasm);
+  if (fontArg) fontBytes = fontArg instanceof Uint8Array ? fontArg : new Uint8Array(fontArg);
+  await ready;
+}
+
 let fontBytes;
 async function font() {
   if (!fontBytes) {
