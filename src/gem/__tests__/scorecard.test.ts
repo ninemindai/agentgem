@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isPortable, scoreProject, aggregateScorecard, type ProjectLoad } from "../scorecard.js";
+import { isPortable, scoreProject, aggregateScorecard, collectScorecard, type ProjectLoad, type ScorecardDeps } from "../scorecard.js";
 import type { ProcedureCandidate } from "../distillTypes.js";
 import type { WorkflowSignal } from "../workflowScan.js";
 
@@ -64,5 +64,36 @@ describe("aggregateScorecard", () => {
     expect(sc.gaps).toContain("gap-A");
     expect(sc.projects).toHaveLength(2);
     expect(sc).toMatchObject({ generatedAtMs: 1234, degraded: false });
+  });
+});
+
+describe("collectScorecard", () => {
+  it("composes discover + per-project load into a Scorecard via injected deps", () => {
+    const deps: ScorecardDeps = {
+      discover: () => [{ path: "/r/a" }, { path: "/r/b" }],
+      loadProject: (root) => ({
+        signal: sig(root),
+        reflections: [],
+        candidates: [cand({ key: `${root}-k`, priorConfidence: "high", skeleton: { name: "k", tools: ["Skill"] } as any })],
+      }),
+    };
+    const sc = collectScorecard(undefined, undefined, 99, deps);
+    expect(sc.projects.map((p) => p.root)).toEqual(["/r/a", "/r/b"]);
+    expect(sc.breadth).toBe(2);
+    expect(sc.battleTested).toBe(2);
+    expect(sc.portable).toBe(2);
+    expect(sc.degraded).toBe(false);
+  });
+
+  it("restricts to the given projects and marks degraded when a load fails", () => {
+    const deps: ScorecardDeps = {
+      discover: () => [{ path: "/r/a" }, { path: "/r/b" }],
+      loadProject: (root) => (root === "/r/a" ? { signal: sig(root), reflections: [], candidates: [] } : null),
+    };
+    const sc = collectScorecard(undefined, ["/r/a"], 1, deps);
+    expect(sc.projects.map((p) => p.root)).toEqual(["/r/a"]);
+    expect(sc.degraded).toBe(false);
+    const sc2 = collectScorecard(undefined, undefined, 1, deps);
+    expect(sc2.degraded).toBe(true);   // /r/b load returned null
   });
 });

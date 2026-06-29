@@ -5,6 +5,11 @@
 // breadth = distinct reusable workflows; battleTested = mature (priorConfidence
 // "high"); portable = mature AND general enough to travel beyond its origin repo.
 import { basename } from "node:path";
+import { discoverProjects } from "./testbedFlavors.js";
+import { resolveDirs, resolveProject } from "../resolveDir.js";
+import { introspectProject, introspectConfig } from "./introspect.js";
+import { claudeTranscriptsForCwd, scanWorkflow } from "./workflowScan.js";
+import { extractCandidates } from "./extract.js";
 import type { WorkflowSignal } from "./workflowScan.js";
 import type { ProcedureCandidate, Reflection } from "./distillTypes.js";
 
@@ -82,4 +87,46 @@ export function aggregateScorecard(loads: ProjectLoad[], nowMs: number, degraded
     generatedAtMs: nowMs,
     degraded,
   };
+}
+
+export interface ScorecardDeps {
+  discover(dir?: string): { path: string }[];
+  loadProject(root: string, dir?: string): { signal: WorkflowSignal; candidates: ProcedureCandidate[]; reflections: Reflection[] } | null;
+}
+
+// Default deps run the real, shipped analyze pipeline — the same wiring as
+// src/workflowStream.ts, minus the LLM (deterministic only).
+export const defaultScorecardDeps: ScorecardDeps = {
+  discover: (dir) => discoverProjects(resolveDirs(dir)),
+  loadProject: (root, dir) => {
+    try {
+      const dirs = resolveDirs(dir);
+      const project = introspectProject(resolveProject(root));
+      const globalInv = introspectConfig(dirs);
+      const scanInv = { project, global: { skills: globalInv.skills, mcpServers: globalInv.mcpServers, hooks: globalInv.hooks } };
+      const paths = claudeTranscriptsForCwd(dirs.claudeDir, root);
+      const signal = scanWorkflow(paths, scanInv, { retainSequences: true });
+      const { candidates, reflections } = extractCandidates(signal, scanInv);
+      return { signal, candidates, reflections };
+    } catch {
+      return null;
+    }
+  },
+};
+
+export function collectScorecard(
+  dir: string | undefined,
+  projects: string[] | undefined,
+  nowMs: number,
+  deps: ScorecardDeps = defaultScorecardDeps,
+): Scorecard {
+  const roots = projects?.length ? projects : deps.discover(dir).map((p) => p.path);
+  const loads: ProjectLoad[] = [];
+  let degraded = false;
+  for (const root of roots) {
+    const loaded = deps.loadProject(root, dir);
+    if (!loaded) { degraded = true; continue; }
+    loads.push({ root, label: basename(root), ...loaded });
+  }
+  return aggregateScorecard(loads, nowMs, degraded);
 }
