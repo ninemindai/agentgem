@@ -19,8 +19,12 @@ services:
       - key: HOST
         value: 0.0.0.0          # bind all interfaces (the Dockerfile also sets this)
       - key: TRUST_PROXY
-        value: "1"              # Render terminates TLS at its proxy; trust 1 hop so the
-                                # per-IP rate limiting reads the real client IP, not the proxy's
+        value: "1"              # trust the proxy hop for req.protocol/secure (TLS terminated upstream)
+      - key: CLIENT_IP_HEADER
+        value: cf-connecting-ip # Render is fronted by Cloudflare; trust-proxy hop-counting is
+                                # unreliable here (rotating edge IPs), so key the per-IP rate limits
+                                # on Cloudflare's real-client-IP header instead. CF overwrites it, so
+                                # it can't be spoofed on this deployment.
       - key: AGGREGATOR_ADMIN_TOKEN
         generateValue: true     # Render generates a random secret; read it from the dashboard
                                 # to mint/revoke API keys via POST /api/aggregator/keys

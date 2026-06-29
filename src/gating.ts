@@ -26,7 +26,24 @@ type GReq = {
   originalUrl?: string;
   baseUrl?: string;
   path?: string;
+  headers?: Record<string, string | string[] | undefined>;
 };
+
+// Resolve the caller's IP for per-IP rate limiting. Behind a proxy/CDN (e.g. Render is fronted
+// by Cloudflare), `req.ip` is the proxy's address — and trust-proxy hop-counting is fragile when
+// the depth varies, so each rotating edge IP lands in its own bucket and the limit never binds.
+// If CLIENT_IP_HEADER names a header the fronting proxy sets to the true client IP (e.g.
+// `cf-connecting-ip`), key on that instead. Env-gated so the header is trusted only on hosts where
+// a known proxy sets it — otherwise a client could spoof it to evade the limit.
+export function clientIp(req: GReq): string {
+  const headerName = process.env.CLIENT_IP_HEADER;
+  if (headerName) {
+    const raw = req.headers?.[headerName.toLowerCase()];
+    const val = Array.isArray(raw) ? raw[0] : raw;
+    if (typeof val === "string" && val.trim()) return val.split(",")[0].trim();
+  }
+  return req.ip ?? "anon";
+}
 
 function isIngestPath(req: GReq): boolean {
   const full = req.originalUrl ? req.originalUrl.split("?")[0] : (req.baseUrl ?? "") + (req.path ?? "");
@@ -49,7 +66,7 @@ export function anonRateLimitOptions(points: number = ANON_POINTS) {
     path: AGG_PATH,
     points,
     durationSecs: WINDOW_SECS,
-    keyGenerator: (req: GReq) => req.ip ?? "anon",
+    keyGenerator: (req: GReq) => clientIp(req),
     skip: (req: GReq) => isAdminPath(req) || isIngestPath(req) || req.gemTier === "keyed",
   };
 }
@@ -72,7 +89,7 @@ export function ingestRateLimitOptions(points: number = INGEST_POINTS) {
     path: AGG_PATH,
     points,
     durationSecs: WINDOW_SECS,
-    keyGenerator: (req: GReq) => req.ip ?? "anon",
+    keyGenerator: (req: GReq) => clientIp(req),
     skip: (req: GReq) => !isIngestPath(req), // this mount applies ONLY to /ingest
   };
 }

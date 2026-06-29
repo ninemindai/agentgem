@@ -77,8 +77,11 @@ curl -s -D - -o /dev/null -H "x-api-key: ag_..." "$BASE/api/aggregator/popularit
 for i in $(seq 1 65); do curl -s -o /dev/null -w "%{http_code} " "$BASE/api/aggregator/overview"; done; echo
 ```
 
-If anonymous requests share a single bucket and 429 correctly (rather than every distinct
-request looking like the proxy IP), `TRUST_PROXY=1` is doing its job.
+The 65-request burst from one client should 429 once past 60. **Render runs behind Cloudflare**
+(≥2 proxy hops), so trust-proxy hop-counting alone is unreliable — `req.ip` resolves to rotating
+Cloudflare edge IPs and the per-IP limit never binds. The Blueprint sets `CLIENT_IP_HEADER=cf-connecting-ip`
+so the limiter keys on Cloudflare's true-client-IP header (which CF overwrites, so it can't be
+spoofed here). If the burst does **not** 429, check that `CLIENT_IP_HEADER` is set on the service.
 
 ## Caveats (free tier)
 
@@ -99,7 +102,8 @@ request looking like the proxy IP), `TRUST_PROXY=1` is doing its job.
 | --- | --- | --- |
 | `DATABASE_URL` | you (`sync: false`) | Neon Postgres connection string (`?sslmode=require`) |
 | `AGGREGATOR_ADMIN_TOKEN` | Render (`generateValue`) | gates `POST /api/aggregator/keys*` + `/sweep` |
-| `TRUST_PROXY` | Blueprint (`1`) | trust the Render proxy hop so per-IP rate limiting sees real client IPs |
+| `TRUST_PROXY` | Blueprint (`1`) | trust the proxy hop for `req.protocol`/`secure` (TLS terminated upstream) |
+| `CLIENT_IP_HEADER` | Blueprint (`cf-connecting-ip`) | key per-IP rate limits on this header (the real client IP) instead of `req.ip` — required behind Render's Cloudflare front, where `req.ip` is a rotating edge IP |
 | `HOST` | Blueprint (`0.0.0.0`) | bind all interfaces (also in the Dockerfile) |
 | `PORT` | Render (injected) | the server binds to it; do **not** pin it |
 | `AGG_ANON_POINTS` / `AGG_KEYED_POINTS` / `AGG_INGEST_POINTS` | optional | override the rate-limit ceilings (defaults 60 / 600 / 120 per min) |
