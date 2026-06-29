@@ -3,7 +3,7 @@
 // Pure (no IO) payload builder for GET /api/optimize. Joins the installed inventory
 // with per-artifact usage to flag installed-but-unused skills/MCP, and derives a
 // deterministic weight/health view of instructions (CLAUDE.md / AGENTS.md).
-import type { ConfigInventory, InstructionsArtifact, McpServerArtifact, ProjectInventory, SkillArtifact } from "./types.js";
+import type { ConfigInventory, InstructionsArtifact, McpServerArtifact, SkillArtifact } from "./types.js";
 import type { ArtifactUsage } from "./workflowScan.js";
 
 export type OptimizeRange = "today" | "7d" | "30d" | "all";
@@ -139,10 +139,6 @@ function instructionHealth(name: string, source: string, content: InstructionsAr
 function buildInstructions(inv: ConfigInventory): OptimizeInstruction[] {
   const out: OptimizeInstruction[] = [];
   for (const i of inv.instructions) out.push(instructionHealth(i.name, "user", i.content));
-  const projects: ProjectInventory[] = inv.projects ?? [];
-  for (const p of projects) {
-    for (const i of p.instructions) out.push(instructionHealth(i.name, p.root, i.content));
-  }
   return out.sort((a, b) => b.contextTokens - a.contextTokens);
 }
 
