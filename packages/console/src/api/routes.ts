@@ -228,6 +228,19 @@ export const registryInstallRoute = defineRoute("POST", "/api/registry/install",
     applied: z.object({ mode: z.string(), workspace: z.string().optional(), dest: z.string().optional() }),
   }),
 });
+export const registryPublishRoute = defineRoute("POST", "/api/registry/publish", {
+  body: z.object({
+    workspace: z.string(),
+    scope: z.string(),
+    name: z.string().optional(),
+    version: z.string(),
+    dependencies: z.array(z.string()).optional(),
+    description: z.string().optional(),
+    tags: z.array(z.string()).optional(),
+    type: z.string().optional(),
+  }),
+  response: z.object({ ref: z.string(), version: z.string(), gemDigest: z.string(), commit: z.string(), path: z.string() }),
+});
 
 // Testbed: discovery (recents + project candidates) + scaffold a new one.
 const RecentEntrySchema = z.object({
