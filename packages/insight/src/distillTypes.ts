@@ -59,3 +59,43 @@ export interface DistilledSkill {
   confidence: "high" | "medium" | "low";
   origin: "llm" | "heuristic";
 }
+
+// A distilled LESSON: a salient learning rendered as draft instructions. Mirrors
+// DistilledSkill (status:"draft", evidence carries the coordinates-only provenance),
+// but source-agnostic — provenance may span one or many sessions, no recurrence assumed.
+export interface DistilledLesson {
+  name: string;          // kebab slug, path-safe
+  body: string;          // the scrubbed lesson text (already privacy-safe)
+  importance: "high" | "medium";
+  status: "draft";
+  evidence: { sessions: number; root: string; provenance: Provenance };
+}
+
+export function lessonSlug(detail: string): string {
+  const slug = detail.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
+    .split("-").filter(Boolean).slice(0, 6).join("-");
+  return slug || "lesson";
+}
+
+// One reflection → one draft lesson. `root` is the analyze project root (a Reflection
+// carries no root). `unresolved-task` is a personal gap, not a shareable lesson → null.
+export function reflectionToLesson(r: Reflection, root: string): DistilledLesson | null {
+  if (r.kind === "unresolved-task") return null;
+  const sessions = new Set(r.provenance.occurrences.map((o) => o.sessionId)).size;
+  return { name: lessonSlug(r.detail), body: r.detail, importance: r.importance, status: "draft",
+    evidence: { sessions, root, provenance: r.provenance } };
+}
+
+// Batch adapter: map → drop nulls → de-duplicate names (collision-suffix -2, -3, …).
+export function reflectionsToLessons(reflections: Reflection[], root: string): DistilledLesson[] {
+  const out: DistilledLesson[] = [];
+  const seen = new Map<string, number>();
+  for (const r of reflections) {
+    const l = reflectionToLesson(r, root);
+    if (!l) continue;
+    const n = seen.get(l.name) ?? 0;
+    seen.set(l.name, n + 1);
+    out.push(n === 0 ? l : { ...l, name: `${l.name}-${n + 1}` });
+  }
+  return out;
+}
