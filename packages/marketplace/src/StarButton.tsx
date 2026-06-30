@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { makeStars } from "./stars";
 import { NotSignedIn } from "./stars";
 
@@ -9,6 +9,9 @@ export function StarButton({ kind, id, count, starred, signedIn, loginUrl, api }
   const [on, setOn] = useState(starred);
   const [n, setN] = useState(count);
   const [busy, setBusy] = useState(false);
+  // Props arrive after the page's star-fetch resolves (server counts + mine);
+  // useState only reads them at mount, so sync when they actually change.
+  useEffect(() => { setOn(starred); setN(count); }, [starred, count]);
 
   const click = async (e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation();

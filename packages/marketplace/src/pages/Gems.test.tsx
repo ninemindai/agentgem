@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { Gems } from "./Gems";
 import { STATIC_GEMS } from "../gems/catalog";
 
@@ -42,5 +42,17 @@ describe("Gems (browse)", () => {
     render(<Gems api={api} stars={stars} />);
     await screen.findByText("brainstorming-kit");
     expect((await screen.findAllByRole("button", { name: /star/i })).length).toBeGreaterThan(0);
+  });
+
+  it("reflects server counts + the caller's stars from GET /api/stars", async () => {
+    const api = apiWith(() => Promise.resolve([]));  // → static fallback
+    const starred = { ...stars, signedIn: true, api: { get: async () => ({ counts: { "brainstorming-kit": 7 }, mine: ["brainstorming-kit"] }), toggle: async () => ({ starred: true, count: 7 }) } as never };
+    render(<Gems api={api} stars={starred} />);
+    await screen.findByText("brainstorming-kit");
+    await waitFor(() => {
+      const starOn = screen.getAllByRole("button", { name: /unstar/i });
+      expect(starOn.length).toBe(1);
+      expect(starOn[0].textContent).toContain("7");
+    });
   });
 });
