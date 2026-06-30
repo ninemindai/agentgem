@@ -1,10 +1,20 @@
-import { useState } from "react";
-import { listGems, filterGems } from "../gems/catalog";
+import { useEffect, useState } from "react";
+import type { makeApi } from "../api";
+import type { Gem } from "../gems/catalog";
+import { loadGems, filterGems } from "../gems/catalog";
 import { kindLabel } from "../data";
 
-export function Gems() {
+export function Gems({ api }: { api: ReturnType<typeof makeApi> }) {
+  const [gems, setGems] = useState<Gem[] | null>(null);
   const [search, setSearch] = useState("");
-  const gems = listGems();
+
+  useEffect(() => {
+    let alive = true;
+    loadGems(api).then((g) => { if (alive) setGems(g); });
+    return () => { alive = false; };
+  }, [api]);
+
+  if (gems === null) return <p className="ex-empty">Loading gems…</p>;
   const visible = filterGems(gems, search);
 
   return (

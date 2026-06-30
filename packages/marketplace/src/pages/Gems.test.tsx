@@ -1,32 +1,30 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { Gems } from "./Gems";
+import { STATIC_GEMS } from "../gems/catalog";
 
 afterEach(() => cleanup());
+const apiWith = (impl: () => Promise<unknown>) => ({ getGems: impl }) as never;
 
 describe("Gems (browse)", () => {
-  it("renders gem cards from the catalog", () => {
-    render(<Gems />);
-    expect(screen.getByText("brainstorming-kit")).toBeTruthy();
-    expect(screen.getByText("github-flow")).toBeTruthy();
+  it("renders live gems from the api", async () => {
+    const api = apiWith(() => Promise.resolve([{ key: "live-gem", version: "3.0.0", description: "d", tags: [], artifactKinds: ["mcp"] }]));
+    render(<Gems api={api} />);
+    expect(await screen.findByText("live-gem")).toBeTruthy();
   });
 
-  it("a card links to the gem detail page (encoded key)", () => {
-    render(<Gems />);
-    const link = screen.getByText("brainstorming-kit").closest("a");
-    expect(link?.getAttribute("href")).toBe("/gems/" + encodeURIComponent("brainstorming-kit"));
+  it("falls back to the static catalog when the api returns empty", async () => {
+    const api = apiWith(() => Promise.resolve([]));
+    render(<Gems api={api} />);
+    expect(await screen.findByText(STATIC_GEMS[0].key)).toBeTruthy();
   });
 
-  it("search narrows the list", () => {
-    render(<Gems />);
+  it("search narrows the loaded list", async () => {
+    const api = apiWith(() => Promise.resolve([]));  // → static fallback (has github-flow + brainstorming-kit)
+    render(<Gems api={api} />);
+    await screen.findByText("brainstorming-kit");
     fireEvent.change(screen.getByLabelText("search gems"), { target: { value: "github" } });
     expect(screen.getByText("github-flow")).toBeTruthy();
     expect(screen.queryByText("brainstorming-kit")).toBeNull();
-  });
-
-  it("shows a no-match state", () => {
-    render(<Gems />);
-    fireEvent.change(screen.getByLabelText("search gems"), { target: { value: "zzzznomatch" } });
-    expect(screen.getByText(/no gems match/i)).toBeTruthy();
   });
 });

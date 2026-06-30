@@ -1,5 +1,4 @@
-/** Curated static gem catalog. Shaped to mirror the eventual registry API, behind a small accessor
- *  seam (listGems/getGem) so a live source can drop in here without touching the pages. */
+/** Curated static gem catalog. Used as fallback when the live registry is empty or unavailable. */
 
 export interface GemIngredient {
   id: string;   // an aggregator ingredient id, e.g. "skill:superpowers/brainstorming" or "npx:@scope/pkg"
@@ -88,13 +87,6 @@ export const STATIC_GEMS: Gem[] = [
     ],
   },
 ];
-
-/** @deprecated use STATIC_GEMS — kept so existing imports don't break until Task 4 */
-export const GEMS: Gem[] = STATIC_GEMS;
-
-export function listGems(): Gem[] { return STATIC_GEMS; }
-
-export function getGem(key: string): Gem | undefined { return STATIC_GEMS.find((g) => g.key === key); }
 
 /** Case-insensitive substring match over key + description + tags; all gems on blank. */
 export function filterGems(gems: Gem[], query: string): Gem[] {

@@ -16,8 +16,8 @@ export function Router({ api }: { api: ReturnType<typeof makeApi> }) {
   }, []);
 
   const gemDetail = path.match(/^\/gems\/(.+)$/);
-  if (gemDetail) return <Gem keyName={decodeURIComponent(gemDetail[1])} />;
-  if (path === "/gems") return <Gems />;
+  if (gemDetail) return <Gem api={api} keyName={decodeURIComponent(gemDetail[1])} />;
+  if (path === "/gems") return <Gems api={api} />;
 
   const ing = path.match(/^\/ingredient\/(.+)$/);
   if (ing) return <Ingredient api={api} id={decodeURIComponent(ing[1])} />;

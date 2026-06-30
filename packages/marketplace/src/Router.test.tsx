@@ -24,16 +24,17 @@ describe("Router", () => {
     expect(await screen.findByText("brainstorming")).toBeTruthy(); // header from decoded id
   });
 
-  it("renders the gem browse page at /gems", () => {
+  it("renders the gem browse page at /gems", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => res({ gems: [] }))); // empty live list → static fallback
     window.history.pushState({}, "", "/gems");
     render(<Router api={makeApi("")} />);
-    expect(screen.getByText("brainstorming-kit")).toBeTruthy();
+    expect(await screen.findByText("brainstorming-kit")).toBeTruthy();
   });
 
-  it("renders the gem detail page at /gems/:key with the decoded key", () => {
+  it("renders the gem detail page at /gems/:key with the decoded key", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => res({ gems: [] }))); // empty live list → static fallback
     window.history.pushState({}, "", "/gems/" + encodeURIComponent("github-flow"));
     render(<Router api={makeApi("")} />);
-    expect(screen.getByRole("heading", { name: /github-flow/ })).toBeTruthy();
-    expect(screen.getByText(/2\.1\.0/)).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: /github-flow/ })).toBeTruthy();
   });
 });

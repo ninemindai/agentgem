@@ -1,32 +1,25 @@
 import { describe, it, expect } from "vitest";
-import { GEMS, listGems, getGem, filterGems, STATIC_GEMS, loadGems, findGem } from "./catalog";
+import { filterGems, STATIC_GEMS, loadGems, findGem } from "./catalog";
 import type { RegistryGem } from "../types";
 
 describe("catalog", () => {
-  it("listGems returns the seed (non-empty, unique keys)", () => {
-    const gems = listGems();
-    expect(gems.length).toBeGreaterThan(0);
-    expect(new Set(gems.map((g) => g.key)).size).toBe(gems.length);
-    expect(gems).toEqual(GEMS);
+  it("STATIC_GEMS is non-empty with unique keys", () => {
+    expect(STATIC_GEMS.length).toBeGreaterThan(0);
+    expect(new Set(STATIC_GEMS.map((g) => g.key)).size).toBe(STATIC_GEMS.length);
   });
 
   it("every gem has real-shaped ingredient ids (kind-prefixed)", () => {
-    for (const g of GEMS) {
+    for (const g of STATIC_GEMS) {
       expect(g.ingredients.length).toBeGreaterThan(0);
       for (const ing of g.ingredients) expect(ing.id.includes(":")).toBe(true);
     }
   });
 
-  it("getGem hits and misses", () => {
-    expect(getGem("brainstorming-kit")?.key).toBe("brainstorming-kit");
-    expect(getGem("nope")).toBeUndefined();
-  });
-
   it("filterGems matches key/description/tags case-insensitively, all on blank", () => {
-    expect(filterGems(GEMS, "   ")).toEqual(GEMS);
-    expect(filterGems(GEMS, "BRAINSTORM").some((g) => g.key === "brainstorming-kit")).toBe(true);
-    expect(filterGems(GEMS, "github").some((g) => g.tags.includes("github") || g.key.includes("github"))).toBe(true);
-    expect(filterGems(GEMS, "zzzznomatch")).toEqual([]);
+    expect(filterGems(STATIC_GEMS, "   ")).toEqual(STATIC_GEMS);
+    expect(filterGems(STATIC_GEMS, "BRAINSTORM").some((g) => g.key === "brainstorming-kit")).toBe(true);
+    expect(filterGems(STATIC_GEMS, "github").some((g) => g.tags.includes("github") || g.key.includes("github"))).toBe(true);
+    expect(filterGems(STATIC_GEMS, "zzzznomatch")).toEqual([]);
   });
 });
 
