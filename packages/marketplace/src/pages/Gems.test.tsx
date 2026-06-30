@@ -27,4 +27,12 @@ describe("Gems (browse)", () => {
     expect(screen.getByText("github-flow")).toBeTruthy();
     expect(screen.queryByText("brainstorming-kit")).toBeNull();
   });
+
+  it("shows a no-match state when nothing matches the search", async () => {
+    const api = apiWith(() => Promise.resolve([]));  // → static fallback
+    render(<Gems api={api} />);
+    await screen.findByText("brainstorming-kit");
+    fireEvent.change(screen.getByLabelText("search gems"), { target: { value: "zzzznomatch" } });
+    expect(screen.getByText(/no gems match/i)).toBeTruthy();
+  });
 });
