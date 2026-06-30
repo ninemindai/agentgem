@@ -71,6 +71,11 @@ describe("originGuard (CSRF / drive-by guard)", () => {
     expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "GET", "/api/stars").nexted).toBe(true);
     expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "POST", "/api/stars/toggle").nexted).toBe(true);
   });
+  it("exempts a cross-site POST /api/registry/upload-publish (credentialed publish)", () => {
+    const r = run({ "sec-fetch-site": "cross-site" }, "app.agentgem.ai", "POST", "/api/registry/upload-publish");
+    expect(r.nexted).toBe(true);
+    expect(r.blocked).toBe(false);
+  });
   it("blocks a malformed Origin", () => {
     expect(run({ origin: "not a url" }).blocked).toBe(true);
   });

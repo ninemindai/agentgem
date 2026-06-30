@@ -120,22 +120,27 @@ export function Insights({ apiBase }: { apiBase: string }) {
   );
 }
 
-function InsightsReportCard({ report, scanned, onBuild }: { report: InsightsReportView; scanned?: number | null; onBuild?: () => void }) {
+export function InsightsReportCard({ report, scanned, onBuild }: { report: InsightsReportView; scanned?: number | null; onBuild?: () => void }) {
   // Be honest about the cap: the report judges the most-recent sessions, which
   // can be fewer than were scanned (50-session batch bound, or unmissioned ones).
   const judged = report.totals.sessions;
   const capped = scanned != null && scanned > judged;
+  // Defensive: tolerate a malformed/older-shape report (e.g. a stale cache entry
+  // missing a field) — a missing array must not crash the whole console.
+  const byModel = report.by_model ?? [];
+  const publishCandidates = report.publish_candidates ?? [];
+  const friction = report.friction ?? [];
   return (
     <div className="insights-report">
       {report.narrative && <p className="insights-narrative">{report.narrative}</p>}
       <p className="analyze-candidate-desc">{report.outcomes_summary}</p>
       {capped && <p className="insights-hint">Based on the {judged} most-recent of {scanned} sessions scanned.</p>}
 
-      {report.by_model.length > 1 && (
+      {byModel.length > 1 && (
         <div className="insights-section">
           <h4>By model</h4>
           <ul className="insights-bymodel">
-            {report.by_model.map((m) => (
+            {byModel.map((m) => (
               <li key={m.model}>
                 <span className="analyze-include-name">{m.model}</span>
                 <span className="insights-rate">{Math.round((m.mostly / m.total) * 100)}% mostly</span>
@@ -146,14 +151,14 @@ function InsightsReportCard({ report, scanned, onBuild }: { report: InsightsRepo
         </div>
       )}
 
-      {report.publish_candidates.length > 0 && (
+      {publishCandidates.length > 0 && (
         <div className="insights-section">
           <div className="analyze-candidate-head">
             <h4 style={{ margin: 0 }}>Worth publishing</h4>
             {onBuild && <button type="button" className="ledger-build" style={{ marginLeft: "auto" }} onClick={onBuild}>Build a Gem from this project →</button>}
           </div>
           <ul className="analyze-include">
-            {report.publish_candidates.map((c) => (
+            {publishCandidates.map((c) => (
               <li key={c.sessionId}>
                 <span className="analyze-include-name">{c.goal}</span>
                 <span className="targets-label">{c.why}</span>
@@ -163,18 +168,18 @@ function InsightsReportCard({ report, scanned, onBuild }: { report: InsightsRepo
         </div>
       )}
 
-      {report.friction.length > 0 && (
+      {friction.length > 0 && (
         <div className="insights-section">
           <h4>Friction</h4>
           <ul className="analyze-include">
-            {report.friction.map((f) => (
+            {friction.map((f) => (
               <li key={f.sessionId}><span className="analyze-include-name">{f.detail}</span></li>
             ))}
           </ul>
         </div>
       )}
 
-      {report.publish_candidates.length === 0 && report.friction.length === 0 && (
+      {publishCandidates.length === 0 && friction.length === 0 && (
         <p className="ledger-empty">No standout sessions yet — keep working and re-run.</p>
       )}
     </div>

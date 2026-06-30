@@ -55,4 +55,17 @@ describe("Gems (browse)", () => {
       expect(starOn[0].textContent).toContain("7");
     });
   });
+
+  it("renders a cut badge for a typed gem and filters by cut", async () => {
+    const api = apiWith(() => Promise.resolve([
+      { key: "intgem", version: "1.0.0", description: "d", tags: [], artifactKinds: ["mcp_server"], type: "integration" },
+      { key: "guidegem", version: "1.0.0", description: "d", tags: [], artifactKinds: ["instructions"], type: "guide" },
+    ]));
+    render(<Gems api={api} stars={stars} />);
+    expect((await screen.findAllByText("Integration")).length).toBeGreaterThan(0); // the cut pill label
+    // facet chip narrows to the integration gem
+    fireEvent.click(screen.getByRole("button", { name: /filter by Integration/i }));
+    await waitFor(() => expect(screen.queryByText("guidegem")).toBeNull());
+    expect(screen.getByText("intgem")).toBeTruthy();
+  });
 });

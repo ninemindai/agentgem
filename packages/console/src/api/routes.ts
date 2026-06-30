@@ -228,6 +228,19 @@ export const registryInstallRoute = defineRoute("POST", "/api/registry/install",
     applied: z.object({ mode: z.string(), workspace: z.string().optional(), dest: z.string().optional() }),
   }),
 });
+export const registryPublishRoute = defineRoute("POST", "/api/registry/publish", {
+  body: z.object({
+    workspace: z.string(),
+    scope: z.string(),
+    name: z.string().optional(),
+    version: z.string(),
+    dependencies: z.array(z.string()).optional(),
+    description: z.string().optional(),
+    tags: z.array(z.string()).optional(),
+    type: z.string().optional(),
+  }),
+  response: z.object({ ref: z.string(), version: z.string(), gemDigest: z.string(), commit: z.string(), path: z.string() }),
+});
 
 // Testbed: discovery (recents + project candidates) + scaffold a new one.
 const RecentEntrySchema = z.object({
@@ -557,6 +570,18 @@ export type InstallSkillResult = z.infer<typeof InstallSkillResultSchema>;
 export const installSkillRoute = defineRoute("POST", "/api/optimize/discover/install", {
   body: z.object({ source: z.string(), skillId: z.string() }),
   response: InstallSkillResultSchema,
+});
+
+// Network cross-model benchmark (aggregator, k-anonymised). Per-model outcome
+// counts across producers; success rate = mostly / (mostly + partially + notAchieved).
+export const BenchmarkSchema = z.array(z.object({
+  model: z.string(), mostly: z.number(), partially: z.number(), notAchieved: z.number(),
+  producers: z.number(), verifiedProducers: z.number(),
+}));
+export type BenchmarkRow = z.infer<typeof BenchmarkSchema>[number];
+export const benchmarksRoute = defineRoute("GET", "/api/aggregator/benchmarks", {
+  query: z.object({ gemDigest: z.string().optional() }),
+  response: BenchmarkSchema,
 });
 
 export const makeClient = (apiBase: string): Client => createClient({ baseURL: apiBase });

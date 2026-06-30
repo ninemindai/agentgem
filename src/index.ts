@@ -34,6 +34,9 @@ import { resolveAggregatorDb, type AppDb, GitHubVerifier } from "@agentgem/aggre
 import { mountGating } from "./gating.js";
 import { installAuth, githubExchangeCode } from "./auth/install.js";
 import { installStars } from "./stars/install.js";
+import { installRegistryUploadPublish } from "./registry/uploadPublish.js";
+import { registryConfigFromEnv, githubRegistrySource, githubRegistryPublisher } from "@agentgem/distribute";
+import { defaultGemTypeRegistry } from "./gem/gemTypeRegistry.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -134,6 +137,15 @@ export async function createApp(port: number): Promise<RestApplication> {
   // Stars need the DB + an allowlisted web origin; they don't need the GitHub OAuth secret.
   if (aggDb && webOrigins.length > 0) {
     installStars(server.expressApp as never, { db: aggDb, webOrigins });
+  }
+  // Registry upload-publish: requires DB, a web origin allowlist, and a configured GitHub registry.
+  const regCfg = registryConfigFromEnv();
+  if (aggDb && webOrigins.length > 0 && regCfg) {
+    installRegistryUploadPublish(server.expressApp as never, {
+      db: aggDb, webOrigins,
+      source: githubRegistrySource(regCfg), publisher: githubRegistryPublisher(regCfg),
+      gemTypes: defaultGemTypeRegistry,
+    });
   }
   // The desktop console UI is served at `/` (and `/console`) for LOCAL runs only. The hosted
   // public deployment (api.agentgem.ai) is API-only — the console is a local desktop app, not a

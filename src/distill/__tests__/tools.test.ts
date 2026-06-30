@@ -49,9 +49,55 @@ describe("distill tools", () => {
     const deps = { loadContext: () => ({ inventory, signal }), salt: "S" };
     await expect(dispatchTool("build_attestation", {}, deps)).rejects.toThrow("requires an explicit selection");
   });
+
+  it("build_attestation includes the per-model outcome histogram (v2) when outcomes are requested", async () => {
+    const facets = [{ sessionId: "s", transcript: "", atMs: 0, underlying_goal: "", brief_summary: "", outcome: "mostly_achieved" as const, friction_detail: "", model: "claude-opus-4-8", origin: "llm" as const }];
+    const deps = { loadContext: () => ({ inventory, signal }), salt: "S", judge: async () => ({ facets, degraded: false }) };
+    const r = (await dispatchTool("build_attestation", { selection: { mcpServers: ["gh"] }, includeOutcomes: true }, deps)) as { attestation: { formatVersion: number; source: { outcomeHistogram?: unknown } } };
+    expect(r.attestation.formatVersion).toBe(2);
+    expect(r.attestation.source.outcomeHistogram).toBeDefined();
+  });
+
+  it("build_attestation stays v1 and never judges when outcomes are not requested", async () => {
+    const deps = { loadContext: () => ({ inventory, signal }), salt: "S", judge: async () => { throw new Error("should not judge"); } };
+    const r = (await dispatchTool("build_attestation", { selection: { mcpServers: ["gh"] } }, deps)) as { attestation: { formatVersion: number } };
+    expect(r.attestation.formatVersion).toBe(1);
+  });
+
+  it("build_attestation stays v1 when the judge DEGRADED (never publishes neutral outcomes)", async () => {
+    const facets = [{ sessionId: "s", transcript: "", atMs: 0, underlying_goal: "", brief_summary: "", outcome: "partially_achieved" as const, friction_detail: "", model: "claude-opus-4-8", origin: "heuristic" as const }];
+    const deps = { loadContext: () => ({ inventory, signal }), salt: "S", judge: async () => ({ facets, degraded: true }) };
+    const r = (await dispatchTool("build_attestation", { selection: { mcpServers: ["gh"] }, includeOutcomes: true }, deps)) as { attestation: { formatVersion: number; source: { outcomeHistogram?: unknown } } };
+    expect(r.attestation.formatVersion).toBe(1); // degraded → outcomes withheld, no benchmark pollution
+    expect(r.attestation.source.outcomeHistogram).toBeUndefined();
+  });
   it("sign_and_publish rejects a missing selection (privacy-gate, no bypass to all)", async () => {
     const deps = { loadContext: () => ({ inventory, signal }), salt: "S" };
     await expect(dispatchTool("sign_and_publish", {}, deps)).rejects.toThrow("requires an explicit selection");
+  });
+
+  it("sign_and_publish contributes per-model outcomes (v2) BY DEFAULT", async () => {
+    let published: { formatVersion: number; source: { outcomeHistogram?: unknown } } | undefined;
+    const facets = [{ sessionId: "s", transcript: "", atMs: 0, underlying_goal: "", brief_summary: "", outcome: "mostly_achieved" as const, friction_detail: "", model: "claude-opus-4-8", origin: "llm" as const }];
+    const deps = {
+      loadContext: () => ({ inventory, signal }), salt: "S",
+      judge: async () => ({ facets, degraded: false }),
+      publish: async (_g: unknown, files: Record<string, string>) => { published = JSON.parse(files["attestation.json"]); return { ref: "r" }; },
+    };
+    await dispatchTool("sign_and_publish", { selection: { mcpServers: ["gh"] } }, deps); // no flag → default on
+    expect(published!.formatVersion).toBe(2);
+    expect(published!.source.outcomeHistogram).toBeDefined();
+  });
+
+  it("sign_and_publish skips outcomes (v1) when includeOutcomes:false", async () => {
+    let published: { formatVersion: number } | undefined;
+    const deps = {
+      loadContext: () => ({ inventory, signal }), salt: "S",
+      judge: async () => { throw new Error("should not judge when opted out"); },
+      publish: async (_g: unknown, files: Record<string, string>) => { published = JSON.parse(files["attestation.json"]); return { ref: "r" }; },
+    };
+    await dispatchTool("sign_and_publish", { selection: { mcpServers: ["gh"] }, includeOutcomes: false }, deps);
+    expect(published!.formatVersion).toBe(1);
   });
   it("sign_and_publish IGNORES caller-authored counts and signs the real scan-derived counts", async () => {
     let publishedAttestation: { ingredients: { mcps: { id: string; invocations: number }[] } } | undefined;

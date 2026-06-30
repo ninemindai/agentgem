@@ -93,15 +93,64 @@ describe("judgeSessions", () => {
     expect(facets.map((f) => f.sessionId).sort()).toEqual(["s4", "s5"]); // the two most recent
   });
 
-  it("defaults the cap to DEFAULT_MAX_JUDGE so one agent pass fits its timeout", async () => {
-    const sessions = Array.from({ length: 25 }, (_, i) => ({
+  it("defaults the cap to DEFAULT_MAX_JUDGE", async () => {
+    const sessions = Array.from({ length: DEFAULT_MAX_JUDGE + 10 }, (_, i) => ({
       steps: [], sessionId: `s${i}`, transcript: `s${i}.jsonl`, atMs: i * 100,
       missionHint: { task: `task ${i}`, outcome: "done" },
     }));
     const { facets } = await judgeSessions(signalWith(sessions), {
       connectFn: async () => { throw new Error("boom"); }, // fallback over the capped set
     });
-    expect(facets).toHaveLength(DEFAULT_MAX_JUDGE);
-    expect(DEFAULT_MAX_JUDGE).toBeLessThanOrEqual(25); // capped below the 25 available
+    expect(facets).toHaveLength(DEFAULT_MAX_JUDGE); // capped below the available count
+  });
+
+  // Echo fake: returns one mostly_achieved facet per sessionId in the chunk's
+  // prompt, so multi-chunk accumulation is observable. failCall throws on the Nth
+  // connectFn call (one call == one chunk).
+  function echoConnect(failCall = -1): AcpConnectFn {
+    let call = 0;
+    return async () => {
+      const myCall = call++;
+      return {
+        ctx: {
+          async open(_cwd: string) {
+            let mode = "default";
+            return {
+              async setMode(m: string) { mode = m; },
+              async promptText(prompt: string) {
+                if (mode !== "plan") throw new Error("not plan");
+                if (myCall === failCall) throw new Error(`chunk ${myCall} failed`);
+                const ids = [...prompt.matchAll(/"sessionId":"([^"]+)"/g)].map((m) => m[1]);
+                return JSON.stringify({ facets: ids.map((id) => ({ sessionId: id, underlying_goal: "g", outcome: "mostly_achieved", friction_detail: "", brief_summary: "s" })) });
+              },
+              dispose() {},
+            };
+          },
+        },
+        close() {},
+      };
+    };
+  }
+
+  function manySessions(n: number): WorkflowSignal {
+    return signalWith(Array.from({ length: n }, (_, i) => ({
+      steps: [], sessionId: `s${i}`, transcript: `s${i}.jsonl`, atMs: i * 100,
+      missionHint: { task: `task ${i}`, outcome: "done" },
+    })));
+  }
+
+  it("judges in chunks and accumulates facets across all chunks", async () => {
+    const { facets, degraded } = await judgeSessions(manySessions(25), { maxSessions: 25, chunkSize: 10, connectFn: echoConnect() });
+    expect(facets).toHaveLength(25);                       // 10 + 10 + 5
+    expect(facets.every((f) => f.origin === "llm")).toBe(true);
+    expect(degraded).toBe(false);
+  });
+
+  it("degrades only the failing chunk; other chunks still succeed", async () => {
+    const { facets, degraded } = await judgeSessions(manySessions(25), { maxSessions: 25, chunkSize: 10, connectFn: echoConnect(1) }); // 2nd chunk fails
+    expect(facets).toHaveLength(25);
+    expect(facets.filter((f) => f.origin === "heuristic")).toHaveLength(10); // the failed chunk's sessions
+    expect(facets.filter((f) => f.origin === "llm")).toHaveLength(15);       // the two good chunks
+    expect(degraded).toBe(true);
   });
 });
