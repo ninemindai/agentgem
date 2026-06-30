@@ -5,7 +5,7 @@
 
 ## Goal
 
-Give distilled **reflections** (a user's *lessons*) a path into a **Gem**, by turning a reflection into an **instructions artifact** — the missing leg that lets a **Playbook** carry both wins (distilled skills) and lessons (distilled instructions). Server + model only; no UI (that is subsystem #4).
+Give a user's **lessons** a path into a **Gem**, by turning a `Lesson` into an **instructions artifact** — the missing, *source-agnostic* leg that lets a **Playbook** carry both wins (distilled skills) and lessons (distilled instructions). A `Lesson` is a salient learning carrying provenance from *one or many* sessions — it does **not** assume recurrence. This subsystem builds the **plumbing** and wires the cheapest *source* (recurring reflections) to prove the loop end-to-end; the high-value **meaningful-single-session** source is subsystem #2, which emits `Lesson`s through this same seam. Server + model only; no UI (subsystem #5).
 
 ## Context
 
@@ -20,17 +20,21 @@ Relevant shapes (ground truth):
 - Skill draft helpers (the pattern to mirror) — `packages/capture/src/draftStage.ts` (`distilledSkillMarkdown`, `distilledToArtifact`, `writeDistilledDraft`, `stageDraftsByEvidence`, `stageDistilledDrafts`).
 - Accept endpoint to mirror — `POST /api/workflow/draft` in `src/gem.controller.ts` (accepts a `DistilledSkill`, writes a reviewable draft); `DistilledSkillSchema` in `src/schemas.ts`.
 
-## Decisions (flag for review)
+## Decisions (settled)
 
-1. **Only `recurring-pattern` + `recurring-decision` are lesson-eligible.** `unresolved-task` is a personal TODO/gap, not a reusable lesson to share — it stays gap-only and is excluded from lesson promotion. *(Decision — confirm.)*
-2. **A reflection promotes to a reviewable `DistilledLesson` draft, deterministically.** A reflection has no `name`; promotion derives a kebab `name` from `detail` (slugified leading words, validated `[a-z0-9-]`, collision-suffixed) and a framed instructions `body`. Start **heuristic-only** (no LLM) — same heuristic-first resilience as the distill seam; LLM prose enrichment is a later, optional concern. *(Decision — confirm the deterministic-first scope and the name-derivation rule; the user can rename on accept.)*
-3. **Lessons stage as instructions into the gem build**, mirroring how skill drafts stage — so `buildGem` (which resolves names against the in-memory inventory) includes them with no change to `buildGem` itself.
+1. **The plumbing is source-agnostic; `Lesson` does not assume recurrence.** A `Lesson` carries provenance from one or many sessions. *This subsystem* wires only the cheapest source — recurring reflections — to exercise the seam; the meaningful-single-session source (the real value) is subsystem #2 and emits `Lesson`s through the same `lessonToArtifact`/staging path.
+2. **From the reflection source, only `recurring-pattern` + `recurring-decision` promote.** `unresolved-task` is a personal TODO/gap, not a reusable lesson — it stays gap-only. (A *source-level* filter, not a constraint on what a Lesson is.)
+3. **A source promotes to a reviewable `DistilledLesson` draft, deterministically (in #1).** Promotion derives a kebab `name` (slugified leading words of the lesson detail, validated `[a-z0-9-]`, collision-suffixed) and a framed instructions `body`. #1 stays **heuristic-only**; #2's meaningful-session source brings the LLM prose (same `distill.ts`/`extract.ts` seam). The user can rename on accept.
+4. **Lessons stage as instructions into the gem build**, mirroring how skill drafts stage — so `buildGem` (which resolves names against the in-memory inventory) includes them with no change to `buildGem` itself.
 
 ## Model & data flow
 
 ```
-Reflection (recurring-pattern | recurring-decision)
-   └─ reflectionToLesson()  → DistilledLesson { name, body, importance, status:"draft", provenance, evidence }
+DistilledLesson { name, body, importance, status:"draft", provenance, evidence }   ← source-agnostic
+   ↑ produced by a SOURCE (this subsystem wires the first one):
+   │   reflectionToLesson(reflection)  — recurring-pattern | recurring-decision (free source; #1)
+   │   [meaningful-session extractor   — subsystem #2, emits DistilledLesson through this same seam]
+   └─ then, source-agnostic:
         ├─ lessonToArtifact()        → InstructionsArtifact { type:"instructions", name, content }
         ├─ distilledLessonMarkdown() → the instructions body (lesson + coordinates-only provenance footer)
         ├─ writeDistilledLesson()    → <agentgemHome>/.agentgem/distilled/lessons/<name>.md  (review/promote)
@@ -60,9 +64,9 @@ Accept loop (mirrors the skill draft loop): `analyze` already returns `reflectio
 
 ## Out of scope (this subsystem)
 
-- Any UI (console "accept as lesson" button / marketplace) — subsystem #4.
-- LLM enrichment of lesson prose — start deterministic; enrich later behind the same seam the skill distiller uses.
-- The `type:"playbook"` cut classification itself — subsystem #2 (`GEM_TYPES`). #1 only makes lessons *exist as artifacts*; a gem with distilled skills + lessons is already buildable/shareable without a formal cut label.
+- Any UI (console "accept as lesson" button / marketplace) — subsystem #5.
+- The **meaningful-single-session** lesson source + its LLM distillation — subsystem #2 (emits `DistilledLesson` through this subsystem's seam).
+- The `type:"playbook"` cut classification itself — subsystem #3 (`GEM_TYPES`). #1 only makes lessons *exist as artifacts*; a gem with distilled skills + lessons is already buildable/shareable without a formal cut label.
 
 ## Risks
 
