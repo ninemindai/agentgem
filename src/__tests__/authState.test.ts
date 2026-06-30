@@ -21,4 +21,8 @@ describe("auth state (HMAC + TTL)", () => {
     const s = signState({ returnTo: "https://explore.agentgem.ai" }, SECRET, 1000);
     expect(verifyState(s, SECRET, 1000 + 70_000, 60_000)).toBeNull();
   });
+  it("rejects a state issued in the future (clock skew / replay guard)", () => {
+    const s = signState({ returnTo: "https://explore.agentgem.ai" }, SECRET, 10_000);
+    expect(verifyState(s, SECRET, 5_000, 60_000)).toBeNull(); // now < iat
+  });
 });
