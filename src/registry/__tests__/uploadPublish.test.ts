@@ -48,6 +48,14 @@ describe("upload-publish", () => {
     await uploadPublishHandler(deps(db, publisher))(mkReq({ headers:{ cookie:`${SESSION_COOKIE}=${token}` }, body:{ scope:"alice", version:"1.0.0", bytesBase64: Buffer.from("not a gem").toString("base64") } }) as any, res as any);
     expect(res._s).toBe(400);
   });
+  it("500s (generic, no leak) on an infra failure — putCommit throws", async () => {
+    const db = await makeTestDb(); const token = await session(db, "alice"); const res = mkRes();
+    const throwing: RegistryPublisher = { async putCommit() { throw new Error("github 503: secret-internal-detail"); } };
+    await uploadPublishHandler(deps(db, throwing))(mkReq({ headers:{ cookie:`${SESSION_COOKIE}=${token}`, origin:"https://explore.agentgem.ai" }, body:{ scope:"alice", version:"1.0.0", bytesBase64: gemBase64() } }) as any, res as any);
+    expect(res._s).toBe(500);
+    expect((res._b as any).error).toBe("publish failed");                  // generic — internal detail NOT leaked
+    expect(JSON.stringify(res._b)).not.toContain("secret-internal-detail");
+  });
   it("OPTIONS preflight → 204 with credentialed CORS", async () => {
     const db = await makeTestDb(); const { publisher } = capturing(); const res = mkRes();
     await uploadPublishHandler(deps(db, publisher))(mkReq({ method:"OPTIONS", headers:{ origin:"https://explore.agentgem.ai" } }) as any, res as any);

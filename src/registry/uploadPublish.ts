@@ -11,6 +11,7 @@ import { resolveSession } from "@agentgem/aggregator";
 import { importGem, publishGem, type RegistrySource, type RegistryPublisher } from "@agentgem/distribute";
 import { parseCookies, SESSION_COOKIE } from "../auth/cookie.js";
 import { resolvePublishType, type GemTypeRegistry } from "../gem/gemTypeRegistry.js";
+import { InvalidInputError } from "@agentgem/model";
 
 export interface UploadPublishDeps { db: AppDb; webOrigins: string[]; source: RegistrySource; publisher: RegistryPublisher; gemTypes: GemTypeRegistry }
 type Req = { method?: string; headers: Record<string, string | undefined>; body?: Record<string, unknown> };
@@ -44,8 +45,13 @@ export function uploadPublishHandler(deps: UploadPublishDeps) {
     if (scope !== who.login) { res.status(403).json({ error: `you can only publish under your own login (@${who.login})` }); return; }
     if (typeof body.bytesBase64 !== "string") { res.status(400).json({ error: "bytesBase64 is required" }); return; }
 
+    let gem;
     try {
-      const { gem } = importGem(Buffer.from(body.bytesBase64, "base64")); // throws on tamper/parse
+      gem = importGem(Buffer.from(body.bytesBase64, "base64")).gem;        // verifies gem.lock; throws on tamper/parse
+    } catch {
+      res.status(400).json({ error: "invalid or tampered .gem archive" }); return;
+    }
+    try {
       const type = resolvePublishType(deps.gemTypes, typeof body.type === "string" ? body.type : undefined, gem);
       const index = await deps.source.getIndex();                         // fresh per request
       const result = await publishGem({
@@ -58,7 +64,14 @@ export function uploadPublishHandler(deps: UploadPublishDeps) {
       });
       res.json(result);
     } catch (err) {
-      res.status(400).json({ error: (err as Error).message });
+      const msg = (err as Error).message;
+      // User-actionable input errors (unknown type, bad scope/name, version immutability) → 400.
+      // Unexpected infra failures (registry network / GitHub) → 500 generic, no internal leak.
+      if (err instanceof InvalidInputError || /immutable|already published|invalid (scope|version|semver|ref)/i.test(msg)) {
+        res.status(400).json({ error: msg }); return;
+      }
+      console.error("upload-publish: publish failed:", msg);
+      res.status(500).json({ error: "publish failed" });
     }
   };
 }
