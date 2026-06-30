@@ -22,6 +22,7 @@ import { GemTools } from "./gem.tools.js";
 import { streamWorkflowAnalyze } from "./workflowStream.js";
 import { streamGemRun } from "./gemRunStream.js";
 import { streamScorecard } from "./scorecardStream.js";
+import { streamInsights } from "./insightsStream.js";
 import { originGuard } from "./originGuard.js";
 import { registerDrizzle } from "@agentback/drizzle";
 import { AggregatorController } from "./aggregator.controller.js";
@@ -153,6 +154,9 @@ export async function createApp(port: number): Promise<RestApplication> {
   // SSE scorecard scan: per-project progress with live-climbing counts, then the
   // final aggregate scorecard. GET /api/scorecard/stream?projects=[...]&dir=...
   server.expressApp.get("/api/scorecard/stream", originGuard, (req, res) => streamScorecard(req as never, res as never));
+  // SSE personal session-insights report: scan a project's transcripts → judge
+  // each session with the ACP agent → synthesize. GET /api/insights/stream?root=...&dir=...
+  server.expressApp.get("/api/insights/stream", originGuard, (req, res) => streamInsights(req as never, res as never));
   return app;
 }
 
