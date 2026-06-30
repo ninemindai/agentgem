@@ -18,14 +18,16 @@ import type { SessionStat } from "./observeAggregate.js";
 export type { SessionStat, ObserveRange, ObserveFilter, ObservePayload } from "./observeAggregate.js";
 export { aggregateObserve } from "./observeAggregate.js";
 
-function* jsonLines(text: string): Generator<Record<string, unknown>> {
+// Exported for reuse by the on-demand transcript read path (inspectSession.ts),
+// which walks the same Claude/Codex stores but emits content trees, not metadata.
+export function* jsonLines(text: string): Generator<Record<string, unknown>> {
   for (const line of text.split("\n")) {
     if (!line.trim()) continue;
     try { yield JSON.parse(line) as Record<string, unknown>; } catch { /* skip malformed */ }
   }
 }
 
-function listFiles(dir: string, suffix: string): string[] {
+export function listFiles(dir: string, suffix: string): string[] {
   const out: string[] = [];
   let entries: import("node:fs").Dirent[];
   try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return out; }

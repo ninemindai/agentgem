@@ -41,6 +41,18 @@ describe("Shell", () => {
     expect(screen.getByText("panel-b")).toBeTruthy();
   });
 
+  it("resolves a drill-down sub-route to its page via longest-prefix match", () => {
+    // #/inspect/<id> must render the Inspect page, not fall back to the first page.
+    const subPages = [
+      defineConsolePage({ id: "a", title: "Alpha", order: 10, route: "#/a", component: () => <p>panel-a</p> }),
+      defineConsolePage({ id: "inspect", title: "Inspect", order: 20, route: "#/inspect", component: () => <p>panel-inspect</p> }),
+    ];
+    window.location.hash = "#/inspect/claude/abc-123";
+    render(<Shell pages={subPages} apiBase="" />);
+    expect(screen.getByText("panel-inspect")).toBeTruthy();
+    expect(screen.queryByText("panel-a")).toBeNull();
+  });
+
   it("switches between panels with different hook counts without crashing", () => {
     // Each panel must get its own fiber: a panel that uses hooks (Hooky) and one that
     // uses none (Plain). If Shell renders the panel by CALLING it instead of as an

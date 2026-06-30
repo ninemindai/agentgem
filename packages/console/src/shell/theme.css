@@ -698,6 +698,64 @@ button.scorecard-intent { line-height: 1.4; }
 .obs-caret { display: inline-block; transition: transform 0.15s; margin-right: 4px; color: var(--muted); font-size: 0.7rem; }
 .obs-caret.open { transform: rotate(90deg); }
 
+/* Inspect → transcript drill-down (Phase 2): personal-library register, not a
+   monitoring dashboard — calm, archival, reuses the obs-* palette. */
+.obs-open-transcript {
+  margin-left: 12px; padding: 1px 9px; border: 1px solid var(--accent); border-radius: 999px;
+  background: var(--raised); color: var(--accent); font: 600 11px/1.5 var(--font-ui); cursor: pointer;
+}
+.obs-open-transcript:hover { background: #fbeee9; }
+
+.tv-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.tv-back {
+  background: var(--raised); border: 1px solid var(--line); border-radius: 7px;
+  padding: 5px 11px; color: var(--ink-soft); cursor: pointer; font: 600 12px/1 var(--font-ui);
+}
+.tv-back:hover { border-color: var(--accent); color: var(--accent); }
+.tv-title { margin: 0; }
+.tv-meta { font-size: 12px; }
+.tv-collapse { margin-left: auto; }
+
+.tv-turns { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.tv-turn { border: 1px solid var(--line); border-radius: var(--radius); background: var(--raised); overflow: hidden; }
+.tv-turn.role-user { border-left: 3px solid var(--accent); }
+.tv-turn.role-assistant { border-left: 3px solid var(--emerald); }
+.tv-turn-head {
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+  background: none; border: 0; cursor: pointer; padding: 8px 12px; font: inherit; color: var(--ink);
+}
+.tv-turn-head:hover { background: var(--paper); }
+.tv-role {
+  text-transform: uppercase; letter-spacing: .1em; font: 700 9.5px/1 var(--font-ui);
+  color: var(--muted); flex: none; width: 64px;
+}
+.tv-summary { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
+.tv-when { flex: none; font: 11px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+.tv-tok { flex: none; font-size: 10.5px; }
+
+.tv-spans { padding: 4px 12px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+.tv-msg {
+  margin: 0; padding: 8px 10px; background: var(--paper); border-radius: 6px;
+  font: 12px/1.6 var(--font-mono); white-space: pre-wrap; word-break: break-word; color: var(--ink-soft);
+}
+.tv-msg.role-user { background: color-mix(in srgb, var(--accent) 6%, var(--paper)); }
+
+.tv-tool { border: 1px solid var(--line); border-radius: 6px; background: var(--paper); }
+.tv-tool.is-error { border-color: var(--accent); }
+.tv-tool-head {
+  display: flex; align-items: center; gap: 6px; width: 100%; text-align: left;
+  background: none; border: 0; cursor: pointer; padding: 6px 10px; font: 600 12px/1 var(--font-ui); color: var(--ink);
+}
+.tv-tool-name { font-family: var(--font-mono); }
+.tv-tool-err { color: var(--accent); font-weight: 700; font-size: 11px; }
+.tv-tool-body { padding: 0 10px 10px 10px; }
+.tv-tool-label { text-transform: uppercase; letter-spacing: .08em; font-size: 10px; margin: 6px 0 2px; }
+.tv-io {
+  margin: 0; padding: 8px 10px; background: var(--raised); border: 1px solid var(--line); border-radius: 5px;
+  font: 11.5px/1.55 var(--font-mono); white-space: pre-wrap; word-break: break-word;
+  color: var(--ink-soft); max-height: 360px; overflow: auto;
+}
+
 /* scorecard progress bar */
 .scorecard-bar { height: 7px; background: var(--paper-2); border: 1px solid var(--line); border-radius: 999px; overflow: hidden; margin: 4px 0 14px; }
 .scorecard-bar-fill { height: 100%; background: var(--accent); border-radius: 999px; transition: width .3s ease; }

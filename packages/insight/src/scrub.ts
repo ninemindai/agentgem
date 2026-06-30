@@ -41,7 +41,10 @@ function dehomePaths(s: string): string {
 
 // Token-scrub a free-text arg: de-home paths, then replace any secret-looking
 // whitespace token with <redacted>, leaving the rest of the command intact.
-function scrubText(s: string): string {
+// Exported as the *preserve-and-redact* path (vs. scrubStep's default-deny drop):
+// the transcript viewer (inspectSession.ts) reuses this to make verbatim message
+// text and tool I/O secret-safe without discarding the content itself.
+export function scrubText(s: string): string {
   return dehomePaths(s)
     .split(/(\s+)/) // keep separators so spacing is preserved
     .map((tok) => (/\s/.test(tok) ? tok : redactToken(tok)))
