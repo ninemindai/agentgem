@@ -1,0 +1,71 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
+// packages/insight/src/judgeSession.ts
+//
+// Drives a local ACP coding agent (Claude, plan mode / read-only) over the
+// mission hints of a WorkflowSignal to produce one SessionFacet per session — a
+// typed judgment of goal + outcome + friction. Batched: every missioned session
+// goes in one prompt. Never throws: short-circuits to [] when nothing is
+// missioned, degrades to deterministicFacets on agent error. The signal is the
+// source of truth for which sessions exist (validateFacets enforces it).
+// Mirrors recommendWorkflow / distillWorkflow in acpRecommender.ts.
+import type { WorkflowSignal } from "./workflowScan.js";
+import type { SessionFacet } from "./facets.js";
+import { deterministicFacets, validateFacets } from "./facets.js";
+import {
+  type AcpConnectFn, type AcpCtx, type AcpSessionHandle,
+  CLAUDE_AGENT, analysisWorkspace, currentTestConnectFn, defaultConnectFn,
+} from "./acpRecommender.js";
+
+const JUDGE = (sessionsJson: string) =>
+  `You are analysing a developer's past coding-agent sessions. For EACH session below, ` +
+  `judge what the user was trying to accomplish and how it went.\n` +
+  `SESSIONS (goal = the user's first request; result = the agent's final message):\n${sessionsJson}\n\n` +
+  `For each session return a facet:\n` +
+  `- underlying_goal: one sentence — what the user actually wanted.\n` +
+  `- brief_summary: one sentence — what happened.\n` +
+  `- outcome: one of "mostly_achieved" | "partially_achieved" | "not_achieved".\n` +
+  `- friction_detail: one sentence on what slowed it down, or "" if none.\n` +
+  `Return ONLY a JSON object: {"facets":[{"sessionId","underlying_goal","outcome",` +
+  `"friction_detail","brief_summary"}]}. Use the exact sessionId values given; do not invent sessions.`;
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`agent timeout after ${ms}ms`)), ms))]);
+}
+
+/**
+ * Judge every missioned session in `signal`. Never throws. Returns degraded:true
+ * only when the agent call itself failed (an unusable response still yields
+ * deterministic facets with degraded:false — the call succeeded).
+ */
+export async function judgeSessions(
+  signal: WorkflowSignal,
+  opts: { connectFn?: AcpConnectFn; timeoutMs?: number; onDelta?: (chunk: string) => void } = {},
+): Promise<{ facets: SessionFacet[]; degraded: boolean }> {
+  const missioned = (signal.sequences?.sessions ?? []).filter((s) => s.missionHint);
+  if (!missioned.length) return { facets: [], degraded: false };   // nothing to judge — agent never invoked
+
+  const connectFn = opts.connectFn ?? currentTestConnectFn() ?? defaultConnectFn;
+  const timeoutMs = opts.timeoutMs ?? 60_000;
+  let conn: { ctx: AcpCtx; close: () => void } | null = null;
+  let handle: AcpSessionHandle | null = null;
+  try {
+    const payload = missioned.map((s) => ({ sessionId: s.sessionId, goal: s.missionHint!.task, result: s.missionHint!.outcome }));
+    const prompt = JUDGE(JSON.stringify(payload));
+    // One shared deadline across connect + open + setMode + prompt (the ACP
+    // handshake is otherwise unbounded). Mirrors recommendWorkflow.
+    const deadline = Date.now() + timeoutMs;
+    const left = () => Math.max(0, deadline - Date.now());
+    conn = await withTimeout(connectFn(CLAUDE_AGENT, null), left());
+    handle = await withTimeout(conn.ctx.open(analysisWorkspace()), left());  // neutral cwd — don't pollute the project
+    await withTimeout(handle.setMode("plan"), left());                       // explicit — never edits files
+    const text = await withTimeout(handle.promptText(prompt, opts.onDelta), left());
+    return { facets: validateFacets(text, signal), degraded: false };
+  } catch (err) {
+    console.error("insights: session judge fell back to heuristic:", (err as Error).message);
+    return { facets: deterministicFacets(signal), degraded: true };
+  } finally {
+    try { handle?.dispose(); } catch { /* ignore */ }
+    try { conn?.close(); } catch { /* ignore */ }
+  }
+}
