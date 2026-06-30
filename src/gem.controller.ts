@@ -7,7 +7,7 @@ import { z } from "zod";
 import { api, get, post } from "@agentback/openapi";
 import { scanSessionsCached, aggregateObserve } from "@agentgem/insight";
 import { scanArtifactUsageCached } from "@agentgem/insight";
-import { buildOptimizePayload, type OptimizeRange } from "@agentgem/insight";
+import { buildOptimizePayload, buildDiscover, rerankCandidates, type OptimizeRange } from "@agentgem/insight";
 
 const ObserveQuerySchema = z.object({
   range: z.enum(["today", "7d", "30d", "all"]).optional(),
@@ -54,6 +54,22 @@ export const OptimizePayloadSchema = z.object({
   artifacts: z.array(OptimizeArtifactSchema),
   instructions: z.array(OptimizeInstructionSchema),
 });
+const DiscoverCandidateSchema = z.object({
+  name: z.string(),
+  source: z.string(),
+  registry: z.literal("skills.sh"),
+  installs: z.number().optional(),
+  url: z.string(),
+  reason: z.string(),
+  installCmd: z.string(),
+});
+export const DiscoverPayloadSchema = z.object({
+  candidates: z.array(DiscoverCandidateSchema),
+  topics: z.array(z.string()),
+  reranked: z.boolean().optional(),
+  degraded: z.object({ reason: z.string() }).optional(),
+});
+const RerankBodySchema = z.object({ candidates: z.array(DiscoverCandidateSchema), topics: z.array(z.string()) });
 const ScorecardBuildRequestSchema = z.object({
   dir: z.string().optional(),
   name: z.string().optional(),
@@ -257,6 +273,18 @@ export class GemController {
     const inv = introspectConfig();
     const usage = await scanArtifactUsageCached(inv, now, undefined, refresh);
     return buildOptimizePayload(inv, usage, range, now);
+  }
+
+  @get("/optimize/discover", { response: DiscoverPayloadSchema })
+  async optimizeDiscover(): Promise<z.infer<typeof DiscoverPayloadSchema>> {
+    const inv = introspectConfig();
+    const usage = await scanArtifactUsageCached(inv, Date.now());
+    return buildDiscover(usage, inv);
+  }
+
+  @post("/optimize/discover/rerank", { body: RerankBodySchema, response: DiscoverPayloadSchema })
+  async optimizeDiscoverRerank(input: { body: z.infer<typeof RerankBodySchema> }): Promise<z.infer<typeof DiscoverPayloadSchema>> {
+    return rerankCandidates(input.body);
   }
 
   @get("/scorecard", { query: DirQuerySchema, response: ScorecardSchema })

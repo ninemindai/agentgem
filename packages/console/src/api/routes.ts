@@ -463,4 +463,31 @@ export const optimizeRoute = defineRoute("GET", "/api/optimize", {
   response: OptimizePayloadSchema,
 });
 
+// ── Optimize ▸ Discover (Plan 2: registry recommendations) ──
+const DiscoverCandidateSchema = z.object({
+  name: z.string(),
+  source: z.string(),
+  registry: z.literal("skills.sh"),
+  installs: z.number().optional(),
+  url: z.string(),
+  reason: z.string(),
+  installCmd: z.string(),
+});
+export const DiscoverPayloadSchema = z.object({
+  candidates: z.array(DiscoverCandidateSchema),
+  topics: z.array(z.string()),
+  reranked: z.boolean().optional(),
+  degraded: z.object({ reason: z.string() }).optional(),
+});
+export type DiscoverCandidate = z.infer<typeof DiscoverCandidateSchema>;
+export type DiscoverPayload = z.infer<typeof DiscoverPayloadSchema>;
+
+export const discoverRoute = defineRoute("GET", "/api/optimize/discover", {
+  response: DiscoverPayloadSchema,
+});
+export const rerankDiscoverRoute = defineRoute("POST", "/api/optimize/discover/rerank", {
+  body: z.object({ candidates: z.array(DiscoverCandidateSchema), topics: z.array(z.string()) }),
+  response: DiscoverPayloadSchema,
+});
+
 export const makeClient = (apiBase: string): Client => createClient({ baseURL: apiBase });

@@ -29,8 +29,8 @@ change"* (actionable recommendations).
 | v1 scope | Both A (prune) and B (discover) together |
 | Action model | **Recommend-only** in v1. Exact change shown + copy. One-click apply/undo is a v2 fast-follow. |
 | MCP external recs | **Out of scope** — skills.sh is skills-only. MCP appears only in the local prune half. External MCP discovery deferred. |
-| Relevance ranking | Hybrid: deterministic topic scan → ACP agent re-rank, reusing the existing analyze/`acpRecommender` pattern. |
-| Discover engine | An ACP agent **loaded with the `find-skills` skill** (`vercel-labs/skills`), which drives `npx skills find` + skills.sh leaderboard. No hand-rolled HTTP client. |
+| Relevance ranking | Hybrid: deterministic topic scan + registry fetch (default, free) → optional ACP agent re-rank, reusing the existing analyze/`acpRecommender` pattern. |
+| Discover engine | **Direct registry fetch (Stage 1) + optional ACP re-rank (Stage 2).** *Amended 2026-06-29* — the original "ACP-only, via the `find-skills` skill / `npx skills find`" decision is superseded. The `skills.sh` *documented* API (`/api/v1/*`) is OIDC-auth-walled, but the **undocumented, unauthenticated** `GET https://skills.sh/api/search?q=&limit=&owner=` endpoint (the one the `skills` CLI itself calls) returns clean JSON. Stage 1 fetches it directly via an isolated `skillsRegistry` client (no `npx` subprocess, no LLM); Stage 2 is an opt-in ACP re-rank that degrades to Stage-1 order. |
 | Instructions health depth | **Deterministic now** (weight + bloat flags, local, in Plan 1). LLM-driven semantic critique (redundant/stale/contradictory rules, rewrite suggestions) is deferred to a later ACP plan. |
 
 ## Plan decomposition
@@ -40,7 +40,8 @@ written first and is fully shippable on its own):
 
 - **Plan 1 — Optimize panel + local analysis (no LLM, no tools).** Panel shell + Prune
   (skills/MCP usage) + Instructions health (weight/bloat). Endpoint `GET /api/optimize`.
-- **Plan 2 — Discover (ACP + `find-skills`).** Endpoint `POST /api/optimize/discover`.
+- **Plan 2 — Discover (registry fetch + optional ACP re-rank).** Endpoints
+  `GET /api/optimize/discover` (deterministic) + `POST /api/optimize/discover/rerank` (ACP).
 - **Plan 3 — Semantic instructions critique (ACP).** LLM reads CLAUDE.md → flags
   redundant/stale/contradictory rules + rewrite suggestions.
 
@@ -69,10 +70,12 @@ UI has three sections:
    (`oversized`, `very-long`, `duplicate-lines`). Sorted by context tokens desc. Plan 1.
    *(v1 is global-only — `introspectConfig()` returns no project inventories; per-project
    CLAUDE.md is a fast-follow.)*
-3. **Discover — recommended for you.** *(Plan 2)* Loads on demand via a button
-   (token-costing). Renders ranked cards: skill name, `source` (owner/repo), `installs`
-   count, relevance reason, and `npx skills add owner/repo` install command (copy).
-   Graceful empty/degraded states.
+3. **Discover — recommended for you.** *(Plan 2)* A **"Find recommendations"** button runs
+   Stage 1 on demand (free — a network call, so not auto-run). Renders ranked rows: skill
+   name, `source` (owner/repo), `installs` (labeled *registry-reported*), relevance reason,
+   `npx skills add owner/repo@name` install command (copy), and a link to skills.sh. Once
+   results exist, a secondary **"Re-rank with AI"** button runs Stage 2 (token-costing,
+   labeled). Recommend-only — no install is performed. Graceful empty/degraded states.
 
 ## Backend
 
@@ -168,35 +171,74 @@ instructions are a fast-follow that enriches the handler's inventory):
 - No usage join — instructions always load, so there is nothing to "prune"; the section is
   pure weight/health. Sorted by `contextTokens` desc.
 
-### ② `POST /api/optimize/discover` — Discover (token-costing, opt-in)
+### ② Discover — two-stage (registry fetch + optional ACP re-rank)
 
-Mirrors the existing `analyze` endpoint's "deterministic scan + ACP agent" pattern.
+Hybrid. **Stage 1 is the default and is free** (no LLM, no subprocess); **Stage 2 is
+opt-in and token-costing**. Prune / Instructions health are unaffected by either.
 
-1. **Topic extraction** (deterministic): derive workflow topics from recent sessions /
-   projects via `workflowScan` (reuse existing).
-2. **ACP agent + `find-skills` skill:** run an ACP agent (reusing `acpRecommender`
-   plumbing for structured output) loaded with the `find-skills` skill. Input prompt =
-   workflow topics + the already-installed skills list (from `introspectAll`) to exclude.
-3. The agent runs `npx skills find …`, applies find-skills' own ranking (install count +
-   source reputation + GitHub stars), and returns structured candidates.
+#### Registry client (isolated, degrades gracefully)
 
-**Response shape:**
+A small `skillsRegistry` module — one search function — wraps the **undocumented,
+unauthenticated** skills.sh search endpoint that the `skills` CLI itself uses:
+
+```
+GET https://skills.sh/api/search?q=<query>&limit=<n>[&owner=<owner>]
+→ 200 { skills: [{ id, skillId, name, installs, source }], searchType, count }
+```
+
+- Plain `fetch`, **no auth header**. (The *documented* `/api/v1/*` API is OIDC-walled and is
+  deliberately NOT used.)
+- Because the endpoint is undocumented it may change without notice — per
+  [[local-control-plane]] "no hard dependency on an API you don't control": **any non-200,
+  network error, or parse failure resolves to `[]`/degraded**, never throws. Isolating it in
+  one module keeps the swap-or-add-registry path open (the "aggregator above registries"
+  thesis) without touching the panel.
+
+#### `GET /api/optimize/discover` — Stage 1 (deterministic, free, on-demand)
+
+1. **Topic extraction** (deterministic): derive the top ~3–5 workflow topics from recent
+   sessions via `workflowScan` (reuse existing; same scan Prune uses).
+2. **Registry search:** `skillsRegistry.search(topic)` per topic.
+3. **Exclude already-installed** skills (match on `source`/`name` against the inventory from
+   `introspectAll`/`introspectConfig`).
+4. **Dedupe** across topics; **rank** by `(topic-match strength, installs)`; cap at ~8–10.
+   Deterministic `reason` per item (e.g. *"matches your `react` + `testing` sessions"*).
+   `installs` is **registry-reported** (labeled as such in the UI — not an AgentGem
+   endorsement, per the security-signal-liability caution in [[local-control-plane]]).
+5. Result cached with a short TTL (registry data moves slowly; ~5 min, `scanArtifactUsageCached`
+   style) so repeat opens are cheap.
+
+#### `POST /api/optimize/discover/rerank` — Stage 2 (ACP, token-costing, opt-in)
+
+Body = Stage-1 `candidates` + `topics`. Reuses `acpRecommender` plumbing (plan-mode,
+permissions denied, structured-output validation). The agent reorders by semantic relevance
+and rewrites each `reason`; validation **drops any candidate not in the input set** (no
+hallucinated skills). **Degrades to the Stage-1 order** (`reranked: false` + `degraded`) on
+any ACP failure — the existing `deterministicAnalysis` fallback pattern.
+
+**Response shape (both endpoints):**
 
 ```ts
+type DiscoverCandidate = {
+  name: string;          // skill name
+  source: string;        // "owner/repo"
+  registry: "skills.sh"; // future-proof for the aggregator thesis
+  installs?: number;     // registry-reported
+  url: string;           // https://skills.sh/<id>
+  reason: string;        // topic match (Stage 1) or AI rationale (Stage 2)
+  installCmd: string;    // "npx skills add owner/repo@name"
+};
 type DiscoverPayload = {
-  candidates: Array<{
-    name: string;
-    source: string;       // owner/repo
-    installs?: number;
-    reason: string;       // relevance to the user's workflows
-    installCmd: string;   // npx skills add owner/repo
-  }>;
-  degraded?: { reason: string };  // e.g. npx skills unavailable / offline
+  candidates: DiscoverCandidate[];
+  topics: string[];               // what we matched on (shown to user)
+  reranked?: boolean;             // true after Stage 2
+  degraded?: { reason: string };  // registry offline / ACP failed
 };
 ```
 
 Controller methods land in `src/gem.controller.ts` next to the existing `observe` /
-`analyze` handlers.
+`analyze` / `optimize` handlers; both typed via `defineRoute` in
+`packages/console/src/api/routes.ts`.
 
 ## Out of scope (fast-follows)
 
@@ -224,14 +266,21 @@ Write tests first, per project + global rules. vitest runs from compiled `dist/`
 - instructions health: token estimate, line count, each bloat flag (`oversized`,
   `very-long`, `duplicate-lines`) at/around its threshold.
 - routes: Zod schema round-trip for `OptimizePayload`.
-- (Plan 2) discover: ACP agent invocation mocked; structured-output parsing;
-  **exclude-installed** logic; degraded path when `npx skills` is unavailable.
+- (Plan 2) `skillsRegistry.search`: mock `fetch` — parse, sort by installs, owner filter,
+  non-200 → `[]`, parse-error → `[]`.
+- (Plan 2) discover Stage 1: topic derivation, exclude-installed join, dedupe, ranking, cap,
+  reason text; degraded when the registry returns nothing.
+- (Plan 2) rerank Stage 2: ACP agent mocked — reorder, **drop out-of-set** items,
+  degrade-to-input order on failure.
+- (Plan 2) routes: Zod round-trip for `DiscoverPayload`.
 
 ## Risks / verify during implementation
 
-1. **skills.sh / `npx skills` reachability:** Discover needs the `npx skills` CLI + network
-   at run time. If absent/offline, Discover returns `degraded` with a clear message; Prune
-   is unaffected.
+1. **skills.sh reachability + endpoint stability:** Stage 1 needs network at run time and
+   depends on the **undocumented** `GET /api/search` endpoint, which can change without
+   notice. On any non-200 / network / parse failure the `skillsRegistry` client returns
+   `[]` and Discover returns `degraded` with a clear message; Prune is unaffected. Verify the
+   live response shape (`{ skills: [{ id, name, installs, source }] }`) during implementation.
 2. **MCP usage detection** relies on the `mcp__<server>__*` tool-naming convention appearing
    in transcripts — confirm against real fixtures.
 3. **Context-cost is an estimate** (`chars/4`) — must be labeled as such in the UI to avoid
