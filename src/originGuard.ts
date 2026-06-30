@@ -52,7 +52,7 @@ export function originGuard(req: GuardReq, res: GuardRes, next: GuardNext): void
   // design (SPA on explore.agentgem.ai → API on app.agentgem.ai). CSRF defense: the OAuth `state`,
   // SameSite=Lax cookie, and (stars) a 401 on the authed toggle. The handlers set their own
   // credentialed CORS for the AGENTGEM_WEB_ORIGINS allowlist.
-  if (req.path.startsWith("/api/auth/") || req.path.startsWith("/api/stars")) { next(); return; }
+  if (req.path.startsWith("/api/auth/") || req.path.startsWith("/api/stars") || req.path.startsWith("/api/registry/upload-publish")) { next(); return; }
   const site = req.get("sec-fetch-site");
   if (site !== undefined) {
     if (site === "same-origin") { next(); return; }
