@@ -5,7 +5,7 @@
 
 ## Goal
 
-Let a **signed-in** user publish a gem **from `explore.agentgem.ai`**: upload a `.gem` (exported from the console), and a session-authed endpoint publishes it to the registry stamped with **#4a attribution** (`publishedBy` = their verified GitHub login). This is the first **live consumer** of #4a's attribution and the hosted complement to the local console publish panel (A). Carries a **minimal safety rail** (`scope === your login`) so the public endpoint isn't an abuse vector; the richer ownership model (org/claimed scopes) stays #4b.
+Let a **signed-in** user publish a gem **from `app.agentgem.ai`**: upload a `.gem` (exported from the console), and a session-authed endpoint publishes it to the registry stamped with **#4a attribution** (`publishedBy` = their verified GitHub login). This is the first **live consumer** of #4a's attribution and the hosted complement to the local console publish panel (A). Carries a **minimal safety rail** (`scope === your login`) so the public endpoint isn't an abuse vector; the richer ownership model (org/claimed scopes) stays #4b.
 
 ## Context (ground-truth)
 
