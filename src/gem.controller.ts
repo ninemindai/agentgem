@@ -5,7 +5,7 @@ import { existsSync, writeFileSync, readFileSync } from "node:fs";
 import { basename, resolve, sep } from "node:path";
 import { z } from "zod";
 import { api, get, post } from "@agentback/openapi";
-import { scanSessionsCached, aggregateObserve, loadSessionTranscript, resolveClaudeSession, dehomeDistilled } from "@agentgem/insight";
+import { scanSessionsCached, aggregateObserve, loadSessionTranscript, resolveClaudeSession, dehomeDistilled, scrubText } from "@agentgem/insight";
 import { scanArtifactUsageCached } from "@agentgem/insight";
 import { buildOptimizePayload, buildDiscover, rerankCandidates, installSkill, type OptimizeRange } from "@agentgem/insight";
 
@@ -64,7 +64,7 @@ const TranscriptViewSchema = z.object({
 // distill pipeline over a single session's transcript. Claude-only, like the
 // project analyze flow (workflowScan reads Claude transcripts).
 const InspectDistillBodySchema = z.object({ id: z.string(), agent: z.enum(["claude", "codex"]) });
-const InspectDistillResponseSchema = z.object({ distilled: z.array(DistilledSkillSchema), degraded: z.boolean() });
+const InspectDistillResponseSchema = z.object({ distilled: z.array(DistilledSkillSchema), lessons: z.array(DistilledLessonSchema), degraded: z.boolean() });
 const OptimizeQuerySchema = z.object({ range: z.enum(["today", "7d", "30d", "all"]).optional(), refresh: z.coerce.boolean().optional() });
 const OptimizeArtifactSchema = z.object({
   name: z.string(), type: z.enum(["skill", "mcp"]), source: z.string(),
@@ -188,7 +188,7 @@ import { collectScorecard, selectScorecardRoots, scorecardTranscriptPaths, defau
 import { sanitizeShareText } from "@agentgem/insight";
 import { claudeTranscriptsForCwd, scanWorkflow, allClaudeTranscripts, bucketTranscriptsByCwd } from "@agentgem/insight";
 import { recommendWorkflow, recommendationToSelection } from "@agentgem/insight";
-import { distillWorkflow, type DistilledSkill } from "@agentgem/insight";
+import { distillWorkflow, distillSessionLessons, type DistilledSkill } from "@agentgem/insight";
 import { extractReflections } from "@agentgem/insight";
 import { writeReflections } from "@agentgem/insight";
 import { writeDistilledDraft, writeDistilledLesson, stageDraftsByEvidence, stageLessonsByEvidence } from "@agentgem/capture";
@@ -312,11 +312,15 @@ export class GemController {
     if (!project) throw new InvalidInputError(`Project for session '${input.body.id}' not found in inventory.`);
     const scanInv = { project, global: { skills: inventory.skills, mcpServers: inventory.mcpServers, hooks: inventory.hooks } };
     const signal = scanWorkflow([found.path], scanInv, { retainSequences: true });
-    const distill = await distillWorkflow(signal, scanInv);
+    const [distill, lessonsRes] = await Promise.all([
+      distillWorkflow(signal, scanInv),
+      distillSessionLessons(signal, scanInv),
+    ]);
     // The client sent only a session id, so the derived absolute project path
     // (carries the OS username) must not leak back via evidence.root — mirror the
-    // TranscriptView boundary.
-    return { distilled: dehomeDistilled(distill.distilled), degraded: distill.degraded };
+    // TranscriptView boundary. Skills AND lessons both carry evidence.root.
+    const lessons = lessonsRes.lessons.map((l) => ({ ...l, evidence: { ...l.evidence, root: scrubText(l.evidence.root) } }));
+    return { distilled: dehomeDistilled(distill.distilled), lessons, degraded: distill.degraded || lessonsRes.degraded };
   }
 
   @get("/optimize", { query: OptimizeQuerySchema, response: OptimizePayloadSchema })
