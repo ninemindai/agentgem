@@ -8,7 +8,7 @@ import { inject } from "@agentback/core";
 import { DrizzleBindings } from "@agentback/drizzle";
 import type { AppDb } from "@agentgem/aggregator";
 import { ingestAttestation } from "@agentgem/aggregator";
-import { popularity, coOccurrence, adoption, overview, coOccurrenceMatrix } from "@agentgem/aggregator";
+import { popularity, coOccurrence, adoption, overview, coOccurrenceMatrix, modelBenchmark } from "@agentgem/aggregator";
 import type { UsageAttestation } from "@agentgem/insight";
 import { recordBinding } from "@agentgem/aggregator";
 import { GitHubVerifier } from "@agentgem/aggregator";
@@ -30,6 +30,8 @@ const CoMatrixResult = z.array(z.object({ a: z.string(), b: z.string(), producer
 const AdoptQuery = z.object({ id: z.string(), bucket: z.enum(["week", "month"]).optional() }); // NOTE: no `k`
 const AdoptResult = z.array(z.object({ bucket: z.string(), producers: z.number(), verifiedProducers: z.number(), invocations: z.number() }));
 const OverviewResult = z.object({ ingredients: z.number(), producers: z.number(), verifiedProducers: z.number(), invocations: z.number(), sessions: z.number() });
+const BenchQuery = z.object({ gemDigest: z.string().optional(), limit: z.coerce.number().optional() }); // NOTE: no `k`
+const BenchResult = z.array(z.object({ model: z.string(), mostly: z.number(), partially: z.number(), notAchieved: z.number(), producers: z.number(), verifiedProducers: z.number() }));
 const BindBody = z.object({ pubkey: z.string(), token: z.string(), signedAt: z.number(), signature: z.string() });
 const BindResultSchema = z.union([
   z.object({ bound: z.literal(true), provider: z.string(), login: z.string(), accountId: z.string() }),
@@ -102,6 +104,13 @@ export class AggregatorController {
   async overview(): Promise<z.infer<typeof OverviewResult>> {
     // No query params; k is server policy (DEFAULT_K), never caller-supplied.
     return overview(this.db, {});
+  }
+
+  // Cross-model benchmark: per-model success rates aggregated across producers,
+  // optionally scoped to one gem. k is server policy (DEFAULT_K), never caller-supplied.
+  @get("/benchmarks", { query: BenchQuery, response: BenchResult })
+  async benchmarks(input: { query: z.infer<typeof BenchQuery> }): Promise<z.infer<typeof BenchResult>> {
+    return modelBenchmark(this.db, { gemDigest: input.query.gemDigest, limit: input.query.limit });
   }
 
   @post("/bind", { body: BindBody, response: BindResultSchema })

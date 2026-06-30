@@ -19,6 +19,17 @@ function signed() {
   return signAttestation(buildAttestation({ gem, signal, gemDigest: "sha256:aa", salt: "S" }), id, 1);
 }
 
+const facet = (outcome: "mostly_achieved" | "partially_achieved" | "not_achieved") =>
+  ({ sessionId: "s", transcript: "", atMs: 0, underlying_goal: "", brief_summary: "", outcome, friction_detail: "", model: "claude-opus-4-8", origin: "llm" as const });
+function signedV2(facets: ReturnType<typeof facet>[]) {
+  const id = loadOrCreateIdentity(mkdtempSync(join(tmpdir(), "agg-id-")));
+  return signAttestation(buildAttestation({ gem, signal, gemDigest: "sha256:aa", salt: "S", facets }), id, 1);
+}
+function resign<T extends { signature: string }>(a: T): T {
+  const id = loadOrCreateIdentity(mkdtempSync(join(tmpdir(), "agg-id-")));
+  return signAttestation({ ...a, signature: "" } as never, id, 1) as never;
+}
+
 describe("verifyAttestation", () => {
   it("accepts a validly signed attestation", () => {
     expect(verifyAttestation(signed())).toEqual({ ok: true });
@@ -34,5 +45,15 @@ describe("verifyAttestation", () => {
     const id = loadOrCreateIdentity(mkdtempSync(join(tmpdir(), "agg-id-")));
     const resigned = signAttestation({ ...a, signature: "" }, id, 1);
     expect(verifyAttestation(resigned)).toEqual({ ok: false, reason: "inconsistent" });
+  });
+
+  it("accepts a v2 attestation whose outcome histogram fits the session count", () => {
+    expect(verifyAttestation(signedV2([facet("mostly_achieved"), facet("not_achieved")]))).toEqual({ ok: true }); // 2 ≤ 4
+  });
+
+  it("rejects a histogram claiming more outcomes than scanned sessions (anti-inflation)", () => {
+    const a = signedV2([facet("mostly_achieved")]);
+    a.source.outcomeHistogram![0].mostly = a.source.scan.sessions + 5; // inflate beyond the 4 sessions
+    expect(verifyAttestation(resign(a))).toEqual({ ok: false, reason: "inconsistent" });
   });
 });

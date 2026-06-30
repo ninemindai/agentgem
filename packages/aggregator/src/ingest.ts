@@ -18,6 +18,14 @@ export function verifyAttestation(att: UsageAttestation): VerifyResult {
       return { ok: false, reason: "inconsistent" };
     }
   }
+  // Outcome histogram (v2): each judged session contributes one outcome, so the
+  // total counts cannot exceed the scanned sessions (anti-inflation).
+  let outcomeTotal = 0;
+  for (const h of att.source.outcomeHistogram ?? []) {
+    if (h.mostly < 0 || h.partially < 0 || h.not < 0) return { ok: false, reason: "inconsistent" };
+    outcomeTotal += h.mostly + h.partially + h.not;
+  }
+  if (outcomeTotal > cap) return { ok: false, reason: "inconsistent" };
   return { ok: true };
 }
 

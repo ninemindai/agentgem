@@ -33,6 +33,32 @@ export async function popularity(
   return r.rows as { id: string; kind: string; producers: number; verifiedProducers: number; invocations: number; sessions: number }[];
 }
 
+/** Cross-model benchmark: per-model outcome counts aggregated across producers,
+ *  k-anonymised on distinct producers. Optionally scoped to one gem. Success rate
+ *  = mostly / (mostly + partially + notAchieved), computed by the caller. */
+export async function modelBenchmark(
+  db: AppDb, opts: { gemDigest?: string; limit?: number; k?: number } = {},
+): Promise<{ model: string; mostly: number; partially: number; notAchieved: number; producers: number; verifiedProducers: number }[]> {
+  const k = opts.k ?? DEFAULT_K, limit = opts.limit ?? 100;
+  const r = await db.execute<{ model: string; mostly: number; partially: number; notAchieved: number; producers: number; verifiedProducers: number }>(sql`
+    select mo.model,
+           sum(mo.mostly)::int as mostly,
+           sum(mo.partially)::int as partially,
+           sum(mo.not_achieved)::int as "notAchieved",
+           count(distinct a.producer_pubkey)::int as producers,
+           count(distinct b.provider || ':' || b.account_id)::int as "verifiedProducers"
+    from model_outcomes mo
+    join attestations a on a.id = mo.attestation_id and not a.quarantined
+    left join account_bindings b on b.pubkey = a.producer_pubkey
+    where (${opts.gemDigest ?? null}::text is null or a.gem_digest = ${opts.gemDigest ?? null})
+    group by mo.model
+    having count(distinct a.producer_pubkey) >= ${k}
+    order by producers desc, mo.model
+    limit ${limit}
+  `);
+  return r.rows as { model: string; mostly: number; partially: number; notAchieved: number; producers: number; verifiedProducers: number }[];
+}
+
 export async function coOccurrence(
   db: AppDb, opts: { id: string; limit?: number; k?: number },
 ): Promise<{ id: string; producers: number; verifiedProducers: number }[]> {

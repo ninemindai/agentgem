@@ -4,7 +4,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { AppDb } from "./schema.js";
-import { producers, attestations, ingredients, usageEdges } from "./schema.js";
+import { producers, attestations, ingredients, usageEdges, modelOutcomes } from "./schema.js";
 import type { UsageAttestation } from "@agentgem/insight";
 
 interface Node { id: string; kind: string; idKind: string; invocations: number; sessions: number }
@@ -35,6 +35,11 @@ export async function projectAttestation(db: AppDb, att: UsageAttestation): Prom
     await db.insert(ingredients).values({ id: n.id, kind: n.kind, idKind: n.idKind })
       .onConflictDoUpdate({ target: ingredients.id, set: { lastSeen: sql`now()` } });
     await db.insert(usageEdges).values({ attestationId: id, ingredientId: n.id, invocations: n.invocations, sessions: n.sessions })
+      .onConflictDoNothing();
+  }
+  // v2 attestations carry per-model outcome counts → the cross-model benchmark.
+  for (const h of att.source.outcomeHistogram ?? []) {
+    await db.insert(modelOutcomes).values({ attestationId: id, model: h.model, mostly: h.mostly, partially: h.partially, notAchieved: h.not })
       .onConflictDoNothing();
   }
   return { id, publicIngredients: nodes.length, privateCount };
