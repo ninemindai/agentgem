@@ -6,7 +6,7 @@ import { DiscoverSection } from "./Discover.js";
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 const res = (body: unknown) => ({ ok: true, status: 200, text: async () => JSON.stringify(body) }) as unknown as Response;
-const cand = (name: string) => ({ name, source: "o/r", registry: "skills.sh", installs: 1234, url: `https://skills.sh/o/r/${name}`, reason: `matches your ${name} workflow`, installCmd: `npx skills add o/r@${name}` });
+const cand = (name: string) => ({ name, source: "o/r", skillId: name, registry: "skills.sh", installs: 1234, url: `https://skills.sh/o/r/${name}`, reason: `matches your ${name} workflow`, installCmd: `npx skills add o/r@${name}` });
 
 describe("DiscoverSection", () => {
   it("fetches and renders recommendations on click", async () => {
@@ -38,5 +38,46 @@ describe("DiscoverSection", () => {
       const cmds = screen.getAllByText(/npx skills add/).map((n) => n.textContent);
       expect(cmds[0]).toBe("npx skills add o/r@b"); // b now first
     });
+  });
+
+  it("installs a skill: Install → confirm → POSTs source+skillId → shows installed", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(res({ candidates: [cand("a")], topics: ["a"], reranked: false }))
+      .mockResolvedValueOnce(res({ ok: true, skill: "o/r@a", message: "Installed 1 skill" }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<DiscoverSection apiBase="" />);
+    fireEvent.click(screen.getByRole("button", { name: /find recommendations/i }));
+    await screen.findByText("npx skills add o/r@a");
+    fireEvent.click(screen.getByRole("button", { name: /^install$/i }));         // arm confirm
+    fireEvent.click(screen.getByRole("button", { name: /^confirm$/i }));         // execute
+    expect(await screen.findByText(/✓ installed/)).toBeTruthy();
+    // the install POST carried the canonical source + skillId, not the display string
+    const body = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body));
+    expect(body).toEqual({ source: "o/r", skillId: "a" });
+  });
+
+  it("surfaces an install failure (ok:false) without throwing", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(res({ candidates: [cand("a")], topics: ["a"], reranked: false }))
+      .mockResolvedValueOnce(res({ ok: false, skill: "o/r@a", message: "Repository not found" }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<DiscoverSection apiBase="" />);
+    fireEvent.click(screen.getByRole("button", { name: /find recommendations/i }));
+    await screen.findByText("npx skills add o/r@a");
+    fireEvent.click(screen.getByRole("button", { name: /^install$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^confirm$/i }));
+    expect(await screen.findByText(/Repository not found/)).toBeTruthy();
+  });
+
+  it("Cancel aborts the install without POSTing", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(res({ candidates: [cand("a")], topics: ["a"], reranked: false }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<DiscoverSection apiBase="" />);
+    fireEvent.click(screen.getByRole("button", { name: /find recommendations/i }));
+    await screen.findByText("npx skills add o/r@a");
+    fireEvent.click(screen.getByRole("button", { name: /^install$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+    expect(screen.getByRole("button", { name: /^install$/i })).toBeTruthy();     // back to idle
+    expect(fetchMock).toHaveBeenCalledTimes(1);                                  // only the find call
   });
 });

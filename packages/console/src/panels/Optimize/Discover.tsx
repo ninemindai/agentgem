@@ -1,6 +1,6 @@
 // packages/console/src/panels/Optimize/Discover.tsx
 import { useState } from "react";
-import { discoverRoute, rerankDiscoverRoute, makeClient, type DiscoverPayload } from "../../api/routes.js";
+import { discoverRoute, rerankDiscoverRoute, installSkillRoute, makeClient, type DiscoverPayload, type DiscoverCandidate } from "../../api/routes.js";
 
 export function DiscoverSection({ apiBase }: { apiBase: string }) {
   const [data, setData] = useState<DiscoverPayload | null>(null);
@@ -42,7 +42,7 @@ export function DiscoverSection({ apiBase }: { apiBase: string }) {
 
       {data && data.candidates.length > 0 && (
         <>
-          <p className="obs-muted opt-note">Recommend-only — nothing is installed for you. Install counts are <strong>registry-reported</strong>, not AgentGem endorsements.</p>
+          <p className="obs-muted opt-note">Install runs the <code>skills</code> CLI with <code>--global</code> on this machine (into your <code>~/.claude</code> skills). Install counts are <strong>registry-reported</strong>, not AgentGem endorsements.</p>
           <table className="obs-table">
             <thead><tr><th>skill</th><th>source</th><th>installs</th><th>why</th><th>install</th></tr></thead>
             <tbody>
@@ -52,7 +52,7 @@ export function DiscoverSection({ apiBase }: { apiBase: string }) {
                   <td className="obs-muted">{c.source}</td>
                   <td className="obs-muted">{c.installs != null ? c.installs.toLocaleString() : "—"}</td>
                   <td className="obs-muted">{c.reason}</td>
-                  <td><CopyCmd cmd={c.installCmd} /></td>
+                  <td><InstallCell apiBase={apiBase} candidate={c} /></td>
                 </tr>
               ))}
             </tbody>
@@ -60,6 +60,44 @@ export function DiscoverSection({ apiBase }: { apiBase: string }) {
         </>
       )}
     </section>
+  );
+}
+
+type InstallPhase = "idle" | "confirming" | "installing" | "done" | "error";
+
+function InstallCell({ apiBase, candidate }: { apiBase: string; candidate: DiscoverCandidate }) {
+  const [phase, setPhase] = useState<InstallPhase>("idle");
+  const [message, setMessage] = useState<string>("");
+
+  const install = () => {
+    setPhase("installing"); setMessage("");
+    installSkillRoute.call(makeClient(apiBase), { body: { source: candidate.source, skillId: candidate.skillId } })
+      .then((r) => { setPhase(r.ok ? "done" : "error"); setMessage(r.message); })
+      .catch((e) => { setPhase("error"); setMessage(String(e?.message ?? e)); });
+  };
+
+  return (
+    <div className="opt-install">
+      {phase === "idle" && (
+        <button type="button" className="obs-range-btn" onClick={() => setPhase("confirming")} title="Install this skill to your machine">Install</button>
+      )}
+      {phase === "confirming" && (
+        <span className="opt-install-confirm">
+          <span className="obs-muted">Install to ~/.claude (global)?</span>
+          <button type="button" className="obs-range-btn" onClick={install}>Confirm</button>
+          <button type="button" className="opt-copy-cmd" onClick={() => setPhase("idle")}>Cancel</button>
+        </span>
+      )}
+      {phase === "installing" && <span className="obs-muted">Installing…</span>}
+      {phase === "done" && <span className="opt-install-ok" title={message}>✓ installed</span>}
+      {phase === "error" && (
+        <span className="opt-install-err">
+          <span className="obs-error" title={message}>✗ {message.split("\n").slice(-1)[0] || "failed"}</span>
+          <button type="button" className="opt-copy-cmd" onClick={install}>retry</button>
+        </span>
+      )}
+      <CopyCmd cmd={candidate.installCmd} />
+    </div>
   );
 }
 

@@ -4,7 +4,7 @@ import { describe, it, expect } from "vitest";
 import { rerankCandidates, type DiscoverCandidate, type AcpConnectFn } from "@agentgem/insight";
 
 const cand = (name: string, source = "o/r"): DiscoverCandidate => ({
-  name, source, registry: "skills.sh", installs: 1,
+  name, source, skillId: name, registry: "skills.sh", installs: 1,
   url: `https://skills.sh/${source}/${name}`, reason: "orig", installCmd: `npx skills add ${source}@${name}`,
 });
 

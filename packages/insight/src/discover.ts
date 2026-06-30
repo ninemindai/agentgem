@@ -13,6 +13,7 @@ import { searchSkills, type RegistrySkill } from "./skillsRegistry.js";
 export interface DiscoverCandidate {
   name: string;
   source: string;          // "owner/repo"
+  skillId: string;         // canonical slug; the install target for `skills add <source>@<skillId>`
   registry: "skills.sh";   // future-proof: other registries can join
   installs?: number;       // registry-reported
   url: string;             // https://skills.sh/<id>
@@ -82,6 +83,7 @@ export async function buildDiscover(
     .map(({ row, topics: ts }): DiscoverCandidate => ({
       name: row.name,
       source: row.source,
+      skillId: row.skillId,
       registry: "skills.sh",
       installs: row.installs,
       url: `https://skills.sh/${row.id}`,
