@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 import type { Gem, GemArtifact, SecretRequirement, GemCheck } from "@agentgem/model";
 import { readGemArchive, computeLock, verifyLock, writeGemArchive, readGemMeta } from "@agentgem/archive";
 import { materialize } from "@agentgem/model";

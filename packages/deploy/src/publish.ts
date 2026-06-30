@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/publish.ts
 // Network publish: render a Gem, register each skill as a custom Agent Skill (Skills API), then
 // create the agent referencing those skills. The PublishClient is injected so the orchestration is

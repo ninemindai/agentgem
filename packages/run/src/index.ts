@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // @agentgem/run — run/verify a Gem via a local ACP agent + sandbox + config access.
 export * from "./run.js";
 export * from "./runGem.js";

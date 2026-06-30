@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/runGem.ts
 //
 // The end-to-end "run my Gem" path: materialize a portable Gem into a runnable

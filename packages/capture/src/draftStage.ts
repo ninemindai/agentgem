@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/draftStage.ts
 //
 // Stage a distilled DRAFT skill so a Gem candidate can include it before it is

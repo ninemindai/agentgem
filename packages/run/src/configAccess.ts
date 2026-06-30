@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/configAccess.ts
 //
 // The sandboxed Gem runner keeps the agent on its REAL ~/.claude so Keychain/OAuth auth

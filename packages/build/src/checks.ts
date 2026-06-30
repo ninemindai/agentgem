@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/checks.ts
 // Scaffold editable check drafts from a built Gem. Pure; runs nothing. The runner registry
 // holds DECLARATIONS only — the adapters that actually execute live in the platform runner.

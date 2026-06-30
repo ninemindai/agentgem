@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/index.ts
 import { config as loadEnv } from "dotenv";
 import { credentialsEnvPath } from "@agentgem/capture";

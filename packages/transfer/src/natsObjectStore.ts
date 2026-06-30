@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/transfer/natsObjectStore.ts
 import { connect, type NatsConnection } from "@nats-io/transport-node";
 import { Objm, StorageType, type ObjectStore as NatsOS } from "@nats-io/obj";

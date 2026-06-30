@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/attestation.ts
 import { createHash } from "node:crypto";
 import type { Gem, McpServerArtifact, SkillArtifact } from "@agentgem/model";

@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // @agentgem/aggregator — Postgres/pglite data-moat: schema, aggregates, ingest, detection, account binding.
 export * from "./schema.js";
 export * from "./aggregates.js";

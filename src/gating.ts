@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // Three-bucket rate limiting for the aggregator: anonymous reads (per-IP, low ceiling), keyed
 // reads (per-key, high ceiling), and a separate ingest bucket (per-IP, 120/min by default) so
 // publish bursts and read traffic never share a budget. Each bucket is a separate mount, routed

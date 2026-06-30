@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/redact.ts
 // Strip secret VALUES from an MCP/hook config while preserving its shape, and record the
 // NAME + LOCATION of every value stripped so a runtime can re-inject by name. Values never leave.

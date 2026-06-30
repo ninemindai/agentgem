@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/agentcorePublish.ts
 // Publish a gem as a Bedrock AgentCore harness via CreateHarness. The control-plane client is injected
 // so the network call is unit-testable with a fake (no live AWS). Skills are skip-and-reported: the API

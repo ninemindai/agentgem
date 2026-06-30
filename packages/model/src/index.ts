@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // @agentgem/model — the gem format + materialize-target codegen foundation.
 // Barrel re-export; consumers import named symbols from "@agentgem/model".
 export * from "./types.js";

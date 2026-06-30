@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/identity.ts
 import { generateKeyPairSync, sign as edSign, verify as edVerify, createPublicKey, createPrivateKey } from "node:crypto";
 import { mkdirSync, writeFileSync, lstatSync, chmodSync, openSync, readSync, fstatSync, fchmodSync, closeSync, constants } from "node:fs";

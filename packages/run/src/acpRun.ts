@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/acpRun.ts
 //
 // Runs a materialized Gem by driving a locally-installed ACP coding agent (Claude)

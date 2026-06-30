@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/sandboxLaunch.ts
 // Pure generators for the OS-native sandbox launchers. The v1 boundary contains
 // FILESYSTEM WRITES to the run dir (+ temp); reads, exec, and network stay open. This

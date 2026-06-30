@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/testbedFlavors.ts
 // The set of harness "flavors" a testbed can be authored/test-driven as. Flavors drive the
 // flavor-specific bits — detection, scaffold skeleton, test-drive run command, and import support.

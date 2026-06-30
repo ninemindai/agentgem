@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/credentials.ts
 // Server-side credentials the deploy/publish backends gate on (Claude Managed → ANTHROPIC_API_KEY,
 // eve → VERCEL_TOKEN, flue → CLOUDFLARE_API_TOKEN). These are agentgem-SERVER secrets — the machine's

@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/aggregator/accountVerifier.ts
 // The provider seam: the only network dependency in the binding path. Tests inject a fake.
 export interface VerifiedAccount { provider: string; accountId: string; login: string; }

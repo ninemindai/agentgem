@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/share.ts
 // The registry-optional "easy share" loop: turn a Gem into one portable .gem file
 // and install one back. Pure + in-process — no disk/network — so it composes with

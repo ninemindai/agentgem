@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 import { randomBytes } from "node:crypto";
 
 export interface ObjectStore {

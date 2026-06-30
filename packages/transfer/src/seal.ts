@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 
 const IV_LEN = 12;

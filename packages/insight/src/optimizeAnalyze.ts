@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/optimizeAnalyze.ts
 //
 // Pure (no IO) payload builder for GET /api/optimize. Joins the installed inventory

@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/agentcoreRun.ts
 // Deploy a workspace's rendered AgentCore project via the `agentcore` CLI. Peer of run.ts;
 // reuses its ProcessRunner injection so command/state logic is unit-testable without a real CLI/AWS.

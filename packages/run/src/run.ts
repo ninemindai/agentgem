@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/run.ts
 // Run/deploy the rendered eve project. Side-effecting orchestration (peer of workspaces.ts).
 // Process spawning is injected via ProcessRunner so command/env/state logic is unit-testable.

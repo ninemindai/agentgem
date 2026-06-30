@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/bind/cli.ts — `agentgem bind`: device-flow auth, then bind the local key to a GitHub account.
 import { writeFileSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";

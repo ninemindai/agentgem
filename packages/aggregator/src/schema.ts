@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 import { pgTable, text, integer, uuid, timestamp, boolean, real, primaryKey, jsonb, bigint } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { PgDatabase } from "drizzle-orm/pg-core";

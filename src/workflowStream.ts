@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/workflowStream.ts
 //
 // SSE endpoint for the workflow analysis. agentgem's decorator framework returns

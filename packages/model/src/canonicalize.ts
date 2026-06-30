@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/canonicalize.ts
 import { createHash } from "node:crypto";
 import type { McpServerArtifact, SkillArtifact } from "./types.js";

@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/distill/mcpServer.ts
 import { createHash } from "node:crypto";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";

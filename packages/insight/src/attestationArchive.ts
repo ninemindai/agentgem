@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/attestationArchive.ts
 import type { Gem } from "@agentgem/model";
 import type { FileTree } from "@agentgem/archive";

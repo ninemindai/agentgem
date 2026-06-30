@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/aggregator/seed.ts
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";

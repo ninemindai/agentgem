@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/targets.ts
 // Render a normalized Gem INTO a harness's on-disk layout. Pure; writes nothing — returns an
 // in-memory FileTree. Targets compose shared per-artifact-type convention renderers; unmappable

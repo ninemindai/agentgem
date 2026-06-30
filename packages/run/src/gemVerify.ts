@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/gemVerify.ts
 //
 // The verification surface: given the outcome of runGemWithAgent, decide whether a

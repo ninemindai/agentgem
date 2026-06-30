@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/toml.ts
 // Minimal TOML emitter for the MCP-server config shape ONLY (command/url/type scalars,
 // args array, env/headers sub-tables). Not a general TOML library.

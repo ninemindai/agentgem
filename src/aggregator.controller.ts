@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/aggregator.controller.ts
 import { z } from "zod";
 import { timingSafeEqual } from "node:crypto";

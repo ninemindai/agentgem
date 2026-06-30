@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 import { randomBytes, randomUUID, createHash } from "node:crypto";
 import { eq, and, isNull, desc } from "drizzle-orm";
 import { apiKeys, type AppDb } from "./schema.js";

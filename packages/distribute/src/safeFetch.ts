@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/safeFetch.ts
 // SSRF guard for installing a .gem from a URL. A localhost-bound dev server is still
 // reachable by a malicious page via CSRF, so an unguarded server-side fetch lets an

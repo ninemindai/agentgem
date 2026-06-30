@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/inputError.ts
 // A rejection of a caller-supplied value by an input-containment guard: an unsafe
 // workspace-name path segment, a non-public (SSRF) URL, a malformed credential.

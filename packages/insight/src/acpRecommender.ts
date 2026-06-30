@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/acpRecommender.ts
 //
 // Turns a deterministic WorkflowSignal + inventory into a GemRecommendation by

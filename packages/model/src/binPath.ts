@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/binPath.ts
 // Leaf helper: is `binName` resolvable on the current PATH? Shared by the adapter
 // resolver (runGem) and the sandbox backend availability checks (sandbox), so neither

@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/aggregator/ingest.ts
 import { sql } from "drizzle-orm";
 import { verify } from "@agentgem/model";

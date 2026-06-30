@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/buildGem.ts
 import type { ConfigInventory, Gem, GemArtifact, GemCheck, SecretRequirement, ChannelPlatform } from "@agentgem/model";
 import { redactMcpConfig } from "@agentgem/base";

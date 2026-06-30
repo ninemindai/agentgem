@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/registryGithub.ts
 // Isolated GitHub network client. All HTTP goes through the injected `http` fn so logic stays testable.
 // Fetch uses the Contents API (token-optional → public + private uniform). Publish builds one atomic

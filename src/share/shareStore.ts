@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 import { randomBytes } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { shareCards } from "@agentgem/aggregator";

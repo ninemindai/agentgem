@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/testbed.ts
 // The inverse of introspect.ts: scaffold a runnable .claude/ testbed and merge selected
 // GLOBAL artifacts into it. MCP/hook secrets are copied verbatim from raw global config into

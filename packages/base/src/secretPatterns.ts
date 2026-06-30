@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/secretPatterns.ts
 //
 // Strong, low-false-positive credential patterns shared by the capture-time redactor

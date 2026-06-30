@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/channels.ts
 // The single place that knows how each platform maps onto Eve's channel factories. Generalizes the
 // old hard-coded eveChannelTs scaffold. Adding a platform = one entry here; the archive never changes.

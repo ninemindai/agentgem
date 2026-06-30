@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/acpSession.ts
 //
 // The shared ACP adapter plumbing used by BOTH the workflow recommender and the

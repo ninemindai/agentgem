@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/cli.ts — the `agentgem` command. A thin wrapper over run() in index.ts:
 // parses a couple of flags and starts the local server. Published as the `bin`
 // entry so `npx @ninemind/agentgem` and a global install both work.

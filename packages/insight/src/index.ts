@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // @agentgem/insight — scan transcripts -> signals, distill skills, recommend & attest Gems.
 export * from "./workflowScan.js";
 export * from "./scrub.js";

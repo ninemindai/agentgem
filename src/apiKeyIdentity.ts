@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // Resolves the caller's tier from an API key BEFORE the rate limiters run, so the
 // limiters' synchronous keyGenerator/skip can read req.gemTier/req.gemKeyId without an
 // async DB hit. Mounted (scoped to /api/aggregator) ahead of the extension-rate-limit mounts.

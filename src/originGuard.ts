@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/originGuard.ts
 // CSRF / drive-by guard for the loopback REST surface.
 //

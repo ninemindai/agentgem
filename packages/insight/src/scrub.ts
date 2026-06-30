@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/scrub.ts
 //
 // Field-aware, default-deny scrubber for builtin tool_use inputs captured during

@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/usageCache.ts
 //
 // Single-entry persistent cache for the (expensive: reads every transcript)

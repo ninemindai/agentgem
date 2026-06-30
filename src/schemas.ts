@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/schemas.ts
 import { z } from "zod";
 import { RUNNER_REGISTRY } from "@agentgem/build";

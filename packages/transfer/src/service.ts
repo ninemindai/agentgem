@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/transfer/service.ts
 // Dependency-injected entry points shared by the MCP tools, REST controller, and
 // CLI. The transport (an ObjectStore, possibly a remote one we must close) is

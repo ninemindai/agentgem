@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/deploy.ts
 // Deploy backends as a registry (mirrors TARGET_REGISTRY for materialize). Each DeployTarget renders
 // a Gem offline (preview), reports whether the server is configured for it (ready), and performs the

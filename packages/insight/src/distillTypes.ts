@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/distillTypes.ts
 //
 // Shared distillation types. Extracted from distill.ts so that extract.ts (the

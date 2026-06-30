@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/workflowScan.ts
 //
 // Deterministic transcript → WorkflowSignal. Reads a project's Claude session

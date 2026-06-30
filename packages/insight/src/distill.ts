@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/distill.ts
 //
 // Distillation track: turn the builtin procedure recovered by the scan into draft

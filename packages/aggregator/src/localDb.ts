@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // Chooses the aggregator's database: hosted Postgres when DATABASE_URL is set, otherwise an
 // embedded pglite instance so the full gated aggregator runs locally with no external Postgres.
 // pglite data is in-memory/ephemeral — for dev + validation, not production.

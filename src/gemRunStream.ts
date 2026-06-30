@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gemRunStream.ts
 //
 // SSE endpoint for running an already-prepared Gem with a local ACP coding agent.

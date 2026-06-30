@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/sandbox.ts
 // Pluggable sandbox-backend registry in front of the RunConnectFn seam. Each backend
 // produces a RunConnectFn pre-scoped to a run dir. Auto-allow is capability-gated:

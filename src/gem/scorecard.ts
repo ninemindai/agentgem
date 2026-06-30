@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/scorecard.ts
 //
 // Deterministic "goldmine scorecard": rolls the existing analyze pipeline's

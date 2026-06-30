@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/transfer/mint.ts
 import { createUser, fromSeed } from "@nats-io/nkeys";
 import { encodeUser, fmtCreds } from "@nats-io/jwt";

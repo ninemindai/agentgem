@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/optimizeScan.ts
 //
 // IO seam for GET /api/optimize: scan all Claude transcripts into a per-artifact usage

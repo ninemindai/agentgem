@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/types.ts
 export type ArtifactType = "skill" | "mcp_server" | "instructions" | "hook" | "channel";
 

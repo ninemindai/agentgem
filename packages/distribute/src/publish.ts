@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/publish.ts
 // Pure render: a (redacted) Gem -> the Managed Agents `agents.create` payload (sans skills) plus
 // the skills to register and the side-lists. No network, no secret values.

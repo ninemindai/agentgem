@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/extract.ts
 //
 // The deterministic extractor seam between procedure mining and the LLM. Takes

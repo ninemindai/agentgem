@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/scorecardStream.ts
 //
 // SSE endpoint for the goldmine scorecard scan. Mirrors workflowStream.ts: the

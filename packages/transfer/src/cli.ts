@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/transfer/cli.ts
 import { readFile as fsReadFile, writeFile as fsWriteFile } from "node:fs/promises";
 import { sendGemBytes, receiveGem } from "./transferIndex.js";

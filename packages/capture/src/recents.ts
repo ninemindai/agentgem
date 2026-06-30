@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/recents.ts
 // Persisted "testbeds you've opened in agentgem" — a small JSON list under ~/.agentgem.
 // Pure store: takes an explicit home dir, computes no fs-existence (the endpoint adds that).

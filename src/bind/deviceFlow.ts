@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/bind/deviceFlow.ts
 // GitHub OAuth device flow (https://docs.github.com/apps/oauth-device-flow). No callback URL,
 // no client secret — the CLI requests a code, the user approves in a browser, the CLI polls.

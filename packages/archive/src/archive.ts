@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 import { createHash } from "node:crypto";
 import type { FileTree, SkippedArtifact } from "@agentgem/model";
 import type {

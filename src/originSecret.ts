@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/originSecret.ts
 // Origin lock for the anonymous share-create endpoint (POST /api/aggregator/share).
 //

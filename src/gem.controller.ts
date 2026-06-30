@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem.controller.ts
 import { existsSync, writeFileSync, readFileSync } from "node:fs";
 import { basename, resolve, sep } from "node:path";

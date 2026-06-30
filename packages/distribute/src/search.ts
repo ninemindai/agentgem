@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/search.ts
 // Discovery over the registry index. Index-only and in-memory: getIndex() already
 // fetches the whole index in one call, so search is a pure weighted scan — no extra

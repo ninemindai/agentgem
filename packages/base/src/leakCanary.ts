@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/leakCanary.ts
 //
 // Final, independent safety net before a Gem leaves the machine. `buildGem` already redacts at

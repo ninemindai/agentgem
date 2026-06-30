@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/aggregator/binding.ts
 // Records a server-verified pubkey -> account binding. Two proofs combine: the ed25519
 // signature proves key possession; the token (verified live by AccountVerifier) proves

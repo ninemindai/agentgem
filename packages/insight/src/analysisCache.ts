@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/analysisCache.ts
 //
 // Per-project cache of the (expensive, ~15-20s) workflow analysis. Keyed by the

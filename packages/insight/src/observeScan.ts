@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/observeScan.ts
 //
 // Deterministic transcript → SessionStat. Walks the local Claude + Codex session

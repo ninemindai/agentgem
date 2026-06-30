@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/archiveTar.ts
 // Bundle a FileTree into a single .tar.gz buffer and back — the archive's transport/shipping form
 // (the directory tree is the canonical form). Dependency-free: a minimal POSIX ustar writer/reader

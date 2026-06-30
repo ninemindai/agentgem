@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem/globalUsage.ts
 //
 // Pure global-usage scan: count which GLOBAL artifacts fired across the given

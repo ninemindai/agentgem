@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/gem.tools.ts
 import { z } from "zod";
 import { mcpServer, tool } from "@agentback/mcp";

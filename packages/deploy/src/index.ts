@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // @agentgem/deploy — publish/deploy a Gem to a cloud runtime (Anthropic managed agent, AWS AgentCore).
 export * from "./deploy.js";
 export * from "./agentcorePublish.js";

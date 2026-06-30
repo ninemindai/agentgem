@@ -1,3 +1,5 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
 // src/pickFolder.ts
 // Pop the OS-native folder chooser (agentgem runs locally, so the dialog appears on the
 // user's own screen) and return the chosen absolute path. The user explicitly selects the
