@@ -1,4 +1,4 @@
-import type { AggIngredient, AggCoOccurrence, AdoptionPoint } from "./types";
+import type { AggIngredient, AggCoOccurrence, AdoptionPoint, RegistryGem } from "./types";
 
 type Query = Record<string, string | number | undefined>;
 
@@ -20,6 +20,8 @@ export function makeApi(base: string) {
       get<AggCoOccurrence[]>(base, "/api/aggregator/co-occurrence", q),
     getAdoption: (q: { id: string; bucket?: "week" | "month" }) =>
       get<AdoptionPoint[]>(base, "/api/aggregator/adoption", q),
+    getGems: () =>
+      get<{ gems: RegistryGem[] }>(base, "/api/registry/gems").then((r) => r.gems),
   };
 }
 

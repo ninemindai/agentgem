@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { GEMS, listGems, getGem, filterGems } from "./catalog";
+import { GEMS, listGems, getGem, filterGems, STATIC_GEMS, loadGems, findGem } from "./catalog";
+import type { RegistryGem } from "../types";
 
 describe("catalog", () => {
   it("listGems returns the seed (non-empty, unique keys)", () => {
@@ -26,5 +27,28 @@ describe("catalog", () => {
     expect(filterGems(GEMS, "BRAINSTORM").some((g) => g.key === "brainstorming-kit")).toBe(true);
     expect(filterGems(GEMS, "github").some((g) => g.tags.includes("github") || g.key.includes("github"))).toBe(true);
     expect(filterGems(GEMS, "zzzznomatch")).toEqual([]);
+  });
+});
+
+const liveOne: RegistryGem = { key: "live-gem", version: "3.0.0", author: "acme", description: "live", tags: ["x"], artifactKinds: ["mcp"] };
+const apiWith = (impl: () => Promise<RegistryGem[]>) => ({ getGems: impl }) as never;
+
+describe("loadGems", () => {
+  it("maps live registry gems to Gem with empty ingredients", async () => {
+    const gems = await loadGems(apiWith(() => Promise.resolve([liveOne])));
+    expect(gems).toEqual([{ key: "live-gem", version: "3.0.0", author: "acme", description: "live", tags: ["x"], artifactKinds: ["mcp"], ingredients: [] }]);
+  });
+  it("falls back to STATIC_GEMS when the live list is empty", async () => {
+    expect(await loadGems(apiWith(() => Promise.resolve([])))).toEqual(STATIC_GEMS);
+  });
+  it("falls back to STATIC_GEMS when getGems throws", async () => {
+    expect(await loadGems(apiWith(() => Promise.reject(new Error("net"))))).toEqual(STATIC_GEMS);
+  });
+});
+
+describe("findGem", () => {
+  it("hits and misses", () => {
+    expect(findGem(STATIC_GEMS, STATIC_GEMS[0].key)?.key).toBe(STATIC_GEMS[0].key);
+    expect(findGem(STATIC_GEMS, "nope")).toBeUndefined();
   });
 });

@@ -16,7 +16,7 @@ export interface Gem {
   ingredients: GemIngredient[]; // bundled ingredients; ids match aggregator ids for cross-linking
 }
 
-export const GEMS: Gem[] = [
+export const STATIC_GEMS: Gem[] = [
   {
     key: "brainstorming-kit", version: "1.2.0", author: "superpowers",
     description: "Turn rough ideas into approved specs through guided dialogue, then into bite-sized implementation plans.",
@@ -89,9 +89,12 @@ export const GEMS: Gem[] = [
   },
 ];
 
-export function listGems(): Gem[] { return GEMS; }
+/** @deprecated use STATIC_GEMS — kept so existing imports don't break until Task 4 */
+export const GEMS: Gem[] = STATIC_GEMS;
 
-export function getGem(key: string): Gem | undefined { return GEMS.find((g) => g.key === key); }
+export function listGems(): Gem[] { return STATIC_GEMS; }
+
+export function getGem(key: string): Gem | undefined { return STATIC_GEMS.find((g) => g.key === key); }
 
 /** Case-insensitive substring match over key + description + tags; all gems on blank. */
 export function filterGems(gems: Gem[], query: string): Gem[] {
@@ -104,3 +107,22 @@ export function filterGems(gems: Gem[], query: string): Gem[] {
       g.tags.some((t) => t.toLowerCase().includes(q)),
   );
 }
+
+import type { RegistryGem } from "../types";
+import type { makeApi } from "../api";
+
+function toGem(r: RegistryGem): Gem {
+  return { key: r.key, version: r.version, author: r.author, description: r.description ?? "", tags: r.tags ?? [], artifactKinds: r.artifactKinds ?? [], ingredients: [] };
+}
+
+/** Live registry gems, or the curated STATIC_GEMS when the registry is empty/unconfigured/errors. */
+export async function loadGems(api: ReturnType<typeof makeApi>): Promise<Gem[]> {
+  try {
+    const live = await api.getGems();
+    return live.length > 0 ? live.map(toGem) : STATIC_GEMS;
+  } catch {
+    return STATIC_GEMS;
+  }
+}
+
+export function findGem(gems: Gem[], key: string): Gem | undefined { return gems.find((g) => g.key === key); }

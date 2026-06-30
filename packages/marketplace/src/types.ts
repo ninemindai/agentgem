@@ -1,3 +1,12 @@
+export interface RegistryGem {
+  key: string;
+  version: string;
+  author?: string;
+  description?: string;
+  tags?: string[];
+  artifactKinds?: string[];
+}
+
 export interface AggIngredient {
   id: string;
   kind: string;
