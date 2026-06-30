@@ -13,7 +13,7 @@ import type { DistilledSkill, DistilledLesson } from "@agentgem/insight";
 // The concrete (non-all) selection variant returned by buildPlaybookGem. Using the
 // Exclude utility avoids inventing a new type while still giving callers typed
 // access to `.skills`, `.includeInstructions`, etc. without a union narrowing step.
-type PlaybookSelection = Exclude<GemSelection, { all: true }>;
+export type PlaybookSelection = Exclude<GemSelection, { all: true }>;
 
 export function buildPlaybookGem(args: {
   name: string; baseInventory: ConfigInventory; skills: DistilledSkill[]; lessons: DistilledLesson[]; createdFrom?: string;
