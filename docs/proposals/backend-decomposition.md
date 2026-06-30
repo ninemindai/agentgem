@@ -94,10 +94,13 @@ reversible.
    `@agentgem/model` (barrel); wired via TS project references + `workspace:*`. Full build +
    722 tests green. The repo's first compiled runtime workspace package.
 
-   > **Publish caveat:** the root package publishes to npm, so its new `workspace:*` dep on
-   > the private, unpublished `@agentgem/model` must be resolved before publish — either
-   > publish `@agentgem/model` publicly (lockstep version) or bundle it into the root `dist`
-   > at pack time.
+   > **Publish caveat (resolved):** the root publishes to npm, so its `workspace:*` deps on
+   > the private, unpublished `@agentgem/*` packages would not resolve for consumers. Fixed by
+   > the *bundle* path: root is CLI-only (two bins, no library exports), so the `@agentgem/*`
+   > deps moved to `devDependencies` (still symlinked in the monorepo for build/test/deploy,
+   > but not installed by consumers) and `scripts/bundle-bins.mjs` esbuild-inlines them into the
+   > published bins (keeping real npm deps external). Runs only in `prepublishOnly`; verified via
+   > `pnpm pack` (zero `@agentgem` in published `dependencies` or shipped bins).
 2. **`archive` (the one true leaf).** ✅ *Shipped on `pkg-split-model`.* Extracted
    `packages/archive` = `{archive, archiveFs, archiveTar}` (deps: model only); 18 consumer
    imports rewritten to `@agentgem/archive`. Full build + 722 tests green.
@@ -181,7 +184,7 @@ root @ninemind/agentgem  →  depends on all; owns controllers + index + schemas
 
 ## Tradeoffs
 
-11 packages for ~10k LOC and a small team is real ceremony: 11 `package.json` + `tsconfig`
+12 packages for ~10k LOC and a small team is real ceremony: 12 `package.json` + `tsconfig`
 files, a project-reference graph, `workspace:*` wiring, and the `build-console.mjs`
 dist-folding pattern generalized to siblings. The payoff is strongest where a **dependency
 or deploy boundary** justifies it (`model`, `aggregator`, `deploy`, `transfer`); it is
