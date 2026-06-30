@@ -54,6 +54,21 @@ export const OptimizePayloadSchema = z.object({
   artifacts: z.array(OptimizeArtifactSchema),
   instructions: z.array(OptimizeInstructionSchema),
 });
+const DiscoverCandidateSchema = z.object({
+  name: z.string(),
+  source: z.string(),
+  registry: z.literal("skills.sh"),
+  installs: z.number().optional(),
+  url: z.string(),
+  reason: z.string(),
+  installCmd: z.string(),
+});
+export const DiscoverPayloadSchema = z.object({
+  candidates: z.array(DiscoverCandidateSchema),
+  topics: z.array(z.string()),
+  reranked: z.boolean().optional(),
+  degraded: z.object({ reason: z.string() }).optional(),
+});
 const ScorecardBuildRequestSchema = z.object({
   dir: z.string().optional(),
   name: z.string().optional(),
