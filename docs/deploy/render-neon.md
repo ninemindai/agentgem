@@ -119,14 +119,14 @@ spoofed here). If the burst does **not** 429, check that `CLIENT_IP_HEADER` is s
 
 ## Explore — the public marketplace UI (second service, same Blueprint)
 
-The same `render.yaml` defines a second service, `agentgem-explore`: a Vite/React **static site**
+The same `render.yaml` defines a second service, `agentgem-app`: a Vite/React **static site**
 (`packages/marketplace`) for the public ingredient-discovery app. Static sites on Render are
 **free, CDN-served, and don't sleep** (unlike the free web service). Topology:
 
 | Domain | Render service | Serves |
 | --- | --- | --- |
 | `api.agentgem.ai` | `agentgem` (Docker web) | the **API** (`/api/*`) only; `/` redirects to the marketing site. The desktop console UI is a **local** app and is disabled here via `SERVE_CONSOLE=false`. |
-| `app.agentgem.ai` | `agentgem-explore` (static) | the **public marketplace UI** |
+| `app.agentgem.ai` | `agentgem-app` (static) | the **public marketplace UI** |
 
 How it deploys (the Blueprint handles it automatically when applied):
 - **Build:** `pnpm install --frozen-lockfile && pnpm --filter @agentgem/marketplace build` (Render's build image already ships pnpm — do NOT `corepack enable`, it crashes on the read-only `/usr/bin`)
@@ -137,8 +137,8 @@ How it deploys (the Blueprint handles it automatically when applied):
   cross-origin call from `app.agentgem.ai` → `api.agentgem.ai/api/aggregator/*` works.
 
 Steps:
-1. Apply/sync the Blueprint — Render creates the `agentgem-explore` static site alongside `agentgem`.
-2. In the `agentgem-explore` service → **Settings → Custom Domains**, add `app.agentgem.ai` (CNAME
+1. Apply/sync the Blueprint — Render creates the `agentgem-app` static site alongside `agentgem`.
+2. In the `agentgem-app` service → **Settings → Custom Domains**, add `app.agentgem.ai` (CNAME
    to the Render target it shows).
 3. Verify: open `https://app.agentgem.ai` → leaderboard loads from the live API (or its
    k-anon empty state); click a row → `/ingredient/:id` deep-links and reloads cleanly.

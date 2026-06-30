@@ -647,4 +647,4 @@ git commit -m "feat(marketplace): wire StarButton into gems, gem detail, leaderb
 - [ ] **Backend** (compiled dist): `pnpm test` → green incl. `stars`, `starsInstall`, `originGuard`; the existing suites unaffected.
 - [ ] **Marketplace:** `pnpm --filter @agentgem/marketplace test && … typecheck && … build` → green.
 - [ ] **Manual smoke (optional, post-deploy on the live domains):** signed out → star counts show, clicking a star → GitHub sign-in; signed in → click stars/unstars optimistically and the count updates; reload keeps the starred state (`mine`).
-- [ ] **Deploy:** ships with the next `agentgem` Docker deploy (the endpoints) + the `agentgem-explore` static rebuild (the UI). No new env vars (reuses `AGENTGEM_WEB_ORIGINS` + the DB).
+- [ ] **Deploy:** ships with the next `agentgem` Docker deploy (the endpoints) + the `agentgem-app` static rebuild (the UI). No new env vars (reuses `AGENTGEM_WEB_ORIGINS` + the DB).
