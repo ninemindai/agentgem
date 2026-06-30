@@ -9,8 +9,8 @@
 // it into the inventory upstream. buildGem itself is unchanged.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { ConfigInventory, SkillArtifact } from "@agentgem/model";
-import type { DistilledSkill } from "@agentgem/insight";
+import type { ConfigInventory, SkillArtifact, InstructionsArtifact } from "@agentgem/model";
+import type { DistilledSkill, DistilledLesson } from "@agentgem/insight";
 import { agentgemHome } from "@agentgem/model";
 
 // Assemble the SKILL.md text: skillify-shaped frontmatter + the captured body.
@@ -33,6 +33,24 @@ export function distilledSkillMarkdown(s: DistilledSkill): string {
 
 export function distilledToArtifact(s: DistilledSkill): SkillArtifact {
   return { type: "skill", name: s.name, description: s.description, source: "distilled-draft", content: distilledSkillMarkdown(s) };
+}
+
+// Render a lesson as instructions markdown: the scrubbed body + a coordinates-free
+// footer (sessions COUNT + importance only — never sessionIds or raw content).
+export function distilledLessonMarkdown(l: DistilledLesson): string {
+  const n = l.evidence.sessions;
+  return [
+    `# Lesson: ${l.name}`,
+    "",
+    l.body.trim(),
+    "",
+    `> Distilled from ${n} session${n === 1 ? "" : "s"} — importance: ${l.importance}.`,
+    "",
+  ].join("\n");
+}
+
+export function lessonToArtifact(l: DistilledLesson): InstructionsArtifact {
+  return { type: "instructions", name: l.name, content: distilledLessonMarkdown(l) };
 }
 
 /**
