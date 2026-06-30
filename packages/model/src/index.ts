@@ -12,3 +12,4 @@ export * from "./binPath.js";
 export * from "./identity.js";
 export * from "./inputError.js";
 export * from "./resolveDir.js";
+export * from "./gemTypes.js";
