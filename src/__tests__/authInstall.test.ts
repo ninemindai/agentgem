@@ -95,6 +95,17 @@ describe("auth handlers", () => {
     }
   });
 
+  it("answers an OPTIONS preflight with 204 + CORS for an allowed origin", async () => {
+    { const db = await makeTestDb();
+      const res = mockRes();
+      await meHandler(deps(db))(mockReq({ method: "OPTIONS", headers: { origin: "https://explore.agentgem.ai" } }) as any, res as any);
+      expect(res._status).toBe(204);
+      expect(res._headers["access-control-allow-origin"]).toBe("https://explore.agentgem.ai");
+      expect(res._headers["access-control-allow-credentials"]).toBe("true");
+      expect(res._headers["access-control-allow-methods"]).toContain("OPTIONS");
+    }
+  });
+
   it("logout deletes the session and clears the cookie", async () => {
     { const db = await makeTestDb();
       const login = mockRes();

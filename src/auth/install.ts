@@ -18,7 +18,7 @@ export interface AuthDeps { db: AppDb; verifier: AccountVerifier; exchangeCode: 
 // duck-typed Express req/res (no @types/express dependency, matching originGuard / the SSE handlers)
 interface Req { method: string; path: string; query: Record<string, unknown>; headers: Record<string, string | undefined>; get(name: string): string | undefined }
 interface Res { status(c: number): Res; set(k: string, v: string): Res; setHeader(k: string, v: string): Res; json(b: unknown): Res; send(b: unknown): Res; redirect(code: number, url?: string): Res }
-type ExpressApp = { get(path: string, h: (req: Req, res: Res) => unknown): unknown; post(path: string, h: (req: Req, res: Res) => unknown): unknown };
+type ExpressApp = { get(path: string, h: (req: Req, res: Res) => unknown): unknown; post(path: string, h: (req: Req, res: Res) => unknown): unknown; options(path: string, h: (req: Req, res: Res) => unknown): unknown };
 
 const STATE_TTL_MS = 10 * 60 * 1000;
 
@@ -114,4 +114,8 @@ export function installAuth(expressApp: ExpressApp, deps: AuthDeps): void {
   expressApp.get("/api/auth/github/callback", callbackHandler(deps));
   expressApp.get("/api/auth/me", meHandler(deps));
   expressApp.post("/api/auth/logout", logoutHandler(deps));
+  // CORS preflight: browsers send OPTIONS for credentialed cross-origin XHR; Express won't route it
+  // to the GET/POST handlers, so register it explicitly. The handlers' OPTIONS branch answers 204+CORS.
+  expressApp.options("/api/auth/me", meHandler(deps));
+  expressApp.options("/api/auth/logout", logoutHandler(deps));
 }
