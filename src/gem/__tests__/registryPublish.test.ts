@@ -80,6 +80,14 @@ describe("publishGem", () => {
     expect(disc?.type).toBe("integration");
   });
 
+  it("stores publishedBy (verified) on the discovery block when supplied", async () => {
+    const { publisher, commits } = capturingPublisher();
+    await publishGem({ gem, scope: "acme", version: "1.0.0", index: empty, publisher, publishedBy: "octocat" });
+    const idx = JSON.parse(commits[0].files["registry.json"]) as RegistryIndex;
+    const disc = idx.items["@acme/github-search"].discovery;
+    expect(disc?.publishedBy).toBe("octocat");
+  });
+
   it("bumps latest only when the new version is higher", () => {
     let idx = updateIndex(empty, { key: "@a/x", version: "1.0.0", path: "p", gemDigest: "sha256:a", dependencies: [] });
     idx = updateIndex(idx, { key: "@a/x", version: "1.2.0", path: "p", gemDigest: "sha256:b", dependencies: [] });

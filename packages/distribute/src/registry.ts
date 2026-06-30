@@ -17,6 +17,7 @@ export interface RegistryItemDiscovery {
   artifactKinds?: string[];
   updatedAt?: string;
   type?: string;        // the gem's cut (setup/kit/skill/integration/guide/playbook + plugin cuts)
+  publishedBy?: string; // server-verified GitHub login of the publishing account (distinct from free-form `author`)
 }
 export interface RegistryItem { latest: string; versions: Record<string, RegistryItemVersion>; discovery?: RegistryItemDiscovery }
 export interface RegistryIndex { formatVersion: number; items: Record<string, RegistryItem> }
@@ -202,7 +203,7 @@ export interface RegistryPublisher {
 // Derive the searchable discovery block for a publish: caller-supplied description/tags,
 // falling back to the first artifact's description; kinds/author derived from the gem.
 export function buildDiscovery(
-  gem: Gem, scope: string, opts: { description?: string; tags?: string[]; updatedAt?: string; type?: string } = {},
+  gem: Gem, scope: string, opts: { description?: string; tags?: string[]; updatedAt?: string; type?: string; publishedBy?: string } = {},
 ): RegistryItemDiscovery {
   const description = opts.description ?? gem.artifacts.find((a) => "description" in a && a.description)?.["description" as never];
   const tags = (opts.tags ?? []).map((t) => t.toLowerCase());
@@ -212,6 +213,7 @@ export function buildDiscovery(
   if (tags.length) d.tags = tags;
   if (opts.updatedAt) d.updatedAt = opts.updatedAt;
   if (opts.type) d.type = opts.type;
+  if (opts.publishedBy) d.publishedBy = opts.publishedBy;
   return d;
 }
 
@@ -238,7 +240,7 @@ export function updateIndex(
 export async function publishGem(args: {
   gem: Gem; scope: string; name?: string; version: string; dependencies?: string[];
   index: RegistryIndex; publisher: RegistryPublisher;
-  description?: string; tags?: string[]; updatedAt?: string; type?: string;
+  description?: string; tags?: string[]; updatedAt?: string; type?: string; publishedBy?: string;
 }): Promise<{ ref: string; version: string; gemDigest: string; commit: string; path: string }> {
   const name = args.name ?? args.gem.name;
   if (!SEG.test(args.scope) || !SEG.test(name)) throw new Error(`invalid scope/name '@${args.scope}/${name}': must match [a-z0-9-]`);
@@ -257,7 +259,7 @@ export async function publishGem(args: {
     return { ref: key, version: args.version, gemDigest, commit: "", path };
   }
 
-  const discovery = buildDiscovery(args.gem, args.scope, { description: args.description, tags: args.tags, updatedAt: args.updatedAt, type: args.type });
+  const discovery = buildDiscovery(args.gem, args.scope, { description: args.description, tags: args.tags, updatedAt: args.updatedAt, type: args.type, publishedBy: args.publishedBy });
   const nextIndex = updateIndex(args.index, { key, version: args.version, path, gemDigest, dependencies, discovery });
   const commitFiles: FileTree = { "registry.json": JSON.stringify(nextIndex, null, 2) };
   for (const [rel, content] of Object.entries(files)) commitFiles[`${path}/${rel}`] = content;
