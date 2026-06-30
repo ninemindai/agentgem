@@ -1,39 +1,328 @@
-:root { color-scheme: light; font-family: system-ui, sans-serif; }
-.ex-tabs { display: flex; gap: 8px; margin-bottom: 8px; }
-.ex-tab { padding: 4px 10px; border: 1px solid #ddd; border-radius: 6px; background: #fff; cursor: pointer; }
-.ex-tab.is-active { background: #efe9df; }
-.ex-search { width: 100%; box-sizing: border-box; padding: 6px 10px; margin: 8px 0; }
-.ex-rows { list-style: none; padding: 0; margin: 0; }
-.ex-row { display: grid; grid-template-columns: 2ch 1fr auto; gap: 8px; align-items: center; padding: 8px; text-decoration: none; color: inherit; }
-.ex-scope { color: #888; margin-left: 6px; font-size: .85em; }
-.ex-bar, .ex-vshare { background: #eee; height: 6px; border-radius: 3px; overflow: hidden; }
-.ex-bar-fill { display: block; height: 100%; background: #b4543a; }
-.ex-vshare-fill { display: block; height: 100%; background: #3a7d44; }
-.ex-empty, .ex-error { color: #777; padding: 16px 8px; }
-.ex-gem-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
-.ex-gem-card { display: grid; gap: 4px; padding: 12px; border: 1px solid #e5e0d8; border-radius: 8px; text-decoration: none; color: inherit; }
-.ex-gem-card:hover { border-color: #b4543a; }
-.ex-gem-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-.ex-gem-key { font-weight: 600; }
-.ex-gem-desc { color: #444; font-size: .92em; }
-.ex-gem-tags, .ex-gem-kinds { display: flex; gap: 6px; flex-wrap: wrap; }
-.ex-tag { color: #888; font-size: .8em; }
-.ex-chip { background: #efe9df; border-radius: 4px; padding: 1px 6px; font-size: .75em; }
-.ex-gem-title { margin-bottom: 2px; }
-.ex-gem-version { color: #888; font-size: .7em; font-weight: 400; }
-.ex-gem-meta { display: flex; gap: 8px; align-items: center; color: #666; font-size: .9em; }
-.ex-getit { display: flex; gap: 8px; align-items: center; }
-.ex-key { background: #f3efe8; padding: 2px 6px; border-radius: 4px; }
-.ex-copy { cursor: pointer; border: 1px solid #ddd; border-radius: 4px; background: #fff; padding: 2px 8px; }
-.ex-getit-steps { color: #555; font-size: .9em; }
-.ex-ingredients { list-style: none; padding: 0; margin: 0; }
-.ex-ingredients li { display: flex; gap: 8px; align-items: center; padding: 4px 0; }
-.ex-header { display: flex; align-items: baseline; gap: 16px; }
-.ex-nav { display: flex; gap: 12px; }
-.ex-navlink { text-decoration: none; color: #777; }
-.ex-navlink.is-active { color: #b4543a; font-weight: 600; }
-.ex-auth { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-.ex-avatar { border-radius: 50%; }
-.ex-login { font-size: .9em; }
-.ex-signin, .ex-signout { font-size: .85em; cursor: pointer; }
-.ex-signout { border: 1px solid #ddd; border-radius: 4px; background: #fff; padding: 2px 8px; }
+/* AgentGem Explore — marketplace UI.
+   Register: product (a discovery tool). Restrained palette around the committed brand
+   terracotta (#b4543a) + verified green (#3a7d44). One sans family, fixed rem scale. */
+
+:root {
+  color-scheme: light;
+
+  /* neutrals — soft warm-tinted, low chroma (not cream) */
+  --bg:        #f7f6f4;
+  --surface:   #ffffff;
+  --surface-2: #fbfaf8;
+  --ink:       #1c1a18;   /* primary text — ~14:1 on bg */
+  --ink-2:     #524d46;   /* secondary text — ~7:1 on white */
+  --muted:     #6f6a61;   /* meta/labels — ~4.8:1 on white */
+  --line:      #e7e3dd;
+  --line-2:    #d9d4cc;
+
+  /* brand */
+  --brand:        #b4543a;
+  --brand-strong: #95402a;   /* hover/active/links — darker, ~5:1 on white */
+  --brand-wash:   #f6ece8;   /* active/selected tint */
+  --verified:     #3a7d44;
+  --verified-wash:#eaf2ec;
+
+  /* radii (product caps cards at ~14px) */
+  --r-xs: 5px;
+  --r-sm: 7px;
+  --r:    10px;
+  --r-lg: 14px;
+  --r-pill: 999px;
+
+  --shadow: 0 1px 2px rgba(28, 22, 16, 0.05);
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);   /* ease-out-quint */
+  --t: 150ms;
+
+  --content: 880px;
+
+  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a { color: var(--brand-strong); }
+
+:where(button, input, a):focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: var(--r-xs);
+}
+
+h2, h3 { font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; }
+
+/* ── App shell ───────────────────────────────────────────────── */
+.ex-app { min-height: 100dvh; display: flex; flex-direction: column; }
+
+.ex-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 12px clamp(16px, 5vw, 40px);
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  backdrop-filter: saturate(1.4) blur(8px);
+  border-bottom: 1px solid var(--line);
+}
+
+.ex-brand {
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 0.98rem;
+}
+.ex-brand::before {
+  content: "";
+  display: inline-block;
+  width: 9px; height: 9px;
+  margin-right: 8px;
+  border-radius: 2px;
+  background: var(--brand);
+  transform: rotate(45deg) translateY(-1px);
+}
+
+.ex-nav { display: flex; gap: 4px; }
+.ex-navlink {
+  text-decoration: none;
+  color: var(--ink-2);
+  font-size: 0.9rem;
+  font-weight: 500;
+  padding: 5px 10px;
+  border-radius: var(--r-sm);
+  transition: color var(--t), background var(--t);
+}
+.ex-navlink:hover { color: var(--ink); background: var(--surface-2); }
+.ex-navlink.is-active { color: var(--brand-strong); background: var(--brand-wash); }
+
+.ex-auth { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.ex-avatar { width: 22px; height: 22px; border-radius: var(--r-pill); border: 1px solid var(--line); }
+.ex-login { font-size: 0.875rem; color: var(--ink-2); font-weight: 500; }
+
+.ex-main { width: 100%; max-width: var(--content); margin: 0 auto; padding: clamp(20px, 4vw, 40px) clamp(16px, 5vw, 40px) 72px; flex: 1; }
+
+.ex-footer {
+  border-top: 1px solid var(--line);
+  padding: 20px clamp(16px, 5vw, 40px);
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-align: center;
+}
+.ex-footer a { color: var(--brand-strong); text-decoration: none; }
+.ex-footer a:hover { text-decoration: underline; }
+
+/* ── Shared controls ─────────────────────────────────────────── */
+.ex-search {
+  width: 100%;
+  padding: 9px 12px;
+  margin: 0 0 18px;
+  font: inherit;
+  font-size: 0.92rem;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r);
+  transition: border-color var(--t), box-shadow var(--t);
+}
+.ex-search::placeholder { color: var(--muted); }
+.ex-search:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-wash); }
+
+/* button vocabulary — tabs, bucket toggle, copy, sign-out all share it */
+.ex-tab, .ex-bucket-btn, .ex-copy, .ex-signin, .ex-signout {
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--ink-2);
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  padding: 5px 11px;
+  cursor: pointer;
+  transition: color var(--t), background var(--t), border-color var(--t);
+}
+.ex-tab:hover, .ex-bucket-btn:hover, .ex-copy:hover, .ex-signout:hover {
+  color: var(--ink); border-color: var(--line-2); background: var(--surface-2);
+}
+.ex-tab.is-active, .ex-bucket-btn.is-active {
+  color: var(--brand-strong); background: var(--brand-wash); border-color: transparent;
+}
+.ex-signin { color: #fff; background: var(--brand); border-color: transparent; text-decoration: none; }
+.ex-signin:hover { background: var(--brand-strong); color: #fff; }
+
+.ex-tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+
+.ex-chip {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xs);
+  padding: 1px 7px;
+  line-height: 1.5;
+}
+
+.ex-scope { color: var(--muted); margin-left: 6px; font-size: 0.85em; font-weight: 400; }
+
+.ex-empty, .ex-error {
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 22px 18px;
+  text-align: center;
+  font-size: 0.92rem;
+}
+.ex-error { color: var(--brand-strong); background: var(--brand-wash); border-color: transparent; }
+
+/* ── Leaderboard ─────────────────────────────────────────────── */
+.ex-rows { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; }
+.ex-rows > li + li { border-top: 1px solid var(--line); }
+
+.ex-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 12px;
+  text-decoration: none;
+  color: inherit;
+  border-radius: var(--r);
+  transition: background var(--t);
+}
+.ex-row:hover { background: var(--surface-2); }
+
+.ex-rank {
+  flex: 0 0 1.75rem;
+  text-align: right;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.ex-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 550;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ex-kind { flex: 0 0 auto; }
+
+.ex-bar, .ex-vshare {
+  flex: 0 0 auto;
+  background: var(--line);
+  border-radius: var(--r-pill);
+  overflow: hidden;
+}
+.ex-bar  { width: 72px; height: 6px; }
+.ex-vshare { width: 40px; height: 6px; }
+.ex-bar-fill   { display: block; height: 100%; background: var(--brand); border-radius: inherit; }
+.ex-vshare-fill { display: block; height: 100%; background: var(--verified); border-radius: inherit; }
+
+.ex-counts {
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+/* ── Cards (ingredient detail + gem detail) ──────────────────── */
+.ex-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 18px 20px;
+  margin-bottom: 16px;
+}
+.ex-card > h3 { margin: 0 0 12px; font-size: 0.95rem; }
+.ex-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.ex-card-head > h3 { margin: 0; }
+.ex-bucket { display: flex; gap: 6px; }
+
+/* ── Ingredient detail ───────────────────────────────────────── */
+.ex-detail-head { margin: 0 0 18px; font-size: 1.5rem; letter-spacing: -0.02em; }
+.ex-co { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; }
+.ex-co > li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; font-size: 0.92rem; }
+.ex-co > li + li { border-top: 1px solid var(--line); }
+
+.ex-spark { display: block; width: 100%; height: auto; overflow: visible; }
+.ex-legend { display: flex; align-items: center; gap: 8px; margin: 12px 0 0; font-size: 0.8rem; color: var(--muted); }
+.ex-dot { width: 9px; height: 9px; border-radius: var(--r-pill); display: inline-block; }
+.ex-dot + .ex-dot { margin-left: 8px; }
+.ex-dot-prod { background: var(--brand); }
+.ex-dot-ver  { background: var(--verified); }
+
+/* ── Gems: browse ────────────────────────────────────────────── */
+.ex-gem-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+.ex-gem-card {
+  display: grid;
+  gap: 7px;
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color var(--t), background var(--t);
+}
+.ex-gem-card:hover { border-color: var(--brand); background: var(--surface-2); }
+.ex-gem-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.ex-gem-key { font-weight: 650; letter-spacing: -0.01em; font-size: 1.02rem; }
+.ex-gem-kinds, .ex-gem-tags { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.ex-gem-desc { color: var(--ink-2); font-size: 0.9rem; line-height: 1.5; max-width: 68ch; }
+.ex-tag { color: var(--muted); font-size: 0.78rem; }
+
+/* ── Gem: detail ─────────────────────────────────────────────── */
+.ex-gem-title { font-size: 1.6rem; letter-spacing: -0.02em; margin: 0 0 4px; }
+.ex-gem-version { color: var(--muted); font-size: 0.62em; font-weight: 500; margin-left: 6px; font-variant-numeric: tabular-nums; }
+.ex-gem-meta { display: flex; gap: 10px; align-items: center; color: var(--ink-2); font-size: 0.9rem; margin: 0 0 12px; }
+.ex-gem-detail > .ex-gem-desc { font-size: 1rem; color: var(--ink-2); max-width: 70ch; margin: 0 0 10px; }
+.ex-gem-detail > .ex-gem-tags { margin: 0 0 22px; }
+
+.ex-getit { display: flex; gap: 10px; align-items: center; margin: 0 0 10px; flex-wrap: wrap; }
+.ex-key {
+  font-family: var(--mono);
+  font-size: 0.88rem;
+  color: var(--brand-strong);
+  background: var(--brand-wash);
+  border-radius: var(--r-xs);
+  padding: 3px 8px;
+}
+.ex-getit-steps { color: var(--ink-2); font-size: 0.9rem; margin: 0; }
+.ex-getit-steps strong { color: var(--ink); font-weight: 600; }
+
+.ex-ingredients { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; }
+.ex-ingredients li { display: flex; align-items: center; gap: 10px; padding: 9px 0; font-size: 0.92rem; }
+.ex-ingredients li + li { border-top: 1px solid var(--line); }
+.ex-ingredients a { color: var(--brand-strong); text-decoration: none; font-weight: 500; }
+.ex-ingredients a:hover { text-decoration: underline; }
+
+/* ── Responsive ──────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .ex-header { gap: 12px; padding: 10px 16px; flex-wrap: wrap; }
+  .ex-row { flex-wrap: wrap; gap: 8px 10px; }
+  .ex-bar, .ex-vshare, .ex-counts { display: none; }   /* keep rank · name · kind on small screens */
+  .ex-gem-head { flex-direction: column; align-items: flex-start; gap: 6px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration: 1ms !important; animation-duration: 1ms !important; }
+}
