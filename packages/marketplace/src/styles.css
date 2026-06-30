@@ -19,3 +19,12 @@
 .ex-gem-tags, .ex-gem-kinds { display: flex; gap: 6px; flex-wrap: wrap; }
 .ex-tag { color: #888; font-size: .8em; }
 .ex-chip { background: #efe9df; border-radius: 4px; padding: 1px 6px; font-size: .75em; }
+.ex-gem-title { margin-bottom: 2px; }
+.ex-gem-version { color: #888; font-size: .7em; font-weight: 400; }
+.ex-gem-meta { display: flex; gap: 8px; align-items: center; color: #666; font-size: .9em; }
+.ex-getit { display: flex; gap: 8px; align-items: center; }
+.ex-key { background: #f3efe8; padding: 2px 6px; border-radius: 4px; }
+.ex-copy { cursor: pointer; border: 1px solid #ddd; border-radius: 4px; background: #fff; padding: 2px 8px; }
+.ex-getit-steps { color: #555; font-size: .9em; }
+.ex-ingredients { list-style: none; padding: 0; margin: 0; }
+.ex-ingredients li { display: flex; gap: 8px; align-items: center; padding: 4px 0; }
