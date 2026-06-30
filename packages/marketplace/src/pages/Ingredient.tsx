@@ -3,12 +3,16 @@ import type { makeApi } from "../api";
 import type { AggCoOccurrence, AdoptionPoint } from "../types";
 import { prettifyId } from "../data";
 import { Sparkline } from "../Sparkline";
+import { StarButton } from "../StarButton";
+import type { StarsCtx } from "../Router";
+import type { StarState } from "../stars";
 
-export function Ingredient({ api, id }: { api: ReturnType<typeof makeApi>; id: string }) {
+export function Ingredient({ api, id, stars }: { api: ReturnType<typeof makeApi>; id: string; stars: StarsCtx }) {
   const [co, setCo] = useState<AggCoOccurrence[]>([]);
   const [series, setSeries] = useState<AdoptionPoint[]>([]);
   const [bucket, setBucket] = useState<"week" | "month">("week");
   const [error, setError] = useState<string | null>(null);
+  const [starState, setStarState] = useState<StarState>({ counts: {}, mine: [] });
 
   useEffect(() => {
     let alive = true;
@@ -20,12 +24,22 @@ export function Ingredient({ api, id }: { api: ReturnType<typeof makeApi>; id: s
     // api is a stable module-level singleton (App.tsx) — excluded so re-renders don't refetch.
   }, [id, bucket]);
 
+  useEffect(() => {
+    if (!id) return;
+    let alive = true;
+    stars.api.get("ingredient", [id]).then((s) => { if (alive) setStarState(s); });
+    return () => { alive = false; };
+  }, [id, stars.api]);
+
   const head = prettifyId(id, "skill");
   if (error) return <div className="ex-detail"><p className="ex-error">Couldn't load this ingredient: {error}</p></div>;
 
   return (
     <div className="ex-detail">
-      <h2 className="ex-detail-head">{head.name}{head.scope && <span className="ex-scope">{head.scope}</span>}</h2>
+      <h2 className="ex-detail-head">{head.name}{head.scope && <span className="ex-scope">{head.scope}</span>}
+        <StarButton kind="ingredient" id={id} count={starState.counts[id] ?? 0} starred={starState.mine.includes(id)}
+          signedIn={stars.signedIn} loginUrl={stars.loginUrl} api={stars.api} />
+      </h2>
 
       <section className="ex-card">
         <h3>Used together with</h3>

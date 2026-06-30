@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import type { makeApi } from "../api";
 import type { AggIngredient } from "../types";
 import { prettifyId, kindLabel, verifiedShare, barWidths, filterRows } from "../data";
+import { StarButton } from "../StarButton";
+import type { StarsCtx } from "../Router";
+import type { StarState } from "../stars";
 
 const KINDS = [
   { value: "all", label: "All" },
@@ -9,12 +12,13 @@ const KINDS = [
   { value: "mcp", label: "MCP" },
 ];
 
-export function Leaderboard({ api }: { api: ReturnType<typeof makeApi> }) {
+export function Leaderboard({ api, stars }: { api: ReturnType<typeof makeApi>; stars: StarsCtx }) {
   const [rows, setRows] = useState<AggIngredient[]>([]);
   const [kind, setKind] = useState("all");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [starState, setStarState] = useState<StarState>({ counts: {}, mine: [] });
 
   useEffect(() => {
     let alive = true;
@@ -26,6 +30,14 @@ export function Leaderboard({ api }: { api: ReturnType<typeof makeApi> }) {
     return () => { alive = false; };
     // api is a stable module-level singleton (App.tsx) — excluded so re-renders don't refetch.
   }, [kind]);
+
+  useEffect(() => {
+    if (rows.length === 0) return;
+    let alive = true;
+    const ids = rows.map((r) => r.id);
+    stars.api.get("ingredient", ids).then((s) => { if (alive) setStarState(s); });
+    return () => { alive = false; };
+  }, [rows, stars.api]);
 
   const widths = barWidths(rows.map((r) => r.producers));
   const visible = filterRows(rows, search);
@@ -50,7 +62,7 @@ export function Leaderboard({ api }: { api: ReturnType<typeof makeApi> }) {
         {visible.map(({ row: r, rank }) => {
           const p = prettifyId(r.id, r.kind);
           return (
-            <li key={r.id}>
+            <li key={r.id} className="ex-row-wrap">
               <a className="ex-row" href={"/ingredient/" + encodeURIComponent(r.id)}>
                 <span className="ex-rank">{rank}</span>
                 <span className="ex-name">{p.name}{p.scope && <span className="ex-scope">{p.scope}</span>}</span>
@@ -59,6 +71,8 @@ export function Leaderboard({ api }: { api: ReturnType<typeof makeApi> }) {
                 <span className="ex-counts">{r.producers} producers · {r.verifiedProducers} verified ✓</span>
                 <span className="ex-vshare"><span className="ex-vshare-fill" style={{ width: `${(verifiedShare(r.producers, r.verifiedProducers) * 100).toFixed(0)}%` }} /></span>
               </a>
+              <StarButton kind="ingredient" id={r.id} count={starState.counts[r.id] ?? 0} starred={starState.mine.includes(r.id)}
+                signedIn={stars.signedIn} loginUrl={stars.loginUrl} api={stars.api} />
             </li>
           );
         })}

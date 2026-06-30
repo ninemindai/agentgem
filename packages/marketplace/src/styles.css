@@ -334,3 +334,9 @@ h2, h3 { font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; }
 .ex-star[disabled] { opacity: 0.6; cursor: default; }
 .ex-star-ico { font-size: 0.95rem; line-height: 1; }
 
+/* ── Row/card wrappers for sibling StarButton placement ─────── */
+.ex-row-wrap { display: flex; align-items: center; gap: 8px; }
+.ex-row-wrap .ex-row { flex: 1 1 auto; min-width: 0; }
+.ex-gem-item { display: flex; align-items: flex-start; gap: 8px; }
+.ex-gem-item .ex-gem-card { flex: 1 1 auto; min-width: 0; }
+

@@ -3,14 +3,26 @@ import type { makeApi } from "../api";
 import type { Gem as GemT } from "../gems/catalog";
 import { loadGems, findGem } from "../gems/catalog";
 import { prettifyId, kindLabel } from "../data";
+import { StarButton } from "../StarButton";
+import type { StarsCtx } from "../Router";
+import type { StarState } from "../stars";
 
-export function Gem({ api, keyName }: { api: ReturnType<typeof makeApi>; keyName: string }) {
+export function Gem({ api, keyName, stars }: { api: ReturnType<typeof makeApi>; keyName: string; stars: StarsCtx }) {
   const [gems, setGems] = useState<GemT[] | null>(null);
+  const [starState, setStarState] = useState<StarState>({ counts: {}, mine: [] });
+
   useEffect(() => {
     let alive = true;
     loadGems(api).then((g) => { if (alive) setGems(g); });
     return () => { alive = false; };
   }, [api]);
+
+  useEffect(() => {
+    if (!keyName) return;
+    let alive = true;
+    stars.api.get("gem", [keyName]).then((s) => { if (alive) setStarState(s); });
+    return () => { alive = false; };
+  }, [keyName, stars.api]);
 
   if (gems === null) return <div className="ex-gem-detail"><p className="ex-empty">Loading…</p></div>;
   const gem = findGem(gems, keyName);
@@ -20,7 +32,10 @@ export function Gem({ api, keyName }: { api: ReturnType<typeof makeApi>; keyName
 
   return (
     <div className="ex-gem-detail">
-      <h2 className="ex-gem-title">{gem.key} <span className="ex-gem-version">v{gem.version}</span></h2>
+      <h2 className="ex-gem-title">{gem.key} <span className="ex-gem-version">v{gem.version}</span>
+        <StarButton kind="gem" id={gem.key} count={starState.counts[gem.key] ?? 0} starred={starState.mine.includes(gem.key)}
+          signedIn={stars.signedIn} loginUrl={stars.loginUrl} api={stars.api} />
+      </h2>
       <p className="ex-gem-meta">
         {gem.author && <span>by {gem.author}</span>}
         {gem.artifactKinds.map((k) => <span key={k} className="ex-chip">{kindLabel(k)}</span>)}
