@@ -43,6 +43,14 @@ describe("openInsightsStream", () => {
     expect(es.closed).toBe(true);
   });
 
+  it("surfaces how many sessions were scanned (for the judged-vs-scanned hint)", () => {
+    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
+    let done: InsightsEvent | undefined;
+    openInsightsStream("", "/p", (e) => { if (e.type === "done") done = e; });
+    FakeES.last!.emit("done", { report: REPORT, degraded: false, signalSummary: { sessionsScanned: 1467 } });
+    expect(done).toMatchObject({ type: "done", scanned: 1467 });
+  });
+
   it("adds fresh=1 to bypass the cache when requested", () => {
     vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
     openInsightsStream("", "/p", () => {}, true);

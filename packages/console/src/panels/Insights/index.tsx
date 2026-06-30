@@ -20,6 +20,7 @@ export function Insights({ apiBase }: { apiBase: string }) {
   const [phase, setPhase] = useState("");
   const [out, setOut] = useState("");
   const [report, setReport] = useState<InsightsReportView | null>(null);
+  const [scanned, setScanned] = useState<number | null>(null);
   const [degraded, setDegraded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -35,11 +36,11 @@ export function Insights({ apiBase }: { apiBase: string }) {
 
   const generate = (path: string, fresh = false) => {
     closeRef.current?.();
-    setActivePath(path); setPhase(""); setOut(""); setReport(null); setDegraded(false); setError(null); setRunning(true);
+    setActivePath(path); setPhase(""); setOut(""); setReport(null); setScanned(null); setDegraded(false); setError(null); setRunning(true);
     closeRef.current = openInsightsStream(apiBase, path, (e) => {
       if (e.type === "phase") setPhase(e.sessions != null ? `${e.phase} (${e.sessions} sessions)` : e.phase);
       else if (e.type === "delta") setOut((o) => o + e.text);
-      else if (e.type === "done") { setPhase("done"); setReport(e.report); setDegraded(e.degraded); setRunning(false); }
+      else if (e.type === "done") { setPhase("done"); setReport(e.report); setScanned(e.scanned ?? null); setDegraded(e.degraded); setRunning(false); }
       else if (e.type === "failed") { setError(e.message); setRunning(false); }
     }, fresh);
   };
@@ -104,6 +105,7 @@ export function Insights({ apiBase }: { apiBase: string }) {
                       {report && (
                         <InsightsReportCard
                           report={report}
+                          scanned={scanned}
                           onBuild={r.path === "*" ? undefined : () => { setPendingAnalyze(r.path); window.location.hash = "#/curate"; }}
                         />
                       )}
@@ -118,11 +120,16 @@ export function Insights({ apiBase }: { apiBase: string }) {
   );
 }
 
-function InsightsReportCard({ report, onBuild }: { report: InsightsReportView; onBuild?: () => void }) {
+function InsightsReportCard({ report, scanned, onBuild }: { report: InsightsReportView; scanned?: number | null; onBuild?: () => void }) {
+  // Be honest about the cap: the report judges the most-recent sessions, which
+  // can be fewer than were scanned (50-session batch bound, or unmissioned ones).
+  const judged = report.totals.sessions;
+  const capped = scanned != null && scanned > judged;
   return (
     <div className="insights-report">
       {report.narrative && <p className="insights-narrative">{report.narrative}</p>}
       <p className="analyze-candidate-desc">{report.outcomes_summary}</p>
+      {capped && <p className="insights-hint">Based on the {judged} most-recent of {scanned} sessions scanned.</p>}
 
       {report.publish_candidates.length > 0 && (
         <div className="insights-section">
