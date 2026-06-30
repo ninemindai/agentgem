@@ -35,42 +35,6 @@ importers:
       '@agentclientprotocol/sdk':
         specifier: ^0.28.1
         version: 0.28.1(zod@4.4.3)
-      '@agentgem/aggregator':
-        specifier: workspace:*
-        version: link:packages/aggregator
-      '@agentgem/archive':
-        specifier: workspace:*
-        version: link:packages/archive
-      '@agentgem/base':
-        specifier: workspace:*
-        version: link:packages/base
-      '@agentgem/build':
-        specifier: workspace:*
-        version: link:packages/build
-      '@agentgem/capture':
-        specifier: workspace:*
-        version: link:packages/capture
-      '@agentgem/deploy':
-        specifier: workspace:*
-        version: link:packages/deploy
-      '@agentgem/distribute':
-        specifier: workspace:*
-        version: link:packages/distribute
-      '@agentgem/insight':
-        specifier: workspace:*
-        version: link:packages/insight
-      '@agentgem/model':
-        specifier: workspace:*
-        version: link:packages/model
-      '@agentgem/run':
-        specifier: workspace:*
-        version: link:packages/run
-      '@agentgem/testbed':
-        specifier: workspace:*
-        version: link:packages/testbed
-      '@agentgem/transfer':
-        specifier: workspace:*
-        version: link:packages/transfer
       '@anthropic-ai/sdk':
         specifier: ^0.104.2
         version: 0.104.2(zod@4.4.3)
@@ -123,6 +87,42 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
+      '@agentgem/aggregator':
+        specifier: workspace:*
+        version: link:packages/aggregator
+      '@agentgem/archive':
+        specifier: workspace:*
+        version: link:packages/archive
+      '@agentgem/base':
+        specifier: workspace:*
+        version: link:packages/base
+      '@agentgem/build':
+        specifier: workspace:*
+        version: link:packages/build
+      '@agentgem/capture':
+        specifier: workspace:*
+        version: link:packages/capture
+      '@agentgem/deploy':
+        specifier: workspace:*
+        version: link:packages/deploy
+      '@agentgem/distribute':
+        specifier: workspace:*
+        version: link:packages/distribute
+      '@agentgem/insight':
+        specifier: workspace:*
+        version: link:packages/insight
+      '@agentgem/model':
+        specifier: workspace:*
+        version: link:packages/model
+      '@agentgem/run':
+        specifier: workspace:*
+        version: link:packages/run
+      '@agentgem/testbed':
+        specifier: workspace:*
+        version: link:packages/testbed
+      '@agentgem/transfer':
+        specifier: workspace:*
+        version: link:packages/transfer
       '@resvg/resvg-wasm':
         specifier: ^2.6.2
         version: 2.6.2
@@ -135,6 +135,9 @@ importers:
       '@types/supertest':
         specifier: ^6
         version: 6.0.3
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.12
       eve:
         specifier: ^0.15.0
         version: 0.15.0(@electric-sql/pglite@0.5.3)(@vercel/blob@2.4.0)(ai@7.0.2(zod@4.4.3))(chokidar@4.0.0)(dotenv@17.4.2)(drizzle-orm@0.45.2(@electric-sql/pglite@0.5.3)(@types/pg@8.20.0)(pg@8.22.0))(lru-cache@11.5.1)(react@19.2.7)(rollup@4.62.0)(vite@7.3.5(@types/node@24.13.2)(tsx@4.21.0)(yaml@2.9.0))
