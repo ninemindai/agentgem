@@ -23,4 +23,17 @@ describe("Router", () => {
     render(<Router api={makeApi("")} />);
     expect(await screen.findByText("brainstorming")).toBeTruthy(); // header from decoded id
   });
+
+  it("renders the gem browse page at /gems", () => {
+    window.history.pushState({}, "", "/gems");
+    render(<Router api={makeApi("")} />);
+    expect(screen.getByText("brainstorming-kit")).toBeTruthy();
+  });
+
+  it("renders the gem detail page at /gems/:key with the decoded key", () => {
+    window.history.pushState({}, "", "/gems/" + encodeURIComponent("github-flow"));
+    render(<Router api={makeApi("")} />);
+    expect(screen.getByText("github-flow")).toBeTruthy();
+    expect(screen.getByText(/2\.1\.0/)).toBeTruthy();
+  });
 });

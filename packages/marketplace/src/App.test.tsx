@@ -62,4 +62,16 @@ describe("App link interceptor", () => {
     // Interceptor must NOT have called pushState — pathname unchanged
     expect(window.location.pathname).toBe("/");
   });
+
+  it("renders Ingredients + Gems nav links, marking the active surface on /gems", () => {
+    vi.stubGlobal("fetch", vi.fn(async () => res([])));
+    window.history.pushState({}, "", "/gems");
+    render(<App />);
+    const gemsLink = screen.getByRole("link", { name: "Gems" });
+    const ingLink = screen.getByRole("link", { name: "Ingredients" });
+    expect(gemsLink.getAttribute("href")).toBe("/gems");
+    expect(ingLink.getAttribute("href")).toBe("/");
+    expect(gemsLink.className).toMatch(/is-active/);
+    expect(ingLink.className).not.toMatch(/is-active/);
+  });
 });

@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import type { makeApi } from "./api";
 import { Leaderboard } from "./pages/Leaderboard";
 import { Ingredient } from "./pages/Ingredient";
+import { Gems } from "./pages/Gems";
+import { Gem } from "./pages/Gem";
 
 // Navigation is intercepted globally in App (same-origin <a> clicks → pushState + popstate),
 // so pages just use plain <a href> and this Router reacts to popstate.
@@ -12,6 +14,10 @@ export function Router({ api }: { api: ReturnType<typeof makeApi> }) {
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
+
+  const gemDetail = path.match(/^\/gems\/(.+)$/);
+  if (gemDetail) return <Gem keyName={decodeURIComponent(gemDetail[1])} />;
+  if (path === "/gems") return <Gems />;
 
   const ing = path.match(/^\/ingredient\/(.+)$/);
   if (ing) return <Ingredient api={api} id={decodeURIComponent(ing[1])} />;

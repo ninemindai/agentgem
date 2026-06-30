@@ -28,3 +28,7 @@
 .ex-getit-steps { color: #555; font-size: .9em; }
 .ex-ingredients { list-style: none; padding: 0; margin: 0; }
 .ex-ingredients li { display: flex; gap: 8px; align-items: center; padding: 4px 0; }
+.ex-header { display: flex; align-items: baseline; gap: 16px; }
+.ex-nav { display: flex; gap: 12px; }
+.ex-navlink { text-decoration: none; color: #777; }
+.ex-navlink.is-active { color: #b4543a; font-weight: 600; }
