@@ -47,6 +47,7 @@ function introspectAll(dir?: string, projects?: string[]): ConfigInventory {
 @mcpServer()
 export class GemTools {
   constructor(@service(GemTypeRegistry, { optional: true }) private gemTypes: GemTypeRegistry = defaultGemTypeRegistry) {}
+
   @tool("inventory", {
     description: "Introspect the local coding-agent config (skills, MCP servers, CLAUDE.md). Pass project roots to also include project-level artifacts. Secrets are redacted.",
     input: InventoryInput,

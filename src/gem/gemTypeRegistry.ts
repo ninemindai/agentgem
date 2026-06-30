@@ -15,6 +15,8 @@ export const GEM_TYPES = "agentgem.gemTypes";
 
 @extensionPoint(GEM_TYPES)
 export class GemTypeRegistry {
+  // `@extensions.list` injects a SNAPSHOT of the registered cuts at construction time,
+  // so a plugin must register its cut at startup (before the first publish), not lazily.
   constructor(@extensions.list(GEM_TYPES) private specs: GemTypeSpec[]) {}
   all(): GemTypeSpec[] { return [...this.specs].sort((a, b) => a.order - b.order); }
   byId(id: string): GemTypeSpec | undefined { return this.specs.find((s) => s.id === id); }
