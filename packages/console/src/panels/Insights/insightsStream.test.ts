@@ -43,6 +43,12 @@ describe("openInsightsStream", () => {
     expect(es.closed).toBe(true);
   });
 
+  it("adds fresh=1 to bypass the cache when requested", () => {
+    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
+    openInsightsStream("", "/p", () => {}, true);
+    expect(FakeES.last!.url).toContain("fresh=1");
+  });
+
   it("translates failed and closes", () => {
     vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
     const events: InsightsEvent[] = [];

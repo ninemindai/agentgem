@@ -19,8 +19,11 @@ export function openInsightsStream(
   apiBase: string,
   root: string,
   onEvent: (e: InsightsEvent) => void,
+  fresh = false,
 ): () => void {
-  const es = new EventSource(`${apiBase}/api/insights/stream?${new URLSearchParams({ root }).toString()}`);
+  const params = new URLSearchParams({ root });
+  if (fresh) params.set("fresh", "1");
+  const es = new EventSource(`${apiBase}/api/insights/stream?${params.toString()}`);
   const data = (m: Event) => JSON.parse((m as MessageEvent).data);
 
   es.addEventListener("phase", (m) => {

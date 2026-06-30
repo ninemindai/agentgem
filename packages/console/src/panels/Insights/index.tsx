@@ -33,7 +33,7 @@ export function Insights({ apiBase }: { apiBase: string }) {
   }, [apiBase]);
   useEffect(() => () => closeRef.current?.(), []);
 
-  const generate = (path: string) => {
+  const generate = (path: string, fresh = false) => {
     closeRef.current?.();
     setActivePath(path); setPhase(""); setOut(""); setReport(null); setDegraded(false); setError(null); setRunning(true);
     closeRef.current = openInsightsStream(apiBase, path, (e) => {
@@ -41,7 +41,7 @@ export function Insights({ apiBase }: { apiBase: string }) {
       else if (e.type === "delta") setOut((o) => o + e.text);
       else if (e.type === "done") { setPhase("done"); setReport(e.report); setDegraded(e.degraded); setRunning(false); }
       else if (e.type === "failed") { setError(e.message); setRunning(false); }
-    });
+    }, fresh);
   };
 
   const rows = (() => {
@@ -93,6 +93,9 @@ export function Insights({ apiBase }: { apiBase: string }) {
                           {error ? "failed" : phase || (running ? "Reading…" : "done")}
                         </span>
                         {degraded && !error && <span className="ws-chip" title="The local agent was unavailable; showing a basic report.">basic</span>}
+                        {report && !running && (
+                          <button type="button" className="ledger-view" style={{ marginLeft: "auto" }} onClick={() => generate(r.path, true)}>Re-run ↻</button>
+                        )}
                       </div>
                       {error && <p className="ledger-error">{error}</p>}
                       {out && !report && <pre className="run-transcript">{out}</pre>}

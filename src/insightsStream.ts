@@ -12,6 +12,7 @@ import { introspectConfig, introspectProject } from "@agentgem/capture";
 import { resolveDirs, resolveProject } from "@agentgem/model";
 import { claudeTranscriptsForCwd, scanWorkflow } from "@agentgem/insight";
 import { judgeSessions, synthesizeInsights, narrateInsights } from "@agentgem/insight";
+import { insightsToken, readInsightsCache, writeInsightsCache } from "@agentgem/insight";
 
 interface SseReq { query: Record<string, unknown> }
 interface SseRes {
@@ -23,6 +24,7 @@ interface SseRes {
 export async function streamInsights(req: SseReq, res: SseRes): Promise<void> {
   const root = typeof req.query.root === "string" ? req.query.root : "";
   const dir = typeof req.query.dir === "string" ? req.query.dir : undefined;
+  const fresh = req.query.fresh === "1";   // bypass the cache (Re-run)
 
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
@@ -44,6 +46,15 @@ export async function streamInsights(req: SseReq, res: SseRes): Promise<void> {
 
     send("phase", { phase: "scanning" });
     const paths = claudeTranscriptsForCwd(dirs.claudeDir, root);
+
+    // Cache hit (unless Re-run): the report is two agent passes, so serve the
+    // prior result instantly. Token invalidates when a session is added/updated.
+    const token = insightsToken(paths);
+    if (!fresh) {
+      const cached = readInsightsCache(root, token);
+      if (cached) { send("done", { ...(cached as object), cached: true }); return; }
+    }
+
     const signal = scanWorkflow(paths, scanInv, { retainSequences: true });
     send("phase", { phase: "scanned", transcripts: paths.length, sessions: signal.sessions.scanned });
 
@@ -58,12 +69,14 @@ export async function streamInsights(req: SseReq, res: SseRes): Promise<void> {
     const narr = await narrateInsights(facets, report.narrative, { onDelta: (chunk) => send("delta", { text: chunk }) });
     report.narrative = narr.narrative;
 
-    send("done", {
+    const payload = {
       report,
       facets,
       degraded: judgeDegraded || narr.degraded,
       signalSummary: { sessionsScanned: signal.sessions.scanned, spanDays: signal.sessions.spanDays, notes: signal.notes },
-    });
+    };
+    if (!payload.degraded) writeInsightsCache(root, token, payload, Date.now());   // don't cache fallbacks
+    send("done", { ...payload, cached: false });
   } catch (err) {
     send("failed", { message: (err as Error)?.message ?? String(err) });
   } finally {
