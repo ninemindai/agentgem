@@ -15,6 +15,8 @@
 - **CORS for auth:** only origins in `AGENTGEM_WEB_ORIGINS` (comma-list) get `Access-Control-Allow-Origin: <that origin>` + `Access-Control-Allow-Credentials: true` (wildcard is illegal with credentials). Public reads keep `*` unchanged.
 - **Scope** `read:user`. Secrets (`AGENTGEM_GITHUB_CLIENT_SECRET`, `AGENTGEM_SESSION_SECRET`) come only from env — never the repo.
 - Reuse the existing `AccountVerifier`/`GitHubVerifier` from `@agentgem/aggregator` (do not reimplement the GitHub `/user` call).
+- **TEST-DB PATTERN (authoritative — overrides the `withTestDb` shorthand in the task test code):** the real helper is `makeTestDb(): Promise<AppDb>` from `@agentgem/aggregator` (it already runs `ensureSchema`; **no cleanup needed**). Translate every `await withTestDb(async (db) => { BODY })` in the plan's tests to `{ const db = await makeTestDb(); BODY }`, importing `makeTestDb` from `@agentgem/aggregator`. The store functions (`upsertAccount` etc.) are also imported from `@agentgem/aggregator` (the package barrel), not relative paths.
+- **TEST LOCATIONS (post-decomposition):** aggregator-package tests live in `src/aggregator/__tests__/` (NOT `packages/aggregator/src/__tests__/`) and compile to `dist/aggregator/__tests__/`. Root-`src` tests live in `src/__tests__/` → `dist/__tests__/`. The aggregator **source** stays in `packages/aggregator/src/`. So Task 1's `webAuth.test.ts` goes in `src/aggregator/__tests__/webAuth.test.ts`; its run path is `dist/aggregator/__tests__/webAuth.test.js`.
 
 ## File structure
 
@@ -47,7 +49,7 @@ packages/marketplace/src/
 
 **Files:**
 - Modify: `packages/aggregator/src/schema.ts`, `packages/aggregator/src/index.ts`
-- Create: `packages/aggregator/src/webAuth.ts`, `packages/aggregator/src/__tests__/webAuth.test.ts`
+- Create: `packages/aggregator/src/webAuth.ts` (source), `src/aggregator/__tests__/webAuth.test.ts` (test — see TEST LOCATIONS)
 
 **Interfaces:**
 - Consumes: `AppDb` (existing), drizzle `pgTable` (existing import in schema.ts).
@@ -148,8 +150,6 @@ describe("webAuth store", () => {
 });
 ```
 
-> NOTE: confirm the test-db helper's real name/signature in `packages/aggregator/src/testDb.ts` (the plan assumes `withTestDb(async (db) => {…})`). If it differs (e.g. a `makeTestDb()` returning `{ db, cleanup }`), adapt these tests to that shape — keep the assertions identical.
-
 - [ ] **Step 3: Run to verify it fails**
 
 Run: `pnpm exec tsc -b && pnpm exec vitest run dist/aggregator/__tests__/webAuth.test.js` (path is the compiled location; adjust if the package compiles elsewhere — the dist mirror of `packages/aggregator/src/__tests__/webAuth.test.ts`).
@@ -228,7 +228,7 @@ Expected: PASS (5 tests).
 - [ ] **Step 7: Commit**
 
 ```bash
-git add packages/aggregator/src/schema.ts packages/aggregator/src/webAuth.ts packages/aggregator/src/__tests__/webAuth.test.ts packages/aggregator/src/index.ts
+git add packages/aggregator/src/schema.ts packages/aggregator/src/webAuth.ts src/aggregator/__tests__/webAuth.test.ts packages/aggregator/src/index.ts
 git commit -m "feat(aggregator): accounts + web_sessions store for web sign-in"
 ```
 
@@ -530,8 +530,6 @@ describe("auth handlers", () => {
   });
 });
 ```
-
-> NOTE: adapt `withTestDb` to the real `@agentgem/aggregator` test-db helper if its name/signature differs (same caveat as Task 1).
 
 - [ ] **Step 2: Run to verify it fails**
 
