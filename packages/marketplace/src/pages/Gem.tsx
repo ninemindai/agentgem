@@ -12,7 +12,7 @@ export function Gem({ keyName }: { keyName: string }) {
   return (
     <div className="ex-gem-detail">
       <h2 className="ex-gem-title">
-        {gem.key} v{gem.version}
+        {gem.key} <span className="ex-gem-version">v{gem.version}</span>
       </h2>
       <p className="ex-gem-meta">
         {gem.author && <span>by {gem.author}</span>}

@@ -33,7 +33,7 @@ describe("Router", () => {
   it("renders the gem detail page at /gems/:key with the decoded key", () => {
     window.history.pushState({}, "", "/gems/" + encodeURIComponent("github-flow"));
     render(<Router api={makeApi("")} />);
-    expect(screen.getByText("github-flow")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /github-flow/ })).toBeTruthy();
     expect(screen.getByText(/2\.1\.0/)).toBeTruthy();
   });
 });
