@@ -48,7 +48,8 @@ export const accountBindings = pgTable("account_bindings", {
 export const shareCards = pgTable("share_cards", {
   id: text("id").primaryKey(),
   kind: text("kind").notNull(),
-  counts: jsonb("counts").notNull().$type<{ breadth: number; battleTested: number; portable: number }>(),
+  counts: jsonb("counts").$type<{ breadth: number; battleTested: number; portable: number }>(),
+  payload: jsonb("payload").$type<{ name: string; provenance: string }>(),
   generatedAtMs: bigint("generated_at_ms", { mode: "number" }).notNull(),
   createdAtMs: bigint("created_at_ms", { mode: "number" }).notNull(),
 });
@@ -74,5 +75,7 @@ export async function ensureSchema(db: AppDb): Promise<void> {
   await db.execute(sql`create table if not exists usage_edges (attestation_id uuid not null references attestations(id), ingredient_id text not null references ingredients(id), invocations int not null, sessions int not null, primary key (attestation_id, ingredient_id))`);
   await db.execute(sql`create table if not exists account_bindings (pubkey text primary key references producers(pubkey), provider text not null, account_id text not null, account_login text not null, bound_at timestamptz not null default now())`);
   await db.execute(sql`create table if not exists share_cards (id text primary key, kind text not null, counts jsonb not null, generated_at_ms bigint not null, created_at_ms bigint not null)`);
+  await db.execute(sql`alter table share_cards add column if not exists payload jsonb`);
+  await db.execute(sql`alter table share_cards alter column counts drop not null`);
   await db.execute(sql`create table if not exists api_keys (id uuid primary key, key_hash text not null unique, label text not null, created_at timestamptz not null default now(), revoked_at timestamptz)`);
 }
