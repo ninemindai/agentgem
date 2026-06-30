@@ -72,8 +72,17 @@ export interface DistilledLesson {
 }
 
 export function lessonSlug(detail: string): string {
-  const slug = detail.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
-    .split("-").filter(Boolean).slice(0, 6).join("-");
+  // Strip contractions (test's → tests) before slugifying so apostrophes don't
+  // produce spurious single-char tokens. Use character-based truncation (~45 chars)
+  // instead of a fixed word count so "short phrase — long tail" bodies land cleanly.
+  const words = detail.replace(/'/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "").split("-").filter(Boolean);
+  let slug = "";
+  for (const w of words) {
+    const next = slug ? `${slug}-${w}` : w;
+    if (next.length > 45) break;
+    slug = next;
+  }
   return slug || "lesson";
 }
 

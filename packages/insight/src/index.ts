@@ -25,3 +25,4 @@ export * from "./skillsRegistry.js";
 export * from "./skillsInstall.js";
 export * from "./discover.js";
 export * from "./discoverRerank.js";
+export * from "./sessionLessons.js";
