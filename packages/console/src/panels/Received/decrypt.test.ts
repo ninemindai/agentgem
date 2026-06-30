@@ -4,7 +4,9 @@ import { randomBytes } from "node:crypto";
 import { decryptGem } from "./decrypt.js";
 
 // Reuse the SERVER seal() to produce ciphertext, proving byte-parity with src/transfer/seal.ts.
-const { seal } = await import(join(process.cwd(), "..", "..", "dist", "transfer", "seal.js"));
+// Import the source directly (seal.ts is self-contained — node:crypto only) so this test does
+// not depend on a prior `tsc -b` build of dist/.
+const { seal } = await import(join(process.cwd(), "..", "..", "src", "transfer", "seal.ts"));
 
 describe("decryptGem (parity with server seal)", () => {
   it("round-trips across sizes incl. a padding boundary", async () => {
