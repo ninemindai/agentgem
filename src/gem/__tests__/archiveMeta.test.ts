@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { writeGemArchive, readGemMeta } from "../archive.js";
-import type { Gem } from "../types.js";
+import { writeGemArchive, readGemMeta } from "@agentgem/archive";
+import type { Gem } from "@agentgem/model";
 
 const gem: Gem = {
   name: "github-search", createdFrom: "/d", checks: [], requiredSecrets: [],

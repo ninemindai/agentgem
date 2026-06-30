@@ -1,6 +1,6 @@
 // src/transfer/__tests__/natsObjectStore.integration.test.ts
 import { describe, it, expect } from "vitest";
-import { NatsObjectStore } from "../natsObjectStore.js";
+import { NatsObjectStore } from "@agentgem/transfer";
 
 const natsUrl = process.env.NATS_URL;
 const gated = natsUrl ? describe : describe.skip;

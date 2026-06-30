@@ -3,8 +3,8 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { claudeTranscriptsForCwd, scanWorkflow, spineWithIndices } from "../workflowScan.js";
-import type { ProjectInventory } from "../types.js";
+import { claudeTranscriptsForCwd, scanWorkflow, spineWithIndices } from "@agentgem/insight";
+import type { ProjectInventory } from "@agentgem/model";
 
 let claudeDir: string;
 const PROJ = "/Users/me/work/app";

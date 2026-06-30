@@ -1,7 +1,7 @@
 // src/gem/__tests__/safeFetch.test.ts
 import { describe, it, expect, afterEach } from "vitest";
 import { createServer, type Server } from "node:http";
-import { isBlockedAddress, assertPublicUrl, fetchGemBytes, makePinnedLookup } from "../safeFetch.js";
+import { isBlockedAddress, assertPublicUrl, fetchGemBytes, makePinnedLookup } from "@agentgem/distribute";
 
 describe("isBlockedAddress", () => {
   it("blocks loopback, private, link-local, and metadata ranges", () => {

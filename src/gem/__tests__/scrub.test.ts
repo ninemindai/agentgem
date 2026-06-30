@@ -1,6 +1,6 @@
 // src/gem/__tests__/scrub.test.ts
 import { describe, it, expect } from "vitest";
-import { scrubStep, scrubProse, sanitizeShareText } from "../scrub.js";
+import { scrubStep, scrubProse, sanitizeShareText } from "@agentgem/insight";
 
 describe("scrubStep — Bash", () => {
   it("derives a verb from argv0 + subcommand and keeps the command", () => {

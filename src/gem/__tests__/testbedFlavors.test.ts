@@ -2,9 +2,9 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TESTBED_FLAVORS, detectFlavor, suggestTestbed, writeMcpCodexToml, discoverProjects } from "../testbedFlavors.js";
-import { scaffoldTestbed } from "../testbed.js";
-import { resolveDirs } from "../../resolveDir.js";
+import { TESTBED_FLAVORS, detectFlavor, suggestTestbed, writeMcpCodexToml, discoverProjects } from "@agentgem/testbed";
+import { scaffoldTestbed } from "@agentgem/testbed";
+import { resolveDirs } from "@agentgem/model";
 
 let root: string;
 beforeEach(() => { root = mkdtempSync(join(tmpdir(), "fl-")); });

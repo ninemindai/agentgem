@@ -2,8 +2,8 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { scanArtifactUsage } from "../optimizeScan.js";
-import type { ConfigInventory } from "../types.js";
+import { scanArtifactUsage } from "@agentgem/insight";
+import type { ConfigInventory } from "@agentgem/model";
 
 let home: string, claudeDir: string;
 

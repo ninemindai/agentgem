@@ -1,7 +1,7 @@
 // src/aggregator/__tests__/bindings.schema.test.ts
 import { describe, it, expect } from "vitest";
-import { makeTestDb } from "../testDb.js";
-import { producers, accountBindings } from "../schema.js";
+import { makeTestDb } from "@agentgem/aggregator";
+import { producers, accountBindings } from "@agentgem/aggregator";
 
 describe("account_bindings schema", () => {
   it("stores a binding and reads it back", async () => {

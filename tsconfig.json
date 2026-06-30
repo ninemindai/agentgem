@@ -22,5 +22,6 @@
     "incremental": true
   },
   "include": ["src/**/*"],
-  "exclude": ["dist", "node_modules"]
+  "exclude": ["dist", "node_modules"],
+  "references": [{ "path": "packages/model" }, { "path": "packages/archive" }, { "path": "packages/distribute" }, { "path": "packages/testbed" }, { "path": "packages/base" }, { "path": "packages/build" }, { "path": "packages/run" }, { "path": "packages/insight" }, { "path": "packages/capture" }, { "path": "packages/deploy" }, { "path": "packages/aggregator" }, { "path": "packages/transfer" }]
 }

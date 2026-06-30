@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { introspectProject } from "../introspect.js";
+import { introspectProject } from "@agentgem/capture";
 
 let root: string;
 function skill(r: string, name: string, body: string) {

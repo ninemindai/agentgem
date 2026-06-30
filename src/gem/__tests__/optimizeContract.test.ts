@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { buildOptimizePayload } from "../optimizeAnalyze.js";
+import { buildOptimizePayload } from "@agentgem/insight";
 import { OptimizePayloadSchema } from "../../gem.controller.js";
-import type { ConfigInventory } from "../types.js";
-import type { ArtifactUsage } from "../workflowScan.js";
+import type { ConfigInventory } from "@agentgem/model";
+import type { ArtifactUsage } from "@agentgem/insight";
 
 const NOW = Date.parse("2026-06-29T00:00:00.000Z");
 

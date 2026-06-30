@@ -1,13 +1,13 @@
 // src/gem/__tests__/run.test.ts
 import { describe, it, expect } from "vitest";
-import { pushLog, nodeMajor, parseEveUrl, parseVercelUrl, parseSingleTeamScope, parseWorkersUrl, runReadiness, deployCloudflare, undeployCloudflare } from "../run.js";
-import { startLocal, stopLocal, getRunStatus, deployVercel, undeployVercel, vercelProject, type ProcessRunner, type ProcHandle } from "../run.js";
-import { readDeployRecord, writeDeployRecord } from "../deployRecord.js";
+import { pushLog, nodeMajor, parseEveUrl, parseVercelUrl, parseSingleTeamScope, parseWorkersUrl, runReadiness, deployCloudflare, undeployCloudflare } from "@agentgem/run";
+import { startLocal, stopLocal, getRunStatus, deployVercel, undeployVercel, vercelProject, type ProcessRunner, type ProcHandle } from "@agentgem/run";
+import { readDeployRecord, writeDeployRecord } from "@agentgem/base";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createWorkspace } from "../workspaces.js";
-import type { Gem } from "../types.js";
+import { createWorkspace } from "@agentgem/base";
+import type { Gem } from "@agentgem/model";
 
 describe("run pure helpers", () => {
   it("pushLog caps the buffer at 200 lines (drops oldest)", () => {

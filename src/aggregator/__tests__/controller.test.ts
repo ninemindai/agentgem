@@ -3,11 +3,11 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { makeTestDb } from "../testDb.js";
+import { makeTestDb } from "@agentgem/aggregator";
 import { AggregatorController } from "../../aggregator.controller.js";
-import { seedSynthetic } from "../seed.js";
-import { buildAttestation, signAttestation } from "../../gem/attestation.js";
-import { loadOrCreateIdentity } from "../../gem/identity.js";
+import { seedSynthetic } from "@agentgem/aggregator";
+import { buildAttestation, signAttestation } from "@agentgem/insight";
+import { loadOrCreateIdentity } from "@agentgem/model";
 
 const gem = { name: "demo", createdFrom: "claude", artifacts: [
   { type: "skill" as const, name: "brainstorming", source: "plugin:superpowers@m", content: "B" } ], checks: [], requiredSecrets: [] };

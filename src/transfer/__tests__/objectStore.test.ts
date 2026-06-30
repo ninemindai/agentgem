@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { InMemoryObjectStore } from "../objectStore.js";
+import { InMemoryObjectStore } from "@agentgem/transfer";
 
 describe("InMemoryObjectStore", () => {
   it("put returns an unguessable name; get returns the bytes", async () => {

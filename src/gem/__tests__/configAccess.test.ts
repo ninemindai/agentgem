@@ -1,7 +1,7 @@
 // src/gem/__tests__/configAccess.test.ts
 import { describe, it, expect } from "vitest";
 import { join } from "node:path";
-import { claudeJsonPath, sensitiveConfigPaths, configWriteAccess } from "../configAccess.js";
+import { claudeJsonPath, sensitiveConfigPaths, configWriteAccess } from "@agentgem/run";
 
 describe("claudeJsonPath", () => {
   it("reads $CLAUDE_CONFIG_DIR/.claude.json when CLAUDE_CONFIG_DIR is set", () => {

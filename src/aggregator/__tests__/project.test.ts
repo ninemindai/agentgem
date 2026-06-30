@@ -1,9 +1,9 @@
 // src/aggregator/__tests__/project.test.ts
 import { describe, it, expect } from "vitest";
 import { sql } from "drizzle-orm";
-import { makeTestDb } from "../testDb.js";
-import { projectAttestation } from "../project.js";
-import { ingredients, usageEdges, attestations, producers } from "../schema.js";
+import { makeTestDb } from "@agentgem/aggregator";
+import { projectAttestation } from "@agentgem/aggregator";
+import { ingredients, usageEdges, attestations, producers } from "@agentgem/aggregator";
 
 function att(pubkey: string, gemDigest: string) {
   return { formatVersion: 1, canonicalizerVersion: 3, gem: { name: "g", digest: gemDigest },

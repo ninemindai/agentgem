@@ -2,8 +2,8 @@
 import { writeFileSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { loadOrCreateIdentity } from "../gem/identity.js";
-import { bindSigningPayload } from "../aggregator/binding.js";
+import { loadOrCreateIdentity } from "@agentgem/model";
+import { bindSigningPayload } from "@agentgem/aggregator";
 import { requestDeviceCode, pollForToken } from "./deviceFlow.js";
 
 export async function main(_argv: string[]): Promise<void> {

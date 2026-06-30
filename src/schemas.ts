@@ -1,10 +1,10 @@
 // src/schemas.ts
 import { z } from "zod";
-import { RUNNER_REGISTRY } from "./gem/checks.js";
-import { TARGET_REGISTRY } from "./gem/targets.js";
-import { deployTargetIds } from "./gem/deploy.js";
-import { flavorIds } from "./gem/testbedFlavors.js";
-import { CREDENTIAL_KEYS } from "./gem/credentials.js";
+import { RUNNER_REGISTRY } from "@agentgem/build";
+import { TARGET_REGISTRY } from "@agentgem/model";
+import { deployTargetIds } from "@agentgem/deploy";
+import { flavorIds } from "@agentgem/testbed";
+import { CREDENTIAL_KEYS } from "@agentgem/capture";
 
 export const SkillArtifactSchema = z.object({
   type: z.literal("skill"),

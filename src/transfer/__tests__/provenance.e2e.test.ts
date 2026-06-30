@@ -3,11 +3,11 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { exportGem } from "../../gem/share.js";
-import { loadOrCreateIdentity, type Identity } from "../../gem/identity.js";
-import { InMemoryObjectStore } from "../objectStore.js";
-import { sendGemBytes, receiveGem } from "../index.js";
-import type { Gem } from "../../gem/types.js";
+import { exportGem } from "@agentgem/distribute";
+import { loadOrCreateIdentity, type Identity } from "@agentgem/model";
+import { InMemoryObjectStore } from "@agentgem/transfer";
+import { sendGemBytes, receiveGem } from "@agentgem/transfer";
+import type { Gem } from "@agentgem/model";
 
 const demoGem: Gem = {
   name: "github-search", createdFrom: "/tmp/.claude", checks: [], requiredSecrets: [],

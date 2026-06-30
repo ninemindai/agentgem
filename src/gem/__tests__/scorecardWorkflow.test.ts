@@ -3,8 +3,8 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { resolve } from "node:path";
 import { GemController } from "../../gem.controller.js";
 import { defaultScorecardDeps } from "../scorecard.js";
-import type { ProcedureCandidate } from "../distillTypes.js";
-import type { WorkflowSignal } from "../workflowScan.js";
+import type { ProcedureCandidate } from "@agentgem/insight";
+import type { WorkflowSignal } from "@agentgem/insight";
 
 const ROOT = resolve(process.cwd());
 

@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
-import { seal } from "../seal.js";
+import { seal } from "@agentgem/transfer";
 
 // The browser module is plain ESM JS — import it directly from source (no dist/copy needed).
 let decryptGem: (c: Uint8Array, k: Uint8Array) => Promise<Uint8Array>;

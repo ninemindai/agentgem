@@ -1,9 +1,9 @@
 // src/gem/__tests__/share.test.ts
 import { describe, it, expect } from "vitest";
 import { gzipSync } from "node:zlib";
-import { exportGem, importGem } from "../share.js";
-import { packTar, unpackTar } from "../archiveTar.js";
-import type { Gem } from "../types.js";
+import { exportGem, importGem } from "@agentgem/distribute";
+import { packTar, unpackTar } from "@agentgem/archive";
+import type { Gem } from "@agentgem/model";
 
 const demoGem: Gem = {
   name: "github-search",

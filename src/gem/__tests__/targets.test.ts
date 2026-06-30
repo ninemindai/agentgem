@@ -1,7 +1,7 @@
 // src/gem/__tests__/targets.test.ts
 import { describe, it, expect } from "vitest";
-import { materialize, compatibility, TARGET_REGISTRY, buildAgentcoreHarness, agentcoreComposeProject, a2aAgentCard } from "../targets.js";
-import type { Gem, GemArtifact, SkillArtifact, McpServerArtifact, InstructionsArtifact, HookArtifact } from "../types.js";
+import { materialize, compatibility, TARGET_REGISTRY, buildAgentcoreHarness, agentcoreComposeProject, a2aAgentCard } from "@agentgem/model";
+import type { Gem, GemArtifact, SkillArtifact, McpServerArtifact, InstructionsArtifact, HookArtifact } from "@agentgem/model";
 
 const gem = (artifacts: GemArtifact[]): Gem => ({ name: "p", createdFrom: "/d", artifacts, checks: [], requiredSecrets: [] });
 const skill = (n: string, content = "# body"): SkillArtifact => ({ type: "skill", name: n, source: "standalone", content });

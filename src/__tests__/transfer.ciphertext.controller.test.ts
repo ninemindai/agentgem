@@ -3,8 +3,8 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import supertest from "supertest";
 import { RestApplication } from "@agentback/rest";
 import { GemController } from "../gem.controller.js";
-import { InMemoryObjectStore } from "../transfer/objectStore.js";
-import { setStoreFactoryForTests } from "../transfer/service.js";
+import { InMemoryObjectStore } from "@agentgem/transfer";
+import { setStoreFactoryForTests } from "@agentgem/transfer";
 
 let app: RestApplication;
 let client: ReturnType<typeof supertest>;

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
-import { makeTestDb } from "../aggregator/testDb.js";
-import { issueKey } from "../aggregator/apiKeys.js";
+import { makeTestDb } from "@agentgem/aggregator";
+import { issueKey } from "@agentgem/aggregator";
 import { makeApiKeyIdentity } from "../apiKeyIdentity.js";
 
 function mockReqRes(headers: Record<string, string> = {}, query: Record<string, unknown> = {}) {

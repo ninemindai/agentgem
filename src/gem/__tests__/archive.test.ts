@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { computeLock, verifyLock, writeGemArchive, readGemArchive } from "../archive.js";
-import { makeChannelArtifact } from "../channels.js";
-import type { Gem, GemArtifact } from "../types.js";
+import { computeLock, verifyLock, writeGemArchive, readGemArchive } from "@agentgem/archive";
+import { makeChannelArtifact } from "@agentgem/model";
+import type { Gem, GemArtifact } from "@agentgem/model";
 
 describe("computeLock", () => {
   it("hashes every file except gem.lock and is order-independent", () => {

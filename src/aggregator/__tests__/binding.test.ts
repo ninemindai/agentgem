@@ -1,10 +1,10 @@
 // src/aggregator/__tests__/binding.test.ts
 import { describe, it, expect } from "vitest";
 import { generateKeyPairSync, sign as edSign } from "node:crypto";
-import { makeTestDb } from "../testDb.js";
-import { producers, accountBindings } from "../schema.js";
-import { recordBinding, bindSigningPayload, type BindRequest } from "../binding.js";
-import type { AccountVerifier, VerifiedAccount } from "../accountVerifier.js";
+import { makeTestDb } from "@agentgem/aggregator";
+import { producers, accountBindings } from "@agentgem/aggregator";
+import { recordBinding, bindSigningPayload, type BindRequest } from "@agentgem/aggregator";
+import type { AccountVerifier, VerifiedAccount } from "@agentgem/aggregator";
 
 function makeSigner() {
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");

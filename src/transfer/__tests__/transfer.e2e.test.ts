@@ -1,9 +1,9 @@
 // src/transfer/__tests__/transfer.e2e.test.ts
 import { describe, it, expect } from "vitest";
-import { exportGem } from "../../gem/share.js";
-import { InMemoryObjectStore } from "../objectStore.js";
-import { sendGemBytes, receiveGem } from "../index.js";
-import type { Gem } from "../../gem/types.js";
+import { exportGem } from "@agentgem/distribute";
+import { InMemoryObjectStore } from "@agentgem/transfer";
+import { sendGemBytes, receiveGem } from "@agentgem/transfer";
+import type { Gem } from "@agentgem/model";
 
 const demoGem: Gem = {
   name: "github-search",

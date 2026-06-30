@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { randomBytes } from "node:crypto";
-import { seal, open, paddedSize } from "../seal.js";
+import { seal, open, paddedSize } from "@agentgem/transfer";
 
 describe("seal/open", () => {
   it("round-trips plaintext", () => {

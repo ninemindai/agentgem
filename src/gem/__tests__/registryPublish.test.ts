@@ -1,9 +1,9 @@
 // src/gem/__tests__/registryPublish.test.ts
 import { describe, it, expect } from "vitest";
-import { publishGem, updateIndex } from "../registry.js";
-import type { RegistryIndex, RegistryPublisher } from "../registry.js";
-import type { FileTree } from "../targets.js";
-import type { Gem } from "../types.js";
+import { publishGem, updateIndex } from "@agentgem/distribute";
+import type { RegistryIndex, RegistryPublisher } from "@agentgem/distribute";
+import type { FileTree } from "@agentgem/model";
+import type { Gem } from "@agentgem/model";
 
 const gem: Gem = { name: "github-search", createdFrom: "/d", checks: [], requiredSecrets: [],
   artifacts: [{ type: "skill", name: "search", source: "standalone", content: "# Search" }] };

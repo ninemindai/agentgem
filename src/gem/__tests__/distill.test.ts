@@ -1,8 +1,8 @@
 // src/gem/__tests__/distill.test.ts
 import { describe, it, expect } from "vitest";
-import { distillCandidates } from "../distill.js";
-import type { WorkflowSignal, ProcedureStep, SessionSequence } from "../workflowScan.js";
-import { extractReflections } from "../extract.js";
+import { distillCandidates } from "@agentgem/insight";
+import type { WorkflowSignal, ProcedureStep, SessionSequence } from "@agentgem/insight";
+import { extractReflections } from "@agentgem/insight";
 
 function step(tool: string, verb: string): ProcedureStep {
   return { tool, verb, arg: "", msgIndex: 0 };
@@ -66,8 +66,8 @@ describe("distillCandidates — Phase-0 gate", () => {
   });
 });
 
-import { validateDistilled } from "../distill.js";
-import type { GatedCandidate, ProcedureCandidate } from "../distillTypes.js";
+import { validateDistilled } from "@agentgem/insight";
+import type { GatedCandidate, ProcedureCandidate } from "@agentgem/insight";
 
 function enrich(g: GatedCandidate): ProcedureCandidate {
   return { ...g, provenance: { occurrences: [] }, priorConfidence: "medium", skeleton: undefined as any };
@@ -128,8 +128,8 @@ describe("validateDistilled", () => {
   });
 });
 
-import { distillWorkflow } from "../distill.js";
-import type { AcpConnectFn } from "../acpRecommender.js";
+import { distillWorkflow } from "@agentgem/insight";
+import type { AcpConnectFn } from "@agentgem/insight";
 
 function fakeConnect(canned: string | (() => Promise<string>)): AcpConnectFn {
   return async () => ({

@@ -1,6 +1,6 @@
 // src/index.ts
 import { config as loadEnv } from "dotenv";
-import { credentialsEnvPath } from "./gem/credentials.js";
+import { credentialsEnvPath } from "@agentgem/capture";
 // Load env before anything reads it: cwd .env (a dev override) layered over the
 // persisted server credentials in ~/.agentgem/.env. `override` defaults to false,
 // so a value already set in the cwd .env wins. `quiet` silences dotenv's banner/
@@ -26,7 +26,7 @@ import { AggregatorController } from "./aggregator.controller.js";
 import { ShareController } from "./share.controller.js";
 import { requireShareOriginSecret } from "./originSecret.js";
 import { ShareProxyController } from "./share.proxy.controller.js";
-import { resolveAggregatorDb } from "./aggregator/localDb.js";
+import { resolveAggregatorDb } from "@agentgem/aggregator";
 import { mountGating } from "./gating.js";
 
 const here = dirname(fileURLToPath(import.meta.url));

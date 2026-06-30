@@ -1,10 +1,10 @@
 // src/gem/__tests__/registryInstall.test.ts
 import { describe, it, expect } from "vitest";
-import { resolveInstall } from "../registry.js";
-import type { RegistrySource, RegistryIndex } from "../registry.js";
-import { writeGemArchive } from "../archive.js";
-import type { Gem } from "../types.js";
-import type { FileTree } from "../targets.js";
+import { resolveInstall } from "@agentgem/distribute";
+import type { RegistrySource, RegistryIndex } from "@agentgem/distribute";
+import { writeGemArchive } from "@agentgem/archive";
+import type { Gem } from "@agentgem/model";
+import type { FileTree } from "@agentgem/model";
 
 const root: Gem = { name: "github-search", createdFrom: "/d", checks: [], requiredSecrets: [],
   artifacts: [{ type: "skill", name: "search", source: "standalone", content: "# Search" }] };

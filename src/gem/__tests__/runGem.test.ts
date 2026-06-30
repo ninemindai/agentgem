@@ -3,9 +3,9 @@ import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { materializeGemToTestbed, materializeAndRunGem, AGENT_ADAPTERS, registerRun, resolveRun, resolveAdapterCommand, resolveOrFetchAdapter, adapterCacheDir, type AgentAdapter, type AdapterInstaller } from "../runGem.js";
-import type { RunConnectFn, RunResult } from "../acpRun.js";
-import type { Gem } from "../types.js";
+import { materializeGemToTestbed, materializeAndRunGem, AGENT_ADAPTERS, registerRun, resolveRun, resolveAdapterCommand, resolveOrFetchAdapter, adapterCacheDir, type AgentAdapter, type AdapterInstaller } from "@agentgem/run";
+import type { RunConnectFn, RunResult } from "@agentgem/run";
+import type { Gem } from "@agentgem/model";
 
 // A fake adapter whose package is neither on PATH nor a real dep, so resolution
 // always reaches the fetch tier (driven by an injected installer — never network).

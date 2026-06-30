@@ -1,6 +1,6 @@
 // src/gem/__tests__/canonicalize.test.ts
 import { describe, it, expect } from "vitest";
-import { canonicalMcpServer, canonicalSkill, canonicalModel, canonicalHarness, CANONICALIZER_VERSION } from "../canonicalize.js";
+import { canonicalMcpServer, canonicalSkill, canonicalModel, canonicalHarness, CANONICALIZER_VERSION } from "@agentgem/model";
 
 describe("canonicalize", () => {
   it("maps a public npx package server to a stable public id regardless of local name", () => {

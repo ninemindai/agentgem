@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { randomBytes } from "node:crypto";
-import { encodeTicket, parseTicket } from "../ticket.js";
+import { encodeTicket, parseTicket } from "@agentgem/transfer";
 
 describe("ticket", () => {
   it("round-trips bucket/object/key", () => {

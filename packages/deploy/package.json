@@ -1,0 +1,27 @@
+{
+  "name": "@agentgem/deploy",
+  "version": "0.3.1",
+  "description": "Publish/deploy a Gem to a cloud runtime — Anthropic managed agent and AWS AgentCore.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@agentgem/archive": "workspace:*",
+    "@agentgem/base": "workspace:*",
+    "@agentgem/distribute": "workspace:*",
+    "@agentgem/model": "workspace:*",
+    "@agentgem/run": "workspace:*",
+    "@anthropic-ai/sdk": "^0.104.2",
+    "@aws-sdk/client-bedrock-agentcore-control": "^3.1073.0"
+  }
+}

@@ -3,9 +3,9 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { verifyAttestation } from "../ingest.js";
-import { buildAttestation, signAttestation } from "../../gem/attestation.js";
-import { loadOrCreateIdentity } from "../../gem/identity.js";
+import { verifyAttestation } from "@agentgem/aggregator";
+import { buildAttestation, signAttestation } from "@agentgem/insight";
+import { loadOrCreateIdentity } from "@agentgem/model";
 
 const gem = { name: "demo", createdFrom: "claude", artifacts: [
   { type: "mcp_server" as const, name: "gh", transport: "stdio" as const, config: { command: "npx", args: ["@modelcontextprotocol/server-github"] } },

@@ -3,9 +3,9 @@ import { existsSync, writeFileSync, readFileSync } from "node:fs";
 import { basename, resolve, sep } from "node:path";
 import { z } from "zod";
 import { api, get, post } from "@agentback/openapi";
-import { scanSessionsCached, aggregateObserve } from "./gem/observeScan.js";
-import { scanArtifactUsageCached } from "./gem/optimizeScan.js";
-import { buildOptimizePayload, type OptimizeRange } from "./gem/optimizeAnalyze.js";
+import { scanSessionsCached, aggregateObserve } from "@agentgem/insight";
+import { scanArtifactUsageCached } from "@agentgem/insight";
+import { buildOptimizePayload, type OptimizeRange } from "@agentgem/insight";
 
 const ObserveQuerySchema = z.object({
   range: z.enum(["today", "7d", "30d", "all"]).optional(),
@@ -63,32 +63,32 @@ const ScorecardSchema = z.object({
   generatedAtMs: z.number(),
   degraded: z.boolean(),
 }) satisfies z.ZodType<Scorecard>;
-import { introspectConfig, introspectProject } from "./gem/introspect.js";
-import { buildGem } from "./gem/buildGem.js";
-import { InvalidInputError } from "./gem/inputError.js";
-import { scaffoldChecks } from "./gem/checks.js";
-import { materialize, compatibility } from "./gem/targets.js";
-import type { TargetId } from "./gem/targets.js";
-import { DEPLOY_REGISTRY, deployTargetList } from "./gem/deploy.js";
-import type { DeployTargetId } from "./gem/deploy.js";
-import { createWorkspace, listWorkspaces, readWorkspace, renderTarget, deleteWorkspace } from "./gem/workspaces.js";
-import { writeGemArchive, readGemArchive } from "./gem/archive.js";
-import type { GemLock } from "./gem/archive.js";
-import { writeArchiveDir, readArchiveDir } from "./gem/archiveFs.js";
-import { packTar } from "./gem/archiveTar.js";
-import { exportGem, importGem } from "./gem/share.js";
-import { fetchGemBytes } from "./gem/safeFetch.js";
-import { sendBytes, receiveTicket, natsStoreFromEnv, assertConfigured, mintCredsFromEnv, fetchAndBurnCiphertext } from "./transfer/service.js";
-import type { Gem } from "./gem/types.js";
-import { readDeployRecord, writeDeployRecord, clearDeployRecord } from "./gem/deployRecord.js";
-import type { DeployBackend } from "./gem/deployRecord.js";
-import { transcriptToken, readAnalysisCache, writeAnalysisCache } from "./gem/analysisCache.js";
-import { readGlobalUsageCache, writeGlobalUsageCache, readGlobalUsageCacheStale } from "./gem/usageCache.js";
-import { computeGlobalUsage } from "./gem/globalUsage.js";
-import { undeployManagedAgent, anthropicPublishClient } from "./publish.js";
-import { undeployAgentcoreHarness, realAgentcoreControlClient } from "./gem/agentcorePublish.js";
+import { introspectConfig, introspectProject } from "@agentgem/capture";
+import { buildGem } from "@agentgem/build";
+import { InvalidInputError } from "@agentgem/model";
+import { scaffoldChecks } from "@agentgem/build";
+import { materialize, compatibility } from "@agentgem/model";
+import type { TargetId } from "@agentgem/model";
+import { DEPLOY_REGISTRY, deployTargetList } from "@agentgem/deploy";
+import type { DeployTargetId } from "@agentgem/deploy";
+import { createWorkspace, listWorkspaces, readWorkspace, renderTarget, deleteWorkspace } from "@agentgem/base";
+import { writeGemArchive, readGemArchive } from "@agentgem/archive";
+import type { GemLock } from "@agentgem/archive";
+import { writeArchiveDir, readArchiveDir } from "@agentgem/archive";
+import { packTar } from "@agentgem/archive";
+import { exportGem, importGem } from "@agentgem/distribute";
+import { fetchGemBytes } from "@agentgem/distribute";
+import { sendBytes, receiveTicket, natsStoreFromEnv, assertConfigured, mintCredsFromEnv, fetchAndBurnCiphertext } from "@agentgem/transfer";
+import type { Gem } from "@agentgem/model";
+import { readDeployRecord, writeDeployRecord, clearDeployRecord } from "@agentgem/base";
+import type { DeployBackend } from "@agentgem/base";
+import { transcriptToken, readAnalysisCache, writeAnalysisCache } from "@agentgem/insight";
+import { readGlobalUsageCache, writeGlobalUsageCache, readGlobalUsageCacheStale } from "@agentgem/capture";
+import { computeGlobalUsage } from "@agentgem/capture";
+import { undeployManagedAgent, anthropicPublishClient } from "@agentgem/deploy";
+import { undeployAgentcoreHarness, realAgentcoreControlClient } from "@agentgem/deploy";
 
-import type { ConfigInventory } from "./gem/types.js";
+import type { ConfigInventory } from "@agentgem/model";
 import {
   InventorySchema, GemSchema, GemRequestSchema, DirQuerySchema, PickQuerySchema, PickFolderSchema,
   ScaffoldChecksRequestSchema, ScaffoldChecksResponseSchema,
@@ -123,26 +123,26 @@ import {
   UsageSchema, UsageQuerySchema,
 } from "./schemas.js";
 import { collectScorecard, selectScorecardRoots, scorecardTranscriptPaths, defaultScorecardDeps, isPortable, type Scorecard } from "./gem/scorecard.js";
-import { sanitizeShareText } from "./gem/scrub.js";
-import { claudeTranscriptsForCwd, scanWorkflow, allClaudeTranscripts, bucketTranscriptsByCwd } from "./gem/workflowScan.js";
-import { recommendWorkflow, recommendationToSelection } from "./gem/acpRecommender.js";
-import { distillWorkflow, type DistilledSkill } from "./gem/distill.js";
-import { extractReflections } from "./gem/extract.js";
-import { writeReflections } from "./gem/reflectionStore.js";
-import { writeDistilledDraft, stageDraftsByEvidence } from "./gem/draftStage.js";
-import { runReadiness, startLocal, stopLocal, getRunStatus, deployVercel, deployCloudflare, undeployVercel, undeployCloudflare } from "./gem/run.js";
-import { setCredential } from "./gem/credentials.js";
-import { agentcoreReadiness, deployAgentcore, getAgentcoreStatus } from "./gem/agentcoreRun.js";
-import { scaffoldTestbed, importArtifacts } from "./gem/testbed.js";
-import { materializeAndRunGem, materializeGemToTestbed, registerRun, AGENT_ADAPTERS, type AgentId } from "./gem/runGem.js";
-import { detectFlavor, suggestTestbed, discoverProjects } from "./gem/testbedFlavors.js";
-import type { TestbedFlavorId } from "./gem/testbedFlavors.js";
-import { readRecents, upsertRecent } from "./gem/recents.js";
-import { resolveInstall, publishGem } from "./gem/registry.js";
-import { searchIndex } from "./gem/search.js";
-import { githubRegistrySource, githubRegistryPublisher, registryConfigFromEnv, registryReady } from "./gem/registryGithub.js";
+import { sanitizeShareText } from "@agentgem/insight";
+import { claudeTranscriptsForCwd, scanWorkflow, allClaudeTranscripts, bucketTranscriptsByCwd } from "@agentgem/insight";
+import { recommendWorkflow, recommendationToSelection } from "@agentgem/insight";
+import { distillWorkflow, type DistilledSkill } from "@agentgem/insight";
+import { extractReflections } from "@agentgem/insight";
+import { writeReflections } from "@agentgem/insight";
+import { writeDistilledDraft, stageDraftsByEvidence } from "@agentgem/capture";
+import { runReadiness, startLocal, stopLocal, getRunStatus, deployVercel, deployCloudflare, undeployVercel, undeployCloudflare } from "@agentgem/run";
+import { setCredential } from "@agentgem/capture";
+import { agentcoreReadiness, deployAgentcore, getAgentcoreStatus } from "@agentgem/deploy";
+import { scaffoldTestbed, importArtifacts } from "@agentgem/testbed";
+import { materializeAndRunGem, materializeGemToTestbed, registerRun, AGENT_ADAPTERS, type AgentId } from "@agentgem/run";
+import { detectFlavor, suggestTestbed, discoverProjects } from "@agentgem/testbed";
+import type { TestbedFlavorId } from "@agentgem/testbed";
+import { readRecents, upsertRecent } from "@agentgem/capture";
+import { resolveInstall, publishGem } from "@agentgem/distribute";
+import { searchIndex } from "@agentgem/distribute";
+import { githubRegistrySource, githubRegistryPublisher, registryConfigFromEnv, registryReady } from "@agentgem/distribute";
 import { createGemCache } from "./gem/publicCatalog.js";
-import { resolveDirs, resolveProject, agentgemHome } from "./resolveDir.js";
+import { resolveDirs, resolveProject, agentgemHome } from "@agentgem/model";
 import { pickFolder } from "./pickFolder.js";
 
 let globalUsageRefreshing = false;

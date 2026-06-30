@@ -1,9 +1,9 @@
 // src/gem/__tests__/extract.test.ts
 import { describe, it, expect } from "vitest";
-import { buildProvenance, heuristicSkeleton, scoreCandidate, extractCandidates } from "../extract.js";
-import { validateDistilled } from "../distill.js";
-import type { SessionSequence } from "../workflowScan.js";
-import type { GatedCandidate } from "../distillTypes.js";
+import { buildProvenance, heuristicSkeleton, scoreCandidate, extractCandidates } from "@agentgem/insight";
+import { validateDistilled } from "@agentgem/insight";
+import type { SessionSequence } from "@agentgem/insight";
+import type { GatedCandidate } from "@agentgem/insight";
 
 // ── Task 3: buildProvenance ──────────────────────────────────────────────────
 
@@ -69,8 +69,8 @@ describe("heuristicSkeleton", () => {
   });
 });
 
-import { extractReflections } from "../extract.js";
-import { writeReflections } from "../reflectionStore.js";
+import { extractReflections } from "@agentgem/insight";
+import { writeReflections } from "@agentgem/insight";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

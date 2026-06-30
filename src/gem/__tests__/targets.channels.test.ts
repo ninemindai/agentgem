@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { materialize } from "../targets.js";
-import { makeChannelArtifact } from "../channels.js";
+import { materialize } from "@agentgem/model";
+import { makeChannelArtifact } from "@agentgem/model";
 
 const gemWith = (...platforms: string[]) => ({
   name: "demo", createdFrom: "test", checks: [], requiredSecrets: [],

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { api, get, post, AgentError } from "@agentback/openapi";
 import { inject } from "@agentback/core";
 import { DrizzleBindings } from "@agentback/drizzle";
-import type { AppDb } from "./aggregator/schema.js";
+import type { AppDb } from "@agentgem/aggregator";
 import { createShareCard, getShareCard } from "./share/shareStore.js";
 
 const sanitize = (s: string) => s.replace(/[\u0000-\u001f]/g, "").trim();

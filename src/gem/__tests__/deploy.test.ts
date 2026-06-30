@@ -1,8 +1,8 @@
 // src/gem/__tests__/deploy.test.ts
 import { describe, it, expect, afterEach } from "vitest";
-import { DEPLOY_REGISTRY, deployTargetIds, deployTargetList } from "../deploy.js";
-import { renderManagedAgent } from "../publish.js";
-import type { Gem, GemArtifact } from "../types.js";
+import { DEPLOY_REGISTRY, deployTargetIds, deployTargetList } from "@agentgem/deploy";
+import { renderManagedAgent } from "@agentgem/distribute";
+import type { Gem, GemArtifact } from "@agentgem/model";
 
 const gem = (artifacts: GemArtifact[]): Gem => ({ name: "p", createdFrom: "/d", artifacts, checks: [], requiredSecrets: [] });
 const skill = (n: string): GemArtifact => ({ type: "skill", name: n, source: "standalone", content: "# body" });

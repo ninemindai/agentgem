@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readGlobalUsageCache, writeGlobalUsageCache } from "../usageCache.js";
+import { readGlobalUsageCache, writeGlobalUsageCache } from "@agentgem/capture";
 
 let home: string, prev: string | undefined;
 beforeEach(() => { home = mkdtempSync(join(tmpdir(), "ugcache-")); prev = process.env.AGENTGEM_HOME; process.env.AGENTGEM_HOME = home; });

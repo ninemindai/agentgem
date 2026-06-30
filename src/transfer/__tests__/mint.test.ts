@@ -2,7 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { createAccount } from "@nats-io/nkeys";
 import { decode, parseCreds } from "@nats-io/jwt";
-import { mintScopedCreds, scopeSubjects } from "../mint.js";
+import { mintScopedCreds, scopeSubjects } from "@agentgem/transfer";
 
 // A hermetic account key for signing — no broker involved.
 function testAccountSeed(): string {

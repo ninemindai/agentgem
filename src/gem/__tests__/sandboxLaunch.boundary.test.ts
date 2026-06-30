@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { seatbeltPolicy, type DeniedPath } from "../sandboxLaunch.js";
+import { seatbeltPolicy, type DeniedPath } from "@agentgem/run";
 
 const onMac = process.platform === "darwin" && existsSync("/usr/bin/sandbox-exec");
 

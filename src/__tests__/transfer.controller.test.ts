@@ -3,8 +3,8 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import supertest from "supertest";
 import { RestApplication } from "@agentback/rest";
 import { GemController } from "../gem.controller.js";
-import { exportGem } from "../gem/share.js";
-import type { Gem } from "../gem/types.js";
+import { exportGem } from "@agentgem/distribute";
+import type { Gem } from "@agentgem/model";
 
 let app: RestApplication;
 let client: ReturnType<typeof supertest>;

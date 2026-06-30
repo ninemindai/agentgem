@@ -3,9 +3,9 @@ import { describe, it, expect } from "vitest";
 import {
   recommendationToSelection, deterministicAnalysis, validateAnalysis,
   recommendWorkflow, type AcpConnectFn,
-} from "../acpRecommender.js";
-import type { WorkflowSignal } from "../workflowScan.js";
-import type { ProjectInventory } from "../types.js";
+} from "@agentgem/insight";
+import type { WorkflowSignal } from "@agentgem/insight";
+import type { ProjectInventory } from "@agentgem/model";
 
 const ROOT = "/Users/me/work/app";
 const inventory: ProjectInventory = {

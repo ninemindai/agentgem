@@ -1,7 +1,7 @@
 // src/gem/__tests__/publish.test.ts
 import { describe, it, expect } from "vitest";
-import { renderManagedAgent, MANAGED_AGENTS_MODEL } from "../publish.js";
-import type { Gem } from "../types.js";
+import { renderManagedAgent, MANAGED_AGENTS_MODEL } from "@agentgem/distribute";
+import type { Gem } from "@agentgem/model";
 
 const gem: Gem = {
   name: "mygem",

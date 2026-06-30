@@ -1,20 +1,20 @@
 // src/gem.tools.ts
 import { z } from "zod";
 import { mcpServer, tool } from "@agentback/mcp";
-import { introspectConfig, introspectProject } from "./gem/introspect.js";
-import { buildGem } from "./gem/buildGem.js";
-import type { ConfigInventory } from "./gem/types.js";
+import { introspectConfig, introspectProject } from "@agentgem/capture";
+import { buildGem } from "@agentgem/build";
+import type { ConfigInventory } from "@agentgem/model";
 import { GemSelectionSchema } from "./schemas.js";
-import { resolveDirs, resolveProject } from "./resolveDir.js";
-import { resolveInstall, publishGem } from "./gem/registry.js";
-import { searchIndex } from "./gem/search.js";
-import type { TargetId } from "./gem/targets.js";
-import { githubRegistrySource, githubRegistryPublisher, registryConfigFromEnv } from "./gem/registryGithub.js";
-import { readWorkspace } from "./gem/workspaces.js";
-import { readGemArchive } from "./gem/archive.js";
-import { exportGem, importGem } from "./gem/share.js";
-import { fetchGemBytes } from "./gem/safeFetch.js";
-import { sendBytes, receiveTicket, natsStoreFromEnv, assertConfigured } from "./transfer/service.js";
+import { resolveDirs, resolveProject } from "@agentgem/model";
+import { resolveInstall, publishGem } from "@agentgem/distribute";
+import { searchIndex } from "@agentgem/distribute";
+import type { TargetId } from "@agentgem/model";
+import { githubRegistrySource, githubRegistryPublisher, registryConfigFromEnv } from "@agentgem/distribute";
+import { readWorkspace } from "@agentgem/base";
+import { readGemArchive } from "@agentgem/archive";
+import { exportGem, importGem } from "@agentgem/distribute";
+import { fetchGemBytes } from "@agentgem/distribute";
+import { sendBytes, receiveTicket, natsStoreFromEnv, assertConfigured } from "@agentgem/transfer";
 import { readFileSync } from "node:fs";
 
 const InventoryInput = z.object({ dir: z.string().optional(), projects: z.array(z.string()).optional() });

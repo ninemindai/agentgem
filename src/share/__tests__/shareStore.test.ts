@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { makeTestDb } from "../../aggregator/testDb.js";
+import { makeTestDb } from "@agentgem/aggregator";
 import { createShareCard, getShareCard } from "../shareStore.js";
 
 describe("shareStore gem", () => {

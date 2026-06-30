@@ -1,9 +1,9 @@
 import { describe, it, expect, afterEach } from "vitest";
-import type { Gem } from "../types.js";
+import type { Gem } from "@agentgem/model";
 import {
   harnessNameFor, buildCreateHarnessRequest, agentcorePublishReady,
   deployAgentcorePublish, undeployAgentcoreHarness, type AgentcoreControlClient,
-} from "../agentcorePublish.js";
+} from "@agentgem/deploy";
 
 const gem = (over: Partial<Gem> = {}): Gem => ({
   name: "research agent!", createdFrom: "/d",

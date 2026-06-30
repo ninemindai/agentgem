@@ -1,0 +1,24 @@
+{
+  "name": "@agentgem/insight",
+  "version": "0.3.1",
+  "description": "Scan transcripts into signals, distill skills, recommend and attest Gems.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@agentgem/archive": "workspace:*",
+    "@agentgem/base": "workspace:*",
+    "@agentgem/build": "workspace:*",
+    "@agentgem/model": "workspace:*"
+  }
+}
