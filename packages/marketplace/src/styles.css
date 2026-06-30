@@ -10,3 +10,12 @@
 .ex-bar-fill { display: block; height: 100%; background: #b4543a; }
 .ex-vshare-fill { display: block; height: 100%; background: #3a7d44; }
 .ex-empty, .ex-error { color: #777; padding: 16px 8px; }
+.ex-gem-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.ex-gem-card { display: grid; gap: 4px; padding: 12px; border: 1px solid #e5e0d8; border-radius: 8px; text-decoration: none; color: inherit; }
+.ex-gem-card:hover { border-color: #b4543a; }
+.ex-gem-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.ex-gem-key { font-weight: 600; }
+.ex-gem-desc { color: #444; font-size: .92em; }
+.ex-gem-tags, .ex-gem-kinds { display: flex; gap: 6px; flex-wrap: wrap; }
+.ex-tag { color: #888; font-size: .8em; }
+.ex-chip { background: #efe9df; border-radius: 4px; padding: 1px 6px; font-size: .75em; }
