@@ -20,6 +20,7 @@ export interface SessionFacet {
   brief_summary: string;
   outcome: SessionOutcome;
   friction_detail: string;     // "" = none observed
+  model?: string;              // dominant model in the session — backfilled from the signal
   origin: "llm" | "heuristic"; // heuristic = deterministic fallback (no agent)
 }
 
@@ -43,6 +44,7 @@ export function deterministicFacets(signal: WorkflowSignal): SessionFacet[] {
     brief_summary: s.missionHint!.task,
     outcome: "partially_achieved",
     friction_detail: "",
+    model: s.model,
     origin: "heuristic",
   }));
 }
@@ -83,6 +85,7 @@ export function validateFacets(raw: unknown, signal: WorkflowSignal): SessionFac
       brief_summary: f.brief_summary,
       outcome: f.outcome,
       friction_detail: typeof f.friction_detail === "string" ? f.friction_detail : "",
+      model: sess.model,                                     // from the signal, never the agent
       origin: "llm",
     });
   }

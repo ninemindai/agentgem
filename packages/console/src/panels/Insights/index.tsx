@@ -131,6 +131,21 @@ function InsightsReportCard({ report, scanned, onBuild }: { report: InsightsRepo
       <p className="analyze-candidate-desc">{report.outcomes_summary}</p>
       {capped && <p className="insights-hint">Based on the {judged} most-recent of {scanned} sessions scanned.</p>}
 
+      {report.by_model.length > 1 && (
+        <div className="insights-section">
+          <h4>By model</h4>
+          <ul className="insights-bymodel">
+            {report.by_model.map((m) => (
+              <li key={m.model}>
+                <span className="analyze-include-name">{m.model}</span>
+                <span className="insights-rate">{Math.round((m.mostly / m.total) * 100)}% mostly</span>
+                <span className="targets-label">{m.total} session{m.total === 1 ? "" : "s"}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {report.publish_candidates.length > 0 && (
         <div className="insights-section">
           <div className="analyze-candidate-head">

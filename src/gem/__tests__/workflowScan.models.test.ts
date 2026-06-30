@@ -1,6 +1,27 @@
 // src/gem/__tests__/workflowScan.models.test.ts
 import { describe, it, expect } from "vitest";
-import { collectModels } from "@agentgem/insight";
+import { collectModels, sessionPrimaryModel } from "@agentgem/insight";
+
+describe("sessionPrimaryModel", () => {
+  it("returns the most-frequent real model in one session", () => {
+    expect(sessionPrimaryModel([
+      { message: { model: "claude-opus-4-8" } },
+      { message: { model: "claude-opus-4-8" } },
+      { message: { model: "gpt-5.1" } },
+    ])).toBe("claude-opus-4-8");
+  });
+
+  it("lowercases and skips synthetic markers", () => {
+    expect(sessionPrimaryModel([
+      { message: { model: "<synthetic>" } },
+      { message: { model: "GPT-5.1" } },
+    ])).toBe("gpt-5.1");
+  });
+
+  it("returns undefined when no real model is present", () => {
+    expect(sessionPrimaryModel([{ message: { role: "user" } }])).toBeUndefined();
+  });
+});
 
 describe("collectModels", () => {
   it("collects distinct lowercased model ids with session counts", () => {

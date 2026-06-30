@@ -29,7 +29,7 @@ export interface ProcedureStep extends ScrubbedStep { tool: string; msgIndex: nu
 export interface MissionHint { task: string; outcome: string }
 // `sessionId`/`transcript`/`atMs` are provenance coordinates: which transcript a
 // run came from and when. `transcript` is a basename, never an absolute path.
-export interface SessionSequence { steps: ProcedureStep[]; missionHint?: MissionHint; sessionId: string; transcript: string; atMs: number }
+export interface SessionSequence { steps: ProcedureStep[]; missionHint?: MissionHint; sessionId: string; transcript: string; atMs: number; model?: string }
 // A recurring procedure (verb spine), the sessions exercising it, a representative
 // sample index, and ALL exercising session indices (for provenance fan-out).
 export interface ProcedureGroup { key: string; verbs: string[]; sessions: number; sampleSessionIdx: number; sessionIdxs: number[] }
@@ -187,6 +187,25 @@ export function collectModels(sessions: RawRecord[][]): { id: string; sessions: 
   }
   return order.map((id) => ({ id, sessions: counts.get(id)! }))
     .sort((a, b) => b.sessions - a.sessions || a.id.localeCompare(b.id));
+}
+
+// The dominant real model in ONE session (most-frequent message.model, lowercased,
+// synthetic markers skipped; lexicographic tie-break for determinism). Lets the
+// insights layer bucket a session's outcome by the model that did the work.
+export function sessionPrimaryModel(records: RawRecord[]): string | undefined {
+  const counts = new Map<string, number>();
+  for (const r of records) {
+    const m = r.message?.model;
+    if (!m || m.startsWith("<")) continue;
+    const id = m.toLowerCase();
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  let best: string | undefined;
+  let bestN = 0;
+  for (const [id, n] of counts) {
+    if (n > bestN || (n === bestN && best !== undefined && id < best)) { best = id; bestN = n; }
+  }
+  return best;
 }
 
 // Global/plugin artifacts (from introspectConfig). Only names + hook config are
@@ -412,7 +431,7 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
     if (opts.retainSequences && steps.length > 0) {
       const missionHint: MissionHint | undefined =
         firstUserText !== null ? { task: scrubProse(firstUserText), outcome: scrubProse(lastAssistantText) } : undefined;
-      const coords = { sessionId: sessionId || basename.replace(/\.jsonl$/, ""), transcript: basename, atMs: ms };
+      const coords = { sessionId: sessionId || basename.replace(/\.jsonl$/, ""), transcript: basename, atMs: ms, model: sessionPrimaryModel(currentSessionRecords) };
       seqSessions.push(missionHint ? { steps, missionHint, ...coords } : { steps, ...coords });
     }
   }

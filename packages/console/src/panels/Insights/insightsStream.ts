@@ -5,6 +5,7 @@ export interface InsightsReportView {
   totals: { sessions: number; mostly: number; partially: number; not: number };
   outcomes_summary: string;
   narrative: string;
+  by_model: { model: string; mostly: number; partially: number; not: number; total: number }[];
   friction: { sessionId: string; detail: string }[];
   publish_candidates: { sessionId: string; goal: string; why: string }[];
 }

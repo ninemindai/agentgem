@@ -483,6 +483,11 @@ body::before {
 .insights-narrative { margin: 0 0 10px; padding: 10px 12px; border-left: 3px solid var(--accent);
   background: var(--paper-2); border-radius: 6px; color: var(--ink); font: 14px/1.6 var(--font-ui); }
 .insights-hint { margin: 4px 0 0; font: 11.5px/1.4 var(--font-ui); color: var(--muted); font-style: italic; }
+.insights-bymodel { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.insights-bymodel li { display: flex; align-items: baseline; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--line-soft); }
+.insights-bymodel li:last-child { border-bottom: none; }
+.insights-bymodel .analyze-include-name { font: 12px/1.4 var(--font-mono); color: var(--ink); flex: 1; }
+.insights-rate { font: 600 13px/1 var(--font-ui); color: var(--accent); }
 .insights-section { margin-top: 12px; padding: 10px; border: 1px solid var(--line-soft);
   border-radius: 8px; background: var(--paper); }
 .insights-section h4 { font: 600 12px/1 var(--font-ui); letter-spacing: .04em; text-transform: uppercase;

@@ -3,8 +3,8 @@ import { describe, it, expect } from "vitest";
 import { deterministicFacets, validateFacets } from "@agentgem/insight";
 import type { WorkflowSignal, SessionSequence } from "@agentgem/insight";
 
-function sess(id: string, task: string | null): SessionSequence {
-  const base: SessionSequence = { steps: [], sessionId: id, transcript: `${id}.jsonl`, atMs: 100 };
+function sess(id: string, task: string | null, model?: string): SessionSequence {
+  const base: SessionSequence = { steps: [], sessionId: id, transcript: `${id}.jsonl`, atMs: 100, model };
   return task === null ? base : { ...base, missionHint: { task, outcome: "" } };
 }
 
@@ -36,17 +36,22 @@ describe("deterministicFacets", () => {
     expect(out[0].sessionId).toBe("a");
   });
 
+  it("carries the session's model", () => {
+    const out = deterministicFacets(signalWith([sess("a", "Ship the auth flow", "claude-opus-4-8")]));
+    expect(out[0].model).toBe("claude-opus-4-8");
+  });
+
   it("returns [] when the signal has no sequences", () => {
     expect(deterministicFacets(signalWith(null))).toEqual([]);
   });
 });
 
 describe("validateFacets", () => {
-  const sig = signalWith([sess("a", "Ship the auth flow"), sess("b", "Fix DNS")]);
+  const sig = signalWith([sess("a", "Ship the auth flow", "claude-opus-4-8"), sess("b", "Fix DNS")]);
 
-  it("accepts well-formed facets, stamps llm origin and backfills provenance", () => {
+  it("accepts well-formed facets, stamps llm origin and backfills provenance + model", () => {
     const raw = JSON.stringify({ facets: [
-      { sessionId: "a", underlying_goal: "Ship GitHub device-flow auth", outcome: "mostly_achieved", friction_detail: "", brief_summary: "Built and merged auth binding." },
+      { sessionId: "a", underlying_goal: "Ship GitHub device-flow auth", outcome: "mostly_achieved", friction_detail: "", brief_summary: "Built and merged auth binding.", model: "gpt-spoofed" },
     ] });
     const out = validateFacets(raw, sig);
     expect(out).toHaveLength(1);
@@ -54,6 +59,7 @@ describe("validateFacets", () => {
     expect(out[0].outcome).toBe("mostly_achieved");
     expect(out[0].transcript).toBe("a.jsonl"); // backfilled from the signal, not trusted from the agent
     expect(out[0].atMs).toBe(100);
+    expect(out[0].model).toBe("claude-opus-4-8"); // from the signal, NOT the agent's "gpt-spoofed"
   });
 
   it("drops a facet whose sessionId is not in the signal but keeps valid ones", () => {

@@ -3,12 +3,12 @@ import { describe, it, expect } from "vitest";
 import { synthesizeInsights } from "@agentgem/insight";
 import type { SessionFacet, SessionOutcome } from "@agentgem/insight";
 
-function facet(sessionId: string, outcome: SessionOutcome, friction = ""): SessionFacet {
+function facet(sessionId: string, outcome: SessionOutcome, friction = "", model?: string): SessionFacet {
   return {
     sessionId, transcript: `${sessionId}.jsonl`, atMs: 0,
     underlying_goal: `goal-${sessionId}`,
     brief_summary: `summary-${sessionId}`,
-    outcome, friction_detail: friction, origin: "llm",
+    outcome, friction_detail: friction, model, origin: "llm",
   };
 }
 
@@ -40,6 +40,20 @@ describe("synthesizeInsights", () => {
     expect(r.friction).toHaveLength(1);
     expect(r.friction[0].sessionId).toBe("a");
     expect(r.friction[0].detail).toBe("interrupted mid-generation");
+  });
+
+  it("buckets outcomes by model, excluding facets with no model", () => {
+    const r = synthesizeInsights([
+      facet("a", "mostly_achieved", "", "claude-opus-4-8"),
+      facet("b", "not_achieved", "", "claude-opus-4-8"),
+      facet("c", "mostly_achieved", "", "gpt-5.1"),
+      facet("d", "mostly_achieved", ""), // no model → excluded
+    ]);
+    const opus = r.by_model.find((m) => m.model === "claude-opus-4-8")!;
+    expect(opus).toMatchObject({ mostly: 1, not: 1, total: 2 });
+    const gpt = r.by_model.find((m) => m.model === "gpt-5.1")!;
+    expect(gpt).toMatchObject({ mostly: 1, total: 1 });
+    expect(r.by_model).toHaveLength(2); // the model-less facet contributes no bucket
   });
 
   it("returns a zeroed report for no facets", () => {

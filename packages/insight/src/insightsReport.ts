@@ -11,10 +11,13 @@ import type { SessionFacet } from "./facets.js";
 
 export interface PublishCandidate { sessionId: string; goal: string; why: string }
 export interface FrictionTheme { sessionId: string; detail: string }
+// Per-model outcome counts — the local (Ring 0) cross-model success view.
+export interface ModelOutcome { model: string; mostly: number; partially: number; not: number; total: number }
 export interface InsightsReport {
   totals: { sessions: number; mostly: number; partially: number; not: number };
   outcomes_summary: string;
   narrative: string;            // cross-session prose; deterministic here, upgraded by narrateInsights
+  by_model: ModelOutcome[];     // outcome breakdown per model (facets with a known model)
   friction: FrictionTheme[];
   publish_candidates: PublishCandidate[];
 }
@@ -35,7 +38,22 @@ export function synthesizeInsights(facets: SessionFacet[]): InsightsReport {
   const publish_candidates: PublishCandidate[] = facets
     .filter((f) => f.outcome === "mostly_achieved")
     .map((f) => ({ sessionId: f.sessionId, goal: f.underlying_goal, why: `Succeeded: ${f.brief_summary}` }));
-  return { totals, outcomes_summary, narrative: templateNarrative(totals, publish_candidates), friction, publish_candidates };
+  return { totals, outcomes_summary, narrative: templateNarrative(totals, publish_candidates), by_model: bucketByModel(facets), friction, publish_candidates };
+}
+
+// Group facets by their (known) model into per-model outcome counts, busiest first.
+function bucketByModel(facets: SessionFacet[]): ModelOutcome[] {
+  const by = new Map<string, ModelOutcome>();
+  for (const f of facets) {
+    if (!f.model) continue;
+    const m = by.get(f.model) ?? { model: f.model, mostly: 0, partially: 0, not: 0, total: 0 };
+    if (f.outcome === "mostly_achieved") m.mostly++;
+    else if (f.outcome === "partially_achieved") m.partially++;
+    else m.not++;
+    m.total++;
+    by.set(f.model, m);
+  }
+  return [...by.values()].sort((a, b) => b.total - a.total || a.model.localeCompare(b.model));
 }
 
 // Deterministic baseline narrative — a factual one-liner from the stats. The
