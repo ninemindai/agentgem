@@ -204,6 +204,8 @@ import { resolveInstall, publishGem } from "@agentgem/distribute";
 import { searchIndex } from "@agentgem/distribute";
 import { githubRegistrySource, githubRegistryPublisher, registryConfigFromEnv, registryReady } from "@agentgem/distribute";
 import { createGemCache } from "./gem/publicCatalog.js";
+import { service } from "@agentback/core";
+import { GemTypeRegistry, defaultGemTypeRegistry, resolvePublishType } from "./gem/gemTypeRegistry.js";
 import { resolveDirs, resolveProject, agentgemHome } from "@agentgem/model";
 import { pickFolder } from "./pickFolder.js";
 
@@ -227,6 +229,8 @@ function deriveRunDir(gemName: string): string {
 
 @api({ basePath: "/api" })
 export class GemController {
+  constructor(@service(GemTypeRegistry, { optional: true }) private gemTypes: GemTypeRegistry = defaultGemTypeRegistry) {}
+
   @get("/inventory", { query: DirQuerySchema, response: InventorySchema })
   async inventory(input: { query: z.infer<typeof DirQuerySchema> }): Promise<z.infer<typeof InventorySchema>> {
     return introspectAll(input.query.dir, parseProjectsQuery(input.query.projects));
@@ -797,11 +801,12 @@ export class GemController {
   async registryPublish(input: { body: z.infer<typeof RegistryPublishRequestSchema> }): Promise<z.infer<typeof RegistryPublishResponseSchema>> {
     const { cfg, source } = this.registrySource();
     const gem = readGemArchive(readWorkspace(input.body.workspace).files); // WorkspaceDetail exposes .files, not .gem
+    const type = resolvePublishType(this.gemTypes, input.body.type, gem);
     const index = await source.getIndex();
     return publishGem({
       gem, scope: input.body.scope, name: input.body.name, version: input.body.version,
       dependencies: input.body.dependencies, index, publisher: githubRegistryPublisher(cfg),
-      description: input.body.description, tags: input.body.tags,
+      description: input.body.description, tags: input.body.tags, type,
     });
   }
 

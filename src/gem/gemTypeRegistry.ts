@@ -8,7 +8,7 @@
 // registry to derive + validate a gem's cut at publish; non-DI callers (tests) use
 // defaultGemTypeRegistry. First app-level extension point in the repo (see spec).
 import { extensionPoint, extensions, extensionFor, Binding, type Component } from "@agentback/core";
-import { BUILTIN_CUTS, deriveCut, type GemTypeSpec } from "@agentgem/model";
+import { BUILTIN_CUTS, deriveCut, type GemTypeSpec, InvalidInputError } from "@agentgem/model";
 import type { Gem } from "@agentgem/model";
 
 export const GEM_TYPES = "agentgem.gemTypes";
@@ -33,3 +33,11 @@ export class GemTypesComponent implements Component {
 // The non-DI fallback for callers that aren't container-resolved (tests; defensive
 // default in the publish handlers). Built directly from the built-ins.
 export const defaultGemTypeRegistry = new GemTypeRegistry(BUILTIN_CUTS);
+
+/** Derive-or-accept the gem type, then validate it against the registry.
+ *  A missing `supplied` is defaulted via derive(gem); an unknown id throws 400. */
+export function resolvePublishType(registry: GemTypeRegistry, supplied: string | undefined, gem: Gem): string {
+  const type = supplied ?? registry.derive(gem);
+  if (!registry.byId(type)) throw new InvalidInputError(`unknown gem type '${type}'`);
+  return type;
+}

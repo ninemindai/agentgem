@@ -10,6 +10,7 @@ export interface RegistryGem {
   description?: string;
   tags?: string[];
   artifactKinds?: string[];
+  type?: string;
 }
 
 /** Flatten the index's per-item discovery block into a browse list. No ingredients (browse-only). */
@@ -21,6 +22,7 @@ export function mapIndexToGems(index: RegistryIndex): RegistryGem[] {
     description: item.discovery?.description,
     tags: item.discovery?.tags,
     artifactKinds: item.discovery?.artifactKinds,
+    type: item.discovery?.type,
   }));
 }
 

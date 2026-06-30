@@ -749,6 +749,7 @@ export const RegistryPublishRequestSchema = z.object({
   dependencies: z.array(z.string()).optional(),
   description: z.string().optional(), // discovery metadata for search
   tags: z.array(z.string()).optional(),
+  type: z.string().optional(),
 });
 export const RegistryPublishResponseSchema = z.object({
   ref: z.string(), version: z.string(), gemDigest: z.string(), commit: z.string(), path: z.string(),

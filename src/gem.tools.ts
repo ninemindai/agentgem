@@ -18,11 +18,13 @@ import { exportGem, importGem } from "@agentgem/distribute";
 import { fetchGemBytes } from "@agentgem/distribute";
 import { sendBytes, receiveTicket, natsStoreFromEnv, assertConfigured } from "@agentgem/transfer";
 import { readFileSync } from "node:fs";
+import { service } from "@agentback/core";
+import { GemTypeRegistry, defaultGemTypeRegistry, resolvePublishType } from "./gem/gemTypeRegistry.js";
 
 const InventoryInput = z.object({ dir: z.string().optional(), projects: z.array(z.string()).optional() });
 const GemInput = z.object({ selection: GemSelectionSchema, name: z.string().optional(), dir: z.string().optional(), projects: z.array(z.string()).optional() });
 const RegistryRefsInput = z.object({ refs: z.array(z.string()).min(1), mode: z.enum(["materialize", "workspace"]), target: z.string().optional(), a2aServer: z.boolean().optional() });
-const RegistryPublishInput = z.object({ workspace: z.string(), scope: z.string(), name: z.string().optional(), version: z.string(), dependencies: z.array(z.string()).optional(), description: z.string().optional(), tags: z.array(z.string()).optional() });
+const RegistryPublishInput = z.object({ workspace: z.string(), scope: z.string(), name: z.string().optional(), version: z.string(), dependencies: z.array(z.string()).optional(), description: z.string().optional(), tags: z.array(z.string()).optional(), type: z.string().optional() });
 const RegistrySearchInput = z.object({ q: z.string().optional(), kind: z.string().optional(), tag: z.string().optional(), limit: z.number().int().positive().max(100).optional() });
 const GemExportInput = z.object({ selection: GemSelectionSchema, name: z.string().optional(), version: z.string().optional(), dir: z.string().optional(), projects: z.array(z.string()).optional() });
 const GemInstallInput = z.object({ gemUrl: z.string().optional(), gemPath: z.string().optional(), bytesBase64: z.string().optional() });
@@ -44,6 +46,7 @@ function introspectAll(dir?: string, projects?: string[]): ConfigInventory {
 
 @mcpServer()
 export class GemTools {
+  constructor(@service(GemTypeRegistry, { optional: true }) private gemTypes: GemTypeRegistry = defaultGemTypeRegistry) {}
   @tool("inventory", {
     description: "Introspect the local coding-agent config (skills, MCP servers, CLAUDE.md). Pass project roots to also include project-level artifacts. Secrets are redacted.",
     input: InventoryInput,
@@ -135,7 +138,8 @@ export class GemTools {
   async registryPublish(input: z.infer<typeof RegistryPublishInput>) {
     const { cfg, source } = registrySourceOrThrow();
     const gem = readGemArchive(readWorkspace(input.workspace).files);
+    const type = resolvePublishType(this.gemTypes, input.type, gem);
     const index = await source.getIndex();
-    return publishGem({ gem, scope: input.scope, name: input.name, version: input.version, dependencies: input.dependencies, index, publisher: githubRegistryPublisher(cfg), description: input.description, tags: input.tags });
+    return publishGem({ gem, scope: input.scope, name: input.name, version: input.version, dependencies: input.dependencies, index, publisher: githubRegistryPublisher(cfg), description: input.description, tags: input.tags, type });
   }
 }
