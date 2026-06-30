@@ -32,6 +32,6 @@ export class ShareController {
     // and the Worker can't then tell "no such card" from a real backend fault. AgentError carries
     // the status + a stable code through buildErrorEnvelope.
     if (!rec) throw new AgentError("share card not found", { status: 404, code: "share_not_found", retryable: false });
-    return rec;
+    return rec as z.infer<typeof ReadResult>;
   }
 }
