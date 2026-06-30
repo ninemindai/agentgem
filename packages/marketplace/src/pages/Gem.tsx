@@ -4,6 +4,7 @@ import type { Gem as GemT } from "../gems/catalog";
 import { loadGems, findGem } from "../gems/catalog";
 import { prettifyId, kindLabel } from "../data";
 import { StarButton } from "../StarButton";
+import { CutBadge } from "../CutBadge";
 import type { StarsCtx } from "../Router";
 import type { StarState } from "../stars";
 
@@ -32,7 +33,7 @@ export function Gem({ api, keyName, stars }: { api: ReturnType<typeof makeApi>; 
 
   return (
     <div className="ex-gem-detail">
-      <h2 className="ex-gem-title">{gem.key} <span className="ex-gem-version">v{gem.version}</span>
+      <h2 className="ex-gem-title">{gem.key} <span className="ex-gem-version">v{gem.version}</span> <CutBadge cut={gem.cut} />
         <StarButton kind="gem" id={gem.key} count={starState.counts[gem.key] ?? 0} starred={starState.mine.includes(gem.key)}
           signedIn={stars.signedIn} loginUrl={stars.loginUrl} api={stars.api} />
       </h2>
