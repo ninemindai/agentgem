@@ -7,7 +7,7 @@
 // live in @agentgem/model; this is the DI wiring. The publish handlers inject the
 // registry to derive + validate a gem's cut at publish; non-DI callers (tests) use
 // defaultGemTypeRegistry. First app-level extension point in the repo (see spec).
-import { injectable, extensionPoint, extensions, extensionFor, Binding, type Component } from "@agentback/core";
+import { extensionPoint, extensions, extensionFor, Binding, type Component } from "@agentback/core";
 import { BUILTIN_CUTS, deriveCut, type GemTypeSpec } from "@agentgem/model";
 import type { Gem } from "@agentgem/model";
 
@@ -23,7 +23,7 @@ export class GemTypeRegistry {
 
 // Register the built-in cuts as constant-value extensions + the registry service.
 // A plugin contributes a cut the same way: a constant binding tagged extensionFor(GEM_TYPES).
-@injectable()
+// Plain class (no decorator) — app.component() instantiates it directly, mirroring MCPComponent.
 export class GemTypesComponent implements Component {
   bindings = BUILTIN_CUTS.map((spec) =>
     Binding.bind(`gemTypes.cut.${spec.id}`).to(spec).apply(extensionFor(GEM_TYPES)));

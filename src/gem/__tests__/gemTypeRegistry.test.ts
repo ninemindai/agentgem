@@ -27,11 +27,12 @@ describe("GEM_TYPES extension point (wired container)", () => {
     for (const s of comp.services ?? []) ctx.service(s as never);
     // a plugin contributes a cut the same way — a constant binding tagged for GEM_TYPES
     const pluginCut: GemTypeSpec = { id: "starter", label: "Starter", gemstone: "Garnet", order: 25, matches: () => false };
-    const { Binding } = await import("@agentback/core");
-    const { extensionFor } = await import("@agentback/core");
+    const { Binding, extensionFor } = await import("@agentback/core");
     ctx.add(Binding.bind("gemTypes.cut.starter").to(pluginCut).apply(extensionFor(GEM_TYPES)));
     const registry = await ctx.get<GemTypeRegistry>("services.GemTypeRegistry");
     expect(registry.byId("starter")?.label).toBe("Starter");
     expect(registry.all().map((c) => c.id)).toContain("playbook");
+    // Falsifiable against partial injection: all 6 built-ins + the 1 plugin cut must wire through.
+    expect(registry.all().length).toBe(7);
   });
 });
