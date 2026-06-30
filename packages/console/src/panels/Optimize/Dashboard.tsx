@@ -1,6 +1,7 @@
 // packages/console/src/panels/Optimize/Dashboard.tsx
 import { fmtTokens } from "../Observe/data.js";
 import type { OptimizePayload, OptimizeRange } from "../../api/routes.js";
+import { RefreshButton } from "../../shell/RefreshButton.js";
 
 const RANGES: OptimizeRange[] = ["today", "7d", "30d", "all"];
 
@@ -8,11 +9,12 @@ function utcDay(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10);
 }
 
-export function Dashboard({ data, range, onRange, pending }: {
+export function Dashboard({ data, range, onRange, pending, onRefresh }: {
   data: OptimizePayload;
   range: OptimizeRange;
   onRange: (r: OptimizeRange) => void;
   pending: boolean;
+  onRefresh?: () => void;
 }) {
   const prunable = data.artifacts.filter((a) => a.prune);
   const savings = prunable.reduce((acc, a) => acc + a.contextTokens, 0);
@@ -26,6 +28,7 @@ export function Dashboard({ data, range, onRange, pending }: {
           ))}
         </div>
         {pending && <span className="obs-muted">refreshing…</span>}
+        {onRefresh && <RefreshButton onClick={onRefresh} busy={pending} />}
       </div>
 
       <section className="opt-section">

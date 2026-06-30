@@ -11,7 +11,8 @@ describe("build-client", () => {
 
   it("emits a self-contained index.html with the mount node and bundle", () => {
     const html = readFileSync(join(pkg, "dist", "index.html"), "utf8");
-    expect(html).toContain('<div id="root"></div>');
+    expect(html).toContain('<div id="root">');           // mount node, seeded with the boot splash
+    expect(html).toContain('class="boot-splash"');         // static pre-React loading screen
     expect(html).toContain('<script type="module">');
     expect(html.length).toBeGreaterThan(1000);
   });

@@ -173,10 +173,11 @@ export function aggregateObserve(stats: SessionStat[], range: ObserveRange, nowM
 let _cache: { atMs: number; stats: SessionStat[] } | null = null;
 const SCAN_TTL_MS = 15_000;
 /** Cached scan for the request path: re-scans at most every SCAN_TTL_MS. nowMs injected for testability.
- *  Fix 4: when custom dirs are provided the result is never cached — only the default path is cacheable. */
-export async function scanSessionsCached(nowMs: number, dirs?: { claudeDir?: string; codexDir?: string }): Promise<SessionStat[]> {
+ *  Fix 4: when custom dirs are provided the result is never cached — only the default path is cacheable.
+ *  refresh (the ?fresh=1 bypass) forces a re-scan even within the TTL and repopulates the cache. */
+export async function scanSessionsCached(nowMs: number, dirs?: { claudeDir?: string; codexDir?: string }, refresh = false): Promise<SessionStat[]> {
   if (dirs) return scanSessions(dirs);                       // custom dirs are never cached
-  if (_cache && nowMs - _cache.atMs < SCAN_TTL_MS) return _cache.stats;
+  if (!refresh && _cache && nowMs - _cache.atMs < SCAN_TTL_MS) return _cache.stats;
   const stats = await scanSessions();
   _cache = { atMs: nowMs, stats };
   return stats;

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { testbedRecentsRoute, testbedProjectsRoute, makeClient, type RecentEntry, type ProjectCandidate } from "../../api/routes.js";
 import { openAnalyzeStream, type AnalyzeCandidate } from "./analyzeStream.js";
 import { includeToKeys } from "./selection.js";
+import { Loading } from "../../shell/Loading.js";
 
 function short(path: string): string {
   const parts = path.split("/").filter(Boolean);
@@ -69,7 +70,7 @@ export function Analyze({ apiBase, onPick }: { apiBase: string; onPick: (keys: s
           style={{ marginBottom: 12 }}
         />
       )}
-      {!projects && !recents ? <p className="ledger-loading">Loading…</p>
+      {!projects && !recents ? <Loading />
         : rows.length === 0 ? <p className="ledger-empty">{query ? "No projects match." : "No projects with session history found."}</p>
         : (
           <ul className="analyze-list">

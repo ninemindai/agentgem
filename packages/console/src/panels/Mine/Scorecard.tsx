@@ -3,6 +3,7 @@ import type { Scorecard } from "../../api/routes.js";
 import { createShareRoute, makeClient } from "../../api/routes.js";
 import { renderCardSvg } from "./card.js";
 import { ShareLinks } from "./ShareLinks.js";
+import { RefreshButton } from "../../shell/RefreshButton.js";
 
 // Asset-framed hero. Count stats are now plain text (filter chips moved to MineWorkflows).
 // The share button mints a hosted certificate URL and shows per-platform share intents.
@@ -10,7 +11,7 @@ export type WorkflowFilter = "all" | "battleTested" | "portable";
 
 type CreateShare = (b: { kind: "certificate"; counts: { breadth: number; battleTested: number; portable: number }; generatedAtMs: number }) => Promise<{ id: string; url: string }>;
 
-export function ScorecardHero({ data, apiBase = "", createShare }: { data: Scorecard; apiBase?: string; createShare?: CreateShare }) {
+export function ScorecardHero({ data, apiBase = "", createShare, onRescan }: { data: Scorecard; apiBase?: string; createShare?: CreateShare; onRescan?: () => void }) {
   const counts = { breadth: data.breadth, battleTested: data.battleTested, portable: data.portable };
   const doCreate: CreateShare = createShare ?? ((body) => createShareRoute.call(makeClient(apiBase), { body }));
   const [shareUrl, setShareUrl] = useState<string | null>(null);
@@ -62,6 +63,7 @@ export function ScorecardHero({ data, apiBase = "", createShare }: { data: Score
           {busy ? <><span className="scorecard-spin" aria-hidden="true" />Creating link…</> : "Share your goldmine"}
         </button>
         <button className="scorecard-download" onClick={downloadPng}>Download PNG</button>
+        {onRescan && <RefreshButton onClick={onRescan} title="Re-scan your goldmine" />}
       </div>
       {busy && slow && <p className="scorecard-pending">Waking the server — the first share after a while can take up to ~30s.</p>}
       {err && <p className="scorecard-error">{err}</p>}

@@ -7,6 +7,7 @@ import {
   makeClient,
   type RegistryResult,
 } from "../../api/routes.js";
+import { Loading } from "../../shell/Loading.js";
 
 export function GetGems({ apiBase }: { apiBase: string }) {
   const [ready, setReady] = useState<boolean | null>(null);
@@ -51,7 +52,7 @@ export function GetGems({ apiBase }: { apiBase: string }) {
     }
   };
 
-  if (ready === null) return <p className="ledger-loading">Loading…</p>;
+  if (ready === null) return <Loading />;
   if (!ready) {
     return (
       <p className="ledger-empty">

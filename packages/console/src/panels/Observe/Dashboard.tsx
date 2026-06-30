@@ -6,6 +6,7 @@ import {
 } from "recharts";
 import type { ObservePayload, ObserveRange, ObserveFilter } from "../../api/routes.js";
 import { fmtTokens, fmtDuration, tokenSeries, fmtTime, flameLevel, heatmapCells, heatmapMonths, utcDay } from "./data.js";
+import { RefreshButton } from "../../shell/RefreshButton.js";
 
 const WEEKDAY_LABELS = ["", "Mon", "", "Wed", "", "Fri", ""];
 
@@ -15,9 +16,10 @@ const SLICE_COLORS = ["var(--accent)", "var(--emerald, #34d399)", "#f59e0b", "#8
 
 type SortKey = "tokens" | "msgs" | "durationMs" | "endMs";
 
-export function Dashboard({ data, range, onRange, filter, onFilter, pending }: {
+export function Dashboard({ data, range, onRange, filter, onFilter, pending, onRefresh }: {
   data: ObservePayload; range: ObserveRange; onRange: (r: ObserveRange) => void;
   filter: ObserveFilter; onFilter: (f: ObserveFilter) => void; pending?: boolean;
+  onRefresh?: () => void;
 }) {
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "endMs", dir: "desc" });
   const [openId, setOpenId] = useState<string | null>(null);
@@ -43,7 +45,7 @@ export function Dashboard({ data, range, onRange, filter, onFilter, pending }: {
   return (
     <div className="obs">
       <div className="obs-head">
-        <h2 className="obs-title">Observe</h2>
+        <h2 className="obs-title">Inspect</h2>
         {pending && <span className="obs-pending-pill">Updating…</span>}
         <div className="obs-range" role="tablist" aria-label="time range">
           {RANGES.map((r) => (
@@ -53,6 +55,7 @@ export function Dashboard({ data, range, onRange, filter, onFilter, pending }: {
             </button>
           ))}
         </div>
+        {onRefresh && <RefreshButton onClick={onRefresh} busy={pending} />}
       </div>
 
       <div className="obs-filters">
@@ -71,9 +74,12 @@ export function Dashboard({ data, range, onRange, filter, onFilter, pending }: {
           <option value="">All models</option>
           {data.facets.models.map(m => <option key={m} value={m}>{m}</option>)}
         </select>
-        <input type="number" min={0} aria-label="min messages" placeholder="min msgs"
-          value={filter.minMsgs ?? ""}
-          onChange={e => onFilter({ ...filter, minMsgs: e.target.value === "" ? undefined : Number(e.target.value) })} />
+        <label className="obs-filter-num">
+          min msgs
+          <input type="number" min={0} aria-label="minimum messages per session" placeholder="any"
+            value={filter.minMsgs ?? ""}
+            onChange={e => onFilter({ ...filter, minMsgs: e.target.value === "" ? undefined : Number(e.target.value) })} />
+        </label>
       </div>
 
       <div className={"obs-body" + (pending ? " is-updating" : "")}>

@@ -52,7 +52,7 @@ function parseProjects(q: unknown): string[] | undefined {
 export async function streamScorecard(req: SseReq, res: SseRes, deps: ScorecardStreamDeps = realStreamDeps): Promise<void> {
   const dir = typeof req.query.dir === "string" ? req.query.dir : undefined;
   const projects = parseProjects(req.query.projects);
-  const fresh = req.query.fresh === "1";   // bypass the cache (Re-scan)
+  const fresh = req.query.refresh === "true";   // ?refresh=true bypasses the cache (Re-scan)
 
   res.writeHead(200, {
     "Content-Type": "text/event-stream",

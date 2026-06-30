@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
 import type { Scorecard } from "../../api/routes.js";
 import { scorecardBuildRoute, makeClient } from "../../api/routes.js";
@@ -17,17 +17,24 @@ export function Mine({ apiBase, openStream = openScorecardStream }: { apiBase: s
   const [building, setBuilding] = useState(false);
   const [buildResult, setBuildResult] = useState<{ name: string; skills: string[] } | null>(null);
   const [buildError, setBuildError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  // A manual re-scan opens the stream with ?refresh=true to bypass the cached
+  // scorecard; the ref keeps it out of the dep array so it's a one-shot.
+  const freshRef = useRef(false);
 
   useEffect(() => {
     setScorecard(null); setProgress(null); setPhase("loading"); setFilter("all");
+    const fresh = freshRef.current; freshRef.current = false;
     const close = openStream(apiBase, (e: ScorecardStreamEvent) => {
       if (e.type === "start") setPhase("scanning");
       else if (e.type === "progress") { setPhase("scanning"); setProgress({ done: e.done, total: e.total, label: e.label, partial: e.partial }); }
       else if (e.type === "done") { setScorecard(e.scorecard); setPhase("done"); }
       else if (e.type === "failed") setPhase("failed");
-    });
+    }, fresh ? { refresh: true } : undefined);
     return close;
-  }, [apiBase, openStream]);
+  }, [apiBase, openStream, reloadKey]);
+
+  const onRescan = () => { freshRef.current = true; setReloadKey((k) => k + 1); };
 
   const onBuild = async (selections: { root: string; keys: string[] }[], name: string) => {
     setBuilding(true);
@@ -48,7 +55,7 @@ export function Mine({ apiBase, openStream = openScorecardStream }: { apiBase: s
     <div className="obs mine">
       {phase === "done" && scorecard
         ? <>
-            <ScorecardHero data={scorecard} />
+            <ScorecardHero data={scorecard} onRescan={onRescan} />
             <MineWorkflows data={scorecard} filter={filter} onFilter={setFilter} onBuild={onBuild} building={building} result={buildResult} error={buildError} apiBase={apiBase} />
           </>
         : phase === "failed"

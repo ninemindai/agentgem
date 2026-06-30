@@ -360,6 +360,7 @@ export const observeRoute = defineRoute("GET", "/api/observe", {
     project: z.string().optional(),
     model: z.string().optional(),
     minMsgs: z.number().optional(),
+    refresh: z.boolean().optional(),   // ?refresh=true forces a re-scan past the 15s server cache
   }),
   response: ObservePayloadSchema,
 });
@@ -439,7 +440,7 @@ export type OptimizePayload = z.infer<typeof OptimizePayloadSchema>;
 export type OptimizeRange = OptimizePayload["range"];
 
 export const optimizeRoute = defineRoute("GET", "/api/optimize", {
-  query: z.object({ range: z.enum(["today", "7d", "30d", "all"]).optional() }),
+  query: z.object({ range: z.enum(["today", "7d", "30d", "all"]).optional(), refresh: z.boolean().optional() }),
   response: OptimizePayloadSchema,
 });
 

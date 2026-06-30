@@ -335,4 +335,14 @@ describe("scanSessionsCached", () => {
     const second = await scanSessionsCached(nowMs + 1_000, { claudeDir, codexDir }); // +1s < 15s TTL
     expect(second).not.toBe(first);
   });
+
+  it("refresh forces a re-scan within TTL (the ?fresh=1 bypass)", async () => {
+    const nowMs = Date.now();
+    const first = await scanSessionsCached(nowMs);
+    const forced = await scanSessionsCached(nowMs + 1_000, undefined, true); // within TTL but refresh
+    expect(forced).not.toBe(first);
+    // the forced scan repopulates the cache, so a subsequent plain call hits it
+    const third = await scanSessionsCached(nowMs + 2_000);
+    expect(third).toBe(forced);
+  });
 });

@@ -7,6 +7,7 @@ import { useActiveGem, setKeys, toggleKey as toggleKeyStore, clearKeys, setName 
 import { Analyze } from "./Analyze.js";
 import { Checks } from "./Checks.js";
 import { ContentView } from "./ContentView.js";
+import { Loading } from "../../shell/Loading.js";
 
 export function Curate({ apiBase }: { apiBase: string }) {
   const [groups, setGroups] = useState<LedgerGroup[] | null>(null);
@@ -111,7 +112,7 @@ export function Curate({ apiBase }: { apiBase: string }) {
   });
 
   if (error) return <p className="ledger-error">Could not load inventory: {error}</p>;
-  if (!groups) return <p className="ledger-loading">Loading…</p>;
+  if (!groups) return <Loading />;
 
   // "Used only" hiding everything (e.g. no usage analyzed yet) is the common
   // empty case — point at the toggle rather than implying the ledger is empty.

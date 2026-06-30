@@ -21,10 +21,10 @@ describe("openScorecardStream", () => {
     expect(FakeES.last!.url).toBe("http://localhost:3000/api/scorecard/stream");
   });
 
-  it("appends fresh=1 when opts.fresh is true", () => {
+  it("appends refresh=true when opts.refresh is true", () => {
     vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
-    openScorecardStream("", () => {}, { fresh: true });
-    expect(FakeES.last!.url).toContain("fresh=1");
+    openScorecardStream("", () => {}, { refresh: true });
+    expect(FakeES.last!.url).toContain("refresh=true");
   });
 
   it("translates start/progress/done events and closes on done", () => {

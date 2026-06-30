@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
+import { Loading } from "../../shell/Loading.js";
 import {
   deployTargetsRoute, setCredentialRoute, CREDENTIAL_KEYS, makeClient,
 } from "../../api/routes.js";
@@ -47,7 +48,7 @@ export function Settings({ apiBase }: { apiBase: string }) {
       <section className="ledger-group">
         <h2 className="ledger-group-label">Deploy backends</h2>
         {error && <p className="ledger-error">{error}</p>}
-        {!targets ? <p className="ledger-loading">Loading…</p>
+        {!targets ? <Loading />
           : targets.length === 0 ? <p className="ledger-empty">No deploy backends.</p>
           : (
             <div className="ws-list">

@@ -6,6 +6,7 @@ import {
 } from "../../api/routes.js";
 import { setName, setKeys, resetGem } from "../../activeGem.js";
 import { includeToKeys } from "../Curate/selection.js";
+import { Loading } from "../../shell/Loading.js";
 
 /** Count chips shown per workspace, in display order. */
 export function countChips(ws: WorkspaceSummary): { label: string; n: number }[] {
@@ -35,7 +36,7 @@ export function Workspaces({ apiBase }: { apiBase: string }) {
   useEffect(() => { void reload(); }, [reload]);
 
   if (error) return <p className="ledger-error">Could not load workspaces: {error}</p>;
-  if (!items) return <p className="ledger-loading">Loading…</p>;
+  if (!items) return <Loading />;
 
   const handleNewGem = () => { resetGem(); window.location.hash = "#/curate"; };
 

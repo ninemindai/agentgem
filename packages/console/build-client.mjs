@@ -41,7 +41,11 @@ const html = `<!doctype html>
 <style>${css}</style>
 </head>
 <body>
-<div id="root"></div>
+<!-- Boot splash: static HTML painted before the inlined bundle parses + React
+     mounts (and while web fonts load). createRoot().render() clears #root on its
+     first commit, so this needs no teardown. Markup mirrors shell/Loading.tsx —
+     keep them in sync; the .gem-loading styles come from the inlined theme.css. -->
+<div id="root"><div class="boot-splash" role="status" aria-live="polite" aria-busy="true"><div class="gem-loading"><svg class="gem-loading__mark" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path class="gem-loading__fill" d="M6 3h12l4 6-10 12L2 9l4-6Z"/><path class="gem-loading__facets" d="M2 9h20M9 3 7 9l5 12M15 3l2 6-5 12"/><path class="gem-loading__rim" d="M6 3h12l4 6-10 12L2 9l4-6Z"/><path class="gem-loading__glint" d="M6 3h12l4 6-10 12L2 9l4-6Z" pathLength="100"/></svg><span class="gem-loading__label">Loading…</span></div></div></div>
 <script type="module">${js}</script>
 </body>
 </html>

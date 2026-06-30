@@ -31,10 +31,10 @@ export function scanArtifactUsage(inv: ConfigInventory, claudeDir: string): Map<
   return map;
 }
 
-export async function scanArtifactUsageCached(inv: ConfigInventory, nowMs: number, claudeDir?: string): Promise<Map<string, ArtifactUsage>> {
+export async function scanArtifactUsageCached(inv: ConfigInventory, nowMs: number, claudeDir?: string, refresh = false): Promise<Map<string, ArtifactUsage>> {
   if (claudeDir) return scanArtifactUsage(inv, claudeDir);   // custom dir bypasses cache
   const dir = join(homedir(), ".claude");
-  if (cache && nowMs - cache.atMs < SCAN_TTL_MS) return cache.map;
+  if (!refresh && cache && nowMs - cache.atMs < SCAN_TTL_MS) return cache.map;
   const map = scanArtifactUsage(inv, dir);
   cache = { atMs: nowMs, map };
   return map;

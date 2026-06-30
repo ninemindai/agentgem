@@ -117,7 +117,7 @@ describe("Observe Dashboard", () => {
 
   it("min-msgs filter input shows value 100 when filter.minMsgs is 100", () => {
     render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{ minMsgs: 100 }} onFilter={() => {}} />);
-    const input = screen.getByLabelText(/min messages/i) as HTMLInputElement;
+    const input = screen.getByLabelText(/minimum messages/i) as HTMLInputElement;
     expect(input.value).toBe("100");
   });
 });

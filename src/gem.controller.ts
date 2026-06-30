@@ -15,6 +15,7 @@ const ObserveQuerySchema = z.object({
   project: z.string().optional(),
   model: z.string().optional(),
   minMsgs: z.coerce.number().int().nonnegative().optional(),
+  refresh: z.coerce.boolean().optional(),   // ?refresh=true forces a re-scan past the 15s scan cache
 });
 const ObservePayloadSchema = z.object({
   pulse: z.object({ sessions: z.number(), msgs: z.number(), tokens: z.number(), activeMs: z.number() }),
@@ -24,7 +25,7 @@ const ObservePayloadSchema = z.object({
   facets: z.object({ agents: z.array(z.string()), projects: z.array(z.string()), models: z.array(z.string()) }),
   range: z.enum(["today", "7d", "30d", "all"]),
 });
-const OptimizeQuerySchema = z.object({ range: z.enum(["today", "7d", "30d", "all"]).optional() });
+const OptimizeQuerySchema = z.object({ range: z.enum(["today", "7d", "30d", "all"]).optional(), refresh: z.coerce.boolean().optional() });
 const OptimizeArtifactSchema = z.object({
   name: z.string(), type: z.enum(["skill", "mcp"]), source: z.string(),
   contextTokens: z.number(), uses: z.number(), lastUsedMs: z.number().nullable(),
@@ -224,15 +225,17 @@ export class GemController {
   async observe(input: { query: z.infer<typeof ObserveQuerySchema> }): Promise<z.infer<typeof ObservePayloadSchema>> {
     const range = input.query.range ?? "7d";
     const { agent, project, model, minMsgs } = input.query;
-    return aggregateObserve(await scanSessionsCached(Date.now()), range, Date.now(), { agent, project, model, minMsgs });
+    const refresh = input.query.refresh ?? false;
+    return aggregateObserve(await scanSessionsCached(Date.now(), undefined, refresh), range, Date.now(), { agent, project, model, minMsgs });
   }
 
   @get("/optimize", { query: OptimizeQuerySchema, response: OptimizePayloadSchema })
   async optimize(input: { query: z.infer<typeof OptimizeQuerySchema> }): Promise<z.infer<typeof OptimizePayloadSchema>> {
     const range: OptimizeRange = input.query.range ?? "30d";
     const now = Date.now();
+    const refresh = input.query.refresh ?? false;
     const inv = introspectConfig();
-    const usage = await scanArtifactUsageCached(inv, now);
+    const usage = await scanArtifactUsageCached(inv, now, undefined, refresh);
     return buildOptimizePayload(inv, usage, range, now);
   }
 

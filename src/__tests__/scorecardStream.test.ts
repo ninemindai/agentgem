@@ -79,4 +79,26 @@ describe("streamScorecard", () => {
     expect(ev.find((e) => e.event === "done")?.data).toMatchObject({ cached: true, scorecard: { breadth: 9 } });
     expect(loadProject).not.toHaveBeenCalled();
   });
+
+  it("bypasses the cache and re-scans when refresh=true", async () => {
+    const loadProject = vi.fn(() => mkLoad() as never);
+    const deps: ScorecardStreamDeps = {
+      discover: () => [],
+      loadProject,
+      transcriptsFor: () => [],
+      bucketTranscripts: () => new Map(),
+      readCache: () => ({ breadth: 9, battleTested: 0, portable: 0, gaps: [], projects: [], generatedAtMs: 0, degraded: false }),
+      writeCache: vi.fn(),
+    };
+    const res = fakeRes();
+    await streamScorecard(
+      { query: { projects: JSON.stringify(["/r/a"]), refresh: "true" } },
+      res as never,
+      deps,
+    );
+    const ev = events(res.chunks);
+    // refresh ignores the cached result: it actually scans (progress) and loads the project
+    expect(ev.some((e) => e.event === "progress")).toBe(true);
+    expect(loadProject).toHaveBeenCalled();
+  });
 });

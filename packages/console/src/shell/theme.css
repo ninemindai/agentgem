@@ -333,6 +333,39 @@ body::before {
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .58; } }
+
+/* ── Loading — the facet mark catching the light ── */
+/* Boot splash: full-viewport centering for the same loader, painted before React
+   mounts (seeded into #root by build-client.mjs). A touch larger than the inline
+   panel loader so it reads as a deliberate launch screen, not a stalled panel. */
+.boot-splash { position: fixed; inset: 0; display: grid; place-items: center; background: var(--paper); }
+.boot-splash .gem-loading__mark { width: 60px; height: 60px; }
+.gem-loading {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px; padding: 56px 0; color: var(--accent);
+  animation: fade .45s ease both;
+}
+.gem-loading__mark { width: 46px; height: 46px; overflow: visible; animation: gem-float 2.8s ease-in-out infinite; }
+.gem-loading__fill   { fill: var(--accent); animation: gem-breathe 2.8s ease-in-out infinite; }
+.gem-loading__facets { fill: none; stroke: var(--accent); stroke-width: 1; stroke-linejoin: round; opacity: .55; animation: gem-breathe 2.8s ease-in-out infinite .35s; }
+.gem-loading__rim    { fill: none; stroke: var(--accent); stroke-width: 1.4; stroke-linejoin: round; stroke-opacity: .4; }
+.gem-loading__glint  { fill: none; stroke: var(--gold); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 14 86; animation: gem-glint 1.9s linear infinite; }
+.gem-loading__label  { color: var(--muted); font-style: italic; font-size: 13px; letter-spacing: .01em; }
+@keyframes gem-float  { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+@keyframes gem-breathe { 0%, 100% { fill-opacity: .12; opacity: .55; } 50% { fill-opacity: .3; opacity: .92; } }
+@keyframes gem-glint  { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -100; } }
+
+/* ── Refresh icon — force a fresh scan past the cache ── */
+.refresh-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; padding: 0; border: 1px solid var(--line);
+  border-radius: 8px; background: var(--raised); color: var(--ink-soft);
+  cursor: pointer; transition: border-color .15s, color .15s, background .15s;
+}
+.refresh-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: var(--paper); }
+.refresh-btn:disabled { cursor: default; opacity: .65; }
+.refresh-btn.is-busy svg { animation: refresh-spin .8s linear infinite; transform-origin: 50% 50%; }
+@keyframes refresh-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
   *, *::before { animation: none !important; transition: none !important; }
 }
@@ -491,7 +524,8 @@ body::before {
 .obs-filters select:focus, .obs-filters input[type="number"]:focus {
   border-color: var(--accent); color: var(--ink);
 }
-.obs-filters input[type="number"] { width: 90px; }
+.obs-filters input[type="number"] { width: 64px; }
+.obs-filter-num { display: inline-flex; align-items: center; gap: 6px; font: 12.5px/1.5 var(--font-ui); color: var(--muted); }
 
 .obs-sort-btn {
   background: none; border: none; padding: 0; cursor: pointer;
