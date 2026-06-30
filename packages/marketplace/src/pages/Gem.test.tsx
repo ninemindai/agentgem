@@ -7,7 +7,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 describe("Gem (detail)", () => {
   it("renders a known gem's fields + kind chips", () => {
     render(<Gem keyName="brainstorming-kit" />);
-    expect(screen.getByText("brainstorming-kit")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /brainstorming-kit/ })).toBeTruthy();
     expect(screen.getByText(/1\.2\.0/)).toBeTruthy();
     expect(screen.getByText(/superpowers/)).toBeTruthy();
   });
