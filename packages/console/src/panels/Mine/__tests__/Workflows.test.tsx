@@ -444,6 +444,19 @@ describe("MineWorkflows", () => {
       await waitFor(() => expect(screen.getByText("mint failed")).toBeTruthy());
       wfSpy.mockRestore();
     });
+
+    it("per-build Share gem sets shareErrors on failure", async () => {
+      const createGemShare = vi.fn(async () => { throw new Error("mint failed"); });
+      render(
+        <MineWorkflows
+          {...defaultProps}
+          result={{ name: "my-gem", skills: ["deploy", "lint"] }}
+          createGemShare={createGemShare}
+        />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: /share my-gem gem/i }));
+      await waitFor(() => expect(screen.getByText("mint failed")).toBeTruthy());
+    });
   });
 
   // Stale-selection note test
