@@ -1,5 +1,5 @@
 import { render, screen, fireEvent } from "@testing-library/react";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { ShareLinks } from "../ShareLinks.js";
 
 describe("ShareLinks", () => {
@@ -20,5 +20,19 @@ describe("ShareLinks", () => {
     // intents are inert chips, not links
     expect(container.querySelector("a.scorecard-intent")).toBeNull();
     expect(container.querySelector(".scorecard-intent.is-disabled")).toBeTruthy();
+  });
+
+  it("offers a native OS share when supported, passing url + title", () => {
+    const share = vi.fn().mockResolvedValue(undefined);
+    (navigator as unknown as { share?: unknown }).share = share;
+    try {
+      const { container } = render(<ShareLinks url="https://agentgem.ai/share/abc" title="my-wf" />);
+      const more = container.querySelector('button[aria-label="Share via system dialog"]') as HTMLButtonElement;
+      expect(more).toBeTruthy();
+      fireEvent.click(more);
+      expect(share).toHaveBeenCalledWith({ url: "https://agentgem.ai/share/abc", title: "my-wf" });
+    } finally {
+      delete (navigator as unknown as { share?: unknown }).share;
+    }
   });
 });

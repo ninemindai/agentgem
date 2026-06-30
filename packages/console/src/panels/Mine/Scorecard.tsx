@@ -65,7 +65,7 @@ export function ScorecardHero({ data, apiBase = "", createShare }: { data: Score
       </div>
       {busy && slow && <p className="scorecard-pending">Waking the server — the first share after a while can take up to ~30s.</p>}
       {err && <p className="scorecard-error">{err}</p>}
-      {shareUrl && <ShareLinks url={shareUrl} />}
+      {shareUrl && <ShareLinks url={shareUrl} title="My Agent Goldmine" />}
       {data.degraded && <span className="scorecard-degraded" title="Some projects could not be fully scanned">partial</span>}
     </section>
   );
