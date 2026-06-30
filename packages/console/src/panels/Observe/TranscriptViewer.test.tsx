@@ -85,6 +85,29 @@ describe("TranscriptViewer", () => {
     await screen.findByText(/saved →/);
   });
 
+  it("hides the distill CTA for a trivial session with nothing to distill", async () => {
+    const trivial: TranscriptView = {
+      ...view,
+      turns: [
+        { id: "u1", role: "user", tsMs: 1000, tokens: { in: 0, out: 0, cache: 0 }, spans: [{ kind: "message", role: "user", text: "hi" }] },
+        { id: "a1", role: "assistant", tsMs: 2000, tokens: { in: 1, out: 1, cache: 0 }, spans: [{ kind: "message", role: "assistant", text: "hello" }] },
+      ],
+    };
+    vi.spyOn(routes.inspectSessionRoute, "call").mockResolvedValue(trivial);
+    render(<TranscriptViewer apiBase="" agent="claude" sessionId="s1" onBack={() => {}} />);
+    await waitFor(() => expect(screen.getAllByText("hi").length).toBeGreaterThan(0));
+    expect(screen.queryByText(/Distill this session/)).toBeNull();
+  });
+
+  it("shows ACP guidance (not an API key) when distillation is degraded", async () => {
+    vi.spyOn(routes.inspectSessionRoute, "call").mockResolvedValue(view);
+    vi.spyOn(routes.inspectDistillRoute, "call").mockResolvedValue({ distilled: [], lessons: [], degraded: true });
+    render(<TranscriptViewer apiBase="" agent="claude" sessionId="s1" onBack={() => {}} />);
+    fireEvent.click(await screen.findByText(/Distill this session/));
+    await waitFor(() => expect(screen.getByText(/Claude ACP agent/)).toBeTruthy());
+    expect(screen.queryByText(/ANTHROPIC_API_KEY/)).toBeNull();
+  });
+
   it("hides the distill CTA for Codex sessions (Claude-only pipeline)", async () => {
     vi.spyOn(routes.inspectSessionRoute, "call").mockResolvedValue({ ...view, agent: "codex" });
     render(<TranscriptViewer apiBase="" agent="codex" sessionId="s1" onBack={() => {}} />);

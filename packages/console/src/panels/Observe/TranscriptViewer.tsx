@@ -61,7 +61,7 @@ export function TranscriptViewer({ apiBase, agent, sessionId, onBack }: {
         )}
       </div>
 
-      {view && <DistillSection apiBase={apiBase} agent={view.agent} sessionId={view.sessionId} />}
+      {view && <DistillSection apiBase={apiBase} agent={view.agent} sessionId={view.sessionId} turns={view.turns} />}
 
       {error ? (
         <p className="obs-error">Couldn't load session: {error}</p>
@@ -153,14 +153,20 @@ function firstLine(s: string): string {
 // this one session and lists the resulting draft skill(s). Claude-only — the
 // workflow scan reads Claude transcripts. Annotation/scoring is deliberately out
 // of scope (proposal non-goals): this is just tagging-via-distill, not an eval rig.
-function DistillSection({ apiBase, agent, sessionId }: { apiBase: string; agent: "claude" | "codex"; sessionId: string }) {
+function DistillSection({ apiBase, agent, sessionId, turns }: { apiBase: string; agent: "claude" | "codex"; sessionId: string; turns: TranscriptTurn[] }) {
   const [state, setState] = useState<"idle" | "running" | "done" | "error">("idle");
   const [drafts, setDrafts] = useState<DistilledSkill[]>([]);
   const [lessons, setLessons] = useState<DistilledLesson[]>([]);
   const [degraded, setDegraded] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  if (agent !== "claude") return null;
+  // Distillation is Claude-only (the pipeline drives an ACP Claude agent). Don't
+  // offer the CTA for a session too thin to yield anything: a skill needs a tool
+  // procedure, a lesson needs real substance. Below this floor — a couple of
+  // message exchanges, no tool use — the run only ever returns "nothing found",
+  // so a prominent button there is noise.
+  const substantive = turns.some((t) => t.spans.some((s) => s.kind === "tool_call")) || turns.length >= 6;
+  if (agent !== "claude" || !substantive) return null;
 
   const run = () => {
     setState("running"); setErr(null);
@@ -176,7 +182,7 @@ function DistillSection({ apiBase, agent, sessionId }: { apiBase: string; agent:
       </button>
       {state === "error" && <span className="obs-error tv-distill-note">{err}</span>}
       {state === "done" && degraded && (
-        <span className="obs-muted tv-distill-note">Heuristic draft — set ANTHROPIC_API_KEY for richer distillation.</span>
+        <span className="obs-muted tv-distill-note">Heuristic draft — no local agent ran; start a Claude ACP agent for richer distillation.</span>
       )}
       {state === "done" && drafts.length === 0 && lessons.length === 0 && (
         <span className="obs-muted tv-distill-note">No distillable procedure or lesson found in this session.</span>
