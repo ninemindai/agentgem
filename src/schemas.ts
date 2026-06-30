@@ -672,6 +672,16 @@ export const RegistrySearchQuerySchema = z.object({
   tag: z.string().optional(),
   limit: z.coerce.number().int().positive().max(100).optional(),
 });
+export const RegistryGemSchema = z.object({
+  key: z.string(),
+  version: z.string(),
+  author: z.string().optional(),
+  description: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  artifactKinds: z.array(z.string()).optional(),
+});
+export const RegistryGemsResponseSchema = z.object({ gems: z.array(RegistryGemSchema) });
+
 export const RegistrySearchResponseSchema = z.object({
   results: z.array(z.object({
     key: z.string(), latest: z.string(), score: z.number(),

@@ -111,7 +111,7 @@ import {
   GemApplyRequestSchema, GemApplyResponseSchema,
   AgentcoreReadyResponseSchema, AgentcoreDeployRequestSchema, AgentcoreStatusQuerySchema, AgentcoreDeployStateSchema,
   RegistryReadyResponseSchema, RegistryIndexResponseSchema,
-  RegistrySearchQuerySchema, RegistrySearchResponseSchema,
+  RegistrySearchQuerySchema, RegistrySearchResponseSchema, RegistryGemsResponseSchema,
   RegistryResolveRequestSchema, RegistryResolveResponseSchema,
   RegistryInstallRequestSchema, RegistryInstallResponseSchema,
   RegistryPublishRequestSchema, RegistryPublishResponseSchema,
@@ -141,10 +141,14 @@ import { readRecents, upsertRecent } from "./gem/recents.js";
 import { resolveInstall, publishGem } from "./gem/registry.js";
 import { searchIndex } from "./gem/search.js";
 import { githubRegistrySource, githubRegistryPublisher, registryConfigFromEnv, registryReady } from "./gem/registryGithub.js";
+import { createGemCache } from "./gem/publicCatalog.js";
 import { resolveDirs, resolveProject, agentgemHome } from "./resolveDir.js";
 import { pickFolder } from "./pickFolder.js";
 
 let globalUsageRefreshing = false;
+
+// Public browse catalog: one shared 5-minute TTL cache so visitor traffic never hits GitHub per-request.
+const publicGemCache = createGemCache(5 * 60 * 1000);
 
 // Server-derived run directory for a Gem. NEVER taken from client input: a caller-controlled path is
 // a path-injection sink, and the ACP agent then runs there with tool permissions. The gem name is
@@ -625,6 +629,15 @@ export class GemController {
   async registrySearch(input: { query: z.infer<typeof RegistrySearchQuerySchema> }): Promise<z.infer<typeof RegistrySearchResponseSchema>> {
     const index = await this.registrySource().source.getIndex();
     return { results: searchIndex(index, input.query.q ?? "", { kind: input.query.kind, tag: input.query.tag, limit: input.query.limit }) };
+  }
+
+  // Public, CORS-open (see originGuard), browse-only gem list. Graceful: unconfigured or a fetch
+  // error yields { gems: [] }. Uses the shared TTL cache to bound GitHub traffic.
+  @get("/registry/gems", { query: PickQuerySchema, response: RegistryGemsResponseSchema })
+  async registryGems(_input: { query: z.infer<typeof PickQuerySchema> }): Promise<z.infer<typeof RegistryGemsResponseSchema>> {
+    const cfg = registryConfigFromEnv();
+    const getIndex = cfg ? () => githubRegistrySource(cfg).getIndex() : null;
+    return { gems: await publicGemCache.get(getIndex, Date.now()) };
   }
 
   @post("/registry/resolve", { body: RegistryResolveRequestSchema, response: RegistryResolveResponseSchema })
