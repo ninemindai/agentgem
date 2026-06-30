@@ -1,6 +1,11 @@
 // src/gem/__tests__/scorecardRoute.test.ts
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { GemController } from "../../gem.controller.js";
+import { useHermeticHome } from "../../__tests__/support/hermeticHome.js";
+
+let restoreHome: () => void;
+beforeAll(() => { restoreHome = useHermeticHome(); });
+afterAll(() => restoreHome());
 
 describe("GET /api/scorecard handler", () => {
   it("returns a count-only scorecard shape for the given projects", async () => {

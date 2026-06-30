@@ -1,10 +1,15 @@
 // src/gem/__tests__/scorecardBuild.test.ts
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeAll, afterAll } from "vitest";
 import { resolve } from "node:path";
 import { GemController } from "../../gem.controller.js";
 import { defaultScorecardDeps } from "../scorecard.js";
 import type { ProcedureCandidate } from "@agentgem/insight";
 import type { WorkflowSignal } from "@agentgem/insight";
+import { useHermeticHome } from "../../__tests__/support/hermeticHome.js";
+
+let restoreHome: () => void;
+beforeAll(() => { restoreHome = useHermeticHome(); });
+afterAll(() => restoreHome());
 
 const ROOT = resolve(process.cwd());
 

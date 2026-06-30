@@ -1,5 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { GemController } from "../gem.controller.js";
+import { useHermeticHome } from "./support/hermeticHome.js";
+
+let restoreHome: () => void;
+beforeAll(() => { restoreHome = useHermeticHome(); });
+afterAll(() => restoreHome());
 
 describe("GemController.observe", () => {
   it("returns an ObservePayload for a valid range without throwing", async () => {

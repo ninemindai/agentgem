@@ -1,7 +1,12 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import { isPortable, scoreProject, aggregateScorecard, collectScorecard, selectScorecardRoots, type ProjectLoad, type ScorecardDeps, type ScorecardProgress } from "../scorecard.js";
 import type { ProcedureCandidate } from "@agentgem/insight";
 import type { WorkflowSignal } from "@agentgem/insight";
+import { useHermeticHome } from "../../__tests__/support/hermeticHome.js";
+
+let restoreHome: () => void;
+beforeAll(() => { restoreHome = useHermeticHome(); });
+afterAll(() => restoreHome());
 
 // Minimal candidate factory — only the fields scorecard.ts reads.
 function cand(over: Partial<ProcedureCandidate> & { key: string }): ProcedureCandidate {

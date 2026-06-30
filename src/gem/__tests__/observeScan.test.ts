@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
+import { useHermeticHome } from "../../__tests__/support/hermeticHome.js";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -299,6 +300,9 @@ describe("parseClaudeTranscript model sentinel (Fix 2)", () => {
 });
 
 describe("scanSessionsCached", () => {
+  let restoreHome: () => void;
+  beforeAll(() => { restoreHome = useHermeticHome(); });
+  afterAll(() => restoreHome());
   beforeEach(() => clearScanCache());
 
   it("returns the same array reference on second call within TTL (no custom dirs)", async () => {
