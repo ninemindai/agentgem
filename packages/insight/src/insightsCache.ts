@@ -16,7 +16,9 @@ function cachePath(): string { return join(agentgemHome(), ".agentgem", "insight
 
 // Bump when the report shape changes so stale-shape entries aren't served.
 // iv1 = { report (totals, outcomes_summary, narrative, friction, publish_candidates), facets }.
-const TOKEN_VERSION = "iv1";
+// iv2 = report also carries by_model (Ring 0 cross-model breakdown) — iv1 entries
+// lack it and would crash the panel, so they must not be served.
+const TOKEN_VERSION = "iv2";
 
 /** version + transcript count + newest mtime — a new/updated session yields a new token. */
 export function insightsToken(paths: string[]): string {
