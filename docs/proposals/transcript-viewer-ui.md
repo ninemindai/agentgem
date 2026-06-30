@@ -1,6 +1,6 @@
 # Proposal: Session transcript viewer for the Inspect panel
 
-- **Status:** Proposal (not started)
+- **Status:** Phases 1–2 implemented (PR #43); phases 3–4 pending
 - **Date:** 2026-06-30
 - **Area:** Console Inspect panel (`packages/console/src/panels/Observe`), insight transcript
   parsing (`packages/insight/src/observeScan.ts`), redaction (`packages/insight/src/scrub.ts`)

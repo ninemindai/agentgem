@@ -716,6 +716,22 @@ button.scorecard-intent { line-height: 1.4; }
 .tv-meta { font-size: 12px; }
 .tv-collapse { margin-left: auto; }
 
+/* distill-this-session CTA + draft cards */
+.tv-distill { margin: 0 0 16px; display: flex; flex-direction: column; gap: 8px; }
+.tv-distill-btn {
+  align-self: flex-start; padding: 7px 14px; border: 1px solid var(--accent); border-radius: 8px;
+  background: linear-gradient(180deg, var(--accent-2), var(--accent)); color: #fff7f1;
+  font: 600 12.5px/1 var(--font-ui); cursor: pointer;
+}
+.tv-distill-btn:disabled { opacity: .6; cursor: default; }
+.tv-distill-note { font-size: 12px; }
+.tv-draft { border: 1px solid var(--line); border-left: 3px solid var(--emerald); border-radius: var(--radius); background: var(--raised); padding: 10px 12px; }
+.tv-draft-head { display: flex; align-items: center; gap: 8px; }
+.tv-draft-name { font: 700 13px/1 var(--font-mono); color: var(--ink); }
+.tv-draft-saved { font-size: 11px; }
+.tv-draft-desc { margin: 6px 0 4px; font-size: 12.5px; color: var(--ink-soft); }
+.tv-draft-tools { font-size: 11px; }
+
 .tv-turns { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .tv-turn { border: 1px solid var(--line); border-radius: var(--radius); background: var(--raised); overflow: hidden; }
 .tv-turn.role-user { border-left: 3px solid var(--accent); }

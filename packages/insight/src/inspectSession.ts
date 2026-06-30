@@ -229,3 +229,23 @@ export async function loadSessionTranscript(
   }
   return null;
 }
+
+/** Server-only: resolve a Claude session to its transcript file path and the
+ *  RAW project cwd it ran in — the inputs the distill hook (workflow scan +
+ *  inventory) needs. Distinct from loadSessionTranscript because the cwd is the
+ *  real (un-de-homed) path required to resolve the project; it must NOT be put
+ *  into the client-facing TranscriptView. Returns null if not found. */
+export async function resolveClaudeSession(
+  sessionId: string,
+  dirs?: { claudeDir?: string },
+): Promise<{ path: string; cwd: string | null } | null> {
+  const claudeDir = dirs?.claudeDir ?? resolveDirs().claudeDir;
+  for (const f of listFiles(join(claudeDir, "projects"), ".jsonl")) {
+    if (basename(f).replace(/\.jsonl$/, "") !== sessionId) continue;
+    let raw: string; try { raw = await readFile(f, "utf8"); } catch { return null; }
+    let cwd: string | null = null;
+    for (const rec of jsonLines(raw)) { if (typeof rec.cwd === "string") { cwd = rec.cwd; break; } }
+    return { path: f, cwd };
+  }
+  return null;
+}

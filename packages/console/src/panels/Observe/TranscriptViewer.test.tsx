@@ -51,4 +51,31 @@ describe("TranscriptViewer", () => {
     render(<TranscriptViewer apiBase="" agent="claude" sessionId="s1" onBack={() => {}} />);
     await waitFor(() => expect(screen.getByText(/Couldn't load session/)).toBeTruthy());
   });
+
+  it("distills the session and saves a draft", async () => {
+    vi.spyOn(routes.inspectSessionRoute, "call").mockResolvedValue(view);
+    const draft: routes.DistilledSkill = {
+      name: "do-the-thing", description: "packages the thing", triggers: ["thing"], tools: ["Read"],
+      mutating: false, body: "# steps", status: "draft", confidence: "high", origin: "llm",
+      evidence: { sessions: 1, exampleSequence: ["Read"], root: "/work/app", provenance: { occurrences: [] } },
+    };
+    const distillSpy = vi.spyOn(routes.inspectDistillRoute, "call").mockResolvedValue({ distilled: [draft], degraded: false });
+    vi.spyOn(routes.workflowDraftRoute, "call").mockResolvedValue({ path: "/work/app/.agentgem/distilled/do-the-thing/SKILL.md" });
+    render(<TranscriptViewer apiBase="" agent="claude" sessionId="s1" onBack={() => {}} />);
+    await waitFor(() => expect(screen.getAllByText("do the thing").length).toBeGreaterThan(0));
+
+    fireEvent.click(screen.getByText(/Distill this session/));
+    await waitFor(() => expect(screen.getByText("do-the-thing")).toBeTruthy());
+    expect(distillSpy).toHaveBeenCalledWith(expect.anything(), { body: { id: "s1", agent: "claude" } });
+
+    fireEvent.click(screen.getByText("Save draft"));
+    await waitFor(() => expect(screen.getByText(/saved →/)).toBeTruthy());
+  });
+
+  it("hides the distill CTA for Codex sessions (Claude-only pipeline)", async () => {
+    vi.spyOn(routes.inspectSessionRoute, "call").mockResolvedValue({ ...view, agent: "codex" });
+    render(<TranscriptViewer apiBase="" agent="codex" sessionId="s1" onBack={() => {}} />);
+    await waitFor(() => expect(screen.getAllByText("do the thing").length).toBeGreaterThan(0));
+    expect(screen.queryByText(/Distill this session/)).toBeNull();
+  });
 });
