@@ -16,6 +16,7 @@ import { isMain } from "@agentback/core";
 import { RestApplication } from "@agentback/rest";
 import { installExplorer } from "@agentback/rest-explorer";
 import { MCPComponent } from "@agentback/mcp";
+import { GemTypesComponent } from "./gem/gemTypeRegistry.js";
 import { installMcpHttp } from "@agentback/mcp-http";
 import { GemController } from "./gem.controller.js";
 import { GemTools } from "./gem.tools.js";
@@ -64,6 +65,7 @@ export async function createApp(port: number): Promise<RestApplication> {
   // the top-level app config. Host comes from serverHost() so a deploy can bind 0.0.0.0.
   app.configure("servers.RestServer").to({ port, host: serverHost(), bodyParser: { json: { limit: "25mb" } } });
   app.component(MCPComponent);
+  app.component(GemTypesComponent);
   app.configure("servers.MCPServer").to({ name: "agentgem", version: "0.1.0", transports: { stdio: false } });
   app.restController(GemController);
   app.restController(ShareProxyController);
