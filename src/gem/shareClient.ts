@@ -5,7 +5,9 @@ const defaultHttp: ShareHttp = async (url, init) => {
   return { status: res.status, json: () => res.json() };
 };
 
-type Counts = { breadth: number; battleTested: number; portable: number };
+type CreateBody =
+  | { kind: "certificate"; counts: { breadth: number; battleTested: number; portable: number }; generatedAtMs: number }
+  | { kind: "gem"; name: string; provenance: string; generatedAtMs: number };
 
 // The hosted aggregator, Cloudflare-fronted. Sharing must work with zero config on a fresh desktop
 // install, and going through app.agentgem.ai is what lets Cloudflare inject the X-Origin-Auth the
@@ -23,7 +25,7 @@ function resolveBase(endpoint: string | undefined): string {
 }
 
 export async function postShare(args: {
-  counts: Counts; generatedAtMs: number; endpoint?: string; http?: ShareHttp;
+  body: CreateBody; endpoint?: string; http?: ShareHttp;
 }): Promise<{ id: string; url: string } | { skipped: true }> {
   const base = resolveBase(args.endpoint);
   if (!base) return { skipped: true };
@@ -31,10 +33,10 @@ export async function postShare(args: {
   const res = await http(`${base}/api/aggregator/share`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ kind: "certificate", counts: args.counts, generatedAtMs: args.generatedAtMs }),
+    body: JSON.stringify(args.body),
   });
   if (res.status < 200 || res.status >= 300) throw new Error(`share ${res.status}`);
-  const body = (await res.json()) as { id?: string; url?: string };
-  if (!body.id || !body.url) throw new Error("share: response missing id/url");
-  return { id: body.id, url: body.url };
+  const b = (await res.json()) as { id?: string; url?: string };
+  if (!b.id || !b.url) throw new Error("share: response missing id/url");
+  return { id: b.id, url: b.url };
 }

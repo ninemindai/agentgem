@@ -8,7 +8,7 @@ describe("postShare", () => {
   it("POSTs to the configured endpoint and returns id/url", async () => {
     let seen: { url: string; body: string } | null = null;
     const http = async (url: string, init: { body: string }) => { seen = { url, body: init.body }; return { status: 200, json: async () => ({ id: "x10", url: "https://agentgem.ai/share/x10" }) }; };
-    const r = await postShare({ counts, generatedAtMs: 9, endpoint: "https://api.test", http });
+    const r = await postShare({ body: { kind: "certificate", counts, generatedAtMs: 9 }, endpoint: "https://api.test", http });
     expect(r).toEqual({ id: "x10", url: "https://agentgem.ai/share/x10" });
     expect(seen!.url).toBe("https://api.test/api/aggregator/share");
     expect(JSON.parse(seen!.body)).toEqual({ kind: "certificate", counts, generatedAtMs: 9 });
@@ -17,7 +17,7 @@ describe("postShare", () => {
   it("defaults to the hosted aggregator (app.agentgem.ai) when nothing is configured", async () => {
     let seenUrl = "";
     const http = async (url: string) => { seenUrl = url; return { status: 200, json: async () => ({ id: "a", url: "u" }) }; };
-    await postShare({ counts, generatedAtMs: 9, http });
+    await postShare({ body: { kind: "certificate", counts, generatedAtMs: 9 }, http });
     expect(seenUrl).toBe(`${DEFAULT_AGGREGATOR_URL}/api/aggregator/share`);
     expect(DEFAULT_AGGREGATOR_URL).toBe("https://app.agentgem.ai");
   });
@@ -26,17 +26,24 @@ describe("postShare", () => {
     process.env.AGENTGEM_AGGREGATOR_URL = "https://staging.example";
     let seenUrl = "";
     const http = async (url: string) => { seenUrl = url; return { status: 200, json: async () => ({ id: "a", url: "u" }) }; };
-    await postShare({ counts, generatedAtMs: 9, http });
+    await postShare({ body: { kind: "certificate", counts, generatedAtMs: 9 }, http });
     expect(seenUrl).toBe("https://staging.example/api/aggregator/share");
   });
 
   it("an explicit empty endpoint disables sharing (skips)", async () => {
-    const r = await postShare({ counts, generatedAtMs: 9, endpoint: "" });
+    const r = await postShare({ body: { kind: "certificate", counts, generatedAtMs: 9 }, endpoint: "" });
     expect(r).toEqual({ skipped: true });
   });
 
   it("throws on a non-2xx", async () => {
     const http = async () => ({ status: 500, json: async () => ({}) });
-    await expect(postShare({ counts, generatedAtMs: 9, endpoint: "https://api.test", http })).rejects.toThrow(/share 500/);
+    await expect(postShare({ body: { kind: "certificate", counts, generatedAtMs: 9 }, endpoint: "https://api.test", http })).rejects.toThrow(/share 500/);
+  });
+
+  it("forwards a gem body verbatim", async () => {
+    let sent = "";
+    const http = async (_u: string, init: { body: string }) => { sent = init.body; return { status: 200, json: async () => ({ id: "g", url: "u" }) }; };
+    await postShare({ body: { kind: "gem", name: "wf", provenance: "Distilled from 5 sessions", generatedAtMs: 9 }, endpoint: "https://api.test", http });
+    expect(JSON.parse(sent)).toEqual({ kind: "gem", name: "wf", provenance: "Distilled from 5 sessions", generatedAtMs: 9 });
   });
 });
