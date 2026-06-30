@@ -150,7 +150,7 @@ import {
   RegistryPublishRequestSchema, RegistryPublishResponseSchema,
   UndeployRequestSchema, UndeployResponseSchema, DeployRecordQuerySchema, DeployRecordResponseSchema,
   WorkflowAnalyzeRequestSchema, WorkflowAnalyzeResponseSchema,
-  DistilledSkillSchema, WorkflowDraftWriteResponseSchema,
+  DistilledSkillSchema, DistilledLessonSchema, WorkflowDraftWriteResponseSchema,
   GemRunRequestSchema, GemRunResponseSchema,
   GemRunPrepareRequestSchema, GemRunPrepareResponseSchema,
   UsageSchema, UsageQuerySchema,
@@ -162,7 +162,7 @@ import { recommendWorkflow, recommendationToSelection } from "@agentgem/insight"
 import { distillWorkflow, type DistilledSkill } from "@agentgem/insight";
 import { extractReflections } from "@agentgem/insight";
 import { writeReflections } from "@agentgem/insight";
-import { writeDistilledDraft, stageDraftsByEvidence, stageLessonsByEvidence } from "@agentgem/capture";
+import { writeDistilledDraft, writeDistilledLesson, stageDraftsByEvidence, stageLessonsByEvidence } from "@agentgem/capture";
 import { runReadiness, startLocal, stopLocal, getRunStatus, deployVercel, deployCloudflare, undeployVercel, undeployCloudflare } from "@agentgem/run";
 import { setCredential } from "@agentgem/capture";
 import { agentcoreReadiness, deployAgentcore, getAgentcoreStatus } from "@agentgem/deploy";
@@ -788,6 +788,16 @@ export class GemController {
     const skill = input.body;
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(skill.name)) throw new Error(`invalid draft name '${skill.name}'`);
     return { path: writeDistilledDraft(skill) };
+  }
+
+  // Accept a distilled LESSON: persist it to .agentgem/distilled/lessons/<name>.md for
+  // review/promote (mirrors workflow/draft). The kebab name is re-validated here (defense
+  // in depth) since it composes a path.
+  @post("/workflow/lesson", { body: DistilledLessonSchema, response: WorkflowDraftWriteResponseSchema })
+  async writeWorkflowLesson(input: { body: z.infer<typeof DistilledLessonSchema> }): Promise<z.infer<typeof WorkflowDraftWriteResponseSchema>> {
+    const lesson = input.body;
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(lesson.name)) throw new Error(`invalid lesson name '${lesson.name}'`);
+    return { path: writeDistilledLesson(lesson) };
   }
 }
 
