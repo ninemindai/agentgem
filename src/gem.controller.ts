@@ -162,7 +162,7 @@ import { recommendWorkflow, recommendationToSelection } from "@agentgem/insight"
 import { distillWorkflow, type DistilledSkill } from "@agentgem/insight";
 import { extractReflections } from "@agentgem/insight";
 import { writeReflections } from "@agentgem/insight";
-import { writeDistilledDraft, stageDraftsByEvidence } from "@agentgem/capture";
+import { writeDistilledDraft, stageDraftsByEvidence, stageLessonsByEvidence } from "@agentgem/capture";
 import { runReadiness, startLocal, stopLocal, getRunStatus, deployVercel, deployCloudflare, undeployVercel, undeployCloudflare } from "@agentgem/run";
 import { setCredential } from "@agentgem/capture";
 import { agentcoreReadiness, deployAgentcore, getAgentcoreStatus } from "@agentgem/deploy";
@@ -339,7 +339,10 @@ export class GemController {
     const dirs = resolveDirs(input.body.dir);
     // Fold any accepted distilled drafts into the inventory (by evidence.root)
     // before resolution, so a selection can reference one by name (proposal §7b).
-    const inventory = stageDraftsByEvidence(introspectAll(input.body.dir, input.body.projects), input.body.distilledDrafts ?? []);
+    const inventory = stageLessonsByEvidence(
+      stageDraftsByEvidence(introspectAll(input.body.dir, input.body.projects), input.body.distilledDrafts ?? []),
+      input.body.distilledLessons ?? [],
+    );
     return buildGem(inventory, input.body.selection, {
       name: input.body.name ?? "gem",
       createdFrom: dirs.claudeDir,
@@ -351,7 +354,10 @@ export class GemController {
   @post("/scaffold-checks", { body: ScaffoldChecksRequestSchema, response: ScaffoldChecksResponseSchema })
   async scaffoldChecks(input: { body: z.infer<typeof ScaffoldChecksRequestSchema> }): Promise<z.infer<typeof ScaffoldChecksResponseSchema>> {
     const dirs = resolveDirs(input.body.dir);
-    const inventory = stageDraftsByEvidence(introspectAll(input.body.dir, input.body.projects), input.body.distilledDrafts ?? []);
+    const inventory = stageLessonsByEvidence(
+      stageDraftsByEvidence(introspectAll(input.body.dir, input.body.projects), input.body.distilledDrafts ?? []),
+      input.body.distilledLessons ?? [],
+    );
     const gem = buildGem(inventory, input.body.selection, { name: input.body.name ?? "gem", createdFrom: dirs.claudeDir });
     return { checks: scaffoldChecks(gem) };
   }
@@ -381,7 +387,10 @@ export class GemController {
   async transferSend(input: { body: z.infer<typeof TransferSendRequestSchema> }): Promise<z.infer<typeof TransferSendResponseSchema>> {
     assertConfigured(); // 400 before any filesystem/build work if NATS_URL is unset
     const dirs = resolveDirs(input.body.dir);
-    const inventory = stageDraftsByEvidence(introspectAll(input.body.dir, input.body.projects), input.body.distilledDrafts ?? []);
+    const inventory = stageLessonsByEvidence(
+      stageDraftsByEvidence(introspectAll(input.body.dir, input.body.projects), input.body.distilledDrafts ?? []),
+      input.body.distilledLessons ?? [],
+    );
     const gem = buildGem(inventory, input.body.selection, { name: input.body.name ?? "gem", createdFrom: dirs.claudeDir, channels: input.body.channels });
     const { bytes } = exportGem(gem, { version: input.body.version });
     const { ticket } = await sendBytes(bytes, natsStoreFromEnv());

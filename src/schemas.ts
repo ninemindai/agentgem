@@ -188,6 +188,18 @@ export const ReflectionSchema = z.object({
   provenance: ProvenanceSchema,
 });
 
+export const DistilledLessonSchema = z.object({
+  name: z.string(),
+  body: z.string(),
+  importance: z.enum(["high", "medium"]),
+  status: z.literal("draft"),
+  evidence: z.object({
+    sessions: z.number(),
+    root: z.string(),
+    provenance: ProvenanceSchema,
+  }),
+});
+
 export const GemRequestSchema = z.object({
   selection: GemSelectionSchema,
   name: z.string().optional(),
@@ -198,6 +210,7 @@ export const GemRequestSchema = z.object({
   // Accepted distilled drafts to fold into the build — staged into the inventory
   // (by evidence.root) before resolution, so a selection can reference one by name.
   distilledDrafts: z.array(DistilledSkillSchema).optional(),
+  distilledLessons: z.array(DistilledLessonSchema).optional(),
 });
 
 export const ScaffoldChecksRequestSchema = z.object({
@@ -206,6 +219,7 @@ export const ScaffoldChecksRequestSchema = z.object({
   dir: z.string().optional(),
   projects: z.array(z.string()).optional(),
   distilledDrafts: z.array(DistilledSkillSchema).optional(),
+  distilledLessons: z.array(DistilledLessonSchema).optional(),
 });
 
 export const ScaffoldChecksResponseSchema = z.object({ checks: z.array(GemCheckSchema) });
@@ -421,6 +435,7 @@ export const TransferSendRequestSchema = z.object({
   projects: z.array(z.string()).optional(),
   channels: ChannelDeclSchema,
   distilledDrafts: z.array(DistilledSkillSchema).optional(),
+  distilledLessons: z.array(DistilledLessonSchema).optional(),
 });
 export const TransferSendResponseSchema = z.object({ ticket: z.string() });
 
