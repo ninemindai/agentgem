@@ -9,7 +9,7 @@ afterEach(() => {
 });
 
 const res = (body: unknown) =>
-  ({ ok: true, status: 200, text: async () => JSON.stringify(body) }) as unknown as Response;
+  ({ ok: true, status: 200, text: async () => JSON.stringify(body), json: async () => body }) as unknown as Response;
 
 const popularityRow = [
   { id: "skill:superpowers/brainstorming", kind: "skill", producers: 80, verifiedProducers: 40, invocations: 200, sessions: 90 },
@@ -73,5 +73,25 @@ describe("App link interceptor", () => {
     expect(ingLink.getAttribute("href")).toBe("/");
     expect(gemsLink.className).toMatch(/is-active/);
     expect(ingLink.className).not.toMatch(/is-active/);
+  });
+
+  it("shows a Sign in link when unauthenticated", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (u: string) => {
+      if (u.includes("/api/auth/me")) return res({ authenticated: false });
+      return res([]); // leaderboard / other reads
+    }));
+    render(<App />);
+    const link = await screen.findByRole("link", { name: /sign in/i });
+    expect(link.getAttribute("href")).toContain("/api/auth/github/login?return=");
+  });
+
+  it("shows the login + Sign out when authenticated", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (u: string) => {
+      if (u.includes("/api/auth/me")) return res({ login: "octocat", avatarUrl: null });
+      return res([]);
+    }));
+    render(<App />);
+    expect(await screen.findByText("octocat")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /sign out/i })).toBeTruthy();
   });
 });
