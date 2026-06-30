@@ -39,8 +39,11 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
  * deterministic facets with degraded:false — the call succeeded).
  */
 // Default cap on sessions sent to the agent in one batch. Bounds prompt size on
-// projects with hundreds of sessions; we judge the most-recent ones.
-export const DEFAULT_MAX_JUDGE = 50;
+// projects with hundreds of sessions; we judge the most-recent ones. Tuned to
+// fit ONE agent pass within its timeout — at 50, judging "All projects" timed
+// out (~58s vs the 60s default) and the whole report degraded to neutral. 20
+// completes comfortably; chunking is the durable fix for full coverage.
+export const DEFAULT_MAX_JUDGE = 20;
 
 export async function judgeSessions(
   signal: WorkflowSignal,
@@ -56,7 +59,10 @@ export async function judgeSessions(
   const missioned = selected;
 
   const connectFn = opts.connectFn ?? currentTestConnectFn() ?? defaultConnectFn;
-  const timeoutMs = opts.timeoutMs ?? 60_000;
+  // A multi-session judge prompt reasons over every session at once; observed
+  // ~58s even for 20 sessions, blowing a 60s deadline and degrading the whole
+  // report. Give the single pass real room (chunking is the durable fix).
+  const timeoutMs = opts.timeoutMs ?? 180_000;
   let conn: { ctx: AcpCtx; close: () => void } | null = null;
   let handle: AcpSessionHandle | null = null;
   try {

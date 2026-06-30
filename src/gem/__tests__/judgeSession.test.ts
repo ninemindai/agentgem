@@ -1,6 +1,6 @@
 // src/gem/__tests__/judgeSession.test.ts
 import { describe, it, expect } from "vitest";
-import { judgeSessions } from "@agentgem/insight";
+import { judgeSessions, DEFAULT_MAX_JUDGE } from "@agentgem/insight";
 import type { WorkflowSignal, SessionSequence, AcpConnectFn } from "@agentgem/insight";
 
 function sess(id: string, task: string | null): SessionSequence {
@@ -91,5 +91,17 @@ describe("judgeSessions", () => {
     });
     expect(facets).toHaveLength(2);
     expect(facets.map((f) => f.sessionId).sort()).toEqual(["s4", "s5"]); // the two most recent
+  });
+
+  it("defaults the cap to DEFAULT_MAX_JUDGE so one agent pass fits its timeout", async () => {
+    const sessions = Array.from({ length: 25 }, (_, i) => ({
+      steps: [], sessionId: `s${i}`, transcript: `s${i}.jsonl`, atMs: i * 100,
+      missionHint: { task: `task ${i}`, outcome: "done" },
+    }));
+    const { facets } = await judgeSessions(signalWith(sessions), {
+      connectFn: async () => { throw new Error("boom"); }, // fallback over the capped set
+    });
+    expect(facets).toHaveLength(DEFAULT_MAX_JUDGE);
+    expect(DEFAULT_MAX_JUDGE).toBeLessThanOrEqual(25); // capped below the 25 available
   });
 });
