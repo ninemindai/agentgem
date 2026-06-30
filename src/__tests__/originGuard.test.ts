@@ -56,20 +56,20 @@ describe("originGuard (CSRF / drive-by guard)", () => {
     expect(r.status).toBe(403);
   });
   it("allows cross-site web sign-in requests (/api/auth/*) — OAuth nav + the SPA's credentialed XHR", () => {
-    // The real sign-in flow is cross-site: clicking "Sign in" on explore.agentgem.ai navigates to
-    // app.agentgem.ai/api/auth/github/login (Sec-Fetch-Site: cross-site), GitHub redirects to the
+    // The real sign-in flow is cross-site: clicking "Sign in" on app.agentgem.ai navigates to
+    // api.agentgem.ai/api/auth/github/login (Sec-Fetch-Site: cross-site), GitHub redirects to the
     // callback (cross-site), and /me + /logout are credentialed XHR. originGuard must not block these.
-    expect(run({ "sec-fetch-site": "cross-site" }, "app.agentgem.ai", "GET", "/api/auth/github/login").nexted).toBe(true);
-    expect(run({ "sec-fetch-site": "cross-site" }, "app.agentgem.ai", "GET", "/api/auth/github/callback").nexted).toBe(true);
-    expect(run({ "sec-fetch-site": "cross-site" }, "app.agentgem.ai", "GET", "/api/auth/me").nexted).toBe(true);
-    expect(run({ "sec-fetch-site": "cross-site" }, "app.agentgem.ai", "POST", "/api/auth/logout").nexted).toBe(true);
+    expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "GET", "/api/auth/github/login").nexted).toBe(true);
+    expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "GET", "/api/auth/github/callback").nexted).toBe(true);
+    expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "GET", "/api/auth/me").nexted).toBe(true);
+    expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "POST", "/api/auth/logout").nexted).toBe(true);
   });
   it("still blocks a cross-site request to a NON-auth API path", () => {
-    expect(run({ "sec-fetch-site": "cross-site" }, "app.agentgem.ai", "POST", "/api/gem").blocked).toBe(true);
+    expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "POST", "/api/gem").blocked).toBe(true);
   });
   it("allows cross-site star requests (/api/stars + /api/stars/toggle) — public counts + the SPA's credentialed toggle", () => {
-    expect(run({ "sec-fetch-site": "cross-site" }, "app.agentgem.ai", "GET", "/api/stars").nexted).toBe(true);
-    expect(run({ "sec-fetch-site": "cross-site" }, "app.agentgem.ai", "POST", "/api/stars/toggle").nexted).toBe(true);
+    expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "GET", "/api/stars").nexted).toBe(true);
+    expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "POST", "/api/stars/toggle").nexted).toBe(true);
   });
   it("blocks a malformed Origin", () => {
     expect(run({ origin: "not a url" }).blocked).toBe(true);

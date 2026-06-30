@@ -7,7 +7,7 @@ discovery over the already-deployed aggregator.
 
 ## Goal
 
-A standalone public web app at **`explore.agentgem.ai`** that makes the aggregator's
+A standalone public web app at **`app.agentgem.ai`** that makes the aggregator's
 trusted-adoption data legible to anyone — a leaderboard of ingredients (skills/MCPs) with
 per-ingredient drill-in (co-occurrence + adoption) — driving discovery/acquisition. No
 accounts. Reuses the live backend with (ideally) zero server changes.
@@ -29,7 +29,7 @@ accounts. Reuses the live backend with (ideally) zero server changes.
    browse/detail is a fast-follow (M1.5) once a public gem API exists; accounts + starring/
    reviews (M2) and commerce (M3) are later.
 2. **Stack = Vite + React SPA**, deployed static to **Cloudflare Pages**, at the
-   **`explore.agentgem.ai`** subdomain. (Accepted tradeoff: client-rendered → weak SEO/OG;
+   **`app.agentgem.ai`** subdomain. (Accepted tradeoff: client-rendered → weak SEO/OG;
    the share-card surface covers shareable artifacts separately.)
 3. **Standalone over the public HTTP API.** A new monorepo package consumes *only* the
    deployed aggregator's public endpoints over fetch/CORS — **no server-code import** — which
@@ -41,7 +41,7 @@ accounts. Reuses the live backend with (ideally) zero server changes.
 ## Architecture
 
 ```
-explore.agentgem.ai (Cloudflare Pages, static SPA)
+app.agentgem.ai (Cloudflare Pages, static SPA)
         │  fetch (CORS)
         ▼
 https://agentgem.onrender.com/api/aggregator/{popularity,co-occurrence,adoption,co-occurrence-matrix}
@@ -113,7 +113,7 @@ Vitest + `@testing-library/react`, mirroring the console:
 ## Deployment
 
 - Cloudflare Pages project building `packages/marketplace` (static output) + the `_redirects`
-  SPA fallback. Custom domain `explore.agentgem.ai`. `VITE_API_BASE` set at build time.
+  SPA fallback. Custom domain `app.agentgem.ai`. `VITE_API_BASE` set at build time.
 - A short runbook (Pages setup + DNS + env) accompanies the implementation, like the Render one.
 
 ## Out of scope (later slices)

@@ -22,7 +22,7 @@ services:
         value: 0.0.0.0          # bind all interfaces (the Dockerfile also sets this)
       - key: SERVE_CONSOLE
         value: "false"          # API-only: the desktop console UI is a LOCAL app, not served on
-                                # app.agentgem.ai. `/` redirects to the marketing site instead.
+                                # api.agentgem.ai. `/` redirects to the marketing site instead.
       - key: TRUST_PROXY
         value: "1"              # trust the proxy hop for req.protocol/secure (TLS terminated upstream)
       - key: CLIENT_IP_HEADER
@@ -52,7 +52,7 @@ services:
     staticPublishPath: packages/marketplace/dist
     envVars:
       - key: VITE_API_BASE
-        value: https://app.agentgem.ai          # the agentgem service's custom domain (serves the API at /api/* AND the desktop UI at /)
+        value: https://api.agentgem.ai          # the agentgem service's custom domain (serves the API at /api/* AND the desktop UI at /)
     routes:
       - type: rewrite
         source: /*

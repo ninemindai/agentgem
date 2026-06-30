@@ -5,7 +5,7 @@ import { makeTestDb, upsertAccount, createSession, generateSessionToken, toggleS
 import { toggleHandler, listHandler } from "../stars/install.js";
 import { SESSION_COOKIE } from "../auth/cookie.js";
 
-const webOrigins = ["https://explore.agentgem.ai"];
+const webOrigins = ["https://app.agentgem.ai"];
 function mockRes() {
   const r: any = { _status: 200, _headers: {} as Record<string,string>, _body: undefined };
   r.status = (c: number) => { r._status = c; return r; };

@@ -12,10 +12,10 @@ type CreateBody =
   | { kind: "gem"; name: string; provenance: string; generatedAtMs: number };
 
 // The hosted aggregator, Cloudflare-fronted. Sharing must work with zero config on a fresh desktop
-// install, and going through app.agentgem.ai is what lets Cloudflare inject the X-Origin-Auth the
+// install, and going through api.agentgem.ai is what lets Cloudflare inject the X-Origin-Auth the
 // backend's origin guard requires (a create that skips CF is rejected). Override with
 // AGENTGEM_AGGREGATOR_URL (e.g. http://127.0.0.1:PORT for local dev against an in-process aggregator).
-export const DEFAULT_AGGREGATOR_URL = "https://app.agentgem.ai";
+export const DEFAULT_AGGREGATOR_URL = "https://api.agentgem.ai";
 
 // Resolve the backend base: explicit endpoint (incl. "" to disable) -> AGENTGEM_AGGREGATOR_URL ->
 // the hosted default. Clicking "Share" is explicit intent to publish, so defaulting to the hosted
