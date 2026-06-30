@@ -520,6 +520,7 @@ export const optimizeRoute = defineRoute("GET", "/api/optimize", {
 const DiscoverCandidateSchema = z.object({
   name: z.string(),
   source: z.string(),
+  skillId: z.string(),
   registry: z.literal("skills.sh"),
   installs: z.number().optional(),
   url: z.string(),
@@ -541,6 +542,12 @@ export const discoverRoute = defineRoute("GET", "/api/optimize/discover", {
 export const rerankDiscoverRoute = defineRoute("POST", "/api/optimize/discover/rerank", {
   body: z.object({ candidates: z.array(DiscoverCandidateSchema), topics: z.array(z.string()) }),
   response: DiscoverPayloadSchema,
+});
+export const InstallSkillResultSchema = z.object({ ok: z.boolean(), skill: z.string(), message: z.string() });
+export type InstallSkillResult = z.infer<typeof InstallSkillResultSchema>;
+export const installSkillRoute = defineRoute("POST", "/api/optimize/discover/install", {
+  body: z.object({ source: z.string(), skillId: z.string() }),
+  response: InstallSkillResultSchema,
 });
 
 export const makeClient = (apiBase: string): Client => createClient({ baseURL: apiBase });

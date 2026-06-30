@@ -7,7 +7,7 @@ import { z } from "zod";
 import { api, get, post } from "@agentback/openapi";
 import { scanSessionsCached, aggregateObserve, loadSessionTranscript, resolveClaudeSession, dehomeDistilled } from "@agentgem/insight";
 import { scanArtifactUsageCached } from "@agentgem/insight";
-import { buildOptimizePayload, buildDiscover, rerankCandidates, type OptimizeRange } from "@agentgem/insight";
+import { buildOptimizePayload, buildDiscover, rerankCandidates, installSkill, type OptimizeRange } from "@agentgem/insight";
 
 const ObserveQuerySchema = z.object({
   range: z.enum(["today", "7d", "30d", "all"]).optional(),
@@ -83,6 +83,7 @@ export const OptimizePayloadSchema = z.object({
 const DiscoverCandidateSchema = z.object({
   name: z.string(),
   source: z.string(),
+  skillId: z.string(),
   registry: z.literal("skills.sh"),
   installs: z.number().optional(),
   url: z.string(),
@@ -96,6 +97,8 @@ export const DiscoverPayloadSchema = z.object({
   degraded: z.object({ reason: z.string() }).optional(),
 });
 const RerankBodySchema = z.object({ candidates: z.array(DiscoverCandidateSchema), topics: z.array(z.string()) });
+const InstallSkillBodySchema = z.object({ source: z.string(), skillId: z.string() });
+export const InstallSkillResultSchema = z.object({ ok: z.boolean(), skill: z.string(), message: z.string() });
 const ScorecardBuildRequestSchema = z.object({
   dir: z.string().optional(),
   name: z.string().optional(),
@@ -336,6 +339,15 @@ export class GemController {
   @post("/optimize/discover/rerank", { body: RerankBodySchema, response: DiscoverPayloadSchema })
   async optimizeDiscoverRerank(input: { body: z.infer<typeof RerankBodySchema> }): Promise<z.infer<typeof DiscoverPayloadSchema>> {
     return rerankCandidates(input.body);
+  }
+
+  // Install a recommended skill onto this machine by shelling out to the `skills`
+  // CLI (--global, non-interactive). Protected by originGuard like every /api route
+  // — the same boundary /gem/run relies on. Never throws: installSkill maps every
+  // failure to { ok:false, message }.
+  @post("/optimize/discover/install", { body: InstallSkillBodySchema, response: InstallSkillResultSchema })
+  async optimizeDiscoverInstall(input: { body: z.infer<typeof InstallSkillBodySchema> }): Promise<z.infer<typeof InstallSkillResultSchema>> {
+    return installSkill(input.body.source, input.body.skillId);
   }
 
   @get("/scorecard", { query: DirQuerySchema, response: ScorecardSchema })

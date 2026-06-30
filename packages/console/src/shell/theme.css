@@ -874,3 +874,7 @@ button.scorecard-intent { line-height: 1.4; }
 .opt-disc-actions { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
 .opt-copy-cmd { background: none; border: none; padding: 0; cursor: pointer; font: inherit; text-align: left; }
 .opt-copy-cmd code { color: var(--text, inherit); }
+.opt-install { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.opt-install-confirm { display: flex; gap: 6px; align-items: center; }
+.opt-install-err { display: flex; gap: 6px; align-items: center; }
+.opt-install-ok { color: var(--emerald, #2e7d32); }
