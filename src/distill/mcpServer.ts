@@ -3,9 +3,10 @@
 // SPDX-License-Identifier: MIT
 // src/distill/mcpServer.ts
 import { createHash } from "node:crypto";
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { z } from "zod";
+import { MCPApplication, mcpServer, tool } from "@agentback/mcp";
+import { isMain } from "@agentback/core";
+import { GemSelectionSchema } from "../schemas.js";
 import type { ConfigInventory, Gem, ProjectInventory } from "@agentgem/model";
 import type { WorkflowSignal } from "@agentgem/insight";
 import { buildGem, type GemSelection } from "@agentgem/build";
@@ -111,22 +112,48 @@ export async function dispatchTool(name: string, args: Record<string, unknown>, 
   }
 }
 
-const TOOLS = [
-  { name: "scan_workflow", description: "Scan local transcripts into a redacted workflow signal.", inputSchema: { type: "object", properties: { cwd: { type: "string" } } } },
-  { name: "inspect_ingredients", description: "Canonical fingerprints of available harness/models/skills/mcps.", inputSchema: { type: "object", properties: { cwd: { type: "string" } } } },
-  { name: "build_attestation", description: "Build the unsigned usage attestation + a 'what will leave your machine' preview.", inputSchema: { type: "object", properties: { selection: { type: "object" }, cwd: { type: "string" } }, required: ["selection"] } },
-  { name: "sign_and_publish", description: "Sign + publish from the reviewed selection. The attestation is REBUILT server-side from the local scan; the host agent supplies only the selection, never the counts (any caller-supplied attestation is ignored). Embeds it in the Gem archive and POSTs to the ingest endpoint (skipped if unconfigured). Registry distribution is currently disabled; do not report a published distribution unless a publishedRef is returned.", inputSchema: { type: "object", properties: { selection: { type: "object" }, cwd: { type: "string" } }, required: ["selection"] } },
-];
+// ---- MCP tool surface (AgentBack @tool: one Zod schema = validator + MCP input) ----
+// Each tool delegates to the unit-tested dispatchTool over realDeps(); the class is
+// just the transport adapter. `selection` reuses the REST GemSelectionSchema (single
+// source of truth) instead of the old hand-written JSON Schema.
+const CwdInput = z.object({ cwd: z.string().optional() });
+const AccountInput = z.object({ provider: z.string(), login: z.string() }).nullable().optional();
+const AttestInput = z.object({ selection: GemSelectionSchema, cwd: z.string().optional(), account: AccountInput });
+
+@mcpServer()
+export class DistillTools {
+  private readonly deps: ToolDeps = realDeps();
+
+  @tool("scan_workflow", { input: CwdInput, description: "Scan local transcripts into a redacted workflow signal." })
+  async scanWorkflow(input: z.infer<typeof CwdInput>) {
+    return dispatchTool("scan_workflow", input as Record<string, unknown>, this.deps);
+  }
+
+  @tool("inspect_ingredients", { input: CwdInput, description: "Canonical fingerprints of available harness/models/skills/mcps." })
+  async inspectIngredients(input: z.infer<typeof CwdInput>) {
+    return dispatchTool("inspect_ingredients", input as Record<string, unknown>, this.deps);
+  }
+
+  @tool("build_attestation", { input: AttestInput, description: "Build the unsigned usage attestation + a 'what will leave your machine' preview." })
+  async buildAttestation(input: z.infer<typeof AttestInput>) {
+    return dispatchTool("build_attestation", input as Record<string, unknown>, this.deps);
+  }
+
+  @tool("sign_and_publish", {
+    input: AttestInput,
+    description:
+      "Sign + publish from the reviewed selection. The attestation is REBUILT server-side from the local scan; the host agent supplies only the selection, never the counts (any caller-supplied attestation is ignored). Embeds it in the Gem archive and POSTs to the ingest endpoint (skipped if unconfigured). Registry distribution is currently disabled; do not report a published distribution unless a publishedRef is returned.",
+  })
+  async signAndPublish(input: z.infer<typeof AttestInput>) {
+    return dispatchTool("sign_and_publish", input as Record<string, unknown>, this.deps);
+  }
+}
 
 export async function main(): Promise<void> {
-  const server = new Server({ name: "agentgem-distill", version: "0.1.0" }, { capabilities: { tools: {} } });
-  const deps = realDeps();
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
-  server.setRequestHandler(CallToolRequestSchema, async (req) => {
-    const result = await dispatchTool(req.params.name, (req.params.arguments ?? {}) as Record<string, unknown>, deps);
-    return { content: [{ type: "text", text: JSON.stringify(result) }] };
-  });
-  await server.connect(new StdioServerTransport());
+  const app = new MCPApplication();
+  app.configure("servers.MCPServer").to({ name: "agentgem-distill", version: "0.1.0" });
+  app.service(DistillTools);
+  await app.start(); // stdio transport; blocks until stdin closes
 }
 
 // sign_and_publish is environment-touching; export it for integration tests with injected deps.
@@ -143,4 +170,4 @@ export async function signAndPublishTool(
   return { publishedRef: published?.ref, gemDigest: lock.gemDigest, signature: lock.signature, ingestId: "ingestId" in ingest ? ingest.ingestId : undefined };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) { void main(); }
+if (isMain(import.meta)) void main();
