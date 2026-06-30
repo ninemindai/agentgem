@@ -16,6 +16,12 @@ export async function resolvePublishedBy(req: HasCookies | undefined, db: AppDb 
   if (!req || !db) return undefined;                       // local/trusted path — no session
   const token = parseCookies(req.headers.cookie)[SESSION_COOKIE];
   if (!token) return undefined;
-  const who = await resolveSession(db, token);
-  return who?.login;                                       // verified GitHub login, or undefined
+  // Fail-closed: a transient DB error degrades to an un-attributed publish (undefined),
+  // never a 500 — attribution is best-effort, not a gate on publishing.
+  try {
+    const who = await resolveSession(db, token);
+    return who?.login;                                     // verified GitHub login, or undefined
+  } catch {
+    return undefined;
+  }
 }

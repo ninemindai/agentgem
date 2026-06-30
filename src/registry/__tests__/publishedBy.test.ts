@@ -24,4 +24,8 @@ describe("resolvePublishedBy", () => {
     expect(await resolvePublishedBy(reqWith("other=1"), db)).toBeUndefined();
     expect(await resolvePublishedBy(reqWith("ag_session=nope"), db)).toBeUndefined();
   });
+  it("degrades to undefined (not a throw) on a DB error — attribution is best-effort", async () => {
+    const throwingDb = { select: () => { throw new Error("db down"); } } as never;
+    await expect(resolvePublishedBy(reqWith("ag_session=x"), throwingDb)).resolves.toBeUndefined();
+  });
 });
