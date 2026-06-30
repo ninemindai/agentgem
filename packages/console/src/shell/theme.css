@@ -571,7 +571,15 @@ body::before {
 .scorecard-download:hover { border-color: var(--accent); color: var(--accent); background: rgba(154, 51, 36, .05); }
 .scorecard-error { font-size: 12.5px; color: var(--accent); margin: 10px 0 0; }
 .scorecard-share-links { display: flex; flex-direction: column; gap: 11px; max-width: 540px;
-  margin: 14px 0 0; padding-top: 14px; border-top: 1px solid var(--line-soft); animation: fade .25s ease both; }
+  margin: 14px 0 0; padding-top: 14px; border-top: 1px solid var(--line-soft); animation: fade .25s ease both;
+  transition: opacity .25s ease; }
+/* pending: row appears immediately, dimmed, while the hosted link is minted */
+.scorecard-share-links.is-pending { opacity: .55; }
+.scorecard-share-copy input:disabled, .scorecard-share-copy .is-copy:disabled { cursor: default; }
+.scorecard-share-copy .is-copy:disabled:hover { border-color: var(--line); color: var(--ink-soft); }
+.scorecard-intent.is-disabled { color: var(--muted); background: rgba(32, 25, 15, .04);
+  border-color: var(--line-soft); cursor: default; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .scorecard-share-links { transition: none; } }
 .scorecard-share-copy { display: flex; gap: 8px; }
 .scorecard-share-copy input { flex: 1; min-width: 0; font: 400 12px/1.4 var(--font-mono); color: var(--ink-soft);
   background: rgba(32, 25, 15, .035); border: 1px solid var(--line); border-radius: 7px; padding: 7px 10px; }

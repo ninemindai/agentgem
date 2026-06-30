@@ -62,18 +62,15 @@ export function MineWorkflows({ data, filter, onFilter, onBuild, building, resul
   const shareWorkflow = async (root: string, key: string, wfName: string) => {
     const cacheKey = `${root}:${key}`;
     if (sharing.has(cacheKey)) return;
-    let detail = details[cacheKey];
-    if (!detail) {
-      try {
-        detail = await scorecardWorkflowRoute.call(makeClient(apiBase), { query: { root, key } });
-        setDetails((prev) => ({ ...prev, [cacheKey]: detail! }));
-      } catch (e: unknown) {
-        setDetailError((prev) => ({ ...prev, [cacheKey]: e instanceof Error ? e.message : "Share failed" }));
-        return;
-      }
-    }
+    // Mark in-flight immediately so the disabled ShareLinks row appears on click — this covers both
+    // the (possibly uncached) detail fetch and the link mint, not just the mint.
     setSharing((s) => new Set([...s, cacheKey]));
     try {
+      let detail = details[cacheKey];
+      if (!detail) {
+        detail = await scorecardWorkflowRoute.call(makeClient(apiBase), { query: { root, key } });
+        setDetails((prev) => ({ ...prev, [cacheKey]: detail! }));
+      }
       const { url } = await doCreateGemShare({
         kind: "gem",
         name: wfName,
@@ -207,7 +204,7 @@ export function MineWorkflows({ data, filter, onFilter, onBuild, building, resul
                     })()}
                   </div>
                 )}
-                {shareUrls[cacheKey] && <ShareLinks url={shareUrls[cacheKey]} />}
+                {(sharing.has(cacheKey) || shareUrls[cacheKey]) && <ShareLinks url={shareUrls[cacheKey]} />}
               </li>
               );
             })}
@@ -237,7 +234,7 @@ export function MineWorkflows({ data, filter, onFilter, onBuild, building, resul
             {" "}<button className="mine-wf-share" aria-label={`Share ${result.name} gem`} onClick={() => void shareGem()}>Share gem</button>
           </p>
           {shareErrors["__gem__"] && <span className="obs-error">{shareErrors["__gem__"]}</span>}
-          {shareUrls["__gem__"] && <ShareLinks url={shareUrls["__gem__"]} />}
+          {(sharing.has("__gem__") || shareUrls["__gem__"]) && <ShareLinks url={shareUrls["__gem__"]} />}
         </>
       )}
       {error && <p className="obs-error">{error}</p>}
