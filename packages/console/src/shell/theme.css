@@ -478,6 +478,20 @@ body::before {
 .analyze-include li { display: flex; align-items: center; gap: 8px; }
 .analyze-include-name { font: 12px/1.4 var(--font-mono); color: var(--ink-soft); }
 
+/* Insights: the per-project session report (narrative + worth-publishing + friction) */
+.insights-report { margin-top: 10px; }
+.insights-narrative { margin: 0 0 10px; padding: 10px 12px; border-left: 3px solid var(--accent);
+  background: var(--paper-2); border-radius: 6px; color: var(--ink); font: 14px/1.6 var(--font-ui); }
+.insights-section { margin-top: 12px; padding: 10px; border: 1px solid var(--line-soft);
+  border-radius: 8px; background: var(--paper); }
+.insights-section h4 { font: 600 12px/1 var(--font-ui); letter-spacing: .04em; text-transform: uppercase;
+  color: var(--muted); }
+.insights-section .analyze-include li { flex-direction: column; align-items: flex-start; gap: 2px;
+  padding: 6px 0; border-bottom: 1px solid var(--line-soft); }
+.insights-section .analyze-include li:last-child { border-bottom: none; }
+.insights-section .analyze-include-name { font: 13px/1.4 var(--font-ui); color: var(--ink); }
+.insights-section .targets-label { font: 12px/1.5 var(--font-ui); color: var(--ink-soft); }
+
 /* Transfer: share-via-ticket (Materialize) + receive/apply (Received) */
 .transfer-section { margin: 18px 0 0; }
 .transfer-section:first-child { margin-top: 0; }
