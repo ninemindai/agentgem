@@ -1,6 +1,6 @@
 # Proposal: Session transcript viewer for the Inspect panel
 
-- **Status:** Phases 1–2 implemented (PR #43); phases 3–4 pending
+- **Status:** Phases 1–4 implemented (PR #43)
 - **Date:** 2026-06-30
 - **Area:** Console Inspect panel (`packages/console/src/panels/Observe`), insight transcript
   parsing (`packages/insight/src/observeScan.ts`), redaction (`packages/insight/src/scrub.ts`)
@@ -137,8 +137,10 @@ Each step is independently shippable and testable; (2) is the high-value core.
   metadata; confirm the content/tool-call shape for each harness the parser must cover, and
   how gracefully it degrades on unknown shapes (degrade-to-text, never throw — match the
   existing scan's robustness contract).
-- **Diff alignment heuristic.** Turn-by-turn alignment is naive when two runs diverge
-  early. Is a simple positional/anchored diff enough for the v1 "v1 vs v2" use case, or is
-  this its own follow-up?
+- **Diff alignment heuristic.** ~~Turn-by-turn alignment is naive when two runs diverge
+  early.~~ _Resolved (phase 4):_ alignment uses an LCS over coarse turn *signatures*
+  (role + tool-name sequence + first message line), so a shared tail stays aligned after an
+  early divergence instead of smearing into false "changed" rows. Within an aligned pair,
+  full content decides same-vs-changed. See `packages/console/src/panels/Observe/diff.ts`.
 - **Large-session rendering.** Hundreds of turns × verbose tool output needs virtualization
   / lazy expansion so the tree stays responsive.
