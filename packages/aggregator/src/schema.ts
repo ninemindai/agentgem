@@ -81,7 +81,15 @@ export const webSessions = pgTable("web_sessions", {
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
 });
 
-export const schema = { producers, attestations, ingredients, usageEdges, accountBindings, shareCards, apiKeys, accounts, webSessions };
+export const stars = pgTable("stars", {
+  id: uuid("id").primaryKey(),
+  accountId: uuid("account_id").notNull().references(() => accounts.id),
+  targetKind: text("target_kind").notNull(),
+  targetId: text("target_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const schema = { producers, attestations, ingredients, usageEdges, accountBindings, shareCards, apiKeys, accounts, webSessions, stars };
 export type AppDb = PgDatabase<any, typeof schema>;
 
 // Idempotent DDL. (Schema-as-tables above is the query source of truth; this DDL
@@ -99,4 +107,6 @@ export async function ensureSchema(db: AppDb): Promise<void> {
   await db.execute(sql`create table if not exists api_keys (id uuid primary key, key_hash text not null unique, label text not null, created_at timestamptz not null default now(), revoked_at timestamptz)`);
   await db.execute(sql`create table if not exists accounts (id uuid primary key, provider text not null, provider_account_id text not null, login text not null, avatar_url text, created_at timestamptz not null default now(), unique (provider, provider_account_id))`);
   await db.execute(sql`create table if not exists web_sessions (id uuid primary key, token_hash text not null unique, account_id uuid not null references accounts(id), created_at timestamptz not null default now(), expires_at timestamptz not null)`);
+  await db.execute(sql`create table if not exists stars (id uuid primary key, account_id uuid not null references accounts(id), target_kind text not null, target_id text not null, created_at timestamptz not null default now(), unique (account_id, target_kind, target_id))`);
+  await db.execute(sql`create index if not exists stars_target_idx on stars (target_kind, target_id)`);
 }
