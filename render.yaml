@@ -33,6 +33,10 @@ services:
       - key: AGGREGATOR_ADMIN_TOKEN
         generateValue: true     # Render generates a random secret; read it from the dashboard
                                 # to mint/revoke API keys via POST /api/aggregator/keys
+      - key: AGENTGEM_REGISTRY_REPO
+        value: ninemindai/agentgem-registry  # public GitHub-backed gem registry read by GET /api/registry/gems.
+                                # Public repo → reads need NO token (the Contents API is token-optional). Publishing
+                                # needs a GITHUB_TOKEN with repo scope, but that runs out-of-band, not on the server.
       - key: DATABASE_URL
         sync: false             # set manually = your Neon connection string (include ?sslmode=require)
     # PORT is intentionally NOT set here — Render injects its own PORT and the
