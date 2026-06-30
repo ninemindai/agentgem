@@ -55,9 +55,13 @@ describe("distillSessionLessons", () => {
     const r = await distillSessionLessons(signalWith([sess("a", "x")]), inv, { connectFn: async () => { throw new Error("no binary"); } });
     expect(r).toEqual({ lessons: [], degraded: true });
   });
-  it("returns [] on malformed JSON (degraded — agent ran but produced junk)", async () => {
+  it("returns [] non-degraded on malformed JSON (the agent RAN — degraded means only 'agent could not run')", async () => {
     const r = await distillSessionLessons(signalWith([sess("a", "x")]), inv, { connectFn: fakeConnect("not json") });
-    expect(r).toEqual({ lessons: [], degraded: true });
+    expect(r).toEqual({ lessons: [], degraded: false });
+  });
+  it("returns [] non-degraded on a valid empty result (no lesson worth sharing is NOT degraded)", async () => {
+    const r = await distillSessionLessons(signalWith([sess("a", "x")]), inv, { connectFn: fakeConnect(JSON.stringify({ lessons: [] })) });
+    expect(r).toEqual({ lessons: [], degraded: false });
   });
 });
 

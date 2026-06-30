@@ -66,6 +66,7 @@ export function validateSessionLessons(raw: unknown, session: SessionSequence, r
     const body0 = (item as { body?: unknown })?.body;
     if (typeof body0 !== "string" || !body0.trim()) continue;
     const body = sanitizeShareText(scrubText(body0), 400);
+    if (!body.trim()) continue; // a body that was entirely a secret/path scrubs to nothing — drop it
     const imp = (item as { importance?: unknown })?.importance;
     const importance: DistilledLesson["importance"] = imp === "high" ? "high" : "medium";
     const base = lessonSlug(body);
@@ -103,9 +104,11 @@ export async function distillSessionLessons(
     handle = await withTimeout(conn.ctx.open(analysisWorkspace()), left());
     await withTimeout(handle.setMode("plan"), left());
     const text = await withTimeout(handle.promptText(prompt), left());
-    const lessons = validateSessionLessons(text, session, root);
-    if (!lessons.length) return { lessons: [], degraded: true }; // agent ran, nothing usable
-    return { lessons, degraded: false };
+    // The agent ran: a valid empty result ({"lessons":[]}) is a legitimate "no
+    // lesson worth sharing" — NOT degraded. `degraded` for lessons means only "the
+    // agent couldn't run" (it drives the "set ANTHROPIC_API_KEY" hint); reserve it
+    // for the catch. There is no heuristic lesson fallback, so success → false.
+    return { lessons: validateSessionLessons(text, session, root), degraded: false };
   } catch (err) {
     console.error("session-lessons: agent unavailable, no lessons:", (err as Error).message);
     return { lessons: [], degraded: true };
