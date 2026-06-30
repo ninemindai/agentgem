@@ -204,7 +204,7 @@ export function MineWorkflows({ data, filter, onFilter, onBuild, building, resul
                     })()}
                   </div>
                 )}
-                {(sharing.has(cacheKey) || shareUrls[cacheKey]) && <ShareLinks url={shareUrls[cacheKey]} />}
+                {(sharing.has(cacheKey) || shareUrls[cacheKey]) && <ShareLinks url={shareUrls[cacheKey]} title={w.name} />}
               </li>
               );
             })}
@@ -234,7 +234,7 @@ export function MineWorkflows({ data, filter, onFilter, onBuild, building, resul
             {" "}<button className="mine-wf-share" aria-label={`Share ${result.name} gem`} onClick={() => void shareGem()}>Share gem</button>
           </p>
           {shareErrors["__gem__"] && <span className="obs-error">{shareErrors["__gem__"]}</span>}
-          {(sharing.has("__gem__") || shareUrls["__gem__"]) && <ShareLinks url={shareUrls["__gem__"]} />}
+          {(sharing.has("__gem__") || shareUrls["__gem__"]) && <ShareLinks url={shareUrls["__gem__"]} title={result.name} />}
         </>
       )}
       {error && <p className="obs-error">{error}</p>}

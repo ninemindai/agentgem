@@ -592,7 +592,8 @@ body::before {
 .scorecard-share-on { font-size: 12px; color: var(--muted); margin-right: 1px; }
 .scorecard-intent { font: 500 12.5px var(--font-ui); color: var(--accent); text-decoration: none;
   background: rgba(154, 51, 36, .06); border: 1px solid var(--line); border-radius: 7px; padding: 5px 13px;
-  transition: background .14s, border-color .14s, color .14s; }
+  cursor: pointer; transition: background .14s, border-color .14s, color .14s; }
+button.scorecard-intent { line-height: 1.4; }
 .scorecard-intent:hover { background: rgba(154, 51, 36, .12); border-color: var(--accent); color: var(--accent-2); }
 .scorecard-degraded { position: absolute; top: 15px; right: 17px; font-size: 11px; color: var(--muted); font-style: italic; }
 
