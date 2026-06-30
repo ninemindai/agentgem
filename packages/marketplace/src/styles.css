@@ -32,3 +32,8 @@
 .ex-nav { display: flex; gap: 12px; }
 .ex-navlink { text-decoration: none; color: #777; }
 .ex-navlink.is-active { color: #b4543a; font-weight: 600; }
+.ex-auth { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.ex-avatar { border-radius: 50%; }
+.ex-login { font-size: .9em; }
+.ex-signin, .ex-signout { font-size: .85em; cursor: pointer; }
+.ex-signout { border: 1px solid #ddd; border-radius: 4px; background: #fff; padding: 2px 8px; }
