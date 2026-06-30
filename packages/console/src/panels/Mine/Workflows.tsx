@@ -1,12 +1,13 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import type { Scorecard, ProjectGoldmine, WorkflowDetail } from "../../api/routes.js";
-import { scorecardWorkflowRoute, makeClient } from "../../api/routes.js";
+import { scorecardWorkflowRoute, createGemShareRoute, makeClient } from "../../api/routes.js";
 import type { WorkflowFilter } from "./Scorecard.js";
-import { drawWorkflowCard, drawGemCard, shareCanvas } from "./shareCard.js";
+import { ShareLinks } from "./ShareLinks.js";
 
 type WorkflowEntry = ProjectGoldmine["workflows"][number];
+type CreateGemShare = (body: { kind: "gem"; name: string; provenance: string; generatedAtMs: number }) => Promise<{ id: string; url: string }>;
 
-export function MineWorkflows({ data, filter, onFilter, onBuild, building, result, error, apiBase }: {
+export function MineWorkflows({ data, filter, onFilter, onBuild, building, result, error, apiBase, createGemShare }: {
   data: Scorecard;
   filter: WorkflowFilter;
   onFilter: (f: WorkflowFilter) => void;
@@ -15,6 +16,7 @@ export function MineWorkflows({ data, filter, onFilter, onBuild, building, resul
   result: { name: string; skills: string[] } | null;
   error: string | null;
   apiBase: string;
+  createGemShare?: CreateGemShare;
 }) {
   const [selected, setSelected] = useState<Record<string, Set<string>>>({});
   const [name, setName] = useState("");
@@ -22,7 +24,12 @@ export function MineWorkflows({ data, filter, onFilter, onBuild, building, resul
   const [details, setDetails] = useState<Record<string, WorkflowDetail>>({});
   const [detailLoading, setDetailLoading] = useState<Record<string, boolean>>({});
   const [detailError, setDetailError] = useState<Record<string, string>>({});
-  const shareCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [shareUrls, setShareUrls] = useState<Record<string, string>>({});
+  const [shareErrors, setShareErrors] = useState<Record<string, string>>({});
+  const [sharing, setSharing] = useState<Set<string>>(new Set());
+
+  const doCreateGemShare: CreateGemShare = createGemShare ??
+    ((body) => createGemShareRoute.call(makeClient(apiBase), { body }));
 
   const toggle = (root: string, key: string) => setSelected((s) => {
     const set = new Set(s[root] ?? []);
@@ -54,6 +61,7 @@ export function MineWorkflows({ data, filter, onFilter, onBuild, building, resul
 
   const shareWorkflow = async (root: string, key: string, wfName: string) => {
     const cacheKey = `${root}:${key}`;
+    if (sharing.has(cacheKey)) return;
     let detail = details[cacheKey];
     if (!detail) {
       try {
@@ -64,18 +72,41 @@ export function MineWorkflows({ data, filter, onFilter, onBuild, building, resul
         return;
       }
     }
-    const c = shareCanvasRef.current;
-    if (!c) return;
-    drawWorkflowCard(c, detail);
-    void shareCanvas(c, `${wfName}.png`, wfName);
+    setSharing((s) => new Set([...s, cacheKey]));
+    try {
+      const { url } = await doCreateGemShare({
+        kind: "gem",
+        name: wfName,
+        provenance: `Distilled from ${detail.sessions} session${detail.sessions === 1 ? "" : "s"}`,
+        generatedAtMs: Date.now(),
+      });
+      setShareUrls((m) => ({ ...m, [cacheKey]: url }));
+      setShareErrors((prev) => { const next = { ...prev }; delete next[cacheKey]; return next; });
+    } catch (e: unknown) {
+      setShareErrors((prev) => ({ ...prev, [cacheKey]: e instanceof Error ? e.message : "Share failed" }));
+    } finally {
+      setSharing((s) => { const next = new Set(s); next.delete(cacheKey); return next; });
+    }
   };
 
-  const shareGem = () => {
+  const shareGem = async () => {
     if (!result) return;
-    const c = shareCanvasRef.current;
-    if (!c) return;
-    drawGemCard(c, result);
-    void shareCanvas(c, `${result.name}.png`, result.name);
+    const cacheKey = "__gem__";
+    if (sharing.has(cacheKey)) return;
+    setSharing((s) => new Set([...s, cacheKey]));
+    try {
+      const { url } = await doCreateGemShare({
+        kind: "gem",
+        name: result.name,
+        provenance: `${result.skills.length} skill${result.skills.length === 1 ? "" : "s"}`,
+        generatedAtMs: Date.now(),
+      });
+      setShareUrls((m) => ({ ...m, [cacheKey]: url }));
+    } catch (e: unknown) {
+      setShareErrors((prev) => ({ ...prev, [cacheKey]: e instanceof Error ? e.message : "Share failed" }));
+    } finally {
+      setSharing((s) => { const next = new Set(s); next.delete(cacheKey); return next; });
+    }
   };
 
   const match = (w: WorkflowEntry) => filter === "all" || (filter === "battleTested" ? w.confidence === "high" : w.portable);
@@ -153,6 +184,7 @@ export function MineWorkflows({ data, filter, onFilter, onBuild, building, resul
                   aria-label={`Share ${w.name}`}
                   onClick={() => void shareWorkflow(p.root, w.key, w.name)}
                 >Share</button>
+                {shareErrors[cacheKey] && <span className="obs-error">{shareErrors[cacheKey]}</span>}
                 {expanded[cacheKey] && (
                   <div className="mine-wf-detail">
                     {detailLoading[cacheKey] && <span>Loading…</span>}
@@ -175,6 +207,7 @@ export function MineWorkflows({ data, filter, onFilter, onBuild, building, resul
                     })()}
                   </div>
                 )}
+                {shareUrls[cacheKey] && <ShareLinks url={shareUrls[cacheKey]} />}
               </li>
               );
             })}
@@ -198,13 +231,15 @@ export function MineWorkflows({ data, filter, onFilter, onBuild, building, resul
         {hiddenCount > 0 && <span className="mine-hidden-note">({hiddenCount} selected hidden by filter)</span>}
       </div>
       {result && (
-        <p className="mine-build-ok">
-          ✓ Built <strong>{result.name}</strong> — {result.skills.length} skill{result.skills.length === 1 ? "" : "s"}: {result.skills.join(", ")}
-          {" "}<button className="mine-wf-share" aria-label={`Share ${result.name} gem`} onClick={shareGem}>Share gem</button>
-        </p>
+        <>
+          <p className="mine-build-ok">
+            ✓ Built <strong>{result.name}</strong> — {result.skills.length} skill{result.skills.length === 1 ? "" : "s"}: {result.skills.join(", ")}
+            {" "}<button className="mine-wf-share" aria-label={`Share ${result.name} gem`} onClick={() => void shareGem()}>Share gem</button>
+          </p>
+          {shareUrls["__gem__"] && <ShareLinks url={shareUrls["__gem__"]} />}
+        </>
       )}
       {error && <p className="obs-error">{error}</p>}
-      <canvas ref={shareCanvasRef} style={{ display: "none" }} />
     </section>
   );
 }

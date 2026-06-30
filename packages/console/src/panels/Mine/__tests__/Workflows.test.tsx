@@ -396,6 +396,56 @@ describe("MineWorkflows", () => {
     });
   });
 
+  // ── Hosted share (Task 8) ───────────────────────────────────────────────────
+
+  describe("hosted gem share (Task 8)", () => {
+    it("per-workflow Share mints a gem link and shows ShareLinks", async () => {
+      const detail: WorkflowDetail = {
+        key: "wf-a", name: "Deploy workflow", description: "desc",
+        triggers: [], tools: [], mutating: false, steps: [], sessions: 5,
+        confidence: "high", portable: true,
+      };
+      const wfSpy = vi.spyOn(routes.scorecardWorkflowRoute, "call").mockResolvedValue(detail);
+      const createGemShare = vi.fn(async () => ({ id: "g1", url: "https://agentgem.ai/share/g1" }));
+      render(<MineWorkflows {...defaultProps} createGemShare={createGemShare} />);
+      fireEvent.click(screen.getAllByRole("button", { name: /^share deploy workflow/i })[0]);
+      await waitFor(() => expect(createGemShare).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: "gem", name: "Deploy workflow", provenance: "Distilled from 5 sessions" }),
+      ));
+      expect(await screen.findByRole("link", { name: "X" })).toBeTruthy();
+      wfSpy.mockRestore();
+    });
+
+    it("per-build Share gem mints a gem link and shows ShareLinks", async () => {
+      const createGemShare = vi.fn(async () => ({ id: "g2", url: "https://agentgem.ai/share/g2" }));
+      render(
+        <MineWorkflows
+          {...defaultProps}
+          result={{ name: "my-gem", skills: ["deploy", "lint"] }}
+          createGemShare={createGemShare}
+        />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: /share my-gem gem/i }));
+      await waitFor(() => expect(createGemShare).toHaveBeenCalledWith(expect.objectContaining({ kind: "gem", name: "my-gem", provenance: "2 skills" })));
+      expect(await screen.findByRole("link", { name: "X" })).toBeTruthy();
+    });
+
+    it("per-workflow Share sets detailError on failure", async () => {
+      const createGemShare = vi.fn(async () => { throw new Error("mint failed"); });
+      const detail: WorkflowDetail = {
+        key: "wf-a", name: "Deploy workflow", description: "desc",
+        triggers: [], tools: [], mutating: false, steps: [], sessions: 1,
+        confidence: "high", portable: true,
+      };
+      const wfSpy = vi.spyOn(routes.scorecardWorkflowRoute, "call").mockResolvedValue(detail);
+      render(<MineWorkflows {...defaultProps} createGemShare={createGemShare} />);
+      const shareBtn = screen.getAllByRole("button", { name: /^share deploy workflow/i })[0];
+      fireEvent.click(shareBtn);
+      await waitFor(() => expect(screen.getByText("mint failed")).toBeTruthy());
+      wfSpy.mockRestore();
+    });
+  });
+
   // Stale-selection note test
   it("shows stale-selection note when selected key is hidden by filter", () => {
     render(<MineWorkflows {...defaultProps} />);
