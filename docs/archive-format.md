@@ -3,7 +3,7 @@
 A Gem serializes to an archive with two parts: a **manifest** (`gem.json`) and a **lock**
 (`gem.lock`). This split is what lets Gems compose — merging reconciles manifests and
 re-resolves a single lock, rather than diffing opaque blobs. This page specifies the
-on-disk format produced by `src/gem/archive.ts`.
+on-disk format produced by `packages/archive/src/archive.ts`.
 
 `ARCHIVE_FORMAT_VERSION` is currently `1`.
 

@@ -2,7 +2,7 @@
 
 Beyond building and distributing Gems, AgentGem can install a Gem into a local **testbed**
 to try it, and **run** a materialized target locally or deploy it to an edge platform. Both
-subsystems live in `src/gem/` and store state under `~/.agentgem` (override with
+subsystems live in the `@agentgem/*` packages and store state under `~/.agentgem` (override with
 `AGENTGEM_HOME`).
 
 ## Testbeds

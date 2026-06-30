@@ -49,7 +49,7 @@ Analyze is grounded in a deterministic **transcript scan** before any AI is invo
 - It records which artifacts **co-occur** in the same session, which is how a single
   project gets split into multiple workflow candidates rather than one big bundle.
 - For distillation, it also keeps each session's **builtin tool procedure** in order,
-  passed through a **field-aware scrubber** ([`src/gem/scrub.ts`](redaction.md)) that
+  passed through a **field-aware scrubber** ([`packages/insight/src/scrub.ts`](redaction.md)) that
   keeps only a structural slice per tool (a command's verb, a file path) and **drops
   everything else** — file contents, pasted prompts, secrets — before the procedure
   is ever stored or sent to the agent.

@@ -34,7 +34,7 @@ X but not Y" — that gating only exists where the tool loop actually runs.
 - **Caller auth → A2A target.** The generated `server.ts` gates the JSON-RPC/REST routes on
   `A2A_API_KEY` (`Authorization: Bearer <key>`), and emits `securitySchemes`/`security[]` on the
   card only when the key is set. `.well-known` discovery stays open. This is the correct layer
-  and is effectively done. (`src/gem/targets.ts` ~L639, ~L691)
+  and is effectively done. (`packages/model/src/targets.ts` ~L639, ~L691)
 - **Credentials injected at request time.** AgentGem redacts secrets to named refs at capture and
   re-binds them from `process.env` at materialize/boot. Structurally this *is* the blog's
   "credentials injected at request time" pattern — applied to build artifacts rather than channels.

@@ -1,6 +1,6 @@
 # The build pipeline
 
-A Gem is produced by four pure functions in `src/gem/`, chained from raw config to a
+A Gem is produced by four pure functions in the `@agentgem/*` packages, chained from raw config to a
 verifiable archive. This page traces that path. The safety rule that runs through it lives
 in [Redaction](redaction.md); the on-disk result is specified in
 [Archive format](archive-format.md).

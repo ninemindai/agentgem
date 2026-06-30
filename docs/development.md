@@ -43,9 +43,13 @@ deploy and deploy records, testbed flavors, run, credentials, the MCP proxy, and
 
 ## Code organization conventions
 
-- **`src/gem/` is framework-agnostic.** No HTTP, no decorators — just functions over plain
-  data. The REST controller and MCP service are thin adapters that call into it. Keep new
-  core logic here so it stays testable and reusable across both surfaces.
+- **The `@agentgem/*` packages are framework-agnostic.** The kernel lives in `packages/*`
+  (12 acyclic workspace packages) — no HTTP, no decorators, just functions over plain data.
+  The REST controller and MCP service in `src/` are thin adapters that call into them. Keep
+  new core logic in the right package so it stays testable and reusable across both surfaces;
+  see the [package map](architecture.md#the-gem-core-agentgem-packages).
+- **Every source file carries the MIT/SPDX header** (`// Copyright (c) 2026 NineMind, Inc.`
+  + `// SPDX-License-Identifier: MIT`), below any shebang.
 - **One contract per operation.** Add or change a Zod schema in `src/schemas.ts`, then surface
   it on the REST controller and/or the MCP service. Don't hand-write a second schema for the
   other surface — see [Architecture](architecture.md#the-one-contract-model).

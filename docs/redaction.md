@@ -2,7 +2,7 @@
 
 AgentGem's core safety rule: **secrets are redacted at capture.** The moment config is read,
 secret values are stripped — before anything crosses a boundary. This page specifies the
-rules and the data that carries them, as implemented in `src/gem/redact.ts`.
+rules and the data that carries them, as implemented in `packages/base/src/redact.ts`.
 
 ## The trust boundary
 
@@ -83,7 +83,7 @@ wrong tool for **free transcript text** — the builtin tool calls that
 pasted prompts, file contents). Scrubbing arbitrary prose by blocklist both over-redacts
 (one secret token nukes the whole command) and under-detects (short secrets, `user:pass@host`
 URLs, PII in paths). So distillation uses a separate, **default-deny** scrubber,
-`src/gem/scrub.ts` — distinct from `redact.ts`:
+`packages/insight/src/scrub.ts` — distinct from `redact.ts`:
 
 - **`scrubStep(tool, input)`** keeps only an *allowlisted structural slice* per builtin — a
   `Bash` command's coarse verb (`Bash:git commit`), an `Edit`/`Write` `file_path`, a

@@ -15,7 +15,7 @@ trust model as the rest of a local-first tool — see the out-of-scope note in
 ## How a rejection is reported
 
 A guard that refuses a caller-supplied value throws
-[`InvalidInputError`](../src/gem/inputError.ts), which carries `statusCode: 400`.
+[`InvalidInputError`](../packages/model/src/inputError.ts), which carries `statusCode: 400`.
 `@agentback/rest` hides the message of any `>= 500` error (returning a generic
 `Internal Server Error`) but surfaces a `4xx` message verbatim — so a blocked request
 returns `400 { code: "invalid_input", message: "<the violated rule>" }` instead of an
@@ -24,15 +24,15 @@ and applies on both the REST and MCP surfaces (the error envelope is shared).
 
 The canonical confinement helpers are:
 
-- [`workspaceName(name)`](../src/gem/workspaces.ts) — rejects any name that is not a
+- [`workspaceName(name)`](../packages/base/src/workspaces.ts) — rejects any name that is not a
   single safe path segment (`[A-Za-z0-9._-]`, no separators, no `.`/`..`), so two
   requests never collide and nothing escapes the workspace store. `workspaceDir`,
   and therefore every deploy-record path, routes through it.
 - [`deriveRunDir(gemName)`](../src/gem.controller.ts) — slugs the gem name and asserts
   the resolved dir stays under `~/.agentgem/runs`.
-- [`fetchGemBytes`](../src/gem/safeFetch.ts) — SSRF guard that rejects URLs resolving
+- [`fetchGemBytes`](../packages/distribute/src/safeFetch.ts) — SSRF guard that rejects URLs resolving
   to non-public (loopback/private/link-local) addresses.
-- [`setCredential`](../src/gem/credentials.ts) — allowlisted keys only; rejects
+- [`setCredential`](../packages/capture/src/credentials.ts) — allowlisted keys only; rejects
   empty/multi-line values so the persisted `.env` cannot be injected.
 
 ## Route-by-route disposition

@@ -19,8 +19,8 @@ There are four horizontal bands:
    the [Desktop app](desktop.md), which embeds the same server in Electron (tray + auto-update).
 2. **Contract surface** — one Zod definition per operation, surfaced as a REST endpoint, an
    MCP tool, and an OpenAPI 3.1 document. See [the one-contract model](#the-one-contract-model).
-3. **Gem core** (`src/gem/`) — pure, framework-agnostic functions: `introspect` → `redact`
-   → `buildGem` → `archive`. See the [build pipeline](pipeline.md).
+3. **Gem core** (the `@agentgem/*` packages) — pure, framework-agnostic functions:
+   `introspect` → `redact` → `buildGem` → `archive`. See the [build pipeline](pipeline.md).
 4. **Distribution** — the neutral Gem feeds targets (materialize), the registry, deploy
    backends, and local testbeds/runs. See [distribution](#distribution) below.
 
@@ -69,34 +69,34 @@ needs. See the full list in the [API reference](api-reference.md).
 Because every operation is decorator-defined, the build **must** compile with
 `experimentalDecorators` + `emitDecoratorMetadata` — see [Development](development.md).
 
-## The Gem core
+## The Gem core (`@agentgem/*` packages)
 
-Everything under `src/gem/` is framework-agnostic — no HTTP, no decorators, just functions
-over plain data. That is what lets the same code back a web request, an MCP tool call, and
-a test. The pipeline is documented in detail in [The build pipeline](pipeline.md); the
-on-disk result is specified in [Archive format](archive-format.md); the safety rule that
-governs all of it is in [Redaction](redaction.md).
+The kernel is decomposed into 12 acyclic `@agentgem/*` workspace packages (pnpm workspaces +
+TypeScript project references); the server layer in `src/` stays thin and consumes them via
+`@agentgem/*`. They are framework-agnostic — no HTTP, no decorators, just functions over plain
+data — which is what lets the same code back a web request, an MCP tool call, and a test. The
+pipeline is in [The build pipeline](pipeline.md); the on-disk result in
+[Archive format](archive-format.md); the trust boundary in [Redaction](redaction.md); the full
+dependency graph + rationale in [the decomposition proposal](proposals/backend-decomposition.md).
 
-| Module | Responsibility |
+| Package | Responsibility |
 | --- | --- |
-| `introspect.ts` | Read `~/.claude`, plugins, `~/.agents`, `~/.codex`, `~/.hermes`, and project dirs into a `ConfigInventory` |
-| `redact.ts` | Strip secret values at capture; record `SecretRef[]` |
-| `buildGem.ts` | Select artifacts by name → a `Gem` (+ checks, `requiredSecrets`) |
-| `archive.ts` | Lay a Gem out as `gem.json` (manifest) + `gem.lock` and verify integrity |
-| `archiveFs.ts` / `archiveTar.ts` | Serialize the file tree to a directory or a deterministic `.tar.gz` |
-| `checks.ts` | Scaffold behavioral + external (`skillspector`) checks |
-| `types.ts` | The core types: `Gem`, `GemArtifact`, `ConfigInventory`, `GemCheck`, … |
+| `@agentgem/model` | Core types (`Gem`, `GemArtifact`, `ConfigInventory`, `GemCheck`, …), channels, canonicalize, target specs, MCP proxy, identity, config-dir resolution |
+| `@agentgem/capture` | `introspect` `~/.claude`/plugins/`~/.agents`/`~/.codex`/`~/.hermes` + project dirs → `ConfigInventory`; credentials, recents, usage, draft staging |
+| `@agentgem/base` | Cross-cutting helpers: redaction (`redact`, secret patterns, leak canary), workspaces, deploy records, ACP session |
+| `@agentgem/build` | `buildGem` — select artifacts by name → a `Gem` (+ checks, `requiredSecrets`); behavioral + external (`skillspector`) check scaffolding |
+| `@agentgem/archive` | Lay a Gem out as `gem.json` (manifest) + `gem.lock` and verify integrity; serialize to a directory or a deterministic `.tar.gz` |
+| `@agentgem/insight` | Analyze: transcript scan → `WorkflowSignal`, default-deny `scrub`, distill draft skills, ACP recommender, attestation + ingest |
+| `@agentgem/distribute` | Registry (GitHub-backed index + per-version archives), share/search, SSRF-guarded fetch |
+| `@agentgem/run` | Run/verify a Gem; local OS sandbox + ACP run; deploy a materialized project to Vercel/Cloudflare |
+| `@agentgem/testbed` | Install a Gem into a local `.claude`/`.codex`/`.hermes` testbed; flavor detection |
+| `@agentgem/deploy` | Deploy backends — Anthropic Managed Agents + AWS Bedrock AgentCore — each with an undeploy record |
+| `@agentgem/aggregator` | Hosted data-moat: Postgres/pglite schema, k-anon aggregates, ingest, detection, API keys |
+| `@agentgem/transfer` | NATS store-and-forward Gem transfer: seal, ticket, mint, object store |
 
-The optional **Analyze / workflow-aware** path (see [Analyze](analyze.md)) adds, also under
-`src/gem/`:
-
-| Module | Responsibility |
-| --- | --- |
-| `workflowScan.ts` | Scan transcripts → `WorkflowSignal`: artifact usage + co-occurrence, plus (opt-in) the redacted builtin **procedure**, **mission hints**, and frequent-n-gram **procedure recurrence** |
-| `scrub.ts` | Field-aware, **default-deny** scrubbing of builtin tool inputs (free text) — distinct from `redact.ts`'s config-value redaction |
-| `acpRecommender.ts` | Cluster usage into `GemCandidate[]`; validate against the inventory; degrade to a deterministic ranking |
-| `distill.ts` | Phase-0 gate over recurring procedures → a generative ACP run → evidence-grounded `DistilledSkill[]` drafts |
-| `draftStage.ts` | Stage a draft into the `ConfigInventory` (so `buildGem` can include it) and write `~/.agentgem/distilled/<name>/SKILL.md` |
+The conceptual pipeline `introspect → redact → buildGem → archive` therefore spans
+`capture → base → build → archive`; the optional **Analyze / workflow-aware** path
+(scan → distill drafts → recommend, see [Analyze](analyze.md)) lives in `@agentgem/insight`.
 
 ## Distribution
 
@@ -108,36 +108,39 @@ The Gem is a neutral source. Three subsystems consume it, plus local testbeds an
 > [PNG](diagrams/distribution.png) ·
 > [interactive HTML](diagrams/distribution.html)
 
-- **Targets** (`targets.ts`) — `materialize(gem, target)` runs per-artifact renderers and a
+- **Targets** (`@agentgem/model`) — `materialize(gem, target)` runs per-artifact renderers and a
   cross-cutting `compose` hook to emit a `FileTree`. Code-gen targets: Eve, Flue, OpenAI
   Sandbox, AgentCore, and A2A (an [Agent Card](a2a.md) projection with an opt-in runnable
   server) — plus the editor targets claude/codex/agents/hermes. See
   [Targets & deploy](targets.md).
-- **Registry** (`registry.ts`, `registryGithub.ts`) — a GitHub-backed index plus per-version
+- **Registry** (`@agentgem/distribute`) — a GitHub-backed index plus per-version
   item archives; publish / resolve / merge / install with semver and a dependency graph. See
   [Registry](registry.md).
-- **Deploy backends** (`deploy.ts`, `publish.ts`, `agentcorePublish.ts`) — Anthropic Managed
+- **Deploy backends** (`@agentgem/deploy`) — Anthropic Managed
   Agents and AWS Bedrock AgentCore, each recorded in a deploy record that drives Undeploy.
-- **Testbed & Run** (`testbed.ts`, `run.ts`) — install a Gem into a local `.claude`/`.codex`/
+- **Testbed & Run** (`@agentgem/testbed`, `@agentgem/run`) — install a Gem into a local `.claude`/`.codex`/
   `.hermes` testbed, or run/deploy a materialized project locally, to Vercel, or to
   Cloudflare. See [Testbed & run](testbed-and-run.md).
 
 ## Source layout
 
+The published npm package is CLI-only (`agentgem`, `agentgem-distill`); at pack time
+`scripts/bundle-bins.mjs` esbuild-inlines the `@agentgem/*` packages into the bins so the
+tarball is self-contained (the in-repo build + Docker deploy use loose `dist/` + workspace links).
+
 ```
-src/
+src/                  # the thin server layer — consumes @agentgem/* via workspace deps
   index.ts            # AgentBack wiring: REST + MCP + Explorer on one app
   cli.ts              # `agentgem` bin — starts the server
   gem.controller.ts   # REST surface (@api) — /api/*
-  gem.tools.ts        # MCP surface (@mcpServer) — /mcp
-  schemas.ts          # Zod schemas shared by both surfaces
-  workflowStream.ts   # SSE handler for /workflow/analyze progress
-  resolveDir.ts       # config-dir + ~/.agentgem home resolution
-  pickFolder.ts       # OS-native folder picker (for the UI)
-  publish.ts          # Anthropic Managed Agents publish/undeploy client
-  public/index.html   # single-page Gem Builder UI
-  gem/                # framework-agnostic core (pipeline, targets, registry, run,
-                      #   workflowScan, acpRecommender, …)
+  gem.tools.ts        # MCP-over-HTTP surface (@mcpServer) — /mcp
+  aggregator.controller.ts · share.controller.ts   # hosted aggregator + share surfaces
+  schemas.ts          # Zod schemas shared across surfaces
+  *Stream.ts          # SSE handlers (workflow analyze, gem run, scorecard)
+  distill/mcpServer.ts # `agentgem-distill` bin — stdio MCP (MCPApplication + @tool)
+  bind/               # `agentgem bind` device-flow auth
+packages/             # the Gem core — 12 @agentgem/* workspace packages (see table above)
+  console/ · marketplace/   # the React console + public marketplace SPAs
 desktop/              # Electron host — embeds the server (tray + auto-update)
 docs/
   diagrams/           # .svg (for docs), .png (fallback), .html (interactive export)
