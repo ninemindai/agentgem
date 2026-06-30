@@ -168,6 +168,7 @@ import {
   TestbedSuggestionQuerySchema, TestbedSuggestionResponseSchema,
   TestbedRecentsResponseSchema,
   TestbedProjectsQuerySchema, TestbedProjectsResponseSchema,
+  TargetProjectsQuerySchema, TargetProjectsResponseSchema,
   TestbedScaffoldRequestSchema, TestbedScaffoldResponseSchema,
   TestbedImportRequestSchema, TestbedImportResponseSchema,
   GemApplyRequestSchema, GemApplyResponseSchema,
@@ -198,6 +199,7 @@ import { agentcoreReadiness, deployAgentcore, getAgentcoreStatus } from "@agentg
 import { scaffoldTestbed, importArtifacts } from "@agentgem/testbed";
 import { materializeAndRunGem, materializeGemToTestbed, registerRun, AGENT_ADAPTERS, type AgentId } from "@agentgem/run";
 import { detectFlavor, suggestTestbed, discoverProjects } from "@agentgem/testbed";
+import { discoverTargetProjects, scanRootsForTargets } from "@agentgem/testbed";
 import type { TestbedFlavorId } from "@agentgem/testbed";
 import { readRecents, upsertRecent } from "@agentgem/capture";
 import { resolveInstall, publishGem } from "@agentgem/distribute";
@@ -702,6 +704,19 @@ export class GemController {
   @get("/testbed/projects", { query: TestbedProjectsQuerySchema, response: TestbedProjectsResponseSchema })
   async testbedProjects(input: { query: z.infer<typeof TestbedProjectsQuerySchema> }): Promise<z.infer<typeof TestbedProjectsResponseSchema>> {
     return { projects: discoverProjects(resolveDirs(input.query.dir)) };
+  }
+
+  // Independently-existing target projects (eve/flue) on this machine: classified from Claude/Codex
+  // session cwds, optionally augmented by scanning caller-supplied allowlisted roots (comma-separated).
+  // Session candidates take precedence on a path collision (they carry real usage recency). Ungated.
+  @get("/targets/projects", { query: TargetProjectsQuerySchema, response: TargetProjectsResponseSchema })
+  async targetProjects(input: { query: z.infer<typeof TargetProjectsQuerySchema> }): Promise<z.infer<typeof TargetProjectsResponseSchema>> {
+    const fromSessions = discoverTargetProjects(resolveDirs(input.query.dir));
+    const roots = (input.query.roots ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    const fromScan = roots.length ? await scanRootsForTargets(roots) : [];
+    const byPath = new Map<string, z.infer<typeof TargetProjectsResponseSchema>["projects"][number]>();
+    for (const p of [...fromSessions, ...fromScan]) if (!byPath.has(p.path)) byPath.set(p.path, p);
+    return { projects: [...byPath.values()] };
   }
 
   @post("/testbed/scaffold", { body: TestbedScaffoldRequestSchema, response: TestbedScaffoldResponseSchema })
