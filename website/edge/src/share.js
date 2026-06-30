@@ -21,6 +21,24 @@ export function placeholderHtml() {
     `<h1>Sharing is coming soon</h1><p><a style="color:#7cc4ff" href="${CANONICAL}">Value your own agent goldmine →</a></p></body>`;
 }
 
+export function renderGemShareHtml(record, { shareUrl }) {
+  const name = esc(record.name), prov = esc(record.provenance);
+  return `<!doctype html><html><head><meta charset="utf-8">` +
+    `<title>${name} — AgentGem</title>` +
+    `<meta property="og:title" content="${name}">` +
+    `<meta property="og:description" content="${prov}">` +
+    `<meta property="og:type" content="website">` +
+    `<meta property="og:url" content="${esc(shareUrl)}">` +
+    `<meta name="twitter:card" content="summary">` +
+    `<meta name="twitter:title" content="${name}">` +
+    `<meta name="twitter:description" content="${prov}">` +
+    `</head><body style="font-family:sans-serif;background:#0b0f17;color:#e8edf5;text-align:center;padding:48px">` +
+    `<h1 style="font-size:34px;margin:0 0 8px">${name}</h1>` +
+    `<p style="font-size:18px;color:#9aa">${prov}</p>` +
+    `<p><a style="color:#7cc4ff;font-size:22px" href="${CANONICAL}">Value your own agent goldmine →</a></p>` +
+    `</body></html>`;
+}
+
 export function renderShareHtml(record, { ogImageUrl, shareUrl }) {
   const desc = cardDescription(record.counts);
   return `<!doctype html><html><head><meta charset="utf-8">` +
@@ -68,6 +86,13 @@ export async function handleShare(request, env) {
   const record = await fetchRecord(env, parsed.id);
   if (!record) {
     return new Response("Card not found", { status: 404, headers: { "content-type": "text/plain" } });
+  }
+
+  if (record.kind === "gem") {
+    if (parsed.png) return new Response("Not found", { status: 404, headers: { "content-type": "text/plain" } });
+    const shareUrl = `${CANONICAL}/share/${parsed.id}`;
+    const html = renderGemShareHtml(record, { shareUrl });
+    return new Response(html, { status: 200, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300" } });
   }
 
   if (parsed.png) {

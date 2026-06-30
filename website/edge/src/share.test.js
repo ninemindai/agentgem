@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseShareId, renderShareHtml, handleShare, isCacheable } from "./share.js";
+import { parseShareId, renderShareHtml, handleShare, isCacheable, renderGemShareHtml } from "./share.js";
 
 const record = { kind: "certificate", counts: { breadth: 14, battleTested: 3, portable: 5 }, generatedAtMs: 1, createdAtMs: 2 };
 
@@ -48,6 +48,25 @@ describe("handleShare", () => {
     const res = await handleShare(new Request("https://agentgem.ai/share/x"), {});
     expect(res.status).toBe(200);
     expect(await res.text()).toContain("coming soon");
+  });
+});
+
+describe("gem unfurl", () => {
+  it("is a text summary card (no og:image)", () => {
+    const html = renderGemShareHtml({ kind: "gem", name: "my-wf", provenance: "Distilled from 5 sessions" }, { shareUrl: "https://agentgem.ai/share/g" });
+    expect(html).toContain('<meta property="og:title" content="my-wf">');
+    expect(html).toContain('<meta property="og:description" content="Distilled from 5 sessions">');
+    expect(html).toContain('<meta name="twitter:card" content="summary">');
+    expect(html).not.toContain("og:image");
+    expect(html).toContain("agentgem.ai");
+  });
+  it("handleShare routes a gem record to the gem unfurl, og.png 404s", async () => {
+    const rec = { kind: "gem", name: "my-wf", provenance: "Distilled from 5 sessions", generatedAtMs: 1, createdAtMs: 2 };
+    const env = { AGGREGATOR_API: "https://api.test", fetch: async () => ({ ok: true, json: async () => rec }) };
+    const page = await handleShare(new Request("https://agentgem.ai/share/g"), env);
+    expect(await page.text()).toContain("twitter:card");
+    const png = await handleShare(new Request("https://agentgem.ai/share/g/og.png"), env);
+    expect(png.status).toBe(404);
   });
 });
 
