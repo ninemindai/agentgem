@@ -5,7 +5,7 @@ import { existsSync, writeFileSync, readFileSync } from "node:fs";
 import { basename, resolve, sep } from "node:path";
 import { z } from "zod";
 import { api, get, post } from "@agentback/openapi";
-import { scanSessionsCached, aggregateObserve, loadSessionTranscript, resolveClaudeSession } from "@agentgem/insight";
+import { scanSessionsCached, aggregateObserve, loadSessionTranscript, resolveClaudeSession, dehomeDistilled } from "@agentgem/insight";
 import { scanArtifactUsageCached } from "@agentgem/insight";
 import { buildOptimizePayload, buildDiscover, rerankCandidates, type OptimizeRange } from "@agentgem/insight";
 
@@ -310,7 +310,10 @@ export class GemController {
     const scanInv = { project, global: { skills: inventory.skills, mcpServers: inventory.mcpServers, hooks: inventory.hooks } };
     const signal = scanWorkflow([found.path], scanInv, { retainSequences: true });
     const distill = await distillWorkflow(signal, scanInv);
-    return { distilled: distill.distilled, degraded: distill.degraded };
+    // The client sent only a session id, so the derived absolute project path
+    // (carries the OS username) must not leak back via evidence.root — mirror the
+    // TranscriptView boundary.
+    return { distilled: dehomeDistilled(distill.distilled), degraded: distill.degraded };
   }
 
   @get("/optimize", { query: OptimizeQuerySchema, response: OptimizePayloadSchema })

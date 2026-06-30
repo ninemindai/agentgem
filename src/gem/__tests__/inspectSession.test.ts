@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   parseClaudeTranscriptView, parseCodexTranscriptView, loadSessionTranscript, resolveClaudeSession,
-  type TranscriptView,
+  dehomeDistilled, type TranscriptView, type DistilledSkill,
 } from "@agentgem/insight";
 
 let home: string, claudeDir: string, codexDir: string;
@@ -174,5 +174,23 @@ describe("resolveClaudeSession (distill hook seam)", () => {
 
   it("returns null for a missing session", async () => {
     expect(await resolveClaudeSession("nope", { claudeDir })).toBeNull();
+  });
+});
+
+describe("dehomeDistilled (distill response privacy)", () => {
+  const draft = (root: string): DistilledSkill => ({
+    name: "do-thing", description: "d", triggers: ["t"], tools: ["Read"], mutating: false, body: "b",
+    evidence: { sessions: 1, exampleSequence: ["Read"], root, provenance: { occurrences: [] } },
+    status: "draft", confidence: "low", origin: "heuristic",
+  });
+
+  it("de-homes the absolute project root so the username never reaches the client", () => {
+    const [out] = dehomeDistilled([draft("/Users/alice/Projects/secret-app")]);
+    expect(out.evidence.root).toBe("~/Projects/secret-app");
+    expect(out.evidence.root).not.toContain("/Users/alice");
+  });
+
+  it("leaves an already-relative root untouched", () => {
+    expect(dehomeDistilled([draft("~/Projects/app")])[0].evidence.root).toBe("~/Projects/app");
   });
 });

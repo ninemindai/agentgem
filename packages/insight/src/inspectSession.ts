@@ -17,6 +17,7 @@ import { resolveDirs } from "@agentgem/model";
 import { jsonLines, listFiles, parseClaudeTranscript, parseCodexTranscript } from "./observeScan.js";
 import { scrubText } from "./scrub.js";
 import type { SessionStat } from "./observeAggregate.js";
+import type { DistilledSkill } from "./distillTypes.js";
 
 export interface TokenBreakdown { in: number; out: number; cache: number; }
 
@@ -228,6 +229,16 @@ export async function loadSessionTranscript(
     if (view && view.sessionId === sessionId) return view;
   }
   return null;
+}
+
+/** Strip the absolute project path (carries the OS username) from distilled
+ *  drafts before they cross to the client. The "distill this session" route
+ *  derives cwd from the session itself, so — unlike /workflow/analyze, where the
+ *  client supplies the root — the client must not learn it from evidence.root.
+ *  De-homes via scrubText (/Users/<name>/ → ~/). Safe to persist: writeDistilledDraft
+ *  keys off agentgemHome(), not evidence.root. */
+export function dehomeDistilled(drafts: DistilledSkill[]): DistilledSkill[] {
+  return drafts.map((d) => ({ ...d, evidence: { ...d.evidence, root: scrubText(d.evidence.root) } }));
 }
 
 /** Server-only: resolve a Claude session to its transcript file path and the
