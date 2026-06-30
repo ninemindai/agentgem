@@ -56,6 +56,35 @@ describe("attestation", () => {
     expect(JSON.stringify(a)).not.toContain("/p"); // no root path leaked
     expect((a as unknown as Record<string, unknown>).signal).toBeUndefined();
   });
+
+  it("stays formatVersion 1 with no outcome histogram when no facets are given", () => {
+    const a = buildAttestation({ gem, signal, gemDigest: "sha256:aa", salt: "S" });
+    expect(a.formatVersion).toBe(1);
+    expect(a.source.outcomeHistogram).toBeUndefined();
+  });
+
+  it("builds a per-model outcome histogram from facets and bumps to formatVersion 2", () => {
+    const f = (model: string, outcome: "mostly_achieved" | "partially_achieved" | "not_achieved") =>
+      ({ sessionId: "s", transcript: "", atMs: 0, underlying_goal: "", brief_summary: "", outcome, friction_detail: "", model, origin: "llm" as const });
+    const facets = [f("claude-opus-4-8", "mostly_achieved"), f("claude-opus-4-8", "not_achieved"), f("claude-sonnet-4-6", "mostly_achieved")];
+    const a = buildAttestation({ gem, signal, gemDigest: "sha256:aa", salt: "S", facets });
+    expect(a.formatVersion).toBe(2);
+    const hist = a.source.outcomeHistogram!;
+    expect(hist.find((h) => h.model === "claude-opus-4-8")).toMatchObject({ mostly: 1, partially: 0, not: 1 });
+    expect(hist.find((h) => h.model === "claude-sonnet-4-6")).toMatchObject({ mostly: 1 });
+    // deterministic for a stable signature
+    expect(canonicalJSON(a)).toBe(canonicalJSON(buildAttestation({ gem, signal, gemDigest: "sha256:aa", salt: "S", facets })));
+  });
+
+  it("a v2 attestation with a histogram still signs and verifies", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ag-att2-"));
+    const id = loadOrCreateIdentity(dir);
+    const facets = [{ sessionId: "s", transcript: "", atMs: 0, underlying_goal: "", brief_summary: "", outcome: "mostly_achieved" as const, friction_detail: "", model: "claude-opus-4-8", origin: "llm" as const }];
+    const signed = signAttestation(buildAttestation({ gem, signal, gemDigest: "sha256:aa", salt: "S", facets }), id);
+    const { signature, ...rest } = signed;
+    expect(verify(signed.producer.publicKey, canonicalJSON(rest), signature)).toBe(true);
+    expect(signed.formatVersion).toBe(2);
+  });
 });
 
 describe("canonicalJSON hardening", () => {

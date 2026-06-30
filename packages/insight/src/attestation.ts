@@ -4,15 +4,20 @@
 import { createHash } from "node:crypto";
 import type { Gem, McpServerArtifact, SkillArtifact } from "@agentgem/model";
 import type { WorkflowSignal } from "./workflowScan.js";
+import type { SessionFacet } from "./facets.js";
 import { CANONICALIZER_VERSION, canonicalHarness, canonicalModel, canonicalMcpServer, canonicalSkill } from "@agentgem/model";
 import type { Identity } from "@agentgem/model";
+
+// Per-model outcome counts published in the attestation (formatVersion 2). The
+// network aggregates these across producers into the cross-model benchmark.
+export interface ModelOutcomeRow { model: string; mostly: number; partially: number; not: number }
 
 export interface UsageAttestation {
   formatVersion: number;
   canonicalizerVersion: number;
   gem: { name: string; digest: string };
   producer: { publicKey: string; account: { provider: string; login: string } | null };
-  source: { harness: { id: string }; models: string[]; scan: { sessions: number; spanDays: number; firstMs: number; lastMs: number } };
+  source: { harness: { id: string }; models: string[]; scan: { sessions: number; spanDays: number; firstMs: number; lastMs: number }; outcomeHistogram?: ModelOutcomeRow[] };
   ingredients: {
     skills: { id: string; idKind: string; public: boolean; invocations: number; sessions: number }[];
     mcps: { id: string; idKind: string; public: boolean; invocations: number; sessions: number }[];
@@ -38,11 +43,29 @@ export function canonicalJSON(value: unknown): string {
   return JSON.stringify(norm(value));
 }
 
+// Bucket judged facets into per-model outcome counts, with canonical model ids
+// (matching source.models) and a deterministic order for a stable signature.
+function outcomeHistogram(facets: SessionFacet[]): ModelOutcomeRow[] {
+  const by = new Map<string, ModelOutcomeRow>();
+  for (const f of facets) {
+    if (!f.model) continue;
+    const model = canonicalModel(f.model).id;
+    const row = by.get(model) ?? { model, mostly: 0, partially: 0, not: 0 };
+    if (f.outcome === "mostly_achieved") row.mostly++;
+    else if (f.outcome === "partially_achieved") row.partially++;
+    else row.not++;
+    by.set(model, row);
+  }
+  return [...by.values()].sort((a, b) => a.model.localeCompare(b.model));
+}
+
 export function buildAttestation(args: {
   gem: Gem; signal: WorkflowSignal; gemDigest: string; salt: string;
   account?: { provider: string; login: string } | null;
+  facets?: SessionFacet[];   // judged outcomes → per-model histogram (formatVersion 2)
 }): UsageAttestation {
   const { gem, signal, gemDigest, salt } = args;
+  const histogram = args.facets?.length ? outcomeHistogram(args.facets) : [];
   // Map gem artifacts → canonical ids, then attach counts from the signal (counts are the source of truth).
   const usageByName = new Map(signal.artifacts.map((a) => [`${a.type}:${a.name}`, a]));
 
@@ -60,7 +83,7 @@ export function buildAttestation(args: {
     .map((m) => mkRow(canonicalMcpServer(m, salt), `mcp_server:${m.name}`));
 
   const att: UsageAttestation = {
-    formatVersion: 1,
+    formatVersion: histogram.length ? 2 : 1,   // v2 only when it carries outcome data
     canonicalizerVersion: CANONICALIZER_VERSION,
     gem: { name: gem.name, digest: gemDigest },
     producer: { publicKey: "", account: args.account ?? null },
@@ -68,6 +91,7 @@ export function buildAttestation(args: {
       harness: { id: canonicalHarness(signal.flavor).id },
       models: signal.models.map((m) => canonicalModel(m.id).id),
       scan: { sessions: signal.sessions.scanned, spanDays: signal.sessions.spanDays, firstMs: signal.sessions.firstMs, lastMs: signal.sessions.lastMs },
+      ...(histogram.length ? { outcomeHistogram: histogram } : {}),
     },
     ingredients: { skills, mcps },
     // Tamper-evident commitment to the published aggregate ingredient rows (self-consistency,
