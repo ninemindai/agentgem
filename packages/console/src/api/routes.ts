@@ -399,9 +399,14 @@ export const scorecardWorkflowRoute = defineRoute("GET", "/api/scorecard/workflo
 
 export const createShareRoute = defineRoute("POST", "/api/share", {
   body: z.object({
+    kind: z.literal("certificate"),
     counts: z.object({ breadth: z.number(), battleTested: z.number(), portable: z.number() }),
     generatedAtMs: z.number(),
   }),
+  response: z.object({ id: z.string(), url: z.string() }),
+});
+export const createGemShareRoute = defineRoute("POST", "/api/share", {
+  body: z.object({ kind: z.literal("gem"), name: z.string(), provenance: z.string(), generatedAtMs: z.number() }),
   response: z.object({ id: z.string(), url: z.string() }),
 });
 
