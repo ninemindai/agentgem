@@ -28,4 +28,19 @@ describe("ShareController", () => {
     const c = new ShareController(db);
     await expect(c.read({ query: { id: "nope000000" } })).rejects.toMatchObject({ statusCode: 404, code: "share_not_found" });
   });
+
+  it("creates + reads a gem card, sanitizing name/provenance", async () => {
+    const db = await makeTestDb();
+    const c = new ShareController(db);
+    const { id } = await c.create({ body: { kind: "gem", name: "  my wf\x07 ", provenance: "Distilled from 5 sessions", generatedAtMs: 1 } as never });
+    const rec = await c.read({ query: { id } });
+    expect(rec).toMatchObject({ kind: "gem", name: "my wf", provenance: "Distilled from 5 sessions" });
+  });
+
+  it("rejects an empty gem name and over-length provenance", async () => {
+    const db = await makeTestDb();
+    const c = new ShareController(db);
+    await expect(c.create({ body: { kind: "gem", name: "", provenance: "x", generatedAtMs: 1 } as never })).rejects.toThrow();
+    await expect(c.create({ body: { kind: "gem", name: "ok", provenance: "x".repeat(201), generatedAtMs: 1 } as never })).rejects.toThrow();
+  });
 });

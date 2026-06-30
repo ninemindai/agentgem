@@ -5,15 +5,27 @@ import { DrizzleBindings } from "@agentback/drizzle";
 import type { AppDb } from "./aggregator/schema.js";
 import { createShareCard, getShareCard } from "./share/shareStore.js";
 
+const sanitize = (s: string) => s.replace(/[\u0000-\u001f]/g, "").trim();
+
 const Counts = z.object({
   breadth: z.number().int().nonnegative(),
   battleTested: z.number().int().nonnegative(),
   portable: z.number().int().nonnegative(),
 }).strict();
-const CreateBody = z.object({ kind: z.literal("certificate"), counts: Counts, generatedAtMs: z.number().int().nonnegative() }).strict();
+const CertBody = z.object({ kind: z.literal("certificate"), counts: Counts, generatedAtMs: z.number().int().nonnegative() }).strict();
+const GemBody = z.object({
+  kind: z.literal("gem"),
+  name: z.string().transform(sanitize).pipe(z.string().min(1).max(120)),
+  provenance: z.string().transform(sanitize).pipe(z.string().max(200)),
+  generatedAtMs: z.number().int().nonnegative(),
+}).strict();
+const CreateBody = z.discriminatedUnion("kind", [CertBody, GemBody]);
 const CreateResult = z.object({ id: z.string(), url: z.string() });
 const ReadQuery = z.object({ id: z.string() });
-const ReadResult = z.object({ kind: z.literal("certificate"), counts: Counts, generatedAtMs: z.number(), createdAtMs: z.number() });
+const ReadResult = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("certificate"), counts: Counts, generatedAtMs: z.number(), createdAtMs: z.number() }),
+  z.object({ kind: z.literal("gem"), name: z.string(), provenance: z.string(), generatedAtMs: z.number(), createdAtMs: z.number() }),
+]);
 
 @api({ basePath: "/api/aggregator/share" })
 export class ShareController {
