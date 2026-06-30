@@ -4,6 +4,7 @@ import { inventoryRoute, usageRoute, createWorkspaceRoute, scaffoldChecksRoute, 
 import { groupInventory, mergeUsage, applyView, sortGroupItems, relativeTime, formatSource, DEFAULT_VIEW, type LedgerGroup, type SortKey, type SortDir } from "./data.js";
 import { selKey, visibleKeys, buildSelection } from "./selection.js";
 import { useActiveGem, setKeys, toggleKey as toggleKeyStore, clearKeys, setName as setNameStore } from "../../activeGem.js";
+import { consumePendingAnalyze } from "../../pendingAnalyze.js";
 import { Analyze } from "./Analyze.js";
 import { Checks } from "./Checks.js";
 import { ContentView } from "./ContentView.js";
@@ -19,6 +20,13 @@ export function Curate({ apiBase }: { apiBase: string }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [tab, setTab] = useState<"compose" | "suggest">("compose");
+  // Hand-off from the Insights panel: "Build a Gem from this project" lands here
+  // on the Suggest tab with the project pre-targeted (consumed once).
+  const [analyzeTarget, setAnalyzeTarget] = useState<string | null>(null);
+  useEffect(() => {
+    const pending = consumePendingAnalyze();
+    if (pending) { setAnalyzeTarget(pending); setTab("suggest"); }
+  }, []);
   const [suggested, setSuggested] = useState<GemCheck[] | null>(null);
   const [included, setIncluded] = useState<Set<string>>(new Set());
   const [checksBusy, setChecksBusy] = useState(false);
@@ -140,7 +148,7 @@ export function Curate({ apiBase }: { apiBase: string }) {
       </div>
 
       {tab === "suggest" && (
-        <Analyze apiBase={apiBase} onPick={(picked) => { setKeys(new Set(picked)); setView((v) => ({ ...v, usedOnly: false })); setTab("compose"); }} />
+        <Analyze apiBase={apiBase} initialPath={analyzeTarget ?? undefined} onPick={(picked) => { setKeys(new Set(picked)); setView((v) => ({ ...v, usedOnly: false })); setTab("compose"); }} />
       )}
 
       {tab === "compose" && (<>

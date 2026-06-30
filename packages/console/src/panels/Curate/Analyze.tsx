@@ -14,7 +14,7 @@ const prettyType = (t: string): string => TYPE_LABEL[t] ?? t;
 
 /** "Suggest a gem from a project": discovered projects, each analyzed in one click;
  *  picking a suggestion hands recommended keys to onPick (Curate flips to Compose). */
-export function Analyze({ apiBase, onPick }: { apiBase: string; onPick: (keys: string[]) => void }) {
+export function Analyze({ apiBase, onPick, initialPath }: { apiBase: string; onPick: (keys: string[]) => void; initialPath?: string }) {
   const [projects, setProjects] = useState<ProjectCandidate[] | null>(null);
   const [recents, setRecents] = useState<RecentEntry[] | null>(null);
   const [activePath, setActivePath] = useState<string | null>(null);
@@ -43,6 +43,9 @@ export function Analyze({ apiBase, onPick }: { apiBase: string; onPick: (keys: s
       else if (e.type === "failed") { setError(e.message); setRunning(false); }
     });
   };
+
+  // Auto-run when another panel hands us a project (Insights → "Build a Gem").
+  useEffect(() => { if (initialPath) analyze(initialPath); }, [initialPath]);
 
   // Merge recents + discovered projects into one de-duped, compact list, then
   // filter by the search query (matches the display label OR the full path).

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { testbedRecentsRoute, testbedProjectsRoute, makeClient, type RecentEntry, type ProjectCandidate } from "../../api/routes.js";
 import { defineConsolePage } from "../../registry.js";
 import { openInsightsStream, type InsightsReportView } from "./insightsStream.js";
+import { setPendingAnalyze } from "../../pendingAnalyze.js";
 import { Loading } from "../../shell/Loading.js";
 
 function short(path: string): string {
@@ -95,7 +96,12 @@ export function Insights({ apiBase }: { apiBase: string }) {
                       </div>
                       {error && <p className="ledger-error">{error}</p>}
                       {out && !report && <pre className="run-transcript">{out}</pre>}
-                      {report && <InsightsReportCard report={report} />}
+                      {report && (
+                        <InsightsReportCard
+                          report={report}
+                          onBuild={() => { setPendingAnalyze(r.path); window.location.hash = "#/curate"; }}
+                        />
+                      )}
                     </div>
                   )}
                 </li>
@@ -107,14 +113,17 @@ export function Insights({ apiBase }: { apiBase: string }) {
   );
 }
 
-function InsightsReportCard({ report }: { report: InsightsReportView }) {
+function InsightsReportCard({ report, onBuild }: { report: InsightsReportView; onBuild: () => void }) {
   return (
     <div className="insights-report">
       <p className="analyze-candidate-desc">{report.outcomes_summary}</p>
 
       {report.publish_candidates.length > 0 && (
         <div className="insights-section">
-          <h4>Worth publishing</h4>
+          <div className="analyze-candidate-head">
+            <h4 style={{ margin: 0 }}>Worth publishing</h4>
+            <button type="button" className="ledger-build" style={{ marginLeft: "auto" }} onClick={onBuild}>Build a Gem from this project →</button>
+          </div>
           <ul className="analyze-include">
             {report.publish_candidates.map((c) => (
               <li key={c.sessionId}>
