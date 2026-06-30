@@ -2,6 +2,7 @@
 import { fmtTokens } from "../Observe/data.js";
 import type { OptimizePayload, OptimizeRange } from "../../api/routes.js";
 import { RefreshButton } from "../../shell/RefreshButton.js";
+import { DiscoverSection } from "./Discover.js";
 
 const RANGES: OptimizeRange[] = ["today", "7d", "30d", "all"];
 
@@ -9,12 +10,13 @@ function utcDay(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10);
 }
 
-export function Dashboard({ data, range, onRange, pending, onRefresh }: {
+export function Dashboard({ data, range, onRange, pending, onRefresh, apiBase }: {
   data: OptimizePayload;
   range: OptimizeRange;
   onRange: (r: OptimizeRange) => void;
   pending: boolean;
   onRefresh?: () => void;
+  apiBase: string;
 }) {
   const prunable = data.artifacts.filter((a) => a.prune);
   const savings = prunable.reduce((acc, a) => acc + a.contextTokens, 0);
@@ -70,10 +72,7 @@ export function Dashboard({ data, range, onRange, pending, onRefresh }: {
         </table>
       </section>
 
-      <section className="opt-section opt-soon">
-        <h3>Discover — recommended for you</h3>
-        <p className="obs-muted">Ranked skill recommendations from skills.sh, matched to your workflows. Coming in the next update.</p>
-      </section>
+      <DiscoverSection apiBase={apiBase} />
     </div>
   );
 }

@@ -31,7 +31,7 @@ export function Optimize({ apiBase }: { apiBase: string }) {
 
   if (error) return <div className="opt"><p className="obs-error">Couldn't load Optimize: {error}</p></div>;
   if (!data) return <div className="opt"><Loading /></div>;
-  return <Dashboard data={data} range={range} onRange={setRange} pending={pending} onRefresh={onRefresh} />;
+  return <Dashboard data={data} range={range} onRange={setRange} pending={pending} onRefresh={onRefresh} apiBase={apiBase} />;
 }
 
 export const optimizePage = defineConsolePage({
