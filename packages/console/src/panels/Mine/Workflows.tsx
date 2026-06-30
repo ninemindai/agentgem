@@ -236,6 +236,7 @@ export function MineWorkflows({ data, filter, onFilter, onBuild, building, resul
             ✓ Built <strong>{result.name}</strong> — {result.skills.length} skill{result.skills.length === 1 ? "" : "s"}: {result.skills.join(", ")}
             {" "}<button className="mine-wf-share" aria-label={`Share ${result.name} gem`} onClick={() => void shareGem()}>Share gem</button>
           </p>
+          {shareErrors["__gem__"] && <span className="obs-error">{shareErrors["__gem__"]}</span>}
           {shareUrls["__gem__"] && <ShareLinks url={shareUrls["__gem__"]} />}
         </>
       )}
