@@ -7,8 +7,8 @@ import { loginHandler, callbackHandler, meHandler, logoutHandler } from "../auth
 import { SESSION_COOKIE } from "../auth/cookie.js";
 
 const cfg = {
-  clientId: "cid", clientSecret: "sec", webOrigins: ["https://explore.agentgem.ai"],
-  cookieDomain: ".agentgem.ai", callbackUrl: "https://app.agentgem.ai/api/auth/github/callback",
+  clientId: "cid", clientSecret: "sec", webOrigins: ["https://app.agentgem.ai"],
+  cookieDomain: ".agentgem.ai", callbackUrl: "https://api.agentgem.ai/api/auth/github/callback",
   stateSecret: "ssecret", sessionTtlMs: 3_600_000,
 };
 // Minimal mock req/res capturing what the handlers do.
@@ -34,7 +34,7 @@ describe("auth handlers", () => {
       expect(bad._status).toBe(400);
 
       const ok = mockRes();
-      await loginHandler(deps(db))(mockReq({ query: { return: "https://explore.agentgem.ai/gems" } }) as any, ok as any);
+      await loginHandler(deps(db))(mockReq({ query: { return: "https://app.agentgem.ai/gems" } }) as any, ok as any);
       expect(ok._redirect).toContain("https://github.com/login/oauth/authorize");
       expect(ok._redirect).toContain("state=");
       expect(ok._redirect).toContain("scope=read%3Auser");
@@ -45,12 +45,12 @@ describe("auth handlers", () => {
     { const db = await makeTestDb();
       // produce a valid state by running login first and pulling it out of the redirect URL
       const login = mockRes();
-      await loginHandler(deps(db))(mockReq({ query: { return: "https://explore.agentgem.ai/gems" } }) as any, login as any);
+      await loginHandler(deps(db))(mockReq({ query: { return: "https://app.agentgem.ai/gems" } }) as any, login as any);
       const state = new URL(login._redirect!).searchParams.get("state")!;
 
       const cb = mockRes();
       await callbackHandler(deps(db))(mockReq({ query: { code: "abc", state } }) as any, cb as any);
-      expect(cb._redirect).toBe("https://explore.agentgem.ai/gems");
+      expect(cb._redirect).toBe("https://app.agentgem.ai/gems");
       const setCookie = cb._headers["set-cookie"] as string;
       expect(setCookie).toContain(`${SESSION_COOKIE}=`);
       expect(setCookie).toContain("HttpOnly");
@@ -72,16 +72,16 @@ describe("auth handlers", () => {
   it("me returns the identity for a valid cookie + credentialed CORS for an allowed origin", async () => {
     { const db = await makeTestDb();
       const login = mockRes();
-      await loginHandler(deps(db))(mockReq({ query: { return: "https://explore.agentgem.ai" } }) as any, login as any);
+      await loginHandler(deps(db))(mockReq({ query: { return: "https://app.agentgem.ai" } }) as any, login as any);
       const state = new URL(login._redirect!).searchParams.get("state")!;
       const cb = mockRes();
       await callbackHandler(deps(db))(mockReq({ query: { code: "abc", state } }) as any, cb as any);
       const token = (cb._headers["set-cookie"] as string).split(";")[0].split("=")[1];
 
       const me = mockRes();
-      await meHandler(deps(db))(mockReq({ headers: { cookie: `${SESSION_COOKIE}=${token}`, origin: "https://explore.agentgem.ai" } }) as any, me as any);
+      await meHandler(deps(db))(mockReq({ headers: { cookie: `${SESSION_COOKIE}=${token}`, origin: "https://app.agentgem.ai" } }) as any, me as any);
       expect(me._body).toEqual({ login: "octocat", avatarUrl: null });
-      expect(me._headers["access-control-allow-origin"]).toBe("https://explore.agentgem.ai");
+      expect(me._headers["access-control-allow-origin"]).toBe("https://app.agentgem.ai");
       expect(me._headers["access-control-allow-credentials"]).toBe("true");
     }
   });
@@ -98,9 +98,9 @@ describe("auth handlers", () => {
   it("answers an OPTIONS preflight with 204 + CORS for an allowed origin", async () => {
     { const db = await makeTestDb();
       const res = mockRes();
-      await meHandler(deps(db))(mockReq({ method: "OPTIONS", headers: { origin: "https://explore.agentgem.ai" } }) as any, res as any);
+      await meHandler(deps(db))(mockReq({ method: "OPTIONS", headers: { origin: "https://app.agentgem.ai" } }) as any, res as any);
       expect(res._status).toBe(204);
-      expect(res._headers["access-control-allow-origin"]).toBe("https://explore.agentgem.ai");
+      expect(res._headers["access-control-allow-origin"]).toBe("https://app.agentgem.ai");
       expect(res._headers["access-control-allow-credentials"]).toBe("true");
       expect(res._headers["access-control-allow-methods"]).toContain("OPTIONS");
     }
@@ -109,14 +109,14 @@ describe("auth handlers", () => {
   it("logout deletes the session and clears the cookie", async () => {
     { const db = await makeTestDb();
       const login = mockRes();
-      await loginHandler(deps(db))(mockReq({ query: { return: "https://explore.agentgem.ai" } }) as any, login as any);
+      await loginHandler(deps(db))(mockReq({ query: { return: "https://app.agentgem.ai" } }) as any, login as any);
       const state = new URL(login._redirect!).searchParams.get("state")!;
       const cb = mockRes();
       await callbackHandler(deps(db))(mockReq({ query: { code: "abc", state } }) as any, cb as any);
       const token = (cb._headers["set-cookie"] as string).split(";")[0].split("=")[1];
 
       const out = mockRes();
-      await logoutHandler(deps(db))(mockReq({ method: "POST", headers: { cookie: `${SESSION_COOKIE}=${token}`, origin: "https://explore.agentgem.ai" } }) as any, out as any);
+      await logoutHandler(deps(db))(mockReq({ method: "POST", headers: { cookie: `${SESSION_COOKIE}=${token}`, origin: "https://app.agentgem.ai" } }) as any, out as any);
       expect(out._body).toEqual({ ok: true });
       expect(await resolveSession(db, token)).toBeNull();
       expect(out._headers["set-cookie"]).toContain("Max-Age=0");

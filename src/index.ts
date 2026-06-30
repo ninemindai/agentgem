@@ -128,7 +128,7 @@ export async function createApp(port: number): Promise<RestApplication> {
       config: {
         clientId: ghClientId, clientSecret: ghSecret, webOrigins,
         cookieDomain: process.env.AGENTGEM_SESSION_COOKIE_DOMAIN,
-        callbackUrl: `${process.env.AGENTGEM_PUBLIC_BASE ?? "https://app.agentgem.ai"}/api/auth/github/callback`,
+        callbackUrl: `${process.env.AGENTGEM_PUBLIC_BASE ?? "https://api.agentgem.ai"}/api/auth/github/callback`,
         stateSecret: process.env.AGENTGEM_SESSION_SECRET ?? ghSecret,
         sessionTtlMs: 30 * 24 * 60 * 60 * 1000, // 30 days
       },
@@ -148,7 +148,7 @@ export async function createApp(port: number): Promise<RestApplication> {
     });
   }
   // The desktop console UI is served at `/` (and `/console`) for LOCAL runs only. The hosted
-  // public deployment (app.agentgem.ai) is API-only — the console is a local desktop app, not a
+  // public deployment (api.agentgem.ai) is API-only — the console is a local desktop app, not a
   // public surface — so SERVE_CONSOLE=false disables it there and redirects `/` to the site.
   if (process.env.SERVE_CONSOLE !== "false") {
     const consolePage = consoleHtml();

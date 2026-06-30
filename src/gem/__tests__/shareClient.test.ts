@@ -14,12 +14,12 @@ describe("postShare", () => {
     expect(JSON.parse(seen!.body)).toEqual({ kind: "certificate", counts, generatedAtMs: 9 });
   });
 
-  it("defaults to the hosted aggregator (app.agentgem.ai) when nothing is configured", async () => {
+  it("defaults to the hosted aggregator (api.agentgem.ai) when nothing is configured", async () => {
     let seenUrl = "";
     const http = async (url: string) => { seenUrl = url; return { status: 200, json: async () => ({ id: "a", url: "u" }) }; };
     await postShare({ body: { kind: "certificate", counts, generatedAtMs: 9 }, http });
     expect(seenUrl).toBe(`${DEFAULT_AGGREGATOR_URL}/api/aggregator/share`);
-    expect(DEFAULT_AGGREGATOR_URL).toBe("https://app.agentgem.ai");
+    expect(DEFAULT_AGGREGATOR_URL).toBe("https://api.agentgem.ai");
   });
 
   it("AGENTGEM_AGGREGATOR_URL overrides the default", async () => {

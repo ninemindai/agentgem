@@ -256,19 +256,19 @@ import { signState, verifyState } from "../auth/state.js";
 const SECRET = "test-secret";
 describe("auth state (HMAC + TTL)", () => {
   it("round-trips returnTo and verifies within the TTL", () => {
-    const s = signState({ returnTo: "https://explore.agentgem.ai/gems" }, SECRET, 1000);
-    expect(verifyState(s, SECRET, 1500, 60_000)).toEqual({ returnTo: "https://explore.agentgem.ai/gems" });
+    const s = signState({ returnTo: "https://app.agentgem.ai/gems" }, SECRET, 1000);
+    expect(verifyState(s, SECRET, 1500, 60_000)).toEqual({ returnTo: "https://app.agentgem.ai/gems" });
   });
   it("rejects a tampered state", () => {
-    const s = signState({ returnTo: "https://explore.agentgem.ai" }, SECRET, 1000);
+    const s = signState({ returnTo: "https://app.agentgem.ai" }, SECRET, 1000);
     expect(verifyState(s + "x", SECRET, 1500, 60_000)).toBeNull();
   });
   it("rejects a wrong secret", () => {
-    const s = signState({ returnTo: "https://explore.agentgem.ai" }, SECRET, 1000);
+    const s = signState({ returnTo: "https://app.agentgem.ai" }, SECRET, 1000);
     expect(verifyState(s, "other", 1500, 60_000)).toBeNull();
   });
   it("rejects an expired state", () => {
-    const s = signState({ returnTo: "https://explore.agentgem.ai" }, SECRET, 1000);
+    const s = signState({ returnTo: "https://app.agentgem.ai" }, SECRET, 1000);
     expect(verifyState(s, SECRET, 1000 + 70_000, 60_000)).toBeNull();
   });
 });
@@ -424,8 +424,8 @@ import { loginHandler, callbackHandler, meHandler, logoutHandler } from "../auth
 import { SESSION_COOKIE } from "../auth/cookie.js";
 
 const cfg = {
-  clientId: "cid", clientSecret: "sec", webOrigins: ["https://explore.agentgem.ai"],
-  cookieDomain: ".agentgem.ai", callbackUrl: "https://app.agentgem.ai/api/auth/github/callback",
+  clientId: "cid", clientSecret: "sec", webOrigins: ["https://app.agentgem.ai"],
+  cookieDomain: ".agentgem.ai", callbackUrl: "https://api.agentgem.ai/api/auth/github/callback",
   stateSecret: "ssecret", sessionTtlMs: 3_600_000,
 };
 // Minimal mock req/res capturing what the handlers do.
@@ -451,7 +451,7 @@ describe("auth handlers", () => {
       expect(bad._status).toBe(400);
 
       const ok = mockRes();
-      await loginHandler(deps(db))(mockReq({ query: { return: "https://explore.agentgem.ai/gems" } }) as any, ok as any);
+      await loginHandler(deps(db))(mockReq({ query: { return: "https://app.agentgem.ai/gems" } }) as any, ok as any);
       expect(ok._redirect).toContain("https://github.com/login/oauth/authorize");
       expect(ok._redirect).toContain("state=");
       expect(ok._redirect).toContain("scope=read%3Auser");
@@ -462,12 +462,12 @@ describe("auth handlers", () => {
     await withTestDb(async (db) => {
       // produce a valid state by running login first and pulling it out of the redirect URL
       const login = mockRes();
-      await loginHandler(deps(db))(mockReq({ query: { return: "https://explore.agentgem.ai/gems" } }) as any, login as any);
+      await loginHandler(deps(db))(mockReq({ query: { return: "https://app.agentgem.ai/gems" } }) as any, login as any);
       const state = new URL(login._redirect!).searchParams.get("state")!;
 
       const cb = mockRes();
       await callbackHandler(deps(db))(mockReq({ query: { code: "abc", state } }) as any, cb as any);
-      expect(cb._redirect).toBe("https://explore.agentgem.ai/gems");
+      expect(cb._redirect).toBe("https://app.agentgem.ai/gems");
       const setCookie = cb._headers["set-cookie"] as string;
       expect(setCookie).toContain(`${SESSION_COOKIE}=`);
       expect(setCookie).toContain("HttpOnly");
@@ -489,16 +489,16 @@ describe("auth handlers", () => {
   it("me returns the identity for a valid cookie + credentialed CORS for an allowed origin", async () => {
     await withTestDb(async (db) => {
       const login = mockRes();
-      await loginHandler(deps(db))(mockReq({ query: { return: "https://explore.agentgem.ai" } }) as any, login as any);
+      await loginHandler(deps(db))(mockReq({ query: { return: "https://app.agentgem.ai" } }) as any, login as any);
       const state = new URL(login._redirect!).searchParams.get("state")!;
       const cb = mockRes();
       await callbackHandler(deps(db))(mockReq({ query: { code: "abc", state } }) as any, cb as any);
       const token = (cb._headers["set-cookie"] as string).split(";")[0].split("=")[1];
 
       const me = mockRes();
-      await meHandler(deps(db))(mockReq({ headers: { cookie: `${SESSION_COOKIE}=${token}`, origin: "https://explore.agentgem.ai" } }) as any, me as any);
+      await meHandler(deps(db))(mockReq({ headers: { cookie: `${SESSION_COOKIE}=${token}`, origin: "https://app.agentgem.ai" } }) as any, me as any);
       expect(me._body).toEqual({ login: "octocat", avatarUrl: null });
-      expect(me._headers["access-control-allow-origin"]).toBe("https://explore.agentgem.ai");
+      expect(me._headers["access-control-allow-origin"]).toBe("https://app.agentgem.ai");
       expect(me._headers["access-control-allow-credentials"]).toBe("true");
     });
   });
@@ -515,14 +515,14 @@ describe("auth handlers", () => {
   it("logout deletes the session and clears the cookie", async () => {
     await withTestDb(async (db) => {
       const login = mockRes();
-      await loginHandler(deps(db))(mockReq({ query: { return: "https://explore.agentgem.ai" } }) as any, login as any);
+      await loginHandler(deps(db))(mockReq({ query: { return: "https://app.agentgem.ai" } }) as any, login as any);
       const state = new URL(login._redirect!).searchParams.get("state")!;
       const cb = mockRes();
       await callbackHandler(deps(db))(mockReq({ query: { code: "abc", state } }) as any, cb as any);
       const token = (cb._headers["set-cookie"] as string).split(";")[0].split("=")[1];
 
       const out = mockRes();
-      await logoutHandler(deps(db))(mockReq({ method: "POST", headers: { cookie: `${SESSION_COOKIE}=${token}`, origin: "https://explore.agentgem.ai" } }) as any, out as any);
+      await logoutHandler(deps(db))(mockReq({ method: "POST", headers: { cookie: `${SESSION_COOKIE}=${token}`, origin: "https://app.agentgem.ai" } }) as any, out as any);
       expect(out._body).toEqual({ ok: true });
       expect(await resolveSession(db, token)).toBeNull();
       expect(out._headers["set-cookie"]).toContain("Max-Age=0");
@@ -685,7 +685,7 @@ Inside the block where the aggregator `db` is in scope (right after `mountGating
       config: {
         clientId: ghClientId, clientSecret: ghSecret, webOrigins,
         cookieDomain: process.env.AGENTGEM_SESSION_COOKIE_DOMAIN,
-        callbackUrl: `${process.env.AGENTGEM_PUBLIC_BASE ?? "https://app.agentgem.ai"}/api/auth/github/callback`,
+        callbackUrl: `${process.env.AGENTGEM_PUBLIC_BASE ?? "https://api.agentgem.ai"}/api/auth/github/callback`,
         stateSecret: process.env.AGENTGEM_SESSION_SECRET ?? ghSecret,
         sessionTtlMs: 30 * 24 * 60 * 60 * 1000, // 30 days
       },
@@ -886,7 +886,7 @@ export function App() {
   );
 }
 ```
-> The `Sign in with GitHub` link is an `<a href="https://app.agentgem.ai/api/auth/...">` — an absolute, cross-origin URL. The App click-interceptor only intercepts `href.startsWith("/")`, so this external link navigates normally (correct — OAuth needs a full navigation).
+> The `Sign in with GitHub` link is an `<a href="https://api.agentgem.ai/api/auth/...">` — an absolute, cross-origin URL. The App click-interceptor only intercepts `href.startsWith("/")`, so this external link navigates normally (correct — OAuth needs a full navigation).
 
 - [ ] **Step 8: Append header styles to `styles.css`** (not asserted)
 
@@ -917,7 +917,7 @@ git commit -m "feat(marketplace): web sign-in client + header (Sign in with GitH
 - [ ] **Backend suite** (compiled dist): `pnpm test` (= `tsc -b && vitest run`) → green, including `webAuth`, `authState`, `authCookie`, `authInstall`; the aggregator + controller suites unaffected.
 - [ ] **Marketplace gate:** `pnpm --filter @agentgem/marketplace test && … typecheck && … build` → green.
 - [ ] **Deploy + manual smoke (you-run-it, on the LIVE domains — the cross-site cookie can only be verified there):**
-  1. Register the OAuth callback `https://app.agentgem.ai/api/auth/github/callback` on the GitHub OAuth app.
-  2. Set on the Render `agentgem` service: `AGENTGEM_GITHUB_CLIENT_SECRET`, `AGENTGEM_WEB_ORIGINS=https://explore.agentgem.ai`, `AGENTGEM_SESSION_COOKIE_DOMAIN=.agentgem.ai`, `AGENTGEM_SESSION_SECRET` (random), `AGENTGEM_PUBLIC_BASE=https://app.agentgem.ai`. (`AGENTGEM_GITHUB_CLIENT_ID` already set.)
-  3. On `explore.agentgem.ai`: click **Sign in with GitHub** → authorize → land back signed in (avatar + login shown); reload keeps you signed in (cookie persists); **Sign out** clears it. Confirm `app.agentgem.ai/api/auth/me` returns `{authenticated:false}` cross-origin without the cookie and your identity with it.
+  1. Register the OAuth callback `https://api.agentgem.ai/api/auth/github/callback` on the GitHub OAuth app.
+  2. Set on the Render `agentgem` service: `AGENTGEM_GITHUB_CLIENT_SECRET`, `AGENTGEM_WEB_ORIGINS=https://app.agentgem.ai`, `AGENTGEM_SESSION_COOKIE_DOMAIN=.agentgem.ai`, `AGENTGEM_SESSION_SECRET` (random), `AGENTGEM_PUBLIC_BASE=https://api.agentgem.ai`. (`AGENTGEM_GITHUB_CLIENT_ID` already set.)
+  3. On `app.agentgem.ai`: click **Sign in with GitHub** → authorize → land back signed in (avatar + login shown); reload keeps you signed in (cookie persists); **Sign out** clears it. Confirm `api.agentgem.ai/api/auth/me` returns `{authenticated:false}` cross-origin without the cookie and your identity with it.
 - [ ] **Note:** sign-in will NOT round-trip on `localhost` / the raw `onrender.com` URLs (parent-domain cookie) — that's the accepted dev caveat; everything else in the marketplace still works signed-out there.

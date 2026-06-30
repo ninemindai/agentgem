@@ -5,7 +5,7 @@
 
 ## Goal
 
-Add public **gem browse + detail** pages to the marketplace (`packages/marketplace`, served at `explore.agentgem.ai`). A gem is a composable bundle of ingredients (skills/MCPs/…). M1 shipped *ingredient* discovery (the aggregator leaderboard); M1.5 adds *gem* discovery on top, and ties the two together via cross-links.
+Add public **gem browse + detail** pages to the marketplace (`packages/marketplace`, served at `app.agentgem.ai`). A gem is a composable bundle of ingredients (skills/MCPs/…). M1 shipped *ingredient* discovery (the aggregator leaderboard); M1.5 adds *gem* discovery on top, and ties the two together via cross-links.
 
 ## Context & key constraint
 

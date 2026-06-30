@@ -52,7 +52,7 @@ console Workflows.tsx
   shareGem(result)   → createGemShareRoute { kind:"gem", name: result.name, provenance: "N skills" }
         │ same-origin POST /api/share  (browser stays same-origin)
         ▼
-  ShareProxyController  → shareClient.postShare(body)  → app.agentgem.ai (default) / AGENTGEM_AGGREGATOR_URL
+  ShareProxyController  → shareClient.postShare(body)  → api.agentgem.ai (default) / AGENTGEM_AGGREGATOR_URL
         │ server-to-server (CF injects X-Origin-Auth; rate-limited)
         ▼
   ShareController.create  → shareStore  → share_cards row (kind:"gem", payload:{name,provenance})
@@ -66,7 +66,7 @@ Worker GET /share/:id → fetch record → branch on kind:
   GET /share/:id/og.png → certificate-only; for a gem id, 404 (no image).
 ```
 
-The create path already defaults to `https://app.agentgem.ai` (shareClient) and is protected by the
+The create path already defaults to `https://api.agentgem.ai` (shareClient) and is protected by the
 existing rate-limit + origin-secret — the gem kind rides all of it for free.
 
 ## Backend

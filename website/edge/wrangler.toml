@@ -45,7 +45,7 @@ routes = [
 # Hosted aggregator base URL (the share record store), no trailing slash. Empty/unset -> /share
 # serves a graceful placeholder. The Worker only does server-to-server GET reads against it.
 # Canonical Cloudflare-proxied host (→ Render); keeps traffic on one CF-fronted origin.
-AGGREGATOR_API = "https://app.agentgem.ai"
+AGGREGATOR_API = "https://api.agentgem.ai"
 
 [[rules]]
 type = "Data"
