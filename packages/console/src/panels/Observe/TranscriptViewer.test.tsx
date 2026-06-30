@@ -72,6 +72,21 @@ describe("TranscriptViewer", () => {
     await waitFor(() => expect(screen.getByText(/saved →/)).toBeTruthy());
   });
 
+  it("offers a compare picker that navigates to the diff sub-route", async () => {
+    vi.spyOn(routes.inspectSessionRoute, "call").mockResolvedValue(view);
+    vi.spyOn(routes.observeRawRoute, "call").mockResolvedValue({ sessions: [
+      { agent: "claude", sessionId: "s1", project: "agentgem", model: null, gitBranch: null, startMs: 0, endMs: 1, msgs: 1, tokensIn: 0, tokensOut: 0, tokensCache: 0 },
+      { agent: "claude", sessionId: "other2", project: "proj-b", model: null, gitBranch: null, startMs: 0, endMs: 1, msgs: 1, tokensIn: 0, tokensOut: 0, tokensCache: 0 },
+    ] });
+    window.location.hash = "";
+    render(<TranscriptViewer apiBase="" agent="claude" sessionId="s1" onBack={() => {}} />);
+    const picker = await screen.findByLabelText(/compare with another session/i) as HTMLSelectElement;
+    // current session is excluded; the other one is offered
+    expect(screen.queryByRole("option", { name: /other2/ })).toBeTruthy();
+    fireEvent.change(picker, { target: { value: "claude:other2" } });
+    expect(window.location.hash).toBe("#/inspect/claude/s1?vs=claude:other2");
+  });
+
   it("hides the distill CTA for Codex sessions (Claude-only pipeline)", async () => {
     vi.spyOn(routes.inspectSessionRoute, "call").mockResolvedValue({ ...view, agent: "codex" });
     render(<TranscriptViewer apiBase="" agent="codex" sessionId="s1" onBack={() => {}} />);

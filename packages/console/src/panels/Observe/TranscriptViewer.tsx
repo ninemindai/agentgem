@@ -6,7 +6,7 @@
 // reuses the obs-* token family so it sits inside the existing Inspect styling.
 import { useEffect, useState } from "react";
 import {
-  inspectSessionRoute, inspectDistillRoute, workflowDraftRoute, makeClient,
+  inspectSessionRoute, inspectDistillRoute, workflowDraftRoute, observeRawRoute, makeClient,
   type TranscriptView, type TranscriptTurn, type TranscriptSpan, type DistilledSkill,
 } from "../../api/routes.js";
 import { fmtTokens, fmtDuration } from "./data.js";
@@ -53,6 +53,7 @@ export function TranscriptViewer({ apiBase, agent, sessionId, onBack }: {
                 {allCollapsed ? "Expand all" : "Collapse all"}
               </button>
             )}
+            <ComparePicker apiBase={apiBase} current={{ agent, sessionId }} />
           </>
         )}
       </div>
@@ -99,7 +100,7 @@ function Turn({ turn, startMs, open, onToggle }: {
   );
 }
 
-function Span({ span }: { span: TranscriptSpan }) {
+export function Span({ span }: { span: TranscriptSpan }) {
   if (span.kind === "message") {
     return <pre className={"tv-msg role-" + span.role}>{span.text}</pre>;
   }
@@ -132,7 +133,7 @@ function ToolCall({ span }: { span: Extract<TranscriptSpan, { kind: "tool_call" 
 }
 
 // One-line preview of a turn for the collapsed header.
-function summarize(turn: TranscriptTurn): string {
+export function summarize(turn: TranscriptTurn): string {
   const first = turn.spans[0];
   if (!first) return "";
   if (first.kind === "message") return firstLine(first.text);
@@ -143,6 +144,41 @@ function summarize(turn: TranscriptTurn): string {
 function firstLine(s: string): string {
   const line = s.split("\n", 1)[0];
   return line.length > 120 ? line.slice(0, 119) + "…" : line;
+}
+
+// "Compare with…" picker (phase 4): lists other local sessions and navigates to
+// the side-by-side diff sub-route. Reuses the cached raw-session scan.
+function ComparePicker({ apiBase, current }: { apiBase: string; current: { agent: "claude" | "codex"; sessionId: string } }) {
+  const [sessions, setSessions] = useState<{ agent: "claude" | "codex"; sessionId: string; project: string | null }[]>([]);
+  useEffect(() => {
+    let alive = true;
+    observeRawRoute.call(makeClient(apiBase), { query: {} })
+      .then((p) => { if (alive) setSessions(p.sessions); })
+      .catch(() => { /* picker is optional — stay silent */ });
+    return () => { alive = false; };
+  }, [apiBase]);
+
+  const others = sessions.filter((s) => !(s.agent === current.agent && s.sessionId === current.sessionId));
+  if (others.length === 0) return null;
+
+  return (
+    <select className="tv-compare" aria-label="compare with another session" defaultValue=""
+      onChange={(e) => {
+        const v = e.target.value;
+        if (!v) return;
+        const idx = v.indexOf(":");
+        const agent = v.slice(0, idx), id = v.slice(idx + 1);
+        window.location.hash =
+          `#/inspect/${current.agent}/${encodeURIComponent(current.sessionId)}?vs=${agent}:${encodeURIComponent(id)}`;
+      }}>
+      <option value="">Compare with…</option>
+      {others.map((s) => (
+        <option key={s.agent + "|" + s.sessionId} value={`${s.agent}:${s.sessionId}`}>
+          {(s.project ?? "session")} · {s.sessionId.slice(0, 8)} · {s.agent}
+        </option>
+      ))}
+    </select>
+  );
 }
 
 // "Distill this session" CTA (phase 3): runs the existing distill pipeline over

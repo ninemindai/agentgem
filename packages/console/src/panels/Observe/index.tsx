@@ -5,13 +5,24 @@ import { observeRawRoute, makeClient, type ObserveRange, type ObserveFilter } fr
 import { aggregateObserve, type SessionStat } from "@agentgem/insight/observeAggregate";
 import { Dashboard } from "./Dashboard.js";
 import { TranscriptViewer } from "./TranscriptViewer.js";
+import { TranscriptDiff } from "./TranscriptDiff.js";
 import { Loading } from "../../shell/Loading.js";
 
-// Sub-route under #/inspect: #/inspect/<agent>/<sessionId> opens the transcript
-// drill-down for one session. Anything else (incl. bare #/inspect) is the aggregate.
-function parseSelection(hash: string): { agent: "claude" | "codex"; sessionId: string } | null {
-  const m = /^#\/inspect\/(claude|codex)\/(.+)$/.exec(hash.split("?")[0]);
-  return m ? { agent: m[1] as "claude" | "codex", sessionId: decodeURIComponent(m[2]) } : null;
+type Ref = { agent: "claude" | "codex"; sessionId: string };
+
+// Sub-route under #/inspect:
+//   #/inspect/<agent>/<sessionId>              → single-session transcript viewer
+//   #/inspect/<agent>/<sessionId>?vs=<a>:<id>  → side-by-side diff vs. another run
+// Anything else (incl. bare #/inspect) is the aggregate dashboard.
+function parseSelection(hash: string): { a: Ref; b: Ref | null } | null {
+  const [path, query] = hash.split("?");
+  const m = /^#\/inspect\/(claude|codex)\/(.+)$/.exec(path);
+  if (!m) return null;
+  const a: Ref = { agent: m[1] as Ref["agent"], sessionId: decodeURIComponent(m[2]) };
+  const vs = new URLSearchParams(query ?? "").get("vs");
+  const vm = vs ? /^(claude|codex):(.+)$/.exec(vs) : null;
+  const b: Ref | null = vm ? { agent: vm[1] as Ref["agent"], sessionId: decodeURIComponent(vm[2]) } : null;
+  return { a, b };
 }
 
 export function Observe({ apiBase }: { apiBase: string }) {
@@ -55,10 +66,12 @@ export function Observe({ apiBase }: { apiBase: string }) {
   );
 
   if (selection) {
+    const back = () => { window.location.hash = "#/inspect"; };
     return (
       <div className="obs">
-        <TranscriptViewer apiBase={apiBase} agent={selection.agent} sessionId={selection.sessionId}
-          onBack={() => { window.location.hash = "#/inspect"; }} />
+        {selection.b
+          ? <TranscriptDiff apiBase={apiBase} a={selection.a} b={selection.b} onBack={back} />
+          : <TranscriptViewer apiBase={apiBase} agent={selection.a.agent} sessionId={selection.a.sessionId} onBack={back} />}
       </div>
     );
   }
