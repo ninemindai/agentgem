@@ -9,7 +9,7 @@
 // missioned, degrades to deterministicFacets on agent error. The signal is the
 // source of truth for which sessions exist (validateFacets enforces it).
 // Mirrors recommendWorkflow / distillWorkflow in acpRecommender.ts.
-import type { WorkflowSignal } from "./workflowScan.js";
+import type { WorkflowSignal, SessionSequence } from "./workflowScan.js";
 import type { SessionFacet } from "./facets.js";
 import { deterministicFacets, validateFacets } from "./facets.js";
 import {
@@ -33,55 +33,69 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`agent timeout after ${ms}ms`)), ms))]);
 }
 
-/**
- * Judge every missioned session in `signal`. Never throws. Returns degraded:true
- * only when the agent call itself failed (an unusable response still yields
- * deterministic facets with degraded:false — the call succeeded).
- */
-// Default cap on sessions sent to the agent in one batch. Bounds prompt size on
-// projects with hundreds of sessions; we judge the most-recent ones. Tuned to
-// fit ONE agent pass within its timeout — at 50, judging "All projects" timed
-// out (~58s vs the 60s default) and the whole report degraded to neutral. 20
-// completes comfortably; chunking is the durable fix for full coverage.
-export const DEFAULT_MAX_JUDGE = 20;
+// Total cap on sessions judged (most-recent first). Bounds cost on projects with
+// hundreds of sessions. Chunked (below) so each agent call stays small.
+export const DEFAULT_MAX_JUDGE = 30;
+// Sessions per agent call. A multi-session judge prompt reasons over every session
+// at once and scales with batch size — at ~20 it neared a 60s deadline. Small
+// chunks each complete comfortably; coverage scales by judging several chunks.
+export const JUDGE_CHUNK_SIZE = 10;
 
-export async function judgeSessions(
-  signal: WorkflowSignal,
-  opts: { connectFn?: AcpConnectFn; timeoutMs?: number; maxSessions?: number; onDelta?: (chunk: string) => void } = {},
+// Judge ONE batch of sessions in a single agent call. Never throws: a failed call
+// degrades to deterministicFacets for THIS batch only. `subSignal` is the
+// authoritative source for validateFacets (only these sessions exist to it).
+async function judgeBatch(
+  subSignal: WorkflowSignal, sessions: SessionSequence[],
+  connectFn: AcpConnectFn, timeoutMs: number, onDelta?: (chunk: string) => void,
 ): Promise<{ facets: SessionFacet[]; degraded: boolean }> {
-  const allMissioned = (signal.sequences?.sessions ?? []).filter((s) => s.missionHint);
-  if (!allMissioned.length) return { facets: [], degraded: false };   // nothing to judge — agent never invoked
-  // Cap to the most-recent N and trim the signal so every downstream consumer
-  // (payload, validateFacets, deterministicFacets) sees the same judged set.
-  const max = opts.maxSessions ?? DEFAULT_MAX_JUDGE;
-  const selected = [...allMissioned].sort((a, b) => b.atMs - a.atMs).slice(0, max);
-  signal = { ...signal, sequences: { root: signal.sequences!.root, sessions: selected } };
-  const missioned = selected;
-
-  const connectFn = opts.connectFn ?? currentTestConnectFn() ?? defaultConnectFn;
-  // A multi-session judge prompt reasons over every session at once; observed
-  // ~58s even for 20 sessions, blowing a 60s deadline and degrading the whole
-  // report. Give the single pass real room (chunking is the durable fix).
-  const timeoutMs = opts.timeoutMs ?? 180_000;
   let conn: { ctx: AcpCtx; close: () => void } | null = null;
   let handle: AcpSessionHandle | null = null;
   try {
-    const payload = missioned.map((s) => ({ sessionId: s.sessionId, goal: s.missionHint!.task, result: s.missionHint!.outcome }));
+    const payload = sessions.map((s) => ({ sessionId: s.sessionId, goal: s.missionHint!.task, result: s.missionHint!.outcome }));
     const prompt = JUDGE(JSON.stringify(payload));
-    // One shared deadline across connect + open + setMode + prompt (the ACP
-    // handshake is otherwise unbounded). Mirrors recommendWorkflow.
     const deadline = Date.now() + timeoutMs;
     const left = () => Math.max(0, deadline - Date.now());
     conn = await withTimeout(connectFn(CLAUDE_AGENT, null), left());
     handle = await withTimeout(conn.ctx.open(analysisWorkspace()), left());  // neutral cwd — don't pollute the project
     await withTimeout(handle.setMode("plan"), left());                       // explicit — never edits files
-    const text = await withTimeout(handle.promptText(prompt, opts.onDelta), left());
-    return { facets: validateFacets(text, signal), degraded: false };
+    const text = await withTimeout(handle.promptText(prompt, onDelta), left());
+    return { facets: validateFacets(text, subSignal), degraded: false };
   } catch (err) {
-    console.error("insights: session judge fell back to heuristic:", (err as Error).message);
-    return { facets: deterministicFacets(signal), degraded: true };
+    console.error("insights: session judge chunk fell back to heuristic:", (err as Error).message);
+    return { facets: deterministicFacets(subSignal), degraded: true };
   } finally {
     try { handle?.dispose(); } catch { /* ignore */ }
     try { conn?.close(); } catch { /* ignore */ }
   }
+}
+
+/**
+ * Judge the most-recent missioned sessions in `signal`, in chunks so each agent
+ * call stays small + reliable. Never throws. degraded:true if ANY chunk's agent
+ * call failed (that chunk's sessions get deterministic facets; the rest succeed).
+ */
+export async function judgeSessions(
+  signal: WorkflowSignal,
+  opts: { connectFn?: AcpConnectFn; timeoutMs?: number; maxSessions?: number; chunkSize?: number; onDelta?: (chunk: string) => void } = {},
+): Promise<{ facets: SessionFacet[]; degraded: boolean }> {
+  const allMissioned = (signal.sequences?.sessions ?? []).filter((s) => s.missionHint);
+  if (!allMissioned.length) return { facets: [], degraded: false };   // nothing to judge — agent never invoked
+
+  const max = opts.maxSessions ?? DEFAULT_MAX_JUDGE;
+  const chunkSize = Math.max(1, opts.chunkSize ?? JUDGE_CHUNK_SIZE);
+  const selected = [...allMissioned].sort((a, b) => b.atMs - a.atMs).slice(0, max);
+  const connectFn = opts.connectFn ?? currentTestConnectFn() ?? defaultConnectFn;
+  const timeoutMs = opts.timeoutMs ?? 90_000;   // per chunk; small chunks fit easily
+  const root = signal.sequences!.root;
+
+  const facets: SessionFacet[] = [];
+  let degraded = false;
+  for (let i = 0; i < selected.length; i += chunkSize) {
+    const chunk = selected.slice(i, i + chunkSize);
+    const subSignal = { ...signal, sequences: { root, sessions: chunk } };
+    const r = await judgeBatch(subSignal, chunk, connectFn, timeoutMs, opts.onDelta);
+    facets.push(...r.facets);
+    if (r.degraded) degraded = true;
+  }
+  return { facets, degraded };
 }
