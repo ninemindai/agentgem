@@ -10,7 +10,7 @@
 // framework only returns single JSON bodies.
 import { introspectConfig, introspectProject } from "@agentgem/capture";
 import { resolveDirs, resolveProject } from "@agentgem/model";
-import { claudeTranscriptsForCwd, scanWorkflow } from "@agentgem/insight";
+import { claudeTranscriptsForCwd, allClaudeTranscripts, scanWorkflow } from "@agentgem/insight";
 import { judgeSessions, synthesizeInsights, narrateInsights } from "@agentgem/insight";
 import { insightsToken, readInsightsCache, writeInsightsCache } from "@agentgem/insight";
 
@@ -40,12 +40,20 @@ export async function streamInsights(req: SseReq, res: SseRes): Promise<void> {
   try {
     if (!root) { send("failed", { message: "missing root" }); return; }
     const dirs = resolveDirs(dir);
-    const project = introspectProject(resolveProject(root));
-    const globalInv = introspectConfig(dirs);
-    const scanInv = { project, global: { skills: globalInv.skills, mcpServers: globalInv.mcpServers, hooks: globalInv.hooks } };
+    // root === "*" → cross-project: judge the most-recent sessions across ALL
+    // projects (the agent cap bounds it). Inventory is irrelevant to insights
+    // (only mission hints are used), so the all-projects path skips introspection.
+    const allProjects = root === "*";
+    const scanInv = allProjects
+      ? { project: { root: "*", name: "All projects", skills: [], mcpServers: [], hooks: [], instructions: [] } }
+      : (() => {
+          const project = introspectProject(resolveProject(root));
+          const globalInv = introspectConfig(dirs);
+          return { project, global: { skills: globalInv.skills, mcpServers: globalInv.mcpServers, hooks: globalInv.hooks } };
+        })();
 
     send("phase", { phase: "scanning" });
-    const paths = claudeTranscriptsForCwd(dirs.claudeDir, root);
+    const paths = allProjects ? allClaudeTranscripts(dirs.claudeDir) : claudeTranscriptsForCwd(dirs.claudeDir, root);
 
     // Cache hit (unless Re-run): the report is two agent passes, so serve the
     // prior result instantly. Token invalidates when a session is added/updated.

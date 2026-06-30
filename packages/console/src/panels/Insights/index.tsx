@@ -51,7 +51,9 @@ export function Insights({ apiBase }: { apiBase: string }) {
     for (const p of projects ?? []) { if (!seen.has(p.path)) { seen.add(p.path); acc.push({ path: p.path, flavor: p.flavor, label: short(p.path) }); } }
     const q = query.trim().toLowerCase();
     const matched = q ? acc.filter((r) => r.label.toLowerCase().includes(q) || r.path.toLowerCase().includes(q)) : acc;
-    return matched.slice(0, 40);
+    // "All projects" (root "*") leads the list — a cross-project report over the
+    // most-recent sessions everywhere.
+    return [{ path: "*", flavor: "all", label: "All projects" }, ...matched.slice(0, 40)];
   })();
 
   return (
@@ -102,7 +104,7 @@ export function Insights({ apiBase }: { apiBase: string }) {
                       {report && (
                         <InsightsReportCard
                           report={report}
-                          onBuild={() => { setPendingAnalyze(r.path); window.location.hash = "#/curate"; }}
+                          onBuild={r.path === "*" ? undefined : () => { setPendingAnalyze(r.path); window.location.hash = "#/curate"; }}
                         />
                       )}
                     </div>
@@ -116,7 +118,7 @@ export function Insights({ apiBase }: { apiBase: string }) {
   );
 }
 
-function InsightsReportCard({ report, onBuild }: { report: InsightsReportView; onBuild: () => void }) {
+function InsightsReportCard({ report, onBuild }: { report: InsightsReportView; onBuild?: () => void }) {
   return (
     <div className="insights-report">
       {report.narrative && <p className="insights-narrative">{report.narrative}</p>}
@@ -126,7 +128,7 @@ function InsightsReportCard({ report, onBuild }: { report: InsightsReportView; o
         <div className="insights-section">
           <div className="analyze-candidate-head">
             <h4 style={{ margin: 0 }}>Worth publishing</h4>
-            <button type="button" className="ledger-build" style={{ marginLeft: "auto" }} onClick={onBuild}>Build a Gem from this project →</button>
+            {onBuild && <button type="button" className="ledger-build" style={{ marginLeft: "auto" }} onClick={onBuild}>Build a Gem from this project →</button>}
           </div>
           <ul className="analyze-include">
             {report.publish_candidates.map((c) => (
