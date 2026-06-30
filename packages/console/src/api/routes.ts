@@ -559,4 +559,16 @@ export const installSkillRoute = defineRoute("POST", "/api/optimize/discover/ins
   response: InstallSkillResultSchema,
 });
 
+// Network cross-model benchmark (aggregator, k-anonymised). Per-model outcome
+// counts across producers; success rate = mostly / (mostly + partially + notAchieved).
+export const BenchmarkSchema = z.array(z.object({
+  model: z.string(), mostly: z.number(), partially: z.number(), notAchieved: z.number(),
+  producers: z.number(), verifiedProducers: z.number(),
+}));
+export type BenchmarkRow = z.infer<typeof BenchmarkSchema>[number];
+export const benchmarksRoute = defineRoute("GET", "/api/aggregator/benchmarks", {
+  query: z.object({ gemDigest: z.string().optional() }),
+  response: BenchmarkSchema,
+});
+
 export const makeClient = (apiBase: string): Client => createClient({ baseURL: apiBase });
