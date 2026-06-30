@@ -48,4 +48,14 @@ describe("synthesizeInsights", () => {
     expect(r.publish_candidates).toEqual([]);
     expect(r.friction).toEqual([]);
   });
+
+  it("includes a deterministic narrative summarizing the outcomes", () => {
+    const r = synthesizeInsights([facet("a", "mostly_achieved"), facet("b", "not_achieved")]);
+    expect(r.narrative).toContain("2"); // session count
+    expect(r.narrative.length).toBeGreaterThan(0);
+  });
+
+  it("gives a no-sessions narrative when empty", () => {
+    expect(synthesizeInsights([]).narrative.toLowerCase()).toContain("no session");
+  });
 });

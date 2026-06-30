@@ -11,7 +11,7 @@
 import { introspectConfig, introspectProject } from "@agentgem/capture";
 import { resolveDirs, resolveProject } from "@agentgem/model";
 import { claudeTranscriptsForCwd, scanWorkflow } from "@agentgem/insight";
-import { judgeSessions, synthesizeInsights } from "@agentgem/insight";
+import { judgeSessions, synthesizeInsights, narrateInsights } from "@agentgem/insight";
 
 interface SseReq { query: Record<string, unknown> }
 interface SseRes {
@@ -48,14 +48,20 @@ export async function streamInsights(req: SseReq, res: SseRes): Promise<void> {
     send("phase", { phase: "scanned", transcripts: paths.length, sessions: signal.sessions.scanned });
 
     send("phase", { phase: "judging" });
-    const { facets, degraded } = await judgeSessions(signal, { onDelta: (chunk) => send("delta", { text: chunk }) });
+    const { facets, degraded: judgeDegraded } = await judgeSessions(signal, { onDelta: (chunk) => send("delta", { text: chunk }) });
 
     send("phase", { phase: "synthesizing" });
     const report = synthesizeInsights(facets);
+
+    // Upgrade the deterministic narrative with the agent's cross-session prose.
+    send("phase", { phase: "narrating" });
+    const narr = await narrateInsights(facets, report.narrative, { onDelta: (chunk) => send("delta", { text: chunk }) });
+    report.narrative = narr.narrative;
+
     send("done", {
       report,
       facets,
-      degraded,
+      degraded: judgeDegraded || narr.degraded,
       signalSummary: { sessionsScanned: signal.sessions.scanned, spanDays: signal.sessions.spanDays, notes: signal.notes },
     });
   } catch (err) {

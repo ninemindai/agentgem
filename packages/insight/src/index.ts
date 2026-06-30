@@ -5,6 +5,7 @@ export * from "./workflowScan.js";
 export * from "./facets.js";
 export * from "./judgeSession.js";
 export * from "./insightsReport.js";
+export * from "./narrateInsights.js";
 export * from "./scrub.js";
 export * from "./observeScan.js";
 export * from "./inspectSession.js";

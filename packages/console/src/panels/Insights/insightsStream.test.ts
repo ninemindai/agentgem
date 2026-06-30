@@ -16,6 +16,7 @@ afterEach(() => { FakeES.last = null; });
 const REPORT = {
   totals: { sessions: 2, mostly: 1, partially: 1, not: 0 },
   outcomes_summary: "2 session(s): 1 mostly achieved, 1 partial, 0 not achieved.",
+  narrative: "You ship end-to-end and verify as you go.",
   friction: [{ sessionId: "b", detail: "interrupted" }],
   publish_candidates: [{ sessionId: "a", goal: "ship auth", why: "Succeeded: merged" }],
 };

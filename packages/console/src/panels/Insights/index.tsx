@@ -116,6 +116,7 @@ export function Insights({ apiBase }: { apiBase: string }) {
 function InsightsReportCard({ report, onBuild }: { report: InsightsReportView; onBuild: () => void }) {
   return (
     <div className="insights-report">
+      {report.narrative && <p className="insights-narrative">{report.narrative}</p>}
       <p className="analyze-candidate-desc">{report.outcomes_summary}</p>
 
       {report.publish_candidates.length > 0 && (

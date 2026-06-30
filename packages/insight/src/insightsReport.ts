@@ -14,6 +14,7 @@ export interface FrictionTheme { sessionId: string; detail: string }
 export interface InsightsReport {
   totals: { sessions: number; mostly: number; partially: number; not: number };
   outcomes_summary: string;
+  narrative: string;            // cross-session prose; deterministic here, upgraded by narrateInsights
   friction: FrictionTheme[];
   publish_candidates: PublishCandidate[];
 }
@@ -34,5 +35,21 @@ export function synthesizeInsights(facets: SessionFacet[]): InsightsReport {
   const publish_candidates: PublishCandidate[] = facets
     .filter((f) => f.outcome === "mostly_achieved")
     .map((f) => ({ sessionId: f.sessionId, goal: f.underlying_goal, why: `Succeeded: ${f.brief_summary}` }));
-  return { totals, outcomes_summary, friction, publish_candidates };
+  return { totals, outcomes_summary, narrative: templateNarrative(totals, publish_candidates), friction, publish_candidates };
+}
+
+// Deterministic baseline narrative — a factual one-liner from the stats. The
+// agent pass (narrateInsights) upgrades this to a real characterization; this is
+// the honest fallback when the agent is unavailable.
+function templateNarrative(
+  totals: InsightsReport["totals"],
+  publish: PublishCandidate[],
+): string {
+  if (totals.sessions === 0) return "No sessions analyzed yet — nothing to characterize.";
+  const parts = [`Across ${totals.sessions} session(s), ${totals.mostly} mostly succeeded`];
+  if (totals.partially) parts.push(`${totals.partially} were partial`);
+  if (totals.not) parts.push(`${totals.not} fell short`);
+  let s = parts.join(", ") + ".";
+  if (publish.length) s += ` ${publish.length} look worth publishing — e.g. "${publish[0].goal}".`;
+  return s;
 }
