@@ -428,12 +428,21 @@ export const DistilledSkillSchema = z.object({
   origin: z.enum(["llm", "heuristic"]),
 });
 export type DistilledSkill = z.infer<typeof DistilledSkillSchema>;
+export const DistilledLessonSchema = z.object({
+  name: z.string(), body: z.string(), importance: z.enum(["high", "medium"]), status: z.literal("draft"),
+  evidence: z.object({ sessions: z.number(), root: z.string(), provenance: z.object({ occurrences: z.array(z.unknown()) }) }),
+});
+export type DistilledLesson = z.infer<typeof DistilledLessonSchema>;
 export const inspectDistillRoute = defineRoute("POST", "/api/inspect/distill", {
   body: z.object({ id: z.string(), agent: z.enum(["claude", "codex"]) }),
-  response: z.object({ distilled: z.array(DistilledSkillSchema), degraded: z.boolean() }),
+  response: z.object({ distilled: z.array(DistilledSkillSchema), lessons: z.array(DistilledLessonSchema), degraded: z.boolean() }),
 });
 export const workflowDraftRoute = defineRoute("POST", "/api/workflow/draft", {
   body: DistilledSkillSchema,
+  response: z.object({ path: z.string() }),
+});
+export const workflowLessonRoute = defineRoute("POST", "/api/workflow/lesson", {
+  body: DistilledLessonSchema,
   response: z.object({ path: z.string() }),
 });
 

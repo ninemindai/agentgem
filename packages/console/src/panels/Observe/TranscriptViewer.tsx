@@ -6,8 +6,8 @@
 // reuses the obs-* token family so it sits inside the existing Inspect styling.
 import { useEffect, useState } from "react";
 import {
-  inspectSessionRoute, inspectDistillRoute, workflowDraftRoute, observeRawRoute, makeClient,
-  type TranscriptView, type TranscriptTurn, type TranscriptSpan, type DistilledSkill,
+  inspectSessionRoute, inspectDistillRoute, workflowDraftRoute, workflowLessonRoute, observeRawRoute, makeClient,
+  type TranscriptView, type TranscriptTurn, type TranscriptSpan, type DistilledSkill, type DistilledLesson,
 } from "../../api/routes.js";
 import { fmtTokens, fmtDuration } from "./data.js";
 import { Loading } from "../../shell/Loading.js";
@@ -188,6 +188,7 @@ function ComparePicker({ apiBase, current }: { apiBase: string; current: { agent
 function DistillSection({ apiBase, agent, sessionId }: { apiBase: string; agent: "claude" | "codex"; sessionId: string }) {
   const [state, setState] = useState<"idle" | "running" | "done" | "error">("idle");
   const [drafts, setDrafts] = useState<DistilledSkill[]>([]);
+  const [lessons, setLessons] = useState<DistilledLesson[]>([]);
   const [degraded, setDegraded] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -196,7 +197,7 @@ function DistillSection({ apiBase, agent, sessionId }: { apiBase: string; agent:
   const run = () => {
     setState("running"); setErr(null);
     inspectDistillRoute.call(makeClient(apiBase), { body: { id: sessionId, agent } })
-      .then((r) => { setDrafts(r.distilled); setDegraded(r.degraded); setState("done"); })
+      .then((r) => { setDrafts(r.distilled); setLessons(r.lessons); setDegraded(r.degraded); setState("done"); })
       .catch((e) => { setErr(String(e?.message ?? e)); setState("error"); });
   };
 
@@ -209,10 +210,11 @@ function DistillSection({ apiBase, agent, sessionId }: { apiBase: string; agent:
       {state === "done" && degraded && (
         <span className="obs-muted tv-distill-note">Heuristic draft — set ANTHROPIC_API_KEY for richer distillation.</span>
       )}
-      {state === "done" && drafts.length === 0 && (
-        <span className="obs-muted tv-distill-note">No distillable procedure found in this session.</span>
+      {state === "done" && drafts.length === 0 && lessons.length === 0 && (
+        <span className="obs-muted tv-distill-note">No distillable procedure or lesson found in this session.</span>
       )}
       {drafts.map((d) => <DraftCard key={d.name} apiBase={apiBase} draft={d} />)}
+      {lessons.map((l) => <LessonCard key={l.name} apiBase={apiBase} lesson={l} />)}
     </div>
   );
 }
@@ -246,6 +248,30 @@ function DraftCard({ apiBase, draft }: { apiBase: string; draft: DistilledSkill 
         <span className={"obs-caret" + (open ? " open" : "")}>▸</span> body
       </button>
       {open && <pre className="tv-io">{draft.body}</pre>}
+      {err && <span className="obs-error tv-distill-note">{err}</span>}
+    </div>
+  );
+}
+
+function LessonCard({ apiBase, lesson }: { apiBase: string; lesson: DistilledLesson }) {
+  const [saved, setSaved] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const save = () => {
+    setSaving(true); setErr(null);
+    workflowLessonRoute.call(makeClient(apiBase), { body: lesson })
+      .then((r) => setSaved(r.path)).catch((e) => setErr(String(e?.message ?? e))).finally(() => setSaving(false));
+  };
+  return (
+    <div className="tv-draft">
+      <div className="tv-draft-head">
+        <span className="tv-draft-name">{lesson.name}</span>
+        <span className="obs-chip">{lesson.importance}</span>
+        {saved
+          ? <span className="obs-muted tv-draft-saved">saved → {saved}</span>
+          : <button type="button" className="obs-open-transcript" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save lesson"}</button>}
+      </div>
+      <p className="tv-draft-desc">{lesson.body}</p>
       {err && <span className="obs-error tv-distill-note">{err}</span>}
     </div>
   );

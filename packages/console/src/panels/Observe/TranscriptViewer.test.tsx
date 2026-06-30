@@ -59,7 +59,7 @@ describe("TranscriptViewer", () => {
       mutating: false, body: "# steps", status: "draft", confidence: "high", origin: "llm",
       evidence: { sessions: 1, exampleSequence: ["Read"], root: "/work/app", provenance: { occurrences: [] } },
     };
-    const distillSpy = vi.spyOn(routes.inspectDistillRoute, "call").mockResolvedValue({ distilled: [draft], degraded: false });
+    const distillSpy = vi.spyOn(routes.inspectDistillRoute, "call").mockResolvedValue({ distilled: [draft], lessons: [], degraded: false });
     vi.spyOn(routes.workflowDraftRoute, "call").mockResolvedValue({ path: "/work/app/.agentgem/distilled/do-the-thing/SKILL.md" });
     render(<TranscriptViewer apiBase="" agent="claude" sessionId="s1" onBack={() => {}} />);
     await waitFor(() => expect(screen.getAllByText("do the thing").length).toBeGreaterThan(0));
@@ -85,6 +85,19 @@ describe("TranscriptViewer", () => {
     expect(screen.queryByRole("option", { name: /other2/ })).toBeTruthy();
     fireEvent.change(picker, { target: { value: "claude:other2" } });
     expect(window.location.hash).toBe("#/inspect/claude/s1?vs=claude:other2");
+  });
+
+  it("renders distilled lessons and saves one via /api/workflow/lesson", async () => {
+    const lesson = { name: "pin-the-seed", body: "Pin the flaky test seed first.", importance: "high" as const, status: "draft" as const,
+      evidence: { sessions: 1, root: "/work/app", provenance: { occurrences: [] } } };
+    vi.spyOn(routes.inspectSessionRoute, "call").mockResolvedValue(view);
+    vi.spyOn(routes.inspectDistillRoute, "call").mockResolvedValue({ distilled: [], lessons: [lesson], degraded: false });
+    const saveSpy = vi.spyOn(routes.workflowLessonRoute, "call").mockResolvedValue({ path: "/work/app/.agentgem/distilled/lessons/pin-the-seed.md" });
+    render(<TranscriptViewer apiBase="" agent="claude" sessionId="s1" onBack={vi.fn()} />);
+    fireEvent.click(await screen.findByText(/Distill this session/));
+    fireEvent.click(await screen.findByText("Save lesson"));
+    await waitFor(() => expect(saveSpy).toHaveBeenCalledWith(expect.anything(), { body: lesson }));
+    await screen.findByText(/saved →/);
   });
 
   it("hides the distill CTA for Codex sessions (Claude-only pipeline)", async () => {
