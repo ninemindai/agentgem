@@ -55,7 +55,9 @@ export interface ToolDeps {
   token?: string;
   // Judge sessions into per-model outcomes (the ACP agent). Opt-in: only called
   // when a tool requests includeOutcomes, so the default publish stays agent-free.
-  judge?: (signal: WorkflowSignal) => Promise<SessionFacet[]>;
+  // Returns degraded:true when the agent fell back to neutral heuristics — those
+  // outcomes must NOT be published, or they pollute the network benchmark.
+  judge?: (signal: WorkflowSignal) => Promise<{ facets: SessionFacet[]; degraded: boolean }>;
 }
 
 // The scan resolves a Skill/mcp__ invocation against BOTH project-local and
@@ -76,7 +78,7 @@ export function realDeps(): ToolDeps {
       // outcome judge (the cross-model histogram); cheap when unused.
       return { inventory, signal: scanWorkflow(paths, scanInv, { retainSequences: true }) };
     },
-    judge: async (signal) => (await judgeSessions(signal)).facets,
+    judge: (signal) => judgeSessions(signal),
     // Distribution-publish to the GitHub registry is intentionally NOT wired here yet.
     // It must first fetch the LIVE registry index — publishing against an empty index
     // would overwrite and erase other published gems (data loss). Until that lands,
@@ -90,7 +92,12 @@ export function realDeps(): ToolDeps {
 // Opt-in: judge sessions into per-model outcomes only when the tool asks for it
 // (includeOutcomes) and a judge is wired. Keeps the default publish agent-free.
 async function maybeJudge(args: Record<string, unknown>, signal: WorkflowSignal, deps: ToolDeps): Promise<SessionFacet[] | undefined> {
-  return args.includeOutcomes === true && deps.judge ? deps.judge(signal) : undefined;
+  if (args.includeOutcomes !== true || !deps.judge) return undefined;
+  const { facets, degraded } = await deps.judge(signal);
+  // A degraded judge yields neutral heuristic facets — publishing those would
+  // pollute the network benchmark with fake "partially" outcomes. Omit them
+  // (the attestation stays v1) so only real, agent-judged outcomes are shared.
+  return degraded ? undefined : facets;
 }
 
 // ---- dispatch (unit-tested with injected deps) ----
@@ -157,7 +164,7 @@ export class DistillTools {
   @tool("sign_and_publish", {
     input: AttestInput,
     description:
-      "Sign + publish from the reviewed selection. The attestation is REBUILT server-side from the local scan; the host agent supplies only the selection, never the counts (any caller-supplied attestation is ignored). Embeds it in the Gem archive and POSTs to the ingest endpoint (skipped if unconfigured). Registry distribution is currently disabled; do not report a published distribution unless a publishedRef is returned.",
+      "Sign + publish from the reviewed selection. The attestation is REBUILT server-side from the local scan; the host agent supplies only the selection, never the counts (any caller-supplied attestation is ignored). Embeds it in the Gem archive and POSTs to the ingest endpoint (skipped if unconfigured). Registry distribution is currently disabled; do not report a published distribution unless a publishedRef is returned. Pass includeOutcomes:true (with the user's consent) to also judge the sessions and contribute per-model success rates to the public cross-model benchmark; degraded judgements are withheld, never published.",
   })
   async signAndPublish(input: z.infer<typeof AttestInput>) {
     return dispatchTool("sign_and_publish", input as Record<string, unknown>, this.deps);
