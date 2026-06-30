@@ -40,6 +40,7 @@ export function App() {
         <nav className="ex-nav">
           <a href="/" className={"ex-navlink" + (onGems ? "" : " is-active")}>Ingredients</a>
           <a href="/gems" className={"ex-navlink" + (onGems ? " is-active" : "")}>Gems</a>
+          {me && <a href="/publish" className="ex-navlink">Publish</a>}
         </nav>
         <span className="ex-auth">
           {me ? (
@@ -53,7 +54,7 @@ export function App() {
           )}
         </span>
       </header>
-      <main className="ex-main"><Router api={api} stars={{ signedIn: !!me, loginUrl: () => auth.loginUrl(window.location.href), api: starsApi }} /></main>
+      <main className="ex-main"><Router api={api} me={me} stars={{ signedIn: !!me, loginUrl: () => auth.loginUrl(window.location.href), api: starsApi }} /></main>
       <footer className="ex-footer">Trusted-adoption data, k-anonymized. <a href="https://agentgem.ai">agentgem.ai</a></footer>
     </div>
   );
