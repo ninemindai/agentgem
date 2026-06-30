@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  parseClaudeTranscriptView, parseCodexTranscriptView, loadSessionTranscript,
+  parseClaudeTranscriptView, parseCodexTranscriptView, loadSessionTranscript, resolveClaudeSession,
   type TranscriptView,
 } from "@agentgem/insight";
 
@@ -161,5 +161,18 @@ describe("loadSessionTranscript", () => {
   it("returns null for a missing session without throwing", async () => {
     expect(await loadSessionTranscript("nope", "claude", { claudeDir, codexDir })).toBeNull();
     expect(await loadSessionTranscript("nope", "codex", { claudeDir, codexDir })).toBeNull();
+  });
+});
+
+describe("resolveClaudeSession (distill hook seam)", () => {
+  it("returns the transcript path and the RAW cwd for distillation", async () => {
+    const found = await resolveClaudeSession("s1", { claudeDir });
+    expect(found).not.toBeNull();
+    expect(found!.path.endsWith("s1.jsonl")).toBe(true);
+    expect(found!.cwd).toBe("/work/app"); // raw, un-de-homed — needed to resolve the project
+  });
+
+  it("returns null for a missing session", async () => {
+    expect(await resolveClaudeSession("nope", { claudeDir })).toBeNull();
   });
 });

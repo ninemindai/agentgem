@@ -408,6 +408,35 @@ export const inspectSessionRoute = defineRoute("GET", "/api/inspect/session", {
   response: TranscriptViewSchema,
 });
 
+// "Distill this session" (phase 3): runs the workflow scan + distill pipeline over
+// one session, returning draft skills. Mirrors the server DistilledSkillSchema so a
+// draft round-trips back to /workflow/draft unchanged.
+const OccurrenceSchema = z.object({ sessionId: z.string(), transcript: z.string(), messageIndices: z.array(z.number()), atMs: z.number() });
+export const DistilledSkillSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  triggers: z.array(z.string()),
+  tools: z.array(z.string()),
+  mutating: z.boolean(),
+  body: z.string(),
+  evidence: z.object({
+    sessions: z.number(), exampleSequence: z.array(z.string()), root: z.string(),
+    provenance: z.object({ occurrences: z.array(OccurrenceSchema) }),
+  }),
+  status: z.literal("draft"),
+  confidence: z.enum(["high", "medium", "low"]),
+  origin: z.enum(["llm", "heuristic"]),
+});
+export type DistilledSkill = z.infer<typeof DistilledSkillSchema>;
+export const inspectDistillRoute = defineRoute("POST", "/api/inspect/distill", {
+  body: z.object({ id: z.string(), agent: z.enum(["claude", "codex"]) }),
+  response: z.object({ distilled: z.array(DistilledSkillSchema), degraded: z.boolean() }),
+});
+export const workflowDraftRoute = defineRoute("POST", "/api/workflow/draft", {
+  body: DistilledSkillSchema,
+  response: z.object({ path: z.string() }),
+});
+
 export const ScorecardSchema = z.object({
   breadth: z.number(),
   battleTested: z.number(),

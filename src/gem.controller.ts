@@ -5,7 +5,7 @@ import { existsSync, writeFileSync, readFileSync } from "node:fs";
 import { basename, resolve, sep } from "node:path";
 import { z } from "zod";
 import { api, get, post } from "@agentback/openapi";
-import { scanSessionsCached, aggregateObserve, loadSessionTranscript } from "@agentgem/insight";
+import { scanSessionsCached, aggregateObserve, loadSessionTranscript, resolveClaudeSession } from "@agentgem/insight";
 import { scanArtifactUsageCached } from "@agentgem/insight";
 import { buildOptimizePayload, buildDiscover, rerankCandidates, type OptimizeRange } from "@agentgem/insight";
 
@@ -60,6 +60,11 @@ const TranscriptViewSchema = z.object({
   sessionId: z.string(), agent: z.enum(["claude", "codex"]),
   meta: SessionStatSchema, turns: z.array(TranscriptTurnSchema),
 });
+// "Distill this session" (proposal phase 3): runs the EXISTING workflow scan +
+// distill pipeline over a single session's transcript. Claude-only, like the
+// project analyze flow (workflowScan reads Claude transcripts).
+const InspectDistillBodySchema = z.object({ id: z.string(), agent: z.enum(["claude", "codex"]) });
+const InspectDistillResponseSchema = z.object({ distilled: z.array(DistilledSkillSchema), degraded: z.boolean() });
 const OptimizeQuerySchema = z.object({ range: z.enum(["today", "7d", "30d", "all"]).optional(), refresh: z.coerce.boolean().optional() });
 const OptimizeArtifactSchema = z.object({
   name: z.string(), type: z.enum(["skill", "mcp"]), source: z.string(),
@@ -291,6 +296,21 @@ export class GemController {
     const view = await loadSessionTranscript(input.query.id, input.query.agent);
     if (!view) throw new InvalidInputError(`No ${input.query.agent} session '${input.query.id}' found.`);
     return view;
+  }
+
+  @post("/inspect/distill", { body: InspectDistillBodySchema, response: InspectDistillResponseSchema })
+  async inspectDistill(input: { body: z.infer<typeof InspectDistillBodySchema> }): Promise<z.infer<typeof InspectDistillResponseSchema>> {
+    if (input.body.agent !== "claude") throw new InvalidInputError("Distillation supports Claude sessions only.");
+    const found = await resolveClaudeSession(input.body.id);
+    if (!found || !found.cwd) throw new InvalidInputError(`No Claude session '${input.body.id}' found (or it has no recorded project).`);
+    // Same pipeline as /workflow/analyze, scoped to this one transcript.
+    const inventory = introspectAll(undefined, [found.cwd]);
+    const project = (inventory.projects ?? []).find((p) => p.root === resolveProject(found.cwd!));
+    if (!project) throw new InvalidInputError(`Project for session '${input.body.id}' not found in inventory.`);
+    const scanInv = { project, global: { skills: inventory.skills, mcpServers: inventory.mcpServers, hooks: inventory.hooks } };
+    const signal = scanWorkflow([found.path], scanInv, { retainSequences: true });
+    const distill = await distillWorkflow(signal, scanInv);
+    return { distilled: distill.distilled, degraded: distill.degraded };
   }
 
   @get("/optimize", { query: OptimizeQuerySchema, response: OptimizePayloadSchema })

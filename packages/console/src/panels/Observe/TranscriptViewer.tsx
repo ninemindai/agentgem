@@ -5,7 +5,10 @@
 // I/O, and per-turn token/cost chips. Reads the lazy, scrubbed transcript route;
 // reuses the obs-* token family so it sits inside the existing Inspect styling.
 import { useEffect, useState } from "react";
-import { inspectSessionRoute, makeClient, type TranscriptView, type TranscriptTurn, type TranscriptSpan } from "../../api/routes.js";
+import {
+  inspectSessionRoute, inspectDistillRoute, workflowDraftRoute, makeClient,
+  type TranscriptView, type TranscriptTurn, type TranscriptSpan, type DistilledSkill,
+} from "../../api/routes.js";
 import { fmtTokens, fmtDuration } from "./data.js";
 import { Loading } from "../../shell/Loading.js";
 
@@ -53,6 +56,8 @@ export function TranscriptViewer({ apiBase, agent, sessionId, onBack }: {
           </>
         )}
       </div>
+
+      {view && <DistillSection apiBase={apiBase} agent={view.agent} sessionId={view.sessionId} />}
 
       {error ? (
         <p className="obs-error">Couldn't load session: {error}</p>
@@ -138,6 +143,76 @@ function summarize(turn: TranscriptTurn): string {
 function firstLine(s: string): string {
   const line = s.split("\n", 1)[0];
   return line.length > 120 ? line.slice(0, 119) + "…" : line;
+}
+
+// "Distill this session" CTA (phase 3): runs the existing distill pipeline over
+// this one session and lists the resulting draft skill(s). Claude-only — the
+// workflow scan reads Claude transcripts. Annotation/scoring is deliberately out
+// of scope (proposal non-goals): this is just tagging-via-distill, not an eval rig.
+function DistillSection({ apiBase, agent, sessionId }: { apiBase: string; agent: "claude" | "codex"; sessionId: string }) {
+  const [state, setState] = useState<"idle" | "running" | "done" | "error">("idle");
+  const [drafts, setDrafts] = useState<DistilledSkill[]>([]);
+  const [degraded, setDegraded] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  if (agent !== "claude") return null;
+
+  const run = () => {
+    setState("running"); setErr(null);
+    inspectDistillRoute.call(makeClient(apiBase), { body: { id: sessionId, agent } })
+      .then((r) => { setDrafts(r.distilled); setDegraded(r.degraded); setState("done"); })
+      .catch((e) => { setErr(String(e?.message ?? e)); setState("error"); });
+  };
+
+  return (
+    <div className="tv-distill">
+      <button type="button" className="tv-distill-btn" onClick={run} disabled={state === "running"}>
+        {state === "running" ? "Distilling…" : "✦ Distill this session"}
+      </button>
+      {state === "error" && <span className="obs-error tv-distill-note">{err}</span>}
+      {state === "done" && degraded && (
+        <span className="obs-muted tv-distill-note">Heuristic draft — set ANTHROPIC_API_KEY for richer distillation.</span>
+      )}
+      {state === "done" && drafts.length === 0 && (
+        <span className="obs-muted tv-distill-note">No distillable procedure found in this session.</span>
+      )}
+      {drafts.map((d) => <DraftCard key={d.name} apiBase={apiBase} draft={d} />)}
+    </div>
+  );
+}
+
+function DraftCard({ apiBase, draft }: { apiBase: string; draft: DistilledSkill }) {
+  const [open, setOpen] = useState(false);
+  const [saved, setSaved] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const save = () => {
+    setSaving(true); setErr(null);
+    workflowDraftRoute.call(makeClient(apiBase), { body: draft })
+      .then((r) => setSaved(r.path))
+      .catch((e) => setErr(String(e?.message ?? e)))
+      .finally(() => setSaving(false));
+  };
+
+  return (
+    <div className="tv-draft">
+      <div className="tv-draft-head">
+        <span className="tv-draft-name">{draft.name}</span>
+        <span className="obs-chip">{draft.confidence}</span>
+        {saved
+          ? <span className="obs-muted tv-draft-saved">saved → {saved}</span>
+          : <button type="button" className="obs-open-transcript" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save draft"}</button>}
+      </div>
+      <p className="tv-draft-desc">{draft.description}</p>
+      {draft.tools.length > 0 && <div className="obs-muted tv-draft-tools">tools: {draft.tools.join(", ")}</div>}
+      <button type="button" className="tv-tool-head" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <span className={"obs-caret" + (open ? " open" : "")}>▸</span> body
+      </button>
+      {open && <pre className="tv-io">{draft.body}</pre>}
+      {err && <span className="obs-error tv-distill-note">{err}</span>}
+    </div>
+  );
 }
 
 // Relative offset from session start, e.g. "+0s", "+1m12s", "+1h03m".
