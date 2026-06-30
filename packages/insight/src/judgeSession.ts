@@ -38,12 +38,22 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
  * only when the agent call itself failed (an unusable response still yields
  * deterministic facets with degraded:false — the call succeeded).
  */
+// Default cap on sessions sent to the agent in one batch. Bounds prompt size on
+// projects with hundreds of sessions; we judge the most-recent ones.
+export const DEFAULT_MAX_JUDGE = 50;
+
 export async function judgeSessions(
   signal: WorkflowSignal,
-  opts: { connectFn?: AcpConnectFn; timeoutMs?: number; onDelta?: (chunk: string) => void } = {},
+  opts: { connectFn?: AcpConnectFn; timeoutMs?: number; maxSessions?: number; onDelta?: (chunk: string) => void } = {},
 ): Promise<{ facets: SessionFacet[]; degraded: boolean }> {
-  const missioned = (signal.sequences?.sessions ?? []).filter((s) => s.missionHint);
-  if (!missioned.length) return { facets: [], degraded: false };   // nothing to judge — agent never invoked
+  const allMissioned = (signal.sequences?.sessions ?? []).filter((s) => s.missionHint);
+  if (!allMissioned.length) return { facets: [], degraded: false };   // nothing to judge — agent never invoked
+  // Cap to the most-recent N and trim the signal so every downstream consumer
+  // (payload, validateFacets, deterministicFacets) sees the same judged set.
+  const max = opts.maxSessions ?? DEFAULT_MAX_JUDGE;
+  const selected = [...allMissioned].sort((a, b) => b.atMs - a.atMs).slice(0, max);
+  signal = { ...signal, sequences: { root: signal.sequences!.root, sessions: selected } };
+  const missioned = selected;
 
   const connectFn = opts.connectFn ?? currentTestConnectFn() ?? defaultConnectFn;
   const timeoutMs = opts.timeoutMs ?? 60_000;

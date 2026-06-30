@@ -76,4 +76,20 @@ describe("judgeSessions", () => {
     expect(facets).toHaveLength(2);
     expect(facets.every((f) => f.origin === "heuristic")).toBe(true);
   });
+
+  it("caps judging to the most-recent N missioned sessions (prompt-size bound)", async () => {
+    // 5 missioned sessions with ascending recency; cap to 2 → only the two newest.
+    const sessions = [1, 2, 3, 4, 5].map((n) => ({
+      steps: [], sessionId: `s${n}`, transcript: `s${n}.jsonl`, atMs: n * 100,
+      missionHint: { task: `task ${n}`, outcome: "done" },
+    }));
+    const sig: WorkflowSignal = signalWith(sessions);
+    // Agent errors → deterministic fallback over the CAPPED set proves the cap.
+    const { facets } = await judgeSessions(sig, {
+      maxSessions: 2,
+      connectFn: async () => { throw new Error("boom"); },
+    });
+    expect(facets).toHaveLength(2);
+    expect(facets.map((f) => f.sessionId).sort()).toEqual(["s4", "s5"]); // the two most recent
+  });
 });
