@@ -33,6 +33,8 @@ export function Dashboard({ data, range, onRange, pending, onRefresh, apiBase }:
         {onRefresh && <RefreshButton onClick={onRefresh} busy={pending} />}
       </div>
 
+      <DiscoverSection apiBase={apiBase} />
+
       <section className="opt-section">
         <h3>Prune — installed but unused <span className="obs-muted">({prunable.length}, ~{fmtTokens(savings)} est. context saved)</span></h3>
         <p className="obs-muted opt-note">Context tokens are estimates (chars/4). Skills count name+description; MCP counts launch config (tool schemas add more at runtime). Recommend-only — nothing is changed for you.</p>
@@ -71,8 +73,6 @@ export function Dashboard({ data, range, onRange, pending, onRefresh, apiBase }:
           </tbody>
         </table>
       </section>
-
-      <DiscoverSection apiBase={apiBase} />
     </div>
   );
 }
