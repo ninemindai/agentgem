@@ -3,7 +3,7 @@
 // connection, so this stays hermetic; the broker-side application of `ttl` is
 // covered by the gated integration test.
 import { describe, it, expect } from "vitest";
-import { ttlNanos, DEFAULT_TTL_HOURS } from "../natsObjectStore.js";
+import { ttlNanos, DEFAULT_TTL_HOURS } from "@agentgem/transfer";
 
 describe("ttlNanos", () => {
   it("converts hours to nanoseconds", () => {

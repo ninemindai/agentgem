@@ -7,13 +7,13 @@
 // breadth = distinct reusable workflows; battleTested = mature (priorConfidence
 // "high"); portable = mature AND general enough to travel beyond its origin repo.
 import { basename } from "node:path";
-import { discoverProjects } from "./testbedFlavors.js";
-import { resolveDirs, resolveProject } from "../resolveDir.js";
-import { introspectProject, introspectConfig } from "./introspect.js";
-import { claudeTranscriptsForCwd, scanWorkflow, bucketTranscriptsByCwd } from "./workflowScan.js";
-import { extractCandidates } from "./extract.js";
-import type { WorkflowSignal } from "./workflowScan.js";
-import type { ProcedureCandidate, Reflection } from "./distillTypes.js";
+import { discoverProjects } from "@agentgem/testbed";
+import { resolveDirs, resolveProject } from "@agentgem/model";
+import { introspectProject, introspectConfig } from "@agentgem/capture";
+import { claudeTranscriptsForCwd, scanWorkflow, bucketTranscriptsByCwd } from "@agentgem/insight";
+import { extractCandidates } from "@agentgem/insight";
+import type { WorkflowSignal } from "@agentgem/insight";
+import type { ProcedureCandidate, Reflection } from "@agentgem/insight";
 
 // A workflow "travels" when it does more than hand-edit one repo — i.e. it uses
 // at least one tool beyond the repo-local edit set. (Skill/MCP usage is NOT

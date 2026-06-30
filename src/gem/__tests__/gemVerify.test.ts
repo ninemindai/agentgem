@@ -1,7 +1,7 @@
 // src/gem/__tests__/gemVerify.test.ts
 import { describe, it, expect } from "vitest";
-import { verifyGemRun, type GemExpectations } from "../gemVerify.js";
-import type { GemRunOutcome } from "../acpRun.js";
+import { verifyGemRun, type GemExpectations } from "@agentgem/run";
+import type { GemRunOutcome } from "@agentgem/run";
 
 function outcome(over: Partial<GemRunOutcome> & { toolCalls?: GemRunOutcome["result"]["toolCalls"]; text?: string } = {}): GemRunOutcome {
   return {

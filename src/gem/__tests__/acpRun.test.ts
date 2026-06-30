@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 import {
   runGemWithAgent, createAccumulator, applyUpdate, setRunConnectFnForTests,
   type RunConnectFn, type RunResult, type ToolInvocation,
-} from "../acpRun.js";
+} from "@agentgem/run";
 
 const DIR = "/tmp/agentgem-testbed/qa-gem";
 

@@ -1,7 +1,7 @@
 // src/gem/__tests__/attestation.test.ts
 import { describe, it, expect } from "vitest";
-import { buildAttestation, signAttestation, canonicalJSON } from "../attestation.js";
-import { loadOrCreateIdentity, verify } from "../identity.js";
+import { buildAttestation, signAttestation, canonicalJSON } from "@agentgem/insight";
+import { loadOrCreateIdentity, verify } from "@agentgem/model";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

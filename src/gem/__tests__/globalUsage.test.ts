@@ -3,10 +3,10 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GemController } from "../../gem.controller.js";
-import { computeGlobalUsage } from "../globalUsage.js";
-import { readGlobalUsageCacheStale, writeGlobalUsageCache } from "../usageCache.js";
-import { allClaudeTranscripts } from "../workflowScan.js";
-import { resolveDirs } from "../../resolveDir.js";
+import { computeGlobalUsage } from "@agentgem/capture";
+import { readGlobalUsageCacheStale, writeGlobalUsageCache } from "@agentgem/capture";
+import { allClaudeTranscripts } from "@agentgem/insight";
+import { resolveDirs } from "@agentgem/model";
 
 let home: string, claudeDir: string;
 beforeAll(() => {

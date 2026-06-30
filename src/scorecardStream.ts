@@ -13,7 +13,7 @@ import {
   type ProjectLoad,
   type ScorecardDeps,
 } from "./gem/scorecard.js";
-import { transcriptToken, readAnalysisCache, writeAnalysisCache } from "./gem/analysisCache.js";
+import { transcriptToken, readAnalysisCache, writeAnalysisCache } from "@agentgem/insight";
 
 // Minimal structural types for the Express req/res we use — avoids a hard
 // dependency on @types/express (expressApp's handler is duck-typed).

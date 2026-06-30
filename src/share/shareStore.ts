@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { shareCards } from "../aggregator/schema.js";
-import type { AppDb } from "../aggregator/schema.js";
+import { shareCards } from "@agentgem/aggregator";
+import type { AppDb } from "@agentgem/aggregator";
 
 export type ShareCounts = { breadth: number; battleTested: number; portable: number };
 export type GemPayload = { name: string; provenance: string };

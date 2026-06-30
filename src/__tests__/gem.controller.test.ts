@@ -8,12 +8,12 @@ import supertest from "supertest";
 import { RestApplication } from "@agentback/rest";
 import { GemController } from "../gem.controller.js";
 import { createServer } from "node:http";
-import { packTar, unpackTar } from "../gem/archiveTar.js";
-import { writeGemArchive } from "../gem/archive.js";
-import { writeArchiveDir } from "../gem/archiveFs.js";
-import { setRunConnectFnForTests, type RunConnectFn } from "../gem/acpRun.js";
-import { resolveRun } from "../gem/runGem.js";
-import type { Gem } from "../gem/types.js";
+import { packTar, unpackTar } from "@agentgem/archive";
+import { writeGemArchive } from "@agentgem/archive";
+import { writeArchiveDir } from "@agentgem/archive";
+import { setRunConnectFnForTests, type RunConnectFn } from "@agentgem/run";
+import { resolveRun } from "@agentgem/run";
+import type { Gem } from "@agentgem/model";
 
 let app: RestApplication;
 let client: ReturnType<typeof supertest>;
@@ -292,7 +292,7 @@ describe("GemController", () => {
   });
 
   it("GET /api/deploy-record returns a record after writing one", async () => {
-    const { writeDeployRecord, clearDeployRecord } = await import("../gem/deployRecord.js");
+    const { writeDeployRecord, clearDeployRecord } = await import("@agentgem/base");
     writeDeployRecord("test-ws-record", { backend: "eve", at: "2024-01-01T00:00:00Z", project: "eve-test-ws-record", url: "https://example.com" });
     try {
       const r = await client.get("/api/deploy-record?name=test-ws-record&backend=eve").expect(200);

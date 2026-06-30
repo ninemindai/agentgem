@@ -1,10 +1,10 @@
 // src/aggregator/__tests__/detection.test.ts
 import { describe, it, expect } from "vitest";
 import { sql } from "drizzle-orm";
-import { makeTestDb } from "../testDb.js";
-import { projectAttestation } from "../project.js";
-import { popularity } from "../aggregates.js";
-import { sweepQuarantine } from "../detection.js";
+import { makeTestDb } from "@agentgem/aggregator";
+import { projectAttestation } from "@agentgem/aggregator";
+import { popularity } from "@agentgem/aggregator";
+import { sweepQuarantine } from "@agentgem/aggregator";
 
 function att(pk: string, digest: string, skills: string[]) {
   return { formatVersion: 1, canonicalizerVersion: 3, gem: { name: "g", digest },

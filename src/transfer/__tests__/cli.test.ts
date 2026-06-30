@@ -3,11 +3,11 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir, homedir } from "node:os";
 import { join } from "node:path";
-import { InMemoryObjectStore } from "../objectStore.js";
-import { runCli } from "../cli.js";
-import { sendGemBytes } from "../index.js";
-import { loadOrCreateIdentity } from "../../gem/identity.js";
-import { exportGem } from "../../gem/share.js";
+import { InMemoryObjectStore } from "@agentgem/transfer";
+import { runCli } from "@agentgem/transfer";
+import { sendGemBytes } from "@agentgem/transfer";
+import { loadOrCreateIdentity } from "@agentgem/model";
+import { exportGem } from "@agentgem/distribute";
 
 // The CLI send path signs via loadOrCreateIdentity(), which writes ~/.agentgem.
 // Redirect HOME to a temp dir so the suite never touches the real home.
@@ -39,7 +39,7 @@ describe("runCli", () => {
       err: (s: string) => errs.push(s),
     };
     // a real .gem to send
-    const { exportGem } = await import("../../gem/share.js");
+    const { exportGem } = await import("@agentgem/distribute");
     const demo = { name: "x", createdFrom: "/tmp/.claude", checks: [], requiredSecrets: [],
       artifacts: [{ type: "skill", name: "s", source: "standalone", content: "# s\n" }] } as const;
     files.set("in.gem", exportGem(demo as any, { version: "2.0.0" }).bytes);

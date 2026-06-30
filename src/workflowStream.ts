@@ -4,14 +4,14 @@
 // a single JSON body, so streaming progress (scan → agent token stream → done)
 // is served by a raw Express handler registered on `server.expressApp`. The
 // non-streaming POST /api/workflow/analyze stays for programmatic/test callers.
-import { introspectConfig, introspectProject } from "./gem/introspect.js";
-import { resolveDirs, resolveProject } from "./resolveDir.js";
-import { claudeTranscriptsForCwd, scanWorkflow } from "./gem/workflowScan.js";
-import { recommendWorkflow, recommendationToSelection } from "./gem/acpRecommender.js";
-import { distillWorkflow } from "./gem/distill.js";
-import { extractReflections } from "./gem/extract.js";
-import { writeReflections } from "./gem/reflectionStore.js";
-import { transcriptToken, readAnalysisCache, writeAnalysisCache } from "./gem/analysisCache.js";
+import { introspectConfig, introspectProject } from "@agentgem/capture";
+import { resolveDirs, resolveProject } from "@agentgem/model";
+import { claudeTranscriptsForCwd, scanWorkflow } from "@agentgem/insight";
+import { recommendWorkflow, recommendationToSelection } from "@agentgem/insight";
+import { distillWorkflow } from "@agentgem/insight";
+import { extractReflections } from "@agentgem/insight";
+import { writeReflections } from "@agentgem/insight";
+import { transcriptToken, readAnalysisCache, writeAnalysisCache } from "@agentgem/insight";
 
 // Minimal structural types for the Express req/res we use — avoids a hard
 // dependency on @types/express (expressApp's handler is duck-typed).

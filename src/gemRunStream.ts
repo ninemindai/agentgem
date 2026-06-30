@@ -7,9 +7,9 @@
 // (POST, carries the selection) from stream (GET, simple query params) lets the UI
 // use native EventSource while keeping the run dir off the wire — the client only
 // ever holds the opaque id, never a path it could redirect the agent to.
-import { runGemWithAgent, hasTestConnectFn } from "./gem/acpRun.js";
-import { resolveRun, resolveOrFetchAdapter, AGENT_ADAPTERS } from "./gem/runGem.js";
-import { verifyGemRun, type GemExpectations } from "./gem/gemVerify.js";
+import { runGemWithAgent, hasTestConnectFn } from "@agentgem/run";
+import { resolveRun, resolveOrFetchAdapter, AGENT_ADAPTERS } from "@agentgem/run";
+import { verifyGemRun, type GemExpectations } from "@agentgem/run";
 
 interface SseReq { query: Record<string, unknown> }
 interface SseRes {

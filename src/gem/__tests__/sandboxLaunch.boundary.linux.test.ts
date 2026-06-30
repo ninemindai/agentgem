@@ -9,7 +9,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, mkdirSync, rmSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, delimiter } from "node:path";
-import { bwrapArgs, type DeniedPath, type MaskPlaceholders } from "../sandboxLaunch.js";
+import { bwrapArgs, type DeniedPath, type MaskPlaceholders } from "@agentgem/run";
 
 function onPath(bin: string): boolean {
   return (process.env.PATH ?? "").split(delimiter).some((d) => d && existsSync(join(d, bin)));

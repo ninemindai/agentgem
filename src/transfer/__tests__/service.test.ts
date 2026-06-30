@@ -3,10 +3,10 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { exportGem } from "../../gem/share.js";
-import { InMemoryObjectStore } from "../objectStore.js";
-import { sendBytes, receiveTicket, natsStoreFromEnv } from "../service.js";
-import type { Gem } from "../../gem/types.js";
+import { exportGem } from "@agentgem/distribute";
+import { InMemoryObjectStore } from "@agentgem/transfer";
+import { sendBytes, receiveTicket, natsStoreFromEnv } from "@agentgem/transfer";
+import type { Gem } from "@agentgem/model";
 
 // sendBytes signs via loadOrCreateIdentity() (REST/MCP send edge), which writes
 // ~/.agentgem. Redirect HOME to a temp dir so the suite never touches the real home.

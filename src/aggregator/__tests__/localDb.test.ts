@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { resolveAggregatorDb } from "../localDb.js";
-import { issueKey, verifyKey } from "../apiKeys.js";
+import { resolveAggregatorDb } from "@agentgem/aggregator";
+import { issueKey, verifyKey } from "@agentgem/aggregator";
 
 const orig = { ...process.env };
 afterEach(() => { process.env = { ...orig }; });

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { CHANNEL_REGISTRY, channelScaffold, makeChannelArtifact } from "../channels.js";
-import type { ChannelPlatform } from "../types.js";
+import { CHANNEL_REGISTRY, channelScaffold, makeChannelArtifact } from "@agentgem/model";
+import type { ChannelPlatform } from "@agentgem/model";
 
 const PLATFORMS: ChannelPlatform[] = ["slack", "telegram", "discord", "teams", "twilio", "github"];
 

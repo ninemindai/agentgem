@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { scanSessions, parseClaudeTranscript, parseCodexTranscript, scanSessionsCached, clearScanCache, type SessionStat } from "../observeScan.js";
+import { scanSessions, parseClaudeTranscript, parseCodexTranscript, scanSessionsCached, clearScanCache, type SessionStat } from "@agentgem/insight";
 
 let home: string, claudeDir: string, codexDir: string;
 
@@ -105,7 +105,7 @@ describe("scanSessions", () => {
   });
 });
 
-import { aggregateObserve, type ObservePayload } from "../observeScan.js";
+import { aggregateObserve, type ObservePayload } from "@agentgem/insight";
 
 const mk = (over: Partial<SessionStat>): SessionStat => ({
   agent: "claude", sessionId: "s", project: "app", model: "claude-opus-4-8",

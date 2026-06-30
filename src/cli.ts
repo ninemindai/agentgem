@@ -50,7 +50,7 @@ async function main(argv: string[]): Promise<void> {
   // `agentgem send|receive ...` — the store-and-forward Gem transfer subcommands.
   // Delegated to the transfer CLI, which wires a NATS store from $NATS_URL.
   if (argv[0] === "send" || argv[0] === "receive") {
-    const { main: transferMain } = await import("./transfer/cli.js");
+    const { main: transferMain } = await import("@agentgem/transfer");
     return transferMain(argv);
   }
 

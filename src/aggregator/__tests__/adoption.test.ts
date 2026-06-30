@@ -1,9 +1,9 @@
 // src/aggregator/__tests__/adoption.test.ts
 import { describe, it, expect } from "vitest";
 import { sql } from "drizzle-orm";
-import { makeTestDb } from "../testDb.js";
-import { projectAttestation } from "../project.js";
-import { adoption } from "../aggregates.js";
+import { makeTestDb } from "@agentgem/aggregator";
+import { projectAttestation } from "@agentgem/aggregator";
+import { adoption } from "@agentgem/aggregator";
 
 function att(pk: string, digest: string, skills: string[]) {
   return { formatVersion: 1, canonicalizerVersion: 3, gem: { name: "g", digest },

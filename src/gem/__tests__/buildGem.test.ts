@@ -1,7 +1,7 @@
 // tests/gem/buildGem.test.ts
 import { describe, it, expect } from "vitest";
-import { buildGem } from "../buildGem.js";
-import type { ConfigInventory } from "../types.js";
+import { buildGem } from "@agentgem/build";
+import type { ConfigInventory } from "@agentgem/model";
 
 const inv: ConfigInventory = {
   skills: [

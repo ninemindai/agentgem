@@ -1,7 +1,7 @@
 // src/gem/__tests__/search.test.ts
 import { describe, it, expect } from "vitest";
-import { searchIndex } from "../search.js";
-import type { RegistryIndex } from "../registry.js";
+import { searchIndex } from "@agentgem/distribute";
+import type { RegistryIndex } from "@agentgem/distribute";
 
 const index: RegistryIndex = {
   formatVersion: 1,

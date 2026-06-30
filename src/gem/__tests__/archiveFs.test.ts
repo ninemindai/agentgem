@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { writeArchiveDir, readArchiveDir } from "../archiveFs.js";
+import { writeArchiveDir, readArchiveDir } from "@agentgem/archive";
 
 const tmps: string[] = [];
 const tmp = () => { const d = mkdtempSync(join(tmpdir(), "afs-")); tmps.push(d); return d; };

@@ -1,6 +1,6 @@
 // src/gem/__tests__/acpSession.test.ts
 import { describe, it, expect } from "vitest";
-import { localAgentEnv } from "../acpSession.js";
+import { localAgentEnv } from "@agentgem/base";
 
 describe("localAgentEnv", () => {
   it("strips stored provider credentials (Anthropic + OpenAI) so the agent uses its own local login", () => {

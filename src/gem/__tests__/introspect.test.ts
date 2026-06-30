@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { introspectConfig } from "../introspect.js";
+import { introspectConfig } from "@agentgem/capture";
 
 let dir: string;
 let agentDir: string;

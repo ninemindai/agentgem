@@ -1,7 +1,7 @@
 // src/distill/__tests__/tools.test.ts
 import { describe, it, expect } from "vitest";
 import { inspectIngredientsTool, buildAttestationTool, dispatchTool, scanInventoryFor } from "../mcpServer.js";
-import { scanWorkflow } from "../../gem/workflowScan.js";
+import { scanWorkflow } from "@agentgem/insight";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

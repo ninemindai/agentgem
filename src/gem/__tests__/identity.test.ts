@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, chmodSync, statSync, renameSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadOrCreateIdentity, verify } from "../identity.js";
+import { loadOrCreateIdentity, verify } from "@agentgem/model";
 
 describe("identity", () => {
   it("creates a stable keypair and signs/verifies", () => {

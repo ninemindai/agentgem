@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { postAttestation } from "../ingestClient.js";
+import { postAttestation } from "@agentgem/insight";
 
 const att = { formatVersion: 1 } as never;
 

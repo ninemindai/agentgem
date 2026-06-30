@@ -2,9 +2,9 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createWorkspace } from "../workspaces.js";
-import { writeDeployRecord, readDeployRecord, clearDeployRecord } from "../deployRecord.js";
-import type { Gem } from "../types.js";
+import { createWorkspace } from "@agentgem/base";
+import { writeDeployRecord, readDeployRecord, clearDeployRecord } from "@agentgem/base";
+import type { Gem } from "@agentgem/model";
 
 let home: string;
 beforeEach(() => { home = mkdtempSync(join(tmpdir(), "dr-")); process.env.AGENTGEM_HOME = home;

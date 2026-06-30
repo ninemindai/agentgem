@@ -4,15 +4,15 @@ import { createHash } from "node:crypto";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import type { ConfigInventory, Gem, ProjectInventory } from "../gem/types.js";
-import type { WorkflowSignal } from "../gem/workflowScan.js";
-import { buildGem, type GemSelection } from "../gem/buildGem.js";
-import { canonicalHarness, canonicalModel, canonicalMcpServer, canonicalSkill } from "../gem/canonicalize.js";
-import { buildAttestation, signAttestation, canonicalJSON, type UsageAttestation } from "../gem/attestation.js";
-import { writeGemArchive, computeLock } from "../gem/archive.js";
-import { writeAttestedArchive } from "../gem/attestationArchive.js";
-import { loadOrCreateIdentity } from "../gem/identity.js";
-import { postAttestation } from "../gem/ingestClient.js";
+import type { ConfigInventory, Gem, ProjectInventory } from "@agentgem/model";
+import type { WorkflowSignal } from "@agentgem/insight";
+import { buildGem, type GemSelection } from "@agentgem/build";
+import { canonicalHarness, canonicalModel, canonicalMcpServer, canonicalSkill } from "@agentgem/model";
+import { buildAttestation, signAttestation, canonicalJSON, type UsageAttestation } from "@agentgem/insight";
+import { writeGemArchive, computeLock } from "@agentgem/archive";
+import { writeAttestedArchive } from "@agentgem/insight";
+import { loadOrCreateIdentity } from "@agentgem/model";
+import { postAttestation } from "@agentgem/insight";
 
 // ---- pure handlers (unit-tested) ----
 export function inspectIngredientsTool(input: { inventory: ConfigInventory; signal: WorkflowSignal; salt: string }) {
@@ -41,8 +41,8 @@ export function buildAttestationTool(input: { inventory: ConfigInventory; signal
 import { randomBytes } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { introspectConfig, introspectProject } from "../gem/introspect.js";
-import { scanWorkflow, claudeTranscriptsForCwd } from "../gem/workflowScan.js";
+import { introspectConfig, introspectProject } from "@agentgem/capture";
+import { scanWorkflow, claudeTranscriptsForCwd } from "@agentgem/insight";
 
 export interface ToolDeps {
   loadContext: (cwd: string) => { inventory: ConfigInventory; signal: WorkflowSignal };

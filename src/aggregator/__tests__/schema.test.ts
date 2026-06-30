@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { sql } from "drizzle-orm";
-import { makeTestDb } from "../testDb.js";
-import { producers } from "../schema.js";
+import { makeTestDb } from "@agentgem/aggregator";
+import { producers } from "@agentgem/aggregator";
 
 describe("schema/testDb", () => {
   it("creates the schema and runs drizzle queries on pglite", async () => {

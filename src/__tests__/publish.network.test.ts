@@ -1,9 +1,9 @@
 // src/__tests__/publish.network.test.ts
 import { describe, it, expect } from "vitest";
-import { publishManagedAgent, publishManagedAgentOnce, undeployManagedAgent } from "../publish.js";
-import type { PublishClient, CustomSkillRef } from "../publish.js";
-import type { ManagedAgentPayload } from "../gem/publish.js";
-import type { Gem } from "../gem/types.js";
+import { publishManagedAgent, publishManagedAgentOnce, undeployManagedAgent } from "@agentgem/deploy";
+import type { PublishClient, CustomSkillRef } from "@agentgem/deploy";
+import type { ManagedAgentPayload } from "@agentgem/distribute";
+import type { Gem } from "@agentgem/model";
 
 const gem: Gem = {
   name: "p", createdFrom: "/d", checks: [], requiredSecrets: [],

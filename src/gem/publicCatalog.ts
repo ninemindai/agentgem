@@ -1,6 +1,6 @@
 // Copyright NineMind, Inc. 2026. All Rights Reserved.
 // Browse-only public gem catalog: flatten the registry index's discovery metadata and cache it.
-import type { RegistryIndex } from "./registry.js";
+import type { RegistryIndex } from "@agentgem/distribute";
 
 export interface RegistryGem {
   key: string;

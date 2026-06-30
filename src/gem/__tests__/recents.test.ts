@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readRecents, upsertRecent } from "../recents.js";
+import { readRecents, upsertRecent } from "@agentgem/capture";
 
 let home: string;
 beforeEach(() => { home = mkdtempSync(join(tmpdir(), "agem-")); });

@@ -2,13 +2,13 @@ import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createWorkspace } from "../workspaces.js";
-import type { Gem } from "../types.js";
-import type { ProcessRunner, ProcHandle } from "../run.js";
+import { createWorkspace } from "@agentgem/base";
+import type { Gem } from "@agentgem/model";
+import type { ProcessRunner, ProcHandle } from "@agentgem/run";
 import {
   resolveAgentcoreBin, agentcoreReadiness, parseAgentcoreEndpoint,
   deployAgentcore, getAgentcoreStatus,
-} from "../agentcoreRun.js";
+} from "@agentgem/deploy";
 
 function fakeRunner() {
   const calls: { cmd: string; args: string[]; cwd: string; env: NodeJS.ProcessEnv }[] = [];

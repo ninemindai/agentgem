@@ -1,11 +1,11 @@
 // src/aggregator/__tests__/cooccurrenceMatrix.test.ts
 import { describe, it, expect } from "vitest";
 import { sql } from "drizzle-orm";
-import { makeTestDb } from "../testDb.js";
-import { projectAttestation } from "../project.js";
-import { accountBindings } from "../schema.js";
-import { coOccurrenceMatrix } from "../aggregates.js";
-import type { AppDb } from "../schema.js";
+import { makeTestDb } from "@agentgem/aggregator";
+import { projectAttestation } from "@agentgem/aggregator";
+import { accountBindings } from "@agentgem/aggregator";
+import { coOccurrenceMatrix } from "@agentgem/aggregator";
+import type { AppDb } from "@agentgem/aggregator";
 
 // Helper: an attestation for `pubkey` carrying the given skill + mcp ids (all public, tools).
 function att(pubkey: string, digest: string, skills: string[], mcps: string[] = []) {

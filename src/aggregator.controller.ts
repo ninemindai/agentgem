@@ -4,14 +4,14 @@ import { timingSafeEqual } from "node:crypto";
 import { api, get, post } from "@agentback/openapi";
 import { inject } from "@agentback/core";
 import { DrizzleBindings } from "@agentback/drizzle";
-import type { AppDb } from "./aggregator/schema.js";
-import { ingestAttestation } from "./aggregator/ingest.js";
-import { popularity, coOccurrence, adoption, overview, coOccurrenceMatrix } from "./aggregator/aggregates.js";
-import type { UsageAttestation } from "./gem/attestation.js";
-import { recordBinding } from "./aggregator/binding.js";
-import { GitHubVerifier } from "./aggregator/accountVerifier.js";
-import { sweepQuarantine } from "./aggregator/detection.js";
-import { issueKey, revokeKey, listKeys } from "./aggregator/apiKeys.js";
+import type { AppDb } from "@agentgem/aggregator";
+import { ingestAttestation } from "@agentgem/aggregator";
+import { popularity, coOccurrence, adoption, overview, coOccurrenceMatrix } from "@agentgem/aggregator";
+import type { UsageAttestation } from "@agentgem/insight";
+import { recordBinding } from "@agentgem/aggregator";
+import { GitHubVerifier } from "@agentgem/aggregator";
+import { sweepQuarantine } from "@agentgem/aggregator";
+import { issueKey, revokeKey, listKeys } from "@agentgem/aggregator";
 
 // Loose body schema — the real gate is the core's verifyAttestation (ed25519 + consistency).
 const IngestBody = z.object({ producer: z.object({ publicKey: z.string() }).loose(), signature: z.string(), gem: z.object({ digest: z.string() }).loose() }).loose();

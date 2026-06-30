@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { sql } from "drizzle-orm";
-import { makeTestDb } from "../testDb.js";
-import { shareCards } from "../schema.js";
+import { makeTestDb } from "@agentgem/aggregator";
+import { shareCards } from "@agentgem/aggregator";
 
 describe("share_cards schema", () => {
   it("stores and reads a certificate record", async () => {

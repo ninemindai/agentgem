@@ -1,0 +1,22 @@
+{
+  "name": "@agentgem/build",
+  "version": "0.3.1",
+  "description": "Assemble a Gem from a selection, with build-time validation.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@agentgem/base": "workspace:*",
+    "@agentgem/model": "workspace:*"
+  }
+}

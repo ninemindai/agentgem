@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, readFileSync, statSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { setCredential, credentialsEnvPath, CREDENTIAL_KEYS } from "../credentials.js";
+import { setCredential, credentialsEnvPath, CREDENTIAL_KEYS } from "@agentgem/capture";
 
 let home: string;
 let prev: Record<string, string | undefined>;

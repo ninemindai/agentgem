@@ -1,10 +1,10 @@
 // src/gem/__tests__/registryMerge.test.ts
 import { describe, it, expect } from "vitest";
-import { mergeGems } from "../registry.js";
-import type { ResolvedNode, RegistrySource } from "../registry.js";
-import { writeGemArchive } from "../archive.js";
-import type { Gem } from "../types.js";
-import type { FileTree } from "../targets.js";
+import { mergeGems } from "@agentgem/distribute";
+import type { ResolvedNode, RegistrySource } from "@agentgem/distribute";
+import { writeGemArchive } from "@agentgem/archive";
+import type { Gem } from "@agentgem/model";
+import type { FileTree } from "@agentgem/model";
 
 // Build an in-memory source: item path -> archive FileTree, prefixed under the item path.
 function fakeSource(items: Record<string, { gem: Gem; version: string }>): { source: RegistrySource; nodes: ResolvedNode[] } {

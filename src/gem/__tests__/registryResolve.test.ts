@@ -1,7 +1,7 @@
 // src/gem/__tests__/registryResolve.test.ts
 import { describe, it, expect } from "vitest";
-import { resolveGraph, selectVersion } from "../registry.js";
-import type { RegistryIndex } from "../registry.js";
+import { resolveGraph, selectVersion } from "@agentgem/distribute";
+import type { RegistryIndex } from "@agentgem/distribute";
 
 const idx: RegistryIndex = {
   formatVersion: 1,

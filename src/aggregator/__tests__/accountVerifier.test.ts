@@ -1,6 +1,6 @@
 // src/aggregator/__tests__/accountVerifier.test.ts
 import { describe, it, expect } from "vitest";
-import { GitHubVerifier } from "../accountVerifier.js";
+import { GitHubVerifier } from "@agentgem/aggregator";
 
 function fakeFetch(status: number, body: unknown): typeof fetch {
   return (async () => ({ ok: status >= 200 && status < 300, status, json: async () => body })) as unknown as typeof fetch;

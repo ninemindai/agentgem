@@ -1,6 +1,6 @@
 // src/gem/__tests__/mcpProxy.test.ts
 import { describe, it, expect } from "vitest";
-import { stdioProxyRunner, PROXY_BASE_PORT, PROXY_HOST } from "../mcpProxy.js";
+import { stdioProxyRunner, PROXY_BASE_PORT, PROXY_HOST } from "@agentgem/model";
 
 describe("stdioProxyRunner", () => {
   it("generates a runnable stdio->HTTP bridge with the command, port, and SDK imports", () => {

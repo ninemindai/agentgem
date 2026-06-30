@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { makeTestDb } from "../testDb.js";
+import { makeTestDb } from "@agentgem/aggregator";
 import { AggregatorController } from "../../aggregator.controller.js";
 
 const orig = { ...process.env };

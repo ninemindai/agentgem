@@ -1,8 +1,8 @@
 // Resolves the caller's tier from an API key BEFORE the rate limiters run, so the
 // limiters' synchronous keyGenerator/skip can read req.gemTier/req.gemKeyId without an
 // async DB hit. Mounted (scoped to /api/aggregator) ahead of the extension-rate-limit mounts.
-import type { AppDb } from "./aggregator/schema.js";
-import { verifyKey } from "./aggregator/apiKeys.js";
+import type { AppDb } from "@agentgem/aggregator";
+import { verifyKey } from "@agentgem/aggregator";
 
 interface IdReq {
   query?: Record<string, unknown>;

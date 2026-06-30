@@ -1,9 +1,9 @@
 // src/gem/__tests__/draftStage.test.ts
 import { describe, it, expect } from "vitest";
-import { distilledSkillMarkdown, distilledToArtifact, stageDistilledDrafts } from "../draftStage.js";
-import { buildGem } from "../buildGem.js";
-import type { ConfigInventory } from "../types.js";
-import type { DistilledSkill } from "../distill.js";
+import { distilledSkillMarkdown, distilledToArtifact, stageDistilledDrafts } from "@agentgem/capture";
+import { buildGem } from "@agentgem/build";
+import type { ConfigInventory } from "@agentgem/model";
+import type { DistilledSkill } from "@agentgem/insight";
 
 const draft: DistilledSkill = {
   name: "tdd-feature-loop",
@@ -65,7 +65,7 @@ describe("stageDistilledDrafts", () => {
   });
 });
 
-import { writeDistilledDraft } from "../draftStage.js";
+import { writeDistilledDraft } from "@agentgem/capture";
 import { mkdtempSync, readFileSync, existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -83,7 +83,7 @@ describe("writeDistilledDraft", () => {
   });
 });
 
-import { stageDraftsByEvidence } from "../draftStage.js";
+import { stageDraftsByEvidence } from "@agentgem/capture";
 describe("stageDraftsByEvidence", () => {
   it("stages each draft into the project named by its evidence.root", () => {
     const inv = {

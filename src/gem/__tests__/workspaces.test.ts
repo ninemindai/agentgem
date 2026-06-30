@@ -5,8 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   workspacesRoot, workspaceDir, createWorkspace, listWorkspaces, readWorkspace, renderTarget, deleteWorkspace,
-} from "../workspaces.js";
-import type { Gem, GemArtifact } from "../types.js";
+} from "@agentgem/base";
+import type { Gem, GemArtifact } from "@agentgem/model";
 
 let home: string;
 beforeEach(() => { home = mkdtempSync(join(tmpdir(), "agh-")); process.env.AGENTGEM_HOME = home; });

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { isPortable, scoreProject, aggregateScorecard, collectScorecard, selectScorecardRoots, type ProjectLoad, type ScorecardDeps, type ScorecardProgress } from "../scorecard.js";
-import type { ProcedureCandidate } from "../distillTypes.js";
-import type { WorkflowSignal } from "../workflowScan.js";
+import type { ProcedureCandidate } from "@agentgem/insight";
+import type { WorkflowSignal } from "@agentgem/insight";
 
 // Minimal candidate factory — only the fields scorecard.ts reads.
 function cand(over: Partial<ProcedureCandidate> & { key: string }): ProcedureCandidate {

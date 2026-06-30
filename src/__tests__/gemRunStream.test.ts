@@ -1,8 +1,8 @@
 // src/__tests__/gemRunStream.test.ts
 import { describe, it, expect, afterEach } from "vitest";
 import { streamGemRun } from "../gemRunStream.js";
-import { registerRun } from "../gem/runGem.js";
-import { setRunConnectFnForTests, type RunConnectFn, type ToolInvocation } from "../gem/acpRun.js";
+import { registerRun } from "@agentgem/run";
+import { setRunConnectFnForTests, type RunConnectFn, type ToolInvocation } from "@agentgem/run";
 
 // Capture the SSE frames a handler writes, parsed back into { event, data } pairs.
 function fakeRes() {

@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { sql } from "drizzle-orm";
-import { makeTestDb } from "../testDb.js";
-import { projectAttestation } from "../project.js";
+import { makeTestDb } from "@agentgem/aggregator";
+import { projectAttestation } from "@agentgem/aggregator";
 import { AggregatorController } from "../../aggregator.controller.js";
 
 function att(pk: string, digest: string, skills: string[]) {

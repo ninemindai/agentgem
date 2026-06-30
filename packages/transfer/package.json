@@ -1,0 +1,26 @@
+{
+  "name": "@agentgem/transfer",
+  "version": "0.3.1",
+  "description": "NATS-backed direct Gem transfer — seal, ticket, object store, mint.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@agentgem/distribute": "workspace:*",
+    "@agentgem/model": "workspace:*",
+    "@nats-io/jwt": "0.0.10-5",
+    "@nats-io/nkeys": "^2.0.3",
+    "@nats-io/obj": "^3.4.0",
+    "@nats-io/transport-node": "^3.4.0"
+  }
+}

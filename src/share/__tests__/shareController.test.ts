@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { makeTestDb } from "../../aggregator/testDb.js";
+import { makeTestDb } from "@agentgem/aggregator";
 import { ShareController } from "../../share.controller.js";
 
 const counts = { breadth: 14, battleTested: 3, portable: 5 };

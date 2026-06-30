@@ -1,0 +1,23 @@
+{
+  "name": "@agentgem/distribute",
+  "version": "0.3.1",
+  "description": "Gem distribution — GitHub-backed registry (resolve/publish/merge), .gem share, index search.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@agentgem/archive": "workspace:*",
+    "@agentgem/model": "workspace:*",
+    "undici": "^6.27.0"
+  }
+}

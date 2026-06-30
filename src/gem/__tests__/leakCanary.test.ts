@@ -1,8 +1,8 @@
 // src/gem/__tests__/leakCanary.test.ts
 import { describe, it, expect } from "vitest";
-import { scanGemForLeaks, assertGemSafe, GemLeakError } from "../leakCanary.js";
-import { findStrongCredentials, redactStrongCredentials } from "../secretPatterns.js";
-import type { Gem } from "../types.js";
+import { scanGemForLeaks, assertGemSafe, GemLeakError } from "@agentgem/base";
+import { findStrongCredentials, redactStrongCredentials } from "@agentgem/base";
+import type { Gem } from "@agentgem/model";
 
 // Minimal Gem builder — only the fields the canary scans matter here.
 function gem(parts: Partial<Gem>): Gem {

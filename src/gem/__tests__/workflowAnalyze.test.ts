@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GemController } from "../../gem.controller.js";
-import { setConnectFnForTests } from "../acpRecommender.js";
+import { setConnectFnForTests } from "@agentgem/insight";
 
 let home: string, projectRoot: string;
 beforeAll(() => {

@@ -1,6 +1,6 @@
 // src/gem/__tests__/workflowScan.models.test.ts
 import { describe, it, expect } from "vitest";
-import { collectModels } from "../workflowScan.js";
+import { collectModels } from "@agentgem/insight";
 
 describe("collectModels", () => {
   it("collects distinct lowercased model ids with session counts", () => {

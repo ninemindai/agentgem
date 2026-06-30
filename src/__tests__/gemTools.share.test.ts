@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GemTools } from "../gem.tools.js";
-import { packTar, unpackTar } from "../gem/archiveTar.js";
+import { packTar, unpackTar } from "@agentgem/archive";
 
 let dir: string;
 let homeDir: string;

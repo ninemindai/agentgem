@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { createHash } from "node:crypto";
-import { makeTestDb } from "../testDb.js";
-import { generateKey, issueKey, verifyKey, revokeKey, listKeys } from "../apiKeys.js";
+import { makeTestDb } from "@agentgem/aggregator";
+import { generateKey, issueKey, verifyKey, revokeKey, listKeys } from "@agentgem/aggregator";
 
 describe("generateKey", () => {
   it("produces an ag_-prefixed plaintext whose hash is its sha256", () => {

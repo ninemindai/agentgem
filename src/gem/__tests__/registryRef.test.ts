@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseRef } from "../registry.js";
+import { parseRef } from "@agentgem/distribute";
 
 describe("parseRef", () => {
   it("parses a bare ref as latest", () => {

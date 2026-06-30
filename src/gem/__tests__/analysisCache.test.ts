@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, writeFileSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { transcriptToken } from "../analysisCache.js";
+import { transcriptToken } from "@agentgem/insight";
 
 describe("transcriptToken", () => {
   it("is versioned so a distillation rollout invalidates pre-distill entries", () => {

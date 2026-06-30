@@ -3,9 +3,9 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { writeAttestedArchive } from "../attestationArchive.js";
-import { buildAttestation } from "../attestation.js";
-import { loadOrCreateIdentity, verify } from "../identity.js";
+import { writeAttestedArchive } from "@agentgem/insight";
+import { buildAttestation } from "@agentgem/insight";
+import { loadOrCreateIdentity, verify } from "@agentgem/model";
 
 const gem = { name: "demo", createdFrom: "claude", artifacts: [
   { type: "skill" as const, name: "qa", source: "@acme/qa", content: "BODY" },

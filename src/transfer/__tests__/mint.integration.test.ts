@@ -7,7 +7,7 @@
 import { describe, it, expect } from "vitest";
 import { connect } from "@nats-io/transport-node";
 import { credsAuthenticator } from "@nats-io/nats-core";
-import { mintScopedCreds } from "../mint.js";
+import { mintScopedCreds } from "@agentgem/transfer";
 
 const url = process.env.NATS_JWT_TEST;
 const accountSeed = process.env.NATS_JWT_TEST_ACCOUNT_SEED;

@@ -1,7 +1,7 @@
 // src/gem/__tests__/sandbox.test.ts
 import { describe, it, expect } from "vitest";
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { selectRunBackend, envPermission, ensureMaskPlaceholders, type SandboxBackend } from "../sandbox.js";
+import { selectRunBackend, envPermission, ensureMaskPlaceholders, type SandboxBackend } from "@agentgem/run";
 
 const fake = (id: string, isolated: boolean, available: boolean): SandboxBackend => ({
   id, isolated, available: () => available,

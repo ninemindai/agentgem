@@ -2,10 +2,10 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { scaffoldTestbed, importArtifacts } from "../testbed.js";
-import type { ConfigInventory } from "../types.js";
-import { introspectProject } from "../introspect.js";
-import { buildGem } from "../buildGem.js";
+import { scaffoldTestbed, importArtifacts } from "@agentgem/testbed";
+import type { ConfigInventory } from "@agentgem/model";
+import { introspectProject } from "@agentgem/capture";
+import { buildGem } from "@agentgem/build";
 
 let root: string;
 beforeEach(() => { root = mkdtempSync(join(tmpdir(), "tb-")); });

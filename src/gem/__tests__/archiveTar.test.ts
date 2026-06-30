@@ -1,7 +1,7 @@
 // src/gem/__tests__/archiveTar.test.ts
 import { describe, it, expect } from "vitest";
 import { gunzipSync } from "node:zlib";
-import { packTar, unpackTar } from "../archiveTar.js";
+import { packTar, unpackTar } from "@agentgem/archive";
 
 describe("packTar/unpackTar", () => {
   it("round-trips a FileTree exactly", () => {

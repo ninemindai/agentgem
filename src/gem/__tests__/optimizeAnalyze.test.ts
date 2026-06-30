@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { estTokens, rangeStartMs, buildOptimizePayload } from "../optimizeAnalyze.js";
-import type { ConfigInventory } from "../types.js";
-import type { ArtifactUsage } from "../workflowScan.js";
+import { estTokens, rangeStartMs, buildOptimizePayload } from "@agentgem/insight";
+import type { ConfigInventory } from "@agentgem/model";
+import type { ArtifactUsage } from "@agentgem/insight";
 
 const NOW = Date.parse("2026-06-29T00:00:00.000Z");
 const DAY = 86_400_000;

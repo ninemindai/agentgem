@@ -1,6 +1,6 @@
 // tests/gem/redact.test.ts
 import { describe, it, expect } from "vitest";
-import { redactMcpConfig } from "../redact.js";
+import { redactMcpConfig } from "@agentgem/base";
 
 describe("redactMcpConfig", () => {
   it("redacts every value under env and headers but keeps the keys", () => {

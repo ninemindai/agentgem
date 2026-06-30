@@ -4,7 +4,7 @@
 // by `skip`. Admin endpoints (/keys*, /sweep) are excluded from all three buckets.
 import { installRateLimit } from "@agentback/extension-rate-limit";
 import { makeApiKeyIdentity } from "./apiKeyIdentity.js";
-import type { AppDb } from "./aggregator/schema.js";
+import type { AppDb } from "@agentgem/aggregator";
 
 const AGG_PATH = "/api/aggregator";
 export const WINDOW_SECS = 60;

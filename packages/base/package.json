@@ -1,0 +1,22 @@
+{
+  "name": "@agentgem/base",
+  "version": "0.3.1",
+  "description": "Cross-cutting shared helpers — workspace fs, deploy records, ACP session, redaction.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@agentgem/archive": "workspace:*",
+    "@agentgem/model": "workspace:*"
+  }
+}

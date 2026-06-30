@@ -1,11 +1,11 @@
 // src/aggregator/__tests__/verifiedProducers.test.ts
 import { describe, it, expect } from "vitest";
 import { sql } from "drizzle-orm";
-import { makeTestDb } from "../testDb.js";
-import { projectAttestation } from "../project.js";
-import { accountBindings } from "../schema.js";
-import { popularity, coOccurrence, adoption } from "../aggregates.js";
-import type { AppDb } from "../schema.js";
+import { makeTestDb } from "@agentgem/aggregator";
+import { projectAttestation } from "@agentgem/aggregator";
+import { accountBindings } from "@agentgem/aggregator";
+import { popularity, coOccurrence, adoption } from "@agentgem/aggregator";
+import type { AppDb } from "@agentgem/aggregator";
 
 function att(pubkey: string, digest: string, skills: string[]) {
   return { formatVersion: 1, canonicalizerVersion: 3, gem: { name: "g", digest },

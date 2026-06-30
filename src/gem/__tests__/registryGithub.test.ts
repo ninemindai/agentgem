@@ -1,7 +1,7 @@
 // src/gem/__tests__/registryGithub.test.ts
 import { describe, it, expect } from "vitest";
-import { githubRegistrySource, githubRegistryPublisher } from "../registryGithub.js";
-import type { Http } from "../registryGithub.js";
+import { githubRegistrySource, githubRegistryPublisher } from "@agentgem/distribute";
+import type { Http } from "@agentgem/distribute";
 
 // Minimal fake GitHub Contents API: directory listings return arrays; files return { content (base64) }.
 function fakeHttp(tree: Record<string, string>): Http {

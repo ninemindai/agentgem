@@ -2,7 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { tmpdir } from "node:os";
 import { realpathSync } from "node:fs";
-import { seatbeltPolicy, bwrapArgs, wrapWithSandbox } from "../sandboxLaunch.js";
+import { seatbeltPolicy, bwrapArgs, wrapWithSandbox } from "@agentgem/run";
 
 describe("seatbeltPolicy", () => {
   it("allows by default, denies writes, re-allows writes under runDir + tmp", () => {

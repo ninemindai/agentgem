@@ -1,7 +1,7 @@
 // src/gem/__tests__/toml.test.ts
 import { describe, it, expect } from "vitest";
-import { tomlMcpServers, parseTomlMcpServers } from "../toml.js";
-import type { McpServerArtifact } from "../types.js";
+import { tomlMcpServers, parseTomlMcpServers } from "@agentgem/model";
+import type { McpServerArtifact } from "@agentgem/model";
 
 const srv = (name: string, config: Record<string, unknown>): McpServerArtifact => ({ type: "mcp_server", name, transport: "stdio", config });
 
