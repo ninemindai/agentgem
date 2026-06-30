@@ -74,4 +74,16 @@ describe("buildDiscover", () => {
     expect(out.topics).toEqual(["t"]);
     expect(out.degraded?.reason).toMatch(/skills\.sh/i);
   });
+
+  it("degrades gracefully when search throws during topic loop", async () => {
+    const u = usage([
+      ["skill:frontend", { name: "frontend", invocations: 5 }],
+      ["skill:qa", { name: "qa", invocations: 3 }],
+    ]);
+    const boom = (async () => { throw new Error("network down"); }) as never;
+    const out = await buildDiscover(u, inv(), { search: boom });
+    expect(out.candidates).toEqual([]);
+    expect(out.topics).toEqual(["frontend", "qa"]);
+    expect(out.degraded?.reason).toMatch(/skills\.sh/i);
+  });
 });

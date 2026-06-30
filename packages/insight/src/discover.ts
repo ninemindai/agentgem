@@ -59,14 +59,18 @@ export async function buildDiscover(
   const installed = new Set(inv.skills.map((s) => s.name.toLowerCase()));
   // id → { row, matchedTopics }
   const hits = new Map<string, { row: RegistrySkill; topics: string[] }>();
-  for (const topic of topics) {
-    const rows = await search(topic, { limit: opts.perTopic ?? 10 });
-    for (const row of rows) {
-      if (installed.has(row.name.toLowerCase())) continue;
-      const existing = hits.get(row.id);
-      if (existing) { if (!existing.topics.includes(topic)) existing.topics.push(topic); }
-      else hits.set(row.id, { row, topics: [topic] });
+  try {
+    for (const topic of topics) {
+      const rows = await search(topic, { limit: opts.perTopic ?? 10 });
+      for (const row of rows) {
+        if (installed.has(row.name.toLowerCase())) continue;
+        const existing = hits.get(row.id);
+        if (existing) { if (!existing.topics.includes(topic)) existing.topics.push(topic); }
+        else hits.set(row.id, { row, topics: [topic] });
+      }
     }
+  } catch {
+    return { candidates: [], topics, reranked: false, degraded: { reason: "skills.sh returned no new recommendations (or is unreachable)." } };
   }
 
   if (hits.size === 0)
