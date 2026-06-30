@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { Scorecard } from "../../api/routes.js";
 import { createShareRoute, makeClient } from "../../api/routes.js";
 import { renderCardSvg } from "./card.js";
-import { shareIntents } from "./shareIntents.js";
+import { ShareLinks } from "./ShareLinks.js";
 
 // Asset-framed hero. Count stats are now plain text (filter chips moved to MineWorkflows).
 // The share button mints a hosted certificate URL and shows per-platform share intents.
@@ -16,7 +16,6 @@ export function ScorecardHero({ data, apiBase = "", createShare }: { data: Score
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   const [slow, setSlow] = useState(false);
   const svg = renderCardSvg(counts);
   const svgDataUri = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
@@ -36,13 +35,6 @@ export function ScorecardHero({ data, apiBase = "", createShare }: { data: Score
     } finally { clearTimeout(slowTimer); setBusy(false); setSlow(false); }
   };
 
-  const copyLink = () => {
-    if (!shareUrl) return;
-    void navigator.clipboard?.writeText(shareUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1600);
-  };
-
   const downloadPng = () => {
     const img = new Image();
     img.onload = () => {
@@ -59,8 +51,6 @@ export function ScorecardHero({ data, apiBase = "", createShare }: { data: Score
     img.src = svgDataUri;
   };
 
-  const intents = shareUrl ? shareIntents(shareUrl) : null;
-
   return (
     <section className="scorecard-hero" aria-label="Goldmine scorecard">
       <h2>Your log holds <strong>{data.breadth} reusable workflows</strong></h2>
@@ -75,20 +65,7 @@ export function ScorecardHero({ data, apiBase = "", createShare }: { data: Score
       </div>
       {busy && slow && <p className="scorecard-pending">Waking the server — the first share after a while can take up to ~30s.</p>}
       {err && <p className="scorecard-error">{err}</p>}
-      {shareUrl && intents && (
-        <div className="scorecard-share-links">
-          <div className="scorecard-share-copy">
-            <input readOnly value={shareUrl} aria-label="Share link" onFocus={(e) => e.currentTarget.select()} />
-            <button type="button" className="is-copy" onClick={copyLink}>{copied ? "Copied" : "Copy link"}</button>
-          </div>
-          <div className="scorecard-share-intents">
-            <span className="scorecard-share-on">Share to</span>
-            <a className="scorecard-intent" href={intents.x} target="_blank" rel="noreferrer">X</a>
-            <a className="scorecard-intent" href={intents.linkedin} target="_blank" rel="noreferrer">LinkedIn</a>
-            <a className="scorecard-intent" href={intents.facebook} target="_blank" rel="noreferrer">Facebook</a>
-          </div>
-        </div>
-      )}
+      {shareUrl && <ShareLinks url={shareUrl} />}
       {data.degraded && <span className="scorecard-degraded" title="Some projects could not be fully scanned">partial</span>}
     </section>
   );
