@@ -91,8 +91,11 @@ export function realDeps(): ToolDeps {
 
 // Opt-in: judge sessions into per-model outcomes only when the tool asks for it
 // (includeOutcomes) and a judge is wired. Keeps the default publish agent-free.
-async function maybeJudge(args: Record<string, unknown>, signal: WorkflowSignal, deps: ToolDeps): Promise<SessionFacet[] | undefined> {
-  if (args.includeOutcomes !== true || !deps.judge) return undefined;
+async function maybeJudge(args: Record<string, unknown>, signal: WorkflowSignal, deps: ToolDeps, defaultOn: boolean): Promise<SessionFacet[] | undefined> {
+  // Publishing to the network defaults outcomes ON (defaultOn); preview/build stays
+  // off. An explicit includeOutcomes flag always wins.
+  const want = args.includeOutcomes === undefined ? defaultOn : args.includeOutcomes === true;
+  if (!want || !deps.judge) return undefined;
   const { facets, degraded } = await deps.judge(signal);
   // A degraded judge yields neutral heuristic facets — publishing those would
   // pollute the network benchmark with fake "partially" outcomes. Omit them
@@ -116,14 +119,14 @@ export async function dispatchTool(name: string, args: Record<string, unknown>, 
       if (!args.selection) throw new Error("build_attestation requires an explicit selection");
       const { inventory, signal } = deps.loadContext(cwd);
       const salt = deps.salt ?? randomBytes(16).toString("hex");
-      const facets = await maybeJudge(args, signal, deps);
+      const facets = await maybeJudge(args, signal, deps, false);   // preview: opt-in only (stays fast)
       return buildAttestationTool({ inventory, signal, selection: args.selection as GemSelection, salt, account: (args.account as { provider: string; login: string } | null) ?? null, facets });
     }
     case "sign_and_publish": {
       if (!args.selection) throw new Error("sign_and_publish requires an explicit selection");
       const { inventory, signal } = deps.loadContext(cwd);
       const salt = deps.salt ?? randomBytes(16).toString("hex");
-      const facets = await maybeJudge(args, signal, deps);
+      const facets = await maybeJudge(args, signal, deps, true);    // network contribution: outcomes ON by default
       // Rebuild the attestation server-side from the real scan + the reviewed selection.
       // The caller does NOT author counts; any caller-supplied args.attestation is ignored.
       const { attestation, gemPreview } = buildAttestationTool({ inventory, signal, selection: args.selection as GemSelection, salt, account: (args.account as { provider: string; login: string } | null) ?? null, facets });
@@ -164,7 +167,7 @@ export class DistillTools {
   @tool("sign_and_publish", {
     input: AttestInput,
     description:
-      "Sign + publish from the reviewed selection. The attestation is REBUILT server-side from the local scan; the host agent supplies only the selection, never the counts (any caller-supplied attestation is ignored). Embeds it in the Gem archive and POSTs to the ingest endpoint (skipped if unconfigured). Registry distribution is currently disabled; do not report a published distribution unless a publishedRef is returned. Pass includeOutcomes:true (with the user's consent) to also judge the sessions and contribute per-model success rates to the public cross-model benchmark; degraded judgements are withheld, never published.",
+      "Sign + publish from the reviewed selection. The attestation is REBUILT server-side from the local scan; the host agent supplies only the selection, never the counts (any caller-supplied attestation is ignored). Embeds it in the Gem archive and POSTs to the ingest endpoint (skipped if unconfigured). Registry distribution is currently disabled; do not report a published distribution unless a publishedRef is returned. By default it also judges the sessions and contributes per-model success rates to the public cross-model benchmark (degraded judgements are withheld, never published); pass includeOutcomes:false to publish without contributing outcomes.",
   })
   async signAndPublish(input: z.infer<typeof AttestInput>) {
     return dispatchTool("sign_and_publish", input as Record<string, unknown>, this.deps);
