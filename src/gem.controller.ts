@@ -204,7 +204,11 @@ import { resolveInstall, publishGem } from "@agentgem/distribute";
 import { searchIndex } from "@agentgem/distribute";
 import { githubRegistrySource, githubRegistryPublisher, registryConfigFromEnv, registryReady } from "@agentgem/distribute";
 import { createGemCache } from "./gem/publicCatalog.js";
-import { service } from "@agentback/core";
+import { service, inject } from "@agentback/core";
+import { RestBindings } from "@agentback/rest";
+import { DrizzleBindings } from "@agentback/drizzle";
+import type { AppDb } from "@agentgem/aggregator";
+import { resolvePublishedBy } from "./registry/publishedBy.js";
 import { GemTypeRegistry, defaultGemTypeRegistry, resolvePublishType } from "./gem/gemTypeRegistry.js";
 import { resolveDirs, resolveProject, agentgemHome } from "@agentgem/model";
 import { pickFolder } from "./pickFolder.js";
@@ -229,7 +233,11 @@ function deriveRunDir(gemName: string): string {
 
 @api({ basePath: "/api" })
 export class GemController {
-  constructor(@service(GemTypeRegistry, { optional: true }) private gemTypes: GemTypeRegistry = defaultGemTypeRegistry) {}
+  constructor(
+    @service(GemTypeRegistry, { optional: true }) private gemTypes: GemTypeRegistry = defaultGemTypeRegistry,
+    @inject(RestBindings.HTTP_REQUEST, { optional: true }) private req?: { headers: { cookie?: string } },
+    @inject(DrizzleBindings.CLIENT, { optional: true }) private db?: AppDb,
+  ) {}
 
   @get("/inventory", { query: DirQuerySchema, response: InventorySchema })
   async inventory(input: { query: z.infer<typeof DirQuerySchema> }): Promise<z.infer<typeof InventorySchema>> {
@@ -803,10 +811,11 @@ export class GemController {
     const gem = readGemArchive(readWorkspace(input.body.workspace).files); // WorkspaceDetail exposes .files, not .gem
     const type = resolvePublishType(this.gemTypes, input.body.type, gem);
     const index = await source.getIndex();
+    const publishedBy = await resolvePublishedBy(this.req, this.db);
     return publishGem({
       gem, scope: input.body.scope, name: input.body.name, version: input.body.version,
       dependencies: input.body.dependencies, index, publisher: githubRegistryPublisher(cfg),
-      description: input.body.description, tags: input.body.tags, type,
+      description: input.body.description, tags: input.body.tags, type, publishedBy,
     });
   }
 

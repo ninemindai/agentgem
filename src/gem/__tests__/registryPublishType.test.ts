@@ -35,6 +35,16 @@ describe("mapIndexToGems — type", () => {
   });
 });
 
+describe("mapIndexToGems — publishedBy", () => {
+  it("surfaces discovery.publishedBy as RegistryGem.publishedBy", () => {
+    const index: RegistryIndex = { formatVersion: 1, items: {
+      "@a/x": { latest: "1.0.0", versions: { "1.0.0": { path: "p", gemDigest: "sha256:d", dependencies: [] } },
+        discovery: { author: "a", artifactKinds: ["skill"], publishedBy: "octocat" } },
+    } };
+    expect(mapIndexToGems(index)[0].publishedBy).toBe("octocat");
+  });
+});
+
 describe("resolvePublishType", () => {
   it("defaults the type from derive when omitted, and rejects an unknown type", () => {
     const g = {
