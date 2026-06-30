@@ -25,6 +25,20 @@ const ObservePayloadSchema = z.object({
   facets: z.object({ agents: z.array(z.string()), projects: z.array(z.string()), models: z.array(z.string()) }),
   range: z.enum(["today", "7d", "30d", "all"]),
 });
+// Raw scan output: the uncapped SessionStat[] the console fetches once, then
+// aggregates per range/filter client-side (sharing @agentgem/insight's
+// aggregateObserve). /observe still serves the server-aggregated payload.
+const SessionStatSchema = z.object({
+  agent: z.enum(["claude", "codex"]),
+  sessionId: z.string(),
+  project: z.string().nullable(),
+  model: z.string().nullable(),
+  gitBranch: z.string().nullable(),
+  startMs: z.number(), endMs: z.number(), msgs: z.number(),
+  tokensIn: z.number(), tokensOut: z.number(), tokensCache: z.number(),
+});
+const ObserveRawQuerySchema = z.object({ refresh: z.coerce.boolean().optional() });
+const ObserveRawSchema = z.object({ sessions: z.array(SessionStatSchema) });
 const OptimizeQuerySchema = z.object({ range: z.enum(["today", "7d", "30d", "all"]).optional(), refresh: z.coerce.boolean().optional() });
 const OptimizeArtifactSchema = z.object({
   name: z.string(), type: z.enum(["skill", "mcp"]), source: z.string(),
@@ -227,6 +241,12 @@ export class GemController {
     const { agent, project, model, minMsgs } = input.query;
     const refresh = input.query.refresh ?? false;
     return aggregateObserve(await scanSessionsCached(Date.now(), undefined, refresh), range, Date.now(), { agent, project, model, minMsgs });
+  }
+
+  @get("/observe/raw", { query: ObserveRawQuerySchema, response: ObserveRawSchema })
+  async observeRaw(input: { query: z.infer<typeof ObserveRawQuerySchema> }): Promise<z.infer<typeof ObserveRawSchema>> {
+    const refresh = input.query.refresh ?? false;
+    return { sessions: await scanSessionsCached(Date.now(), undefined, refresh) };
   }
 
   @get("/optimize", { query: OptimizeQuerySchema, response: OptimizePayloadSchema })

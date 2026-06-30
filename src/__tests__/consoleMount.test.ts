@@ -10,7 +10,8 @@ describe("UI routing", () => {
       const res = await request(server.expressApp).get(path).set("Host", "127.0.0.1");
       expect(res.status).toBe(200);
       expect(res.type).toMatch(/html/);
-      expect(res.text).toContain('<div id="root"></div>');
+      expect(res.text).toContain('<div id="root">');       // mount node, seeded with the boot splash
+      expect(res.text).toContain('class="boot-splash"');     // static pre-React loading screen
     }
   });
 });

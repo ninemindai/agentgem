@@ -32,3 +32,17 @@ describe("GemController.observe", () => {
     expect(Array.isArray(out.facets.models)).toBe(true);
   });
 });
+
+describe("GemController.observeRaw", () => {
+  it("returns the uncapped raw SessionStat[] (no range/filter/aggregation)", async () => {
+    const c = new GemController();
+    const out = await c.observeRaw({ query: {} });
+    expect(Array.isArray(out.sessions)).toBe(true);
+    // raw rows carry per-session scan fields, not aggregated/derived ones
+    for (const s of out.sessions.slice(0, 3)) {
+      expect(s).toHaveProperty("startMs");
+      expect(s).toHaveProperty("tokensIn");
+      expect(s).not.toHaveProperty("durationMs"); // durationMs/tokens are added by aggregateObserve
+    }
+  });
+});

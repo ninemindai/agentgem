@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./observeAggregate": {
+      "types": "./dist/observeAggregate.d.ts",
+      "default": "./dist/observeAggregate.js"
     }
   },
   "files": ["dist"],

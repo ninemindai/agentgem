@@ -219,6 +219,9 @@ importers:
       '@agentback/client':
         specifier: ^0.6.0
         version: 0.6.0(zod@4.4.3)
+      '@agentgem/insight':
+        specifier: workspace:*
+        version: link:../insight
       dompurify:
         specifier: ^3.4.11
         version: 3.4.11

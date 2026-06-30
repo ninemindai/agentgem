@@ -365,6 +365,25 @@ export const observeRoute = defineRoute("GET", "/api/observe", {
   response: ObservePayloadSchema,
 });
 
+// Raw uncapped scan: the console fetches this ONCE (and on Refresh) and derives
+// every range/filter view client-side via @agentgem/insight's aggregateObserve —
+// so range/filter toggles cost zero API calls. Shape mirrors insight's SessionStat.
+export const ObserveRawSchema = z.object({
+  sessions: z.array(z.object({
+    agent: z.enum(["claude", "codex"]),
+    sessionId: z.string(),
+    project: z.string().nullable(),
+    model: z.string().nullable(),
+    gitBranch: z.string().nullable(),
+    startMs: z.number(), endMs: z.number(), msgs: z.number(),
+    tokensIn: z.number(), tokensOut: z.number(), tokensCache: z.number(),
+  })),
+});
+export const observeRawRoute = defineRoute("GET", "/api/observe/raw", {
+  query: z.object({ refresh: z.boolean().optional() }),
+  response: ObserveRawSchema,
+});
+
 export const ScorecardSchema = z.object({
   breadth: z.number(),
   battleTested: z.number(),
