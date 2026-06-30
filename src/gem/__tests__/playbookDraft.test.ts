@@ -1,6 +1,6 @@
 // src/gem/__tests__/playbookDraft.test.ts
 import { describe, it, expect } from "vitest";
-import { buildPlaybookGem } from "@agentgem/insight";
+import { buildPlaybookGem } from "../../playbookDraft.js";
 import { deriveCut, BUILTIN_CUTS } from "@agentgem/model";
 import type { DistilledSkill, DistilledLesson } from "@agentgem/insight";
 

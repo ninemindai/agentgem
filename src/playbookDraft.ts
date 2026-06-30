@@ -1,5 +1,6 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
+// src/playbookDraft.ts
 // Assemble a Playbook Gem from distilled wins (skills) + lessons (instructions).
 // Staging makes distilled drafts visible to buildGem; the resulting gem carries a
 // skill with source "distilled-draft" so GemTypeRegistry derives the playbook cut.
@@ -7,7 +8,7 @@ import type { ConfigInventory, Gem } from "@agentgem/model";
 import { stageDraftsByEvidence, stageLessonsByEvidence } from "@agentgem/capture";
 import { buildGem } from "@agentgem/build";
 import type { GemSelection } from "@agentgem/build";
-import type { DistilledSkill, DistilledLesson } from "./distillTypes.js";
+import type { DistilledSkill, DistilledLesson } from "@agentgem/insight";
 
 // The concrete (non-all) selection variant returned by buildPlaybookGem. Using the
 // Exclude utility avoids inventing a new type while still giving callers typed
