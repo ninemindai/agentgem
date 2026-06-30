@@ -326,3 +326,11 @@ h2, h3 { font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; }
 @media (prefers-reduced-motion: reduce) {
   * { transition-duration: 1ms !important; animation-duration: 1ms !important; }
 }
+
+/* ── StarButton ──────────────────────────────────────────────── */
+.ex-star { display: inline-flex; align-items: center; gap: 5px; font: inherit; font-size: 0.8rem; font-variant-numeric: tabular-nums; color: var(--ink-2); background: var(--surface); border: 1px solid var(--line-2); border-radius: var(--r-pill); padding: 2px 9px; cursor: pointer; transition: color var(--t), background var(--t), border-color var(--t); }
+.ex-star:hover { color: var(--ink); border-color: var(--brand); }
+.ex-star.is-on { color: var(--brand-strong); border-color: var(--brand); background: var(--brand-wash); }
+.ex-star[disabled] { opacity: 0.6; cursor: default; }
+.ex-star-ico { font-size: 0.95rem; line-height: 1; }
+
