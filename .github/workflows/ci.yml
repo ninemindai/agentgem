@@ -32,4 +32,10 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Full build first (tsc -b && build-console) so consoleMount's server test
+      # serves the real boot-splash HTML, not the "console not built"
+      # placeholder. `pnpm test` alone only runs `tsc -b && vitest run` and never
+      # invokes the esbuild console bundler — and that bundler needs the
+      # tsc-compiled @agentgem/* dist to resolve, so order matters.
+      - run: pnpm build
       - run: pnpm test
