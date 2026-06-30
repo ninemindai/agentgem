@@ -8,7 +8,7 @@ import { shareIntents } from "./shareIntents.js";
 // The share button mints a hosted certificate URL and shows per-platform share intents.
 export type WorkflowFilter = "all" | "battleTested" | "portable";
 
-type CreateShare = (b: { counts: { breadth: number; battleTested: number; portable: number }; generatedAtMs: number }) => Promise<{ id: string; url: string }>;
+type CreateShare = (b: { kind: "certificate"; counts: { breadth: number; battleTested: number; portable: number }; generatedAtMs: number }) => Promise<{ id: string; url: string }>;
 
 export function ScorecardHero({ data, apiBase = "", createShare }: { data: Scorecard; apiBase?: string; createShare?: CreateShare }) {
   const counts = { breadth: data.breadth, battleTested: data.battleTested, portable: data.portable };
@@ -29,7 +29,7 @@ export function ScorecardHero({ data, apiBase = "", createShare }: { data: Score
     setBusy(true); setErr(null); setSlow(false);
     const slowTimer = setTimeout(() => setSlow(true), 3000);
     try {
-      const { url } = await doCreate({ counts, generatedAtMs: data.generatedAtMs });
+      const { url } = await doCreate({ kind: "certificate", counts, generatedAtMs: data.generatedAtMs });
       setShareUrl(url);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Couldn't create a share link — try again.");
