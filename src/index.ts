@@ -28,8 +28,9 @@ import { AggregatorController } from "./aggregator.controller.js";
 import { ShareController } from "./share.controller.js";
 import { requireShareOriginSecret } from "./originSecret.js";
 import { ShareProxyController } from "./share.proxy.controller.js";
-import { resolveAggregatorDb } from "@agentgem/aggregator";
+import { resolveAggregatorDb, type AppDb, GitHubVerifier } from "@agentgem/aggregator";
 import { mountGating } from "./gating.js";
+import { installAuth, githubExchangeCode } from "./auth/install.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -69,8 +70,10 @@ export async function createApp(port: number): Promise<RestApplication> {
   // embedded pglite for local runs (ephemeral). mountGating adds the api-key identity middleware
   // + the two-tier rate limiters over /api/aggregator. Public read endpoints are CORS-open and
   // originGuard-exempt; auth boundary is apiKeyIdentity + rate limiters.
+  let aggDb: AppDb | undefined;
   {
     const { db, onStop, mode } = await resolveAggregatorDb();
+    aggDb = db;
     registerDrizzle(app, db as never, { onStop });
     app.restController(AggregatorController);
     app.restController(ShareController);
@@ -105,6 +108,25 @@ export async function createApp(port: number): Promise<RestApplication> {
   // Liveness probe for deploy orchestrators (Cloud Run / ECS / Fly / k8s). Unauthenticated
   // and origin-less by design — registered as a raw route, so it's outside originGuard.
   server.expressApp.get("/healthz", (_req, res) => res.json({ status: "ok" }));
+  // Web sign-in (marketplace). Raw express routes (302 + Set-Cookie), outside originGuard; they set
+  // their own credentialed CORS for AGENTGEM_WEB_ORIGINS. Enabled only when the OAuth secret is set.
+  const ghClientId = process.env.AGENTGEM_GITHUB_CLIENT_ID;
+  const ghSecret = process.env.AGENTGEM_GITHUB_CLIENT_SECRET;
+  const webOrigins = (process.env.AGENTGEM_WEB_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  if (ghClientId && ghSecret && webOrigins.length > 0 && aggDb) {
+    installAuth(server.expressApp as never, {
+      db: aggDb,
+      verifier: new GitHubVerifier(),
+      exchangeCode: githubExchangeCode(ghClientId, ghSecret),
+      config: {
+        clientId: ghClientId, clientSecret: ghSecret, webOrigins,
+        cookieDomain: process.env.AGENTGEM_SESSION_COOKIE_DOMAIN,
+        callbackUrl: `${process.env.AGENTGEM_PUBLIC_BASE ?? "https://app.agentgem.ai"}/api/auth/github/callback`,
+        stateSecret: process.env.AGENTGEM_SESSION_SECRET ?? ghSecret,
+        sessionTtlMs: 30 * 24 * 60 * 60 * 1000, // 30 days
+      },
+    });
+  }
   // The desktop console UI is served at `/` (and `/console`) for LOCAL runs only. The hosted
   // public deployment (app.agentgem.ai) is API-only — the console is a local desktop app, not a
   // public surface — so SERVE_CONSOLE=false disables it there and redirects `/` to the site.
