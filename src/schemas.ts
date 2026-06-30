@@ -547,6 +547,17 @@ export const ProjectCandidateSchema = z.object({
 });
 export const TestbedProjectsResponseSchema = z.object({ projects: z.array(ProjectCandidateSchema) });
 
+// Target-project discovery: independently-existing eve/flue projects on this machine. `dir` overrides
+// the ~/.claude base for the session-history pass; `roots` is an optional comma-separated allowlist of
+// directories to additionally scan. `lastUsed` is a recency proxy (session mtime or dir mtime).
+export const TargetProjectsQuerySchema = z.object({ dir: z.string().optional(), roots: z.string().optional() });
+export const TargetProjectCandidateSchema = z.object({
+  path: z.string(),
+  target: TargetIdSchema,
+  lastUsed: z.string().nullable(),
+});
+export const TargetProjectsResponseSchema = z.object({ projects: z.array(TargetProjectCandidateSchema) });
+
 export const TestbedImportSelectionSchema = z.object({
   skills: z.array(z.string()).optional(),
   mcpServers: z.array(z.string()).optional(),

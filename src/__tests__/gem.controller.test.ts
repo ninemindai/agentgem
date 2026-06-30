@@ -834,6 +834,31 @@ describe("testbed flavors", () => {
     } finally { rmSync(home, { recursive: true, force: true }); }
   });
 
+  it("target projects: classifies session cwds and scans allowlisted roots (deduped)", async () => {
+    const home = mkdtempSync(join(tmpdir(), "tgt-"));
+    try {
+      // A flue project that a Claude session was run in -> found via session history.
+      const sessionProj = join(home, "from-session");
+      mkdirSync(sessionProj, { recursive: true });
+      writeFileSync(join(sessionProj, "flue.config.ts"), "export default {}");
+      const sessDir = join(home, ".claude", "projects", "-enc");
+      mkdirSync(sessDir, { recursive: true });
+      writeFileSync(join(sessDir, "s.jsonl"), `{"type":"user","cwd":${JSON.stringify(sessionProj)}}\n`);
+
+      // An eve project under an allowlisted scan root that no session touched.
+      const scanRoot = join(home, "code");
+      const scanProj = join(scanRoot, "from-scan");
+      mkdirSync(scanProj, { recursive: true });
+      writeFileSync(join(scanProj, "package.json"), JSON.stringify({ dependencies: { eve: "^0.15.0" }, scripts: { dev: "eve dev" } }));
+
+      const r = await client
+        .get(`/api/targets/projects?dir=${encodeURIComponent(join(home, ".claude"))}&roots=${encodeURIComponent(scanRoot)}`)
+        .expect(200);
+      expect(r.body.projects).toContainEqual({ path: sessionProj, target: "flue", lastUsed: expect.any(String) });
+      expect(r.body.projects).toContainEqual(expect.objectContaining({ path: scanProj, target: "eve" }));
+    } finally { rmSync(home, { recursive: true, force: true }); }
+  });
+
   it("recents: scaffolding records a recent that /recents returns with exists", async () => {
     const home = mkdtempSync(join(tmpdir(), "rec-"));
     const proj = mkdtempSync(join(tmpdir(), "recproj-"));
