@@ -669,7 +669,8 @@ body::before {
 .mine-wf-list li { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; padding: 0.2rem 0; }
 .mine-wf-list li label { display: flex; align-items: center; cursor: pointer; }
 .mine-wf-list li label:hover input { accent-color: var(--accent); }
-.mine-wf-name { font-size: 0.875rem; flex: 1; min-width: 0; }
+.mine-wf-name { font-size: 0.875rem; flex: 1; min-width: 0; cursor: pointer; }
+.mine-wf-name:hover { color: var(--accent); }
 .mine-badge { font-size: 0.65rem; font-weight: 600; padding: 0.1rem 0.45rem; border-radius: 999px; letter-spacing: .04em; }
 .mine-badge-bt { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
 .mine-badge-portable { background: color-mix(in srgb, var(--emerald) 15%, transparent); color: var(--emerald); }
