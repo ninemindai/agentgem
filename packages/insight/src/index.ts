@@ -7,6 +7,7 @@ export * from "./judgeSession.js";
 export * from "./insightsReport.js";
 export * from "./scrub.js";
 export * from "./observeScan.js";
+export * from "./inspectSession.js";
 export * from "./analysisCache.js";
 export * from "./distill.js";
 export * from "./distillTypes.js";

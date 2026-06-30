@@ -268,6 +268,16 @@ export function Dashboard({ data, range, onRange, filter, onFilter, pending, onR
                               <span>agent <strong>{s.agent}</strong></span>
                               <span className="obs-detail-sep"> · </span>
                               <span>session <code>{s.sessionId.slice(0, 8)}…</code></span>
+                              <button
+                                type="button"
+                                className="obs-open-transcript"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  window.location.hash = `#/inspect/${s.agent}/${encodeURIComponent(s.sessionId)}`;
+                                }}
+                              >
+                                Open transcript →
+                              </button>
                             </td>
                           </tr>
                         )}

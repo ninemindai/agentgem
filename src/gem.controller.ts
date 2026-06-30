@@ -5,7 +5,7 @@ import { existsSync, writeFileSync, readFileSync } from "node:fs";
 import { basename, resolve, sep } from "node:path";
 import { z } from "zod";
 import { api, get, post } from "@agentback/openapi";
-import { scanSessionsCached, aggregateObserve } from "@agentgem/insight";
+import { scanSessionsCached, aggregateObserve, loadSessionTranscript } from "@agentgem/insight";
 import { scanArtifactUsageCached } from "@agentgem/insight";
 import { buildOptimizePayload, buildDiscover, rerankCandidates, type OptimizeRange } from "@agentgem/insight";
 
@@ -39,6 +39,27 @@ const SessionStatSchema = z.object({
 });
 const ObserveRawQuerySchema = z.object({ refresh: z.coerce.boolean().optional() });
 const ObserveRawSchema = z.object({ sessions: z.array(SessionStatSchema) });
+
+// Per-session transcript: the on-demand drill-down read path (inspectSession.ts).
+// Lazy + scrubbed, NOT part of the aggregate scan — preserves Inspect's
+// metadata-only/one-shot properties.
+const InspectSessionQuerySchema = z.object({
+  id: z.string(),
+  agent: z.enum(["claude", "codex"]),
+});
+const TokenBreakdownSchema = z.object({ in: z.number(), out: z.number(), cache: z.number() });
+const TranscriptSpanSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("message"), role: z.enum(["user", "assistant"]), text: z.string() }),
+  z.object({ kind: z.literal("tool_call"), name: z.string(), input: z.string(), output: z.string().optional(), error: z.boolean().optional() }),
+]);
+const TranscriptTurnSchema = z.object({
+  id: z.string(), role: z.enum(["user", "assistant"]), tsMs: z.number(),
+  spans: z.array(TranscriptSpanSchema), tokens: TokenBreakdownSchema,
+});
+const TranscriptViewSchema = z.object({
+  sessionId: z.string(), agent: z.enum(["claude", "codex"]),
+  meta: SessionStatSchema, turns: z.array(TranscriptTurnSchema),
+});
 const OptimizeQuerySchema = z.object({ range: z.enum(["today", "7d", "30d", "all"]).optional(), refresh: z.coerce.boolean().optional() });
 const OptimizeArtifactSchema = z.object({
   name: z.string(), type: z.enum(["skill", "mcp"]), source: z.string(),
@@ -263,6 +284,13 @@ export class GemController {
   async observeRaw(input: { query: z.infer<typeof ObserveRawQuerySchema> }): Promise<z.infer<typeof ObserveRawSchema>> {
     const refresh = input.query.refresh ?? false;
     return { sessions: await scanSessionsCached(Date.now(), undefined, refresh) };
+  }
+
+  @get("/inspect/session", { query: InspectSessionQuerySchema, response: TranscriptViewSchema })
+  async inspectSession(input: { query: z.infer<typeof InspectSessionQuerySchema> }): Promise<z.infer<typeof TranscriptViewSchema>> {
+    const view = await loadSessionTranscript(input.query.id, input.query.agent);
+    if (!view) throw new InvalidInputError(`No ${input.query.agent} session '${input.query.id}' found.`);
+    return view;
   }
 
   @get("/optimize", { query: OptimizeQuerySchema, response: OptimizePayloadSchema })

@@ -13,7 +13,12 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
-  const active = ordered.find((p) => p.route === hash) ?? ordered[0];
+  // Exact match first; otherwise the longest route that is a prefix of the hash,
+  // so a drill-down sub-route (e.g. #/inspect/<id>) still resolves to its page.
+  const base = hash.split(/[?]/)[0];
+  const active = ordered.find((p) => p.route === base)
+    ?? [...ordered].filter((p) => base.startsWith(p.route + "/")).sort((a, b) => b.route.length - a.route.length)[0]
+    ?? ordered[0];
   // Render the active page as a real element (not `active.component({...})`).
   // Calling it as a function inlines the page's hooks into Shell's own hook
   // list, so switching pages changes Shell's hook count and React throws

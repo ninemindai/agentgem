@@ -384,6 +384,30 @@ export const observeRawRoute = defineRoute("GET", "/api/observe/raw", {
   response: ObserveRawSchema,
 });
 
+// Per-session transcript drill-down: lazy, scrubbed, fetched only when a session
+// is opened. Mirrors the insight TranscriptView shape.
+const TokenBreakdownSchema = z.object({ in: z.number(), out: z.number(), cache: z.number() });
+const TranscriptSpanSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("message"), role: z.enum(["user", "assistant"]), text: z.string() }),
+  z.object({ kind: z.literal("tool_call"), name: z.string(), input: z.string(), output: z.string().optional(), error: z.boolean().optional() }),
+]);
+export const TranscriptViewSchema = z.object({
+  sessionId: z.string(),
+  agent: z.enum(["claude", "codex"]),
+  meta: ObserveRawSchema.shape.sessions.element,
+  turns: z.array(z.object({
+    id: z.string(), role: z.enum(["user", "assistant"]), tsMs: z.number(),
+    spans: z.array(TranscriptSpanSchema), tokens: TokenBreakdownSchema,
+  })),
+});
+export type TranscriptView = z.infer<typeof TranscriptViewSchema>;
+export type TranscriptTurn = TranscriptView["turns"][number];
+export type TranscriptSpan = TranscriptTurn["spans"][number];
+export const inspectSessionRoute = defineRoute("GET", "/api/inspect/session", {
+  query: z.object({ id: z.string(), agent: z.enum(["claude", "codex"]) }),
+  response: TranscriptViewSchema,
+});
+
 export const ScorecardSchema = z.object({
   breadth: z.number(),
   battleTested: z.number(),

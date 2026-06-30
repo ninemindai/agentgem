@@ -115,6 +115,14 @@ describe("Observe Dashboard", () => {
     expect(screen.getByText("More")).toBeDefined();
   });
 
+  it("'Open transcript' in the expanded row navigates to the drill-down sub-route", () => {
+    window.location.hash = "";
+    const { container } = render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} />);
+    fireEvent.click(container.querySelector('tr[role="button"]') as HTMLElement); // expand detail
+    fireEvent.click(screen.getByText(/Open transcript/));
+    expect(window.location.hash).toBe("#/inspect/claude/s1");
+  });
+
   it("min-msgs filter input shows value 100 when filter.minMsgs is 100", () => {
     render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{ minMsgs: 100 }} onFilter={() => {}} />);
     const input = screen.getByLabelText(/minimum messages/i) as HTMLInputElement;
