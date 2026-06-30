@@ -27,7 +27,7 @@ export function inspectIngredientsTool(input: { inventory: ConfigInventory; sign
   };
 }
 
-export function buildAttestationTool(input: { inventory: ConfigInventory; signal: WorkflowSignal; selection: GemSelection; salt: string; account?: { provider: string; login: string } | null }) {
+export function buildAttestationTool(input: { inventory: ConfigInventory; signal: WorkflowSignal; selection: GemSelection; salt: string; account?: { provider: string; login: string } | null; facets?: SessionFacet[] }) {
   const gem: Gem = buildGem(input.inventory, input.selection, { createdFrom: input.signal.flavor });
   // attestation.gem.digest ties to the PUBLISHED archive: it is the pre-attestation archive
   // payload digest (computeLock over the gem archive WITHOUT attestation.json). writeAttestedArchive
@@ -35,7 +35,7 @@ export function buildAttestationTool(input: { inventory: ConfigInventory; signal
   // intentionally different and reconcilable — remove attestation.json, recompute computeLock.
   const { files } = writeGemArchive(gem);
   const gemDigest = computeLock(files).gemDigest;
-  const attestation = buildAttestation({ gem, signal: input.signal, gemDigest, salt: input.salt, account: input.account ?? null });
+  const attestation = buildAttestation({ gem, signal: input.signal, gemDigest, salt: input.salt, account: input.account ?? null, facets: input.facets });
   const ids = [...attestation.ingredients.skills, ...attestation.ingredients.mcps].map((i) => i.id);
   return { attestation, gemPreview: gem, willPublish: ids };
 }
@@ -45,13 +45,17 @@ import { randomBytes } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { introspectConfig, introspectProject } from "@agentgem/capture";
-import { scanWorkflow, claudeTranscriptsForCwd } from "@agentgem/insight";
+import { scanWorkflow, claudeTranscriptsForCwd, judgeSessions } from "@agentgem/insight";
+import type { SessionFacet } from "@agentgem/insight";
 
 export interface ToolDeps {
   loadContext: (cwd: string) => { inventory: ConfigInventory; signal: WorkflowSignal };
   publish?: (gem: Gem, files: Record<string, string>) => Promise<{ ref: string }>;
   salt?: string; // fixed salt for reproducible builds/tests; else random per call
   token?: string;
+  // Judge sessions into per-model outcomes (the ACP agent). Opt-in: only called
+  // when a tool requests includeOutcomes, so the default publish stays agent-free.
+  judge?: (signal: WorkflowSignal) => Promise<SessionFacet[]>;
 }
 
 // The scan resolves a Skill/mcp__ invocation against BOTH project-local and
@@ -68,8 +72,11 @@ export function realDeps(): ToolDeps {
       const inventory = introspectConfig();
       const scanInv = scanInventoryFor(inventory, introspectProject(cwd));
       const paths = claudeTranscriptsForCwd(join(homedir(), ".claude"), cwd);
-      return { inventory, signal: scanWorkflow(paths, scanInv, { retainSequences: false }) };
+      // retainSequences: the per-session model + mission hints feed the opt-in
+      // outcome judge (the cross-model histogram); cheap when unused.
+      return { inventory, signal: scanWorkflow(paths, scanInv, { retainSequences: true }) };
     },
+    judge: async (signal) => (await judgeSessions(signal)).facets,
     // Distribution-publish to the GitHub registry is intentionally NOT wired here yet.
     // It must first fetch the LIVE registry index — publishing against an empty index
     // would overwrite and erase other published gems (data loss). Until that lands,
@@ -78,6 +85,12 @@ export function realDeps(): ToolDeps {
     publish: undefined,
     token: process.env.AGENTGEM_INGEST_TOKEN,
   };
+}
+
+// Opt-in: judge sessions into per-model outcomes only when the tool asks for it
+// (includeOutcomes) and a judge is wired. Keeps the default publish agent-free.
+async function maybeJudge(args: Record<string, unknown>, signal: WorkflowSignal, deps: ToolDeps): Promise<SessionFacet[] | undefined> {
+  return args.includeOutcomes === true && deps.judge ? deps.judge(signal) : undefined;
 }
 
 // ---- dispatch (unit-tested with injected deps) ----
@@ -96,15 +109,17 @@ export async function dispatchTool(name: string, args: Record<string, unknown>, 
       if (!args.selection) throw new Error("build_attestation requires an explicit selection");
       const { inventory, signal } = deps.loadContext(cwd);
       const salt = deps.salt ?? randomBytes(16).toString("hex");
-      return buildAttestationTool({ inventory, signal, selection: args.selection as GemSelection, salt, account: (args.account as { provider: string; login: string } | null) ?? null });
+      const facets = await maybeJudge(args, signal, deps);
+      return buildAttestationTool({ inventory, signal, selection: args.selection as GemSelection, salt, account: (args.account as { provider: string; login: string } | null) ?? null, facets });
     }
     case "sign_and_publish": {
       if (!args.selection) throw new Error("sign_and_publish requires an explicit selection");
       const { inventory, signal } = deps.loadContext(cwd);
       const salt = deps.salt ?? randomBytes(16).toString("hex");
+      const facets = await maybeJudge(args, signal, deps);
       // Rebuild the attestation server-side from the real scan + the reviewed selection.
       // The caller does NOT author counts; any caller-supplied args.attestation is ignored.
-      const { attestation, gemPreview } = buildAttestationTool({ inventory, signal, selection: args.selection as GemSelection, salt, account: (args.account as { provider: string; login: string } | null) ?? null });
+      const { attestation, gemPreview } = buildAttestationTool({ inventory, signal, selection: args.selection as GemSelection, salt, account: (args.account as { provider: string; login: string } | null) ?? null, facets });
       return signAndPublishTool({ gem: gemPreview, attestation, token: deps.token }, { publish: deps.publish ? (files) => deps.publish!(gemPreview, files) : undefined });
     }
     default:
@@ -118,7 +133,7 @@ export async function dispatchTool(name: string, args: Record<string, unknown>, 
 // source of truth) instead of the old hand-written JSON Schema.
 const CwdInput = z.object({ cwd: z.string().optional() });
 const AccountInput = z.object({ provider: z.string(), login: z.string() }).nullable().optional();
-const AttestInput = z.object({ selection: GemSelectionSchema, cwd: z.string().optional(), account: AccountInput });
+const AttestInput = z.object({ selection: GemSelectionSchema, cwd: z.string().optional(), account: AccountInput, includeOutcomes: z.boolean().optional() });
 
 @mcpServer()
 export class DistillTools {

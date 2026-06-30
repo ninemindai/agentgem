@@ -49,6 +49,20 @@ describe("distill tools", () => {
     const deps = { loadContext: () => ({ inventory, signal }), salt: "S" };
     await expect(dispatchTool("build_attestation", {}, deps)).rejects.toThrow("requires an explicit selection");
   });
+
+  it("build_attestation includes the per-model outcome histogram (v2) when outcomes are requested", async () => {
+    const facets = [{ sessionId: "s", transcript: "", atMs: 0, underlying_goal: "", brief_summary: "", outcome: "mostly_achieved" as const, friction_detail: "", model: "claude-opus-4-8", origin: "llm" as const }];
+    const deps = { loadContext: () => ({ inventory, signal }), salt: "S", judge: async () => facets };
+    const r = (await dispatchTool("build_attestation", { selection: { mcpServers: ["gh"] }, includeOutcomes: true }, deps)) as { attestation: { formatVersion: number; source: { outcomeHistogram?: unknown } } };
+    expect(r.attestation.formatVersion).toBe(2);
+    expect(r.attestation.source.outcomeHistogram).toBeDefined();
+  });
+
+  it("build_attestation stays v1 and never judges when outcomes are not requested", async () => {
+    const deps = { loadContext: () => ({ inventory, signal }), salt: "S", judge: async () => { throw new Error("should not judge"); } };
+    const r = (await dispatchTool("build_attestation", { selection: { mcpServers: ["gh"] } }, deps)) as { attestation: { formatVersion: number } };
+    expect(r.attestation.formatVersion).toBe(1);
+  });
   it("sign_and_publish rejects a missing selection (privacy-gate, no bypass to all)", async () => {
     const deps = { loadContext: () => ({ inventory, signal }), salt: "S" };
     await expect(dispatchTool("sign_and_publish", {}, deps)).rejects.toThrow("requires an explicit selection");
