@@ -31,6 +31,7 @@ import { ShareProxyController } from "./share.proxy.controller.js";
 import { resolveAggregatorDb, type AppDb, GitHubVerifier } from "@agentgem/aggregator";
 import { mountGating } from "./gating.js";
 import { installAuth, githubExchangeCode } from "./auth/install.js";
+import { installStars } from "./stars/install.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -126,6 +127,10 @@ export async function createApp(port: number): Promise<RestApplication> {
         sessionTtlMs: 30 * 24 * 60 * 60 * 1000, // 30 days
       },
     });
+  }
+  // Stars need the DB + an allowlisted web origin; they don't need the GitHub OAuth secret.
+  if (aggDb && webOrigins.length > 0) {
+    installStars(server.expressApp as never, { db: aggDb, webOrigins });
   }
   // The desktop console UI is served at `/` (and `/console`) for LOCAL runs only. The hosted
   // public deployment (app.agentgem.ai) is API-only — the console is a local desktop app, not a
