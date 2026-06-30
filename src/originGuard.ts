@@ -48,13 +48,11 @@ export function originGuard(req: GuardReq, res: GuardRes, next: GuardNext): void
     next();
     return;
   }
-  // Web sign-in endpoints (/api/auth/*) are reachable cross-site by design: the OAuth navigations
-  // (login/callback) arrive cross-site from the SPA and from GitHub, and /me + /logout are the SPA's
-  // credentialed XHR from explore.agentgem.ai. The CSRF defenses are the OAuth `state` (redirect leg)
-  // and the SameSite=Lax session cookie (a drive-by cross-site POST carries no cookie, so it's a
-  // no-op). The auth handlers set their own credentialed CORS for the AGENTGEM_WEB_ORIGINS allowlist,
-  // so exempt these paths from the cross-site block instead of rejecting them here.
-  if (req.path.startsWith("/api/auth/")) { next(); return; }
+  // Web sign-in (/api/auth/*) and stars (/api/stars, /api/stars/toggle) are reachable cross-site by
+  // design (SPA on explore.agentgem.ai → API on app.agentgem.ai). CSRF defense: the OAuth `state`,
+  // SameSite=Lax cookie, and (stars) a 401 on the authed toggle. The handlers set their own
+  // credentialed CORS for the AGENTGEM_WEB_ORIGINS allowlist.
+  if (req.path.startsWith("/api/auth/") || req.path.startsWith("/api/stars")) { next(); return; }
   const site = req.get("sec-fetch-site");
   if (site !== undefined) {
     if (site === "same-origin") { next(); return; }
