@@ -5,6 +5,7 @@ export interface RegistryGem {
   description?: string;
   tags?: string[];
   artifactKinds?: string[];
+  type?: string;
 }
 
 export interface AggIngredient {

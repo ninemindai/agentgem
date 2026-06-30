@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { filterGems, STATIC_GEMS, loadGems, findGem } from "./catalog";
 import type { RegistryGem } from "../types";
+import { cutMeta } from "./cuts";
 
 describe("catalog", () => {
   it("STATIC_GEMS is non-empty with unique keys", () => {
@@ -43,5 +44,28 @@ describe("findGem", () => {
   it("hits and misses", () => {
     expect(findGem(STATIC_GEMS, STATIC_GEMS[0].key)?.key).toBe(STATIC_GEMS[0].key);
     expect(findGem(STATIC_GEMS, "nope")).toBeUndefined();
+  });
+});
+
+describe("cut threading", () => {
+  it("loadGems maps RegistryGem.type → Gem.cut", async () => {
+    const live: RegistryGem = { key: "k", version: "1.0.0", description: "d", tags: [], artifactKinds: ["mcp_server"], type: "integration" };
+    const [g] = await loadGems(apiWith(() => Promise.resolve([live])));
+    expect(g.cut).toBe("integration");
+  });
+  it("a live gem with no type maps to an undefined cut (no badge)", async () => {
+    const live: RegistryGem = { key: "k", version: "1.0.0", description: "d", tags: [], artifactKinds: [] };
+    const [g] = await loadGems(apiWith(() => Promise.resolve([live])));
+    expect(g.cut).toBeUndefined();
+  });
+  it("every STATIC_GEM has a known cut", () => {
+    for (const g of STATIC_GEMS) expect(cutMeta(g.cut)).not.toBeNull();
+  });
+  it("filterGems narrows by cut, AND-ed with search; empty cuts = all", () => {
+    const gems = STATIC_GEMS;
+    const integrations = filterGems(gems, "", ["integration"]);
+    expect(integrations.length).toBeGreaterThan(0);
+    expect(integrations.every((g) => g.cut === "integration")).toBe(true);
+    expect(filterGems(gems, "", []).length).toBe(gems.length); // empty selection = all
   });
 });
