@@ -64,7 +64,24 @@ export const apiKeys = pgTable("api_keys", {
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
 });
 
-export const schema = { producers, attestations, ingredients, usageEdges, accountBindings, shareCards, apiKeys };
+export const accounts = pgTable("accounts", {
+  id: uuid("id").primaryKey(),
+  provider: text("provider").notNull(),
+  providerAccountId: text("provider_account_id").notNull(),
+  login: text("login").notNull(),
+  avatarUrl: text("avatar_url"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const webSessions = pgTable("web_sessions", {
+  id: uuid("id").primaryKey(),
+  tokenHash: text("token_hash").notNull().unique(),
+  accountId: uuid("account_id").notNull().references(() => accounts.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+});
+
+export const schema = { producers, attestations, ingredients, usageEdges, accountBindings, shareCards, apiKeys, accounts, webSessions };
 export type AppDb = PgDatabase<any, typeof schema>;
 
 // Idempotent DDL. (Schema-as-tables above is the query source of truth; this DDL
@@ -80,4 +97,6 @@ export async function ensureSchema(db: AppDb): Promise<void> {
   await db.execute(sql`alter table share_cards add column if not exists payload jsonb`);
   await db.execute(sql`alter table share_cards alter column counts drop not null`);
   await db.execute(sql`create table if not exists api_keys (id uuid primary key, key_hash text not null unique, label text not null, created_at timestamptz not null default now(), revoked_at timestamptz)`);
+  await db.execute(sql`create table if not exists accounts (id uuid primary key, provider text not null, provider_account_id text not null, login text not null, avatar_url text, created_at timestamptz not null default now(), unique (provider, provider_account_id))`);
+  await db.execute(sql`create table if not exists web_sessions (id uuid primary key, token_hash text not null unique, account_id uuid not null references accounts(id), created_at timestamptz not null default now(), expires_at timestamptz not null)`);
 }

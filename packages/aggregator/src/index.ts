@@ -12,3 +12,4 @@ export * from "./seed.js";
 export * from "./testDb.js";
 export * from "./apiKeys.js";
 export * from "./localDb.js";
+export * from "./webAuth.js";
