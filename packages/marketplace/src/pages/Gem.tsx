@@ -25,7 +25,7 @@ export function Gem({ keyName }: { keyName: string }) {
         <h3>Get this gem</h3>
         <p className="ex-getit">
           Gem key: <code className="ex-key">{gem.key}</code>
-          <button type="button" className="ex-copy" onClick={copyKey} aria-label="copy gem key">Copy key</button>
+          <button type="button" className="ex-copy" onClick={copyKey}>Copy key</button>
         </p>
         <p className="ex-getit-steps">Open the AgentGem desktop console → <strong>Get Gems</strong> → search "{gem.key}" → <strong>Install</strong>.</p>
       </section>
