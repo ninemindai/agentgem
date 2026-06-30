@@ -100,3 +100,40 @@ export function stageDistilledDrafts(inv: ConfigInventory, drafts: DistilledSkil
     ? { ...inv, projects }
     : { ...inv, skills: [...inv.skills, ...arts], projects: inv.projects ? projects : undefined };
 }
+
+// Persist an accepted lesson to <base>/.agentgem/distilled/lessons/<name>.md for review/promote.
+// `name` is a validated kebab slug (re-validated at the accept endpoint), so path-safe.
+export function writeDistilledLesson(l: DistilledLesson, base: string = agentgemHome()): string {
+  const dir = join(base, ".agentgem", "distilled", "lessons");
+  mkdirSync(dir, { recursive: true });
+  const path = join(dir, `${l.name}.md`);
+  writeFileSync(path, distilledLessonMarkdown(l), "utf8");
+  return path;
+}
+
+// Merge lessons into inventory.instructions — project-scoped by `root`, else top-level.
+// Pure; never mutates input; no-op (same ref) when empty. Symmetric to stageDistilledDrafts.
+export function stageDistilledLessons(inv: ConfigInventory, lessons: DistilledLesson[], root: string): ConfigInventory {
+  if (!lessons.length) return inv;
+  const arts = lessons.map(lessonToArtifact);
+  const matched = (inv.projects ?? []).some((p) => p.root === root);
+  const projects = (inv.projects ?? []).map((p) =>
+    p.root === root ? { ...p, instructions: [...p.instructions, ...arts] } : p);
+  return matched
+    ? { ...inv, projects }
+    : { ...inv, instructions: [...inv.instructions, ...arts], projects: inv.projects ? projects : undefined };
+}
+
+// Stage each lesson into the project named by its own evidence.root (lessons may span projects).
+export function stageLessonsByEvidence(inv: ConfigInventory, lessons: DistilledLesson[]): ConfigInventory {
+  if (!lessons.length) return inv;
+  const byRoot = new Map<string, DistilledLesson[]>();
+  for (const l of lessons) {
+    const list = byRoot.get(l.evidence.root) ?? [];
+    list.push(l);
+    byRoot.set(l.evidence.root, list);
+  }
+  let out = inv;
+  for (const [root, list] of byRoot) out = stageDistilledLessons(out, list, root);
+  return out;
+}
