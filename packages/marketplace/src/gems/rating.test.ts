@@ -28,14 +28,14 @@ describe("stoneRating", () => {
   });
 });
 describe("isDiamond", () => {
-  it("is true only when maxed on all three axes (grade 3 + 21 stars + 50 installs)", () => {
-    expect(isDiamond(3, 21, 50)).toBe(true);
+  it("is true only when maxed on all three axes (grade 3 + 21 stars + 50 VERIFIED installs)", () => {
+    expect(isDiamond(3, 21, 50)).toBe(true);    // 50 verified installs
     expect(isDiamond(3, 999, 999)).toBe(true);
   });
   it("is false if any single axis is below the max", () => {
     expect(isDiamond(2, 21, 50)).toBe(false);   // grade below 3
     expect(isDiamond(3, 20, 50)).toBe(false);   // stars below 21 (starCurve !== 5)
-    expect(isDiamond(3, 21, 49)).toBe(false);   // installs below 50 (adoptionCurve !== 5)
+    expect(isDiamond(3, 21, 49)).toBe(false);   // <50 verified installs (adoptionCurve !== 5)
     expect(isDiamond(undefined, 21, 50)).toBe(false); // no grade
     expect(isDiamond(3, 0, 0)).toBe(false);
   });

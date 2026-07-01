@@ -15,7 +15,7 @@ export function Gems({ api, stars }: { api: ReturnType<typeof makeApi>; stars: S
   const [search, setSearch] = useState("");
   const [selectedCuts, setSelectedCuts] = useState<string[]>([]);
   const [starState, setStarState] = useState<StarState>({ counts: {}, mine: [] });
-  const [adoptions, setAdoptions] = useState<Record<string, number>>({});
+  const [adoptions, setAdoptions] = useState<Record<string, { installs: number; verifiedInstalls: number }>>({});
 
   useEffect(() => {
     let alive = true;
@@ -64,7 +64,7 @@ export function Gems({ api, stars }: { api: ReturnType<typeof makeApi>; stars: S
               <span className="ex-gem-head">
                 <span className="ex-gem-key">{g.key}</span>
                 <CutBadge cut={g.cut} />
-                <StoneRating cut={g.cut} grade={g.grade} stars={starState.counts[g.key] ?? 0} installs={adoptions[g.key] ?? 0} />
+                <StoneRating cut={g.cut} grade={g.grade} stars={starState.counts[g.key] ?? 0} installs={adoptions[g.key]?.installs ?? 0} verifiedInstalls={adoptions[g.key]?.verifiedInstalls ?? 0} />
                 <span className="ex-gem-kinds">{g.artifactKinds.map((k) => <span key={k} className="ex-chip">{kindLabel(k)}</span>)}</span>
               </span>
               <span className="ex-gem-desc">{g.description}</span>
