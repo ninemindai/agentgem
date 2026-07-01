@@ -150,6 +150,11 @@ export class AggregatorController {
 
   // Not-connected is NOT an HTTP error — stays 200 with { shared: false, rejected: "not-connected" },
   // same shape as /bind's rejection.
+  //
+  // Abuse protection: this path lives under AGG_PATH, so it inherits the anonymous per-IP rate
+  // limiter (gating.ts `anonRateLimitOptions` — only /keys*, /sweep, /ingest are skipped). Combined
+  // with the mandatory ed25519 signature + account binding, that is sufficient; a dedicated
+  // per-pubkey limiter is deferred until real abuse justifies the extra machinery.
   @post("/catalog", { body: CatalogBody, response: CatalogResult })
   async catalog(input: { body: z.infer<typeof CatalogBody> }): Promise<z.infer<typeof CatalogResult>> {
     const r = await recordCatalogShare(this.db, input.body);

@@ -37,4 +37,9 @@ describe("publicCatalog merge", () => {
     });
     expect(gems).toEqual([]);
   });
+
+  it("re-clamps an out-of-range DB grade so it never 500s the response schema", () => {
+    const gems = mapDbToGems([{ gemKey: "@o/k", version: "1.0.0", publishedBy: "o", grade: 7, createdAtMs: 1 }]);
+    expect(gems[0].grade).toBe(3); // 7 clamped to the 1..3 floor at read time
+  });
 });

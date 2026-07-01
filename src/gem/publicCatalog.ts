@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 // Browse-only public gem catalog: flatten the registry index's discovery metadata and cache it.
 import type { RegistryIndex } from "@agentgem/distribute";
-import type { CatalogRow } from "@agentgem/aggregator";
+import { type CatalogRow, clampGrade } from "@agentgem/aggregator";
 
 export interface RegistryGem {
   key: string;
@@ -33,12 +33,14 @@ export function mapIndexToGems(index: RegistryIndex): RegistryGem[] {
   }));
 }
 
-/** DB-shared gems are browse-only teasers, never installable. */
+/** DB-shared gems are browse-only teasers, never installable. Grade is re-clamped defensively:
+ *  writes already clamp (recordCatalogShare), but an out-of-band DB row with an out-of-range grade
+ *  must not reach the response schema's min(1).max(3) and 500 the public (never-500) catalog. */
 export function mapDbToGems(rows: CatalogRow[]): RegistryGem[] {
   return rows.map((r) => ({
     key: r.gemKey, version: r.version, author: r.author, description: r.description,
     tags: r.tags, artifactKinds: r.artifactKinds, type: r.type, publishedBy: r.publishedBy,
-    grade: r.grade, installable: false,
+    grade: clampGrade(r.grade), installable: false,
   }));
 }
 
@@ -51,7 +53,11 @@ export async function safeDbGems(list: () => Promise<CatalogRow[]>): Promise<Reg
   }
 }
 
-/** Union both sources; DB (freshly shared) wins on key collision. */
+/** Union both sources; DB (freshly shared) wins on key collision. Intentional (design spec):
+ *  a freshly shared teaser reflects the author's latest intent. Note the trade-off — if a key
+ *  exists in BOTH the registry (installable) and the DB (teaser), the merged row is the
+ *  browse-only teaser and loses its install affordance. Acceptable while share and publish are
+ *  distinct verbs; revisit if a single key is expected to be both. */
 export function mergeGems(dbGems: RegistryGem[], indexGems: RegistryGem[]): RegistryGem[] {
   const byKey = new Map<string, RegistryGem>();
   for (const g of indexGems) byKey.set(g.key, g);
