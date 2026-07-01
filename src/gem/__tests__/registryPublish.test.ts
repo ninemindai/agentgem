@@ -102,6 +102,13 @@ describe("publishGem", () => {
     expect("grade" in (idx.items["@acme/github-search"].discovery ?? {})).toBe(false);
   });
 
+  it("clamps an out-of-range grade to the 1..3 contract (a hand-crafted .gem can't publish grade 999)", async () => {
+    const { publisher, commits } = capturingPublisher();
+    await publishGem({ gem, scope: "acme", version: "1.0.0", index: empty, publisher, grade: 999 });
+    const idx = JSON.parse(commits[0].files["registry.json"]) as RegistryIndex;
+    expect(idx.items["@acme/github-search"].discovery?.grade).toBe(3); // clamped, never out-of-range on the registry
+  });
+
   it("bumps latest only when the new version is higher", () => {
     let idx = updateIndex(empty, { key: "@a/x", version: "1.0.0", path: "p", gemDigest: "sha256:a", dependencies: [] });
     idx = updateIndex(idx, { key: "@a/x", version: "1.2.0", path: "p", gemDigest: "sha256:b", dependencies: [] });

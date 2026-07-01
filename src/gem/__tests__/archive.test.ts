@@ -49,6 +49,21 @@ describe("verifyLock", () => {
 const gem = (artifacts: GemArtifact[], extra: Partial<Gem> = {}): Gem =>
   ({ name: "demo", createdFrom: "/d", artifacts, checks: [], requiredSecrets: [], ...extra });
 
+describe("gem grade in the archive", () => {
+  it("omits grade for no-grade gems (stable digest), serializes + restores it for graded gems", () => {
+    const base: GemArtifact[] = [{ type: "instructions", name: "soul", content: "be kind" }];
+    const plain = writeGemArchive(gem(base), { version: "1.0.0" }).files;
+    const graded = writeGemArchive(gem(base, { grade: 2 }), { version: "1.0.0" }).files;
+    // A no-grade gem has NO `grade` key in gem.json → byte-identical to a pre-feature gem → unchanged digest.
+    expect("grade" in JSON.parse(plain["gem.json"])).toBe(false);
+    // grade participates in the digest only when present (so it can't silently alter existing gems).
+    expect(computeLock(graded).gemDigest).not.toBe(computeLock(plain).gemDigest);
+    // symmetric write→read round-trip.
+    expect(readGemArchive(graded).grade).toBe(2);
+    expect(readGemArchive(plain).grade).toBeUndefined();
+  });
+});
+
 describe("writeGemArchive", () => {
   it("extracts bodies to files and writes manifest + lock", () => {
     const p = gem([

@@ -13,7 +13,7 @@ export interface Gem {
   tags: string[];
   artifactKinds: string[];      // e.g. ["skill","mcp"] — chip row
   cut?: string;                  // gem cut (type), e.g. "kit" | "skill" | "integration" | "setup"
-  grade?: number;                // authoring quality floor (1–5); blended with community stars
+  grade?: number;                // authoring quality floor (1–3); blended with community stars into the 1–5 rating
   ingredients: GemIngredient[]; // bundled ingredients; ids match aggregator ids for cross-linking
 }
 

@@ -215,7 +215,10 @@ export function buildDiscovery(
   if (opts.updatedAt) d.updatedAt = opts.updatedAt;
   if (opts.type) d.type = opts.type;
   if (opts.publishedBy) d.publishedBy = opts.publishedBy;
-  if (opts.grade != null) d.grade = opts.grade;
+  // Clamp the client-authored floor to its 1..3 contract at the single publish chokepoint,
+  // so a hand-crafted .gem can never write an out-of-range discovery.grade (which would fail
+  // the outbound RegistryGemSchema .max(3) validation on /api/registry/gems for the whole list).
+  if (opts.grade != null) d.grade = Math.max(1, Math.min(3, Math.round(opts.grade)));
   return d;
 }
 
