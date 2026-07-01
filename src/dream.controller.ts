@@ -72,6 +72,10 @@ export class DreamController {
   async accept(input: { body: z.infer<typeof KeyBody> }): Promise<z.infer<typeof OkPathSchema>> {
     const entry = readQueue(this.base).find((e) => e.key === input.body.key);
     if (!entry) throw new InvalidInputError(`No queued draft '${input.body.key}'.`);
+    // Defense-in-depth: entry.name becomes a filesystem path segment in both writers
+    // (draftStage.ts), so re-validate the kebab shape here — mirrors gem.controller.ts's
+    // sibling accept endpoints, which re-check the name at every path-composing write.
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(entry.name)) throw new InvalidInputError(`Unsafe draft name '${entry.name}'.`);
     // reflectionToLesson derives its own name via slugFromReflection(r), which in
     // production always matches entry.name (harvestEntries sets both the same way).
     // Override with entry.name anyway so the file is named after the queue's
@@ -99,7 +103,7 @@ export class DreamController {
 
   @post("/dream/run", { response: StartedSchema })
   async run(): Promise<z.infer<typeof StartedSchema>> {
-    void runWarmPass({ force: true }); // fire-and-forget; poll /api/dream/status
+    void runWarmPass({ force: true }).catch(() => {}); // best-effort; a pre-loop throw must not become an unhandled rejection
     return { started: true };
   }
 }
