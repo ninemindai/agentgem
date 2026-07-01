@@ -8,6 +8,7 @@ import { readFile } from "node:fs/promises";
 import { join, basename } from "node:path";
 import type { SessionStat } from "../observeAggregate.js";
 import type { GemArtifact, McpServerArtifact, ReferenceArtifact } from "@agentgem/model";
+import { firstPackage, isPublicNpm } from "@agentgem/model";
 import type { ImportResult } from "../sources.js";
 
 interface ClineMsg { ts?: number; type?: string; say?: string; text?: string }
@@ -45,18 +46,8 @@ export async function scanClineSessions(taskDirs: string[]): Promise<SessionStat
 // Artifact (authoring) face: .clinerules -> instructions, cline_mcp_settings.json -> mcp_server /
 // package reference. Public npx packages are referenced (not embedded); everything else is kept
 // as a redacted McpServerArtifact — secret-bearing `env` is never ingested.
-const PUBLIC_SCOPES = new Set(["@modelcontextprotocol"]);
-// First non-flag arg is the package spec.
-function firstPackage(args: unknown): string | null {
-  if (!Array.isArray(args)) return null;
-  for (const a of args) { if (typeof a === "string" && !a.startsWith("-")) return a; }
-  return null;
-}
-function isPublicNpm(pkg: string): boolean {
-  if (pkg.startsWith("/") || pkg.startsWith(".")) return false;
-  if (pkg.startsWith("@")) return PUBLIC_SCOPES.has(pkg.split("/")[0]);
-  return /^[a-z0-9][a-z0-9._-]*$/i.test(pkg);
-}
+// firstPackage/isPublicNpm hoisted to @agentgem/model (packages/model/src/publicPackage.ts) so
+// every source adapter shares one classifier.
 
 export async function readClineArtifacts(env: { rulesFile?: string; mcpSettingsFile?: string }): Promise<ImportResult> {
   const artifacts: GemArtifact[] = [];

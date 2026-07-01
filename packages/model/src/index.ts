@@ -16,3 +16,4 @@ export * from "./resolveDir.js";
 export * from "./gemTypes.js";
 export * from "./gemGrade.js";
 export * from "./atomicWrite.js";
+export * from "./publicPackage.js";
