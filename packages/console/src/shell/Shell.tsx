@@ -1,10 +1,15 @@
 import { useEffect, useState } from "react";
 import { groupedPages, sortedPages, type ConsolePage } from "../registry.js";
 import { ActiveGemSwitcher } from "./ActiveGemSwitcher.js";
+import { useActiveGem } from "../activeGem.js";
 
 export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: string }) {
   const groups = groupedPages(pages);
   const ordered = sortedPages(pages);
+  // Drives both the "Build · <gem>" subheader and the dimming of gem-scoped
+  // build stages — one subscription so nav text and lock state never drift.
+  const { keys, name } = useActiveGem();
+  const hasGem = keys.size > 0;
   const [hash, setHash] = useState(() => window.location.hash);
 
   useEffect(() => {
@@ -28,7 +33,7 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
   const item = (p: ConsolePage) => (
     <button
       key={p.id}
-      className={"console-nav-item" + (p === active ? " is-active" : "")}
+      className={"console-nav-item" + (p === active ? " is-active" : "") + (p.requiresGem && !hasGem ? " is-locked" : "")}
       onClick={() => { window.location.hash = p.route; }}
     >
       {p.icon ? <span className="console-nav-icon">{p.icon}</span> : null}
@@ -50,7 +55,9 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
         <ActiveGemSwitcher apiBase={apiBase} />
         {groups.observe.length > 0 && <div className="console-group-label">Observe</div>}
         {groups.observe.map(item)}
-        <div className="console-group-label">Build</div>
+        <div className="console-group-label">
+          Build <span className="console-group-gem">· {name || "New Gem"}</span>
+        </div>
         {groups.build.map(item)}
         {groups.library.length > 0 && <div className="console-group-label">Library</div>}
         {groups.library.map(item)}

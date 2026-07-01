@@ -89,6 +89,10 @@ body::before {
   content: ""; position: absolute; left: -14px; top: 7px; bottom: 7px; width: 3px;
   background: var(--accent); border-radius: 0 3px 3px 0;
 }
+/* Gem-scoped build stages, dimmed until a gem is active. Still clickable — the
+   panel itself shows a "curate first" prompt — so this is a hint, not a wall. */
+.console-nav-item.is-locked { opacity: .45; }
+.console-nav-item.is-locked:hover { opacity: .75; }
 .console-nav-icon { font-size: 14px; line-height: 1; opacity: .85; width: 16px; text-align: center; }
 .console-switcher { position: relative; margin-bottom: 4px; }
 .console-activegem {
@@ -136,6 +140,10 @@ body::before {
 .console-group-label { margin: 14px 8px 4px; font: 700 10px/1 var(--font-ui);
   text-transform: uppercase; letter-spacing: .16em; color: var(--muted); }
 .console-group-label:first-of-type { margin-top: 6px; }
+/* The active gem, echoed under the Build label — natural case + accent so it
+   reads as a live value, not a category. Truncates rather than wrapping. */
+.console-group-gem { color: var(--accent); text-transform: none; letter-spacing: .01em;
+  font-weight: 600; }
 .console-footer { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--line-soft); }
 
 .console-main { padding: 30px 36px 56px; max-width: 1100px; animation: fade .5s ease both; }
