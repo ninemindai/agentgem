@@ -18,7 +18,7 @@ function kebab(s: string): string {
 }
 export function slugFromReflection(r: Reflection): string {
   const words = kebab(r.detail).split("-").filter(Boolean).slice(0, 3).join("-");
-  return `${r.kind}-${words}`;
+  return `${r.kind}-${words}`.slice(0, 45);
 }
 export function harvestEntries(root: string, distilled: DistilledSkill[], reflections: Reflection[], nowMs: number): DreamQueueEntry[] {
   const out: DreamQueueEntry[] = [];
@@ -41,10 +41,12 @@ export function harvestEntries(root: string, distilled: DistilledSkill[], reflec
   }
   return out;
 }
-export function reflectionToLesson(entry: DreamQueueEntry): DistilledLesson {
-  const r = entry.draft as Reflection;
+// Total over any Reflection — callers pass `entry.draft as Reflection, entry.root` at the
+// one kind-guarded site (Task 5), so this never receives a skill draft and never throws.
+export function reflectionToLesson(r: Reflection, root: string): DistilledLesson {
+  const sessions = new Set((r.provenance.occurrences ?? []).map((o) => o.sessionId)).size;
   return {
-    name: entry.name, body: r.detail, importance: r.importance, status: "draft",
-    evidence: { sessions: r.provenance.occurrences?.length ?? 0, root: entry.root, provenance: r.provenance },
+    name: slugFromReflection(r), body: r.detail, importance: r.importance, status: "draft",
+    evidence: { sessions, root, provenance: r.provenance },
   };
 }
