@@ -62,7 +62,7 @@ export function TranscriptViewer({ apiBase, agent, sessionId, onBack }: {
         )}
       </div>
 
-      {view && <DistillSection apiBase={apiBase} agent={view.agent} sessionId={view.sessionId} turns={view.turns} />}
+      {view && <DistillSection apiBase={apiBase} agent={agent} sessionId={view.sessionId} turns={view.turns} />}
 
       {error ? (
         <p className="obs-error">Couldn't load session: {error}</p>

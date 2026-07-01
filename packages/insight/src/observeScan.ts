@@ -8,7 +8,6 @@
 // text (mirrors workflowScan.ts). Total functions: missing dirs / malformed
 // lines degrade to empty/skip, never throw.
 import { readdirSync } from "node:fs";
-import { readFile } from "node:fs/promises";
 import { join, basename } from "node:path";
 import { BUILTIN_SOURCES, type SourceSpec } from "./sources.js";
 // The pure aggregation half (SessionStat + aggregateObserve + payload types) lives
