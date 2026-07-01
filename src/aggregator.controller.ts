@@ -12,7 +12,7 @@ import { popularity, coOccurrence, adoption, overview, coOccurrenceMatrix, model
 import type { UsageAttestation, GemAdoption } from "@agentgem/insight";
 import { recordBinding } from "@agentgem/aggregator";
 import { GitHubVerifier } from "@agentgem/aggregator";
-import { sweepQuarantine } from "@agentgem/aggregator";
+import { sweepQuarantine, sweepAdoptionQuarantine } from "@agentgem/aggregator";
 import { issueKey, revokeKey, listKeys } from "@agentgem/aggregator";
 
 // Loose body schema — the real gate is the core's verifyAttestation (ed25519 + consistency).
@@ -48,6 +48,7 @@ const BindResultSchema = z.union([
 const SweepBody = z.object({ apply: z.boolean().optional(), token: z.string() });
 const SweepReportSchema = z.object({
   clustersFound: z.number(), attestationsQuarantined: z.number(), producersFlagged: z.number(), dryRun: z.boolean(),
+  adoptionsQuarantined: z.number(),
 });
 const SweepResult = z.union([
   z.object({ ok: z.literal(true), report: SweepReportSchema }),
@@ -146,7 +147,8 @@ export class AggregatorController {
     if (!expected) return { ok: false, rejected: "sweep-disabled" };
     if (!tokenEq(input.body.token, expected)) return { ok: false, rejected: "unauthorized" };
     const report = await sweepQuarantine(this.db, { dryRun: !input.body.apply });
-    return { ok: true, report };
+    const ad = await sweepAdoptionQuarantine(this.db, { dryRun: !input.body.apply });
+    return { ok: true, report: { ...report, adoptionsQuarantined: ad.adoptionsQuarantined } };
   }
 
   // Admin-only: mint an API key. Gated by AGGREGATOR_ADMIN_TOKEN (like /sweep). The plaintext
