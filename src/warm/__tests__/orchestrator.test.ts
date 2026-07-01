@@ -1,6 +1,6 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { runWarmPass, getWarmStatus, beginForeground, endForeground } from "../orchestrator.js";
 import type { Warmable } from "../registry.js";
 
@@ -63,5 +63,60 @@ describe("runWarmPass", () => {
     await runWarmPass({ registry: fakeRegistry([]), roots: [], now: () => 42, isBusy: () => false });
     expect(getWarmStatus().running).toBe(false);
     expect(getWarmStatus().last?.finishedAt).toBe(42);
+  });
+});
+
+describe("runWarmPass – AGENTGEM_WARM_TOPN env override", () => {
+  const KEY = "AGENTGEM_WARM_TOPN";
+  const saved = process.env[KEY];
+  afterEach(() => {
+    if (saved === undefined) delete process.env[KEY];
+    else process.env[KEY] = saved;
+  });
+
+  it("env='2' with no explicit topN → honors 2 (roots beyond index 1 dropped)", async () => {
+    process.env[KEY] = "2";
+    const calls: string[] = [];
+    await runWarmPass({
+      registry: fakeRegistry(calls),
+      roots: ["/a", "/b", "/c", "/d"],   // > 2
+      now: () => 1, isBusy: () => false,
+    });
+    // per-root warmable should fire for /a and /b only
+    expect(calls.filter((c) => c.startsWith("insights:"))).toEqual(["insights:/a", "insights:/b"]);
+  });
+
+  it("explicit opts.topN overrides env", async () => {
+    process.env[KEY] = "2";
+    const calls: string[] = [];
+    await runWarmPass({
+      registry: fakeRegistry(calls),
+      roots: ["/a", "/b", "/c"],
+      topN: 1,   // explicit wins over env "2"
+      now: () => 1, isBusy: () => false,
+    });
+    expect(calls.filter((c) => c.startsWith("insights:"))).toEqual(["insights:/a"]);
+  });
+
+  it("invalid env ('abc') → falls back to DEFAULT_TOP_N (5)", async () => {
+    process.env[KEY] = "abc";
+    const calls: string[] = [];
+    await runWarmPass({
+      registry: fakeRegistry(calls),
+      roots: ["/a", "/b", "/c", "/d", "/e", "/f"],   // 6 roots; default 5 should limit to 5
+      now: () => 1, isBusy: () => false,
+    });
+    expect(calls.filter((c) => c.startsWith("insights:"))).toHaveLength(5);
+  });
+
+  it("env='0' (<=0) → falls back to DEFAULT_TOP_N", async () => {
+    process.env[KEY] = "0";
+    const calls: string[] = [];
+    await runWarmPass({
+      registry: fakeRegistry(calls),
+      roots: ["/a", "/b", "/c", "/d", "/e", "/f"],
+      now: () => 1, isBusy: () => false,
+    });
+    expect(calls.filter((c) => c.startsWith("insights:"))).toHaveLength(5);
   });
 });
