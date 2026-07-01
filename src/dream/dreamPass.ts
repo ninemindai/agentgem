@@ -27,6 +27,7 @@ export async function dreamRoot(root: string, deps: DreamDeps = {}): Promise<"wa
   const analyze = deps.analyze ?? computeWorkflowAnalysis;
 
   // Cache hit in a normal pass (analyze ran earlier this pass). No force → no LLM.
+  // Un-forced: in a normal pass the analyze warmable already populated this root's cache, so this is a cache hit (no LLM). Narrow exception: if analyze was skipped for this root (foreground busy) but the foreground frees before dream's turn, this un-forced call can miss cache and do a real analysis — bounded to one analyze/root/pass.
   const a = await analyze(root, { dir: deps.dir });
 
   const distilled = (a.payload.distilled as DistilledSkill[] | undefined) ?? [];

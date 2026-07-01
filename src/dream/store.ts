@@ -31,6 +31,7 @@ const diaryPath = (base: string) => join(dreamDir(base), "diary.json");
 export function readQueue(base: string = agentgemHome()): DreamQueueEntry[] {
   return readJson<DreamQueueEntry[]>(queuePath(base), []);
 }
+// Dedup by key (incl. provenanceHash): a dismissed/accepted draft never resurfaces UNLESS its evidence changes (new occurrences → new hash → new key), which is intentional — fresh evidence is worth re-reviewing.
 export function enqueueNew(candidates: DreamQueueEntry[], base: string = agentgemHome()): DreamQueueEntry[] {
   const existing = readQueue(base);
   const seen = new Set(existing.map((e) => e.key));
