@@ -40,7 +40,7 @@ export function Settings({ apiBase }: { apiBase: string }) {
     setBindError(null);
     setBindFlow(null);
     try {
-      const r = await bindStartRoute.call(makeClient(apiBase));
+      const r = await bindStartRoute.call(makeClient(apiBase), { body: {} });
       if (!r.configured) {
         setBindFlow({ step: "unconfigured" });
         return;

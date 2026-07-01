@@ -901,6 +901,34 @@ button.scorecard-intent { line-height: 1.4; }
 .opt-install-ok { color: var(--emerald, #2e7d32); }
 
 /* Share-to-Explore connect gate (Curate → PublishToExplore) */
-.explore-connect { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; margin: 8px 0; }
-.explore-connect p { margin: 0; font-size: 0.85em; color: var(--muted, #667085); }
-.explore-connect code { font-weight: 600; }
+.explore-connect { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; margin: 4px 0 12px; }
+.explore-connect p { margin: 0; font-size: 12.5px; color: var(--muted); }
+.explore-connect code { font-weight: 600; color: var(--ink); }
+
+/* Share-to-Explore publish form (Curate → PublishToExplore) */
+.publish-form, .publish-result {
+  margin: 18px 0 26px; padding: 16px; border: 1px solid var(--line);
+  border-radius: var(--radius); background: var(--raised); box-shadow: var(--shadow-sm);
+}
+.publish-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.publish-form h3 { margin: 0; font: 600 15px/1.2 var(--font-ui); color: var(--ink); }
+.publish-verified {
+  display: inline-flex; align-items: center; gap: 4px; flex: none;
+  font: 600 11px/1 var(--font-ui); letter-spacing: .01em; color: var(--emerald);
+  background: rgba(47, 107, 58, .09); border: 1px solid rgba(47, 107, 58, .22);
+  border-radius: 999px; padding: 4px 9px;
+}
+.publish-note { margin: 4px 0 12px; color: var(--muted); font-size: 12.5px; }
+.publish-fields { display: flex; flex-wrap: wrap; gap: 8px; }
+.publish-fields .publish-scope { flex: 0 1 160px; min-width: 130px; }
+.publish-fields .publish-version { flex: 0 1 110px; min-width: 90px; }
+.publish-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin-top: 12px;
+}
+.publish-provenance { color: var(--muted); font-size: 12px; font-style: italic; }
+.publish-error { margin: 10px 0 0; color: var(--accent); font-size: 12.5px; font-weight: 500; }
+.publish-result p { margin: 0 0 8px; }
+.publish-result p:last-child { margin-bottom: 0; }
+.publish-result code { font: 600 12.5px/1 var(--font-mono); color: var(--accent); }
+.publish-result a { color: var(--accent); }

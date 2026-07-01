@@ -27,6 +27,7 @@ export function PublishToExplore({ apiBase, selected, skillCount, lessonCount }:
   const [copied, setCopied] = useState(false);
   const [bindStatus, setBindStatus] = useState<{ bound: boolean; login?: string } | null>(null);
   const [connecting, setConnecting] = useState<{ userCode: string; verificationUri: string } | null>(null);
+  const [connectBusy, setConnectBusy] = useState(false);
 
   const provenance = `distilled from ${skillCount} skill${skillCount === 1 ? "" : "s"} and ${lessonCount} lesson${lessonCount === 1 ? "" : "s"}`;
 
@@ -36,17 +37,26 @@ export function PublishToExplore({ apiBase, selected, skillCount, lessonCount }:
   }, [apiBase]);
 
   const connectGitHub = async () => {
-    const client = makeClient(apiBase);
-    const start = await bindStartRoute.call(client);
-    if (!start.configured) {
-      setError("Set AGENTGEM_GITHUB_CLIENT_ID to connect GitHub");
-      return;
+    setError(null);
+    setConnectBusy(true);
+    try {
+      const client = makeClient(apiBase);
+      const start = await bindStartRoute.call(client, { body: {} });
+      if (!start.configured) {
+        setError("GitHub verification isn't set up on this server.");
+        return;
+      }
+      setConnecting({ userCode: start.userCode!, verificationUri: start.verificationUri! });
+      const res = await bindCompleteRoute.call(client, { body: { deviceCode: start.deviceCode!, interval: start.interval } });
+      if (res.bound) setBindStatus({ bound: true, login: res.login });
+      else setError(res.rejected === "unknown-producer" ? "Share telemetry once first, then connect." : `Couldn't verify with GitHub (${res.rejected}).`);
+    } catch (err) {
+      // Any thrown error (network, expired/denied device code) must surface, not vanish.
+      setError(err instanceof Error ? err.message : "Couldn't reach GitHub — try again.");
+    } finally {
+      setConnecting(null);
+      setConnectBusy(false);
     }
-    setConnecting({ userCode: start.userCode!, verificationUri: start.verificationUri! });
-    const res = await bindCompleteRoute.call(client, { body: { deviceCode: start.deviceCode!, interval: start.interval } });
-    setConnecting(null);
-    if (res.bound) setBindStatus({ bound: true, login: res.login });
-    else setError(res.rejected === "unknown-producer" ? "Share telemetry once first, then connect." : `Connect failed: ${res.rejected}`);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -92,7 +102,7 @@ export function PublishToExplore({ apiBase, selected, skillCount, lessonCount }:
           <p>
             Share: <a href={result.shareUrl}>{result.shareUrl}</a>
             {" "}
-            <button type="button" onClick={copyUrl}>{copied ? "Copied!" : "Copy"}</button>
+            <button type="button" className="ledger-sort" onClick={copyUrl}>{copied ? "Copied!" : "Copy"}</button>
           </p>
         )}
       </div>
@@ -101,32 +111,38 @@ export function PublishToExplore({ apiBase, selected, skillCount, lessonCount }:
 
   return (
     <form className="publish-form" onSubmit={handleSubmit}>
-      <h3>Share to Explore</h3>
-      <p className="publish-note">Scope is caller-supplied — account-binding coming.</p>
+      <div className="publish-head">
+        <h3>Share to Explore</h3>
+        {bindStatus?.bound && (
+          <span className="publish-verified">✓ Verified as @{bindStatus.login}</span>
+        )}
+      </div>
+      <p className="publish-note">Publish this Playbook to the public Explore catalog for anyone to install.</p>
+
       {bindStatus && !bindStatus.bound && (
         <div className="explore-connect">
-          <button type="button" onClick={connectGitHub}>Connect GitHub</button>
-          {connecting && (
-            <p>
-              Open <a href={connecting.verificationUri} target="_blank" rel="noreferrer">{connecting.verificationUri}</a> and enter <code>{connecting.userCode}</code>
-            </p>
-          )}
+          <button type="button" className="ledger-sort" onClick={connectGitHub} disabled={connectBusy}>
+            {connectBusy ? "Connecting…" : "Connect GitHub"}
+          </button>
+          <p>
+            Optional — verify authorship so your Playbook publishes as verified.
+            {connecting && (
+              <> Open <a href={connecting.verificationUri} target="_blank" rel="noreferrer">{connecting.verificationUri}</a> and enter <code>{connecting.userCode}</code>.</>
+            )}
+          </p>
         </div>
       )}
-      <label>
-        <span className="visually-hidden">scope</span>
+
+      <div className="publish-fields">
         <input
           id="publish-scope"
           aria-label="scope"
-          className="ledger-search"
+          className="ledger-search publish-scope"
           placeholder="scope (e.g. @me)"
           value={scope}
           onChange={(e) => setScope(e.target.value)}
           required
         />
-      </label>
-      <label>
-        <span className="visually-hidden">name</span>
         <input
           id="publish-name"
           aria-label="name"
@@ -136,26 +152,26 @@ export function PublishToExplore({ apiBase, selected, skillCount, lessonCount }:
           onChange={(e) => setName(e.target.value)}
           required
         />
-      </label>
-      <label>
-        <span className="visually-hidden">version</span>
         <input
           id="publish-version"
           aria-label="version"
-          className="ledger-search"
+          className="ledger-search publish-version"
           placeholder="version"
           value={version}
           onChange={(e) => setVersion(e.target.value)}
         />
-      </label>
-      <p className="publish-provenance">{provenance}</p>
-      <button
-        type="submit"
-        className="ledger-build"
-        disabled={busy || !name.trim() || !scope.trim() || !bindStatus?.bound}
-      >
-        {busy ? "Sharing…" : "Share to explore"}
-      </button>
+      </div>
+
+      <div className="publish-foot">
+        <span className="publish-provenance">{provenance}</span>
+        <button
+          type="submit"
+          className="ledger-build"
+          disabled={busy || !name.trim() || !scope.trim()}
+        >
+          {busy ? "Sharing…" : "Share to Explore"}
+        </button>
+      </div>
       {error && <p className="publish-error">{error}</p>}
     </form>
   );

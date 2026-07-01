@@ -12,8 +12,18 @@ import { requestDeviceCode, pollForToken } from "./deviceFlow.js";
 
 export interface BindConfig { clientId?: string; base?: string }
 
+// The canonical hosted OAuth app + aggregator. The GitHub *device-flow* client ID is
+// public (device flow has no client secret), so shipping it as a default lets
+// "Connect GitHub" work with zero configuration against api.agentgem.ai. Self-hosters
+// override either value via env.
+const DEFAULT_GITHUB_CLIENT_ID = "Ov23liCbBVnhr7AH9FkF";
+const DEFAULT_AGGREGATOR_URL = "https://api.agentgem.ai";
+
 export function bindConfig(): BindConfig {
-  return { clientId: process.env.AGENTGEM_GITHUB_CLIENT_ID, base: process.env.AGENTGEM_AGGREGATOR_URL };
+  return {
+    clientId: process.env.AGENTGEM_GITHUB_CLIENT_ID ?? DEFAULT_GITHUB_CLIENT_ID,
+    base: process.env.AGENTGEM_AGGREGATOR_URL ?? DEFAULT_AGGREGATOR_URL,
+  };
 }
 
 const bindingPath = () => join(homedir(), ".agentgem", "binding.json");

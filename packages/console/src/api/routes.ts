@@ -631,6 +631,9 @@ export const bindStatusRoute = defineRoute("GET", "/api/bind/status", {
   response: z.object({ bound: z.boolean(), login: z.string().optional(), provider: z.string().optional() }),
 });
 export const bindStartRoute = defineRoute("POST", "/api/bind/start", {
+  // The server requires an (empty) object body; without a body schema the client
+  // would POST nothing and the server rejects it with 422 invalid_body.
+  body: z.object({}),
   response: z.object({ configured: z.boolean(), userCode: z.string().optional(), verificationUri: z.string().optional(), deviceCode: z.string().optional(), interval: z.number().optional() }),
 });
 export const bindCompleteRoute = defineRoute("POST", "/api/bind/complete", {

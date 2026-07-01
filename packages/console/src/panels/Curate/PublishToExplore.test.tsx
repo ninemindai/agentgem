@@ -83,17 +83,26 @@ describe("PublishToExplore", () => {
     await waitFor(() => expect(screen.getByText(/registry down|error/i)).toBeTruthy());
   });
 
-  it("disables Share until GitHub is connected", async () => {
+  it("shares without binding, and still offers optional Connect GitHub when unbound", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
       const u = String(url);
       if (u.includes("/api/bind/status")) return res({ bound: false });
+      if (u.includes("/api/workspaces")) return res({ name: "p" });
+      if (u.includes("/api/playbook/publish")) {
+        return res({ exploreRef: "@me/p", version: "1.0.0", shareUrl: "https://agentgem.ai/share/xyz" });
+      }
       throw new Error(`unexpected: ${u}`);
     }));
     render(
-      <PublishToExplore apiBase="" selected={new Set()} skillCount={1} lessonCount={0} />
+      <PublishToExplore apiBase="" selected={new Set(["skills::x"])} skillCount={1} lessonCount={0} />
     );
-    const btn = (await screen.findByRole("button", { name: /share to explore/i })) as HTMLButtonElement;
-    expect(btn.disabled).toBe(true);
-    expect(screen.getByText(/connect github/i)).toBeTruthy();
+    // Connect GitHub is offered but optional — sharing is not gated on it.
+    expect(await screen.findByRole("button", { name: /connect github/i })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("scope"), { target: { value: "@me" } });
+    fireEvent.change(screen.getByLabelText("name"), { target: { value: "p" } });
+    const btn = screen.getByRole("button", { name: /share to explore/i }) as HTMLButtonElement;
+    await waitFor(() => expect(btn.disabled).toBe(false));
+    fireEvent.click(btn);
+    await waitFor(() => expect(screen.getByText(/@me\/p/)).toBeTruthy());
   });
 });

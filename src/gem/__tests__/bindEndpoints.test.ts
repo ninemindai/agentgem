@@ -20,13 +20,14 @@ const fakeIdentity = { publicKey: "ed25519:FAKEKEY==", sign: (_data: string) => 
 const fakeCode = { deviceCode: "dc", userCode: "ABCD-1234", verificationUri: "https://github.com/login/device", interval: 5 };
 
 describe("/bind/start", () => {
-  it("returns {configured:false} when AGENTGEM_GITHUB_CLIENT_ID is unset", async () => {
+  it("falls back to the default hosted client ID when env is unset", async () => {
     const prev = process.env.AGENTGEM_GITHUB_CLIENT_ID;
     delete process.env.AGENTGEM_GITHUB_CLIENT_ID;
     try {
       const controller = new GemController();
-      const result = await controller.bindStart({ body: {} });
-      expect(result).toEqual({ configured: false });
+      // The public device-flow client ID defaults in, so start is configured out of the box.
+      const result = await controller.bindStart({ body: {} }, { requestCode: async () => fakeCode });
+      expect(result).toEqual({ configured: true, ...fakeCode });
     } finally {
       if (prev !== undefined) process.env.AGENTGEM_GITHUB_CLIENT_ID = prev;
     }
