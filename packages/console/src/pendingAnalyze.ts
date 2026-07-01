@@ -21,3 +21,12 @@ export interface PendingPlaybook { root: string; skills: string[]; lessons: stri
 let pendingPlaybook: PendingPlaybook | null = null;
 export function setPendingPlaybook(d: PendingPlaybook): void { pendingPlaybook = d; }
 export function consumePendingPlaybook(): PendingPlaybook | null { const d = pendingPlaybook; pendingPlaybook = null; return d; }
+
+// One-shot hand-off of a ready-made selection into Curate's Publish flow, for
+// on-ramps that already know their exact selection keys: "Share my setup"
+// (whole inventory) and a single distilled lesson's "Share". Consumed once. The
+// counts feed PublishToExplore's provenance line.
+export interface PendingContribution { keys: string[]; skillCount: number; lessonCount: number; name?: string }
+let pendingContribution: PendingContribution | null = null;
+export function setPendingContribution(d: PendingContribution): void { pendingContribution = d; }
+export function consumePendingContribution(): PendingContribution | null { const d = pendingContribution; pendingContribution = null; return d; }
