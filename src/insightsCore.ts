@@ -27,7 +27,11 @@ export interface InsightsResult { payload: InsightsPayload; cached: boolean; upd
 
 export async function computeInsights(
   root: string,
-  opts: { dir?: string; force?: boolean; progress?: InsightsProgress; now?: () => number } = {},
+  opts: {
+    dir?: string; force?: boolean; progress?: InsightsProgress; now?: () => number;
+    judge?: typeof judgeSessions;
+    narrate?: typeof narrateInsights;
+  } = {},
 ): Promise<InsightsResult> {
   const now = opts.now ?? Date.now;
   const p = opts.progress;
@@ -54,13 +58,13 @@ export async function computeInsights(
   p?.onPhase?.("scanned", { transcripts: paths.length, sessions: signal.sessions.scanned });
 
   p?.onPhase?.("judging");
-  const { facets, degraded: judgeDegraded } = await judgeSessions(signal, { onDelta: (chunk) => p?.onDelta?.(chunk) });
+  const { facets, degraded: judgeDegraded } = await (opts.judge ?? judgeSessions)(signal, { onDelta: (chunk) => p?.onDelta?.(chunk) });
 
   p?.onPhase?.("synthesizing");
   const report = synthesizeInsights(facets);
 
   p?.onPhase?.("narrating");
-  const narr = await narrateInsights(facets, report.narrative, { onDelta: (chunk) => p?.onDelta?.(chunk) });
+  const narr = await (opts.narrate ?? narrateInsights)(facets, report.narrative, { onDelta: (chunk) => p?.onDelta?.(chunk) });
   report.narrative = narr.narrative;
 
   const payload: InsightsPayload = {

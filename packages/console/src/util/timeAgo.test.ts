@@ -10,4 +10,7 @@ describe("timeAgo", () => {
     expect(timeAgo(now - 3 * 60_000, now)).toBe("3m ago");
     expect(timeAgo(now - 2 * 3_600_000, now)).toBe("2h ago");
   });
+  it("formats days", () => {
+    expect(timeAgo(now - 2 * 86_400_000, now)).toBe("2d ago");
+  });
 });
