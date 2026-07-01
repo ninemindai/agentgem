@@ -125,4 +125,45 @@ describe("POST /api/scorecard/build handler", () => {
       }),
     ).rejects.toThrow();
   });
+
+  it("bakes grade=3 for battle-tested portable selections", async () => {
+    const c = mkCandidate("k-portable", "portable-skill");
+    // Override tools to include a non-local tool so isPortable returns true
+    c.skeleton.tools = ["WebFetch", "Edit"];
+    vi.spyOn(defaultScorecardDeps, "loadProject").mockReturnValue({
+      signal: MINIMAL_SIGNAL,
+      candidates: [c],
+      reflections: [],
+    });
+
+    const ctrl = new GemController();
+    const gem = await ctrl.scorecardBuild({
+      body: {
+        name: "portable-gem",
+        selections: [{ root: ROOT, keys: ["k-portable"] }],
+      },
+    });
+
+    expect(gem.grade).toBe(3);
+  });
+
+  it("bakes grade=2 for battle-tested all-local selections", async () => {
+    // mkCandidate uses ["Edit","Bash"] (local tools only) + priorConfidence:"high"
+    const c = mkCandidate("k-local", "local-skill");
+    vi.spyOn(defaultScorecardDeps, "loadProject").mockReturnValue({
+      signal: MINIMAL_SIGNAL,
+      candidates: [c],
+      reflections: [],
+    });
+
+    const ctrl = new GemController();
+    const gem = await ctrl.scorecardBuild({
+      body: {
+        name: "local-gem",
+        selections: [{ root: ROOT, keys: ["k-local"] }],
+      },
+    });
+
+    expect(gem.grade).toBe(2);
+  });
 });

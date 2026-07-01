@@ -127,7 +127,7 @@ const ScorecardSchema = z.object({
 }) satisfies z.ZodType<Scorecard>;
 import { introspectConfig, introspectProject } from "@agentgem/capture";
 import { buildGem } from "@agentgem/build";
-import { InvalidInputError } from "@agentgem/model";
+import { InvalidInputError, scorecardFloor } from "@agentgem/model";
 import { scaffoldChecks } from "@agentgem/build";
 import { materialize, compatibility } from "@agentgem/model";
 import type { TargetId } from "@agentgem/model";
@@ -426,6 +426,8 @@ export class GemController {
     const drafts: DistilledSkill[] = [];
     const projSel: Record<string, { skills: string[] }> = {};
     const roots: string[] = [];
+    const keys = new Set<string>();
+    let battleTested = 0, portable = 0;
     for (const sel of input.body.selections) {
       const canonRoot = resolveProject(sel.root);
       roots.push(canonRoot);
@@ -434,12 +436,16 @@ export class GemController {
       const chosen = loaded.candidates.filter((c) => sel.keys.includes(c.key));
       if (!chosen.length) throw new InvalidInputError(`No matching workflows in '${sel.root}' for the given keys.`);
       for (const c of chosen) {
+        keys.add(c.key);
+        if (c.priorConfidence === "high") battleTested++;
+        if (isPortable(c)) portable++;
         drafts.push({ ...c.skeleton, description: sanitizeShareText(c.skeleton.description) });
         (projSel[c.skeleton.evidence.root] ??= { skills: [] }).skills.push(c.skeleton.name);
       }
     }
+    const grade = scorecardFloor({ breadth: keys.size, battleTested, portable });
     const inventory = stageDraftsByEvidence(introspectAll(dir, roots), drafts);
-    const gem = buildGem(inventory, { projects: projSel }, { name: input.body.name ?? "goldmine-gem", createdFrom: resolveDirs(dir).claudeDir });
+    const gem = buildGem(inventory, { projects: projSel }, { name: input.body.name ?? "goldmine-gem", createdFrom: resolveDirs(dir).claudeDir, grade });
     return gem;
   }
 
