@@ -309,8 +309,10 @@ const mcpClineSettings = (servers: McpServerArtifact[]): MaterializeResult => {
 const instructionsGeminiMd = (all: InstructionsArtifact[]): FileTree => ({ "GEMINI.md": all.map((i) => i.content).join("\n\n") });
 const skillGeminiCommand = (a: SkillArtifact): FileTree => {
   const rel = a.name.split(":").map(safePathSegment).join("/");
-  // Literal TOML string ''' preserves the prompt verbatim (no escaping); guard the rare ''' case.
-  const body = a.content.includes("'''") ? JSON.stringify(a.content) : `'''${a.content}'''`;
+  // Literal TOML string ''' preserves the prompt verbatim (no escaping); guard the rare ''' case
+  // and the subtler case of content ending in one or two apostrophes, which would merge with the
+  // closing ''' delimiter (e.g. "...quote'" -> '''...quote'''' silently drops the trailing ').
+  const body = (a.content.includes("'''") || /'{1,2}$/.test(a.content)) ? JSON.stringify(a.content) : `'''${a.content}'''`;
   const desc = a.description ? `\ndescription = ${JSON.stringify(a.description)}` : "";
   return { [`.gemini/commands/${rel}.toml`]: `prompt = ${body}${desc}\n` };
 };
