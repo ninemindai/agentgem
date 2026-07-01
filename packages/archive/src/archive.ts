@@ -77,6 +77,7 @@ interface GemManifest {
   requiredSecrets: Gem["requiredSecrets"];
   checks: ManifestCheckEntry[];
   dependencies?: string[];
+  grade?: number;
 }
 
 export interface ArchiveResult { files: FileTree; skipped: SkippedArtifact[] }
@@ -144,6 +145,7 @@ export function writeGemArchive(gem: Gem, opts: { version?: string; dependencies
     requiredSecrets: gem.requiredSecrets,
     checks,
     ...(opts.dependencies && opts.dependencies.length ? { dependencies: opts.dependencies } : {}),
+    ...(gem.grade != null ? { grade: gem.grade } : {}),
   };
   files[MANIFEST_PATH] = JSON.stringify(manifest, null, 2);
   files[LOCK_PATH] = JSON.stringify(computeLock(files), null, 2);
@@ -203,7 +205,9 @@ export function readGemArchive(files: FileTree): Gem {
   });
 
   const checks: GemCheck[] = manifest.checks.map((c) => JSON.parse(body(c.path)) as GemCheck);
-  return { name: manifest.name, createdFrom: manifest.createdFrom, artifacts, checks, requiredSecrets: manifest.requiredSecrets };
+  const gem: Gem = { name: manifest.name, createdFrom: manifest.createdFrom, artifacts, checks, requiredSecrets: manifest.requiredSecrets };
+  if (manifest.grade != null) gem.grade = manifest.grade;
+  return gem;
 }
 
 export function readGemMeta(files: FileTree): { name: string; version: string; dependencies: string[]; gemDigest: string } {

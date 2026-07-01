@@ -875,6 +875,7 @@ export class GemController {
       gem, scope: input.body.scope, name: input.body.name, version: input.body.version,
       dependencies: input.body.dependencies, index, publisher: githubRegistryPublisher(cfg),
       description: input.body.description, tags: input.body.tags, type, publishedBy,
+      grade: gem.grade,
     });
   }
 

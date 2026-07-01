@@ -56,6 +56,15 @@ describe("upload-publish", () => {
     expect((res._b as any).error).toBe("publish failed");                  // generic — internal detail NOT leaked
     expect(JSON.stringify(res._b)).not.toContain("secret-internal-detail");
   });
+  it("stamps grade from the archive and ignores a bogus grade in the request body", async () => {
+    const db = await makeTestDb(); const token = await session(db, "alice"); const { publisher, commits } = capturing(); const res = mkRes();
+    const graded: Gem = { ...gem, grade: 2 };
+    const gradedBase64 = exportGem(graded, { version: "1.0.0" }).bytes.toString("base64");
+    await uploadPublishHandler(deps(db, publisher))(mkReq({ headers:{ cookie:`${SESSION_COOKIE}=${token}`, origin:"https://app.agentgem.ai" }, body:{ scope:"alice", version:"1.0.0", grade: 5, bytesBase64: gradedBase64 } }) as any, res as any);
+    expect(res._s).toBe(200);
+    const idx = JSON.parse((commits[0].files as any)["registry.json"]);
+    expect(idx.items["@alice/test-gem"].discovery.grade).toBe(2); // from the archive, not the body's bogus 5
+  });
   it("OPTIONS preflight → 204 with credentialed CORS", async () => {
     const db = await makeTestDb(); const { publisher } = capturing(); const res = mkRes();
     await uploadPublishHandler(deps(db, publisher))(mkReq({ method:"OPTIONS", headers:{ origin:"https://app.agentgem.ai" } }) as any, res as any);

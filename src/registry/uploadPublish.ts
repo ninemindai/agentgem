@@ -61,6 +61,7 @@ export function uploadPublishHandler(deps: UploadPublishDeps) {
         description: typeof body.description === "string" ? body.description : undefined,
         index, publisher: deps.publisher, type,
         publishedBy: who.login,                                            // VERIFIED attribution (#4a)
+        grade: gem.grade,                                                  // forwarded from the archive (never the request body)
       });
       res.json(result);
     } catch (err) {
