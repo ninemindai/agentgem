@@ -141,6 +141,17 @@ export interface GemVerificationReport {
   passed: boolean; // all results passed AND results.length > 0
 }
 
+// Per-harness execution overlay — delta-only (only what the neutral artifacts can't express).
+// Unsigned: NOT serialized into the archive, so it never affects the gem digest.
+export interface AgentBinding {
+  agent: string;                      // AgentId this binding is for
+  origin: "imported" | "rendered";    // mined FROM this harness, or exported TO it
+  model?: string;
+  entry?: string;
+  secretMap?: Record<string, string>; // requiredSecret name -> this harness's env var NAME
+  config?: Record<string, unknown>;
+}
+
 export interface Gem {
   name: string;
   createdFrom: string;
@@ -148,4 +159,5 @@ export interface Gem {
   checks: GemCheck[];                   // 0..n; embedded operator checks
   requiredSecrets: SecretRequirement[];  // declared secret surface; names only
   grade?: number;                        // authoring-quality floor (1..3), baked at build; absent when unmeasured
+  bindings?: AgentBinding[];  // in-memory overlay; absent = none. Not archived (see AgentBinding).
 }
