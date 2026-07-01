@@ -18,4 +18,14 @@ describe("preparePlaybook (core)", () => {
     expect(r).toEqual({ skills: ["ship-loop"], lessons: ["verify-first"], root: "/r", degraded: false });
     expect(written).toEqual(["skill:ship-loop", "lesson:verify-first"]);
   });
+
+  it("propagates the degraded flag from the distill result", async () => {
+    const r = await preparePlaybook({
+      root: "/r",
+      distill: async () => ({ skills: [], lessons: [], degraded: true }),
+      persistSkill: () => {},
+      persistLesson: () => {},
+    });
+    expect(r).toEqual({ skills: [], lessons: [], root: "/r", degraded: true });
+  });
 });
