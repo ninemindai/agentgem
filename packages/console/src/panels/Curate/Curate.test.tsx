@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { Curate } from "./index.js";
+import { setPendingPlaybook } from "../../pendingAnalyze.js";
 
 afterEach(cleanup);
 
@@ -152,6 +153,35 @@ describe("Curate", () => {
     await screen.findByText("pdf");
     fireEvent.click(usedOnly()); // turn the focus filter ON; pdf has no usage → category empties
     expect(await screen.findByText(/uncheck .Used only. to browse all 1/i)).toBeTruthy();
+  });
+
+  it("playbook hand-off with lessons pre-selects instruction keys so buildSelection includes them", async () => {
+    // Prime the one-shot playbook hand-off (simulates the Insights panel handing off to Curate).
+    setPendingPlaybook({ root: "/proj", skills: ["ship-loop"], lessons: ["lesson-one"] });
+
+    const workspaceBodies: unknown[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const u = String(url);
+      if (u.includes("/api/inventory"))
+        return res({ skills: [{ name: "ship-loop" }], mcpServers: [], instructions: [{ name: "lesson-one", content: "be concise" }], hooks: [] });
+      if (u.includes("/api/usage")) return res({ artifacts: [] });
+      if (u.includes("/api/workspaces")) {
+        workspaceBodies.push(JSON.parse((init?.body as string) ?? "{}"));
+        return res({ name: "my-gem" });
+      }
+      throw new Error(`unexpected url ${u}`);
+    }));
+
+    render(<Curate apiBase="" />);
+    // The mount effect fires on render: 1 skill + 1 instruction = 2 selected.
+    await waitFor(() => expect(screen.getByText("2 selected")).toBeTruthy());
+
+    // Save to workspace and confirm the selection body carries includeInstructions.
+    fireEvent.change(screen.getByLabelText("workspace name"), { target: { value: "my-gem" } });
+    fireEvent.click(screen.getByText("Save workspace"));
+    await waitFor(() => expect(screen.getByText(/saved workspace/i)).toBeTruthy());
+
+    expect(workspaceBodies[0]).toMatchObject({ selection: { skills: ["ship-loop"], includeInstructions: true } });
   });
 
 });

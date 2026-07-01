@@ -33,7 +33,10 @@ export function Curate({ apiBase }: { apiBase: string }) {
     if (pending) { setAnalyzeTarget(pending); setTab("suggest"); }
     const playbook = consumePendingPlaybook();
     if (playbook) {
-      setKeys(new Set(playbook.skills.map(k => selKey("skills", k))));
+      setKeys(new Set([
+        ...playbook.skills.map(k => selKey("skills", k)),
+        ...playbook.lessons.map(k => selKey("instructions", k)),
+      ]));
       setTab("compose");
       setShowPublish(true);
       setPublishCounts({ skills: playbook.skills.length, lessons: playbook.lessons.length });
