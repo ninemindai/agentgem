@@ -6,7 +6,8 @@ export const selKey = (groupKey: string, name: string): string => `${groupKey}::
 export interface GemSelection {
   skills?: string[];
   mcpServers?: string[];
-  includeInstructions?: boolean;
+  includeInstructions?: boolean;   // back-compat: all instructions
+  instructions?: string[];         // the specific instructions selected
   hooks?: string[];
 }
 
@@ -31,9 +32,9 @@ export function visibleKeys(groups: LedgerGroup[]): string[] {
 }
 
 /**
- * Translate the set of selected keys into the API selection object. Instructions
- * are all-or-nothing on the server (`includeInstructions`), so selecting any
- * instruction sets the flag.
+ * Translate the set of selected keys into the API selection object. Each group is
+ * resolved by name — including instructions, so sharing a single lesson bundles
+ * only that lesson, not every instruction on the machine.
  */
 export function buildSelection(keys: Set<string>): GemSelection {
   const byGroup: Record<string, string[]> = {};
@@ -47,6 +48,6 @@ export function buildSelection(keys: Set<string>): GemSelection {
   if (byGroup.skills?.length) sel.skills = byGroup.skills;
   if (byGroup.mcpServers?.length) sel.mcpServers = byGroup.mcpServers;
   if (byGroup.hooks?.length) sel.hooks = byGroup.hooks;
-  if (byGroup.instructions?.length) sel.includeInstructions = true;
+  if (byGroup.instructions?.length) sel.instructions = byGroup.instructions;
   return sel;
 }

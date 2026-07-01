@@ -136,6 +136,7 @@ const ProjectSelectionSchema = z.record(
     skills: z.array(z.string()).optional(),
     mcpServers: z.array(z.string()).optional(),
     includeInstructions: z.boolean().optional(),
+    instructions: z.array(z.string()).optional(),
     hooks: z.array(z.string()).optional(),
   }),
 );
@@ -146,6 +147,7 @@ export const GemSelectionSchema = z.union([
     skills: z.array(z.string()).optional(),
     mcpServers: z.array(z.string()).optional(),
     includeInstructions: z.boolean().optional(),
+    instructions: z.array(z.string()).optional(),
     hooks: z.array(z.string()).optional(),
     projects: ProjectSelectionSchema.optional(),
   }),

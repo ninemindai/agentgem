@@ -44,6 +44,7 @@ const GemSelectionSchema = z.union([
     skills: z.array(z.string()).optional(),
     mcpServers: z.array(z.string()).optional(),
     includeInstructions: z.boolean().optional(),
+    instructions: z.array(z.string()).optional(),
     hooks: z.array(z.string()).optional(),
   }),
 ]);
