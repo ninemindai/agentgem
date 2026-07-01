@@ -30,7 +30,9 @@ describe("optimizeContract", () => {
     });
 
     const usage = new Map<string, ArtifactUsage>();
-    const payload = buildOptimizePayload(c, usage, "30d", NOW);
+    // The controller returns { ...buildOptimizePayload(...), disabled: listDisabled() };
+    // validate that composed shape (disabled is [] in this pure, fs-free unit test).
+    const payload = { ...buildOptimizePayload(c, usage, "30d", NOW), disabled: [] as { type: "skill" | "mcp" | "plugin"; name: string; source: string }[] };
 
     // Must not throw — if it does, the controller would reject its own output
     const parsed = OptimizePayloadSchema.parse(payload);
