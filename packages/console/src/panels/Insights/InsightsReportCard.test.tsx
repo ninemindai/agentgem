@@ -37,4 +37,17 @@ describe("InsightsReportCard", () => {
     expect(() => render(<InsightsReportCard report={stale} />)).not.toThrow();
     expect(screen.getByText("2 session(s): 1 mostly achieved.")).toBeTruthy();
   });
+
+  it("shows 'Contribute to explore' button when onContribute is provided", () => {
+    const report: InsightsReportView = {
+      totals: { sessions: 1, mostly: 1, partially: 0, not: 0 },
+      outcomes_summary: "1 session(s): 1 mostly achieved.",
+      narrative: "You ship.",
+      by_model: [],
+      friction: [],
+      publish_candidates: [{ sessionId: "b", goal: "write tests", why: "Succeeded" }],
+    };
+    render(<InsightsReportCard report={report} onContribute={() => {}} />);
+    expect(screen.getByText("Contribute to explore →")).toBeTruthy();
+  });
 });

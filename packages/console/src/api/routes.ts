@@ -572,6 +572,16 @@ export const installSkillRoute = defineRoute("POST", "/api/optimize/discover/ins
   response: InstallSkillResultSchema,
 });
 
+// Playbook: distill a project's sessions into a draft playbook, then publish to Explore.
+export const playbookPrepareRoute = defineRoute("POST", "/api/playbook/prepare", {
+  body: z.object({ root: z.string() }),
+  response: z.object({ skills: z.array(z.string()), lessons: z.array(z.string()), root: z.string(), degraded: z.boolean() }),
+});
+export const playbookPublishRoute = defineRoute("POST", "/api/playbook/publish", {
+  body: z.object({ workspace: z.string(), scope: z.string(), name: z.string().optional(), version: z.string(), description: z.string().optional(), tags: z.array(z.string()).optional(), provenance: z.string() }),
+  response: z.object({ exploreRef: z.string(), version: z.string(), shareUrl: z.string() }),
+});
+
 // Network cross-model benchmark (aggregator, k-anonymised). Per-model outcome
 // counts across producers; success rate = mostly / (mostly + partially + notAchieved).
 export const BenchmarkSchema = z.array(z.object({

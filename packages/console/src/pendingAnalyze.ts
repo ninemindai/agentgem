@@ -13,3 +13,11 @@ export function consumePendingAnalyze(): string | null {
   target = null;
   return t;
 }
+
+// One-shot hand-off of a distilled playbook draft from the Insights panel to
+// Curate. Consumed (read-and-cleared) once so a later navigation to Curate
+// doesn't re-trigger.
+export interface PendingPlaybook { root: string; skills: string[]; lessons: string[] }
+let pendingPlaybook: PendingPlaybook | null = null;
+export function setPendingPlaybook(d: PendingPlaybook): void { pendingPlaybook = d; }
+export function consumePendingPlaybook(): PendingPlaybook | null { const d = pendingPlaybook; pendingPlaybook = null; return d; }

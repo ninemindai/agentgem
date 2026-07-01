@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { testbedRecentsRoute, testbedProjectsRoute, makeClient, type RecentEntry, type ProjectCandidate } from "../../api/routes.js";
+import { testbedRecentsRoute, testbedProjectsRoute, makeClient, playbookPrepareRoute, type RecentEntry, type ProjectCandidate } from "../../api/routes.js";
 import { defineConsolePage } from "../../registry.js";
 import { openInsightsStream, type InsightsReportView } from "./insightsStream.js";
-import { setPendingAnalyze } from "../../pendingAnalyze.js";
+import { setPendingAnalyze, setPendingPlaybook } from "../../pendingAnalyze.js";
 import { Loading } from "../../shell/Loading.js";
 
 function short(path: string): string {
@@ -107,6 +107,11 @@ export function Insights({ apiBase }: { apiBase: string }) {
                           report={report}
                           scanned={scanned}
                           onBuild={r.path === "*" ? undefined : () => { setPendingAnalyze(r.path); window.location.hash = "#/curate"; }}
+                          onContribute={r.path === "*" ? undefined : async () => {
+                            const { skills, lessons } = await playbookPrepareRoute.call(makeClient(apiBase), { body: { root: r.path } });
+                            setPendingPlaybook({ root: r.path, skills, lessons });
+                            window.location.hash = "#/curate";
+                          }}
                         />
                       )}
                     </div>
@@ -120,7 +125,7 @@ export function Insights({ apiBase }: { apiBase: string }) {
   );
 }
 
-export function InsightsReportCard({ report, scanned, onBuild }: { report: InsightsReportView; scanned?: number | null; onBuild?: () => void }) {
+export function InsightsReportCard({ report, scanned, onBuild, onContribute }: { report: InsightsReportView; scanned?: number | null; onBuild?: () => void; onContribute?: () => void }) {
   // Be honest about the cap: the report judges the most-recent sessions, which
   // can be fewer than were scanned (50-session batch bound, or unmissioned ones).
   const judged = report.totals.sessions;
@@ -156,6 +161,7 @@ export function InsightsReportCard({ report, scanned, onBuild }: { report: Insig
           <div className="analyze-candidate-head">
             <h4 style={{ margin: 0 }}>Worth publishing</h4>
             {onBuild && <button type="button" className="ledger-build" style={{ marginLeft: "auto" }} onClick={onBuild}>Build a Gem from this project →</button>}
+            {onContribute && <button type="button" className="ledger-build" onClick={onContribute}>Contribute to explore →</button>}
           </div>
           <ul className="analyze-include">
             {publishCandidates.map((c) => (
