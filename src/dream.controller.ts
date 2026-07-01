@@ -20,7 +20,21 @@ const StatusSchema = z.object({
   queued: z.number(),
   lastPassAtMs: z.number().nullable(),
 });
-const QueueSchema = z.object({ items: z.array(z.any()) });
+const QueueItemSchema = z.object({
+  key: z.string(),
+  kind: z.enum(["skill", "lesson"]),
+  root: z.string(),
+  name: z.string(),
+  summary: z.string(),
+  confidence: z.enum(["high", "medium", "low"]).optional(),
+  importance: z.enum(["high", "medium"]).optional(),
+  phase: z.enum(["DEEP", "REM"]),
+  status: z.enum(["queued", "accepted", "dismissed"]),
+  firstSeenMs: z.number(),
+  reviewedMs: z.number().optional(),
+  draft: z.unknown(), // opaque body (DistilledSkill | Reflection) — not re-validated here
+});
+const QueueSchema = z.object({ items: z.array(QueueItemSchema) });
 const OkPathSchema = z.object({ ok: z.boolean(), path: z.string() });
 const OkSchema = z.object({ ok: z.boolean() });
 const StartedSchema = z.object({ started: z.boolean() });
