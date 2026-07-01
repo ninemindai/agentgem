@@ -6,23 +6,24 @@
 // must never block dreaming — callers get a safe empty value back.
 // Written to <base>/.agentgem/dream/{queue,diary}.json.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { agentgemHome } from "@agentgem/model";
 import type { DreamQueueEntry, DreamDiaryEntry, DreamStatus } from "./types.js";
 
 const DIARY_MAX = 100;
 
+// Path only — never mkdir here, so reads on a missing dir stay never-throw.
 function dreamDir(base: string): string {
-  const dir = join(base, ".agentgem", "dream");
-  mkdirSync(dir, { recursive: true });
-  return dir;
+  return join(base, ".agentgem", "dream");
 }
 function readJson<T>(path: string, fallback: T): T {
   try { return JSON.parse(readFileSync(path, "utf8")) as T; } catch { return fallback; }
 }
 function writeJson(path: string, value: unknown): void {
-  try { writeFileSync(path, JSON.stringify(value, null, 2), "utf8"); }
-  catch (err) { console.error("dream: sidecar write failed (ignored):", (err as Error).message); }
+  try {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, JSON.stringify(value, null, 2), "utf8");
+  } catch (err) { console.error("dream: sidecar write failed (ignored):", (err as Error).message); }
 }
 const queuePath = (base: string) => join(dreamDir(base), "queue.json");
 const diaryPath = (base: string) => join(dreamDir(base), "diary.json");
