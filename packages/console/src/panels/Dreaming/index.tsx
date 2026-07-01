@@ -9,9 +9,10 @@ const PHASES = ["LIGHT", "DEEP", "REM"] as const;
  *  lets the operator accept or dismiss each draft. Nothing is written to disk
  *  until accepted here. */
 export function Dreaming({ apiBase }: { apiBase: string }) {
-  const [tab, setTab] = useState<"scene" | "queue" | "diary">("scene");
+  const [tab, setTab] = useState<"review" | "diary">("review");
   const [status, setStatus] = useState<DreamStatus | null>(null);
   const [items, setItems] = useState<DreamItem[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
     getStatus(apiBase).then(setStatus).catch(() => setStatus(null));
@@ -19,7 +20,8 @@ export function Dreaming({ apiBase }: { apiBase: string }) {
   }, [apiBase]);
   useEffect(() => { refresh(); }, [refresh]);
 
-  const act = async (path: string, key: string) => { await post(apiBase, path, { key }); refresh(); };
+  const act = (path: string, key: string) =>
+    post(apiBase, path, { key }).then(() => { setError(null); refresh(); }).catch(() => setError("Action failed — try again."));
 
   return (
     <div className="dreaming">
@@ -27,37 +29,42 @@ export function Dreaming({ apiBase }: { apiBase: string }) {
         <h1>Dreaming</h1>
         <p>Consolidates what the background job already learned. Nothing lands without your accept.</p>
         <span>{status?.enabled ? "DREAMING ON" : "DREAMING OFF"}</span>
-        <button onClick={() => post(apiBase, "enable", { enabled: !status?.enabled }).then(refresh)}>
+        <button onClick={() => post(apiBase, "enable", { enabled: !status?.enabled }).then(() => { setError(null); refresh(); }).catch(() => setError("Could not change Dreaming."))}>
           {status?.enabled ? "Turn off" : "Turn on"}
         </button>
       </header>
 
       <nav>
-        {(["scene", "queue", "diary"] as const).map((t) => (
+        {(["review", "diary"] as const).map((t) => (
           <button key={t} aria-pressed={tab === t} onClick={() => setTab(t)}>{t}</button>
         ))}
       </nav>
 
-      {status && (
-        <section className="dreaming-scene">
-          <div className="phases">
-            {PHASES.map((p) => <span key={p} data-lit={status.phasesLit.includes(p)}>{p}</span>)}
-          </div>
-          <p>{status.promoted} promoted · {status.queued} queued</p>
-          <button onClick={() => post(apiBase, "run").then(() => setTimeout(refresh, 1500))}>Dream now</button>
-        </section>
-      )}
+      {error && <p role="alert">{error}</p>}
 
-      <ul className="dreaming-queue">
-        {items.map((it) => (
-          <li key={it.key}>
-            <strong>{it.name}</strong> <em>{it.kind}</em> — {it.summary}
-            <button onClick={() => act("queue/accept", it.key)}>Accept</button>
-            <button onClick={() => act("queue/dismiss", it.key)}>Dismiss</button>
-          </li>
-        ))}
-        {items.length === 0 && <li>Nothing queued yet.</li>}
-      </ul>
+      {tab === "review" && (
+        <>
+          {status && (
+            <section>
+              <div className="phases">
+                {PHASES.map((p) => <span key={p} data-lit={status.phasesLit.includes(p)}>{p}</span>)}
+              </div>
+              <p>{status.promoted} promoted · {status.queued} queued</p>
+              <button onClick={() => post(apiBase, "run").then(() => { setError(null); setTimeout(refresh, 1500); }).catch(() => setError("Dream run failed."))}>Dream now</button>
+            </section>
+          )}
+          <ul>
+            {items.map((it) => (
+              <li key={it.key}>
+                <strong>{it.name}</strong> <em>{it.kind}</em> — {it.summary}
+                <button onClick={() => act("queue/accept", it.key)}>Accept</button>
+                <button onClick={() => act("queue/dismiss", it.key)}>Dismiss</button>
+              </li>
+            ))}
+            {items.length === 0 && <li>Nothing queued yet.</li>}
+          </ul>
+        </>
+      )}
 
       {tab === "diary" && <p>Diary view — pass history (wire to /api/dream/diary in a follow-up).</p>}
     </div>
