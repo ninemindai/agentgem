@@ -38,6 +38,12 @@ export function readAnalysisCache(root: string, token: string): unknown | null {
   return e ? e.result : null;
 }
 
+/** Cached entry (result + write timestamp) for (root, token), or null on miss/stale. */
+export function readAnalysisCacheEntry(root: string, token: string): { result: unknown; ts: number } | null {
+  const e = readAll().find((x) => x.root === root && x.token === token);
+  return e ? { result: e.result, ts: e.ts } : null;
+}
+
 /** Store (root, token) → result, replacing any prior entry for root. Capped + best-effort. */
 export function writeAnalysisCache(root: string, token: string, result: unknown, nowMs: number): void {
   try {

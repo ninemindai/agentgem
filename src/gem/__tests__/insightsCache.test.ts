@@ -3,8 +3,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readInsightsCache, writeInsightsCache, insightsToken } from "@agentgem/insight";
-import { readAnalysisCache, writeAnalysisCache } from "@agentgem/insight";
+import { readInsightsCache, writeInsightsCache, insightsToken, readInsightsCacheEntry } from "@agentgem/insight";
+import { readAnalysisCache, writeAnalysisCache, readAnalysisCacheEntry } from "@agentgem/insight";
 
 let home: string;
 let prev: string | undefined;
@@ -40,5 +40,17 @@ describe("insightsCache", () => {
 
   it("insightsToken changes when the transcript count changes", () => {
     expect(insightsToken([])).not.toBe(insightsToken(["/x"]));
+  });
+
+  it("readInsightsCacheEntry returns { result, ts } for a hit and null for a miss", () => {
+    writeInsightsCache("/proj", "tok", { hello: "world" }, 1234);
+    expect(readInsightsCacheEntry("/proj", "tok")).toEqual({ result: { hello: "world" }, ts: 1234 });
+    expect(readInsightsCacheEntry("/proj", "other-token")).toBeNull();
+  });
+
+  it("readAnalysisCacheEntry returns { result, ts } for a hit and null for a miss", () => {
+    writeAnalysisCache("/proj", "atk", { x: 1 }, 5678);
+    expect(readAnalysisCacheEntry("/proj", "atk")).toEqual({ result: { x: 1 }, ts: 5678 });
+    expect(readAnalysisCacheEntry("/proj", "wrong")).toBeNull();
   });
 });
