@@ -4,10 +4,18 @@ import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { startWarmWatch, mapFilesToRoots } from "../watch.js";
+import { startWarmWatch, mapFilesToRoots, warmRootsIndividually } from "../watch.js";
 
 let dir: string | undefined;
 afterEach(() => { if (dir) rmSync(dir, { recursive: true, force: true }); dir = undefined; });
+
+describe("warmRootsIndividually", () => {
+  it("warms each root separately with topN:1", async () => {
+    const calls: Array<{ roots: string[]; topN: number }> = [];
+    await warmRootsIndividually(["/a", "/b"], async (o) => { calls.push(o); });
+    expect(calls).toEqual([{ roots: ["/a"], topN: 1 }, { roots: ["/b"], topN: 1 }]);
+  });
+});
 
 describe("startWarmWatch", () => {
   it("coalesces a burst of .jsonl events into one run and maps to roots", () => {

@@ -27,6 +27,15 @@ export function mapFilesToRoots(claudeDir: string, changed: string[]): string[] 
   return [...roots];
 }
 
+/** Warm each root individually so a multi-project burst doesn't skip all but the first.
+ *  The `warm` parameter is injectable for testing; production code uses runWarmPass. */
+export async function warmRootsIndividually(
+  roots: string[],
+  warm: (o: { roots: string[]; topN: number }) => Promise<unknown> = (o) => runWarmPass(o),
+): Promise<void> {
+  for (const r of roots) await warm({ roots: [r], topN: 1 });
+}
+
 export function startWarmWatch(opts: {
   claudeDir?: string;
   debounceMs?: number;
@@ -42,7 +51,7 @@ export function startWarmWatch(opts: {
   const watchFn: WatchFn = opts.watch ?? ((dir, cb) => fsWatch(dir, { recursive: true }, (evt, f) => cb(evt, f as string | null)));
   const setTimer = opts.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
   const clearTimer = opts.clearTimer ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>));
-  const run = opts.run ?? ((roots) => runWarmPass({ roots, topN: 1 }));
+  const run = opts.run ?? ((roots) => warmRootsIndividually(roots));
   const toRoots = opts.toRoots ?? mapFilesToRoots;
 
   const pending = new Set<string>();

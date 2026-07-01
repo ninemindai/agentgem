@@ -15,12 +15,14 @@ describe("startWarmDaemon", () => {
   it("runs the initial pass once, starts the watcher, and blocks a second daemon via the pidfile", async () => {
     dir = mkdtempSync(join(tmpdir(), "dmn-"));
     let passes = 0;
-    const first = startWarmDaemon({ home: dir, onLog: () => {}, watch: () => ({ stop() {} }), initialPass: async () => { passes++; } });
+    const watcher = fakeWatch();
+    const first = startWarmDaemon({ home: dir, onLog: () => {}, watch: watcher, initialPass: async () => { passes++; } });
     expect(first).not.toBeNull();
     expect(passes).toBe(1);
     const second = startWarmDaemon({ home: dir, onLog: () => {}, watch: () => ({ stop() {} }), initialPass: async () => { passes++; } });
     expect(second).toBeNull();               // pidfile held by first (our own live pid)
     await first!.stop();                      // releases pidfile
+    expect(watcher.wasStopped()).toBe(true); // daemon.stop() must invoke the watcher's stop()
     const third = startWarmDaemon({ home: dir, onLog: () => {}, watch: () => ({ stop() {} }), initialPass: async () => { passes++; } });
     expect(third).not.toBeNull();             // free again
     await third!.stop();
