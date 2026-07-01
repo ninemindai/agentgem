@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { setPendingAnalyze, consumePendingAnalyze, setPendingPlaybook, consumePendingPlaybook } from "./pendingAnalyze.js";
+import { setPendingAnalyze, consumePendingAnalyze, setPendingPlaybook, consumePendingPlaybook, setPendingContribution, consumePendingContribution } from "./pendingAnalyze.js";
 
 beforeEach(() => { consumePendingAnalyze(); }); // clear any leftover target
 
@@ -19,4 +19,11 @@ it("hands a playbook draft from Insights to Curate exactly once", () => {
   setPendingPlaybook({ root: "/r", skills: ["a"], lessons: ["b"] });
   expect(consumePendingPlaybook()).toEqual({ root: "/r", skills: ["a"], lessons: ["b"] });
   expect(consumePendingPlaybook()).toBeNull();
+});
+
+it("hands a ready selection (setup / lesson share) to Curate exactly once", () => {
+  const contrib = { keys: ["skills::x", "instructions::y"], skillCount: 1, lessonCount: 1, name: "my-setup" };
+  setPendingContribution(contrib);
+  expect(consumePendingContribution()).toEqual(contrib);
+  expect(consumePendingContribution()).toBeNull();
 });

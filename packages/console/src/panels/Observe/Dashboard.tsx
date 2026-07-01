@@ -16,10 +16,10 @@ const SLICE_COLORS = ["var(--accent)", "var(--emerald, #34d399)", "#f59e0b", "#8
 
 type SortKey = "tokens" | "msgs" | "durationMs" | "endMs";
 
-export function Dashboard({ data, range, onRange, filter, onFilter, pending, onRefresh }: {
+export function Dashboard({ data, range, onRange, filter, onFilter, pending, onRefresh, onShareSetup }: {
   data: ObservePayload; range: ObserveRange; onRange: (r: ObserveRange) => void;
   filter: ObserveFilter; onFilter: (f: ObserveFilter) => void; pending?: boolean;
-  onRefresh?: () => void;
+  onRefresh?: () => void; onShareSetup?: () => void;
 }) {
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "endMs", dir: "desc" });
   const [openId, setOpenId] = useState<string | null>(null);
@@ -55,6 +55,11 @@ export function Dashboard({ data, range, onRange, filter, onFilter, pending, onR
             </button>
           ))}
         </div>
+        {onShareSetup && (
+          <button type="button" className="obs-range-btn obs-share-setup" onClick={onShareSetup}>
+            Share my setup ↗
+          </button>
+        )}
         {onRefresh && <RefreshButton onClick={onRefresh} busy={pending} />}
       </div>
 

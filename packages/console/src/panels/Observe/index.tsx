@@ -1,7 +1,8 @@
 // packages/console/src/panels/Observe/index.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
-import { observeRawRoute, makeClient, type ObserveRange, type ObserveFilter } from "../../api/routes.js";
+import { observeRawRoute, inventoryRoute, makeClient, type ObserveRange, type ObserveFilter } from "../../api/routes.js";
+import { setPendingContribution } from "../../pendingAnalyze.js";
 import { aggregateObserve, type SessionStat } from "@agentgem/insight/observeAggregate";
 import { Dashboard } from "./Dashboard.js";
 import { TranscriptViewer } from "./TranscriptViewer.js";
@@ -59,6 +60,24 @@ export function Observe({ apiBase }: { apiBase: string }) {
 
   const onRefresh = () => { freshRef.current = true; setReloadKey((k) => k + 1); };
 
+  // "Share my setup": bundle the whole inventory into a Gem via Curate's Publish
+  // flow. Fetched lazily on click (Inspect doesn't otherwise need inventory).
+  const onShareSetup = async () => {
+    try {
+      const inv = await inventoryRoute.call(makeClient(apiBase));
+      const keys = [
+        ...inv.skills.map((a) => `skills::${a.name}`),
+        ...inv.mcpServers.map((a) => `mcpServers::${a.name}`),
+        ...inv.instructions.map((a) => `instructions::${a.name}`),
+        ...inv.hooks.map((a) => `hooks::${a.name}`),
+      ];
+      setPendingContribution({ keys, skillCount: inv.skills.length, lessonCount: 0, name: "my-setup" });
+      window.location.hash = "#/curate";
+    } catch (e) {
+      setError(String((e as Error)?.message ?? e));
+    }
+  };
+
   // Pure, instant re-derivation on any range/filter change — no network.
   const data = useMemo(
     () => (stats ? aggregateObserve(stats, range, Date.now(), filter) : null),
@@ -80,7 +99,7 @@ export function Observe({ apiBase }: { apiBase: string }) {
   if (!data) return <div className="obs"><Loading /></div>;
   return (
     <div className="obs">
-      <Dashboard data={data} range={range} onRange={setRange} filter={filter} onFilter={setFilter} pending={pending} onRefresh={onRefresh} />
+      <Dashboard data={data} range={range} onRange={setRange} filter={filter} onFilter={setFilter} pending={pending} onRefresh={onRefresh} onShareSetup={onShareSetup} />
     </div>
   );
 }
