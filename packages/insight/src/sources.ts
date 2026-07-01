@@ -5,11 +5,14 @@
 // outbound TargetSpec. FS-touching + returns SessionStat, so it lives here (Node), not in the
 // pure @agentgem/model. The DI extension point (SourceRegistry) is app-layer (see src/gem/sourceRegistry.ts).
 import { readFile } from "node:fs/promises";
+import { readdirSync } from "node:fs";
 import { join, basename } from "node:path";
+import { homedir } from "node:os";
 import { resolveDirs } from "@agentgem/model";
 import type { AgentBinding, GemArtifact } from "@agentgem/model";
 import type { AgentId, SessionStat } from "./observeAggregate.js";
 import { listFiles, parseClaudeTranscript, parseCodexTranscript } from "./observeScan.js";
+import { scanClineSessions, readClineArtifacts } from "./sources/cline.js";
 
 // codexDir is a legacy independent override (scanSessions({ claudeDir, codexDir })); when absent it
 // derives from baseDir's parent via resolveDirs, same as every other agent root.
@@ -47,4 +50,24 @@ const codexSource: SourceSpec = {
     scanJsonl(roots.flatMap((r) => listFiles(r, ".jsonl")).filter((f) => basename(f).startsWith("rollout-")), parseCodexTranscript),
 };
 
-export const BUILTIN_SOURCES: SourceSpec[] = [claudeSource, codexSource];
+// macOS globalStorage roots for VS Code + forks that host the Cline extension. baseDir overrides for tests.
+function clineTaskDirs(baseDir?: string): string[] {
+  const roots = baseDir ? [baseDir] : ["Code", "Code - Insiders", "Cursor", "VSCodium", "Windsurf"].map(
+    (app) => join(homedir(), "Library", "Application Support", app, "User", "globalStorage", "saoudrizwan.claude-dev", "tasks"));
+  const dirs: string[] = [];
+  const seen = new Set<string>();               // dedup by taskId across editor forks
+  for (const root of roots) {
+    let entries: import("node:fs").Dirent[]; try { entries = readdirSync(root, { withFileTypes: true }); } catch { continue; }
+    for (const e of entries) if (e.isDirectory() && !seen.has(e.name)) { seen.add(e.name); dirs.push(join(root, e.name)); }
+  }
+  return dirs;
+}
+
+const clineSource: SourceSpec = {
+  id: "cline", label: "Cline / Roo", traits: { storage: "json" },
+  roots: (env) => clineTaskDirs(env.baseDir),
+  scanSessions: (roots) => scanClineSessions(roots),
+  readArtifacts: async (roots) => readClineArtifacts({}), // per-repo rules/mcp paths are supplied by the caller in Phase 3; roots here are task dirs
+};
+
+export const BUILTIN_SOURCES: SourceSpec[] = [claudeSource, codexSource, clineSource];
