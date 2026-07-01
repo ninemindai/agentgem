@@ -13,6 +13,7 @@ import type { AgentBinding, GemArtifact } from "@agentgem/model";
 import type { AgentId, SessionStat } from "./observeAggregate.js";
 import { listFiles, parseClaudeTranscript, parseCodexTranscript } from "./observeScan.js";
 import { scanClineSessions, readClineArtifacts } from "./sources/cline.js";
+import { scanGeminiSessions, readGeminiArtifacts } from "./sources/gemini.js";
 
 // codexDir is a legacy independent override (scanSessions({ claudeDir, codexDir })); when absent it
 // derives from baseDir's parent via resolveDirs, same as every other agent root.
@@ -70,4 +71,18 @@ const clineSource: SourceSpec = {
   readArtifacts: async (roots) => readClineArtifacts({}), // per-repo rules/mcp paths are supplied by the caller in Phase 3; roots here are task dirs
 };
 
-export const BUILTIN_SOURCES: SourceSpec[] = [claudeSource, codexSource, clineSource];
+// Session files live under ~/.gemini/tmp/<slug>/chats/session-*.jsonl. baseDir overrides for tests
+// and points at a ~/.gemini root. We glob all .jsonl under tmp and keep the `session-`-prefixed ones.
+function geminiTmpDir(baseDir?: string): string {
+  return join(baseDir ?? join(homedir(), ".gemini"), "tmp");
+}
+
+const geminiSource: SourceSpec = {
+  id: "gemini", label: "Gemini CLI", traits: { storage: "jsonl" },
+  roots: (env) => [geminiTmpDir(env.baseDir)],
+  scanSessions: (roots) =>
+    scanGeminiSessions(roots.flatMap((r) => listFiles(r, ".jsonl")).filter((f) => basename(f).startsWith("session-"))),
+  readArtifacts: async () => readGeminiArtifacts({}),  // per-repo file paths supplied by callers in a later phase (mirrors cline)
+};
+
+export const BUILTIN_SOURCES: SourceSpec[] = [claudeSource, codexSource, clineSource, geminiSource];
