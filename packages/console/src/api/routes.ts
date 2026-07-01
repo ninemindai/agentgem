@@ -353,8 +353,8 @@ export const gemApplyRoute = defineRoute("POST", "/api/gem/apply", {
 const ObservePayloadSchema = z.object({
   pulse: z.object({ sessions: z.number(), msgs: z.number(), tokens: z.number(), activeMs: z.number() }),
   daily: z.array(z.object({ date: z.string(), sessions: z.number(), msgs: z.number(), tokensIn: z.number(), tokensOut: z.number(), tokensCache: z.number() })),
-  sessions: z.array(z.object({ agent: z.enum(["claude", "codex"]), sessionId: z.string(), project: z.string().nullable(), model: z.string().nullable(), startMs: z.number(), endMs: z.number(), durationMs: z.number(), msgs: z.number(), tokens: z.number(), tokensIn: z.number(), tokensOut: z.number(), tokensCache: z.number(), gitBranch: z.string().nullable() })),
-  models: z.array(z.object({ model: z.string(), agent: z.enum(["claude", "codex"]), sessions: z.number(), tokens: z.number() })),
+  sessions: z.array(z.object({ agent: z.string(), sessionId: z.string(), project: z.string().nullable(), model: z.string().nullable(), startMs: z.number(), endMs: z.number(), durationMs: z.number(), msgs: z.number(), tokens: z.number(), tokensIn: z.number(), tokensOut: z.number(), tokensCache: z.number(), gitBranch: z.string().nullable() })),
+  models: z.array(z.object({ model: z.string(), agent: z.string(), sessions: z.number(), tokens: z.number() })),
   facets: z.object({ agents: z.array(z.string()), projects: z.array(z.string()), models: z.array(z.string()) }),
   range: z.enum(["today", "7d", "30d", "all"]),
 });
@@ -384,7 +384,7 @@ export const observeRoute = defineRoute("GET", "/api/observe", {
 // so range/filter toggles cost zero API calls. Shape mirrors insight's SessionStat.
 export const ObserveRawSchema = z.object({
   sessions: z.array(z.object({
-    agent: z.enum(["claude", "codex"]),
+    agent: z.string(),
     sessionId: z.string(),
     project: z.string().nullable(),
     model: z.string().nullable(),
@@ -407,7 +407,7 @@ const TranscriptSpanSchema = z.discriminatedUnion("kind", [
 ]);
 export const TranscriptViewSchema = z.object({
   sessionId: z.string(),
-  agent: z.enum(["claude", "codex"]),
+  agent: z.string(),
   meta: ObserveRawSchema.shape.sessions.element,
   turns: z.array(z.object({
     id: z.string(), role: z.enum(["user", "assistant"]), tsMs: z.number(),
