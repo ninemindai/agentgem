@@ -8,6 +8,7 @@ beforeEach(() => {
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
     if (url.endsWith("/api/dream/status")) return new Response(JSON.stringify({ enabled: true, phasesLit: ["DEEP"], promoted: 2, queued: 1, lastPassAtMs: 1 }));
     if (url.endsWith("/api/dream/queue")) return new Response(JSON.stringify({ items: [{ key: "k1", kind: "skill", name: "foo", summary: "does foo" }] }));
+    if (url.endsWith("/api/dream/diary")) return new Response(JSON.stringify({ entries: [{ atMs: 1, passId: 1, rootsProcessed: ["/p"], phasesLit: ["DEEP"], enqueued: { skills: 3, lessons: 1 }, degraded: false }] }));
     return new Response(JSON.stringify({ ok: true }));
   }));
 });
@@ -25,5 +26,12 @@ describe("Dreaming panel", () => {
     await waitFor(() => screen.getByText("foo"));
     fireEvent.click(screen.getByRole("button", { name: /accept/i }));
     await waitFor(() => expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.some((c) => String(c[0]).endsWith("/api/dream/queue/accept"))).toBe(true));
+  });
+
+  it("shows pass history in the Diary tab", async () => {
+    render(<Dreaming apiBase="" />);
+    await waitFor(() => screen.getByText("foo"));
+    fireEvent.click(screen.getByRole("button", { name: /diary/i }));
+    await waitFor(() => expect(screen.getByText(/\+3 skills · \+1 lessons/)).toBeTruthy());
   });
 });

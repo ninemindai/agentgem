@@ -6,7 +6,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DreamController } from "../dream.controller.js";
-import { enqueueNew } from "../dream/store.js";
+import { enqueueNew, appendDiary } from "../dream/store.js";
 import type { DreamQueueEntry } from "../dream/types.js";
 
 const prov = { occurrences: [{ sessionId: "s1", transcript: "t.jsonl", messageIndices: [1], atMs: 5 }] };
@@ -62,5 +62,16 @@ describe("DreamController", () => {
     const c = new DreamController();
     (c as unknown as { base: string }).base = base;
     await expect(c.accept({ body: { key: "skill:/p:evil:h" } })).rejects.toThrow();
+  });
+
+  it("returns diary entries newest-first", async () => {
+    appendDiary({ atMs: 1, passId: 1, rootsProcessed: ["/p"], phasesLit: ["DEEP"], enqueued: { skills: 2, lessons: 1 }, degraded: false }, base);
+    appendDiary({ atMs: 2, passId: 2, rootsProcessed: ["/q"], phasesLit: ["LIGHT"], enqueued: { skills: 0, lessons: 0 }, degraded: true }, base);
+    const c = new DreamController();
+    (c as unknown as { base: string }).base = base;
+    const r = await c.diary();
+    expect(r.entries.length).toBe(2);
+    expect(r.entries[0].passId).toBe(2); // appendDiary prepends → newest first
+    expect(r.entries[0].degraded).toBe(true);
   });
 });
