@@ -25,7 +25,7 @@ export interface DreamQueueEntry {
 
 export interface DreamDiaryEntry {
   atMs: number;
-  passId: number; // WarmPassResult.finishedAt
+  passId: number; // per-root harvest timestamp (NOT a pass-wide id; the Warmable interface exposes no pass timestamp)
   rootsProcessed: string[];
   phasesLit: Array<"LIGHT" | "DEEP" | "REM">;
   enqueued: { skills: number; lessons: number };

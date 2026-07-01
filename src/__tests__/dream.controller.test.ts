@@ -55,4 +55,12 @@ describe("DreamController", () => {
     await c.dismiss({ body: { key: "lesson:/p:l1:h" } });
     expect((await c.queue()).items.length).toBe(0);
   });
+
+  it("rejects a draft whose name would escape the distilled path", async () => {
+    const bad = { ...skillEntry(), key: "skill:/p:evil:h", name: "../evil" };
+    enqueueNew([bad], base);
+    const c = new DreamController();
+    (c as unknown as { base: string }).base = base;
+    await expect(c.accept({ body: { key: "skill:/p:evil:h" } })).rejects.toThrow();
+  });
 });
