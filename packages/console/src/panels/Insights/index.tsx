@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { testbedRecentsRoute, testbedProjectsRoute, makeClient, playbookPrepareRoute, type RecentEntry, type ProjectCandidate } from "../../api/routes.js";
 import { defineConsolePage } from "../../registry.js";
 import { openInsightsStream, type InsightsReportView } from "./insightsStream.js";
+import { OutcomesDonut, ByModelBars } from "./InsightsCharts.js";
 import { setPendingAnalyze, setPendingPlaybook } from "../../pendingAnalyze.js";
 import { Loading } from "../../shell/Loading.js";
 
@@ -157,9 +158,12 @@ export function InsightsReportCard({ report, scanned, onBuild, onContribute }: {
       <p className="analyze-candidate-desc">{report.outcomes_summary}</p>
       {capped && <p className="insights-hint">Based on the {judged} most-recent of {scanned} sessions scanned.</p>}
 
+      <OutcomesDonut totals={report.totals} />
+
       {byModel.length > 1 && (
         <div className="insights-section">
           <h4>By model</h4>
+          <ByModelBars byModel={byModel} />
           <ul className="insights-bymodel">
             {byModel.map((m) => (
               <li key={m.model}>
