@@ -6,6 +6,7 @@ export * from "./credentials.js";
 export * from "./recents.js";
 export * from "./usageCache.js";
 export * from "./globalUsage.js";
+export * from "./transcriptIndex.js";
 export * from "./draftStage.js";
 export * from "./skillRoots.js";
 export * from "./disableArtifact.js";

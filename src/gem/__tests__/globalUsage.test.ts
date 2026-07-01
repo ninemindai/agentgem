@@ -47,12 +47,20 @@ describe("stale-while-revalidate", () => {
   it("readGlobalUsageCacheStale returns null when no cache exists", () => {
     expect(readGlobalUsageCacheStale()).toBeNull();
   });
-  it("endpoint serves a stale cache synchronously when the live token differs", async () => {
-    // prime a stale entry under a bogus token; the real scan of `claudeDir` yields a different token
+  it("endpoint serves FRESH indexed usage, superseding any stale cache", async () => {
+    // The persistent index is now the primary path: it returns fresh data fast, so
+    // a stale cache is no longer served on the happy path (the old SWR stale-serving
+    // is only a fallback for when the index errors). Prime a stale entry and confirm
+    // the endpoint ignores it in favor of the real, indexed scan of `claudeDir`.
     const stale = { artifacts: [{ type: "skill", name: "STALE", root: null, invocations: 42, sessionsUsedIn: 1, lastUsedMs: 1 }] };
     const dirs = resolveDirs(claudeDir);
     writeGlobalUsageCache("bogus-token", stale, dirs.claudeDir);
     const res = await new GemController().usage({ query: { dir: claudeDir, scope: "global" } });
-    expect(res.artifacts).toEqual(stale.artifacts);   // served the stale result, not a fresh scan
+    const names = res.artifacts.map((a) => a.name);
+    expect(names).toContain("diagram");        // fresh, from the index
+    expect(names).not.toContain("STALE");       // the stale cache was NOT served
+    const d = res.artifacts.find((a) => a.name === "diagram");
+    expect(d!.invocations).toBe(3);             // 2 (A) + 1 (B), same as computeGlobalUsage
+    expect(d!.root).toBeNull();
   });
 });
