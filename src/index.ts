@@ -25,6 +25,8 @@ import { streamGemRun } from "./gemRunStream.js";
 import { streamScorecard } from "./scorecardStream.js";
 import { streamInsights } from "./insightsStream.js";
 import { originGuard } from "./originGuard.js";
+import { getWarmStatus, beginForeground, endForeground } from "./warm/orchestrator.js";
+import { startWarmSchedule } from "./warm/schedule.js";
 import { registerDrizzle } from "@agentback/drizzle";
 import { AggregatorController } from "./aggregator.controller.js";
 import { ShareController } from "./share.controller.js";
@@ -166,7 +168,13 @@ export async function createApp(port: number): Promise<RestApplication> {
   // framework only returns single JSON bodies). The POST /api/workflow/analyze
   // route stays for programmatic/test callers. originGuard is applied per-route because these raw
   // routes are registered directly on expressApp, outside the controller dispatch chain.
-  server.expressApp.get("/api/workflow/analyze/stream", originGuard, streamWorkflowAnalyze);
+  // Read-only warm cache status. Outside any foreground gate — cheap metadata only.
+  server.expressApp.get("/api/warm/status", originGuard, (_req, res) => res.json(getWarmStatus() as never));
+  // Foreground gate: mark user-facing LLM computes so background warming yields.
+  server.expressApp.get("/api/workflow/analyze/stream", originGuard, async (req, res) => {
+    beginForeground();
+    try { await streamWorkflowAnalyze(req as never, res as never); } finally { endForeground(); }
+  });
   // SSE progress stream for running a Gem with a local ACP agent (materialize →
   // run → tool/token deltas → done). POST /api/gem/run stays for programmatic callers.
   server.expressApp.get("/api/gem/run/stream", originGuard, streamGemRun);
@@ -175,7 +183,10 @@ export async function createApp(port: number): Promise<RestApplication> {
   server.expressApp.get("/api/scorecard/stream", originGuard, (req, res) => streamScorecard(req as never, res as never));
   // SSE personal session-insights report: scan a project's transcripts → judge
   // each session with the ACP agent → synthesize. GET /api/insights/stream?root=...&dir=...
-  server.expressApp.get("/api/insights/stream", originGuard, (req, res) => streamInsights(req as never, res as never));
+  server.expressApp.get("/api/insights/stream", originGuard, async (req, res) => {
+    beginForeground();
+    try { await streamInsights(req as never, res as never); } finally { endForeground(); }
+  });
   return app;
 }
 
@@ -212,6 +223,8 @@ export async function run(port: number = Number(process.env.PORT ?? 4317)): Prom
   const app = await createApp(port);
   await app.start();
   installGracefulShutdown(app);
+  // Background cache warming — console (local desktop) only; never on the hosted API.
+  if (process.env.SERVE_CONSOLE !== "false") startWarmSchedule();
   const server = await app.restServer;
   console.log(`agentgem listening at ${server.url}`);
   console.log(`  UI:       ${server.url}/`);
