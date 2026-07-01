@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 // Browse-only "shared" gem catalog. Manifest metadata only (no archive bytes).
 import { createHash } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { sql, desc } from "drizzle-orm";
 import { verify } from "@agentgem/model";
 import { canonicalJSON } from "@agentgem/insight";
 import type { AppDb } from "./schema.js";
@@ -31,7 +31,7 @@ export async function upsertCatalogGem(db: AppDb, row: CatalogRow): Promise<void
 }
 
 export async function listCatalogGems(db: AppDb): Promise<CatalogRow[]> {
-  const rows = await db.select().from(catalogGems).orderBy(sql`created_at_ms desc`);
+  const rows = await db.select().from(catalogGems).orderBy(desc(catalogGems.createdAtMs));
   return rows.map((r) => ({
     gemKey: r.gemKey, version: r.version, publishedBy: r.publishedBy,
     author: r.author ?? undefined, description: r.description ?? undefined,
@@ -50,7 +50,11 @@ export type ShareResult =
   | { shared: false; rejected: "bad-signature" | "stale" | "not-connected" };
 
 const FRESHNESS_MS = 300_000;
-const clampGrade = (g?: number): number | undefined => (g === undefined ? undefined : Math.max(1, Math.min(3, Math.trunc(g))));
+// Grade is a 1..3 floor. Exported so the read path (mapDbToGems) can re-clamp defensively —
+// an out-of-band DB write with an out-of-range grade must not 500 the public catalog via the
+// response schema's min(1).max(3). NaN-safe: a non-numeric grade collapses to undefined.
+export const clampGrade = (g?: number): number | undefined =>
+  g === undefined || Number.isNaN(g) ? undefined : Math.max(1, Math.min(3, Math.trunc(g)));
 
 // Sign over a hash of the manifest so the canonical (loggable) payload stays compact and stable.
 export function catalogSigningPayload(m: CatalogManifest, pubkey: string, signedAt: number): string {
