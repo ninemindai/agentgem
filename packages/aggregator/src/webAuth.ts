@@ -5,7 +5,7 @@
 import { randomUUID, randomBytes, createHash } from "node:crypto";
 import { and, eq, gt } from "drizzle-orm";
 import type { AppDb } from "./schema.js";
-import { accounts, webSessions } from "./schema.js";
+import { accounts, webSessions, accountScopes } from "./schema.js";
 
 const sha256hex = (s: string): string => createHash("sha256").update(s).digest("hex");
 
@@ -53,4 +53,23 @@ export async function resolveSession(db: AppDb, token: string): Promise<{ login:
 
 export async function deleteSession(db: AppDb, token: string): Promise<void> {
   await db.delete(webSessions).where(eq(webSessions.tokenHash, sha256hex(token)));
+}
+
+/** REPLACE the account's owned scope set (login + org logins). Deduped; empty clears it. */
+export async function setAccountScopes(db: AppDb, accountId: string, scopes: string[]): Promise<void> {
+  const unique = [...new Set(scopes)];
+  await db.delete(accountScopes).where(eq(accountScopes.accountId, accountId));
+  if (unique.length > 0) {
+    await db.insert(accountScopes).values(unique.map((scope) => ({ accountId, scope })));
+  }
+}
+
+/** True iff the account owns `scope` (its login or a captured org membership). */
+export async function accountOwnsScope(db: AppDb, accountId: string, scope: string): Promise<boolean> {
+  const rows = await db
+    .select({ scope: accountScopes.scope })
+    .from(accountScopes)
+    .where(and(eq(accountScopes.accountId, accountId), eq(accountScopes.scope, scope)))
+    .limit(1);
+  return rows.length > 0;
 }

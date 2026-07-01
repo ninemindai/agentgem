@@ -109,7 +109,12 @@ export const gemAdoptions = pgTable("gem_adoptions", {
   adoptedAt: timestamp("adopted_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.gemKey, t.producerPubkey] })]);
 
-export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, webSessions, stars, gemAdoptions };
+export const accountScopes = pgTable("account_scopes", {
+  accountId: uuid("account_id").notNull().references(() => accounts.id),
+  scope: text("scope").notNull(),
+}, (t) => [primaryKey({ columns: [t.accountId, t.scope] })]);
+
+export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, webSessions, stars, gemAdoptions, accountScopes };
 export type AppDb = PgDatabase<any, typeof schema>;
 
 // Idempotent DDL. (Schema-as-tables above is the query source of truth; this DDL
@@ -131,4 +136,5 @@ export async function ensureSchema(db: AppDb): Promise<void> {
   await db.execute(sql`create table if not exists stars (id uuid primary key, account_id uuid not null references accounts(id), target_kind text not null, target_id text not null, created_at timestamptz not null default now(), unique (account_id, target_kind, target_id))`);
   await db.execute(sql`create index if not exists stars_target_idx on stars (target_kind, target_id)`);
   await db.execute(sql`create table if not exists gem_adoptions (gem_key text not null, gem_digest text not null, producer_pubkey text not null references producers(pubkey), account_login text, event text not null default 'install', adopted_at timestamptz not null default now(), primary key (gem_key, producer_pubkey))`);
+  await db.execute(sql`create table if not exists account_scopes (account_id uuid not null references accounts(id), scope text not null, primary key (account_id, scope))`);
 }
