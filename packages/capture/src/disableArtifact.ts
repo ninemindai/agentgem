@@ -128,12 +128,61 @@ function enablePlugin(it: DisableItem, opts: DisableOptions): DisableResult {
   writeJson(p, obj);
   return { ...base, ok: true, message: `plugin ${key} re-enabled` };
 }
-// ── mcp branch: Task 4 replaces these stubs ──
-function disableMcp(it: DisableItem, _opts: DisableOptions): DisableResult {
-  return { type: it.type, name: it.name, ok: false, message: "mcp disable not implemented" };
+// ── mcp: settings.json entries are stashed (reversible); .mcp.json servers use a flag ──
+function mcpJsonServers(opts: DisableOptions): Record<string, unknown> {
+  const parsed = readJson(join(claudeConfigDir(opts), ".mcp.json"));
+  if (!parsed || typeof parsed !== "object") return {};
+  const servers = (parsed as any).mcpServers;
+  if (servers && typeof servers === "object") return servers;
+  return parsed as Record<string, unknown>;
 }
-function enableMcp(it: DisableItem, _opts: DisableOptions): DisableResult {
-  return { type: it.type, name: it.name, ok: false, message: "mcp enable not implemented" };
+function disableMcp(it: DisableItem, opts: DisableOptions): DisableResult {
+  const base = { type: it.type, name: it.name };
+  const p = settingsPath(opts);
+  const settings = readJson(p);
+  const obj = settings && typeof settings === "object" ? settings : {};
+  const servers = obj.mcpServers && typeof obj.mcpServers === "object" ? obj.mcpServers : undefined;
+  if (servers && it.name in servers) {
+    const stash = join(archiveRoot(opts), "mcp", `${it.name}.json`);
+    if (existsSync(stash)) return { ...base, ok: false, message: `already stashed at ${stash}` };
+    writeJson(stash, { name: it.name, config: servers[it.name] });
+    delete servers[it.name];
+    obj.mcpServers = servers;
+    writeJson(p, obj);
+    return { ...base, ok: true, message: `mcp ${it.name} disabled (stashed)` };
+  }
+  if (it.name in mcpJsonServers(opts)) {
+    const list: string[] = Array.isArray(obj.disabledMcpjsonServers) ? obj.disabledMcpjsonServers : [];
+    if (!list.includes(it.name)) list.push(it.name);
+    obj.disabledMcpjsonServers = list;
+    writeJson(p, obj);
+    return { ...base, ok: true, message: `mcp ${it.name} disabled (flagged)` };
+  }
+  return { ...base, ok: false, message: `mcp ${it.name} not found in settings.json or .mcp.json` };
+}
+function enableMcp(it: DisableItem, opts: DisableOptions): DisableResult {
+  const base = { type: it.type, name: it.name };
+  const p = settingsPath(opts);
+  const settings = readJson(p);
+  const obj = settings && typeof settings === "object" ? settings : {};
+  const stash = join(archiveRoot(opts), "mcp", `${it.name}.json`);
+  if (existsSync(stash)) {
+    const saved = readJson(stash);
+    const servers = obj.mcpServers && typeof obj.mcpServers === "object" ? obj.mcpServers : {};
+    if (it.name in servers) return { ...base, ok: false, message: `already present in mcpServers` };
+    servers[it.name] = saved?.config ?? {};
+    obj.mcpServers = servers;
+    writeJson(p, obj);
+    rmSync(stash, { force: true });
+    return { ...base, ok: true, message: `mcp ${it.name} restored` };
+  }
+  const list: string[] = Array.isArray(obj.disabledMcpjsonServers) ? obj.disabledMcpjsonServers : [];
+  if (list.includes(it.name)) {
+    obj.disabledMcpjsonServers = list.filter((n) => n !== it.name);
+    writeJson(p, obj);
+    return { ...base, ok: true, message: `mcp ${it.name} re-enabled` };
+  }
+  return { ...base, ok: false, message: `mcp ${it.name} is not disabled` };
 }
 
 // ── enumerate everything currently disabled (skill archive only in Task 2; Tasks 3–4 extend) ──
@@ -150,6 +199,15 @@ export function listDisabled(opts: DisableOptions = {}): DisabledArtifact[] {
     ? settings.enabledPlugins as Record<string, unknown> : {};
   for (const [key, v] of Object.entries(enabled)) {
     if (v === false) out.push({ type: "plugin", name: key, source: `plugin:${key}` });
+  }
+  const disabledMcpjson = settings && typeof settings === "object" && Array.isArray(settings.disabledMcpjsonServers)
+    ? settings.disabledMcpjsonServers as string[] : [];
+  for (const name of disabledMcpjson) out.push({ type: "mcp", name, source: "user" });
+  const mcpStash = join(archiveRoot(opts), "mcp");
+  if (existsSync(mcpStash)) {
+    for (const f of readdirSync(mcpStash)) {
+      if (f.endsWith(".json")) out.push({ type: "mcp", name: f.replace(/\.json$/, ""), source: "user" });
+    }
   }
   return out;
 }
