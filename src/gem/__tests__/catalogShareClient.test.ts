@@ -1,7 +1,7 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect, vi } from "vitest";
-import { postCatalogShare } from "../catalogShareClient.js";
+import { postCatalogShare, shareRejectedError } from "../catalogShareClient.js";
 import type { Identity } from "@agentgem/model";
 
 const identity: Identity = { publicKey: "ed25519:PUB", sign: (d) => "sig" + d.length };
@@ -25,5 +25,19 @@ describe("postCatalogShare", () => {
     const http = vi.fn(async (_url: string, _init: { method: string; headers: Record<string, string>; body: string }) => ({ status: 200, json: async () => ({ shared: false, rejected: "not-connected" }) }));
     const res = await postCatalogShare({ manifest: { gemKey: "@o/k", version: "1.0.0" }, identity, endpoint: "https://api.agentgem.ai", http });
     expect(res).toEqual({ shared: false, rejected: "not-connected" });
+  });
+});
+
+describe("shareRejectedError", () => {
+  it("maps not-connected to a friendly 400", () => {
+    const err = shareRejectedError("not-connected");
+    expect(err.statusCode).toBe(400);
+    expect(err.message).toBe("connect your GitHub account first");
+  });
+
+  it("maps other rejections to a 400 naming the reason", () => {
+    const err = shareRejectedError("bad-signature");
+    expect(err.statusCode).toBe(400);
+    expect(err.message).toBe("share rejected: bad-signature");
   });
 });
