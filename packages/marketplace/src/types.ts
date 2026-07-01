@@ -7,6 +7,7 @@ export interface RegistryGem {
   artifactKinds?: string[];
   type?: string;
   grade?: number;
+  installable?: boolean;
 }
 
 export interface AggIngredient {

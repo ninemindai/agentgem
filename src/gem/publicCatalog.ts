@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 // Browse-only public gem catalog: flatten the registry index's discovery metadata and cache it.
 import type { RegistryIndex } from "@agentgem/distribute";
+import type { CatalogRow } from "@agentgem/aggregator";
 
 export interface RegistryGem {
   key: string;
@@ -13,6 +14,7 @@ export interface RegistryGem {
   type?: string;
   publishedBy?: string;
   grade?: number;
+  installable: boolean;
 }
 
 /** Flatten the index's per-item discovery block into a browse list. No ingredients (browse-only). */
@@ -27,7 +29,25 @@ export function mapIndexToGems(index: RegistryIndex): RegistryGem[] {
     type: item.discovery?.type,
     publishedBy: item.discovery?.publishedBy,
     grade: item.discovery?.grade,
+    installable: true,
   }));
+}
+
+/** DB-shared gems are browse-only teasers, never installable. */
+export function mapDbToGems(rows: CatalogRow[]): RegistryGem[] {
+  return rows.map((r) => ({
+    key: r.gemKey, version: r.version, author: r.author, description: r.description,
+    tags: r.tags, artifactKinds: r.artifactKinds, type: r.type, publishedBy: r.publishedBy,
+    grade: r.grade, installable: false,
+  }));
+}
+
+/** Union both sources; DB (freshly shared) wins on key collision. */
+export function mergeGems(dbGems: RegistryGem[], indexGems: RegistryGem[]): RegistryGem[] {
+  const byKey = new Map<string, RegistryGem>();
+  for (const g of indexGems) byKey.set(g.key, g);
+  for (const g of dbGems) byKey.set(g.key, g); // DB overwrites
+  return [...byKey.values()];
 }
 
 export interface GemCache {

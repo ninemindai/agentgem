@@ -210,11 +210,12 @@ import { readRecents, upsertRecent } from "@agentgem/capture";
 import { resolveInstall, publishGem } from "@agentgem/distribute";
 import { searchIndex } from "@agentgem/distribute";
 import { githubRegistrySource, githubRegistryPublisher, registryConfigFromEnv, registryReady } from "@agentgem/distribute";
-import { createGemCache } from "./gem/publicCatalog.js";
+import { createGemCache, mapDbToGems, mergeGems } from "./gem/publicCatalog.js";
 import { service, inject } from "@agentback/core";
 import { RestBindings } from "@agentback/rest";
 import { DrizzleBindings } from "@agentback/drizzle";
 import type { AppDb } from "@agentgem/aggregator";
+import { listCatalogGems } from "@agentgem/aggregator";
 import { resolvePublishedBy } from "./registry/publishedBy.js";
 import { GemTypeRegistry, defaultGemTypeRegistry, resolvePublishType } from "./gem/gemTypeRegistry.js";
 import { resolveDirs, resolveProject, agentgemHome } from "@agentgem/model";
@@ -857,7 +858,9 @@ export class GemController {
   async registryGems(_input: { query: z.infer<typeof PickQuerySchema> }): Promise<z.infer<typeof RegistryGemsResponseSchema>> {
     const cfg = registryConfigFromEnv();
     const getIndex = cfg ? () => githubRegistrySource(cfg).getIndex() : null;
-    return { gems: await publicGemCache.get(getIndex, Date.now()) };
+    const indexGems = await publicGemCache.get(getIndex, Date.now());
+    const dbGems = this.db ? mapDbToGems(await listCatalogGems(this.db)) : [];
+    return { gems: mergeGems(dbGems, indexGems) };
   }
 
   @post("/registry/resolve", { body: RegistryResolveRequestSchema, response: RegistryResolveResponseSchema })
