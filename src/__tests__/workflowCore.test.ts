@@ -31,4 +31,50 @@ describe("computeWorkflowAnalysis", () => {
     expect(res.cached).toBe(true);
     expect(res.updatedAt).toBe(555);
   });
+
+  it("fresh non-degraded compute: writes cache, second call returns hit", async () => {
+    home = mkdtempSync(join(tmpdir(), "wf-nd-"));
+    process.env.AGENTGEM_HOME = home;
+    const claudeDir = join(home, ".claude");
+    const projDir = join(claudeDir, "projects", "-proj2");
+    mkdirSync(projDir, { recursive: true });
+    writeFileSync(join(projDir, "t.jsonl"), JSON.stringify({ cwd: "/proj2" }) + "\n");
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const fakeRecommend = (async () => ({ analysis: { candidates: [], gaps: [] }, degraded: false })) as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const fakeDistill = (async () => ({ distilled: [], degraded: false })) as any;
+
+    const first = await computeWorkflowAnalysis("/proj2", { dir: claudeDir, recommend: fakeRecommend, distill: fakeDistill });
+    expect(first.cached).toBe(false);
+    expect(typeof first.updatedAt).toBe("number");
+
+    // Second call without force — must hit the cache written by the first call.
+    const second = await computeWorkflowAnalysis("/proj2", { dir: claudeDir, recommend: fakeRecommend, distill: fakeDistill });
+    expect(second.cached).toBe(true);
+    expect(second.updatedAt).toBe(first.updatedAt);
+  });
+
+  it("degraded via distill: does not write cache, repeated calls stay uncached", async () => {
+    home = mkdtempSync(join(tmpdir(), "wf-deg-"));
+    process.env.AGENTGEM_HOME = home;
+    const claudeDir = join(home, ".claude");
+    const projDir = join(claudeDir, "projects", "-proj3");
+    mkdirSync(projDir, { recursive: true });
+    writeFileSync(join(projDir, "t.jsonl"), JSON.stringify({ cwd: "/proj3" }) + "\n");
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const fakeRecommend = (async () => ({ analysis: { candidates: [], gaps: [] }, degraded: false })) as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const fakeDistill = (async () => ({ distilled: [], degraded: true })) as any;
+
+    const first = await computeWorkflowAnalysis("/proj3", { dir: claudeDir, recommend: fakeRecommend, distill: fakeDistill });
+    expect(first.cached).toBe(false);
+    expect(first.updatedAt).toBeNull();
+
+    // Cache must NOT have been written — second call still computes.
+    const second = await computeWorkflowAnalysis("/proj3", { dir: claudeDir, recommend: fakeRecommend, distill: fakeDistill });
+    expect(second.cached).toBe(false);
+    expect(second.updatedAt).toBeNull();
+  });
 });

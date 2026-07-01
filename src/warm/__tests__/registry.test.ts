@@ -10,6 +10,7 @@ const orig = process.env.AGENTGEM_HOME;
 afterEach(() => { if (orig === undefined) delete process.env.AGENTGEM_HOME; else process.env.AGENTGEM_HOME = orig; });
 
 function usage() { return WARMABLES.find((w) => w.id === "usage")!; }
+function scorecard() { return WARMABLES.find((w) => w.id === "scorecard")!; }
 
 describe("usage warmable", () => {
   it("warms on first call, then reports a hit on the second (same sessions)", async () => {
@@ -24,6 +25,25 @@ describe("usage warmable", () => {
       expect(await usage().warm(null, { dir })).toBe("warmed");
       expect(await usage().warm(null, { dir })).toBe("hit");
       expect(await usage().warm(null, { dir, force: true })).toBe("warmed");
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("scorecard warmable", () => {
+  it("warms on first call, hits on second, force re-warms", async () => {
+    const home = mkdtempSync(join(tmpdir(), "reg-sc-"));
+    process.env.AGENTGEM_HOME = home;
+    const claudeDir = join(home, ".claude", "projects", "-proj");
+    mkdirSync(claudeDir, { recursive: true });
+    writeFileSync(join(claudeDir, "s.jsonl"), JSON.stringify({ cwd: "/proj" }) + "\n");
+    const dir = join(home, ".claude");
+
+    try {
+      expect(await scorecard().warm(null, { dir })).toBe("warmed");
+      expect(await scorecard().warm(null, { dir })).toBe("hit");
+      expect(await scorecard().warm(null, { dir, force: true })).toBe("warmed");
     } finally {
       rmSync(home, { recursive: true, force: true });
     }

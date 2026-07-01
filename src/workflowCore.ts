@@ -25,6 +25,8 @@ export async function computeWorkflowAnalysis(
   opts: {
     dir?: string; force?: boolean; now?: () => number;
     progress?: { onPhase?(phase: string, extra?: Record<string, unknown>): void; onDelta?(text: string): void };
+    recommend?: typeof recommendWorkflow;
+    distill?: typeof distillWorkflow;
   } = {},
 ): Promise<WorkflowAnalysisResult> {
   const now = opts.now ?? Date.now;
@@ -47,8 +49,8 @@ export async function computeWorkflowAnalysis(
 
   p?.onPhase?.("thinking");
   const [{ analysis, degraded }, distill] = await Promise.all([
-    recommendWorkflow(signal, scanInv, { onDelta: (chunk) => p?.onDelta?.(chunk) }),
-    distillWorkflow(signal, scanInv),
+    (opts.recommend ?? recommendWorkflow)(signal, scanInv, { onDelta: (chunk) => p?.onDelta?.(chunk) }),
+    (opts.distill ?? distillWorkflow)(signal, scanInv),
   ]);
 
   p?.onPhase?.("validating");
