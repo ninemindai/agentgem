@@ -14,7 +14,7 @@ import { channelScaffold } from "./channels.js";
 import { tomlMcpServers } from "./toml.js";
 import { stdioProxyRunner, PROXY_BASE_PORT, PROXY_HOST } from "./mcpProxy.js";
 
-export type TargetId = "claude" | "codex" | "agents" | "hermes" | "eve" | "flue" | "openai-sandbox" | "agentcore" | "a2a";
+export type TargetId = "claude" | "codex" | "agents" | "hermes" | "eve" | "flue" | "openai-sandbox" | "agentcore" | "a2a" | "cline";
 export type FileTree = Record<string, string>;
 
 export interface SkippedArtifact { artifact: string; type: ArtifactType | "reference"; reason: string }
@@ -291,6 +291,16 @@ const mcpDotMcpJson = (servers: McpServerArtifact[]): MaterializeResult =>
   rendered({ ".mcp.json": JSON.stringify({ mcpServers: Object.fromEntries(servers.map((s) => [s.name, s.config])) }, null, 2) });
 const mcpCodexToml = (servers: McpServerArtifact[]): MaterializeResult =>
   rendered({ "config.toml": tomlMcpServers(servers) });
+
+// Cline / Roo layout: a single .clinerules file, skills under .clinerules/skills/<name>/SKILL.md,
+// and MCP servers in cline_mcp_settings.json.
+const instructionsClinerules = (all: InstructionsArtifact[]): FileTree => ({ ".clinerules": all.map((i) => i.content).join("\n\n") });
+const skillClinerules = (a: SkillArtifact): FileTree => ({ [`.clinerules/skills/${safePathSegment(a.name)}/SKILL.md`]: a.content });
+const mcpClineSettings = (servers: McpServerArtifact[]): MaterializeResult => {
+  const mcpServers: Record<string, unknown> = {};
+  for (const s of servers) mcpServers[s.name] = s.config;   // config already redacted at import
+  return rendered({ "cline_mcp_settings.json": JSON.stringify({ mcpServers }, null, 2) });
+};
 
 // Reconstruct settings.json's `.hooks` event map. HookArtifact.config IS the group object
 // ({ matcher?, hooks: [...] }) captured by introspect, so we group those back under their event.
@@ -872,6 +882,9 @@ export const TARGET_REGISTRY: Record<TargetId, TargetSpec> = {
   // A2A Agent Card primitive. Wholly compose-driven (all per-type renderers no-op); compose emits the
   // runtime-free agent-card.json. Card-only mode reports nothing skipped.
   a2a: { id: "a2a", label: "A2A", skill: () => ({}), instructions: () => ({}), mcp: () => ({ files: {}, skipped: [] }), hook: () => ({}), compose: a2aComposeProject },
+  // Cline / Roo layout: .clinerules for instructions, .clinerules/skills/<name>/SKILL.md for
+  // skills, cline_mcp_settings.json for MCP servers (hooks unsupported).
+  cline: { id: "cline", label: "Cline / Roo", skill: skillClinerules, instructions: instructionsClinerules, mcp: mcpClineSettings },
 };
 
 export function materialize(gem: Gem, target: TargetId, opts: MaterializeOpts = {}): MaterializeResult {
