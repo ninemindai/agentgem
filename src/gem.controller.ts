@@ -127,7 +127,7 @@ const ScorecardSchema = z.object({
 }) satisfies z.ZodType<Scorecard>;
 import { introspectConfig, introspectProject } from "@agentgem/capture";
 import { buildGem } from "@agentgem/build";
-import { InvalidInputError, scorecardFloor } from "@agentgem/model";
+import { InvalidInputError, scorecardFloor, loadOrCreateIdentity } from "@agentgem/model";
 import { scaffoldChecks } from "@agentgem/build";
 import { materialize, compatibility } from "@agentgem/model";
 import type { TargetId } from "@agentgem/model";
@@ -191,6 +191,7 @@ import { collectScorecard, selectScorecardRoots, scorecardTranscriptPaths, defau
 import { preparePlaybook } from "./gem/playbookPrepareCore.js";
 import { publishPlaybookCore } from "./gem/playbookPublishCore.js";
 import { createShareCard } from "./share/shareStore.js";
+import { postCatalogShare } from "./gem/catalogShareClient.js";
 import { sanitizeShareText } from "@agentgem/insight";
 import { claudeTranscriptsForCwd, scanWorkflow, allClaudeTranscripts, bucketTranscriptsByCwd } from "@agentgem/insight";
 import { recommendWorkflow, recommendationToSelection } from "@agentgem/insight";
@@ -389,8 +390,16 @@ export class GemController {
     const b = input.body;
     return publishPlaybookCore({
       publish: async () => {
-        const r = await this.registryPublish({ body: { workspace: b.workspace, scope: b.scope, name: b.name, version: b.version, description: b.description, tags: b.tags } });
-        return { ref: r.ref, version: r.version };
+        const gem = readGemArchive(readWorkspace(b.workspace).files);
+        const manifest = {
+          gemKey: `${b.scope}/${b.name ?? b.workspace}`, version: b.version,
+          description: b.description, tags: b.tags, grade: gem.grade,
+          artifactKinds: gem.artifacts.map((a) => a.type),
+        };
+        const identity = loadOrCreateIdentity();
+        const r = await postCatalogShare({ manifest, identity });
+        if (!r.shared) throw new Error(r.rejected === "not-connected" ? "connect your GitHub account first" : `share rejected: ${r.rejected}`);
+        return { ref: manifest.gemKey, version: b.version };
       },
       share: async () => createShareCard(this.db!, { kind: "gem", name: b.name ?? b.workspace, provenance: b.provenance, generatedAtMs: Date.now() }),
     });
