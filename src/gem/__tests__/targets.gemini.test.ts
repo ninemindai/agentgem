@@ -27,10 +27,15 @@ describe("gemini target", () => {
     const trailingApostrophe = "Wrap it up y'all'";               // ends in a single '
     const trailingDouble = "Nested quotes: 'a''b''";               // ends in two ''
     const newlineAndQuote = 'Line one\nSay "hi" to the user\nLine three';
+    // Ends in a single apostrophe (forces the JSON.stringify basic-string fallback) AND contains a
+    // literal backslash-then-n (not a newline) — the sequential-replace unescape used to turn this
+    // into a real newline (C:\<LF>otes'), silently corrupting the path.
+    const backslashN = "C:\\notes'";
     const roundTripGem: Gem = { name: "g2", createdFrom: "t", checks: [], requiredSecrets: [], artifacts: [
       { type: "skill", name: "trail-one", source: "gemini-command", content: trailingApostrophe },
       { type: "skill", name: "trail-two", source: "gemini-command", content: trailingDouble },
       { type: "skill", name: "newline-quote", source: "gemini-command", content: newlineAndQuote },
+      { type: "skill", name: "backslash-n", source: "gemini-command", content: backslashN },
     ] };
 
     const { files } = materialize(roundTripGem, "gemini");
@@ -47,5 +52,6 @@ describe("gemini target", () => {
     expect(byName("trail-one")?.content).toBe(trailingApostrophe);
     expect(byName("trail-two")?.content).toBe(trailingDouble);
     expect(byName("newline-quote")?.content).toBe(newlineAndQuote);
+    expect(byName("backslash-n")?.content).toBe(backslashN);
   });
 });

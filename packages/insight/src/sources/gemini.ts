@@ -95,7 +95,7 @@ function tomlField(text: string, key: string): string | null {
   const triple = text.match(new RegExp(`${key}\\s*=\\s*("""|''')([\\s\\S]*?)\\1`));
   if (triple) return triple[2];
   const basic = text.match(new RegExp(`${key}\\s*=\\s*"((?:[^"\\\\]|\\\\.)*)"`));
-  if (basic) return basic[1].replace(/\\"/g, '"').replace(/\\n/g, "\n").replace(/\\\\/g, "\\");
+  if (basic) return basic[1].replace(/\\(["\\n])/g, (_, c) => (c === "n" ? "\n" : c));
   return null;
 }
 
