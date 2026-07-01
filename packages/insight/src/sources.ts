@@ -11,7 +11,9 @@ import type { AgentBinding, GemArtifact } from "@agentgem/model";
 import type { AgentId, SessionStat } from "./observeAggregate.js";
 import { listFiles, parseClaudeTranscript, parseCodexTranscript } from "./observeScan.js";
 
-export interface SourceEnv { baseDir?: string }
+// codexDir is a legacy independent override (scanSessions({ claudeDir, codexDir })); when absent it
+// derives from baseDir's parent via resolveDirs, same as every other agent root.
+export interface SourceEnv { baseDir?: string; codexDir?: string }
 export interface ImportResult { artifacts: GemArtifact[]; binding: AgentBinding }
 
 export interface SourceSpec {
@@ -40,7 +42,7 @@ const claudeSource: SourceSpec = {
 
 const codexSource: SourceSpec = {
   id: "codex", label: "Codex", traits: { storage: "jsonl" },
-  roots: (env) => [join(resolveDirs(env.baseDir).codexDir, "sessions")],
+  roots: (env) => [join(env.codexDir ?? resolveDirs(env.baseDir).codexDir, "sessions")],
   scanSessions: (roots) =>
     scanJsonl(roots.flatMap((r) => listFiles(r, ".jsonl")).filter((f) => basename(f).startsWith("rollout-")), parseCodexTranscript),
 };
