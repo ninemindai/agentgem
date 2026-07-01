@@ -1,9 +1,12 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 // Browse-only "shared" gem catalog. Manifest metadata only (no archive bytes).
+import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
+import { verify } from "@agentgem/model";
+import { canonicalJSON } from "@agentgem/insight";
 import type { AppDb } from "./schema.js";
-import { catalogGems } from "./schema.js";
+import { catalogGems, producers, accountBindings } from "./schema.js";
 
 export interface CatalogRow {
   gemKey: string; version: string; publishedBy: string;
@@ -35,4 +38,48 @@ export async function listCatalogGems(db: AppDb): Promise<CatalogRow[]> {
     tags: r.tags ?? undefined, artifactKinds: r.artifactKinds ?? undefined,
     type: r.type ?? undefined, grade: r.grade ?? undefined, createdAtMs: r.createdAtMs,
   }));
+}
+
+export interface CatalogManifest {
+  gemKey: string; version: string; author?: string; description?: string;
+  tags?: string[]; artifactKinds?: string[]; type?: string; grade?: number;
+}
+export interface ShareRequest { manifest: CatalogManifest; pubkey: string; signedAt: number; signature: string }
+export type ShareResult =
+  | { shared: true; publishedBy: string; gemKey: string; version: string }
+  | { shared: false; rejected: "bad-signature" | "stale" | "not-connected" };
+
+const FRESHNESS_MS = 300_000;
+const clampGrade = (g?: number): number | undefined => (g === undefined ? undefined : Math.max(1, Math.min(3, Math.trunc(g))));
+
+// Sign over a hash of the manifest so the canonical (loggable) payload stays compact and stable.
+export function catalogSigningPayload(m: CatalogManifest, pubkey: string, signedAt: number): string {
+  const manifestHash = createHash("sha256").update(canonicalJSON(m)).digest("hex");
+  return canonicalJSON({ pubkey, signedAt, manifestHash });
+}
+
+// publishedBy is ALWAYS server-derived from the account_bindings lookup below — never
+// from req.manifest.author or any other client-supplied field. The signature only proves
+// producer-key possession; the binding is what proves that key maps to a verified GitHub
+// login, so it is the sole source of truth for attribution. Mirrors recordBinding (binding.ts).
+export async function recordCatalogShare(db: AppDb, req: ShareRequest, now: number = Date.now()): Promise<ShareResult> {
+  if (!verify(req.pubkey, catalogSigningPayload(req.manifest, req.pubkey, req.signedAt), req.signature)) {
+    return { shared: false, rejected: "bad-signature" };
+  }
+  if (!Number.isFinite(req.signedAt) || Math.abs(now - req.signedAt) > FRESHNESS_MS) {
+    return { shared: false, rejected: "stale" };
+  }
+  // Bootstrap: register the producer so a first-time desktop can share (mirrors ingest's implicit
+  // producer creation). No-op if it already exists.
+  await db.insert(producers).values({ pubkey: req.pubkey }).onConflictDoNothing();
+  const bind = await db.select().from(accountBindings).where(sql`pubkey = ${req.pubkey}`);
+  const login = bind[0]?.accountLogin;
+  if (!login) return { shared: false, rejected: "not-connected" };
+  const m = req.manifest;
+  await upsertCatalogGem(db, {
+    gemKey: m.gemKey, version: m.version, publishedBy: login,
+    author: m.author, description: m.description, tags: m.tags, artifactKinds: m.artifactKinds,
+    type: m.type, grade: clampGrade(m.grade), createdAtMs: now,
+  });
+  return { shared: true, publishedBy: login, gemKey: m.gemKey, version: m.version };
 }
