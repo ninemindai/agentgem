@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { groupedPages, sortedPages, type ConsolePage } from "../registry.js";
 import { ActiveGemSwitcher } from "./ActiveGemSwitcher.js";
 import { useActiveGem } from "../activeGem.js";
+import { WarmingPill } from "../components/WarmingPill.js";
 
 export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: string }) {
   const groups = groupedPages(pages);
@@ -53,6 +54,7 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
           AgentGem
         </div>
         <ActiveGemSwitcher apiBase={apiBase} />
+        <WarmingPill apiBase={apiBase} />
         {groups.observe.length > 0 && <div className="console-group-label">Observe</div>}
         {groups.observe.map(item)}
         <div className="console-group-label">

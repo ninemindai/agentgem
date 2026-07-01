@@ -39,6 +39,7 @@ describe("streamScorecard", () => {
       transcriptsFor: () => [],
       bucketTranscripts: () => new Map(),
       readCache: () => null,
+      readCacheEntry: () => null,
       writeCache: vi.fn(),
     };
     const res = fakeRes();
@@ -60,12 +61,14 @@ describe("streamScorecard", () => {
 
   it("emits done immediately on cache hit (no progress)", async () => {
     const loadProject = vi.fn(() => mkLoad() as never);
+    const CACHED_SC = { breadth: 9, battleTested: 0, portable: 0, gaps: [], projects: [], generatedAtMs: 0, degraded: false };
     const deps: ScorecardStreamDeps = {
       discover: () => [],
       loadProject,
       transcriptsFor: () => [],
       bucketTranscripts: () => new Map(),
-      readCache: () => ({ breadth: 9, battleTested: 0, portable: 0, gaps: [], projects: [], generatedAtMs: 0, degraded: false }),
+      readCache: () => CACHED_SC,
+      readCacheEntry: () => ({ result: CACHED_SC, ts: 11111 }),
       writeCache: vi.fn(),
     };
     const res = fakeRes();
@@ -76,18 +79,20 @@ describe("streamScorecard", () => {
     );
     const ev = events(res.chunks);
     expect(ev.some((e) => e.event === "progress")).toBe(false);
-    expect(ev.find((e) => e.event === "done")?.data).toMatchObject({ cached: true, scorecard: { breadth: 9 } });
+    expect(ev.find((e) => e.event === "done")?.data).toMatchObject({ cached: true, scorecard: { breadth: 9 }, updatedAt: 11111 });
     expect(loadProject).not.toHaveBeenCalled();
   });
 
   it("bypasses the cache and re-scans when refresh=true", async () => {
     const loadProject = vi.fn(() => mkLoad() as never);
+    const CACHED_SC = { breadth: 9, battleTested: 0, portable: 0, gaps: [], projects: [], generatedAtMs: 0, degraded: false };
     const deps: ScorecardStreamDeps = {
       discover: () => [],
       loadProject,
       transcriptsFor: () => [],
       bucketTranscripts: () => new Map(),
-      readCache: () => ({ breadth: 9, battleTested: 0, portable: 0, gaps: [], projects: [], generatedAtMs: 0, degraded: false }),
+      readCache: () => CACHED_SC,
+      readCacheEntry: () => ({ result: CACHED_SC, ts: 22222 }),
       writeCache: vi.fn(),
     };
     const res = fakeRes();

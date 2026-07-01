@@ -56,7 +56,7 @@ describe("Mine panel", () => {
     const stream = syncStream([
       { type: "start", total: 3 },
       { type: "progress", done: 2, total: 3, label: "proj-a", partial: { breadth: 7, battleTested: 3, portable: 1 } },
-      { type: "done", scorecard: FAKE_SCORECARD, cached: false },
+      { type: "done", scorecard: FAKE_SCORECARD, cached: false, updatedAt: null },
     ]);
     render(<Mine apiBase="http://localhost:0" openStream={stream} />);
     expect(screen.getByText(/10 reusable workflows/i)).toBeTruthy();
@@ -70,7 +70,7 @@ describe("Mine panel", () => {
   });
 
   it("clicking a filter chip in the workflow list filters the workflow list", () => {
-    const stream = syncStream([{ type: "done", scorecard: SCORECARD_WITH_WORKFLOWS, cached: false }]);
+    const stream = syncStream([{ type: "done", scorecard: SCORECARD_WITH_WORKFLOWS, cached: false, updatedAt: null }]);
     render(<Mine apiBase="http://localhost:0" openStream={stream} />);
     // both workflows are visible before filtering
     expect(screen.getByText("Deploy workflow")).toBeTruthy();
@@ -84,7 +84,7 @@ describe("Mine panel", () => {
   });
 
   it("ScorecardHero does not receive filter/onFilter — stats are plain text", () => {
-    const stream = syncStream([{ type: "done", scorecard: SCORECARD_WITH_WORKFLOWS, cached: false }]);
+    const stream = syncStream([{ type: "done", scorecard: SCORECARD_WITH_WORKFLOWS, cached: false, updatedAt: null }]);
     render(<Mine apiBase="http://localhost:0" openStream={stream} />);
     // Stats text appears in the hero as a plain paragraph (not a button)
     const statsEl = screen.getByText(/1 battle-tested · 1 worth sharing/i);
@@ -92,7 +92,7 @@ describe("Mine panel", () => {
   });
 
   it("MineWorkflows receives filter, onFilter, and apiBase", () => {
-    const stream = syncStream([{ type: "done", scorecard: SCORECARD_WITH_WORKFLOWS, cached: false }]);
+    const stream = syncStream([{ type: "done", scorecard: SCORECARD_WITH_WORKFLOWS, cached: false, updatedAt: null }]);
     render(<Mine apiBase="http://localhost:0" openStream={stream} />);
     // Filter chips are rendered inside MineWorkflows
     expect(screen.getByRole("button", { name: /^all$/i })).toBeTruthy();
