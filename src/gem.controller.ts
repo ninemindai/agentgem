@@ -219,6 +219,8 @@ import { resolvePublishedBy } from "./registry/publishedBy.js";
 import { GemTypeRegistry, defaultGemTypeRegistry, resolvePublishType } from "./gem/gemTypeRegistry.js";
 import { resolveDirs, resolveProject, agentgemHome } from "@agentgem/model";
 import { pickFolder } from "./pickFolder.js";
+import { readShareAdoption, setShareAdoption } from "./agentgemConfig.js";
+import { emitAdoption } from "./registry/emitAdoption.js";
 
 let globalUsageRefreshing = false;
 
@@ -852,6 +854,8 @@ export class GemController {
   async registryInstall(input: { body: z.infer<typeof RegistryInstallRequestSchema> }): Promise<z.infer<typeof RegistryInstallResponseSchema>> {
     const { source } = this.registrySource();
     const { plan, gem } = await resolveInstall({ refs: input.body.refs, mode: input.body.mode, target: input.body.target as TargetId | undefined, source, a2aServer: input.body.a2aServer });
+    const installed = plan.items.map((it) => ({ gemKey: it.key, version: it.version, gemDigest: "" }));
+    void emitAdoption(installed);   // opt-in + fire-and-forget; never awaited, never throws
     if (input.body.mode === "materialize") {
       if (!input.body.dest) throw new Error("materialize mode requires `dest`");
       writeArchiveDir(input.body.dest, plan.materialize!.files);
@@ -860,6 +864,17 @@ export class GemController {
     const name = input.body.workspaceName ?? gem.name;
     createWorkspace(name, gem);
     return { plan, applied: { mode: "workspace", workspace: name } };
+  }
+
+  @get("/settings/adoption", { query: PickQuerySchema, response: z.object({ enabled: z.boolean() }) })
+  async getAdoptionSetting(_input: { query: z.infer<typeof PickQuerySchema> }): Promise<{ enabled: boolean }> {
+    return { enabled: readShareAdoption() };
+  }
+
+  @post("/settings/adoption", { body: z.object({ enabled: z.boolean() }), response: z.object({ enabled: z.boolean() }) })
+  async setAdoptionSetting(input: { body: { enabled: boolean } }): Promise<{ enabled: boolean }> {
+    setShareAdoption(input.body.enabled);
+    return { enabled: input.body.enabled };
   }
 
   // OUTWARD-FACING: gated network publish. Reads a Gem from the workspace, writes its archive +
