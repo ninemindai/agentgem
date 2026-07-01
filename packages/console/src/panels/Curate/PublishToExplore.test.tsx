@@ -27,7 +27,7 @@ describe("PublishToExplore", () => {
     const calls: string[] = [];
     vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
       const u = String(url);
-      if (u.includes("/api/explore/identity")) return res({ connected: true, login: "octocat" });
+      if (u.includes("/api/bind/status")) return res({ bound: true, login: "octocat" });
       if (u.includes("/api/workspaces")) {
         calls.push("workspace");
         return res({ name: "my-playbook" });
@@ -60,7 +60,7 @@ describe("PublishToExplore", () => {
   it("shows an error when publish fails", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
       const u = String(url);
-      if (u.includes("/api/explore/identity")) return res({ connected: true, login: "octocat" });
+      if (u.includes("/api/bind/status")) return res({ bound: true, login: "octocat" });
       if (u.includes("/api/workspaces")) return res({ name: "p" });
       if (u.includes("/api/playbook/publish")) {
         return { ok: false, status: 500, text: async () => "registry down" } as unknown as Response;
@@ -86,7 +86,7 @@ describe("PublishToExplore", () => {
   it("disables Share until GitHub is connected", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
       const u = String(url);
-      if (u.includes("/api/explore/identity")) return res({ connected: false });
+      if (u.includes("/api/bind/status")) return res({ bound: false });
       throw new Error(`unexpected: ${u}`);
     }));
     render(
