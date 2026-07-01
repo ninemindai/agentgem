@@ -27,6 +27,7 @@ describe("PublishToExplore", () => {
     const calls: string[] = [];
     vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
       const u = String(url);
+      if (u.includes("/api/explore/identity")) return res({ connected: true, login: "octocat" });
       if (u.includes("/api/workspaces")) {
         calls.push("workspace");
         return res({ name: "my-playbook" });
@@ -48,7 +49,9 @@ describe("PublishToExplore", () => {
     );
     fireEvent.change(screen.getByLabelText("scope"), { target: { value: "@me" } });
     fireEvent.change(screen.getByLabelText("name"), { target: { value: "my-playbook" } });
-    fireEvent.click(screen.getByRole("button", { name: /publish to explore/i }));
+    const btn = await screen.findByRole("button", { name: /share to explore/i });
+    await waitFor(() => expect((btn as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(btn);
     await waitFor(() => expect(screen.getByText(/@me\/my-playbook/)).toBeTruthy());
     expect(calls).toEqual(["workspace", "publish"]);
     expect(screen.getByText("https://agentgem.ai/share/abc")).toBeTruthy();
@@ -57,6 +60,7 @@ describe("PublishToExplore", () => {
   it("shows an error when publish fails", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
       const u = String(url);
+      if (u.includes("/api/explore/identity")) return res({ connected: true, login: "octocat" });
       if (u.includes("/api/workspaces")) return res({ name: "p" });
       if (u.includes("/api/playbook/publish")) {
         return { ok: false, status: 500, text: async () => "registry down" } as unknown as Response;
@@ -73,7 +77,23 @@ describe("PublishToExplore", () => {
     );
     fireEvent.change(screen.getByLabelText("scope"), { target: { value: "@me" } });
     fireEvent.change(screen.getByLabelText("name"), { target: { value: "p" } });
-    fireEvent.click(screen.getByRole("button", { name: /publish to explore/i }));
+    const btn = await screen.findByRole("button", { name: /share to explore/i });
+    await waitFor(() => expect((btn as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(btn);
     await waitFor(() => expect(screen.getByText(/registry down|error/i)).toBeTruthy());
+  });
+
+  it("disables Share until GitHub is connected", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+      const u = String(url);
+      if (u.includes("/api/explore/identity")) return res({ connected: false });
+      throw new Error(`unexpected: ${u}`);
+    }));
+    render(
+      <PublishToExplore apiBase="" selected={new Set()} skillCount={1} lessonCount={0} />
+    );
+    const btn = (await screen.findByRole("button", { name: /share to explore/i })) as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    expect(screen.getByText(/connect github/i)).toBeTruthy();
   });
 });
