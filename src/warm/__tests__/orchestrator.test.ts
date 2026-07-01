@@ -43,6 +43,19 @@ describe("runWarmPass", () => {
     expect(calls).toEqual(["/a"]);   // insights still ran after usage threw
   });
 
+  it("does not start an overlapping pass while one is already running", async () => {
+    let calls = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const reg: Warmable[] = [{ id: "usage", cost: "cheap", scope: "global", async warm() { calls++; await gate; return "warmed"; } }];
+    const p1 = runWarmPass({ registry: reg, roots: [], now: () => 1, isBusy: () => false });
+    await runWarmPass({ registry: reg, roots: [], now: () => 2, isBusy: () => false }); // must bail immediately
+    expect(calls).toBe(1);
+    release();
+    await p1;
+    expect(calls).toBe(1);
+  });
+
   it("reports running=false and the last result after a pass; foreground flag toggles", async () => {
     beginForeground();
     // isForegroundBusy default is used only when isBusy is not injected; here we assert the toggle:
