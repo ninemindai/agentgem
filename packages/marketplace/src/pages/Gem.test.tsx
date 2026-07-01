@@ -4,9 +4,9 @@ import { Gem } from "./Gem";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 // Static fallback path: empty live list → STATIC_GEMS (which include brainstorming-kit with ingredients).
-const apiEmpty = { getGems: () => Promise.resolve([]) } as never;
+const apiEmpty = { getGems: () => Promise.resolve([]), gemAdoption: () => Promise.resolve({}) } as never;
 // Live path: one ingredient-less gem.
-const apiLive = { getGems: () => Promise.resolve([{ key: "live-gem", version: "3.0.0", author: "acme", description: "d", tags: [], artifactKinds: ["mcp"] }]) } as never;
+const apiLive = { getGems: () => Promise.resolve([{ key: "live-gem", version: "3.0.0", author: "acme", description: "d", tags: [], artifactKinds: ["mcp"] }]), gemAdoption: () => Promise.resolve({}) } as never;
 const stars = { signedIn: false, loginUrl: () => "/login", api: { get: async () => ({ counts: {}, mine: [] }), toggle: async () => ({ starred: false, count: 0 }) } as never };
 
 describe("Gem (detail)", () => {

@@ -22,6 +22,11 @@ export function makeApi(base: string) {
       get<AdoptionPoint[]>(base, "/api/aggregator/adoption", q),
     getGems: () =>
       get<{ gems: RegistryGem[] }>(base, "/api/registry/gems").then((r) => r.gems),
+    gemAdoption: (keys: string[]): Promise<Record<string, number>> =>
+      keys.length === 0 ? Promise.resolve({}) :
+      get<{ items: { gemKey: string; installs: number }[] }>(base, "/api/aggregator/gem-adoption", { keys: keys.join(",") })
+        .then((r) => Object.fromEntries(r.items.map((i) => [i.gemKey, i.installs])))
+        .catch(() => ({})),                       // adoption is best-effort; never breaks the page
   };
 }
 

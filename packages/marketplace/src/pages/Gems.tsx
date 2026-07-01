@@ -15,6 +15,7 @@ export function Gems({ api, stars }: { api: ReturnType<typeof makeApi>; stars: S
   const [search, setSearch] = useState("");
   const [selectedCuts, setSelectedCuts] = useState<string[]>([]);
   const [starState, setStarState] = useState<StarState>({ counts: {}, mine: [] });
+  const [adoptions, setAdoptions] = useState<Record<string, number>>({});
 
   useEffect(() => {
     let alive = true;
@@ -27,6 +28,7 @@ export function Gems({ api, stars }: { api: ReturnType<typeof makeApi>; stars: S
     let alive = true;
     const ids = gems.map((g) => g.key);
     stars.api.get("gem", ids).then((s) => { if (alive) setStarState(s); });
+    api.gemAdoption(ids).then((a) => { if (alive) setAdoptions(a); });
     return () => { alive = false; };
   }, [gems, stars.api]);
 
@@ -62,7 +64,7 @@ export function Gems({ api, stars }: { api: ReturnType<typeof makeApi>; stars: S
               <span className="ex-gem-head">
                 <span className="ex-gem-key">{g.key}</span>
                 <CutBadge cut={g.cut} />
-                <StoneRating cut={g.cut} grade={g.grade} stars={starState.counts[g.key] ?? 0} />
+                <StoneRating cut={g.cut} grade={g.grade} stars={starState.counts[g.key] ?? 0} installs={adoptions[g.key] ?? 0} />
                 <span className="ex-gem-kinds">{g.artifactKinds.map((k) => <span key={k} className="ex-chip">{kindLabel(k)}</span>)}</span>
               </span>
               <span className="ex-gem-desc">{g.description}</span>

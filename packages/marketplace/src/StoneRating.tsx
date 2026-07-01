@@ -4,11 +4,11 @@ import { stoneRating } from "./gems/rating";
 const NEUTRAL = { fg: "#8a8f98", bg: "#e6e8eb" };
 
 /** N filled gemstones (of 5) in the cut's color — the gem's Stone rating. */
-export function StoneRating({ cut, grade, stars }: { cut?: string; grade?: number; stars: number }) {
+export function StoneRating({ cut, grade, stars, installs }: { cut?: string; grade?: number; stars: number; installs?: number }) {
   const m = cutMeta(cut);
   const fg = m?.fg ?? NEUTRAL.fg;
   const bg = m?.bg ?? NEUTRAL.bg;
-  const n = stoneRating(grade, stars);
+  const n = stoneRating(grade, stars, installs ?? 0);
   const label = `${n} of 5 · ${m?.gemstone ?? "gem"}`;
   return (
     <span className="ex-stones" title={label} aria-label={label}>

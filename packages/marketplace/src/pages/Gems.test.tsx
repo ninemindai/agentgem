@@ -4,7 +4,7 @@ import { Gems } from "./Gems";
 import { STATIC_GEMS } from "../gems/catalog";
 
 afterEach(() => cleanup());
-const apiWith = (impl: () => Promise<unknown>) => ({ getGems: impl }) as never;
+const apiWith = (impl: () => Promise<unknown>) => ({ getGems: impl, gemAdoption: () => Promise.resolve({}) }) as never;
 const stars = { signedIn: false, loginUrl: () => "/login", api: { get: async () => ({ counts: {}, mine: [] }), toggle: async () => ({ starred: false, count: 0 }) } as never };
 
 describe("Gems (browse)", () => {
