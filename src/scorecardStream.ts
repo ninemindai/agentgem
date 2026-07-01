@@ -38,7 +38,7 @@ const realStreamDeps: ScorecardStreamDeps = {
 };
 
 // Cache key used for the aggregate scorecard (distinct from per-project keys).
-const CACHE_ROOT = "__scorecard__";
+export const SCORECARD_CACHE_ROOT = "__scorecard__";
 const yieldToLoop = () => new Promise<void>((r) => setImmediate(r));
 
 function parseProjects(q: unknown): string[] | undefined {
@@ -74,7 +74,7 @@ export async function streamScorecard(req: SseReq, res: SseRes, deps: ScorecardS
     // Cache hit (unless Re-scan): return the prior result instantly so the user
     // can revisit the scorecard without re-scanning every project.
     if (!fresh) {
-      const cached = deps.readCache(CACHE_ROOT, token);
+      const cached = deps.readCache(SCORECARD_CACHE_ROOT, token);
       if (cached) { send("done", { scorecard: cached, cached: true }); return; }
     }
 
@@ -95,7 +95,7 @@ export async function streamScorecard(req: SseReq, res: SseRes, deps: ScorecardS
       });
     }
     const sc = aggregateScorecard(loads, Date.now(), degraded);
-    if (!degraded) deps.writeCache(CACHE_ROOT, token, sc, Date.now());
+    if (!degraded) deps.writeCache(SCORECARD_CACHE_ROOT, token, sc, Date.now());
     send("done", { scorecard: sc, cached: false });
   } catch (err) {
     send("failed", { message: (err as Error)?.message ?? String(err) });
