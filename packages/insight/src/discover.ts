@@ -77,9 +77,34 @@ export async function buildDiscover(
   if (hits.size === 0)
     return { candidates: [], topics, reranked: false, degraded: { reason: "skills.sh returned no new recommendations (or is unreachable)." } };
 
-  const candidates = [...hits.values()]
-    .sort((a, b) => b.topics.length - a.topics.length || (b.row.installs ?? 0) - (a.row.installs ?? 0))
-    .slice(0, max)
+  // Round-robin across topics rather than a single global sort, so one topic whose
+  // results all survive the already-installed filter (e.g. an MCP server like
+  // `playwright`, which has no same-named installed skill) can't fill every slot and
+  // bury the lower-install survivors of self-colliding skill topics. Within a topic,
+  // multi-topic matches still come first, then install count.
+  const byTopic = new Map<string, Array<{ row: RegistrySkill; topics: string[] }>>(topics.map((t) => [t, []]));
+  for (const hit of hits.values())
+    for (const t of hit.topics) byTopic.get(t)?.push(hit);
+  for (const bucket of byTopic.values())
+    bucket.sort((a, b) => b.topics.length - a.topics.length || (b.row.installs ?? 0) - (a.row.installs ?? 0));
+
+  const picked = new Set<string>();
+  const ordered: Array<{ row: RegistrySkill; topics: string[] }> = [];
+  for (let progressed = true; progressed && ordered.length < max; ) {
+    progressed = false;
+    for (const topic of topics) {
+      const bucket = byTopic.get(topic)!;
+      let hit = bucket.shift();
+      while (hit && picked.has(hit.row.id)) hit = bucket.shift();
+      if (!hit) continue;
+      picked.add(hit.row.id);
+      ordered.push(hit);
+      progressed = true;
+      if (ordered.length >= max) break;
+    }
+  }
+
+  const candidates = ordered
     .map(({ row, topics: ts }): DiscoverCandidate => ({
       name: row.name,
       source: row.source,
