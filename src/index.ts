@@ -138,9 +138,13 @@ export async function createApp(port: number): Promise<RestApplication> {
   if (aggDb && webOrigins.length > 0) {
     installStars(server.expressApp as never, { db: aggDb, webOrigins });
   }
-  // Registry upload-publish: requires DB, a web origin allowlist, and a configured GitHub registry.
+  // Registry upload-publish: requires DB, a web origin allowlist, and a GitHub registry with a
+  // write token. Gate on `regCfg.token` — githubRegistryPublisher() throws without it, and a
+  // deploy that sets AGENTGEM_REGISTRY_REPO but not GITHUB_TOKEN (e.g. render.yaml, where
+  // publishing runs out-of-band) would otherwise crash createApp() at boot. Token-less servers
+  // simply don't mount the route, since it can't publish anyway.
   const regCfg = registryConfigFromEnv();
-  if (aggDb && webOrigins.length > 0 && regCfg) {
+  if (aggDb && webOrigins.length > 0 && regCfg?.token) {
     installRegistryUploadPublish(server.expressApp as never, {
       db: aggDb, webOrigins,
       source: githubRegistrySource(regCfg), publisher: githubRegistryPublisher(regCfg),
