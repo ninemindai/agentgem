@@ -5,7 +5,7 @@ import type { FileTree, SkippedArtifact } from "@agentgem/model";
 import type {
   Gem, GemArtifact, ArtifactType,
   SkillArtifact, McpServerArtifact, HookArtifact, GemCheck,
-  ChannelArtifact, SecretRef,
+  ChannelArtifact, SecretRef, ReferenceArtifact,
 } from "@agentgem/model";
 import { safePathSegment } from "@agentgem/model";
 
@@ -66,7 +66,7 @@ export function verifyLock(files: FileTree, lock: GemLock): VerifyResult {
   return { ok, mismatches, missing, extra };
 }
 
-interface ManifestArtifactEntry { type: ArtifactType; name: string; path: string; description?: string; source?: string }
+interface ManifestArtifactEntry { type: ArtifactType | "reference"; name: string; path: string; description?: string; source?: string }
 interface ManifestCheckEntry { name: string; path: string }
 interface GemManifest {
   formatVersion: number;
@@ -118,6 +118,10 @@ export function writeGemArchive(gem: Gem, opts: { version?: string; dependencies
       const body: Record<string, unknown> = { platform: a.platform, secretRefs: a.secretRefs };
       if (a.description !== undefined) body.description = a.description;
       if (place(path, JSON.stringify(body, null, 2), a.name, "channel")) artifacts.push({ type: "channel", name: a.name, path });
+    } else if (a.type === "reference") {
+      const path = `refs/${withExt(seg, ".json")}`;
+      const bodyStr = JSON.stringify({ refKind: a.refKind, ref: a.ref }, null, 2);
+      if (place(path, bodyStr, a.name, "skill")) artifacts.push({ type: "reference", name: a.name, path } as ManifestArtifactEntry);
     } else {
       const path = `hooks/${withExt(seg, ".json")}`;
       const body: Record<string, unknown> = { event: a.event, config: a.config };
@@ -194,6 +198,10 @@ export function readGemArchive(files: FileTree): Gem {
       const a: ChannelArtifact = { type: "channel", name: e.name, platform: o.platform, secretRefs: o.secretRefs };
       if (o.description !== undefined) a.description = o.description;
       return a;
+    }
+    if (e.type === "reference") {
+      const o = JSON.parse(body(e.path)) as { refKind: ReferenceArtifact["refKind"]; ref: ReferenceArtifact["ref"] };
+      return { type: "reference", name: e.name, refKind: o.refKind, ref: o.ref };
     }
     if (e.type !== "hook") throw new Error(`unknown artifact type '${e.type}' in manifest`);
     const o = JSON.parse(body(e.path)) as { event: string; matcher?: string; config: Record<string, unknown>; source?: string; secretRefs?: HookArtifact["secretRefs"] };

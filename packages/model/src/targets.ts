@@ -7,8 +7,9 @@
 // runner rebinds real secrets from gem.requiredSecrets at install.
 import type {
   Gem, ArtifactType, SecretRequirement, SecretRef, ChannelArtifact,
-  SkillArtifact, McpServerArtifact, InstructionsArtifact, HookArtifact,
+  SkillArtifact, McpServerArtifact, InstructionsArtifact, HookArtifact, ReferenceArtifact,
 } from "./types.js";
+import { resolveArtifactRef } from "./artifactRef.js";
 import { channelScaffold } from "./channels.js";
 import { tomlMcpServers } from "./toml.js";
 import { stdioProxyRunner, PROXY_BASE_PORT, PROXY_HOST } from "./mcpProxy.js";
@@ -919,6 +920,17 @@ export function materialize(gem: Gem, target: TargetId, opts: MaterializeOpts = 
       skipped.push(...result.skipped);
     }
     else skipAll(channels, "channel");
+  }
+
+  const refs = gem.artifacts.filter((a): a is ReferenceArtifact => a.type === "reference");
+  for (const r of refs) {
+    const res = resolveArtifactRef(r);
+    if (!res.ok) { skipped.push({ artifact: r.name, type: r.refKind, reason: res.reason }); continue; }
+    if (res.artifact.type === "mcp_server" && spec.mcp) {
+      const out = spec.mcp([res.artifact]); merge(out.files, r.name, "mcp_server"); skipped.push(...out.skipped);
+    } else {
+      skipped.push({ artifact: r.name, type: r.refKind, reason: `reference of kind ${r.refKind} unsupported on ${target}` });
+    }
   }
 
   if (spec.compose) {

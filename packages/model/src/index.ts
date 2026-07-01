@@ -3,6 +3,7 @@
 // @agentgem/model — the gem format + materialize-target codegen foundation.
 // Barrel re-export; consumers import named symbols from "@agentgem/model".
 export * from "./types.js";
+export * from "./artifactRef.js";
 export * from "./channels.js";
 export * from "./toml.js";
 export * from "./canonicalize.js";

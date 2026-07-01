@@ -56,12 +56,26 @@ export const ChannelArtifactSchema = z.object({
 // path while present on another. Each platform entry becomes a channel artifact via buildGem.
 export const ChannelDeclSchema = z.array(z.object({ platform: ChannelPlatformSchema, name: z.string().optional() })).optional();
 
+export const ArtifactRefSchema = z.object({
+  kind: z.enum(["package", "gem"]),
+  id: z.string(),
+  digest: z.string().optional(),
+});
+
+export const ReferenceArtifactSchema = z.object({
+  type: z.literal("reference"),
+  name: z.string(),
+  refKind: z.enum(["skill", "mcp_server", "instructions", "hook", "channel"]),
+  ref: ArtifactRefSchema,
+});
+
 export const GemArtifactSchema = z.discriminatedUnion("type", [
   SkillArtifactSchema,
   McpServerArtifactSchema,
   InstructionsArtifactSchema,
   HookArtifactSchema,
   ChannelArtifactSchema,
+  ReferenceArtifactSchema,
 ]);
 
 export const SecretRequirementSchema = z.object({
