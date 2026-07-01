@@ -6,6 +6,7 @@ import { kindLabel } from "../data";
 import { StarButton } from "../StarButton";
 import { CutBadge } from "../CutBadge";
 import { cutMeta } from "../gems/cuts";
+import { StoneRating } from "../StoneRating";
 import type { StarsCtx } from "../Router";
 import type { StarState } from "../stars";
 
@@ -61,6 +62,7 @@ export function Gems({ api, stars }: { api: ReturnType<typeof makeApi>; stars: S
               <span className="ex-gem-head">
                 <span className="ex-gem-key">{g.key}</span>
                 <CutBadge cut={g.cut} />
+                <StoneRating cut={g.cut} grade={g.grade} stars={starState.counts[g.key] ?? 0} />
                 <span className="ex-gem-kinds">{g.artifactKinds.map((k) => <span key={k} className="ex-chip">{kindLabel(k)}</span>)}</span>
               </span>
               <span className="ex-gem-desc">{g.description}</span>
