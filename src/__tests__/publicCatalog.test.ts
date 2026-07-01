@@ -15,8 +15,8 @@ const index = {
 describe("mapIndexToGems", () => {
   it("flattens index items to RegistryGem (version = latest, discovery spread, no ingredients field)", () => {
     const gems = mapIndexToGems(index);
-    expect(gems).toContainEqual({ key: "@superpowers/brainstorming-kit", version: "1.2.0", author: "superpowers", description: "plan stuff", tags: ["planning"], artifactKinds: ["skill"] });
-    expect(gems.find((g) => g.key === "@x/bare")).toEqual({ key: "@x/bare", version: "0.1.0", author: undefined, description: undefined, tags: undefined, artifactKinds: undefined });
+    expect(gems).toContainEqual({ key: "@superpowers/brainstorming-kit", version: "1.2.0", author: "superpowers", description: "plan stuff", tags: ["planning"], artifactKinds: ["skill"], installable: true });
+    expect(gems.find((g) => g.key === "@x/bare")).toEqual({ key: "@x/bare", version: "0.1.0", author: undefined, description: undefined, tags: undefined, artifactKinds: undefined, installable: true });
     expect(gems.some((g) => "ingredients" in g)).toBe(false);
   });
 
