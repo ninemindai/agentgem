@@ -83,6 +83,16 @@ describe("disableArtifacts / enableArtifacts — skills", () => {
     expect(res[0].ok).toBe(false);
     expect(res[1].ok).toBe(true);
   });
+
+  it("rejects name '.' without moving the skills root", () => {
+    seedSkill("standalone", "demo");
+    const [r] = disableArtifacts([{ type: "skill", name: ".", source: "standalone" }], opts);
+    expect(r.ok).toBe(false);
+    expect(r.message).toMatch(/invalid/i);
+    expect(existsSync(join(rootFor("standalone"), "demo"))).toBe(true); // skills root untouched
+    expect(existsSync(archiveSkill("standalone", "."))).toBe(false);
+    expect(existsSync(join(home, ".agentgem", "disabled", "skills", "standalone"))).toBe(false);
+  });
 });
 
 describe("plugin disable/enable", () => {
@@ -150,5 +160,24 @@ describe("mcp disable/enable", () => {
     const [r] = disableArtifacts([{ type: "mcp", name: "ghost", source: "user" }], opts);
     expect(r.ok).toBe(false);
     expect(r.message).toMatch(/not found/i);
+  });
+
+  it("refuses to disable when a stash already exists (anti-clobber)", () => {
+    writeFileSync(settingsFile(), JSON.stringify({ mcpServers: { gh: { command: "npx", args: ["gh-mcp"] } } }));
+    mkdirSync(join(home, ".agentgem", "disabled", "mcp"), { recursive: true });
+    writeFileSync(stashFile("gh"), "{}");
+    const [r] = disableArtifacts([{ type: "mcp", name: "gh", source: "user" }], opts);
+    expect(r.ok).toBe(false);
+    expect(r.message).toMatch(/already stashed/i);
+    expect(readSettings().mcpServers.gh).toBeDefined(); // not deleted
+  });
+
+  it("refuses to enable when the server is already present (anti-clobber)", () => {
+    writeFileSync(settingsFile(), JSON.stringify({ mcpServers: { gh: { command: "npx", args: ["gh-mcp"] } } }));
+    mkdirSync(join(home, ".agentgem", "disabled", "mcp"), { recursive: true });
+    writeFileSync(stashFile("gh"), JSON.stringify({ name: "gh", config: { command: "x" } }));
+    const [r] = enableArtifacts([{ type: "mcp", name: "gh", source: "user" }], opts);
+    expect(r.ok).toBe(false);
+    expect(r.message).toMatch(/already present/i);
   });
 });

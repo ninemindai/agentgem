@@ -22,7 +22,8 @@ const NAME_RE = /^[\w.@-]+$/;       // skill/mcp/plugin identifiers
 const SOURCE_RE = /^[\w.:@/-]+$/;   // "standalone", "user", "plugin:brooks-lint"
 
 function invalid(name: string, source: string): boolean {
-  return !NAME_RE.test(name) || !SOURCE_RE.test(source) || name.includes("..") || source.includes("..");
+  return !NAME_RE.test(name) || !SOURCE_RE.test(source)
+    || name === "." || name === ".." || name.includes("..") || source.includes("..");
 }
 function readJson(path: string): any {
   try { return JSON.parse(readFileSync(path, "utf8")); } catch { return undefined; }
@@ -192,7 +193,9 @@ export function listDisabled(opts: DisableOptions = {}): DisabledArtifact[] {
   for (const source of SKILL_SOURCES) {
     const dir = join(skillsRoot, source);
     if (!existsSync(dir)) continue;
-    for (const name of readdirSync(dir)) out.push({ type: "skill", name, source });
+    let names: string[] = [];
+    try { names = readdirSync(dir); } catch { continue; }
+    for (const name of names) out.push({ type: "skill", name, source });
   }
   const settings = readJson(settingsPath(opts));
   const enabled = settings && typeof settings === "object" && settings.enabledPlugins && typeof settings.enabledPlugins === "object"
@@ -205,7 +208,9 @@ export function listDisabled(opts: DisableOptions = {}): DisabledArtifact[] {
   for (const name of disabledMcpjson) out.push({ type: "mcp", name, source: "user" });
   const mcpStash = join(archiveRoot(opts), "mcp");
   if (existsSync(mcpStash)) {
-    for (const f of readdirSync(mcpStash)) {
+    let stashFiles: string[] = [];
+    try { stashFiles = readdirSync(mcpStash); } catch { stashFiles = []; }
+    for (const f of stashFiles) {
       if (f.endsWith(".json")) out.push({ type: "mcp", name: f.replace(/\.json$/, ""), source: "user" });
     }
   }
