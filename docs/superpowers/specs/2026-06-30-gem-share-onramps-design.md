@@ -80,13 +80,15 @@ lesson is saved (save writes it to inventory, which the gem build resolves):
 - `setPendingContribution({ keys: ["instructions::" + lesson.name], skillCount: 0, lessonCount: 1, name: lesson.name })`
 - `window.location.hash = "#/curate"`
 
-### Known v1 limitation (documented, not a regression)
+### Per-instruction granularity (follow-up — now implemented)
 
-`buildSelection` collapses instructions to `includeInstructions: true` (all-or-nothing) —
-so a lesson gem also carries the user's other instructions. This is **pre-existing**
-behavior shared with the shipped Insights "Contribute" flow; the user reviews and
-refines the selection in Curate before publishing. Per-instruction granularity is a
-separate follow-up (would touch `GemSelectionSchema` + `buildGem`).
+Originally `buildSelection` collapsed instructions to `includeInstructions: true`
+(all-or-nothing), so a lesson gem also carried every other instruction. Resolved:
+`GemSelection` gained an `instructions?: string[]` field (name-resolved in `buildGem`
+like skills/hooks, throwing on an unknown name), `includeInstructions` is kept for
+back-compat, and `buildSelection` now emits the named subset. A single lesson's
+"Share" therefore bundles only that lesson; the Insights "Contribute" flow likewise
+now carries just its playbook lessons, not all CLAUDE.md instructions.
 
 ## Testing
 

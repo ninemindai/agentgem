@@ -176,12 +176,12 @@ describe("Curate", () => {
     // The mount effect fires on render: 1 skill + 1 instruction = 2 selected.
     await waitFor(() => expect(screen.getByText("2 selected")).toBeTruthy());
 
-    // Save to workspace and confirm the selection body carries includeInstructions.
+    // Save to workspace and confirm the selection body carries the named lesson.
     fireEvent.change(screen.getByLabelText("workspace name"), { target: { value: "my-gem" } });
     fireEvent.click(screen.getByText("Save workspace"));
     await waitFor(() => expect(screen.getByText(/saved workspace/i)).toBeTruthy());
 
-    expect(workspaceBodies[0]).toMatchObject({ selection: { skills: ["ship-loop"], includeInstructions: true } });
+    expect(workspaceBodies[0]).toMatchObject({ selection: { skills: ["ship-loop"], instructions: ["lesson-one"] } });
   });
 
   it("a ready contribution (Share my setup) pre-selects its keys and opens the Publish form", async () => {

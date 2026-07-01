@@ -24,9 +24,9 @@ describe("buildSelection", () => {
     expect(sel).toEqual({ skills: ["pdf"], mcpServers: ["github"] });
   });
 
-  it("maps any selected instruction to includeInstructions:true", () => {
-    const sel = buildSelection(new Set([selKey("instructions", "CLAUDE.md")]));
-    expect(sel).toEqual({ includeInstructions: true });
+  it("maps selected instructions to a named subset (not all-or-nothing)", () => {
+    const sel = buildSelection(new Set([selKey("instructions", "CLAUDE.md"), selKey("instructions", "a-lesson")]));
+    expect(sel).toEqual({ instructions: ["CLAUDE.md", "a-lesson"] });
   });
 
   it("returns an empty object for no selection", () => {
