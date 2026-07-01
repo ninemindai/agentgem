@@ -13,3 +13,4 @@ export * from "./identity.js";
 export * from "./inputError.js";
 export * from "./resolveDir.js";
 export * from "./gemTypes.js";
+export * from "./gemGrade.js";
