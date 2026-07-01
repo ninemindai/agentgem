@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 // src/dream/__tests__/store.test.ts
 import { describe, it, expect, beforeEach } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readQueue, enqueueNew, setStatus, readDiary, appendDiary, promotedCount } from "../store.js";
@@ -51,5 +51,12 @@ describe("dream store", () => {
 
   it("readQueue returns [] when nothing written", () => {
     expect(readQueue(base)).toEqual([]);
+  });
+
+  it("never throws when the sidecar dir can't be created", () => {
+    // Put a FILE where the `.agentgem` dir should be, so mkdir of `.agentgem/dream` fails (ENOTDIR).
+    writeFileSync(join(base, ".agentgem"), "x", "utf8");
+    expect(() => enqueueNew([entry()], base)).not.toThrow();
+    expect(readQueue(base)).toEqual([]); // reads stay safe too
   });
 });
