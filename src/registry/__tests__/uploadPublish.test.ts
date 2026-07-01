@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { makeTestDb, upsertAccount, createSession, generateSessionToken } from "@agentgem/aggregator";
+import { makeTestDb, upsertAccount, createSession, generateSessionToken, setAccountScopes } from "@agentgem/aggregator";
 import { exportGem, type RegistryPublisher, type RegistrySource, type RegistryIndex } from "@agentgem/distribute";
 import { uploadPublishHandler } from "../uploadPublish.js";
 import { SESSION_COOKIE } from "../../auth/cookie.js";
@@ -20,7 +20,11 @@ const mkRes = () => { const r: any = { _s: 200, _h: {}, _b: undefined };
   r.json=(b:unknown)=>{r._b=b;return r;}; r.send=(b:unknown)=>{r._b=b;return r;}; return r; };
 const mkReq = (over: any = {}) => ({ method:"POST", path:"/api/registry/upload-publish", headers:{}, body:{}, ...over });
 const deps = (db: any, publisher: RegistryPublisher) => ({ db, webOrigins:["https://app.agentgem.ai"], source: emptySource(), publisher, gemTypes: defaultGemTypeRegistry });
-async function session(db: any, login: string) { const a = await upsertAccount(db, { provider:"github", accountId:"1", login }); const { token } = generateSessionToken(); await createSession(db, a.id, token, 60_000); return token; }
+async function session(db: any, login: string, scopes: string[] = [login]) {
+  const a = await upsertAccount(db, { provider:"github", accountId:"1", login });
+  await setAccountScopes(db, a.id, scopes);
+  const { token } = generateSessionToken(); await createSession(db, a.id, token, 60_000); return token;
+}
 
 describe("upload-publish", () => {
   it("401s without a session", async () => {
@@ -28,7 +32,7 @@ describe("upload-publish", () => {
     await uploadPublishHandler(deps(db, publisher))(mkReq({ body: { scope:"x", version:"1.0.0", bytesBase64: gemBase64() } }) as any, res as any);
     expect(res._s).toBe(401);
   });
-  it("403s when scope !== login (the safety rail)", async () => {
+  it("403s when the account does not own the scope", async () => {
     const db = await makeTestDb(); const token = await session(db, "alice"); const { publisher } = capturing(); const res = mkRes();
     await uploadPublishHandler(deps(db, publisher))(mkReq({ headers:{ cookie:`${SESSION_COOKIE}=${token}`, origin:"https://app.agentgem.ai" }, body:{ scope:"bob", version:"1.0.0", bytesBase64: gemBase64() } }) as any, res as any);
     expect(res._s).toBe(403);
@@ -42,6 +46,14 @@ describe("upload-publish", () => {
     expect(idx.items["@alice/test-gem"].discovery.publishedBy).toBe("alice"); // VERIFIED attribution
     expect(res._h["access-control-allow-origin"]).toBe("https://app.agentgem.ai");
     expect(res._h["access-control-allow-credentials"]).toBe("true");
+  });
+  it("publishes to an owned org scope (captured at login)", async () => {
+    const db = await makeTestDb(); const token = await session(db, "alice", ["alice", "ninemind"]); const { publisher, commits } = capturing(); const res = mkRes();
+    await uploadPublishHandler(deps(db, publisher))(mkReq({ headers:{ cookie:`${SESSION_COOKIE}=${token}`, origin:"https://app.agentgem.ai" }, body:{ scope:"ninemind", version:"1.0.0", bytesBase64: gemBase64() } }) as any, res as any);
+    expect(res._s).toBe(200);
+    expect((res._b as any).ref).toBe("@ninemind/test-gem");
+    const idx = JSON.parse((commits[0].files as any)["registry.json"]);
+    expect(idx.items["@ninemind/test-gem"].discovery.publishedBy).toBe("alice"); // attribution stays the verified login
   });
   it("400s on tampered bytes (gem.lock fails)", async () => {
     const db = await makeTestDb(); const token = await session(db, "alice"); const { publisher } = capturing(); const res = mkRes();

@@ -7,7 +7,7 @@
 // handle). Raw-express + credentialed CORS + originGuard-exempt, mirroring auth/stars.
 // The richer scope-ownership model (org/claimed) is #4b. importGem rejects tampering.
 import type { AppDb } from "@agentgem/aggregator";
-import { resolveSession } from "@agentgem/aggregator";
+import { resolveSession, accountOwnsScope } from "@agentgem/aggregator";
 import { importGem, publishGem, type RegistrySource, type RegistryPublisher } from "@agentgem/distribute";
 import { parseCookies, SESSION_COOKIE } from "../auth/cookie.js";
 import { resolvePublishType, type GemTypeRegistry } from "../gem/gemTypeRegistry.js";
@@ -41,8 +41,10 @@ export function uploadPublishHandler(deps: UploadPublishDeps) {
     const scope = typeof body.scope === "string" ? body.scope.trim() : "";
     const version = typeof body.version === "string" ? body.version.trim() : "";
     if (!scope || !version) { res.status(400).json({ error: "scope and version are required" }); return; }
-    // SAFETY RAIL: you may only publish under your own login (the #4b model is deferred).
-    if (scope !== who.login) { res.status(403).json({ error: `you can only publish under your own login (@${who.login})` }); return; }
+    // #4b: enforce account-scope ownership (login + public GitHub org memberships captured at login).
+    if (!(await accountOwnsScope(deps.db, who.accountId, scope))) {
+      res.status(403).json({ error: `you don't own the scope @${scope}` }); return;
+    }
     if (typeof body.bytesBase64 !== "string") { res.status(400).json({ error: "bytesBase64 is required" }); return; }
 
     let gem;
