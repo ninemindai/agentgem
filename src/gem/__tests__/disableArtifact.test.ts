@@ -84,3 +84,30 @@ describe("disableArtifacts / enableArtifacts — skills", () => {
     expect(res[1].ok).toBe(true);
   });
 });
+
+describe("plugin disable/enable", () => {
+  const settingsFile = () => join(opts.claudeDir, "settings.json");
+  const readSettings = () => JSON.parse(readFileSync(settingsFile(), "utf8"));
+
+  beforeEach(() => {
+    mkdirSync(opts.claudeDir, { recursive: true });
+    writeFileSync(settingsFile(), JSON.stringify({ enabledPlugins: { "brooks-lint": true }, someOther: 1 }));
+  });
+
+  it("disables a plugin-sourced row by flipping the flag, preserving other keys", () => {
+    const [r] = disableArtifacts([{ type: "skill", name: "brooks-review", source: "plugin:brooks-lint" }], opts);
+    expect(r.ok).toBe(true);
+    const s = readSettings();
+    expect(s.enabledPlugins["brooks-lint"]).toBe(false);
+    expect(s.someOther).toBe(1); // untouched
+  });
+
+  it("lists a disabled plugin and re-enables it", () => {
+    disableArtifacts([{ type: "skill", name: "brooks-review", source: "plugin:brooks-lint" }], opts);
+    const disabled = listDisabled(opts);
+    expect(disabled).toContainEqual({ type: "plugin", name: "brooks-lint", source: "plugin:brooks-lint" });
+    const [e] = enableArtifacts([{ type: "plugin", name: "brooks-lint", source: "plugin:brooks-lint" }], opts);
+    expect(e.ok).toBe(true);
+    expect(readSettings().enabledPlugins["brooks-lint"]).toBe(true);
+  });
+});

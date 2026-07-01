@@ -106,12 +106,27 @@ function enableSkill(it: DisableItem, opts: DisableOptions): DisableResult {
   return { ...base, ok: true, message: `re-enabled (restored to ${to})` };
 }
 
-// ── plugin branch: Task 3 replaces these stubs ──
-function disablePlugin(it: DisableItem, _opts: DisableOptions): DisableResult {
-  return { type: it.type, name: it.name, ok: false, message: "plugin disable not implemented" };
+// ── plugins: reversible via settings.json enabledPlugins flag ──
+function disablePlugin(it: DisableItem, opts: DisableOptions): DisableResult {
+  const base = { type: it.type, name: it.name };
+  const key = it.source.slice("plugin:".length);
+  const p = settingsPath(opts);
+  const settings = readJson(p);
+  const obj = settings && typeof settings === "object" ? settings : {};
+  obj.enabledPlugins = { ...(obj.enabledPlugins ?? {}), [key]: false };
+  writeJson(p, obj);
+  return { ...base, ok: true, message: `plugin ${key} disabled` };
 }
-function enablePlugin(it: DisableItem, _opts: DisableOptions): DisableResult {
-  return { type: it.type, name: it.name, ok: false, message: "plugin enable not implemented" };
+function enablePlugin(it: DisableItem, opts: DisableOptions): DisableResult {
+  const base = { type: it.type, name: it.name };
+  // name carries the plugin key for a "plugin"-typed row; source carries it otherwise.
+  const key = it.source.startsWith("plugin:") ? it.source.slice("plugin:".length) : it.name;
+  const p = settingsPath(opts);
+  const settings = readJson(p);
+  const obj = settings && typeof settings === "object" ? settings : {};
+  obj.enabledPlugins = { ...(obj.enabledPlugins ?? {}), [key]: true };
+  writeJson(p, obj);
+  return { ...base, ok: true, message: `plugin ${key} re-enabled` };
 }
 // ── mcp branch: Task 4 replaces these stubs ──
 function disableMcp(it: DisableItem, _opts: DisableOptions): DisableResult {
@@ -129,6 +144,12 @@ export function listDisabled(opts: DisableOptions = {}): DisabledArtifact[] {
     const dir = join(skillsRoot, source);
     if (!existsSync(dir)) continue;
     for (const name of readdirSync(dir)) out.push({ type: "skill", name, source });
+  }
+  const settings = readJson(settingsPath(opts));
+  const enabled = settings && typeof settings === "object" && settings.enabledPlugins && typeof settings.enabledPlugins === "object"
+    ? settings.enabledPlugins as Record<string, unknown> : {};
+  for (const [key, v] of Object.entries(enabled)) {
+    if (v === false) out.push({ type: "plugin", name: key, source: `plugin:${key}` });
   }
   return out;
 }
