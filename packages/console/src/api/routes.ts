@@ -523,10 +523,18 @@ const OptimizeInstructionSchema = z.object({
   lines: z.number(),
   flags: z.array(z.enum(["oversized", "very-long", "duplicate-lines"])),
 });
+const DisabledArtifactSchema = z.object({
+  type: z.enum(["skill", "mcp", "plugin"]),
+  name: z.string(),
+  source: z.string(),
+});
+export type DisabledArtifact = z.infer<typeof DisabledArtifactSchema>;
+
 const OptimizePayloadSchema = z.object({
   range: z.enum(["today", "7d", "30d", "all"]),
   artifacts: z.array(OptimizeArtifactSchema),
   instructions: z.array(OptimizeInstructionSchema),
+  disabled: z.array(DisabledArtifactSchema),
 });
 export type OptimizeArtifact = z.infer<typeof OptimizeArtifactSchema>;
 export type OptimizeInstruction = z.infer<typeof OptimizeInstructionSchema>;
@@ -536,6 +544,29 @@ export type OptimizeRange = OptimizePayload["range"];
 export const optimizeRoute = defineRoute("GET", "/api/optimize", {
   query: z.object({ range: z.enum(["today", "7d", "30d", "all"]).optional(), refresh: z.boolean().optional() }),
   response: OptimizePayloadSchema,
+});
+
+const DisableItemSchema = z.object({
+  type: z.enum(["skill", "mcp", "plugin"]),
+  name: z.string(),
+  source: z.string(),
+});
+const DisableResultSchema = z.object({
+  type: z.enum(["skill", "mcp", "plugin"]),
+  name: z.string(),
+  ok: z.boolean(),
+  message: z.string(),
+});
+export type DisableItem = z.infer<typeof DisableItemSchema>;
+export type DisableResult = z.infer<typeof DisableResultSchema>;
+
+export const disableArtifactsRoute = defineRoute("POST", "/api/optimize/disable", {
+  body: z.object({ artifacts: z.array(DisableItemSchema) }),
+  response: z.object({ results: z.array(DisableResultSchema) }),
+});
+export const enableArtifactsRoute = defineRoute("POST", "/api/optimize/enable", {
+  body: z.object({ artifacts: z.array(DisableItemSchema) }),
+  response: z.object({ results: z.array(DisableResultSchema) }),
 });
 
 // ── Optimize ▸ Discover (Plan 2: registry recommendations) ──

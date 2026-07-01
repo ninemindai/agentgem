@@ -66,6 +66,20 @@ const TranscriptViewSchema = z.object({
 const InspectDistillBodySchema = z.object({ id: z.string(), agent: z.enum(["claude", "codex"]) });
 const InspectDistillResponseSchema = z.object({ distilled: z.array(DistilledSkillSchema), lessons: z.array(DistilledLessonSchema), degraded: z.boolean() });
 const OptimizeQuerySchema = z.object({ range: z.enum(["today", "7d", "30d", "all"]).optional(), refresh: z.coerce.boolean().optional() });
+const DisableItemSchema = z.object({
+  type: z.enum(["skill", "mcp", "plugin"]),
+  name: z.string(),
+  source: z.string(),
+});
+const DisableBodySchema = z.object({ artifacts: z.array(DisableItemSchema) });
+const DisableResponseSchema = z.object({
+  results: z.array(z.object({
+    type: z.enum(["skill", "mcp", "plugin"]),
+    name: z.string(),
+    ok: z.boolean(),
+    message: z.string(),
+  })),
+});
 const OptimizeArtifactSchema = z.object({
   name: z.string(), type: z.enum(["skill", "mcp"]), source: z.string(),
   contextTokens: z.number(), uses: z.number(), lastUsedMs: z.number().nullable(),
@@ -79,6 +93,11 @@ export const OptimizePayloadSchema = z.object({
   range: z.enum(["today", "7d", "30d", "all"]),
   artifacts: z.array(OptimizeArtifactSchema),
   instructions: z.array(OptimizeInstructionSchema),
+  disabled: z.array(z.object({
+    type: z.enum(["skill", "mcp", "plugin"]),
+    name: z.string(),
+    source: z.string(),
+  })),
 });
 const DiscoverCandidateSchema = z.object({
   name: z.string(),
@@ -125,7 +144,7 @@ const ScorecardSchema = z.object({
   generatedAtMs: z.number(),
   degraded: z.boolean(),
 }) satisfies z.ZodType<Scorecard>;
-import { introspectConfig, introspectProject } from "@agentgem/capture";
+import { introspectConfig, introspectProject, disableArtifacts, enableArtifacts, listDisabled } from "@agentgem/capture";
 import { buildGem } from "@agentgem/build";
 import { InvalidInputError, scorecardFloor } from "@agentgem/model";
 import { scaffoldChecks } from "@agentgem/build";
@@ -384,7 +403,8 @@ export class GemController {
     const refresh = input.query.refresh ?? false;
     const inv = introspectConfig();
     const usage = await scanArtifactUsageCached(inv, now, undefined, refresh);
-    return buildOptimizePayload(inv, usage, range, now);
+    const payload = buildOptimizePayload(inv, usage, range, now);
+    return { ...payload, disabled: listDisabled() };
   }
 
   @get("/optimize/discover", { response: DiscoverPayloadSchema })
@@ -406,6 +426,18 @@ export class GemController {
   @post("/optimize/discover/install", { body: InstallSkillBodySchema, response: InstallSkillResultSchema })
   async optimizeDiscoverInstall(input: { body: z.infer<typeof InstallSkillBodySchema> }): Promise<z.infer<typeof InstallSkillResultSchema>> {
     return installSkill(input.body.source, input.body.skillId);
+  }
+
+  // Reversible deactivation of prune rows. originGuard-protected like every /api route.
+  // Never throws: disableArtifacts/enableArtifacts map each item to { ok, message }.
+  @post("/optimize/disable", { body: DisableBodySchema, response: DisableResponseSchema })
+  async optimizeDisable(input: { body: z.infer<typeof DisableBodySchema> }): Promise<z.infer<typeof DisableResponseSchema>> {
+    return { results: disableArtifacts(input.body.artifacts) };
+  }
+
+  @post("/optimize/enable", { body: DisableBodySchema, response: DisableResponseSchema })
+  async optimizeEnable(input: { body: z.infer<typeof DisableBodySchema> }): Promise<z.infer<typeof DisableResponseSchema>> {
+    return { results: enableArtifacts(input.body.artifacts) };
   }
 
   @get("/scorecard", { query: DirQuerySchema, response: ScorecardSchema })
