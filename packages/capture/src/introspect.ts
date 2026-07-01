@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: MIT
 // src/gem/introspect.ts
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { redactMcpConfig } from "@agentgem/base";
-import { parseTomlMcpServers } from "@agentgem/model";
+import { parseTomlMcpServers, agentgemHome } from "@agentgem/model";
 import type {
   ConfigInventory,
   ProjectInventory,
@@ -214,6 +214,24 @@ export function introspectConfig(opts: IntrospectOptions = {}): ConfigInventory 
       instructions.push({ type: "instructions", name: "SOUL.md", content: readFileSync(soul, "utf8") });
     } catch {
       // skip unreadable SOUL.md
+    }
+  }
+
+  // Distilled-draft skills from <distilledRoot>/<name>/SKILL.md and lessons
+  // from <distilledRoot>/lessons/<name>.md — added last so they don't shadow
+  // an already-installed (standalone) skill of the same name via dedupByName.
+  const distilledBase = opts.claudeDir ? dirname(opts.claudeDir) : agentgemHome();
+  const distilledRoot = join(distilledBase, ".agentgem", "distilled");
+  skillList.push(...readSkillsDir(distilledRoot, "distilled-draft"));
+  const lessonsDir = join(distilledRoot, "lessons");
+  if (existsSync(lessonsDir)) {
+    let lessonFiles: string[] = [];
+    try { lessonFiles = readdirSync(lessonsDir); } catch { /* skip unreadable */ }
+    for (const file of lessonFiles) {
+      if (!file.endsWith(".md")) continue;
+      try {
+        instructions.push({ type: "instructions", name: file.replace(/\.md$/, ""), content: readFileSync(join(lessonsDir, file), "utf8") });
+      } catch { /* skip unreadable */ }
     }
   }
 

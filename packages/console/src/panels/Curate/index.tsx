@@ -4,10 +4,11 @@ import { inventoryRoute, usageRoute, createWorkspaceRoute, scaffoldChecksRoute, 
 import { groupInventory, mergeUsage, applyView, sortGroupItems, relativeTime, formatSource, DEFAULT_VIEW, type LedgerGroup, type SortKey, type SortDir } from "./data.js";
 import { selKey, visibleKeys, buildSelection } from "./selection.js";
 import { useActiveGem, setKeys, toggleKey as toggleKeyStore, clearKeys, setName as setNameStore } from "../../activeGem.js";
-import { consumePendingAnalyze } from "../../pendingAnalyze.js";
+import { consumePendingAnalyze, consumePendingPlaybook } from "../../pendingAnalyze.js";
 import { Analyze } from "./Analyze.js";
 import { Checks } from "./Checks.js";
 import { ContentView } from "./ContentView.js";
+import { PublishToExplore } from "./PublishToExplore.js";
 import { Loading } from "../../shell/Loading.js";
 
 export function Curate({ apiBase }: { apiBase: string }) {
@@ -23,9 +24,20 @@ export function Curate({ apiBase }: { apiBase: string }) {
   // Hand-off from the Insights panel: "Build a Gem from this project" lands here
   // on the Suggest tab with the project pre-targeted (consumed once).
   const [analyzeTarget, setAnalyzeTarget] = useState<string | null>(null);
+  // Hand-off from the Insights panel: a distilled playbook draft pre-populates
+  // the compose tab and shows the Publish to Explore form.
+  const [showPublish, setShowPublish] = useState(false);
+  const [publishCounts, setPublishCounts] = useState({ skills: 0, lessons: 0 });
   useEffect(() => {
     const pending = consumePendingAnalyze();
     if (pending) { setAnalyzeTarget(pending); setTab("suggest"); }
+    const playbook = consumePendingPlaybook();
+    if (playbook) {
+      setKeys(new Set(playbook.skills.map(k => selKey("skills", k))));
+      setTab("compose");
+      setShowPublish(true);
+      setPublishCounts({ skills: playbook.skills.length, lessons: playbook.lessons.length });
+    }
   }, []);
   const [suggested, setSuggested] = useState<GemCheck[] | null>(null);
   const [included, setIncluded] = useState<Set<string>>(new Set());
@@ -205,6 +217,15 @@ export function Curate({ apiBase }: { apiBase: string }) {
 
       {selected.size > 0 && (
         <Checks suggested={suggested} included={included} busy={checksBusy} error={checksError} onSuggest={suggestChecks} onToggle={toggleCheck} />
+      )}
+
+      {showPublish && (
+        <PublishToExplore
+          apiBase={apiBase}
+          selected={selected}
+          skillCount={publishCounts.skills}
+          lessonCount={publishCounts.lessons}
+        />
       )}
 
       {visible.length === 0 ? (
