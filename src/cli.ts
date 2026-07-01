@@ -34,7 +34,8 @@ Once running, open the printed URL (default http://127.0.0.1:4317/). Append
 Sharing a Gem (store-and-forward over NATS; set $NATS_URL, default nats://127.0.0.1:4222):
   agentgem send <file.gem>              Encrypt + stash; prints a one-time agentgem:// ticket
   agentgem receive <ticket> [out.gem]   Fetch, decrypt, verify; writes the .gem
-  agentgem bind                         Bind this machine's key to your GitHub account`;
+  agentgem bind                         Bind this machine's key to your GitHub account
+  agentgem warm --watch                 Background daemon: keep insights/scorecard caches warm on change`;
 
 async function main(argv: string[]): Promise<void> {
   const has = (...names: string[]) => names.some((n) => argv.includes(n));
@@ -60,6 +61,13 @@ async function main(argv: string[]): Promise<void> {
   if (argv[0] === "bind") {
     const { main: bindMain } = await import("./bind/cli.js");
     return bindMain(argv);
+  }
+
+  // `agentgem warm --watch` — Trigger C: the background warming daemon.
+  if (argv[0] === "warm") {
+    const { runWarmCommand } = await import("./warm/daemon.js");
+    runWarmCommand(argv.slice(1));
+    return;
   }
 
   const portArg = opt("-p", "--port");
