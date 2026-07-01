@@ -19,6 +19,22 @@ describe("mapIndexToGems", () => {
     expect(gems.find((g) => g.key === "@x/bare")).toEqual({ key: "@x/bare", version: "0.1.0", author: undefined, description: undefined, tags: undefined, artifactKinds: undefined });
     expect(gems.some((g) => "ingredients" in g)).toBe(false);
   });
+
+  it("maps discovery.grade to RegistryGem.grade; absent grade is undefined", () => {
+    const withGrade = {
+      formatVersion: 1,
+      items: {
+        "@test/graded": {
+          latest: "1.0.0", versions: {},
+          discovery: { grade: 3 },
+        },
+        "@test/ungraded": { latest: "1.0.0", versions: {} },
+      },
+    } as never;
+    const gems = mapIndexToGems(withGrade);
+    expect(gems.find((g) => g.key === "@test/graded")?.grade).toBe(3);
+    expect(gems.find((g) => g.key === "@test/ungraded")?.grade).toBeUndefined();
+  });
 });
 
 describe("createGemCache", () => {
