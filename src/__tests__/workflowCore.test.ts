@@ -4,7 +4,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { transcriptToken, writeAnalysisCache, claudeTranscriptsForCwd } from "@agentgem/insight";
+import { transcriptToken, writeAnalysisCache, claudeTranscriptsForCwd, recommendWorkflow, distillWorkflow } from "@agentgem/insight";
 import { computeWorkflowAnalysis } from "../workflowCore.js";
 
 const orig = process.env.AGENTGEM_HOME;
@@ -40,10 +40,8 @@ describe("computeWorkflowAnalysis", () => {
     mkdirSync(projDir, { recursive: true });
     writeFileSync(join(projDir, "t.jsonl"), JSON.stringify({ cwd: "/proj2" }) + "\n");
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const fakeRecommend = (async () => ({ analysis: { candidates: [], gaps: [] }, degraded: false })) as any;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const fakeDistill = (async () => ({ distilled: [], degraded: false })) as any;
+    const fakeRecommend: typeof recommendWorkflow = async () => ({ analysis: { candidates: [], gaps: [], distilled: [], reflections: [] }, degraded: false });
+    const fakeDistill: typeof distillWorkflow = async () => ({ distilled: [], degraded: false });
 
     const first = await computeWorkflowAnalysis("/proj2", { dir: claudeDir, recommend: fakeRecommend, distill: fakeDistill });
     expect(first.cached).toBe(false);
@@ -63,10 +61,8 @@ describe("computeWorkflowAnalysis", () => {
     mkdirSync(projDir, { recursive: true });
     writeFileSync(join(projDir, "t.jsonl"), JSON.stringify({ cwd: "/proj3" }) + "\n");
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const fakeRecommend = (async () => ({ analysis: { candidates: [], gaps: [] }, degraded: false })) as any;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const fakeDistill = (async () => ({ distilled: [], degraded: true })) as any;
+    const fakeRecommend: typeof recommendWorkflow = async () => ({ analysis: { candidates: [], gaps: [], distilled: [], reflections: [] }, degraded: false });
+    const fakeDistill: typeof distillWorkflow = async () => ({ distilled: [], degraded: true });
 
     const first = await computeWorkflowAnalysis("/proj3", { dir: claudeDir, recommend: fakeRecommend, distill: fakeDistill });
     expect(first.cached).toBe(false);

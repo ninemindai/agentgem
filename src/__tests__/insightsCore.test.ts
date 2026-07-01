@@ -4,7 +4,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { insightsToken, writeInsightsCache, claudeTranscriptsForCwd } from "@agentgem/insight";
+import { insightsToken, writeInsightsCache, claudeTranscriptsForCwd, judgeSessions, narrateInsights } from "@agentgem/insight";
 import { computeInsights } from "../insightsCore.js";
 
 const orig = { home: process.env.AGENTGEM_HOME };
@@ -44,10 +44,8 @@ describe("computeInsights", () => {
     mkdirSync(projDir, { recursive: true });
     writeFileSync(join(projDir, "t.jsonl"), JSON.stringify({ cwd: "/proj2" }) + "\n");
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const fakeJudge = (async () => ({ facets: [], degraded: false })) as any;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const fakeNarrate = (async () => ({ narrative: "ok", degraded: false })) as any;
+    const fakeJudge: typeof judgeSessions = async () => ({ facets: [], degraded: false });
+    const fakeNarrate: typeof narrateInsights = async () => ({ narrative: "ok", degraded: false });
 
     const first = await computeInsights("/proj2", { dir: claudeDir, judge: fakeJudge, narrate: fakeNarrate });
     expect(first.cached).toBe(false);
@@ -67,10 +65,8 @@ describe("computeInsights", () => {
     mkdirSync(projDir, { recursive: true });
     writeFileSync(join(projDir, "t.jsonl"), JSON.stringify({ cwd: "/proj3" }) + "\n");
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const fakeJudge = (async () => ({ facets: [], degraded: true })) as any;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const fakeNarrate = (async () => ({ narrative: "ok", degraded: false })) as any;
+    const fakeJudge: typeof judgeSessions = async () => ({ facets: [], degraded: true });
+    const fakeNarrate: typeof narrateInsights = async () => ({ narrative: "ok", degraded: false });
 
     const first = await computeInsights("/proj3", { dir: claudeDir, judge: fakeJudge, narrate: fakeNarrate });
     expect(first.cached).toBe(false);
