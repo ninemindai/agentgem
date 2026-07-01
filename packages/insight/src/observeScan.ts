@@ -10,7 +10,7 @@
 import { readdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join, basename } from "node:path";
-import { resolveDirs } from "@agentgem/model";
+import { BUILTIN_SOURCES, type SourceSpec } from "./sources.js";
 // The pure aggregation half (SessionStat + aggregateObserve + payload types) lives
 // in observeAggregate.ts so the browser can share it; re-export so existing
 // `@agentgem/insight` consumers of these names keep resolving.
@@ -108,19 +108,14 @@ export async function scanSessionsCached(nowMs: number, dirs?: { claudeDir?: str
 /** Test seam: drop the cache. */
 export function clearScanCache(): void { _cache = null; }
 
-export async function scanSessions(dirs?: { claudeDir?: string; codexDir?: string }): Promise<SessionStat[]> {
-  const resolved = resolveDirs();
-  const claudeDir = dirs?.claudeDir ?? resolved.claudeDir;
-  const codexDir = dirs?.codexDir ?? resolved.codexDir;
+export async function scanSessions(dirs?: { claudeDir?: string; codexDir?: string }, specs: SourceSpec[] = BUILTIN_SOURCES): Promise<SessionStat[]> {
+  // Preserve the legacy per-agent override: dirs.claudeDir feeds baseDir; dirs.codexDir
+  // (if given independently) overrides codex's own root instead of deriving from baseDir.
+  const env = { baseDir: dirs?.claudeDir, codexDir: dirs?.codexDir };
   const out: SessionStat[] = [];
-  for (const f of listFiles(join(claudeDir, "projects"), ".jsonl")) {
-    let text: string; try { text = await readFile(f, "utf8"); } catch { continue; }
-    const s = parseClaudeTranscript(text, f); if (s) out.push(s);
-  }
-  for (const f of listFiles(join(codexDir, "sessions"), ".jsonl")) {
-    if (!basename(f).startsWith("rollout-")) continue;   // skip history.jsonl etc.
-    let text: string; try { text = await readFile(f, "utf8"); } catch { continue; }
-    const s = parseCodexTranscript(text, f); if (s) out.push(s);
+  for (const spec of specs) {
+    if (!spec.scanSessions) continue;
+    try { out.push(...(await spec.scanSessions(spec.roots(env)))); } catch { /* a source never breaks the scan */ }
   }
   return out;
 }
