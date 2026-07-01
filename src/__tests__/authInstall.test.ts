@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
 import { makeTestDb } from "@agentgem/aggregator";
-import { resolveSession } from "@agentgem/aggregator";
+import { resolveSession, accountOwnsScope } from "@agentgem/aggregator";
 import { loginHandler, callbackHandler, meHandler, logoutHandler } from "../auth/install.js";
 import { SESSION_COOKIE } from "../auth/cookie.js";
 
@@ -24,7 +24,13 @@ function mockRes() {
 }
 const mockReq = (over: any = {}) => ({ method: "GET", path: "/", query: {}, headers: {}, get(n: string) { return (this.headers as any)[n.toLowerCase()]; }, ...over });
 
-const deps = (db: any) => ({ db, verifier: { verify: async () => ({ provider: "github", accountId: "42", login: "octocat" }) }, exchangeCode: async () => "gh-token", config: cfg });
+const deps = (db: any, over: Partial<{ fetchOrgs: (t: string) => Promise<string[]> }> = {}) => ({
+  db,
+  verifier: { verify: async () => ({ provider: "github", accountId: "42", login: "octocat" }) },
+  exchangeCode: async () => "gh-token",
+  fetchOrgs: over.fetchOrgs ?? (async () => []),
+  config: cfg,
+});
 
 describe("auth handlers", () => {
   it("login rejects an off-allowlist return and 302s to github for an allowed one", async () => {
@@ -120,6 +126,41 @@ describe("auth handlers", () => {
       expect(out._body).toEqual({ ok: true });
       expect(await resolveSession(db, token)).toBeNull();
       expect(out._headers["set-cookie"]).toContain("Max-Age=0");
+    }
+  });
+
+  it("callback captures login + org scopes into account_scopes", async () => {
+    { const db = await makeTestDb();
+      const d = deps(db, { fetchOrgs: async () => ["ninemind", "acme"] });
+      const login = mockRes();
+      await loginHandler(d)(mockReq({ query: { return: "https://app.agentgem.ai" } }) as any, login as any);
+      const state = new URL(login._redirect!).searchParams.get("state")!;
+      const cb = mockRes();
+      await callbackHandler(d)(mockReq({ query: { code: "abc", state } }) as any, cb as any);
+      const token = (cb._headers["set-cookie"] as string).split(";")[0].split("=")[1];
+      const who = await resolveSession(db, token);
+      expect(who).not.toBeNull();
+      expect(await accountOwnsScope(db, who!.accountId, "octocat")).toBe(true);
+      expect(await accountOwnsScope(db, who!.accountId, "ninemind")).toBe(true);
+      expect(await accountOwnsScope(db, who!.accountId, "acme")).toBe(true);
+      expect(await accountOwnsScope(db, who!.accountId, "stranger")).toBe(false);
+    }
+  });
+
+  it("an org-fetch failure still yields a session owning at least the login scope", async () => {
+    { const db = await makeTestDb();
+      const d = deps(db, { fetchOrgs: async () => { throw new Error("orgs api down"); } });
+      const login = mockRes();
+      await loginHandler(d)(mockReq({ query: { return: "https://app.agentgem.ai" } }) as any, login as any);
+      const state = new URL(login._redirect!).searchParams.get("state")!;
+      const cb = mockRes();
+      await callbackHandler(d)(mockReq({ query: { code: "abc", state } }) as any, cb as any);
+      const setCookie = cb._headers["set-cookie"] as string;
+      expect(setCookie).toContain(`${SESSION_COOKIE}=`);       // login did NOT fail
+      const token = setCookie.split(";")[0].split("=")[1];
+      const who = await resolveSession(db, token);
+      expect(await accountOwnsScope(db, who!.accountId, "octocat")).toBe(true);
+      expect(await accountOwnsScope(db, who!.accountId, "ninemind")).toBe(false);
     }
   });
 });

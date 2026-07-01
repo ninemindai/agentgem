@@ -5,7 +5,7 @@
 // credentialed CORS for the AGENTGEM_WEB_ORIGINS allowlist. SameSite=Lax + the OAuth `state` are the
 // CSRF defenses (a cross-site POST carries no session cookie under Lax).
 import type { AppDb, AccountVerifier } from "@agentgem/aggregator";
-import { upsertAccount, createSession, deleteSession, resolveSession, generateSessionToken } from "@agentgem/aggregator";
+import { upsertAccount, createSession, deleteSession, resolveSession, generateSessionToken, setAccountScopes } from "@agentgem/aggregator";
 import { signState, verifyState } from "./state.js";
 import { SESSION_COOKIE, parseCookies, serializeSessionCookie, clearSessionCookie } from "./cookie.js";
 
@@ -13,7 +13,7 @@ export interface AuthConfig {
   clientId: string; clientSecret: string; webOrigins: string[];
   cookieDomain?: string; callbackUrl: string; stateSecret: string; sessionTtlMs: number;
 }
-export interface AuthDeps { db: AppDb; verifier: AccountVerifier; exchangeCode: (code: string) => Promise<string>; config: AuthConfig }
+export interface AuthDeps { db: AppDb; verifier: AccountVerifier; exchangeCode: (code: string) => Promise<string>; fetchOrgs: (token: string) => Promise<string[]>; config: AuthConfig }
 
 // duck-typed Express req/res (no @types/express dependency, matching originGuard / the SSE handlers)
 interface Req { method: string; path: string; query: Record<string, unknown>; headers: Record<string, string | undefined>; get(name: string): string | undefined }
@@ -62,6 +62,11 @@ export function callbackHandler(deps: AuthDeps) {
       const token = await deps.exchangeCode(code);
       const acct = await deps.verifier.verify(token);
       const row = await upsertAccount(deps.db, { provider: acct.provider, accountId: acct.accountId, login: acct.login });
+      // #4b: capture owned scopes (login + public org memberships) at login. Best-effort —
+      // an org-fetch failure must never fail login; the user still owns at least their login.
+      let orgs: string[] = [];
+      try { orgs = await deps.fetchOrgs(token); } catch { orgs = []; }
+      await setAccountScopes(deps.db, row.id, [acct.login, ...orgs]);
       const { token: sessionToken } = generateSessionToken();
       await createSession(deps.db, row.id, sessionToken, deps.config.sessionTtlMs);
       res.setHeader("Set-Cookie", serializeSessionCookie(sessionToken, { domain: deps.config.cookieDomain, maxAgeSec: Math.floor(deps.config.sessionTtlMs / 1000) }));
