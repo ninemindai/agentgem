@@ -147,4 +147,5 @@ export interface Gem {
   artifacts: GemArtifact[];
   checks: GemCheck[];                   // 0..n; embedded operator checks
   requiredSecrets: SecretRequirement[];  // declared secret surface; names only
+  grade?: number;                        // authoring-quality floor (1..3), baked at build; absent when unmeasured
 }

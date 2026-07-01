@@ -427,6 +427,7 @@ export const GemSchema = z.object({
   artifacts: z.array(GemArtifactSchema),
   checks: z.array(GemCheckSchema),
   requiredSecrets: z.array(SecretRequirementSchema),
+  grade: z.number().int().min(1).max(3).optional(),
 });
 
 // --- Transfer (store-and-forward ticket sharing) ---

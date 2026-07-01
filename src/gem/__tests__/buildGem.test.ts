@@ -114,6 +114,17 @@ describe("buildGem", () => {
     expect(gem.requiredSecrets).toEqual([{ name: "GH_TOKEN", artifact: "gh", location: "env.GH_TOKEN" }]); // no dup
   });
 
+  describe("buildGem grade", () => {
+    it("bakes opts.grade onto the gem", () => {
+      const gem = buildGem(inv, { skills: ["review"] }, { name: "g", grade: 3 });
+      expect(gem.grade).toBe(3);
+    });
+    it("omits grade when not supplied (key absent, not undefined-valued)", () => {
+      const gem = buildGem(inv, { skills: ["review"] }, { name: "g" });
+      expect("grade" in gem).toBe(false);
+    });
+  });
+
   describe("declared channels", () => {
     const emptyInv = { skills: [], mcpServers: [], instructions: [], hooks: [] };
 

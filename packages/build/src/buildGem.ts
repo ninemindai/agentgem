@@ -27,7 +27,7 @@ export type GemSelection =
 export function buildGem(
   inventory: ConfigInventory,
   selection: GemSelection,
-  opts: { name?: string; createdFrom?: string; checks?: GemCheck[]; channels?: { platform: ChannelPlatform; name?: string }[] } = {},
+  opts: { name?: string; createdFrom?: string; checks?: GemCheck[]; channels?: { platform: ChannelPlatform; name?: string }[]; grade?: number } = {},
 ): Gem {
   const artifacts: GemArtifact[] = [];
   const projects = inventory.projects ?? [];
@@ -109,5 +109,6 @@ export function buildGem(
     artifacts,
     checks,
     requiredSecrets,
+    ...(opts.grade != null ? { grade: opts.grade } : {}),
   };
 }
