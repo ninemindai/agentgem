@@ -42,6 +42,15 @@ export function mapDbToGems(rows: CatalogRow[]): RegistryGem[] {
   }));
 }
 
+/** DB-shared gems for the public browse path. Graceful: any read error yields [] so /registry/gems never 500s. */
+export async function safeDbGems(list: () => Promise<CatalogRow[]>): Promise<RegistryGem[]> {
+  try {
+    return mapDbToGems(await list());
+  } catch {
+    return [];
+  }
+}
+
 /** Union both sources; DB (freshly shared) wins on key collision. */
 export function mergeGems(dbGems: RegistryGem[], indexGems: RegistryGem[]): RegistryGem[] {
   const byKey = new Map<string, RegistryGem>();

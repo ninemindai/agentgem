@@ -210,7 +210,7 @@ import { readRecents, upsertRecent } from "@agentgem/capture";
 import { resolveInstall, publishGem } from "@agentgem/distribute";
 import { searchIndex } from "@agentgem/distribute";
 import { githubRegistrySource, githubRegistryPublisher, registryConfigFromEnv, registryReady } from "@agentgem/distribute";
-import { createGemCache, mapDbToGems, mergeGems } from "./gem/publicCatalog.js";
+import { createGemCache, safeDbGems, mergeGems } from "./gem/publicCatalog.js";
 import { service, inject } from "@agentback/core";
 import { RestBindings } from "@agentback/rest";
 import { DrizzleBindings } from "@agentback/drizzle";
@@ -859,7 +859,7 @@ export class GemController {
     const cfg = registryConfigFromEnv();
     const getIndex = cfg ? () => githubRegistrySource(cfg).getIndex() : null;
     const indexGems = await publicGemCache.get(getIndex, Date.now());
-    const dbGems = this.db ? mapDbToGems(await listCatalogGems(this.db)) : [];
+    const dbGems = this.db ? await safeDbGems(() => listCatalogGems(this.db!)) : [];
     return { gems: mergeGems(dbGems, indexGems) };
   }
 
