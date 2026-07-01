@@ -222,9 +222,9 @@ export function installGracefulShutdown(
 export async function run(port: number = Number(process.env.PORT ?? 4317)): Promise<RestApplication> {
   const app = await createApp(port);
   await app.start();
-  installGracefulShutdown(app);
   // Background cache warming — console (local desktop) only; never on the hosted API.
-  if (process.env.SERVE_CONSOLE !== "false") startWarmSchedule();
+  const sched = process.env.SERVE_CONSOLE !== "false" ? startWarmSchedule() : null;
+  installGracefulShutdown({ stop: async () => { sched?.stop(); await app.stop(); } });
   const server = await app.restServer;
   console.log(`agentgem listening at ${server.url}`);
   console.log(`  UI:       ${server.url}/`);
