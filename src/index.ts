@@ -30,7 +30,6 @@ import { AggregatorController } from "./aggregator.controller.js";
 import { ShareController } from "./share.controller.js";
 import { requireShareOriginSecret } from "./originSecret.js";
 import { ShareProxyController } from "./share.proxy.controller.js";
-import { ExploreController } from "./explore.controller.js";
 import { resolveAggregatorDb, type AppDb, GitHubVerifier, fetchOrgs } from "@agentgem/aggregator";
 import { mountGating } from "./gating.js";
 import { installAuth, githubExchangeCode } from "./auth/install.js";
@@ -73,7 +72,6 @@ export async function createApp(port: number): Promise<RestApplication> {
   app.configure("servers.MCPServer").to({ name: "agentgem", version: "0.1.0", transports: { stdio: false } });
   app.restController(GemController);
   app.restController(ShareProxyController);
-  app.restController(ExploreController);
   app.service(GemTools);
   // Aggregator (B1) + gating: always registered now — Postgres when DATABASE_URL is set, else
   // embedded pglite for local runs (ephemeral). mountGating adds the api-key identity middleware
