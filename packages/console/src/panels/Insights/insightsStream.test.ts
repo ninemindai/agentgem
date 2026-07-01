@@ -39,7 +39,7 @@ describe("openInsightsStream", () => {
       { type: "phase", phase: "scanning", transcripts: undefined, sessions: undefined },
       { type: "phase", phase: "scanned", transcripts: 4, sessions: 2 },
       { type: "delta", text: "judging…" },
-      { type: "done", report: REPORT, degraded: false },
+      { type: "done", report: REPORT, degraded: false, scanned: undefined, updatedAt: null },
     ]);
     expect(es.closed).toBe(true);
   });

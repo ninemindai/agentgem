@@ -13,7 +13,7 @@ export interface InsightsReportView {
 export type InsightsEvent =
   | { type: "phase"; phase: string; transcripts?: number; sessions?: number }
   | { type: "delta"; text: string }
-  | { type: "done"; report: InsightsReportView; degraded: boolean; scanned?: number }
+  | { type: "done"; report: InsightsReportView; degraded: boolean; scanned?: number; updatedAt: number | null }
   | { type: "failed"; message: string };
 
 export function openInsightsStream(
@@ -34,7 +34,7 @@ export function openInsightsStream(
   es.addEventListener("delta", (m) => onEvent({ type: "delta", text: data(m).text }));
   es.addEventListener("done", (m) => {
     const d = data(m);
-    onEvent({ type: "done", report: d.report, degraded: !!d.degraded, scanned: d.signalSummary?.sessionsScanned });
+    onEvent({ type: "done", report: d.report, degraded: !!d.degraded, scanned: d.signalSummary?.sessionsScanned, updatedAt: typeof d.updatedAt === "number" ? d.updatedAt : null });
     es.close();
   });
   es.addEventListener("failed", (m) => { onEvent({ type: "failed", message: data(m).message }); es.close(); });

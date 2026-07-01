@@ -11,6 +11,7 @@ type Progress = { done: number; total: number; label: string; partial: { breadth
 
 export function Mine({ apiBase, openStream = openScorecardStream }: { apiBase: string; openStream?: typeof openScorecardStream }) {
   const [scorecard, setScorecard] = useState<Scorecard | null>(null);
+  const [scorecardUpdatedAt, setScorecardUpdatedAt] = useState<number | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [phase, setPhase] = useState<"loading" | "scanning" | "done" | "failed">("loading");
   const [filter, setFilter] = useState<WorkflowFilter>("all");
@@ -23,12 +24,12 @@ export function Mine({ apiBase, openStream = openScorecardStream }: { apiBase: s
   const freshRef = useRef(false);
 
   useEffect(() => {
-    setScorecard(null); setProgress(null); setPhase("loading"); setFilter("all");
+    setScorecard(null); setScorecardUpdatedAt(null); setProgress(null); setPhase("loading"); setFilter("all");
     const fresh = freshRef.current; freshRef.current = false;
     const close = openStream(apiBase, (e: ScorecardStreamEvent) => {
       if (e.type === "start") setPhase("scanning");
       else if (e.type === "progress") { setPhase("scanning"); setProgress({ done: e.done, total: e.total, label: e.label, partial: e.partial }); }
-      else if (e.type === "done") { setScorecard(e.scorecard); setPhase("done"); }
+      else if (e.type === "done") { setScorecard(e.scorecard); setScorecardUpdatedAt(e.updatedAt); setPhase("done"); }
       else if (e.type === "failed") setPhase("failed");
     }, fresh ? { refresh: true } : undefined);
     return close;
@@ -55,7 +56,7 @@ export function Mine({ apiBase, openStream = openScorecardStream }: { apiBase: s
     <div className="obs mine">
       {phase === "done" && scorecard
         ? <>
-            <ScorecardHero data={scorecard} onRescan={onRescan} />
+            <ScorecardHero data={scorecard} updatedAt={scorecardUpdatedAt} onRescan={onRescan} />
             <MineWorkflows data={scorecard} filter={filter} onFilter={setFilter} onBuild={onBuild} building={building} result={buildResult} error={buildError} apiBase={apiBase} />
           </>
         : phase === "failed"

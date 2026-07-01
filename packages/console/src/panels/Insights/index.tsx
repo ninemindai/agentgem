@@ -5,6 +5,7 @@ import { openInsightsStream, type InsightsReportView } from "./insightsStream.js
 import { OutcomesDonut, ByModelBars } from "./InsightsCharts.js";
 import { setPendingAnalyze, setPendingPlaybook } from "../../pendingAnalyze.js";
 import { Loading } from "../../shell/Loading.js";
+import { timeAgo } from "../../util/timeAgo.js";
 
 function short(path: string): string {
   const parts = path.split("/").filter(Boolean);
@@ -21,6 +22,7 @@ export function Insights({ apiBase }: { apiBase: string }) {
   const [phase, setPhase] = useState("");
   const [out, setOut] = useState("");
   const [report, setReport] = useState<InsightsReportView | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const [scanned, setScanned] = useState<number | null>(null);
   const [degraded, setDegraded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,11 +39,11 @@ export function Insights({ apiBase }: { apiBase: string }) {
 
   const generate = (path: string, fresh = false) => {
     closeRef.current?.();
-    setActivePath(path); setPhase(""); setOut(""); setReport(null); setScanned(null); setDegraded(false); setError(null); setRunning(true);
+    setActivePath(path); setPhase(""); setOut(""); setReport(null); setUpdatedAt(null); setScanned(null); setDegraded(false); setError(null); setRunning(true);
     closeRef.current = openInsightsStream(apiBase, path, (e) => {
       if (e.type === "phase") setPhase(e.sessions != null ? `${e.phase} (${e.sessions} sessions)` : e.phase);
       else if (e.type === "delta") setOut((o) => o + e.text);
-      else if (e.type === "done") { setPhase("done"); setReport(e.report); setScanned(e.scanned ?? null); setDegraded(e.degraded); setRunning(false); }
+      else if (e.type === "done") { setPhase("done"); setReport(e.report); setUpdatedAt(e.updatedAt); setScanned(e.scanned ?? null); setDegraded(e.degraded); setRunning(false); }
       else if (e.type === "failed") { setError(e.message); setRunning(false); }
     }, fresh);
   };
@@ -98,7 +100,14 @@ export function Insights({ apiBase }: { apiBase: string }) {
                         </span>
                         {degraded && !error && <span className="ws-chip" title="The local agent was unavailable; showing a basic report.">basic</span>}
                         {report && !running && (
-                          <button type="button" className="ledger-view" style={{ marginLeft: "auto" }} onClick={() => generate(r.path, true)}>Re-run ↻</button>
+                          <>
+                            {updatedAt != null && (
+                              <span className="ledger-muted" style={{ marginLeft: "auto", marginRight: 8 }}>
+                                updated {timeAgo(updatedAt)}
+                              </span>
+                            )}
+                            <button type="button" className="ledger-view" style={updatedAt == null ? { marginLeft: "auto" } : undefined} onClick={() => generate(r.path, true)}>Re-run ↻</button>
+                          </>
                         )}
                       </div>
                       {error && <p className="ledger-error">{error}</p>}

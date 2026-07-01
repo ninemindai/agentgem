@@ -15,7 +15,7 @@ import {
   type ProjectLoad,
   type ScorecardDeps,
 } from "./gem/scorecard.js";
-import { transcriptToken, readAnalysisCache, writeAnalysisCache } from "@agentgem/insight";
+import { transcriptToken, readAnalysisCache, writeAnalysisCache, readAnalysisCacheEntry } from "@agentgem/insight";
 
 // Minimal structural types for the Express req/res we use — avoids a hard
 // dependency on @types/express (expressApp's handler is duck-typed).
@@ -28,12 +28,14 @@ interface SseRes {
 
 export interface ScorecardStreamDeps extends ScorecardDeps {
   readCache(root: string, token: string): unknown | null;
+  readCacheEntry(root: string, token: string): { result: unknown; ts: number } | null;
   writeCache(root: string, token: string, result: unknown, nowMs: number): void;
 }
 
 const realStreamDeps: ScorecardStreamDeps = {
   ...defaultScorecardDeps,
   readCache: readAnalysisCache,
+  readCacheEntry: readAnalysisCacheEntry,
   writeCache: writeAnalysisCache,
 };
 
@@ -74,8 +76,8 @@ export async function streamScorecard(req: SseReq, res: SseRes, deps: ScorecardS
     // Cache hit (unless Re-scan): return the prior result instantly so the user
     // can revisit the scorecard without re-scanning every project.
     if (!fresh) {
-      const cached = deps.readCache(SCORECARD_CACHE_ROOT, token);
-      if (cached) { send("done", { scorecard: cached, cached: true }); return; }
+      const entry = deps.readCacheEntry(SCORECARD_CACHE_ROOT, token);
+      if (entry) { send("done", { scorecard: entry.result, cached: true, updatedAt: entry.ts }); return; }
     }
 
     send("start", { total: roots.length });
@@ -94,9 +96,10 @@ export async function streamScorecard(req: SseReq, res: SseRes, deps: ScorecardS
         partial: { breadth: partial.breadth, battleTested: partial.battleTested, portable: partial.portable },
       });
     }
-    const sc = aggregateScorecard(loads, Date.now(), degraded);
-    if (!degraded) deps.writeCache(SCORECARD_CACHE_ROOT, token, sc, Date.now());
-    send("done", { scorecard: sc, cached: false });
+    const nowMs = Date.now();
+    const sc = aggregateScorecard(loads, nowMs, degraded);
+    if (!degraded) deps.writeCache(SCORECARD_CACHE_ROOT, token, sc, nowMs);
+    send("done", { scorecard: sc, cached: false, updatedAt: nowMs });
   } catch (err) {
     send("failed", { message: (err as Error)?.message ?? String(err) });
   } finally {
