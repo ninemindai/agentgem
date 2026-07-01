@@ -17,6 +17,7 @@
 - **Fixture-based tests.** None of the new agents is installed on dev machines and real-FS scans flake under concurrency — every new adapter test uses synthetic in-repo fixtures, never `~`.
 - **Commits.** Author `Raymond Feng <raymond@ninemind.ai>`; trailer `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`. Stage explicitly (Edits don't `git add`).
 - **Test command.** Root `pnpm test` (Vitest). Per the repo, tests run from compiled `dist/` — rebuild or clean `dist/` after moving/renaming files.
+- **TEST LOCATION (overrides every task's stated test path).** The root Vitest config only globs `dist/**/__tests__/**/*.test.js` — i.e. tests compiled from the **root `src/` tree**. Tests placed under `packages/*/src/__tests__/` compile to `packages/*/dist/` and are NEVER run by `pnpm test`. Therefore every new test in this plan MUST live at **`src/gem/__tests__/<name>.test.ts`** (matching the established siblings `src/gem/__tests__/canonicalize.test.ts`, `observeScan.test.ts`) and import the code under test from its published package (`@agentgem/model`, `@agentgem/insight`, `@agentgem/archive`), NOT via deep relative `../` paths into a package. Where a task's brief says `packages/*/src/__tests__/...`, read it as `src/gem/__tests__/...` with package imports.
 
 ---
 
