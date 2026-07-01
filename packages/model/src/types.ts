@@ -55,7 +55,22 @@ export interface ChannelArtifact {
   description?: string;     // optional; for discovery / Card
 }
 
-export type GemArtifact = SkillArtifact | McpServerArtifact | InstructionsArtifact | HookArtifact | ChannelArtifact;
+export interface ArtifactRef {
+  kind: "package" | "gem";  // npx/npm package  |  registry gem digest
+  id: string;               // e.g. "npx:@scope/pkg"  |  "sha256:<hex>"
+  digest?: string;          // pinned in the lock at resolve time
+}
+
+// An artifact provided by reference rather than embedded bytes. `refKind` is what it stands
+// in for. Discriminated by type:"reference" so existing type-narrowing on the 5 value kinds is unaffected.
+export interface ReferenceArtifact {
+  type: "reference";
+  name: string;
+  refKind: ArtifactType;
+  ref: ArtifactRef;
+}
+
+export type GemArtifact = SkillArtifact | McpServerArtifact | InstructionsArtifact | HookArtifact | ChannelArtifact | ReferenceArtifact;
 
 export interface ProjectInventory {
   root: string;
