@@ -5,9 +5,9 @@
 // Single-entry persistent cache for the (expensive: reads every transcript)
 // global usage scan. Keyed by a transcript token that changes whenever any
 // session is added/updated, so it self-refreshes. Best-effort: failures never throw.
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { agentgemHome } from "@agentgem/model";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { agentgemHome, writeJsonAtomic } from "@agentgem/model";
 
 function cachePath(): string { return join(agentgemHome(), ".agentgem", "global-usage-cache.json"); }
 
@@ -20,9 +20,7 @@ export function readGlobalUsageCache(token: string): { artifacts: unknown[] } | 
 
 export function writeGlobalUsageCache(token: string, result: { artifacts: unknown[] }, claudeDir?: string): void {
   try {
-    const path = cachePath();
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, JSON.stringify({ token, result, claudeDir }), "utf8");
+    writeJsonAtomic(cachePath(), { token, result, claudeDir });
   } catch { /* best-effort */ }
 }
 
