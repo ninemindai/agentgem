@@ -191,8 +191,8 @@ git commit -m "feat(aggregator): stars store (toggle/counts/starredIds)"
 - [ ] **Step 1: Add the failing test** — in `src/__tests__/originGuard.test.ts`, after the `/api/auth/*` test:
 ```ts
   it("allows cross-site star requests (/api/stars + /api/stars/toggle) — public counts + the SPA's credentialed toggle", () => {
-    expect(run({ "sec-fetch-site": "cross-site" }, "app.agentgem.ai", "GET", "/api/stars").nexted).toBe(true);
-    expect(run({ "sec-fetch-site": "cross-site" }, "app.agentgem.ai", "POST", "/api/stars/toggle").nexted).toBe(true);
+    expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "GET", "/api/stars").nexted).toBe(true);
+    expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "POST", "/api/stars/toggle").nexted).toBe(true);
   });
 ```
 
@@ -205,7 +205,7 @@ git commit -m "feat(aggregator): stars store (toggle/counts/starredIds)"
 becomes:
 ```ts
   // Web sign-in (/api/auth/*) and stars (/api/stars, /api/stars/toggle) are reachable cross-site by
-  // design (SPA on explore.agentgem.ai → API on app.agentgem.ai). CSRF defense: the OAuth `state`,
+  // design (SPA on app.agentgem.ai → API on api.agentgem.ai). CSRF defense: the OAuth `state`,
   // SameSite=Lax cookie, and (stars) a 401 on the authed toggle. The handlers set their own
   // credentialed CORS for the AGENTGEM_WEB_ORIGINS allowlist.
   if (req.path.startsWith("/api/auth/") || req.path.startsWith("/api/stars")) { next(); return; }
@@ -240,7 +240,7 @@ import { makeTestDb, upsertAccount, createSession, generateSessionToken, toggleS
 import { toggleHandler, listHandler } from "../stars/install.js";
 import { SESSION_COOKIE } from "../auth/cookie.js";
 
-const webOrigins = ["https://explore.agentgem.ai"];
+const webOrigins = ["https://app.agentgem.ai"];
 function mockRes() {
   const r: any = { _status: 200, _headers: {} as Record<string,string>, _body: undefined };
   r.status = (c: number) => { r._status = c; return r; };
@@ -647,4 +647,4 @@ git commit -m "feat(marketplace): wire StarButton into gems, gem detail, leaderb
 - [ ] **Backend** (compiled dist): `pnpm test` → green incl. `stars`, `starsInstall`, `originGuard`; the existing suites unaffected.
 - [ ] **Marketplace:** `pnpm --filter @agentgem/marketplace test && … typecheck && … build` → green.
 - [ ] **Manual smoke (optional, post-deploy on the live domains):** signed out → star counts show, clicking a star → GitHub sign-in; signed in → click stars/unstars optimistically and the count updates; reload keeps the starred state (`mine`).
-- [ ] **Deploy:** ships with the next `agentgem` Docker deploy (the endpoints) + the `agentgem-explore` static rebuild (the UI). No new env vars (reuses `AGENTGEM_WEB_ORIGINS` + the DB).
+- [ ] **Deploy:** ships with the next `agentgem` Docker deploy (the endpoints) + the `agentgem-app` static rebuild (the UI). No new env vars (reuses `AGENTGEM_WEB_ORIGINS` + the DB).

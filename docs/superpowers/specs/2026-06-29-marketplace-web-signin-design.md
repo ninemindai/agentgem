@@ -5,7 +5,7 @@
 
 ## Goal
 
-Let a visitor "Sign in with GitHub" on the marketplace (`explore.agentgem.ai`), obtain a session, and have the SPA know who they are. This is the **identity foundation** the later M2 slices (starring, reviews) build on. It reuses the existing GitHub OAuth app, `accountVerifier`, and the aggregator's Postgres. No starring yet.
+Let a visitor "Sign in with GitHub" on the marketplace (`app.agentgem.ai`), obtain a session, and have the SPA know who they are. This is the **identity foundation** the later M2 slices (starring, reviews) build on. It reuses the existing GitHub OAuth app, `accountVerifier`, and the aggregator's Postgres. No starring yet.
 
 ## Context
 
@@ -21,12 +21,12 @@ What's new ground: there is **no cookie/session handling anywhere** today (all a
 
 ## Architecture decisions (settled in brainstorming)
 
-- **Web app shape unchanged:** the marketplace stays a static React SPA on the CDN; the existing `app.agentgem.ai` API gains the OAuth routes + session. No SSR / server-backed migration.
-- **Session transport = parent-domain cookie.** `explore.agentgem.ai` and `app.agentgem.ai` share the registrable domain `agentgem.ai`, so a cookie scoped to `Domain=.agentgem.ai` is **first-party** (same-site, cross-origin). `HttpOnly; Secure; SameSite=Lax` — XSS-safe, sent on the SPA's credentialed fetch.
+- **Web app shape unchanged:** the marketplace stays a static React SPA on the CDN; the existing `api.agentgem.ai` API gains the OAuth routes + session. No SSR / server-backed migration.
+- **Session transport = parent-domain cookie.** `app.agentgem.ai` and `api.agentgem.ai` share the registrable domain `agentgem.ai`, so a cookie scoped to `Domain=.agentgem.ai` is **first-party** (same-site, cross-origin). `HttpOnly; Secure; SameSite=Lax` — XSS-safe, sent on the SPA's credentialed fetch.
 - **Accepted dev caveat:** the parent-domain cookie only round-trips on the real `*.agentgem.ai` domains — **not** on the raw `*.onrender.com` URLs or `localhost`. Sign-in is verified on the live domains; local-dev/onrender auth is a deferred nicety (not built here). Non-auth marketplace features remain fully usable signed-out everywhere.
 - **Scope = `read:user`** (login identity only; never repo access).
 
-## Backend (API, `app.agentgem.ai`)
+## Backend (API, `api.agentgem.ai`)
 
 ### Session + account store — `@agentgem/aggregator`
 
@@ -53,9 +53,9 @@ The public reads keep `Access-Control-Allow-Origin: *` (no credentials). The **a
 
 ### New env (hosted `agentgem` service)
 - `AGENTGEM_GITHUB_CLIENT_SECRET` — the OAuth app's secret (web flow). `AGENTGEM_GITHUB_CLIENT_ID` already exists.
-- `AGENTGEM_WEB_ORIGINS` — comma-list, e.g. `https://explore.agentgem.ai` (redirect-allowlist + credentialed-CORS allowlist).
+- `AGENTGEM_WEB_ORIGINS` — comma-list, e.g. `https://app.agentgem.ai` (redirect-allowlist + credentialed-CORS allowlist).
 - `AGENTGEM_SESSION_COOKIE_DOMAIN` — `.agentgem.ai` (the cookie `Domain`). `AGENTGEM_PUBLIC_BASE` (or reuse existing) for the callback `redirect_uri`. A session-signing/`state` secret (`AGENTGEM_SESSION_SECRET`).
-- GitHub OAuth app: register the callback URL `https://app.agentgem.ai/api/auth/github/callback`.
+- GitHub OAuth app: register the callback URL `https://api.agentgem.ai/api/auth/github/callback`.
 
 ## Frontend (marketplace SPA — unchanged shape)
 
@@ -66,7 +66,7 @@ The public reads keep `Access-Control-Allow-Origin: *` (no credentials). The **a
 
 ## Data flow
 
-Sign in: SPA link → `app.agentgem.ai/api/auth/github/login` → GitHub → `…/callback` (exchange + verify + upsert + session + Set-Cookie) → 302 back to `explore.agentgem.ai`. SPA `getMe()` (cookie sent) → identity. Sign out: `POST /api/auth/logout` clears it.
+Sign in: SPA link → `api.agentgem.ai/api/auth/github/login` → GitHub → `…/callback` (exchange + verify + upsert + session + Set-Cookie) → 302 back to `app.agentgem.ai`. SPA `getMe()` (cookie sent) → identity. Sign out: `POST /api/auth/logout` clears it.
 
 ## Out of scope (later slices / deferred)
 

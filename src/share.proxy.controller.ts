@@ -15,7 +15,7 @@ const Body = z.discriminatedUnion("kind", [
 ]);
 const Result = z.object({ id: z.string(), url: z.string() });
 
-// Same-origin endpoint the console calls. Forwards to the hosted aggregator (the app.agentgem.ai
+// Same-origin endpoint the console calls. Forwards to the hosted aggregator (the api.agentgem.ai
 // default, overridable via AGENTGEM_AGGREGATOR_URL). Browser stays same-origin.
 @api({ basePath: "/api/share" })
 export class ShareProxyController {

@@ -5,7 +5,7 @@
 
 ## Goal
 
-Remove the `Insights` panel from the desktop console (`packages/console`). It showed the network-wide aggregator dashboard (ingredient leaderboard, adoption pulse, per-ingredient detail), which is now **fully replaced by the live public marketplace** at `explore.agentgem.ai`. The desktop console is a local-first app; network-wide discovery belongs in the public marketplace, not the desktop. Everything else in the console stays.
+Remove the `Insights` panel from the desktop console (`packages/console`). It showed the network-wide aggregator dashboard (ingredient leaderboard, adoption pulse, per-ingredient detail), which is now **fully replaced by the live public marketplace** at `app.agentgem.ai`. The desktop console is a local-first app; network-wide discovery belongs in the public marketplace, not the desktop. Everything else in the console stays.
 
 ## Context
 

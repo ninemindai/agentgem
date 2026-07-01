@@ -34,6 +34,9 @@ import { resolveAggregatorDb, type AppDb, GitHubVerifier } from "@agentgem/aggre
 import { mountGating } from "./gating.js";
 import { installAuth, githubExchangeCode } from "./auth/install.js";
 import { installStars } from "./stars/install.js";
+import { installRegistryUploadPublish } from "./registry/uploadPublish.js";
+import { registryConfigFromEnv, githubRegistrySource, githubRegistryPublisher } from "@agentgem/distribute";
+import { defaultGemTypeRegistry } from "./gem/gemTypeRegistry.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -125,7 +128,7 @@ export async function createApp(port: number): Promise<RestApplication> {
       config: {
         clientId: ghClientId, clientSecret: ghSecret, webOrigins,
         cookieDomain: process.env.AGENTGEM_SESSION_COOKIE_DOMAIN,
-        callbackUrl: `${process.env.AGENTGEM_PUBLIC_BASE ?? "https://app.agentgem.ai"}/api/auth/github/callback`,
+        callbackUrl: `${process.env.AGENTGEM_PUBLIC_BASE ?? "https://api.agentgem.ai"}/api/auth/github/callback`,
         stateSecret: process.env.AGENTGEM_SESSION_SECRET ?? ghSecret,
         sessionTtlMs: 30 * 24 * 60 * 60 * 1000, // 30 days
       },
@@ -135,8 +138,17 @@ export async function createApp(port: number): Promise<RestApplication> {
   if (aggDb && webOrigins.length > 0) {
     installStars(server.expressApp as never, { db: aggDb, webOrigins });
   }
+  // Registry upload-publish: requires DB, a web origin allowlist, and a configured GitHub registry.
+  const regCfg = registryConfigFromEnv();
+  if (aggDb && webOrigins.length > 0 && regCfg) {
+    installRegistryUploadPublish(server.expressApp as never, {
+      db: aggDb, webOrigins,
+      source: githubRegistrySource(regCfg), publisher: githubRegistryPublisher(regCfg),
+      gemTypes: defaultGemTypeRegistry,
+    });
+  }
   // The desktop console UI is served at `/` (and `/console`) for LOCAL runs only. The hosted
-  // public deployment (app.agentgem.ai) is API-only — the console is a local desktop app, not a
+  // public deployment (api.agentgem.ai) is API-only — the console is a local desktop app, not a
   // public surface — so SERVE_CONSOLE=false disables it there and redirects `/` to the site.
   if (process.env.SERVE_CONSOLE !== "false") {
     const consolePage = consoleHtml();

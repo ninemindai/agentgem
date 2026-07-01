@@ -11,7 +11,7 @@ describe("Router", () => {
   it("renders the leaderboard at /", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => res([{ id: "skill:a/b", kind: "skill", producers: 5, verifiedProducers: 2, invocations: 9, sessions: 4 }])));
     window.history.pushState({}, "", "/");
-    render(<Router api={makeApi("")} stars={stars} />);
+    render(<Router api={makeApi("")} stars={stars} me={null} />);
     expect(await screen.findByText("b")).toBeTruthy();
   });
 
@@ -21,21 +21,21 @@ describe("Router", () => {
       return res([]);
     }));
     window.history.pushState({}, "", "/ingredient/" + encodeURIComponent("skill:superpowers/brainstorming"));
-    render(<Router api={makeApi("")} stars={stars} />);
+    render(<Router api={makeApi("")} stars={stars} me={null} />);
     expect(await screen.findByText("brainstorming")).toBeTruthy(); // header from decoded id
   });
 
   it("renders the gem browse page at /gems", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => res({ gems: [] }))); // empty live list → static fallback
     window.history.pushState({}, "", "/gems");
-    render(<Router api={makeApi("")} stars={stars} />);
+    render(<Router api={makeApi("")} stars={stars} me={null} />);
     expect(await screen.findByText("brainstorming-kit")).toBeTruthy();
   });
 
   it("renders the gem detail page at /gems/:key with the decoded key", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => res({ gems: [] }))); // empty live list → static fallback
     window.history.pushState({}, "", "/gems/" + encodeURIComponent("github-flow"));
-    render(<Router api={makeApi("")} stars={stars} />);
+    render(<Router api={makeApi("")} stars={stars} me={null} />);
     expect(await screen.findByRole("heading", { name: /github-flow/ })).toBeTruthy();
   });
 });

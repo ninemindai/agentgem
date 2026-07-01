@@ -49,10 +49,10 @@ export function originGuard(req: GuardReq, res: GuardRes, next: GuardNext): void
     return;
   }
   // Web sign-in (/api/auth/*) and stars (/api/stars, /api/stars/toggle) are reachable cross-site by
-  // design (SPA on explore.agentgem.ai → API on app.agentgem.ai). CSRF defense: the OAuth `state`,
+  // design (SPA on app.agentgem.ai → API on api.agentgem.ai). CSRF defense: the OAuth `state`,
   // SameSite=Lax cookie, and (stars) a 401 on the authed toggle. The handlers set their own
   // credentialed CORS for the AGENTGEM_WEB_ORIGINS allowlist.
-  if (req.path.startsWith("/api/auth/") || req.path.startsWith("/api/stars")) { next(); return; }
+  if (req.path.startsWith("/api/auth/") || req.path.startsWith("/api/stars") || req.path.startsWith("/api/registry/upload-publish")) { next(); return; }
   const site = req.get("sec-fetch-site");
   if (site !== undefined) {
     if (site === "same-origin") { next(); return; }

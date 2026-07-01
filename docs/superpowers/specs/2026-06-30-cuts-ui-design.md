@@ -5,7 +5,7 @@
 
 ## Goal
 
-Make a gem's **cut** visible and navigable on `explore.agentgem.ai`: render each gem with its cut's **gemstone-colored pill** (e.g. a pearl-tinted "Playbook"), and add a **cut filter facet** to the `/gems` browse page. Reads the `type` field that #3 already stores on the registry and surfaces on `RegistryGem` — no server change. The browse/render half; the publish-from-marketplace UI (which needs #4 account-bound publishing) is separate and later.
+Make a gem's **cut** visible and navigable on `app.agentgem.ai`: render each gem with its cut's **gemstone-colored pill** (e.g. a pearl-tinted "Playbook"), and add a **cut filter facet** to the `/gems` browse page. Reads the `type` field that #3 already stores on the registry and surfaces on `RegistryGem` — no server change. The browse/render half; the publish-from-marketplace UI (which needs #4 account-bound publishing) is separate and later.
 
 ## Context (ground-truth)
 

@@ -645,4 +645,4 @@ Expected: green, clean, `dist/` produced.
 
 - [ ] **Manual smoke (optional):** `pnpm --filter @agentgem/marketplace dev`, open the printed URL → click **Gems** in the nav → the browse list renders; search narrows; click a gem → detail shows version/author/description, the Copy button copies the key, and each ingredient links into the live `/ingredient/:id` page (which loads real adoption data). The Ingredients↔Gems nav marks the active surface.
 
-- [ ] **Deploy:** none needed beyond the existing Render static-site build — the `agentgem-explore` service rebuilds `packages/marketplace` on merge to `main`, so `/gems` ships automatically.
+- [ ] **Deploy:** none needed beyond the existing Render static-site build — the `agentgem-app` service rebuilds `packages/marketplace` on merge to `main`, so `/gems` ships automatically.

@@ -5,7 +5,7 @@
 
 ## Goal
 
-Turn `explore.agentgem.ai` from a read-only discovery surface into a **publishing destination** where a signed-in user shares their agent contributions — gems, whole setups, curated skills/MCP/instructions, and (the differentiated case) the **wins and lessons distilled from their real session transcripts** — so other people's coding/coworking agents can adopt them.
+Turn `app.agentgem.ai` from a read-only discovery surface into a **publishing destination** where a signed-in user shares their agent contributions — gems, whole setups, curated skills/MCP/instructions, and (the differentiated case) the **wins and lessons distilled from their real session transcripts** — so other people's coding/coworking agents can adopt them.
 
 ## Context (what exists today)
 
@@ -66,7 +66,7 @@ Built in this order; each produces working, testable software on its own.
 2. **Meaningful-session extractor** — the value source: detect a *salient* session (troubleshooting/devops/hard-fix) and LLM-distill its wins + lessons, emitted through #1's seam. The differentiated capability.
 3. **`GEM_TYPES` extension point** — the extensible cut registry (`extensionPoint(GEM_TYPES)` / `@extensions.list()` / `extensionFor` / `addExtension`, the `MCP_SERVERS` pattern), the built-in cuts **with their signature gemstone colors**, the `derive(gem)` default classifier, and `type` stored on + read from the registry discovery block.
 4. **Account-bound publishing** — close the M2-A gap: a publish records authorship = the signed-in account; scope ownership (only `@you/*`); list "gems by @you". Prerequisite to publishing *from* the marketplace.
-5. **Faceted publish + browse UI** on `explore.agentgem.ai` — browse by Cut and by rating; render a gem as **N gems of its cut's color** + the Diamond seal; a publish/manage surface (the local-origin constraint stands: the static SPA can't read `~/.claude`, so building a gem from a setup still *originates* in the local console; the marketplace drives publish-management + discovery). Rating computation is authoring-seeded now; crowd-earned counts land when gem-adoption telemetry exists.
+5. **Faceted publish + browse UI** on `app.agentgem.ai` — browse by Cut and by rating; render a gem as **N gems of its cut's color** + the Diamond seal; a publish/manage surface (the local-origin constraint stands: the static SPA can't read `~/.claude`, so building a gem from a setup still *originates* in the local console; the marketplace drives publish-management + discovery). Rating computation is authoring-seeded now; crowd-earned counts land when gem-adoption telemetry exists.
 
 ## Non-goals (for the program)
 

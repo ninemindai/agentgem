@@ -48,7 +48,7 @@ A new route on the gem controller:
 
 ## Data flow
 
-browser → `app.agentgem.ai/api/registry/gems` (CORS-open, TTL-cached) → live gems, or `{ gems: [] }` on unconfigured/error → `loadGems` falls back to `STATIC_GEMS`. No per-gem endpoint: the cached list is small, so `Gem` loads the list and `findGem`s client-side.
+browser → `api.agentgem.ai/api/registry/gems` (CORS-open, TTL-cached) → live gems, or `{ gems: [] }` on unconfigured/error → `loadGems` falls back to `STATIC_GEMS`. No per-gem endpoint: the cached list is small, so `Gem` loads the list and `findGem`s client-side.
 
 ## Out of scope (later)
 

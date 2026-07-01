@@ -11,7 +11,7 @@ Let signed-in users star/unstar **gems and ingredients**; everyone sees public s
 
 M2-A shipped GitHub web sign-in: `resolveSession(db, token) → { login, avatarUrl, accountId } | null` gates authed writes; the SPA's `makeAuth` makes credentialed calls; the raw-express + credentialed-CORS + originGuard-exemption pattern is established in `src/auth/install.ts` + `src/index.ts`.
 
-**Hard lesson carried from M2-A:** any new cross-site path (the SPA on `explore.agentgem.ai` → the API on `app.agentgem.ai`) is rejected by `originGuard`'s cross-site block unless exempted. So `/api/stars/*` must be exempted in `originGuard` AND tested *through* the guard (not just the handlers in isolation — that gap is what shipped the auth bug).
+**Hard lesson carried from M2-A:** any new cross-site path (the SPA on `app.agentgem.ai` → the API on `api.agentgem.ai`) is rejected by `originGuard`'s cross-site block unless exempted. So `/api/stars/*` must be exempted in `originGuard` AND tested *through* the guard (not just the handlers in isolation — that gap is what shipped the auth bug).
 
 **Structural fact:** ingredients live in the aggregator DB (`ingredients.id`, e.g. `skill:superpowers/brainstorming`), but gems do **not** — they're the static catalog / registry (key like `brainstorming-kit`). So the star target is stored as plain text (no FK), generic over both kinds.
 

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** A standalone public web app (`packages/marketplace`) — leaderboard + ingredient-detail — served static on Cloudflare Pages at `explore.agentgem.ai`, reading the deployed aggregator's public CORS-open endpoints.
+**Goal:** A standalone public web app (`packages/marketplace`) — leaderboard + ingredient-detail — served static on Cloudflare Pages at `app.agentgem.ai`, reading the deployed aggregator's public CORS-open endpoints.
 
 **Architecture:** A new Vite + React 19 SPA in the monorepo. It talks *only* to the deployed aggregator's public HTTP API (`popularity`/`co-occurrence`/`adoption`) over `fetch` — no server-code import — and copies the console's small, pure Insights helpers/visuals rather than importing them (to dodge the local↔origin divergence). History routing + a Cloudflare `_redirects` SPA fallback give clean shareable URLs.
 
@@ -924,4 +924,4 @@ Expected: green, clean, `dist/` produced (with `_redirects`).
 
 - [ ] **Manual smoke (optional):** `pnpm --filter @agentgem/marketplace dev`, open the printed localhost URL with `VITE_API_BASE=https://agentgem.onrender.com` → leaderboard loads from the live aggregator (or its k-anon empty state); click a row → ingredient page; toggle week/month.
 
-- [ ] **Deploy (separate, you-run-it):** a Cloudflare Pages runbook (project root `packages/marketplace`, build `pnpm --filter @agentgem/marketplace build`, output `packages/marketplace/dist`, env `VITE_API_BASE`, custom domain `explore.agentgem.ai`) — authored after the build is green, mirroring the Render runbook.
+- [ ] **Deploy (separate, you-run-it):** a Cloudflare Pages runbook (project root `packages/marketplace`, build `pnpm --filter @agentgem/marketplace build`, output `packages/marketplace/dist`, env `VITE_API_BASE`, custom domain `app.agentgem.ai`) — authored after the build is green, mirroring the Render runbook.
