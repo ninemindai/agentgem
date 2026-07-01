@@ -125,7 +125,23 @@ export function Insights({ apiBase }: { apiBase: string }) {
   );
 }
 
-export function InsightsReportCard({ report, scanned, onBuild, onContribute }: { report: InsightsReportView; scanned?: number | null; onBuild?: () => void; onContribute?: () => void }) {
+export function InsightsReportCard({ report, scanned, onBuild, onContribute }: { report: InsightsReportView; scanned?: number | null; onBuild?: () => void; onContribute?: () => void | Promise<void> }) {
+  const [contributing, setContributing] = useState(false);
+  const [contributeError, setContributeError] = useState<string | null>(null);
+
+  const handleContribute = async () => {
+    if (!onContribute) return;
+    setContributing(true);
+    setContributeError(null);
+    try {
+      await onContribute();
+    } catch (e) {
+      setContributeError(e instanceof Error ? e.message : "Prepare failed.");
+    } finally {
+      setContributing(false);
+    }
+  };
+
   // Be honest about the cap: the report judges the most-recent sessions, which
   // can be fewer than were scanned (50-session batch bound, or unmissioned ones).
   const judged = report.totals.sessions;
@@ -161,8 +177,9 @@ export function InsightsReportCard({ report, scanned, onBuild, onContribute }: {
           <div className="analyze-candidate-head">
             <h4 style={{ margin: 0 }}>Worth publishing</h4>
             {onBuild && <button type="button" className="ledger-build" style={{ marginLeft: "auto" }} onClick={onBuild}>Build a Gem from this project →</button>}
-            {onContribute && <button type="button" className="ledger-build" onClick={onContribute}>Contribute to explore →</button>}
+            {onContribute && <button type="button" className="ledger-build" disabled={contributing} onClick={handleContribute}>{contributing ? "Preparing…" : "Contribute to explore →"}</button>}
           </div>
+          {contributeError && <p className="ledger-error">{contributeError}</p>}
           <ul className="analyze-include">
             {publishCandidates.map((c) => (
               <li key={c.sessionId}>

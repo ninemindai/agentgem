@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, waitFor, act, fireEvent } from "@testing-library/react";
 import { InsightsReportCard } from "./index.js";
 import type { InsightsReportView } from "./insightsStream.js";
 
@@ -49,5 +49,54 @@ describe("InsightsReportCard", () => {
     };
     render(<InsightsReportCard report={report} onContribute={() => {}} />);
     expect(screen.getByText("Contribute to explore →")).toBeTruthy();
+  });
+
+  const contributeReport: InsightsReportView = {
+    totals: { sessions: 1, mostly: 1, partially: 0, not: 0 },
+    outcomes_summary: "1 session(s): 1 mostly achieved.",
+    narrative: "You ship.",
+    by_model: [],
+    friction: [],
+    publish_candidates: [{ sessionId: "c", goal: "deploy feature", why: "Succeeded" }],
+  };
+
+  it("disables the Contribute button and shows Preparing… while the prepare call is in flight", async () => {
+    let resolveContribute!: () => void;
+    const onContribute = () => new Promise<void>((r) => { resolveContribute = r; });
+
+    render(<InsightsReportCard report={contributeReport} onContribute={onContribute} />);
+    const btn = screen.getByText("Contribute to explore →") as HTMLButtonElement;
+    expect(btn.disabled).toBe(false);
+
+    fireEvent.click(btn);
+
+    await waitFor(() => {
+      const preparing = screen.getByText("Preparing…") as HTMLButtonElement;
+      expect(preparing).toBeTruthy();
+      expect(preparing.disabled).toBe(true);
+    });
+
+    act(() => { resolveContribute(); });
+
+    await waitFor(() => {
+      const restored = screen.getByText("Contribute to explore →") as HTMLButtonElement;
+      expect(restored.disabled).toBe(false);
+    });
+  });
+
+  it("shows an error and does not navigate when prepare rejects", async () => {
+    const originalHash = window.location.hash;
+    const onContribute = () => Promise.reject(new Error("server blew up"));
+
+    render(<InsightsReportCard report={contributeReport} onContribute={onContribute} />);
+    const btn = screen.getByText("Contribute to explore →");
+    fireEvent.click(btn);
+
+    await waitFor(() => {
+      expect(screen.getByText(/server blew up/)).toBeTruthy();
+    });
+
+    expect(window.location.hash).toBe(originalHash);
+    expect((screen.getByText("Contribute to explore →") as HTMLButtonElement).disabled).toBe(false);
   });
 });
