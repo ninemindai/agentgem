@@ -213,6 +213,9 @@ importers:
       '@agentgem/testbed':
         specifier: workspace:*
         version: link:../testbed
+      '@electric-sql/pglite':
+        specifier: ^0.5.3
+        version: 0.5.3
 
   packages/console:
     dependencies:

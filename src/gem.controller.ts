@@ -165,7 +165,7 @@ import { readDeployRecord, writeDeployRecord, clearDeployRecord } from "@agentge
 import type { DeployBackend } from "@agentgem/base";
 import { transcriptToken, readAnalysisCache, writeAnalysisCache } from "@agentgem/insight";
 import { readGlobalUsageCache, writeGlobalUsageCache, readGlobalUsageCacheStale } from "@agentgem/capture";
-import { computeGlobalUsage } from "@agentgem/capture";
+import { computeGlobalUsage, getGlobalUsageIndexed } from "@agentgem/capture";
 import { undeployManagedAgent, anthropicPublishClient } from "@agentgem/deploy";
 import { undeployAgentcoreHarness, realAgentcoreControlClient } from "@agentgem/deploy";
 
@@ -296,6 +296,14 @@ export class GemController {
       if (input.query.scope === "global") {
         const dirs = resolveDirs(input.query.dir);
         const paths = allClaudeTranscripts(dirs.claudeDir);
+        // Primary path: the persistent incremental index (reparses only changed
+        // transcripts). On any failure, fall through to the legacy token-cache +
+        // stale-while-revalidate full scan below — behavior-identical, just slower.
+        try {
+          return await getGlobalUsageIndexed(dirs, paths) as z.infer<typeof UsageSchema>;
+        } catch (e) {
+          console.error("[usage] index path failed, falling back to full scan:", e);
+        }
         const token = transcriptToken(paths);
         const exact = readGlobalUsageCache(token);
         if (exact) return exact as z.infer<typeof UsageSchema>;
