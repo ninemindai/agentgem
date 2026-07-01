@@ -125,6 +125,29 @@ export async function coOccurrenceMatrix(
   return r.rows as { a: string; b: string; producers: number; verifiedProducers: number }[];
 }
 
+export async function gemAdoption(
+  db: AppDb, opts: { keys?: string[]; k?: number } = {},
+): Promise<{ gemKey: string; installs: number; verifiedInstalls: number }[]> {
+  const k = opts.k ?? DEFAULT_K;
+  // PGlite does not accept JS arrays cast to text[] via drizzle params; build the filter with
+  // individually-bound params joined into ARRAY[...] so each element is a safe $N placeholder.
+  const keys = opts.keys && opts.keys.length ? opts.keys : null;
+  const keysFilter = keys
+    ? sql`gem_key = any(array[${sql.join(keys.map((key) => sql`${key}`), sql.raw(", "))}])`
+    : sql`true`;
+  const r = await db.execute<{ gemKey: string; installs: number; verifiedInstalls: number }>(sql`
+    select gem_key as "gemKey",
+           count(distinct producer_pubkey)::int as installs,
+           count(distinct account_login)::int as "verifiedInstalls"
+    from gem_adoptions
+    where ${keysFilter}
+    group by gem_key
+    having count(distinct producer_pubkey) >= ${k}
+    order by installs desc
+  `);
+  return r.rows as { gemKey: string; installs: number; verifiedInstalls: number }[];
+}
+
 export async function adoption(
   db: AppDb, opts: { id: string; bucket?: "week" | "month"; k?: number },
 ): Promise<{ bucket: string; producers: number; verifiedProducers: number; invocations: number }[]> {

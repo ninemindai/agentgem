@@ -8,7 +8,7 @@ import { inject } from "@agentback/core";
 import { DrizzleBindings } from "@agentback/drizzle";
 import type { AppDb } from "@agentgem/aggregator";
 import { ingestAttestation, ingestGemAdoption } from "@agentgem/aggregator";
-import { popularity, coOccurrence, adoption, overview, coOccurrenceMatrix, modelBenchmark } from "@agentgem/aggregator";
+import { popularity, coOccurrence, adoption, overview, coOccurrenceMatrix, modelBenchmark, gemAdoption } from "@agentgem/aggregator";
 import type { UsageAttestation, GemAdoption } from "@agentgem/insight";
 import { recordBinding } from "@agentgem/aggregator";
 import { GitHubVerifier } from "@agentgem/aggregator";
@@ -36,6 +36,9 @@ const AdoptResult = z.array(z.object({ bucket: z.string(), producers: z.number()
 const OverviewResult = z.object({ ingredients: z.number(), producers: z.number(), verifiedProducers: z.number(), invocations: z.number(), sessions: z.number() });
 const BenchQuery = z.object({ gemDigest: z.string().optional(), limit: z.coerce.number().optional() }); // NOTE: no `k`
 const BenchResult = z.array(z.object({ model: z.string(), mostly: z.number(), partially: z.number(), notAchieved: z.number(), producers: z.number(), verifiedProducers: z.number() }));
+const GemAdoptionQuery = z.object({ keys: z.string().optional() });
+const GemAdoptionResult = z.object({ items: z.array(z.object({ gemKey: z.string(), installs: z.number(), verifiedInstalls: z.number() })) });
+
 const BindBody = z.object({ pubkey: z.string(), token: z.string(), signedAt: z.number(), signature: z.string() });
 const BindResultSchema = z.union([
   z.object({ bound: z.literal(true), provider: z.string(), login: z.string(), accountId: z.string() }),
@@ -120,6 +123,13 @@ export class AggregatorController {
   @get("/benchmarks", { query: BenchQuery, response: BenchResult })
   async benchmarks(input: { query: z.infer<typeof BenchQuery> }): Promise<z.infer<typeof BenchResult>> {
     return modelBenchmark(this.db, { gemDigest: input.query.gemDigest, limit: input.query.limit });
+  }
+
+  // Gem-level k-anon install counts. k is server policy (DEFAULT_K), never caller-supplied.
+  @get("/gem-adoption", { query: GemAdoptionQuery, response: GemAdoptionResult })
+  async gemAdoption(input: { query: z.infer<typeof GemAdoptionQuery> }): Promise<z.infer<typeof GemAdoptionResult>> {
+    const keys = input.query.keys ? input.query.keys.split(",").map((s) => s.trim()).filter(Boolean) : undefined;
+    return { items: await gemAdoption(this.db, { keys }) };
   }
 
   @post("/bind", { body: BindBody, response: BindResultSchema })
