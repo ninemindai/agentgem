@@ -3,9 +3,15 @@ import { defineConsolePage } from "../../registry.js";
 import { Loading } from "../../shell/Loading.js";
 import {
   deployTargetsRoute, setCredentialRoute, CREDENTIAL_KEYS, makeClient,
+  bindStatusRoute, bindStartRoute, bindCompleteRoute,
 } from "../../api/routes.js";
 
 type Backend = { id: string; label: string; ready: boolean };
+type BindStatus = { bound: boolean; login?: string; provider?: string } | null;
+type BindFlow =
+  | { step: "code"; userCode: string; verificationUri: string; deviceCode: string; interval?: number }
+  | { step: "unconfigured" }
+  | null;
 
 export function Settings({ apiBase }: { apiBase: string }) {
   const [targets, setTargets] = useState<Backend[] | null>(null);
@@ -14,11 +20,54 @@ export function Settings({ apiBase }: { apiBase: string }) {
   const [credValue, setCredValue] = useState("");
   const [credNote, setCredNote] = useState<string | null>(null);
 
+  const [bindStatus, setBindStatus] = useState<BindStatus>(null);
+  const [bindFlow, setBindFlow] = useState<BindFlow>(null);
+  const [bindError, setBindError] = useState<string | null>(null);
+
   useEffect(() => {
     deployTargetsRoute.call(makeClient(apiBase))
       .then((r) => setTargets(r.targets))
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   }, [apiBase]);
+
+  useEffect(() => {
+    bindStatusRoute.call(makeClient(apiBase))
+      .then((r) => setBindStatus(r))
+      .catch((e) => setBindError(e instanceof Error ? e.message : String(e)));
+  }, [apiBase]);
+
+  const connectGitHub = async () => {
+    setBindError(null);
+    setBindFlow(null);
+    try {
+      const r = await bindStartRoute.call(makeClient(apiBase));
+      if (!r.configured) {
+        setBindFlow({ step: "unconfigured" });
+        return;
+      }
+      const flow: BindFlow = {
+        step: "code",
+        userCode: r.userCode!,
+        verificationUri: r.verificationUri!,
+        deviceCode: r.deviceCode!,
+        interval: r.interval,
+      };
+      setBindFlow(flow);
+      const result = await bindCompleteRoute.call(makeClient(apiBase), {
+        body: { deviceCode: r.deviceCode!, interval: r.interval },
+      });
+      if (result.bound) {
+        setBindStatus({ bound: true, login: result.login });
+        setBindFlow(null);
+      } else if (result.rejected) {
+        setBindError(result.rejected);
+        setBindFlow(null);
+      }
+    } catch (e) {
+      setBindError(e instanceof Error ? e.message : String(e));
+      setBindFlow(null);
+    }
+  };
 
   const saveCredential = async () => {
     setCredNote(null);
@@ -43,6 +92,36 @@ export function Settings({ apiBase }: { apiBase: string }) {
           <button type="button" className="ledger-build" disabled={!credValue.trim()} onClick={saveCredential}>Save</button>
           {credNote && <span className="ws-note">{credNote}</span>}
         </div>
+      </section>
+
+      <section className="ledger-group">
+        <h2 className="ledger-group-label">Verify identity</h2>
+        {bindError && <p className="ledger-error">{bindError}</p>}
+        {bindStatus === null ? null : bindStatus.bound ? (
+          <p className="ws-note">Verified as @{bindStatus.login}</p>
+        ) : (
+          <>
+            <p className="deploy-hint">Not verified — your installs won't count toward verified ratings</p>
+            {bindFlow === null && (
+              <>
+                <div className="ledger-bar">
+                  <button type="button" className="ledger-build" onClick={connectGitHub}>Connect GitHub</button>
+                </div>
+                <p className="deploy-hint">Connect to unlock 💎 Diamond — verified installs count toward your rating</p>
+              </>
+            )}
+            {bindFlow?.step === "unconfigured" && (
+              <p className="deploy-hint">Verification unavailable (not configured)</p>
+            )}
+            {bindFlow?.step === "code" && (
+              <div>
+                <p className="ws-note">Your code: <strong>{bindFlow.userCode}</strong></p>
+                <p className="deploy-hint"><a href={bindFlow.verificationUri} target="_blank" rel="noreferrer">Open GitHub</a> and enter this code</p>
+                <p className="deploy-hint">Waiting for verification…</p>
+              </div>
+            )}
+          </>
+        )}
       </section>
 
       <section className="ledger-group">
