@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GemController } from "../../gem.controller.js";
-import { setConnectFnForTests } from "@agentgem/insight";
+import { setConnectFnForTests, claudeTranscriptsForCwd, transcriptToken, readAnalysisCache } from "@agentgem/insight";
 
 let home: string, projectRoot: string;
 beforeAll(() => {
@@ -49,6 +49,24 @@ describe("POST /api/workflow/analyze", () => {
     expect(res.signalSummary.sessionsScanned).toBe(1);
     // distillation track present (empty here — the transcript has no builtin procedure)
     expect(res.distilled).toEqual([]);
+  });
+
+  it("populates the analysis cache so a second call is served from cache", async () => {
+    const cacheHome = mkdtempSync(join(tmpdir(), "wfcache-"));
+    const prev = process.env.AGENTGEM_HOME;
+    process.env.AGENTGEM_HOME = cacheHome;
+    try {
+      const ctl = new GemController();
+      const res = await ctl.workflowAnalyze({ body: { dir: join(home, ".claude"), root: projectRoot } });
+      // Non-degraded run must write a cache entry.
+      expect(res.degraded).toBe(false);
+      const paths = claudeTranscriptsForCwd(join(home, ".claude"), projectRoot);
+      const cached = readAnalysisCache(projectRoot, transcriptToken(paths));
+      expect(cached).not.toBeNull();
+    } finally {
+      if (prev === undefined) delete process.env.AGENTGEM_HOME; else process.env.AGENTGEM_HOME = prev;
+      rmSync(cacheHome, { recursive: true, force: true });
+    }
   });
 });
 
