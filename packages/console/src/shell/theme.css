@@ -976,3 +976,12 @@ button.scorecard-intent { line-height: 1.4; }
 .dream-act:hover { border-color: var(--accent); color: var(--accent); }
 .dream-act.is-accept:hover { border-color: var(--emerald); color: var(--emerald); }
 .dream-diary { margin: 8px 0 0; color: var(--muted); font: 13px/1.5 var(--font-ui); font-style: italic; }
+.dream-diary-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.dream-diary-list li { display: flex; align-items: baseline; gap: 12px; padding: 8px 2px;
+  border-bottom: 1px solid var(--line-soft); font: 12.5px/1.5 var(--font-ui); color: var(--ink-soft); }
+.dream-diary-list li:last-child { border-bottom: none; }
+.dream-diary-when { min-width: 76px; color: var(--muted); font: 600 12px/1.4 var(--font-mono); }
+.dream-diary-phases { color: var(--accent); font: 600 11px/1.4 var(--font-mono); letter-spacing: .06em; }
+.dream-diary-count { flex: 1; color: var(--ink-soft); }
+.dream-diary-degraded { padding: 1px 7px; border-radius: 999px; font: 600 9.5px/1.4 var(--font-mono);
+  letter-spacing: .06em; text-transform: uppercase; background: rgba(154, 51, 36, .1); color: var(--accent); }

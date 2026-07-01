@@ -7,7 +7,7 @@ import { writeDistilledDraft, writeDistilledLesson } from "@agentgem/capture";
 import type { DistilledSkill, Reflection } from "@agentgem/insight";
 import { agentgemHome, InvalidInputError } from "@agentgem/model";
 import { getWarmStatus, runWarmPass } from "./warm/orchestrator.js";
-import { readQueue, setStatus, promotedCount } from "./dream/store.js";
+import { readQueue, setStatus, promotedCount, readDiary } from "./dream/store.js";
 import { dreamEnabled, setDreamEnabled } from "./dream/config.js";
 import { reflectionToLesson } from "./dream/harvest.js";
 
@@ -38,6 +38,15 @@ const QueueSchema = z.object({ items: z.array(QueueItemSchema) });
 const OkPathSchema = z.object({ ok: z.boolean(), path: z.string() });
 const OkSchema = z.object({ ok: z.boolean() });
 const StartedSchema = z.object({ started: z.boolean() });
+const DiaryEntrySchema = z.object({
+  atMs: z.number(),
+  passId: z.number(),
+  rootsProcessed: z.array(z.string()),
+  phasesLit: z.array(z.enum(["LIGHT", "DEEP", "REM"])),
+  enqueued: z.object({ skills: z.number(), lessons: z.number() }),
+  degraded: z.boolean(),
+});
+const DiarySchema = z.object({ entries: z.array(DiaryEntrySchema) });
 
 const PHASE_OF: Record<string, "LIGHT" | "DEEP" | "REM"> = {
   usage: "LIGHT", scorecard: "LIGHT", analyze: "DEEP", insights: "REM",
@@ -66,6 +75,11 @@ export class DreamController {
   @get("/dream/queue", { response: QueueSchema })
   async queue(): Promise<z.infer<typeof QueueSchema>> {
     return { items: readQueue(this.base).filter((e) => e.status === "queued") };
+  }
+
+  @get("/dream/diary", { response: DiarySchema })
+  async diary(): Promise<z.infer<typeof DiarySchema>> {
+    return { entries: readDiary(this.base) }; // newest-first, bounded by the store
   }
 
   @post("/dream/queue/accept", { body: KeyBody, response: OkPathSchema })

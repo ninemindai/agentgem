@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { defineConsolePage } from "../../registry.js";
-import { getStatus, getQueue, post, type DreamStatus, type DreamItem } from "./api.js";
+import { timeAgo } from "../../util/timeAgo.js";
+import { getStatus, getQueue, getDiary, post, type DreamStatus, type DreamItem, type DreamDiaryEntry } from "./api.js";
 
 const PHASES = ["LIGHT", "DEEP", "REM"] as const;
 
@@ -12,11 +13,13 @@ export function Dreaming({ apiBase }: { apiBase: string }) {
   const [tab, setTab] = useState<"review" | "diary">("review");
   const [status, setStatus] = useState<DreamStatus | null>(null);
   const [items, setItems] = useState<DreamItem[]>([]);
+  const [diary, setDiary] = useState<DreamDiaryEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
     getStatus(apiBase).then(setStatus).catch(() => setStatus(null));
     getQueue(apiBase).then((r) => setItems(r.items)).catch(() => setItems([]));
+    getDiary(apiBase).then((r) => setDiary(r.entries ?? [])).catch(() => setDiary([]));
   }, [apiBase]);
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -68,7 +71,20 @@ export function Dreaming({ apiBase }: { apiBase: string }) {
         </>
       )}
 
-      {tab === "diary" && <p className="dream-diary">Diary view — pass history (wire to /api/dream/diary in a follow-up).</p>}
+      {tab === "diary" && (
+        diary.length === 0
+          ? <p className="dream-diary">No dream passes yet.</p>
+          : <ul className="dream-diary-list">
+              {diary.map((d) => (
+                <li key={`${d.passId}:${d.atMs}`}>
+                  <span className="dream-diary-when">{timeAgo(d.atMs)}</span>
+                  <span className="dream-diary-phases">{d.phasesLit.join(" · ") || "—"}</span>
+                  <span className="dream-diary-count">+{d.enqueued.skills} skills · +{d.enqueued.lessons} lessons</span>
+                  {d.degraded && <span className="dream-diary-degraded">degraded</span>}
+                </li>
+              ))}
+            </ul>
+      )}
     </div>
   );
 }
