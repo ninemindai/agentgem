@@ -21,18 +21,36 @@ function jsonFetch(body: unknown): typeof fetch {
 }
 
 describe("bindConfig", () => {
-  it("returns empty object when env vars unset", () => {
+  it("falls back to the canonical hosted app when env vars unset", () => {
     const prev1 = process.env.AGENTGEM_GITHUB_CLIENT_ID;
     const prev2 = process.env.AGENTGEM_AGGREGATOR_URL;
     delete process.env.AGENTGEM_GITHUB_CLIENT_ID;
     delete process.env.AGENTGEM_AGGREGATOR_URL;
     try {
       const cfg = bindConfig();
-      expect(cfg.clientId).toBeUndefined();
-      expect(cfg.base).toBeUndefined();
+      // Device-flow client IDs are public, so we ship a default so Connect works out of the box.
+      expect(cfg.clientId).toBe("Ov23liCbBVnhr7AH9FkF");
+      expect(cfg.base).toBe("https://api.agentgem.ai");
     } finally {
       if (prev1 !== undefined) process.env.AGENTGEM_GITHUB_CLIENT_ID = prev1;
       if (prev2 !== undefined) process.env.AGENTGEM_AGGREGATOR_URL = prev2;
+    }
+  });
+
+  it("prefers env overrides when set", () => {
+    const prev1 = process.env.AGENTGEM_GITHUB_CLIENT_ID;
+    const prev2 = process.env.AGENTGEM_AGGREGATOR_URL;
+    process.env.AGENTGEM_GITHUB_CLIENT_ID = "self-hosted-id";
+    process.env.AGENTGEM_AGGREGATOR_URL = "http://agg.local";
+    try {
+      const cfg = bindConfig();
+      expect(cfg.clientId).toBe("self-hosted-id");
+      expect(cfg.base).toBe("http://agg.local");
+    } finally {
+      if (prev1 === undefined) delete process.env.AGENTGEM_GITHUB_CLIENT_ID;
+      else process.env.AGENTGEM_GITHUB_CLIENT_ID = prev1;
+      if (prev2 === undefined) delete process.env.AGENTGEM_AGGREGATOR_URL;
+      else process.env.AGENTGEM_AGGREGATOR_URL = prev2;
     }
   });
 });

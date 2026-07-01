@@ -202,7 +202,8 @@ describe("Curate", () => {
     // All four handed-off keys are pre-selected…
     await waitFor(() => expect(screen.getByText("4 selected")).toBeTruthy());
     // …and the Publish-to-Explore form is open so the user can share it out.
-    expect(screen.getByText("Share to Explore")).toBeTruthy();
+    // (heading role disambiguates from the identically-labelled submit button)
+    expect(screen.getByRole("heading", { name: "Share to Explore" })).toBeTruthy();
     // Default workspace name was applied from the contribution.
     expect((screen.getByLabelText("workspace name") as HTMLInputElement).value).toBe("my-setup");
   });
