@@ -245,7 +245,7 @@ export const TargetIdSchema = z.enum(TARGET_IDS);
 
 export const SkippedArtifactSchema = z.object({
   artifact: z.string(),
-  type: z.enum(["skill", "mcp_server", "instructions", "hook", "channel"]),
+  type: z.enum(["skill", "mcp_server", "instructions", "hook", "channel", "reference"]),
   reason: z.string(),
 });
 

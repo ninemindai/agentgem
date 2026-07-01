@@ -25,7 +25,7 @@ export interface ManagedAgentPayload {
   tools: ({ type: "agent_toolset_20260401" } | { type: "mcp_toolset"; mcp_server_name: string })[];
 }
 
-export interface SkippedArtifact { artifact: string; type: ArtifactType; reason: string }
+export interface SkippedArtifact { artifact: string; type: ArtifactType | "reference"; reason: string }
 
 export interface ManagedAgentRender {
   payload: ManagedAgentPayload;                    // agents.create payload minus skills (added at publish)
