@@ -40,13 +40,13 @@ export function parseGeminiSession(jsonl: string, fallbackSessionId: string, pro
     if (typeof rec.id === "string") {                  // message record
       const m = rec as unknown as GemMsg;
       map.set(m.id, m);
-      if (m.type === "gemini" && typeof m.model === "string") model = m.model;
     }
   }
   const msgsArr = [...map.values()].filter((m) => m.type === "user" || m.type === "gemini");
   if (msgsArr.length === 0) return null;
   let startMs = Infinity, endMs = -Infinity, tokensIn = 0, tokensOut = 0, tokensCache = 0;
   for (const m of msgsArr) {
+    if (m.type === "gemini" && typeof m.model === "string") model = m.model;
     const ts = m.timestamp ? Date.parse(m.timestamp) : NaN;
     if (!Number.isNaN(ts)) { startMs = Math.min(startMs, ts); endMs = Math.max(endMs, ts); }
     if (m.type === "gemini" && m.tokens) {

@@ -30,4 +30,21 @@ describe("Gemini session fold", () => {
     expect(parseGeminiSession("", "f", null)).toBeNull();
     expect(parseGeminiSession("not json\n{bad", "f", null)).toBeNull();
   });
+  it("derives model from surviving messages, not a message later dropped by $rewindTo", () => {
+    // header, user m1, gemini m2 (survivor, model gemini-2.5-pro), user m3, gemini m4 (model
+    // gemini-OLD), then $rewindTo m4 (drops m4). The raw fold sees m4 LAST, so a naive
+    // last-write-wins over ALL records would wrongly report "gemini-OLD"; the survivors
+    // (m1, m2, m3) are model "gemini-2.5-pro".
+    const rewoundJsonl = [
+      L({ sessionId: "sess-456", projectHash: "abc", startTime: "2026-07-01T00:00:00Z", lastUpdated: "2026-07-01T00:10:00Z", kind: "main" }),
+      L({ id: "m1", timestamp: "2026-07-01T00:00:01Z", type: "user", content: "hi" }),
+      L({ id: "m2", timestamp: "2026-07-01T00:00:02Z", type: "gemini", model: "gemini-2.5-pro", content: "x", tokens: { input: 5, output: 3, cached: 0, total: 8 } }),
+      L({ id: "m3", timestamp: "2026-07-01T00:05:00Z", type: "user", content: "again" }),
+      L({ id: "m4", timestamp: "2026-07-01T00:05:01Z", type: "gemini", model: "gemini-OLD", content: "y", tokens: { input: 999, output: 999, cached: 0, total: 1998 } }),
+      L({ $rewindTo: "m4" }),
+    ].join("\n");
+    const s = parseGeminiSession(rewoundJsonl, "fallback", "my-repo")!;
+    expect(s.msgs).toBe(3);
+    expect(s.model).toBe("gemini-2.5-pro");
+  });
 });
