@@ -16,6 +16,14 @@ function lessonEntry(): DreamQueueEntry {
     draft: { kind: "recurring-decision", detail: "use pnpm", importance: "high", provenance: prov } as DreamQueueEntry["draft"],
     status: "queued", firstSeenMs: 1 };
 }
+function skillEntry(): DreamQueueEntry {
+  return { key: "skill:/p:run-migrations:h", kind: "skill", root: "/p", name: "run-migrations",
+    summary: "apply db migrations", confidence: "high", phase: "DEEP",
+    draft: { name: "run-migrations", description: "apply db migrations", triggers: [], tools: [], mutating: true,
+      body: "…", evidence: { sessions: 1, exampleSequence: [], root: "/p", provenance: prov },
+      status: "draft", confidence: "high", origin: "llm" } as DreamQueueEntry["draft"],
+    status: "queued", firstSeenMs: 1 };
+}
 
 describe("DreamController", () => {
   let base: string;
@@ -29,6 +37,15 @@ describe("DreamController", () => {
     const res = await c.accept({ body: { key: "lesson:/p:l1:h" } });
     expect(res.ok).toBe(true);
     expect(res.path).toContain(join(".agentgem", "distilled", "lessons", "l1.md"));
+  });
+
+  it("accepts a skill (writes a distilled SKILL.md)", async () => {
+    enqueueNew([skillEntry()], base);
+    const c = new DreamController();
+    (c as unknown as { base: string }).base = base;
+    const res = await c.accept({ body: { key: "skill:/p:run-migrations:h" } });
+    expect(res.ok).toBe(true);
+    expect(res.path).toContain(join(".agentgem", "distilled", "run-migrations", "SKILL.md"));
   });
 
   it("dismiss removes from queued and blocks re-list", async () => {
