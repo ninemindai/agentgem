@@ -15,3 +15,4 @@ export * from "./localDb.js";
 export * from "./webAuth.js";
 export * from "./stars.js";
 export * from "./projectAdoption.js";
+export * from "./ingestAdoption.js";

@@ -7,9 +7,9 @@ import { api, get, post } from "@agentback/openapi";
 import { inject } from "@agentback/core";
 import { DrizzleBindings } from "@agentback/drizzle";
 import type { AppDb } from "@agentgem/aggregator";
-import { ingestAttestation } from "@agentgem/aggregator";
+import { ingestAttestation, ingestGemAdoption } from "@agentgem/aggregator";
 import { popularity, coOccurrence, adoption, overview, coOccurrenceMatrix, modelBenchmark } from "@agentgem/aggregator";
-import type { UsageAttestation } from "@agentgem/insight";
+import type { UsageAttestation, GemAdoption } from "@agentgem/insight";
 import { recordBinding } from "@agentgem/aggregator";
 import { GitHubVerifier } from "@agentgem/aggregator";
 import { sweepQuarantine } from "@agentgem/aggregator";
@@ -21,6 +21,10 @@ const IngestResult = z.union([
   z.object({ accepted: z.literal(true), id: z.string(), publicIngredients: z.number(), privateCount: z.number(), idempotent: z.boolean() }),
   z.object({ accepted: z.literal(false), rejected: z.string() }),
 ]);
+// Loose body schema — the real gate is verifyGemAdoption (ed25519 signature).
+const AdoptBody = z.object({ producer: z.object({ publicKey: z.string() }).loose(), signature: z.string(), gemKey: z.string(), version: z.string(), gemDigest: z.string() }).loose();
+const AdoptResultSchema = z.object({ accepted: z.boolean(), idempotent: z.boolean().optional(), rejected: z.string().optional() });
+
 const PopQuery = z.object({ kind: z.string().optional(), limit: z.coerce.number().optional() }); // NOTE: no `k`
 const PopResult = z.array(z.object({ id: z.string(), kind: z.string(), producers: z.number(), verifiedProducers: z.number(), invocations: z.number(), sessions: z.number() }));
 const CoQuery = z.object({ id: z.string(), limit: z.coerce.number().optional() }); // NOTE: no `k`
@@ -76,6 +80,11 @@ export class AggregatorController {
   @post("/ingest", { body: IngestBody, response: IngestResult })
   async ingest(input: { body: z.infer<typeof IngestBody> }): Promise<z.infer<typeof IngestResult>> {
     return ingestAttestation(this.db, input.body as unknown as UsageAttestation);
+  }
+
+  @post("/adopt", { body: AdoptBody, response: AdoptResultSchema })
+  async adopt(input: { body: z.infer<typeof AdoptBody> }): Promise<z.infer<typeof AdoptResultSchema>> {
+    return ingestGemAdoption(this.db, input.body as unknown as GemAdoption);
   }
 
   @get("/popularity", { query: PopQuery, response: PopResult })

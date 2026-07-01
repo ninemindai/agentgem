@@ -49,7 +49,7 @@ export function clientIp(req: GReq): string {
 
 function isIngestPath(req: GReq): boolean {
   const full = req.originalUrl ? req.originalUrl.split("?")[0] : (req.baseUrl ?? "") + (req.path ?? "");
-  return full === `${AGG_PATH}/ingest`;
+  return full === `${AGG_PATH}/ingest` || full === `${AGG_PATH}/adopt`;
 }
 
 // Admin paths (key management + sweep) must not consume the public rate-limit buckets.
