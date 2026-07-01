@@ -89,7 +89,7 @@ export function writeGemArchive(gem: Gem, opts: { version?: string; dependencies
 
   const withExt = (s: string, ext: string) => (s.endsWith(ext) ? s : s + ext);
 
-  const place = (path: string, content: string, name: string, type: ArtifactType): boolean => {
+  const place = (path: string, content: string, name: string, type: ArtifactType | "reference"): boolean => {
     if (path in files) { skipped.push({ artifact: name, type, reason: `path collision with an earlier ${type} at ${path}` }); return false; }
     files[path] = content;
     return true;
@@ -121,7 +121,7 @@ export function writeGemArchive(gem: Gem, opts: { version?: string; dependencies
     } else if (a.type === "reference") {
       const path = `refs/${withExt(seg, ".json")}`;
       const bodyStr = JSON.stringify({ refKind: a.refKind, ref: a.ref }, null, 2);
-      if (place(path, bodyStr, a.name, "skill")) artifacts.push({ type: "reference", name: a.name, path } as ManifestArtifactEntry);
+      if (place(path, bodyStr, a.name, "reference")) artifacts.push({ type: "reference", name: a.name, path });
     } else {
       const path = `hooks/${withExt(seg, ".json")}`;
       const body: Record<string, unknown> = { event: a.event, config: a.config };

@@ -8,6 +8,7 @@ import type { GemArtifact, McpServerArtifact, ReferenceArtifact } from "./types.
 export function resolveArtifactRef(a: ReferenceArtifact):
   | { ok: true; artifact: GemArtifact }
   | { ok: false; reason: string } {
+  if (!a?.ref || typeof a.ref.id !== "string") return { ok: false, reason: "malformed reference (missing ref or id)" };
   if (a.ref.kind === "package") {
     // id shape "npx:@scope/pkg" or "runner:pkg" -> { command: runner, args: [pkg] }
     const [runner, ...rest] = a.ref.id.split(":");

@@ -17,7 +17,7 @@ import { stdioProxyRunner, PROXY_BASE_PORT, PROXY_HOST } from "./mcpProxy.js";
 export type TargetId = "claude" | "codex" | "agents" | "hermes" | "eve" | "flue" | "openai-sandbox" | "agentcore" | "a2a";
 export type FileTree = Record<string, string>;
 
-export interface SkippedArtifact { artifact: string; type: ArtifactType; reason: string }
+export interface SkippedArtifact { artifact: string; type: ArtifactType | "reference"; reason: string }
 export interface MaterializeResult { files: FileTree; skipped: SkippedArtifact[] }
 
 // Per-materialization options that some targets honor (e.g. eve's deploy-time auth posture,
@@ -893,6 +893,7 @@ export function materialize(gem: Gem, target: TargetId, opts: MaterializeOpts = 
   const instr = gem.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions");
   const hooks = gem.artifacts.filter((a): a is HookArtifact => a.type === "hook");
   const channels = gem.artifacts.filter((a): a is ChannelArtifact => a.type === "channel");
+  const refs = gem.artifacts.filter((a): a is ReferenceArtifact => a.type === "reference");
 
   if (spec.skill) for (const s of skills) merge(spec.skill(s), s.name, "skill");
   else skipAll(skills, "skill");
@@ -901,13 +902,28 @@ export function materialize(gem: Gem, target: TargetId, opts: MaterializeOpts = 
     if (spec.instructions) merge(spec.instructions(instr), instr.map((i) => i.name).join(", "), "instructions");
     else skipAll(instr, "instructions");
   }
-  if (mcp.length) {
+
+  // Resolve references up front so package-backed mcp_server refs render in the SAME
+  // spec.mcp(...) call as value mcp_server artifacts below. Targets whose mcp renderer
+  // aggregates all servers into one fixed-path file (claude -> .mcp.json, codex ->
+  // config.toml) would otherwise have each extra per-reference spec.mcp(...) call re-emit
+  // the whole file at the same path, which merge() then drops as a path collision.
+  const resolvedMcpRefs: McpServerArtifact[] = [];
+  for (const r of refs) {
+    const res = resolveArtifactRef(r);
+    if (!res.ok) { skipped.push({ artifact: r.name, type: r.refKind, reason: res.reason }); continue; }
+    if (res.artifact.type === "mcp_server") resolvedMcpRefs.push(res.artifact);
+    else skipped.push({ artifact: r.name, type: r.refKind, reason: `reference of kind ${r.refKind} unsupported on ${target}` });
+  }
+
+  const allMcp = [...mcp, ...resolvedMcpRefs];
+  if (allMcp.length) {
     if (spec.mcp) {
-      const result = spec.mcp(mcp);
-      merge(result.files, mcp.map((m) => m.name).join(", "), "mcp_server");
+      const result = spec.mcp(allMcp);
+      merge(result.files, allMcp.map((m) => m.name).join(", "), "mcp_server");
       skipped.push(...result.skipped);
     }
-    else skipAll(mcp, "mcp_server");
+    else skipAll(allMcp, "mcp_server");
   }
   if (hooks.length) {
     if (spec.hook) merge(spec.hook(hooks), hooks.map((h) => h.name).join(", "), "hook");
@@ -920,17 +936,6 @@ export function materialize(gem: Gem, target: TargetId, opts: MaterializeOpts = 
       skipped.push(...result.skipped);
     }
     else skipAll(channels, "channel");
-  }
-
-  const refs = gem.artifacts.filter((a): a is ReferenceArtifact => a.type === "reference");
-  for (const r of refs) {
-    const res = resolveArtifactRef(r);
-    if (!res.ok) { skipped.push({ artifact: r.name, type: r.refKind, reason: res.reason }); continue; }
-    if (res.artifact.type === "mcp_server" && spec.mcp) {
-      const out = spec.mcp([res.artifact]); merge(out.files, r.name, "mcp_server"); skipped.push(...out.skipped);
-    } else {
-      skipped.push({ artifact: r.name, type: r.refKind, reason: `reference of kind ${r.refKind} unsupported on ${target}` });
-    }
   }
 
   if (spec.compose) {
