@@ -18,3 +18,24 @@ export class GitHubVerifier implements AccountVerifier {
     return { provider: "github", accountId: String(u.id), login: u.login };
   }
 }
+
+/**
+ * Public GitHub org memberships for the token's user. Failure-tolerant by design:
+ * any non-2xx, malformed, or thrown error yields [] so login never fails over it.
+ * v1 is PUBLIC orgs only (no read:org scope requested).
+ */
+export async function fetchOrgs(token: string, fetchImpl: typeof fetch = fetch): Promise<string[]> {
+  try {
+    const res = await fetchImpl("https://api.github.com/user/orgs", {
+      headers: { Authorization: `Bearer ${token}`, "User-Agent": "agentgem", Accept: "application/vnd.github+json" },
+    });
+    if (!res.ok) return [];
+    const body = (await res.json()) as unknown;
+    if (!Array.isArray(body)) return [];
+    return body
+      .map((o) => (o && typeof (o as { login?: unknown }).login === "string" ? (o as { login: string }).login : null))
+      .filter((l): l is string => l !== null);
+  } catch {
+    return [];
+  }
+}
