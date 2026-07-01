@@ -27,14 +27,12 @@ interface SseRes {
 }
 
 export interface ScorecardStreamDeps extends ScorecardDeps {
-  readCache(root: string, token: string): unknown | null;
   readCacheEntry(root: string, token: string): { result: unknown; ts: number } | null;
   writeCache(root: string, token: string, result: unknown, nowMs: number): void;
 }
 
 const realStreamDeps: ScorecardStreamDeps = {
   ...defaultScorecardDeps,
-  readCache: readAnalysisCache,
   readCacheEntry: readAnalysisCacheEntry,
   writeCache: writeAnalysisCache,
 };
