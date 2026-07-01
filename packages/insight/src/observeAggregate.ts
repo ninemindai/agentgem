@@ -7,8 +7,12 @@
 // range/filter view client-side from one raw scan, sharing this exact logic with
 // the server (which still calls it after scanning). Keep it dependency-free.
 
+/** Open, registry-derived agent identity. Runtime validity is the SourceRegistry's concern;
+ *  the type stays `string` so the pure aggregation layer needs no registry dependency. */
+export type AgentId = string;
+
 export interface SessionStat {
-  agent: "claude" | "codex";
+  agent: AgentId;
   sessionId: string;
   project: string | null;   // basename of session cwd, or null
   model: string | null;
@@ -28,8 +32,8 @@ export interface ObserveFilter { agent?: string; project?: string; model?: strin
 export interface ObservePayload {
   pulse: { sessions: number; msgs: number; tokens: number; activeMs: number };
   daily: { date: string; sessions: number; msgs: number; tokensIn: number; tokensOut: number; tokensCache: number }[];
-  sessions: { agent: "claude" | "codex"; sessionId: string; project: string | null; model: string | null; startMs: number; endMs: number; durationMs: number; msgs: number; tokens: number; tokensIn: number; tokensOut: number; tokensCache: number; gitBranch: string | null }[];
-  models: { model: string; agent: "claude" | "codex"; sessions: number; tokens: number }[];
+  sessions: { agent: AgentId; sessionId: string; project: string | null; model: string | null; startMs: number; endMs: number; durationMs: number; msgs: number; tokens: number; tokensIn: number; tokensOut: number; tokensCache: number; gitBranch: string | null }[];
+  models: { model: string; agent: AgentId; sessions: number; tokens: number }[];
   facets: { agents: string[]; projects: string[]; models: string[] };
   range: ObserveRange;
 }

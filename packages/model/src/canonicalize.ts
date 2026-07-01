@@ -50,8 +50,9 @@ function runnerName(command: string): string {
 const PUBLIC_SCOPES = new Set(["@modelcontextprotocol"]);
 
 export function canonicalModel(id: string): Ingredient { return { id: id.toLowerCase(), idKind: "known", public: true }; }
-export function canonicalHarness(flavor: "claude" | "codex"): Ingredient {
-  return { id: flavor === "claude" ? "claude-code" : "codex", idKind: "known", public: true };
+const KNOWN_HARNESS: Record<string, string> = { claude: "claude-code", codex: "codex" };
+export function canonicalHarness(flavor: string): Ingredient {
+  return { id: KNOWN_HARNESS[flavor] ?? flavor, idKind: "known", public: true };
 }
 
 export function canonicalSkill(s: SkillArtifact, salt: string): Ingredient {

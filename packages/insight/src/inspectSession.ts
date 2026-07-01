@@ -16,7 +16,7 @@ import { join, basename } from "node:path";
 import { resolveDirs } from "@agentgem/model";
 import { jsonLines, listFiles, parseClaudeTranscript, parseCodexTranscript } from "./observeScan.js";
 import { scrubText } from "./scrub.js";
-import type { SessionStat } from "./observeAggregate.js";
+import type { SessionStat, AgentId } from "./observeAggregate.js";
 import type { DistilledSkill } from "./distillTypes.js";
 
 export interface TokenBreakdown { in: number; out: number; cache: number; }
@@ -35,7 +35,7 @@ export interface TranscriptTurn {
 
 export interface TranscriptView {
   sessionId: string;
-  agent: "claude" | "codex";
+  agent: AgentId;
   meta: SessionStat;
   turns: TranscriptTurn[];
 }
@@ -206,7 +206,7 @@ function codexText(content: unknown): string {
  *  Never throws — unreadable files / malformed lines degrade to null/skip. */
 export async function loadSessionTranscript(
   sessionId: string,
-  agent: "claude" | "codex",
+  agent: AgentId,
   dirs?: { claudeDir?: string; codexDir?: string },
 ): Promise<TranscriptView | null> {
   const resolved = resolveDirs();

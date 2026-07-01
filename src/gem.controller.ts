@@ -20,8 +20,8 @@ const ObserveQuerySchema = z.object({
 const ObservePayloadSchema = z.object({
   pulse: z.object({ sessions: z.number(), msgs: z.number(), tokens: z.number(), activeMs: z.number() }),
   daily: z.array(z.object({ date: z.string(), sessions: z.number(), msgs: z.number(), tokensIn: z.number(), tokensOut: z.number(), tokensCache: z.number() })),
-  sessions: z.array(z.object({ agent: z.enum(["claude", "codex"]), sessionId: z.string(), project: z.string().nullable(), model: z.string().nullable(), startMs: z.number(), endMs: z.number(), durationMs: z.number(), msgs: z.number(), tokens: z.number(), tokensIn: z.number(), tokensOut: z.number(), tokensCache: z.number(), gitBranch: z.string().nullable() })),
-  models: z.array(z.object({ model: z.string(), agent: z.enum(["claude", "codex"]), sessions: z.number(), tokens: z.number() })),
+  sessions: z.array(z.object({ agent: z.string(), sessionId: z.string(), project: z.string().nullable(), model: z.string().nullable(), startMs: z.number(), endMs: z.number(), durationMs: z.number(), msgs: z.number(), tokens: z.number(), tokensIn: z.number(), tokensOut: z.number(), tokensCache: z.number(), gitBranch: z.string().nullable() })),
+  models: z.array(z.object({ model: z.string(), agent: z.string(), sessions: z.number(), tokens: z.number() })),
   facets: z.object({ agents: z.array(z.string()), projects: z.array(z.string()), models: z.array(z.string()) }),
   range: z.enum(["today", "7d", "30d", "all"]),
 });
@@ -29,7 +29,7 @@ const ObservePayloadSchema = z.object({
 // aggregates per range/filter client-side (sharing @agentgem/insight's
 // aggregateObserve). /observe still serves the server-aggregated payload.
 const SessionStatSchema = z.object({
-  agent: z.enum(["claude", "codex"]),
+  agent: z.string(),
   sessionId: z.string(),
   project: z.string().nullable(),
   model: z.string().nullable(),
@@ -57,7 +57,7 @@ const TranscriptTurnSchema = z.object({
   spans: z.array(TranscriptSpanSchema), tokens: TokenBreakdownSchema,
 });
 const TranscriptViewSchema = z.object({
-  sessionId: z.string(), agent: z.enum(["claude", "codex"]),
+  sessionId: z.string(), agent: z.string(),
   meta: SessionStatSchema, turns: z.array(TranscriptTurnSchema),
 });
 // "Distill this session" (proposal phase 3): runs the EXISTING workflow scan +

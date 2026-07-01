@@ -15,7 +15,7 @@ import { resolveDirs } from "@agentgem/model";
 // in observeAggregate.ts so the browser can share it; re-export so existing
 // `@agentgem/insight` consumers of these names keep resolving.
 import type { SessionStat } from "./observeAggregate.js";
-export type { SessionStat, ObserveRange, ObserveFilter, ObservePayload } from "./observeAggregate.js";
+export type { SessionStat, ObserveRange, ObserveFilter, ObservePayload, AgentId } from "./observeAggregate.js";
 export { aggregateObserve } from "./observeAggregate.js";
 
 // Exported for reuse by the on-demand transcript read path (inspectSession.ts),
