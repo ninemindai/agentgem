@@ -3,9 +3,11 @@
 // src/registry/uploadPublish.ts
 //
 // Signed-in .gem upload → publish, with #4a attribution (publishedBy = the verified
-// session login) and a scope===login safety rail (you may only publish under your own
-// handle). Raw-express + credentialed CORS + originGuard-exempt, mirroring auth/stars.
-// The richer scope-ownership model (org/claimed) is #4b. importGem rejects tampering.
+// session login) and #4b account-scope ownership: you may publish to a scope only if
+// accountOwnsScope confirms it (your login or a captured GitHub org). Raw-express +
+// credentialed CORS + originGuard-exempt, mirroring auth/stars. account_scopes is
+// populated at login, so a pre-#4b session with no rows is fail-closed (403 on its own
+// login) until the user signs in again. importGem rejects tampering.
 import type { AppDb } from "@agentgem/aggregator";
 import { resolveSession, accountOwnsScope } from "@agentgem/aggregator";
 import { importGem, publishGem, type RegistrySource, type RegistryPublisher } from "@agentgem/distribute";

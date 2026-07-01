@@ -125,7 +125,7 @@ export async function createApp(port: number): Promise<RestApplication> {
       db: aggDb,
       verifier: new GitHubVerifier(),
       exchangeCode: githubExchangeCode(ghClientId, ghSecret),
-      fetchOrgs: (token) => fetchOrgs(token),
+      fetchOrgs,
       config: {
         clientId: ghClientId, clientSecret: ghSecret, webOrigins,
         cookieDomain: process.env.AGENTGEM_SESSION_COOKIE_DOMAIN,

@@ -37,6 +37,11 @@ describe("upload-publish", () => {
     await uploadPublishHandler(deps(db, publisher))(mkReq({ headers:{ cookie:`${SESSION_COOKIE}=${token}`, origin:"https://app.agentgem.ai" }, body:{ scope:"bob", version:"1.0.0", bytesBase64: gemBase64() } }) as any, res as any);
     expect(res._s).toBe(403);
   });
+  it("403s a legacy session with no account_scopes rows — even on its own login (fail-closed)", async () => {
+    const db = await makeTestDb(); const token = await session(db, "alice", []); const { publisher } = capturing(); const res = mkRes();
+    await uploadPublishHandler(deps(db, publisher))(mkReq({ headers:{ cookie:`${SESSION_COOKIE}=${token}`, origin:"https://app.agentgem.ai" }, body:{ scope:"alice", version:"1.0.0", bytesBase64: gemBase64() } }) as any, res as any);
+    expect(res._s).toBe(403);
+  });
   it("publishes + stamps publishedBy when scope === login", async () => {
     const db = await makeTestDb(); const token = await session(db, "alice"); const { publisher, commits } = capturing(); const res = mkRes();
     await uploadPublishHandler(deps(db, publisher))(mkReq({ headers:{ cookie:`${SESSION_COOKIE}=${token}`, origin:"https://app.agentgem.ai" }, body:{ scope:"alice", version:"1.0.0", tags:["x"], bytesBase64: gemBase64() } }) as any, res as any);
