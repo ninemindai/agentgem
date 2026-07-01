@@ -34,7 +34,7 @@ export async function postCatalogShare(args: {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ manifest: args.manifest, pubkey: args.identity.publicKey, signedAt: now, signature }),
   });
-  if (res.status < 200 || res.status >= 300) throw new Error(`catalog share ${res.status}`);
+  if (res.status < 200 || res.status >= 300) throw new InvalidInputError(`could not reach the share service (HTTP ${res.status}); try again in a moment`);
   const b = (await res.json()) as { shared?: boolean; publishedBy?: string; rejected?: string };
   return b.shared && b.publishedBy ? { shared: true, publishedBy: b.publishedBy } : { shared: false, rejected: b.rejected ?? "unknown" };
 }

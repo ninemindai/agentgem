@@ -6,7 +6,7 @@ import { z } from "zod";
 import { api, get, post } from "@agentback/openapi";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { loadOrCreateIdentity } from "@agentgem/model";
+import { InvalidInputError, loadOrCreateIdentity } from "@agentgem/model";
 import { requestDeviceCode, pollForToken } from "./bind/deviceFlow.js";
 import { startConnect, finishConnect } from "./explore/connectCore.js";
 import { readBinding, writeBinding } from "./explore/bindingFile.js";
@@ -21,7 +21,7 @@ const agentgemDir = (): string => process.env.AGENTGEM_HOME ?? join(homedir(), "
 const aggregatorBase = (): string => process.env.AGENTGEM_AGGREGATOR_URL ?? "https://api.agentgem.ai";
 function clientId(): string {
   const id = process.env.AGENTGEM_GITHUB_CLIENT_ID;
-  if (!id) throw new Error("set AGENTGEM_GITHUB_CLIENT_ID to connect GitHub");
+  if (!id) throw new InvalidInputError("set AGENTGEM_GITHUB_CLIENT_ID to connect GitHub");
   return id;
 }
 
@@ -37,7 +37,7 @@ export class ExploreController {
     const dir = agentgemDir();
     const r = await finishConnect({
       clientId: clientId(), deviceCode: input.body.deviceCode, interval: input.body.interval,
-      base: aggregatorBase(), identity: loadOrCreateIdentity(dir),
+      base: aggregatorBase(), identity: loadOrCreateIdentity(),
       pollForToken, http: async (url, i) => { const res = await fetch(url, i); return { status: res.status, json: () => res.json() }; },
       now: () => Date.now(), write: (b) => { writeBinding(b, dir); },
     });

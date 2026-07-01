@@ -26,6 +26,13 @@ describe("postCatalogShare", () => {
     const res = await postCatalogShare({ manifest: { gemKey: "@o/k", version: "1.0.0" }, identity, endpoint: "https://api.agentgem.ai", http });
     expect(res).toEqual({ shared: false, rejected: "not-connected" });
   });
+
+  it("throws a surfaceable InvalidInputError (not a redacted 500) when the hosted service is unreachable", async () => {
+    const http = vi.fn(async (_url: string, _init: { method: string; headers: Record<string, string>; body: string }) => ({ status: 502, json: async () => ({}) }));
+    await expect(
+      postCatalogShare({ manifest: { gemKey: "@o/k", version: "1.0.0" }, identity, endpoint: "https://api.agentgem.ai", http }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+  });
 });
 
 describe("shareRejectedError", () => {
