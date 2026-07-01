@@ -185,9 +185,12 @@ import {
   GemRunPrepareRequestSchema, GemRunPrepareResponseSchema,
   UsageSchema, UsageQuerySchema,
   PlaybookPrepareBodySchema, PlaybookPrepareResponseSchema,
+  PlaybookPublishBodySchema, PlaybookPublishResponseSchema,
 } from "./schemas.js";
 import { collectScorecard, selectScorecardRoots, scorecardTranscriptPaths, defaultScorecardDeps, isPortable, type Scorecard } from "./gem/scorecard.js";
 import { preparePlaybook } from "./gem/playbookPrepareCore.js";
+import { publishPlaybookCore } from "./gem/playbookPublishCore.js";
+import { createShareCard } from "./share/shareStore.js";
 import { sanitizeShareText } from "@agentgem/insight";
 import { claudeTranscriptsForCwd, scanWorkflow, allClaudeTranscripts, bucketTranscriptsByCwd } from "@agentgem/insight";
 import { recommendWorkflow, recommendationToSelection } from "@agentgem/insight";
@@ -357,6 +360,18 @@ export class GemController {
       },
       persistSkill: (s) => { writeDistilledDraft(s); },
       persistLesson: (l) => { writeDistilledLesson(l); },
+    });
+  }
+
+  @post("/playbook/publish", { body: PlaybookPublishBodySchema, response: PlaybookPublishResponseSchema })
+  async playbookPublish(input: { body: z.infer<typeof PlaybookPublishBodySchema> }): Promise<z.infer<typeof PlaybookPublishResponseSchema>> {
+    const b = input.body;
+    return publishPlaybookCore({
+      publish: async () => {
+        const r = await this.registryPublish({ body: { workspace: b.workspace, scope: b.scope, name: b.name, version: b.version, description: b.description, tags: b.tags } });
+        return { ref: r.ref, version: r.version };
+      },
+      share: async () => createShareCard(this.db!, { kind: "gem", name: b.name ?? b.workspace, provenance: b.provenance, generatedAtMs: Date.now() }),
     });
   }
 

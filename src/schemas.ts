@@ -414,6 +414,13 @@ export const WorkflowDraftWriteResponseSchema = z.object({ path: z.string() });
 export const PlaybookPrepareBodySchema = z.object({ root: z.string() });
 export const PlaybookPrepareResponseSchema = z.object({ skills: z.array(z.string()), lessons: z.array(z.string()), root: z.string(), degraded: z.boolean() });
 
+// ── Playbook publish ──
+export const PlaybookPublishBodySchema = z.object({
+  workspace: z.string(), scope: z.string(), name: z.string().optional(), version: z.string(),
+  description: z.string().optional(), tags: z.array(z.string()).optional(), provenance: z.string(),
+});
+export const PlaybookPublishResponseSchema = z.object({ exploreRef: z.string(), version: z.string(), shareUrl: z.string() });
+
 export const GemSchema = z.object({
   name: z.string(),
   createdFrom: z.string(),
