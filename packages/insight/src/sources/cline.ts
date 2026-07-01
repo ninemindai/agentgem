@@ -7,6 +7,8 @@
 import { readFile } from "node:fs/promises";
 import { join, basename } from "node:path";
 import type { SessionStat } from "../observeAggregate.js";
+import type { GemArtifact, McpServerArtifact, ReferenceArtifact } from "@agentgem/model";
+import type { ImportResult } from "../sources.js";
 
 interface ClineMsg { ts?: number; type?: string; say?: string; text?: string }
 
@@ -38,4 +40,47 @@ export async function scanClineSessions(taskDirs: string[]): Promise<SessionStat
     const s = parseClineTask(text, basename(dir)); if (s) out.push(s);
   }
   return out;
+}
+
+// Artifact (authoring) face: .clinerules -> instructions, cline_mcp_settings.json -> mcp_server /
+// package reference. Public npx packages are referenced (not embedded); everything else is kept
+// as a redacted McpServerArtifact — secret-bearing `env` is never ingested.
+const PUBLIC_SCOPES = new Set(["@modelcontextprotocol"]);
+// First non-flag arg is the package spec.
+function firstPackage(args: unknown): string | null {
+  if (!Array.isArray(args)) return null;
+  for (const a of args) { if (typeof a === "string" && !a.startsWith("-")) return a; }
+  return null;
+}
+function isPublicNpm(pkg: string): boolean {
+  if (pkg.startsWith("/") || pkg.startsWith(".")) return false;
+  if (pkg.startsWith("@")) return PUBLIC_SCOPES.has(pkg.split("/")[0]);
+  return /^[a-z0-9][a-z0-9._-]*$/i.test(pkg);
+}
+
+export async function readClineArtifacts(env: { rulesFile?: string; mcpSettingsFile?: string }): Promise<ImportResult> {
+  const artifacts: GemArtifact[] = [];
+  if (env.rulesFile) {
+    try {
+      const content = await readFile(env.rulesFile, "utf8");
+      if (content.trim()) artifacts.push({ type: "instructions", name: "clinerules", content });
+    } catch { /* absent */ }
+  }
+  if (env.mcpSettingsFile) {
+    try {
+      const raw = JSON.parse(await readFile(env.mcpSettingsFile, "utf8")) as { mcpServers?: Record<string, { command?: string; args?: unknown; env?: Record<string, unknown>; url?: string }> };
+      for (const [name, cfg] of Object.entries(raw.mcpServers ?? {})) {
+        const pkg = firstPackage(cfg.args);
+        if (cfg.command === "npx" && pkg && isPublicNpm(pkg)) {
+          const ref: ReferenceArtifact = { type: "reference", name, refKind: "mcp_server", ref: { kind: "package", id: `npx:${pkg}` } };
+          artifacts.push(ref);
+        } else {
+          // Redact secret-bearing env; keep only command/args (metadata only).
+          const server: McpServerArtifact = { type: "mcp_server", name, transport: cfg.url ? "http" : "stdio", config: cfg.url ? { url: cfg.url } : { command: cfg.command, args: cfg.args } };
+          artifacts.push(server);
+        }
+      }
+    } catch { /* absent/malformed */ }
+  }
+  return { artifacts, binding: { agent: "cline", origin: "imported" } };
 }
