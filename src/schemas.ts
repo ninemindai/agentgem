@@ -136,6 +136,7 @@ const ProjectSelectionSchema = z.record(
     skills: z.array(z.string()).optional(),
     mcpServers: z.array(z.string()).optional(),
     includeInstructions: z.boolean().optional(),
+    instructions: z.array(z.string()).optional(),
     hooks: z.array(z.string()).optional(),
   }),
 );
@@ -146,6 +147,7 @@ export const GemSelectionSchema = z.union([
     skills: z.array(z.string()).optional(),
     mcpServers: z.array(z.string()).optional(),
     includeInstructions: z.boolean().optional(),
+    instructions: z.array(z.string()).optional(),
     hooks: z.array(z.string()).optional(),
     projects: ProjectSelectionSchema.optional(),
   }),
@@ -719,7 +721,10 @@ export const RegistryGemSchema = z.object({
   description: z.string().optional(),
   tags: z.array(z.string()).optional(),
   artifactKinds: z.array(z.string()).optional(),
+  type: z.string().optional(),
+  publishedBy: z.string().optional(),
   grade: z.number().int().min(1).max(3).optional(),
+  installable: z.boolean(),
 });
 export const RegistryGemsResponseSchema = z.object({ gems: z.array(RegistryGemSchema) });
 

@@ -44,6 +44,7 @@ const GemSelectionSchema = z.union([
     skills: z.array(z.string()).optional(),
     mcpServers: z.array(z.string()).optional(),
     includeInstructions: z.boolean().optional(),
+    instructions: z.array(z.string()).optional(),
     hooks: z.array(z.string()).optional(),
   }),
 ]);
@@ -623,6 +624,18 @@ export type BenchmarkRow = z.infer<typeof BenchmarkSchema>[number];
 export const benchmarksRoute = defineRoute("GET", "/api/aggregator/benchmarks", {
   query: z.object({ gemDigest: z.string().optional() }),
   response: BenchmarkSchema,
+});
+
+// Identity binding: link the local key to a GitHub account via device-flow OAuth.
+export const bindStatusRoute = defineRoute("GET", "/api/bind/status", {
+  response: z.object({ bound: z.boolean(), login: z.string().optional(), provider: z.string().optional() }),
+});
+export const bindStartRoute = defineRoute("POST", "/api/bind/start", {
+  response: z.object({ configured: z.boolean(), userCode: z.string().optional(), verificationUri: z.string().optional(), deviceCode: z.string().optional(), interval: z.number().optional() }),
+});
+export const bindCompleteRoute = defineRoute("POST", "/api/bind/complete", {
+  body: z.object({ deviceCode: z.string(), interval: z.number().optional() }),
+  response: z.object({ bound: z.boolean(), login: z.string().optional(), rejected: z.string().optional() }),
 });
 
 export const makeClient = (apiBase: string): Client => createClient({ baseURL: apiBase });

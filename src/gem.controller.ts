@@ -146,7 +146,7 @@ const ScorecardSchema = z.object({
 }) satisfies z.ZodType<Scorecard>;
 import { introspectConfig, introspectProject, disableArtifacts, enableArtifacts, listDisabled } from "@agentgem/capture";
 import { buildGem } from "@agentgem/build";
-import { InvalidInputError, scorecardFloor } from "@agentgem/model";
+import { InvalidInputError, scorecardFloor, loadOrCreateIdentity } from "@agentgem/model";
 import { scaffoldChecks } from "@agentgem/build";
 import { materialize, compatibility } from "@agentgem/model";
 import type { TargetId } from "@agentgem/model";
@@ -210,6 +210,7 @@ import { collectScorecard, selectScorecardRoots, scorecardTranscriptPaths, defau
 import { preparePlaybook } from "./gem/playbookPrepareCore.js";
 import { publishPlaybookCore } from "./gem/playbookPublishCore.js";
 import { createShareCard } from "./share/shareStore.js";
+import { postCatalogShare, shareRejectedError } from "./gem/catalogShareClient.js";
 import { sanitizeShareText } from "@agentgem/insight";
 import { claudeTranscriptsForCwd, scanWorkflow, allClaudeTranscripts, bucketTranscriptsByCwd } from "@agentgem/insight";
 import { recommendWorkflow, recommendationToSelection } from "@agentgem/insight";
@@ -229,17 +230,36 @@ import { readRecents, upsertRecent } from "@agentgem/capture";
 import { resolveInstall, publishGem } from "@agentgem/distribute";
 import { searchIndex } from "@agentgem/distribute";
 import { githubRegistrySource, githubRegistryPublisher, registryConfigFromEnv, registryReady } from "@agentgem/distribute";
-import { createGemCache } from "./gem/publicCatalog.js";
+import { createGemCache, safeDbGems, mergeGems } from "./gem/publicCatalog.js";
 import { service, inject } from "@agentback/core";
 import { RestBindings } from "@agentback/rest";
 import { DrizzleBindings } from "@agentback/drizzle";
 import type { AppDb } from "@agentgem/aggregator";
+import { listCatalogGems } from "@agentgem/aggregator";
 import { resolvePublishedBy } from "./registry/publishedBy.js";
 import { GemTypeRegistry, defaultGemTypeRegistry, resolvePublishType } from "./gem/gemTypeRegistry.js";
 import { resolveDirs, resolveProject, agentgemHome } from "@agentgem/model";
 import { pickFolder } from "./pickFolder.js";
 import { readShareAdoption, setShareAdoption } from "./agentgemConfig.js";
 import { emitAdoption } from "./registry/emitAdoption.js";
+import { bindConfig, startDeviceBind, completeDeviceBind, readBindingStatus, type StartDeps, type CompleteDeps } from "./bind/bindCore.js";
+
+const BindStartSchema = z.object({
+  configured: z.boolean(),
+  userCode: z.string().optional(),
+  verificationUri: z.string().optional(),
+  deviceCode: z.string().optional(),
+  interval: z.number().optional(),
+});
+const BindCompleteBodySchema = z.object({ deviceCode: z.string(), interval: z.number().optional() });
+const BindCompleteSchema = z.object({
+  bound: z.boolean(),
+  provider: z.string().optional(),
+  login: z.string().optional(),
+  accountId: z.string().optional(),
+  rejected: z.string().optional(),
+});
+const BindStatusSchema = z.object({ bound: z.boolean(), login: z.string().optional(), provider: z.string().optional() });
 
 let globalUsageRefreshing = false;
 
@@ -389,8 +409,16 @@ export class GemController {
     const b = input.body;
     return publishPlaybookCore({
       publish: async () => {
-        const r = await this.registryPublish({ body: { workspace: b.workspace, scope: b.scope, name: b.name, version: b.version, description: b.description, tags: b.tags } });
-        return { ref: r.ref, version: r.version };
+        const gem = readGemArchive(readWorkspace(b.workspace).files);
+        const manifest = {
+          gemKey: `${b.scope}/${b.name ?? b.workspace}`, version: b.version,
+          description: b.description, tags: b.tags, grade: gem.grade,
+          artifactKinds: gem.artifacts.map((a) => a.type),
+        };
+        const identity = loadOrCreateIdentity();
+        const r = await postCatalogShare({ manifest, identity });
+        if (!r.shared) throw shareRejectedError(r.rejected);
+        return { ref: manifest.gemKey, version: b.version };
       },
       share: async () => createShareCard(this.db!, { kind: "gem", name: b.name ?? b.workspace, provenance: b.provenance, generatedAtMs: Date.now() }),
     });
@@ -871,7 +899,9 @@ export class GemController {
   async registryGems(_input: { query: z.infer<typeof PickQuerySchema> }): Promise<z.infer<typeof RegistryGemsResponseSchema>> {
     const cfg = registryConfigFromEnv();
     const getIndex = cfg ? () => githubRegistrySource(cfg).getIndex() : null;
-    return { gems: await publicGemCache.get(getIndex, Date.now()) };
+    const indexGems = await publicGemCache.get(getIndex, Date.now());
+    const dbGems = this.db ? await safeDbGems(() => listCatalogGems(this.db!)) : [];
+    return { gems: mergeGems(dbGems, indexGems) };
   }
 
   @post("/registry/resolve", { body: RegistryResolveRequestSchema, response: RegistryResolveResponseSchema })
@@ -926,6 +956,28 @@ export class GemController {
       description: input.body.description, tags: input.body.tags, type, publishedBy,
       grade: gem.grade,
     });
+  }
+
+  // Bind: start the GitHub device flow for sybil-hardening. Returns { configured: false } when the
+  // server has no client ID set — the UI can gate on this without an error state.
+  @post("/bind/start", { body: z.object({}), response: BindStartSchema })
+  async bindStart(_input: { body: Record<string, never> }, deps: StartDeps = {}): Promise<z.infer<typeof BindStartSchema>> {
+    const cfg = bindConfig();
+    if (!cfg.clientId) return { configured: false };
+    const dc = await startDeviceBind(cfg, deps);
+    return { configured: true, ...dc };
+  }
+
+  // Bind: complete the device flow — poll GitHub, sign the token, POST to the aggregator.
+  @post("/bind/complete", { body: BindCompleteBodySchema, response: BindCompleteSchema })
+  async bindComplete(input: { body: z.infer<typeof BindCompleteBodySchema> }, deps: CompleteDeps = {}): Promise<z.infer<typeof BindCompleteSchema>> {
+    return completeDeviceBind(bindConfig(), { deviceCode: input.body.deviceCode, interval: input.body.interval }, deps);
+  }
+
+  // Bind: read the local binding.json (bound/unbound, no secret).
+  @get("/bind/status", { query: PickQuerySchema, response: BindStatusSchema })
+  async bindStatus(_input: { query: z.infer<typeof PickQuerySchema> }): Promise<z.infer<typeof BindStatusSchema>> {
+    return readBindingStatus();
   }
 
   // Pop the OS-native folder picker and return the chosen absolute path (null if cancelled).

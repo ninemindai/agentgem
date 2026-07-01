@@ -56,6 +56,26 @@ describe("buildDiscover", () => {
     expect(out.degraded).toBeUndefined();
   });
 
+  it("interleaves across topics so one collision-free topic can't monopolize every slot", async () => {
+    // Real-world shape: `playwright` is an MCP server (no installed skill named
+    // "playwright"), so all its results survive the already-installed filter and,
+    // under a pure global install sort, fill every slot — while a skill-named topic
+    // like `brainstorming` self-collides down to one low-install survivor.
+    const u = usage([
+      ["mcp_server:playwright", { type: "mcp_server", name: "playwright", invocations: 9 }],
+      ["skill:brainstorming", { name: "brainstorming", invocations: 5 }],
+    ]);
+    const pw: RegistrySkill[] = Array.from({ length: 8 }, (_, i) => ({ id: `pw/r/p${i}`, skillId: `p${i}`, name: `playwright-${i}`, source: "pw/r", installs: 10000 - i }));
+    const bs: RegistrySkill[] = [{ id: "bs/r/product-brainstorming", skillId: "product-brainstorming", name: "product-brainstorming", source: "bs/r", installs: 300 }];
+    const out = await buildDiscover(u, inv({ skills: [skill("brainstorming")] }), {
+      search: search({ playwright: pw, brainstorming: bs }), max: 8,
+    });
+    // brainstorming's lone survivor earns a slot despite fewer installs than every playwright row…
+    expect(out.candidates.map((c) => c.name)).toContain("product-brainstorming");
+    // …and playwright no longer occupies all 8 slots.
+    expect(out.candidates.filter((c) => c.name.startsWith("playwright")).length).toBeLessThan(8);
+  });
+
   it("caps the candidate list at `max`", async () => {
     const rows: RegistrySkill[] = Array.from({ length: 12 }, (_, i) => ({ id: `o/r/s${i}`, skillId: `s${i}`, name: `s${i}`, source: "o/r", installs: 12 - i }));
     const out = await buildDiscover(usage([["skill:t", { name: "t", invocations: 1 }]]), inv(), { search: search({ t: rows }), max: 8 });

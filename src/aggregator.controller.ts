@@ -12,8 +12,9 @@ import { popularity, coOccurrence, adoption, overview, coOccurrenceMatrix, model
 import type { UsageAttestation, GemAdoption } from "@agentgem/insight";
 import { recordBinding } from "@agentgem/aggregator";
 import { GitHubVerifier } from "@agentgem/aggregator";
-import { sweepQuarantine } from "@agentgem/aggregator";
+import { sweepQuarantine, sweepAdoptionQuarantine } from "@agentgem/aggregator";
 import { issueKey, revokeKey, listKeys } from "@agentgem/aggregator";
+import { recordCatalogShare } from "@agentgem/aggregator";
 
 // Loose body schema — the real gate is the core's verifyAttestation (ed25519 + consistency).
 const IngestBody = z.object({ producer: z.object({ publicKey: z.string() }).loose(), signature: z.string(), gem: z.object({ digest: z.string() }).loose() }).loose();
@@ -37,7 +38,7 @@ const OverviewResult = z.object({ ingredients: z.number(), producers: z.number()
 const BenchQuery = z.object({ gemDigest: z.string().optional(), limit: z.coerce.number().optional() }); // NOTE: no `k`
 const BenchResult = z.array(z.object({ model: z.string(), mostly: z.number(), partially: z.number(), notAchieved: z.number(), producers: z.number(), verifiedProducers: z.number() }));
 const GemAdoptionQuery = z.object({ keys: z.string().optional() });
-const GemAdoptionResult = z.object({ items: z.array(z.object({ gemKey: z.string(), installs: z.number(), selfReportedAccounts: z.number() })) });
+const GemAdoptionResult = z.object({ items: z.array(z.object({ gemKey: z.string(), installs: z.number(), verifiedInstalls: z.number() })) });
 
 const BindBody = z.object({ pubkey: z.string(), token: z.string(), signedAt: z.number(), signature: z.string() });
 const BindResultSchema = z.union([
@@ -48,6 +49,7 @@ const BindResultSchema = z.union([
 const SweepBody = z.object({ apply: z.boolean().optional(), token: z.string() });
 const SweepReportSchema = z.object({
   clustersFound: z.number(), attestationsQuarantined: z.number(), producersFlagged: z.number(), dryRun: z.boolean(),
+  adoptionsQuarantined: z.number(), adoptionGemsFlagged: z.number(), adoptionProducersFlagged: z.number(),
 });
 const SweepResult = z.union([
   z.object({ ok: z.literal(true), report: SweepReportSchema }),
@@ -69,6 +71,14 @@ const KeyListResult = z.union([
   z.object({ ok: z.literal(true), keys: z.array(z.object({ id: z.string(), label: z.string(), createdAt: z.string(), revokedAt: z.string().nullable() })) }),
   z.object({ ok: z.literal(false), rejected: z.string() }),
 ]);
+
+const CatalogManifestSchema = z.object({
+  gemKey: z.string(), version: z.string(), author: z.string().optional(), description: z.string().optional(),
+  tags: z.array(z.string()).optional(), artifactKinds: z.array(z.string()).optional(),
+  type: z.string().optional(), grade: z.number().optional(),
+});
+const CatalogBody = z.object({ manifest: CatalogManifestSchema, pubkey: z.string(), signedAt: z.number(), signature: z.string() });
+const CatalogResult = z.object({ shared: z.boolean(), publishedBy: z.string().optional(), gemKey: z.string().optional(), version: z.string().optional(), rejected: z.string().optional() });
 
 // Constant-time token compare (length-guarded so timingSafeEqual never throws on mismatched lengths).
 function tokenEq(a: string, b: string): boolean {
@@ -138,6 +148,21 @@ export class AggregatorController {
     return recordBinding(this.db, input.body as z.infer<typeof BindBody>, new GitHubVerifier());
   }
 
+  // Not-connected is NOT an HTTP error — stays 200 with { shared: false, rejected: "not-connected" },
+  // same shape as /bind's rejection.
+  //
+  // Abuse protection: this path lives under AGG_PATH, so it inherits the anonymous per-IP rate
+  // limiter (gating.ts `anonRateLimitOptions` — only /keys*, /sweep, /ingest are skipped). Combined
+  // with the mandatory ed25519 signature + account binding, that is sufficient; a dedicated
+  // per-pubkey limiter is deferred until real abuse justifies the extra machinery.
+  @post("/catalog", { body: CatalogBody, response: CatalogResult })
+  async catalog(input: { body: z.infer<typeof CatalogBody> }): Promise<z.infer<typeof CatalogResult>> {
+    const r = await recordCatalogShare(this.db, input.body);
+    return r.shared
+      ? { shared: true, publishedBy: r.publishedBy, gemKey: r.gemKey, version: r.version }
+      : { shared: false, rejected: r.rejected };
+  }
+
   // Admin-only: run the anti-sybil quarantine sweep. Dry-run by default; apply=true is
   // destructive and requires AGGREGATOR_ADMIN_TOKEN. Do NOT log input.body (it has the token).
   @post("/sweep", { body: SweepBody, response: SweepResult })
@@ -146,7 +171,8 @@ export class AggregatorController {
     if (!expected) return { ok: false, rejected: "sweep-disabled" };
     if (!tokenEq(input.body.token, expected)) return { ok: false, rejected: "unauthorized" };
     const report = await sweepQuarantine(this.db, { dryRun: !input.body.apply });
-    return { ok: true, report };
+    const ad = await sweepAdoptionQuarantine(this.db, { dryRun: !input.body.apply });
+    return { ok: true, report: { ...report, adoptionsQuarantined: ad.adoptionsQuarantined, adoptionGemsFlagged: ad.gemsFlagged, adoptionProducersFlagged: ad.producersFlagged } };
   }
 
   // Admin-only: mint an API key. Gated by AGGREGATOR_ADMIN_TOKEN (like /sweep). The plaintext

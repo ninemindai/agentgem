@@ -11,6 +11,7 @@ import {
 } from "../../api/routes.js";
 import { fmtTokens, fmtDuration } from "./data.js";
 import { Loading } from "../../shell/Loading.js";
+import { setPendingContribution } from "../../pendingAnalyze.js";
 
 export function TranscriptViewer({ apiBase, agent, sessionId, onBack }: {
   apiBase: string; agent: "claude" | "codex"; sessionId: string; onBack: () => void;
@@ -236,13 +237,23 @@ function LessonCard({ apiBase, lesson }: { apiBase: string; lesson: DistilledLes
     workflowLessonRoute.call(makeClient(apiBase), { body: lesson })
       .then((r) => setSaved(r.path)).catch((e) => setErr(String(e?.message ?? e))).finally(() => setSaving(false));
   };
+  // Share a saved lesson as an installable Gem: hand its (already-in-inventory)
+  // instruction into Curate's Publish flow. Gated on `saved` because the gem
+  // build resolves the lesson from inventory, which the save writes.
+  const share = () => {
+    setPendingContribution({ keys: [`instructions::${lesson.name}`], skillCount: 0, lessonCount: 1, name: lesson.name });
+    window.location.hash = "#/curate";
+  };
   return (
     <div className="tv-draft">
       <div className="tv-draft-head">
         <span className="tv-draft-name">{lesson.name}</span>
         <span className="obs-chip">{lesson.importance}</span>
         {saved
-          ? <span className="obs-muted tv-draft-saved">saved → {saved}</span>
+          ? <>
+              <span className="obs-muted tv-draft-saved">saved → {saved}</span>
+              <button type="button" className="obs-open-transcript" onClick={share}>Share</button>
+            </>
           : <button type="button" className="obs-open-transcript" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save lesson"}</button>}
       </div>
       <p className="tv-draft-desc">{lesson.body}</p>

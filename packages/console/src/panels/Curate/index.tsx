@@ -4,7 +4,7 @@ import { inventoryRoute, usageRoute, createWorkspaceRoute, scaffoldChecksRoute, 
 import { groupInventory, mergeUsage, applyView, sortGroupItems, relativeTime, formatSource, DEFAULT_VIEW, type LedgerGroup, type SortKey, type SortDir } from "./data.js";
 import { selKey, visibleKeys, buildSelection } from "./selection.js";
 import { useActiveGem, setKeys, toggleKey as toggleKeyStore, clearKeys, setName as setNameStore } from "../../activeGem.js";
-import { consumePendingAnalyze, consumePendingPlaybook } from "../../pendingAnalyze.js";
+import { consumePendingAnalyze, consumePendingPlaybook, consumePendingContribution } from "../../pendingAnalyze.js";
 import { Analyze } from "./Analyze.js";
 import { Checks } from "./Checks.js";
 import { ContentView } from "./ContentView.js";
@@ -40,6 +40,16 @@ export function Curate({ apiBase }: { apiBase: string }) {
       setTab("compose");
       setShowPublish(true);
       setPublishCounts({ skills: playbook.skills.length, lessons: playbook.lessons.length });
+    }
+    // "Share my setup" / a single lesson's "Share" arrive with their selection
+    // keys already resolved — pre-select them and open the Publish form.
+    const contrib = consumePendingContribution();
+    if (contrib) {
+      setKeys(new Set(contrib.keys));
+      if (contrib.name) setNameStore(contrib.name);
+      setTab("compose");
+      setShowPublish(true);
+      setPublishCounts({ skills: contrib.skillCount, lessons: contrib.lessonCount });
     }
   }, []);
   const [suggested, setSuggested] = useState<GemCheck[] | null>(null);

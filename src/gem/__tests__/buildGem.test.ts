@@ -27,6 +27,24 @@ describe("buildGem", () => {
     expect(gem.artifacts.some((a) => a.type === "instructions")).toBe(false);
   });
 
+  it("selects a named subset of instructions (per-instruction granularity)", () => {
+    const inv2: ConfigInventory = {
+      ...inv,
+      instructions: [
+        { type: "instructions", name: "CLAUDE.md", content: "x" },
+        { type: "instructions", name: "always-read-errors-first", content: "y" },
+      ],
+    };
+    // Only the named lesson, not every instruction.
+    const one = buildGem(inv2, { instructions: ["always-read-errors-first"] });
+    expect(one.artifacts.map((a) => a.name)).toEqual(["always-read-errors-first"]);
+    // includeInstructions still means ALL (back-compat).
+    const all = buildGem(inv2, { includeInstructions: true });
+    expect(all.artifacts.filter((a) => a.type === "instructions").map((a) => a.name)).toEqual(["CLAUDE.md", "always-read-errors-first"]);
+    // A named instruction absent from inventory is a bad request, like skills/hooks.
+    expect(() => buildGem(inv2, { instructions: ["nope"] })).toThrow(/instruction/i);
+  });
+
   it("{ all: true } includes everything", () => {
     const gem = buildGem(inv, { all: true });
     expect(gem.artifacts.length).toBe(5); // 2 skills + 1 mcp + 1 instructions + 1 hook

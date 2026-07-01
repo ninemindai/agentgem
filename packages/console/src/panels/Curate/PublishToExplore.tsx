@@ -3,8 +3,11 @@
 // Publish a reviewed Curate selection as a Playbook to the Explore registry.
 // Two-step: (1) save the selection as a named workspace via createWorkspaceRoute,
 // (2) publish that workspace to the registry + mint a share card via playbookPublishRoute.
-import { useState } from "react";
-import { createWorkspaceRoute, playbookPublishRoute, makeClient } from "../../api/routes.js";
+import { useEffect, useState } from "react";
+import {
+  createWorkspaceRoute, playbookPublishRoute, makeClient,
+  bindStatusRoute, bindStartRoute, bindCompleteRoute,
+} from "../../api/routes.js";
 import { buildSelection } from "./selection.js";
 
 export interface PublishToExploreProps {
@@ -22,8 +25,29 @@ export function PublishToExplore({ apiBase, selected, skillCount, lessonCount }:
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ exploreRef: string; shareUrl: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [bindStatus, setBindStatus] = useState<{ bound: boolean; login?: string } | null>(null);
+  const [connecting, setConnecting] = useState<{ userCode: string; verificationUri: string } | null>(null);
 
   const provenance = `distilled from ${skillCount} skill${skillCount === 1 ? "" : "s"} and ${lessonCount} lesson${lessonCount === 1 ? "" : "s"}`;
+
+  useEffect(() => {
+    const client = makeClient(apiBase);
+    bindStatusRoute.call(client).then(setBindStatus).catch(() => setBindStatus({ bound: false }));
+  }, [apiBase]);
+
+  const connectGitHub = async () => {
+    const client = makeClient(apiBase);
+    const start = await bindStartRoute.call(client);
+    if (!start.configured) {
+      setError("Set AGENTGEM_GITHUB_CLIENT_ID to connect GitHub");
+      return;
+    }
+    setConnecting({ userCode: start.userCode!, verificationUri: start.verificationUri! });
+    const res = await bindCompleteRoute.call(client, { body: { deviceCode: start.deviceCode!, interval: start.interval } });
+    setConnecting(null);
+    if (res.bound) setBindStatus({ bound: true, login: res.login });
+    else setError(res.rejected === "unknown-producer" ? "Share telemetry once first, then connect." : `Connect failed: ${res.rejected}`);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,8 +101,18 @@ export function PublishToExplore({ apiBase, selected, skillCount, lessonCount }:
 
   return (
     <form className="publish-form" onSubmit={handleSubmit}>
-      <h3>Publish to Explore</h3>
+      <h3>Share to Explore</h3>
       <p className="publish-note">Scope is caller-supplied — account-binding coming.</p>
+      {bindStatus && !bindStatus.bound && (
+        <div className="explore-connect">
+          <button type="button" onClick={connectGitHub}>Connect GitHub</button>
+          {connecting && (
+            <p>
+              Open <a href={connecting.verificationUri} target="_blank" rel="noreferrer">{connecting.verificationUri}</a> and enter <code>{connecting.userCode}</code>
+            </p>
+          )}
+        </div>
+      )}
       <label>
         <span className="visually-hidden">scope</span>
         <input
@@ -118,9 +152,9 @@ export function PublishToExplore({ apiBase, selected, skillCount, lessonCount }:
       <button
         type="submit"
         className="ledger-build"
-        disabled={busy || !name.trim() || !scope.trim()}
+        disabled={busy || !name.trim() || !scope.trim() || !bindStatus?.bound}
       >
-        {busy ? "Publishing…" : "Publish to explore"}
+        {busy ? "Sharing…" : "Share to explore"}
       </button>
       {error && <p className="publish-error">{error}</p>}
     </form>

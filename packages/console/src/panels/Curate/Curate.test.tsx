@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { Curate } from "./index.js";
-import { setPendingPlaybook } from "../../pendingAnalyze.js";
+import { setPendingPlaybook, setPendingContribution } from "../../pendingAnalyze.js";
 
 afterEach(cleanup);
 
@@ -176,12 +176,35 @@ describe("Curate", () => {
     // The mount effect fires on render: 1 skill + 1 instruction = 2 selected.
     await waitFor(() => expect(screen.getByText("2 selected")).toBeTruthy());
 
-    // Save to workspace and confirm the selection body carries includeInstructions.
+    // Save to workspace and confirm the selection body carries the named lesson.
     fireEvent.change(screen.getByLabelText("workspace name"), { target: { value: "my-gem" } });
     fireEvent.click(screen.getByText("Save workspace"));
     await waitFor(() => expect(screen.getByText(/saved workspace/i)).toBeTruthy());
 
-    expect(workspaceBodies[0]).toMatchObject({ selection: { skills: ["ship-loop"], includeInstructions: true } });
+    expect(workspaceBodies[0]).toMatchObject({ selection: { skills: ["ship-loop"], instructions: ["lesson-one"] } });
+  });
+
+  it("a ready contribution (Share my setup) pre-selects its keys and opens the Publish form", async () => {
+    // Simulates the Inspect "Share my setup" on-ramp handing off a whole-inventory selection.
+    setPendingContribution({
+      keys: ["skills::pdf", "mcpServers::db", "instructions::house-rules", "hooks::lint"],
+      skillCount: 1, lessonCount: 0, name: "my-setup",
+    });
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+      const u = String(url);
+      if (u.includes("/api/inventory")) return res({ skills: [{ name: "pdf" }], mcpServers: [{ name: "db" }], instructions: [{ name: "house-rules" }], hooks: [{ name: "lint" }] });
+      if (u.includes("/api/usage")) return res({ artifacts: [] });
+      if (u.includes("/api/bind")) return res({ bound: false });
+      throw new Error(`unexpected url ${u}`);
+    }));
+
+    render(<Curate apiBase="" />);
+    // All four handed-off keys are pre-selected…
+    await waitFor(() => expect(screen.getByText("4 selected")).toBeTruthy());
+    // …and the Publish-to-Explore form is open so the user can share it out.
+    expect(screen.getByText("Share to Explore")).toBeTruthy();
+    // Default workspace name was applied from the contribution.
+    expect((screen.getByLabelText("workspace name") as HTMLInputElement).value).toBe("my-setup");
   });
 
 });

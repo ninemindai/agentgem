@@ -105,13 +105,13 @@ describe("Shell", () => {
   it("shows 'New Gem' fallback in the switcher when no active gem is set", () => {
     resetGem();
     render(<Shell pages={pages} apiBase="" />);
-    expect(screen.getByText(/New Gem/)).toBeTruthy();
+    expect(screen.getByText("New Gem")).toBeTruthy();
   });
 
   it("clicking the active-gem switcher opens its dropdown menu", () => {
     render(<Shell pages={pages} apiBase="" />);
     expect(screen.queryByRole("menu")).toBeNull();
-    fireEvent.click(screen.getByText(/New Gem/));
+    fireEvent.click(screen.getByText("New Gem"));
     expect(screen.getByRole("menu")).toBeTruthy();
     expect(screen.getByText("Browse all →")).toBeTruthy();
   });
@@ -127,5 +127,30 @@ describe("Shell", () => {
     expect(screen.getByText("Library")).toBeTruthy();
     expect(screen.getByText("Build A")).toBeTruthy();
     expect(screen.getByText("Settings")).toBeTruthy();
+  });
+
+  it("echoes the active gem under the Build label (name when set, 'New Gem' when not)", () => {
+    resetGem();
+    const { rerender } = render(<Shell pages={pages} apiBase="" />);
+    expect(document.querySelector(".console-group-gem")?.textContent).toContain("New Gem");
+    act(() => { setName("shiny-kit"); setKeys(new Set(["a"])); });
+    rerender(<Shell pages={pages} apiBase="" />);
+    expect(document.querySelector(".console-group-gem")?.textContent).toContain("shiny-kit");
+  });
+
+  it("dims a gem-scoped (requiresGem) nav item until a gem is active, and un-dims it once artifacts exist", () => {
+    const gp = [
+      defineConsolePage({ id: "cur", title: "Curate", order: 10, group: "build", route: "#/cur", component: () => <p>c</p> }),
+      defineConsolePage({ id: "mat", title: "Materialize", order: 20, group: "build", requiresGem: true, route: "#/mat", component: () => <p>m</p> }),
+    ];
+    resetGem();
+    const { rerender } = render(<Shell pages={gp} apiBase="" />);
+    // No gem: the gem-scoped stage is locked; the entry (Curate) never is.
+    expect(screen.getByText("Materialize").classList.contains("is-locked")).toBe(true);
+    expect(screen.getByText("Curate").classList.contains("is-locked")).toBe(false);
+    // Curate something → the lock lifts.
+    act(() => { setKeys(new Set(["x"])); });
+    rerender(<Shell pages={gp} apiBase="" />);
+    expect(screen.getByText("Materialize").classList.contains("is-locked")).toBe(false);
   });
 });

@@ -114,3 +114,59 @@ export async function sweepQuarantine(db: AppDb, opts: SweepOpts = {}): Promise<
     dryRun,
   };
 }
+
+export interface AdoptionSweepReport {
+  gemsFlagged: number;
+  adoptionsQuarantined: number;
+  producersFlagged: number;
+  dryRun: boolean;
+}
+
+/**
+ * Statistical detection of coordinated/sybil gem-adoption clusters, then quarantine.
+ *
+ * A gem's adopter cluster is suspicious when >= minProducers distinct producers have
+ * installed it AND >= freshFraction of them are "fresh" (attest_count <= freshMaxAttest)
+ * AND unbound (no account_bindings row). Matching gem_adoptions rows get quarantined=true
+ * and trust_score=0. GitHub-bound producers are always exempt.
+ *
+ * Idempotent: already-quarantined rows are excluded from the cluster computation.
+ */
+export async function sweepAdoptionQuarantine(db: AppDb, opts: SweepOpts = {}): Promise<AdoptionSweepReport> {
+  const minProducers = opts.minProducers ?? num(process.env.DETECT_ADOPT_MIN_PRODUCERS, 10);
+  const freshMax = opts.freshMaxAttest ?? num(process.env.DETECT_FRESH_MAX, 2);
+  const freshFraction = opts.freshFraction ?? num(process.env.DETECT_FRESH_FRACTION, 0.8);
+  const dryRun = opts.dryRun ?? false;
+  const updCte = dryRun ? sql`` : sql`, upd as (
+    update gem_adoptions set quarantined = true, trust_score = 0
+    where (gem_key, producer_pubkey) in (select gem_key, pk from targets) returning gem_key, producer_pubkey
+  )`;
+  const countFrom = dryRun ? sql`targets` : sql`upd`;
+  const pkCol = dryRun ? sql`pk` : sql`producer_pubkey`;
+  const r = await db.execute<{ gems_flagged: number; adoptions_quarantined: number; producers_flagged: number }>(sql`
+    with adopters as (
+      select g.gem_key as gk, g.producer_pubkey as pk, p.attest_count as ac,
+             not exists (select 1 from account_bindings ab where ab.pubkey = g.producer_pubkey) as unbound
+      from gem_adoptions g
+      join producers p on p.pubkey = g.producer_pubkey
+      where not g.quarantined
+    ),
+    clusters as (
+      select gk, count(distinct pk) as producers,
+             (count(distinct pk) filter (where ac <= ${freshMax} and unbound))::float
+               / nullif(count(distinct pk), 0) as fresh_frac
+      from adopters group by gk
+    ),
+    bad as (select gk from clusters where producers >= ${minProducers} and fresh_frac >= ${freshFraction}),
+    targets as (
+      select a.gk as gem_key, a.pk as pk
+      from adopters a join bad b on b.gk = a.gk
+      where a.ac <= ${freshMax} and a.unbound
+    )${updCte}
+    select (select count(*) from bad)::int as gems_flagged,
+           (select count(*) from ${countFrom})::int as adoptions_quarantined,
+           (select count(distinct ${pkCol}) from ${countFrom})::int as producers_flagged
+  `);
+  const row = r.rows[0];
+  return { gemsFlagged: Number(row.gems_flagged), adoptionsQuarantined: Number(row.adoptions_quarantined), producersFlagged: Number(row.producers_flagged), dryRun };
+}

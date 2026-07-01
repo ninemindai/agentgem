@@ -9,7 +9,8 @@ import { InvalidInputError } from "@agentgem/model";
 export interface ProjectSelection {
   skills?: string[];
   mcpServers?: string[];
-  includeInstructions?: boolean;
+  includeInstructions?: boolean;   // all instructions (back-compat, wins over `instructions`)
+  instructions?: string[];         // a named subset (e.g. a single distilled lesson)
   hooks?: string[];
 }
 
@@ -20,9 +21,25 @@ export type GemSelection =
       skills?: string[];
       mcpServers?: string[];
       includeInstructions?: boolean;
+      instructions?: string[];
       hooks?: string[];
       projects?: Record<string, ProjectSelection>; // keyed by project root path
     };
+
+/** Resolve instruction artifacts for a selection scope: all when `includeInstructions`
+ *  is set (back-compat), else the named subset (name-resolved like skills/hooks). */
+function selectInstructions(
+  pool: ConfigInventory["instructions"],
+  sel: { includeInstructions?: boolean; instructions?: string[] },
+  where: string,
+): ConfigInventory["instructions"] {
+  if (sel.includeInstructions) return pool;
+  return (sel.instructions ?? []).map((n) => {
+    const a = pool.find((s) => s.name === n);
+    if (!a) throw new InvalidInputError(`No instruction '${n}'${where}. Available: ${pool.map((s) => s.name).join(", ") || "(none)"}`);
+    return a;
+  });
+}
 
 export function buildGem(
   inventory: ConfigInventory,
@@ -47,7 +64,7 @@ export function buildGem(
       if (!a) throw new InvalidInputError(`No MCP server '${n}'. Available: ${inventory.mcpServers.map((s) => s.name).join(", ") || "(none)"}`);
       artifacts.push(a);
     }
-    if (sel.includeInstructions) artifacts.push(...inventory.instructions);
+    artifacts.push(...selectInstructions(inventory.instructions, sel, ""));
     for (const n of sel.hooks ?? []) {
       const a = inventory.hooks.find((h) => h.name === n);
       if (!a) throw new InvalidInputError(`No hook '${n}'. Available: ${inventory.hooks.map((h) => h.name).join(", ") || "(none)"}`);
@@ -66,7 +83,7 @@ export function buildGem(
         if (!a) throw new InvalidInputError(`No MCP server '${n}' in project '${proj.name}'. Available: ${proj.mcpServers.map((s) => s.name).join(", ") || "(none)"}`);
         artifacts.push(a);
       }
-      if (ps.includeInstructions) artifacts.push(...proj.instructions);
+      artifacts.push(...selectInstructions(proj.instructions, ps, ` in project '${proj.name}'`));
       for (const n of ps.hooks ?? []) {
         const a = proj.hooks.find((h) => h.name === n);
         if (!a) throw new InvalidInputError(`No hook '${n}' in project '${proj.name}'. Available: ${proj.hooks.map((h) => h.name).join(", ") || "(none)"}`);

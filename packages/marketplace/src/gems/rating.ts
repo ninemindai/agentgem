@@ -19,7 +19,7 @@ export function stoneRating(floor: number | undefined, stars: number, installs =
   return Math.min(5, Math.max(floor ?? 1, starCurve(stars), adoptionCurve(installs)));
 }
 // Diamond apex: maxed on all THREE independent axes at once (reuses the curve breakpoints).
-// Rare + honest + cross-type — grade 3 AND >=21 stars AND >=50 real k-anon installs.
-export function isDiamond(grade: number | undefined, stars: number, installs = 0): boolean {
-  return grade === 3 && starCurve(stars) === 5 && adoptionCurve(installs) === 5;
+// Rare + honest + cross-type — grade 3 AND >=21 stars AND >=50 VERIFIED installs.
+export function isDiamond(grade: number | undefined, stars: number, verifiedInstalls = 0): boolean {
+  return grade === 3 && starCurve(stars) === 5 && adoptionCurve(verifiedInstalls) === 5;
 }

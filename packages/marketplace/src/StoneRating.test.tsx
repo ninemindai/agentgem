@@ -18,7 +18,7 @@ describe("StoneRating", () => {
     expect(container.querySelectorAll('[data-stone="filled"]').length).toBe(5);
   });
   it("renders the Diamond apex (data-diamond + 5 filled) when maxed on all axes", () => {
-    const { container } = render(<StoneRating cut="skill" grade={3} stars={21} installs={50} />);
+    const { container } = render(<StoneRating cut="skill" grade={3} stars={21} installs={50} verifiedInstalls={50} />);
     expect(container.querySelector('[data-diamond="true"]')).toBeTruthy();
     expect(container.querySelectorAll('[data-stone="filled"]').length).toBe(5);
   });
@@ -26,5 +26,14 @@ describe("StoneRating", () => {
     const { container } = render(<StoneRating cut="skill" grade={3} stars={21} installs={0} />);
     expect(container.querySelector('[data-diamond="true"]')).toBeNull(); // stars alone → 5 of 5, not Diamond
     expect(container.querySelectorAll('[data-stone="filled"]').length).toBe(5);
+  });
+  it("50 raw installs but 0 verified → 5 filled stones (raw drives count) but NOT diamond", () => {
+    const { container } = render(<StoneRating cut="skill" grade={3} stars={21} installs={50} verifiedInstalls={0} />);
+    expect(container.querySelector('[data-diamond="true"]')).toBeNull();
+    expect(container.querySelectorAll('[data-stone="filled"]').length).toBe(5);
+  });
+  it("50 raw + 50 verified installs → diamond", () => {
+    const { container } = render(<StoneRating cut="skill" grade={3} stars={21} installs={50} verifiedInstalls={50} />);
+    expect(container.querySelector('[data-diamond="true"]')).toBeTruthy();
   });
 });
