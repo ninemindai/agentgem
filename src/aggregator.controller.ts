@@ -12,7 +12,7 @@ import { popularity, coOccurrence, adoption, overview, coOccurrenceMatrix, model
 import type { UsageAttestation, GemAdoption } from "@agentgem/insight";
 import { recordBinding } from "@agentgem/aggregator";
 import { GitHubVerifier } from "@agentgem/aggregator";
-import { sweepQuarantine } from "@agentgem/aggregator";
+import { sweepQuarantine, sweepAdoptionQuarantine } from "@agentgem/aggregator";
 import { issueKey, revokeKey, listKeys } from "@agentgem/aggregator";
 import { recordCatalogShare } from "@agentgem/aggregator";
 
@@ -38,7 +38,7 @@ const OverviewResult = z.object({ ingredients: z.number(), producers: z.number()
 const BenchQuery = z.object({ gemDigest: z.string().optional(), limit: z.coerce.number().optional() }); // NOTE: no `k`
 const BenchResult = z.array(z.object({ model: z.string(), mostly: z.number(), partially: z.number(), notAchieved: z.number(), producers: z.number(), verifiedProducers: z.number() }));
 const GemAdoptionQuery = z.object({ keys: z.string().optional() });
-const GemAdoptionResult = z.object({ items: z.array(z.object({ gemKey: z.string(), installs: z.number(), selfReportedAccounts: z.number() })) });
+const GemAdoptionResult = z.object({ items: z.array(z.object({ gemKey: z.string(), installs: z.number(), verifiedInstalls: z.number() })) });
 
 const BindBody = z.object({ pubkey: z.string(), token: z.string(), signedAt: z.number(), signature: z.string() });
 const BindResultSchema = z.union([
@@ -49,6 +49,7 @@ const BindResultSchema = z.union([
 const SweepBody = z.object({ apply: z.boolean().optional(), token: z.string() });
 const SweepReportSchema = z.object({
   clustersFound: z.number(), attestationsQuarantined: z.number(), producersFlagged: z.number(), dryRun: z.boolean(),
+  adoptionsQuarantined: z.number(), adoptionGemsFlagged: z.number(), adoptionProducersFlagged: z.number(),
 });
 const SweepResult = z.union([
   z.object({ ok: z.literal(true), report: SweepReportSchema }),
@@ -165,7 +166,8 @@ export class AggregatorController {
     if (!expected) return { ok: false, rejected: "sweep-disabled" };
     if (!tokenEq(input.body.token, expected)) return { ok: false, rejected: "unauthorized" };
     const report = await sweepQuarantine(this.db, { dryRun: !input.body.apply });
-    return { ok: true, report };
+    const ad = await sweepAdoptionQuarantine(this.db, { dryRun: !input.body.apply });
+    return { ok: true, report: { ...report, adoptionsQuarantined: ad.adoptionsQuarantined, adoptionGemsFlagged: ad.gemsFlagged, adoptionProducersFlagged: ad.producersFlagged } };
   }
 
   // Admin-only: mint an API key. Gated by AGGREGATOR_ADMIN_TOKEN (like /sweep). The plaintext

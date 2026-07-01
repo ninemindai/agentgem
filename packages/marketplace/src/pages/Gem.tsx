@@ -12,7 +12,7 @@ import type { StarState } from "../stars";
 export function Gem({ api, keyName, stars }: { api: ReturnType<typeof makeApi>; keyName: string; stars: StarsCtx }) {
   const [gems, setGems] = useState<GemT[] | null>(null);
   const [starState, setStarState] = useState<StarState>({ counts: {}, mine: [] });
-  const [adoptions, setAdoptions] = useState<Record<string, number>>({});
+  const [adoptions, setAdoptions] = useState<Record<string, { installs: number; verifiedInstalls: number }>>({});
 
   useEffect(() => {
     let alive = true;
@@ -36,7 +36,7 @@ export function Gem({ api, keyName, stars }: { api: ReturnType<typeof makeApi>; 
 
   return (
     <div className="ex-gem-detail">
-      <h2 className="ex-gem-title">{gem.key} <span className="ex-gem-version">v{gem.version}</span> <CutBadge cut={gem.cut} /> <StoneRating cut={gem.cut} grade={gem.grade} stars={starState.counts[gem.key] ?? 0} installs={adoptions[gem.key] ?? 0} />
+      <h2 className="ex-gem-title">{gem.key} <span className="ex-gem-version">v{gem.version}</span> <CutBadge cut={gem.cut} /> <StoneRating cut={gem.cut} grade={gem.grade} stars={starState.counts[gem.key] ?? 0} installs={adoptions[gem.key]?.installs ?? 0} verifiedInstalls={adoptions[gem.key]?.verifiedInstalls ?? 0} />
         <StarButton kind="gem" id={gem.key} count={starState.counts[gem.key] ?? 0} starred={starState.mine.includes(gem.key)}
           signedIn={stars.signedIn} loginUrl={stars.loginUrl} api={stars.api} />
       </h2>
