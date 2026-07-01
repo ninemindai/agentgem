@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readBinding, writeBinding } from "../bindingFile.js";
@@ -21,7 +21,6 @@ describe("bindingFile", () => {
     const dir = mkdtempSync(join(tmpdir(), "agbind-"));
     writeBinding({ provider: "github", login: "x", accountId: "1", boundAt: "t" }, dir);
     // corrupt it
-    const { writeFileSync } = require("node:fs");
     writeFileSync(join(dir, "binding.json"), "{not json");
     expect(readBinding(dir)).toBeNull();
   });

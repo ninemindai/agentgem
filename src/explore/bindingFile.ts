@@ -14,8 +14,8 @@ export function readBinding(dir: string = defaultDir()): Binding | null {
   try {
     const raw = readFileSync(join(dir, "binding.json"), "utf8");
     const b = JSON.parse(raw) as Partial<Binding>;
-    if (typeof b.login === "string" && typeof b.provider === "string" && typeof b.accountId === "string") {
-      return { provider: b.provider, login: b.login, accountId: b.accountId, boundAt: String(b.boundAt ?? "") };
+    if (typeof b.login === "string" && typeof b.provider === "string" && typeof b.accountId === "string" && typeof b.boundAt === "string") {
+      return { provider: b.provider, login: b.login, accountId: b.accountId, boundAt: b.boundAt };
     }
     return null;
   } catch {
