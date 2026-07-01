@@ -5,8 +5,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-const CONFIG_DIR = join(homedir(), ".agentgem");
-const CONFIG_PATH = join(CONFIG_DIR, "config.json");
+// Resolve the paths lazily (per call) rather than at module load, so the config honors
+// the current HOME — matters for the hermetic-home test fixture and for any HOME change.
+const configDir = (): string => join(homedir(), ".agentgem");
+const configPath = (): string => join(configDir(), "config.json");
 
 interface AgentgemConfig {
   shareAdoption?: boolean;
@@ -14,8 +16,9 @@ interface AgentgemConfig {
 
 function readConfig(): AgentgemConfig {
   try {
-    if (!existsSync(CONFIG_PATH)) return {};
-    return JSON.parse(readFileSync(CONFIG_PATH, "utf8")) as AgentgemConfig;
+    const path = configPath();
+    if (!existsSync(path)) return {};
+    return JSON.parse(readFileSync(path, "utf8")) as AgentgemConfig;
   } catch {
     return {};
   }
@@ -27,10 +30,10 @@ export function readShareAdoption(): boolean {
 
 export function setShareAdoption(v: boolean): void {
   try {
-    mkdirSync(CONFIG_DIR, { recursive: true });
+    mkdirSync(configDir(), { recursive: true });
     const current = readConfig();
     const updated = { ...current, shareAdoption: v };
-    writeFileSync(CONFIG_PATH, JSON.stringify(updated, null, 2), { encoding: "utf8", mode: 0o600 });
+    writeFileSync(configPath(), JSON.stringify(updated, null, 2), { encoding: "utf8", mode: 0o600 });
   } catch {
     // best-effort; silently ignore write errors
   }

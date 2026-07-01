@@ -35,7 +35,7 @@ describe("gemAdoption aggregate + k-anon", () => {
     expect(await gemAdoption(db)).toEqual([]);
   });
 
-  it("returns a row once the 5th installer arrives; verifiedInstalls counts distinct non-null account_login", async () => {
+  it("returns a row once the 5th installer arrives; selfReportedAccounts counts distinct non-null account_login", async () => {
     const db = await makeTestDb();
     // 3 installers without account
     for (let i = 0; i < 3; i++) {
@@ -48,7 +48,7 @@ describe("gemAdoption aggregate + k-anon", () => {
 
     const rows = await gemAdoption(db);
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ gemKey: "@a/g", installs: 5, verifiedInstalls: 2 });
+    expect(rows[0]).toMatchObject({ gemKey: "@a/g", installs: 5, selfReportedAccounts: 2 });
   });
 
   it("keys filter narrows results to the specified gems only", async () => {

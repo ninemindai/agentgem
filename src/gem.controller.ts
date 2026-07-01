@@ -854,15 +854,17 @@ export class GemController {
   async registryInstall(input: { body: z.infer<typeof RegistryInstallRequestSchema> }): Promise<z.infer<typeof RegistryInstallResponseSchema>> {
     const { source } = this.registrySource();
     const { plan, gem } = await resolveInstall({ refs: input.body.refs, mode: input.body.mode, target: input.body.target as TargetId | undefined, source, a2aServer: input.body.a2aServer });
+    // Adoption fires only AFTER the install actually lands (below), never on a resolve-then-fail.
     const installed = plan.items.map((it) => ({ gemKey: it.key, version: it.version, gemDigest: "" }));
-    void emitAdoption(installed);   // opt-in + fire-and-forget; never awaited, never throws
     if (input.body.mode === "materialize") {
       if (!input.body.dest) throw new Error("materialize mode requires `dest`");
       writeArchiveDir(input.body.dest, plan.materialize!.files);
+      void emitAdoption(installed);   // opt-in + fire-and-forget; never awaited, never throws
       return { plan, applied: { mode: "materialize", dest: input.body.dest, written: Object.keys(plan.materialize!.files) } };
     }
     const name = input.body.workspaceName ?? gem.name;
     createWorkspace(name, gem);
+    void emitAdoption(installed);   // opt-in + fire-and-forget; never awaited, never throws
     return { plan, applied: { mode: "workspace", workspace: name } };
   }
 
