@@ -14,7 +14,7 @@ import { channelScaffold } from "./channels.js";
 import { tomlMcpServers } from "./toml.js";
 import { stdioProxyRunner, PROXY_BASE_PORT, PROXY_HOST } from "./mcpProxy.js";
 
-export type TargetId = "claude" | "codex" | "agents" | "hermes" | "eve" | "flue" | "openai-sandbox" | "agentcore" | "a2a" | "cline";
+export type TargetId = "claude" | "codex" | "agents" | "hermes" | "eve" | "flue" | "openai-sandbox" | "agentcore" | "a2a" | "cline" | "gemini";
 export type FileTree = Record<string, string>;
 
 export interface SkippedArtifact { artifact: string; type: ArtifactType | "reference"; reason: string }
@@ -300,6 +300,24 @@ const mcpClineSettings = (servers: McpServerArtifact[]): MaterializeResult => {
   const mcpServers: Record<string, unknown> = {};
   for (const s of servers) mcpServers[s.name] = s.config;   // config already redacted at import
   return rendered({ "cline_mcp_settings.json": JSON.stringify({ mcpServers }, null, 2) });
+};
+
+// Gemini CLI layout: GEMINI.md for instructions, .gemini/commands/<name>.toml for skills
+// (a namespaced skill name like "git:commit" maps to commands/git/commit.toml — the inverse of
+// the Task-3 import, which turns commands/git/commit.toml into skill name "git:commit"), and
+// .gemini/settings.json for MCP servers.
+const instructionsGeminiMd = (all: InstructionsArtifact[]): FileTree => ({ "GEMINI.md": all.map((i) => i.content).join("\n\n") });
+const skillGeminiCommand = (a: SkillArtifact): FileTree => {
+  const rel = a.name.split(":").map(safePathSegment).join("/");
+  // Literal TOML string ''' preserves the prompt verbatim (no escaping); guard the rare ''' case.
+  const body = a.content.includes("'''") ? JSON.stringify(a.content) : `'''${a.content}'''`;
+  const desc = a.description ? `\ndescription = ${JSON.stringify(a.description)}` : "";
+  return { [`.gemini/commands/${rel}.toml`]: `prompt = ${body}${desc}\n` };
+};
+const mcpGeminiSettings = (servers: McpServerArtifact[]): MaterializeResult => {
+  const mcpServers: Record<string, unknown> = {};
+  for (const s of servers) mcpServers[s.name] = s.config;   // already redacted at import
+  return rendered({ ".gemini/settings.json": JSON.stringify({ mcpServers }, null, 2) });
 };
 
 // Reconstruct settings.json's `.hooks` event map. HookArtifact.config IS the group object
@@ -885,6 +903,8 @@ export const TARGET_REGISTRY: Record<TargetId, TargetSpec> = {
   // Cline / Roo layout: .clinerules for instructions, .clinerules/skills/<name>/SKILL.md for
   // skills, cline_mcp_settings.json for MCP servers (hooks unsupported).
   cline: { id: "cline", label: "Cline / Roo", skill: skillClinerules, instructions: instructionsClinerules, mcp: mcpClineSettings },
+  // Gemini CLI layout: GEMINI.md, .gemini/commands/<namespaced>.toml, .gemini/settings.json (hooks unsupported).
+  gemini: { id: "gemini", label: "Gemini CLI", skill: skillGeminiCommand, instructions: instructionsGeminiMd, mcp: mcpGeminiSettings },
 };
 
 export function materialize(gem: Gem, target: TargetId, opts: MaterializeOpts = {}): MaterializeResult {

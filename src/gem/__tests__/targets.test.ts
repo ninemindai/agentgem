@@ -375,7 +375,7 @@ describe("compatibility", () => {
     expect(c.codex).toEqual({ supported: 1, skipped: 1 });   // hook unsupported
     expect(c.hermes).toEqual({ supported: 1, skipped: 1 });
     expect(c.eve).toEqual({ supported: 1, skipped: 1 }); // skill ok, hook unsupported
-    expect(Object.keys(TARGET_REGISTRY).sort()).toEqual(["a2a", "agentcore", "agents", "claude", "cline", "codex", "eve", "flue", "hermes", "openai-sandbox"]);
+    expect(Object.keys(TARGET_REGISTRY).sort()).toEqual(["a2a", "agentcore", "agents", "claude", "cline", "codex", "eve", "flue", "gemini", "hermes", "openai-sandbox"]);
   });
 });
 
