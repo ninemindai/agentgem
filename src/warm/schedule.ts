@@ -8,7 +8,12 @@
 // can drive runWarmPass directly and ignore this module.
 import { runWarmPass } from "./orchestrator.js";
 
-const DEFAULT_INTERVAL_MS = 10 * 60 * 1000;   // 10 minutes
+const DEFAULT_INTERVAL_MS = 10 * 60 * 1000;   // 10 minutes; override with AGENTGEM_WARM_INTERVAL_MS env var
+
+function intervalFromEnv(): number | undefined {
+  const v = parseInt(process.env.AGENTGEM_WARM_INTERVAL_MS ?? "", 10);
+  return Number.isFinite(v) && v >= 1000 ? v : undefined;
+}
 
 export interface WarmSchedule { stop(): void }
 
@@ -19,7 +24,7 @@ export function startWarmSchedule(opts: {
   clearInterval?: (h: unknown) => void;
   runNow?: (fn: () => void) => void;
 } = {}): WarmSchedule {
-  const intervalMs = opts.intervalMs ?? DEFAULT_INTERVAL_MS;
+  const intervalMs = opts.intervalMs ?? intervalFromEnv() ?? DEFAULT_INTERVAL_MS;
   const run = opts.run ?? (() => runWarmPass());
   const setI = opts.setInterval ?? ((fn, ms) => globalThis.setInterval(fn, ms));
   const clearI = opts.clearInterval ?? ((h) => globalThis.clearInterval(h as ReturnType<typeof globalThis.setInterval>));

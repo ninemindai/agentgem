@@ -15,7 +15,12 @@ export interface WarmOutcome { id: string; root: string | null; status: WarmItem
 export interface WarmPassResult { startedAt: number; finishedAt: number; outcomes: WarmOutcome[] }
 export interface WarmStatus { running: boolean; last: WarmPassResult | null }
 
-const DEFAULT_TOP_N = 5;
+const DEFAULT_TOP_N = 5; // override with AGENTGEM_WARM_TOPN env var
+
+function topNFromEnv(): number | undefined {
+  const v = parseInt(process.env.AGENTGEM_WARM_TOPN ?? "", 10);
+  return Number.isFinite(v) && v >= 1 ? v : undefined;
+}
 
 // Foreground gate: incremented while a user-facing LLM compute (insights/analyze
 // SSE endpoint) is in flight, so background warms yield the agent to the user.
@@ -38,7 +43,7 @@ export async function runWarmPass(opts: {
   if (status.running) return status.last ?? { startedAt: now(), finishedAt: now(), outcomes: [] };
   const registry = opts.registry ?? WARMABLES;
   const isBusy = opts.isBusy ?? isForegroundBusy;
-  const topN = opts.topN ?? DEFAULT_TOP_N;
+  const topN = opts.topN ?? topNFromEnv() ?? DEFAULT_TOP_N;
   const roots = opts.roots
     ?? readRecents(opts.home ?? agentgemHome()).map((r) => r.path);
   const selectedRoots = roots.slice(0, topN);
