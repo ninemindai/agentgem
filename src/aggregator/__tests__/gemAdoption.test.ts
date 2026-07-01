@@ -5,6 +5,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { sql } from "drizzle-orm";
 import { makeTestDb, projectGemAdoption, gemAdoption } from "@agentgem/aggregator";
 import { buildGemAdoption, signGemAdoption } from "@agentgem/insight";
 import { loadOrCreateIdentity } from "@agentgem/model";
@@ -35,7 +36,7 @@ describe("gemAdoption aggregate + k-anon", () => {
     expect(await gemAdoption(db)).toEqual([]);
   });
 
-  it("returns a row once the 5th installer arrives; selfReportedAccounts counts distinct non-null account_login", async () => {
+  it("returns a row once the 5th installer arrives; verifiedInstalls is 0 when no account_bindings exist", async () => {
     const db = await makeTestDb();
     // 3 installers without account
     for (let i = 0; i < 3; i++) {
@@ -48,7 +49,7 @@ describe("gemAdoption aggregate + k-anon", () => {
 
     const rows = await gemAdoption(db);
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ gemKey: "@a/g", installs: 5, selfReportedAccounts: 2 });
+    expect(rows[0]).toMatchObject({ gemKey: "@a/g", installs: 5, verifiedInstalls: 0 });
   });
 
   it("keys filter narrows results to the specified gems only", async () => {
@@ -79,5 +80,35 @@ describe("gemAdoption aggregate + k-anon", () => {
     const filtered = await c.gemAdoption({ query: { keys: "@a/g, @missing/x" } });
     expect(filtered.items.map((i) => i.gemKey)).toContain("@a/g");
     expect(filtered.items.map((i) => i.gemKey)).not.toContain("@missing/x");
+  });
+
+  it("excludes quarantined adoptions from installs and the k-anon count", async () => {
+    const db = await makeTestDb();
+    const ids = Array.from({ length: 5 }, () => freshId());
+    for (const id of ids) {
+      await projectGemAdoption(db, ev(id, "@a/g"));
+    }
+    // Quarantine the first installer — drops non-quarantined count to 4 < k(5)
+    const pk = (await ids[0]).publicKey;
+    await db.execute(sql`update gem_adoptions set quarantined = true where gem_key = '@a/g' and producer_pubkey = ${pk}`);
+    const rows = await gemAdoption(db, {});
+    expect(rows.find((r) => r.gemKey === "@a/g")).toBeUndefined();
+  });
+
+  it("verifiedInstalls counts distinct BOUND producers, not self-reported logins", async () => {
+    const db = await makeTestDb();
+    const ids = Array.from({ length: 5 }, () => freshId());
+    for (const id of ids) {
+      await projectGemAdoption(db, ev(id, "@a/g"));
+    }
+    // Bind 2 of the 5 producers via account_bindings
+    for (let i = 0; i < 2; i++) {
+      const pk = (await ids[i]).publicKey;
+      await db.execute(sql`insert into account_bindings (pubkey, provider, account_id, account_login) values (${pk}, 'github', ${pk}, 'user')`);
+    }
+    const rows = await gemAdoption(db, {});
+    const g = rows.find((r) => r.gemKey === "@a/g")!;
+    expect(g.installs).toBe(5);
+    expect(g.verifiedInstalls).toBe(2);
   });
 });

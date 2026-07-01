@@ -37,7 +37,7 @@ const OverviewResult = z.object({ ingredients: z.number(), producers: z.number()
 const BenchQuery = z.object({ gemDigest: z.string().optional(), limit: z.coerce.number().optional() }); // NOTE: no `k`
 const BenchResult = z.array(z.object({ model: z.string(), mostly: z.number(), partially: z.number(), notAchieved: z.number(), producers: z.number(), verifiedProducers: z.number() }));
 const GemAdoptionQuery = z.object({ keys: z.string().optional() });
-const GemAdoptionResult = z.object({ items: z.array(z.object({ gemKey: z.string(), installs: z.number(), selfReportedAccounts: z.number() })) });
+const GemAdoptionResult = z.object({ items: z.array(z.object({ gemKey: z.string(), installs: z.number(), verifiedInstalls: z.number() })) });
 
 const BindBody = z.object({ pubkey: z.string(), token: z.string(), signedAt: z.number(), signature: z.string() });
 const BindResultSchema = z.union([
