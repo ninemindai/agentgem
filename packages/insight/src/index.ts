@@ -23,6 +23,7 @@ export * from "./optimizeScan.js";
 export * from "./optimizeAnalyze.js";
 export * from "./skillsRegistry.js";
 export * from "./skillsInstall.js";
+export * from "./skillDescribe.js";
 export * from "./discover.js";
 export * from "./discoverRerank.js";
 export * from "./sessionLessons.js";

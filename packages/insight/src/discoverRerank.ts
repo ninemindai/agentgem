@@ -7,6 +7,7 @@
 // it was given — anything outside the input set is dropped, and any failure degrades
 // to the Stage-1 order. Never throws. Token-costing — invoked behind an explicit UI button.
 import { CLAUDE_AGENT, analysisWorkspace, defaultConnectFn, currentTestConnectFn, type AcpConnectFn, type AcpCtx, type AcpSessionHandle } from "./acpRecommender.js";
+import { describeCandidates } from "./skillDescribe.js";
 import type { DiscoverCandidate, DiscoverPayload } from "./discover.js";
 
 const key = (source: string, name: string) => `${source}\n${name}`;
@@ -15,13 +16,15 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`agent timeout after ${ms}ms`)), ms))]);
 }
 
-function prompt(candidates: DiscoverCandidate[], topics: string[]): string {
-  const list = candidates.map((c, i) =>
-    `${i}. ${c.source}@${c.name} (${c.installs ?? 0} installs) — ${c.reason}`).join("\n");
+function prompt(candidates: DiscoverCandidate[], topics: string[], descriptions: Map<string, string>): string {
+  const list = candidates.map((c, i) => {
+    const d = descriptions.get(`${c.source}@${c.skillId}`);
+    return `${i}. ${c.source}@${c.name} (${c.installs ?? 0} installs) — ${c.reason}` + (d ? `\n   description: ${d}` : "");
+  }).join("\n");
   return (
     `Rank these candidate agent "skills" by relevance to the user's active workflows.\n` +
     `User workflow topics: ${topics.join(", ")}.\n` +
-    `Candidates (source@name):\n${list}\n\n` +
+    `Candidates (source@name, with each skill's own description where known):\n${list}\n\n` +
     `Return ONLY JSON: {"order":[{"source","name","reason"}]}, most relevant first. ` +
     `Use ONLY the exact source/name pairs above — never invent. ` +
     `"reason" is one short clause on why it fits the user's workflows.`
@@ -60,20 +63,35 @@ function applyOrder(raw: string, input: DiscoverCandidate[]): DiscoverCandidate[
 
 export async function rerankCandidates(
   input: { candidates: DiscoverCandidate[]; topics: string[] },
-  opts: { connectFn?: AcpConnectFn; timeoutMs?: number } = {},
+  opts: {
+    connectFn?: AcpConnectFn;
+    timeoutMs?: number;
+    // Injectable for tests; defaults to describeCandidates (shells `skills use`).
+    describe?: (candidates: DiscoverCandidate[]) => Promise<Map<string, string>>;
+  } = {},
 ): Promise<DiscoverPayload> {
   if (input.candidates.length <= 1) return { ...input, reranked: false };
   const connectFn = opts.connectFn ?? currentTestConnectFn() ?? defaultConnectFn;
+  const describe = opts.describe ?? ((c) => describeCandidates(c));
   const timeoutMs = opts.timeoutMs ?? 60_000;
   let conn: { ctx: AcpCtx; close: () => void } | null = null;
   let handle: AcpSessionHandle | null = null;
   try {
     const deadline = Date.now() + timeoutMs;
     const left = () => Math.max(0, deadline - Date.now());
+    // Fetch descriptions in parallel with agent startup. Self-bounded and best-effort:
+    // it resolves to an empty map on failure or after its own budget, so slow clones
+    // never eat the agent's time budget or fail the whole re-rank.
+    const descBudget = Math.min(20_000, Math.floor(timeoutMs / 2));
+    const descP = Promise.race([
+      describe(input.candidates).catch(() => new Map<string, string>()),
+      new Promise<Map<string, string>>((res) => setTimeout(() => res(new Map()), descBudget)),
+    ]);
     conn = await withTimeout(connectFn(CLAUDE_AGENT, null), left());
     handle = await withTimeout(conn.ctx.open(analysisWorkspace()), left());
     await withTimeout(handle.setMode("plan"), left());
-    const text = await withTimeout(handle.promptText(prompt(input.candidates, input.topics)), left());
+    const descriptions = await descP;
+    const text = await withTimeout(handle.promptText(prompt(input.candidates, input.topics, descriptions)), left());
     const ordered = applyOrder(text, input.candidates);
     if (!ordered) return { ...input, reranked: false, degraded: { reason: "AI re-rank returned no usable order; showing default order." } };
     return { candidates: ordered, topics: input.topics, reranked: true };
