@@ -1,13 +1,15 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 // src/gem/__tests__/bindEndpoints.test.ts
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { useHermeticHome } from "../../__tests__/support/hermeticHome.js";
 import { GemController } from "../../gem.controller.js";
 
+// Fresh hermetic home PER TEST so tests are order-independent (a prior /bind/complete
+// writing binding.json must not leak into another test's home).
 let restore: () => void;
-beforeAll(() => { restore = useHermeticHome(); });
-afterAll(() => restore());
+beforeEach(() => { restore = useHermeticHome(); });
+afterEach(() => restore());
 
 function jsonFetch(body: unknown): typeof fetch {
   return (async () => ({ ok: true, status: 200, json: async () => body })) as unknown as typeof fetch;
@@ -44,7 +46,6 @@ describe("/bind/start", () => {
   });
 });
 
-// Run /bind/status BEFORE /bind/complete to avoid the side-effect of writing binding.json.
 describe("/bind/status", () => {
   it("returns {bound:false} on empty home (hermetic)", async () => {
     const controller = new GemController();
