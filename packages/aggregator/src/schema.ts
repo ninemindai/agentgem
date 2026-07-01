@@ -116,7 +116,20 @@ export const accountScopes = pgTable("account_scopes", {
   scope: text("scope").notNull(),
 }, (t) => [primaryKey({ columns: [t.accountId, t.scope] })]);
 
-export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, webSessions, stars, gemAdoptions, accountScopes };
+export const catalogGems = pgTable("catalog_gems", {
+  gemKey: text("gem_key").notNull(),
+  version: text("version").notNull(),
+  publishedBy: text("published_by").notNull(),
+  author: text("author"),
+  description: text("description"),
+  tags: jsonb("tags").$type<string[]>(),
+  artifactKinds: jsonb("artifact_kinds").$type<string[]>(),
+  type: text("type"),
+  grade: integer("grade"),
+  createdAtMs: bigint("created_at_ms", { mode: "number" }).notNull(),
+}, (t) => [primaryKey({ columns: [t.gemKey, t.version] })]);
+
+export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, webSessions, stars, gemAdoptions, accountScopes, catalogGems };
 export type AppDb = PgDatabase<any, typeof schema>;
 
 // Idempotent DDL. (Schema-as-tables above is the query source of truth; this DDL
@@ -139,4 +152,5 @@ export async function ensureSchema(db: AppDb): Promise<void> {
   await db.execute(sql`create index if not exists stars_target_idx on stars (target_kind, target_id)`);
   await db.execute(sql`create table if not exists gem_adoptions (gem_key text not null, gem_digest text not null, producer_pubkey text not null references producers(pubkey), account_login text, event text not null default 'install', adopted_at timestamptz not null default now(), trust_score real not null default 1, quarantined boolean not null default false, primary key (gem_key, producer_pubkey))`);
   await db.execute(sql`create table if not exists account_scopes (account_id uuid not null references accounts(id), scope text not null, primary key (account_id, scope))`);
+  await db.execute(sql`create table if not exists catalog_gems (gem_key text not null, version text not null, published_by text not null, author text, description text, tags jsonb, artifact_kinds jsonb, type text, grade integer, created_at_ms bigint not null, primary key (gem_key, version))`);
 }
