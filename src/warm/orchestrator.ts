@@ -32,12 +32,16 @@ export async function runWarmPass(opts: {
   now?: () => number; registry?: Warmable[]; isBusy?: () => boolean; home?: string;
 } = {}): Promise<WarmPassResult> {
   const now = opts.now ?? Date.now;
+  // Re-entrancy guard: a pass already in flight (e.g. an idle tick firing while
+  // the previous pass is still warming) must not overlap — overlapping passes
+  // corrupt `status` and double the LLM work. Bail with the last known result.
+  if (status.running) return status.last ?? { startedAt: now(), finishedAt: now(), outcomes: [] };
   const registry = opts.registry ?? WARMABLES;
   const isBusy = opts.isBusy ?? isForegroundBusy;
   const topN = opts.topN ?? DEFAULT_TOP_N;
   const roots = opts.roots
     ?? readRecents(opts.home ?? agentgemHome()).map((r) => r.path);
-  const llmRoots = roots.slice(0, topN);
+  const selectedRoots = roots.slice(0, topN);
 
   status = { running: true, last: status.last };
   const startedAt = now();
@@ -47,7 +51,7 @@ export async function runWarmPass(opts: {
     if (w.scope === "global") {
       outcomes.push(await runOne(w, null, opts));
     } else {
-      for (const root of llmRoots) {
+      for (const root of selectedRoots) {
         if (w.cost === "llm" && isBusy()) { outcomes.push({ id: w.id, root, status: "skipped" }); continue; }
         outcomes.push(await runOne(w, root, opts));   // serial: await each before the next
       }
