@@ -14,3 +14,4 @@ export * from "./apiKeys.js";
 export * from "./localDb.js";
 export * from "./webAuth.js";
 export * from "./stars.js";
+export * from "./projectAdoption.js";
