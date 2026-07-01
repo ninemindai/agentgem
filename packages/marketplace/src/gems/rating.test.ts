@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { starCurve, stoneRating, adoptionCurve } from "./rating";
+import { starCurve, stoneRating, adoptionCurve, isDiamond } from "./rating";
 
 describe("starCurve", () => {
   it("maps star counts to 1..5 buckets", () => {
@@ -25,5 +25,18 @@ describe("stoneRating", () => {
   });
   it("defaults installs to 0 so 2-arg still works", () => {
     expect(stoneRating(3, 0)).toBe(3);
+  });
+});
+describe("isDiamond", () => {
+  it("is true only when maxed on all three axes (grade 3 + 21 stars + 50 installs)", () => {
+    expect(isDiamond(3, 21, 50)).toBe(true);
+    expect(isDiamond(3, 999, 999)).toBe(true);
+  });
+  it("is false if any single axis is below the max", () => {
+    expect(isDiamond(2, 21, 50)).toBe(false);   // grade below 3
+    expect(isDiamond(3, 20, 50)).toBe(false);   // stars below 21 (starCurve !== 5)
+    expect(isDiamond(3, 21, 49)).toBe(false);   // installs below 50 (adoptionCurve !== 5)
+    expect(isDiamond(undefined, 21, 50)).toBe(false); // no grade
+    expect(isDiamond(3, 0, 0)).toBe(false);
   });
 });
