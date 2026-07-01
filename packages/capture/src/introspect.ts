@@ -6,6 +6,7 @@ import { basename, dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { redactMcpConfig } from "@agentgem/base";
 import { parseTomlMcpServers, agentgemHome } from "@agentgem/model";
+import { resolveSkillRoot } from "./skillRoots.js";
 import type {
   ConfigInventory,
   ProjectInventory,
@@ -165,7 +166,7 @@ export function introspectConfig(opts: IntrospectOptions = {}): ConfigInventory 
   const mcpList: McpServerArtifact[] = [];
   const hookList: HookArtifact[] = [];
 
-  skillList.push(...readSkillsDir(join(claudeDir, "skills"), "standalone"));
+  skillList.push(...readSkillsDir(resolveSkillRoot("standalone", { claudeDir, agentDir, codexDir, hermesDir }), "standalone"));
 
   const settings = readJson(join(claudeDir, "settings.json"));
   if (isObj(settings) && isObj(settings.mcpServers)) {
@@ -187,14 +188,14 @@ export function introspectConfig(opts: IntrospectOptions = {}): ConfigInventory 
     hookList.push(...hooksFromConfig(readJson(join(installPath, "hooks", "hooks.json")), source, redact));
   }
 
-  skillList.push(...readSkillsDir(agentDir, "agent"));
+  skillList.push(...readSkillsDir(resolveSkillRoot("agent", { claudeDir, agentDir, codexDir, hermesDir }), "agent"));
 
   // Source 5: Codex skills (~/.codex/skills)
-  skillList.push(...readSkillsDir(join(codexDir, "skills"), "codex"));
+  skillList.push(...readSkillsDir(resolveSkillRoot("codex", { claudeDir, agentDir, codexDir, hermesDir }), "codex"));
 
   // Source 6: Hermes skills (~/.hermes/skills/<name>/DESCRIPTION.md, some SKILL.md).
   // Hermes secrets (.env, auth.json, config.yaml) are never read.
-  skillList.push(...readSkillsDir(join(hermesDir, "skills"), "hermes", ["SKILL.md", "DESCRIPTION.md"]));
+  skillList.push(...readSkillsDir(resolveSkillRoot("hermes", { claudeDir, agentDir, codexDir, hermesDir }), "hermes", ["SKILL.md", "DESCRIPTION.md"]));
 
   const instructions: InstructionsArtifact[] = [];
   const claudeMd = join(claudeDir, "CLAUDE.md");
