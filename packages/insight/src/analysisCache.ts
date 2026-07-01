@@ -7,9 +7,9 @@
 // or updated — so the cache stays valid until the project's sessions change, and
 // revisiting a project to pick a different candidate is instant. Best-effort and
 // persistent (~/.agentgem/analysis-cache.json); failures never throw.
-import { readFileSync, writeFileSync, mkdirSync, statSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { agentgemHome } from "@agentgem/model";
+import { readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { agentgemHome, writeJsonAtomic } from "@agentgem/model";
 
 const MAX_ENTRIES = 50;
 function cachePath(): string { return join(agentgemHome(), ".agentgem", "analysis-cache.json"); }
@@ -50,8 +50,6 @@ export function writeAnalysisCache(root: string, token: string, result: unknown,
     const all = readAll().filter((x) => x.root !== root);
     all.push({ root, token, result, ts: nowMs });
     all.sort((a, b) => b.ts - a.ts);
-    const path = cachePath();
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, JSON.stringify(all.slice(0, MAX_ENTRIES)), "utf8");
+    writeJsonAtomic(cachePath(), all.slice(0, MAX_ENTRIES));
   } catch { /* best-effort */ }
 }
