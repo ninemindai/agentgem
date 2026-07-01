@@ -3,6 +3,7 @@
 // Signs a gem manifest with the local producer key and forwards it to the hosted aggregator's
 // catalog endpoint. Mirrors shareClient.ts (same base resolution, same http seam).
 import type { Identity } from "@agentgem/model";
+import { InvalidInputError } from "@agentgem/model";
 import { catalogSigningPayload, type CatalogManifest } from "@agentgem/aggregator";
 
 export type ShareHttp = (url: string, init: { method: string; headers: Record<string, string>; body: string }) => Promise<{ status: number; json(): Promise<unknown> }>;
@@ -36,4 +37,11 @@ export async function postCatalogShare(args: {
   if (res.status < 200 || res.status >= 300) throw new Error(`catalog share ${res.status}`);
   const b = (await res.json()) as { shared?: boolean; publishedBy?: string; rejected?: string };
   return b.shared && b.publishedBy ? { shared: true, publishedBy: b.publishedBy } : { shared: false, rejected: b.rejected ?? "unknown" };
+}
+
+/** Map a hosted-catalog rejection reason to a client-surfacing 400 (not a redacted 500). */
+export function shareRejectedError(rejected: string): InvalidInputError {
+  return new InvalidInputError(
+    rejected === "not-connected" ? "connect your GitHub account first" : `share rejected: ${rejected}`,
+  );
 }

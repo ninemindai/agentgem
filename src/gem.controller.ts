@@ -191,7 +191,7 @@ import { collectScorecard, selectScorecardRoots, scorecardTranscriptPaths, defau
 import { preparePlaybook } from "./gem/playbookPrepareCore.js";
 import { publishPlaybookCore } from "./gem/playbookPublishCore.js";
 import { createShareCard } from "./share/shareStore.js";
-import { postCatalogShare } from "./gem/catalogShareClient.js";
+import { postCatalogShare, shareRejectedError } from "./gem/catalogShareClient.js";
 import { sanitizeShareText } from "@agentgem/insight";
 import { claudeTranscriptsForCwd, scanWorkflow, allClaudeTranscripts, bucketTranscriptsByCwd } from "@agentgem/insight";
 import { recommendWorkflow, recommendationToSelection } from "@agentgem/insight";
@@ -380,7 +380,7 @@ export class GemController {
         };
         const identity = loadOrCreateIdentity();
         const r = await postCatalogShare({ manifest, identity });
-        if (!r.shared) throw new Error(r.rejected === "not-connected" ? "connect your GitHub account first" : `share rejected: ${r.rejected}`);
+        if (!r.shared) throw shareRejectedError(r.rejected);
         return { ref: manifest.gemKey, version: b.version };
       },
       share: async () => createShareCard(this.db!, { kind: "gem", name: b.name ?? b.workspace, provenance: b.provenance, generatedAtMs: Date.now() }),
