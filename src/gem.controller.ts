@@ -221,6 +221,24 @@ import { resolveDirs, resolveProject, agentgemHome } from "@agentgem/model";
 import { pickFolder } from "./pickFolder.js";
 import { readShareAdoption, setShareAdoption } from "./agentgemConfig.js";
 import { emitAdoption } from "./registry/emitAdoption.js";
+import { bindConfig, startDeviceBind, completeDeviceBind, readBindingStatus, type StartDeps, type CompleteDeps } from "./bind/bindCore.js";
+
+const BindStartSchema = z.object({
+  configured: z.boolean(),
+  userCode: z.string().optional(),
+  verificationUri: z.string().optional(),
+  deviceCode: z.string().optional(),
+  interval: z.number().optional(),
+});
+const BindCompleteBodySchema = z.object({ deviceCode: z.string(), interval: z.number().optional() });
+const BindCompleteSchema = z.object({
+  bound: z.boolean(),
+  provider: z.string().optional(),
+  login: z.string().optional(),
+  accountId: z.string().optional(),
+  rejected: z.string().optional(),
+});
+const BindStatusSchema = z.object({ bound: z.boolean(), login: z.string().optional(), provider: z.string().optional() });
 
 let globalUsageRefreshing = false;
 
@@ -894,6 +912,28 @@ export class GemController {
       description: input.body.description, tags: input.body.tags, type, publishedBy,
       grade: gem.grade,
     });
+  }
+
+  // Bind: start the GitHub device flow for sybil-hardening. Returns { configured: false } when the
+  // server has no client ID set — the UI can gate on this without an error state.
+  @post("/bind/start", { body: z.object({}), response: BindStartSchema })
+  async bindStart(_input: { body: Record<string, never> }, deps: StartDeps = {}): Promise<z.infer<typeof BindStartSchema>> {
+    const cfg = bindConfig();
+    if (!cfg.clientId) return { configured: false };
+    const dc = await startDeviceBind(cfg, deps);
+    return { configured: true, ...dc };
+  }
+
+  // Bind: complete the device flow — poll GitHub, sign the token, POST to the aggregator.
+  @post("/bind/complete", { body: BindCompleteBodySchema, response: BindCompleteSchema })
+  async bindComplete(input: { body: z.infer<typeof BindCompleteBodySchema> }, deps: CompleteDeps = {}): Promise<z.infer<typeof BindCompleteSchema>> {
+    return completeDeviceBind(bindConfig(), { deviceCode: input.body.deviceCode, interval: input.body.interval }, deps);
+  }
+
+  // Bind: read the local binding.json (bound/unbound, no secret).
+  @get("/bind/status", { query: PickQuerySchema, response: BindStatusSchema })
+  async bindStatus(_input: { query: z.infer<typeof PickQuerySchema> }): Promise<z.infer<typeof BindStatusSchema>> {
+    return readBindingStatus();
   }
 
   // Pop the OS-native folder picker and return the chosen absolute path (null if cancelled).
