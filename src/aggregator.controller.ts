@@ -48,7 +48,7 @@ const BindResultSchema = z.union([
 const SweepBody = z.object({ apply: z.boolean().optional(), token: z.string() });
 const SweepReportSchema = z.object({
   clustersFound: z.number(), attestationsQuarantined: z.number(), producersFlagged: z.number(), dryRun: z.boolean(),
-  adoptionsQuarantined: z.number(),
+  adoptionsQuarantined: z.number(), adoptionGemsFlagged: z.number(), adoptionProducersFlagged: z.number(),
 });
 const SweepResult = z.union([
   z.object({ ok: z.literal(true), report: SweepReportSchema }),
@@ -148,7 +148,7 @@ export class AggregatorController {
     if (!tokenEq(input.body.token, expected)) return { ok: false, rejected: "unauthorized" };
     const report = await sweepQuarantine(this.db, { dryRun: !input.body.apply });
     const ad = await sweepAdoptionQuarantine(this.db, { dryRun: !input.body.apply });
-    return { ok: true, report: { ...report, adoptionsQuarantined: ad.adoptionsQuarantined } };
+    return { ok: true, report: { ...report, adoptionsQuarantined: ad.adoptionsQuarantined, adoptionGemsFlagged: ad.gemsFlagged, adoptionProducersFlagged: ad.producersFlagged } };
   }
 
   // Admin-only: mint an API key. Gated by AGGREGATOR_ADMIN_TOKEN (like /sweep). The plaintext

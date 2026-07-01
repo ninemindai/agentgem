@@ -44,7 +44,7 @@ describe("POST /api/aggregator/sweep", () => {
     const db = await makeTestDb();
     await seedCluster(db);
     const res = await new AggregatorController(db).sweep({ body: { token: "s3cret" } });
-    expect(res).toEqual({ ok: true, report: { clustersFound: 1, attestationsQuarantined: 3, producersFlagged: 3, adoptionsQuarantined: 0, dryRun: true } });
+    expect(res).toEqual({ ok: true, report: { clustersFound: 1, attestationsQuarantined: 3, producersFlagged: 3, adoptionsQuarantined: 0, adoptionGemsFlagged: 0, adoptionProducersFlagged: 0, dryRun: true } });
     expect(await quarantinedCount(db)).toBe(0); // nothing actually quarantined
   });
 
@@ -53,7 +53,7 @@ describe("POST /api/aggregator/sweep", () => {
     const db = await makeTestDb();
     await seedCluster(db);
     const res = await new AggregatorController(db).sweep({ body: { token: "s3cret", apply: true } });
-    expect(res).toEqual({ ok: true, report: { clustersFound: 1, attestationsQuarantined: 3, producersFlagged: 3, adoptionsQuarantined: 0, dryRun: false } });
+    expect(res).toEqual({ ok: true, report: { clustersFound: 1, attestationsQuarantined: 3, producersFlagged: 3, adoptionsQuarantined: 0, adoptionGemsFlagged: 0, adoptionProducersFlagged: 0, dryRun: false } });
     expect(await quarantinedCount(db)).toBe(3);
   });
 });
