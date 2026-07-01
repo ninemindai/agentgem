@@ -111,3 +111,44 @@ describe("plugin disable/enable", () => {
     expect(readSettings().enabledPlugins["brooks-lint"]).toBe(true);
   });
 });
+
+describe("mcp disable/enable", () => {
+  const settingsFile = () => join(opts.claudeDir, "settings.json");
+  const mcpJsonFile = () => join(opts.claudeDir, ".mcp.json");
+  const readSettings = () => JSON.parse(readFileSync(settingsFile(), "utf8"));
+  const stashFile = (name: string) => join(home, ".agentgem", "disabled", "mcp", `${name}.json`);
+
+  beforeEach(() => mkdirSync(opts.claudeDir, { recursive: true }));
+
+  it("stashes and restores a settings.json-defined MCP server", () => {
+    writeFileSync(settingsFile(), JSON.stringify({ mcpServers: { gh: { command: "npx", args: ["gh-mcp"] } } }));
+    const [d] = disableArtifacts([{ type: "mcp", name: "gh", source: "user" }], opts);
+    expect(d.ok).toBe(true);
+    expect(readSettings().mcpServers.gh).toBeUndefined();          // removed from live config
+    expect(JSON.parse(readFileSync(stashFile("gh"), "utf8")).config.args).toEqual(["gh-mcp"]); // stashed
+    expect(listDisabled(opts)).toContainEqual({ type: "mcp", name: "gh", source: "user" });
+    const [e] = enableArtifacts([{ type: "mcp", name: "gh", source: "user" }], opts);
+    expect(e.ok).toBe(true);
+    expect(readSettings().mcpServers.gh.args).toEqual(["gh-mcp"]); // restored
+    expect(existsSync(stashFile("gh"))).toBe(false);              // stash cleaned up
+  });
+
+  it("toggles disabledMcpjsonServers for a .mcp.json-defined server", () => {
+    writeFileSync(settingsFile(), JSON.stringify({}));
+    writeFileSync(mcpJsonFile(), JSON.stringify({ mcpServers: { fs: { command: "npx", args: ["fs-mcp"] } } }));
+    const [d] = disableArtifacts([{ type: "mcp", name: "fs", source: "user" }], opts);
+    expect(d.ok).toBe(true);
+    expect(readSettings().disabledMcpjsonServers).toContain("fs");
+    expect(listDisabled(opts)).toContainEqual({ type: "mcp", name: "fs", source: "user" });
+    const [e] = enableArtifacts([{ type: "mcp", name: "fs", source: "user" }], opts);
+    expect(e.ok).toBe(true);
+    expect(readSettings().disabledMcpjsonServers).not.toContain("fs");
+  });
+
+  it("fails cleanly for an MCP name in neither config", () => {
+    writeFileSync(settingsFile(), JSON.stringify({}));
+    const [r] = disableArtifacts([{ type: "mcp", name: "ghost", source: "user" }], opts);
+    expect(r.ok).toBe(false);
+    expect(r.message).toMatch(/not found/i);
+  });
+});
