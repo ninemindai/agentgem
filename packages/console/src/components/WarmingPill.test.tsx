@@ -19,6 +19,11 @@ describe("WarmingPill", () => {
   it("renders nothing when status.running is false", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => res({ running: false, last: null })));
     render(<WarmingPill apiBase="" />);
-    await waitFor(() => expect(screen.queryByText("warming…")).toBeNull());
+    // Wait for the poll to actually fire so the assertion is not vacuous (the
+    // component initialises with useState(false) and returns null immediately,
+    // meaning a synchronous queryByText check would pass even if fetch was never
+    // called).  Confirming fetch ran proves the false-branch was exercised.
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    expect(screen.queryByText("warming…")).toBeNull();
   });
 });
