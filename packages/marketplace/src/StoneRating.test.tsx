@@ -17,4 +17,14 @@ describe("StoneRating", () => {
     const { container } = render(<StoneRating cut="skill" grade={1} stars={0} installs={50} />);
     expect(container.querySelectorAll('[data-stone="filled"]').length).toBe(5);
   });
+  it("renders the Diamond apex (data-diamond + 5 filled) when maxed on all axes", () => {
+    const { container } = render(<StoneRating cut="skill" grade={3} stars={21} installs={50} />);
+    expect(container.querySelector('[data-diamond="true"]')).toBeTruthy();
+    expect(container.querySelectorAll('[data-stone="filled"]').length).toBe(5);
+  });
+  it("a 5-of-5 gem that is NOT diamond (maxed by one axis only) shows no diamond seal", () => {
+    const { container } = render(<StoneRating cut="skill" grade={3} stars={21} installs={0} />);
+    expect(container.querySelector('[data-diamond="true"]')).toBeNull(); // stars alone → 5 of 5, not Diamond
+    expect(container.querySelectorAll('[data-stone="filled"]').length).toBe(5);
+  });
 });
