@@ -184,8 +184,10 @@ import {
   GemRunRequestSchema, GemRunResponseSchema,
   GemRunPrepareRequestSchema, GemRunPrepareResponseSchema,
   UsageSchema, UsageQuerySchema,
+  PlaybookPrepareBodySchema, PlaybookPrepareResponseSchema,
 } from "./schemas.js";
 import { collectScorecard, selectScorecardRoots, scorecardTranscriptPaths, defaultScorecardDeps, isPortable, type Scorecard } from "./gem/scorecard.js";
+import { preparePlaybook } from "./gem/playbookPrepareCore.js";
 import { sanitizeShareText } from "@agentgem/insight";
 import { claudeTranscriptsForCwd, scanWorkflow, allClaudeTranscripts, bucketTranscriptsByCwd } from "@agentgem/insight";
 import { recommendWorkflow, recommendationToSelection } from "@agentgem/insight";
@@ -335,6 +337,27 @@ export class GemController {
     // TranscriptView boundary. Skills AND lessons both carry evidence.root.
     const lessons = lessonsRes.lessons.map((l) => ({ ...l, evidence: { ...l.evidence, root: scrubText(l.evidence.root) } }));
     return { distilled: dehomeDistilled(distill.distilled), lessons, degraded: distill.degraded || lessonsRes.degraded };
+  }
+
+  @post("/playbook/prepare", { body: PlaybookPrepareBodySchema, response: PlaybookPrepareResponseSchema })
+  async playbookPrepare(input: { body: z.infer<typeof PlaybookPrepareBodySchema> }): Promise<z.infer<typeof PlaybookPrepareResponseSchema>> {
+    const root = input.body.root;
+    const inventory = introspectAll(undefined, [root]);
+    const project = (inventory.projects ?? []).find((p) => p.root === resolveProject(root));
+    if (!project) throw new InvalidInputError(`Project '${root}' not found in inventory.`);
+    const dirs = resolveDirs(undefined);
+    const paths = claudeTranscriptsForCwd(dirs.claudeDir, root);
+    const scanInv = { project, global: { skills: inventory.skills, mcpServers: inventory.mcpServers, hooks: inventory.hooks } };
+    const signal = scanWorkflow(paths, scanInv, { retainSequences: true });
+    return preparePlaybook({
+      root,
+      distill: async () => {
+        const [w, l] = await Promise.all([distillWorkflow(signal, scanInv), distillSessionLessons(signal, scanInv)]);
+        return { skills: w.distilled, lessons: l.lessons, degraded: w.degraded || l.degraded };
+      },
+      persistSkill: (s) => { writeDistilledDraft(s); },
+      persistLesson: (l) => { writeDistilledLesson(l); },
+    });
   }
 
   @get("/optimize", { query: OptimizeQuerySchema, response: OptimizePayloadSchema })

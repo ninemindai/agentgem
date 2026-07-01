@@ -410,6 +410,10 @@ export const WorkflowAnalyzeResponseSchema = z.object({
 // Accept a distilled draft → write it to .agentgem/distilled/<name>/SKILL.md.
 export const WorkflowDraftWriteResponseSchema = z.object({ path: z.string() });
 
+// ── Playbook prepare ──
+export const PlaybookPrepareBodySchema = z.object({ root: z.string() });
+export const PlaybookPrepareResponseSchema = z.object({ skills: z.array(z.string()), lessons: z.array(z.string()), root: z.string(), degraded: z.boolean() });
+
 export const GemSchema = z.object({
   name: z.string(),
   createdFrom: z.string(),
