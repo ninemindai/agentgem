@@ -28,45 +28,47 @@ export function Dreaming({ apiBase }: { apiBase: string }) {
       <header>
         <h1>Dreaming</h1>
         <p>Consolidates what the background job already learned. Nothing lands without your accept.</p>
-        <span>{status?.enabled ? "DREAMING ON" : "DREAMING OFF"}</span>
-        <button onClick={() => post(apiBase, "enable", { enabled: !status?.enabled }).then(() => { setError(null); refresh(); }).catch(() => setError("Could not change Dreaming."))}>
+        <span className="dream-flag" data-on={!!status?.enabled}>{status?.enabled ? "DREAMING ON" : "DREAMING OFF"}</span>
+        <button className="dream-btn" onClick={() => post(apiBase, "enable", { enabled: !status?.enabled }).then(() => { setError(null); refresh(); }).catch(() => setError("Could not change Dreaming."))}>
           {status?.enabled ? "Turn off" : "Turn on"}
         </button>
       </header>
 
-      <nav>
+      <nav className="dream-tabs">
         {(["review", "diary"] as const).map((t) => (
           <button key={t} aria-pressed={tab === t} onClick={() => setTab(t)}>{t}</button>
         ))}
       </nav>
 
-      {error && <p role="alert">{error}</p>}
+      {error && <p className="ledger-error" role="alert">{error}</p>}
 
       {tab === "review" && (
         <>
           {status && (
-            <section>
+            <section className="dream-scene">
               <div className="phases">
                 {PHASES.map((p) => <span key={p} data-lit={status.phasesLit.includes(p)}>{p}</span>)}
               </div>
-              <p>{status.promoted} promoted · {status.queued} queued</p>
-              <button onClick={() => post(apiBase, "run").then(() => { setError(null); setTimeout(refresh, 1500); }).catch(() => setError("Dream run failed."))}>Dream now</button>
+              <p className="dream-counts">{status.promoted} promoted · {status.queued} queued</p>
+              <button className="dream-btn" onClick={() => post(apiBase, "run").then(() => { setError(null); setTimeout(refresh, 1500); }).catch(() => setError("Dream run failed."))}>Dream now</button>
             </section>
           )}
-          <ul>
+          <ul className="dream-queue">
             {items.map((it) => (
               <li key={it.key}>
-                <strong>{it.name}</strong> <em>{it.kind}</em> — {it.summary}
-                <button onClick={() => act("queue/accept", it.key)}>Accept</button>
-                <button onClick={() => act("queue/dismiss", it.key)}>Dismiss</button>
+                <span className="dream-item-name">{it.name}</span>
+                <span className="dream-item-kind">{it.kind}</span>
+                <span className="dream-item-summary">{it.summary}</span>
+                <button className="dream-act is-accept" onClick={() => act("queue/accept", it.key)}>Accept</button>
+                <button className="dream-act" onClick={() => act("queue/dismiss", it.key)}>Dismiss</button>
               </li>
             ))}
-            {items.length === 0 && <li>Nothing queued yet.</li>}
+            {items.length === 0 && <li className="is-empty">Nothing queued yet.</li>}
           </ul>
         </>
       )}
 
-      {tab === "diary" && <p>Diary view — pass history (wire to /api/dream/diary in a follow-up).</p>}
+      {tab === "diary" && <p className="dream-diary">Diary view — pass history (wire to /api/dream/diary in a follow-up).</p>}
     </div>
   );
 }
