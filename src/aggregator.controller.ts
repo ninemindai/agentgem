@@ -14,6 +14,7 @@ import { recordBinding } from "@agentgem/aggregator";
 import { GitHubVerifier } from "@agentgem/aggregator";
 import { sweepQuarantine, sweepAdoptionQuarantine } from "@agentgem/aggregator";
 import { issueKey, revokeKey, listKeys } from "@agentgem/aggregator";
+import { recordCatalogShare } from "@agentgem/aggregator";
 
 // Loose body schema — the real gate is the core's verifyAttestation (ed25519 + consistency).
 const IngestBody = z.object({ producer: z.object({ publicKey: z.string() }).loose(), signature: z.string(), gem: z.object({ digest: z.string() }).loose() }).loose();
@@ -70,6 +71,14 @@ const KeyListResult = z.union([
   z.object({ ok: z.literal(true), keys: z.array(z.object({ id: z.string(), label: z.string(), createdAt: z.string(), revokedAt: z.string().nullable() })) }),
   z.object({ ok: z.literal(false), rejected: z.string() }),
 ]);
+
+const CatalogManifestSchema = z.object({
+  gemKey: z.string(), version: z.string(), author: z.string().optional(), description: z.string().optional(),
+  tags: z.array(z.string()).optional(), artifactKinds: z.array(z.string()).optional(),
+  type: z.string().optional(), grade: z.number().optional(),
+});
+const CatalogBody = z.object({ manifest: CatalogManifestSchema, pubkey: z.string(), signedAt: z.number(), signature: z.string() });
+const CatalogResult = z.object({ shared: z.boolean(), publishedBy: z.string().optional(), gemKey: z.string().optional(), version: z.string().optional(), rejected: z.string().optional() });
 
 // Constant-time token compare (length-guarded so timingSafeEqual never throws on mismatched lengths).
 function tokenEq(a: string, b: string): boolean {
@@ -137,6 +146,16 @@ export class AggregatorController {
   async bind(input: { body: z.infer<typeof BindBody> }): Promise<z.infer<typeof BindResultSchema>> {
     // GitHubVerifier is the live provider; recordBinding does signature + freshness + producer checks.
     return recordBinding(this.db, input.body as z.infer<typeof BindBody>, new GitHubVerifier());
+  }
+
+  // Not-connected is NOT an HTTP error — stays 200 with { shared: false, rejected: "not-connected" },
+  // same shape as /bind's rejection.
+  @post("/catalog", { body: CatalogBody, response: CatalogResult })
+  async catalog(input: { body: z.infer<typeof CatalogBody> }): Promise<z.infer<typeof CatalogResult>> {
+    const r = await recordCatalogShare(this.db, input.body);
+    return r.shared
+      ? { shared: true, publishedBy: r.publishedBy, gemKey: r.gemKey, version: r.version }
+      : { shared: false, rejected: r.rejected };
   }
 
   // Admin-only: run the anti-sybil quarantine sweep. Dry-run by default; apply=true is
