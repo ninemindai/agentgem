@@ -1,7 +1,6 @@
-// Copyright (c) 2026 NineMind, Inc.
-// SPDX-License-Identifier: MIT
+// src/gem/__tests__/agentId.test.ts
 import { describe, it, expect } from "vitest";
-import type { SessionStat, AgentId } from "../observeAggregate.js";
+import type { AgentId, SessionStat } from "@agentgem/insight";
 import { canonicalHarness } from "@agentgem/model";
 
 describe("AgentId is open", () => {
