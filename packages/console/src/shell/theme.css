@@ -488,6 +488,14 @@ body::before {
 .insights-bymodel li:last-child { border-bottom: none; }
 .insights-bymodel .analyze-include-name { font: 12px/1.4 var(--font-mono); color: var(--ink); flex: 1; }
 .insights-rate { font: 600 13px/1 var(--font-ui); color: var(--accent); }
+.insights-chart { margin: 8px 0; }
+.insights-chart h4 { font: 600 12px/1 var(--font-ui); letter-spacing: .04em; text-transform: uppercase;
+  color: var(--muted); margin: 0 0 6px; }
+.insights-legend { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 12px;
+  font: 12px/1.4 var(--font-ui); color: var(--ink); }
+.insights-legend li { display: flex; align-items: center; gap: 5px; }
+.insights-legend strong { font-weight: 600; }
+.insights-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
 .insights-section { margin-top: 12px; padding: 10px; border: 1px solid var(--line-soft);
   border-radius: 8px; background: var(--paper); }
 .insights-section h4 { font: 600 12px/1 var(--font-ui); letter-spacing: .04em; text-transform: uppercase;
