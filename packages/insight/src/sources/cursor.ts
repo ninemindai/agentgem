@@ -7,11 +7,14 @@
 // while Cursor runs, so we COPY it (+ sidecars) to a temp file and open read-only. Metadata only:
 // we read a bubble's type/createdAt/token fields — NEVER its text/thinking/codeBlocks/toolFormerData.
 // Total: a missing/locked/corrupt DB or malformed blob degrades to [] / skip, never throws.
-import { copyFile, mkdtemp, rm } from "node:fs/promises";
+import { copyFile, mkdtemp, rm, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, basename } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { classifyMcpServer } from "@agentgem/model";
+import type { GemArtifact } from "@agentgem/model";
 import type { SessionStat } from "../observeAggregate.js";
+import type { ImportResult } from "../sources.js";
 
 const n = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
 const parse = (s: unknown): Record<string, unknown> | null => {
@@ -77,4 +80,39 @@ export async function scanCursorSessions(dbPath: string): Promise<SessionStat[]>
     return aggregateComposers(rows);
   } catch { return []; }
   finally { if (tmp) { try { await rm(tmp, { recursive: true, force: true }); } catch { /* best effort */ } } }
+}
+
+// Artifact (authoring) face: .cursor/rules/*.mdc + .cursorrules (legacy) + AGENTS.md -> instructions,
+// .cursor/mcp.json -> mcp_server / package reference. Cursor's mcp.json is an object-map keyed by
+// server name (like Cline), not Continue's array shape. classifyMcpServer (shared with
+// cline/gemini/continue, see packages/model/src/publicPackage.ts) references public npx packages
+// and redacts everything else — secret-bearing `env` is never ingested.
+
+// Strip a leading YAML frontmatter block (--- ... ---) from an .mdc rule, returning the body.
+// Cursor's description/globs/alwaysApply are rule-activation metadata not represented in the
+// neutral Gem; only the markdown body becomes the instructions artifact's content.
+function stripFrontmatter(text: string): string {
+  const m = text.match(/^---\n[\s\S]*?\n---\n?/);
+  return m ? text.slice(m[0].length).trimStart() : text;
+}
+
+export async function readCursorArtifacts(env: { rulesDir?: string; cursorrules?: string; agentsMd?: string; mcpFile?: string }): Promise<ImportResult> {
+  const artifacts: GemArtifact[] = [];
+  if (env.rulesDir) {
+    let files: string[]; try { files = (await readdir(env.rulesDir)).filter((f) => f.toLowerCase().endsWith(".mdc")); } catch { files = []; }
+    for (const f of files) {
+      try { const body = stripFrontmatter(await readFile(join(env.rulesDir, f), "utf8")); if (body.trim()) artifacts.push({ type: "instructions", name: basename(f, ".mdc"), content: body }); } catch { /* skip */ }
+    }
+  }
+  for (const [path, name] of [[env.cursorrules, "cursorrules"], [env.agentsMd, "agents"]] as const) {
+    if (!path) continue;
+    try { const c = await readFile(path, "utf8"); if (c.trim()) artifacts.push({ type: "instructions", name, content: c }); } catch { /* absent */ }
+  }
+  if (env.mcpFile) {
+    try {
+      const raw = JSON.parse(await readFile(env.mcpFile, "utf8")) as { mcpServers?: Record<string, { command?: string; args?: unknown; url?: string }> };
+      for (const [name, cfg] of Object.entries(raw.mcpServers ?? {})) artifacts.push(classifyMcpServer(name, cfg));  // object-map, like cline
+    } catch { /* absent/malformed */ }
+  }
+  return { artifacts, binding: { agent: "cursor", origin: "imported" } };
 }
