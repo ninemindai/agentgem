@@ -134,7 +134,11 @@ describe("POST /api/gem/run", () => {
       expect(r.body.materialized.written.some((w: { name: string }) => w.name === "qa")).toBe(true);
       expect(existsSync(join(runDir, ".claude", "skills", "qa", "SKILL.md"))).toBe(true);
       // The opaque id resolves server-side to the real dir + agent (raw path never trusted from the client).
-      expect(resolveRun(r.body.runId)).toEqual({ dir: runDir, agent: "claude" });
+      expect(resolveRun(r.body.runId)).toEqual({
+        dir: runDir,
+        agent: "claude",
+        meta: { gemName: "qa-gem", gemDigest: expect.any(String), contract: undefined },
+      });
     } finally {
       rmSync(archiveDir, { recursive: true, force: true });
       rmSync(runDir, { recursive: true, force: true });

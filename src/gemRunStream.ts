@@ -12,6 +12,7 @@
 import { runGemWithAgent, hasTestConnectFn } from "@agentgem/run";
 import { resolveRun, resolveOrFetchAdapter, AGENT_ADAPTERS } from "@agentgem/run";
 import { verifyGemRun, type GemExpectations } from "@agentgem/run";
+import { contractToExpectations, appendVerification } from "@agentgem/run";
 
 interface SseReq { query: Record<string, unknown> }
 interface SseRes {
@@ -44,7 +45,9 @@ export async function streamGemRun(req: SseReq, res: SseRes): Promise<void> {
   try {
     const reg = resolveRun(runId);
     if (!reg) { send("failed", { message: "unknown or expired runId — prepare the run again" }); return; }
-    if (!task) { send("failed", { message: "missing task" }); return; }
+    const contract = reg.meta?.contract;
+    const resolvedTask = task || contract?.task || "";
+    if (!resolvedTask) { send("failed", { message: "missing task (no task param and the Gem carries no contract)" }); return; }
 
     // Resolve the adapter (fetching on demand if needed), streaming a phase so a
     // one-time download shows progress instead of a hang.
@@ -57,14 +60,29 @@ export async function streamGemRun(req: SseReq, res: SseRes): Promise<void> {
     send("phase", { phase: "running", agent: reg.agent });
     const run = await runGemWithAgent({
       dir: reg.dir,
-      task,
+      task: resolvedTask,
       descriptor: { id: adapter.id, name: adapter.name, command },
       onToolCall: (t) => send("tool", t),
       onDelta: (c) => send("delta", { text: c }),
     });
-    const expectations: GemExpectations | undefined = expectTools || expectText ? { expectTools, expectText } : undefined;
+    // Explicit query expectations replace the contract's entirely (no per-field mixing).
+    const queryExpectations: GemExpectations | undefined =
+      expectTools || expectText ? { expectTools, expectText } : undefined;
+    const expectations = queryExpectations ?? (contract ? contractToExpectations(contract) : undefined);
+    const contractApplied = queryExpectations === undefined && contract !== undefined;
     const verification = expectations ? verifyGemRun(run, expectations) : undefined;
-    send("done", { runId, agent: reg.agent, run, verification });
+    if (verification) {
+      appendVerification({
+        gemName: reg.meta?.gemName,
+        gemDigest: reg.meta?.gemDigest,
+        agent: reg.agent,
+        adapterVersion: adapter.version,
+        contractApplied,
+        run: { ok: run.ok, toolCalls: run.ok ? run.result.toolCalls.length : 0 },
+        verification,
+      });
+    }
+    send("done", { runId, agent: reg.agent, run, verification, contractApplied });
   } catch (err) {
     send("failed", { message: (err as Error)?.message ?? String(err) });
   } finally {

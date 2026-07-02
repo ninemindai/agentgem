@@ -153,7 +153,7 @@ import type { TargetId } from "@agentgem/model";
 import { DEPLOY_REGISTRY, deployTargetList } from "@agentgem/deploy";
 import type { DeployTargetId } from "@agentgem/deploy";
 import { createWorkspace, listWorkspaces, readWorkspace, renderTarget, deleteWorkspace } from "@agentgem/base";
-import { writeGemArchive, readGemArchive } from "@agentgem/archive";
+import { writeGemArchive, readGemArchive, readGemMeta } from "@agentgem/archive";
 import type { GemLock } from "@agentgem/archive";
 import { writeArchiveDir, readArchiveDir } from "@agentgem/archive";
 import { packTar } from "@agentgem/archive";
@@ -860,13 +860,17 @@ export class GemController {
   @post("/gem/run/prepare", { body: GemRunPrepareRequestSchema, response: GemRunPrepareResponseSchema })
   async prepareGemRun(input: { body: z.infer<typeof GemRunPrepareRequestSchema> }): Promise<z.infer<typeof GemRunPrepareResponseSchema>> {
     const b = input.body;
-    const gem: Gem = b.archivePath
-      ? readGemArchive(readArchiveDir(b.archivePath))
+    const files = b.archivePath ? readArchiveDir(b.archivePath) : undefined;
+    const gem: Gem = files
+      ? readGemArchive(files)
       : buildGem(introspectAll(b.dir, b.projects), b.selection!, { name: b.name ?? "gem", createdFrom: resolveDirs(b.dir).claudeDir });
     const agent = (b.agent ?? "claude") as AgentId;
     const runDir = deriveRunDir(gem.name);
     const materialized = materializeGemToTestbed(gem, runDir, AGENT_ADAPTERS[agent].flavor);
-    const runId = registerRun(runDir, agent);
+    // Capture gem facts server-side so the stream can verify against the Gem's own
+    // contract and ledger the verdict under a stable content digest.
+    const gemDigest = readGemMeta(files ?? writeGemArchive(gem).files).gemDigest;
+    const runId = registerRun(runDir, agent, { gemName: gem.name, gemDigest, contract: gem.contract });
     return { runId, runDir, agent, materialized };
   }
 
