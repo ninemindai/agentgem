@@ -19,11 +19,12 @@ function dreamDir(base: string): string {
 function readJson<T>(path: string, fallback: T): T {
   try { return JSON.parse(readFileSync(path, "utf8")) as T; } catch { return fallback; }
 }
-function writeJson(path: string, value: unknown): void {
+function writeJson(path: string, value: unknown): boolean {
   try {
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, JSON.stringify(value, null, 2), "utf8");
-  } catch (err) { console.error("dream: sidecar write failed (ignored):", (err as Error).message); }
+    return true;
+  } catch (err) { console.error("dream: sidecar write failed (ignored):", (err as Error).message); return false; }
 }
 const queuePath = (base: string) => join(dreamDir(base), "queue.json");
 const diaryPath = (base: string) => join(dreamDir(base), "diary.json");
@@ -36,8 +37,9 @@ export function enqueueNew(candidates: DreamQueueEntry[], base: string = agentge
   const existing = readQueue(base);
   const seen = new Set(existing.map((e) => e.key));
   const added = candidates.filter((c) => !seen.has(c.key));
-  if (added.length) writeJson(queuePath(base), [...existing, ...added]);
-  return added;
+  if (!added.length) return added;
+  // Return [] if the write didn't persist, so callers don't record work that was dropped.
+  return writeJson(queuePath(base), [...existing, ...added]) ? added : [];
 }
 export function setStatus(key: string, status: DreamStatus, nowMs: number, base: string = agentgemHome()): DreamQueueEntry | null {
   const q = readQueue(base);
@@ -45,11 +47,11 @@ export function setStatus(key: string, status: DreamStatus, nowMs: number, base:
   if (!found) return null;
   found.status = status;
   found.reviewedMs = nowMs;
-  writeJson(queuePath(base), q);
-  return found;
+  return writeJson(queuePath(base), q) ? found : null; // null if the status change didn't persist
 }
 export function promotedCount(base: string = agentgemHome()): number {
-  return readQueue(base).filter((e) => e.status === "accepted").length;
+  // "promoted" = a draft distilled to disk; accepting an opportunity writes no file, so exclude it.
+  return readQueue(base).filter((e) => e.status === "accepted" && e.kind !== "opportunity").length;
 }
 export function readDiary(base: string = agentgemHome()): DreamDiaryEntry[] {
   return readJson<DreamDiaryEntry[]>(diaryPath(base), []);
