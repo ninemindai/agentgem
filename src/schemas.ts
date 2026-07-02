@@ -659,7 +659,7 @@ export const GemRunRequestSchema = z.object({
   name: z.string().optional(),
   dir: z.string().optional(),                              // introspect home (selection mode), like /materialize
   projects: z.array(z.string()).optional(),
-  task: z.string(),
+  task: z.string().optional(),                             // falls back to the Gem's contract.task
   // runDir is intentionally NOT accepted from the client: a caller-controlled path is a path-injection
   // sink (and the agent runs there with tool permissions). The server always derives it under
   // AGENTGEM_HOME from the gem name. See gem.controller runGem/prepareGemRun.

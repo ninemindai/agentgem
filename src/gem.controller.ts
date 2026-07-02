@@ -222,6 +222,7 @@ import { setCredential } from "@agentgem/capture";
 import { agentcoreReadiness, deployAgentcore, getAgentcoreStatus } from "@agentgem/deploy";
 import { scaffoldTestbed, importArtifacts } from "@agentgem/testbed";
 import { materializeAndRunGem, materializeGemToTestbed, registerRun, AGENT_ADAPTERS, type AgentId } from "@agentgem/run";
+import { contractToExpectations, appendVerification } from "@agentgem/run";
 import { detectFlavor, suggestTestbed, discoverProjects } from "@agentgem/testbed";
 import { discoverTargetProjects, scanRootsForTargets } from "@agentgem/testbed";
 import type { TestbedFlavorId } from "@agentgem/testbed";
@@ -846,12 +847,29 @@ export class GemController {
   @post("/gem/run", { body: GemRunRequestSchema, response: GemRunResponseSchema })
   async runGem(input: { body: z.infer<typeof GemRunRequestSchema> }): Promise<z.infer<typeof GemRunResponseSchema>> {
     const b = input.body;
-    const gem: Gem = b.archivePath
-      ? readGemArchive(readArchiveDir(b.archivePath))
+    const files = b.archivePath ? readArchiveDir(b.archivePath) : undefined;
+    const gem: Gem = files
+      ? readGemArchive(files)
       : buildGem(introspectAll(b.dir, b.projects), b.selection!, { name: b.name ?? "gem", createdFrom: resolveDirs(b.dir).claudeDir });
+    const task = b.task ?? gem.contract?.task;
+    if (!task) throw new InvalidInputError("task is required (this Gem carries no contract)");
+    // Explicit body expectations replace the contract's entirely (no per-field mixing).
+    const expectations = b.expectations ?? (gem.contract ? contractToExpectations(gem.contract) : undefined);
+    const contractApplied = b.expectations === undefined && gem.contract !== undefined;
     const agent = (b.agent ?? "claude") as AgentId;
     const runDir = deriveRunDir(gem.name);
-    const out = await materializeAndRunGem({ gem, dir: runDir, task: b.task, agent, expectations: b.expectations });
+    const out = await materializeAndRunGem({ gem, dir: runDir, task, agent, expectations });
+    if (out.verification) {
+      appendVerification({
+        gemName: gem.name,
+        gemDigest: readGemMeta(files ?? writeGemArchive(gem).files).gemDigest,
+        agent: out.agent,
+        adapterVersion: AGENT_ADAPTERS[out.agent].version,
+        contractApplied,
+        run: { ok: out.run.ok, toolCalls: out.run.ok ? out.run.result.toolCalls.length : 0 },
+        verification: out.verification,
+      });
+    }
     return { dir: runDir, agent: out.agent, materialized: out.materialized, run: out.run, verification: out.verification };
   }
 

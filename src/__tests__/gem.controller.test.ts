@@ -164,6 +164,34 @@ describe("POST /api/gem/run", () => {
       rmSync(runDir, { recursive: true, force: true });
     }
   });
+
+  it("uses the archived contract when no task/expectations are sent, and ledgers", async () => {
+    const archiveDir = mkdtempSync(join(tmpdir(), "gem-arc-"));
+    const runDir = join(agentgemHomeDir, ".agentgem", "runs", "qa-gem");
+    const withContract: Gem = { ...gem, contract: { task: "exercise qa", expect: { tools: ["qa"] } } };
+    writeArchiveDir(archiveDir, writeGemArchive(withContract).files);
+    setRunConnectFnForTests(fakeRun);
+    try {
+      const r = await client.post("/api/gem/run").send({ archivePath: archiveDir }).expect(200);
+      expect(r.body.verification.passed).toBe(true); // fake invokes "Skill(qa)" → matches "qa"
+      const rec = JSON.parse(readFileSync(join(agentgemHomeDir, "verifications.jsonl"), "utf8").trim().split("\n").at(-1)!);
+      expect(rec.gemName).toBe("qa-gem");
+      expect(rec.contractApplied).toBe(true);
+      expect(rec.agent).toBe("claude");
+    } finally {
+      setRunConnectFnForTests(null);
+      rmSync(archiveDir, { recursive: true, force: true });
+      rmSync(runDir, { recursive: true, force: true });
+    }
+  });
+
+  it("400s when neither a task nor a contract exists", async () => {
+    const archiveDir = mkdtempSync(join(tmpdir(), "gem-arc-"));
+    writeArchiveDir(archiveDir, writeGemArchive(gem).files); // no contract on `gem`
+    const r = await client.post("/api/gem/run").send({ archivePath: archiveDir });
+    expect(r.status).toBe(400);
+    rmSync(archiveDir, { recursive: true, force: true });
+  });
 });
 
 describe("GemController", () => {
