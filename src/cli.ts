@@ -35,7 +35,9 @@ Sharing a Gem (store-and-forward over NATS; set $NATS_URL, default nats://127.0.
   agentgem send <file.gem>              Encrypt + stash; prints a one-time agentgem:// ticket
   agentgem receive <ticket> [out.gem]   Fetch, decrypt, verify; writes the .gem
   agentgem bind                         Bind this machine's key to your GitHub account
-  agentgem warm --watch                 Background daemon: keep insights/scorecard caches warm on change`;
+  agentgem warm --watch                 Background daemon: keep insights/scorecard caches warm on change
+  agentgem warm --install-service       Install an OS unit (launchd/systemd) to auto-start the daemon at login
+  agentgem warm --uninstall-service     Remove the OS unit`;
 
 async function main(argv: string[]): Promise<void> {
   const has = (...names: string[]) => names.some((n) => argv.includes(n));
@@ -63,8 +65,14 @@ async function main(argv: string[]): Promise<void> {
     return bindMain(argv);
   }
 
-  // `agentgem warm --watch` — Trigger C: the background warming daemon.
+  // `agentgem warm` — Trigger C. --install-service/--uninstall-service manage the
+  // OS auto-start unit; otherwise --watch runs the daemon.
   if (argv[0] === "warm") {
+    if (argv.includes("--install-service") || argv.includes("--uninstall-service")) {
+      const { runServiceCommand } = await import("./warm/service.js");
+      runServiceCommand(argv.slice(1));
+      return;
+    }
     const { runWarmCommand } = await import("./warm/daemon.js");
     runWarmCommand(argv.slice(1));
     return;
