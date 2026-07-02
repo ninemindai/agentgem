@@ -1,6 +1,6 @@
 // src/__tests__/verifyCli.test.ts
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, renameSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { writeGemArchive, writeArchiveDir } from "@agentgem/archive";
@@ -83,18 +83,26 @@ describe("agentgem verify", () => {
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
-  it("parses an archive dir whose name equals an agent id after --agents", async () => {
-    // Reproduce by passing: ["--agents", "claude", <dir>] where the dir path is positional
-    const dir = archiveWith(true);
+  it("keeps a positional that duplicates the --agents value (old indexOf filter dropped it)", async () => {
+    // The dir is literally named "claude" — same string as the --agents value —
+    // which the old first-occurrence (indexOf) filter dropped from positionals.
+    const src = archiveWith(true);
+    const parent = mkdtempSync(join(tmpdir(), "gem-cli-collide-"));
+    renameSync(src, join(parent, "claude"));
+    const prevCwd = process.cwd();
+    process.chdir(parent);
     let roster: string[] | undefined;
     try {
-      const code = await runVerifyCommand(["--agents", "claude", dir], {
+      const code = await runVerifyCommand(["--agents", "claude", "claude"], {
         verify: async (o) => { roster = o.roster; return [{ agent: "claude", status: "passed", verification: { passed: true, checks: [] } }]; },
         out: () => {},
       });
       expect(code).toBe(0);
       expect(roster).toEqual(["claude"]);
-    } finally { rmSync(dir, { recursive: true, force: true }); }
+    } finally {
+      process.chdir(prevCwd);
+      rmSync(parent, { recursive: true, force: true });
+    }
   });
 
   it("exits 2 when --agents has no value", async () => {
