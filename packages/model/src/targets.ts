@@ -15,7 +15,7 @@ import { tomlMcpServers } from "./toml.js";
 import { stdioProxyRunner, PROXY_BASE_PORT, PROXY_HOST } from "./mcpProxy.js";
 import { stringify as stringifyYaml } from "yaml";
 
-export type TargetId = "claude" | "codex" | "agents" | "hermes" | "eve" | "flue" | "openai-sandbox" | "agentcore" | "a2a" | "cline" | "gemini" | "continue";
+export type TargetId = "claude" | "codex" | "agents" | "hermes" | "eve" | "flue" | "openai-sandbox" | "agentcore" | "a2a" | "cline" | "gemini" | "continue" | "cursor";
 export type FileTree = Record<string, string>;
 
 export interface SkippedArtifact { artifact: string; type: ArtifactType | "reference"; reason: string }
@@ -321,6 +321,24 @@ const mcpGeminiSettings = (servers: McpServerArtifact[]): MaterializeResult => {
   const mcpServers: Record<string, unknown> = {};
   for (const s of servers) mcpServers[s.name] = s.config;   // already redacted at import
   return rendered({ ".gemini/settings.json": JSON.stringify({ mcpServers }, null, 2) });
+};
+
+// Cursor layout: one .cursor/rules/<name>.mdc per instruction/skill (minimal always-on frontmatter;
+// the neutral Gem doesn't carry Cursor's description/globs), .cursor/mcp.json for MCP servers.
+// Minimal always-on rule frontmatter; the neutral Gem doesn't carry Cursor's description/globs.
+const mdcRule = (name: string, body: string): FileTree => ({
+  [`.cursor/rules/${safePathSegment(name)}.mdc`]: `---\ndescription: ""\nglobs: ""\nalwaysApply: true\n---\n${body}\n`,
+});
+const skillCursor = (a: SkillArtifact): FileTree => mdcRule(a.name, a.content);
+const instructionsCursor = (all: InstructionsArtifact[]): FileTree => {
+  const files: FileTree = {};
+  for (const i of all) Object.assign(files, mdcRule(i.name, i.content));
+  return files;
+};
+const mcpCursorJson = (servers: McpServerArtifact[]): MaterializeResult => {
+  const mcpServers: Record<string, unknown> = {};
+  for (const s of servers) mcpServers[s.name] = s.config;   // already redacted at import
+  return rendered({ ".cursor/mcp.json": JSON.stringify({ mcpServers }, null, 2) });
 };
 
 // Reconstruct settings.json's `.hooks` event map. HookArtifact.config IS the group object
@@ -933,6 +951,9 @@ export const TARGET_REGISTRY: Record<TargetId, TargetSpec> = {
   cline: { id: "cline", label: "Cline / Roo", skill: skillClinerules, instructions: instructionsClinerules, mcp: mcpClineSettings },
   // Gemini CLI layout: GEMINI.md, .gemini/commands/<namespaced>.toml, .gemini/settings.json (hooks unsupported).
   gemini: { id: "gemini", label: "Gemini CLI", skill: skillGeminiCommand, instructions: instructionsGeminiMd, mcp: mcpGeminiSettings },
+  // Cursor layout: .cursor/rules/<name>.mdc for skills/instructions (one file per artifact),
+  // .cursor/mcp.json for MCP servers (hooks unsupported).
+  cursor: { id: "cursor", label: "Cursor", skill: skillCursor, instructions: instructionsCursor, mcp: mcpCursorJson },
   continue: {
     id: "continue", label: "Continue",
     // Continue collapses every artifact into ONE config.yaml, emitted by compose below.
