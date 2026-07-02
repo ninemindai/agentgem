@@ -13,8 +13,9 @@ import { resolveArtifactRef } from "./artifactRef.js";
 import { channelScaffold } from "./channels.js";
 import { tomlMcpServers } from "./toml.js";
 import { stdioProxyRunner, PROXY_BASE_PORT, PROXY_HOST } from "./mcpProxy.js";
+import { stringify as stringifyYaml } from "yaml";
 
-export type TargetId = "claude" | "codex" | "agents" | "hermes" | "eve" | "flue" | "openai-sandbox" | "agentcore" | "a2a" | "cline" | "gemini";
+export type TargetId = "claude" | "codex" | "agents" | "hermes" | "eve" | "flue" | "openai-sandbox" | "agentcore" | "a2a" | "cline" | "gemini" | "continue";
 export type FileTree = Record<string, string>;
 
 export interface SkippedArtifact { artifact: string; type: ArtifactType | "reference"; reason: string }
@@ -882,6 +883,28 @@ const a2aComposeProject = (gem: Gem, opts: MaterializeOpts = {}): MaterializeRes
   };
 };
 
+// Continue collapses the whole gem into ONE config.yaml (models/mcpServers/rules/prompts). Compose
+// does not receive materialize's reference-batching, so it resolves package refs itself.
+const continueCompose = (gem: Gem): MaterializeResult => {
+  const skipped: SkippedArtifact[] = [];
+  const rules = gem.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions").map((i) => ({ name: i.name, rule: i.content }));
+  const prompts = gem.artifacts.filter((a): a is SkillArtifact => a.type === "skill").map((s) => ({ name: s.name, prompt: s.content, ...(s.description ? { description: s.description } : {}) }));
+  const mcpServers: Record<string, unknown>[] = [];
+  for (const a of gem.artifacts) {
+    if (a.type === "mcp_server") mcpServers.push({ name: a.name, ...a.config }); // config already redacted
+    else if (a.type === "reference" && a.refKind === "mcp_server") {
+      const r = resolveArtifactRef(a);
+      if (r.ok && r.artifact.type === "mcp_server") mcpServers.push({ name: a.name, ...r.artifact.config });
+      else skipped.push({ artifact: a.name, type: "mcp_server", reason: r.ok ? "unsupported reference" : r.reason });
+    }
+  }
+  const config: Record<string, unknown> = { name: gem.name, version: "0.0.1" };
+  if (mcpServers.length) config.mcpServers = mcpServers;
+  if (rules.length) config.rules = rules;
+  if (prompts.length) config.prompts = prompts;
+  return { files: { "config.yaml": stringifyYaml(config) }, skipped };
+};
+
 // ── targets compose the shared renderers (convergence is literal, not duplicated) ──
 export const TARGET_REGISTRY: Record<TargetId, TargetSpec> = {
   claude: { id: "claude", label: "Claude", skill: skillSkillMd,       instructions: instructionsClaudeMd, mcp: mcpDotMcpJson, hook: hooksSettingsJson },
@@ -907,6 +930,14 @@ export const TARGET_REGISTRY: Record<TargetId, TargetSpec> = {
   cline: { id: "cline", label: "Cline / Roo", skill: skillClinerules, instructions: instructionsClinerules, mcp: mcpClineSettings },
   // Gemini CLI layout: GEMINI.md, .gemini/commands/<namespaced>.toml, .gemini/settings.json (hooks unsupported).
   gemini: { id: "gemini", label: "Gemini CLI", skill: skillGeminiCommand, instructions: instructionsGeminiMd, mcp: mcpGeminiSettings },
+  continue: {
+    id: "continue", label: "Continue",
+    // Continue collapses every artifact into ONE config.yaml, emitted by compose below.
+    // These per-type renderers are intentional no-ops: they exist only so materialize()
+    // does not report artifacts as "unsupported on continue" via skipAll before compose runs.
+    skill: () => ({}), instructions: () => ({}), mcp: () => rendered({}),
+    compose: continueCompose,
+  },
 };
 
 export function materialize(gem: Gem, target: TargetId, opts: MaterializeOpts = {}): MaterializeResult {

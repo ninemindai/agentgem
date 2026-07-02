@@ -159,6 +159,9 @@ importers:
       vitest:
         specifier: ^3
         version: 3.2.6(@edge-runtime/vm@3.2.0)(@types/debug@4.1.13)(@types/node@24.13.2)(jsdom@25.0.1)(tsx@4.21.0)(yaml@2.9.0)
+      yaml:
+        specifier: ^2
+        version: 2.9.0
 
   packages/aggregator:
     dependencies:
@@ -351,7 +354,11 @@ importers:
         specifier: ^3
         version: 3.2.6(@edge-runtime/vm@3.2.0)(@types/debug@4.1.13)(@types/node@24.13.2)(jsdom@25.0.1)(tsx@4.21.0)(yaml@2.9.0)
 
-  packages/model: {}
+  packages/model:
+    dependencies:
+      yaml:
+        specifier: ^2
+        version: 2.9.0
 
   packages/run:
     dependencies:
