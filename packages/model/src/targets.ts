@@ -278,7 +278,7 @@ export const agentcoreComposeProject = (gem: Gem): MaterializeResult => {
       "Dockerfile": AGENTCORE_DOCKERFILE,
       "SECRETS.md": agentcoreSecretsMd(gem.requiredSecrets),
     },
-    skipped,
+    skipped: [...skipped, ...skipResolvedReferenceArtifacts(gem, "agentcore")],
   };
 };
 
@@ -502,6 +502,21 @@ const sandboxMcpServer = (s: McpServerArtifact): SandboxServer => {
   return { skip: `${s.transport} MCP has no usable URL or stdio command` };
 };
 
+// Targets whose `mcp` TargetSpec field is a no-op (sandbox, agentcore: see TARGET_REGISTRY) re-derive
+// MCP entirely from gem.artifacts inside compose, which only ever looks at the 4 concrete VALUE
+// kinds — a ReferenceArtifact that resolves fine (see resolveArtifactRef) would otherwise vanish
+// with NO skipped entry at all. gem-kind refs always FAIL resolution and are already reported by
+// materialize()'s outer reference-resolution loop for every target regardless of compose, so only
+// the resolved (package) case is reported here — reporting the failure case too would double-count.
+function skipResolvedReferenceArtifacts(gem: Gem, targetId: TargetId): SkippedArtifact[] {
+  const out: SkippedArtifact[] = [];
+  for (const a of gem.artifacts) {
+    if (a.type !== "reference") continue;
+    if (resolveArtifactRef(a).ok) out.push({ artifact: a.name, type: a.refKind, reason: `reference unsupported on ${targetId}` });
+  }
+  return out;
+}
+
 const sandboxComposeAgent = (gem: Gem): MaterializeResult => {
   const skills = gem.artifacts.filter((a): a is SkillArtifact => a.type === "skill");
   const instr = gem.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions");
@@ -526,6 +541,7 @@ const sandboxComposeAgent = (gem: Gem): MaterializeResult => {
   }
   const mcpImport = usedClasses.size ? `import { ${[...usedClasses].sort().join(", ")} } from "@openai/agents";\n` : "";
   const mcpServers = serverCodes.length ? `\n  mcpServers: [\n${serverCodes.join("\n")}\n  ],` : "";
+  skipped.push(...skipResolvedReferenceArtifacts(gem, "openai-sandbox"));
 
   const file =
 `${sandboxImport}
