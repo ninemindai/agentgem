@@ -32,6 +32,7 @@ export interface VerifyMatrixOptions {
   connectFn?: RunConnectFn;            // test seam → skips availability, passed to materializeAndRunGem
   resolveAdapter?: typeof resolveOrFetchAdapter; // test seam for hermetic "unavailable"
   home?: string;                       // ledger home (test seam; default agentgemHome())
+  gemDigest?: string;                  // precomputed (e.g. the archive's true digest); default: recomputed from the gem at archive-write defaults
 }
 
 // Shared hardened base-dir derivation for the matrix (endpoint + CLI use the same
@@ -52,7 +53,7 @@ export async function verifyGemAcrossAgents(opts: VerifyMatrixOptions): Promise<
   const roster = opts.roster ?? (Object.keys(AGENT_ADAPTERS) as AgentId[]);
   const resolveAdapter = opts.resolveAdapter ?? resolveOrFetchAdapter;
   const expectations = contractToExpectations(contract);
-  const gemDigest = readGemMeta(writeGemArchive(opts.gem).files).gemDigest;
+  const gemDigest = opts.gemDigest ?? readGemMeta(writeGemArchive(opts.gem).files).gemDigest;
 
   const verdicts: AgentVerdict[] = [];
   for (const agent of roster) {

@@ -239,6 +239,22 @@ describe("POST /api/gem/run", () => {
       rmSync(archiveDir, { recursive: true, force: true });
     }
   });
+
+  it("verify response gemDigest matches the ledger rows even for a non-default-version archive", async () => {
+    const archiveDir = mkdtempSync(join(tmpdir(), "gem-arc-"));
+    const withContract: Gem = { ...gem, contract: { task: "exercise qa", expect: { tools: ["qa"] } } };
+    writeArchiveDir(archiveDir, writeGemArchive(withContract, { version: "2.3.4" }).files);
+    setRunConnectFnForTests(fakeRun);
+    try {
+      const r = await client.post("/api/gem/verify").send({ archivePath: archiveDir, agents: ["claude"] }).expect(200);
+      const last = JSON.parse(readFileSync(ledgerPath(), "utf8").trim().split("\n").at(-1)!);
+      expect(last.gemDigest).toBe(r.body.gemDigest);
+    } finally {
+      setRunConnectFnForTests(null);
+      rmSync(archiveDir, { recursive: true, force: true });
+      rmSync(join(agentgemHomeDir, ".agentgem", "runs", "qa-gem-matrix"), { recursive: true, force: true });
+    }
+  });
 });
 
 describe("GemController", () => {

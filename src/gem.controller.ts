@@ -908,13 +908,14 @@ export class GemController {
     const unknown = (b.agents ?? []).filter((a) => !known.includes(a));
     if (unknown.length) throw new InvalidInputError(`unknown agent(s): ${unknown.join(", ")}. Known: ${known.join(", ")}`);
     const baseDir = deriveMatrixBaseDir(gem.name);
+    const gemDigest = readGemMeta(files ?? writeGemArchive(gem).files).gemDigest;
     const verdicts = await verifyGemAcrossAgents({
       gem,
       baseDir,
-      roster: b.agents as AgentId[] | undefined,
+      roster: b.agents?.length ? (b.agents as AgentId[]) : undefined,
       fetch: b.fetch,
+      gemDigest,
     });
-    const gemDigest = readGemMeta(files ?? writeGemArchive(gem).files).gemDigest;
     return { gemName: gem.name, gemDigest, baseDir, verdicts };
   }
 
