@@ -32,3 +32,4 @@ export * from "./sources.js";
 export * from "./sources/cline.js";
 export * from "./sources/gemini.js";
 export * from "./sources/continue.js";
+export * from "./sources/cursor.js";
