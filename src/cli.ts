@@ -37,7 +37,8 @@ Sharing a Gem (store-and-forward over NATS; set $NATS_URL, default nats://127.0.
   agentgem bind                         Bind this machine's key to your GitHub account
   agentgem warm --watch                 Background daemon: keep insights/scorecard caches warm on change
   agentgem warm --install-service       Install an OS unit (launchd/systemd) to auto-start the daemon at login
-  agentgem warm --uninstall-service     Remove the OS unit`;
+  agentgem warm --uninstall-service     Remove the OS unit
+  agentgem verify <archive-dir>         Verify a .gem archive across local agents (--agents claude,codex; --fetch)`;
 
 async function main(argv: string[]): Promise<void> {
   const has = (...names: string[]) => names.some((n) => argv.includes(n));
@@ -75,6 +76,14 @@ async function main(argv: string[]): Promise<void> {
     }
     const { runWarmCommand } = await import("./warm/daemon.js");
     runWarmCommand(argv.slice(1));
+    return;
+  }
+
+  // `agentgem verify <archive-dir>` — run the Gem's contract across the local
+  // agent roster and print the compatibility matrix.
+  if (argv[0] === "verify") {
+    const { runVerifyCommand } = await import("./verifyCli.js");
+    process.exitCode = await runVerifyCommand(argv.slice(1));
     return;
   }
 
