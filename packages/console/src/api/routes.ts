@@ -161,6 +161,7 @@ export const archiveRoute = defineRoute("POST", "/api/archive", {
 // vanilla UI's target select.
 export const TARGET_IDS = [
   "claude", "codex", "agents", "hermes", "eve", "flue", "openai-sandbox", "agentcore", "a2a",
+  "cline", "gemini", "continue", "cursor",
 ] as const;
 export type TargetId = (typeof TARGET_IDS)[number];
 
