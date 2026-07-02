@@ -17,7 +17,7 @@ import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { agentgemHome } from "@agentgem/model";
 import { binOnPath } from "@agentgem/model";
-import type { Gem, ConfigInventory } from "@agentgem/model";
+import type { Gem, ConfigInventory, GemContract } from "@agentgem/model";
 import { scaffoldTestbed, importArtifacts, type ImportedRef, type ImportSkip } from "@agentgem/testbed";
 import type { TestbedFlavorId } from "@agentgem/testbed";
 import { runGemWithAgent, hasTestConnectFn, type RunConnectFn, type GemRunOutcome, type ToolInvocation } from "./acpRun.js";
@@ -36,14 +36,20 @@ export type AgentId = "claude" | "codex";
 // GET. We hand the client an opaque runId — NOT the raw runDir — so a crafted GET
 // can't point the agent at an arbitrary path; the id maps server-side to the dir
 // (always under AGENTGEM_HOME) and the agent chosen at prepare time.
-const RUN_REGISTRY = new Map<string, { dir: string; agent: AgentId }>();
 
-export function registerRun(dir: string, agent: AgentId): string {
+// Gem facts captured at prepare time so the stream endpoint can verify against the
+// Gem's own contract and ledger the result — all server-side; the client still only
+// ever holds the opaque runId.
+export interface RunMeta { gemName?: string; gemDigest?: string; contract?: GemContract }
+
+const RUN_REGISTRY = new Map<string, { dir: string; agent: AgentId; meta?: RunMeta }>();
+
+export function registerRun(dir: string, agent: AgentId, meta?: RunMeta): string {
   const id = randomUUID();
-  RUN_REGISTRY.set(id, { dir, agent });
+  RUN_REGISTRY.set(id, { dir, agent, ...(meta ? { meta } : {}) });
   return id;
 }
-export function resolveRun(id: string): { dir: string; agent: AgentId } | undefined {
+export function resolveRun(id: string): { dir: string; agent: AgentId; meta?: RunMeta } | undefined {
   return RUN_REGISTRY.get(id);
 }
 // An adapter "recipe": the npm package + bin + pinned version to fetch on demand,

@@ -10,6 +10,7 @@
 // and nothing failed — not that the transcript matched a golden string. Asserting
 // exact output would make every verification flaky and is the wrong question.
 import type { GemRunOutcome } from "./acpRun.js";
+import type { GemContract } from "@agentgem/model";
 
 export interface GemExpectations {
   // Each entry must (case-insensitively, as a substring) match the title of some
@@ -71,4 +72,14 @@ export function verifyGemRun(outcome: GemRunOutcome, expectations: GemExpectatio
   }
 
   return { passed: checks.every((c) => c.passed), checks };
+}
+
+// Bridge a Gem's serialized contract to the runner's expectation shape. Absent
+// fields stay absent so verifyGemRun's own defaults (forbidToolFailures: true) apply.
+export function contractToExpectations(c: GemContract): GemExpectations {
+  const e: GemExpectations = {};
+  if (c.expect.tools !== undefined) e.expectTools = c.expect.tools;
+  if (c.expect.text !== undefined) e.expectText = c.expect.text;
+  if (c.expect.forbidToolFailures !== undefined) e.forbidToolFailures = c.expect.forbidToolFailures;
+  return e;
 }
