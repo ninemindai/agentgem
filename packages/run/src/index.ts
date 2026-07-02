@@ -7,4 +7,5 @@ export * from "./acpRun.js";
 export * from "./sandbox.js";
 export * from "./sandboxLaunch.js";
 export * from "./gemVerify.js";
+export * from "./evidenceLedger.js";
 export * from "./configAccess.js";
