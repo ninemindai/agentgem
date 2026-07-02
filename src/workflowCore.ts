@@ -23,7 +23,7 @@ export interface WorkflowAnalysisResult { payload: WorkflowAnalysisPayload; cach
 export async function computeWorkflowAnalysis(
   root: string,
   opts: {
-    dir?: string; force?: boolean; now?: () => number;
+    dir?: string; force?: boolean; cacheOnly?: boolean; now?: () => number;
     progress?: { onPhase?(phase: string, extra?: Record<string, unknown>): void; onDelta?(text: string): void };
     recommend?: typeof recommendWorkflow;
     distill?: typeof distillWorkflow;
@@ -42,6 +42,11 @@ export async function computeWorkflowAnalysis(
   if (!opts.force) {
     const entry = readAnalysisCacheEntry(root, token);
     if (entry) return { payload: entry.result as WorkflowAnalysisPayload, cached: true, updatedAt: entry.ts };
+  }
+  if (opts.cacheOnly) {
+    // Cache miss and the caller only wants cached results (the dream harvest) — do NOT run
+    // a real analysis pass. Guarantees the harvest never spends LLM regardless of foreground.
+    return { payload: { candidates: [], gaps: [], distilled: [], reflections: [], signalSummary: { sessionsScanned: 0, spanDays: 0, notes: null }, degraded: false }, cached: false, updatedAt: null };
   }
 
   const signal = scanWorkflow(paths, scanInv, { retainSequences: true });

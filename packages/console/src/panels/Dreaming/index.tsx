@@ -20,9 +20,12 @@ export function Dreaming({ apiBase }: { apiBase: string }) {
   const refresh = useCallback(() => {
     getStatus(apiBase).then(setStatus).catch(() => setStatus(null));
     getQueue(apiBase).then((r) => setItems(r.items)).catch(() => setItems([]));
-    getDiary(apiBase).then((r) => setDiary(r.entries ?? [])).catch(() => setDiary([]));
   }, [apiBase]);
   useEffect(() => { refresh(); }, [refresh]);
+  // Diary is historical — fetch it only when its tab is opened, not on every action.
+  useEffect(() => {
+    if (tab === "diary") getDiary(apiBase).then((r) => setDiary(r.entries ?? [])).catch(() => setDiary([]));
+  }, [tab, apiBase]);
 
   const act = (path: string, key: string) =>
     post(apiBase, path, { key }).then(() => { setError(null); refresh(); }).catch(() => setError("Action failed — try again."));
