@@ -4,10 +4,11 @@
 // gem.artifacts, which never includes ReferenceArtifacts — before this fix, a package ref that
 // resolved fine (see resolveArtifactRef) vanished on openai-sandbox/agentcore with NO skipped
 // entry at all (materialize()'s outer-loop no-op `mcp` field for those two targets swallowed it).
-// This asserts the ref is now accounted for EXACTLY ONCE per target: either rendered (0 skips,
-// eve/flue's real `mcp` renderers already handled this correctly) or reported skipped (1 skip,
-// the sandbox/agentcore fix) — never silently dropped (0 skips + not rendered) and never
-// double-counted (2+ skips for the same artifact).
+// This asserts the ref is now accounted for EXACTLY ONCE per target: either rendered into files
+// (0 skips — eve/flue's real `mcp` renderers already handled this correctly, and sandbox now wires
+// resolved refs the same way) or reported skipped (1 skip — eve and agentcore, both HTTP/SSE-only
+// integrations that cannot express the stdio shape a package ref resolves to) — never silently
+// dropped (0 skips + not rendered) and never double-counted (2+ skips for the same artifact).
 import { describe, it, expect } from "vitest";
 import { materialize } from "@agentgem/model";
 import type { Gem } from "@agentgem/model";
@@ -32,12 +33,17 @@ describe("compose targets: resolved package ReferenceArtifact is never silently 
     expect(Object.keys(files).some((p) => p.startsWith("src/proxies/"))).toBe(true);
   });
 
-  it("openai-sandbox: compose doesn't wire refs (follow-up); now reported skipped exactly once instead of silently dropped", () => {
-    const { skipped } = materialize(gemWithPackageRef, "openai-sandbox");
-    expect(refSkips(skipped)).toHaveLength(1);
+  it("openai-sandbox: resolved ref is wired into the agent file via native MCPServerStdio, not skipped", () => {
+    const { files, skipped } = materialize(gemWithPackageRef, "openai-sandbox");
+    expect(refSkips(skipped)).toHaveLength(0);
+    const agentFile = files["p.agent.ts"];
+    expect(agentFile).toContain("MCPServerStdio");
+    expect(agentFile).toContain("@modelcontextprotocol/server-context7");
   });
 
-  it("agentcore: compose doesn't wire refs (follow-up); now reported skipped exactly once instead of silently dropped", () => {
+  it("agentcore: resolved ref is fed through the same agentcoreMcpTools path as a value server; a stdio " +
+      "resolution still can't be expressed by AgentCore's HTTP/SSE-only remote_mcp tool, so it is reported " +
+      "skipped exactly once (via the ordinary MCP-shape-unsupported reason, not a blanket reference skip)", () => {
     const { skipped } = materialize(gemWithPackageRef, "agentcore");
     expect(refSkips(skipped)).toHaveLength(1);
   });
