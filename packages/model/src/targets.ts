@@ -76,7 +76,9 @@ const headerSecretEntries = (refs: SecretRef[]): (readonly [string, string])[] =
 const skillSkillMd = (a: SkillArtifact): FileTree => ({ [`skills/${safePathSegment(a.name)}/SKILL.md`]: a.content });
 const skillDescriptionMd = (a: SkillArtifact): FileTree => ({ [`skills/${safePathSegment(a.name)}/DESCRIPTION.md`]: a.content });
 // Strip a leading YAML frontmatter block ("---\n … \n---\n") if present; return the body.
-function stripYamlFrontmatter(content: string): string {
+// Exported so other sources (e.g. @agentgem/insight's Cursor .mdc import) share one CRLF-safe
+// implementation instead of re-deriving a (possibly LF-only) regex.
+export function stripYamlFrontmatter(content: string): string {
   const m = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/.exec(content);
   return m ? content.slice(m[0].length) : content;
 }

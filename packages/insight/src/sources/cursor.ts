@@ -11,7 +11,7 @@ import { copyFile, mkdtemp, rm, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, basename } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { classifyMcpServer } from "@agentgem/model";
+import { classifyMcpServer, stripYamlFrontmatter } from "@agentgem/model";
 import type { GemArtifact } from "@agentgem/model";
 import type { SessionStat } from "../observeAggregate.js";
 import type { ImportResult } from "../sources.js";
@@ -88,20 +88,16 @@ export async function scanCursorSessions(dbPath: string): Promise<SessionStat[]>
 // cline/gemini/continue, see packages/model/src/publicPackage.ts) references public npx packages
 // and redacts everything else — secret-bearing `env` is never ingested.
 
-// Strip a leading YAML frontmatter block (--- ... ---) from an .mdc rule, returning the body.
-// Cursor's description/globs/alwaysApply are rule-activation metadata not represented in the
-// neutral Gem; only the markdown body becomes the instructions artifact's content.
-function stripFrontmatter(text: string): string {
-  const m = text.match(/^---\n[\s\S]*?\n---\n?/);
-  return m ? text.slice(m[0].length).trimStart() : text;
-}
+// Cursor's description/globs/alwaysApply frontmatter is rule-activation metadata not represented
+// in the neutral Gem; only the markdown body becomes the instructions artifact's content. Reuses
+// @agentgem/model's stripYamlFrontmatter (CRLF-safe) rather than a locally re-derived regex.
 
 export async function readCursorArtifacts(env: { rulesDir?: string; cursorrules?: string; agentsMd?: string; mcpFile?: string }): Promise<ImportResult> {
   const artifacts: GemArtifact[] = [];
   if (env.rulesDir) {
     let files: string[]; try { files = (await readdir(env.rulesDir)).filter((f) => f.toLowerCase().endsWith(".mdc")); } catch { files = []; }
     for (const f of files) {
-      try { const body = stripFrontmatter(await readFile(join(env.rulesDir, f), "utf8")); if (body.trim()) artifacts.push({ type: "instructions", name: basename(f, ".mdc"), content: body }); } catch { /* skip */ }
+      try { const body = stripYamlFrontmatter(await readFile(join(env.rulesDir, f), "utf8")); if (body.trim()) artifacts.push({ type: "instructions", name: basename(f, ".mdc"), content: body }); } catch { /* skip */ }
     }
   }
   for (const [path, name] of [[env.cursorrules, "cursorrules"], [env.agentsMd, "agents"]] as const) {
