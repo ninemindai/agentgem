@@ -8,8 +8,9 @@
 import { join } from "node:path";
 import { agentgemHome } from "@agentgem/model";
 import { runWarmPass } from "./orchestrator.js";
-import { startWarmWatch } from "./watch.js";
+import { startWarmWatch, warmRootsIndividually } from "./watch.js";
 import { acquirePidfile, releasePidfile } from "./pidfile.js";
+import { withWarmLock } from "./lock.js";
 
 export interface WarmDaemon { stop(): Promise<void> }
 
@@ -22,12 +23,12 @@ export function startWarmDaemon(opts: {
   const home = opts.home ?? agentgemHome();
   const log = opts.onLog ?? ((m) => console.log(m));
   const startWatch = opts.watch ?? startWarmWatch;
-  const initialPass = opts.initialPass ?? (() => runWarmPass());
+  const initialPass = opts.initialPass ?? (() => withWarmLock(home, () => runWarmPass(), () => undefined));
   const pidPath = join(home, ".agentgem", "warm.pid");
 
   if (!acquirePidfile(pidPath)) { log("agentgem warm: another daemon is already running; exiting."); return null; }
   void initialPass();                        // fire-and-forget: warm current state
-  const w = startWatch({});
+  const w = startWatch({ run: (roots) => withWarmLock(home, () => warmRootsIndividually(roots), () => undefined) });
   return { async stop() { try { w.stop(); } finally { releasePidfile(pidPath); } } };
 }
 
