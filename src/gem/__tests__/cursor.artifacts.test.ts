@@ -23,4 +23,15 @@ describe("Cursor artifact import", () => {
     expect(JSON.stringify(local)).not.toContain("secret");
     expect(binding).toMatchObject({ agent: "cursor", origin: "imported" });
   });
+
+  it("strips CRLF frontmatter from a Windows-authored .mdc (no leaking --- / description lines)", async () => {
+    const base = mkdtempSync(join(tmpdir(), "cursor-crlf-"));
+    const rulesDir = join(base, ".cursor", "rules"); mkdirSync(rulesDir, { recursive: true });
+    writeFileSync(join(rulesDir, "windows.mdc"), "---\r\ndescription: style\r\nglobs: \"*.ts\"\r\nalwaysApply: true\r\n---\r\nPrefer small diffs.");
+    const { artifacts } = await readCursorArtifacts({ rulesDir });
+    const instr = artifacts.find((a) => a.type === "instructions");
+    expect(instr?.content).toBe("Prefer small diffs.");
+    expect(instr?.content).not.toContain("---");
+    expect(instr?.content).not.toContain("description:");
+  });
 });
