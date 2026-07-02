@@ -207,7 +207,17 @@ export const buildAgentcoreHarness = (gem: Gem): { harness: Record<string, unkno
   const skills = gem.artifacts.filter((a): a is SkillArtifact => a.type === "skill");
   const mcp = gem.artifacts.filter((a): a is McpServerArtifact => a.type === "mcp_server");
   const instr = gem.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions");
-  const { tools, skipped } = agentcoreMcpTools(mcp);
+  // Resolved package refs are wired alongside value-declared servers — agentcoreMcpTools decides
+  // per-server whether the resolved shape is expressible (e.g. an HTTP/SSE package ref becomes a
+  // real remote_mcp tool; a stdio one hits the same "remote-URL only" skip a value stdio server
+  // would). gem-kind refs always fail resolveArtifactRef and are reported by materialize()'s outer loop.
+  const refMcp: McpServerArtifact[] = [];
+  for (const a of gem.artifacts) {
+    if (a.type !== "reference") continue;
+    const r = resolveArtifactRef(a);
+    if (r.ok && r.artifact.type === "mcp_server") refMcp.push(r.artifact);
+  }
+  const { tools, skipped } = agentcoreMcpTools([...mcp, ...refMcp]);
   const harness: Record<string, unknown> = { model: { bedrockModelConfig: { modelId: AGENTCORE_MODEL_ID } } };
   if (instr.length) harness.systemPrompt = [{ text: instr.map((i) => `## ${i.name}\n\n${i.content}`).join("\n\n---\n\n") }];
   if (tools.length) harness.tools = tools;
@@ -278,7 +288,7 @@ export const agentcoreComposeProject = (gem: Gem): MaterializeResult => {
       "Dockerfile": AGENTCORE_DOCKERFILE,
       "SECRETS.md": agentcoreSecretsMd(gem.requiredSecrets),
     },
-    skipped: [...skipped, ...skipResolvedReferenceArtifacts(gem, "agentcore")],
+    skipped,
   };
 };
 
@@ -533,15 +543,23 @@ const sandboxComposeAgent = (gem: Gem): MaterializeResult => {
   const skipped: SkippedArtifact[] = [];
   const serverCodes: string[] = [];
   const usedClasses = new Set<string>();
-  for (const s of mcps) {
+  const wireServer = (s: McpServerArtifact) => {
     const res = sandboxMcpServer(s);
-    if ("skip" in res) { skipped.push({ artifact: s.name, type: "mcp_server", reason: res.skip }); continue; }
+    if ("skip" in res) { skipped.push({ artifact: s.name, type: "mcp_server", reason: res.skip }); return; }
     serverCodes.push(res.code);
     usedClasses.add(res.cls);
+  };
+  for (const s of mcps) wireServer(s);
+  // Resolved package refs (e.g. an npx-run MCP server) are wired exactly like a value mcp_server
+  // artifact — the SDK's native MCPServerStdio makes this expressible. gem-kind refs always fail
+  // resolveArtifactRef and are already reported by materialize()'s outer reference-resolution loop.
+  for (const a of gem.artifacts) {
+    if (a.type !== "reference") continue;
+    const r = resolveArtifactRef(a);
+    if (r.ok && r.artifact.type === "mcp_server") wireServer(r.artifact);
   }
   const mcpImport = usedClasses.size ? `import { ${[...usedClasses].sort().join(", ")} } from "@openai/agents";\n` : "";
   const mcpServers = serverCodes.length ? `\n  mcpServers: [\n${serverCodes.join("\n")}\n  ],` : "";
-  skipped.push(...skipResolvedReferenceArtifacts(gem, "openai-sandbox"));
 
   const file =
 `${sandboxImport}
