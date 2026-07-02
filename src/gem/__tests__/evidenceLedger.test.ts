@@ -35,7 +35,7 @@ describe("evidence ledger", () => {
   it("never throws when the ledger is unwritable (best-effort)", () => {
     const dir = mkdtempSync(join(tmpdir(), "agem-ledger-"));
     const fileAsHome = join(dir, "not-a-dir");
-    writeFileSync(fileAsHome, "occupied"); // home path is a FILE → appendFile fails
+    writeFileSync(fileAsHome, "occupied"); // home path is a FILE → mkdirSync under it fails (ENOTDIR)
     try {
       expect(() => appendVerification(rec, fileAsHome)).not.toThrow();
     } finally {

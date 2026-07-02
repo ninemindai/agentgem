@@ -6,7 +6,7 @@
 // this is an observability substrate for the cross-agent matrix and the journey
 // timeline, never a gate: an IO failure must not fail the run that produced it.
 import { appendFileSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { agentgemHome } from "@agentgem/model";
 import type { VerificationReport } from "./gemVerify.js";
 
@@ -22,15 +22,15 @@ export interface VerificationRecord {
 }
 
 export function ledgerPath(home?: string): string {
-  return join(home ?? agentgemHome(), "verifications.jsonl");
+  return join(home ?? agentgemHome(), ".agentgem", "verifications.jsonl");
 }
 
 export function appendVerification(rec: Omit<VerificationRecord, "ts">, home?: string): void {
   try {
-    const dir = home ?? agentgemHome();
-    mkdirSync(dir, { recursive: true });
+    const path = ledgerPath(home);
+    mkdirSync(dirname(path), { recursive: true });
     const full: VerificationRecord = { ts: new Date().toISOString(), ...rec };
-    appendFileSync(ledgerPath(home), JSON.stringify(full) + "\n", "utf8");
+    appendFileSync(path, JSON.stringify(full) + "\n", "utf8");
   } catch (err) {
     console.error(`[agentgem] evidence-ledger append failed: ${(err as Error).message}`);
   }

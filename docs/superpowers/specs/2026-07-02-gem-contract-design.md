@@ -22,7 +22,7 @@ Success criteria:
 2. A run prepared from a contract-bearing Gem verifies against that contract with
    **no** query params; explicit query params still win.
 3. Every verified run (blocking and SSE paths) appends one JSONL record to the
-   ledger under `agentgemHome()`.
+   ledger under `agentgemHome()/.agentgem/verifications.jsonl`.
 4. Archives without contracts, and old archives read by new code, behave exactly
    as today. `ARCHIVE_FORMAT_VERSION` stays `1`.
 
@@ -140,7 +140,7 @@ export interface VerificationRecord {
 export function appendVerification(rec: VerificationRecord, home?: string): void
 ```
 
-Append-one-JSON-line to `join(home ?? agentgemHome(), "verifications.jsonl")`.
+Append-one-JSON-line to `join(home ?? agentgemHome(), ".agentgem", "verifications.jsonl")`.
 Synchronous append (`appendFileSync`) keeps ordering trivial; records are small.
 Errors are caught and logged, never thrown. Both run endpoints call it whenever
 verification ran (pass or fail — failures are evidence too). The ledger is

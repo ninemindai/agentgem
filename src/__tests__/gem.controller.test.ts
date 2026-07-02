@@ -12,7 +12,7 @@ import { packTar, unpackTar } from "@agentgem/archive";
 import { writeGemArchive } from "@agentgem/archive";
 import { writeArchiveDir } from "@agentgem/archive";
 import { setRunConnectFnForTests, type RunConnectFn } from "@agentgem/run";
-import { resolveRun } from "@agentgem/run";
+import { resolveRun, ledgerPath } from "@agentgem/run";
 import type { Gem } from "@agentgem/model";
 
 let app: RestApplication;
@@ -174,7 +174,7 @@ describe("POST /api/gem/run", () => {
     try {
       const r = await client.post("/api/gem/run").send({ archivePath: archiveDir }).expect(200);
       expect(r.body.verification.passed).toBe(true); // fake invokes "Skill(qa)" → matches "qa"
-      const rec = JSON.parse(readFileSync(join(agentgemHomeDir, "verifications.jsonl"), "utf8").trim().split("\n").at(-1)!);
+      const rec = JSON.parse(readFileSync(ledgerPath(), "utf8").trim().split("\n").at(-1)!);
       expect(rec.gemName).toBe("qa-gem");
       expect(rec.contractApplied).toBe(true);
       expect(rec.agent).toBe("claude");
@@ -183,6 +183,20 @@ describe("POST /api/gem/run", () => {
       rmSync(archiveDir, { recursive: true, force: true });
       rmSync(runDir, { recursive: true, force: true });
     }
+  });
+
+  it("prepare threads a selection-derived contract + digest into the run registry", async () => {
+    const r = await client.post("/api/gem/run/prepare").send({
+      dir,
+      selection: { skills: ["review"] },
+      name: "contract-gem",
+    }).expect(200);
+    const reg = resolveRun(r.body.runId);
+    expect(reg?.meta?.gemName).toBe("contract-gem");
+    expect(reg?.meta?.gemDigest).toMatch(/./);
+    expect(reg?.meta?.contract?.task).toContain('"review"');
+    expect(reg?.meta?.contract?.expect.tools).toEqual(["review"]);
+    rmSync(join(agentgemHomeDir, ".agentgem", "runs", "contract-gem"), { recursive: true, force: true });
   });
 
   it("400s when neither a task nor a contract exists", async () => {
