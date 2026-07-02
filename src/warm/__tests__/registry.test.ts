@@ -5,6 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WARMABLES } from "../registry.js";
+import { distillToken, writeDistillCache, claudeTranscriptsForCwd } from "@agentgem/insight";
 
 const orig = process.env.AGENTGEM_HOME;
 afterEach(() => { if (orig === undefined) delete process.env.AGENTGEM_HOME; else process.env.AGENTGEM_HOME = orig; });
@@ -47,5 +48,23 @@ describe("scorecard warmable", () => {
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
+  });
+});
+
+describe("distill warmable", () => {
+  it("distill warmable: hit on seeded cache, force recomputes", async () => {
+    const home = mkdtempSync(join(tmpdir(), "regd-"));
+    const prev = process.env.AGENTGEM_HOME; process.env.AGENTGEM_HOME = home;
+    try {
+      const claudeDir = join(home, ".claude");
+      const projDir = join(claudeDir, "projects", "-proj");
+      mkdirSync(projDir, { recursive: true });
+      writeFileSync(join(projDir, "s.jsonl"), JSON.stringify({ cwd: "/proj" }) + "\n");
+      const token = distillToken(claudeTranscriptsForCwd(claudeDir, "/proj"));
+      writeDistillCache("/proj", token, { skills: [], lessons: [], degraded: false }, 1);
+      const d = WARMABLES.find((w) => w.id === "distill")!;
+      expect(d.cost).toBe("llm"); expect(d.scope).toBe("per-root");
+      expect(await d.warm("/proj", { dir: claudeDir })).toBe("hit");
+    } finally { if (prev === undefined) delete process.env.AGENTGEM_HOME; else process.env.AGENTGEM_HOME = prev; rmSync(home, { recursive: true, force: true }); }
   });
 });
