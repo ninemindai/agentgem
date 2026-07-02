@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, rmSync, renameSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { writeGemArchive, writeArchiveDir } from "@agentgem/archive";
+import { writeGemArchive, writeArchiveDir, readGemMeta, readArchiveDir } from "@agentgem/archive";
 import { runVerifyCommand } from "../verifyCli.js";
 import type { Gem } from "@agentgem/model";
 import type { AgentVerdict } from "@agentgem/run";
@@ -17,6 +17,19 @@ function archiveWith(contract: boolean): string {
   };
   const dir = mkdtempSync(join(tmpdir(), "gem-cli-"));
   writeArchiveDir(dir, writeGemArchive(gem).files);
+  return dir;
+}
+
+function archiveWithVersion(contract: boolean, version: string): string {
+  const gem: Gem = {
+    name: "cli-gem", createdFrom: "test",
+    artifacts: [{ type: "skill", name: "qa", source: "standalone", content: "# QA" }],
+    checks: [], requiredSecrets: [],
+    ...(contract ? { contract: { task: "t", expect: { tools: ["qa"] } } } : {}),
+  };
+  const dir = mkdtempSync(join(tmpdir(), "gem-cli-"));
+  const { files } = writeGemArchive(gem, { version });
+  writeArchiveDir(dir, files);
   return dir;
 }
 
@@ -111,6 +124,19 @@ describe("agentgem verify", () => {
     try {
       expect(await runVerifyCommand([dir, "--agents"], { err: (l) => errs.push(l) })).toBe(2);
       expect(errs.some((l) => l.includes("--agents requires"))).toBe(true);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it("threads the archive's true digest (non-default version) into the core", async () => {
+    const dir = archiveWithVersion(true, "9.9.9");
+    const expected = readGemMeta(readArchiveDir(dir)).gemDigest;
+    let got: string | undefined;
+    try {
+      await runVerifyCommand([dir], {
+        verify: async (o) => { got = o.gemDigest; return []; },
+        out: () => {},
+      });
+      expect(got).toBe(expected);
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });
