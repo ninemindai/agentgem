@@ -49,6 +49,12 @@ describe("compose targets: resolved package ReferenceArtifact is never silently 
   });
 });
 
-// a2a is deliberately NOT touched by this fix (it owns its own skip reporting per the ticket).
-// Note: a2a's card-only mode has the same silent-drop shape for a resolved package ref (0 skips,
-// not rendered) — out of scope here; left for a2a's own follow-up.
+// a2a's card-only mode (the default, no MaterializeOpts) is a discovery Card format — it has no
+// runnable-agent surface at all, so unlike sandbox/agentcore it can never wire a resolved package
+// ref into anything. It gets the same visibility treatment as before: reported skipped exactly once.
+describe("compose targets: a2a card reports a resolved package ref as skipped (can't express stdio MCP)", () => {
+  it("a2a: card-only mode cannot express any MCP server, resolved ref included -> skipped exactly once", () => {
+    const { skipped } = materialize(gemWithPackageRef, "a2a");
+    expect(refSkips(skipped)).toHaveLength(1);
+  });
+});
