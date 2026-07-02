@@ -71,12 +71,27 @@ describe("DreamController", () => {
     expect((await c.queue()).items.length).toBe(0);
   });
 
-  it("rejects a draft whose name would escape the distilled path", async () => {
-    const bad = { ...skillEntry(), key: "skill:/p:evil:h", name: "../evil" };
-    enqueueNew([bad], base);
+  it("rejects a skill whose DRAFT name would escape the distilled path", async () => {
+    // The path segment comes from draft.name, not entry.name — a corrupted queue.json could
+    // pair a safe entry.name with an unsafe draft.name. The guard must catch the draft name.
+    const s = skillEntry();
+    (s.draft as { name: string }).name = "../evil"; // entry.name stays "run-migrations" (safe)
+    s.key = "skill:/p:evil:h";
+    enqueueNew([s], base);
     const c = new DreamController();
     (c as unknown as { base: string }).base = base;
     await expect(c.accept({ body: { key: "skill:/p:evil:h" } })).rejects.toThrow();
+  });
+
+  it("rejects accepting a lesson whose draft is an unresolved-task (not shareable)", async () => {
+    const e: DreamQueueEntry = { key: "lesson:/p:todo:h", kind: "lesson", root: "/p", name: "todo",
+      summary: "finish it", importance: "high", phase: "DEEP",
+      draft: { kind: "unresolved-task", detail: "finish it", importance: "high", provenance: prov } as DreamQueueEntry["draft"],
+      status: "queued", firstSeenMs: 1 };
+    enqueueNew([e], base);
+    const c = new DreamController();
+    (c as unknown as { base: string }).base = base;
+    await expect(c.accept({ body: { key: "lesson:/p:todo:h" } })).rejects.toThrow();
   });
 
   it("returns diary entries newest-first", async () => {

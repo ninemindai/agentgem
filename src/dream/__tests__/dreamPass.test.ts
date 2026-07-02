@@ -14,7 +14,7 @@ const analyzePayload = {
   signalSummary: { sessionsScanned: 3, spanDays: 2, notes: null },
   distilled: [{ name: "foo", description: "d", triggers: [], tools: [], mutating: false, body: "b",
     evidence: { sessions: 1, exampleSequence: [], root: "/p", provenance: prov }, status: "draft", confidence: "medium", origin: "llm" }],
-  reflections: [{ kind: "unresolved-task", detail: "finish the migration", importance: "high", provenance: prov }],
+  reflections: [{ kind: "recurring-decision", detail: "finish the migration", importance: "high", provenance: prov }],
 };
 const insightsPayload = {
   report: {
