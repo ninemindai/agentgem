@@ -25,4 +25,13 @@ describe("continue target", () => {
     expect(byName("local")).toMatchObject({ name: "local", command: "node", args: ["s.js"] });
     expect(byName("context7")).toMatchObject({ name: "context7", command: "npx", args: ["@modelcontextprotocol/server-context7"] });
   });
+
+  it("reports an unresolvable reference exactly once (compose must not double-count materialize's outer-loop skip)", () => {
+    const gemWithUnresolvableRef: Gem = { name: "my-gem", createdFrom: "t", checks: [], requiredSecrets: [], artifacts: [
+      { type: "reference", name: "dep", refKind: "mcp_server", ref: { kind: "gem", id: "sha256:abc" } },
+    ] };
+    const { skipped } = materialize(gemWithUnresolvableRef, "continue");
+    expect(skipped).toHaveLength(1);
+    expect(skipped[0].artifact).toBe("dep");
+  });
 });

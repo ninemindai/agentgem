@@ -884,7 +884,10 @@ const a2aComposeProject = (gem: Gem, opts: MaterializeOpts = {}): MaterializeRes
 };
 
 // Continue collapses the whole gem into ONE config.yaml (models/mcpServers/rules/prompts). Compose
-// does not receive materialize's reference-batching, so it resolves package refs itself.
+// does not receive materialize's reference-batching, so it resolves package refs itself. Resolution
+// FAILURES are already reported by materialize's outer reference-resolution loop (which runs before
+// compose for every target), so compose only handles the success path here to avoid double-counting
+// the same artifact in `skipped` (that corrupted the compatibility() supported/skipped metric).
 const continueCompose = (gem: Gem): MaterializeResult => {
   const skipped: SkippedArtifact[] = [];
   const rules = gem.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions").map((i) => ({ name: i.name, rule: i.content }));
@@ -894,8 +897,9 @@ const continueCompose = (gem: Gem): MaterializeResult => {
     if (a.type === "mcp_server") mcpServers.push({ name: a.name, ...a.config }); // config already redacted
     else if (a.type === "reference" && a.refKind === "mcp_server") {
       const r = resolveArtifactRef(a);
-      if (r.ok && r.artifact.type === "mcp_server") mcpServers.push({ name: a.name, ...r.artifact.config });
-      else skipped.push({ artifact: a.name, type: "mcp_server", reason: r.ok ? "unsupported reference" : r.reason });
+      if (!r.ok) continue; // already reported by materialize's outer loop
+      if (r.artifact.type === "mcp_server") mcpServers.push({ name: a.name, ...r.artifact.config });
+      else skipped.push({ artifact: a.name, type: "mcp_server", reason: "unsupported reference" });
     }
   }
   const config: Record<string, unknown> = { name: gem.name, version: "0.0.1" };
