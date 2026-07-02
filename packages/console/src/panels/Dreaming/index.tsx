@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { defineConsolePage } from "../../registry.js";
 import { timeAgo } from "../../util/timeAgo.js";
+import { setPendingAnalyze } from "../../pendingAnalyze.js";
 import { getStatus, getQueue, getDiary, post, type DreamStatus, type DreamItem, type DreamDiaryEntry } from "./api.js";
 
 const PHASES = ["LIGHT", "DEEP", "REM"] as const;
@@ -25,6 +26,15 @@ export function Dreaming({ apiBase }: { apiBase: string }) {
 
   const act = (path: string, key: string) =>
     post(apiBase, path, { key }).then(() => { setError(null); refresh(); }).catch(() => setError("Action failed — try again."));
+
+  // An opportunity is a succeeded session worth publishing: acknowledge it (mark
+  // accepted) and route into Curate's "suggest from a project" flow, pre-loaded with
+  // the session's project — the same bridge the Insights panel uses.
+  const openOpportunity = (it: DreamItem) =>
+    post(apiBase, "queue/accept", { key: it.key }).then(() => {
+      setPendingAnalyze(it.root);
+      window.location.hash = "#/curate";
+    }).catch(() => setError("Could not open this opportunity."));
 
   return (
     <div className="dreaming">
@@ -62,7 +72,9 @@ export function Dreaming({ apiBase }: { apiBase: string }) {
                 <span className="dream-item-name">{it.name}</span>
                 <span className="dream-item-kind">{it.kind}</span>
                 <span className="dream-item-summary">{it.summary}</span>
-                <button className="dream-act is-accept" onClick={() => act("queue/accept", it.key)}>Accept</button>
+                {it.kind === "opportunity"
+                  ? <button className="dream-act is-accept" onClick={() => openOpportunity(it)}>Publish →</button>
+                  : <button className="dream-act is-accept" onClick={() => act("queue/accept", it.key)}>Accept</button>}
                 <button className="dream-act" onClick={() => act("queue/dismiss", it.key)}>Dismiss</button>
               </li>
             ))}
@@ -79,7 +91,7 @@ export function Dreaming({ apiBase }: { apiBase: string }) {
                 <li key={`${d.passId}:${d.atMs}`}>
                   <span className="dream-diary-when">{timeAgo(d.atMs)}</span>
                   <span className="dream-diary-phases">{d.phasesLit.join(" · ") || "—"}</span>
-                  <span className="dream-diary-count">+{d.enqueued.skills} skills · +{d.enqueued.lessons} lessons</span>
+                  <span className="dream-diary-count">+{d.enqueued.skills} skills · +{d.enqueued.lessons} lessons · +{d.enqueued.opportunities ?? 0} opportunities</span>
                   {d.degraded && <span className="dream-diary-degraded">degraded</span>}
                 </li>
               ))}
