@@ -903,9 +903,11 @@ const a2aComposeProject = (gem: Gem, opts: MaterializeOpts = {}): MaterializeRes
   const hookSkips = hooks.map((h): SkippedArtifact => ({ artifact: h.name, type: "hook", reason: "A2A has no hook concept" }));
 
   if (!opts.a2aServer) {
-    // Card-only: an Agent Card represents identity + skills, not MCP servers or hooks.
+    // Card-only: an Agent Card represents identity + skills, not MCP servers or hooks. A resolved
+    // package ref is the same "cannot express MCP" story as a value mcp_server, just reported via
+    // skipResolvedReferenceArtifacts (gem-kind refs are already reported by materialize's outer loop).
     const cardSkips = mcps.map((s): SkippedArtifact => ({ artifact: s.name, type: "mcp_server", reason: "an Agent Card cannot express MCP servers (materialize with a2aServer to wire them)" }));
-    return { files, skipped: [...cardSkips, ...hookSkips] };
+    return { files, skipped: [...cardSkips, ...hookSkips, ...skipResolvedReferenceArtifacts(gem, "a2a")] };
   }
 
   const skills = gem.artifacts.filter((a): a is SkillArtifact => a.type === "skill");
