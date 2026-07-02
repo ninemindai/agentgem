@@ -1,7 +1,7 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 // src/gem/buildGem.ts
-import type { ConfigInventory, Gem, GemArtifact, GemCheck, SecretRequirement, ChannelPlatform } from "@agentgem/model";
+import type { ConfigInventory, Gem, GemArtifact, GemCheck, GemContract, SecretRequirement, ChannelPlatform } from "@agentgem/model";
 import { redactMcpConfig } from "@agentgem/base";
 import { makeChannelArtifact } from "@agentgem/model";
 import { InvalidInputError } from "@agentgem/model";
@@ -41,10 +41,22 @@ function selectInstructions(
   });
 }
 
+// Derive a conservative default contract: only when the gem bundles a skill, whose
+// name agents invoke as a tool title (proven by the runner's live validation). Gems
+// without skills get no guessed contract — a wrong contract is worse than none.
+function deriveContract(artifacts: GemArtifact[]): GemContract | undefined {
+  const skill = artifacts.find((a) => a.type === "skill");
+  if (!skill) return undefined;
+  return {
+    task: `Use the "${skill.name}" skill to complete a small demonstration task in this workspace.`,
+    expect: { tools: [skill.name], forbidToolFailures: true },
+  };
+}
+
 export function buildGem(
   inventory: ConfigInventory,
   selection: GemSelection,
-  opts: { name?: string; createdFrom?: string; checks?: GemCheck[]; channels?: { platform: ChannelPlatform; name?: string }[]; grade?: number } = {},
+  opts: { name?: string; createdFrom?: string; checks?: GemCheck[]; channels?: { platform: ChannelPlatform; name?: string }[]; grade?: number; contract?: GemContract } = {},
 ): Gem {
   const artifacts: GemArtifact[] = [];
   const projects = inventory.projects ?? [];
@@ -120,6 +132,8 @@ export function buildGem(
     (c) => redactMcpConfig(c as unknown as Record<string, unknown>).config as unknown as GemCheck,
   );
 
+  const contract = opts.contract ?? deriveContract(artifacts);
+
   return {
     name: opts.name ?? "gem",
     createdFrom: opts.createdFrom ?? "unknown",
@@ -127,5 +141,6 @@ export function buildGem(
     checks,
     requiredSecrets,
     ...(opts.grade != null ? { grade: opts.grade } : {}),
+    ...(contract ? { contract } : {}),
   };
 }

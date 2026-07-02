@@ -167,6 +167,18 @@ export interface AgentBinding {
   config?: Record<string, unknown>;
 }
 
+// A Gem's portable completion contract: the task a runner should hand an agent to
+// exercise the Gem, and the behavior evidence that proves it worked. String-only
+// (no RegExp) so it serializes into the archive manifest verbatim.
+export interface GemContract {
+  task: string;
+  expect: {
+    tools?: string[];              // each must substring-match an invoked tool title
+    text?: string;                 // substring the agent's output must contain
+    forbidToolFailures?: boolean;  // default true at verification time
+  };
+}
+
 export interface Gem {
   name: string;
   createdFrom: string;
@@ -174,5 +186,6 @@ export interface Gem {
   checks: GemCheck[];                   // 0..n; embedded operator checks
   requiredSecrets: SecretRequirement[];  // declared secret surface; names only
   grade?: number;                        // authoring-quality floor (1..3), baked at build; absent when unmeasured
+  contract?: GemContract;                // portable completion contract; absent = not contract-bearing
   bindings?: AgentBinding[];  // in-memory overlay; absent = none. Not archived (see AgentBinding).
 }
