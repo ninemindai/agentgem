@@ -34,4 +34,13 @@ describe("Cursor artifact import", () => {
     expect(instr?.content).not.toContain("---");
     expect(instr?.content).not.toContain("description:");
   });
+
+  it("strips a case-insensitive .MDC extension from the artifact name", async () => {
+    const base = mkdtempSync(join(tmpdir(), "cursor-ext-"));
+    const rulesDir = join(base, ".cursor", "rules"); mkdirSync(rulesDir, { recursive: true });
+    writeFileSync(join(rulesDir, "FOO.MDC"), "Body text.");
+    const { artifacts } = await readCursorArtifacts({ rulesDir });
+    const instr = artifacts.find((a) => a.type === "instructions");
+    expect(instr?.name).toBe("FOO");
+  });
 });

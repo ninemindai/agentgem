@@ -35,4 +35,22 @@ describe("Cursor SQLite scan", () => {
   it("returns [] for a missing DB, never throws", async () => {
     await expect(scanCursorSessions("/no/such/state.vscdb")).resolves.toEqual([]);
   });
+
+  it("picks the best-effort model deterministically (ORDER BY rowid, not key-lexicographic scan order)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cursor-order-"));
+    const path = join(dir, "state.vscdb");
+    const db = new DatabaseSync(path);
+    db.exec("CREATE TABLE cursorDiskKV (key TEXT PRIMARY KEY, value BLOB)");
+    const put = db.prepare("INSERT INTO cursorDiskKV (key, value) VALUES (?, ?)");
+    put.run("composerData:c1", JSON.stringify({ composerId: "c1", fullConversationHeadersOnly: [{ bubbleId: "b2" }, { bubbleId: "b1" }] }));
+    // Insert b2 BEFORE b1 (rowid order), but "b1" < "b2" lexicographically — without ORDER BY
+    // rowid, SQLite's covering-index scan on the TEXT primary key returns b1 before b2, flipping
+    // which bubble is "first" and thus which model wins the best-effort pick.
+    put.run("bubbleId:c1:b2", JSON.stringify({ type: 2, createdAt: 2, model: "zeta" }));
+    put.run("bubbleId:c1:b1", JSON.stringify({ type: 2, createdAt: 1, model: "alpha" }));
+    db.close();
+    const stats = await scanCursorSessions(path);
+    expect(stats).toHaveLength(1);
+    expect(stats[0].model).toBe("zeta"); // first bubble in INSERTION (rowid) order, not key order
+  });
 });

@@ -4,6 +4,7 @@ import type { Gem } from "@agentgem/model";
 
 const gem: Gem = { name: "g", createdFrom: "t", checks: [], requiredSecrets: [], artifacts: [
   { type: "instructions", name: "style", content: "Prefer small diffs." },
+  { type: "skill", name: "commit", source: "standalone", content: "Write a conventional commit." },
   { type: "mcp_server", name: "local", transport: "stdio", config: { command: "node", args: ["s.js"] } },
   { type: "reference", name: "context7", refKind: "mcp_server", ref: { kind: "package", id: "npx:@modelcontextprotocol/server-context7" } },
 ] };
@@ -17,5 +18,12 @@ describe("cursor target", () => {
     const mcp = JSON.parse(files[".cursor/mcp.json"]);
     expect(mcp.mcpServers.local).toMatchObject({ command: "node", args: ["s.js"] });
     expect(mcp.mcpServers.context7).toMatchObject({ command: "npx", args: ["@modelcontextprotocol/server-context7"] });
+  });
+
+  it("writes a skill artifact as .cursor/rules/<skillname>.mdc (skillCursor coverage)", () => {
+    const { files } = materialize(gem, "cursor");
+    const mdc = files[".cursor/rules/commit.mdc"];
+    expect(mdc).toContain("alwaysApply: true");
+    expect(mdc).toContain("Write a conventional commit.");
   });
 });
