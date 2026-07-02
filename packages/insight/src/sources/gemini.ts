@@ -9,8 +9,8 @@
 import { readFile } from "node:fs/promises";
 import { readdirSync } from "node:fs";
 import { basename, join, relative, sep } from "node:path";
-import { firstPackage, isPublicNpm } from "@agentgem/model";
-import type { GemArtifact, McpServerArtifact, ReferenceArtifact } from "@agentgem/model";
+import { classifyMcpServer } from "@agentgem/model";
+import type { GemArtifact } from "@agentgem/model";
 import type { SessionStat } from "../observeAggregate.js";
 import type { ImportResult } from "../sources.js";
 
@@ -82,7 +82,7 @@ export async function scanGeminiSessions(files: string[]): Promise<SessionStat[]
 
 // Artifact (authoring) face: GEMINI.md -> instructions, settings.json mcpServers -> mcp_server /
 // package reference (mirrors cline.ts's classifier), commands/**/*.toml -> namespaced skills.
-// firstPackage/isPublicNpm from @agentgem/model so every source adapter shares one classifier.
+// classifyMcpServer from @agentgem/model so every source adapter shares one classifier.
 // Secret-bearing `env` is never ingested (redacted allowlist copy of command/args/url only).
 
 // No TOML parser is a declared dependency of @agentgem/insight or its deps (checked: smol-toml
@@ -126,14 +126,7 @@ export async function readGeminiArtifacts(env: { contextFile?: string; settingsF
       const s = JSON.parse(await readFile(env.settingsFile, "utf8")) as { model?: { name?: string }; mcpServers?: Record<string, { command?: string; args?: unknown; env?: unknown; url?: string; httpUrl?: string }> };
       if (typeof s.model?.name === "string") model = s.model.name;
       for (const [name, cfg] of Object.entries(s.mcpServers ?? {})) {
-        const pkg = firstPackage(cfg.args);
-        if (cfg.command === "npx" && pkg && isPublicNpm(pkg)) {
-          artifacts.push({ type: "reference", name, refKind: "mcp_server", ref: { kind: "package", id: `npx:${pkg}` } } satisfies ReferenceArtifact);
-        } else {
-          const url = cfg.url ?? cfg.httpUrl;
-          const server: McpServerArtifact = { type: "mcp_server", name, transport: url ? "http" : "stdio", config: url ? { url } : { command: cfg.command, args: cfg.args } };  // env redacted (allowlist copy)
-          artifacts.push(server);
-        }
+        artifacts.push(classifyMcpServer(name, cfg));
       }
     } catch { /* absent/malformed */ }
   }

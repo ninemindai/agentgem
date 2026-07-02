@@ -894,12 +894,11 @@ const continueCompose = (gem: Gem): MaterializeResult => {
   const prompts = gem.artifacts.filter((a): a is SkillArtifact => a.type === "skill").map((s) => ({ name: s.name, prompt: s.content, ...(s.description ? { description: s.description } : {}) }));
   const mcpServers: Record<string, unknown>[] = [];
   for (const a of gem.artifacts) {
-    if (a.type === "mcp_server") mcpServers.push({ name: a.name, ...a.config }); // config already redacted
+    if (a.type === "mcp_server") mcpServers.push({ ...a.config, name: a.name }); // config already redacted
     else if (a.type === "reference" && a.refKind === "mcp_server") {
       const r = resolveArtifactRef(a);
       if (!r.ok) continue; // already reported by materialize's outer loop
-      if (r.artifact.type === "mcp_server") mcpServers.push({ name: a.name, ...r.artifact.config });
-      else skipped.push({ artifact: a.name, type: "mcp_server", reason: "unsupported reference" });
+      if (r.artifact.type === "mcp_server") mcpServers.push({ ...r.artifact.config, name: a.name });
     }
   }
   const config: Record<string, unknown> = { name: gem.name, version: "0.0.1" };

@@ -7,8 +7,8 @@
 import { readFile } from "node:fs/promises";
 import { join, basename } from "node:path";
 import type { SessionStat } from "../observeAggregate.js";
-import type { GemArtifact, McpServerArtifact, ReferenceArtifact } from "@agentgem/model";
-import { firstPackage, isPublicNpm } from "@agentgem/model";
+import type { GemArtifact } from "@agentgem/model";
+import { classifyMcpServer } from "@agentgem/model";
 import type { ImportResult } from "../sources.js";
 
 interface ClineMsg { ts?: number; type?: string; say?: string; text?: string }
@@ -46,8 +46,8 @@ export async function scanClineSessions(taskDirs: string[]): Promise<SessionStat
 // Artifact (authoring) face: .clinerules -> instructions, cline_mcp_settings.json -> mcp_server /
 // package reference. Public npx packages are referenced (not embedded); everything else is kept
 // as a redacted McpServerArtifact — secret-bearing `env` is never ingested.
-// firstPackage/isPublicNpm hoisted to @agentgem/model (packages/model/src/publicPackage.ts) so
-// every source adapter shares one classifier.
+// classifyMcpServer hoisted to @agentgem/model (packages/model/src/publicPackage.ts) so every
+// source adapter shares one classifier.
 
 export async function readClineArtifacts(env: { rulesFile?: string; mcpSettingsFile?: string }): Promise<ImportResult> {
   const artifacts: GemArtifact[] = [];
@@ -61,15 +61,7 @@ export async function readClineArtifacts(env: { rulesFile?: string; mcpSettingsF
     try {
       const raw = JSON.parse(await readFile(env.mcpSettingsFile, "utf8")) as { mcpServers?: Record<string, { command?: string; args?: unknown; env?: Record<string, unknown>; url?: string }> };
       for (const [name, cfg] of Object.entries(raw.mcpServers ?? {})) {
-        const pkg = firstPackage(cfg.args);
-        if (cfg.command === "npx" && pkg && isPublicNpm(pkg)) {
-          const ref: ReferenceArtifact = { type: "reference", name, refKind: "mcp_server", ref: { kind: "package", id: `npx:${pkg}` } };
-          artifacts.push(ref);
-        } else {
-          // Redact secret-bearing env; keep only command/args (metadata only).
-          const server: McpServerArtifact = { type: "mcp_server", name, transport: cfg.url ? "http" : "stdio", config: cfg.url ? { url: cfg.url } : { command: cfg.command, args: cfg.args } };
-          artifacts.push(server);
-        }
+        artifacts.push(classifyMcpServer(name, cfg));
       }
     } catch { /* absent/malformed */ }
   }

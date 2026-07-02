@@ -9,8 +9,8 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join, basename } from "node:path";
 import { parse as parseYaml } from "yaml";
-import { firstPackage, isPublicNpm } from "@agentgem/model";
-import type { GemArtifact, McpServerArtifact, ReferenceArtifact } from "@agentgem/model";
+import { classifyMcpServer } from "@agentgem/model";
+import type { GemArtifact } from "@agentgem/model";
 import type { SessionStat } from "../observeAggregate.js";
 import type { ImportResult } from "../sources.js";
 
@@ -76,8 +76,8 @@ export async function scanContinueSessions(sessionsDir: string): Promise<Session
 // is valid YAML) -> mcpServers/rules/prompts. Unlike Cline/Gemini, Continue's mcpServers is an
 // ARRAY of {name, ...} rather than an object-map. Public npx servers become a package reference;
 // everything else stays a redacted McpServerArtifact — secret-bearing `env` is never ingested
-// (allowlist copy of command/args/url only). firstPackage/isPublicNpm from @agentgem/model so
-// every source adapter shares one classifier.
+// (allowlist copy of command/args/url only). classifyMcpServer from @agentgem/model so every
+// source adapter shares one classifier.
 
 interface CConfig {
   models?: { name?: string; model?: string; roles?: string[] }[];
@@ -99,13 +99,7 @@ export async function readContinueArtifacts(env: { configFile?: string }): Promi
 
       for (const srv of cfg.mcpServers ?? []) {
         if (!srv || typeof srv.name !== "string") continue;
-        const pkg = firstPackage(srv.args);
-        if (srv.command === "npx" && pkg && isPublicNpm(pkg)) {
-          artifacts.push({ type: "reference", name: srv.name, refKind: "mcp_server", ref: { kind: "package", id: `npx:${pkg}` } } satisfies ReferenceArtifact);
-        } else {
-          const server: McpServerArtifact = { type: "mcp_server", name: srv.name, transport: srv.url ? "http" : "stdio", config: srv.url ? { url: srv.url } : { command: srv.command, args: srv.args } };  // env redacted
-          artifacts.push(server);
-        }
+        artifacts.push(classifyMcpServer(srv.name, srv));
       }
       let ri = 0;
       for (const r of cfg.rules ?? []) {
@@ -114,9 +108,10 @@ export async function readContinueArtifacts(env: { configFile?: string }): Promi
       }
       for (const p of cfg.prompts ?? []) {
         if (p && typeof p.name === "string" && typeof p.prompt === "string") {
-          const skill = { type: "skill" as const, name: p.name, source: "continue-prompt", content: p.prompt };
-          if (typeof p.description === "string") (skill as { description?: string }).description = p.description;
-          artifacts.push(skill);
+          artifacts.push({
+            type: "skill", name: p.name, source: "continue-prompt", content: p.prompt,
+            ...(typeof p.description === "string" ? { description: p.description } : {}),
+          });
         }
       }
     } catch { /* absent/malformed */ }
