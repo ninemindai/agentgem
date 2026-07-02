@@ -313,6 +313,9 @@ importers:
       '@agentgem/model':
         specifier: workspace:*
         version: link:../model
+      yaml:
+        specifier: ^2
+        version: 2.9.0
 
   packages/marketplace:
     dependencies:

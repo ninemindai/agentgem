@@ -23,6 +23,7 @@
     "@agentgem/archive": "workspace:*",
     "@agentgem/base": "workspace:*",
     "@agentgem/build": "workspace:*",
-    "@agentgem/model": "workspace:*"
+    "@agentgem/model": "workspace:*",
+    "yaml": "^2"
   }
 }
