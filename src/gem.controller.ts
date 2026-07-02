@@ -202,6 +202,7 @@ import {
   DistilledSkillSchema, DistilledLessonSchema, WorkflowDraftWriteResponseSchema,
   GemRunRequestSchema, GemRunResponseSchema,
   GemRunPrepareRequestSchema, GemRunPrepareResponseSchema,
+  GemVerifyRequestSchema, GemVerifyResponseSchema,
   UsageSchema, UsageQuerySchema,
   PlaybookPrepareBodySchema, PlaybookPrepareResponseSchema,
   PlaybookPublishBodySchema, PlaybookPublishResponseSchema,
@@ -222,6 +223,7 @@ import { setCredential } from "@agentgem/capture";
 import { agentcoreReadiness, deployAgentcore, getAgentcoreStatus } from "@agentgem/deploy";
 import { scaffoldTestbed, importArtifacts } from "@agentgem/testbed";
 import { materializeAndRunGem, materializeGemToTestbed, registerRun, AGENT_ADAPTERS, type AgentId } from "@agentgem/run";
+import { verifyGemAcrossAgents, deriveMatrixBaseDir } from "@agentgem/run";
 import { contractToExpectations, appendVerification } from "@agentgem/run";
 import { detectFlavor, suggestTestbed, discoverProjects } from "@agentgem/testbed";
 import { discoverTargetProjects, scanRootsForTargets } from "@agentgem/testbed";
@@ -890,6 +892,30 @@ export class GemController {
     const gemDigest = readGemMeta(files ?? writeGemArchive(gem).files).gemDigest;
     const runId = registerRun(runDir, agent, { gemName: gem.name, gemDigest, contract: gem.contract });
     return { runId, runDir, agent, materialized };
+  }
+
+  // Cross-agent verification matrix: run the Gem against its OWN contract across
+  // the local adapter roster, one fresh dir per agent, verdicts + ledger records.
+  // Contract-only by design — loose task/expectations overrides live on /gem/run.
+  @post("/gem/verify", { body: GemVerifyRequestSchema, response: GemVerifyResponseSchema })
+  async verifyGem(input: { body: z.infer<typeof GemVerifyRequestSchema> }): Promise<z.infer<typeof GemVerifyResponseSchema>> {
+    const b = input.body;
+    const files = b.archivePath ? readArchiveDir(b.archivePath) : undefined;
+    const gem: Gem = files
+      ? readGemArchive(files)
+      : buildGem(introspectAll(b.dir, b.projects), b.selection!, { name: b.name ?? "gem", createdFrom: resolveDirs(b.dir).claudeDir });
+    const known = Object.keys(AGENT_ADAPTERS);
+    const unknown = (b.agents ?? []).filter((a) => !known.includes(a));
+    if (unknown.length) throw new InvalidInputError(`unknown agent(s): ${unknown.join(", ")}. Known: ${known.join(", ")}`);
+    const baseDir = deriveMatrixBaseDir(gem.name);
+    const verdicts = await verifyGemAcrossAgents({
+      gem,
+      baseDir,
+      roster: b.agents as AgentId[] | undefined,
+      fetch: b.fetch,
+    });
+    const gemDigest = readGemMeta(files ?? writeGemArchive(gem).files).gemDigest;
+    return { gemName: gem.name, gemDigest, baseDir, verdicts };
   }
 
   // Resolve the configured registry source, or throw a clear error the UI can surface.
