@@ -74,7 +74,7 @@ export async function scanCursorSessions(dbPath: string): Promise<SessionStat[]>
       try {
         // cursorDiskKV may not exist on very old/legacy DBs -> guard.
         const has = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='cursorDiskKV'").get();
-        if (has) rows = db.prepare("SELECT key, CAST(value AS TEXT) AS value FROM cursorDiskKV WHERE key LIKE 'composerData:%' OR key LIKE 'bubbleId:%'").all() as unknown as KV[];
+        if (has) rows = db.prepare("SELECT key, CAST(value AS TEXT) AS value FROM cursorDiskKV WHERE key LIKE 'composerData:%' OR key LIKE 'bubbleId:%' ORDER BY rowid").all() as unknown as KV[];
       } finally { db.close(); }
     } catch { return []; }
     return aggregateComposers(rows);
@@ -97,7 +97,7 @@ export async function readCursorArtifacts(env: { rulesDir?: string; cursorrules?
   if (env.rulesDir) {
     let files: string[]; try { files = (await readdir(env.rulesDir)).filter((f) => f.toLowerCase().endsWith(".mdc")); } catch { files = []; }
     for (const f of files) {
-      try { const body = stripYamlFrontmatter(await readFile(join(env.rulesDir, f), "utf8")); if (body.trim()) artifacts.push({ type: "instructions", name: basename(f, ".mdc"), content: body }); } catch { /* skip */ }
+      try { const body = stripYamlFrontmatter(await readFile(join(env.rulesDir, f), "utf8")); if (body.trim()) artifacts.push({ type: "instructions", name: basename(f).replace(/\.mdc$/i, ""), content: body }); } catch { /* skip */ }
     }
   }
   for (const [path, name] of [[env.cursorrules, "cursorrules"], [env.agentsMd, "agents"]] as const) {
