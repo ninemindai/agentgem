@@ -80,3 +80,20 @@ describe("startWarmSchedule – AGENTGEM_WARM_INTERVAL_MS env override", () => {
     expect(capturedMs).toBe(10 * 60 * 1000);
   });
 });
+
+describe("startWarmSchedule – home + lock integration", () => {
+  it("default run still fires with the lock disabled (AGENTGEM_WARM_LOCK=false)", () => {
+    const prev = process.env.AGENTGEM_WARM_LOCK; process.env.AGENTGEM_WARM_LOCK = "false";
+    try {
+      let ticks = 0;
+      const sched = startWarmSchedule({
+        home: "/home",
+        run: async () => { ticks++; },            // injected run is used verbatim
+        runNow: (fn) => fn(),
+        setInterval: () => ({}), clearInterval: () => {},
+      });
+      expect(ticks).toBe(1);
+      sched.stop();
+    } finally { if (prev === undefined) delete process.env.AGENTGEM_WARM_LOCK; else process.env.AGENTGEM_WARM_LOCK = prev; }
+  });
+});
