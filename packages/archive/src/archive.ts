@@ -5,7 +5,7 @@ import type { FileTree, SkippedArtifact } from "@agentgem/model";
 import type {
   Gem, GemArtifact, ArtifactType,
   SkillArtifact, McpServerArtifact, HookArtifact, GemCheck,
-  ChannelArtifact, SecretRef, ReferenceArtifact,
+  ChannelArtifact, SecretRef, ReferenceArtifact, GemContract,
 } from "@agentgem/model";
 import { safePathSegment } from "@agentgem/model";
 
@@ -78,6 +78,7 @@ interface GemManifest {
   checks: ManifestCheckEntry[];
   dependencies?: string[];
   grade?: number;
+  contract?: GemContract;
 }
 
 export interface ArchiveResult { files: FileTree; skipped: SkippedArtifact[] }
@@ -150,10 +151,26 @@ export function writeGemArchive(gem: Gem, opts: { version?: string; dependencies
     checks,
     ...(opts.dependencies && opts.dependencies.length ? { dependencies: opts.dependencies } : {}),
     ...(gem.grade != null ? { grade: gem.grade } : {}),
+    ...(gem.contract ? { contract: gem.contract } : {}),
   };
   files[MANIFEST_PATH] = JSON.stringify(manifest, null, 2);
   files[LOCK_PATH] = JSON.stringify(computeLock(files), null, 2);
   return { files, skipped };
+}
+
+// Tolerant contract reader: a hand-edited or future-format manifest must never make
+// an archive unreadable. Wrong-shaped fields are dropped; a missing/invalid task
+// invalidates the whole contract (there is nothing to run without one).
+function sanitizeContract(raw: unknown): GemContract | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const c = raw as { task?: unknown; expect?: unknown };
+  if (typeof c.task !== "string" || c.task === "") return undefined;
+  const e = (typeof c.expect === "object" && c.expect !== null ? c.expect : {}) as Record<string, unknown>;
+  const expect: GemContract["expect"] = {};
+  if (Array.isArray(e.tools) && e.tools.every((t) => typeof t === "string")) expect.tools = e.tools as string[];
+  if (typeof e.text === "string") expect.text = e.text;
+  if (typeof e.forbidToolFailures === "boolean") expect.forbidToolFailures = e.forbidToolFailures;
+  return { task: c.task, expect };
 }
 
 export function readGemArchive(files: FileTree): Gem {
@@ -215,6 +232,8 @@ export function readGemArchive(files: FileTree): Gem {
   const checks: GemCheck[] = manifest.checks.map((c) => JSON.parse(body(c.path)) as GemCheck);
   const gem: Gem = { name: manifest.name, createdFrom: manifest.createdFrom, artifacts, checks, requiredSecrets: manifest.requiredSecrets };
   if (manifest.grade != null) gem.grade = manifest.grade;
+  const contract = sanitizeContract(manifest.contract);
+  if (contract) gem.contract = contract;
   return gem;
 }
 
