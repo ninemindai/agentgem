@@ -2,6 +2,7 @@
 import type { ConsolePage } from "./registry.js";
 import { observePage } from "./panels/Observe/index.js";
 import { insightsPage } from "./panels/Insights/index.js";
+import { dreamingPage } from "./panels/Dreaming/index.js";
 import { benchmarkPage } from "./panels/Benchmark/index.js";
 import { optimizePage } from "./panels/Optimize/index.js";
 import { minePage } from "./panels/Mine/index.js";
@@ -14,4 +15,4 @@ import { settingsPage } from "./panels/Settings/index.js";
 import { receivedPage } from "./panels/Received/index.js";
 import { deployPage } from "./panels/Deploy/index.js";
 
-export const pages: ConsolePage[] = [observePage, insightsPage, benchmarkPage, optimizePage, minePage, curatePage, materializePage, workspacesPage, publishPage, getGemsPage, settingsPage, receivedPage, deployPage];
+export const pages: ConsolePage[] = [observePage, insightsPage, dreamingPage, benchmarkPage, optimizePage, minePage, curatePage, materializePage, workspacesPage, publishPage, getGemsPage, settingsPage, receivedPage, deployPage];

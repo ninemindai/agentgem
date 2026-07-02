@@ -20,6 +20,7 @@ import { GemTypesComponent } from "./gem/gemTypeRegistry.js";
 import { AgentSourcesComponent } from "./gem/sourceRegistry.js";
 import { installMcpHttp } from "@agentback/mcp-http";
 import { GemController } from "./gem.controller.js";
+import { DreamController } from "./dream.controller.js";
 import { GemTools } from "./gem.tools.js";
 import { streamWorkflowAnalyze } from "./workflowStream.js";
 import { streamGemRun } from "./gemRunStream.js";
@@ -75,6 +76,7 @@ export async function createApp(port: number): Promise<RestApplication> {
   app.component(AgentSourcesComponent);
   app.configure("servers.MCPServer").to({ name: "agentgem", version: "0.1.0", transports: { stdio: false } });
   app.restController(GemController);
+  app.restController(DreamController);
   app.restController(ShareProxyController);
   app.service(GemTools);
   // Aggregator (B1) + gating: always registered now — Postgres when DATABASE_URL is set, else
