@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: MIT
 // src/dream/harvest.ts
 //
-// Pure mapping from the analyze payload's DistilledSkill[]/Reflection[] into
-// DreamQueueEntry[] for the dream queue. REM/insights harvesting is deferred
-// (see plan note) — every entry produced here is phase:"DEEP".
+// Pure mapping from the warm caches into DreamQueueEntry[]: the analyze payload's
+// DistilledSkill[]/Reflection[] become phase:"DEEP" skill/lesson drafts, and the
+// insights payload's PublishCandidate[] become phase:"REM" "opportunity" entries.
 import { createHash } from "node:crypto";
-import type { DistilledSkill, DistilledLesson, Reflection, Provenance } from "@agentgem/insight";
+import type { DistilledSkill, DistilledLesson, Reflection, Provenance, PublishCandidate } from "@agentgem/insight";
 import type { DreamQueueEntry } from "./types.js";
 
 export function provenanceHash(p: Provenance): string {
@@ -40,6 +40,15 @@ export function harvestEntries(root: string, distilled: DistilledSkill[], reflec
     });
   }
   return out;
+}
+// REM: succeeded sessions worth publishing. sessionId is the stable identity, so the
+// dedup key uses it directly (no provenance hash). Accepting an opportunity routes to the
+// Curate/publish flow (no distilled file is written), so `name` is never a path segment.
+export function opportunityEntries(root: string, candidates: PublishCandidate[], nowMs: number): DreamQueueEntry[] {
+  return candidates.map((c) => ({
+    key: `opportunity:${root}:${c.sessionId}`, kind: "opportunity" as const, root, name: c.sessionId,
+    summary: c.goal, phase: "REM" as const, draft: c, status: "queued" as const, firstSeenMs: nowMs,
+  }));
 }
 // Total over any Reflection — callers pass `entry.draft as Reflection, entry.root` at the
 // one kind-guarded site (Task 5), so this never receives a skill draft and never throws.

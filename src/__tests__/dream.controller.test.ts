@@ -24,6 +24,11 @@ function skillEntry(): DreamQueueEntry {
       status: "draft", confidence: "high", origin: "llm" } as DreamQueueEntry["draft"],
     status: "queued", firstSeenMs: 1 };
 }
+function opportunityEntry(): DreamQueueEntry {
+  return { key: "opportunity:/p:sess-1", kind: "opportunity", root: "/p", name: "sess-1", summary: "ship it",
+    phase: "REM", draft: { sessionId: "sess-1", goal: "ship it", why: "clean success" } as DreamQueueEntry["draft"],
+    status: "queued", firstSeenMs: 1 };
+}
 
 describe("DreamController", () => {
   let base: string;
@@ -46,6 +51,16 @@ describe("DreamController", () => {
     const res = await c.accept({ body: { key: "skill:/p:run-migrations:h" } });
     expect(res.ok).toBe(true);
     expect(res.path).toContain(join(".agentgem", "distilled", "run-migrations", "SKILL.md"));
+  });
+
+  it("accepts an opportunity without writing a file (empty path, leaves queue)", async () => {
+    enqueueNew([opportunityEntry()], base);
+    const c = new DreamController();
+    (c as unknown as { base: string }).base = base;
+    const res = await c.accept({ body: { key: "opportunity:/p:sess-1" } });
+    expect(res.ok).toBe(true);
+    expect(res.path).toBe(""); // no distilled file for opportunities
+    expect((await c.queue()).items.length).toBe(0);
   });
 
   it("dismiss removes from queued and blocks re-list", async () => {

@@ -22,7 +22,7 @@ const StatusSchema = z.object({
 });
 const QueueItemSchema = z.object({
   key: z.string(),
-  kind: z.enum(["skill", "lesson"]),
+  kind: z.enum(["skill", "lesson", "opportunity"]),
   root: z.string(),
   name: z.string(),
   summary: z.string(),
@@ -43,7 +43,7 @@ const DiaryEntrySchema = z.object({
   passId: z.number(),
   rootsProcessed: z.array(z.string()),
   phasesLit: z.array(z.enum(["LIGHT", "DEEP", "REM"])),
-  enqueued: z.object({ skills: z.number(), lessons: z.number() }),
+  enqueued: z.object({ skills: z.number(), lessons: z.number(), opportunities: z.number().optional() }),
   degraded: z.boolean(),
 });
 const DiarySchema = z.object({ entries: z.array(DiaryEntrySchema) });
@@ -86,6 +86,12 @@ export class DreamController {
   async accept(input: { body: z.infer<typeof KeyBody> }): Promise<z.infer<typeof OkPathSchema>> {
     const entry = readQueue(this.base).find((e) => e.key === input.body.key);
     if (!entry) throw new InvalidInputError(`No queued draft '${input.body.key}'.`);
+    // Opportunities (REM publish-candidates) write no file — accepting is an
+    // acknowledgement; the panel routes to the Curate/publish flow for the session.
+    if (entry.kind === "opportunity") {
+      setStatus(entry.key, "accepted", Date.now(), this.base);
+      return { ok: true, path: "" };
+    }
     // Defense-in-depth: entry.name becomes a filesystem path segment in both writers
     // (draftStage.ts), so re-validate the kebab shape here — mirrors gem.controller.ts's
     // sibling accept endpoints, which re-check the name at every path-composing write.
