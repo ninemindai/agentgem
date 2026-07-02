@@ -206,6 +206,39 @@ describe("POST /api/gem/run", () => {
     expect(r.status).toBe(400);
     rmSync(archiveDir, { recursive: true, force: true });
   });
+
+  it("POST /api/gem/verify returns a per-agent matrix for a contract-bearing archive", async () => {
+    const archiveDir = mkdtempSync(join(tmpdir(), "gem-arc-"));
+    const withContract: Gem = { ...gem, contract: { task: "exercise qa", expect: { tools: ["qa"] } } };
+    writeArchiveDir(archiveDir, writeGemArchive(withContract).files);
+    setRunConnectFnForTests(fakeRun); // fake invokes "Skill(qa)" → passes for every agent
+    try {
+      const r = await client.post("/api/gem/verify").send({ archivePath: archiveDir, agents: ["claude", "codex"] }).expect(200);
+      expect(r.body.gemName).toBe("qa-gem");
+      expect(r.body.gemDigest).toMatch(/./);
+      expect(r.body.verdicts.map((v: { agent: string; status: string }) => `${v.agent}:${v.status}`))
+        .toEqual(["claude:passed", "codex:passed"]);
+    } finally {
+      setRunConnectFnForTests(null);
+      rmSync(archiveDir, { recursive: true, force: true });
+      rmSync(join(agentgemHomeDir, ".agentgem", "runs", "qa-gem-matrix"), { recursive: true, force: true });
+    }
+  });
+
+  it("POST /api/gem/verify 400s on an unknown agent id and on a contract-less gem", async () => {
+    const archiveDir = mkdtempSync(join(tmpdir(), "gem-arc-"));
+    writeArchiveDir(archiveDir, writeGemArchive(gem).files); // no contract
+    try {
+      const contractless = await client.post("/api/gem/verify").send({ archivePath: archiveDir });
+      expect(contractless.status).toBe(400);
+      const withContract: Gem = { ...gem, contract: { task: "t", expect: {} } };
+      writeArchiveDir(archiveDir, writeGemArchive(withContract).files);
+      const unknown = await client.post("/api/gem/verify").send({ archivePath: archiveDir, agents: ["gemini"] });
+      expect(unknown.status).toBe(400);
+    } finally {
+      rmSync(archiveDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("GemController", () => {

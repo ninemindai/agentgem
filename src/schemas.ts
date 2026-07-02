@@ -696,6 +696,32 @@ export const GemRunPrepareResponseSchema = z.object({
   materialized: TestbedImportResponseSchema,
 });
 
+export const AgentVerdictSchema = z.object({
+  agent: z.enum(["claude", "codex"]),
+  status: z.enum(["passed", "failed", "unavailable"]),
+  verification: VerificationReportSchema.optional(),
+  detail: z.string().optional(),
+});
+export const GemVerifyRequestSchema = z.object({
+  selection: GemSelectionSchema.optional(),
+  archivePath: z.string().optional(),
+  name: z.string().optional(),
+  dir: z.string().optional(),
+  projects: z.array(z.string()).optional(),
+  // Validated in the controller (unknown ids → InvalidInputError 400) so the error
+  // is a clear message, not a schema 422, and the list stays extensible.
+  agents: z.array(z.string()).optional(),
+  fetch: z.boolean().optional(),       // default false: missing adapters report unavailable, never download
+}).refine((d) => d.selection !== undefined || d.archivePath !== undefined, {
+  message: "provide either selection or archivePath",
+});
+export const GemVerifyResponseSchema = z.object({
+  gemName: z.string(),
+  gemDigest: z.string(),
+  baseDir: z.string(),
+  verdicts: z.array(AgentVerdictSchema),
+});
+
 // ── AgentCore deploy (Phase 2) ──
 export const AgentcoreReadyResponseSchema = z.object({ cli: z.boolean(), awsCreds: z.boolean() });
 export const AgentcoreDeployRequestSchema = z.object({ name: z.string() });
