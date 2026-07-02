@@ -40,6 +40,13 @@ describe("dream store", () => {
     expect(promotedCount(base)).toBe(1);
   });
 
+  it("promotedCount excludes accepted opportunities (they write no file)", () => {
+    enqueueNew([entry(), entry({ key: "opp", kind: "opportunity", name: "sess-1" })], base);
+    setStatus("skill:/p:foo:abc", "accepted", 1, base); // a real distilled draft
+    setStatus("opp", "accepted", 1, base);              // an acknowledged opportunity
+    expect(promotedCount(base)).toBe(1); // only the skill counts
+  });
+
   it("appendDiary keeps newest 100", () => {
     for (let i = 0; i < 105; i++) {
       appendDiary({ atMs: i, passId: i, rootsProcessed: [], phasesLit: [], enqueued: { skills: 0, lessons: 0 }, degraded: false } as DreamDiaryEntry, base);
@@ -53,10 +60,10 @@ describe("dream store", () => {
     expect(readQueue(base)).toEqual([]);
   });
 
-  it("never throws when the sidecar dir can't be created", () => {
+  it("signals failure (no false success) when the sidecar can't be written", () => {
     // Put a FILE where the `.agentgem` dir should be, so mkdir of `.agentgem/dream` fails (ENOTDIR).
     writeFileSync(join(base, ".agentgem"), "x", "utf8");
-    expect(() => enqueueNew([entry()], base)).not.toThrow();
+    expect(enqueueNew([entry()], base)).toEqual([]); // nothing persisted → return [], not the "added" set
     expect(readQueue(base)).toEqual([]); // reads stay safe too
   });
 });

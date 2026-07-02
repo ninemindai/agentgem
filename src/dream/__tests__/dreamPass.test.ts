@@ -53,6 +53,14 @@ describe("dreamRoot", () => {
     expect(d[0].rootsProcessed).toEqual(["/p"]);
   });
 
+  it("requests cache-only reads so the harvest never triggers a real pass", async () => {
+    let seen: { cacheOnly?: boolean } | undefined;
+    await dreamRoot("/p", deps({
+      analyze: async (_root: string, o: { cacheOnly?: boolean }) => { seen = o; return { payload: analyzePayload, cached: true, updatedAt: 1 }; },
+    }));
+    expect(seen?.cacheOnly).toBe(true);
+  });
+
   it("returns 'hit' on a second run (all keys already seen)", async () => {
     await dreamRoot("/p", deps());
     expect(await dreamRoot("/p", deps())).toBe("hit");

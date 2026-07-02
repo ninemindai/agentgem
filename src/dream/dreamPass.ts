@@ -28,12 +28,11 @@ export async function dreamRoot(root: string, deps: DreamDeps = {}): Promise<"wa
   const analyze = deps.analyze ?? computeWorkflowAnalysis;
   const insights = deps.insights ?? computeInsights;
 
-  // Un-forced: in a normal pass the analyze/insights warmables already populated this
-  // root's caches, so these are cache hits (no LLM). Narrow exception: if analyze/insights
-  // was skipped for this root (foreground busy) but the foreground frees before dream's turn,
-  // an un-forced call can miss cache and do a real pass — bounded to one per root/pass.
-  const a = await analyze(root, { dir: deps.dir });
-  const ins = await insights(root, { dir: deps.dir });
+  // cacheOnly: harvest only what the analyze/insights warmables already cached this pass.
+  // On a cache miss they return an empty payload instead of computing, so the harvest never
+  // spends LLM — regardless of foreground timing.
+  const a = await analyze(root, { dir: deps.dir, cacheOnly: true });
+  const ins = await insights(root, { dir: deps.dir, cacheOnly: true });
 
   const distilled = (a.payload.distilled as DistilledSkill[] | undefined) ?? [];
   const reflections = (a.payload.reflections as Reflection[] | undefined) ?? [];

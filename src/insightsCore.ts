@@ -28,7 +28,7 @@ export interface InsightsResult { payload: InsightsPayload; cached: boolean; upd
 export async function computeInsights(
   root: string,
   opts: {
-    dir?: string; force?: boolean; progress?: InsightsProgress; now?: () => number;
+    dir?: string; force?: boolean; cacheOnly?: boolean; progress?: InsightsProgress; now?: () => number;
     judge?: typeof judgeSessions;
     narrate?: typeof narrateInsights;
   } = {},
@@ -52,6 +52,11 @@ export async function computeInsights(
   if (!opts.force) {
     const entry = readInsightsCacheEntry(root, token);
     if (entry) return { payload: entry.result as InsightsPayload, cached: true, updatedAt: entry.ts };
+  }
+  if (opts.cacheOnly) {
+    // Cache miss + cached-only caller (the dream harvest) — return an empty report without
+    // judging/synthesizing, so the harvest never spends LLM.
+    return { payload: { report: synthesizeInsights([]), facets: [], degraded: false, signalSummary: { sessionsScanned: 0, spanDays: 0, notes: null } }, cached: false, updatedAt: null };
   }
 
   const signal = scanWorkflow(paths, scanInv, { retainSequences: true });
