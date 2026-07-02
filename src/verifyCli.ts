@@ -4,7 +4,7 @@
 // verification matrix from the terminal, no server needed. Exit codes:
 // 0 = ≥1 agent available and every available agent passed; 1 = any failure or
 // nothing available; 2 = usage/contract error.
-import { readArchiveDir, readGemArchive } from "@agentgem/archive";
+import { readArchiveDir, readGemArchive, readGemMeta } from "@agentgem/archive";
 import { verifyGemAcrossAgents, deriveMatrixBaseDir, AGENT_ADAPTERS, type AgentId, type AgentVerdict } from "@agentgem/run";
 import { InvalidInputError } from "@agentgem/model";
 
@@ -49,12 +49,15 @@ export async function runVerifyCommand(args: string[], deps: VerifyCliDeps = {})
   }
 
   try {
-    const gem = readGemArchive(readArchiveDir(archiveDir));
+    const files = readArchiveDir(archiveDir);
+    const gem = readGemArchive(files);
+    const gemDigest = readGemMeta(files).gemDigest;
     // Print via onVerdict as agents finish; an injected test `verify` won't call
     // onVerdict, so print any remainder from the returned list afterwards.
     let printed = 0;
     const verdicts = await verify({
       gem,
+      gemDigest,
       baseDir: deriveMatrixBaseDir(gem.name),
       roster,
       fetch,
