@@ -19,6 +19,7 @@
     "@agentgem/base": "workspace:*",
     "@agentgem/insight": "workspace:*",
     "@agentgem/model": "workspace:*",
-    "@agentgem/testbed": "workspace:*"
+    "@agentgem/testbed": "workspace:*",
+    "@electric-sql/pglite": "^0.5.3"
   }
 }
