@@ -82,4 +82,27 @@ describe("agentgem verify", () => {
       expect(got).toEqual({ roster: ["claude"], fetch: true });
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
+
+  it("parses an archive dir whose name equals an agent id after --agents", async () => {
+    // Reproduce by passing: ["--agents", "claude", <dir>] where the dir path is positional
+    const dir = archiveWith(true);
+    let roster: string[] | undefined;
+    try {
+      const code = await runVerifyCommand(["--agents", "claude", dir], {
+        verify: async (o) => { roster = o.roster; return [{ agent: "claude", status: "passed", verification: { passed: true, checks: [] } }]; },
+        out: () => {},
+      });
+      expect(code).toBe(0);
+      expect(roster).toEqual(["claude"]);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it("exits 2 when --agents has no value", async () => {
+    const dir = archiveWith(true);
+    const errs: string[] = [];
+    try {
+      expect(await runVerifyCommand([dir, "--agents"], { err: (l) => errs.push(l) })).toBe(2);
+      expect(errs.some((l) => l.includes("--agents requires"))).toBe(true);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
 });

@@ -28,11 +28,16 @@ export async function runVerifyCommand(args: string[], deps: VerifyCliDeps = {})
   const err = deps.err ?? ((l) => console.error(l));
   const verify = deps.verify ?? verifyGemAcrossAgents;
 
-  const positional = args.filter((a) => !a.startsWith("--") && args[args.indexOf(a) - 1] !== "--agents");
+  const positional = args.filter((a, i) => !a.startsWith("--") && args[i - 1] !== "--agents");
   const archiveDir = positional[0];
   if (!archiveDir) { err("usage: agentgem verify <archive-dir> [--agents claude,codex] [--fetch]"); return 2; }
   const agentsFlag = args.includes("--agents") ? args[args.indexOf("--agents") + 1] : undefined;
   const fetch = args.includes("--fetch");
+
+  if (args.includes("--agents") && (agentsFlag === undefined || agentsFlag.startsWith("--"))) {
+    err("--agents requires a comma-separated list (e.g. --agents claude,codex)");
+    return 2;
+  }
 
   let roster: AgentId[] | undefined;
   if (agentsFlag !== undefined) {
