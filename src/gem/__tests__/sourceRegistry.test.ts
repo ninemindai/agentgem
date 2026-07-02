@@ -7,13 +7,13 @@ import { AGENT_SOURCES, SourceRegistry, AgentSourcesComponent, defaultSourceRegi
 describe("SourceRegistry (direct)", () => {
   const r = new SourceRegistry(BUILTIN_SOURCES);
   it("all() returns the built-in sources; byId resolves", () => {
-    expect(r.all().map((s) => s.id)).toEqual(["claude", "codex", "cline", "gemini"]);
+    expect(r.all().map((s) => s.id)).toEqual(["claude", "codex", "cline", "gemini", "continue"]);
     expect(r.byId("claude")?.label).toBe("Claude Code");
     expect(r.byId("nope")).toBeUndefined();
   });
   it("defaultSourceRegistry carries the built-ins", () => {
     expect(defaultSourceRegistry.byId("claude")?.id).toBe("claude");
-    expect(defaultSourceRegistry.all().length).toBe(4);
+    expect(defaultSourceRegistry.all().length).toBe(5);
   });
 });
 
@@ -31,6 +31,6 @@ describe("AGENT_SOURCES extension point (wired container)", () => {
     expect(registry.byId("cursor")?.label).toBe("Cursor");
     expect(registry.all().map((s) => s.id)).toContain("claude");
     // Falsifiable against partial injection: both built-ins + the 1 plugin source must wire through.
-    expect(registry.all().length).toBe(5);
+    expect(registry.all().length).toBe(6);
   });
 });

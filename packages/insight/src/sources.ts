@@ -14,6 +14,7 @@ import type { AgentId, SessionStat } from "./observeAggregate.js";
 import { listFiles, parseClaudeTranscript, parseCodexTranscript } from "./observeScan.js";
 import { scanClineSessions, readClineArtifacts } from "./sources/cline.js";
 import { scanGeminiSessions, readGeminiArtifacts } from "./sources/gemini.js";
+import { scanContinueSessions, readContinueArtifacts } from "./sources/continue.js";
 
 // codexDir is a legacy independent override (scanSessions({ claudeDir, codexDir })); when absent it
 // derives from baseDir's parent via resolveDirs, same as every other agent root.
@@ -85,4 +86,17 @@ const geminiSource: SourceSpec = {
   readArtifacts: async () => readGeminiArtifacts({}),  // per-repo file paths supplied by callers in a later phase (mirrors cline)
 };
 
-export const BUILTIN_SOURCES: SourceSpec[] = [claudeSource, codexSource, clineSource, geminiSource];
+// ~/.continue/sessions holds the session index + per-session JSON. baseDir overrides for tests
+// (points at a ~/.continue root). scanSessions takes the sessions dir (one root).
+function continueSessionsDir(baseDir?: string): string {
+  return join(baseDir ?? join(homedir(), ".continue"), "sessions");
+}
+
+const continueSource: SourceSpec = {
+  id: "continue", label: "Continue", traits: { storage: "json" },
+  roots: (env) => [continueSessionsDir(env.baseDir)],
+  scanSessions: async (roots) => (await Promise.all(roots.map((r) => scanContinueSessions(r)))).flat(),
+  readArtifacts: async () => readContinueArtifacts({}),   // per-repo config path supplied by callers later (mirrors cline/gemini)
+};
+
+export const BUILTIN_SOURCES: SourceSpec[] = [claudeSource, codexSource, clineSource, geminiSource, continueSource];
