@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 // src/dream/__tests__/harvest.test.ts
 import { describe, it, expect } from "vitest";
-import { provenanceHash, slugFromReflection, harvestEntries, reflectionToLesson } from "../harvest.js";
+import { provenanceHash, slugFromReflection, harvestEntries, reflectionToLesson, opportunityEntries } from "../harvest.js";
 import type { DistilledSkill, Reflection } from "@agentgem/insight";
 
 const prov = { occurrences: [{ sessionId: "s1", transcript: "t.jsonl", messageIndices: [3, 4], atMs: 10 }] };
@@ -14,6 +14,17 @@ const skill: DistilledSkill = {
 const refl: Reflection = { kind: "recurring-decision", detail: "prefer pnpm over npm here", importance: "high", provenance: prov };
 
 describe("dream harvest", () => {
+  it("maps publish candidates to REM opportunity entries keyed by session id", () => {
+    const [e] = opportunityEntries("/p", [{ sessionId: "sess-1", goal: "ship it", why: "clean success" }], 100);
+    expect(e.kind).toBe("opportunity");
+    expect(e.phase).toBe("REM");
+    expect(e.key).toBe("opportunity:/p:sess-1"); // sessionId is the stable identity — no provenance hash
+    expect(e.name).toBe("sess-1");
+    expect(e.summary).toBe("ship it");
+    expect(e.status).toBe("queued");
+    expect(e.firstSeenMs).toBe(100);
+  });
+
   it("hashes provenance stably regardless of occurrence order", () => {
     const a = { occurrences: [prov.occurrences[0], { sessionId: "s2", transcript: "u.jsonl", messageIndices: [1], atMs: 20 }] };
     const b = { occurrences: [a.occurrences[1], a.occurrences[0]] };
