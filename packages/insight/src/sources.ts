@@ -15,6 +15,7 @@ import { listFiles, parseClaudeTranscript, parseCodexTranscript } from "./observ
 import { scanClineSessions, readClineArtifacts } from "./sources/cline.js";
 import { scanGeminiSessions, readGeminiArtifacts } from "./sources/gemini.js";
 import { scanContinueSessions, readContinueArtifacts } from "./sources/continue.js";
+import { scanCursorSessions, readCursorArtifacts } from "./sources/cursor.js";
 
 // codexDir is a legacy independent override (scanSessions({ claudeDir, codexDir })); when absent it
 // derives from baseDir's parent via resolveDirs, same as every other agent root.
@@ -99,4 +100,18 @@ const continueSource: SourceSpec = {
   readArtifacts: async () => readContinueArtifacts({}),   // per-repo config path supplied by callers later (mirrors cline/gemini)
 };
 
-export const BUILTIN_SOURCES: SourceSpec[] = [claudeSource, codexSource, clineSource, geminiSource, continueSource];
+// Cursor's global session DB. macOS default; baseDir overrides for tests (points at a dir holding state.vscdb).
+function cursorDbPath(baseDir?: string): string {
+  return baseDir
+    ? join(baseDir, "state.vscdb")
+    : join(homedir(), "Library", "Application Support", "Cursor", "User", "globalStorage", "state.vscdb");
+}
+
+const cursorSource: SourceSpec = {
+  id: "cursor", label: "Cursor", traits: { storage: "sqlite" },
+  roots: (env) => [cursorDbPath(env.baseDir)],
+  scanSessions: async (roots) => (await Promise.all(roots.map((r) => scanCursorSessions(r)))).flat(),
+  readArtifacts: async () => readCursorArtifacts({}),   // per-repo rule/mcp paths supplied by callers later
+};
+
+export const BUILTIN_SOURCES: SourceSpec[] = [claudeSource, codexSource, clineSource, geminiSource, continueSource, cursorSource];

@@ -8,8 +8,8 @@ import { BUILTIN_SOURCES } from "@agentgem/insight";
 const claudeSpec = () => BUILTIN_SOURCES.find((s) => s.id === "claude")!;
 
 describe("SourceSpec built-ins", () => {
-  it("registers claude, cline, codex, continue, and gemini", () => {
-    expect(BUILTIN_SOURCES.map((s) => s.id).sort()).toEqual(["claude", "cline", "codex", "continue", "gemini"]);
+  it("registers claude, cline, codex, continue, cursor, and gemini", () => {
+    expect(BUILTIN_SOURCES.map((s) => s.id).sort()).toEqual(["claude", "cline", "codex", "continue", "cursor", "gemini"]);
   });
   it("claude spec scans a fixture transcript into a SessionStat", async () => {
     const base = mkdtempSync(join(tmpdir(), "src-"));
