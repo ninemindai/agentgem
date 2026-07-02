@@ -7,10 +7,14 @@
 // while Cursor runs, so we COPY it (+ sidecars) to a temp file and open read-only. Metadata only:
 // we read a bubble's type/createdAt/token fields — NEVER its text/thinking/codeBlocks/toolFormerData.
 // Total: a missing/locked/corrupt DB or malformed blob degrades to [] / skip, never throws.
+// node:sqlite is imported LAZILY inside scanCursorSessions (not at module top level) so this module —
+// and the whole app, which the desktop Electron main process dynamically imports — stays loadable on
+// a runtime that lacks node:sqlite (Electron <= 33 bundles Node 20; node:sqlite needs Node >= 24). There
+// the lazy import() rejects and the scan degrades to [] via the surrounding catch, instead of throwing
+// ERR_UNKNOWN_BUILTIN_MODULE at load time and breaking the embedded server's boot.
 import { copyFile, mkdtemp, rm, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, basename } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { classifyMcpServer, stripYamlFrontmatter } from "@agentgem/model";
 import type { GemArtifact } from "@agentgem/model";
 import type { SessionStat } from "../observeAggregate.js";
@@ -70,6 +74,7 @@ export async function scanCursorSessions(dbPath: string): Promise<SessionStat[]>
     for (const ext of ["-wal", "-shm"]) { try { await copyFile(dbPath + ext, copyPath + ext); } catch { /* sidecar may not exist */ } }
     let rows: KV[] = [];
     try {
+      const { DatabaseSync } = await import("node:sqlite");   // lazy: absent on Node < 24 -> caught -> []
       const db = new DatabaseSync(copyPath, { readOnly: true });
       try {
         // cursorDiskKV may not exist on very old/legacy DBs -> guard.
