@@ -101,6 +101,7 @@
     "marked-highlight": "^2.2.4",
     "supertest": "^7",
     "typescript": "^6",
-    "vitest": "^3"
+    "vitest": "^3",
+    "yaml": "^2"
   }
 }

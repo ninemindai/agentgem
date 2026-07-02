@@ -71,6 +71,7 @@ describe("wire schemas", () => {
       compatibility: {
         claude: { supported: 1, skipped: 0 }, codex: { supported: 0, skipped: 1 },
         agents: { supported: 0, skipped: 1 }, hermes: { supported: 0, skipped: 1 },
+        continue: { supported: 0, skipped: 1 },
         eve: { supported: 0, skipped: 1 }, flue: { supported: 0, skipped: 1 },
         "openai-sandbox": { supported: 0, skipped: 1 }, agentcore: { supported: 0, skipped: 1 },
         a2a: { supported: 1, skipped: 0 }, cline: { supported: 1, skipped: 0 }, gemini: { supported: 0, skipped: 1 },
