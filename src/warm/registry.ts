@@ -14,10 +14,11 @@ import { collectScorecard, selectScorecardRoots, scorecardTranscriptPaths, defau
 import { SCORECARD_CACHE_ROOT } from "../scorecardStream.js";
 import { computeInsights } from "../insightsCore.js";
 import { computeWorkflowAnalysis } from "../workflowCore.js";
+import { computeDistill } from "../distillCore.js";
 
 export type WarmStatusValue = "warmed" | "hit";
 export interface Warmable {
-  id: "usage" | "scorecard" | "insights" | "analyze";
+  id: "usage" | "scorecard" | "insights" | "analyze" | "distill";
   cost: "cheap" | "llm";
   scope: "global" | "per-root";
   warm(root: string | null, opts: { dir?: string; force?: boolean }): Promise<WarmStatusValue>;
@@ -58,6 +59,13 @@ export const WARMABLES: Warmable[] = [
     id: "analyze", cost: "llm", scope: "per-root",
     async warm(root, { dir, force }) {
       const r = await computeWorkflowAnalysis(root as string, { dir, force });
+      return r.cached ? "hit" : "warmed";
+    },
+  },
+  {
+    id: "distill", cost: "llm", scope: "per-root",
+    async warm(root, { dir, force }) {
+      const r = await computeDistill(root as string, { dir, force });
       return r.cached ? "hit" : "warmed";
     },
   },
