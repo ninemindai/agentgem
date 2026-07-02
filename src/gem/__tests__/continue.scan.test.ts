@@ -28,4 +28,25 @@ describe("Continue session parse", () => {
     expect(s.msgs).toBe(1); expect(s.tokensIn).toBe(0); expect(s.tokensOut).toBe(0);
     expect(parseContinueSession("not json", { mtimeMs: 5 })).toBeNull();
   });
+  it("falls back to mtime (not NaN) when dateCreated is a non-numeric string", () => {
+    const s = parseContinueSession(session, { dateCreated: "not-a-number", messageCount: 2, mtimeMs: 2000 })!;
+    expect(s.startMs).toBe(2000);
+    expect(s.endMs).toBe(2000);
+    expect(Number.isNaN(s.startMs)).toBe(false);
+    expect(Number.isNaN(s.endMs)).toBe(false);
+  });
+  it("coerces a corrupted usage block to finite zero tokens instead of NaN", () => {
+    const corrupted = JSON.stringify({
+      sessionId: "s-3", workspaceDirectory: "/p",
+      history: [{ message: { role: "user", content: "x" } }],
+      usage: { promptTokens: "oops", completionTokens: "oops", promptTokensDetails: { cachedTokens: "oops" } },
+    });
+    const s = parseContinueSession(corrupted, { dateCreated: "1000", mtimeMs: 2000 })!;
+    expect(s.tokensIn).toBe(0);
+    expect(s.tokensOut).toBe(0);
+    expect(s.tokensCache).toBe(0);
+    expect(Number.isFinite(s.tokensIn)).toBe(true);
+    expect(Number.isFinite(s.tokensOut)).toBe(true);
+    expect(Number.isFinite(s.tokensCache)).toBe(true);
+  });
 });

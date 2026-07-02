@@ -14,9 +14,11 @@ interface CUsage { promptTokens?: number; completionTokens?: number; promptToken
 interface CSession { sessionId?: string; workspaceDirectory?: string; chatModelTitle?: string | null;
   history?: { message?: { role?: string; usage?: CUsage } }[]; usage?: CUsage }
 
+const n = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+
 function tokensFrom(u: CUsage | undefined): { in: number; out: number; cache: number } {
-  const cache = u?.promptTokensDetails?.cachedTokens ?? 0;
-  return { in: Math.max(0, (u?.promptTokens ?? 0) - cache), out: u?.completionTokens ?? 0, cache };
+  const cache = n(u?.promptTokensDetails?.cachedTokens);
+  return { in: Math.max(0, n(u?.promptTokens) - cache), out: n(u?.completionTokens), cache };
 }
 
 export function parseContinueSession(
@@ -34,12 +36,13 @@ export function parseContinueSession(
   if (s.usage) { const t = tokensFrom(s.usage); tIn = t.in; tOut = t.out; tCache = t.cache; }
   else for (const h of history) if (h.message?.role === "assistant" && h.message.usage) { const t = tokensFrom(h.message.usage); tIn += t.in; tOut += t.out; tCache += t.cache; }
 
-  const startMs = meta.dateCreated ? parseInt(meta.dateCreated, 10) : meta.mtimeMs;
+  let startMs = meta.dateCreated ? parseInt(meta.dateCreated, 10) : meta.mtimeMs;
+  if (Number.isNaN(startMs)) startMs = meta.mtimeMs;
   const endMs = Math.max(meta.mtimeMs, startMs);
   return {
     agent: "continue", sessionId: s.sessionId ?? "", project: s.workspaceDirectory ? basename(s.workspaceDirectory) : null,
     model: s.chatModelTitle ?? null, gitBranch: null,
-    startMs: Number.isNaN(startMs) ? endMs : startMs, endMs, msgs, tokensIn: tIn, tokensOut: tOut, tokensCache: tCache,
+    startMs, endMs, msgs, tokensIn: tIn, tokensOut: tOut, tokensCache: tCache,
   };
 }
 
