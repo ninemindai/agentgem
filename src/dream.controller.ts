@@ -7,9 +7,13 @@ import { writeDistilledDraft, writeDistilledLesson } from "@agentgem/capture";
 import type { DistilledSkill, Reflection } from "@agentgem/insight";
 import { agentgemHome, InvalidInputError } from "@agentgem/model";
 import { getWarmStatus, runWarmPass } from "./warm/orchestrator.js";
+import { reflectionToLesson } from "@agentgem/insight";
 import { readQueue, setStatus, promotedCount, readDiary } from "./dream/store.js";
 import { dreamEnabled, setDreamEnabled } from "./dream/config.js";
-import { reflectionToLesson } from "./dream/harvest.js";
+
+// Path-safety guard for any name that becomes a filesystem path segment (skill dir /
+// lesson file). Mirrors the per-write re-validation in gem.controller.ts.
+const NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 const KeyBody = z.object({ key: z.string().min(1) });
 const EnableBody = z.object({ enabled: z.boolean() });
@@ -92,17 +96,21 @@ export class DreamController {
       setStatus(entry.key, "accepted", Date.now(), this.base);
       return { ok: true, path: "" };
     }
-    // Defense-in-depth: entry.name becomes a filesystem path segment in both writers
-    // (draftStage.ts), so re-validate the kebab shape here — mirrors gem.controller.ts's
-    // sibling accept endpoints, which re-check the name at every path-composing write.
-    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(entry.name)) throw new InvalidInputError(`Unsafe draft name '${entry.name}'.`);
-    // reflectionToLesson derives its own name via slugFromReflection(r), which in
-    // production always matches entry.name (harvestEntries sets both the same way).
-    // Override with entry.name anyway so the file is named after the queue's
-    // canonical (already-deduped) identity rather than a name recomputed from the draft.
-    const path = entry.kind === "skill"
-      ? writeDistilledDraft(entry.draft as DistilledSkill, this.base)
-      : writeDistilledLesson({ ...reflectionToLesson(entry.draft as Reflection, entry.root), name: entry.name }, this.base);
+    // Defense-in-depth: validate the EXACT name used to compose the on-disk path — not
+    // entry.name in general. writeDistilledDraft builds the skill dir from draft.name, so a
+    // corrupted queue.json could pair a safe entry.name with an unsafe draft.name.
+    let path: string;
+    if (entry.kind === "skill") {
+      const skill = entry.draft as DistilledSkill;
+      if (!NAME_RE.test(skill.name)) throw new InvalidInputError(`Unsafe skill name '${skill.name}'.`);
+      path = writeDistilledDraft(skill, this.base);
+    } else {
+      const lesson = reflectionToLesson(entry.draft as Reflection, entry.root);
+      if (!lesson) throw new InvalidInputError(`Draft '${entry.key}' is not a shareable lesson.`); // unresolved-task
+      if (!NAME_RE.test(entry.name)) throw new InvalidInputError(`Unsafe lesson name '${entry.name}'.`);
+      // entry.name is the queue's canonical (hash-suffixed, unique) identity → the file name.
+      path = writeDistilledLesson({ ...lesson, name: entry.name }, this.base);
+    }
     setStatus(entry.key, "accepted", Date.now(), this.base);
     return { ok: true, path };
   }

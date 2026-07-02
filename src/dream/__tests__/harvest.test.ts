@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: MIT
 // src/dream/__tests__/harvest.test.ts
 import { describe, it, expect } from "vitest";
-import { provenanceHash, slugFromReflection, harvestEntries, reflectionToLesson, opportunityEntries } from "../harvest.js";
+import { provenanceHash, harvestEntries, opportunityEntries } from "../harvest.js";
+import { lessonSlug } from "@agentgem/insight";
 import type { DistilledSkill, Reflection } from "@agentgem/insight";
 
 const prov = { occurrences: [{ sessionId: "s1", transcript: "t.jsonl", messageIndices: [3, 4], atMs: 10 }] };
@@ -32,11 +33,6 @@ describe("dream harvest", () => {
     expect(provenanceHash(a)).toHaveLength(8);
   });
 
-  it("slugFromReflection is deterministic, path-safe, and bounded", () => {
-    expect(slugFromReflection(refl)).toBe("recurring-decision-prefer-pnpm-over");
-    expect(slugFromReflection({ ...refl, detail: "x".repeat(200) }).length).toBeLessThanOrEqual(45);
-  });
-
   it("maps a skill to a DEEP queued skill entry with a stable key", () => {
     const [e] = harvestEntries("/p", [skill], [], 100);
     expect(e.kind).toBe("skill");
@@ -48,20 +44,26 @@ describe("dream harvest", () => {
     expect(e.firstSeenMs).toBe(100);
   });
 
-  it("maps a reflection to a DEEP queued lesson entry with a synthesized name", () => {
+  it("maps a shareable reflection to a DEEP queued lesson entry, name suffixed with the provenance hash", () => {
     const [e] = harvestEntries("/p", [], [refl], 100);
     expect(e.kind).toBe("lesson");
     expect(e.phase).toBe("DEEP");
     expect(e.status).toBe("queued");
-    expect(e.name).toBe("recurring-decision-prefer-pnpm-over");
+    expect(e.name).toBe(`${lessonSlug(refl.detail)}-${provenanceHash(prov)}`);
     expect(e.importance).toBe("high");
-    expect(e.key).toBe(`lesson:/p:${e.name}:${provenanceHash(prov)}`);
+    expect(e.key).toBe(`lesson:/p:${e.name}`);
   });
 
-  it("converts a reflection to a DistilledLesson with a distinct-session count", () => {
-    const lesson = reflectionToLesson(refl, "/p");
-    expect(lesson).toMatchObject({ name: slugFromReflection(refl), body: "prefer pnpm over npm here", importance: "high", status: "draft" });
-    expect(lesson.evidence.root).toBe("/p");
-    expect(lesson.evidence.sessions).toBe(1);
+  it("skips unresolved-task reflections (canonical: a personal gap, not a shareable lesson)", () => {
+    const todo: Reflection = { kind: "unresolved-task", detail: "finish the migration", importance: "high", provenance: prov };
+    expect(harvestEntries("/p", [], [todo], 100)).toEqual([]);
+  });
+
+  it("gives same-slug reflections distinct lesson names (no filename collision)", () => {
+    const prov2 = { occurrences: [{ sessionId: "s2", transcript: "u.jsonl", messageIndices: [9], atMs: 20 }] };
+    const [a] = harvestEntries("/p", [], [refl], 100);
+    const [b] = harvestEntries("/p", [], [{ ...refl, provenance: prov2 }], 100);
+    expect(a.name).not.toBe(b.name); // identical detail slug, different provenance → different file
+    expect(a.key).not.toBe(b.key);
   });
 });
