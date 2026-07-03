@@ -8,6 +8,9 @@ import { api, get, post } from "@agentback/openapi";
 import { scanSessionsCached, aggregateObserve, loadSessionTranscript, resolveClaudeSession, dehomeDistilled, scrubText } from "@agentgem/insight";
 import { scanArtifactUsageCached } from "@agentgem/insight";
 import { buildOptimizePayload, buildDiscover, rerankCandidates, installSkill, type OptimizeRange } from "@agentgem/insight";
+import { createLogger } from "@agentgem/base";
+
+const log = createLogger("gem");
 
 const ObserveQuerySchema = z.object({
   range: z.enum(["today", "7d", "30d", "all"]).optional(),
@@ -316,7 +319,7 @@ export class GemController {
         try {
           return await getGlobalUsageIndexed(dirs, paths) as z.infer<typeof UsageSchema>;
         } catch (e) {
-          console.error("[usage] index path failed, falling back to full scan:", e);
+          log.warn("[usage] index path failed, falling back to full scan: %s", (e as Error)?.message ?? e);
         }
         const token = transcriptToken(paths);
         const exact = readGlobalUsageCache(token);
@@ -331,7 +334,7 @@ export class GemController {
             // lets the stale response flush first, then the rescan runs.
             setTimeout(() => {
               try { writeGlobalUsageCache(token, computeGlobalUsage(dirs, paths), dirs.claudeDir); }
-              catch (e) { console.error("[usage] bg refresh failed:", e); }
+              catch (e) { log.warn("[usage] bg refresh failed: %s", (e as Error)?.message ?? e); }
               finally { globalUsageRefreshing = false; }
             }, 0);
           }
@@ -355,7 +358,7 @@ export class GemController {
         invocations: a.invocations, sessionsUsedIn: a.sessionsUsedIn, lastUsedMs: a.lastUsedMs,
       })) };
     } catch (e) {
-      console.error("[usage] scan failed:", e);
+      log.warn("[usage] scan failed: %s", (e as Error)?.message ?? e);
       return { artifacts: [] };
     }
   }

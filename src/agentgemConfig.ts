@@ -4,6 +4,9 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { createLogger } from "@agentgem/base";
+
+const log = createLogger("config");
 
 // Resolve the paths lazily (per call) rather than at module load, so the config honors
 // the current HOME — matters for the hermetic-home test fixture and for any HOME change.
@@ -19,7 +22,8 @@ function readConfig(): AgentgemConfig {
     const path = configPath();
     if (!existsSync(path)) return {};
     return JSON.parse(readFileSync(path, "utf8")) as AgentgemConfig;
-  } catch {
+  } catch (err) {
+    log.warn("could not read config at %s; using defaults: %s", configPath(), (err as Error)?.message ?? err);
     return {};
   }
 }
@@ -34,7 +38,8 @@ export function setShareAdoption(v: boolean): void {
     const current = readConfig();
     const updated = { ...current, shareAdoption: v };
     writeFileSync(configPath(), JSON.stringify(updated, null, 2), { encoding: "utf8", mode: 0o600 });
-  } catch {
-    // best-effort; silently ignore write errors
+  } catch (err) {
+    // best-effort; a write failure must not break the caller, but leave a trace.
+    log.warn("could not persist config to %s: %s", configPath(), (err as Error)?.message ?? err);
   }
 }

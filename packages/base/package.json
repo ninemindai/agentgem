@@ -16,6 +16,7 @@
     "build": "tsc -b"
   },
   "dependencies": {
+    "@agentback/common": "~0.5.2",
     "@agentgem/archive": "workspace:*",
     "@agentgem/model": "workspace:*"
   }

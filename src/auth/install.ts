@@ -8,6 +8,9 @@ import type { AppDb, AccountVerifier } from "@agentgem/aggregator";
 import { upsertAccount, createSession, deleteSession, resolveSession, generateSessionToken, setAccountScopes } from "@agentgem/aggregator";
 import { signState, verifyState } from "./state.js";
 import { SESSION_COOKIE, parseCookies, serializeSessionCookie, clearSessionCookie } from "./cookie.js";
+import { createLogger } from "@agentgem/base";
+
+const log = createLogger("auth");
 
 export interface AuthConfig {
   clientId: string; clientSecret: string; webOrigins: string[];
@@ -65,13 +68,14 @@ export function callbackHandler(deps: AuthDeps) {
       // #4b: capture owned scopes (login + public org memberships) at login. Best-effort —
       // an org-fetch failure must never fail login; the user still owns at least their login.
       let orgs: string[] = [];
-      try { orgs = await deps.fetchOrgs(token); } catch { orgs = []; }
+      try { orgs = await deps.fetchOrgs(token); } catch (err) { log.warn("org scope fetch failed for %s; continuing with login-only scope: %s", acct.login, (err as Error)?.message ?? err); orgs = []; }
       await setAccountScopes(deps.db, row.id, [acct.login, ...orgs]);
       const { token: sessionToken } = generateSessionToken();
       await createSession(deps.db, row.id, sessionToken, deps.config.sessionTtlMs);
       res.setHeader("Set-Cookie", serializeSessionCookie(sessionToken, { domain: deps.config.cookieDomain, maxAgeSec: Math.floor(deps.config.sessionTtlMs / 1000) }));
       res.redirect(302, v.returnTo);
-    } catch {
+    } catch (err) {
+      log.error("sign-in code exchange failed: %s", (err as Error)?.message ?? err);
       res.redirect(302, `${fallback}?auth_error=exchange`);
     }
   };

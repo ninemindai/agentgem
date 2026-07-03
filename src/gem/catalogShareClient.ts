@@ -4,7 +4,10 @@
 // catalog endpoint. Mirrors shareClient.ts (same base resolution, same http seam).
 import type { Identity } from "@agentgem/model";
 import { InvalidInputError } from "@agentgem/model";
+import { createLogger } from "@agentgem/base";
 import { catalogSigningPayload, type CatalogManifest } from "@agentgem/aggregator";
+
+const log = createLogger("share");
 
 export type ShareHttp = (url: string, init: { method: string; headers: Record<string, string>; body: string }) => Promise<{ status: number; json(): Promise<unknown> }>;
 
@@ -34,8 +37,12 @@ export async function postCatalogShare(args: {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ manifest: args.manifest, pubkey: args.identity.publicKey, signedAt: now, signature }),
   });
-  if (res.status < 200 || res.status >= 300) throw new InvalidInputError(`could not reach the share service (HTTP ${res.status}); try again in a moment`);
+  if (res.status < 200 || res.status >= 300) {
+    log.warn("catalog POST to %s failed: HTTP %d", base, res.status);
+    throw new InvalidInputError(`could not reach the share service (HTTP ${res.status}); try again in a moment`);
+  }
   const b = (await res.json()) as { shared?: boolean; publishedBy?: string; rejected?: string };
+  if (!(b.shared && b.publishedBy)) log.info("catalog share rejected: %s", b.rejected ?? "unknown");
   return b.shared && b.publishedBy ? { shared: true, publishedBy: b.publishedBy } : { shared: false, rejected: b.rejected ?? "unknown" };
 }
 

@@ -5,7 +5,10 @@
 // Pure store: takes an explicit home dir, computes no fs-existence (the endpoint adds that).
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { createLogger } from "@agentgem/base";
 import type { TestbedFlavorId } from "@agentgem/testbed";
+
+const log = createLogger("capture");
 
 const CAP = 10;
 
@@ -46,7 +49,7 @@ export function upsertRecent(home: string, e: { path: string; flavor: TestbedFla
     mkdirSync(dirname(abs), { recursive: true });
     writeFileSync(abs, JSON.stringify(next, null, 2) + "\n", "utf8");
   } catch {
-    console.warn(`agentgem: could not write recents to ${recentsFile(home)}`);
+    log.warn("could not write recents to %s", recentsFile(home));
   }
   return next;
 }

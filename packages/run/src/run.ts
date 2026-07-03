@@ -6,7 +6,7 @@
 import { spawn as nodeSpawn } from "node:child_process";
 import { existsSync, mkdirSync, rmSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { workspaceDir } from "@agentgem/base";
+import { workspaceDir, createLogger } from "@agentgem/base";
 import { readGemArchive } from "@agentgem/archive";
 import { readArchiveDir, writeArchiveDir } from "@agentgem/archive";
 import { materialize, flueWorkerName, type TargetId, type MaterializeOpts } from "@agentgem/model";
@@ -20,6 +20,8 @@ export interface ProcHandle {
 export interface ProcessRunner {
   spawn(cmd: string, args: string[], opts: { cwd: string; env: NodeJS.ProcessEnv }): ProcHandle;
 }
+
+const log = createLogger("run");
 
 export type RunMode = "local" | "vercel" | "cloudflare";
 export type RunPhase = "idle" | "installing" | "building" | "running" | "deploying" | "failed";
@@ -72,6 +74,9 @@ export function parseWorkersUrl(lines: string[]): string | undefined {
 // Real runner: line-buffer stdout/stderr; deliver whole lines.
 export const realRunner: ProcessRunner = {
   spawn(cmd, args, opts) {
+    // Command + args + cwd are the first thing you need when a run/deploy fails;
+    // env is deliberately not logged (it carries tokens). Args are non-secret CLI flags.
+    log.debug("spawn: %s %o (cwd=%s)", cmd, args, opts.cwd);
     const child = nodeSpawn(cmd, args, { cwd: opts.cwd, env: opts.env });
     const lineCbs: ((line: string, s: "out" | "err") => void)[] = [];
     const exitCbs: ((code: number | null) => void)[] = [];
@@ -87,7 +92,11 @@ export const realRunner: ProcessRunner = {
     wire(child.stdout, "out");
     wire(child.stderr, "err");
     child.on("exit", (code) => exitCbs.forEach((cb) => cb(code)));
-    child.on("error", () => exitCbs.forEach((cb) => cb(1)));
+    child.on("error", (err) => {
+      // spawn-level failure (e.g. ENOENT — command not on PATH): previously invisible.
+      log.error("spawn failed: %s %o — %s", cmd, args, (err as Error)?.message ?? err);
+      exitCbs.forEach((cb) => cb(1));
+    });
     return {
       onLine: (cb) => { lineCbs.push(cb); },
       onExit: (cb) => { exitCbs.push(cb); },

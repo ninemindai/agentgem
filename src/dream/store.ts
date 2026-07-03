@@ -8,8 +8,10 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { agentgemHome } from "@agentgem/model";
+import { createLogger } from "@agentgem/base";
 import type { DreamQueueEntry, DreamDiaryEntry, DreamStatus } from "./types.js";
 
+const log = createLogger("dream");
 const DIARY_MAX = 100;
 
 // Path only — never mkdir here, so reads on a missing dir stay never-throw.
@@ -24,7 +26,7 @@ function writeJson(path: string, value: unknown): boolean {
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, JSON.stringify(value, null, 2), "utf8");
     return true;
-  } catch (err) { console.error("dream: sidecar write failed (ignored):", (err as Error).message); return false; }
+  } catch (err) { log.warn("sidecar write failed (ignored): %s", (err as Error)?.message ?? err); return false; }
 }
 const queuePath = (base: string) => join(dreamDir(base), "queue.json");
 const diaryPath = (base: string) => join(dreamDir(base), "diary.json");

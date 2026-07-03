@@ -11,6 +11,9 @@ import { runWarmPass } from "./orchestrator.js";
 import { startWarmWatch, warmRootsIndividually } from "./watch.js";
 import { acquirePidfile, releasePidfile } from "./pidfile.js";
 import { withWarmLock } from "./lock.js";
+import { createLogger } from "@agentgem/base";
+
+const warmLog = createLogger("warm");
 
 export interface WarmDaemon { stop(): Promise<void> }
 
@@ -21,7 +24,7 @@ export function startWarmDaemon(opts: {
   initialPass?: () => Promise<unknown>;
 } = {}): WarmDaemon | null {
   const home = opts.home ?? agentgemHome();
-  const log = opts.onLog ?? ((m) => console.log(m));
+  const log = opts.onLog ?? ((m: string) => warmLog.info("%s", m));
   const startWatch = opts.watch ?? startWarmWatch;
   const initialPass = opts.initialPass ?? (() => withWarmLock(home, () => runWarmPass(), () => undefined));
   const pidPath = join(home, ".agentgem", "warm.pid");
@@ -40,8 +43,8 @@ export function runWarmCommand(argv: string[], deps: {
   on?: (sig: "SIGINT" | "SIGTERM", cb: () => void) => void;
 } = {}): WarmDaemon | null {
   const start = deps.start ?? startWarmDaemon;
-  const log = deps.log ?? ((m) => console.log(m));
-  const errorLog = deps.errorLog ?? ((m) => console.error(m));
+  const log = deps.log ?? ((m: string) => warmLog.info("%s", m));
+  const errorLog = deps.errorLog ?? ((m: string) => warmLog.error("%s", m));
   const exit = deps.exit ?? ((c) => process.exit(c));
   const on = deps.on ?? ((s, cb) => { process.once(s, cb); });
 

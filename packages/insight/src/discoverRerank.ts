@@ -9,6 +9,9 @@
 import { CLAUDE_AGENT, analysisWorkspace, defaultConnectFn, currentTestConnectFn, type AcpConnectFn, type AcpCtx, type AcpSessionHandle } from "./acpRecommender.js";
 import { describeCandidates } from "./skillDescribe.js";
 import type { DiscoverCandidate, DiscoverPayload } from "./discover.js";
+import { createLogger } from "@agentgem/base";
+
+const log = createLogger("insight");
 
 const key = (source: string, name: string) => `${source}\n${name}`;
 
@@ -76,9 +79,11 @@ export async function rerankCandidates(
   const timeoutMs = opts.timeoutMs ?? 60_000;
   let conn: { ctx: AcpCtx; close: () => void } | null = null;
   let handle: AcpSessionHandle | null = null;
+  const t0 = Date.now();
   try {
     const deadline = Date.now() + timeoutMs;
     const left = () => Math.max(0, deadline - Date.now());
+    log.debug("discover-rerank: requesting %s over %d candidate(s)", CLAUDE_AGENT.name, input.candidates.length);
     // Fetch descriptions in parallel with agent startup. Self-bounded and best-effort:
     // it resolves to an empty map on failure or after its own budget, so slow clones
     // never eat the agent's time budget or fail the whole re-rank.
@@ -92,11 +97,12 @@ export async function rerankCandidates(
     await withTimeout(handle.setMode("plan"), left());
     const descriptions = await descP;
     const text = await withTimeout(handle.promptText(prompt(input.candidates, input.topics, descriptions)), left());
+    log.debug("discover-rerank: agent returned in %dms", Date.now() - t0);
     const ordered = applyOrder(text, input.candidates);
     if (!ordered) return { ...input, reranked: false, degraded: { reason: "AI re-rank returned no usable order; showing default order." } };
     return { candidates: ordered, topics: input.topics, reranked: true };
   } catch (err) {
-    console.error("discover: re-rank fell back to default order:", (err as Error).message);
+    log.warn("discover: re-rank fell back to default order after %dms: %s", Date.now() - t0, (err as Error)?.message ?? err);
     return { ...input, reranked: false, degraded: { reason: "AI re-rank unavailable; showing default order." } };
   } finally {
     try { handle?.dispose(); } catch { /* ignore */ }

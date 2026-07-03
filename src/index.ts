@@ -31,7 +31,7 @@ import { listActiveSessions } from "./watchSessions.js";
 import { registerChatRoutes, chatConnectFn, goldmineMcpServers } from "./goldmine/chatRoutes.js";
 import { collectBehaviorFindings } from "./goldmine/behaviorFindings.js";
 import { ChatManager } from "@agentgem/run";
-import { availableAgents } from "@agentgem/base";
+import { availableAgents, createLogger } from "@agentgem/base";
 import { collectScorecard, defaultScorecardDeps } from "./gem/scorecard.js";
 import { buildGoldmineBrief, type GoldmineBriefInput } from "@agentgem/insight";
 import { agentgemHome } from "@agentgem/model";
@@ -52,6 +52,8 @@ import { installStars } from "./stars/install.js";
 import { installRegistryUploadPublish } from "./registry/uploadPublish.js";
 import { registryConfigFromEnv, githubRegistrySource, githubRegistryPublisher } from "@agentgem/distribute";
 import { defaultGemTypeRegistry } from "./gem/gemTypeRegistry.js";
+
+const serverLog = createLogger("server");
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -254,7 +256,7 @@ export async function createApp(port: number): Promise<RestApplication> {
               : {}),
           });
         } catch (err) {
-          console.error("[chat] buildBrief degraded:", err);
+          serverLog.warn("[chat] buildBrief degraded: %s", (err as Error)?.message ?? err);
           return buildGoldmineBrief({ scorecard: { breadth: 0, battleTested: 0, portable: 0, gaps: [] }, topArtifacts: [], skillCount: 0 });
         }
       },
@@ -278,7 +280,7 @@ export function installGracefulShutdown(
 ): void {
   const on = opts.on ?? ((sig, cb) => { process.once(sig, cb); });
   const exit = opts.exit ?? ((code) => process.exit(code));
-  const log = opts.log ?? ((msg) => console.log(msg));
+  const log = opts.log ?? ((msg: string) => serverLog.info("%s", msg));
   let stopping = false;
   const shutdown = async (sig: string): Promise<void> => {
     if (stopping) return; // a second signal mid-drain must not double-stop

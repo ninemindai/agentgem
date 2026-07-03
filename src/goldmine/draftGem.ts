@@ -14,6 +14,9 @@ import type { ConfigInventory, Gem } from "@agentgem/model";
 import type { GemSelection } from "@agentgem/build";
 import { buildGem } from "@agentgem/build";
 import type { ChatEvent } from "@agentgem/run";
+import { createLogger } from "@agentgem/base";
+
+const log = createLogger("goldmine");
 
 // ── validateSelection ────────────────────────────────────────────────────────
 
@@ -73,7 +76,8 @@ function extractFirstJson(text: string): unknown {
   if (start === -1 || end === -1 || end < start) return null;
   try {
     return JSON.parse(text.slice(start, end + 1));
-  } catch {
+  } catch (err) {
+    log.warn("extractFirstJson parse failed: %s", (err as Error)?.message ?? err);
     return null;
   }
 }

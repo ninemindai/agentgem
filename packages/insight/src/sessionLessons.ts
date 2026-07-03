@@ -16,6 +16,9 @@ import { sanitizeShareText, scrubText } from "./scrub.js";
 import {
   type AcpConnectFn, CLAUDE_AGENT, analysisWorkspace, currentTestConnectFn, defaultConnectFn,
 } from "./acpRecommender.js";
+import { createLogger } from "@agentgem/base";
+
+const log = createLogger("insight");
 
 // Friction-seeded lessons prompt. One session's mission + redacted verb spine in;
 // durable lessons out. Counts/coordinates are facts; never ask for provenance.
@@ -95,22 +98,25 @@ export async function distillSessionLessons(
   const timeoutMs = opts.timeoutMs ?? 60_000;
   let conn: { ctx: { open(cwd: string): Promise<{ setMode(m: string): Promise<void>; promptText(t: string): Promise<string>; dispose(): void }> }; close: () => void } | null = null;
   let handle: { setMode(m: string): Promise<void>; promptText(t: string): Promise<string>; dispose(): void } | null = null;
+  const t0 = Date.now();
   try {
     const spine = session.steps.map((s) => s.verb);
     const prompt = SESSION_LESSONS(JSON.stringify(session.missionHint), JSON.stringify(spine));
     const deadline = Date.now() + timeoutMs;
     const left = () => Math.max(0, deadline - Date.now());
+    log.debug("session-lessons: requesting %s for 1 session (%d step(s))", CLAUDE_AGENT.name, spine.length);
     conn = await withTimeout(connectFn(CLAUDE_AGENT, null), left());
     handle = await withTimeout(conn.ctx.open(analysisWorkspace()), left());
     await withTimeout(handle.setMode("plan"), left());
     const text = await withTimeout(handle.promptText(prompt), left());
+    log.debug("session-lessons: agent returned in %dms", Date.now() - t0);
     // The agent ran: a valid empty result ({"lessons":[]}) is a legitimate "no
     // lesson worth sharing" — NOT degraded. `degraded` for lessons means only "the
     // agent couldn't run" (it drives the "set ANTHROPIC_API_KEY" hint); reserve it
     // for the catch. There is no heuristic lesson fallback, so success → false.
     return { lessons: validateSessionLessons(text, session, root), degraded: false };
   } catch (err) {
-    console.error("session-lessons: agent unavailable, no lessons:", (err as Error).message);
+    log.warn("session-lessons: agent unavailable, no lessons after %dms: %s", Date.now() - t0, (err as Error)?.message ?? err);
     return { lessons: [], degraded: true };
   } finally {
     try { handle?.dispose(); } catch { /* ignore */ }

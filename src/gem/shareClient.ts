@@ -1,5 +1,9 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
+import { createLogger } from "@agentgem/base";
+
+const log = createLogger("share");
+
 export type ShareHttp = (url: string, init: { method: string; headers: Record<string, string>; body: string }) => Promise<{ status: number; json(): Promise<unknown> }>;
 
 const defaultHttp: ShareHttp = async (url, init) => {
@@ -32,12 +36,16 @@ export async function postShare(args: {
   const base = resolveBase(args.endpoint);
   if (!base) return { skipped: true };
   const http = args.http ?? defaultHttp;
+  log.debug("posting %s share to %s", args.body.kind, base);
   const res = await http(`${base}/api/aggregator/share`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(args.body),
   });
-  if (res.status < 200 || res.status >= 300) throw new Error(`share ${res.status}`);
+  if (res.status < 200 || res.status >= 300) {
+    log.warn("share POST to %s failed: HTTP %d", base, res.status);
+    throw new Error(`share ${res.status}`);
+  }
   const b = (await res.json()) as { id?: string; url?: string };
   if (!b.id || !b.url) throw new Error("share: response missing id/url");
   return { id: b.id, url: b.url };

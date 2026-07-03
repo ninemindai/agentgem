@@ -16,6 +16,9 @@ import {
   type ScorecardDeps,
 } from "./gem/scorecard.js";
 import { transcriptToken, readAnalysisCache, writeAnalysisCache, readAnalysisCacheEntry } from "@agentgem/insight";
+import { createLogger } from "@agentgem/base";
+
+const log = createLogger("scorecard");
 
 // Minimal structural types for the Express req/res we use — avoids a hard
 // dependency on @types/express (expressApp's handler is duck-typed).
@@ -46,7 +49,7 @@ function parseProjects(q: unknown): string[] | undefined {
   try {
     const v = JSON.parse(q);
     return Array.isArray(v) ? v.filter((x) => typeof x === "string") : undefined;
-  } catch { return undefined; }
+  } catch (err) { log.debug("parseProjects failed: %s", (err as Error)?.message ?? err); return undefined; }
 }
 
 export async function streamScorecard(req: SseReq, res: SseRes, deps: ScorecardStreamDeps = realStreamDeps): Promise<void> {

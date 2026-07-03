@@ -189,6 +189,9 @@ importers:
 
   packages/base:
     dependencies:
+      '@agentback/common':
+        specifier: ~0.5.2
+        version: 0.5.2
       '@agentgem/archive':
         specifier: workspace:*
         version: link:../archive

@@ -9,7 +9,10 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { agentgemHome } from "@agentgem/model";
+import { createLogger } from "@agentgem/base";
 import type { Reflection } from "./distillTypes.js";
+
+const log = createLogger("insight");
 
 export function writeReflections(reflections: Reflection[], root: string, base: string = agentgemHome()): string | null {
   if (!reflections.length) return null;
@@ -21,7 +24,7 @@ export function writeReflections(reflections: Reflection[], root: string, base: 
     writeFileSync(path, JSON.stringify({ root, reflections }, null, 2), "utf8");
     return path;
   } catch (err) {
-    console.error("reflections: sidecar write failed (ignored):", (err as Error).message);
+    log.warn("reflections: sidecar write failed (ignored): %s", (err as Error)?.message ?? err);
     return null;
   }
 }

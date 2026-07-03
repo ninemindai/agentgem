@@ -19,9 +19,11 @@
 // NOTE (consolidation): the ACP façade is duplicated from acpRecommender on purpose
 // while this path is prototyped. Once both are proven, the two connectFns should be
 // unified into a shared acpSession module.
-import { connectAcpAdapter, type AgentDescriptor } from "@agentgem/base";
+import { connectAcpAdapter, createLogger, type AgentDescriptor } from "@agentgem/base";
 export type { AgentDescriptor } from "@agentgem/base";
 import { selectRunBackend, envPermission } from "./sandbox.js";   // values used at call-time (safe ESM cycle)
+
+const log = createLogger("run");
 
 // One tool the agent invoked during the run. Mirrors the fields of an ACP
 // `tool_call` session update that matter for verification/observability.
@@ -186,8 +188,8 @@ export async function runGemWithAgent(opts: RunGemOptions): Promise<GemRunOutcom
   } catch (err) {
     return { ok: false, result: { text: "", toolCalls: [] }, error: (err as Error).message, sandbox };
   } finally {
-    try { handle?.dispose(); } catch { /* ignore */ }
-    try { conn?.close(); } catch { /* ignore */ }
+    try { handle?.dispose(); } catch (err) { log.debug("acp teardown/dispose failed: %s", (err as Error)?.message ?? err); }
+    try { conn?.close(); } catch (err) { log.debug("acp teardown/close failed: %s", (err as Error)?.message ?? err); }
   }
 }
 

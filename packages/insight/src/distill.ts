@@ -10,6 +10,9 @@ import { CLAUDE_AGENT, analysisWorkspace, defaultConnectFn, currentTestConnectFn
 import type { GatedCandidate, ProcedureCandidate, DistilledSkill, Provenance, Occurrence } from "./distillTypes.js";
 import { extractCandidates } from "./extract.js";
 import type { TriggerContract } from "@agentgem/model";
+import { createLogger } from "@agentgem/base";
+
+const log = createLogger("insight");
 
 // Back-compat re-exports: existing importers (draftStage.ts, acpRecommender.ts,
 // tests) import these from "./distill.js". The authoritative definitions now live
@@ -76,13 +79,13 @@ export function validateDistilled(raw: unknown, inv: ScanInventory, candidates: 
   const out: DistilledSkill[] = [];
   for (const it of obj.distilled) {
     if (!it || typeof it !== "object") continue;
-    if (typeof it.name !== "string" || !KEBAB_RE.test(it.name)) { console.error(`distill: dropping non-kebab name '${it.name}'`); continue; }
-    if (installed.has(it.name)) { console.error(`distill: dropping slug colliding with installed skill '${it.name}'`); continue; }
+    if (typeof it.name !== "string" || !KEBAB_RE.test(it.name)) { log.warn("distill: dropping non-kebab name '%s'", it.name); continue; }
+    if (installed.has(it.name)) { log.warn("distill: dropping slug colliding with installed skill '%s'", it.name); continue; }
     const triggers = Array.isArray(it.triggers) ? it.triggers.filter((t: unknown): t is string => typeof t === "string" && t.trim().length > 0) : [];
     if (!triggers.length) continue;
     if (typeof it.body !== "string" || !it.body.trim()) continue;
     const tools = Array.isArray(it.tools) ? it.tools.filter((t: unknown): t is string => typeof t === "string") : [];
-    if (tools.some((t: string) => !evidenceTools.has(t))) { console.error(`distill: dropping '${it.name}' — fabricated tool not in evidence`); continue; }
+    if (tools.some((t: string) => !evidenceTools.has(t))) { log.warn("distill: dropping '%s' — fabricated tool not in evidence", it.name); continue; }
     out.push({
       name: it.name,
       description: typeof it.description === "string" ? it.description : "",
@@ -173,8 +176,10 @@ export async function distillWorkflow(
   const timeoutMs = opts.timeoutMs ?? 60_000;
   let conn: { ctx: { open(cwd: string): Promise<{ setMode(m: string): Promise<void>; promptText(t: string): Promise<string>; dispose(): void }> }; close: () => void } | null = null;
   let handle: { setMode(m: string): Promise<void>; promptText(t: string): Promise<string>; dispose(): void } | null = null;
+  const t0 = Date.now();
   try {
     const prompt = DISTILL(JSON.stringify(candidates.map(trimCandidate)), JSON.stringify(installedSkillNames(inv)));
+    log.debug("distill: requesting %s for %d candidate(s)", CLAUDE_AGENT.name, candidates.length);
     // Bound EVERY step against one shared deadline — connect + session open +
     // setMode + prompt — since the ACP handshake/session start are otherwise
     // unbounded (acpSession) and would hang past the prompt-only timeout.
@@ -184,12 +189,13 @@ export async function distillWorkflow(
     handle = await withTimeout(conn.ctx.open(analysisWorkspace()), left());   // neutral cwd — don't pollute the project
     await withTimeout(handle.setMode("plan"), left());                          // explicit — never edits files
     const text = await withTimeout(handle.promptText(prompt), left());
+    log.debug("distill: agent returned in %dms", Date.now() - t0);
     const distilled = validateDistilled(text, inv, candidates);
     // The LLM ran but produced nothing usable → fall back to skeletons (degraded).
     if (!distilled.length) return { distilled: skeletons, degraded: true };
     return { distilled, degraded: false };
   } catch (err) {
-    console.error("distill: agent unavailable, returning heuristic skeletons:", (err as Error).message);
+    log.warn("distill: agent unavailable, returning heuristic skeletons after %dms: %s", Date.now() - t0, (err as Error)?.message ?? err);
     return { distilled: skeletons, degraded: true };
   } finally {
     try { handle?.dispose(); } catch { /* ignore */ }

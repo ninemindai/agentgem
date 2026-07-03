@@ -13,6 +13,9 @@ import {
   runDetectors, loadRuleDetectors, summarizeFindings, DETECTORS,
 } from "@agentgem/insight";
 import type { DetectorFinding, DetectorSummary } from "@agentgem/insight";
+import { createLogger } from "@agentgem/base";
+
+const log = createLogger("goldmine");
 
 const DAY = 86_400_000;
 const MAX_FINDINGS = 50;
@@ -66,7 +69,7 @@ export function collectBehaviorFindings(opts: BehaviorFindingsOptions = {}): Beh
       scanned: { transcripts: paths.length, sessions: signal.sequences?.sessions.length ?? 0, days },
     };
   } catch (err) {
-    console.error("[behavior] collectBehaviorFindings degraded:", (err as Error).message);
+    log.warn("[behavior] collectBehaviorFindings degraded: %s", (err as Error)?.message ?? err);
     return empty(days);
   }
 }

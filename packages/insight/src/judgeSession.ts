@@ -16,6 +16,9 @@ import {
   type AcpConnectFn, type AcpCtx, type AcpSessionHandle,
   CLAUDE_AGENT, analysisWorkspace, currentTestConnectFn, defaultConnectFn,
 } from "./acpRecommender.js";
+import { createLogger } from "@agentgem/base";
+
+const log = createLogger("insight");
 
 const JUDGE = (sessionsJson: string) =>
   `You are analysing a developer's past coding-agent sessions. For EACH session below, ` +
@@ -50,18 +53,21 @@ async function judgeBatch(
 ): Promise<{ facets: SessionFacet[]; degraded: boolean }> {
   let conn: { ctx: AcpCtx; close: () => void } | null = null;
   let handle: AcpSessionHandle | null = null;
+  const t0 = Date.now();
   try {
     const payload = sessions.map((s) => ({ sessionId: s.sessionId, goal: s.missionHint!.task, result: s.missionHint!.outcome }));
     const prompt = JUDGE(JSON.stringify(payload));
     const deadline = Date.now() + timeoutMs;
     const left = () => Math.max(0, deadline - Date.now());
+    log.debug("session-judge: requesting %s for %d session(s)", CLAUDE_AGENT.name, sessions.length);
     conn = await withTimeout(connectFn(CLAUDE_AGENT, null), left());
     handle = await withTimeout(conn.ctx.open(analysisWorkspace()), left());  // neutral cwd — don't pollute the project
     await withTimeout(handle.setMode("plan"), left());                       // explicit — never edits files
     const text = await withTimeout(handle.promptText(prompt, onDelta), left());
+    log.debug("session-judge: agent returned in %dms", Date.now() - t0);
     return { facets: validateFacets(text, subSignal), degraded: false };
   } catch (err) {
-    console.error("insights: session judge chunk fell back to heuristic:", (err as Error).message);
+    log.warn("session-judge chunk fell back to heuristic after %dms: %s", Date.now() - t0, (err as Error)?.message ?? err);
     return { facets: deterministicFacets(subSignal), degraded: true };
   } finally {
     try { handle?.dispose(); } catch { /* ignore */ }

@@ -16,6 +16,9 @@ import { claudeTranscriptsForCwd, scanWorkflow, bucketTranscriptsByCwd } from "@
 import { extractCandidates } from "@agentgem/insight";
 import type { WorkflowSignal } from "@agentgem/insight";
 import type { ProcedureCandidate, Reflection } from "@agentgem/insight";
+import { createLogger } from "@agentgem/base";
+
+const log = createLogger("scorecard");
 
 // A workflow "travels" when it does more than hand-edit one repo — i.e. it uses
 // at least one tool beyond the repo-local edit set. (Skill/MCP usage is NOT
@@ -141,7 +144,7 @@ export function selectScorecardRoots(dir: string | undefined, projects: string[]
   if (projects?.length) return projects;
   const discovered = [...deps.discover(dir)].sort((a, b) => (b.lastUsed ?? "").localeCompare(a.lastUsed ?? ""));
   if (discovered.length > MAX_PROJECTS) {
-    console.warn(`[scorecard] ${discovered.length} projects discovered; scanning the ${MAX_PROJECTS} most recent (perf bound).`);
+    log.warn("[scorecard] %d projects discovered; scanning the %d most recent (perf bound).", discovered.length, MAX_PROJECTS);
   }
   return discovered.slice(0, MAX_PROJECTS).map((p) => p.path);
 }

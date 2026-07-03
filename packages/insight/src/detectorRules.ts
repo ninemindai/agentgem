@@ -8,13 +8,16 @@
 // No code execution — a rule is declarative, so there is nothing to sandbox,
 // and the same format is the future distributable unit for detector-pack Gems.
 // Never throws: missing dir, bad JSON, invalid rules, and id collisions all
-// degrade to "rule skipped" (console.error), mirroring the analysis-path
+// degrade to "rule skipped" (logged via the logger), mirroring the analysis-path
 // contract in judgeSession.ts.
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { agentgemHome } from "@agentgem/model";
+import { createLogger } from "@agentgem/base";
 import type { DetectorFinding, DetectorSeverity, DetectorSpec } from "./detectors.js";
 import { DETECTORS } from "./detectors.js";
+
+const log = createLogger("insight");
 
 export interface DetectorRule {
   id: string;                 // kebab-case slug, unique across built-ins and rules
@@ -105,7 +108,7 @@ export function loadRuleDetectors(dir = defaultDetectorRulesDir()): DetectorSpec
         out.push(compileRule(rule));
       }
     } catch (err) {
-      console.error(`detector rules: skipped ${f}:`, (err as Error).message);
+      log.warn("detector rules: skipped %s: %s", f, (err as Error)?.message ?? err);
     }
   }
   return out;

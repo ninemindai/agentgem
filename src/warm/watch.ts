@@ -11,6 +11,9 @@ import { join, resolve } from "node:path";
 import { resolveDirs } from "@agentgem/model";
 import { bucketTranscriptsByCwd } from "@agentgem/insight";
 import { runWarmPass } from "./orchestrator.js";
+import { createLogger } from "@agentgem/base";
+
+const log = createLogger("warm");
 
 export interface WarmWatch { stop(): void }
 type WatchFn = (dir: string, cb: (evt: string, file: string | null) => void) => { close(): void };
@@ -19,7 +22,7 @@ type WatchFn = (dir: string, cb: (evt: string, file: string | null) => void) => 
  *  Reuses bucketTranscriptsByCwd (cwd read from each transcript); unknown → skipped. */
 export function mapFilesToRoots(claudeDir: string, changed: string[]): string[] {
   let bucket: Map<string, string[]>;
-  try { bucket = bucketTranscriptsByCwd(claudeDir); } catch { return []; }
+  try { bucket = bucketTranscriptsByCwd(claudeDir); } catch (err) { log.warn("mapFilesToRoots bucket failed: %s", (err as Error)?.message ?? err); return []; }
   const fileToRoot = new Map<string, string>();
   for (const [root, paths] of bucket) for (const p of paths) fileToRoot.set(resolve(p), root);
   const roots = new Set<string>();
@@ -73,7 +76,8 @@ export function startWarmWatch(opts: {
       if (timer !== null) clearTimer(timer);
       timer = setTimer(flush, debounceMs);
     });
-  } catch {
+  } catch (err) {
+    log.warn("startWarmWatch: cannot watch %s: %s", projectsDir, (err as Error)?.message ?? err);
     sub = { close() {} };   // best-effort: if the dir can't be watched, stay a no-op
   }
 

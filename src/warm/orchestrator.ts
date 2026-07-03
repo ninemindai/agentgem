@@ -9,6 +9,9 @@
 import { agentgemHome } from "@agentgem/model";
 import { readRecents } from "@agentgem/capture";
 import { WARMABLES, type Warmable } from "./registry.js";
+import { createLogger } from "@agentgem/base";
+
+const log = createLogger("warm");
 
 export type WarmItemStatus = "warmed" | "hit" | "skipped" | "error";
 export interface WarmOutcome { id: string; root: string | null; status: WarmItemStatus }
@@ -73,7 +76,7 @@ async function runOne(w: Warmable, root: string | null, opts: { dir?: string; fo
     const s = await w.warm(root, { dir: opts.dir, force: opts.force });
     return { id: w.id, root, status: s };
   } catch (err) {
-    console.error(`[warm] ${w.id} ${root ?? "(global)"} failed:`, err);
+    log.error("[warm] %s %s failed: %s", w.id, root ?? "(global)", (err as Error)?.message ?? err);
     return { id: w.id, root, status: "error" };
   }
 }

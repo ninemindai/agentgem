@@ -7,8 +7,11 @@
 // timeline, never a gate: an IO failure must not fail the run that produced it.
 import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { createLogger } from "@agentgem/base";
 import { agentgemHome } from "@agentgem/model";
 import type { VerificationReport } from "./gemVerify.js";
+
+const log = createLogger("run");
 
 export interface VerificationRecord {
   ts: string;                          // ISO timestamp, stamped at append
@@ -32,6 +35,6 @@ export function appendVerification(rec: Omit<VerificationRecord, "ts">, home?: s
     const full: VerificationRecord = { ts: new Date().toISOString(), ...rec };
     appendFileSync(path, JSON.stringify(full) + "\n", "utf8");
   } catch (err) {
-    console.error(`[agentgem] evidence-ledger append failed: ${(err as Error).message}`);
+    log.error("evidence-ledger append failed: %s", (err as Error).message);
   }
 }

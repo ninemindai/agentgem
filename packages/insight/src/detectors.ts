@@ -10,6 +10,9 @@
 // detectors (declarative rules, future Gem packs) must not require touching
 // a closed union at every dispatch site.
 import type { ProcedureStep, SessionSequence, WorkflowSignal } from "./workflowScan.js";
+import { createLogger } from "@agentgem/base";
+
+const log = createLogger("insight");
 
 export type DetectorSeverity = "info" | "warn";
 
@@ -157,7 +160,7 @@ export function runDetectors(signal: WorkflowSignal, extra: DetectorSpec[] = [])
   for (const session of sessions) {
     for (const spec of specs) {
       try { out.push(...spec.detect(session, signal)); }
-      catch (err) { console.error(`detector ${spec.id} failed:`, (err as Error).message); }
+      catch (err) { log.warn("detector %s failed: %s", spec.id, (err as Error)?.message ?? err); }
     }
   }
   return out;

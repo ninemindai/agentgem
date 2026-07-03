@@ -1,6 +1,9 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { agentgemHome } from "@agentgem/model";
+import { createLogger } from "@agentgem/base";
+
+const log = createLogger("dream");
 
 function cfgPath(base: string): string {
   return join(base, ".agentgem", "dream", "config.json");
@@ -18,5 +21,5 @@ export function setDreamEnabled(enabled: boolean, base: string = agentgemHome())
     const p = cfgPath(base);
     mkdirSync(dirname(p), { recursive: true });
     writeFileSync(p, JSON.stringify({ enabled }, null, 2), "utf8");
-  } catch (err) { console.error("dream: config write failed (ignored):", (err as Error).message); }
+  } catch (err) { log.warn("config write failed (ignored): %s", (err as Error)?.message ?? err); }
 }

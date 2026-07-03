@@ -14,6 +14,9 @@ import { importGem, publishGem, type RegistrySource, type RegistryPublisher } fr
 import { parseCookies, SESSION_COOKIE } from "../auth/cookie.js";
 import { resolvePublishType, type GemTypeRegistry } from "../gem/gemTypeRegistry.js";
 import { InvalidInputError } from "@agentgem/model";
+import { createLogger } from "@agentgem/base";
+
+const log = createLogger("registry");
 
 export interface UploadPublishDeps { db: AppDb; webOrigins: string[]; source: RegistrySource; publisher: RegistryPublisher; gemTypes: GemTypeRegistry }
 type Req = { method?: string; headers: Record<string, string | undefined>; body?: Record<string, unknown> };
@@ -75,7 +78,7 @@ export function uploadPublishHandler(deps: UploadPublishDeps) {
       if (err instanceof InvalidInputError || /immutable|already published|invalid (scope|version|semver|ref)/i.test(msg)) {
         res.status(400).json({ error: msg }); return;
       }
-      console.error("upload-publish: publish failed:", msg);
+      log.error("upload-publish: publish failed: %s", msg);
       res.status(500).json({ error: "publish failed" });
     }
   };

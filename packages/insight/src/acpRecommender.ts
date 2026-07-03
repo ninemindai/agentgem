@@ -9,8 +9,10 @@
 // degrades to a deterministic frequency-based recommendation. Never throws.
 import { join } from "node:path";
 import { agentgemHome } from "@agentgem/model";
-import { connectAcpAdapter, type AgentDescriptor } from "@agentgem/base";
+import { connectAcpAdapter, createLogger, type AgentDescriptor } from "@agentgem/base";
 export type { AgentDescriptor } from "@agentgem/base";
+
+const log = createLogger("insight");
 import type { ArtifactType } from "@agentgem/model";
 import type { WorkflowSignal, ScanInventory } from "./workflowScan.js";
 import type { GemSelection, ProjectSelection } from "@agentgem/build";
@@ -166,7 +168,7 @@ export function validateAnalysis(raw: unknown, inv: ScanInventory, signal: Workf
     for (const it of c.include) {
       if (!it || !SELECTABLE.includes(it.type) || typeof it.name !== "string") continue;
       const root = resolveRoot(it.type, it.name);
-      if (root === undefined) { console.error(`workflow: dropping hallucinated ${it.type} '${it.name}'`); continue; }
+      if (root === undefined) { log.warn("workflow: dropping hallucinated %s '%s'", it.type, it.name); continue; }
       include.push({ type: it.type, name: it.name, reason: typeof it.reason === "string" ? it.reason : "", root });
     }
     if (!include.length) continue;
@@ -236,10 +238,12 @@ export async function recommendWorkflow(
   const timeoutMs = opts.timeoutMs ?? 60_000;
   let conn: { ctx: AcpCtx; close: () => void } | null = null;
   let handle: AcpSessionHandle | null = null;
+  const t0 = Date.now();
   try {
     const usedGlobal = new Set(signal.artifacts.filter((a) => a.root === null && a.invocations > 0).map((a) => a.name));
     const trimmedInv = trimInventory(inv, usedGlobal);
     const prompt = GROUNDING(JSON.stringify(signal), JSON.stringify(trimmedInv));
+    log.debug("workflow-recommender: requesting %s over %d artifact(s)", CLAUDE_AGENT.name, signal.artifacts.length);
     // Bound EVERY step against one shared deadline — connect + session open +
     // setMode + prompt. The ACP `initialize` handshake and session start are
     // otherwise unbounded (acpSession), so a stalled adapter/auth would hang
@@ -250,9 +254,10 @@ export async function recommendWorkflow(
     handle = await withTimeout(conn.ctx.open(analysisWorkspace()), left());   // neutral cwd — don't pollute the project
     await withTimeout(handle.setMode("plan"), left());                 // explicit — never edits files
     const text = await withTimeout(handle.promptText(prompt, opts.onDelta), left());
+    log.debug("workflow-recommender: agent returned in %dms", Date.now() - t0);
     return { analysis: validateAnalysis(text, inv, signal), degraded: false };
   } catch (err) {
-    console.error("workflow: recommender fell back to deterministic:", (err as Error).message);
+    log.warn("workflow: recommender fell back to deterministic after %dms: %s", Date.now() - t0, (err as Error)?.message ?? err);
     return { analysis: deterministicAnalysis(signal), degraded: true };
   } finally {
     try { handle?.dispose(); } catch { /* ignore */ }

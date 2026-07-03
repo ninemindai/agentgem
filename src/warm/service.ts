@@ -8,6 +8,9 @@ import { writeFileSync, unlinkSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createLogger } from "@agentgem/base";
+
+const warmLog = createLogger("warm");
 
 export class UnsupportedPlatformError extends Error {}
 
@@ -103,8 +106,8 @@ interface RunServiceDeps {
 export function runServiceCommand(argv: string[], deps: RunServiceDeps = {}): void {
   const install = deps.install ?? installService;
   const uninstall = deps.uninstall ?? uninstallService;
-  const log = deps.log ?? ((m) => console.log(m));
-  const errorLog = deps.errorLog ?? ((m) => console.error(m));
+  const log = deps.log ?? ((m: string) => warmLog.info("%s", m));
+  const errorLog = deps.errorLog ?? ((m: string) => warmLog.error("%s", m));
   const exit = deps.exit ?? ((c) => process.exit(c));
   try {
     if (argv.includes("--uninstall-service")) {

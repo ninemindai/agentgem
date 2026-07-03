@@ -13,6 +13,9 @@ import {
   type AcpConnectFn, type AcpCtx, type AcpSessionHandle,
   CLAUDE_AGENT, analysisWorkspace, currentTestConnectFn, defaultConnectFn,
 } from "./acpRecommender.js";
+import { createLogger } from "@agentgem/base";
+
+const log = createLogger("insight");
 
 const NARRATE = (facetsJson: string) =>
   `You are characterising how a developer works, based on a set of their past ` +
@@ -56,18 +59,21 @@ export async function narrateInsights(
   const timeoutMs = opts.timeoutMs ?? 60_000;
   let conn: { ctx: AcpCtx; close: () => void } | null = null;
   let handle: AcpSessionHandle | null = null;
+  const t0 = Date.now();
   try {
     const payload = facets.map((f) => ({ goal: f.underlying_goal, outcome: f.outcome, friction: f.friction_detail }));
     const prompt = NARRATE(JSON.stringify(payload));
     const deadline = Date.now() + timeoutMs;
     const left = () => Math.max(0, deadline - Date.now());
+    log.debug("narrate: requesting %s over %d facet(s)", CLAUDE_AGENT.name, facets.length);
     conn = await withTimeout(connectFn(CLAUDE_AGENT, null), left());
     handle = await withTimeout(conn.ctx.open(analysisWorkspace()), left());
     await withTimeout(handle.setMode("plan"), left());
     const text = await withTimeout(handle.promptText(prompt, opts.onDelta), left());
+    log.debug("narrate: agent returned in %dms", Date.now() - t0);
     return { narrative: validateNarrative(text, fallback), degraded: false };
   } catch (err) {
-    console.error("insights: narrative fell back to template:", (err as Error).message);
+    log.warn("narrate: fell back to template after %dms: %s", Date.now() - t0, (err as Error)?.message ?? err);
     return { narrative: fallback, degraded: true };
   } finally {
     try { handle?.dispose(); } catch { /* ignore */ }

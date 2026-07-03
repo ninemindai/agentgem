@@ -3,6 +3,9 @@
 // Browse-only public gem catalog: flatten the registry index's discovery metadata and cache it.
 import type { RegistryIndex } from "@agentgem/distribute";
 import { type CatalogRow, clampGrade } from "@agentgem/aggregator";
+import { createLogger } from "@agentgem/base";
+
+const log = createLogger("catalog");
 
 export interface RegistryGem {
   key: string;
@@ -48,7 +51,8 @@ export function mapDbToGems(rows: CatalogRow[]): RegistryGem[] {
 export async function safeDbGems(list: () => Promise<CatalogRow[]>): Promise<RegistryGem[]> {
   try {
     return mapDbToGems(await list());
-  } catch {
+  } catch (err) {
+    log.warn("safeDbGems read failed (empty list): %s", (err as Error)?.message ?? err);
     return [];
   }
 }
@@ -81,7 +85,8 @@ export function createGemCache(ttlMs: number): GemCache {
         const gems = mapIndexToGems(await getIndex());
         entry = { at: now, gems };
         return gems;
-      } catch {
+      } catch (err) {
+        log.warn("gem cache index fetch failed (empty list): %s", (err as Error)?.message ?? err);
         return []; // never poison the cache or 500 the public path
       }
     },

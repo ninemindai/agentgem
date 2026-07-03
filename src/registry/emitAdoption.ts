@@ -4,6 +4,9 @@
 import { buildGemAdoption, signGemAdoption, postGemAdoption } from "@agentgem/insight";
 import { loadOrCreateIdentity } from "@agentgem/model";
 import { readShareAdoption } from "../agentgemConfig.js";
+import { createLogger } from "@agentgem/base";
+
+const log = createLogger("registry");
 
 export interface EmitAdoptionDeps {
   enabled?: () => boolean;
@@ -29,7 +32,7 @@ export async function emitAdoption(
       try {
         const signed = signGemAdoption(buildGemAdoption(g), identity, deps.now ?? 0);
         await post({ adoption: signed, endpoint });
-      } catch { /* per-ref: swallow */ }
+      } catch (err) { log.debug("adoption post failed (swallowed): %s", (err as Error)?.message ?? err); }
     }
-  } catch { /* opt-in read / identity load: swallow */ }
+  } catch (err) { log.debug("opt-in read / identity load failed (swallowed): %s", (err as Error)?.message ?? err); }
 }
