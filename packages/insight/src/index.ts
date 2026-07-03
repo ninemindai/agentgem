@@ -3,6 +3,7 @@
 // @agentgem/insight — scan transcripts -> signals, distill skills, recommend & attest Gems.
 export * from "./workflowScan.js";
 export * from "./facets.js";
+export * from "./detectors.js";
 export * from "./judgeSession.js";
 export * from "./insightsReport.js";
 export * from "./narrateInsights.js";
