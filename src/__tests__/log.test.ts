@@ -13,7 +13,7 @@ describe("createLogger", () => {
 
   it("fires the warn/error hook with redacted args, and not for info", () => {
     const seen: { level: string; ns: string; args: unknown[] }[] = [];
-    const dispose = onWarnOrError((ns, level, args) => {
+    const dispose = onWarnOrError((ns: string, level: string, args: unknown[]) => {
       seen.push({ level, ns, args });
     });
     try {
