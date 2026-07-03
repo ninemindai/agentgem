@@ -2,24 +2,23 @@
 // SPDX-License-Identifier: MIT
 // src/watchSessions.ts
 //
-// Active-session discovery for the Watch tab. Walks the local Claude + Codex
-// transcript stores, keeps the recently-touched ones, and returns light metadata
-// (never message text) so the console can offer a live picker of "sessions running
-// right now". Also exports resolveTranscriptFile: the security gate that pins the
-// SSE stream's ?file= to a path *inside* a known transcript root, so the endpoint
-// can never be aimed at an arbitrary file on disk.
-import { statSync } from "node:fs";
-import { readFileSync } from "node:fs";
-import { join, basename, resolve, sep } from "node:path";
-import { resolveDirs } from "@agentgem/model";
-import { listFiles, parseClaudeTranscript, parseCodexTranscript } from "@agentgem/insight";
+// Active-session discovery for the Watch tab, driven entirely by the SourceSpec
+// registry: every agent that declares the watch capabilities (watchFiles +
+// parseMeta + a detector) is enumerated here, so adding a coding agent to the Watch
+// feed is a change in @agentgem/insight/sources.ts, not here. We read metadata only
+// (never message text). resolveTranscriptFile is the security gate that pins the
+// SSE stream's ?file= to one of the registered watch roots, so the endpoint can
+// never be aimed at an arbitrary file on disk.
+import { statSync, readFileSync } from "node:fs";
+import { basename, resolve, sep } from "node:path";
+import { watchableSources, type SourceSpec, type AgentId } from "@agentgem/insight";
 
 export interface WatchSession {
-  /** Canonical session id (transcript filename UUID for Claude). */
+  /** Canonical session id (transcript filename UUID for Claude; session_meta for Codex). */
   id: string;
   /** Absolute transcript path — the handle the stream endpoint re-opens. */
   file: string;
-  agent: "claude" | "codex";
+  agent: AgentId;
   project: string | null;
   model: string | null;
   msgs: number;
@@ -29,32 +28,22 @@ export interface WatchSession {
   ageMs: number;
 }
 
-export interface WatchRoots {
-  claudeProjects: string;
-  codexSessions: string;
-}
+// SourceEnv for the local machine: baseDir feeds every source's root resolver
+// (claude derives .claude/projects, codex derives .codex/sessions from it, etc).
+const envFor = (baseDir?: string) => ({ baseDir });
 
-/** The two transcript roots we watch, derived from the resolved agent home. */
-export function watchRoots(baseDir?: string): WatchRoots {
-  const dirs = resolveDirs(baseDir);
-  return {
-    claudeProjects: join(dirs.claudeDir, "projects"),
-    codexSessions: join(dirs.codexDir, "sessions"),
-  };
-}
+interface Candidate { file: string; mtimeMs: number; spec: SourceSpec }
 
-interface CandidateFile { file: string; mtimeMs: number; agent: "claude" | "codex" }
-
-// mtime-sort candidate transcripts newest-first, so we only parse the freshest
-// slice (parsing every historical transcript on each poll would be wasteful).
-function candidates(roots: WatchRoots): CandidateFile[] {
-  const out: CandidateFile[] = [];
-  const push = (file: string, agent: "claude" | "codex") => {
-    try { out.push({ file, mtimeMs: statSync(file).mtimeMs, agent }); } catch { /* vanished */ }
-  };
-  for (const f of listFiles(roots.claudeProjects, ".jsonl")) push(f, "claude");
-  for (const f of listFiles(roots.codexSessions, ".jsonl")) {
-    if (basename(f).startsWith("rollout-")) push(f, "codex");
+// Enumerate watchable transcript files across all registered sources, newest first,
+// so only the freshest slice is parsed.
+function candidates(baseDir?: string): Candidate[] {
+  const out: Candidate[] = [];
+  for (const spec of watchableSources()) {
+    let files: string[];
+    try { files = spec.watchFiles!(spec.roots(envFor(baseDir))); } catch { continue; }
+    for (const file of files) {
+      try { out.push({ file, mtimeMs: statSync(file).mtimeMs, spec }); } catch { /* vanished */ }
+    }
   }
   return out.sort((a, b) => b.mtimeMs - a.mtimeMs);
 }
@@ -70,25 +59,23 @@ export interface ListOpts {
 }
 
 /**
- * List recently-active transcripts, newest first. Reads metadata only (via the
- * existing metadata-only parsers), degrading past malformed files rather than
- * throwing — a missing store yields an empty list.
+ * List recently-active transcripts across all watchable agents, newest first.
+ * Reads metadata only, degrading past malformed files rather than throwing.
  */
 export function listActiveSessions(opts: ListOpts = {}): WatchSession[] {
   const now = opts.now ?? Date.now();
   const withinMs = opts.withinMs ?? 6 * 60 * 60 * 1000;
   const limit = opts.limit ?? 30;
-  const roots = watchRoots(opts.baseDir);
 
   const out: WatchSession[] = [];
-  for (const c of candidates(roots)) {
+  for (const c of candidates(opts.baseDir)) {
     if (now - c.mtimeMs > withinMs) break; // sorted newest-first → the rest are older
     if (out.length >= limit) break;
     let text: string; try { text = readFileSync(c.file, "utf8"); } catch { continue; }
-    const stat = c.agent === "claude" ? parseClaudeTranscript(text, c.file) : parseCodexTranscript(text, c.file);
+    const stat = c.spec.parseMeta!(text, c.file);
     if (!stat) continue;
     out.push({
-      id: stat.sessionId, file: c.file, agent: c.agent,
+      id: stat.sessionId, file: c.file, agent: c.spec.id,
       project: stat.project, model: stat.model, msgs: stat.msgs,
       startMs: stat.startMs, endMs: stat.endMs, ageMs: Math.max(0, now - c.mtimeMs),
     });
@@ -104,19 +91,32 @@ function isInside(root: string, file: string): boolean {
   return f === r || f.startsWith(r + sep);
 }
 
+/** The registered watch source that owns `file`, or null if it's outside all roots. */
+export function sourceForFile(file: string, baseDir?: string): SourceSpec | null {
+  const f = resolve(file);
+  for (const spec of watchableSources()) {
+    if (spec.roots(envFor(baseDir)).some((r) => isInside(r, f))) return spec;
+  }
+  return null;
+}
+
 /**
  * Validate a client-supplied transcript path: it must end in .jsonl and live under
- * one of the watch roots. Returns the resolved absolute path, or null to reject.
+ * one of the registered watch roots. Returns the resolved absolute path, or null.
  * This is the ONLY sanctioned way the stream endpoint turns ?file= into a read.
  */
 export function resolveTranscriptFile(file: string, baseDir?: string): string | null {
   if (!file || !file.endsWith(".jsonl")) return null;
-  const roots = watchRoots(baseDir);
-  if (!isInside(roots.claudeProjects, file) && !isInside(roots.codexSessions, file)) return null;
-  return resolve(file);
+  return sourceForFile(file, baseDir) ? resolve(file) : null;
 }
 
-/** The agent a validated transcript path belongs to (claude unless under codex). */
-export function agentForFile(file: string, baseDir?: string): "claude" | "codex" {
-  return isInside(watchRoots(baseDir).codexSessions, file) ? "codex" : "claude";
+// Kept for tests/back-compat: which agent a validated path belongs to.
+export function agentForFile(file: string, baseDir?: string): AgentId | null {
+  return sourceForFile(file, baseDir)?.id ?? null;
+}
+
+// Convenience for tests: the concrete roots basename lookups. (Not a security seam;
+// resolveTranscriptFile is.)
+export function watchRootBasenames(): string[] {
+  return watchableSources().flatMap((s) => s.roots(envFor()).map((r) => basename(r)));
 }

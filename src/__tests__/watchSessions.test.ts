@@ -2,7 +2,8 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { listActiveSessions, resolveTranscriptFile, agentForFile, watchRoots } from "../watchSessions.js";
+import { listActiveSessions, resolveTranscriptFile, agentForFile, sourceForFile } from "../watchSessions.js";
+import { resolveDirs } from "@agentgem/model";
 
 let home: string, claudeDir: string, proj: string, freshFile: string, staleFile: string;
 const NOW = Date.parse("2026-07-03T12:00:00.000Z");
@@ -71,15 +72,21 @@ describe("resolveTranscriptFile", () => {
     expect(resolveTranscriptFile("/etc/passwd.jsonl", claudeDir)).toBeNull();
   });
   it("rejects a prefix-sibling of the root", () => {
-    const roots = watchRoots(claudeDir);
-    expect(resolveTranscriptFile(roots.claudeProjects + "-evil/x.jsonl", claudeDir)).toBeNull();
+    const claudeProjects = join(claudeDir, "projects");
+    expect(resolveTranscriptFile(claudeProjects + "-evil/x.jsonl", claudeDir)).toBeNull();
   });
 });
 
-describe("agentForFile", () => {
-  it("classifies codex sessions under the codex root", () => {
-    const roots = watchRoots(claudeDir);
-    expect(agentForFile(join(roots.codexSessions, "rollout-x.jsonl"), claudeDir)).toBe("codex");
+describe("sourceForFile / agentForFile", () => {
+  it("classifies claude and codex transcripts by their registered roots", () => {
+    const codexSessions = join(resolveDirs(claudeDir).codexDir, "sessions");
+    expect(agentForFile(join(codexSessions, "rollout-x.jsonl"), claudeDir)).toBe("codex");
     expect(agentForFile(freshFile, claudeDir)).toBe("claude");
+    expect(sourceForFile(freshFile, claudeDir)?.detectArtifacts).toBeTruthy(); // claude → transcript-driven
+    expect(sourceForFile(join(codexSessions, "rollout-x.jsonl"), claudeDir)?.resolveArtifactPaths).toBeTruthy(); // codex → file-driven
+  });
+  it("returns null for an out-of-scope path", () => {
+    expect(agentForFile("/etc/passwd.jsonl", claudeDir)).toBeNull();
+    expect(sourceForFile("/etc/passwd.jsonl", claudeDir)).toBeNull();
   });
 });

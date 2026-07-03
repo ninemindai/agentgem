@@ -28,7 +28,7 @@ export interface ArtifactVersion {
 }
 
 export type WatchEvent =
-  | { type: "phase"; phase: string }
+  | { type: "phase"; phase: string; mode?: "transcript" | "file" }
   | { type: "artifact"; artifact: ArtifactVersion }
   | { type: "failed"; message: string };
 
@@ -48,7 +48,7 @@ export function openWatchStream(
   const es = new EventSource(`${apiBase}/api/watch/stream?${params.toString()}`);
   const data = (m: Event) => JSON.parse((m as MessageEvent).data);
 
-  es.addEventListener("phase", (m) => onEvent({ type: "phase", phase: data(m).phase }));
+  es.addEventListener("phase", (m) => { const d = data(m); onEvent({ type: "phase", phase: d.phase, mode: d.mode }); });
   es.addEventListener("artifact", (m) => onEvent({ type: "artifact", artifact: data(m) as ArtifactVersion }));
   es.addEventListener("failed", (m) => { onEvent({ type: "failed", message: data(m).message }); es.close(); });
   es.addEventListener("error", () => onEvent({ type: "failed", message: "connection lost" }));
