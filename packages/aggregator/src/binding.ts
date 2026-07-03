@@ -11,10 +11,11 @@ import { canonicalJSON } from "@agentgem/insight";
 import type { AppDb } from "./schema.js";
 import { accountBindings } from "./schema.js";
 import type { AccountVerifier } from "./accountVerifier.js";
+import { upsertAccount } from "./webAuth.js";
 
 export interface BindRequest { pubkey: string; token: string; signedAt: number; signature: string; }
 export type BindResult =
-  | { bound: true; provider: string; login: string; accountId: string }
+  | { bound: true; provider: string; login: string; accountId: string; avatarUrl?: string }
   | { bound: false; rejected: "bad-signature" | "stale" | "unknown-producer" | "provider-error" };
 
 const FRESHNESS_MS = 300_000;
@@ -44,6 +45,11 @@ export async function recordBinding(
   let acct;
   try { acct = await verifier.verify(req.token); }
   catch { return { bound: false, rejected: "provider-error" }; }
+  // 4b. reconcile with the web `accounts` identity + capture avatar. Best-effort: NEVER fail
+  // the bind over it — the account_bindings write below is what ratings depend on.
+  try {
+    await upsertAccount(db, { provider: acct.provider, accountId: acct.accountId, login: acct.login, avatarUrl: acct.avatarUrl ?? null });
+  } catch { /* avatar/profile is best-effort */ }
   // 5. upsert (pubkey PK -> one account per key; rebind updates in place)
   await db.insert(accountBindings)
     .values({ pubkey: req.pubkey, provider: acct.provider, accountId: acct.accountId, accountLogin: acct.login })
@@ -51,5 +57,5 @@ export async function recordBinding(
       target: accountBindings.pubkey,
       set: { provider: acct.provider, accountId: acct.accountId, accountLogin: acct.login, boundAt: sql`now()` },
     });
-  return { bound: true, provider: acct.provider, login: acct.login, accountId: acct.accountId };
+  return { bound: true, provider: acct.provider, login: acct.login, accountId: acct.accountId, ...(acct.avatarUrl ? { avatarUrl: acct.avatarUrl } : {}) };
 }
