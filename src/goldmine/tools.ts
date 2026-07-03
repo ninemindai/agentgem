@@ -7,7 +7,7 @@ export interface ArtifactDetail { type: string; name: string; root: string | nul
 export function searchSessions(sessions: SessionStat[], query: string, limit: number): SessionMatch[] {
   const q = query.trim().toLowerCase();
   const matched = q
-    ? sessions.filter((s) => `${s.project} ${s.model} ${s.gitBranch}`.toLowerCase().includes(q))
+    ? sessions.filter((s) => ((s.project ?? "") + " " + (s.model ?? "") + " " + (s.gitBranch ?? "")).toLowerCase().includes(q))
     : sessions.slice();
   return matched
     .sort((a, b) => b.startMs - a.startMs)

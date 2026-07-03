@@ -13,6 +13,14 @@ describe("searchSessions", () => {
     const rows = [S({ sessionId: "a", startMs: 1 }), S({ sessionId: "b", startMs: 2 })];
     expect(searchSessions(rows, "", 1).map((m) => m.sessionId)).toEqual(["b"]);
   });
+  it("null project/model/gitBranch do not match the query 'null'", () => {
+    const nullSession = S({ sessionId: "null-fields", project: null, model: null, gitBranch: null, startMs: 5 });
+    const other = S({ sessionId: "normal", project: "/p/web", startMs: 3 });
+    // querying "null" must NOT match a session whose fields happen to be null
+    expect(searchSessions([nullSession, other], "null", 10).map((m) => m.sessionId)).toEqual([]);
+    // empty query still returns both (newest first)
+    expect(searchSessions([nullSession, other], "", 10).map((m) => m.sessionId)).toEqual(["null-fields", "normal"]);
+  });
 });
 
 describe("getArtifactDetail", () => {
