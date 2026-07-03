@@ -8,6 +8,8 @@ import {
 import { RefreshButton } from "../../shell/RefreshButton.js";
 import { ListControls } from "../../shell/ListControls.js";
 import { useSelectableList } from "../../shell/useSelectableList.js";
+import { useTableSort, type SortColumn } from "../../shell/useTableSort.js";
+import { SortTh } from "../../shell/SortTh.js";
 import { DiscoverSection } from "./Discover.js";
 
 const RANGES: OptimizeRange[] = ["today", "7d", "30d", "all"];
@@ -26,15 +28,17 @@ function utcDay(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10);
 }
 
-type PruneSort = "recommended" | "context" | "uses" | "lastused";
-function sortRows(rows: OptimizeArtifact[], sort: PruneSort): OptimizeArtifact[] {
-  if (sort === "recommended") return rows;
-  const copy = [...rows];
-  if (sort === "context") copy.sort((a, b) => b.contextTokens - a.contextTokens);   // biggest savings first
-  else if (sort === "uses") copy.sort((a, b) => a.uses - b.uses);                    // least used first
-  else copy.sort((a, b) => (a.lastUsedMs ?? 0) - (b.lastUsedMs ?? 0));               // stalest (never) first
-  return copy;
-}
+// Click-to-sort columns for the Prune table. Unsorted (no active header) keeps
+// the server's "recommended" order; est. ctx defaults to descending (biggest
+// savings first), the rest ascending (least-used / stalest / alphabetical first).
+const PRUNE_COLUMNS: SortColumn<OptimizeArtifact>[] = [
+  { id: "artifact", value: (a) => a.name.toLowerCase() },
+  { id: "type", value: (a) => a.type.toLowerCase() },
+  { id: "source", value: (a) => a.source.toLowerCase() },
+  { id: "context", value: (a) => a.contextTokens, defaultDir: "desc" },
+  { id: "uses", value: (a) => a.uses },
+  { id: "lastused", value: (a) => a.lastUsedMs ?? 0 },
+];
 
 export function Dashboard({ data, range, onRange, pending, onRefresh, onMutate, apiBase }: {
   data: OptimizePayload;
@@ -53,7 +57,7 @@ export function Dashboard({ data, range, onRange, pending, onRefresh, onMutate, 
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [prunableOnly, setPrunableOnly] = useState(false);
-  const [sort, setSort] = useState<PruneSort>("recommended");
+  const pruneSort = useTableSort(PRUNE_COLUMNS);
 
   const pruneList = useSelectableList(data.artifacts, {
     keyOf: key,
@@ -61,7 +65,7 @@ export function Dashboard({ data, range, onRange, pending, onRefresh, onMutate, 
     matches: (a, q) => a.name.toLowerCase().includes(q) || a.source.toLowerCase().includes(q) || a.type.toLowerCase().includes(q),
     extraFilter: (a) => !prunableOnly || a.prune,
   });
-  const sortedPrune = sortRows(pruneList.filtered, sort);
+  const sortedPrune = pruneSort.sort(pruneList.filtered);
   // Savings for the current selection (across all artifacts, even ones filtered out of view).
   const selectedSavings = pruneList.selectedItems().reduce((acc, a) => acc + a.contextTokens, 0);
 
@@ -150,18 +154,10 @@ export function Dashboard({ data, range, onRange, pending, onRefresh, onMutate, 
           selectLabel={pruneList.allSelected ? "Deselect all" : `Select all (${pruneList.eligibleVisible.length})`}
           onSelectAll={pruneList.toggleAll} selectDisabled={pruneList.eligibleVisible.length === 0}
           extras={
-            <>
-              <label className="opt-prunable-only">
-                <input type="checkbox" checked={prunableOnly} onChange={(e) => setPrunableOnly(e.target.checked)} />
-                prunable only
-              </label>
-              <select className="list-sort" aria-label="sort artifacts" value={sort} onChange={(e) => setSort(e.target.value as PruneSort)}>
-                <option value="recommended">sort: recommended</option>
-                <option value="context">sort: est. context ↓</option>
-                <option value="uses">sort: uses ↑</option>
-                <option value="lastused">sort: last used ↑</option>
-              </select>
-            </>
+            <label className="opt-prunable-only">
+              <input type="checkbox" checked={prunableOnly} onChange={(e) => setPrunableOnly(e.target.checked)} />
+              prunable only
+            </label>
           }
           actions={
             <>
@@ -174,7 +170,16 @@ export function Dashboard({ data, range, onRange, pending, onRefresh, onMutate, 
           }
         />
         <table className="obs-table">
-          <thead><tr><th></th><th>artifact</th><th>type</th><th>source</th><th>est. ctx</th><th>uses</th><th>last used</th><th>to disable</th></tr></thead>
+          <thead><tr>
+            <th></th>
+            <SortTh label="artifact" dir={pruneSort.dirFor("artifact")} onClick={() => pruneSort.onSort("artifact")} />
+            <SortTh label="type" dir={pruneSort.dirFor("type")} onClick={() => pruneSort.onSort("type")} />
+            <SortTh label="source" dir={pruneSort.dirFor("source")} onClick={() => pruneSort.onSort("source")} />
+            <SortTh label="est. ctx" dir={pruneSort.dirFor("context")} onClick={() => pruneSort.onSort("context")} />
+            <SortTh label="uses" dir={pruneSort.dirFor("uses")} onClick={() => pruneSort.onSort("uses")} />
+            <SortTh label="last used" dir={pruneSort.dirFor("lastused")} onClick={() => pruneSort.onSort("lastused")} />
+            <th>to disable</th>
+          </tr></thead>
           <tbody>
             {sortedPrune.length === 0 && (
               <tr><td colSpan={8} className="obs-muted">No artifacts match this filter.</td></tr>

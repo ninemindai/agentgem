@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { render, screen, cleanup, waitFor, act, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, waitFor, act, fireEvent, within } from "@testing-library/react";
 import { InsightsReportCard } from "./index.js";
 import type { InsightsReportView } from "./insightsStream.js";
 
@@ -21,6 +21,24 @@ describe("InsightsReportCard", () => {
     render(<InsightsReportCard report={report} />);
     expect(screen.getByText("By model")).toBeTruthy();
     expect(screen.getByText("Worth publishing")).toBeTruthy();
+  });
+
+  it("sorts the Worth-publishing candidates by goal when the header is clicked", () => {
+    const report: InsightsReportView = {
+      totals: { sessions: 2, mostly: 2, partially: 0, not: 0 },
+      outcomes_summary: "2 session(s): 2 mostly achieved.",
+      narrative: "You ship.",
+      by_model: [],
+      friction: [],
+      publish_candidates: [
+        { sessionId: "1", goal: "zebra task", why: "Succeeded" },
+        { sessionId: "2", goal: "apple task", why: "Succeeded" },
+      ],
+    };
+    render(<InsightsReportCard report={report} />);
+    fireEvent.click(screen.getByRole("button", { name: /goal/i }));   // first click → asc (alphabetical)
+    const rows = screen.getAllByRole("row");
+    expect(within(rows[1]).getByText("apple task")).toBeTruthy();     // rows[0] is the header
   });
 
   it("renders a malformed older-shape report (missing by_model) without crashing", () => {

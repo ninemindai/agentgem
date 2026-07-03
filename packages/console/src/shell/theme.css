@@ -604,6 +604,17 @@ body::before {
 .obs-table tr:last-child td { border-bottom: none; }
 .obs-table tr:hover td { background: rgba(154,51,36,.03); }
 
+/* Click-to-sort column header: a bare button that inherits the th caption style,
+   with a caret that only shows for the active column (faint on header hover). */
+.obs-table th .sort-th { display: inline-flex; align-items: center; gap: 5px;
+  background: none; border: none; padding: 0; margin: 0; cursor: pointer;
+  font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit; }
+.obs-table th .sort-th:hover { color: var(--ink-soft); }
+.obs-table th .sort-th.is-sorted { color: var(--accent); }
+.sort-caret { font-size: 8px; line-height: 1; opacity: 0; transition: opacity .12s ease; }
+.obs-table th:hover .sort-th:not(.is-sorted) .sort-caret { opacity: .35; }
+.sort-th.is-sorted .sort-caret { opacity: 1; }
+
 .obs-chip { display: inline-block; padding: 2px 8px; border-radius: 999px;
   background: var(--paper-2); border: 1px solid var(--line);
   font: 600 10.5px/1.4 var(--font-mono); color: var(--ink-soft); white-space: nowrap; }
@@ -899,9 +910,6 @@ button.scorecard-intent { line-height: 1.4; }
   transition: border-color .15s ease, box-shadow .15s ease; }
 .list-filter::placeholder { color: #a99e87; }
 .list-filter:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
-.list-sort { padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px;
-  background: var(--raised); color: var(--ink-soft); font: 500 12.5px/1 var(--font-ui); cursor: pointer; }
-.list-sort:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
 .opt-prunable-only { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 13px; cursor: pointer; }
 .opt-prunable-only input { accent-color: var(--accent); }
 .opt-sel-savings { color: var(--ink-soft); font-size: 12.5px; }
