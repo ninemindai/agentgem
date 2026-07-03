@@ -19,7 +19,7 @@ const MAX_FINDINGS = 50;
 
 export interface BehaviorFindingsOptions {
   days?: number;           // look-back window, default 14, clamp 1..90
-  maxTranscripts?: number; // newest-first cap, default 30, clamp 1..100
+  maxTranscripts?: number; // newest-first cap, default 100, clamp 1..100 (~600ms measured on a 988-transcript fortnight)
   dir?: string;            // claudeDir override (tests)
   rulesDir?: string;       // detector-rules dir override (tests)
   now?: () => number;      // clock seam (tests)
@@ -41,7 +41,7 @@ function empty(days: number): BehaviorFindings {
 
 export function collectBehaviorFindings(opts: BehaviorFindingsOptions = {}): BehaviorFindings {
   const days = clamp(opts.days ?? 14, 1, 90);
-  const maxTranscripts = clamp(opts.maxTranscripts ?? 30, 1, 100);
+  const maxTranscripts = clamp(opts.maxTranscripts ?? 100, 1, 100);
   try {
     const now = (opts.now ?? Date.now)();
     const dirs = resolveDirs(opts.dir);

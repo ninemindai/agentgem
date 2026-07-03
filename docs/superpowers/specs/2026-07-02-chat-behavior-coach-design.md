@@ -30,7 +30,7 @@ A shared helper runs the deterministic detector pipeline directly instead of rea
 ```ts
 export interface BehaviorFindingsOptions {
   days?: number;           // look-back window, default 14, clamp 1..90
-  maxTranscripts?: number; // newest-first cap, default 30, clamp 1..100
+  maxTranscripts?: number; // newest-first cap, default 100, clamp 1..100
   dir?: string;            // claudeDir override (tests)
   rulesDir?: string;       // detector-rules dir override (tests)
   now?: () => number;      // clock seam (tests)
@@ -98,4 +98,4 @@ Findings carry only what the detector layer already guarantees: verb/count-deriv
 
 ## Open question for review
 
-Caps default (14 days / 30 transcripts / 50 findings) are judgment calls — tune freely; they only live in `behaviorFindings.ts`.
+Caps default (14 days / 100 transcripts / 50 findings) are judgment calls — tune freely; they only live in `behaviorFindings.ts`.
