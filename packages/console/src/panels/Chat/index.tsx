@@ -250,8 +250,8 @@ export const chatPage = defineConsolePage({
   id: "chat",
   title: "Chat",
   icon: "💬",
-  order: 15,
-  group: "build",
+  order: 6,
+  group: "observe",
   route: "#/chat",
   component: Chat,
 });
