@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DreamController } from "../dream.controller.js";
 import { enqueueNew, appendDiary } from "../dream/store.js";
+import { appendVerification } from "@agentgem/run";
 import type { DreamQueueEntry } from "../dream/types.js";
 
 const prov = { occurrences: [{ sessionId: "s1", transcript: "t.jsonl", messageIndices: [1], atMs: 5 }] };
@@ -138,5 +139,27 @@ describe("DreamController", () => {
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
+  });
+
+  it("GET /journey merges queue and ledger events newest-first", async () => {
+    enqueueNew([lessonEntry()], base);           // firstSeenMs: 1
+    appendVerification({
+      gemName: "g", agent: "claude", contractApplied: true,
+      run: { ok: true, toolCalls: 1 },
+      verification: { passed: true, checks: [] },
+    }, base);                                    // ts: now (newest)
+    const c = new DreamController();
+    (c as unknown as { base: string }).base = base;
+    const r = await c.journey({ query: {} });
+    expect(r.events.map((e) => e.kind)).toEqual(["verified", "lesson"]);
+    expect(r.truncated).toBe(false);
+  });
+
+  it("GET /journey filters by kind", async () => {
+    enqueueNew([lessonEntry(), skillEntry()], base);
+    const c = new DreamController();
+    (c as unknown as { base: string }).base = base;
+    const r = await c.journey({ query: { kind: "skill" } });
+    expect(r.events.map((e) => e.kind)).toEqual(["skill"]);
   });
 });

@@ -11,6 +11,7 @@ import { reflectionToLesson } from "@agentgem/insight";
 import { readQueue, setStatus, promotedCount, readDiary } from "./dream/store.js";
 import { dreamEnabled, setDreamEnabled } from "./dream/config.js";
 import { learnFromSession } from "./learnCore.js";
+import { buildJourney } from "./journeyCore.js";
 
 // Path-safety guard for any name that becomes a filesystem path segment (skill dir /
 // lesson file). Mirrors the per-write re-validation in gem.controller.ts.
@@ -52,6 +53,24 @@ const DiaryEntrySchema = z.object({
   degraded: z.boolean(),
 });
 const DiarySchema = z.object({ entries: z.array(DiaryEntrySchema) });
+const JourneyQuerySchema = z.object({
+  kind: z.enum(["skill", "lesson", "opportunity", "pass", "verified"]).optional(),
+  limit: z.coerce.number().int().positive().max(500).optional(),
+});
+const JourneyEventSchema = z.object({
+  ts: z.number(),
+  kind: z.enum(["skill", "lesson", "opportunity", "pass", "verified"]),
+  title: z.string(),
+  detail: z.string().optional(),
+  status: z.enum(["queued", "accepted", "dismissed"]).optional(),
+  phase: z.enum(["DEEP", "REM", "LEARN"]).optional(),
+  key: z.string().optional(),
+  firstSeenMs: z.number().optional(),
+  root: z.string().optional(),
+  agent: z.string().optional(),
+  passed: z.boolean().optional(),
+});
+const JourneySchema = z.object({ events: z.array(JourneyEventSchema), truncated: z.boolean() });
 const LearnBody = z.object({
   root: z.string().min(1),
   dir: z.string().optional(),      // claude-home override (tests / non-default homes)
@@ -98,6 +117,14 @@ export class DreamController {
   @get("/dream/diary", { response: DiarySchema })
   async diary(): Promise<z.infer<typeof DiarySchema>> {
     return { entries: readDiary(this.base) }; // newest-first, bounded by the store
+  }
+
+  // The unified learning timeline: queue items (all statuses), dream passes, and
+  // verification-ledger records, newest first. A read-side lens — mutations stay
+  // on the queue endpoints above.
+  @get("/journey", { query: JourneyQuerySchema, response: JourneySchema })
+  async journey(input: { query: z.infer<typeof JourneyQuerySchema> }): Promise<z.infer<typeof JourneySchema>> {
+    return buildJourney({ base: this.base, kind: input.query.kind, limit: input.query.limit });
   }
 
   @post("/dream/queue/accept", { body: KeyBody, response: OkPathSchema })
