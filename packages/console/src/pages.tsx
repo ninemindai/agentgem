@@ -14,5 +14,6 @@ import { getGemsPage } from "./panels/GetGems/index.js";
 import { settingsPage } from "./panels/Settings/index.js";
 import { receivedPage } from "./panels/Received/index.js";
 import { deployPage } from "./panels/Deploy/index.js";
+import { chatPage } from "./panels/Chat/index.js";
 
-export const pages: ConsolePage[] = [observePage, insightsPage, dreamingPage, benchmarkPage, optimizePage, minePage, curatePage, materializePage, workspacesPage, publishPage, getGemsPage, settingsPage, receivedPage, deployPage];
+export const pages: ConsolePage[] = [observePage, insightsPage, dreamingPage, benchmarkPage, optimizePage, minePage, curatePage, materializePage, workspacesPage, publishPage, getGemsPage, settingsPage, receivedPage, deployPage, chatPage];
