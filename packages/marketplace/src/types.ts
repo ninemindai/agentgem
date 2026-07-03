@@ -73,3 +73,11 @@ export interface OrgCatalog {
   ownerCount: number;
   gems: OrgCatalogGem[];
 }
+export interface CuratedSource {
+  id: string; label: string; description: string;
+  repo: string; ref: string; kind: string;
+  license?: string; homepage?: string;
+}
+export interface SourceDivision { key: string; label: string; icon?: string; color?: string }
+export interface SourceAgentRef { division: string; slug: string; name: string; path: string }
+export interface ImportedSkill { name: string; description?: string; content: string; source?: string }

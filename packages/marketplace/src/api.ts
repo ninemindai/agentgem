@@ -1,4 +1,5 @@
-import type { AggIngredient, AggCoOccurrence, AdoptionPoint, RegistryGem, Profile, OrgCatalog } from "./types";
+import type { AggIngredient, AggCoOccurrence, AdoptionPoint, RegistryGem, Profile, OrgCatalog,
+  CuratedSource, SourceDivision, SourceAgentRef, ImportedSkill } from "./types";
 
 type Query = Record<string, string | number | undefined>;
 
@@ -8,6 +9,16 @@ async function get<T>(base: string, path: string, query: Query = {}): Promise<T>
     .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`)
     .join("&");
   const res = await fetch(base + path + (qs ? `?${qs}` : ""));
+  if (!res.ok) throw new Error(`${path} -> ${res.status}`);
+  return JSON.parse(await res.text()) as T;
+}
+
+async function post<T>(base: string, path: string, body: unknown): Promise<T> {
+  const res = await fetch(base + path, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
   if (!res.ok) throw new Error(`${path} -> ${res.status}`);
   return JSON.parse(await res.text()) as T;
 }
@@ -39,6 +50,14 @@ export function makeApi(base: string) {
       if (!res.ok) throw new Error(`/api/aggregator/org-catalog -> ${res.status}`);
       return JSON.parse(await res.text()) as OrgCatalog;
     },
+    getSources: () =>
+      get<{ sources: CuratedSource[] }>(base, "/api/sources").then((r) => r.sources),
+    getSourceDivisions: (source: string) =>
+      get<{ divisions: SourceDivision[] }>(base, "/api/sources/divisions", { source }).then((r) => r.divisions),
+    getSourceAgents: (source: string, division: string) =>
+      get<{ agents: SourceAgentRef[] }>(base, "/api/sources/agents", { source, division }).then((r) => r.agents),
+    importSourceSkill: (source: string, path: string) =>
+      post<ImportedSkill>(base, "/api/sources/import", { source, path }),
   };
 }
 

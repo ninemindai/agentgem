@@ -65,3 +65,21 @@ describe("makeApi", () => {
     expect(await api.getOrgCatalog("bad/scope")).toBeNull();
   });
 });
+
+describe("makeApi sources", () => {
+  it("getSources unwraps {sources}", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => res({ sources: [{ id: "agency-agents", label: "The Agency", description: "d", repo: "o/r", ref: "main", kind: "agency-layout" }] })));
+    const out = await makeApi("").getSources();
+    expect(out[0].id).toBe("agency-agents");
+  });
+
+  it("importSourceSkill POSTs body and returns content", async () => {
+    const spy = vi.fn(async (_url: string | URL, _init?: RequestInit) => res({ name: "ai-engineer", content: "SKILL_BODY" }));
+    vi.stubGlobal("fetch", spy);
+    const out = await makeApi("").importSourceSkill("agency-agents", "engineering/ai-engineer.md");
+    expect(out.content).toBe("SKILL_BODY");
+    const init = spy.mock.calls[0][1]!;
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ source: "agency-agents", path: "engineering/ai-engineer.md" });
+  });
+});
