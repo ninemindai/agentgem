@@ -10,3 +10,4 @@ export * from "./gemVerify.js";
 export * from "./evidenceLedger.js";
 export * from "./configAccess.js";
 export * from "./verifyMatrix.js";
+export * from "./chatSession.js";
