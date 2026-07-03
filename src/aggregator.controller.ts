@@ -3,12 +3,13 @@
 // src/aggregator.controller.ts
 import { z } from "zod";
 import { timingSafeEqual } from "node:crypto";
-import { api, get, post } from "@agentback/openapi";
+import { api, get, post, AgentError } from "@agentback/openapi";
 import { inject } from "@agentback/core";
 import { DrizzleBindings } from "@agentback/drizzle";
 import type { AppDb } from "@agentgem/aggregator";
 import { ingestAttestation, ingestGemAdoption } from "@agentgem/aggregator";
 import { popularity, coOccurrence, adoption, overview, coOccurrenceMatrix, modelBenchmark, gemAdoption } from "@agentgem/aggregator";
+import { buildProfile } from "@agentgem/aggregator";
 import type { UsageAttestation, GemAdoption } from "@agentgem/insight";
 import { recordBinding } from "@agentgem/aggregator";
 import { GitHubVerifier } from "@agentgem/aggregator";
@@ -39,6 +40,16 @@ const BenchQuery = z.object({ gemDigest: z.string().optional(), limit: z.coerce.
 const BenchResult = z.array(z.object({ model: z.string(), mostly: z.number(), partially: z.number(), notAchieved: z.number(), producers: z.number(), verifiedProducers: z.number() }));
 const GemAdoptionQuery = z.object({ keys: z.string().optional() });
 const GemAdoptionResult = z.object({ items: z.array(z.object({ gemKey: z.string(), installs: z.number(), verifiedInstalls: z.number() })) });
+
+const ProfileQuery = z.object({ login: z.string() });
+const ProfileGemSchema = z.object({
+  key: z.string(), version: z.string(), description: z.string().nullable(), grade: z.number().nullable(),
+  stars: z.number(), installs: z.number(), verifiedInstalls: z.number(),
+});
+const ProfileResult = z.object({
+  login: z.string(), avatarUrl: z.string().nullable(), verified: z.boolean(),
+  githubUrl: z.string(), totalStars: z.number(), gems: z.array(ProfileGemSchema),
+});
 
 const BindBody = z.object({ pubkey: z.string(), token: z.string(), signedAt: z.number(), signature: z.string() });
 const BindResultSchema = z.union([
@@ -140,6 +151,15 @@ export class AggregatorController {
   async gemAdoption(input: { query: z.infer<typeof GemAdoptionQuery> }): Promise<z.infer<typeof GemAdoptionResult>> {
     const keys = input.query.keys ? input.query.keys.split(",").map((s) => s.trim()).filter(Boolean) : undefined;
     return { items: await gemAdoption(this.db, { keys }) };
+  }
+
+  // Public profile: avatar + verified flag + published gems with k-anon engagement. login is a query
+  // param (every route here is query-based; the pretty /@login is a frontend route). 404 when absent.
+  @get("/profile", { query: ProfileQuery, response: ProfileResult })
+  async profile(input: { query: z.infer<typeof ProfileQuery> }): Promise<z.infer<typeof ProfileResult>> {
+    const p = await buildProfile(this.db, input.query.login);
+    if (!p) throw new AgentError("profile not found", { status: 404, code: "profile_not_found", retryable: false });
+    return p;
   }
 
   @post("/bind", { body: BindBody, response: BindResultSchema })
