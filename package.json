@@ -5,7 +5,8 @@
   "license": "MIT",
   "bin": {
     "agentgem": "dist/cli.js",
-    "agentgem-distill": "dist/distill/mcpServer.js"
+    "agentgem-distill": "dist/distill/mcpServer.js",
+    "agentgem-goldmine": "dist/goldmine/mcpServer.js"
   },
   "files": [
     "dist",
