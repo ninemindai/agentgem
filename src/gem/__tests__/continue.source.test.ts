@@ -40,4 +40,11 @@ describe("continue SourceSpec", () => {
     expect(instructions.some((a) => "content" in a && typeof a.content === "string" && a.content.length === 1)).toBe(false);
     expect(instructions).toEqual([]);
   });
+  it("falls back to legacy config.json when config.yaml is absent", async () => {
+    const c = BUILTIN_SOURCES.find((s) => s.id === "continue")!;
+    const base = mkdtempSync(join(tmpdir(), "cont-source-json-"));
+    writeFileSync(join(base, "config.json"), JSON.stringify({ rules: ["Always write tests first."] }));
+    const { artifacts } = await c.readArtifacts!({ baseDir: base });
+    expect(artifacts.find((a) => a.type === "instructions")).toMatchObject({ content: "Always write tests first." });
+  });
 });

@@ -5,7 +5,7 @@
 // outbound TargetSpec. FS-touching + returns SessionStat, so it lives here (Node), not in the
 // pure @agentgem/model. The DI extension point (SourceRegistry) is app-layer (see src/gem/sourceRegistry.ts).
 import { readFile } from "node:fs/promises";
-import { readdirSync } from "node:fs";
+import { readdirSync, existsSync } from "node:fs";
 import { join, basename } from "node:path";
 import { homedir } from "node:os";
 import { resolveDirs } from "@agentgem/model";
@@ -118,7 +118,9 @@ const continueSource: SourceSpec = {
   scanSessions: async (roots) => (await Promise.all(roots.map((r) => scanContinueSessions(r)))).flat(),
   readArtifacts: async (env) => {
     const home = env.baseDir || join(homedir(), ".continue");
-    return readContinueArtifacts({ configFile: join(home, "config.yaml") });
+    // prefer config.yaml; fall back to the legacy config.json when yaml is absent.
+    const configFile = ["config.yaml", "config.json"].map((f) => join(home, f)).find(existsSync) ?? join(home, "config.yaml");
+    return readContinueArtifacts({ configFile });
   },
 };
 
