@@ -5,7 +5,11 @@ import { InvalidInputError } from "@agentgem/model";
 import type { LearnResult } from "../learnCore.js";
 
 const result = (over: Partial<LearnResult> = {}): LearnResult =>
-  ({ session: "s1.jsonl", enqueued: 2, skills: 2, lessons: 0, degraded: false, ...over });
+  ({
+    session: "s1.jsonl", enqueued: 2,
+    entries: [{ kind: "skill", name: "extract-api-client" }, { kind: "skill", name: "b" }],
+    skills: 2, lessons: 0, degraded: false, ...over,
+  });
 
 describe("agentgem learn", () => {
   it("prints a summary and exits 0 on success", async () => {
@@ -14,6 +18,7 @@ describe("agentgem learn", () => {
     expect(code).toBe(0);
     expect(lines.some((l) => l.includes("s1.jsonl"))).toBe(true);
     expect(lines.some((l) => l.includes("2 queued"))).toBe(true);
+    expect(lines.some((l) => l.includes(`+ skill "extract-api-client" queued`))).toBe(true);
   });
 
   it("nothing distilled exits 0 with an honest message", async () => {

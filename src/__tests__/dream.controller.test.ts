@@ -119,6 +119,7 @@ describe("DreamController", () => {
       // Synthetic near-empty transcript: the real pipeline finds nothing — that is success.
       expect(r.session).toBe("s1.jsonl");
       expect(r.enqueued).toBe(0);
+      expect(r.entries).toEqual([]);
       expect(typeof r.degraded).toBe("boolean");
     } finally {
       rmSync(home, { recursive: true, force: true });

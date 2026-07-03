@@ -8,8 +8,9 @@
 - **Design deviations from the proposal (flagged for review):** the endpoint lives at
   `POST /api/dream/learn` (not `/api/distill/learn`) because its output *is* dream-queue
   entries and the queue endpoints live on the dream controller; results are tagged with a
-  new queue phase `"LEARN"` so the review UI and diary can distinguish intent-driven
-  finds from background harvests.
+  new queue phase `"LEARN"` so intent-driven finds are distinguishable from background
+  harvests in the queue data and API (surfacing the distinction in the review UI/diary
+  is deferred with the console slice).
 
 ## Goal
 
@@ -103,7 +104,8 @@ strip's `phasesLit` is phase-aware), so no console change is required.
 ### 3. Endpoint — `POST /api/dream/learn` (`src/dream.controller.ts`)
 
 Body `{ root: string, dir?: string, session?: string }`, response = `LearnResult`
-(schemas in `src/schemas.ts`). Thin delegation to `learnFromSession`;
+(schemas inline in `src/dream.controller.ts`, following its existing pattern). Thin
+delegation to `learnFromSession`;
 `InvalidInputError` → 400 via the established mapping. Colocated with
 `/dream/queue/*` because its output is queue entries.
 

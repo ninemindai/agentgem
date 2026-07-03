@@ -39,6 +39,7 @@ describe("learnFromSession", () => {
     const r = await learnFromSession({ root: PROJ, dir: claudeDir, base, distillWf: distillOne, extractRefl: () => [] });
     expect(r.session).toBe("s-new.jsonl");
     expect(r).toMatchObject({ enqueued: 1, skills: 1, lessons: 0, degraded: false });
+    expect(r.entries).toEqual([{ kind: "skill", name: "extract-api-client" }]);
     const q = readQueue(base);
     expect(q).toHaveLength(1);
     expect(q[0]).toMatchObject({ kind: "skill", phase: "LEARN", name: "extract-api-client", status: "queued" });
@@ -65,6 +66,7 @@ describe("learnFromSession", () => {
     await learnFromSession({ root: PROJ, dir: claudeDir, base, distillWf: distillOne, extractRefl: () => [] });
     const r2 = await learnFromSession({ root: PROJ, dir: claudeDir, base, distillWf: distillOne, extractRefl: () => [] });
     expect(r2).toMatchObject({ enqueued: 0, skills: 1 });
+    expect(r2.entries).toEqual([]);
     expect(readQueue(base)).toHaveLength(1);
   });
 

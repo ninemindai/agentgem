@@ -35,8 +35,9 @@ export async function runLearnCommand(args: string[], deps: LearnCliDeps = {}): 
       out(`nothing distilled from ${r.session}${r.degraded ? " (heuristic-only: LLM path unavailable)" : ""}`);
       return 0;
     }
+    for (const e of r.entries) out(`+ ${e.kind} "${e.name}" queued`);
     out(`${r.session}: ${r.skills} skill candidate(s), ${r.lessons} lesson(s) — ${r.enqueued} queued for review` +
-        (r.enqueued < r.skills + r.lessons ? " (rest already queued or reviewed)" : ""));
+        (r.enqueued > 0 && r.enqueued < r.skills + r.lessons ? " (rest already queued or reviewed)" : ""));
     out(`review in the Dreaming panel or GET /api/dream/queue`);
     return 0;
   } catch (e) {
