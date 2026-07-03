@@ -17,6 +17,8 @@
 - **Repo requires REBASE merge, branch up-to-date:** never create merge commits on the branch; linearize on `origin/main` before integrating.
 - **Git identity:** commits authored `Raymond Feng <raymond@ninemind.ai>`; end messages with `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
 - **Read-mostly invariant:** nothing in this feature writes user files or executes Gems. The goldmine MCP tools are pure reads of `~/.claude`; the draft handoff produces a *draft* for human review.
+- **Slice-1 streaming is per-turn, not token-incremental (INTENTIONAL).** `ChatManager.sendMessage` buffers a turn's deltas and yields them after `prompt()` resolves; the whole answer appears when the turn completes. Tool chips + `phase`/`done` events still work. True token-by-token streaming (bridging the ACP `onUpdate` callback into an async channel that yields concurrently with the turn) is a deferred fast-follow — do NOT flag the buffered form as a defect.
+- **Execution ordering:** run **Task 3 before Task 1** — Task 1's live-smoke depends on Task 3's `connectAcpAdapter`/`stdioMcpServer` changes. All other tasks follow plan order.
 
 ---
 
