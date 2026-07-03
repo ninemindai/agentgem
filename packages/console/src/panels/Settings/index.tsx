@@ -7,7 +7,7 @@ import {
 } from "../../api/routes.js";
 
 type Backend = { id: string; label: string; ready: boolean };
-type BindStatus = { bound: boolean; login?: string; provider?: string } | null;
+type BindStatus = { bound: boolean; login?: string; provider?: string; avatarUrl?: string } | null;
 type BindFlow =
   | { step: "code"; userCode: string; verificationUri: string; deviceCode: string; interval?: number }
   | { step: "unconfigured" }
@@ -57,7 +57,7 @@ export function Settings({ apiBase }: { apiBase: string }) {
         body: { deviceCode: r.deviceCode!, interval: r.interval },
       });
       if (result.bound) {
-        setBindStatus({ bound: true, login: result.login });
+        setBindStatus({ bound: true, login: result.login, avatarUrl: result.avatarUrl });
         setBindFlow(null);
       } else if (result.rejected) {
         setBindError(result.rejected);
@@ -98,7 +98,13 @@ export function Settings({ apiBase }: { apiBase: string }) {
         <h2 className="ledger-group-label">Verify identity</h2>
         {bindError && <p className="ledger-error">{bindError}</p>}
         {bindStatus === null ? null : bindStatus.bound ? (
-          <p className="ws-note">Verified as @{bindStatus.login}</p>
+          <p className="ws-note">
+            {bindStatus.avatarUrl && (
+              <img src={bindStatus.avatarUrl} alt={`@${bindStatus.login}`} width={20} height={20}
+                   style={{ borderRadius: "50%", verticalAlign: "middle", marginRight: 6 }} />
+            )}
+            Verified as @{bindStatus.login}
+          </p>
         ) : (
           <>
             <p className="deploy-hint">Not verified — your installs won't count toward verified ratings</p>
