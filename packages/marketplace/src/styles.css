@@ -111,6 +111,8 @@ h2, h3 { font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; }
 .ex-navlink.is-active { color: var(--brand-strong); background: var(--brand-wash); }
 
 .ex-auth { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.ex-me { display: flex; align-items: center; gap: 8px; text-decoration: none; }
+.ex-me:hover .ex-login { color: var(--ink); }
 .ex-avatar { width: 22px; height: 22px; border-radius: var(--r-pill); border: 1px solid var(--line); }
 .ex-login { font-size: 0.875rem; color: var(--ink-2); font-weight: 500; }
 

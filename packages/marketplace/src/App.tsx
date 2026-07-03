@@ -45,8 +45,10 @@ export function App() {
         <span className="ex-auth">
           {me ? (
             <>
-              {me.avatarUrl && <img className="ex-avatar" src={me.avatarUrl} alt="" width={20} height={20} />}
-              <span className="ex-login">{me.login}</span>
+              <a className="ex-me" href={`/@${me.login}`} title="Your profile">
+                {me.avatarUrl && <img className="ex-avatar" src={me.avatarUrl} alt="" width={20} height={20} />}
+                <span className="ex-login">{me.login}</span>
+              </a>
               <button type="button" className="ex-signout" onClick={signOut}>Sign out</button>
             </>
           ) : (

@@ -64,7 +64,9 @@ export function callbackHandler(deps: AuthDeps) {
     try {
       const token = await deps.exchangeCode(code);
       const acct = await deps.verifier.verify(token);
-      const row = await upsertAccount(deps.db, { provider: acct.provider, accountId: acct.accountId, login: acct.login });
+      // Capture the GitHub avatar at web login too (mirrors the device-flow bind path
+      // in recordBinding) so the logged-in user's avatar shows in the nav and on /@login.
+      const row = await upsertAccount(deps.db, { provider: acct.provider, accountId: acct.accountId, login: acct.login, avatarUrl: acct.avatarUrl ?? null });
       // #4b: capture owned scopes (login + public org memberships) at login. Best-effort —
       // an org-fetch failure must never fail login; the user still owns at least their login.
       let orgs: string[] = [];
