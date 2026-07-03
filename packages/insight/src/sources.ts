@@ -19,6 +19,10 @@ import { scanCursorSessions, readCursorArtifacts } from "./sources/cursor.js";
 
 // codexDir is a legacy independent override (scanSessions({ claudeDir, codexDir })); when absent it
 // derives from baseDir's parent via resolveDirs, same as every other agent root.
+//
+// baseDir is overloaded per source: for claude/codex it is the .claude dir (siblings derived via
+// resolveDirs); for cline/gemini/continue/cursor it is that source's OWN config/data home (and a
+// test override). Callers of readArtifacts must pass the per-source home, never claudeDir.
 export interface SourceEnv { baseDir?: string; codexDir?: string }
 export interface ImportResult { artifacts: GemArtifact[]; binding: AgentBinding }
 
@@ -93,7 +97,7 @@ const geminiSource: SourceSpec = {
   scanSessions: (roots) =>
     scanGeminiSessions(roots.flatMap((r) => listFiles(r, ".jsonl")).filter((f) => basename(f).startsWith("session-"))),
   readArtifacts: async (env) => {
-    const home = env.baseDir ?? join(homedir(), ".gemini");
+    const home = env.baseDir || join(homedir(), ".gemini");  // || not ??: "" must mean absent, never a cwd-relative read
     return readGeminiArtifacts({
       contextFile: join(home, "GEMINI.md"),
       settingsFile: join(home, "settings.json"),
@@ -113,7 +117,7 @@ const continueSource: SourceSpec = {
   roots: (env) => [continueSessionsDir(env.baseDir)],
   scanSessions: async (roots) => (await Promise.all(roots.map((r) => scanContinueSessions(r)))).flat(),
   readArtifacts: async (env) => {
-    const home = env.baseDir ?? join(homedir(), ".continue");
+    const home = env.baseDir || join(homedir(), ".continue");
     return readContinueArtifacts({ configFile: join(home, "config.yaml") });
   },
 };
@@ -132,7 +136,7 @@ const cursorSource: SourceSpec = {
   readArtifacts: async (env) => {
     // .cursor/rules, .cursorrules, and AGENTS.md are per-repo (out of scope here); only mcp.json
     // has a meaningful global config-home.
-    const home = env.baseDir ?? join(homedir(), ".cursor");
+    const home = env.baseDir || join(homedir(), ".cursor");
     return readCursorArtifacts({ mcpFile: join(home, "mcp.json") });
   },
 };
