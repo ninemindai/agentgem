@@ -52,9 +52,11 @@ describe("makeApi", () => {
 
   it("getOrgCatalog returns the parsed catalog on 200", async () => {
     const body = { scope: "acme", gemCount: 1, ownerCount: 1, gems: [] };
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, text: () => Promise.resolve(JSON.stringify(body)) }));
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, text: () => Promise.resolve(JSON.stringify(body)) });
+    vi.stubGlobal("fetch", fetchMock);
     const api = makeApi("http://x");
     expect(await api.getOrgCatalog("acme")).toEqual(body);
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/api/aggregator/org-catalog?scope=acme");
   });
 
   it("getOrgCatalog returns null on 400 (malformed scope)", async () => {
