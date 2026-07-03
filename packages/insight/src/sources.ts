@@ -11,7 +11,9 @@ import { homedir } from "node:os";
 import { resolveDirs } from "@agentgem/model";
 import type { AgentBinding, GemArtifact } from "@agentgem/model";
 import type { AgentId, SessionStat } from "./observeAggregate.js";
-import { listFiles, parseClaudeTranscript, parseCodexTranscript } from "./observeScan.js";
+import { listFiles, jsonLines, parseClaudeTranscript, parseCodexTranscript } from "./observeScan.js";
+import { detectHtmlArtifacts, type HtmlArtifactVersion } from "./artifactScan.js";
+import { resolveCodexHtmlPaths } from "./sources/codexArtifacts.js";
 import { scanClineSessions, readClineArtifacts } from "./sources/cline.js";
 import { scanGeminiSessions, readGeminiArtifacts } from "./sources/gemini.js";
 import { scanContinueSessions, readContinueArtifacts } from "./sources/continue.js";
@@ -33,6 +35,24 @@ export interface SourceSpec {
   roots(env: SourceEnv): string[];                        // may be empty when the agent is absent
   scanSessions?(roots: string[]): Promise<SessionStat[]>; // capability: telemetry
   readArtifacts?(env: SourceEnv): Promise<ImportResult>;  // capability: authoring — global config only, per-repo is future work
+  // ── Watch capabilities (live HTML-artifact preview) ─────────────────────────
+  // An agent is "watchable" when it supplies watchFiles + parseMeta and at least
+  // one detection method. detectArtifacts is the rich, full-content path (best
+  // fidelity, survives file deletion); resolveArtifactPaths is the thin, agent-
+  // agnostic fallback (returns just the *.html paths, watched on disk directly).
+  /** Transcript files eligible to watch live; encapsulates per-agent name filters. */
+  watchFiles?(roots: string[]): string[];
+  /** Light metadata for the Watch picker — reuses the telemetry parser. */
+  parseMeta?(text: string, path: string): SessionStat | null;
+  /** Reconstruct ordered full-document HTML snapshots from one transcript. */
+  detectArtifacts?(text: string, path: string): HtmlArtifactVersion[];
+  /** Absolute *.html paths the session touched, for the file-driven fallback. */
+  resolveArtifactPaths?(text: string): string[];
+}
+
+/** Sources that can drive the Watch tab (have discovery + at least one detector). */
+export function watchableSources(specs: SourceSpec[] = BUILTIN_SOURCES): SourceSpec[] {
+  return specs.filter((s) => s.watchFiles && s.parseMeta && (s.detectArtifacts || s.resolveArtifactPaths));
 }
 
 async function scanJsonl(files: string[], parse: (t: string, p: string) => SessionStat | null): Promise<SessionStat[]> {
@@ -48,6 +68,10 @@ const claudeSource: SourceSpec = {
   id: "claude", label: "Claude Code", traits: { storage: "jsonl" },
   roots: (env) => [join(resolveDirs(env.baseDir).claudeDir, "projects")],
   scanSessions: (roots) => scanJsonl(roots.flatMap((r) => listFiles(r, ".jsonl")), parseClaudeTranscript),
+  watchFiles: (roots) => roots.flatMap((r) => listFiles(r, ".jsonl")),
+  parseMeta: parseClaudeTranscript,
+  // Claude's Write/Edit records carry the full document, so we reconstruct snapshots.
+  detectArtifacts: (text) => detectHtmlArtifacts(jsonLines(text)),
 };
 
 const codexSource: SourceSpec = {
@@ -55,6 +79,11 @@ const codexSource: SourceSpec = {
   roots: (env) => [join(env.codexDir ?? resolveDirs(env.baseDir).codexDir, "sessions")],
   scanSessions: (roots) =>
     scanJsonl(roots.flatMap((r) => listFiles(r, ".jsonl")).filter((f) => basename(f).startsWith("rollout-")), parseCodexTranscript),
+  watchFiles: (roots) => roots.flatMap((r) => listFiles(r, ".jsonl")).filter((f) => basename(f).startsWith("rollout-")),
+  parseMeta: parseCodexTranscript,
+  // Codex mutates files via apply_patch/shell (diffs, not whole writes), so we only
+  // resolve the touched *.html paths and let the live layer watch them on disk.
+  resolveArtifactPaths: resolveCodexHtmlPaths,
 };
 
 // macOS globalStorage roots for VS Code + forks that host the Cline extension. baseDir overrides for tests.

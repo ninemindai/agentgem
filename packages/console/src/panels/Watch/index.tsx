@@ -30,6 +30,7 @@ export function Watch({ apiBase }: { apiBase: string }) {
   const [artifacts, setArtifacts] = useState<ArtifactVersion[]>([]);
   const [current, setCurrent] = useState<number | null>(null); // index into artifacts
   const [phase, setPhase] = useState<string>("");
+  const [mode, setMode] = useState<"transcript" | "file" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const closeRef = useRef<(() => void) | null>(null);
   const followRef = useRef(true); // auto-advance to newest until the user picks a version
@@ -47,11 +48,12 @@ export function Watch({ apiBase }: { apiBase: string }) {
     setArtifacts([]);
     setCurrent(null);
     setPhase("connecting");
+    setMode(null);
     setError(null);
     followRef.current = true;
 
     closeRef.current = openWatchStream(apiBase, file, (e) => {
-      if (e.type === "phase") setPhase(e.phase);
+      if (e.type === "phase") { setPhase(e.phase); if (e.mode) setMode(e.mode); }
       else if (e.type === "failed") { setError(e.message); setPhase(""); }
       else if (e.type === "artifact") {
         setArtifacts((prev) => {
@@ -68,8 +70,8 @@ export function Watch({ apiBase }: { apiBase: string }) {
   return (
     <section className="analyze">
       <p className="analyze-intro">
-        Watch a running coding session build an HTML page — every write/edit streams in as a new,
-        sandboxed version. Content is redacted before it reaches this panel.
+        Watch a running coding session (Claude Code, Codex) build an HTML page — every write/edit
+        streams in as a new, sandboxed version. Content is redacted before it reaches this panel.
       </p>
 
       <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
@@ -112,6 +114,11 @@ export function Watch({ apiBase }: { apiBase: string }) {
             <>
               <div className="run-status" style={{ gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
                 {phase && !error && <span className="run-badge run-running">{phase}</span>}
+                {mode && !error && (
+                  <span className="ws-chip" title={mode === "file" ? "Rendering the file the agent wrote on disk" : "Reconstructed from the session transcript"}>
+                    {mode === "file" ? "file-driven" : "transcript"}
+                  </span>
+                )}
                 {artifacts.length > 0 && (
                   <select
                     className="ledger-search"
