@@ -684,5 +684,15 @@ export const sourceInstallRoute = defineRoute("POST", "/api/sources/install", {
   body: z.object({ source: z.string(), path: z.string() }),
   response: z.object({ ok: z.boolean(), skill: z.string(), dir: z.string() }),
 });
+// Build the skill from a persona WITHOUT writing it to disk — lets the user read the
+// exact SKILL.md before committing to Install (a local-machine, trust-sensitive action).
+const ImportedSkillSchema = z.object({
+  type: z.string().optional(), name: z.string(), description: z.string().optional(),
+  source: z.string().optional(), content: z.string(),
+});
+export type ImportedSkill = z.infer<typeof ImportedSkillSchema>;
+export const sourceImportRoute = defineRoute("POST", "/api/sources/import", {
+  body: z.object({ source: z.string(), path: z.string() }), response: ImportedSkillSchema,
+});
 
 export const makeClient = (apiBase: string): Client => createClient({ baseURL: apiBase });

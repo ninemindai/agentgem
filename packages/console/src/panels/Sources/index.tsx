@@ -6,6 +6,7 @@ import {
   sourceAgentsRoute,
   sourceAgentRoute,
   sourceInstallRoute,
+  sourceImportRoute,
   makeClient,
   type CuratedSource,
   type SourceDivision,
@@ -25,6 +26,8 @@ export function Sources({ apiBase }: { apiBase: string }) {
   const [division, setDivision] = useState<string>("");
   const [agents, setAgents] = useState<SourceAgentRef[] | null>(null);
   const [preview, setPreview] = useState<SourceAgentEntry | null>(null);
+  const [skill, setSkill] = useState<{ path: string; content: string } | null>(null); // full SKILL.md, pre-install
+  const [loadingSkill, setLoadingSkill] = useState<string | null>(null); // path being fetched
   const [installed, setInstalled] = useState<Record<string, string>>({}); // path -> skill name
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +45,7 @@ export function Sources({ apiBase }: { apiBase: string }) {
   useEffect(() => {
     if (!sourceId) return;
     let alive = true;
-    setDivisions(null); setDivision(""); setAgents(null); setPreview(null); setError(null);
+    setDivisions(null); setDivision(""); setAgents(null); setPreview(null); setSkill(null); setError(null);
     sourceDivisionsRoute.call(makeClient(apiBase), { query: { source: sourceId } })
       .then((r) => { if (alive) setDivisions(r.divisions); })
       .catch((e) => { if (alive) setError(e instanceof Error ? e.message : String(e)); });
@@ -53,7 +56,7 @@ export function Sources({ apiBase }: { apiBase: string }) {
   useEffect(() => {
     if (!sourceId || !division) return;
     let alive = true;
-    setAgents(null); setPreview(null);
+    setAgents(null); setPreview(null); setSkill(null);
     sourceAgentsRoute.call(makeClient(apiBase), { query: { source: sourceId, division } })
       .then((r) => { if (alive) setAgents(r.agents); })
       .catch((e) => { if (alive) setError(e instanceof Error ? e.message : String(e)); });
@@ -66,6 +69,21 @@ export function Sources({ apiBase }: { apiBase: string }) {
       setPreview(await sourceAgentRoute.call(makeClient(apiBase), { query: { source: sourceId, path: a.path } }));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  // Fetch the full SKILL.md via /import (build-only, never writes to disk) so the user can
+  // read exactly what Install would persist. Toggles: a second click hides it.
+  const viewSkill = async (a: SourceAgentRef) => {
+    if (skill?.path === a.path) { setSkill(null); return; }
+    setError(null); setLoadingSkill(a.path);
+    try {
+      const art = await sourceImportRoute.call(makeClient(apiBase), { body: { source: sourceId, path: a.path } });
+      setSkill({ path: a.path, content: art.content });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoadingSkill(null);
     }
   };
 
@@ -137,6 +155,14 @@ export function Sources({ apiBase }: { apiBase: string }) {
                 ) : (
                   <span style={{ display: "inline-flex", gap: 6 }}>
                     <button type="button" className="ledger-sort" onClick={() => void showAgent(a)}>Preview</button>
+                    <button
+                      type="button"
+                      className="ledger-sort"
+                      disabled={loadingSkill === a.path}
+                      onClick={() => void viewSkill(a)}
+                    >
+                      {loadingSkill === a.path ? "Loading…" : skill?.path === a.path ? "Hide skill" : "View skill"}
+                    </button>
                     <button type="button" className="ledger-sort" disabled={busy} onClick={() => void install(a.path)}>Install</button>
                   </span>
                 )}
@@ -149,6 +175,15 @@ export function Sources({ apiBase }: { apiBase: string }) {
                   </p>
                   {preview.vibe && <p className="getgems-desc" style={{ opacity: 0.75, fontStyle: "italic" }}>{preview.vibe}</p>}
                 </div>
+              )}
+              {skill?.path === a.path && (
+                <pre
+                  className="run-transcript"
+                  aria-label={`${a.name} SKILL.md`}
+                  style={{ maxHeight: 360, overflow: "auto", marginTop: 8, whiteSpace: "pre-wrap" }}
+                >
+                  {skill.content}
+                </pre>
               )}
             </article>
           ))}
