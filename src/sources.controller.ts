@@ -1,8 +1,5 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
-import { homedir } from "node:os";
-import { join } from "node:path";
-import { mkdir, writeFile } from "node:fs/promises";
 import { z } from "zod";
 import { api, get, post } from "@agentback/openapi";
 import { InvalidInputError } from "@agentgem/model";
@@ -17,6 +14,7 @@ import {
   type CuratedSource,
 } from "@agentgem/distribute";
 import { SkillArtifactSchema } from "./schemas.js";
+import { installAgencySkill } from "./sourcesCore.js";
 
 const CuratedSourceSchema = z.object({
   id: z.string(),
@@ -35,8 +33,6 @@ const AgentsQuery = z.object({ source: z.string().min(1), division: z.string().m
 const AgentQuery = z.object({ source: z.string().min(1), path: z.string().min(1) });
 const ImportBody = z.object({ source: z.string().min(1), path: z.string().min(1) }).strict();
 const InstallResult = z.object({ ok: z.boolean(), skill: z.string(), dir: z.string() });
-// Skill names come from the file slug (kebab); re-check before using one as a path segment.
-const SKILL_NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
 
 const DivisionSchema = z.object({ key: z.string(), label: z.string(), icon: z.string().optional(), color: z.string().optional() });
 const DivisionsResult = z.object({ divisions: z.array(DivisionSchema) });
@@ -107,12 +103,7 @@ export class SourcesController {
   // built into a Gem, and published. This is a LOCAL-machine action (mirrors Discover's install).
   @post("/install", { body: ImportBody, response: InstallResult })
   async install(input: { body: z.infer<typeof ImportBody> }): Promise<z.infer<typeof InstallResult>> {
-    const source = sourceOrThrow(input.body.source);
-    const skill = await importAgencyAgentSkill(agencyPathOrThrow(input.body.path), cfgForCuratedSource(source));
-    if (!SKILL_NAME_RE.test(skill.name)) throw new InvalidInputError(`Unsafe skill name '${skill.name}'.`);
-    const dir = join(homedir(), ".agents", "skills", skill.name);
-    await mkdir(dir, { recursive: true });
-    await writeFile(join(dir, "SKILL.md"), skill.content, "utf8");
-    return { ok: true, skill: skill.name, dir };
+    const { ok, skill, dir } = await installAgencySkill(input.body.source, input.body.path);
+    return { ok, skill, dir };
   }
 }
