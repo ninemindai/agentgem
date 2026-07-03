@@ -17,7 +17,7 @@ describe("GoldmineTools wiring", () => {
     try { await app.stop(); } catch { /* already stopped or never started */ }
   });
 
-  it("registers search_sessions and get_artifact_detail", async () => {
+  it("registers search_sessions, get_artifact_detail, and get_behavior_findings", async () => {
     app = new Application();
     app.component(MCPComponent);
     app.configure("servers.MCPServer").to({
@@ -30,6 +30,6 @@ describe("GoldmineTools wiring", () => {
 
     const server = await app.get<MCPServer>("servers.MCPServer");
     const names = server.listTools().map((t) => t.meta.name).sort();
-    expect(names).toEqual(["get_artifact_detail", "search_sessions"]);
+    expect(names).toEqual(["get_artifact_detail", "get_behavior_findings", "search_sessions"]);
   });
 });

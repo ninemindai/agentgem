@@ -8,6 +8,7 @@ import { isMain } from "@agentback/core";
 import { scanSessionsCached } from "@agentgem/insight";
 import { introspectConfig, introspectProject } from "@agentgem/capture";
 import { searchSessions, getArtifactDetail } from "./tools.js";
+import { collectBehaviorFindings } from "./behaviorFindings.js";
 
 const SearchInput = z.object({
   query: z.string().default(""),
@@ -18,6 +19,10 @@ const DetailInput = z.object({
   type: z.enum(["skill", "mcp_server", "hook", "instructions"]),
   name: z.string(),
   root: z.string().optional(),
+});
+
+const BehaviorInput = z.object({
+  days: z.number().int().min(1).max(90).default(14),
 });
 
 @mcpServer()
@@ -40,6 +45,14 @@ export class GoldmineTools {
     const project = root ? introspectProject(root) : null;
     const detail = getArtifactDetail(global, project, type, name);
     return { detail };
+  }
+
+  @tool("get_behavior_findings", {
+    input: BehaviorInput,
+    description: "Recurring problematic behaviors detected in the user's recent coding sessions (retry storms, thrash loops, unverified finishes, user-defined rules), with per-pattern advice. Use when the user asks how to improve, what went wrong, or about their habits.",
+  })
+  async getBehaviorFindingsTool({ days }: z.infer<typeof BehaviorInput>) {
+    return collectBehaviorFindings({ days });
   }
 }
 
