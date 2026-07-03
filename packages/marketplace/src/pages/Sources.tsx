@@ -13,19 +13,25 @@ export function Sources({ api }: { api: ReturnType<typeof makeApi> }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.getSources().then((s) => { setSources(s); setSourceId((id) => id || s[0]?.id || ""); }).catch((e) => setError(String(e)));
+    let alive = true;
+    api.getSources().then((s) => { if (alive) { setSources(s); setSourceId((id) => id || s[0]?.id || ""); } }).catch((e) => { if (alive) setError(String(e)); });
+    return () => { alive = false; };
   }, [api]);
 
   useEffect(() => {
     if (!sourceId) return;
+    let alive = true;
     setDivisions(null); setDivision(""); setAgents(null); setSkill(null);
-    api.getSourceDivisions(sourceId).then(setDivisions).catch((e) => setError(String(e)));
+    api.getSourceDivisions(sourceId).then((d) => { if (alive) setDivisions(d); }).catch((e) => { if (alive) setError(String(e)); });
+    return () => { alive = false; };
   }, [api, sourceId]);
 
   useEffect(() => {
     if (!sourceId || !division) return;
+    let alive = true;
     setAgents(null); setSkill(null);
-    api.getSourceAgents(sourceId, division).then(setAgents).catch((e) => setError(String(e)));
+    api.getSourceAgents(sourceId, division).then((a) => { if (alive) setAgents(a); }).catch((e) => { if (alive) setError(String(e)); });
+    return () => { alive = false; };
   }, [api, sourceId, division]);
 
   const viewSkill = async (a: SourceAgentRef) => {
