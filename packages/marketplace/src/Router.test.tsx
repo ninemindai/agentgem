@@ -46,4 +46,11 @@ describe("Router", () => {
     render(<Router api={makeApi("")} stars={stars} me={null} />);
     expect(await screen.findByRole("heading", { name: /octocat/ })).toBeTruthy();
   });
+
+  it("routes /orgs/:scope to the OrgCatalog page", async () => {
+    window.history.pushState({}, "", "/orgs/acme");
+    const api = { getOrgCatalog: () => Promise.resolve({ scope: "acme", gemCount: 0, ownerCount: 0, gems: [] }) } as never;
+    render(<Router api={api} stars={{ signedIn: false, loginUrl: () => "", api: {} as never }} me={null} />);
+    expect(await screen.findByText(/no gems published under @acme yet/i)).toBeTruthy();
+  });
 });
