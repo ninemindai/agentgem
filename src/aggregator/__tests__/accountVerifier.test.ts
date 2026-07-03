@@ -19,4 +19,12 @@ describe("GitHubVerifier", () => {
     const v = new GitHubVerifier(fakeFetch(200, { login: "octocat" })); // no id
     await expect(v.verify("tok")).rejects.toThrow();
   });
+  it("captures avatar_url when present", async () => {
+    const v = new GitHubVerifier(fakeFetch(200, { id: 42, login: "octocat", avatar_url: "https://avatars.githubusercontent.com/u/42" }));
+    expect(await v.verify("tok")).toEqual({ provider: "github", accountId: "42", login: "octocat", avatarUrl: "https://avatars.githubusercontent.com/u/42" });
+  });
+  it("omits avatarUrl when /user has no avatar_url", async () => {
+    const v = new GitHubVerifier(fakeFetch(200, { id: 42, login: "octocat" }));
+    expect((await v.verify("tok")).avatarUrl).toBeUndefined();
+  });
 });
