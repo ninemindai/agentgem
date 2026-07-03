@@ -8,12 +8,21 @@ export interface SecretRef {
   location: string; // dotted path within the artifact config, e.g. "env.OPENAI_API_KEY"
 }
 
+export interface TriggerContract {
+  intent: string;          // one-line: what this skill is for
+  triggers: string[];      // positive signals — when it SHOULD fire
+  antiTriggers: string[];  // boundaries — when it must NOT fire
+  inputs?: string[];       // optional: what it expects to be present
+  outputs?: string[];      // optional: what it produces
+}
+
 export interface SkillArtifact {
   type: "skill";
   name: string;
   description?: string;
   source: string;
   content: string;
+  trigger?: TriggerContract;
 }
 
 export interface McpServerArtifact {

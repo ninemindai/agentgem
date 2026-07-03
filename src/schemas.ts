@@ -8,12 +8,21 @@ import { deployTargetIds } from "@agentgem/deploy";
 import { flavorIds } from "@agentgem/testbed";
 import { CREDENTIAL_KEYS } from "@agentgem/capture";
 
+export const TriggerContractSchema = z.object({
+  intent: z.string(),
+  triggers: z.array(z.string()),
+  antiTriggers: z.array(z.string()),
+  inputs: z.array(z.string()).optional(),
+  outputs: z.array(z.string()).optional(),
+});
+
 export const SkillArtifactSchema = z.object({
   type: z.literal("skill"),
   name: z.string(),
   description: z.string().optional(),
   source: z.string(),
   content: z.string(),
+  trigger: TriggerContractSchema.optional(),
 });
 
 export const McpServerArtifactSchema = z.object({

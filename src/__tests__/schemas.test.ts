@@ -8,6 +8,7 @@ import {
   DeployTargetIdSchema, DeployReadyQuerySchema, DeployTargetsResponseSchema,
   RegistryResolveRequestSchema, RegistryInstallRequestSchema, RegistryPublishRequestSchema,
   GemArtifactSchema, SkippedArtifactSchema,
+  SkillArtifactSchema, TriggerContractSchema,
 } from "../schemas.js";
 
 describe("wire schemas", () => {
@@ -190,5 +191,34 @@ describe("channel schema", () => {
 
   it("SkippedArtifactSchema accepts a channel skip", () => {
     expect(SkippedArtifactSchema.safeParse({ artifact: "slack", type: "channel", reason: "unsupported" }).success).toBe(true);
+  });
+});
+
+describe("TriggerContract", () => {
+  it("parses a full trigger contract", () => {
+    const c = TriggerContractSchema.parse({
+      intent: "distill a session into a shareable skill",
+      triggers: ["user asks to save this workflow", "repeated manual steps"],
+      antiTriggers: ["one-off throwaway command"],
+      inputs: ["a transcript"],
+      outputs: ["a SkillArtifact"],
+    });
+    expect(c.triggers).toHaveLength(2);
+    expect(c.inputs).toEqual(["a transcript"]);
+  });
+
+  it("accepts a skill artifact WITHOUT a trigger (backward-compat)", () => {
+    const s = SkillArtifactSchema.parse({
+      type: "skill", name: "x", source: "s", content: "c",
+    });
+    expect(s.trigger).toBeUndefined();
+  });
+
+  it("accepts a skill artifact WITH a trigger", () => {
+    const s = SkillArtifactSchema.parse({
+      type: "skill", name: "x", source: "s", content: "c",
+      trigger: { intent: "i", triggers: ["t"], antiTriggers: [] },
+    });
+    expect(s.trigger?.intent).toBe("i");
   });
 });
