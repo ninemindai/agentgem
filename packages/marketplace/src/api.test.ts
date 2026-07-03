@@ -49,4 +49,17 @@ describe("makeApi", () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 404, text: async () => "" }) as unknown as Response));
     expect(await makeApi("https://x").getProfile("nobody")).toBeNull();
   });
+
+  it("getOrgCatalog returns the parsed catalog on 200", async () => {
+    const body = { scope: "acme", gemCount: 1, ownerCount: 1, gems: [] };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, text: () => Promise.resolve(JSON.stringify(body)) }));
+    const api = makeApi("http://x");
+    expect(await api.getOrgCatalog("acme")).toEqual(body);
+  });
+
+  it("getOrgCatalog returns null on 400 (malformed scope)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 400, text: () => Promise.resolve("") }));
+    const api = makeApi("http://x");
+    expect(await api.getOrgCatalog("bad/scope")).toBeNull();
+  });
 });

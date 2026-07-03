@@ -1,4 +1,4 @@
-import type { AggIngredient, AggCoOccurrence, AdoptionPoint, RegistryGem, Profile } from "./types";
+import type { AggIngredient, AggCoOccurrence, AdoptionPoint, RegistryGem, Profile, OrgCatalog } from "./types";
 
 type Query = Record<string, string | number | undefined>;
 
@@ -32,6 +32,12 @@ export function makeApi(base: string) {
       if (res.status === 404) return null;
       if (!res.ok) throw new Error(`/api/aggregator/profile -> ${res.status}`);
       return JSON.parse(await res.text()) as Profile;
+    },
+    getOrgCatalog: async (scope: string): Promise<OrgCatalog | null> => {
+      const res = await fetch(base + "/api/aggregator/org-catalog?scope=" + encodeURIComponent(scope));
+      if (res.status === 400 || res.status === 404) return null;
+      if (!res.ok) throw new Error(`/api/aggregator/org-catalog -> ${res.status}`);
+      return JSON.parse(await res.text()) as OrgCatalog;
     },
   };
 }

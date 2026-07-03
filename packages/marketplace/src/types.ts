@@ -48,3 +48,28 @@ export interface Profile {
   totalStars: number;
   gems: ProfileGem[];
 }
+
+export interface RubricCheck {
+  id: string;
+  label: string;
+  pass: boolean;
+  howToFix: string;
+}
+export interface OrgCatalogGem {
+  key: string;
+  version: string;
+  cut: string | null;
+  grade: number | null;
+  owner: string;
+  description: string | null;
+  stars: number;
+  installs: number;
+  verifiedInstalls: number;
+  rubric: { score: number; checks: RubricCheck[] };
+}
+export interface OrgCatalog {
+  scope: string;
+  gemCount: number;
+  ownerCount: number;
+  gems: OrgCatalogGem[];
+}
