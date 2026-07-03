@@ -20,10 +20,7 @@ export function openChatStream(
   message: string,
   h: ChatStreamHandlers,
 ): () => void {
-  const params = new URLSearchParams({
-    chatId: encodeURIComponent(chatId),
-    message: encodeURIComponent(message),
-  });
+  const params = new URLSearchParams({ chatId, message });
   const es = new EventSource(`/api/chat/stream?${params.toString()}`);
 
   es.addEventListener("delta", (e: Event) => {
