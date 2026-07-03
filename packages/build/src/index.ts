@@ -4,3 +4,4 @@
 export * from "./buildGem.js";
 export * from "./checks.js";
 export * from "./routeConfusion.js";
+export * from "./triggerScorecard.js";
