@@ -8,7 +8,7 @@ export function Sources({ api }: { api: ReturnType<typeof makeApi> }) {
   const [divisions, setDivisions] = useState<SourceDivision[] | null>(null);
   const [division, setDivision] = useState("");
   const [agents, setAgents] = useState<SourceAgentRef[] | null>(null);
-  const [skill, setSkill] = useState<{ path: string; content: string } | null>(null);
+  const [skill, setSkill] = useState<{ sourceId: string; path: string; content: string } | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,11 +35,11 @@ export function Sources({ api }: { api: ReturnType<typeof makeApi> }) {
   }, [api, sourceId, division]);
 
   const viewSkill = async (a: SourceAgentRef) => {
-    if (skill?.path === a.path) { setSkill(null); return; }
+    if (skill?.sourceId === sourceId && skill?.path === a.path) { setSkill(null); return; }
     setError(null); setLoading(a.path);
     try {
       const art = await api.importSourceSkill(sourceId, a.path);
-      setSkill({ path: a.path, content: art.content });
+      setSkill({ sourceId, path: a.path, content: art.content });
     } catch (e) { setError(String(e)); } finally { setLoading(null); }
   };
 
@@ -70,11 +70,11 @@ export function Sources({ api }: { api: ReturnType<typeof makeApi> }) {
               <div className="ex-agent-head">
                 <span className="ex-agent-name">{a.name}</span>
                 <button type="button" className="ex-btn" disabled={loading === a.path} onClick={() => void viewSkill(a)}>
-                  {loading === a.path ? "Loading…" : skill?.path === a.path ? "Hide skill" : "View skill"}
+                  {loading === a.path ? "Loading…" : skill?.sourceId === sourceId && skill?.path === a.path ? "Hide skill" : "View skill"}
                 </button>
               </div>
               <code className="ex-install-cmd">agentgem sources install {sourceId} {a.path}</code>
-              {skill?.path === a.path && (
+              {skill?.sourceId === sourceId && skill?.path === a.path && (
                 <pre className="ex-skill-body" aria-label={`${a.name} SKILL.md`}>{skill.content}</pre>
               )}
             </li>
