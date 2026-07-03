@@ -27,6 +27,9 @@ describe("unknown source is rejected", () => {
   it("import", async () => {
     await expect(c.import({ body: { source: "nope", path: "engineering/x.md" } })).rejects.toBeInstanceOf(InvalidInputError);
   });
+  it("importGet (the GET variant, reachable cross-origin)", async () => {
+    await expect(c.importGet({ query: { source: "nope", path: "engineering/x.md" } })).rejects.toBeInstanceOf(InvalidInputError);
+  });
   it("install", async () => {
     await expect(c.install({ body: { source: "nope", path: "engineering/x.md" } })).rejects.toBeInstanceOf(InvalidInputError);
   });
@@ -37,6 +40,9 @@ describe("input containment guards (checked before any fetch)", () => {
 
   it("rejects a traversal path on import", async () => {
     await expect(c.import({ body: { source, path: "../../etc/passwd" } })).rejects.toThrow(/Invalid agent path/);
+  });
+  it("rejects a traversal path on importGet", async () => {
+    await expect(c.importGet({ query: { source, path: "../../etc/passwd" } })).rejects.toThrow(/Invalid agent path/);
   });
   it("rejects a traversal path on install (before any fetch or write)", async () => {
     await expect(c.install({ body: { source, path: "../../etc/passwd" } })).rejects.toThrow(/Invalid agent path/);
