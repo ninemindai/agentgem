@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 // src/__tests__/dream.controller.test.ts
 import { describe, it, expect, beforeEach } from "vitest";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DreamController } from "../dream.controller.js";
@@ -103,5 +103,39 @@ describe("DreamController", () => {
     expect(r.entries.length).toBe(2);
     expect(r.entries[0].passId).toBe(2); // appendDiary prepends → newest first
     expect(r.entries[0].degraded).toBe(true);
+  });
+
+  it("POST /dream/learn distills a session into the queue and returns counts", async () => {
+    // Claude-home fixture with one session for a project.
+    const home = mkdtempSync(join(tmpdir(), "dreamlearn-"));
+    const claudeDir = join(home, ".claude");
+    const enc = join(claudeDir, "projects", "enc-a");
+    mkdirSync(enc, { recursive: true });
+    writeFileSync(join(enc, "s1.jsonl"), JSON.stringify({ type: "summary" }) + "\n" + JSON.stringify({ cwd: "/Users/me/work/app" }) + "\n");
+    const c = new DreamController();
+    (c as unknown as { base: string }).base = base;
+    try {
+      const r = await c.learn({ body: { root: "/Users/me/work/app", dir: claudeDir } });
+      // Synthetic near-empty transcript: the real pipeline finds nothing — that is success.
+      expect(r.session).toBe("s1.jsonl");
+      expect(r.enqueued).toBe(0);
+      expect(typeof r.degraded).toBe("boolean");
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("POST /dream/learn rejects an unknown session ref", async () => {
+    const home = mkdtempSync(join(tmpdir(), "dreamlearn-"));
+    const claudeDir = join(home, ".claude");
+    mkdirSync(join(claudeDir, "projects"), { recursive: true });
+    const c = new DreamController();
+    (c as unknown as { base: string }).base = base;
+    try {
+      await expect(c.learn({ body: { root: "/Users/me/work/app", dir: claudeDir, session: "nope" } }))
+        .rejects.toThrow(/no session/i);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
   });
 });
