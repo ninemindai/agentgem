@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
-import { TranscriptViewer } from "./TranscriptViewer.js";
+import { TranscriptViewer, DraftCard } from "./TranscriptViewer.js";
 import * as routes from "../../api/routes.js";
 import type { TranscriptView } from "../../api/routes.js";
 
@@ -70,6 +70,22 @@ describe("TranscriptViewer", () => {
 
     fireEvent.click(screen.getByText("Save draft"));
     await waitFor(() => expect(screen.getByText(/saved →/)).toBeTruthy());
+  });
+
+  it("edits the trigger contract and posts the edited draft", async () => {
+    const draft = {
+      name: "do-x", description: "d", triggers: ["t"], tools: [], mutating: false, body: "b",
+      evidence: { sessions: 1, exampleSequence: [], root: "/r", provenance: { occurrences: [] } },
+      status: "draft" as const, confidence: "high" as const, origin: "llm" as const,
+      triggerContract: { intent: "do x", triggers: ["save"], antiTriggers: [] },
+    };
+    const spy = vi.spyOn(routes.workflowDraftRoute, "call").mockResolvedValue({ path: "/p" } as any);
+    render(<DraftCard apiBase="" draft={draft} />);
+    fireEvent.change(screen.getByLabelText("triggers"), { target: { value: "save, share" } });
+    fireEvent.click(screen.getByRole("button", { name: /save draft/i }));
+    await waitFor(() => expect(spy).toHaveBeenCalled());
+    const body = spy.mock.calls[0][1].body;
+    expect(body.triggerContract!.triggers).toEqual(["save", "share"]);
   });
 
   it("renders distilled lessons and saves one via /api/workflow/lesson", async () => {
