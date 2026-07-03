@@ -73,7 +73,8 @@ export function MineWorkflows({ data, filter, onFilter, onBuild, building, resul
       }
       const { url } = await doCreateGemShare({
         kind: "gem",
-        name: wfName,
+        name: wfName.trim() || "workflow", // never send an empty/whitespace name — the share endpoint rejects it
+
         provenance: `Distilled from ${detail.sessions} session${detail.sessions === 1 ? "" : "s"}`,
         generatedAtMs: Date.now(),
       });
