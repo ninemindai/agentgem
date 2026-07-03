@@ -68,4 +68,18 @@ describe("Gems (browse)", () => {
     await waitFor(() => expect(screen.queryByText("guidegem")).toBeNull());
     expect(screen.getByText("intgem")).toBeTruthy();
   });
+
+  it("shows a linked @publishedBy byline on a card", async () => {
+    const api = apiWith(() => Promise.resolve([{ key: "pub-gem", version: "1.0.0", publishedBy: "rfeng", description: "d", tags: [], artifactKinds: ["skill"] }]));
+    render(<Gems api={api} stars={stars} />);
+    const link = (await screen.findByText("@rfeng")).closest("a");
+    expect(link?.getAttribute("href")).toBe("/@rfeng");
+  });
+
+  it("shows no author byline on a card without publishedBy", async () => {
+    const api = apiWith(() => Promise.resolve([{ key: "no-pub", version: "1.0.0", author: "acme", description: "d", tags: [], artifactKinds: ["skill"] }]));
+    render(<Gems api={api} stars={stars} />);
+    await screen.findByText("no-pub");
+    expect(screen.queryByText(/^@/)).toBeNull();
+  });
 });

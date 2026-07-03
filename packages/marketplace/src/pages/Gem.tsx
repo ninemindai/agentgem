@@ -41,7 +41,9 @@ export function Gem({ api, keyName, stars }: { api: ReturnType<typeof makeApi>; 
           signedIn={stars.signedIn} loginUrl={stars.loginUrl} api={stars.api} />
       </h2>
       <p className="ex-gem-meta">
-        {gem.author && <span>by {gem.author}</span>}
+        {gem.publishedBy
+          ? <a className="ex-gem-author" href={"/@" + encodeURIComponent(gem.publishedBy)}>@{gem.publishedBy}</a>
+          : (gem.author ? <span>by {gem.author}</span> : null)}
         {gem.artifactKinds.map((k) => <span key={k} className="ex-chip">{kindLabel(k)}</span>)}
       </p>
       <p className="ex-gem-desc">{gem.description}</p>
