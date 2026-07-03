@@ -25,4 +25,27 @@ describe("scaffoldChecks", () => {
     const checks = scaffoldChecks(p);
     expect(checks.map((c) => c.kind)).toEqual(["behavioral"]);
   });
+
+  it("emits a route-confusion check when a skill has a trigger contract", () => {
+    const gem = {
+      name: "g", createdFrom: "t", artifacts: [
+        { type: "skill", name: "s", source: "x", content: "c",
+          trigger: { intent: "i", triggers: ["t"], antiTriggers: [] } },
+      ], checks: [], requiredSecrets: [],
+    } as any;
+    const checks = scaffoldChecks(gem);
+    const rc = checks.find((c) => c.kind === "external" && c.runner === "route-confusion");
+    expect(rc).toBeTruthy();
+    expect(rc && rc.kind === "external" && rc.with).toEqual({ corpus: "in-gem" });
+  });
+
+  it("omits route-confusion when no skill has a trigger contract", () => {
+    const gem = {
+      name: "g", createdFrom: "t", artifacts: [
+        { type: "skill", name: "s", source: "x", content: "c" },
+      ], checks: [], requiredSecrets: [],
+    } as any;
+    const checks = scaffoldChecks(gem);
+    expect(checks.some((c) => c.kind === "external" && c.runner === "route-confusion")).toBe(false);
+  });
 });

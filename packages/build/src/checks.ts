@@ -12,6 +12,12 @@ export const RUNNER_REGISTRY = {
     resultShape: "score+findings",
     defaultWith: { failAboveRisk: 40 },
   },
+  "route-confusion": {
+    id: "route-confusion",
+    consumes: "gem-as-directory",
+    resultShape: "score+findings",
+    defaultWith: { corpus: "in-gem" },
+  },
 } as const;
 
 export function scaffoldChecks(gem: Gem): GemCheck[] {
@@ -33,6 +39,11 @@ export function scaffoldChecks(gem: Gem): GemCheck[] {
   if (skills.length) {
     const reg = RUNNER_REGISTRY.skillspector;
     checks.push({ kind: "external", name: "security-scan", runner: reg.id, with: { ...reg.defaultWith } });
+  }
+
+  if (skills.some((s) => s.trigger)) {
+    const reg = RUNNER_REGISTRY["route-confusion"];
+    checks.push({ kind: "external", name: "route-confusion", runner: reg.id, with: { ...reg.defaultWith } });
   }
 
   return checks;
