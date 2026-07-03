@@ -34,11 +34,13 @@ interface Res {
   write(chunk: string): void;
   end(): void;
 }
+// Minimal Express middleware shape (same duck-typing as originGuard.ts).
+type Middleware = (req: Req, res: Res, next: () => void) => void;
 // Express app interface — just the subset of methods we call.
 interface App {
-  get(path: string, handler: (req: Req, res: Res) => void): void;
-  post(path: string, handler: (req: Req, res: Res) => Promise<void>): void;
-  delete(path: string, handler: (req: Req, res: Res) => void): void;
+  get(path: string, guard: Middleware, handler: (req: Req, res: Res) => void): void;
+  post(path: string, guard: Middleware, handler: (req: Req, res: Res) => Promise<void>): void;
+  delete(path: string, guard: Middleware, handler: (req: Req, res: Res) => void): void;
 }
 
 export interface ChatRouteDeps {
@@ -48,14 +50,18 @@ export interface ChatRouteDeps {
   goldmineMcp: () => McpServerStdio[];
 }
 
-export function registerChatRoutes(app: App, deps: ChatRouteDeps): void {
+// No-op guard used when originGuard is not provided (e.g. in tests that call
+// registerChatRoutes directly on a bare app without the CSRF middleware layer).
+const noopGuard: Middleware = (_req, _res, next) => next();
+
+export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middleware = noopGuard): void {
   // GET /api/agents — list which agents are on PATH
-  app.get("/api/agents", (_req, res) => {
+  app.get("/api/agents", guard, (_req, res) => {
     res.json({ agents: deps.listAgents() });
   });
 
   // POST /api/chat — open a new chat session; request-derived value is only agentId
-  app.post("/api/chat", async (req, res) => {
+  app.post("/api/chat", guard, async (req, res) => {
     try {
       const agentId = String(req.body?.agentId ?? "");
       if (!agentId) { res.status(400).json({ error: "agentId required" }); return; }
@@ -72,7 +78,7 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps): void {
 
   // GET /api/chat/stream?chatId=...&message=... — SSE stream of ChatEvents
   // Only message text flows from the query string; chatId is an opaque server-issued id.
-  app.get("/api/chat/stream", async (req, res) => {
+  app.get("/api/chat/stream", guard, async (req, res) => {
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("X-Accel-Buffering", "no");
@@ -94,7 +100,7 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps): void {
   });
 
   // DELETE /api/chat/:chatId — close + evict the session
-  app.delete("/api/chat/:chatId", (req, res) => {
+  app.delete("/api/chat/:chatId", guard, (req, res) => {
     deps.manager.closeChat(req.params.chatId);
     res.json({ ok: true });
   });

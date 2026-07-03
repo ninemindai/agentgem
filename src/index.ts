@@ -239,12 +239,13 @@ export async function createApp(port: number): Promise<RestApplication> {
             topArtifacts: topArtifacts.slice(0, 10),
             skillCount: sc.projects.reduce((n, p) => n + p.workflows.length, 0),
           });
-        } catch {
+        } catch (err) {
+          console.error("[chat] buildBrief degraded:", err);
           return buildGoldmineBrief({ scorecard: { breadth: 0, battleTested: 0, portable: 0, gaps: [] }, topArtifacts: [], skillCount: 0 });
         }
       },
       goldmineMcp: goldmineMcpServers,
-    });
+    }, originGuard as never);
   }
   return app;
 }
