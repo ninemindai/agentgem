@@ -5,14 +5,21 @@
 import { z } from "zod";
 import { MCPApplication, mcpServer, tool } from "@agentback/mcp";
 import { isMain } from "@agentback/core";
-import { scanSessionsCached } from "@agentgem/insight";
+import { scanSessionsCached, loadSessionTranscript } from "@agentgem/insight";
 import { introspectConfig, introspectProject } from "@agentgem/capture";
-import { searchSessions, getArtifactDetail } from "./tools.js";
+import { searchSessions, getArtifactDetail, windowTranscript } from "./tools.js";
 import { collectBehaviorFindings } from "./behaviorFindings.js";
 
 const SearchInput = z.object({
   query: z.string().default(""),
   limit: z.number().int().min(1).max(50).default(10),
+});
+
+const TranscriptInput = z.object({
+  sessionId: z.string(),
+  agent: z.enum(["claude", "codex"]).default("claude"),
+  from: z.number().int().min(0).default(0),
+  limit: z.number().int().min(1).max(100).default(30),
 });
 
 const DetailInput = z.object({
@@ -34,6 +41,16 @@ export class GoldmineTools {
   async searchSessionsTool({ query, limit }: z.infer<typeof SearchInput>) {
     const sessions = await scanSessionsCached(Date.now());
     return { matches: searchSessions(sessions, query, limit) };
+  }
+
+  @tool("get_session_transcript", {
+    input: TranscriptInput,
+    description: "Read a bounded window of turns from one past session (use sessionId + agent from search_sessions). Content is redacted; page forward with `from`. `meta` carries the session's token counts.",
+  })
+  async getSessionTranscriptTool({ sessionId, agent, from, limit }: z.infer<typeof TranscriptInput>) {
+    const view = await loadSessionTranscript(sessionId, agent);
+    if (!view) return { found: false, sessionId };
+    return { found: true, ...windowTranscript(view, from, limit) };
   }
 
   @tool("get_artifact_detail", {
