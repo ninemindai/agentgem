@@ -404,12 +404,16 @@ h2, h3 { font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; }
 }
 .ex-agent-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .ex-agent-name { font-weight: 600; font-size: 0.95rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ex-install { display: flex; align-items: flex-start; gap: 8px; }
+.ex-install .ex-install-cmd { flex: 1 1 auto; min-width: 0; }
 .ex-install-cmd {
   font-family: var(--mono); font-size: 0.82rem;
   color: var(--brand-strong); background: var(--brand-wash);
   border-radius: var(--r-xs); padding: 6px 10px;
   overflow-wrap: anywhere;   /* wrap the long command; never force page h-scroll */
 }
+.ex-install-copy { flex: 0 0 auto; }
+.ex-copy.is-copied { color: var(--verified); border-color: var(--verified); }   /* success feedback, on-palette */
 .ex-skill-body {
   margin: 0; font-family: var(--mono); font-size: 0.8rem; line-height: 1.5;
   color: var(--ink-2); background: var(--surface-2);

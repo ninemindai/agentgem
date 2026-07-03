@@ -27,4 +27,15 @@ describe("Sources page", () => {
     await waitFor(() => expect(screen.getByText(/HELLO_SKILL_BODY/)).toBeTruthy());
     expect(screen.getByText("Hide skill")).toBeTruthy();
   });
+
+  it("copies the install command and shows Copied! feedback", async () => {
+    stub();
+    const writeText = vi.fn();
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    render(<Sources api={makeApi("")} />);
+    fireEvent.click(await screen.findByText("Engineering"));
+    fireEvent.click(await screen.findByRole("button", { name: /Copy install command/i }));
+    expect(writeText).toHaveBeenCalledWith("agentgem sources install agency-agents engineering/ai-engineer.md");
+    expect(await screen.findByText("Copied!")).toBeTruthy();
+  });
 });

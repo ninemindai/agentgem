@@ -11,6 +11,7 @@ export function Sources({ api }: { api: ReturnType<typeof makeApi> }) {
   const [skill, setSkill] = useState<{ sourceId: string; path: string; content: string } | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -43,6 +44,12 @@ export function Sources({ api }: { api: ReturnType<typeof makeApi> }) {
     } catch (e) { setError(String(e)); } finally { setLoading(null); }
   };
 
+  const copyCmd = (a: SourceAgentRef) => {
+    void navigator.clipboard?.writeText(`agentgem sources install ${sourceId} ${a.path}`);
+    setCopied(a.path);
+    window.setTimeout(() => setCopied((c) => (c === a.path ? null : c)), 1500);
+  };
+
   const source = sources?.find((s) => s.id === sourceId);
   if (!sources && !error) return <p className="ex-empty">Loading…</p>;
 
@@ -73,7 +80,13 @@ export function Sources({ api }: { api: ReturnType<typeof makeApi> }) {
                   {loading === a.path ? "Loading…" : skill?.sourceId === sourceId && skill?.path === a.path ? "Hide skill" : "View skill"}
                 </button>
               </div>
-              <code className="ex-install-cmd">agentgem sources install {sourceId} {a.path}</code>
+              <div className="ex-install">
+                <code className="ex-install-cmd">agentgem sources install {sourceId} {a.path}</code>
+                <button type="button" className={"ex-copy ex-install-copy" + (copied === a.path ? " is-copied" : "")}
+                  aria-label={`Copy install command for ${a.name}`} onClick={() => copyCmd(a)}>
+                  {copied === a.path ? "Copied!" : "Copy"}
+                </button>
+              </div>
               {skill?.sourceId === sourceId && skill?.path === a.path && (
                 <pre className="ex-skill-body" aria-label={`${a.name} SKILL.md`}>{skill.content}</pre>
               )}
