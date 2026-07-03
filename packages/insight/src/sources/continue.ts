@@ -7,7 +7,8 @@
 // (ms-epoch) and end time from the session file mtime. Metadata only — never reads message
 // `content` and never the session `title` (a content-derived summary). Total: malformed → null/skip.
 import { readFile, readdir, stat } from "node:fs/promises";
-import { join, basename } from "node:path";
+import { statSync } from "node:fs";
+import { join, basename, isAbsolute, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { classifyMcpServer } from "@agentgem/model";
 import type { GemArtifact } from "@agentgem/model";
@@ -48,6 +49,39 @@ export function parseContinueSession(
     model: s.chatModelTitle ?? null, gitBranch: null,
     startMs, endMs, msgs, tokensIn: tIn, tokensOut: tOut, tokensCache: tCache,
   };
+}
+
+// ── Watch capabilities ────────────────────────────────────────────────────────
+// One session = one <sessionId>.json file. parseMeta stats the file for the end
+// time (Continue records no per-message timestamps) and falls back to the filename
+// for the id.
+export function parseContinueMeta(text: string, path: string): SessionStat | null {
+  let mtimeMs = 0; try { mtimeMs = statSync(path).mtimeMs; } catch { /* just written */ }
+  const s = parseContinueSession(text, { mtimeMs });
+  if (s && !s.sessionId) s.sessionId = basename(path, ".json");
+  return s;
+}
+
+// File-driven detector: Continue's edit tools reference the target file by an
+// ABSOLUTE path in a `filepath` / `file_path` / `absolute_path` arg, so we surface
+// those *.html paths and let the live layer render the real file on disk. Continue
+// stores toolCalls with `arguments` as a JSON STRING, so the field's quotes are often
+// escaped (\"filepath\") — the `\\?"` fragments tolerate both the escaped and plain
+// forms. Provisional: the exact tool-arg shape isn't pinned by a fixture yet, so
+// relative paths and other field names degrade to "nothing to show", never a wrong
+// render.
+const CONTINUE_FILE_PATH = /\\?"(?:filepath|file_path|absolute_path)\\?"\s*:\s*\\?"((?:[^"\\]|\\.)*?\.html?)(?=\\?")/gi;
+
+export function resolveContinueHtmlPaths(text: string): string[] {
+  const seen = new Set<string>();
+  const order: string[] = [];
+  for (const m of text.matchAll(CONTINUE_FILE_PATH)) {
+    const p = m[1].replace(/\\(.)/g, "$1");
+    if (!isAbsolute(p)) continue;
+    const abs = resolve(p);
+    if (!seen.has(abs)) { seen.add(abs); order.push(abs); }
+  }
+  return order;
 }
 
 export async function scanContinueSessions(sessionsDir: string): Promise<SessionStat[]> {
