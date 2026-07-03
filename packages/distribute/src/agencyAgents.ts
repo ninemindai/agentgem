@@ -1,0 +1,211 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
+// src/agencyAgents.ts
+//
+// Inbound *adapter source* for github.com/msitarzewski/agency-agents. That repo is NOT an
+// AgentGem registry (no registry.json; its items are single persona `.md` files, not Gem
+// archives), so it can't be consumed by githubRegistrySource. This module translates the
+// repo's native division/`.md` layout into AgentGem skill artifacts on the fly.
+//
+// Casting decision (see docs): these files carry no `tools`/`model`/trigger machinery — only
+// persona prose plus `color`/`emoji`/`vibe` decoration — so each maps to a SkillArtifact, not
+// a first-class agent. `vibe` becomes the description fallback; `color`/`emoji`/`vibe` are
+// surfaced on the catalog *entry* (for the picker UI) but kept OUT of the imported skill's
+// content, so decoration never leaks into a Gem or its digest.
+//
+// All network goes through an injected `Http` (reused shape from registryGithub.ts) so the
+// walk + transforms stay unit-testable with a fake. Reads use the token-optional Contents API,
+// so public browsing needs no credentials (a token only lifts the 60/hr unauthenticated limit).
+import type { SkillArtifact } from "@agentgem/model";
+import type { Http, GithubCfg } from "./registryGithub.js";
+
+export const AGENCY_AGENTS_REPO = { repo: "msitarzewski/agency-agents", ref: "main" } as const;
+
+// Top-level dirs in the repo that are NOT agent divisions (tooling / docs / conversion output).
+// Everything else at the root is treated as a division of persona `.md` files.
+export const NON_AGENT_DIRS = new Set([
+  "integrations", "scripts", "examples", "assets", "docs", ".github",
+]);
+
+export interface AgencyFrontmatter {
+  name?: string;
+  description?: string;
+  vibe?: string;
+  color?: string;
+  emoji?: string;
+}
+
+// A browsable catalog entry: enough to render the picker (name/description/emoji/color/vibe)
+// and to import on demand (division + path). Display attrs live here, not on the skill.
+export interface AgencyAgentEntry {
+  division: string;
+  slug: string;                // filename without extension, e.g. "engineering-frontend-developer"
+  name: string;                // skill name: slug with a leading "<division>-" stripped
+  path: string;                // repo path, e.g. "engineering/engineering-frontend-developer.md"
+  description?: string;
+  vibe?: string;
+  color?: string;
+  emoji?: string;
+}
+
+const API = "https://api.github.com";
+const defaultHttp: Http = async (url, init) => {
+  const res = await fetch(url, init as RequestInit);
+  return { status: res.status, text: () => res.text() };
+};
+
+export function agencyCfgFromEnv(): GithubCfg {
+  return {
+    repo: process.env.AGENCY_AGENTS_REPO ?? AGENCY_AGENTS_REPO.repo,
+    ref: process.env.AGENCY_AGENTS_REF ?? AGENCY_AGENTS_REPO.ref,
+    token: process.env.GITHUB_TOKEN,
+  };
+}
+
+function ghHeaders(cfg: GithubCfg): Record<string, string> {
+  const h: Record<string, string> = { Accept: "application/vnd.github+json", "User-Agent": "agentgem" };
+  if (cfg.token) h.Authorization = `Bearer ${cfg.token}`;
+  return h;
+}
+
+interface ContentsEntry { name: string; path: string; type: "file" | "dir" }
+interface ContentsFile { content: string; encoding: string }
+
+// GET /repos/{repo}/contents/{path}?ref={ref}. A directory returns an array of entries; a file
+// returns a single base64 node. Path segments are encoded but "/" is kept as a separator.
+async function ghContents(http: Http, cfg: GithubCfg, path: string): Promise<ContentsEntry[] | ContentsFile> {
+  const p = encodeURIComponent(path).replace(/%2F/g, "/");
+  const url = `${API}/repos/${cfg.repo}/contents/${p}?ref=${encodeURIComponent(cfg.ref)}`;
+  const res = await http(url, { headers: ghHeaders(cfg) });
+  const body = await res.text();
+  if (res.status >= 300) throw new Error(`GitHub GET contents/${path} → ${res.status}: ${body}`);
+  return JSON.parse(body) as ContentsEntry[] | ContentsFile;
+}
+
+function decodeFile(node: ContentsFile): string {
+  // Contents API base64 is chunked with newlines; Buffer tolerates them.
+  return Buffer.from(node.content, node.encoding === "base64" ? "base64" : "utf8").toString("utf8");
+}
+
+// ── pure transforms (the tested core; no network) ──────────────────────────────
+
+// Split a leading `---\n…\n---` YAML block from the body. Returns the raw frontmatter text and
+// everything after it. No frontmatter → empty fm, whole input as body.
+export function splitFrontmatter(md: string): { fm: string; body: string } {
+  const m = md.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
+  if (!m) return { fm: "", body: md };
+  return { fm: m[1], body: md.slice(m[0].length) };
+}
+
+// Read a single scalar `key: value` from a frontmatter block. Strips matching surrounding
+// quotes (agency files quote e.g. `color: "#000000"`). Intentionally not a full YAML parser —
+// these files are flat scalar frontmatter.
+function fmField(fm: string, key: string): string | undefined {
+  const m = fm.match(new RegExp(`^${key}:[ \\t]*(.+?)[ \\t]*$`, "m"));
+  if (!m) return undefined;
+  let v = m[1].trim();
+  if (v.length >= 2 && ((v[0] === '"' && v.endsWith('"')) || (v[0] === "'" && v.endsWith("'")))) {
+    v = v.slice(1, -1);
+  }
+  return v || undefined;
+}
+
+export function parseAgentFrontmatter(md: string): { fm: AgencyFrontmatter; body: string } {
+  const { fm, body } = splitFrontmatter(md);
+  return {
+    fm: {
+      name: fmField(fm, "name"),
+      description: fmField(fm, "description"),
+      vibe: fmField(fm, "vibe"),
+      color: fmField(fm, "color"),
+      emoji: fmField(fm, "emoji"),
+    },
+    body,
+  };
+}
+
+function divisionOf(path: string): string {
+  return path.split("/")[0] ?? "";
+}
+function slugOf(path: string): string {
+  const base = path.split("/").pop() ?? path;
+  return base.replace(/\.md$/i, "");
+}
+// Skill name = filename slug with a redundant leading "<division>-" removed
+// (engineering/engineering-frontend-developer.md → "frontend-developer").
+function skillNameOf(path: string): string {
+  const slug = slugOf(path);
+  const div = divisionOf(path);
+  return div && slug.startsWith(`${div}-`) ? slug.slice(div.length + 1) : slug;
+}
+
+// Build a catalog entry (metadata + display) from a fetched agent file.
+export function agentMdToEntry(path: string, md: string): AgencyAgentEntry {
+  const { fm } = parseAgentFrontmatter(md);
+  return {
+    division: divisionOf(path),
+    slug: slugOf(path),
+    name: skillNameOf(path),
+    path,
+    description: fm.description ?? fm.vibe,
+    vibe: fm.vibe,
+    color: fm.color,
+    emoji: fm.emoji,
+  };
+}
+
+// Map an agent file → a clean AgentGem SkillArtifact. The emitted `content` is a NORMALIZED
+// SKILL.md (canonical `name`/`description` frontmatter + the original body); the source's
+// `color`/`emoji`/`vibe` are dropped from content so decoration never enters the Gem/digest.
+// `description` falls back to `vibe` (its natural one-liner home), then to the name.
+export function agentMdToSkill(path: string, md: string, sourceLabel = "agency-agents"): SkillArtifact {
+  const { fm, body } = parseAgentFrontmatter(md);
+  const name = skillNameOf(path);
+  const description = fm.description ?? fm.vibe ?? name;
+  const division = divisionOf(path);
+  const content = `---\nname: ${name}\ndescription: ${description}\n---\n\n${body.trimStart()}`;
+  return {
+    type: "skill",
+    name,
+    description,
+    source: division ? `${sourceLabel}:${division}` : sourceLabel,
+    content,
+  };
+}
+
+// ── network helpers (thin; the transforms above carry the logic) ───────────────
+
+// Division directories at the repo root (root dirs minus the non-agent tooling/docs dirs).
+export async function listAgencyDivisions(cfg: GithubCfg = agencyCfgFromEnv(), http: Http = defaultHttp): Promise<string[]> {
+  const node = await ghContents(http, cfg, "");
+  if (!Array.isArray(node)) throw new Error("expected a directory listing at repo root");
+  return node.filter((e) => e.type === "dir" && !NON_AGENT_DIRS.has(e.name)).map((e) => e.name).sort();
+}
+
+// Agent `.md` files under a division (references only — no bodies fetched, so this is cheap).
+export async function listAgencyAgents(
+  division: string,
+  cfg: GithubCfg = agencyCfgFromEnv(),
+  http: Http = defaultHttp,
+): Promise<{ division: string; slug: string; name: string; path: string }[]> {
+  const node = await ghContents(http, cfg, division);
+  if (!Array.isArray(node)) throw new Error(`expected a directory listing at ${division}`);
+  return node
+    .filter((e) => e.type === "file" && /\.md$/i.test(e.name) && !/^readme\.md$/i.test(e.name))
+    .map((e) => ({ division, slug: slugOf(e.path), name: skillNameOf(e.path), path: e.path }))
+    .sort((a, b) => a.slug.localeCompare(b.slug));
+}
+
+// Fetch one agent file and return its browsable catalog entry (metadata + display).
+export async function fetchAgencyAgentEntry(path: string, cfg: GithubCfg = agencyCfgFromEnv(), http: Http = defaultHttp): Promise<AgencyAgentEntry> {
+  const node = await ghContents(http, cfg, path);
+  if (Array.isArray(node)) throw new Error(`expected a file at ${path}, got a directory`);
+  return agentMdToEntry(path, decodeFile(node));
+}
+
+// Fetch one agent file and import it as a SkillArtifact ready to bundle into a Gem.
+export async function importAgencyAgentSkill(path: string, cfg: GithubCfg = agencyCfgFromEnv(), http: Http = defaultHttp): Promise<SkillArtifact> {
+  const node = await ghContents(http, cfg, path);
+  if (Array.isArray(node)) throw new Error(`expected a file at ${path}, got a directory`);
+  return agentMdToSkill(path, decodeFile(node));
+}
