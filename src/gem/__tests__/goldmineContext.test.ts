@@ -17,4 +17,12 @@ describe("buildGoldmineBrief", () => {
   it("handles an empty goldmine without throwing", () => {
     expect(buildGoldmineBrief({ scorecard: { breadth: 0, battleTested: 0, portable: 0, gaps: [] }, topArtifacts: [], skillCount: 0 })).toContain("breadth 0");
   });
+  it("renders the behavior teaser only when provided", () => {
+    const base = { scorecard: { breadth: 0, battleTested: 0, portable: 0, gaps: [] }, topArtifacts: [], skillCount: 0 };
+    expect(buildGoldmineBrief(base)).not.toContain("Behavior:");
+    const brief = buildGoldmineBrief({ ...base, behavior: { patterns: 2, topTitle: "Same command repeated back-to-back" } });
+    expect(brief).toContain(`Behavior: 2 recurring pattern(s)`);
+    expect(brief).toContain("Same command repeated back-to-back");
+    expect(brief).toContain("get_behavior_findings");
+  });
 });

@@ -27,6 +27,7 @@ import { streamGemRun } from "./gemRunStream.js";
 import { streamScorecard } from "./scorecardStream.js";
 import { streamInsights } from "./insightsStream.js";
 import { registerChatRoutes, chatConnectFn, goldmineMcpServers } from "./goldmine/chatRoutes.js";
+import { collectBehaviorFindings } from "./goldmine/behaviorFindings.js";
 import { ChatManager } from "@agentgem/run";
 import { availableAgents } from "@agentgem/base";
 import { collectScorecard, defaultScorecardDeps } from "./gem/scorecard.js";
@@ -234,10 +235,14 @@ export async function createApp(port: number): Promise<RestApplication> {
               topArtifacts.push({ type: "workflow", name: wf.name, invocations: wf.confidence === "high" ? 10 : wf.confidence === "medium" ? 5 : 1 });
             }
           }
+          const behavior = collectBehaviorFindings();
           return buildGoldmineBrief({
             scorecard: { breadth: sc.breadth, battleTested: sc.battleTested, portable: sc.portable, gaps: sc.gaps },
             topArtifacts: topArtifacts.slice(0, 10),
             skillCount: sc.projects.reduce((n, p) => n + p.workflows.length, 0),
+            ...(behavior.summary.length > 0
+              ? { behavior: { patterns: behavior.summary.length, topTitle: behavior.summary[0].title } }
+              : {}),
           });
         } catch (err) {
           console.error("[chat] buildBrief degraded:", err);
