@@ -360,3 +360,20 @@ h2, h3 { font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; }
 .ex-gem-author { align-self: flex-start; color: var(--muted); font-size: 0.8rem; text-decoration: none; }
 .ex-gem-author:hover { color: var(--brand); text-decoration: underline; }
 
+/* Org scorecard catalog */
+.ex-orgcat { max-width: 880px; margin: 0 auto; padding: 1rem; }
+.ex-orgcat-head { display: flex; align-items: baseline; gap: 0.75rem; margin-bottom: 0.75rem; }
+.ex-orgcat-title { margin: 0; }
+.ex-orgcat-counts { color: #8a8f98; font-size: 0.9rem; }
+.ex-orgcat-controls { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
+.ex-orgcat-search { flex: 1 1 12rem; padding: 0.35rem 0.5rem; }
+.ex-orgcat-cut, .ex-orgcat-sort { padding: 0.35rem 0.5rem; }
+.ex-rubric-ring { display: inline-flex; align-items: center; justify-content: center; width: 2.4rem; height: 2.4rem; border-radius: 50%; }
+.ex-rubric-ring-num { background: #fff; border-radius: 50%; width: 1.8rem; height: 1.8rem; display: inline-flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 600; }
+.ex-rubric-toggle { background: none; border: 1px solid #d0d3d8; border-radius: 4px; padding: 0.15rem 0.5rem; cursor: pointer; font-size: 0.8rem; }
+.ex-rubric-detail { list-style: none; margin: 0.5rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; }
+.ex-rubric-check { display: flex; gap: 0.5rem; align-items: baseline; font-size: 0.85rem; }
+.ex-rubric-check[data-pass="true"] .ex-rubric-mark { color: #3a7d44; }
+.ex-rubric-check[data-pass="false"] .ex-rubric-mark { color: #b04a4a; }
+.ex-rubric-fix { color: #8a8f98; }
+
