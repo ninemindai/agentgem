@@ -1,9 +1,12 @@
 # AgentGem documentation
 
-AgentGem is a local web UI that introspects your coding-agent config — skills, MCP
-servers, and `CLAUDE.md` — redacts secrets at capture, and builds a **secret-safe,
-composable Gem**. A Gem is a portable archive (manifest + lock) you can publish to a
-GitHub-backed registry, merge with others, and deploy to several targets.
+AgentGem is a local web UI that reads what you've already built with your coding
+agent — your **agent setup** (skills, MCP servers, `CLAUDE.md`) and your **session
+transcripts** — redacts secrets at capture, and distills it into a **secret-safe,
+composable Gem**. [Analyze](analyze.md) turns the procedures you repeat across
+sessions into draft skills; the builder packages it all into a portable archive
+(manifest + lock) you can publish to a GitHub-backed registry, merge with others,
+and deploy to several targets.
 
 It's built on **[AgentBack](https://agentback.dev)**, the ninemind AI-native API/MCP framework: every operation
 is defined once as a Zod contract and exposed as a REST endpoint, an MCP tool, and an

@@ -303,8 +303,9 @@ write(
   'llms.txt',
   `# AgentGem
 
-> AgentGem turns your coding-agent config — skills, MCP servers, CLAUDE.md — into a
-> secret-safe, composable Gem. Built on AgentBack: one Zod contract becomes a REST
+> AgentGem turns what you've built with your coding agent — your setup (skills, MCP
+> servers, CLAUDE.md) plus the skills it distills from your session transcripts — into
+> a secret-safe, composable Gem. Built on AgentBack: one Zod contract becomes a REST
 > endpoint and an MCP tool.
 
 The full corpus in one file: ${SITE}/llms-full.txt
