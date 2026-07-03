@@ -14,8 +14,8 @@ export function ListControls({
   onQuery: (v: string) => void;
   label: string;                 // accessible name for the filter input
   placeholder?: string;
-  selectLabel: string;           // e.g. "Select all (3)" / "Deselect all"
-  onSelectAll: () => void;
+  selectLabel?: string;          // e.g. "Select all (3)" / "Deselect all"
+  onSelectAll?: () => void;      // omit for filter-only lists (no selection)
   selectDisabled?: boolean;
   extras?: ReactNode;            // list-specific toggles (e.g. "prunable only")
   actions?: ReactNode;          // batch button + summary/note
@@ -27,7 +27,7 @@ export function ListControls({
         placeholder={placeholder} onChange={(e) => onQuery(e.target.value)}
       />
       {extras}
-      <button className="obs-range-btn" onClick={onSelectAll} disabled={selectDisabled}>{selectLabel}</button>
+      {onSelectAll && <button className="obs-range-btn" onClick={onSelectAll} disabled={selectDisabled}>{selectLabel}</button>}
       {actions}
     </div>
   );
