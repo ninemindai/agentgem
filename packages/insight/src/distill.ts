@@ -9,6 +9,7 @@ import type { WorkflowSignal, ScanInventory } from "./workflowScan.js";
 import { CLAUDE_AGENT, analysisWorkspace, defaultConnectFn, currentTestConnectFn, type AcpConnectFn } from "./acpRecommender.js";
 import type { GatedCandidate, ProcedureCandidate, DistilledSkill, Provenance, Occurrence } from "./distillTypes.js";
 import { extractCandidates } from "./extract.js";
+import type { TriggerContract } from "@agentgem/model";
 
 // Back-compat re-exports: existing importers (draftStage.ts, acpRecommender.ts,
 // tests) import these from "./distill.js". The authoritative definitions now live
@@ -23,6 +24,25 @@ function extractJson(text: string): string {
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   return start >= 0 && end > start ? text.slice(start, end + 1) : text;
+}
+
+// Parse a trigger contract out of raw LLM JSON. Never throws, never fabricates:
+// requires the load-bearing fields (intent + >=1 trigger) or returns undefined so
+// the skill still distills without a contract.
+function parseTriggerContract(raw: unknown): TriggerContract | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const o = raw as Record<string, unknown>;
+  const intent = typeof o.intent === "string" ? o.intent.trim() : "";
+  const strs = (v: unknown): string[] =>
+    Array.isArray(v) ? v.filter((s): s is string => typeof s === "string" && s.trim().length > 0) : [];
+  const triggers = strs(o.triggers);
+  if (!intent || !triggers.length) return undefined;
+  const contract: TriggerContract = { intent, triggers, antiTriggers: strs(o.antiTriggers) };
+  const inputs = strs(o.inputs);
+  const outputs = strs(o.outputs);
+  if (inputs.length) contract.inputs = inputs;
+  if (outputs.length) contract.outputs = outputs;
+  return contract;
 }
 
 /**
@@ -74,6 +94,7 @@ export function validateDistilled(raw: unknown, inv: ScanInventory, candidates: 
       status: "draft",
       confidence: ["high", "medium", "low"].includes(it.confidence) ? it.confidence : "medium",
       origin: "llm",
+      triggerContract: parseTriggerContract(it.triggerContract),
     });
   }
   return out;
@@ -105,11 +126,14 @@ export const DISTILL = (candidatesJson: string, installedSkillsJson: string): st
   `user would actually type), tools (from the sequence), mutating (bool)\n` +
   `  body: ## Contract (guarantees) / ## Phases (reproduce the ordered ` +
   `instructions/steps the agent followed) / ## Output Format (the deliverable)\n` +
+  `  triggerContract (optional): {intent (one line), triggers (when it SHOULD fire), ` +
+  `antiTriggers (adjacent tasks where it must NOT fire)} — omit if you cannot state a clear boundary\n` +
   `DEDUP — do NOT propose a skill that overlaps any installed skill:\n${installedSkillsJson}\n` +
   `Drop a candidate that is one-off, trivial, or has no clear trigger phrase.\n` +
   `MISSIONS + WORKFLOWS (redacted; counts are facts):\n${candidatesJson}\n\n` +
   `Return ONLY JSON: {"distilled":[{"name","description","triggers":[],"tools":[],` +
-  `"mutating":bool,"body","confidence":"high"|"medium"|"low"}]}.`;
+  `"mutating":bool,"body","confidence":"high"|"medium"|"low",` +
+  `"triggerContract":{"intent":"","triggers":[],"antiTriggers":[]}}]}.`;
 
 // Bound the prompt: send each candidate's verbs, recurrence, mission hint, and a
 // capped slice of its sampled steps.

@@ -126,6 +126,27 @@ describe("validateDistilled", () => {
     const out = validateDistilled(JSON.stringify({ distilled: [{ ...good, tools: ["Bash", "WebFetch"] }] }), INV, CANDIDATES.map(enrich));
     expect(out).toEqual([]);
   });
+
+  it("carries a well-formed triggerContract from the LLM output", () => {
+    const raw = { distilled: [{
+      name: "do-x", description: "d", triggers: ["save this"], tools: [], body: "## Contract\nx",
+      confidence: "high",
+      triggerContract: { intent: "do x", triggers: ["save this"], antiTriggers: ["one-off"] },
+    }] };
+    const out = validateDistilled(raw, INV, CANDIDATES.map(enrich));
+    expect(out[0].triggerContract).toEqual({ intent: "do x", triggers: ["save this"], antiTriggers: ["one-off"] });
+  });
+
+  it("drops a malformed triggerContract (missing intent) to undefined, keeping the skill", () => {
+    const raw = { distilled: [{
+      name: "do-x", description: "d", triggers: ["save this"], tools: [], body: "## Contract\nx",
+      confidence: "high",
+      triggerContract: { triggers: ["save this"], antiTriggers: [] },
+    }] };
+    const out = validateDistilled(raw, INV, CANDIDATES.map(enrich));
+    expect(out).toHaveLength(1);
+    expect(out[0].triggerContract).toBeUndefined();
+  });
 });
 
 import { distillWorkflow } from "@agentgem/insight";
