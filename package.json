@@ -92,6 +92,7 @@
     "@agentgem/testbed": "workspace:*",
     "@agentgem/transfer": "workspace:*",
     "@resvg/resvg-wasm": "^2.6.2",
+    "@types/express": "^5",
     "@types/node": "^24",
     "@types/pg": "^8.20.0",
     "@types/supertest": "^6",
