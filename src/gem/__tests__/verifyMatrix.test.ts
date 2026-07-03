@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, rmSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { verifyGemAcrossAgents, deriveMatrixBaseDir, ledgerPath } from "@agentgem/run";
+import { verifyGemAcrossAgents, deriveMatrixBaseDir, ledgerPath, registerVerify, resolveVerify } from "@agentgem/run";
 import type { RunConnectFn, ToolInvocation } from "@agentgem/run";
 import type { Gem } from "@agentgem/model";
 
@@ -28,6 +28,7 @@ const splitAgent: RunConnectFn = async () => ({
         async prompt(_t: string, _d?: (c: string) => void, onToolCall?: (t: ToolInvocation) => void) {
           const tool = { toolCallId: "t1", title, status: "completed" };
           onToolCall?.(tool);
+          _d?.("done");
           return { text: "done", toolCalls: [tool] };
         },
         dispose() {},
@@ -109,6 +110,33 @@ describe("verifyGemAcrossAgents", () => {
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
+  });
+
+  it("streams per-agent callbacks in order and tags them with the right agent", async () => {
+    const home = mkdtempSync(join(tmpdir(), "agem-mxcb-"));
+    const seen: string[] = [];
+    try {
+      await verifyGemAcrossAgents({
+        gem, baseDir: join(home, "m"), home,
+        roster: ["claude", "codex"],
+        connectFn: splitAgent,
+        onAgentStart: (a) => seen.push(`start:${a}`),
+        onToolCall: (a, t) => seen.push(`tool:${a}:${t.title}`),
+        onDelta: (a, c) => seen.push(`delta:${a}:${c}`),
+        onVerdict: (v) => seen.push(`verdict:${v.agent}:${v.status}`),
+      });
+      expect(seen).toEqual([
+        "start:claude", "tool:claude:Skill(qa)", "delta:claude:done", "verdict:claude:passed",
+        "start:codex", "tool:codex:Bash(ls)", "delta:codex:done", "verdict:codex:failed",
+      ]);
+    } finally { rmSync(home, { recursive: true, force: true }); }
+  });
+
+  it("registry round-trips a verify spec by opaque id", () => {
+    const spec = { gem, baseDir: "/tmp/m", roster: ["claude" as const], gemDigest: "sha:d", gemName: gem.name };
+    const id = registerVerify(spec as Parameters<typeof registerVerify>[0]);
+    expect(resolveVerify(id)).toMatchObject({ gemName: "mx-gem", gemDigest: "sha:d" });
+    expect(resolveVerify("bogus")).toBeUndefined();
   });
 });
 

@@ -6,12 +6,13 @@
 // deterministic per-agent verdict list. Aggregation is judging, never synthesis:
 // the verdict list IS the matrix. Failures are data (a per-agent problem becomes
 // a verdict, not an exception); only a missing contract throws, before any run.
+import { randomUUID } from "node:crypto";
 import { join, resolve, sep } from "node:path";
 import type { Gem, GemContract } from "@agentgem/model";
 import { InvalidInputError, agentgemHome } from "@agentgem/model";
 import { readGemMeta, writeGemArchive } from "@agentgem/archive";
 import { AGENT_ADAPTERS, resolveOrFetchAdapter, materializeAndRunGem, type AgentId } from "./runGem.js";
-import { hasTestConnectFn, type RunConnectFn } from "./acpRun.js";
+import { hasTestConnectFn, type RunConnectFn, type ToolInvocation } from "./acpRun.js";
 import { contractToExpectations, type VerificationReport } from "./gemVerify.js";
 import { appendVerification } from "./evidenceLedger.js";
 
@@ -33,6 +34,11 @@ export interface VerifyMatrixOptions {
   resolveAdapter?: typeof resolveOrFetchAdapter; // test seam for hermetic "unavailable"
   home?: string;                       // ledger home (test seam; default agentgemHome())
   gemDigest?: string;                  // precomputed (e.g. the archive's true digest); default: recomputed from the gem at archive-write defaults
+  // Streaming seams for the SSE endpoint: fired per agent as it works. Optional and
+  // additive — the blocking endpoint and CLI never set them.
+  onAgentStart?: (agent: AgentId) => void;
+  onDelta?: (agent: AgentId, chunk: string) => void;
+  onToolCall?: (agent: AgentId, tool: ToolInvocation) => void;
 }
 
 // Shared hardened base-dir derivation for the matrix (endpoint + CLI use the same
@@ -57,6 +63,7 @@ export async function verifyGemAcrossAgents(opts: VerifyMatrixOptions): Promise<
 
   const verdicts: AgentVerdict[] = [];
   for (const agent of roster) {
+    opts.onAgentStart?.(agent);
     const adapter = AGENT_ADAPTERS[agent];
     // Availability BEFORE materialize: an unavailable agent must leave no run dir
     // behind. Skipped when a connectFn seam is injected (fakes never spawn).
@@ -78,6 +85,8 @@ export async function verifyGemAcrossAgents(opts: VerifyMatrixOptions): Promise<
       expectations,
       connectFn: opts.connectFn,
       allowFetch: opts.fetch ?? false,
+      onDelta: opts.onDelta ? (c) => opts.onDelta!(agent, c) : undefined,
+      onToolCall: opts.onToolCall ? (t) => opts.onToolCall!(agent, t) : undefined,
     });
     const verification = out.verification as VerificationReport; // expectations always set → always present
     appendVerification({
@@ -99,4 +108,26 @@ export async function verifyGemAcrossAgents(opts: VerifyMatrixOptions): Promise<
     opts.onVerdict?.(v);
   }
   return verdicts;
+}
+
+// ── Opaque verify registry ───────────────────────────────────────────────────
+// The streaming UI prepares a matrix run over POST, then streams it over GET.
+// The client holds only the opaque verifyId — the gem body, baseDir, and roster
+// stay server-side (same discipline as the run registry in runGem.ts).
+export interface VerifySpec {
+  gem: Gem;
+  baseDir: string;
+  roster?: AgentId[];
+  fetch?: boolean;
+  gemDigest: string;
+  gemName: string;
+}
+const VERIFY_REGISTRY = new Map<string, VerifySpec>();
+export function registerVerify(spec: VerifySpec): string {
+  const id = randomUUID();
+  VERIFY_REGISTRY.set(id, spec);
+  return id;
+}
+export function resolveVerify(id: string): VerifySpec | undefined {
+  return VERIFY_REGISTRY.get(id);
 }
