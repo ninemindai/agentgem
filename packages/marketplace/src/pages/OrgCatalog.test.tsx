@@ -36,6 +36,12 @@ describe("OrgCatalog page", () => {
     expect(await screen.findByText(/no catalog for @ghost/i)).toBeTruthy();
   });
 
+  it("shows a distinct error state when the catalog request fails", async () => {
+    const api = { getOrgCatalog: () => Promise.reject(new Error("500")) } as never;
+    render(<OrgCatalog api={api} scope="acme" />);
+    expect(await screen.findByText(/couldn't load the catalog for @acme/i)).toBeTruthy();
+  });
+
   it("filters by search text", async () => {
     render(<OrgCatalog api={apiWith(cat([gem({ key: "@acme/alpha" }), gem({ key: "@acme/beta", owner: "dev2" })]))} scope="acme" />);
     await screen.findByText("@acme/alpha");
