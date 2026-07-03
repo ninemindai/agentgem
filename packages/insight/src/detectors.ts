@@ -80,7 +80,7 @@ const retryStorm: DetectorSpec = {
 
 const EDIT_RE = /^(Edit|Write|NotebookEdit)$/;
 // "Did they check their work?" — matched against `${verb} ${arg}` of Bash steps.
-const VERIFY_RE = /(test|vitest|jest|pytest|tsc|build|lint|typecheck|check)/i;
+const VERIFY_RE = /\b(tests?|vitest|jest|pytest|tsc|build|lint|typecheck|check)\b/i;
 
 function isEdit(s: ProcedureStep): boolean { return EDIT_RE.test(s.verb); }
 function isVerify(s: ProcedureStep): boolean {

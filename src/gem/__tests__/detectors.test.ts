@@ -112,6 +112,15 @@ describe("thrash-loop detector", () => {
     expect(runDetectors(signalWith([sess(below)]))
       .filter((f) => f.detectorId === "thrash-loop")).toHaveLength(0);
   });
+
+  it("does not fire when verify commands alternate on the same file", () => {
+    const steps = Array.from({ length: THRASH_MIN_CYCLES }, (_, i) => [
+      step("Edit", "Edit", "/a.ts", i * 10),
+      step("Bash", "Bash:npm", i % 2 === 0 ? "npm test" : "npm run lint", i * 10 + 1),
+    ]).flat();
+    expect(runDetectors(signalWith([sess(steps)]))
+      .filter((f) => f.detectorId === "thrash-loop")).toHaveLength(0);
+  });
 });
 
 describe("no-verify-finish detector", () => {
@@ -139,6 +148,16 @@ describe("no-verify-finish detector", () => {
       .filter((f) => f.detectorId === "no-verify-finish")).toHaveLength(0);
     expect(runDetectors(signalWith([sess(noEdits)]))
       .filter((f) => f.detectorId === "no-verify-finish")).toHaveLength(0);
+  });
+
+  it("is not fooled by 'latest' or 'checkout' substrings — still fires", () => {
+    const steps = [
+      step("Edit", "Edit", "/a.ts", 1),
+      step("Bash", "Bash:npm", "npm install foo@latest", 2),
+      step("Bash", "Bash:git", "git checkout .", 3),
+    ];
+    expect(runDetectors(signalWith([sess(steps)]))
+      .filter((f) => f.detectorId === "no-verify-finish")).toHaveLength(1);
   });
 
   it("verify BEFORE the last edit does not count", () => {
