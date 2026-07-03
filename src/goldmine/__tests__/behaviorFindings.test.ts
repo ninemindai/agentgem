@@ -74,9 +74,10 @@ describe("collectBehaviorFindings", () => {
     ]);
     const rulesDir = join(claudeDir, "detector-rules");
     mkdirSync(rulesDir, { recursive: true });
+    // bashVerb("npm run deploy") = "Bash:npm run" — argv0 + first lowercase subcommand
     writeFileSync(join(rulesDir, "r.json"), JSON.stringify({
       id: "npm-heavy", title: "Heavy npm use", advice: "Batch npm invocations.",
-      pattern: ["Bash:npm"], minRepeats: 3,
+      pattern: ["Bash:npm run"], minRepeats: 3,
     }));
     const r = collectBehaviorFindings({ dir: claudeDir, rulesDir, now: () => NOW });
     expect(r.summary.map((s) => s.id)).toContain("npm-heavy");
