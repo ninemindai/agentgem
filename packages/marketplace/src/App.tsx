@@ -40,6 +40,7 @@ export function App() {
         <nav className="ex-nav">
           <a href="/" className={"ex-navlink" + (onGems ? "" : " is-active")}>Ingredients</a>
           <a href="/gems" className={"ex-navlink" + (onGems ? " is-active" : "")}>Gems</a>
+          <a href="/sources" className={"ex-navlink" + (path.startsWith("/sources") ? " is-active" : "")}>Sources</a>
           {me && <a href="/publish" className="ex-navlink">Publish</a>}
         </nav>
         <span className="ex-auth">
