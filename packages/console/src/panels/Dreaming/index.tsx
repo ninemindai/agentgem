@@ -104,8 +104,9 @@ export function Dreaming({ apiBase }: { apiBase: string }) {
       {note && <p className="dream-counts" role="status">{note}</p>}
 
       <ul className="dream-queue journey-timeline">
-        {events.map((e) => (
-          <li key={`${e.kind}:${e.key ?? e.title}:${e.ts}`}>
+        {/* index tie-breaker: verified events can share kind+title+ts (same gem, several agents, same ms) */}
+        {events.map((e, i) => (
+          <li key={`${e.kind}:${e.key ?? e.title}:${e.ts}:${i}`}>
             <span className="dream-item-when">{timeAgo(e.ts)}</span>
             <span className="dream-item-kind">{e.kind}</span>
             {e.phase === "LEARN" && <span className="dream-item-phase">LEARN</span>}
