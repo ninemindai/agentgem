@@ -204,6 +204,7 @@ export const DistilledSkillSchema = z.object({
   status: z.literal("draft"),
   confidence: z.enum(["high", "medium", "low"]),
   origin: z.enum(["llm", "heuristic"]),
+  triggerContract: TriggerContractSchema.optional(),
 });
 
 export const ReflectionSchema = z.object({
