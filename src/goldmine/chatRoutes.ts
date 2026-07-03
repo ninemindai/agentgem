@@ -20,6 +20,7 @@ import { connectAcpAdapter, stdioMcpServer } from "@agentgem/base";
 import type { AgentAvailability, AgentDescriptor, McpServerStdio } from "@agentgem/base";
 import { createAccumulator, applyUpdate } from "@agentgem/run";
 import type { ChatManager, ChatConnectFn, ChatCtx, ChatSessionHandle, ToolInvocation } from "@agentgem/run";
+import { draftGemFromChat } from "./draftGem.js";
 
 // Duck-typed Express request/response so this file carries no @types/express dependency.
 interface Req {
@@ -97,6 +98,19 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middlew
       send("failed", { error: (e as Error).message });
     }
     res.end();
+  });
+
+  // POST /api/chat/:chatId/draft-gem — drive one selection turn and return a built Gem.
+  // Returns JSON { selection, gem, dropped } on success or { error } on failure.
+  // NOTE: result is returned directly to the client; there is no persistent Curate
+  // draft store in this repo. A Curate deep-link integration can be added later.
+  app.post("/api/chat/:chatId/draft-gem", guard, async (req, res) => {
+    const result = await draftGemFromChat({ manager: deps.manager }, req.params.chatId);
+    if ("error" in result) {
+      res.status(500).json(result);
+    } else {
+      res.json(result);
+    }
   });
 
   // DELETE /api/chat/:chatId — close + evict the session
