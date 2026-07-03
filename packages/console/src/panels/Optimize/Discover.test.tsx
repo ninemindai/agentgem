@@ -80,4 +80,29 @@ describe("DiscoverSection", () => {
     expect(screen.getByRole("button", { name: /^install$/i })).toBeTruthy();     // back to idle
     expect(fetchMock).toHaveBeenCalledTimes(1);                                  // only the find call
   });
+
+  it("batch installs the selected skills: select all → Install selected → confirm → installs each", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(res({ candidates: [cand("a"), cand("b")], topics: ["a"], reranked: false }))
+      .mockResolvedValue(res({ ok: true, skill: "o/r@x", message: "Installed 1 skill" }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<DiscoverSection apiBase="" />);
+    fireEvent.click(screen.getByRole("button", { name: /find recommendations/i }));
+    await screen.findByText("npx skills add o/r@a");
+    fireEvent.click(screen.getByRole("button", { name: /select all \(2\)/i }));
+    fireEvent.click(screen.getByRole("button", { name: /install selected \(2\)/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^confirm$/i }));
+    await waitFor(() => expect(screen.getAllByText(/✓ installed/)).toHaveLength(2));
+    expect(fetchMock).toHaveBeenCalledTimes(3);   // 1 find + 2 sequential installs
+  });
+
+  it("filters the recommended list by name", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => res({ candidates: [cand("alpha"), cand("beta")], topics: ["a"], reranked: false })));
+    render(<DiscoverSection apiBase="" />);
+    fireEvent.click(screen.getByRole("button", { name: /find recommendations/i }));
+    await screen.findByText("alpha");
+    fireEvent.change(screen.getByRole("searchbox", { name: /filter skills/i }), { target: { value: "alph" } });
+    expect(screen.getByText("alpha")).toBeTruthy();
+    expect(screen.queryByText("beta")).toBeNull();
+  });
 });

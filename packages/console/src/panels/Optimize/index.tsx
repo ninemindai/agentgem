@@ -28,10 +28,14 @@ export function Optimize({ apiBase }: { apiBase: string }) {
   }, [apiBase, range, reloadKey]);
 
   const onRefresh = () => { freshRef.current = true; setReloadKey((k) => k + 1); };
+  // Apply a local, network-free transform after a disable/re-enable so the panel
+  // updates instantly instead of forcing a full re-scan (onRefresh stays for the
+  // explicit Refresh button).
+  const onMutate = (fn: (p: OptimizePayload) => OptimizePayload) => setData((prev) => (prev ? fn(prev) : prev));
 
   if (error) return <div className="opt"><p className="obs-error">Couldn't load Optimize: {error}</p></div>;
   if (!data) return <div className="opt"><Loading /></div>;
-  return <Dashboard data={data} range={range} onRange={setRange} pending={pending} onRefresh={onRefresh} apiBase={apiBase} />;
+  return <Dashboard data={data} range={range} onRange={setRange} pending={pending} onRefresh={onRefresh} onMutate={onMutate} apiBase={apiBase} />;
 }
 
 export const optimizePage = defineConsolePage({
