@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildGoldmineBrief } from "../goldmineContext.js";
+import { buildGoldmineBrief } from "@agentgem/insight";
 
 describe("buildGoldmineBrief", () => {
   it("produces a compact brief with headline + top artifacts", () => {
