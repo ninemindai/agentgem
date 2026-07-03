@@ -162,3 +162,34 @@ export function runDetectors(signal: WorkflowSignal, extra: DetectorSpec[] = [])
   }
   return out;
 }
+
+// One row per detector id that actually fired — the aggregation the coaching
+// layer consumes. Carries title/advice so HTTP consumers need no registry.
+export interface DetectorSummary {
+  id: string;
+  title: string;
+  advice: string;
+  severity: DetectorSeverity;
+  count: number;      // total findings
+  sessions: number;   // distinct sessions it fired in
+}
+
+export function summarizeFindings(findings: DetectorFinding[], specs: DetectorSpec[] = DETECTORS): DetectorSummary[] {
+  const byId = new Map(specs.map((s) => [s.id, s]));
+  const acc = new Map<string, { severity: DetectorSeverity; count: number; sessions: Set<string> }>();
+  for (const f of findings) {
+    const a = acc.get(f.detectorId) ?? { severity: f.severity, count: 0, sessions: new Set<string>() };
+    a.count++;
+    a.sessions.add(f.sessionId);
+    acc.set(f.detectorId, a);
+  }
+  return [...acc.entries()]
+    .map(([id, a]) => {
+      const spec = byId.get(id);
+      return {
+        id, title: spec?.title ?? id, advice: spec?.advice ?? "",
+        severity: spec?.severity ?? a.severity, count: a.count, sessions: a.sessions.size,
+      };
+    })
+    .sort((x, y) => y.count - x.count || x.id.localeCompare(y.id));
+}

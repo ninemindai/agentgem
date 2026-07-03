@@ -21,7 +21,7 @@ const insightsPayload = {
     totals: { sessions: 1, mostly: 1, partially: 0, not: 0 }, outcomes_summary: "", narrative: "",
     by_model: [], friction: [], publish_candidates: [{ sessionId: "sess-1", goal: "ship the thing", why: "clean success" }],
   },
-  facets: [], degraded: false, signalSummary: { sessionsScanned: 1, spanDays: 1, notes: null },
+  facets: [], findings: [], detectorSummary: [], degraded: false, signalSummary: { sessionsScanned: 1, spanDays: 1, notes: null },
 };
 
 describe("dreamRoot", () => {

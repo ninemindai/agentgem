@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 // src/gem/__tests__/detectors.test.ts
 import { describe, it, expect } from "vitest";
-import { DETECTORS, runDetectors, RETRY_STORM_MIN, THRASH_MIN_CYCLES } from "@agentgem/insight";
+import { DETECTORS, runDetectors, summarizeFindings, RETRY_STORM_MIN, THRASH_MIN_CYCLES } from "@agentgem/insight";
 import type { DetectorSpec, ProcedureStep, SessionSequence, WorkflowSignal } from "@agentgem/insight";
 
 function step(tool: string, verb: string, arg: string, msgIndex: number): ProcedureStep {
@@ -167,5 +167,32 @@ describe("no-verify-finish detector", () => {
     ];
     expect(runDetectors(signalWith([sess(steps)]))
       .filter((f) => f.detectorId === "no-verify-finish")).toHaveLength(1);
+  });
+});
+
+describe("summarizeFindings", () => {
+  it("aggregates counts and distinct sessions per detector, joined with spec advice, busiest first", () => {
+    const steps = Array.from({ length: 3 }, (_, i) => step("Bash", "Bash:npm", "npm test", i));
+    const findings = runDetectors(signalWith([sess(steps, "s1"), sess(steps, "s2")]));
+    const summary = summarizeFindings(findings);
+    const storm = summary.find((s) => s.id === "retry-storm")!;
+    expect(storm.count).toBe(2);
+    expect(storm.sessions).toBe(2);
+    expect(storm.title).toBe("Same command repeated back-to-back");
+    expect(storm.advice.length).toBeGreaterThan(0);
+    expect(summary[0].count).toBeGreaterThanOrEqual(summary[summary.length - 1].count);
+  });
+
+  it("falls back to the id for findings whose spec is unknown", () => {
+    const orphan = {
+      detectorId: "ghost", sessionId: "s1", transcript: "s1.jsonl", atMs: 1,
+      severity: "info" as const, detail: "d", evidence: { msgIndices: [1] },
+    };
+    const summary = summarizeFindings([orphan]);
+    expect(summary).toEqual([{ id: "ghost", title: "ghost", advice: "", severity: "info", count: 1, sessions: 1 }]);
+  });
+
+  it("returns [] for no findings", () => {
+    expect(summarizeFindings([])).toEqual([]);
   });
 });

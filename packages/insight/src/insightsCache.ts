@@ -18,7 +18,8 @@ function cachePath(): string { return join(agentgemHome(), ".agentgem", "insight
 // iv1 = { report (totals, outcomes_summary, narrative, friction, publish_candidates), facets }.
 // iv2 = report also carries by_model (Ring 0 cross-model breakdown) — iv1 entries
 // lack it and would crash the panel, so they must not be served.
-const TOKEN_VERSION = "iv2";
+// iv3 = payload gained findings + detectorSummary — iv2 entries lack them and would crash the console.
+const TOKEN_VERSION = "iv3";
 
 /** version + transcript count + newest mtime — a new/updated session yields a new token. */
 export function insightsToken(paths: string[]): string {

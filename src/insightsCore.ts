@@ -11,11 +11,15 @@ import {
   claudeTranscriptsForCwd, allClaudeTranscripts, scanWorkflow,
   judgeSessions, synthesizeInsights, narrateInsights,
   insightsToken, readInsightsCacheEntry, writeInsightsCache,
+  runDetectors, summarizeFindings, loadRuleDetectors, DETECTORS,
+  type DetectorFinding, type DetectorSummary,
 } from "@agentgem/insight";
 
 export interface InsightsPayload {
   report: ReturnType<typeof synthesizeInsights>;
   facets: Awaited<ReturnType<typeof judgeSessions>>["facets"];
+  findings: DetectorFinding[];
+  detectorSummary: DetectorSummary[];
   degraded: boolean;
   signalSummary: { sessionsScanned: number; spanDays: number; notes: unknown };
 }
@@ -56,11 +60,16 @@ export async function computeInsights(
   if (opts.cacheOnly) {
     // Cache miss + cached-only caller (the dream harvest) — return an empty report without
     // judging/synthesizing, so the harvest never spends LLM.
-    return { payload: { report: synthesizeInsights([]), facets: [], degraded: false, signalSummary: { sessionsScanned: 0, spanDays: 0, notes: null } }, cached: false, updatedAt: null };
+    return { payload: { report: synthesizeInsights([]), facets: [], findings: [], detectorSummary: [], degraded: false, signalSummary: { sessionsScanned: 0, spanDays: 0, notes: null } }, cached: false, updatedAt: null };
   }
 
   const signal = scanWorkflow(paths, scanInv, { retainSequences: true });
   p?.onPhase?.("scanned", { transcripts: paths.length, sessions: signal.sessions.scanned });
+
+  p?.onPhase?.("detecting");
+  const ruleSpecs = loadRuleDetectors();
+  const findings = runDetectors(signal, ruleSpecs);
+  const detectorSummary = summarizeFindings(findings, [...DETECTORS, ...ruleSpecs]);
 
   p?.onPhase?.("judging");
   const { facets, degraded: judgeDegraded } = await (opts.judge ?? judgeSessions)(signal, { onDelta: (chunk) => p?.onDelta?.(chunk) });
@@ -73,7 +82,7 @@ export async function computeInsights(
   report.narrative = narr.narrative;
 
   const payload: InsightsPayload = {
-    report, facets,
+    report, facets, findings, detectorSummary,
     degraded: judgeDegraded || narr.degraded,
     signalSummary: { sessionsScanned: signal.sessions.scanned, spanDays: signal.sessions.spanDays, notes: signal.notes },
   };

@@ -27,7 +27,7 @@ describe("computeInsights", () => {
 
     const paths = claudeTranscriptsForCwd(claudeDir, "/proj");
     const token = insightsToken(paths);
-    const payload = { report: { totals: {} }, facets: [], degraded: false, signalSummary: { sessionsScanned: 1, spanDays: 0, notes: [] } };
+    const payload = { report: { totals: {} }, facets: [], findings: [], detectorSummary: [], degraded: false, signalSummary: { sessionsScanned: 1, spanDays: 0, notes: [] } };
     writeInsightsCache("/proj", token, payload, 777);
 
     const res = await computeInsights("/proj", { dir: claudeDir });
@@ -50,6 +50,10 @@ describe("computeInsights", () => {
     const first = await computeInsights("/proj2", { dir: claudeDir, judge: fakeJudge, narrate: fakeNarrate });
     expect(first.cached).toBe(false);
     expect(typeof first.updatedAt).toBe("number");
+    // Detector wiring: a transcript with no tool steps yields empty findings,
+    // but the fields must exist on a fresh payload.
+    expect(first.payload.findings).toEqual([]);
+    expect(first.payload.detectorSummary).toEqual([]);
 
     // Second call without force — must hit the cache written by the first call.
     const second = await computeInsights("/proj2", { dir: claudeDir, judge: fakeJudge, narrate: fakeNarrate });
