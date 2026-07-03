@@ -9,6 +9,7 @@ import { Gems } from "./pages/Gems";
 import { Gem } from "./pages/Gem";
 import { Publish } from "./pages/Publish";
 import { Profile } from "./pages/Profile";
+import { OrgCatalog } from "./pages/OrgCatalog";
 
 export interface StarsCtx { signedIn: boolean; loginUrl: () => string; api: ReturnType<typeof makeStars> }
 
@@ -33,5 +34,9 @@ export function Router({ api, stars, me }: { api: ReturnType<typeof makeApi>; st
 
   const prof = path.match(/^\/@([^/]+)$/);
   if (prof) return <Profile api={api} login={decodeURIComponent(prof[1])} />;
+
+  const org = path.match(/^\/orgs\/([^/]+)$/);
+  if (org) return <OrgCatalog api={api} scope={decodeURIComponent(org[1])} />;
+
   return <Leaderboard api={api} stars={stars} />;
 }
