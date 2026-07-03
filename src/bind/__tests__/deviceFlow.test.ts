@@ -13,6 +13,10 @@ describe("device flow", () => {
     const f = jsonFetch({ device_code: "DC", user_code: "WXYZ-1234", verification_uri: "https://github.com/login/device", interval: 5 });
     expect(await requestDeviceCode("cid", f)).toEqual({ deviceCode: "DC", userCode: "WXYZ-1234", verificationUri: "https://github.com/login/device", interval: 5 });
   });
+  it("requestDeviceCode captures verification_uri_complete when GitHub returns it", async () => {
+    const f = jsonFetch({ device_code: "DC", user_code: "WXYZ-1234", verification_uri: "https://github.com/login/device", verification_uri_complete: "https://github.com/login/device?user_code=WXYZ-1234", interval: 5 });
+    expect(await requestDeviceCode("cid", f)).toMatchObject({ verificationUriComplete: "https://github.com/login/device?user_code=WXYZ-1234" });
+  });
   it("pollForToken returns the token after authorization_pending", async () => {
     const f = jsonFetch({ error: "authorization_pending" }, { access_token: "gho_abc" });
     expect(await pollForToken("cid", "DC", { fetchImpl: f, sleep: noSleep })).toBe("gho_abc");

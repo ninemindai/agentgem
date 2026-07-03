@@ -3,7 +3,9 @@
 // src/bind/deviceFlow.ts
 // GitHub OAuth device flow (https://docs.github.com/apps/oauth-device-flow). No callback URL,
 // no client secret — the CLI requests a code, the user approves in a browser, the CLI polls.
-export interface DeviceCode { deviceCode: string; userCode: string; verificationUri: string; interval: number; }
+// `verificationUriComplete` is GitHub's verification URL with the user code
+// pre-filled — landing the user on a "just click Authorize" page (no manual entry).
+export interface DeviceCode { deviceCode: string; userCode: string; verificationUri: string; verificationUriComplete?: string; interval: number; }
 
 export async function requestDeviceCode(clientId: string, fetchImpl: typeof fetch = fetch): Promise<DeviceCode> {
   const res = await fetchImpl("https://github.com/login/device/code", {
@@ -11,8 +13,11 @@ export async function requestDeviceCode(clientId: string, fetchImpl: typeof fetc
     body: JSON.stringify({ client_id: clientId, scope: "read:user" }),
   });
   if (!res.ok) throw new Error(`device/code: ${res.status}`);
-  const j = (await res.json()) as { device_code: string; user_code: string; verification_uri: string; interval?: number };
-  return { deviceCode: j.device_code, userCode: j.user_code, verificationUri: j.verification_uri, interval: j.interval ?? 5 };
+  const j = (await res.json()) as { device_code: string; user_code: string; verification_uri: string; verification_uri_complete?: string; interval?: number };
+  return {
+    deviceCode: j.device_code, userCode: j.user_code, verificationUri: j.verification_uri, interval: j.interval ?? 5,
+    ...(j.verification_uri_complete ? { verificationUriComplete: j.verification_uri_complete } : {}),
+  };
 }
 
 export async function pollForToken(

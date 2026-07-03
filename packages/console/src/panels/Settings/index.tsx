@@ -9,7 +9,7 @@ import {
 type Backend = { id: string; label: string; ready: boolean };
 type BindStatus = { bound: boolean; login?: string; provider?: string; avatarUrl?: string } | null;
 type BindFlow =
-  | { step: "code"; userCode: string; verificationUri: string; deviceCode: string; interval?: number }
+  | { step: "code"; userCode: string; verificationUri: string; verificationUriComplete?: string; deviceCode: string; interval?: number }
   | { step: "unconfigured" }
   | null;
 
@@ -74,11 +74,13 @@ export function Settings({ apiBase }: { apiBase: string }) {
         step: "code",
         userCode: r.userCode!,
         verificationUri: r.verificationUri!,
+        verificationUriComplete: r.verificationUriComplete,
         deviceCode: r.deviceCode!,
         interval: r.interval,
       };
       setBindFlow(flow);
-      if (ghTab) ghTab.location.href = r.verificationUri!;
+      // Prefer the code-prefilled URL — the user lands on "just click Authorize".
+      if (ghTab) ghTab.location.href = r.verificationUriComplete ?? r.verificationUri!;
       const result = await bindCompleteRoute.call(makeClient(apiBase), {
         body: { deviceCode: r.deviceCode!, interval: r.interval },
       });
@@ -163,7 +165,7 @@ export function Settings({ apiBase }: { apiBase: string }) {
             {bindFlow?.step === "code" && (
               <div>
                 <p className="ws-note">Your code: <strong>{bindFlow.userCode}</strong></p>
-                <p className="deploy-hint">We opened GitHub in a new tab — enter this code there. Didn't open? <a href={bindFlow.verificationUri} target="_blank" rel="noreferrer">Open GitHub</a>.</p>
+                <p className="deploy-hint">We opened GitHub in a new tab — enter this code there. Didn't open? <a href={bindFlow.verificationUriComplete ?? bindFlow.verificationUri} target="_blank" rel="noreferrer">Open GitHub</a>.</p>
                 <p className="deploy-hint">Waiting for verification…</p>
               </div>
             )}
