@@ -216,6 +216,7 @@ import {
   GemRunRequestSchema, GemRunResponseSchema,
   GemRunPrepareRequestSchema, GemRunPrepareResponseSchema,
   GemVerifyRequestSchema, GemVerifyResponseSchema,
+  GemVerifyPrepareRequestSchema, GemVerifyPrepareResponseSchema,
   UsageSchema, UsageQuerySchema,
   PlaybookPrepareBodySchema, PlaybookPrepareResponseSchema,
   PlaybookPublishBodySchema, PlaybookPublishResponseSchema,
@@ -235,7 +236,7 @@ import { runReadiness, startLocal, stopLocal, getRunStatus, deployVercel, deploy
 import { setCredential } from "@agentgem/capture";
 import { agentcoreReadiness, deployAgentcore, getAgentcoreStatus } from "@agentgem/deploy";
 import { scaffoldTestbed, importArtifacts } from "@agentgem/testbed";
-import { materializeAndRunGem, materializeGemToTestbed, registerRun, AGENT_ADAPTERS, type AgentId } from "@agentgem/run";
+import { materializeAndRunGem, materializeGemToTestbed, registerRun, registerVerify, AGENT_ADAPTERS, type AgentId } from "@agentgem/run";
 import { verifyGemAcrossAgents, deriveMatrixBaseDir } from "@agentgem/run";
 import { contractToExpectations, appendVerification } from "@agentgem/run";
 import { detectFlavor, suggestTestbed, discoverProjects } from "@agentgem/testbed";
@@ -944,6 +945,26 @@ export class GemController {
       gemDigest,
     });
     return { gemName: gem.name, gemDigest, baseDir, verdicts };
+  }
+
+  // Step 1 of the streaming matrix flow: resolve + validate everything that can fail
+  // (contract, roster) so failures land here as clean 400s, register the spec
+  // server-side, and hand back an opaque verifyId for GET /gem/verify/stream.
+  @post("/gem/verify/prepare", { body: GemVerifyPrepareRequestSchema, response: GemVerifyPrepareResponseSchema })
+  async prepareGemVerify(input: { body: z.infer<typeof GemVerifyPrepareRequestSchema> }): Promise<z.infer<typeof GemVerifyPrepareResponseSchema>> {
+    const b = input.body;
+    const files = b.archivePath ? readArchiveDir(b.archivePath) : undefined;
+    const gem: Gem = files
+      ? readGemArchive(files)
+      : buildGem(introspectAll(b.dir, b.projects), b.selection!, { name: b.name ?? "gem", createdFrom: resolveDirs(b.dir).claudeDir });
+    if (!gem.contract) throw new InvalidInputError("this Gem carries no contract — the matrix verifies a Gem's own claim (skill-bearing selections get one derived at build)");
+    const known = Object.keys(AGENT_ADAPTERS);
+    const unknown = (b.agents ?? []).filter((a) => !known.includes(a));
+    if (unknown.length) throw new InvalidInputError(`unknown agent(s): ${unknown.join(", ")}. Known: ${known.join(", ")}`);
+    const roster = (b.agents?.length ? b.agents : known) as AgentId[];
+    const gemDigest = readGemMeta(files ?? writeGemArchive(gem).files).gemDigest;
+    const verifyId = registerVerify({ gem, baseDir: deriveMatrixBaseDir(gem.name), roster, fetch: b.fetch, gemDigest, gemName: gem.name });
+    return { verifyId, gemName: gem.name, gemDigest, agents: roster };
   }
 
   // Resolve the configured registry source, or throw a clear error the UI can surface.

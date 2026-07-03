@@ -12,7 +12,7 @@ import { packTar, unpackTar } from "@agentgem/archive";
 import { writeGemArchive } from "@agentgem/archive";
 import { writeArchiveDir } from "@agentgem/archive";
 import { setRunConnectFnForTests, type RunConnectFn } from "@agentgem/run";
-import { resolveRun, ledgerPath } from "@agentgem/run";
+import { resolveRun, resolveVerify, ledgerPath } from "@agentgem/run";
 import type { Gem } from "@agentgem/model";
 
 let app: RestApplication;
@@ -254,6 +254,34 @@ describe("POST /api/gem/run", () => {
       rmSync(archiveDir, { recursive: true, force: true });
       rmSync(join(agentgemHomeDir, ".agentgem", "runs", "qa-gem-matrix"), { recursive: true, force: true });
     }
+  });
+
+  it("POST /api/gem/verify/prepare registers a contract-bearing gem and returns the roster", async () => {
+    const archiveDir = mkdtempSync(join(tmpdir(), "gem-arc-"));
+    const withContract: Gem = { ...gem, contract: { task: "exercise qa", expect: { tools: ["qa"] } } };
+    writeArchiveDir(archiveDir, writeGemArchive(withContract).files);
+    try {
+      const r = await client.post("/api/gem/verify/prepare").send({ archivePath: archiveDir }).expect(200);
+      expect(r.body.gemName).toBe("qa-gem");
+      expect(r.body.gemDigest).toMatch(/./);
+      expect(r.body.agents).toEqual(["claude", "codex"]);
+      const spec = resolveVerify(r.body.verifyId);
+      expect(spec?.gemName).toBe("qa-gem");
+      expect(spec?.baseDir).toContain("qa-gem-matrix");
+    } finally { rmSync(archiveDir, { recursive: true, force: true }); }
+  });
+
+  it("POST /api/gem/verify/prepare 400s on a contract-less gem and on unknown agents", async () => {
+    const archiveDir = mkdtempSync(join(tmpdir(), "gem-arc-"));
+    writeArchiveDir(archiveDir, writeGemArchive(gem).files); // no contract
+    try {
+      const noContract = await client.post("/api/gem/verify/prepare").send({ archivePath: archiveDir });
+      expect(noContract.status).toBe(400);
+      const withContract: Gem = { ...gem, contract: { task: "t", expect: {} } };
+      writeArchiveDir(archiveDir, writeGemArchive(withContract).files);
+      const unknown = await client.post("/api/gem/verify/prepare").send({ archivePath: archiveDir, agents: ["gemini"] });
+      expect(unknown.status).toBe(400);
+    } finally { rmSync(archiveDir, { recursive: true, force: true }); }
   });
 });
 
