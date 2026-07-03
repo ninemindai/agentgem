@@ -6,6 +6,7 @@ import {
   splitFrontmatter,
   agentMdToEntry,
   agentMdToSkill,
+  fetchAgencyDivisions,
   listAgencyDivisions,
   listAgencyAgents,
   importAgencyAgentSkill,
@@ -131,9 +132,34 @@ describe("agentMdToSkill", () => {
   });
 });
 
+const DIVISIONS_JSON = JSON.stringify({
+  _note: "source of truth",
+  divisions: {
+    engineering: { label: "Engineering", icon: "Code", color: "#3B82F6" },
+    marketing: { label: "Marketing", icon: "Megaphone", color: "#F97316" },
+    "game-development": { label: "Game Development", icon: "Gamepad2", color: "#A855F7" },
+  },
+});
+
 describe("agency-agents network helpers over a fake Http", () => {
-  it("lists divisions, excluding non-agent dirs", async () => {
+  it("fetches divisions from divisions.json with label/icon/color, sorted by key", async () => {
+    const http = fakeHttp({ "divisions.json": { content: b64(DIVISIONS_JSON), encoding: "base64" } });
+    const divisions = await fetchAgencyDivisions(CFG, http);
+    expect(divisions.map((d) => d.key)).toEqual(["engineering", "game-development", "marketing"]);
+    const eng = divisions.find((d) => d.key === "engineering")!;
+    expect(eng.label).toBe("Engineering");
+    expect(eng.icon).toBe("Code");
+    expect(eng.color).toBe("#3B82F6");
+  });
+
+  it("listAgencyDivisions returns just the keys from divisions.json", async () => {
+    const http = fakeHttp({ "divisions.json": { content: b64(DIVISIONS_JSON), encoding: "base64" } });
+    expect(await listAgencyDivisions(CFG, http)).toEqual(["engineering", "game-development", "marketing"]);
+  });
+
+  it("falls back to a root walk (minus non-agent dirs) when divisions.json is absent", async () => {
     const http = fakeHttp({
+      // no "divisions.json" route → 404 → fallback path
       "": [
         { name: "engineering", path: "engineering", type: "dir" },
         { name: "marketing", path: "marketing", type: "dir" },
@@ -142,8 +168,10 @@ describe("agency-agents network helpers over a fake Http", () => {
         { name: "README.md", path: "README.md", type: "file" },      // not a dir
       ],
     });
-    const divisions = await listAgencyDivisions(CFG, http);
-    expect(divisions).toEqual(["engineering", "marketing"]);
+    const divisions = await fetchAgencyDivisions(CFG, http);
+    expect(divisions.map((d) => d.key)).toEqual(["engineering", "marketing"]);
+    expect(divisions[0].label).toBe("Engineering"); // synthesized (title-cased), no icon/color
+    expect(divisions[0].icon).toBeUndefined();
     expect(NON_AGENT_DIRS.has("scripts")).toBe(true);
   });
 
