@@ -143,4 +143,10 @@ describe("originGuard — public aggregator reads (CORS + cross-site exemption)"
     expect(r.nexted).toBe(true);
     expect(r.set["access-control-allow-origin"]).toBe("*");
   });
+
+  it("allows a cross-site GET to profile and sets permissive CORS", () => {
+    const r = run({ "sec-fetch-site": "cross-site" }, "agg.example", "GET", "/api/aggregator/profile");
+    expect(r.nexted).toBe(true);
+    expect(r.set["access-control-allow-origin"]).toBe("*");
+  });
 });
