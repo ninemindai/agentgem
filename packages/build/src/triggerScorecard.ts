@@ -1,11 +1,11 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
-// A view over a GemVerificationReport — no persistence. Surfaces trigger precision,
+// A view over a GemVerificationReport — no persistence. Surfaces the net route score,
 // collisions, and context budget for the console scorecard (Plan 2) and grade input.
 import type { Gem, GemVerificationReport } from "@agentgem/model";
 
 export interface TriggerScorecard {
-  precision: number | null; // route-confusion CheckResult.score, null if not run
+  routeScore: number | null; // net route-confusion score (precision − collision rate), null if not run
   collisions: string[];     // finding titles from that result
   contextBudgetChars: number;
 }
@@ -16,7 +16,7 @@ export function triggerScorecard(report: GemVerificationReport, gem: Gem): Trigg
     .filter((a): a is Extract<typeof a, { type: "skill" }> => a.type === "skill")
     .reduce((n, s) => n + s.content.length + (s.trigger ? JSON.stringify(s.trigger).length : 0), 0);
   return {
-    precision: rc?.score ?? null,
+    routeScore: rc?.score ?? null,
     collisions: (rc?.findings ?? []).map((f) => f.title),
     contextBudgetChars,
   };

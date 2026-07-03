@@ -17,27 +17,29 @@ const sibling = {
   contract: { intent: "run a gem", triggers: ["execute the gem"], antiTriggers: [] } as TriggerContract,
 };
 
-it("perfect routing scores 1 with no findings", () => {
-  // judge routes every own-trigger to `distill` and the anti-trigger elsewhere
-  const judge: RouteJudge = (phrase) => (phrase === "one-off command" ? "runGem" : "distill");
-  const r = scoreRouteConfusion(own, [sibling], judge);
-  expect(r.score).toBe(1);
-  expect(r.findings).toHaveLength(0);
-});
+describe("scoreRouteConfusion", () => {
+  it("perfect routing scores 1 with no findings", () => {
+    // judge routes every own-trigger to `distill` and the anti-trigger elsewhere
+    const judge: RouteJudge = (phrase) => (phrase === "one-off command" ? "runGem" : "distill");
+    const r = scoreRouteConfusion(own, [sibling], judge);
+    expect(r.score).toBe(1);
+    expect(r.findings).toHaveLength(0);
+  });
 
-it("a mis-routed trigger lowers precision and is reported", () => {
-  const judge: RouteJudge = (phrase) =>
-    phrase === "repeated steps" ? "runGem" : phrase === "one-off command" ? "runGem" : "distill";
-  const r = scoreRouteConfusion(own, [sibling], judge);
-  // precision = 1/2, collisionRate = 0 -> score 0.5
-  expect(r.score).toBeCloseTo(0.5);
-  expect(r.findings.some((f) => f.title.includes("repeated steps"))).toBe(true);
-});
+  it("a mis-routed trigger lowers precision and is reported", () => {
+    const judge: RouteJudge = (phrase) =>
+      phrase === "repeated steps" ? "runGem" : phrase === "one-off command" ? "runGem" : "distill";
+    const r = scoreRouteConfusion(own, [sibling], judge);
+    // precision = 1/2, collisionRate = 0 -> score 0.5
+    expect(r.score).toBeCloseTo(0.5);
+    expect(r.findings.some((f) => f.title.includes("repeated steps"))).toBe(true);
+  });
 
-it("an anti-trigger that wrongly fires raises collision rate", () => {
-  const judge: RouteJudge = () => "distill"; // everything routes to own, incl. the anti-trigger
-  const r = scoreRouteConfusion(own, [sibling], judge);
-  // precision = 2/2 = 1, collisionRate = 1/1 = 1 -> score clamped to 0
-  expect(r.score).toBe(0);
-  expect(r.findings.some((f) => f.title.includes("one-off command"))).toBe(true);
+  it("an anti-trigger that wrongly fires raises collision rate", () => {
+    const judge: RouteJudge = () => "distill"; // everything routes to own, incl. the anti-trigger
+    const r = scoreRouteConfusion(own, [sibling], judge);
+    // precision = 2/2 = 1, collisionRate = 1/1 = 1 -> score clamped to 0
+    expect(r.score).toBe(0);
+    expect(r.findings.some((f) => f.title.includes("one-off command"))).toBe(true);
+  });
 });

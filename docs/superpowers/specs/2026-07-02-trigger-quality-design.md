@@ -140,9 +140,10 @@ Not a new store — a read-model over the `CheckResult[]` already collected in
 `GemVerificationReport`.
 
 - A pure `triggerScorecard(report)` view surfaces three things already present or cheap:
-  **trigger precision** (from the route-confusion `CheckResult.score`), **collision list**
-  (from `CheckResult.findings`), and **context budget** (token size of `trigger` +
-  `content` — a `string.length`-class measure, no LLM).
+  the **net route score** (precision − collision, from the route-confusion
+  `CheckResult.score`), **collision list** (from `CheckResult.findings`), and **context
+  budget** (token size of `trigger` + `content` — a `string.length`-class measure, no
+  LLM).
 - **Grade integration:** `Gem.grade` (the 1..3 floor, baked at build) gains the
   route-confusion score as *one input*. Advisory — a weak contract lowers the floor but
   never blocks a build or publish. A Gem with no `trigger` contract grades exactly as it
