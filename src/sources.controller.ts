@@ -7,10 +7,11 @@ import {
   CURATED_SOURCES,
   curatedSourceById,
   cfgForCuratedSource,
-  fetchAgencyDivisions,
-  listAgencyAgents,
-  fetchAgencyAgentEntry,
-  importAgencyAgentSkill,
+  sourceDivisions,
+  sourceAgents,
+  sourceEntry,
+  importSourceSkill,
+  assertSourcePath,
   type CuratedSource,
 } from "@agentgem/distribute";
 import { SkillArtifactSchema } from "./schemas.js";
@@ -22,7 +23,7 @@ const CuratedSourceSchema = z.object({
   description: z.string(),
   repo: z.string(),
   ref: z.string(),
-  kind: z.literal("agency-layout"),
+  kind: z.enum(["agency-layout", "skills-layout"]),
   license: z.string().optional(),
   homepage: z.string().optional(),
 });
@@ -43,11 +44,11 @@ const EntrySchema = z.object({
   description: z.string().optional(), vibe: z.string().optional(), color: z.string().optional(), emoji: z.string().optional(),
 });
 
-// Input containment: a division is a single path segment; an agent path is exactly
-// "<division>/<file>.md". Both bound what we fetch to the source repo's persona layout — a
-// caller can't walk to arbitrary repo files or traverse out (the repo itself is fixed per source).
+// Input containment: a division is a single path segment. Agent-path shape is kind-specific
+// (agency-layout vs skills-layout), so it's validated via `assertSourcePath` (dispatch by
+// `source.kind`, in @agentgem/distribute) — a caller can't walk to arbitrary repo files or
+// traverse out (the repo itself is fixed per source).
 const DIV_RE = /^[a-z0-9-]+$/;
-const AGENCY_PATH_RE = /^[a-z0-9-]+\/[A-Za-z0-9._-]+\.md$/;
 
 function sourceOrThrow(id: string): CuratedSource {
   const s = curatedSourceById(id);
@@ -58,15 +59,12 @@ function divisionOrThrow(d: string): string {
   if (!DIV_RE.test(d)) throw new InvalidInputError(`Invalid division '${d}'.`);
   return d;
 }
-function agencyPathOrThrow(path: string): string {
-  if (path.includes("..") || !AGENCY_PATH_RE.test(path)) throw new InvalidInputError(`Invalid agent path '${path}'.`);
-  return path;
-}
 
 // Curated import sources that bootstrap the Gem registry. Reads are server-proxied (the browser
-// stays same-origin) through the token-optional GitHub Contents API; import maps a persona into a
-// SkillArtifact ready to bundle into a Gem. Today every source is "agency-layout"; more sources
-// are more CURATED_SOURCES entries (same layout) or a new adapter + kind.
+// stays same-origin) through the token-optional GitHub Contents API; import maps a persona/skill
+// into a SkillArtifact ready to bundle into a Gem. Every source has a `kind` (agency-layout,
+// skills-layout); more sources are more CURATED_SOURCES entries (same layout) or a new adapter +
+// kind, dispatched uniformly via `@agentgem/distribute`'s sourceImport.ts.
 @api({ basePath: "/api/sources" })
 export class SourcesController {
   @get("/", { response: SourcesResult })
@@ -77,19 +75,19 @@ export class SourcesController {
   @get("/divisions", { query: SourceQuery, response: DivisionsResult })
   async divisions(input: { query: z.infer<typeof SourceQuery> }): Promise<z.infer<typeof DivisionsResult>> {
     const source = sourceOrThrow(input.query.source);
-    return { divisions: await fetchAgencyDivisions(cfgForCuratedSource(source)) };
+    return { divisions: await sourceDivisions(source, cfgForCuratedSource(source)) };
   }
 
   @get("/agents", { query: AgentsQuery, response: AgentsResult })
   async agents(input: { query: z.infer<typeof AgentsQuery> }): Promise<z.infer<typeof AgentsResult>> {
     const source = sourceOrThrow(input.query.source);
-    return { agents: await listAgencyAgents(divisionOrThrow(input.query.division), cfgForCuratedSource(source)) };
+    return { agents: await sourceAgents(source, divisionOrThrow(input.query.division), cfgForCuratedSource(source)) };
   }
 
   @get("/agent", { query: AgentQuery, response: EntrySchema })
   async agent(input: { query: z.infer<typeof AgentQuery> }): Promise<z.infer<typeof EntrySchema>> {
     const source = sourceOrThrow(input.query.source);
-    return fetchAgencyAgentEntry(agencyPathOrThrow(input.query.path), cfgForCuratedSource(source));
+    return sourceEntry(source, assertSourcePath(source, input.query.path), cfgForCuratedSource(source));
   }
 
   // Pure read (fetches curated content, writes nothing) exposed as both GET — reachable
@@ -106,7 +104,8 @@ export class SourcesController {
   }
 
   private importSkill(source: string, path: string): Promise<z.infer<typeof SkillArtifactSchema>> {
-    return importAgencyAgentSkill(agencyPathOrThrow(path), cfgForCuratedSource(sourceOrThrow(source)));
+    const s = sourceOrThrow(source);
+    return importSourceSkill(s, assertSourcePath(s, path), cfgForCuratedSource(s));
   }
 
   // Install a persona into the user's global skills home (~/.agents/skills/<name>/SKILL.md) —

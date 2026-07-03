@@ -4,7 +4,10 @@
 // Barrel re-export; consumers import named symbols from "@agentgem/distribute".
 export * from "./registry.js";
 export * from "./registryGithub.js";
+export * from "./githubContents.js";
 export * from "./agencyAgents.js";
+export * from "./skillsLayout.js";
+export * from "./sourceImport.js";
 export * from "./curatedSources.js";
 export * from "./share.js";
 export * from "./search.js";
