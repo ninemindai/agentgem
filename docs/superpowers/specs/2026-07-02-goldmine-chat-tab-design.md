@@ -12,9 +12,9 @@ The point is differentiation from the raw coding agent the user already has open
 
 ## Locked decisions
 
-- **Data access: hybrid.** Pre-inject a compact goldmine summary into the opening prompt, *plus* give the agent inline read tools to fetch detail on demand.
-- **Turn model: long-lived ACP session.** One ACP subprocess per open chat, kept alive across turns; the agent holds its own context and tools stay connected. Well-matched because the console is local single-user (~1 active chat, not a fleet).
-- **Tool wiring: Approach A — inline ACP tools.** Register read-tool handlers directly on the ACP session, reusing the `acpRun.ts` tool-registration pattern. (Approach B — a standalone reusable goldmine MCP server — is the deferred next step, extracted once we see which tools the chat actually leans on.)
+- **Data access: hybrid (true, in slice 1).** Pre-inject a compact goldmine summary into the opening prompt, *plus* provision a **goldmine MCP server** so the agent can call read tools to dig for detail on demand.
+- **Turn model: long-lived ACP session.** One ACP subprocess per open chat, kept alive across turns; the agent holds its own context and the MCP server stays connected. Well-matched because the console is local single-user (~1 active chat, not a fleet).
+- **Tool wiring: client-provisioned stdio MCP server.** ACP has no lightweight "inline tool handler"; a client exposes tools to an agent only by configuring an MCP server on the session. Confirmed against `@agentclientprotocol/sdk` v0.28.1: `buildSession(cwd).withMcpServer({name, command, args, env}).start()` provisions a **stdio** MCP server. We ship a `agentgem-goldmine` stdio binary built with `@agentback/mcp` — mirroring the existing `agentgem-distill` server (`src/distill/mcpServer.ts`) — and `connectAcpAdapter` is extended to pass it through. **Correction to an earlier draft:** `acpRun.ts` only *observes* the agent's own tool calls; it does not register tools, so there was never a cheap "inline" path — the MCP server is the mechanism.
 - **Gem handoff: in scope.** A "Draft a Gem" action maps the transcript + surfaced artifacts into a Curate draft. Read-mostly: produces a draft for human review, no execution.
 - **Agent selection: fixed-per-chat picker.** A registry of `AgentDescriptor`s (Claude Code, Codex, future adapters) with an availability probe. The agent is chosen when a chat starts and fixed for that chat's lifetime; switching = new chat. (Replay-on-switch deferred.)
 
@@ -24,10 +24,11 @@ Each unit has one job and a well-defined interface; the chat panel never learns 
 
 | Unit | Location | Responsibility | Depends on |
 |---|---|---|---|
+| ACP MCP provisioning | `packages/base/src/acpSession.ts` (extend) | Let `open(cwd, {mcpServers})` pass `McpServer[]` into `buildSession(...).withMcpServer(...)` | `@agentclientprotocol/sdk` |
 | Agent registry | `packages/base/src/agents.ts` | Enumerate selectable ACP backends; `availableAgents()` probes each `command[0]` on PATH | `AgentDescriptor` (exists) |
 | Goldmine context assembler | `packages/insight/src/goldmineContext.ts` | Build a compact opening-prompt summary (scorecard headline + top artifacts/usage) — the pre-inject half of hybrid | existing scorecard/usage/inventory fns |
-| Inline read tools | `packages/run/src/chatTools.ts` | `search_sessions`, `get_artifact_detail` handlers registered on the ACP session — the dig-on-demand half | existing session/artifact query fns |
-| Chat session manager | `packages/run/src/chatSession.ts` | `Map<chatId, LiveChat>`; open / `send(msg) → AsyncGenerator<event>` / teardown; owns subprocess lifecycle | `@agentgem/base`, assembler, tools |
+| Goldmine MCP server | `src/goldmine/mcpServer.ts`, shipped as `agentgem-goldmine` bin | Stdio `@mcpServer` exposing `search_sessions`, `get_artifact_detail` read tools — the dig-on-demand half | `@agentback/mcp`, existing scan/query fns; pattern from `src/distill/mcpServer.ts` |
+| Chat session manager | `packages/run/src/chatSession.ts` | `Map<chatId, LiveChat>`; open (provisions the goldmine MCP server descriptor) / `send(msg) → AsyncGenerator<event>` / teardown; owns subprocess lifecycle | `@agentgem/base`, assembler |
 | Gem-draft mapper | reuse Curate + a mapper | Turn transcript + surfaced artifacts into a Curate draft | existing Curate flow |
 | Chat panel (UI) | `packages/console/src/panels/Chat/` (`index` + `chatStream.ts`) | Agent picker, message list, streaming render, "Draft a Gem" button | `defineConsolePage`, existing `openXxxStream` pattern |
 
@@ -44,9 +45,9 @@ Raw Express SSE handlers, registered alongside the other streams in `src/index.t
 ## Data flow (one chat)
 
 1. Panel loads → `GET /api/agents` → picker shows installed backends; unavailable ones greyed with "not installed."
-2. User picks an agent, sends first message → `POST /api/chat {agentId}`. Manager spawns the ACP session (`connectAcpAdapter`, neutral workspace, `permission:"deny"` — the recommender's read-only posture), calls the assembler to inject the goldmine summary as opening context, registers the inline read tools, stores `LiveChat` under `chatId`.
-3. Turn streams over `GET /api/chat/stream?chatId&message`: `phase(preparing→running)` → `delta` chunks → `tool` events when the agent calls `search_sessions` / `get_artifact_detail` → `done` with the final message + the artifacts surfaced this turn.
-4. Follow-up turns reuse the **same** live session (the point of long-lived): no history replay, agent keeps its own context, tools stay connected.
+2. User picks an agent, sends first message → `POST /api/chat {agentId}`. Manager opens the ACP session (`connectAcpAdapter`, neutral workspace, `permission:"deny"` — the recommender's read-only posture) **with the `agentgem-goldmine` stdio MCP server provisioned** into the session, calls the assembler to inject the goldmine summary as opening context, stores `LiveChat` under `chatId`. Note: read tools call for `permission:"allow"` on the *tool* requests; the "deny" posture blocks *filesystem/write* permission prompts while the goldmine MCP tools are pure reads — the exact permission policy for read-only MCP tools is settled in the plan against adapter behavior.
+3. Turn streams over `GET /api/chat/stream?chatId&message`: `phase(preparing→running)` → `delta` chunks → `tool` events when the agent calls the goldmine MCP tools `search_sessions` / `get_artifact_detail` → `done` with the final message + the artifacts surfaced this turn.
+4. Follow-up turns reuse the **same** live session (the point of long-lived): no history replay, agent keeps its own context, the MCP server stays connected.
 5. "Draft a Gem" → `POST /api/chat/:chatId/draft-gem` → mapper builds a Curate draft from transcript + surfaced artifacts → panel deep-links into Curate.
 
 ## Lifecycle & error handling
@@ -64,20 +65,22 @@ The real risk surface is the long-lived subprocess, so it is contained entirely 
 Reuse the `setConnectFnForTests` seam (in-process fake agent, no subprocess).
 
 - **Session manager:** multi-turn keeps one session (assert connect called once across turns); idle sweep tears down; LRU eviction; `failed` event on fake-agent error.
-- **Inline tools:** fake agent calls `search_sessions` → assert `tool` events surface and results feed back into the turn.
+- **Goldmine MCP server:** each tool (`search_sessions`, `get_artifact_detail`) unit-tested directly against fixture `~/.claude` data (the server is a thin `@mcpServer` over existing scan/query fns — test those handlers without spawning stdio).
+- **MCP provisioning (base):** unit-test that `open(cwd, {mcpServers})` threads the descriptors into `buildSession(...).withMcpServer(...)` via a fake `agentCtx` (assert the builder received them); no real subprocess.
 - **Assembler:** deterministic summary from fixture goldmine data (pure function — straightforward unit test).
 - **Draft-gem mapper:** transcript + surfaced artifacts → expected Curate draft shape.
-- **SSE integration:** one end-to-end turn emits the expected event sequence (mirrors the existing `sse.integration` style).
+- **SSE integration:** one end-to-end turn (fake agent that emits `agent_message_chunk` + a `tool_call`) emits the expected event sequence (mirrors the existing `sse.integration` style).
 
 ## Live-validation risks
 
-- **Codex tool support:** whether `codex-acp` accepts the client-side tool registration our inline tools need. If not, it degrades gracefully to a **pre-inject-only** agent (hybrid falls back to just the summary — still useful).
+- **Adapter honors client MCP servers (PRIMARY RISK):** SDK v0.28.1 *confirms* `buildSession(...).withMcpServer(...)` provisions a stdio `McpServer`, but whether `claude-agent-acp` / `codex-acp` actually spawn and call it end-to-end is **unverified** (adapters not installed here). Mitigation: an **early live-smoke task** (spawn a real adapter, provision a trivial echo MCP tool, confirm the agent calls it) gates the rest. If unsupported, the design degrades gracefully to **pre-inject-only** (the brief still grounds every turn).
+- **Read-tool permission policy:** confirm read-only MCP tool calls proceed under the session's permission posture without a write-style prompt loop.
 - **Binary availability:** each backend needs its CLI installed to appear enabled in the picker; probe on PATH and grey out rather than fail on connect.
 - **stdio bridging** against the real adapters (already flagged as needing live validation in `acpSession.ts`).
 
 ## Out of scope for slice 1 (deferred, YAGNI)
 
-- **Approach B** — standalone reusable goldmine MCP server (extract once the inline tool set is proven; would let *any* agent, including the user's own Claude Code, mount the goldmine).
+- **Reusing the goldmine MCP server elsewhere** — the `agentgem-goldmine` binary is built for this chat first; wiring it into *other* agents (e.g. the user's own Claude Code config) is a later, additive step.
 - **Replay-on-agent-switch** — switching agents starts a new chat rather than migrating context.
 - **Tool-capable / execution mode** — running Gems or touching the filesystem from chat (reopens the full gem-run security surface; intentionally excluded).
 - **Chat persistence across app restarts** — sessions are ephemeral; restart = fresh chat.
