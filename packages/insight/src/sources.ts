@@ -15,7 +15,7 @@ import { listFiles, jsonLines, parseClaudeTranscript, parseCodexTranscript } fro
 import { detectHtmlArtifacts, type HtmlArtifactVersion } from "./artifactScan.js";
 import { resolveCodexHtmlPaths } from "./sources/codexArtifacts.js";
 import { scanClineSessions, readClineArtifacts } from "./sources/cline.js";
-import { scanGeminiSessions, readGeminiArtifacts } from "./sources/gemini.js";
+import { scanGeminiSessions, readGeminiArtifacts, parseGeminiMeta, resolveGeminiHtmlPaths } from "./sources/gemini.js";
 import { scanContinueSessions, readContinueArtifacts } from "./sources/continue.js";
 import { scanCursorSessions, readCursorArtifacts } from "./sources/cursor.js";
 
@@ -125,6 +125,10 @@ const geminiSource: SourceSpec = {
   roots: (env) => [geminiTmpDir(env.baseDir)],
   scanSessions: (roots) =>
     scanGeminiSessions(roots.flatMap((r) => listFiles(r, ".jsonl")).filter((f) => basename(f).startsWith("session-"))),
+  watchFiles: (roots) => roots.flatMap((r) => listFiles(r, ".jsonl")).filter((f) => basename(f).startsWith("session-")),
+  parseMeta: parseGeminiMeta,
+  // write_file/replace use absolute paths → resolve + watch the real files (file-driven).
+  resolveArtifactPaths: resolveGeminiHtmlPaths,
   readArtifacts: async (env) => {
     const home = env.baseDir || join(homedir(), ".gemini");  // || not ??: "" must mean absent, never a cwd-relative read
     return readGeminiArtifacts({
