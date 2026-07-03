@@ -9,7 +9,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { curatedSourceById, cfgForCuratedSource, importAgencyAgentSkill } from "@agentgem/distribute";
 import { InvalidInputError } from "@agentgem/model";
 
-const SKILL_NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
+const SKILL_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const AGENCY_PATH_RE = /^[a-z0-9-]+\/[A-Za-z0-9._-]+\.md$/;
 
 export interface InstallAgencyResult { ok: boolean; skill: string; dir: string; content: string }
@@ -23,7 +23,7 @@ export async function installAgencySkill(
   if (!source) throw new InvalidInputError(`Unknown curated source '${sourceId}'.`);
   if (path.includes("..") || !AGENCY_PATH_RE.test(path)) throw new InvalidInputError(`Invalid agent path '${path}'.`);
   const skill = await importAgencyAgentSkill(path, cfgForCuratedSource(source));
-  if (!SKILL_NAME_RE.test(skill.name)) throw new InvalidInputError(`Unsafe skill name '${skill.name}'.`);
+  if (skill.name.includes("..") || !SKILL_NAME_RE.test(skill.name)) throw new InvalidInputError(`Unsafe skill name '${skill.name}'.`);
   const dir = join(opts.home ?? homedir(), ".agents", "skills", skill.name);
   if (!opts.dryRun) {
     await mkdir(dir, { recursive: true });

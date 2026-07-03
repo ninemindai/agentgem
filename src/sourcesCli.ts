@@ -7,12 +7,15 @@ import { installAgencySkill } from "./sourcesCore.js";
 const USAGE = "usage: agentgem sources install <sourceId> <path>\n  e.g. agentgem sources install agency-agents engineering/ai-engineer.md\n  flags: --dry-run  (print the SKILL.md without writing)";
 
 export async function runSourcesCommand(argv: string[]): Promise<number> {
-  const [sub, sourceId, path] = argv;
+  const positional = argv.filter((a) => !a.startsWith("--"));
+  const [sub, sourceId, path] = positional;
   if (sub !== "install" || !sourceId || !path) {
     console.error(USAGE);
     return 1;
   }
-  const dryRun = argv.includes("--dry-run");
+  // Fail closed: match "--dry-run" and "--dry-run=<value>", not just an exact "--dry-run" element —
+  // a missed dry-run flag means we silently WRITE when a preview was intended.
+  const dryRun = argv.some((a) => a === "--dry-run" || a.startsWith("--dry-run="));
   try {
     const r = await installAgencySkill(sourceId, path, { dryRun });
     if (dryRun) {

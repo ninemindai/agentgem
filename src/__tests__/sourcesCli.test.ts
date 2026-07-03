@@ -18,6 +18,14 @@ describe("runSourcesCommand", () => {
     await runSourcesCommand(["install", "agency-agents", "engineering/ai-engineer.md", "--dry-run"]);
     expect(install).toHaveBeenCalledWith("agency-agents", "engineering/ai-engineer.md", { dryRun: true });
   });
+  it("recognizes --dry-run=1 (not just the bare flag)", async () => {
+    await runSourcesCommand(["install", "agency-agents", "engineering/ai-engineer.md", "--dry-run=1"]);
+    expect(install).toHaveBeenCalledWith("agency-agents", "engineering/ai-engineer.md", { dryRun: true });
+  });
+  it("parses sourceId/path correctly when a flag precedes the positionals", async () => {
+    await runSourcesCommand(["--dry-run", "install", "agency-agents", "engineering/ai-engineer.md"]);
+    expect(install).toHaveBeenCalledWith("agency-agents", "engineering/ai-engineer.md", { dryRun: true });
+  });
   it("missing args returns 1 and does not call the core", async () => {
     const code = await runSourcesCommand(["install"]);
     expect(code).toBe(1);
