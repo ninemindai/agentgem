@@ -34,7 +34,7 @@ export function openVerifyStream(
   es.addEventListener("verdict", (m) => { const d = data(m); onEvent({ type: "verdict", agent: d.agent, status: d.status, detail: d.detail }); });
   es.addEventListener("done", (m) => { onEvent({ type: "done", verdicts: data(m).verdicts }); es.close(); });
   es.addEventListener("failed", (m) => { onEvent({ type: "failed", message: data(m).message }); es.close(); });
-  es.addEventListener("error", () => onEvent({ type: "failed", message: "stream connection error" }));
+  es.addEventListener("error", () => { onEvent({ type: "failed", message: "stream connection error" }); es.close(); });
 
   return () => es.close();
 }

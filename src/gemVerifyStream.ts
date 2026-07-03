@@ -8,7 +8,7 @@
 // the gem body. Every per-agent event is tagged with `agent`; per-agent problems
 // are `verdict`s (failures are data), so the stream ends in `done` unless the
 // verifyId is unknown or the orchestrator itself throws before any run.
-import { resolveVerify, verifyGemAcrossAgents } from "@agentgem/run";
+import { consumeVerify, verifyGemAcrossAgents } from "@agentgem/run";
 
 interface SseReq { query: Record<string, unknown> }
 interface SseRes {
@@ -33,7 +33,7 @@ export async function streamGemVerify(req: SseReq, res: SseRes): Promise<void> {
   };
 
   try {
-    const spec = resolveVerify(verifyId);
+    const spec = consumeVerify(verifyId);
     if (!spec) { send("failed", { message: "unknown or expired verifyId — prepare the verify again" }); return; }
     const verdicts = await verifyGemAcrossAgents({
       gem: spec.gem,
