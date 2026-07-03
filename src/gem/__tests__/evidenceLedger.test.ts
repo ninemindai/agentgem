@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, rmSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, appendFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { appendVerification, ledgerPath } from "@agentgem/run";
+import { appendVerification, ledgerPath, readVerifications } from "@agentgem/run";
 
 const rec = {
   gemName: "g",
@@ -41,5 +41,24 @@ describe("evidence ledger", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it("readVerifications returns records, skipping corrupt lines, keeping the newest `limit`", () => {
+    const home = mkdtempSync(join(tmpdir(), "agem-ledger-"));
+    try {
+      appendVerification(rec, home);
+      appendFileSync(ledgerPath(home), "{corrupt-not-json\n", "utf8");
+      appendVerification({ ...rec, agent: "codex" }, home);
+      const all = readVerifications(home);
+      expect(all).toHaveLength(2);
+      expect(all.map((r) => r.agent)).toEqual(["claude", "codex"]);
+      expect(readVerifications(home, 1).map((r) => r.agent)).toEqual(["codex"]); // newest kept
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("readVerifications returns [] for a missing ledger", () => {
+    expect(readVerifications(join(tmpdir(), "agem-no-such-ledger"))).toEqual([]);
   });
 });
