@@ -264,6 +264,7 @@ const BindStartSchema = z.object({
   configured: z.boolean(),
   userCode: z.string().optional(),
   verificationUri: z.string().optional(),
+  verificationUriComplete: z.string().optional(),
   deviceCode: z.string().optional(),
   interval: z.number().optional(),
 });
