@@ -79,7 +79,7 @@ describe("Journey panel", () => {
     let statusCalls = 0;
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       if (url.endsWith("/api/dream/status")) return new Response(JSON.stringify({ enabled: true, phasesLit: ["DEEP"], promoted: 2, queued: 1, lastPassAtMs: ++statusCalls }));
-      if (url.endsWith("/api/dream/queue")) return new Response(JSON.stringify({ items: [] }));
+      if (url.includes("/api/journey")) return new Response(JSON.stringify({ events: [], truncated: false }));
       return new Response(JSON.stringify({ ok: true }));
     }));
     render(<Dreaming apiBase="" />);
