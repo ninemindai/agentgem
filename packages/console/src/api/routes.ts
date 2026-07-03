@@ -196,6 +196,23 @@ export const prepareRunRoute = defineRoute("POST", "/api/gem/run/prepare", {
   response: PrepareRunResponseSchema,
 });
 
+// POST /api/gem/verify/prepare — stage a streaming cross-agent verify (contract-only;
+// the server rejects contract-less gems here so failures never reach the stream).
+const PrepareVerifyRequestSchema = z.object({
+  selection: GemSelectionSchema,
+  name: z.string().optional(),
+});
+const PrepareVerifyResponseSchema = z.object({
+  verifyId: z.string(),
+  gemName: z.string(),
+  gemDigest: z.string(),
+  agents: z.array(z.string()),
+});
+export const prepareVerifyRoute = defineRoute("POST", "/api/gem/verify/prepare", {
+  body: PrepareVerifyRequestSchema,
+  response: PrepareVerifyResponseSchema,
+});
+
 // POST /api/scaffold-checks — suggest behavioral/external checks for a selection.
 export const scaffoldChecksRoute = defineRoute("POST", "/api/scaffold-checks", {
   body: z.object({ selection: GemSelectionSchema, name: z.string().optional() }),
