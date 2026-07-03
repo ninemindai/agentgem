@@ -24,6 +24,7 @@ import { DreamController } from "./dream.controller.js";
 import { GemTools } from "./gem.tools.js";
 import { streamWorkflowAnalyze } from "./workflowStream.js";
 import { streamGemRun } from "./gemRunStream.js";
+import { streamGemVerify } from "./gemVerifyStream.js";
 import { streamScorecard } from "./scorecardStream.js";
 import { streamInsights } from "./insightsStream.js";
 import { streamWatch } from "./watchStream.js";
@@ -197,6 +198,9 @@ export async function createApp(port: number): Promise<RestApplication> {
   // SSE progress stream for running a Gem with a local ACP agent (materialize →
   // run → tool/token deltas → done). POST /api/gem/run stays for programmatic callers.
   server.expressApp.get("/api/gem/run/stream", originGuard, streamGemRun);
+  // SSE streaming matrix: per-agent progress for a prepared cross-agent verify.
+  // POST /api/gem/verify stays for programmatic callers.
+  server.expressApp.get("/api/gem/verify/stream", originGuard, streamGemVerify);
   // SSE scorecard scan: per-project progress with live-climbing counts, then the
   // final aggregate scorecard. GET /api/scorecard/stream?projects=[...]&dir=...
   server.expressApp.get("/api/scorecard/stream", originGuard, (req, res) => streamScorecard(req as never, res as never));
