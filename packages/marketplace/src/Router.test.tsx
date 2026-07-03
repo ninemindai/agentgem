@@ -38,4 +38,12 @@ describe("Router", () => {
     render(<Router api={makeApi("")} stars={stars} me={null} />);
     expect(await screen.findByRole("heading", { name: /github-flow/ })).toBeTruthy();
   });
+
+  it("renders the profile page at /@login", async () => {
+    const profile = { login: "octocat", avatarUrl: null, verified: false, githubUrl: "https://github.com/octocat", totalStars: 0, gems: [] };
+    vi.stubGlobal("fetch", vi.fn(async () => res(profile)));
+    window.history.pushState({}, "", "/@octocat");
+    render(<Router api={makeApi("")} stars={stars} me={null} />);
+    expect(await screen.findByRole("heading", { name: /octocat/ })).toBeTruthy();
+  });
 });

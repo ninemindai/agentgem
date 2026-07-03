@@ -1,4 +1,4 @@
-import type { AggIngredient, AggCoOccurrence, AdoptionPoint, RegistryGem } from "./types";
+import type { AggIngredient, AggCoOccurrence, AdoptionPoint, RegistryGem, Profile } from "./types";
 
 type Query = Record<string, string | number | undefined>;
 
@@ -27,6 +27,12 @@ export function makeApi(base: string) {
       get<{ items: { gemKey: string; installs: number; verifiedInstalls: number }[] }>(base, "/api/aggregator/gem-adoption", { keys: keys.join(",") })
         .then((r) => Object.fromEntries(r.items.map((i) => [i.gemKey, { installs: i.installs, verifiedInstalls: i.verifiedInstalls }])))
         .catch(() => ({})),                       // adoption is best-effort; never breaks the page
+    getProfile: async (login: string): Promise<Profile | null> => {
+      const res = await fetch(base + "/api/aggregator/profile?login=" + encodeURIComponent(login));
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error(`/api/aggregator/profile -> ${res.status}`);
+      return JSON.parse(await res.text()) as Profile;
+    },
   };
 }
 

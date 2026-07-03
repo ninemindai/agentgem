@@ -8,6 +8,7 @@ import { Ingredient } from "./pages/Ingredient";
 import { Gems } from "./pages/Gems";
 import { Gem } from "./pages/Gem";
 import { Publish } from "./pages/Publish";
+import { Profile } from "./pages/Profile";
 
 export interface StarsCtx { signedIn: boolean; loginUrl: () => string; api: ReturnType<typeof makeStars> }
 
@@ -29,5 +30,8 @@ export function Router({ api, stars, me }: { api: ReturnType<typeof makeApi>; st
 
   const ing = path.match(/^\/ingredient\/(.+)$/);
   if (ing) return <Ingredient api={api} id={decodeURIComponent(ing[1])} stars={stars} />;
+
+  const prof = path.match(/^\/@([^/]+)$/);
+  if (prof) return <Profile api={api} login={decodeURIComponent(prof[1])} />;
   return <Leaderboard api={api} stars={stars} />;
 }
