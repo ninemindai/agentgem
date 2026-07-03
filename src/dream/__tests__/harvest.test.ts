@@ -66,4 +66,14 @@ describe("dream harvest", () => {
     expect(a.name).not.toBe(b.name); // identical detail slug, different provenance → different file
     expect(a.key).not.toBe(b.key);
   });
+
+  it("stamps entries with the given phase (LEARN) and defaults to DEEP", () => {
+    // Reuse the file's existing skill/reflection fixtures for these calls.
+    const learn = harvestEntries("/p", [skill], [], 1, "LEARN");
+    expect(learn[0].phase).toBe("LEARN");
+    const deep = harvestEntries("/p", [skill], [], 1);
+    expect(deep[0].phase).toBe("DEEP");
+    // Same evidence → same key regardless of phase: LEARN dedupes against DEEP harvests.
+    expect(learn[0].key).toBe(deep[0].key);
+  });
 });
