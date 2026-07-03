@@ -375,9 +375,9 @@ git commit -m "feat(build): pure route-confusion scorer (precision minus collisi
 **Interfaces:**
 - Consumes: `GemVerificationReport`, `Gem`, `CheckResult` (existing model types), `scorecardFloor` (existing).
 - Produces:
-  - `interface TriggerScorecard { precision: number | null; collisions: string[]; contextBudgetChars: number }`
+  - `interface TriggerScorecard { routeScore: number | null; collisions: string[]; contextBudgetChars: number }`
   - `function triggerScorecard(report: GemVerificationReport, gem: Gem): TriggerScorecard`
-  - `scorecardFloor` gains optional `triggerPrecision?: number`; when present and `< 0.5`, the floor drops to `GEM_GRADE_MIN` (advisory: a measured-but-poorly-routing gem can't float above the floor). Existing callers pass nothing → behavior unchanged.
+  - `scorecardFloor` gains optional `routeScore?: number`; when present and `< 0.5`, the floor drops to `GEM_GRADE_MIN` (advisory: a measured-but-poorly-routing gem can't float above the floor). Existing callers pass nothing → behavior unchanged.
 
 - [ ] **Step 1: Write the failing test**
 

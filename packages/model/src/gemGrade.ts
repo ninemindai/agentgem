@@ -12,15 +12,15 @@ export const GEM_GRADE_MAX = 3;
  * also portable floors at 3. `breadth` is accepted for a future tweak but does not
  * raise the floor (breadth alone isn't quality). The final 1..5 stone rating blends
  * this floor with community stars client-side — this is only the floor.
- * `triggerPrecision` is an optional advisory input (route-confusion score, 0..1):
+ * `routeScore` is an optional advisory input (the net route-confusion score, 0..1):
  * when present and < 0.5, a measured-but-poorly-routing gem can't float above the
  * minimum floor.
  */
-export function scorecardFloor(sc: { breadth: number; battleTested: number; portable: number; triggerPrecision?: number }): number {
+export function scorecardFloor(sc: { breadth: number; battleTested: number; portable: number; routeScore?: number }): number {
   let f = GEM_GRADE_MIN;
   if (sc.battleTested >= 1) f++;
   if (sc.portable >= 1) f++;
   f = Math.min(GEM_GRADE_MAX, Math.max(GEM_GRADE_MIN, f));
-  if (sc.triggerPrecision !== undefined && sc.triggerPrecision < 0.5) f = GEM_GRADE_MIN;
+  if (sc.routeScore !== undefined && sc.routeScore < 0.5) f = GEM_GRADE_MIN;
   return f;
 }
