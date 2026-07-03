@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { defineConsolePage } from "../../registry.js";
 import { timeAgo } from "../../util/timeAgo.js";
 import { setPendingAnalyze } from "../../pendingAnalyze.js";
@@ -16,6 +16,10 @@ export function Dreaming({ apiBase }: { apiBase: string }) {
   const [items, setItems] = useState<DreamItem[]>([]);
   const [diary, setDiary] = useState<DreamDiaryEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [running, setRunning] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const aliveRef = useRef(true);
+  useEffect(() => () => { aliveRef.current = false; }, []);
 
   const refresh = useCallback(() => {
     getStatus(apiBase).then(setStatus).catch(() => setStatus(null));
@@ -39,6 +43,36 @@ export function Dreaming({ apiBase }: { apiBase: string }) {
       window.location.hash = "#/curate";
     }).catch(() => setError("Could not open this opportunity."));
 
+  // "Dream now" is fire-and-forget server-side (POST /dream/run returns {started} and the
+  // pass runs in the background), so give immediate feedback (button → "Dreaming…") and
+  // poll `lastPassAtMs` until a new pass lands — instead of a blind refresh that showed nothing.
+  const runDream = useCallback(async () => {
+    setError(null);
+    setNote(null);
+    setRunning(true);
+    const before = status?.lastPassAtMs ?? null;
+    try {
+      await post(apiBase, "run");
+      let landed = false;
+      for (let i = 0; i < 12 && !landed && aliveRef.current; i++) {
+        await new Promise((r) => setTimeout(r, 1500));
+        if (!aliveRef.current) return;
+        const s = await getStatus(apiBase).catch(() => null);
+        if (s && aliveRef.current) {
+          setStatus(s);
+          if (s.lastPassAtMs != null && s.lastPassAtMs !== before) landed = true;
+        }
+      }
+      if (!aliveRef.current) return;
+      getQueue(apiBase).then((r) => { if (aliveRef.current) setItems(r.items); }).catch(() => {});
+      setNote(landed ? "Dream pass complete." : "Dream pass is running in the background — new drafts appear here as they're ready.");
+    } catch {
+      if (aliveRef.current) setError("Dream run failed.");
+    } finally {
+      if (aliveRef.current) setRunning(false);
+    }
+  }, [apiBase, status]);
+
   return (
     <div className="dreaming">
       <header>
@@ -57,6 +91,7 @@ export function Dreaming({ apiBase }: { apiBase: string }) {
       </nav>
 
       {error && <p className="ledger-error" role="alert">{error}</p>}
+      {note && <p className="dream-counts" role="status">{note}</p>}
 
       {tab === "review" && (
         <>
@@ -66,7 +101,7 @@ export function Dreaming({ apiBase }: { apiBase: string }) {
                 {PHASES.map((p) => <span key={p} data-lit={status.phasesLit.includes(p)}>{p}</span>)}
               </div>
               <p className="dream-counts">{status.promoted} promoted · {status.queued} queued</p>
-              <button className="dream-btn" onClick={() => post(apiBase, "run").then(() => { setError(null); setTimeout(refresh, 1500); }).catch(() => setError("Dream run failed."))}>Dream now</button>
+              <button className="dream-btn" disabled={running} onClick={runDream}>{running ? "Dreaming…" : "Dream now"}</button>
             </section>
           )}
           <ul className="dream-queue">

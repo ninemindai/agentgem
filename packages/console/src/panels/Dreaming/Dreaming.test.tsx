@@ -44,4 +44,27 @@ describe("Dreaming panel", () => {
     fireEvent.click(screen.getByRole("button", { name: /publish/i }));
     await waitFor(() => expect(window.location.hash).toBe("#/curate"));
   });
+
+  it("gives immediate 'Dreaming…' feedback and hits the run endpoint on Dream now", async () => {
+    render(<Dreaming apiBase="" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Dream now" }));
+    // pending state is shown synchronously — the reported bug was zero feedback here
+    const pending = await screen.findByRole("button", { name: /dreaming/i });
+    expect((pending as HTMLButtonElement).disabled).toBe(true);
+    await waitFor(() => expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.some(
+      (c) => String(c[0]).endsWith("/api/dream/run") && (c[1] as RequestInit | undefined)?.method === "POST")).toBe(true));
+  });
+
+  it("polls until a new pass lands, shows a 'complete' note, and re-enables the button", async () => {
+    let statusCalls = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.endsWith("/api/dream/status")) return new Response(JSON.stringify({ enabled: true, phasesLit: ["DEEP"], promoted: 2, queued: 1, lastPassAtMs: ++statusCalls }));
+      if (url.endsWith("/api/dream/queue")) return new Response(JSON.stringify({ items: [] }));
+      return new Response(JSON.stringify({ ok: true }));
+    }));
+    render(<Dreaming apiBase="" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Dream now" }));
+    await waitFor(() => expect(screen.getByText(/Dream pass complete/i)).toBeTruthy(), { timeout: 4000 });
+    expect(screen.getByRole("button", { name: "Dream now" })).toBeTruthy(); // re-enabled, no longer "Dreaming…"
+  });
 });
