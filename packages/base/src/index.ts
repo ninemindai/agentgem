@@ -8,3 +8,4 @@ export * from "./acpSession.js";
 export * from "./redact.js";
 export * from "./secretPatterns.js";
 export * from "./leakCanary.js";
+export * from "./agents.js";
