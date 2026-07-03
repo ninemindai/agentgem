@@ -18,3 +18,4 @@ export * from "./projectAdoption.js";
 export * from "./ingestAdoption.js";
 export * from "./catalog.js";
 export * from "./profile.js";
+export * from "./orgRubric.js";
