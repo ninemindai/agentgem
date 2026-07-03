@@ -92,7 +92,9 @@ export function GetGems({ apiBase }: { apiBase: string }) {
               </header>
               {r.description && <p className="getgems-desc">{r.description}</p>}
               <div className="ws-meta">
-                {r.author && <span className="ws-chip">{r.author}</span>}
+                {r.publishedBy
+                  ? <a className="ws-chip" href={"https://app.agentgem.ai/@" + encodeURIComponent(r.publishedBy)} target="_blank" rel="noreferrer">@{r.publishedBy}</a>
+                  : (r.author && <span className="ws-chip">{r.author}</span>)}
                 {(r.tags ?? []).map((t) => <span className="ws-chip" key={t}>{t}</span>)}
                 {(r.artifactKinds ?? []).map((k) => <span className="ws-chip" key={"k-" + k}>{k}</span>)}
               </div>

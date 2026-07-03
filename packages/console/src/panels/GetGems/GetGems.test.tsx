@@ -35,6 +35,27 @@ describe("GetGems", () => {
     await waitFor(() => expect(screen.getByText(/installed → acme-starter/i)).toBeTruthy());
   });
 
+  it("links @publishedBy to the web profile; falls back to the author chip", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+      const u = String(url);
+      if (u.includes("/api/registry/ready")) return res({ ready: true });
+      if (u.includes("/api/registry/search"))
+        return res({ results: [
+          { key: "acme/pub", latest: "1.0.0", score: 1, publishedBy: "octocat", author: "acme" },
+          { key: "acme/noPub", latest: "1.0.0", score: 1, author: "acme" },
+        ] });
+      throw new Error(`unexpected ${u}`);
+    }));
+    render(<GetGems apiBase="" />);
+    fireEvent.click(await screen.findByText("Search"));
+    const link = (await screen.findByText("@octocat")).closest("a");
+    expect(link?.getAttribute("href")).toBe("https://app.agentgem.ai/@octocat");
+    expect(link?.getAttribute("target")).toBe("_blank");
+    // the no-publishedBy result shows the free-text author chip, unlinked
+    const chip = screen.getByText("acme");
+    expect(chip.closest("a")).toBeNull();
+  });
+
   it("does not auto-search on mount", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
       const u = String(url);

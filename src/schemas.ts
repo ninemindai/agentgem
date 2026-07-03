@@ -802,7 +802,7 @@ export const RegistrySearchResponseSchema = z.object({
   results: z.array(z.object({
     key: z.string(), latest: z.string(), score: z.number(),
     description: z.string().optional(), tags: z.array(z.string()).optional(),
-    author: z.string().optional(), artifactKinds: z.array(z.string()).optional(), updatedAt: z.string().optional(),
+    author: z.string().optional(), publishedBy: z.string().optional(), artifactKinds: z.array(z.string()).optional(), updatedAt: z.string().optional(),
   })),
 });
 

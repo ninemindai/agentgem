@@ -230,6 +230,7 @@ const RegistryResultSchema = z.object({
   description: z.string().optional(),
   tags: z.array(z.string()).optional(),
   author: z.string().optional(),
+  publishedBy: z.string().optional(),
   artifactKinds: z.array(z.string()).optional(),
 });
 export type RegistryResult = z.infer<typeof RegistryResultSchema>;
