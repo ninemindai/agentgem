@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Insights page — layout directions</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#f4efe3;--paper-2:#efe8d8;--card:#fbf8f1;--ink:#211c15;--ink-2:#4a4133;--muted:#857a64;
+    --line:#ddd2bb;--line-2:#cfc3a8;--accent:#9a3324;--accent-soft:rgba(154,51,36,.10);
+    --gem:#1f6b4f;--gem-soft:rgba(31,107,79,.12);--gold:#b08436;--r:8px;
+    --display:"Fraunces",Georgia,serif;--ui:"Hanken Grotesk",system-ui,sans-serif;--mono:"JetBrains Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--ui);padding:28px 22px 60px}
+  .pageh{max-width:1180px;margin:0 auto 18px}
+  .pageh h1{font-family:var(--display);font-weight:600;font-size:26px;margin:0 0 4px}
+  .pageh p{color:var(--muted);margin:0;font-size:14px}
+  .grid{max-width:1180px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px}
+  @media(max-width:1000px){.grid{grid-template-columns:1fr}}
+  .dir{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;cursor:pointer;transition:.15s;box-shadow:0 10px 28px -18px rgba(33,28,21,.4)}
+  .dir:hover{border-color:var(--accent);transform:translateY(-2px)}
+  .dir.selected{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft),0 10px 28px -16px rgba(33,28,21,.5)}
+  .dir .cap{padding:13px 15px;border-top:1px solid var(--line)}
+  .dir .cap .lt{display:inline-block;width:20px;height:20px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;font-weight:600;text-align:center;line-height:20px;margin-right:7px}
+  .dir .cap h3{display:inline;font-family:var(--display);font-size:16px;font-weight:600}
+  .dir .cap p{color:var(--ink-2);font-size:12.5px;margin:8px 0 0;line-height:1.45}
+  /* mini mockup */
+  .mk{height:300px;padding:14px;background:var(--paper-2);font-size:10px;overflow:hidden}
+  .mk .h{font-family:var(--display);font-weight:600;color:var(--ink);line-height:1.1}
+  .mk .sub{color:var(--muted);margin:3px 0 10px}
+  .tabs{display:flex;gap:5px;margin-bottom:9px}
+  .tab{padding:3px 8px;border-radius:99px;border:1px solid var(--line-2);font-size:9px;color:var(--muted);background:var(--card)}
+  .tab.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .row{display:flex;align-items:center;gap:7px;margin:6px 0}
+  .row .nm{width:74px;font-family:var(--mono);font-size:9px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bar{height:9px;border-radius:3px;background:linear-gradient(90deg,var(--accent),#c0563f)}
+  .row .n{font-family:var(--mono);font-size:9px;color:var(--muted);width:18px;text-align:right}
+  .gembar{background:linear-gradient(90deg,var(--gem),#2f8a68)}
+  .col3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+  .col3 .lab{font-size:8.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:5px;font-weight:600}
+  .col3 .mrow{display:flex;justify-content:space-between;font-family:var(--mono);font-size:8.5px;color:var(--ink-2);margin:4px 0;border-bottom:1px dotted var(--line-2);padding-bottom:2px}
+  .co{margin-top:8px;background:var(--gem-soft);border:1px solid rgba(31,107,79,.25);border-radius:6px;padding:6px 8px}
+  .co .ct{font-size:8.5px;color:var(--gem);font-weight:600;margin-bottom:4px}
+  .chip{display:inline-block;background:var(--card);border:1px solid var(--line-2);border-radius:99px;padding:1px 6px;font-family:var(--mono);font-size:8px;margin:2px 2px 0 0;color:var(--ink-2)}
+  .stats{display:flex;gap:10px;margin:6px 0 12px}
+  .stat{flex:1;background:var(--card);border:1px solid var(--line);border-radius:7px;padding:7px 8px}
+  .stat .big{font-family:var(--display);font-size:18px;font-weight:700;color:var(--accent);line-height:1}
+  .stat .sl{font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:3px}
+  .hint{max-width:1180px;margin:20px auto 0;color:var(--muted);font-size:13px;text-align:center}
+</style>
+</head>
+<body>
+  <div class="pageh">
+    <h1>Public insights page — three directions</h1>
+    <p>Same data (top skills / MCPs / models by # of producers + "what pairs with X"), three ways to present it on agentgem.ninemind.ai. Brand = the warm-paper marketing look. Click the one you like.</p>
+  </div>
+
+  <div class="grid">
+    <!-- A: Editorial leaderboard -->
+    <div class="dir" data-choice="a" onclick="toggleSelect(this)">
+      <div class="mk">
+        <div class="h" style="font-size:15px">What the world's<br>agents actually use</div>
+        <div class="sub">From 847 signed sessions · updated daily</div>
+        <div class="tabs"><span class="tab on">MCPs</span><span class="tab">Skills</span><span class="tab">Models</span></div>
+        <div class="row"><span class="nm">context7</span><div class="bar" style="width:120px"></div><span class="n">42</span></div>
+        <div class="row"><span class="nm">playwright</span><div class="bar" style="width:96px"></div><span class="n">34</span></div>
+        <div class="row"><span class="nm">filesystem</span><div class="bar" style="width:78px"></div><span class="n">28</span></div>
+        <div class="row"><span class="nm">github</span><div class="bar" style="width:60px"></div><span class="n">21</span></div>
+        <div class="row"><span class="nm">slack</span><div class="bar" style="width:40px"></div><span class="n">14</span></div>
+        <div class="co"><div class="ct">▾ teams using context7 also use</div>
+          <span class="chip">filesystem</span><span class="chip">github</span><span class="chip">git</span></div>
+      </div>
+      <div class="cap"><span class="lt">A</span><h3>Editorial leaderboard</h3>
+        <p>Magazine feel, matches the site. One big serif headline, a single ranked list with tabs, and co-occurrence expands inline under a clicked row. Calm, shareable, story-first.</p></div>
+    </div>
+
+    <!-- B: Data dashboard -->
+    <div class="dir" data-choice="b" onclick="toggleSelect(this)">
+      <div class="mk">
+        <div class="h" style="font-size:13px">The AI usage graph</div>
+        <div class="sub">live · k-anonymized</div>
+        <div class="col3">
+          <div><div class="lab">Skills</div>
+            <div class="mrow"><span>brainstorm</span><span>38</span></div><div class="mrow"><span>tdd</span><span>29</span></div><div class="mrow"><span>review</span><span>24</span></div><div class="mrow"><span>debug</span><span>19</span></div><div class="mrow"><span>distill</span><span>12</span></div></div>
+          <div><div class="lab">MCPs</div>
+            <div class="mrow"><span>context7</span><span>42</span></div><div class="mrow"><span>playwright</span><span>34</span></div><div class="mrow"><span>fs</span><span>28</span></div><div class="mrow"><span>github</span><span>21</span></div><div class="mrow"><span>slack</span><span>14</span></div></div>
+          <div><div class="lab">Models</div>
+            <div class="mrow"><span>opus-4.8</span><span>90</span></div><div class="mrow"><span>sonnet</span><span>44</span></div><div class="mrow"><span>haiku</span><span>12</span></div><div class="mrow"><span>gpt-5</span><span>9</span></div><div class="mrow"><span>gemini</span><span>6</span></div></div>
+        </div>
+        <div class="co"><div class="ct">selected: brainstorm → co-occurs with</div>
+          <span class="chip">tdd</span><span class="chip">writing-plans</span><span class="chip">review</span><span class="chip">context7</span></div>
+      </div>
+      <div class="cap"><span class="lt">B</span><h3>Data dashboard</h3>
+        <p>All three leaderboards side-by-side at once — denser, reads as a real data product. Click any ingredient and the co-occurrence panel fills in. Maximum information per scroll.</p></div>
+    </div>
+
+    <!-- C: Hero stats + spotlight -->
+    <div class="dir" data-choice="c" onclick="toggleSelect(this)">
+      <div class="mk">
+        <div class="h" style="font-size:14px">The real AI stack</div>
+        <div class="sub">measured, not surveyed</div>
+        <div class="stats">
+          <div class="stat"><div class="big">847</div><div class="sl">agents</div></div>
+          <div class="stat"><div class="big">273</div><div class="sl">skills</div></div>
+          <div class="stat"><div class="big">41</div><div class="sl">mcps</div></div>
+        </div>
+        <div class="tabs"><span class="tab on">MCPs</span><span class="tab">Skills</span><span class="tab">Models</span></div>
+        <div class="row"><span class="nm">context7</span><div class="bar" style="width:110px"></div><span class="n">42</span></div>
+        <div class="row"><span class="nm">playwright</span><div class="bar" style="width:84px"></div><span class="n">34</span></div>
+        <div class="row"><span class="nm">filesystem</span><div class="bar gembar" style="width:66px"></div><span class="n">28</span></div>
+      </div>
+      <div class="cap"><span class="lt">C</span><h3>Hero stats + spotlight</h3>
+        <p>Marketing-forward: bold headline counters first ("847 agents observed"), then a compact leaderboard below. Best for the top-of-funnel "wow", lighter on depth.</p></div>
+    </div>
+  </div>
+
+  <p class="hint">All three use the same live endpoints and the same data — only the framing differs. Pick a direction (or mix: "A's headline + B's three columns").</p>
+</body>
+</html>

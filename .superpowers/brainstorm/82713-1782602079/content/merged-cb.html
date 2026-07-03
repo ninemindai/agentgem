@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Insights — C hero + B dashboard, switchable</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#f4efe3;--paper-2:#efe8d8;--card:#fbf8f1;--ink:#211c15;--ink-2:#4a4133;--muted:#857a64;
+    --line:#ddd2bb;--line-2:#cfc3a8;--accent:#9a3324;--accent-soft:rgba(154,51,36,.10);
+    --gem:#1f6b4f;--gem-soft:rgba(31,107,79,.12);--gold:#b08436;--r:8px;
+    --display:"Fraunces",Georgia,serif;--ui:"Hanken Grotesk",system-ui,sans-serif;--mono:"JetBrains Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--ui);padding:26px 22px 60px}
+  .wrap{max-width:1080px;margin:0 auto}
+  .note{color:var(--muted);font-size:13px;margin:0 auto 18px;max-width:1080px}
+  .note b{color:var(--ink-2)}
+  /* hero */
+  .hero h1{font-family:var(--display);font-weight:700;font-size:34px;line-height:1.05;margin:0 0 6px}
+  .hero h1 .em{color:var(--accent)}
+  .hero p{color:var(--muted);margin:0 0 18px;font-size:15px}
+  .stats{display:flex;gap:14px;margin-bottom:24px}
+  .stat{flex:1;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;box-shadow:0 10px 26px -20px rgba(33,28,21,.4)}
+  .stat .big{font-family:var(--display);font-size:30px;font-weight:700;color:var(--accent);line-height:1}
+  .stat .sl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:6px}
+  /* switch */
+  .barrow{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px}
+  .seg{display:inline-flex;background:var(--paper-2);border:1px solid var(--line-2);border-radius:99px;padding:3px}
+  .seg button{font-family:var(--ui);font-size:13px;border:0;background:transparent;color:var(--muted);padding:6px 16px;border-radius:99px;cursor:pointer;font-weight:500}
+  .seg button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 4px rgba(33,28,21,.12)}
+  .kindtabs{display:flex;gap:6px}
+  .ktab{font-family:var(--mono);font-size:11px;padding:5px 11px;border-radius:99px;border:1px solid var(--line-2);color:var(--muted);background:var(--card);cursor:pointer}
+  .ktab.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  /* OVERVIEW: 3 columns */
+  .cols{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+  @media(max-width:820px){.cols{grid-template-columns:1fr}.stats{flex-wrap:wrap}}
+  .colcard{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+  .colcard h4{font-family:var(--display);font-size:15px;margin:0 0 2px}
+  .colcard .cs{font-size:11px;color:var(--muted);margin:0 0 12px}
+  .li{display:flex;align-items:center;gap:9px;margin:9px 0;cursor:pointer;padding:3px 5px;margin-left:-5px;margin-right:-5px;border-radius:6px}
+  .li:hover{background:var(--paper-2)}
+  .li.sel{background:var(--accent-soft)}
+  .li .rk{font-family:var(--mono);font-size:11px;color:var(--muted);width:14px}
+  .li .nm{font-family:var(--mono);font-size:12px;color:var(--ink);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .li .ct{font-family:var(--mono);font-size:11px;color:var(--accent);font-weight:500}
+  /* co-occurrence */
+  .copanel{margin-top:16px;background:var(--gem-soft);border:1px solid rgba(31,107,79,.3);border-radius:10px;padding:14px 16px}
+  .copanel .ch{font-family:var(--display);font-size:14px;color:var(--gem);margin:0 0 8px}
+  .chip{display:inline-flex;align-items:center;gap:5px;background:var(--card);border:1px solid var(--line-2);border-radius:99px;padding:4px 10px;font-family:var(--mono);font-size:11px;margin:3px 4px 0 0;color:var(--ink-2)}
+  .chip b{color:var(--gem)}
+  /* spotlight inset preview */
+  .inset{margin-top:22px;border:1px dashed var(--line-2);border-radius:10px;padding:14px 16px;background:var(--paper-2)}
+  .inset .il{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:10px}
+  .srow{display:flex;align-items:center;gap:10px;margin:7px 0}
+  .srow .nm{width:120px;font-family:var(--mono);font-size:11px;color:var(--ink-2)}
+  .sbar{height:13px;border-radius:4px;background:linear-gradient(90deg,var(--accent),#c0563f)}
+  .srow .n{font-family:var(--mono);font-size:11px;color:var(--muted)}
+</style>
+</head>
+<body>
+  <p class="note"><b>Merged direction:</b> C's hero stat band on top, B's all-at-once dashboard as the body, and a <b>switch</b> (Overview ⇄ Spotlight) to flip between the dense 3-column view and a single big-bar leaderboard. Numbers are placeholders.</p>
+  <div class="wrap">
+    <div class="hero">
+      <h1>The real AI stack — <span class="em">measured, not surveyed.</span></h1>
+      <p>What signed coding-agent sessions actually use. k-anonymized, updated daily.</p>
+      <div class="stats">
+        <div class="stat"><div class="big">847</div><div class="sl">agents observed</div></div>
+        <div class="stat"><div class="big">273</div><div class="sl">skills</div></div>
+        <div class="stat"><div class="big">41</div><div class="sl">mcp servers</div></div>
+        <div class="stat"><div class="big">9</div><div class="sl">models</div></div>
+      </div>
+    </div>
+
+    <div class="barrow">
+      <div class="seg"><button class="on">Overview</button><button>Spotlight</button></div>
+      <div class="kindtabs"><span class="ktab on">All</span><span class="ktab">Skills</span><span class="ktab">MCPs</span><span class="ktab">Models</span></div>
+    </div>
+
+    <!-- OVERVIEW (active) -->
+    <div class="cols">
+      <div class="colcard"><h4>Skills</h4><p class="cs">by # of producers</p>
+        <div class="li sel"><span class="rk">1</span><span class="nm">brainstorming</span><span class="ct">38</span></div>
+        <div class="li"><span class="rk">2</span><span class="nm">tdd</span><span class="ct">29</span></div>
+        <div class="li"><span class="rk">3</span><span class="nm">writing-plans</span><span class="ct">24</span></div>
+        <div class="li"><span class="rk">4</span><span class="nm">systematic-debug</span><span class="ct">19</span></div>
+        <div class="li"><span class="rk">5</span><span class="nm">distill</span><span class="ct">12</span></div>
+      </div>
+      <div class="colcard"><h4>MCPs</h4><p class="cs">by # of producers</p>
+        <div class="li"><span class="rk">1</span><span class="nm">context7</span><span class="ct">42</span></div>
+        <div class="li"><span class="rk">2</span><span class="nm">playwright</span><span class="ct">34</span></div>
+        <div class="li"><span class="rk">3</span><span class="nm">filesystem</span><span class="ct">28</span></div>
+        <div class="li"><span class="rk">4</span><span class="nm">github</span><span class="ct">21</span></div>
+        <div class="li"><span class="rk">5</span><span class="nm">slack</span><span class="ct">14</span></div>
+      </div>
+      <div class="colcard"><h4>Models</h4><p class="cs">by # of producers</p>
+        <div class="li"><span class="rk">1</span><span class="nm">opus-4.8</span><span class="ct">90</span></div>
+        <div class="li"><span class="rk">2</span><span class="nm">sonnet-4.6</span><span class="ct">44</span></div>
+        <div class="li"><span class="rk">3</span><span class="nm">haiku-4.5</span><span class="ct">12</span></div>
+        <div class="li"><span class="rk">4</span><span class="nm">gpt-5</span><span class="ct">9</span></div>
+        <div class="li"><span class="rk">5</span><span class="nm">gemini-3</span><span class="ct">6</span></div>
+      </div>
+    </div>
+
+    <div class="copanel">
+      <p class="ch">▾ Teams using <b style="color:var(--ink)">brainstorming</b> also use</p>
+      <span class="chip">tdd <b>·31</b></span><span class="chip">writing-plans <b>·27</b></span>
+      <span class="chip">systematic-debugging <b>·22</b></span><span class="chip">context7 <b>·18</b></span><span class="chip">subagent-driven-dev <b>·15</b></span>
+    </div>
+
+    <div class="inset">
+      <div class="il">↔ Switch → "Spotlight" shows one leaderboard with bars</div>
+      <div class="srow"><span class="nm">context7</span><div class="sbar" style="width:330px"></div><span class="n">42</span></div>
+      <div class="srow"><span class="nm">playwright</span><div class="sbar" style="width:265px"></div><span class="n">34</span></div>
+      <div class="srow"><span class="nm">filesystem</span><div class="sbar" style="width:218px"></div><span class="n">28</span></div>
+    </div>
+  </div>
+</body>
+</html>

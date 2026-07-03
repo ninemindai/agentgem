@@ -5,3 +5,8 @@ dist/
 sdd/
 website/dist/
 .DS_Store
+
+# Scratch / generated artifacts (not for version control)
+.playwright-mcp/
+videos/
+ia-phase1.png
