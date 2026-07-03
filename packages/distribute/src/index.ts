@@ -5,6 +5,7 @@
 export * from "./registry.js";
 export * from "./registryGithub.js";
 export * from "./agencyAgents.js";
+export * from "./curatedSources.js";
 export * from "./share.js";
 export * from "./search.js";
 export * from "./safeFetch.js";
