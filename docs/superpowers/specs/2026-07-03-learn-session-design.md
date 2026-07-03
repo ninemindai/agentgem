@@ -38,8 +38,9 @@ Success criteria:
 ## Decisions and alternatives considered
 
 **Reuse the pipeline on one transcript (chosen).** `scanWorkflow([path], scanInv,
-{ retainSequences: true })` → `distillWorkflow` + `distillSessionLessons` → 
-`harvestEntries` → `enqueueNew` — every stage exists and is tested. Alternatives
+{ retainSequences: true })` → `distillWorkflow` + `extractReflections` (the raw
+`Reflection[]` producer `harvestEntries` consumes — it applies `reflectionToLesson`
+itself) → `harvestEntries` → `enqueueNew` — every stage exists and is tested. Alternatives
 rejected: extending `computeDistill` with a session filter (its cache token is
 project-scoped over *all* transcripts; a session-filtered result must not populate that
 cache, so reuse buys nothing but coupling); a separate learn store (violates the
@@ -77,7 +78,7 @@ export async function learnFromSession(opts: {
   session?: string;           // transcript basename or basename-without-.jsonl; default: newest
   now?: () => number;         // test seam
   distillWf?: typeof distillWorkflow;        // test seams, mirroring computeDistill's
-  distillLessons?: typeof distillSessionLessons;
+  extractRefl?: typeof extractReflections;
   base?: string;              // queue store home (test seam, default agentgemHome())
 }): Promise<LearnResult>
 ```
