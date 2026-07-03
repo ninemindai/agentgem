@@ -86,13 +86,13 @@ describe("Prune disable actions", () => {
     expect(next.disabled).toEqual([]);
   });
 
-  it("sorts the prune table by est. context (desc) when selected", () => {
+  it("sorts the prune table by est. context (desc) when the header is clicked", () => {
     const data = payload({ artifacts: [
       { name: "small", type: "skill", source: "standalone", contextTokens: 100, uses: 0, lastUsedMs: null, prune: true, change: { file: "f", key: "k" } },
       { name: "big", type: "skill", source: "standalone", contextTokens: 900, uses: 0, lastUsedMs: null, prune: true, change: { file: "f", key: "k" } },
     ] });
     render(<Dashboard data={data} range="30d" onRange={() => {}} pending={false} onRefresh={() => {}} onMutate={() => {}} apiBase="" />);
-    fireEvent.change(screen.getByRole("combobox", { name: /sort artifacts/i }), { target: { value: "context" } });
+    fireEvent.click(screen.getByRole("button", { name: /est\. ctx/i }));   // first click → desc (biggest first)
     const rows = screen.getAllByRole("row");
     expect(within(rows[1]).getByText("big")).toBeTruthy();   // rows[0] is the header
   });

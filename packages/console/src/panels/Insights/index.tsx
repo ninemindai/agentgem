@@ -5,7 +5,16 @@ import { openInsightsStream, type InsightsReportView } from "./insightsStream.js
 import { OutcomesDonut, ByModelBars } from "./InsightsCharts.js";
 import { setPendingAnalyze, setPendingPlaybook } from "../../pendingAnalyze.js";
 import { Loading } from "../../shell/Loading.js";
+import { useTableSort, type SortColumn } from "../../shell/useTableSort.js";
+import { SortTh } from "../../shell/SortTh.js";
 import { timeAgo } from "../../util/timeAgo.js";
+
+// Sortable columns for the "Worth publishing" table (unsorted = report order).
+type PublishCandidate = InsightsReportView["publish_candidates"][number];
+const CANDIDATE_COLUMNS: SortColumn<PublishCandidate>[] = [
+  { id: "goal", value: (c) => c.goal.toLowerCase() },
+  { id: "why", value: (c) => c.why.toLowerCase() },
+];
 
 function short(path: string): string {
   const parts = path.split("/").filter(Boolean);
@@ -138,6 +147,7 @@ export function Insights({ apiBase }: { apiBase: string }) {
 export function InsightsReportCard({ report, scanned, onBuild, onContribute }: { report: InsightsReportView; scanned?: number | null; onBuild?: () => void; onContribute?: () => void | Promise<void> }) {
   const [contributing, setContributing] = useState(false);
   const [contributeError, setContributeError] = useState<string | null>(null);
+  const candidateSort = useTableSort(CANDIDATE_COLUMNS);
 
   const handleContribute = async () => {
     if (!onContribute) return;
@@ -193,14 +203,20 @@ export function InsightsReportCard({ report, scanned, onBuild, onContribute }: {
             {onContribute && <button type="button" className="ledger-build" disabled={contributing} onClick={handleContribute}>{contributing ? "Preparing…" : "Contribute to explore →"}</button>}
           </div>
           {contributeError && <p className="ledger-error">{contributeError}</p>}
-          <ul className="analyze-include">
-            {publishCandidates.map((c) => (
-              <li key={c.sessionId}>
-                <span className="analyze-include-name">{c.goal}</span>
-                <span className="targets-label">{c.why}</span>
-              </li>
-            ))}
-          </ul>
+          <table className="obs-table insights-candidates">
+            <thead><tr>
+              <SortTh label="goal" dir={candidateSort.dirFor("goal")} onClick={() => candidateSort.onSort("goal")} />
+              <SortTh label="why" dir={candidateSort.dirFor("why")} onClick={() => candidateSort.onSort("why")} />
+            </tr></thead>
+            <tbody>
+              {candidateSort.sort(publishCandidates).map((c) => (
+                <tr key={c.sessionId}>
+                  <td className="analyze-include-name">{c.goal}</td>
+                  <td className="targets-label">{c.why}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
