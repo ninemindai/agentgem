@@ -9,7 +9,7 @@ const index: RegistryIndex = {
     "@acme/github-search": {
       latest: "1.2.0",
       versions: { "1.2.0": { path: "items/acme/github-search/1.2.0", gemDigest: "sha256:a", dependencies: [] } },
-      discovery: { description: "Search GitHub pull requests and issues", tags: ["github", "search"], author: "acme", artifactKinds: ["skill", "mcp_server"], updatedAt: "2026-01-01T00:00:00Z" },
+      discovery: { description: "Search GitHub pull requests and issues", tags: ["github", "search"], author: "acme", publishedBy: "octocat", artifactKinds: ["skill", "mcp_server"], updatedAt: "2026-01-01T00:00:00Z" },
     },
     "@acme/http-base": {
       latest: "1.0.0",
@@ -41,6 +41,12 @@ describe("searchIndex", () => {
     const hit = searchIndex(index, "github")[0];
     expect(hit).toMatchObject({ key: "@acme/github-search", latest: "1.2.0", description: "Search GitHub pull requests and issues" });
     expect(hit.score).toBeGreaterThan(0);
+  });
+
+  it("carries publishedBy (verified login) from discovery onto the hit", () => {
+    expect(searchIndex(index, "github")[0].publishedBy).toBe("octocat");
+    // a gem whose discovery has no publishedBy leaves it undefined
+    expect(searchIndex(index, "http")[0].publishedBy).toBeUndefined();
   });
 
   it("filters by artifact kind", () => {

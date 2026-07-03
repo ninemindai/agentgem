@@ -13,6 +13,7 @@ export interface SearchHit {
   description?: string;
   tags?: string[];
   author?: string;
+  publishedBy?: string;
   artifactKinds?: string[];
   updatedAt?: string;
 }
@@ -43,7 +44,7 @@ export function searchIndex(index: RegistryIndex, query: string, opts: SearchOpt
     }
     if (terms.length && score === 0) continue; // query given but nothing matched
 
-    hits.push({ key, latest: item.latest, score, description: d.description, tags: d.tags, author: d.author, artifactKinds: d.artifactKinds, updatedAt: d.updatedAt });
+    hits.push({ key, latest: item.latest, score, description: d.description, tags: d.tags, author: d.author, publishedBy: d.publishedBy, artifactKinds: d.artifactKinds, updatedAt: d.updatedAt });
   }
 
   hits.sort((a, b) => b.score - a.score || a.key.localeCompare(b.key));
