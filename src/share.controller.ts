@@ -35,8 +35,14 @@ export class ShareController {
 
   @post("/", { body: CreateBody, response: CreateResult })
   async create(input: { body: z.infer<typeof CreateBody> }): Promise<z.infer<typeof CreateResult>> {
-    const body = CreateBody.parse(input.body); // belt-and-suspenders: reject extras/negatives
-    return createShareCard(this.db, body);
+    // The framework validates against the JSON Schema, which can't express `.transform(sanitize)`:
+    // a whitespace-/control-only name passes minLength:1 there but trims to "" and fails `.min(1)`
+    // here. safeParse + a typed AgentError turns that into a clean 422 instead of a raw ZodError → 500.
+    const parsed = CreateBody.safeParse(input.body);
+    if (!parsed.success) {
+      throw new AgentError("share payload invalid after sanitization", { status: 422, code: "invalid_body", retryable: false });
+    }
+    return createShareCard(this.db, parsed.data);
   }
 
   @get("/", { query: ReadQuery, response: ReadResult })
