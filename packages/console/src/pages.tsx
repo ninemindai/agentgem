@@ -15,5 +15,6 @@ import { settingsPage } from "./panels/Settings/index.js";
 import { receivedPage } from "./panels/Received/index.js";
 import { deployPage } from "./panels/Deploy/index.js";
 import { chatPage } from "./panels/Chat/index.js";
+import { watchPage } from "./panels/Watch/index.js";
 
-export const pages: ConsolePage[] = [observePage, insightsPage, dreamingPage, benchmarkPage, optimizePage, minePage, curatePage, materializePage, workspacesPage, publishPage, getGemsPage, settingsPage, receivedPage, deployPage, chatPage];
+export const pages: ConsolePage[] = [observePage, watchPage, insightsPage, dreamingPage, benchmarkPage, optimizePage, minePage, curatePage, materializePage, workspacesPage, publishPage, getGemsPage, settingsPage, receivedPage, deployPage, chatPage];

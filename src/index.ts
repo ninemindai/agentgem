@@ -26,6 +26,8 @@ import { streamWorkflowAnalyze } from "./workflowStream.js";
 import { streamGemRun } from "./gemRunStream.js";
 import { streamScorecard } from "./scorecardStream.js";
 import { streamInsights } from "./insightsStream.js";
+import { streamWatch } from "./watchStream.js";
+import { listActiveSessions } from "./watchSessions.js";
 import { registerChatRoutes, chatConnectFn, goldmineMcpServers } from "./goldmine/chatRoutes.js";
 import { collectBehaviorFindings } from "./goldmine/behaviorFindings.js";
 import { ChatManager } from "@agentgem/run";
@@ -200,6 +202,13 @@ export async function createApp(port: number): Promise<RestApplication> {
     beginForeground();
     try { await streamInsights(req as never, res as never); } finally { endForeground(); }
   });
+  // Watch tab: live-preview HTML artifacts a regular coding session builds. List the
+  // recently-active transcripts, then SSE-stream one session's HTML file snapshots
+  // (redacted, sandbox-ready) as it writes/edits them. Read-only, metadata + scrubbed
+  // content only; the ?file= path is pinned to a transcript root by resolveTranscriptFile.
+  server.expressApp.get("/api/watch/sessions", originGuard, (_req, res) =>
+    res.json({ sessions: listActiveSessions() } as never));
+  server.expressApp.get("/api/watch/stream", originGuard, (req, res) => streamWatch(req as never, res as never));
   // Goldmine chat: REST + SSE endpoints for multi-turn agent chat grounded in the
   // user's session goldmine. One ChatManager per server process; idle sessions are
   // swept every 60 s. The neutral cwd for each chat session is a stable directory

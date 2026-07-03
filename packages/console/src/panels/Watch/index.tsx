@@ -1,0 +1,161 @@
+import { useEffect, useRef, useState } from "react";
+import { defineConsolePage } from "../../registry.js";
+import { fetchSessions, openWatchStream, type WatchSession, type ArtifactVersion } from "./watchStream.js";
+
+// Wrap the (already-redacted) artifact HTML in a strict CSP so the sandboxed frame
+// can't reach the network — mirrors how Claude.ai renders artifacts. Combined with
+// sandbox="allow-scripts" (and NO allow-same-origin → null origin), the document
+// can run its own inline JS/CSS but cannot read the console's cookies/DOM or call out.
+const CSP =
+  "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; " +
+  "img-src data:; font-src data:; media-src data:;";
+
+export function sandboxDoc(html: string): string {
+  const meta = `<meta http-equiv="Content-Security-Policy" content="${CSP}">`;
+  if (/<head[\s>]/i.test(html)) return html.replace(/<head([^>]*)>/i, `<head$1>${meta}`);
+  return `<!doctype html><html><head>${meta}</head><body>${html}</body></html>`;
+}
+
+const ageLabel = (ms: number): string => {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s ago`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m}m ago`;
+  return `${Math.round(m / 60)}h ago`;
+};
+
+export function Watch({ apiBase }: { apiBase: string }) {
+  const [sessions, setSessions] = useState<WatchSession[] | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [artifacts, setArtifacts] = useState<ArtifactVersion[]>([]);
+  const [current, setCurrent] = useState<number | null>(null); // index into artifacts
+  const [phase, setPhase] = useState<string>("");
+  const [error, setError] = useState<string | null>(null);
+  const closeRef = useRef<(() => void) | null>(null);
+  const followRef = useRef(true); // auto-advance to newest until the user picks a version
+
+  const loadSessions = () => {
+    fetchSessions(apiBase).then(setSessions).catch(() => setSessions([]));
+  };
+
+  useEffect(loadSessions, [apiBase]);
+  useEffect(() => () => closeRef.current?.(), []);
+
+  const watch = (file: string) => {
+    closeRef.current?.();
+    setSelected(file);
+    setArtifacts([]);
+    setCurrent(null);
+    setPhase("connecting");
+    setError(null);
+    followRef.current = true;
+
+    closeRef.current = openWatchStream(apiBase, file, (e) => {
+      if (e.type === "phase") setPhase(e.phase);
+      else if (e.type === "failed") { setError(e.message); setPhase(""); }
+      else if (e.type === "artifact") {
+        setArtifacts((prev) => {
+          const next = [...prev, e.artifact];
+          if (followRef.current) setCurrent(next.length - 1);
+          return next;
+        });
+      }
+    });
+  };
+
+  const shown = current !== null ? artifacts[current] : undefined;
+
+  return (
+    <section className="analyze">
+      <p className="analyze-intro">
+        Watch a running coding session build an HTML page — every write/edit streams in as a new,
+        sandboxed version. Content is redacted before it reaches this panel.
+      </p>
+
+      <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+        {/* Left: active sessions */}
+        <div style={{ flex: "1 1 260px", minWidth: 240 }}>
+          <div className="run-status" style={{ justifyContent: "space-between", marginBottom: 6 }}>
+            <span style={{ fontWeight: 600 }}>Active sessions</span>
+            <button type="button" className="ledger-view" onClick={loadSessions}>Refresh</button>
+          </div>
+          <ul className="analyze-list" style={{ maxHeight: 520, overflowY: "auto" }}>
+            {sessions === null && <li className="ledger-empty">Loading…</li>}
+            {sessions !== null && sessions.length === 0 && (
+              <li className="ledger-empty">No sessions active in the last few hours.</li>
+            )}
+            {(sessions ?? []).map((s) => (
+              <li key={s.file}>
+                <button
+                  type="button"
+                  className={"analyze-row" + (selected === s.file ? " is-active" : "")}
+                  style={{ display: "block", width: "100%", textAlign: "left", cursor: "pointer", background: "none", border: "none" }}
+                  onClick={() => watch(s.file)}
+                >
+                  <div className="analyze-row-head">
+                    <span className="analyze-name">{s.project ?? s.id.slice(0, 8)}</span>
+                    <span className="ws-chip">{s.agent}</span>
+                  </div>
+                  <div style={{ fontSize: 12, opacity: 0.7 }}>
+                    {s.msgs} msgs · {ageLabel(s.ageMs)}{s.model ? ` · ${s.model}` : ""}
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Right: sandboxed artifact preview */}
+        <div style={{ flex: "2 1 460px", minWidth: 320 }}>
+          {!selected && <p className="ledger-empty">Select a session to watch its artifact.</p>}
+          {selected && (
+            <>
+              <div className="run-status" style={{ gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+                {phase && !error && <span className="run-badge run-running">{phase}</span>}
+                {artifacts.length > 0 && (
+                  <select
+                    className="ledger-search"
+                    aria-label="artifact version"
+                    style={{ width: "auto", marginBottom: 0 }}
+                    value={current ?? artifacts.length - 1}
+                    onChange={(e) => { followRef.current = false; setCurrent(Number(e.target.value)); }}
+                  >
+                    {artifacts.map((a, i) => (
+                      <option key={i} value={i}>{a.name} · v{a.version} ({a.tool})</option>
+                    ))}
+                  </select>
+                )}
+                {shown?.truncated && <span className="run-badge run-running">truncated</span>}
+              </div>
+
+              {error && <p className="ledger-error" role="alert">{error}</p>}
+
+              {!shown && !error && (
+                <p className="ledger-empty">Waiting for the session to write an HTML file…</p>
+              )}
+              {shown && (
+                <iframe
+                  title="artifact preview"
+                  aria-label={`artifact ${shown.name} v${shown.version}`}
+                  sandbox="allow-scripts"
+                  srcDoc={sandboxDoc(shown.html)}
+                  style={{ width: "100%", height: 520, border: "1px solid var(--border, #ccc)", borderRadius: 8, background: "#fff" }}
+                />
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export const watchPage = defineConsolePage({
+  id: "watch",
+  title: "Watch",
+  icon: "📺",
+  order: 5,
+  group: "observe",
+  route: "#/watch",
+  component: Watch,
+});
