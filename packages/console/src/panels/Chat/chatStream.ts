@@ -37,6 +37,10 @@ export function openChatStream(
     h.onFailed(JSON.parse((e as MessageEvent).data).error);
     es.close();
   });
+  es.addEventListener("error", () => {
+    h.onFailed("connection lost");
+    es.close();
+  });
 
   return () => es.close();
 }

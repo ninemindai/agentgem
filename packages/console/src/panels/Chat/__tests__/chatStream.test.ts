@@ -78,4 +78,19 @@ describe("openChatStream", () => {
     stop();
     expect(FakeES.last!.closed).toBe(true);
   });
+
+  it("error event calls onFailed and closes the EventSource", () => {
+    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
+    const onFailed = vi.fn();
+    openChatStream("chat_5", "error-test", {
+      onDelta: vi.fn(),
+      onTool: vi.fn(),
+      onDone: vi.fn(),
+      onFailed,
+    });
+
+    FakeES.last!.emit("error", {});
+    expect(onFailed).toHaveBeenCalledWith("connection lost");
+    expect(FakeES.last!.closed).toBe(true);
+  });
 });
