@@ -732,6 +732,26 @@ export const GemVerifyResponseSchema = z.object({
   verdicts: z.array(AgentVerdictSchema),
 });
 
+// Prepare→stream split for the matrix (mirrors GemRunPrepare*): the POST carries the
+// selection/archive; the SSE GET carries only the opaque verifyId.
+export const GemVerifyPrepareRequestSchema = z.object({
+  selection: GemSelectionSchema.optional(),
+  archivePath: z.string().optional(),
+  name: z.string().optional(),
+  dir: z.string().optional(),
+  projects: z.array(z.string()).optional(),
+  agents: z.array(z.string()).optional(),  // validated in the controller → clear 400
+  fetch: z.boolean().optional(),
+}).refine((d) => d.selection !== undefined || d.archivePath !== undefined, {
+  message: "provide either selection or archivePath",
+});
+export const GemVerifyPrepareResponseSchema = z.object({
+  verifyId: z.string(),
+  gemName: z.string(),
+  gemDigest: z.string(),
+  agents: z.array(z.string()),
+});
+
 // ── AgentCore deploy (Phase 2) ──
 export const AgentcoreReadyResponseSchema = z.object({ cli: z.boolean(), awsCreds: z.boolean() });
 export const AgentcoreDeployRequestSchema = z.object({ name: z.string() });
