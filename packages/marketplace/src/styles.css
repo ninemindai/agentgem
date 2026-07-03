@@ -380,6 +380,15 @@ h2, h3 { font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; }
 
 /* ── Sources (curated personas) ──────────────────────────────── */
 .ex-sources { display: flex; flex-direction: column; }
+.ex-source-picker { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; }
+.ex-source-picker-label { font-size: 0.8rem; color: var(--muted); font-weight: 500; }
+.ex-source-select {
+  font: inherit; font-size: 0.9rem; color: var(--ink); max-width: 100%;
+  background: var(--surface); border: 1px solid var(--line-2);
+  border-radius: var(--r-sm); padding: 6px 10px; cursor: pointer;
+  transition: border-color var(--t), box-shadow var(--t);
+}
+.ex-source-select:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-wash); }
 .ex-source-head { color: var(--ink-2); font-size: 0.92rem; line-height: 1.5; margin: 0 0 14px; }
 .ex-source-head .ex-chip { margin-left: 4px; }
 .ex-source-head a { color: var(--brand-strong); text-decoration: none; }
@@ -433,6 +442,6 @@ h2, h3 { font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; }
   }
   .ex-nav { gap: 6px; }
   /* 16px inputs prevent iOS Safari zoom-on-focus */
-  .ex-search, .ex-orgcat-search, .ex-orgcat-cut, .ex-orgcat-sort { font-size: 16px; }
+  .ex-search, .ex-orgcat-search, .ex-orgcat-cut, .ex-orgcat-sort, .ex-source-select { font-size: 16px; }
 }
 

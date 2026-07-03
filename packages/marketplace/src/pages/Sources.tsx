@@ -55,6 +55,16 @@ export function Sources({ api }: { api: ReturnType<typeof makeApi> }) {
 
   return (
     <div className="ex-sources">
+      {sources && sources.length > 1 && (
+        <label className="ex-source-picker">
+          <span className="ex-source-picker-label">Source</span>
+          <select className="ex-source-select" value={sourceId} onChange={(e) => setSourceId(e.target.value)}>
+            {sources.map((s) => (
+              <option key={s.id} value={s.id}>{s.label}</option>
+            ))}
+          </select>
+        </label>
+      )}
       {source && (
         <p className="ex-source-head">
           {source.description}
