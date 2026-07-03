@@ -87,6 +87,20 @@ describe("streamGemVerify", () => {
     expect(evs[0].data.message).toMatch(/unknown or expired/i);
   });
 
+  it("consumes the verifyId one-shot — a replay of the same GET (as an EventSource auto-reconnect would send) fails instead of re-running the matrix", async () => {
+    setRunConnectFnForTests(splitAgent);
+    const verifyId = registerVerify({ gem, baseDir: join(home, "m2"), roster: ["claude", "codex"], gemDigest: "sha:d", gemName: gem.name });
+    const first = fakeRes();
+    await streamGemVerify({ query: { verifyId } }, first.res);
+    expect(first.events().at(-1)!.event).toBe("done");
+
+    const second = fakeRes();
+    await streamGemVerify({ query: { verifyId } }, second.res);
+    const evs = second.events();
+    expect(evs.map((e) => e.event)).toEqual(["failed"]);
+    expect(evs[0].data.message).toMatch(/unknown or expired/i);
+  });
+
   it("emits agent-start before verdict even when the agent run itself throws (failed verdict)", async () => {
     // A throwing connectFn exercises the run-FAILURE path: with a test seam present the
     // availability check is skipped, so this yields a "failed" verdict, not "unavailable"

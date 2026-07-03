@@ -144,8 +144,10 @@ Run bar: agent = "all" → POST /gem/verify/prepare {selection|archive, agents?,
 - Unknown/expired `verifyId` → single `failed` SSE event (mirrors run stream).
 - An agent's failure/unavailability is a `verdict`, never a stream failure — the stream
   ends with `done` whenever the orchestrator returns.
-- Browser disconnect: the server run continues (same as the run stream today); the
-  registry entry is one-shot but re-preparing is cheap.
+- Browser disconnect: the server run continues (same as the run stream today);
+  the registry entry is consumed by the stream (one-shot), so an EventSource
+  auto-reconnect gets the clean unknown-id failure instead of replaying a full
+  matrix run; re-preparing is cheap.
 
 ## Testing
 

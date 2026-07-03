@@ -131,3 +131,12 @@ export function registerVerify(spec: VerifySpec): string {
 export function resolveVerify(id: string): VerifySpec | undefined {
   return VERIFY_REGISTRY.get(id);
 }
+// One-shot consume for the stream endpoint: a resolved spec is deleted so an
+// EventSource auto-reconnect can never replay a full matrix run — the retry GET
+// gets the clean unknown-id failure instead. resolveVerify stays as the
+// read-only peek (tests, diagnostics).
+export function consumeVerify(id: string): VerifySpec | undefined {
+  const spec = VERIFY_REGISTRY.get(id);
+  if (spec) VERIFY_REGISTRY.delete(id);
+  return spec;
+}
