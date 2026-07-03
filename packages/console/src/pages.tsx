@@ -11,10 +11,11 @@ import { materializePage } from "./panels/Materialize/index.js";
 import { workspacesPage } from "./panels/Workspaces/index.js";
 import { publishPage } from "./panels/Publish/index.js";
 import { getGemsPage } from "./panels/GetGems/index.js";
+import { sourcesPage } from "./panels/Sources/index.js";
 import { settingsPage } from "./panels/Settings/index.js";
 import { receivedPage } from "./panels/Received/index.js";
 import { deployPage } from "./panels/Deploy/index.js";
 import { chatPage } from "./panels/Chat/index.js";
 import { watchPage } from "./panels/Watch/index.js";
 
-export const pages: ConsolePage[] = [observePage, watchPage, insightsPage, dreamingPage, benchmarkPage, optimizePage, minePage, curatePage, materializePage, workspacesPage, publishPage, getGemsPage, settingsPage, receivedPage, deployPage, chatPage];
+export const pages: ConsolePage[] = [observePage, watchPage, insightsPage, dreamingPage, benchmarkPage, optimizePage, minePage, curatePage, materializePage, workspacesPage, publishPage, getGemsPage, sourcesPage, settingsPage, receivedPage, deployPage, chatPage];
