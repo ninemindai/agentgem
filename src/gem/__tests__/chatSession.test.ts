@@ -71,4 +71,21 @@ describe("ChatManager", () => {
     expect(evs.at(-1)).toMatchObject({ type: "failed" }); // 'a' evicted when 'b' opened
     expect(b).toBeTruthy();
   });
+
+  it("closes the connection if opening the session fails (no leak)", async () => {
+    let closed = 0;
+    const connectFn = async () => ({
+      ctx: { open: async () => { throw new Error("open failed"); } },
+      close: () => { closed++; },
+    });
+    const mgr = new ChatManager({ connectFn: connectFn as any });
+    await expect(mgr.openChat({ agentId: "claude-code", brief: "B" })).rejects.toThrow("open failed");
+    expect(closed).toBe(1);
+  });
+
+  it("rejects with Unknown agentId when agentId is not in the AGENTS registry", async () => {
+    const fake = fakeConnect(() => []);
+    const mgr = new ChatManager({ connectFn: fake.fn as any });
+    await expect(mgr.openChat({ agentId: "does-not-exist", brief: "B" })).rejects.toThrow(/Unknown agentId/);
+  });
 });

@@ -12,7 +12,6 @@
 import { AGENTS, type AgentDescriptor } from "@agentgem/base";
 import type { ToolInvocation, RunResult } from "./acpRun.js";
 
-export type { ToolInvocation, RunResult };
 
 export type ChatEvent =
   | { type: "phase"; phase: string }
@@ -87,9 +86,13 @@ export class ChatManager {
       })();
 
     const conn = await this.connectFn(descriptor);
-    const handle = await conn.ctx.open(input.cwd ?? process.cwd(), {
-      mcpServers: input.mcpServers,
-    });
+    let handle: ChatSessionHandle;
+    try {
+      handle = await conn.ctx.open(input.cwd ?? process.cwd(), { mcpServers: input.mcpServers });
+    } catch (err) {
+      try { conn.close(); } catch { /* ignore */ }
+      throw err;
+    }
 
     const chatId = `chat_${++counter}`;
     this.live.set(chatId, {
