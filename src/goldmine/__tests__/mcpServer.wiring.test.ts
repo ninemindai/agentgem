@@ -1,5 +1,5 @@
 // mcpServer.wiring.test.ts
-// Verifies that GoldmineTools registers exactly the two expected tools.
+// Verifies that GoldmineTools registers exactly the expected tools.
 // No stdio is started — the test configures transports:{stdio:false} to keep
 // the process clean. getMcpTools is not a public @agentback/mcp export; we use
 // the canonical pattern from the library's own tests: construct an Application,
@@ -17,7 +17,7 @@ describe("GoldmineTools wiring", () => {
     try { await app.stop(); } catch { /* already stopped or never started */ }
   });
 
-  it("registers search_sessions, get_artifact_detail, and get_behavior_findings", async () => {
+  it("registers search_sessions, get_session_transcript, get_artifact_detail, and get_behavior_findings", async () => {
     app = new Application();
     app.component(MCPComponent);
     app.configure("servers.MCPServer").to({
@@ -30,6 +30,6 @@ describe("GoldmineTools wiring", () => {
 
     const server = await app.get<MCPServer>("servers.MCPServer");
     const names = server.listTools().map((t) => t.meta.name).sort();
-    expect(names).toEqual(["get_artifact_detail", "get_behavior_findings", "search_sessions"]);
+    expect(names).toEqual(["get_artifact_detail", "get_behavior_findings", "get_session_transcript", "search_sessions"]);
   });
 });
