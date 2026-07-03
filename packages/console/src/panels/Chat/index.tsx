@@ -29,7 +29,7 @@ export function Chat({ apiBase }: { apiBase: string }) {
   const [draftResult, setDraftResult] = useState<string | null>(null);
   const [drafting, setDrafting] = useState(false);
   const closeRef = useRef<(() => void) | null>(null);
-  const bottomRef = useRef<HTMLDivElement | null>(null);
+  const bottomRef = useRef<HTMLLIElement | null>(null);
 
   useEffect(() => {
     fetch(`${apiBase}/api/agents`)
@@ -58,7 +58,6 @@ export function Chat({ apiBase }: { apiBase: string }) {
     const assistantMsg: Message = { role: "assistant", text: "", tools: [], streaming: true };
 
     setMessages((prev) => [...prev, userMsg, assistantMsg]);
-    const assistantIdx = messages.length + 1; // index after adding both
 
     try {
       let activeChatId = chatId;
@@ -124,8 +123,6 @@ export function Chat({ apiBase }: { apiBase: string }) {
       setError(e instanceof Error ? e.message : "Send failed");
       setSending(false);
     }
-
-    void assistantIdx; // suppress lint — idx computed via closure
   };
 
   const draftGem = async () => {
@@ -196,7 +193,7 @@ export function Chat({ apiBase }: { apiBase: string }) {
             )}
           </li>
         ))}
-        <div ref={bottomRef} />
+        <li ref={bottomRef} style={{ listStyle: "none", padding: 0, margin: 0 }} />
       </ul>
 
       {error && <p className="ledger-error" role="alert">{error}</p>}
