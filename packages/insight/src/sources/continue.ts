@@ -97,16 +97,18 @@ export async function readContinueArtifacts(env: { configFile?: string }): Promi
       const chat = (cfg.models ?? []).find((m) => Array.isArray(m.roles) && m.roles.includes("chat")) ?? (cfg.models ?? [])[0];
       if (chat && typeof chat.model === "string") model = chat.model;
 
-      for (const srv of cfg.mcpServers ?? []) {
+      // Each of these is unvalidated YAML shape: a scalar (e.g. bare `rules: "..."` string) would
+      // make for...of iterate CHARACTERS, not entries — guard every one with Array.isArray.
+      for (const srv of Array.isArray(cfg.mcpServers) ? cfg.mcpServers : []) {
         if (!srv || typeof srv.name !== "string") continue;
         artifacts.push(classifyMcpServer(srv.name, srv));
       }
       let ri = 0;
-      for (const r of cfg.rules ?? []) {
+      for (const r of Array.isArray(cfg.rules) ? cfg.rules : []) {
         if (typeof r === "string") { if (r.trim()) artifacts.push({ type: "instructions", name: `rule-${++ri}`, content: r }); }
         else if (r && typeof r.rule === "string") artifacts.push({ type: "instructions", name: r.name ?? `rule-${++ri}`, content: r.rule });
       }
-      for (const p of cfg.prompts ?? []) {
+      for (const p of Array.isArray(cfg.prompts) ? cfg.prompts : []) {
         if (p && typeof p.name === "string" && typeof p.prompt === "string") {
           artifacts.push({
             type: "skill", name: p.name, source: "continue-prompt", content: p.prompt,

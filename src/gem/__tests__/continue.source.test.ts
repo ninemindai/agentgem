@@ -31,4 +31,13 @@ describe("continue SourceSpec", () => {
     expect(artifacts.find((a) => a.type === "instructions")).toMatchObject({ content: "Always write tests first." });
     expect(binding).toMatchObject({ agent: "continue", model: "claude-sonnet-5" });
   });
+  it("a bare scalar `rules:` string does not explode into per-character artifacts", async () => {
+    const c = BUILTIN_SOURCES.find((s) => s.id === "continue")!;
+    const base = mkdtempSync(join(tmpdir(), "cont-source-scalar-"));
+    writeFileSync(join(base, "config.yaml"), 'rules: "Always write tests first."\n');
+    const { artifacts } = await c.readArtifacts!({ baseDir: base });
+    const instructions = artifacts.filter((a) => a.type === "instructions");
+    expect(instructions.some((a) => "content" in a && typeof a.content === "string" && a.content.length === 1)).toBe(false);
+    expect(instructions).toEqual([]);
+  });
 });
