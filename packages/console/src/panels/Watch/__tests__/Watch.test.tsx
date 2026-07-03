@@ -39,6 +39,8 @@ describe("Watch panel", () => {
     render(<Watch apiBase="" />);
     const row = await screen.findByText("site");
     fireEvent.click(row);
+    // Feed is the default view; switch to Artifact to exercise the iframe pane.
+    fireEvent.click(screen.getByRole("tab", { name: "Artifact" }));
 
     // stream opened for the picked file
     expect(FakeES.last!.url).toContain("sess-1.jsonl");

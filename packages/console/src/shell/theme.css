@@ -477,6 +477,24 @@ body::before {
 .analyze-row .ledger-view:disabled { opacity: .55; cursor: default; }
 .run-badge.run-running { animation: pulse 1.2s ease-in-out infinite; }
 
+/* Watch → Feed: live session-event cards (message bubbles + tool call/result). The
+ * Feed|Artifact toggle reuses .ledger-view; .is-active gives the picked tab an accent. */
+.feed-toggle { display: flex; gap: 6px; }
+.feed-toggle .ledger-view.is-active { color: var(--accent); border-bottom: 2px solid var(--accent); }
+.feed { display: flex; flex-direction: column; gap: 8px; max-height: 560px; overflow-y: auto; }
+.feed-card { border: 1px solid var(--line-soft); border-radius: 8px; background: var(--paper); padding: 8px 10px; }
+.feed-msg-role { font: 600 10px/1 var(--font-ui); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.feed-msg-text { margin-top: 4px; white-space: pre-wrap; font: 14px/1.55 var(--font-ui); color: var(--ink); }
+.feed-msg-user { border-left: 3px solid var(--accent); }
+.feed-tool.is-error { border-color: var(--accent); }
+.feed-tool-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.feed-tool-icon { font-size: 14px; }
+.feed-tool-name { font: 600 13px/1 var(--font-ui); color: var(--ink); }
+.feed-tool-arg { flex: 1; min-width: 0; font: 12px/1.4 var(--font-mono); color: var(--ink-soft);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.feed-tool-out { margin: 8px 0 0; padding: 8px; max-height: 220px; overflow: auto; border-radius: 6px;
+  background: var(--paper-2); font: 12px/1.5 var(--font-mono); color: var(--ink-soft); white-space: pre-wrap; }
+
 /* Analyze candidate: header row + previewed artifact list */
 .analyze-candidate { margin-top: 10px; padding: 10px; border: 1px solid var(--line-soft);
   border-radius: 8px; background: var(--paper); }
