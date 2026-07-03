@@ -7,9 +7,10 @@
 // so the two never evict each other for the same root, and so the insights
 // payload can version independently. Keyed by root + a transcript token that
 // changes when sessions change. Best-effort; never throws.
-import { readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { agentgemHome, writeJsonAtomic } from "@agentgem/model";
+import { defaultDetectorRulesDir } from "./detectorRules.js";
 
 const MAX_ENTRIES = 50;
 function cachePath(): string { return join(agentgemHome(), ".agentgem", "insights-cache.json"); }
@@ -21,11 +22,31 @@ function cachePath(): string { return join(agentgemHome(), ".agentgem", "insight
 // iv3 = payload gained findings + detectorSummary — iv2 entries lack them and would crash the console.
 const TOKEN_VERSION = "iv3";
 
-/** version + transcript count + newest mtime — a new/updated session yields a new token. */
+// Detector-rule config is baked into the cached payload, so rule edits must
+// rotate the token. Missing dir (the common case) reads as 0 files / 0 mtime.
+function rulesDirStamp(): string {
+  try {
+    const dir = defaultDetectorRulesDir();
+    const files = readdirSync(dir).filter((f) => f.endsWith(".json"));
+    let maxMs = 0;
+    for (const f of files) {
+      const ms = statSync(join(dir, f)).mtimeMs;
+      if (ms > maxMs) maxMs = ms;
+    }
+    return `${files.length}:${Math.round(maxMs)}`;
+  } catch {
+    return "0:0";
+  }
+}
+
+/**
+ * version + transcript count + newest mtime + detector-rules-dir stamp — a
+ * new/updated session, or an added/edited/removed rule file, yields a new token.
+ */
 export function insightsToken(paths: string[]): string {
   let maxMs = 0;
   for (const p of paths) { try { const m = statSync(p).mtimeMs; if (m > maxMs) maxMs = m; } catch { /* gone — ignore */ } }
-  return `${TOKEN_VERSION}:${paths.length}:${Math.round(maxMs)}`;
+  return `${TOKEN_VERSION}:${paths.length}:${Math.round(maxMs)}:${rulesDirStamp()}`;
 }
 
 interface Entry { root: string; token: string; result: unknown; ts: number }

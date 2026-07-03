@@ -78,13 +78,18 @@ export function compileRule(rule: DetectorRule): DetectorSpec {
   };
 }
 
+/** Default rules dir (~/.agentgem/detectors), honoring AGENTGEM_HOME via agentgemHome(). */
+export function defaultDetectorRulesDir(): string {
+  return join(agentgemHome(), ".agentgem", "detectors");
+}
+
 /**
  * Load every *.json rule file from the detectors dir (default
  * ~/.agentgem/detectors, honoring AGENTGEM_HOME via agentgemHome()). Files are
  * read in sorted order; each may hold one rule object or an array. Invalid
  * entries and ids colliding with built-ins or earlier rules are skipped.
  */
-export function loadRuleDetectors(dir = join(agentgemHome(), ".agentgem", "detectors")): DetectorSpec[] {
+export function loadRuleDetectors(dir = defaultDetectorRulesDir()): DetectorSpec[] {
   let files: string[];
   try { files = readdirSync(dir).filter((f) => f.endsWith(".json")).sort(); }
   catch { return []; }   // no dir = no rules — the common case

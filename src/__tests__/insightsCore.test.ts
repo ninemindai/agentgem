@@ -81,4 +81,28 @@ describe("computeInsights", () => {
     expect(second.cached).toBe(false);
     expect(second.updatedAt).toBeNull();
   });
+
+  it("adding a detector rule file rotates the token and busts the cache", async () => {
+    tmpHome = mkdtempSync(join(tmpdir(), "ins-rules-"));
+    process.env.AGENTGEM_HOME = tmpHome;
+    const claudeDir = join(tmpHome, ".claude");
+    const projDir = join(claudeDir, "projects", "-proj4");
+    mkdirSync(projDir, { recursive: true });
+    writeFileSync(join(projDir, "t.jsonl"), JSON.stringify({ cwd: "/proj4" }) + "\n");
+
+    const fakeJudge: typeof judgeSessions = async () => ({ facets: [], degraded: false });
+    const fakeNarrate: typeof narrateInsights = async () => ({ narrative: "ok", degraded: false });
+
+    const first = await computeInsights("/proj4", { dir: claudeDir, judge: fakeJudge, narrate: fakeNarrate });
+    expect(first.cached).toBe(false);
+    const second = await computeInsights("/proj4", { dir: claudeDir, judge: fakeJudge, narrate: fakeNarrate });
+    expect(second.cached).toBe(true);
+
+    // Author a rule — the next compute must MISS the cache and recompute.
+    const rulesDir = join(tmpHome, ".agentgem", "detectors");
+    mkdirSync(rulesDir, { recursive: true });
+    writeFileSync(join(rulesDir, "my.json"), JSON.stringify({ id: "my-rule", title: "T", advice: "A", pattern: ["Edit"] }));
+    const third = await computeInsights("/proj4", { dir: claudeDir, judge: fakeJudge, narrate: fakeNarrate });
+    expect(third.cached).toBe(false);
+  });
 });
