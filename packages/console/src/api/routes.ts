@@ -652,6 +652,12 @@ export const bindCompleteRoute = defineRoute("POST", "/api/bind/complete", {
   body: z.object({ deviceCode: z.string(), interval: z.number().optional() }),
   response: z.object({ bound: z.boolean(), login: z.string().optional(), avatarUrl: z.string().optional(), rejected: z.string().optional() }),
 });
+// Disconnect: clear the local binding so this machine is no longer verified.
+// Returns the fresh (unbound) status; reconnect via the device flow re-links.
+export const bindDisconnectRoute = defineRoute("POST", "/api/bind/disconnect", {
+  body: z.object({}),
+  response: z.object({ bound: z.boolean(), login: z.string().optional(), provider: z.string().optional(), avatarUrl: z.string().optional() }),
+});
 
 // Curated import sources (bootstrap the Gem registry from trusted external repos).
 const CuratedSourceSchema = z.object({

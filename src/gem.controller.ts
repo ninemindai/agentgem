@@ -257,7 +257,7 @@ import { resolveDirs, resolveProject, agentgemHome } from "@agentgem/model";
 import { pickFolder } from "./pickFolder.js";
 import { readShareAdoption, setShareAdoption } from "./agentgemConfig.js";
 import { emitAdoption } from "./registry/emitAdoption.js";
-import { bindConfig, startDeviceBind, completeDeviceBind, readBindingStatus, type StartDeps, type CompleteDeps } from "./bind/bindCore.js";
+import { bindConfig, startDeviceBind, completeDeviceBind, readBindingStatus, clearBinding, type StartDeps, type CompleteDeps } from "./bind/bindCore.js";
 
 const BindStartSchema = z.object({
   configured: z.boolean(),
@@ -1054,6 +1054,13 @@ export class GemController {
   @get("/bind/status", { query: PickQuerySchema, response: BindStatusSchema })
   async bindStatus(_input: { query: z.infer<typeof PickQuerySchema> }): Promise<z.infer<typeof BindStatusSchema>> {
     return readBindingStatus();
+  }
+
+  // Bind: disconnect — clear the local binding.json so this machine is no longer
+  // verified. Idempotent; returns the fresh (unbound) status. Reconnect re-links.
+  @post("/bind/disconnect", { body: z.object({}), response: BindStatusSchema })
+  async bindDisconnect(_input: { body: Record<string, never> }): Promise<z.infer<typeof BindStatusSchema>> {
+    return clearBinding();
   }
 
   // Pop the OS-native folder picker and return the chosen absolute path (null if cancelled).
