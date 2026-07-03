@@ -5,7 +5,7 @@ import { CutBadge } from "../CutBadge";
 import { StoneRating } from "../StoneRating";
 import { RubricRing } from "../RubricRing";
 
-type View = { status: "loading" } | { status: "notfound" } | { status: "ok"; catalog: OrgCatalogT };
+type View = { status: "loading" } | { status: "notfound" } | { status: "error" } | { status: "ok"; catalog: OrgCatalogT };
 type Sort = "grade" | "stone";
 
 export function OrgCatalog({ api, scope }: { api: ReturnType<typeof makeApi>; scope: string }) {
@@ -19,7 +19,7 @@ export function OrgCatalog({ api, scope }: { api: ReturnType<typeof makeApi>; sc
     let alive = true;
     api.getOrgCatalog(scope)
       .then((c) => { if (alive) setView(c ? { status: "ok", catalog: c } : { status: "notfound" }); })
-      .catch(() => { if (alive) setView({ status: "notfound" }); });
+      .catch(() => { if (alive) setView({ status: "error" }); });
     return () => { alive = false; };
   }, [api, scope]);
 
@@ -38,6 +38,7 @@ export function OrgCatalog({ api, scope }: { api: ReturnType<typeof makeApi>; sc
 
   if (view.status === "loading") return <div className="ex-orgcat"><p className="ex-empty">Loading…</p></div>;
   if (view.status === "notfound") return <div className="ex-orgcat"><p className="ex-empty">No catalog for @{scope}.</p></div>;
+  if (view.status === "error") return <div className="ex-orgcat"><p className="ex-empty">Couldn't load the catalog for @{scope}. Please try again.</p></div>;
 
   const c = view.catalog;
   return (
