@@ -1,4 +1,4 @@
-# PRODUCT.md — AgentGem Explore (marketplace)
+# PRODUCT.md — AgentGem (marketplace)
 
 **Register:** product. This is a public discovery *tool* — the design serves the task (find trusted agent ingredients & gems), it isn't the product. Bar: earned familiarity; the UI disappears into browsing.
 
