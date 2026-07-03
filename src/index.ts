@@ -26,6 +26,14 @@ import { streamWorkflowAnalyze } from "./workflowStream.js";
 import { streamGemRun } from "./gemRunStream.js";
 import { streamScorecard } from "./scorecardStream.js";
 import { streamInsights } from "./insightsStream.js";
+import { registerChatRoutes, chatConnectFn, goldmineMcpServers } from "./goldmine/chatRoutes.js";
+import { ChatManager } from "@agentgem/run";
+import { availableAgents } from "@agentgem/base";
+import { collectScorecard, defaultScorecardDeps } from "./gem/scorecard.js";
+import { buildGoldmineBrief, type GoldmineBriefInput } from "@agentgem/insight";
+import { agentgemHome } from "@agentgem/model";
+import { join as pathJoin } from "node:path";
+import { mkdirSync } from "node:fs";
 import { originGuard } from "./originGuard.js";
 import { getWarmStatus, beginForeground, endForeground } from "./warm/orchestrator.js";
 import { startWarmSchedule } from "./warm/schedule.js";
@@ -191,6 +199,53 @@ export async function createApp(port: number): Promise<RestApplication> {
     beginForeground();
     try { await streamInsights(req as never, res as never); } finally { endForeground(); }
   });
+  // Goldmine chat: REST + SSE endpoints for multi-turn agent chat grounded in the
+  // user's session goldmine. One ChatManager per server process; idle sessions are
+  // swept every 60 s. The neutral cwd for each chat session is a stable directory
+  // under agentgemHome so the agent doesn't write transcripts into any project.
+  {
+    const chatCwd = pathJoin(agentgemHome(), ".agentgem", "chat");
+    try { mkdirSync(chatCwd, { recursive: true }); } catch { /* already exists */ }
+    const chatManager = new ChatManager({
+      connectFn: async (descriptor) => {
+        const conn = await chatConnectFn(descriptor);
+        // Wrap open() to inject the server-derived neutral cwd regardless of what
+        // ChatManager passes — ensures request input can never redirect the agent.
+        return {
+          ctx: {
+            open: (_cwd: string, opts?: { mcpServers?: unknown[] }) =>
+              conn.ctx.open(chatCwd, opts),
+          },
+          close: conn.close,
+        };
+      },
+    });
+    setInterval(() => chatManager.sweepIdle(), 60_000).unref();
+    registerChatRoutes(server.expressApp as never, {
+      manager: chatManager,
+      listAgents: availableAgents,
+      buildBrief: async () => {
+        // Best-effort: never throws. Falls back to minimal brief on any error.
+        try {
+          const sc = collectScorecard(undefined, undefined, Date.now(), { deps: defaultScorecardDeps });
+          const topArtifacts: GoldmineBriefInput["topArtifacts"] = [];
+          for (const proj of sc.projects) {
+            for (const wf of proj.workflows.slice(0, 3)) {
+              topArtifacts.push({ type: "workflow", name: wf.name, invocations: wf.confidence === "high" ? 10 : wf.confidence === "medium" ? 5 : 1 });
+            }
+          }
+          return buildGoldmineBrief({
+            scorecard: { breadth: sc.breadth, battleTested: sc.battleTested, portable: sc.portable, gaps: sc.gaps },
+            topArtifacts: topArtifacts.slice(0, 10),
+            skillCount: sc.projects.reduce((n, p) => n + p.workflows.length, 0),
+          });
+        } catch {
+          return buildGoldmineBrief({ scorecard: { breadth: 0, battleTested: 0, portable: 0, gaps: [] }, topArtifacts: [], skillCount: 0 });
+        }
+      },
+      goldmineMcp: goldmineMcpServers,
+    });
+  }
   return app;
 }
 
