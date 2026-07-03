@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { Settings } from "./index.js";
+import * as routes from "../../api/routes.js";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 const res = (body: unknown) =>
   ({ ok: true, status: 200, text: async () => JSON.stringify(body) }) as unknown as Response;
@@ -83,5 +84,22 @@ describe("Settings", () => {
     await screen.findByText(/Not verified/);
     fireEvent.click(screen.getByText("Connect GitHub"));
     expect(await screen.findByText(/Verification unavailable/)).toBeTruthy();
+  });
+
+  it("renders the GitHub avatar when the binding has one", async () => {
+    vi.spyOn(routes.deployTargetsRoute, "call").mockResolvedValue({ targets: [] });
+    vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob", avatarUrl: "https://a/bob.png" } as any);
+    render(<Settings apiBase="" />);
+    const img = await screen.findByRole("img", { name: /bob/i });
+    expect(img.getAttribute("src")).toBe("https://a/bob.png");
+    expect(screen.getByText(/Verified as @bob/)).toBeTruthy();
+  });
+
+  it("falls back to text-only when the binding has no avatar", async () => {
+    vi.spyOn(routes.deployTargetsRoute, "call").mockResolvedValue({ targets: [] });
+    vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob" } as any);
+    render(<Settings apiBase="" />);
+    await screen.findByText(/Verified as @bob/);
+    expect(screen.queryByRole("img", { name: /bob/i })).toBeNull();
   });
 });
