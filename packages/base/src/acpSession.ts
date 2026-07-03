@@ -14,6 +14,14 @@
 import { spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { Readable, Writable } from "node:stream";
+import type { McpServer, McpServerStdio } from "@agentclientprotocol/sdk";
+export type { McpServer, McpServerStdio } from "@agentclientprotocol/sdk";
+
+// Build an McpServerStdio value (the stdio variant of the McpServer union).
+// Converts the env map into the {name, value}[] pairs the SDK expects.
+export function stdioMcpServer(name: string, command: string, args: string[], env: Record<string, string> = {}): McpServerStdio {
+  return { name, command, args, env: Object.entries(env).map(([k, v]) => ({ name: k, value: v })) };
+}
 
 // An ACP adapter to spawn: a display id/name plus the argv to launch it.
 export interface AgentDescriptor { id: string; name: string; command: string[] }
@@ -41,7 +49,7 @@ export interface RawAcpSession {
   dispose(): void;
 }
 export interface RawAcpConnection {
-  open(cwd: string): Promise<RawAcpSession>;
+  open(cwd: string, opts?: { mcpServers?: McpServer[] }): Promise<RawAcpSession>;
   close(): void;
 }
 
@@ -79,9 +87,11 @@ export async function connectAcpAdapter(
   await agentCtx.request("initialize", { protocolVersion: PROTOCOL_VERSION });
 
   return {
-    async open(cwd: string) {
+    async open(cwd: string, opts?: { mcpServers?: McpServer[] }) {
       try { mkdirSync(cwd, { recursive: true }); } catch { /* best-effort */ }
-      const session: any = await agentCtx.buildSession(cwd).start();
+      let builder: any = agentCtx.buildSession(cwd);
+      for (const s of opts?.mcpServers ?? []) builder = builder.withMcpServer(s);
+      const session: any = await builder.start();
       const sessionId = session.sessionId as string;
       return {
         async setMode(mode: string) {
