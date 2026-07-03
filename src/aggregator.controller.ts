@@ -9,7 +9,7 @@ import { DrizzleBindings } from "@agentback/drizzle";
 import type { AppDb } from "@agentgem/aggregator";
 import { ingestAttestation, ingestGemAdoption } from "@agentgem/aggregator";
 import { popularity, coOccurrence, adoption, overview, coOccurrenceMatrix, modelBenchmark, gemAdoption } from "@agentgem/aggregator";
-import { buildProfile } from "@agentgem/aggregator";
+import { buildProfile, buildOrgCatalog } from "@agentgem/aggregator";
 import type { UsageAttestation, GemAdoption } from "@agentgem/insight";
 import { recordBinding } from "@agentgem/aggregator";
 import { GitHubVerifier } from "@agentgem/aggregator";
@@ -49,6 +49,18 @@ const ProfileGemSchema = z.object({
 const ProfileResult = z.object({
   login: z.string(), avatarUrl: z.string().nullable(), verified: z.boolean(),
   githubUrl: z.string(), totalStars: z.number(), gems: z.array(ProfileGemSchema),
+});
+
+const OrgCatalogQuery = z.object({ scope: z.string() });
+const RubricCheckSchema = z.object({ id: z.string(), label: z.string(), pass: z.boolean(), howToFix: z.string() });
+const OrgCatalogGemSchema = z.object({
+  key: z.string(), version: z.string(), cut: z.string().nullable(), grade: z.number().nullable(),
+  owner: z.string(), description: z.string().nullable(),
+  stars: z.number(), installs: z.number(), verifiedInstalls: z.number(),
+  rubric: z.object({ score: z.number(), checks: z.array(RubricCheckSchema) }),
+});
+const OrgCatalogResult = z.object({
+  scope: z.string(), gemCount: z.number(), ownerCount: z.number(), gems: z.array(OrgCatalogGemSchema),
 });
 
 const BindBody = z.object({ pubkey: z.string(), token: z.string(), signedAt: z.number(), signature: z.string() });
@@ -160,6 +172,15 @@ export class AggregatorController {
     const p = await buildProfile(this.db, input.query.login);
     if (!p) throw new AgentError("profile not found", { status: 404, code: "profile_not_found", retryable: false });
     return p;
+  }
+
+  // Public org catalog: all gems keyed @scope/* with a per-gem maturity rubric. Unknown scope → empty
+  // catalog (200); malformed scope → 400. scope is a query param so it needs no path-decoding.
+  @get("/org-catalog", { query: OrgCatalogQuery, response: OrgCatalogResult })
+  async orgCatalog(input: { query: z.infer<typeof OrgCatalogQuery> }): Promise<z.infer<typeof OrgCatalogResult>> {
+    const c = await buildOrgCatalog(this.db, input.query.scope);
+    if (!c) throw new AgentError("invalid scope", { status: 400, code: "invalid_scope", retryable: false });
+    return c;
   }
 
   @post("/bind", { body: BindBody, response: BindResultSchema })
