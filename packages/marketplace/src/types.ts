@@ -29,3 +29,21 @@ export interface AdoptionPoint {
   verifiedProducers: number;
   invocations: number;
 }
+
+export interface ProfileGem {
+  key: string;
+  version: string;
+  description: string | null;
+  grade: number | null;
+  stars: number;
+  installs: number;
+  verifiedInstalls: number;
+}
+export interface Profile {
+  login: string;
+  avatarUrl: string | null;
+  verified: boolean;
+  githubUrl: string;
+  totalStars: number;
+  gems: ProfileGem[];
+}

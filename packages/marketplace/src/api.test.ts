@@ -35,4 +35,18 @@ describe("makeApi", () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 500, text: async () => "" }) as unknown as Response));
     await expect(makeApi("https://x").getPopularity()).rejects.toThrow(/500/);
   });
+
+  it("getProfile hits the right URL and returns the parsed profile", async () => {
+    const calls: string[] = [];
+    const profile = { login: "octocat", avatarUrl: null, verified: true, githubUrl: "https://github.com/octocat", totalStars: 3, gems: [] };
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => { calls.push(String(url)); return res(profile); }));
+    const out = await makeApi("https://x").getProfile("octocat");
+    expect(out).toMatchObject({ login: "octocat", verified: true });
+    expect(calls[0]).toBe("https://x/api/aggregator/profile?login=octocat");
+  });
+
+  it("getProfile returns null on 404", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 404, text: async () => "" }) as unknown as Response));
+    expect(await makeApi("https://x").getProfile("nobody")).toBeNull();
+  });
 });
