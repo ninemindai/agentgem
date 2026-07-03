@@ -78,7 +78,72 @@ const retryStorm: DetectorSpec = {
   },
 };
 
-export const DETECTORS: DetectorSpec[] = [retryStorm];
+const EDIT_RE = /^(Edit|Write|NotebookEdit)$/;
+// "Did they check their work?" — matched against `${verb} ${arg}` of Bash steps.
+const VERIFY_RE = /(test|vitest|jest|pytest|tsc|build|lint|typecheck|check)/i;
+
+function isEdit(s: ProcedureStep): boolean { return EDIT_RE.test(s.verb); }
+function isVerify(s: ProcedureStep): boolean {
+  return s.verb.startsWith("Bash:") && VERIFY_RE.test(`${s.verb} ${s.arg}`);
+}
+
+// Same file edited + same command re-run this many consecutive cycles reads as
+// grinding on one spot. Healthy TDD moves across files/tests; thrash doesn't.
+export const THRASH_MIN_CYCLES = 4;
+
+const thrashLoop: DetectorSpec = {
+  id: "thrash-loop",
+  title: "Edit→verify ground loop on one file",
+  cost: "cheap",
+  severity: "warn",
+  advice: "After a few failed edit→test rounds on the same file, stop editing: reproduce the failure in isolation, read the full error, and re-state your hypothesis before the next change.",
+  detect(session) {
+    interface Cycle { file: string; cmd: string; msgIndices: [number, number] }
+    const cycles: Cycle[] = [];
+    let pendingEdit: ProcedureStep | null = null;
+    for (const s of session.steps) {
+      if (isEdit(s)) pendingEdit = s;
+      else if (pendingEdit && isVerify(s)) {
+        cycles.push({ file: pendingEdit.arg, cmd: `${s.verb} ${s.arg}`, msgIndices: [pendingEdit.msgIndex, s.msgIndex] });
+        pendingEdit = null;
+      }
+    }
+    const out: DetectorFinding[] = [];
+    let i = 0;
+    while (i < cycles.length) {
+      let j = i + 1;
+      while (j < cycles.length && cycles[j].file === cycles[i].file && cycles[j].cmd === cycles[i].cmd) j++;
+      if (j - i >= THRASH_MIN_CYCLES) {
+        out.push(mkFinding(thrashLoop, session,
+          `edit→verify on one file repeated ${j - i}x without progress elsewhere`,
+          cycles.slice(i, j).flatMap((c) => c.msgIndices)));
+      }
+      i = j;
+    }
+    return out;
+  },
+};
+
+const noVerifyFinish: DetectorSpec = {
+  id: "no-verify-finish",
+  title: "Edits with no verification afterwards",
+  cost: "cheap",
+  severity: "info",
+  advice: "End sessions that changed code with a verification step — run the tests or build so the change is confirmed working, not assumed working.",
+  detect(session) {
+    let lastEditIdx = -1;
+    let edits = 0;
+    session.steps.forEach((s, idx) => { if (isEdit(s)) { edits++; lastEditIdx = idx; } });
+    if (edits === 0) return [];
+    const verifiedAfter = session.steps.some((s, idx) => idx > lastEditIdx && isVerify(s));
+    if (verifiedAfter) return [];
+    return [mkFinding(noVerifyFinish, session,
+      `${edits} edit step(s) with no test/build run afterwards`,
+      [session.steps[lastEditIdx].msgIndex])];
+  },
+};
+
+export const DETECTORS: DetectorSpec[] = [retryStorm, thrashLoop, noVerifyFinish];
 
 /**
  * Run every registered detector (plus any extras — e.g. compiled declarative

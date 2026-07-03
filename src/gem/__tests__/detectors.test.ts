@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 // src/gem/__tests__/detectors.test.ts
 import { describe, it, expect } from "vitest";
-import { DETECTORS, runDetectors, RETRY_STORM_MIN } from "@agentgem/insight";
+import { DETECTORS, runDetectors, RETRY_STORM_MIN, THRASH_MIN_CYCLES } from "@agentgem/insight";
 import type { DetectorSpec, ProcedureStep, SessionSequence, WorkflowSignal } from "@agentgem/insight";
 
 function step(tool: string, verb: string, arg: string, msgIndex: number): ProcedureStep {
@@ -82,5 +82,71 @@ describe("runDetectors", () => {
       expect(d.title.length).toBeGreaterThan(0);
       expect(d.advice.length).toBeGreaterThan(0);
     }
+  });
+});
+
+// One edit→verify cycle on the same file with the same command.
+function cycle(file: string, cmd: string, at: number): ProcedureStep[] {
+  return [step("Edit", "Edit", file, at), step("Bash", "Bash:npm", cmd, at + 1)];
+}
+
+describe("thrash-loop detector", () => {
+  it("fires after THRASH_MIN_CYCLES same-file same-command edit→verify cycles", () => {
+    const steps = Array.from({ length: THRASH_MIN_CYCLES }, (_, i) =>
+      cycle("/a.ts", "npm test", i * 10)).flat();
+    const hits = runDetectors(signalWith([sess(steps)])).filter((f) => f.detectorId === "thrash-loop");
+    expect(hits).toHaveLength(1);
+    expect(hits[0].severity).toBe("warn");
+    expect(hits[0].detail).toContain(`${THRASH_MIN_CYCLES}x`);
+    expect(hits[0].detail).not.toContain("/a.ts");           // no args in detail
+    expect(hits[0].evidence.msgIndices).toHaveLength(THRASH_MIN_CYCLES * 2);
+  });
+
+  it("does not fire for healthy multi-file progress or below threshold", () => {
+    const multiFile = Array.from({ length: THRASH_MIN_CYCLES }, (_, i) =>
+      cycle(`/f${i}.ts`, "npm test", i * 10)).flat();
+    const below = Array.from({ length: THRASH_MIN_CYCLES - 1 }, (_, i) =>
+      cycle("/a.ts", "npm test", i * 10)).flat();
+    expect(runDetectors(signalWith([sess(multiFile)]))
+      .filter((f) => f.detectorId === "thrash-loop")).toHaveLength(0);
+    expect(runDetectors(signalWith([sess(below)]))
+      .filter((f) => f.detectorId === "thrash-loop")).toHaveLength(0);
+  });
+});
+
+describe("no-verify-finish detector", () => {
+  it("fires when a session edits but never verifies afterwards", () => {
+    const steps = [
+      step("Bash", "Bash:git", "git status", 1),
+      step("Edit", "Edit", "/a.ts", 2),
+      step("Write", "Write", "/b.ts", 3),
+      step("Bash", "Bash:git", "git commit", 4),
+    ];
+    const hits = runDetectors(signalWith([sess(steps)])).filter((f) => f.detectorId === "no-verify-finish");
+    expect(hits).toHaveLength(1);
+    expect(hits[0].severity).toBe("info");
+    expect(hits[0].detail).toContain("2 edit");
+    expect(hits[0].evidence.msgIndices).toEqual([3]);        // the last edit
+  });
+
+  it("stays quiet when a verify step follows the last edit, or with no edits", () => {
+    const verified = [
+      step("Edit", "Edit", "/a.ts", 1),
+      step("Bash", "Bash:npx", "npx vitest run", 2),
+    ];
+    const noEdits = [step("Bash", "Bash:git", "git log", 1)];
+    expect(runDetectors(signalWith([sess(verified)]))
+      .filter((f) => f.detectorId === "no-verify-finish")).toHaveLength(0);
+    expect(runDetectors(signalWith([sess(noEdits)]))
+      .filter((f) => f.detectorId === "no-verify-finish")).toHaveLength(0);
+  });
+
+  it("verify BEFORE the last edit does not count", () => {
+    const steps = [
+      step("Bash", "Bash:npm", "npm test", 1),
+      step("Edit", "Edit", "/a.ts", 2),
+    ];
+    expect(runDetectors(signalWith([sess(steps)]))
+      .filter((f) => f.detectorId === "no-verify-finish")).toHaveLength(1);
   });
 });
