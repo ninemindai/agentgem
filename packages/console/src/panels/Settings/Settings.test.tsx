@@ -95,6 +95,30 @@ describe("Settings", () => {
     expect(screen.getByText(/Verified as @bob/)).toBeTruthy();
   });
 
+  it("shows a friendly guidance message for the unknown-producer rejection (not the raw slug)", async () => {
+    vi.spyOn(routes.deployTargetsRoute, "call").mockResolvedValue({ targets: [] });
+    vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: false } as any);
+    vi.spyOn(routes.bindStartRoute, "call").mockResolvedValue({ configured: true, userCode: "AB-12", verificationUri: "https://github.com/login/device", deviceCode: "dc", interval: 5 } as any);
+    vi.spyOn(routes.bindCompleteRoute, "call").mockResolvedValue({ bound: false, rejected: "unknown-producer" } as any);
+    render(<Settings apiBase="" />);
+    await screen.findByText(/Not verified/);
+    fireEvent.click(screen.getByText("Connect GitHub"));
+    expect(await screen.findByText(/Publish or share a Gem first/)).toBeTruthy();
+    expect(screen.queryByText(/^unknown-producer$/)).toBeNull();
+  });
+
+  it("disconnects a bound identity and returns to the Connect state", async () => {
+    vi.spyOn(routes.deployTargetsRoute, "call").mockResolvedValue({ targets: [] });
+    vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob" } as any);
+    const disconnect = vi.spyOn(routes.bindDisconnectRoute, "call").mockResolvedValue({ bound: false } as any);
+    render(<Settings apiBase="" />);
+    await screen.findByText(/Verified as @bob/);
+    fireEvent.click(screen.getByText("Disconnect"));
+    expect(await screen.findByText("Connect GitHub")).toBeTruthy();
+    expect(screen.queryByText(/Verified as @bob/)).toBeNull();
+    expect(disconnect).toHaveBeenCalledTimes(1);
+  });
+
   it("falls back to text-only when the binding has no avatar", async () => {
     vi.spyOn(routes.deployTargetsRoute, "call").mockResolvedValue({ targets: [] });
     vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob" } as any);

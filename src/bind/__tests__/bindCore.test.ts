@@ -6,7 +6,7 @@ import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { useHermeticHome } from "../../__tests__/support/hermeticHome.js";
-import { bindConfig, startDeviceBind, completeDeviceBind, readBindingStatus } from "../bindCore.js";
+import { bindConfig, startDeviceBind, completeDeviceBind, readBindingStatus, clearBinding } from "../bindCore.js";
 
 let restore: () => void;
 beforeAll(() => { restore = useHermeticHome(); });
@@ -69,6 +69,23 @@ describe("readBindingStatus", () => {
       { mode: 0o600 },
     );
     expect(readBindingStatus()).toEqual({ bound: true, login: "alice", provider: "github" });
+  });
+});
+
+describe("clearBinding", () => {
+  it("removes binding.json and is idempotent", () => {
+    const dir = join(homedir(), ".agentgem");
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    writeFileSync(
+      join(dir, "binding.json"),
+      JSON.stringify({ provider: "github", login: "carol", accountId: "9", boundAt: new Date().toISOString() }),
+      { mode: 0o600 },
+    );
+    expect(readBindingStatus()).toMatchObject({ bound: true, login: "carol" });
+    expect(clearBinding()).toEqual({ bound: false });
+    expect(readBindingStatus()).toEqual({ bound: false });
+    // idempotent — clearing again with the file already gone still succeeds
+    expect(clearBinding()).toEqual({ bound: false });
   });
 });
 

@@ -3,7 +3,7 @@
 // src/bind/bindCore.ts
 // Shared core for device-flow binding. Extracted so both the CLI and the console
 // REST endpoints share identical logic without duplication.
-import { writeFileSync, mkdirSync, readFileSync, existsSync } from "node:fs";
+import { writeFileSync, mkdirSync, readFileSync, existsSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { loadOrCreateIdentity, type Identity } from "@agentgem/model";
@@ -67,6 +67,15 @@ export async function completeDeviceBind(
     { mode: 0o600 },
   );
   return { bound: true, provider: out.provider!, login: out.login!, accountId: out.accountId!, ...(out.avatarUrl ? { avatarUrl: out.avatarUrl } : {}) };
+}
+
+// Disconnect: remove the local binding so this machine is no longer verified.
+// Idempotent (a missing file is success). Local-only — it un-verifies THIS machine
+// but does not revoke the server-side account link; reconnecting via the device
+// flow re-links.
+export function clearBinding(): { bound: false } {
+  rmSync(bindingPath(), { force: true });
+  return { bound: false };
 }
 
 export function readBindingStatus(): { bound: boolean; login?: string; provider?: string; avatarUrl?: string } {

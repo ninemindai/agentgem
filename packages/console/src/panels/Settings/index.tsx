@@ -3,7 +3,7 @@ import { defineConsolePage } from "../../registry.js";
 import { Loading } from "../../shell/Loading.js";
 import {
   deployTargetsRoute, setCredentialRoute, CREDENTIAL_KEYS, makeClient,
-  bindStatusRoute, bindStartRoute, bindCompleteRoute,
+  bindStatusRoute, bindStartRoute, bindCompleteRoute, bindDisconnectRoute,
 } from "../../api/routes.js";
 
 type Backend = { id: string; label: string; ready: boolean };
@@ -12,6 +12,26 @@ type BindFlow =
   | { step: "code"; userCode: string; verificationUri: string; deviceCode: string; interval?: number }
   | { step: "unconfigured" }
   | null;
+
+// The aggregator returns machine-readable rejection slugs; turn them into guidance.
+// `unknown-producer` is the common one on a fresh key — the bind requires you to
+// have produced (shared/published) at least once before an identity can be linked.
+function rejectionMessage(slug: string): string {
+  switch (slug) {
+    case "unknown-producer":
+      return "Publish or share a Gem first — verification links your GitHub to an identity that has already produced something.";
+    case "bad-signature":
+      return "Verification failed a signature check. Please try Connect again.";
+    case "stale":
+      return "The verification request expired. Please try Connect again.";
+    case "provider-error":
+      return "Couldn't reach GitHub just now. Please try again in a moment.";
+    case "not-configured":
+      return "Identity verification isn't configured on this server.";
+    default:
+      return `Verification failed: ${slug}`;
+  }
+}
 
 export function Settings({ apiBase }: { apiBase: string }) {
   const [targets, setTargets] = useState<Backend[] | null>(null);
@@ -39,9 +59,14 @@ export function Settings({ apiBase }: { apiBase: string }) {
   const connectGitHub = async () => {
     setBindError(null);
     setBindFlow(null);
+    // Open the GitHub tab synchronously inside the click gesture so the popup
+    // blocker allows it, then redirect it to the device page once /bind/start
+    // returns the URL. (No `noopener` — we need the handle to set its location.)
+    const ghTab = typeof window !== "undefined" ? window.open("about:blank", "_blank") : null;
     try {
       const r = await bindStartRoute.call(makeClient(apiBase), { body: {} });
       if (!r.configured) {
+        ghTab?.close();
         setBindFlow({ step: "unconfigured" });
         return;
       }
@@ -53,6 +78,7 @@ export function Settings({ apiBase }: { apiBase: string }) {
         interval: r.interval,
       };
       setBindFlow(flow);
+      if (ghTab) ghTab.location.href = r.verificationUri!;
       const result = await bindCompleteRoute.call(makeClient(apiBase), {
         body: { deviceCode: r.deviceCode!, interval: r.interval },
       });
@@ -60,12 +86,24 @@ export function Settings({ apiBase }: { apiBase: string }) {
         setBindStatus({ bound: true, login: result.login, avatarUrl: result.avatarUrl });
         setBindFlow(null);
       } else if (result.rejected) {
-        setBindError(result.rejected);
+        setBindError(rejectionMessage(result.rejected));
         setBindFlow(null);
       }
     } catch (e) {
+      ghTab?.close();
       setBindError(e instanceof Error ? e.message : String(e));
       setBindFlow(null);
+    }
+  };
+
+  const disconnectGitHub = async () => {
+    setBindError(null);
+    setBindFlow(null);
+    try {
+      const r = await bindDisconnectRoute.call(makeClient(apiBase), { body: {} });
+      setBindStatus(r);
+    } catch (e) {
+      setBindError(e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -98,13 +136,16 @@ export function Settings({ apiBase }: { apiBase: string }) {
         <h2 className="ledger-group-label">Verify identity</h2>
         {bindError && <p className="ledger-error">{bindError}</p>}
         {bindStatus === null ? null : bindStatus.bound ? (
-          <p className="ws-note">
-            {bindStatus.avatarUrl && (
-              <img src={bindStatus.avatarUrl} alt={`@${bindStatus.login}`} width={20} height={20}
-                   style={{ borderRadius: "50%", verticalAlign: "middle", marginRight: 6 }} />
-            )}
-            Verified as @{bindStatus.login}
-          </p>
+          <div className="ledger-bar">
+            <span className="ws-note">
+              {bindStatus.avatarUrl && (
+                <img src={bindStatus.avatarUrl} alt={`@${bindStatus.login}`} width={20} height={20}
+                     style={{ borderRadius: "50%", verticalAlign: "middle", marginRight: 6 }} />
+              )}
+              Verified as @{bindStatus.login}
+            </span>
+            <button type="button" className="ledger-view" onClick={disconnectGitHub}>Disconnect</button>
+          </div>
         ) : (
           <>
             <p className="deploy-hint">Not verified — your installs won't count toward verified ratings</p>
@@ -122,7 +163,7 @@ export function Settings({ apiBase }: { apiBase: string }) {
             {bindFlow?.step === "code" && (
               <div>
                 <p className="ws-note">Your code: <strong>{bindFlow.userCode}</strong></p>
-                <p className="deploy-hint"><a href={bindFlow.verificationUri} target="_blank" rel="noreferrer">Open GitHub</a> and enter this code</p>
+                <p className="deploy-hint">We opened GitHub in a new tab — enter this code there. Didn't open? <a href={bindFlow.verificationUri} target="_blank" rel="noreferrer">Open GitHub</a>.</p>
                 <p className="deploy-hint">Waiting for verification…</p>
               </div>
             )}
