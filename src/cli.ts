@@ -38,7 +38,8 @@ Sharing a Gem (store-and-forward over NATS; set $NATS_URL, default nats://127.0.
   agentgem warm --watch                 Background daemon: keep insights/scorecard caches warm on change
   agentgem warm --install-service       Install an OS unit (launchd/systemd) to auto-start the daemon at login
   agentgem warm --uninstall-service     Remove the OS unit
-  agentgem verify <archive-dir>         Verify a .gem archive across local agents (--agents claude,codex; --fetch)`;
+  agentgem verify <archive-dir>         Verify a .gem archive across local agents (--agents claude,codex; --fetch)
+  agentgem learn [root]                 Distill the latest session into the review queue (--session <id>; --dir <claude-home>)`;
 
 async function main(argv: string[]): Promise<void> {
   const has = (...names: string[]) => names.some((n) => argv.includes(n));
@@ -84,6 +85,13 @@ async function main(argv: string[]): Promise<void> {
   if (argv[0] === "verify") {
     const { runVerifyCommand } = await import("./verifyCli.js");
     process.exitCode = await runVerifyCommand(argv.slice(1));
+    return;
+  }
+
+  // `agentgem learn [root]` — distill one session into the dream review queue now.
+  if (argv[0] === "learn") {
+    const { runLearnCommand } = await import("./learnCli.js");
+    process.exitCode = await runLearnCommand(argv.slice(1));
     return;
   }
 
