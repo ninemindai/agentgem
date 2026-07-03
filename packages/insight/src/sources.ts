@@ -14,9 +14,9 @@ import type { AgentId, SessionStat } from "./observeAggregate.js";
 import { listFiles, jsonLines, parseClaudeTranscript, parseCodexTranscript } from "./observeScan.js";
 import { detectHtmlArtifacts, type HtmlArtifactVersion } from "./artifactScan.js";
 import { resolveCodexHtmlPaths } from "./sources/codexArtifacts.js";
-import { scanClineSessions, readClineArtifacts } from "./sources/cline.js";
+import { scanClineSessions, readClineArtifacts, parseClineMeta, detectClineArtifacts } from "./sources/cline.js";
 import { scanGeminiSessions, readGeminiArtifacts, parseGeminiMeta, resolveGeminiHtmlPaths } from "./sources/gemini.js";
-import { scanContinueSessions, readContinueArtifacts } from "./sources/continue.js";
+import { scanContinueSessions, readContinueArtifacts, parseContinueMeta, resolveContinueHtmlPaths } from "./sources/continue.js";
 import { scanCursorSessions, readCursorArtifacts } from "./sources/cursor.js";
 
 // codexDir is a legacy independent override (scanSessions({ claudeDir, codexDir })); when absent it
@@ -103,6 +103,11 @@ const clineSource: SourceSpec = {
   id: "cline", label: "Cline / Roo", traits: { storage: "json" },
   roots: (env) => clineTaskDirs(env.baseDir),
   scanSessions: (roots) => scanClineSessions(roots),
+  // roots are per-task DIRS; the watched file is <taskDir>/ui_messages.json.
+  watchFiles: (roots) => roots.map((d) => join(d, "ui_messages.json")),
+  parseMeta: parseClineMeta,
+  // ui_messages carries full file content on writes → transcript-driven snapshots.
+  detectArtifacts: (text) => detectClineArtifacts(text),
   readArtifacts: async (env) => {
     // cline's global config-home isn't reliably locatable across editor forks (VS Code / Cursor /
     // etc globalStorage); needs baseDir until a follow-up discovers it.
@@ -149,6 +154,11 @@ const continueSource: SourceSpec = {
   id: "continue", label: "Continue", traits: { storage: "json" },
   roots: (env) => [continueSessionsDir(env.baseDir)],
   scanSessions: async (roots) => (await Promise.all(roots.map((r) => scanContinueSessions(r)))).flat(),
+  // One <sessionId>.json per session; sessions.json is the index, not a session.
+  watchFiles: (roots) => roots.flatMap((r) => listFiles(r, ".json")).filter((f) => basename(f) !== "sessions.json"),
+  parseMeta: parseContinueMeta,
+  // Provisional file-driven detector (tool-arg shape not yet pinned by a fixture).
+  resolveArtifactPaths: resolveContinueHtmlPaths,
   readArtifacts: async (env) => {
     const home = env.baseDir || join(homedir(), ".continue");
     // prefer config.yaml; fall back to the legacy config.json when yaml is absent.

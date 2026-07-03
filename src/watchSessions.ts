@@ -100,14 +100,25 @@ export function sourceForFile(file: string, baseDir?: string): SourceSpec | null
   return null;
 }
 
+// The file extension each storage kind exposes as a watchable transcript. The
+// owning source's storage decides which suffix is allowed, so a json-storage agent
+// (Cline, Continue) is accepted while a sqlite DB (Cursor) is not — its sessions
+// aren't file-per-session and need a different, DB-polling watch mode.
+const SUFFIX_BY_STORAGE: Record<string, string> = { jsonl: ".jsonl", json: ".json" };
+
 /**
- * Validate a client-supplied transcript path: it must end in .jsonl and live under
- * one of the registered watch roots. Returns the resolved absolute path, or null.
- * This is the ONLY sanctioned way the stream endpoint turns ?file= into a read.
+ * Validate a client-supplied transcript path: it must live under one of the
+ * registered watch roots AND carry the file suffix its owning source's storage
+ * exposes. Returns the resolved absolute path, or null. This is the ONLY sanctioned
+ * way the stream endpoint turns ?file= into a read.
  */
 export function resolveTranscriptFile(file: string, baseDir?: string): string | null {
-  if (!file || !file.endsWith(".jsonl")) return null;
-  return sourceForFile(file, baseDir) ? resolve(file) : null;
+  if (!file) return null;
+  const src = sourceForFile(file, baseDir);
+  if (!src) return null;
+  const suffix = SUFFIX_BY_STORAGE[src.traits.storage];
+  if (!suffix || !file.endsWith(suffix)) return null;
+  return resolve(file);
 }
 
 // Kept for tests/back-compat: which agent a validated path belongs to.

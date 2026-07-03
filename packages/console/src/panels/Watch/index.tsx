@@ -70,7 +70,7 @@ export function Watch({ apiBase }: { apiBase: string }) {
   return (
     <section className="analyze">
       <p className="analyze-intro">
-        Watch a running coding session (Claude Code, Codex, Gemini) build an HTML page — every write/edit
+        Watch a running coding session (Claude Code, Codex, Gemini, Cline, Continue) build an HTML page — every write/edit
         streams in as a new, sandboxed version. Content is redacted before it reaches this panel.
       </p>
 
