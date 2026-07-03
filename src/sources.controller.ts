@@ -92,10 +92,21 @@ export class SourcesController {
     return fetchAgencyAgentEntry(agencyPathOrThrow(input.query.path), cfgForCuratedSource(source));
   }
 
+  // Pure read (fetches curated content, writes nothing) exposed as both GET — reachable
+  // cross-origin via originGuard's PUBLIC_READ_PATHS — and POST, which the same-origin console
+  // still uses. Both delegate to importSkill so the two can't drift.
+  @get("/import", { query: AgentQuery, response: SkillArtifactSchema })
+  async importGet(input: { query: z.infer<typeof AgentQuery> }): Promise<z.infer<typeof SkillArtifactSchema>> {
+    return this.importSkill(input.query.source, input.query.path);
+  }
+
   @post("/import", { body: ImportBody, response: SkillArtifactSchema })
   async import(input: { body: z.infer<typeof ImportBody> }): Promise<z.infer<typeof SkillArtifactSchema>> {
-    const source = sourceOrThrow(input.body.source);
-    return importAgencyAgentSkill(agencyPathOrThrow(input.body.path), cfgForCuratedSource(source));
+    return this.importSkill(input.body.source, input.body.path);
+  }
+
+  private importSkill(source: string, path: string): Promise<z.infer<typeof SkillArtifactSchema>> {
+    return importAgencyAgentSkill(agencyPathOrThrow(path), cfgForCuratedSource(sourceOrThrow(source)));
   }
 
   // Install a persona into the user's global skills home (~/.agents/skills/<name>/SKILL.md) —

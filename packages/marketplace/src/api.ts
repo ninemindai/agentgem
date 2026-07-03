@@ -13,16 +13,6 @@ async function get<T>(base: string, path: string, query: Query = {}): Promise<T>
   return JSON.parse(await res.text()) as T;
 }
 
-async function post<T>(base: string, path: string, body: unknown): Promise<T> {
-  const res = await fetch(base + path, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`${path} -> ${res.status}`);
-  return JSON.parse(await res.text()) as T;
-}
-
 export function makeApi(base: string) {
   return {
     getPopularity: (q: { kind?: string; limit?: number } = {}) =>
@@ -57,7 +47,7 @@ export function makeApi(base: string) {
     getSourceAgents: (source: string, division: string) =>
       get<{ agents: SourceAgentRef[] }>(base, "/api/sources/agents", { source, division }).then((r) => r.agents),
     importSourceSkill: (source: string, path: string) =>
-      post<ImportedSkill>(base, "/api/sources/import", { source, path }),
+      get<ImportedSkill>(base, "/api/sources/import", { source, path }),
   };
 }
 

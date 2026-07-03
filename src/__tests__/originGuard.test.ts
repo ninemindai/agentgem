@@ -149,4 +149,22 @@ describe("originGuard — public aggregator reads (CORS + cross-site exemption)"
     expect(r.nexted).toBe(true);
     expect(r.set["access-control-allow-origin"]).toBe("*");
   });
+
+  it("allows a cross-site GET to /api/sources and sets permissive CORS", () => {
+    const r = run({ "sec-fetch-site": "cross-site" }, "agg.example", "GET", "/api/sources");
+    expect(r.nexted).toBe(true);
+    expect(r.set["access-control-allow-origin"]).toBe("*");
+  });
+
+  it("allows a cross-site GET to /api/sources/import and sets permissive CORS", () => {
+    const r = run({ "sec-fetch-site": "cross-site" }, "agg.example", "GET", "/api/sources/import");
+    expect(r.nexted).toBe(true);
+    expect(r.set["access-control-allow-origin"]).toBe("*");
+  });
+
+  it("does NOT exempt the install write — cross-site POST to /api/sources/install stays guarded", () => {
+    const r = run({ "sec-fetch-site": "cross-site" }, "agg.example", "POST", "/api/sources/install");
+    expect(r.blocked).toBe(true);
+    expect(r.status).toBe(403);
+  });
 });

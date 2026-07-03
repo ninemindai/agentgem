@@ -73,13 +73,13 @@ describe("makeApi sources", () => {
     expect(out[0].id).toBe("agency-agents");
   });
 
-  it("importSourceSkill POSTs body and returns content", async () => {
+  it("importSourceSkill GETs the source/path querystring and returns content", async () => {
     const spy = vi.fn(async (_url: string | URL, _init?: RequestInit) => res({ name: "ai-engineer", content: "SKILL_BODY" }));
     vi.stubGlobal("fetch", spy);
     const out = await makeApi("").importSourceSkill("agency-agents", "engineering/ai-engineer.md");
     expect(out.content).toBe("SKILL_BODY");
-    const init = spy.mock.calls[0][1]!;
-    expect(init.method).toBe("POST");
-    expect(JSON.parse(init.body as string)).toEqual({ source: "agency-agents", path: "engineering/ai-engineer.md" });
+    expect(String(spy.mock.calls[0][0])).toBe("/api/sources/import?source=agency-agents&path=engineering%2Fai-engineer.md");
+    // the `get` helper passes no init — it's a plain fetch(url), not a POST with a JSON body
+    expect(spy.mock.calls[0][1]).toBeUndefined();
   });
 });
