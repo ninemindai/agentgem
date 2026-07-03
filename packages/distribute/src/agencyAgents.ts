@@ -22,10 +22,20 @@ import type { Http, GithubCfg } from "./registryGithub.js";
 export const AGENCY_AGENTS_REPO = { repo: "msitarzewski/agency-agents", ref: "main" } as const;
 
 // Top-level dirs in the repo that are NOT agent divisions (tooling / docs / conversion output).
-// Everything else at the root is treated as a division of persona `.md` files.
+// Only used as a FALLBACK when divisions.json (the repo's own source of truth) can't be read;
+// the primary path derives divisions from that file instead of this heuristic skip-list.
 export const NON_AGENT_DIRS = new Set([
   "integrations", "scripts", "examples", "assets", "docs", ".github",
 ]);
+
+// A division with its display metadata from the repo's divisions.json (its declared source of
+// truth): a label, a Lucide icon name, and a brand color — ready to render a picker header.
+export interface AgencyDivision {
+  key: string;      // directory name, e.g. "engineering"
+  label: string;    // display label, e.g. "Engineering"
+  icon?: string;    // Lucide icon name, e.g. "Code"
+  color?: string;   // brand hex, e.g. "#3B82F6"
+}
 
 export interface AgencyFrontmatter {
   name?: string;
@@ -175,11 +185,39 @@ export function agentMdToSkill(path: string, md: string, sourceLabel = "agency-a
 
 // ── network helpers (thin; the transforms above carry the logic) ───────────────
 
-// Division directories at the repo root (root dirs minus the non-agent tooling/docs dirs).
+interface DivisionsFile { divisions?: Record<string, { label?: string; icon?: string; color?: string }> }
+
+// Title-case a division key as a fallback label ("game-development" → "Game Development").
+function titleCase(key: string): string {
+  return key.split(/[-_]/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
+}
+
+// The authoritative division catalog from the repo's divisions.json (label + Lucide icon +
+// brand color per division). Falls back to a root dir-walk minus NON_AGENT_DIRS — with
+// synthesized labels and no icon/color — if divisions.json is missing or malformed.
+export async function fetchAgencyDivisions(cfg: GithubCfg = agencyCfgFromEnv(), http: Http = defaultHttp): Promise<AgencyDivision[]> {
+  try {
+    const node = await ghContents(http, cfg, "divisions.json");
+    if (Array.isArray(node)) throw new Error("divisions.json is a directory");
+    const parsed = JSON.parse(decodeFile(node)) as DivisionsFile;
+    const entries = Object.entries(parsed.divisions ?? {});
+    if (entries.length === 0) throw new Error("divisions.json declares no divisions");
+    return entries
+      .map(([key, m]) => ({ key, label: m.label ?? titleCase(key), icon: m.icon, color: m.color }))
+      .sort((a, b) => a.key.localeCompare(b.key));
+  } catch {
+    const root = await ghContents(http, cfg, "");
+    if (!Array.isArray(root)) throw new Error("expected a directory listing at repo root");
+    return root
+      .filter((e) => e.type === "dir" && !NON_AGENT_DIRS.has(e.name))
+      .map((e) => ({ key: e.name, label: titleCase(e.name) }))
+      .sort((a, b) => a.key.localeCompare(b.key));
+  }
+}
+
+// Division directory names (keys only), sourced from the authoritative divisions.json.
 export async function listAgencyDivisions(cfg: GithubCfg = agencyCfgFromEnv(), http: Http = defaultHttp): Promise<string[]> {
-  const node = await ghContents(http, cfg, "");
-  if (!Array.isArray(node)) throw new Error("expected a directory listing at repo root");
-  return node.filter((e) => e.type === "dir" && !NON_AGENT_DIRS.has(e.name)).map((e) => e.name).sort();
+  return (await fetchAgencyDivisions(cfg, http)).map((d) => d.key);
 }
 
 // Agent `.md` files under a division (references only — no bodies fetched, so this is cheap).
