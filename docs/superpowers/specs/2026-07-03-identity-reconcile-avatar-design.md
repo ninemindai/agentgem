@@ -37,17 +37,20 @@ recordBinding(db, req, verifier)
    │      → the SAME accounts row the web sign-in uses (avatar canonical here); best-effort (see errors)
    └─ upsert account_bindings (pubkey → provider, account_id, account_login)   // unchanged
         │
-bindStatus  →  account_bindings b LEFT JOIN accounts a
-                 ON a.provider = b.provider AND a.provider_account_id = b.account_id
-               → { bound, login, provider, avatarUrl }
+   →  BindResult { bound, provider, login, accountId, avatarUrl? }   // avatar RIDES the /bind response
+[console] completeDeviceBind → writes ~/.agentgem/binding.json { …, avatarUrl }   (console status is this LOCAL FILE)
+[console] readBindingStatus  → reads binding.json → { bound, login, provider, avatarUrl }
 ```
+
+**Correction found during planning:** the console's status is the local file `~/.agentgem/binding.json` (`bindCore.ts`), NOT a DB query. `completeDeviceBind` POSTs the token to the hosted aggregator's `/api/aggregator/bind` and writes the response locally — so the avatar reaches the console by riding the `/bind` **response** into that file. `upsertAccount` still runs server-side (canonical `accounts` row for reconciliation + the profile sub-project); it just isn't what the console reads.
 
 **Changes (all in `@agentgem/aggregator` + the bind controller):**
 - `accountVerifier.ts` — `VerifiedAccount` gains `avatarUrl?: string`; `verify()` reads `u.avatar_url` (typed as `avatar_url?: unknown`, coerced to `string | undefined`) from the `/user` response it already parses. `fetchOrgs`/scope path untouched.
 - `binding.ts` `recordBinding` — after the existing signature/freshness/producer checks, call `upsertAccount(db, { provider, accountId, login, avatarUrl })`, then the existing `account_bindings` upsert. `BindResult` gains `avatarUrl?: string`.
-- The bind-status read (in `@agentgem/aggregator`, consumed by `aggregator.controller.ts`) — `LEFT JOIN accounts` on `(provider, account_id)`; return `avatarUrl` alongside `login`/`bound`.
-- The bind controller (`src/aggregator.controller.ts`) response schemas for bind + bind-status gain `avatarUrl` (optional).
-- **No new columns / FK / migration.** Join key `(provider, account_id)` already exists on both tables.
+- `src/aggregator.controller.ts` — `BindResultSchema` (line 44) gains optional `avatarUrl` so the `/api/aggregator/bind` response carries it to the console.
+- `src/bind/bindCore.ts` — `completeDeviceBind` reads `out.avatarUrl` from the `/bind` response and writes it into `~/.agentgem/binding.json`; its return type + `readBindingStatus` gain `avatarUrl?`. **The console's status is this local file, not a DB join.**
+- `src/gem.controller.ts` — `BindStatusSchema` (line 277) + `BindCompleteSchema` gain optional `avatarUrl`.
+- **No new columns / FK / migration.** `upsertAccount`'s existing `(provider, provider_account_id)` conflict key *is* the reconciliation.
 
 ## Part B — console UI, edges, testing
 
