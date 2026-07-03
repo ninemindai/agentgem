@@ -91,7 +91,7 @@ export function Watch({ apiBase }: { apiBase: string }) {
                 <button
                   type="button"
                   className={"analyze-row" + (selected === s.file ? " is-active" : "")}
-                  style={{ display: "block", width: "100%", textAlign: "left", cursor: "pointer", background: "none", border: "none" }}
+                  style={{ display: "block", width: "100%", textAlign: "left", cursor: "pointer" }}
                   onClick={() => watch(s.file)}
                 >
                   <div className="analyze-row-head">
