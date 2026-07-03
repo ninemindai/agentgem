@@ -26,7 +26,7 @@ Success criteria:
    and enqueues candidate skills/lessons into the dream review queue, printing what was
    queued; `--session <id>` targets a specific session.
 2. `POST /api/dream/learn { root, dir?, session? }` does the same over HTTP and returns
-   `{ session, enqueued, skills, lessons, degraded }`.
+   `{ session, enqueued, entries, skills, lessons, degraded }`.
 3. A `session` ref that doesn't match one of the project's known transcripts is rejected
    with `InvalidInputError` → 400 (input containment: the ref selects from a server-derived
    list, it is never used as a path).
@@ -68,6 +68,7 @@ reported as success (criterion 5), not padded with lowered thresholds.
 export interface LearnResult {
   session: string;            // basename of the distilled transcript
   enqueued: number;           // entries actually added (post-dedup)
+  entries: Array<{ kind: "skill" | "lesson"; name: string }>; // what was added
   skills: number;             // candidate skills found (pre-dedup)
   lessons: number;            // candidate lessons found (pre-dedup)
   degraded: boolean;          // LLM path unavailable → heuristic-only
@@ -125,7 +126,7 @@ root (+ optional session id)
   → pick: named basename match | newest mtime    (no match → InvalidInputError)
   → scanWorkflow([one path]) → distillWorkflow + distillSessionLessons
   → harvestEntries(..., phase: "LEARN") → enqueueNew (dedup by key)
-  → { session, enqueued, skills, lessons, degraded }
+  → { session, enqueued, entries, skills, lessons, degraded }
       → existing review flow: /dream/queue → accept | dismiss → diary
 ```
 
