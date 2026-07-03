@@ -10,6 +10,7 @@ import { getWarmStatus, runWarmPass } from "./warm/orchestrator.js";
 import { reflectionToLesson } from "@agentgem/insight";
 import { readQueue, setStatus, promotedCount, readDiary } from "./dream/store.js";
 import { dreamEnabled, setDreamEnabled } from "./dream/config.js";
+import { learnFromSession } from "./learnCore.js";
 
 // Path-safety guard for any name that becomes a filesystem path segment (skill dir /
 // lesson file). Mirrors the per-write re-validation in gem.controller.ts.
@@ -51,6 +52,18 @@ const DiaryEntrySchema = z.object({
   degraded: z.boolean(),
 });
 const DiarySchema = z.object({ entries: z.array(DiaryEntrySchema) });
+const LearnBody = z.object({
+  root: z.string().min(1),
+  dir: z.string().optional(),      // claude-home override (tests / non-default homes)
+  session: z.string().optional(),  // transcript basename (".jsonl" optional); default: newest
+});
+const LearnResultSchema = z.object({
+  session: z.string(),
+  enqueued: z.number(),
+  skills: z.number(),
+  lessons: z.number(),
+  degraded: z.boolean(),
+});
 
 const PHASE_OF: Record<string, "LIGHT" | "DEEP" | "REM"> = {
   usage: "LIGHT", scorecard: "LIGHT", analyze: "DEEP", insights: "REM",
@@ -133,5 +146,13 @@ export class DreamController {
   async run(): Promise<z.infer<typeof StartedSchema>> {
     void runWarmPass({ force: true }).catch(() => {}); // best-effort; a pre-loop throw must not become an unhandled rejection
     return { started: true };
+  }
+
+  // Intent-driven distillation ("/learn on a session"): run the extractor over one
+  // transcript now and land candidates in this review queue as phase:"LEARN". The
+  // second entry point into the same queue — accept/dismiss flow is unchanged.
+  @post("/dream/learn", { body: LearnBody, response: LearnResultSchema })
+  async learn(input: { body: z.infer<typeof LearnBody> }): Promise<z.infer<typeof LearnResultSchema>> {
+    return learnFromSession({ ...input.body, base: this.base });
   }
 }
