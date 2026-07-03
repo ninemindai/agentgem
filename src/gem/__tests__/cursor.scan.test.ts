@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -34,6 +34,20 @@ describe("Cursor SQLite scan", () => {
   });
   it("returns [] for a missing DB, never throws", async () => {
     await expect(scanCursorSessions("/no/such/state.vscdb")).resolves.toEqual([]);
+  });
+
+  it("degrades to [] when node:sqlite is unavailable (Node < 24), without copying the DB first", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cursor-nosqlite-"));
+    const dbPath = makeDb(dir);
+    let loaderCalled = false;
+    const dirBefore = new Set(readdirSync(tmpdir()));
+    const loadSqlite = () => { loaderCalled = true; return Promise.reject(new Error("ERR_UNKNOWN_BUILTIN_MODULE")); };
+    const stats = await scanCursorSessions(dbPath, loadSqlite);
+    expect(stats).toEqual([]);
+    expect(loaderCalled).toBe(true); // the loader is wired up and consulted
+    // the loader rejecting must short-circuit BEFORE any DB copy — no new cursor-db-* temp dir.
+    const copyMade = readdirSync(tmpdir()).some((f) => !dirBefore.has(f) && f.startsWith("cursor-db-"));
+    expect(copyMade).toBe(false);
   });
 
   it("picks the best-effort model deterministically (ORDER BY rowid, not key-lexicographic scan order)", async () => {

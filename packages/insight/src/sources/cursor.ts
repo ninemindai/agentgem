@@ -11,7 +11,10 @@
 // and the whole app, which the desktop Electron main process dynamically imports — stays loadable on
 // a runtime that lacks node:sqlite (Electron <= 33 bundles Node 20; node:sqlite needs Node >= 24). There
 // the lazy import() rejects and the scan degrades to [] via the surrounding catch, instead of throwing
-// ERR_UNKNOWN_BUILTIN_MODULE at load time and breaking the embedded server's boot.
+// ERR_UNKNOWN_BUILTIN_MODULE at load time and breaking the embedded server's boot. The import is
+// resolved FIRST, before the DB is copied, so a Node < 24 host never pays for a pointless copy of
+// the (possibly multi-file WAL) DB on every scan. The loader is an injectable param (defaults to the
+// real `import("node:sqlite")`) so the unavailable-module path is directly testable.
 import { copyFile, mkdtemp, rm, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, basename } from "node:path";
@@ -27,6 +30,13 @@ const parse = (s: unknown): Record<string, unknown> | null => {
 };
 
 interface KV { key: string; value: string }
+
+// Loose shape of node:sqlite's DatabaseSync actually used here (prepare/get/all/close) — typed
+// pragmatically rather than importing the real module's types, so a fake loader can be injected
+// in tests without node:sqlite needing to exist.
+interface SqliteDb { prepare(sql: string): { get(): unknown; all(): unknown[] }; close(): void }
+type LoadSqlite = () => Promise<{ DatabaseSync: new (path: string, opts: { readOnly: boolean }) => SqliteDb }>;
+const defaultLoadSqlite: LoadSqlite = () => import("node:sqlite");
 
 /** Pure core: fold cursorDiskKV rows into one SessionStat per composer. Exported for testing. */
 export function aggregateComposers(rows: KV[]): SessionStat[] {
@@ -64,7 +74,12 @@ export function aggregateComposers(rows: KV[]): SessionStat[] {
   return out;
 }
 
-export async function scanCursorSessions(dbPath: string): Promise<SessionStat[]> {
+export async function scanCursorSessions(dbPath: string, loadSqlite: LoadSqlite = defaultLoadSqlite): Promise<SessionStat[]> {
+  // Resolve node:sqlite BEFORE any copy work: on Node < 24 the import rejects immediately, so
+  // there's no point copying the (possibly multi-file WAL) DB just to fail afterward.
+  let DatabaseSync: new (path: string, opts: { readOnly: boolean }) => SqliteDb;
+  try { ({ DatabaseSync } = await loadSqlite()); } catch { return []; }
+
   // copy-before-read: never open Cursor's live (WAL-locked) DB in place.
   let tmp: string | null = null;
   try {
@@ -74,7 +89,6 @@ export async function scanCursorSessions(dbPath: string): Promise<SessionStat[]>
     for (const ext of ["-wal", "-shm"]) { try { await copyFile(dbPath + ext, copyPath + ext); } catch { /* sidecar may not exist */ } }
     let rows: KV[] = [];
     try {
-      const { DatabaseSync } = await import("node:sqlite");   // lazy: absent on Node < 24 -> caught -> []
       const db = new DatabaseSync(copyPath, { readOnly: true });
       try {
         // cursorDiskKV may not exist on very old/legacy DBs -> guard.
