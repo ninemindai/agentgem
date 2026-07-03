@@ -51,6 +51,19 @@ describe("Watch panel", () => {
     expect(frame.getAttribute("srcdoc")).toContain("Content-Security-Policy");
   });
 
+  it("highlights the selected session and doesn't inline-override the .is-active CSS", async () => {
+    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ sessions: [SESSION] }) })) as unknown as typeof fetch);
+    render(<Watch apiBase="" />);
+    const row = (await screen.findByText("site")).closest("button")!;
+    expect(row.className).not.toContain("is-active");
+    fireEvent.click(row);
+    expect(row.className).toContain("is-active");
+    // an inline border/background reset would beat the .analyze-row.is-active stylesheet rule
+    expect(row.style.border).not.toBe("none");
+    expect(row.style.background).not.toBe("none");
+  });
+
   it("shows an empty state when no sessions are active", async () => {
     vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ sessions: [] }) })) as unknown as typeof fetch);
