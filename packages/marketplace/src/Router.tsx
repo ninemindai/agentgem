@@ -10,6 +10,7 @@ import { Gem } from "./pages/Gem";
 import { Publish } from "./pages/Publish";
 import { Profile } from "./pages/Profile";
 import { OrgCatalog } from "./pages/OrgCatalog";
+import { Sources } from "./pages/Sources";
 
 export interface StarsCtx { signedIn: boolean; loginUrl: () => string; api: ReturnType<typeof makeStars> }
 
@@ -24,6 +25,7 @@ export function Router({ api, stars, me }: { api: ReturnType<typeof makeApi>; st
   }, []);
 
   if (path === "/publish") return <Publish api={api} me={me} base={defaultApiBase()} />;
+  if (path === "/sources") return <Sources api={api} />;
 
   const gemDetail = path.match(/^\/gems\/(.+)$/);
   if (gemDetail) return <Gem api={api} keyName={decodeURIComponent(gemDetail[1])} stars={stars} />;
