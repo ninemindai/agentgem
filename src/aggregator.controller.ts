@@ -42,7 +42,7 @@ const GemAdoptionResult = z.object({ items: z.array(z.object({ gemKey: z.string(
 
 const BindBody = z.object({ pubkey: z.string(), token: z.string(), signedAt: z.number(), signature: z.string() });
 const BindResultSchema = z.union([
-  z.object({ bound: z.literal(true), provider: z.string(), login: z.string(), accountId: z.string() }),
+  z.object({ bound: z.literal(true), provider: z.string(), login: z.string(), accountId: z.string(), avatarUrl: z.string().optional() }),
   z.object({ bound: z.literal(false), rejected: z.string() }),
 ]);
 

@@ -1,8 +1,9 @@
 // src/aggregator/__tests__/binding.test.ts
 import { describe, it, expect } from "vitest";
 import { generateKeyPairSync, sign as edSign } from "node:crypto";
+import { sql } from "drizzle-orm";
 import { makeTestDb } from "@agentgem/aggregator";
-import { producers, accountBindings } from "@agentgem/aggregator";
+import { producers, accountBindings, accounts } from "@agentgem/aggregator";
 import { recordBinding, bindSigningPayload, type BindRequest } from "@agentgem/aggregator";
 import type { AccountVerifier, VerifiedAccount } from "@agentgem/aggregator";
 
@@ -70,5 +71,16 @@ describe("recordBinding", () => {
     const rows = await db.select().from(accountBindings);
     expect(rows).toHaveLength(1);              // still one row for this pubkey
     expect(rows[0].accountId).toBe("99");      // updated in place
+  });
+  it("reconciles the accounts row with avatar and returns avatarUrl", async () => {
+    const db = await makeTestDb();
+    const s = makeSigner();
+    await db.insert(producers).values({ pubkey: s.pubkey });
+    const now = 1_000_000;
+    const verifier = fakeVerifier({ provider: "github", accountId: "42", login: "octocat", avatarUrl: "https://a/42.png" });
+    const res = await recordBinding(db, await req(s, "tok", now), verifier, now);
+    expect(res).toMatchObject({ bound: true, login: "octocat", avatarUrl: "https://a/42.png" });
+    const rows = await db.select().from(accounts).where(sql`provider = 'github' and provider_account_id = '42'`);
+    expect(rows[0]?.avatarUrl).toBe("https://a/42.png");
   });
 });
