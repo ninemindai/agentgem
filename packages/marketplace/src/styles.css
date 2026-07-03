@@ -145,7 +145,7 @@ h2, h3 { font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; }
 .ex-search:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-wash); }
 
 /* button vocabulary — tabs, bucket toggle, copy, sign-out all share it */
-.ex-tab, .ex-bucket-btn, .ex-copy, .ex-signin, .ex-signout {
+.ex-tab, .ex-bucket-btn, .ex-copy, .ex-signin, .ex-signout, .ex-btn {
   font: inherit;
   font-size: 0.85rem;
   font-weight: 500;
@@ -157,9 +157,10 @@ h2, h3 { font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; }
   cursor: pointer;
   transition: color var(--t), background var(--t), border-color var(--t);
 }
-.ex-tab:hover, .ex-bucket-btn:hover, .ex-copy:hover, .ex-signout:hover {
+.ex-tab:hover, .ex-bucket-btn:hover, .ex-copy:hover, .ex-signout:hover, .ex-btn:hover {
   color: var(--ink); border-color: var(--line-2); background: var(--surface-2);
 }
+.ex-btn[disabled] { opacity: 0.6; cursor: default; }
 .ex-tab.is-active, .ex-bucket-btn.is-active {
   color: var(--brand-strong); background: var(--brand-wash); border-color: transparent;
 }
@@ -361,19 +362,73 @@ h2, h3 { font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; }
 .ex-gem-author:hover { color: var(--brand); text-decoration: underline; }
 
 /* Org scorecard catalog */
-.ex-orgcat { max-width: 880px; margin: 0 auto; padding: 1rem; }
+.ex-orgcat { max-width: var(--content); margin: 0 auto; padding: 1rem; }
 .ex-orgcat-head { display: flex; align-items: baseline; gap: 0.75rem; margin-bottom: 0.75rem; }
 .ex-orgcat-title { margin: 0; }
-.ex-orgcat-counts { color: #8a8f98; font-size: 0.9rem; }
+.ex-orgcat-counts { color: var(--muted); font-size: 0.9rem; }
 .ex-orgcat-controls { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
 .ex-orgcat-search { flex: 1 1 12rem; padding: 0.35rem 0.5rem; }
 .ex-orgcat-cut, .ex-orgcat-sort { padding: 0.35rem 0.5rem; }
 .ex-rubric-ring { display: inline-flex; align-items: center; justify-content: center; width: 2.4rem; height: 2.4rem; border-radius: 50%; }
-.ex-rubric-ring-num { background: #fff; border-radius: 50%; width: 1.8rem; height: 1.8rem; display: inline-flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 600; }
-.ex-rubric-toggle { background: none; border: 1px solid #d0d3d8; border-radius: 4px; padding: 0.15rem 0.5rem; cursor: pointer; font-size: 0.8rem; }
+.ex-rubric-ring-num { background: var(--surface); border-radius: 50%; width: 1.8rem; height: 1.8rem; display: inline-flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 600; }
+.ex-rubric-toggle { background: none; border: 1px solid var(--line-2); border-radius: 4px; padding: 0.15rem 0.5rem; cursor: pointer; font-size: 0.8rem; }
 .ex-rubric-detail { list-style: none; margin: 0.5rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; }
 .ex-rubric-check { display: flex; gap: 0.5rem; align-items: baseline; font-size: 0.85rem; }
-.ex-rubric-check[data-pass="true"] .ex-rubric-mark { color: #3a7d44; }
-.ex-rubric-check[data-pass="false"] .ex-rubric-mark { color: #b04a4a; }
-.ex-rubric-fix { color: #8a8f98; }
+.ex-rubric-check[data-pass="true"] .ex-rubric-mark { color: var(--verified); }
+.ex-rubric-check[data-pass="false"] .ex-rubric-mark { color: var(--brand-strong); }
+.ex-rubric-fix { color: var(--muted); }
+
+/* ── Sources (curated personas) ──────────────────────────────── */
+.ex-sources { display: flex; flex-direction: column; }
+.ex-source-head { color: var(--ink-2); font-size: 0.92rem; line-height: 1.5; margin: 0 0 14px; }
+.ex-source-head .ex-chip { margin-left: 4px; }
+.ex-source-head a { color: var(--brand-strong); text-decoration: none; }
+.ex-source-head a:hover { text-decoration: underline; }
+
+.ex-divisions { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 16px; }
+.ex-divisions .ex-chip {
+  font: inherit; font-size: 0.78rem; font-weight: 600; letter-spacing: 0.01em;
+  color: var(--ink-2); background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: var(--r-pill);
+  padding: 5px 12px; cursor: pointer;
+  transition: color var(--t), background var(--t), border-color var(--t);
+}
+.ex-divisions .ex-chip:hover { color: var(--ink); background: var(--surface); border-color: var(--line-2); }
+.ex-divisions .ex-chip.is-active { color: var(--brand-strong); background: var(--brand-wash); border-color: transparent; }
+
+.ex-agent-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.ex-agent {
+  display: flex; flex-direction: column; gap: 9px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-lg); padding: 14px 16px;
+}
+.ex-agent-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ex-agent-name { font-weight: 600; font-size: 0.95rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ex-install-cmd {
+  font-family: var(--mono); font-size: 0.82rem;
+  color: var(--brand-strong); background: var(--brand-wash);
+  border-radius: var(--r-xs); padding: 6px 10px;
+  overflow-wrap: anywhere;   /* wrap the long command; never force page h-scroll */
+}
+.ex-skill-body {
+  margin: 0; font-family: var(--mono); font-size: 0.8rem; line-height: 1.5;
+  color: var(--ink-2); background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: var(--r);
+  padding: 12px 14px; max-width: 100%;
+  white-space: pre-wrap; overflow-wrap: anywhere;   /* long SKILL.md lines wrap inside — no page scroll */
+}
+
+/* ── Touch: comfortable ≥44px hit areas on touch devices (WCAG 2.5.5) ── */
+@media (pointer: coarse) {
+  .ex-navlink, .ex-tab, .ex-bucket-btn, .ex-copy, .ex-signin, .ex-signout, .ex-btn,
+  .ex-star, .ex-cut-toggle, .ex-rubric-toggle, .ex-divisions .ex-chip {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .ex-nav { gap: 6px; }
+  /* 16px inputs prevent iOS Safari zoom-on-focus */
+  .ex-search, .ex-orgcat-search, .ex-orgcat-cut, .ex-orgcat-sort { font-size: 16px; }
+}
 

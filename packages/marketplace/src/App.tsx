@@ -32,6 +32,7 @@ export function App() {
 
   const onGems = path.startsWith("/gems");
   const onSources = path.startsWith("/sources");
+  const onIngredients = path === "/" || path.startsWith("/ingredient");
   const signOut = async () => { await auth.logout(); setMe(null); };
 
   return (
@@ -39,9 +40,9 @@ export function App() {
       <header className="ex-header">
         <a href="/" className="ex-brand">AgentGem</a>
         <nav className="ex-nav">
-          <a href="/" className={"ex-navlink" + (!onGems && !onSources ? " is-active" : "")}>Ingredients</a>
+          <a href="/" className={"ex-navlink" + (onIngredients ? " is-active" : "")}>Ingredients</a>
           <a href="/gems" className={"ex-navlink" + (onGems ? " is-active" : "")}>Gems</a>
-          <a href="/sources" className={"ex-navlink" + (path.startsWith("/sources") ? " is-active" : "")}>Sources</a>
+          <a href="/sources" className={"ex-navlink" + (onSources ? " is-active" : "")}>Sources</a>
           {me && <a href="/publish" className="ex-navlink">Publish</a>}
         </nav>
         <span className="ex-auth">
