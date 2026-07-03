@@ -27,6 +27,9 @@ describe("unknown source is rejected", () => {
   it("import", async () => {
     await expect(c.import({ body: { source: "nope", path: "engineering/x.md" } })).rejects.toBeInstanceOf(InvalidInputError);
   });
+  it("install", async () => {
+    await expect(c.install({ body: { source: "nope", path: "engineering/x.md" } })).rejects.toBeInstanceOf(InvalidInputError);
+  });
 });
 
 describe("input containment guards (checked before any fetch)", () => {
@@ -34,6 +37,9 @@ describe("input containment guards (checked before any fetch)", () => {
 
   it("rejects a traversal path on import", async () => {
     await expect(c.import({ body: { source, path: "../../etc/passwd" } })).rejects.toThrow(/Invalid agent path/);
+  });
+  it("rejects a traversal path on install (before any fetch or write)", async () => {
+    await expect(c.install({ body: { source, path: "../../etc/passwd" } })).rejects.toThrow(/Invalid agent path/);
   });
   it("rejects a non-.md or non-division-scoped path", async () => {
     await expect(c.agent({ query: { source, path: "README.md" } })).rejects.toThrow(/Invalid agent path/);

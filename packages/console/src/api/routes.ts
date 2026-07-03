@@ -653,4 +653,36 @@ export const bindCompleteRoute = defineRoute("POST", "/api/bind/complete", {
   response: z.object({ bound: z.boolean(), login: z.string().optional(), avatarUrl: z.string().optional(), rejected: z.string().optional() }),
 });
 
+// Curated import sources (bootstrap the Gem registry from trusted external repos).
+const CuratedSourceSchema = z.object({
+  id: z.string(), label: z.string(), description: z.string(),
+  repo: z.string(), ref: z.string(), kind: z.string(),
+  license: z.string().optional(), homepage: z.string().optional(),
+});
+export type CuratedSource = z.infer<typeof CuratedSourceSchema>;
+const SourceDivisionSchema = z.object({ key: z.string(), label: z.string(), icon: z.string().optional(), color: z.string().optional() });
+export type SourceDivision = z.infer<typeof SourceDivisionSchema>;
+const SourceAgentRefSchema = z.object({ division: z.string(), slug: z.string(), name: z.string(), path: z.string() });
+export type SourceAgentRef = z.infer<typeof SourceAgentRefSchema>;
+const SourceAgentEntrySchema = z.object({
+  division: z.string(), slug: z.string(), name: z.string(), path: z.string(),
+  description: z.string().optional(), vibe: z.string().optional(), color: z.string().optional(), emoji: z.string().optional(),
+});
+export type SourceAgentEntry = z.infer<typeof SourceAgentEntrySchema>;
+
+export const sourcesListRoute = defineRoute("GET", "/api/sources", { response: z.object({ sources: z.array(CuratedSourceSchema) }) });
+export const sourceDivisionsRoute = defineRoute("GET", "/api/sources/divisions", {
+  query: z.object({ source: z.string() }), response: z.object({ divisions: z.array(SourceDivisionSchema) }),
+});
+export const sourceAgentsRoute = defineRoute("GET", "/api/sources/agents", {
+  query: z.object({ source: z.string(), division: z.string() }), response: z.object({ agents: z.array(SourceAgentRefSchema) }),
+});
+export const sourceAgentRoute = defineRoute("GET", "/api/sources/agent", {
+  query: z.object({ source: z.string(), path: z.string() }), response: SourceAgentEntrySchema,
+});
+export const sourceInstallRoute = defineRoute("POST", "/api/sources/install", {
+  body: z.object({ source: z.string(), path: z.string() }),
+  response: z.object({ ok: z.boolean(), skill: z.string(), dir: z.string() }),
+});
+
 export const makeClient = (apiBase: string): Client => createClient({ baseURL: apiBase });
