@@ -37,7 +37,7 @@ export function App() {
   return (
     <div className="ex-app">
       <header className="ex-header">
-        <a href="/" className="ex-brand">AgentGem Explore</a>
+        <a href="/" className="ex-brand">AgentGem</a>
         <nav className="ex-nav">
           <a href="/" className={"ex-navlink" + (!onGems && !onSources ? " is-active" : "")}>Ingredients</a>
           <a href="/gems" className={"ex-navlink" + (onGems ? " is-active" : "")}>Gems</a>
