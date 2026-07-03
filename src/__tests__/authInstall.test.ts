@@ -24,9 +24,9 @@ function mockRes() {
 }
 const mockReq = (over: any = {}) => ({ method: "GET", path: "/", query: {}, headers: {}, get(n: string) { return (this.headers as any)[n.toLowerCase()]; }, ...over });
 
-const deps = (db: any, over: Partial<{ fetchOrgs: (t: string) => Promise<string[]> }> = {}) => ({
+const deps = (db: any, over: Partial<{ fetchOrgs: (t: string) => Promise<string[]>; verify: () => Promise<any> }> = {}) => ({
   db,
-  verifier: { verify: async () => ({ provider: "github", accountId: "42", login: "octocat" }) },
+  verifier: { verify: over.verify ?? (async () => ({ provider: "github", accountId: "42", login: "octocat" })) },
   exchangeCode: async () => "gh-token",
   fetchOrgs: over.fetchOrgs ?? (async () => []),
   config: cfg,
@@ -63,6 +63,22 @@ describe("auth handlers", () => {
       // the session is resolvable
       const token = setCookie.split(";")[0].split("=")[1];
       expect((await resolveSession(db, token))?.login).toBe("octocat");
+    }
+  });
+
+  it("callback captures the GitHub avatar so /api/auth/me reflects it", async () => {
+    { const db = await makeTestDb();
+      const d = deps(db, { verify: async () => ({ provider: "github", accountId: "42", login: "octocat", avatarUrl: "https://avatars.example/octocat.png" }) });
+      const login = mockRes();
+      await loginHandler(d)(mockReq({ query: { return: "https://app.agentgem.ai" } }) as any, login as any);
+      const state = new URL(login._redirect!).searchParams.get("state")!;
+      const cb = mockRes();
+      await callbackHandler(d)(mockReq({ query: { code: "abc", state } }) as any, cb as any);
+      const token = (cb._headers["set-cookie"] as string).split(";")[0].split("=")[1];
+
+      const me = mockRes();
+      await meHandler(d)(mockReq({ headers: { cookie: `${SESSION_COOKIE}=${token}` } }) as any, me as any);
+      expect((me._body as any).avatarUrl).toBe("https://avatars.example/octocat.png");
     }
   });
 

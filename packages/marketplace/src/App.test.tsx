@@ -93,5 +93,7 @@ describe("App link interceptor", () => {
     render(<App />);
     expect(await screen.findByText("octocat")).toBeTruthy();
     expect(screen.getByRole("button", { name: /sign out/i })).toBeTruthy();
+    // The identity links to the user's own profile page.
+    expect(screen.getByRole("link", { name: "octocat" }).getAttribute("href")).toBe("/@octocat");
   });
 });
