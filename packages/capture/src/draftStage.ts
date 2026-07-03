@@ -24,6 +24,14 @@ export function distilledSkillMarkdown(s: DistilledSkill): string {
     ...s.triggers.map((t) => `  - ${t}`),
     `tools: [${s.tools.join(", ")}]`,
     `mutating: ${s.mutating}`,
+    ...(s.triggerContract ? [
+      "triggerContract:",
+      `  intent: ${s.triggerContract.intent}`,
+      "  triggers:",
+      ...s.triggerContract.triggers.map((t) => `    - ${t}`),
+      "  antiTriggers:",
+      ...s.triggerContract.antiTriggers.map((t) => `    - ${t}`),
+    ] : []),
     "---",
     "",
     s.body.trim(),
@@ -32,7 +40,7 @@ export function distilledSkillMarkdown(s: DistilledSkill): string {
 }
 
 export function distilledToArtifact(s: DistilledSkill): SkillArtifact {
-  return { type: "skill", name: s.name, description: s.description, source: "distilled-draft", content: distilledSkillMarkdown(s) };
+  return { type: "skill", name: s.name, description: s.description, source: "distilled-draft", content: distilledSkillMarkdown(s), trigger: s.triggerContract };
 }
 
 // Render a lesson as instructions markdown: the scrubbed body + a coordinates-free

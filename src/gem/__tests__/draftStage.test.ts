@@ -104,3 +104,30 @@ describe("stageDraftsByEvidence", () => {
     expect(stageDraftsByEvidence(inv, [])).toBe(inv);
   });
 });
+
+const withContract = {
+  name: "do-x", description: "d", triggers: ["t"], tools: [], mutating: false, body: "body",
+  evidence: { sessions: 1, exampleSequence: [], root: "/r", provenance: { occurrences: [] } },
+  status: "draft" as const, confidence: "medium" as const, origin: "llm" as const,
+  triggerContract: { intent: "do x", triggers: ["save"], antiTriggers: ["one-off"] },
+};
+
+describe("distilledToArtifact / distilledSkillMarkdown — trigger contract", () => {
+  it("maps triggerContract onto SkillArtifact.trigger", () => {
+    expect(distilledToArtifact(withContract).trigger).toEqual(withContract.triggerContract);
+  });
+  it("leaves trigger undefined when there is no contract", () => {
+    const { triggerContract, ...noContract } = withContract;
+    expect(distilledToArtifact(noContract).trigger).toBeUndefined();
+  });
+  it("persists the contract into SKILL.md frontmatter", () => {
+    const md = distilledSkillMarkdown(withContract);
+    expect(md).toContain("triggerContract:");
+    expect(md).toContain("intent: do x");
+    expect(md).toContain("    - one-off");
+  });
+  it("omits the triggerContract block when absent (markdown unchanged)", () => {
+    const { triggerContract, ...noContract } = withContract;
+    expect(distilledSkillMarkdown(noContract)).not.toContain("triggerContract:");
+  });
+});
