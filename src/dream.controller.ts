@@ -60,6 +60,7 @@ const LearnBody = z.object({
 const LearnResultSchema = z.object({
   session: z.string(),
   enqueued: z.number(),
+  entries: z.array(z.object({ kind: z.enum(["skill", "lesson"]), name: z.string() })),
   skills: z.number(),
   lessons: z.number(),
   degraded: z.boolean(),

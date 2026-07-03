@@ -21,6 +21,7 @@ import { enqueueNew } from "./dream/store.js";
 export interface LearnResult {
   session: string;   // basename of the distilled transcript
   enqueued: number;  // entries actually added (post-dedup)
+  entries: Array<{ kind: "skill" | "lesson"; name: string }>; // what was actually added (post-dedup)
   skills: number;    // candidate skills found (pre-dedup)
   lessons: number;   // candidate lessons found (pre-dedup, post reflectionToLesson filter)
   degraded: boolean; // LLM path unavailable → heuristic-only
@@ -47,9 +48,9 @@ export async function learnFromSession(opts: {
     if (!hit) throw new InvalidInputError(`no session '${opts.session}' recorded for this project (${paths.length} known)`);
     target = hit;
   } else {
-    target = paths
-      .map((p) => ({ p, m: statSync(p).mtimeMs }))
-      .sort((a, b) => b.m - a.m)[0].p;
+    const stats = paths.flatMap((p) => { try { return [{ p, m: statSync(p).mtimeMs }]; } catch { return []; } });
+    if (!stats.length) throw new InvalidInputError(`no sessions recorded for ${root}`);
+    target = stats.sort((a, b) => b.m - a.m)[0].p;
   }
 
   const project = introspectProject(root);
@@ -64,6 +65,7 @@ export async function learnFromSession(opts: {
   return {
     session: basename(target),
     enqueued: added.length,
+    entries: added.map((e) => ({ kind: e.kind as "skill" | "lesson", name: e.name })),
     skills: wf.distilled.length,
     lessons: entries.filter((e) => e.kind === "lesson").length,
     degraded: wf.degraded,
