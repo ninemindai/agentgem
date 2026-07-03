@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 // src/gem/__tests__/detectorRules.test.ts
 import { describe, it, expect, afterEach } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { validateRule, compileRule, loadRuleDetectors } from "@agentgem/insight";
@@ -60,6 +60,12 @@ describe("compileRule", () => {
     const spec = compileRule({ ...RULE, pattern: ["Edit"], minRepeats: 3 });
     const steps = [step("Edit", "Edit", "/a.ts", 1), step("Edit", "Edit", "/b.ts", 2)];
     expect(spec.detect(sess(steps), signalWith([sess(steps)]))).toHaveLength(0);
+  });
+
+  it("an empty pattern never fires (and never hangs)", () => {
+    const spec = compileRule({ ...RULE, pattern: [] as string[], minRepeats: 1 });
+    const steps = [step("Edit", "Edit", "/a.ts", 1)];
+    expect(spec.detect(sess(steps), signalWith([sess(steps)]))).toEqual([]);
   });
 });
 

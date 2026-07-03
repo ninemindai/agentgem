@@ -52,6 +52,7 @@ export function compileRule(rule: DetectorRule): DetectorSpec {
   return {
     id: rule.id, title: rule.title, advice: rule.advice, cost: "cheap", severity,
     detect(session) {
+      if (rule.pattern.length === 0) return [];   // hand-built rule bypassing validateRule — never fires, never hangs
       const verbs = session.steps.map((s) => s.verb);
       const hits: number[][] = [];
       let i = 0;
