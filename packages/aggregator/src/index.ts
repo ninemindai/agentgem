@@ -19,3 +19,4 @@ export * from "./ingestAdoption.js";
 export * from "./catalog.js";
 export * from "./profile.js";
 export * from "./orgRubric.js";
+export * from "./orgCatalog.js";
