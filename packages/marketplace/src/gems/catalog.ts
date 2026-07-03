@@ -9,6 +9,7 @@ export interface Gem {
   key: string;            // unique, url-safe (e.g. "brainstorming-kit")
   version: string;        // e.g. "1.2.0"
   author?: string;
+  publishedBy?: string;   // verified GitHub login (server-derived); links to the /@login profile
   description: string;
   tags: string[];
   artifactKinds: string[];      // e.g. ["skill","mcp"] — chip row
@@ -107,7 +108,7 @@ import type { RegistryGem } from "../types";
 import type { makeApi } from "../api";
 
 function toGem(r: RegistryGem): Gem {
-  return { key: r.key, version: r.version, author: r.author, description: r.description ?? "", tags: r.tags ?? [], artifactKinds: r.artifactKinds ?? [], cut: r.type, grade: r.grade, ingredients: [] };
+  return { key: r.key, version: r.version, author: r.author, publishedBy: r.publishedBy, description: r.description ?? "", tags: r.tags ?? [], artifactKinds: r.artifactKinds ?? [], cut: r.type, grade: r.grade, ingredients: [] };
 }
 
 /** Live registry gems, or the curated STATIC_GEMS when the registry is empty/unconfigured/errors. */

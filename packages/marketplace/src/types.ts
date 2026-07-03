@@ -6,6 +6,7 @@ export interface RegistryGem {
   tags?: string[];
   artifactKinds?: string[];
   type?: string;
+  publishedBy?: string;
   grade?: number;
   installable?: boolean;
 }

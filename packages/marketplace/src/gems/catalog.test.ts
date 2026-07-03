@@ -68,4 +68,14 @@ describe("cut threading", () => {
     expect(integrations.every((g) => g.cut === "integration")).toBe(true);
     expect(filterGems(gems, "", []).length).toBe(gems.length); // empty selection = all
   });
+  it("loadGems threads RegistryGem.publishedBy → Gem.publishedBy", async () => {
+    const live: RegistryGem = { key: "k", version: "1.0.0", description: "d", tags: [], artifactKinds: ["skill"], publishedBy: "rfeng" };
+    const [g] = await loadGems(apiWith(() => Promise.resolve([live])));
+    expect(g.publishedBy).toBe("rfeng");
+  });
+  it("a live gem with no publishedBy maps to an undefined Gem.publishedBy", async () => {
+    const live: RegistryGem = { key: "k", version: "1.0.0", description: "d", tags: [], artifactKinds: [] };
+    const [g] = await loadGems(apiWith(() => Promise.resolve([live])));
+    expect(g.publishedBy).toBeUndefined();
+  });
 });
