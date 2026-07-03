@@ -71,10 +71,12 @@ Reuse the `setConnectFnForTests` seam (in-process fake agent, no subprocess).
 - **Draft-gem mapper:** transcript + surfaced artifacts → expected Curate draft shape.
 - **SSE integration:** one end-to-end turn (fake agent that emits `agent_message_chunk` + a `tool_call`) emits the expected event sequence (mirrors the existing `sse.integration` style).
 
-## Live-validation risks
+## Live-validation risks — all resolved (see below)
 
+- **End-to-end — ✅ CONFIRMED 2026-07-02 (`scripts/smoke/chat-e2e.mjs`).** The full production path was driven with real components: `chatConnectFn` (`permission:"deny"`) → provisioned `agentgem-goldmine` stdio MCP server → real `claude-agent-acp`. The agent auto-called `mcp__agentgem-goldmine__search_sessions`, received real session data (`scanSessionsCached` over `~/.claude`), and produced a grounded answer (correctly identified the project, branch, models). The draft-a-Gem handoff ran and correctly dropped a name absent from the inventory (never-throw held). Verdict `PASS: true`.
+- **Graceful degradation — ✅ CONFIRMED 2026-07-02 (`scripts/smoke/chat-degrade.mjs`).** With the goldmine MCP bin pointed at a nonexistent path, the chat still answered from the pre-injected brief — no crash, no `failed` event. Verdict `PASS: true`.
 - **Adapter honors client MCP servers (PRIMARY RISK) — ✅ CONFIRMED 2026-07-02.** SDK v0.28.1 provisioning was verified end-to-end against the real `claude-agent-acp` (installed locally): the live smoke (`scripts/smoke/mcp-provision-smoke.mjs` + `echo-mcp.mjs`) provisioned a stdio echo MCP server via `buildSession(...).withMcpServer(...)`, and the agent called it (`mcp__echo__echo` → `echo: PONG42`). The true-hybrid path stands; no pivot to pre-inject-only needed. **Note:** Claude Code namespaces client MCP tools as `mcp__<serverName>__<toolName>` — so goldmine tools surface as `mcp__agentgem-goldmine__search_sessions` / `mcp__agentgem-goldmine__get_artifact_detail`; prompt the agent with these names and expect them in `tool_call` titles. `codex-acp` remains unverified (not installed) and degrades to pre-inject-only.
-- **Read-tool permission policy:** confirm read-only MCP tool calls proceed under the session's permission posture without a write-style prompt loop.
+- **Read-tool permission policy — ✅ CONFIRMED 2026-07-02.** Client-configured MCP tools fire under `permission:"deny"` (Claude Code auto-trusts configured MCP servers; it does not route them through `session/request_permission`). So the chat uses `permission:"deny"` — read tools work while file-write/shell permission prompts are denied (the read-mostly posture). Verified by the deny-variant smoke and the end-to-end run.
 - **Binary availability:** each backend needs its CLI installed to appear enabled in the picker; probe on PATH and grey out rather than fail on connect.
 - **stdio bridging** against the real adapters (already flagged as needing live validation in `acpSession.ts`).
 
