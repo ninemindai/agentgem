@@ -42,4 +42,18 @@ describe("Gem (detail)", () => {
     await screen.findByRole("heading", { name: /live-gem/ });
     expect((await screen.findAllByRole("button", { name: /star/i })).length).toBeGreaterThan(0);
   });
+
+  it("renders a linked @publishedBy byline to the profile", async () => {
+    const apiPub = { getGems: () => Promise.resolve([{ key: "pub-gem", version: "1.0.0", publishedBy: "rfeng", author: "acme", description: "d", tags: [], artifactKinds: ["skill"] }]), gemAdoption: () => Promise.resolve({}) } as never;
+    render(<Gem api={apiPub} keyName="pub-gem" stars={stars} />);
+    const link = (await screen.findByText("@rfeng")).closest("a");
+    expect(link?.getAttribute("href")).toBe("/@rfeng");
+  });
+
+  it("falls back to unlinked 'by {author}' when there is no publishedBy", async () => {
+    render(<Gem api={apiLive} keyName="live-gem" stars={stars} />); // apiLive gem: author 'acme', no publishedBy
+    await screen.findByRole("heading", { name: /live-gem/ });
+    expect(screen.getByText(/by acme/)).toBeTruthy();
+    expect(screen.queryByText("@acme")).toBeNull(); // author is NOT linked
+  });
 });

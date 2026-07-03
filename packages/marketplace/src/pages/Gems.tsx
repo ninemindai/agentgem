@@ -60,16 +60,19 @@ export function Gems({ api, stars }: { api: ReturnType<typeof makeApi>; stars: S
       <ul className="ex-gem-list">
         {visible.map((g) => (
           <li key={g.key} className="ex-gem-item">
-            <a className="ex-gem-card" href={"/gems/" + encodeURIComponent(g.key)}>
-              <span className="ex-gem-head">
-                <span className="ex-gem-key">{g.key}</span>
-                <CutBadge cut={g.cut} />
-                <StoneRating cut={g.cut} grade={g.grade} stars={starState.counts[g.key] ?? 0} installs={adoptions[g.key]?.installs ?? 0} verifiedInstalls={adoptions[g.key]?.verifiedInstalls ?? 0} />
-                <span className="ex-gem-kinds">{g.artifactKinds.map((k) => <span key={k} className="ex-chip">{kindLabel(k)}</span>)}</span>
-              </span>
-              <span className="ex-gem-desc">{g.description}</span>
-              <span className="ex-gem-tags">{g.tags.map((t) => <span key={t} className="ex-tag">#{t}</span>)}</span>
-            </a>
+            <div className="ex-gem-body">
+              <a className="ex-gem-card" href={"/gems/" + encodeURIComponent(g.key)}>
+                <span className="ex-gem-head">
+                  <span className="ex-gem-key">{g.key}</span>
+                  <CutBadge cut={g.cut} />
+                  <StoneRating cut={g.cut} grade={g.grade} stars={starState.counts[g.key] ?? 0} installs={adoptions[g.key]?.installs ?? 0} verifiedInstalls={adoptions[g.key]?.verifiedInstalls ?? 0} />
+                  <span className="ex-gem-kinds">{g.artifactKinds.map((k) => <span key={k} className="ex-chip">{kindLabel(k)}</span>)}</span>
+                </span>
+                <span className="ex-gem-desc">{g.description}</span>
+                <span className="ex-gem-tags">{g.tags.map((t) => <span key={t} className="ex-tag">#{t}</span>)}</span>
+              </a>
+              {g.publishedBy && <a className="ex-gem-author" href={"/@" + encodeURIComponent(g.publishedBy)}>@{g.publishedBy}</a>}
+            </div>
             <StarButton kind="gem" id={g.key} count={starState.counts[g.key] ?? 0} starred={starState.mine.includes(g.key)}
               signedIn={stars.signedIn} loginUrl={stars.loginUrl} api={stars.api} />
           </li>

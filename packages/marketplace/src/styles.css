@@ -354,5 +354,7 @@ h2, h3 { font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; }
 .ex-row-wrap { display: flex; align-items: center; gap: 8px; }
 .ex-row-wrap .ex-row { flex: 1 1 auto; min-width: 0; }
 .ex-gem-item { display: flex; align-items: flex-start; gap: 8px; }
-.ex-gem-item .ex-gem-card { flex: 1 1 auto; min-width: 0; }
+.ex-gem-item .ex-gem-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.ex-gem-author { align-self: flex-start; color: var(--muted); font-size: 0.8rem; text-decoration: none; }
+.ex-gem-author:hover { color: var(--brand); text-decoration: underline; }
 
