@@ -899,6 +899,9 @@ button.scorecard-intent { line-height: 1.4; }
   transition: border-color .15s ease, box-shadow .15s ease; }
 .list-filter::placeholder { color: #a99e87; }
 .list-filter:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
+.list-sort { padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px;
+  background: var(--raised); color: var(--ink-soft); font: 500 12.5px/1 var(--font-ui); cursor: pointer; }
+.list-sort:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
 .opt-prunable-only { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 13px; cursor: pointer; }
 .opt-prunable-only input { accent-color: var(--accent); }
 .opt-sel-savings { color: var(--ink-soft); font-size: 12.5px; }

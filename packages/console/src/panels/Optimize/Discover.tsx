@@ -56,7 +56,13 @@ export function DiscoverSection({ apiBase }: { apiBase: string }) {
   };
   const confirmInstall = () => { const cands = pending ?? []; setPending(null); void runInstall(cands); };
 
-  const installing = Object.values(status).some((s) => s.phase === "installing");
+  const stats = Object.values(status);
+  const installing = stats.some((s) => s.phase === "installing");
+  const doneCount = stats.filter((s) => s.phase === "done").length;
+  const failedCount = stats.filter((s) => s.phase === "error").length;
+  const summary = installing || doneCount || failedCount
+    ? `${installing ? "installing… · " : ""}${doneCount} installed${failedCount ? `, ${failedCount} failed` : ""}`
+    : null;
 
   return (
     <section className="opt-section">
@@ -83,9 +89,12 @@ export function DiscoverSection({ apiBase }: { apiBase: string }) {
             selectLabel={list.allSelected ? "Deselect all" : `Select all (${list.eligibleVisible.length})`}
             onSelectAll={list.toggleAll} selectDisabled={list.eligibleVisible.length === 0}
             actions={
-              <button className="obs-range-btn" onClick={() => setPending(list.selectedItems())} disabled={list.selected.size === 0 || pending !== null || installing}>
-                {`Install selected (${list.selected.size})`}
-              </button>
+              <>
+                <button className="obs-range-btn" onClick={() => setPending(list.selectedItems())} disabled={list.selected.size === 0 || pending !== null || installing}>
+                  {`Install selected (${list.selected.size})`}
+                </button>
+                {summary && <span className="opt-sel-savings">{summary}</span>}
+              </>
             }
           />
           {pending && (

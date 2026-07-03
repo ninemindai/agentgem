@@ -1,5 +1,5 @@
 // packages/console/src/panels/Optimize/Dashboard.tsx
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { fmtTokens } from "../Observe/data.js";
 import {
   disableArtifactsRoute, enableArtifactsRoute, makeClient,
@@ -26,6 +26,16 @@ function utcDay(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10);
 }
 
+type PruneSort = "recommended" | "context" | "uses" | "lastused";
+function sortRows(rows: OptimizeArtifact[], sort: PruneSort): OptimizeArtifact[] {
+  if (sort === "recommended") return rows;
+  const copy = [...rows];
+  if (sort === "context") copy.sort((a, b) => b.contextTokens - a.contextTokens);   // biggest savings first
+  else if (sort === "uses") copy.sort((a, b) => a.uses - b.uses);                    // least used first
+  else copy.sort((a, b) => (a.lastUsedMs ?? 0) - (b.lastUsedMs ?? 0));               // stalest (never) first
+  return copy;
+}
+
 export function Dashboard({ data, range, onRange, pending, onRefresh, onMutate, apiBase }: {
   data: OptimizePayload;
   range: OptimizeRange;
@@ -43,18 +53,35 @@ export function Dashboard({ data, range, onRange, pending, onRefresh, onMutate, 
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [prunableOnly, setPrunableOnly] = useState(false);
+  const [sort, setSort] = useState<PruneSort>("recommended");
 
-  const list = useSelectableList(data.artifacts, {
+  // Full prune rows stashed on disable so re-enable can repaint them into the prune
+  // table without a Refresh. Entries disabled in a prior session aren't stashed —
+  // those still need a Refresh to re-surface (we lack their token/use counts).
+  const stash = useRef<Map<string, OptimizeArtifact>>(new Map());
+
+  const pruneList = useSelectableList(data.artifacts, {
     keyOf: key,
     eligible,
     matches: (a, q) => a.name.toLowerCase().includes(q) || a.source.toLowerCase().includes(q) || a.type.toLowerCase().includes(q),
     extraFilter: (a) => !prunableOnly || a.prune,
   });
+  const sortedPrune = sortRows(pruneList.filtered, sort);
   // Savings for the current selection (across all artifacts, even ones filtered out of view).
-  const selectedSavings = list.selectedItems().reduce((acc, a) => acc + a.contextTokens, 0);
+  const selectedSavings = pruneList.selectedItems().reduce((acc, a) => acc + a.contextTokens, 0);
+
+  const disabledList = useSelectableList(data.disabled, {
+    keyOf: key,
+    matches: (d, q) => d.name.toLowerCase().includes(q) || d.source.toLowerCase().includes(q) || d.type.toLowerCase().includes(q),
+  });
+
+  const instrList = useSelectableList(data.instructions, {
+    keyOf: (i) => i.source + ":" + i.name,
+    matches: (i, q) => i.name.toLowerCase().includes(q) || i.source.toLowerCase().includes(q),
+  });
 
   const disableSelected = () => {
-    const chosen = list.selectedItems();
+    const chosen = pruneList.selectedItems();
     if (!chosen.length) return;
     const artifacts = chosen.map((a) => ({ type: a.type, name: a.name, source: a.source }));
     setBusy(true); setNote(null);
@@ -65,7 +92,8 @@ export function Dashboard({ data, range, onRange, pending, onRefresh, onMutate, 
         // Move only the ones the server confirmed disabled (result carries type+name).
         const okKeys = new Set(r.results.filter((x) => x.ok).map((x) => `${x.type}:${x.name}`));
         const moved = chosen.filter((a) => okKeys.has(`${a.type}:${a.name}`));
-        list.clear();
+        for (const a of moved) stash.current.set(key(a), a);   // remember full row for repaint on re-enable
+        pruneList.clear();
         if (moved.length) onMutate?.((p) => {
           const movedKeys = new Set(moved.map(key));
           return {
@@ -79,19 +107,27 @@ export function Dashboard({ data, range, onRange, pending, onRefresh, onMutate, 
       .finally(() => setBusy(false));
   };
 
-  const reEnable = (d: DisabledArtifact) => {
+  const reEnable = (items: DisabledArtifact[]) => {
+    if (!items.length) return;
     setBusy(true); setNote(null);
-    enableArtifactsRoute.call(makeClient(apiBase), { body: { artifacts: [{ type: d.type, name: d.name, source: d.source }] } })
+    enableArtifactsRoute.call(makeClient(apiBase), { body: { artifacts: items.map((d) => ({ type: d.type, name: d.name, source: d.source })) } })
       .then((r) => {
-        const f = r.results.find((x) => !x.ok);
-        setNote(f ? `${f.name}: ${f.message}` : null);
-        // Drop it from the Disabled list locally. Its prune-table row isn't
-        // reconstructible here (we lack token/use counts), so a Refresh re-scans
-        // to re-surface it if it's still unused.
-        if (!f) onMutate?.((p) => ({
-          ...p,
-          disabled: p.disabled.filter((x) => !(x.type === d.type && x.name === d.name && x.source === d.source)),
-        }));
+        const failed = r.results.filter((x) => !x.ok);
+        setNote(failed.length ? `${failed.length} failed: ${failed.map((f) => `${f.name} (${f.message})`).join("; ")}` : null);
+        const okKeys = new Set(r.results.filter((x) => x.ok).map((x) => `${x.type}:${x.name}`));
+        const restored = items.filter((d) => okKeys.has(`${d.type}:${d.name}`));
+        disabledList.clear();
+        if (restored.length) onMutate?.((p) => {
+          const restoredKeys = new Set(restored.map(key));
+          // Repaint any stashed rows back into the prune table; drop them from disabled.
+          const repaint = restored.map((d) => stash.current.get(key(d))).filter((a): a is OptimizeArtifact => !!a);
+          for (const d of restored) stash.current.delete(key(d));
+          return {
+            ...p,
+            artifacts: [...p.artifacts, ...repaint],
+            disabled: p.disabled.filter((x) => !restoredKeys.has(key(x))),
+          };
+        });
       })
       .catch((e) => setNote(String(e?.message ?? e)))
       .finally(() => setBusy(false));
@@ -115,22 +151,30 @@ export function Dashboard({ data, range, onRange, pending, onRefresh, onMutate, 
         <h3>Prune — installed but unused <span className="obs-muted">({prunable.length}, ~{fmtTokens(savings)} est. context saved)</span></h3>
         <p className="obs-muted opt-note">Context tokens are estimates (chars/4). Disable is reversible: plugins/MCP flip a config flag; skills relocate to <code>~/.agentgem/disabled/</code>. Re-enable below.</p>
         <ListControls
-          query={list.query} onQuery={list.setQuery} label="filter artifacts"
+          query={pruneList.query} onQuery={pruneList.setQuery} label="filter artifacts"
           placeholder="Filter by name, type, or source…"
-          selectLabel={list.allSelected ? "Deselect all" : `Select all (${list.eligibleVisible.length})`}
-          onSelectAll={list.toggleAll} selectDisabled={list.eligibleVisible.length === 0}
+          selectLabel={pruneList.allSelected ? "Deselect all" : `Select all (${pruneList.eligibleVisible.length})`}
+          onSelectAll={pruneList.toggleAll} selectDisabled={pruneList.eligibleVisible.length === 0}
           extras={
-            <label className="opt-prunable-only">
-              <input type="checkbox" checked={prunableOnly} onChange={(e) => setPrunableOnly(e.target.checked)} />
-              prunable only
-            </label>
+            <>
+              <label className="opt-prunable-only">
+                <input type="checkbox" checked={prunableOnly} onChange={(e) => setPrunableOnly(e.target.checked)} />
+                prunable only
+              </label>
+              <select className="list-sort" aria-label="sort artifacts" value={sort} onChange={(e) => setSort(e.target.value as PruneSort)}>
+                <option value="recommended">sort: recommended</option>
+                <option value="context">sort: est. context ↓</option>
+                <option value="uses">sort: uses ↑</option>
+                <option value="lastused">sort: last used ↑</option>
+              </select>
+            </>
           }
           actions={
             <>
-              <button className="obs-range-btn" onClick={disableSelected} disabled={busy || list.selected.size === 0}>
-                {busy ? "Working…" : `Disable selected (${list.selected.size})`}
+              <button className="obs-range-btn" onClick={disableSelected} disabled={busy || pruneList.selected.size === 0}>
+                {busy ? "Working…" : `Disable selected (${pruneList.selected.size})`}
               </button>
-              {list.selected.size > 0 && <span className="opt-sel-savings">~{fmtTokens(selectedSavings)} est. context freed</span>}
+              {pruneList.selected.size > 0 && <span className="opt-sel-savings">~{fmtTokens(selectedSavings)} est. context freed</span>}
               {note && <span className="obs-error" title={note}>{note}</span>}
             </>
           }
@@ -138,13 +182,13 @@ export function Dashboard({ data, range, onRange, pending, onRefresh, onMutate, 
         <table className="obs-table">
           <thead><tr><th></th><th>artifact</th><th>type</th><th>source</th><th>est. ctx</th><th>uses</th><th>last used</th><th>to disable</th></tr></thead>
           <tbody>
-            {list.filtered.length === 0 && (
+            {sortedPrune.length === 0 && (
               <tr><td colSpan={8} className="obs-muted">No artifacts match this filter.</td></tr>
             )}
-            {list.filtered.map((a) => (
-              <tr key={a.type + ":" + a.name} className={a.prune ? "opt-prune" : ""}>
+            {sortedPrune.map((a) => (
+              <tr key={key(a)} className={a.prune ? "opt-prune" : ""}>
                 <td>{eligible(a)
-                  ? <input type="checkbox" aria-label={`select ${a.name}`} checked={list.isSelected(a)} onChange={() => list.toggle(a)} />
+                  ? <input type="checkbox" aria-label={`select ${a.name}`} checked={pruneList.isSelected(a)} onChange={() => pruneList.toggle(a)} />
                   : null}</td>
                 <td>{a.name}</td>
                 <td><span className="obs-chip">{a.type}</span></td>
@@ -162,15 +206,30 @@ export function Dashboard({ data, range, onRange, pending, onRefresh, onMutate, 
       {data.disabled.length > 0 && (
         <section className="opt-section">
           <h3>Disabled <span className="obs-muted">({data.disabled.length}) · reversible</span></h3>
+          <ListControls
+            query={disabledList.query} onQuery={disabledList.setQuery} label="filter disabled"
+            placeholder="Filter disabled…"
+            selectLabel={disabledList.allSelected ? "Deselect all" : `Select all (${disabledList.eligibleVisible.length})`}
+            onSelectAll={disabledList.toggleAll} selectDisabled={disabledList.eligibleVisible.length === 0}
+            actions={
+              <button className="obs-range-btn" onClick={() => reEnable(disabledList.selectedItems())} disabled={busy || disabledList.selected.size === 0}>
+                {`Re-enable selected (${disabledList.selected.size})`}
+              </button>
+            }
+          />
           <table className="obs-table">
-            <thead><tr><th>artifact</th><th>type</th><th>source</th><th>re-enable</th></tr></thead>
+            <thead><tr><th></th><th>artifact</th><th>type</th><th>source</th><th>re-enable</th></tr></thead>
             <tbody>
-              {data.disabled.map((d) => (
-                <tr key={d.type + ":" + d.source + ":" + d.name}>
+              {disabledList.filtered.length === 0 && (
+                <tr><td colSpan={5} className="obs-muted">No disabled artifacts match this filter.</td></tr>
+              )}
+              {disabledList.filtered.map((d) => (
+                <tr key={key(d)}>
+                  <td><input type="checkbox" aria-label={`select ${d.name}`} checked={disabledList.isSelected(d)} onChange={() => disabledList.toggle(d)} /></td>
                   <td>{d.name}</td>
                   <td><span className="obs-chip">{d.type}</span></td>
                   <td className="obs-muted">{d.source}</td>
-                  <td><button className="obs-range-btn" disabled={busy} aria-label={`re-enable ${d.name}`} onClick={() => reEnable(d)}>Re-enable</button></td>
+                  <td><button className="obs-range-btn" disabled={busy} aria-label={`re-enable ${d.name}`} onClick={() => reEnable([d])}>Re-enable</button></td>
                 </tr>
               ))}
             </tbody>
@@ -180,10 +239,17 @@ export function Dashboard({ data, range, onRange, pending, onRefresh, onMutate, 
 
       <section className="opt-section">
         <h3>Instructions health <span className="obs-muted">global · loaded every session</span></h3>
+        <ListControls
+          query={instrList.query} onQuery={instrList.setQuery} label="filter instructions"
+          placeholder="Filter files…"
+        />
         <table className="obs-table">
           <thead><tr><th>file</th><th>source</th><th>est. ctx / session</th><th>lines</th><th>flags</th></tr></thead>
           <tbody>
-            {data.instructions.map((i) => (
+            {instrList.filtered.length === 0 && (
+              <tr><td colSpan={5} className="obs-muted">No files match this filter.</td></tr>
+            )}
+            {instrList.filtered.map((i) => (
               <tr key={i.source + ":" + i.name}>
                 <td>{i.name}</td>
                 <td className="obs-muted">{i.source}</td>

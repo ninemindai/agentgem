@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, waitFor, within } from "@testing-library/react";
+import { useState } from "react";
 import { Dashboard } from "./Dashboard.js";
 import type { OptimizePayload } from "../../api/routes.js";
 
@@ -83,5 +84,65 @@ describe("Prune disable actions", () => {
     expect(body).toEqual({ artifacts: [{ type: "skill", name: "old-skill", source: "standalone" }] });
     const next = onMutate.mock.calls[0][0](data);
     expect(next.disabled).toEqual([]);
+  });
+
+  it("sorts the prune table by est. context (desc) when selected", () => {
+    const data = payload({ artifacts: [
+      { name: "small", type: "skill", source: "standalone", contextTokens: 100, uses: 0, lastUsedMs: null, prune: true, change: { file: "f", key: "k" } },
+      { name: "big", type: "skill", source: "standalone", contextTokens: 900, uses: 0, lastUsedMs: null, prune: true, change: { file: "f", key: "k" } },
+    ] });
+    render(<Dashboard data={data} range="30d" onRange={() => {}} pending={false} onRefresh={() => {}} onMutate={() => {}} apiBase="" />);
+    fireEvent.change(screen.getByRole("combobox", { name: /sort artifacts/i }), { target: { value: "context" } });
+    const rows = screen.getAllByRole("row");
+    expect(within(rows[1]).getByText("big")).toBeTruthy();   // rows[0] is the header
+  });
+
+  it("batch re-enables the selected disabled rows", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(res({ results: [
+      { type: "skill", name: "a", ok: true, message: "restored" },
+      { type: "skill", name: "b", ok: true, message: "restored" },
+    ] }));
+    vi.stubGlobal("fetch", fetchMock);
+    const onMutate = vi.fn();
+    const data = payload({ artifacts: [], disabled: [
+      { type: "skill", name: "a", source: "standalone" },
+      { type: "skill", name: "b", source: "standalone" },
+    ] });
+    render(<Dashboard data={data} range="30d" onRange={() => {}} pending={false} onRefresh={() => {}} onMutate={onMutate} apiBase="" />);
+    fireEvent.click(screen.getByRole("button", { name: /select all \(2\)/i }));   // disabled list's select-all
+    fireEvent.click(screen.getByRole("button", { name: /re-enable selected \(2\)/i }));
+    await waitFor(() => expect(onMutate).toHaveBeenCalled());
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)).artifacts).toHaveLength(2);
+    const next = onMutate.mock.calls[0][0](data);
+    expect(next.disabled).toEqual([]);
+  });
+
+  it("re-enabling a just-disabled row repaints it into the prune table (no Refresh)", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(res({ results: [{ type: "skill", name: "old-skill", ok: true, message: "disabled" }] }))
+      .mockResolvedValueOnce(res({ results: [{ type: "skill", name: "old-skill", ok: true, message: "restored" }] }));
+    vi.stubGlobal("fetch", fetchMock);
+    function Harness() {
+      const [d, setD] = useState<OptimizePayload>(payload({ artifacts: [artifact()], disabled: [] }));
+      return <Dashboard data={d} range="30d" onRange={() => {}} pending={false} onRefresh={() => {}} onMutate={(fn) => setD((p) => fn(p))} apiBase="" />;
+    }
+    render(<Harness />);
+    fireEvent.click(screen.getByRole("checkbox", { name: /select old-skill/i }));
+    fireEvent.click(screen.getByRole("button", { name: /disable selected \(1\)/i }));
+    await screen.findByRole("heading", { name: /Disabled/i });                              // moved to disabled
+    fireEvent.click(screen.getByRole("button", { name: /re-enable old-skill/i }));
+    await waitFor(() => expect(screen.queryByRole("heading", { name: /Disabled/i })).toBeNull());  // disabled section gone
+    expect(screen.getByText("old-skill")).toBeTruthy();                                     // repainted into prune
+  });
+
+  it("filters the instructions health table", () => {
+    const data = payload({ instructions: [
+      { name: "CLAUDE.md", source: "global", contextTokens: 100, lines: 10, flags: [] },
+      { name: "AGENTS.md", source: "global", contextTokens: 50, lines: 5, flags: [] },
+    ] });
+    render(<Dashboard data={data} range="30d" onRange={() => {}} pending={false} onRefresh={() => {}} onMutate={() => {}} apiBase="" />);
+    fireEvent.change(screen.getByRole("searchbox", { name: /filter instructions/i }), { target: { value: "CLAUDE" } });
+    expect(screen.getByText("CLAUDE.md")).toBeTruthy();
+    expect(screen.queryByText("AGENTS.md")).toBeNull();
   });
 });
