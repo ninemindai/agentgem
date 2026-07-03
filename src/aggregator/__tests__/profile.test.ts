@@ -72,6 +72,15 @@ describe("buildProfile", () => {
     expect(p!.gems[0]).toMatchObject({ version: "2.0.0", description: "new" });
   });
 
+  it("dedupes deterministically when two versions share createdAtMs (version tiebreak)", async () => {
+    const db = await makeTestDb();
+    await db.insert(catalogGems).values({ gemKey: "@o/g", version: "1.0.0", publishedBy: "octocat", description: "one", createdAtMs: 5 });
+    await db.insert(catalogGems).values({ gemKey: "@o/g", version: "2.0.0", publishedBy: "octocat", description: "two", createdAtMs: 5 });
+    const p = await buildProfile(db, "octocat");
+    expect(p!.gems).toHaveLength(1);
+    expect(p!.gems[0]).toMatchObject({ version: "2.0.0", description: "two" }); // higher version wins the tie, deterministically
+  });
+
   it("is case-insensitive on login", async () => {
     const db = await makeTestDb();
     await db.insert(accounts).values({ id: randomUUID(), provider: "github", providerAccountId: "1", login: "OctoCat", avatarUrl: null });

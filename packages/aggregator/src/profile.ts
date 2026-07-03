@@ -47,11 +47,13 @@ export async function buildProfile(db: AppDb, rawLogin: string): Promise<Profile
   const verified = !!bind;
 
   // All published rows for this author, newest first → dedupe to the latest version per gemKey.
+  // Secondary sort on version keeps the pick deterministic when two versions share createdAtMs
+  // (a stability tiebreaker, not semver ordering).
   const rows = await db
     .select({ gemKey: catalogGems.gemKey, version: catalogGems.version, description: catalogGems.description, grade: catalogGems.grade })
     .from(catalogGems)
     .where(sql`lower(${catalogGems.publishedBy}) = lower(${login})`)
-    .orderBy(desc(catalogGems.createdAtMs));
+    .orderBy(desc(catalogGems.createdAtMs), desc(catalogGems.version));
   const latest = new Map<string, { gemKey: string; version: string; description: string | null; grade: number | null }>();
   for (const r of rows) if (!latest.has(r.gemKey)) latest.set(r.gemKey, r);
   const base = [...latest.values()];
