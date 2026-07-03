@@ -4,9 +4,9 @@
 // (filters catalog_gems), but keys off the gem's SCOPE rather than published_by, and returns an EMPTY
 // catalog (not null) for an unknown scope so the page shows a friendly empty state; null is reserved
 // for a malformed scope → the route maps that to 400.
-import { sql, desc } from "drizzle-orm";
+import { sql, desc, eq } from "drizzle-orm";
 import type { AppDb } from "./schema.js";
-import { catalogGems } from "./schema.js";
+import { catalogGems, accounts, accountScopes } from "./schema.js";
 import { starCounts } from "./stars.js";
 import { gemAdoption } from "./aggregates.js";
 import { computeGemRubric, type RubricResult } from "./orgRubric.js";
@@ -48,12 +48,31 @@ export async function buildOrgCatalog(db: AppDb, rawScope: string): Promise<OrgC
   for (const r of rows) if (!latest.has(r.gemKey)) latest.set(r.gemKey, r);
   const base = [...latest.values()];
 
-  const keys = base.map((g) => g.gemKey);
+  // Trust filter: a @scope/* gem is shown on this org's page only if its (server-derived) publisher
+  // actually owns `scope` — either it IS their own login (self-scope, always legitimate) or account_scopes
+  // records that they own it (their public GitHub org membership, the same gate the publish path uses via
+  // accountOwnsScope). Without this, anyone could share a @scope/* gem through recordCatalogShare — which
+  // does NOT verify scope ownership — and have it render under an official-looking org page. (PR #99 review
+  // finding #1; the write-path gap is tracked as a separate follow-up.) Self-scope is allowed without an
+  // account_scopes lookup so a bind-only user (no web sign-in → no captured scopes) still lists their own gems.
+  const scopeLc = scope.toLowerCase();
+  const owners = await db
+    .select({ login: accounts.login })
+    .from(accountScopes)
+    .innerJoin(accounts, eq(accountScopes.accountId, accounts.id))
+    .where(sql`lower(${accountScopes.scope}) = ${scopeLc}`);
+  const ownerSet = new Set(owners.map((o) => o.login.toLowerCase()));
+  const owned = base.filter((g) => {
+    const pub = g.publishedBy.toLowerCase();
+    return pub === scopeLc || ownerSet.has(pub);
+  });
+
+  const keys = owned.map((g) => g.gemKey);
   const starMap = await starCounts(db, "gem", keys); // guards keys.length === 0 internally
   const adoptRows = keys.length ? await gemAdoption(db, { keys }) : [];
   const adopt = new Map(adoptRows.map((a) => [a.gemKey, a]));
 
-  const gems: OrgCatalogGem[] = base
+  const gems: OrgCatalogGem[] = owned
     .map((g) => {
       const stars = starMap[g.gemKey] ?? 0;
       const installs = adopt.get(g.gemKey)?.installs ?? 0;

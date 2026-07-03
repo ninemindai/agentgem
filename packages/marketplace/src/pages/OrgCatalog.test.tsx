@@ -50,6 +50,25 @@ describe("OrgCatalog page", () => {
     expect(screen.getByText("@acme/beta")).toBeTruthy();
   });
 
+  it("filters by cut", async () => {
+    render(<OrgCatalog api={apiWith(cat([gem({ key: "@acme/skill1", cut: "skill" }), gem({ key: "@acme/kit1", cut: "kit" })]))} scope="acme" />);
+    await screen.findByText("@acme/skill1");
+    fireEvent.change(screen.getByLabelText(/filter by cut/i), { target: { value: "kit" } });
+    expect(screen.queryByText("@acme/skill1")).toBeNull();
+    expect(screen.getByText("@acme/kit1")).toBeTruthy();
+  });
+
+  it("reorders when toggling the grade↔stone sort", async () => {
+    // aaa: high grade, no stars; bbb: low grade, many stars → grade-sort and stone(stars)-sort disagree.
+    const gems = [gem({ key: "@acme/aaa", grade: 3, stars: 0 }), gem({ key: "@acme/bbb", grade: 1, stars: 30 })];
+    render(<OrgCatalog api={apiWith(cat(gems))} scope="acme" />);
+    await screen.findByText("@acme/aaa");
+    const order = () => Array.from(document.querySelectorAll(".ex-gem-key")).map((e) => e.textContent);
+    expect(order()).toEqual(["@acme/aaa", "@acme/bbb"]); // default: grade desc
+    fireEvent.change(screen.getByLabelText(/sort by/i), { target: { value: "stone" } });
+    expect(order()).toEqual(["@acme/bbb", "@acme/aaa"]); // stone: stars desc
+  });
+
   it("expands the rubric checklist on demand, showing how-to-fix for failing checks", async () => {
     render(<OrgCatalog api={apiWith(cat([gem({})]))} scope="acme" />);
     await screen.findByText("@acme/a");
