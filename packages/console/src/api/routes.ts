@@ -427,6 +427,13 @@ export const inspectSessionRoute = defineRoute("GET", "/api/inspect/session", {
 // one session, returning draft skills. Mirrors the server DistilledSkillSchema so a
 // draft round-trips back to /workflow/draft unchanged.
 const OccurrenceSchema = z.object({ sessionId: z.string(), transcript: z.string(), messageIndices: z.array(z.number()), atMs: z.number() });
+const TriggerContractSchema = z.object({
+  intent: z.string(),
+  triggers: z.array(z.string()),
+  antiTriggers: z.array(z.string()),
+  inputs: z.array(z.string()).optional(),
+  outputs: z.array(z.string()).optional(),
+});
 export const DistilledSkillSchema = z.object({
   name: z.string(),
   description: z.string(),
@@ -441,6 +448,7 @@ export const DistilledSkillSchema = z.object({
   status: z.literal("draft"),
   confidence: z.enum(["high", "medium", "low"]),
   origin: z.enum(["llm", "heuristic"]),
+  triggerContract: TriggerContractSchema.optional(),
 });
 export type DistilledSkill = z.infer<typeof DistilledSkillSchema>;
 export const DistilledLessonSchema = z.object({

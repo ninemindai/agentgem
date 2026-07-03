@@ -12,8 +12,8 @@ import { agentgemHome, writeJsonAtomic } from "@agentgem/model";
 const MAX_ENTRIES = 50;
 function cachePath(): string { return join(agentgemHome(), ".agentgem", "distill-cache.json"); }
 
-// d1 = { skills: DistilledSkill[], lessons: DistilledLesson[], degraded }.
-const TOKEN_VERSION = "d1";
+// d2 = d1 + optional DistilledSkill.triggerContract.
+const TOKEN_VERSION = "d2";
 
 /** version + transcript count + newest mtime — a new/updated session yields a new token. */
 export function distillToken(paths: string[]): string {

@@ -8,7 +8,7 @@ import {
   DeployTargetIdSchema, DeployReadyQuerySchema, DeployTargetsResponseSchema,
   RegistryResolveRequestSchema, RegistryInstallRequestSchema, RegistryPublishRequestSchema,
   GemArtifactSchema, SkippedArtifactSchema,
-  SkillArtifactSchema, TriggerContractSchema,
+  SkillArtifactSchema, TriggerContractSchema, DistilledSkillSchema,
 } from "../schemas.js";
 
 describe("wire schemas", () => {
@@ -220,5 +220,22 @@ describe("TriggerContract", () => {
       trigger: { intent: "i", triggers: ["t"], antiTriggers: [] },
     });
     expect(s.trigger?.intent).toBe("i");
+  });
+});
+
+describe("DistilledSkillSchema triggerContract", () => {
+  const base = {
+    name: "do-x", description: "d", triggers: ["t"], tools: [], mutating: false, body: "b",
+    evidence: { sessions: 1, exampleSequence: [], root: "/r", provenance: { occurrences: [] } },
+    status: "draft" as const, confidence: "medium" as const, origin: "llm" as const,
+  };
+  it("parses a distilled skill WITHOUT a trigger contract (backward-compat)", () => {
+    const s = DistilledSkillSchema.parse(base);
+    expect(s.triggerContract).toBeUndefined();
+  });
+  it("parses and preserves a trigger contract", () => {
+    const s = DistilledSkillSchema.parse({ ...base, triggerContract: { intent: "i", triggers: ["a"], antiTriggers: ["b"] } });
+    expect(s.triggerContract?.intent).toBe("i");
+    expect(s.triggerContract?.antiTriggers).toEqual(["b"]);
   });
 });

@@ -8,6 +8,7 @@
 // `skeleton: DistilledSkill` and distill.ts imports `extractCandidates`, which
 // would otherwise be a cycle. Pure types; no runtime code.
 import type { ProcedureGroup, SessionSequence } from "./workflowScan.js";
+import type { TriggerContract } from "@agentgem/model";
 
 // One source location a procedure/reflection was observed at. COORDINATES ONLY —
 // never raw message content (privacy boundary). `messageIndices` are JSONL line
@@ -58,6 +59,7 @@ export interface DistilledSkill {
   status: "draft";
   confidence: "high" | "medium" | "low";
   origin: "llm" | "heuristic";
+  triggerContract?: TriggerContract;
 }
 
 // A distilled LESSON: a salient learning rendered as draft instructions. Mirrors
