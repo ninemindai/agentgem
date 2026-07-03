@@ -194,15 +194,23 @@ function DistillSection({ apiBase, agent, sessionId, turns }: { apiBase: string;
   );
 }
 
-function DraftCard({ apiBase, draft }: { apiBase: string; draft: DistilledSkill }) {
+const splitList = (s: string): string[] => s.split(",").map((t) => t.trim()).filter(Boolean);
+
+export function DraftCard({ apiBase, draft }: { apiBase: string; draft: DistilledSkill }) {
   const [open, setOpen] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [intent, setIntent] = useState(draft.triggerContract?.intent ?? "");
+  const [triggersRaw, setTriggersRaw] = useState(draft.triggerContract?.triggers.join(", ") ?? "");
+  const [antiRaw, setAntiRaw] = useState(draft.triggerContract?.antiTriggers.join(", ") ?? "");
 
   const save = () => {
     setSaving(true); setErr(null);
-    workflowDraftRoute.call(makeClient(apiBase), { body: draft })
+    const body: DistilledSkill = draft.triggerContract
+      ? { ...draft, triggerContract: { intent: intent.trim(), triggers: splitList(triggersRaw), antiTriggers: splitList(antiRaw) } }
+      : draft;
+    workflowDraftRoute.call(makeClient(apiBase), { body })
       .then((r) => setSaved(r.path))
       .catch((e) => setErr(String(e?.message ?? e)))
       .finally(() => setSaving(false));
@@ -219,6 +227,13 @@ function DraftCard({ apiBase, draft }: { apiBase: string; draft: DistilledSkill 
       </div>
       <p className="tv-draft-desc">{draft.description}</p>
       {draft.tools.length > 0 && <div className="obs-muted tv-draft-tools">tools: {draft.tools.join(", ")}</div>}
+      {draft.triggerContract && (
+        <div className="tv-draft-triggers">
+          <label>intent <input aria-label="intent" value={intent} onChange={(e) => setIntent(e.target.value)} /></label>
+          <label>triggers <input aria-label="triggers" value={triggersRaw} onChange={(e) => setTriggersRaw(e.target.value)} placeholder="comma,separated" /></label>
+          <label>anti-triggers <input aria-label="anti-triggers" value={antiRaw} onChange={(e) => setAntiRaw(e.target.value)} placeholder="comma,separated" /></label>
+        </div>
+      )}
       <button type="button" className="tv-tool-head" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
         <span className={"obs-caret" + (open ? " open" : "")}>▸</span> body
       </button>
