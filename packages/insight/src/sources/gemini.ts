@@ -8,7 +8,7 @@
 // never reads `content`. Total: malformed lines are skipped, a malformed file yields null.
 import { readFile } from "node:fs/promises";
 import { readdirSync } from "node:fs";
-import { basename, join, relative, sep } from "node:path";
+import { basename, join, relative, sep, isAbsolute, resolve } from "node:path";
 import { classifyMcpServer } from "@agentgem/model";
 import type { GemArtifact } from "@agentgem/model";
 import type { SessionStat } from "../observeAggregate.js";
@@ -78,6 +78,34 @@ export async function scanGeminiSessions(files: string[]): Promise<SessionStat[]
     const s = parseGeminiSession(text, fallback, slugOf(f)); if (s) out.push(s);
   }
   return out;
+}
+
+// ── Watch capabilities ────────────────────────────────────────────────────────
+// parseMeta adapter: the (text, path) shape the Watch registry expects, deriving
+// the fallback session id from the filename and the project slug from the path.
+export function parseGeminiMeta(text: string, path: string): SessionStat | null {
+  const fallback = basename(path).replace(/^session-/, "").replace(/\.jsonl$/, "");
+  return parseGeminiSession(text, fallback, slugOf(path));
+}
+
+// Gemini's built-in file tools (write_file / replace) take an ABSOLUTE `file_path`,
+// so — like Codex — we resolve the touched *.html paths and let the file-driven
+// watcher render the real file, rather than reconstruct content from an uncertain
+// record shape. Keying on the arg field name is robust to however the CLI nests the
+// functionCall in a session record. (A richer detectArtifacts could parse write_file
+// `content` for deletion-survival once the record shape is pinned by a fixture.)
+const GEMINI_FILE_PATH = /"(?:file_path|absolute_path)"\s*:\s*"((?:[^"\\]|\\.)*\.html?)"/gi;
+
+export function resolveGeminiHtmlPaths(text: string): string[] {
+  const seen = new Set<string>();
+  const order: string[] = [];
+  for (const m of text.matchAll(GEMINI_FILE_PATH)) {
+    const p = m[1].replace(/\\(.)/g, "$1"); // unescape JSON string escapes (\/ , \\)
+    if (!isAbsolute(p)) continue;           // Gemini file tools use absolute paths
+    const abs = resolve(p);
+    if (!seen.has(abs)) { seen.add(abs); order.push(abs); }
+  }
+  return order;
 }
 
 // Artifact (authoring) face: GEMINI.md -> instructions, settings.json mcpServers -> mcp_server /
