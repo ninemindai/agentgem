@@ -272,9 +272,10 @@ const BindCompleteSchema = z.object({
   provider: z.string().optional(),
   login: z.string().optional(),
   accountId: z.string().optional(),
+  avatarUrl: z.string().optional(),
   rejected: z.string().optional(),
 });
-const BindStatusSchema = z.object({ bound: z.boolean(), login: z.string().optional(), provider: z.string().optional() });
+const BindStatusSchema = z.object({ bound: z.boolean(), login: z.string().optional(), provider: z.string().optional(), avatarUrl: z.string().optional() });
 
 let globalUsageRefreshing = false;
 

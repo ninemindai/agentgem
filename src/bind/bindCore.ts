@@ -46,7 +46,7 @@ export async function completeDeviceBind(
   cfg: BindConfig,
   args: { deviceCode: string; interval?: number },
   deps: CompleteDeps = {},
-): Promise<{ bound: true; provider: string; login: string; accountId: string } | { bound: false; rejected: string }> {
+): Promise<{ bound: true; provider: string; login: string; accountId: string; avatarUrl?: string } | { bound: false; rejected: string }> {
   if (!cfg.clientId || !cfg.base) return { bound: false, rejected: "not-configured" };
   const token = await (deps.poll ?? pollForToken)(cfg.clientId, args.deviceCode, { intervalSec: args.interval ?? 5 });
   const id = deps.identity ?? loadOrCreateIdentity();
@@ -57,23 +57,23 @@ export async function completeDeviceBind(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ pubkey: id.publicKey, token, signedAt, signature }),
   });
-  const out = (await res.json()) as { bound: boolean; provider?: string; login?: string; accountId?: string; rejected?: string };
+  const out = (await res.json()) as { bound: boolean; provider?: string; login?: string; accountId?: string; avatarUrl?: string; rejected?: string };
   if (!out.bound) return { bound: false, rejected: out.rejected ?? "unknown" };
   const dir = join(homedir(), ".agentgem");
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   writeFileSync(
     bindingPath(),
-    JSON.stringify({ provider: out.provider, login: out.login, accountId: out.accountId, boundAt: new Date().toISOString() }),
+    JSON.stringify({ provider: out.provider, login: out.login, accountId: out.accountId, avatarUrl: out.avatarUrl, boundAt: new Date().toISOString() }),
     { mode: 0o600 },
   );
-  return { bound: true, provider: out.provider!, login: out.login!, accountId: out.accountId! };
+  return { bound: true, provider: out.provider!, login: out.login!, accountId: out.accountId!, ...(out.avatarUrl ? { avatarUrl: out.avatarUrl } : {}) };
 }
 
-export function readBindingStatus(): { bound: boolean; login?: string; provider?: string } {
+export function readBindingStatus(): { bound: boolean; login?: string; provider?: string; avatarUrl?: string } {
   try {
     if (!existsSync(bindingPath())) return { bound: false };
-    const j = JSON.parse(readFileSync(bindingPath(), "utf8")) as { login?: string; provider?: string };
-    return j.login ? { bound: true, login: j.login, provider: j.provider } : { bound: false };
+    const j = JSON.parse(readFileSync(bindingPath(), "utf8")) as { login?: string; provider?: string; avatarUrl?: string };
+    return j.login ? { bound: true, login: j.login, provider: j.provider, ...(j.avatarUrl ? { avatarUrl: j.avatarUrl } : {}) } : { bound: false };
   } catch {
     return { bound: false };
   }

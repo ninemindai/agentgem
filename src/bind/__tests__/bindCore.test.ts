@@ -124,6 +124,18 @@ describe("completeDeviceBind", () => {
     expect(bindingRaw).not.toContain("tok-abc");
   });
 
+  it("persists and returns avatarUrl from the bind response", async () => {
+    const cfg = { clientId: "cid", base: "https://agg.example" };
+    const res = await completeDeviceBind(cfg, { deviceCode: "dc" }, {
+      poll: async () => "gh-token",
+      identity: fakeIdentity,
+      fetchImpl: jsonFetch({ bound: true, provider: "github", login: "octocat", accountId: "42", avatarUrl: "https://a/42.png" }),
+    });
+    expect(res).toMatchObject({ bound: true, login: "octocat", avatarUrl: "https://a/42.png" });
+    // written into the hermetic ~/.agentgem/binding.json and read back
+    expect(readBindingStatus()).toMatchObject({ bound: true, login: "octocat", avatarUrl: "https://a/42.png" });
+  });
+
   it("does NOT write binding.json on {bound:false}", async () => {
     // Remove any previous binding.json first
     const bindPath = join(homedir(), ".agentgem", "binding.json");
