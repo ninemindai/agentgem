@@ -72,7 +72,7 @@ describe("Prune disable actions", () => {
   });
 
   it("renders the Disabled section and re-enables a row locally", async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(res({ results: [{ type: "skill", name: "old-skill", ok: true, message: "restored" }] }));
+    const fetchMock = vi.fn().mockResolvedValueOnce(res({ results: [{ type: "skill", name: "old-skill", ok: true, message: "restored" }], artifacts: [] }));
     vi.stubGlobal("fetch", fetchMock);
     const onMutate = vi.fn();
     const data = payload({ disabled: [{ type: "skill", name: "old-skill", source: "standalone" }] });
@@ -81,7 +81,7 @@ describe("Prune disable actions", () => {
     fireEvent.click(screen.getByRole("button", { name: /re-enable old-skill/i }));
     await waitFor(() => expect(onMutate).toHaveBeenCalled());
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
-    expect(body).toEqual({ artifacts: [{ type: "skill", name: "old-skill", source: "standalone" }] });
+    expect(body).toEqual({ artifacts: [{ type: "skill", name: "old-skill", source: "standalone" }], range: "30d" });
     const next = onMutate.mock.calls[0][0](data);
     expect(next.disabled).toEqual([]);
   });
@@ -101,7 +101,7 @@ describe("Prune disable actions", () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(res({ results: [
       { type: "skill", name: "a", ok: true, message: "restored" },
       { type: "skill", name: "b", ok: true, message: "restored" },
-    ] }));
+    ], artifacts: [] }));
     vi.stubGlobal("fetch", fetchMock);
     const onMutate = vi.fn();
     const data = payload({ artifacts: [], disabled: [
@@ -117,22 +117,21 @@ describe("Prune disable actions", () => {
     expect(next.disabled).toEqual([]);
   });
 
-  it("re-enabling a just-disabled row repaints it into the prune table (no Refresh)", async () => {
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(res({ results: [{ type: "skill", name: "old-skill", ok: true, message: "disabled" }] }))
-      .mockResolvedValueOnce(res({ results: [{ type: "skill", name: "old-skill", ok: true, message: "restored" }] }));
+  it("repaints the server-returned row into the prune table on re-enable (prior-session, no Refresh)", async () => {
+    // old-skill was disabled in a PRIOR session: present in `disabled`, absent from `artifacts`
+    // and not in any client stash — the row can only come from the server's enable response.
+    const restoredRow = { name: "old-skill", type: "skill", source: "standalone", contextTokens: 400, uses: 0, lastUsedMs: null, prune: true, change: { file: "~/.claude/skills/old-skill", key: "remove" } };
+    const fetchMock = vi.fn().mockResolvedValueOnce(res({ results: [{ type: "skill", name: "old-skill", ok: true, message: "restored" }], artifacts: [restoredRow] }));
     vi.stubGlobal("fetch", fetchMock);
     function Harness() {
-      const [d, setD] = useState<OptimizePayload>(payload({ artifacts: [artifact()], disabled: [] }));
+      const [d, setD] = useState<OptimizePayload>(payload({ artifacts: [], disabled: [{ type: "skill", name: "old-skill", source: "standalone" }] }));
       return <Dashboard data={d} range="30d" onRange={() => {}} pending={false} onRefresh={() => {}} onMutate={(fn) => setD((p) => fn(p))} apiBase="" />;
     }
     render(<Harness />);
-    fireEvent.click(screen.getByRole("checkbox", { name: /select old-skill/i }));
-    fireEvent.click(screen.getByRole("button", { name: /disable selected \(1\)/i }));
-    await screen.findByRole("heading", { name: /Disabled/i });                              // moved to disabled
+    expect(screen.getByRole("heading", { name: /Disabled/i })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /re-enable old-skill/i }));
     await waitFor(() => expect(screen.queryByRole("heading", { name: /Disabled/i })).toBeNull());  // disabled section gone
-    expect(screen.getByText("old-skill")).toBeTruthy();                                     // repainted into prune
+    expect(screen.getByText("old-skill")).toBeTruthy();                                     // server row repainted into prune
   });
 
   it("filters the instructions health table", () => {

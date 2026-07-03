@@ -574,9 +574,12 @@ export const disableArtifactsRoute = defineRoute("POST", "/api/optimize/disable"
   body: z.object({ artifacts: z.array(DisableItemSchema) }),
   response: z.object({ results: z.array(DisableResultSchema) }),
 });
+// Enable returns the freshly-analyzed rows for the re-enabled artifacts so the client
+// repaints them into the prune table without a Refresh (works for prior-session rows,
+// which the client can't reconstruct). `range` scopes usage to the panel's view.
 export const enableArtifactsRoute = defineRoute("POST", "/api/optimize/enable", {
-  body: z.object({ artifacts: z.array(DisableItemSchema) }),
-  response: z.object({ results: z.array(DisableResultSchema) }),
+  body: z.object({ artifacts: z.array(DisableItemSchema), range: z.enum(["today", "7d", "30d", "all"]).optional() }),
+  response: z.object({ results: z.array(DisableResultSchema), artifacts: z.array(OptimizeArtifactSchema) }),
 });
 
 // ── Optimize ▸ Discover (Plan 2: registry recommendations) ──

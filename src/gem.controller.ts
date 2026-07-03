@@ -99,6 +99,16 @@ export const OptimizePayloadSchema = z.object({
     source: z.string(),
   })),
 });
+// Enable echoes the freshly-analyzed rows for the re-enabled artifacts so the client
+// repaints them into the prune table without a Refresh (covers rows disabled in a
+// prior session, which the client can't reconstruct locally). `range` scopes the
+// usage figures to match the panel's current view.
+const EnableBodySchema = DisableBodySchema.extend({
+  range: z.enum(["today", "7d", "30d", "all"]).optional(),
+});
+const EnableResponseSchema = DisableResponseSchema.extend({
+  artifacts: z.array(OptimizeArtifactSchema),
+});
 const DiscoverCandidateSchema = z.object({
   name: z.string(),
   source: z.string(),
@@ -466,9 +476,22 @@ export class GemController {
     return { results: disableArtifacts(input.body.artifacts) };
   }
 
-  @post("/optimize/enable", { body: DisableBodySchema, response: DisableResponseSchema })
-  async optimizeEnable(input: { body: z.infer<typeof DisableBodySchema> }): Promise<z.infer<typeof DisableResponseSchema>> {
-    return { results: enableArtifacts(input.body.artifacts) };
+  @post("/optimize/enable", { body: EnableBodySchema, response: EnableResponseSchema })
+  async optimizeEnable(input: { body: z.infer<typeof EnableBodySchema> }): Promise<z.infer<typeof EnableResponseSchema>> {
+    const results = enableArtifacts(input.body.artifacts);
+    // Which requested items actually came back (results carry type+name; recover the
+    // full source-aware key from the request so same-named artifacts don't collide).
+    const okTypeNames = new Set(results.filter((r) => r.ok).map((r) => `${r.type}:${r.name}`));
+    const okKeys = new Set(
+      input.body.artifacts.filter((a) => okTypeNames.has(`${a.type}:${a.name}`)).map((a) => `${a.type}:${a.source}:${a.name}`),
+    );
+    // Re-enabled artifacts are back in the inventory — build their fresh prune rows.
+    const now = Date.now();
+    const inv = introspectConfig();
+    const usage = await scanArtifactUsageCached(inv, now);
+    const payload = buildOptimizePayload(inv, usage, input.body.range ?? "30d", now);
+    const artifacts = payload.artifacts.filter((a) => okKeys.has(`${a.type}:${a.source}:${a.name}`));
+    return { results, artifacts };
   }
 
   @get("/scorecard", { query: DirQuerySchema, response: ScorecardSchema })

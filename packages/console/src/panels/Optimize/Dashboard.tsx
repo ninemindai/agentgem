@@ -1,5 +1,5 @@
 // packages/console/src/panels/Optimize/Dashboard.tsx
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { fmtTokens } from "../Observe/data.js";
 import {
   disableArtifactsRoute, enableArtifactsRoute, makeClient,
@@ -55,11 +55,6 @@ export function Dashboard({ data, range, onRange, pending, onRefresh, onMutate, 
   const [prunableOnly, setPrunableOnly] = useState(false);
   const [sort, setSort] = useState<PruneSort>("recommended");
 
-  // Full prune rows stashed on disable so re-enable can repaint them into the prune
-  // table without a Refresh. Entries disabled in a prior session aren't stashed —
-  // those still need a Refresh to re-surface (we lack their token/use counts).
-  const stash = useRef<Map<string, OptimizeArtifact>>(new Map());
-
   const pruneList = useSelectableList(data.artifacts, {
     keyOf: key,
     eligible,
@@ -92,7 +87,6 @@ export function Dashboard({ data, range, onRange, pending, onRefresh, onMutate, 
         // Move only the ones the server confirmed disabled (result carries type+name).
         const okKeys = new Set(r.results.filter((x) => x.ok).map((x) => `${x.type}:${x.name}`));
         const moved = chosen.filter((a) => okKeys.has(`${a.type}:${a.name}`));
-        for (const a of moved) stash.current.set(key(a), a);   // remember full row for repaint on re-enable
         pruneList.clear();
         if (moved.length) onMutate?.((p) => {
           const movedKeys = new Set(moved.map(key));
@@ -110,7 +104,7 @@ export function Dashboard({ data, range, onRange, pending, onRefresh, onMutate, 
   const reEnable = (items: DisabledArtifact[]) => {
     if (!items.length) return;
     setBusy(true); setNote(null);
-    enableArtifactsRoute.call(makeClient(apiBase), { body: { artifacts: items.map((d) => ({ type: d.type, name: d.name, source: d.source })) } })
+    enableArtifactsRoute.call(makeClient(apiBase), { body: { artifacts: items.map((d) => ({ type: d.type, name: d.name, source: d.source })), range } })
       .then((r) => {
         const failed = r.results.filter((x) => !x.ok);
         setNote(failed.length ? `${failed.length} failed: ${failed.map((f) => `${f.name} (${f.message})`).join("; ")}` : null);
@@ -119,12 +113,12 @@ export function Dashboard({ data, range, onRange, pending, onRefresh, onMutate, 
         disabledList.clear();
         if (restored.length) onMutate?.((p) => {
           const restoredKeys = new Set(restored.map(key));
-          // Repaint any stashed rows back into the prune table; drop them from disabled.
-          const repaint = restored.map((d) => stash.current.get(key(d))).filter((a): a is OptimizeArtifact => !!a);
-          for (const d of restored) stash.current.delete(key(d));
+          // Repaint the server's freshly-analyzed rows into the prune table (covers
+          // prior-session rows too); drop the re-enabled items from disabled.
+          const repaintKeys = new Set(r.artifacts.map(key));
           return {
             ...p,
-            artifacts: [...p.artifacts, ...repaint],
+            artifacts: [...p.artifacts.filter((a) => !repaintKeys.has(key(a))), ...r.artifacts],
             disabled: p.disabled.filter((x) => !restoredKeys.has(key(x))),
           };
         });
