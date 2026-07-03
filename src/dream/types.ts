@@ -18,7 +18,7 @@ export interface DreamQueueEntry {
   summary: string;
   confidence?: "high" | "medium" | "low"; // skills
   importance?: "high" | "medium";         // lessons
-  phase: "DEEP" | "REM";
+  phase: "DEEP" | "REM" | "LEARN";
   /** Full body for the Curate handoff (opaque to the queue). */
   draft: DistilledSkill | Reflection | PublishCandidate;
   status: DreamStatus;

@@ -32,7 +32,7 @@ const QueueItemSchema = z.object({
   summary: z.string(),
   confidence: z.enum(["high", "medium", "low"]).optional(),
   importance: z.enum(["high", "medium"]).optional(),
-  phase: z.enum(["DEEP", "REM"]),
+  phase: z.enum(["DEEP", "REM", "LEARN"]),
   status: z.enum(["queued", "accepted", "dismissed"]),
   firstSeenMs: z.number(),
   reviewedMs: z.number().optional(),

@@ -17,13 +17,13 @@ export function provenanceHash(p: Provenance): string {
   const sig = (p.occurrences ?? []).map((o) => `${o.sessionId}#${o.messageIndices.join(",")}`).sort().join("|");
   return createHash("sha1").update(sig).digest("hex").slice(0, 8);
 }
-export function harvestEntries(root: string, distilled: DistilledSkill[], reflections: Reflection[], nowMs: number): DreamQueueEntry[] {
+export function harvestEntries(root: string, distilled: DistilledSkill[], reflections: Reflection[], nowMs: number, phase: "DEEP" | "LEARN" = "DEEP"): DreamQueueEntry[] {
   const out: DreamQueueEntry[] = [];
   for (const s of distilled) {
     const h = provenanceHash(s.evidence.provenance);
     out.push({
       key: `skill:${root}:${s.name}:${h}`, kind: "skill", root, name: s.name,
-      summary: s.description, confidence: s.confidence, phase: "DEEP", draft: s,
+      summary: s.description, confidence: s.confidence, phase, draft: s,
       status: "queued", firstSeenMs: nowMs,
     });
   }
@@ -36,7 +36,7 @@ export function harvestEntries(root: string, distilled: DistilledSkill[], reflec
     const name = `${lesson.name}-${h}`;
     out.push({
       key: `lesson:${root}:${name}`, kind: "lesson", root, name,
-      summary: r.detail, importance: r.importance, phase: "DEEP", draft: r,
+      summary: r.detail, importance: r.importance, phase, draft: r,
       status: "queued", firstSeenMs: nowMs,
     });
   }
