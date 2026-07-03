@@ -4,11 +4,22 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const skillName = vi.hoisted(() => ({ current: "ai-engineer" }));
-vi.mock("@agentgem/distribute", () => ({
-  curatedSourceById: (id: string) => (id === "agency-agents" ? { id, kind: "agency-layout" } : undefined),
-  cfgForCuratedSource: () => ({}),
-  importAgencyAgentSkill: async () => ({ type: "skill", name: skillName.current, source: "agency-agents", content: "SKILL_BODY" }),
-}));
+// `assertSourcePath` is left as the REAL implementation (via importOriginal) so the path-guard
+// tests below exercise the actual kind-dispatch regexes, not a re-implementation of them here.
+// Only the source lookup / network import are faked.
+vi.mock("@agentgem/distribute", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@agentgem/distribute")>();
+  return {
+    ...actual,
+    curatedSourceById: (id: string) => {
+      if (id === "agency-agents") return { id, kind: "agency-layout" } as never;
+      if (id === "skills-source") return { id, kind: "skills-layout" } as never;
+      return undefined;
+    },
+    cfgForCuratedSource: () => ({}),
+    importSourceSkill: async () => ({ type: "skill", name: skillName.current, source: "agency-agents", content: "SKILL_BODY" }),
+  };
+});
 
 import { installAgencySkill } from "../sourcesCore.js";
 
@@ -46,5 +57,19 @@ describe("installAgencySkill", () => {
   it("rejects a skill name containing '/'", async () => {
     skillName.current = "foo/bar";
     await expect(installAgencySkill("agency-agents", "engineering/ai-engineer.md", { home })).rejects.toThrow(/Unsafe skill name/);
+  });
+
+  describe("dispatch by source.kind (skills-layout)", () => {
+    it("installs a skills-layout source's SKILL.md", async () => {
+      const r = await installAgencySkill("skills-source", "foo/SKILL.md", { home });
+      expect(r.skill).toBe("ai-engineer");
+      expect(readFileSync(join(home, ".agents", "skills", "ai-engineer", "SKILL.md"), "utf8")).toBe("SKILL_BODY");
+    });
+    it("rejects a path that isn't a SKILL.md for a skills-layout source", async () => {
+      await expect(installAgencySkill("skills-source", "foo/notaskill.md", { home })).rejects.toThrow(/Invalid skill path/);
+    });
+    it("rejects a traversal path for a skills-layout source", async () => {
+      await expect(installAgencySkill("skills-source", "../etc/SKILL.md", { home })).rejects.toThrow(/Invalid skill path/);
+    });
   });
 });

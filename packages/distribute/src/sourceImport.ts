@@ -1,0 +1,65 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
+// src/sourceImport.ts
+//
+// Dispatch-by-kind over the curated-source adapters (agencyAgents, skillsLayout) so the
+// controller/core layers (sources.controller.ts, sourcesCore.ts) treat every `CuratedSource`
+// uniformly regardless of its on-disk layout. Adding a third `kind` means adding one branch per
+// function here, not touching every call site.
+import type { SkillArtifact } from "@agentgem/model";
+import { InvalidInputError } from "@agentgem/model";
+import type { Http, GithubCfg } from "./registryGithub.js";
+import { defaultHttp } from "./githubContents.js";
+import type { CuratedSource } from "./curatedSources.js";
+import {
+  fetchAgencyDivisions,
+  listAgencyAgents,
+  fetchAgencyAgentEntry,
+  importAgencyAgentSkill,
+  type AgencyDivision,
+  type AgencyAgentEntry,
+} from "./agencyAgents.js";
+import {
+  fetchSkillsDivisions,
+  listSkillsAgents,
+  fetchSkillsEntry,
+  importSkillsSkill,
+  assertSkillsPath,
+} from "./skillsLayout.js";
+
+// Input containment: an agency-layout path is exactly "<division>/<file>.md" — bounds what we
+// fetch to the source repo's persona layout (a caller can't walk to arbitrary repo files or
+// traverse out; the repo itself is fixed per source). Moved here (from sources.controller.ts) so
+// both the controller and sourcesCore validate through the one `assertSourcePath` entry point.
+const AGENCY_PATH_RE = /^[a-z0-9-]+\/[A-Za-z0-9._-]+\.md$/;
+
+export function assertSourcePath(source: CuratedSource, path: string): string {
+  if (source.kind === "agency-layout") {
+    if (path.includes("..") || !AGENCY_PATH_RE.test(path)) throw new InvalidInputError(`Invalid agent path '${path}'.`);
+    return path;
+  }
+  return assertSkillsPath(path);
+}
+
+export function sourceDivisions(source: CuratedSource, cfg: GithubCfg, http: Http = defaultHttp): Promise<AgencyDivision[]> {
+  return source.kind === "agency-layout" ? fetchAgencyDivisions(cfg, http) : fetchSkillsDivisions(cfg, http);
+}
+
+export function sourceAgents(
+  source: CuratedSource,
+  division: string,
+  cfg: GithubCfg,
+  http: Http = defaultHttp,
+): Promise<{ division: string; slug: string; name: string; path: string }[]> {
+  return source.kind === "agency-layout" ? listAgencyAgents(division, cfg, http) : listSkillsAgents(division, cfg, http);
+}
+
+export function sourceEntry(source: CuratedSource, path: string, cfg: GithubCfg, http: Http = defaultHttp): Promise<AgencyAgentEntry> {
+  return source.kind === "agency-layout" ? fetchAgencyAgentEntry(path, cfg, http) : fetchSkillsEntry(path, cfg, http);
+}
+
+export function importSourceSkill(source: CuratedSource, path: string, cfg: GithubCfg, http: Http = defaultHttp): Promise<SkillArtifact> {
+  return source.kind === "agency-layout"
+    ? importAgencyAgentSkill(path, cfg, http)
+    : importSkillsSkill(path, cfg, http, source.id);
+}

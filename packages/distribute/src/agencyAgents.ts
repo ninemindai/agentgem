@@ -18,6 +18,7 @@
 // so public browsing needs no credentials (a token only lifts the 60/hr unauthenticated limit).
 import type { SkillArtifact } from "@agentgem/model";
 import type { Http, GithubCfg } from "./registryGithub.js";
+import { ghContents, decodeFile, defaultHttp, splitFrontmatter, fmField } from "./githubContents.js";
 
 export const AGENCY_AGENTS_REPO = { repo: "msitarzewski/agency-agents", ref: "main" } as const;
 
@@ -58,12 +59,6 @@ export interface AgencyAgentEntry {
   emoji?: string;
 }
 
-const API = "https://api.github.com";
-const defaultHttp: Http = async (url, init) => {
-  const res = await fetch(url, init as RequestInit);
-  return { status: res.status, text: () => res.text() };
-};
-
 export function agencyCfgFromEnv(): GithubCfg {
   return {
     repo: process.env.AGENCY_AGENTS_REPO ?? AGENCY_AGENTS_REPO.repo,
@@ -72,53 +67,7 @@ export function agencyCfgFromEnv(): GithubCfg {
   };
 }
 
-function ghHeaders(cfg: GithubCfg): Record<string, string> {
-  const h: Record<string, string> = { Accept: "application/vnd.github+json", "User-Agent": "agentgem" };
-  if (cfg.token) h.Authorization = `Bearer ${cfg.token}`;
-  return h;
-}
-
-interface ContentsEntry { name: string; path: string; type: "file" | "dir" }
-interface ContentsFile { content: string; encoding: string }
-
-// GET /repos/{repo}/contents/{path}?ref={ref}. A directory returns an array of entries; a file
-// returns a single base64 node. Path segments are encoded but "/" is kept as a separator.
-async function ghContents(http: Http, cfg: GithubCfg, path: string): Promise<ContentsEntry[] | ContentsFile> {
-  const p = encodeURIComponent(path).replace(/%2F/g, "/");
-  const url = `${API}/repos/${cfg.repo}/contents/${p}?ref=${encodeURIComponent(cfg.ref)}`;
-  const res = await http(url, { headers: ghHeaders(cfg) });
-  const body = await res.text();
-  if (res.status >= 300) throw new Error(`GitHub GET contents/${path} → ${res.status}: ${body}`);
-  return JSON.parse(body) as ContentsEntry[] | ContentsFile;
-}
-
-function decodeFile(node: ContentsFile): string {
-  // Contents API base64 is chunked with newlines; Buffer tolerates them.
-  return Buffer.from(node.content, node.encoding === "base64" ? "base64" : "utf8").toString("utf8");
-}
-
 // ── pure transforms (the tested core; no network) ──────────────────────────────
-
-// Split a leading `---\n…\n---` YAML block from the body. Returns the raw frontmatter text and
-// everything after it. No frontmatter → empty fm, whole input as body.
-export function splitFrontmatter(md: string): { fm: string; body: string } {
-  const m = md.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
-  if (!m) return { fm: "", body: md };
-  return { fm: m[1], body: md.slice(m[0].length) };
-}
-
-// Read a single scalar `key: value` from a frontmatter block. Strips matching surrounding
-// quotes (agency files quote e.g. `color: "#000000"`). Intentionally not a full YAML parser —
-// these files are flat scalar frontmatter.
-function fmField(fm: string, key: string): string | undefined {
-  const m = fm.match(new RegExp(`^${key}:[ \\t]*(.+?)[ \\t]*$`, "m"));
-  if (!m) return undefined;
-  let v = m[1].trim();
-  if (v.length >= 2 && ((v[0] === '"' && v.endsWith('"')) || (v[0] === "'" && v.endsWith("'")))) {
-    v = v.slice(1, -1);
-  }
-  return v || undefined;
-}
 
 export function parseAgentFrontmatter(md: string): { fm: AgencyFrontmatter; body: string } {
   const { fm, body } = splitFrontmatter(md);

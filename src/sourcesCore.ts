@@ -6,14 +6,15 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { mkdir, writeFile } from "node:fs/promises";
-import { curatedSourceById, cfgForCuratedSource, importAgencyAgentSkill } from "@agentgem/distribute";
+import { curatedSourceById, cfgForCuratedSource, assertSourcePath, importSourceSkill } from "@agentgem/distribute";
 import { InvalidInputError } from "@agentgem/model";
 
 const SKILL_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
-const AGENCY_PATH_RE = /^[a-z0-9-]+\/[A-Za-z0-9._-]+\.md$/;
 
 export interface InstallAgencyResult { ok: boolean; skill: string; dir: string; content: string }
 
+// Dispatches by `source.kind` (agency-layout vs skills-layout) via @agentgem/distribute's
+// sourceImport.ts — kept under the name `installAgencySkill` to avoid churn at call sites.
 export async function installAgencySkill(
   sourceId: string,
   path: string,
@@ -21,8 +22,7 @@ export async function installAgencySkill(
 ): Promise<InstallAgencyResult> {
   const source = curatedSourceById(sourceId);
   if (!source) throw new InvalidInputError(`Unknown curated source '${sourceId}'.`);
-  if (path.includes("..") || !AGENCY_PATH_RE.test(path)) throw new InvalidInputError(`Invalid agent path '${path}'.`);
-  const skill = await importAgencyAgentSkill(path, cfgForCuratedSource(source));
+  const skill = await importSourceSkill(source, assertSourcePath(source, path), cfgForCuratedSource(source));
   if (skill.name.includes("..") || !SKILL_NAME_RE.test(skill.name)) throw new InvalidInputError(`Unsafe skill name '${skill.name}'.`);
   const dir = join(opts.home ?? homedir(), ".agents", "skills", skill.name);
   if (!opts.dryRun) {

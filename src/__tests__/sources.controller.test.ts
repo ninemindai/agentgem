@@ -56,3 +56,24 @@ describe("input containment guards (checked before any fetch)", () => {
     await expect(c.agents({ query: { source, division: "Engineering!" } })).rejects.toThrow(/Invalid division/);
   });
 });
+
+// Path-guard shape is kind-specific (assertSourcePath dispatches on source.kind, in
+// @agentgem/distribute); these checks run before any fetch, so no network mocking is needed —
+// same style as the agency-layout guard tests above.
+describe("skills-layout dispatch (input containment guards)", () => {
+  const source = CURATED_SOURCES.find((s) => s.kind === "skills-layout")!.id;
+
+  it("has at least one skills-layout curated source", () => {
+    expect(source).toBeTruthy();
+  });
+
+  it("rejects a traversal path on import", async () => {
+    await expect(c.import({ body: { source, path: "../../etc/passwd" } })).rejects.toThrow(/Invalid skill path/);
+  });
+  it("rejects a non-SKILL.md path", async () => {
+    await expect(c.agent({ query: { source, path: "some-division/some-name/README.md" } })).rejects.toThrow(/Invalid skill path/);
+  });
+  it("rejects a bare filename with no directory segment", async () => {
+    await expect(c.agent({ query: { source, path: "SKILL.md" } })).rejects.toThrow(/Invalid skill path/);
+  });
+});
