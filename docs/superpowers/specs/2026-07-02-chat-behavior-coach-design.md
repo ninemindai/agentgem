@@ -47,7 +47,7 @@ Implementation: `allClaudeTranscripts(dirs.claudeDir)` → filter mtime within `
 
 ### 2. Brief teaser (`buildBrief` in `src/index.ts` + brief builder)
 
-`GoldmineBriefInput` (src/gem/goldmineContext.ts) gains an optional field:
+`GoldmineBriefInput` (packages/insight/src/goldmineContext.ts) gains an optional field:
 
 ```ts
 behavior?: { patterns: number; topTitle: string }  // omitted when no findings

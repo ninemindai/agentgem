@@ -62,7 +62,8 @@ export function collectBehaviorFindings(opts: BehaviorFindingsOptions = {}): Beh
     return {
       summary: summarizeFindings(findings, [...DETECTORS, ...ruleSpecs]),
       findings: [...findings].sort((a, b) => b.atMs - a.atMs).slice(0, MAX_FINDINGS),
-      scanned: { transcripts: paths.length, sessions: signal.sessions.scanned, days },
+      // sessions = sessions that retained ≥1 step (signal.sessions.scanned is just the transcript count)
+      scanned: { transcripts: paths.length, sessions: signal.sequences?.sessions.length ?? 0, days },
     };
   } catch (err) {
     console.error("[behavior] collectBehaviorFindings degraded:", (err as Error).message);

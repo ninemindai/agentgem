@@ -42,6 +42,7 @@ describe("collectBehaviorFindings", () => {
     ]);
     const r = collectBehaviorFindings({ dir: claudeDir, rulesDir: join(claudeDir, "no-rules"), now: () => NOW });
     expect(r.scanned.transcripts).toBe(1);
+    expect(r.scanned.sessions).toBe(1);   // the fixture session retained steps
     expect(r.findings.some((f) => f.detectorId === "retry-storm")).toBe(true);
     const storm = r.summary.find((s) => s.id === "retry-storm");
     expect(storm?.count).toBe(1);
@@ -89,8 +90,11 @@ describe("collectBehaviorFindings", () => {
   });
 
   it("clamps out-of-range options", () => {
-    const r = collectBehaviorFindings({ days: 9999, maxTranscripts: -5, dir: "/nonexistent/claude", rulesDir: "/nonexistent/rules", now: () => NOW });
-    expect(r.scanned.days).toBe(90);   // days clamped to 90
-    // maxTranscripts clamp to 1 is exercised implicitly (no throw, empty dir)
+    const { claudeDir, projDir } = makeClaudeDir();
+    writeTranscript(projDir, "a.jsonl", [bashLine("git status")], NOW - 2 * DAY);
+    writeTranscript(projDir, "b.jsonl", [bashLine("git status")], NOW - DAY);
+    const r = collectBehaviorFindings({ days: 9999, maxTranscripts: -5, dir: claudeDir, rulesDir: join(claudeDir, "no-rules"), now: () => NOW });
+    expect(r.scanned.days).toBe(90);        // days clamped to 90
+    expect(r.scanned.transcripts).toBe(1);  // maxTranscripts clamped to 1
   });
 });
