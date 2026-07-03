@@ -87,12 +87,14 @@ describe("streamGemVerify", () => {
     expect(evs[0].data.message).toMatch(/unknown or expired/i);
   });
 
-  it("emits agent-start before verdict even for unavailable agents", async () => {
-    // connectFn that throws for agents without test setup (unavailable adapter)
-    const unavailableAgent: RunConnectFn = async () => {
-      throw new Error("adapter not installed");
+  it("emits agent-start before verdict even when the agent run itself throws (failed verdict)", async () => {
+    // A throwing connectFn exercises the run-FAILURE path: with a test seam present the
+    // availability check is skipped, so this yields a "failed" verdict, not "unavailable"
+    // (the adapter-unavailable path runs only without a connectFn).
+    const throwingAgent: RunConnectFn = async () => {
+      throw new Error("boom mid-run");
     };
-    setRunConnectFnForTests(unavailableAgent);
+    setRunConnectFnForTests(throwingAgent);
     const verifyId = registerVerify({ gem, baseDir: join(home, "u"), roster: ["claude"], gemDigest: "sha:x", gemName: gem.name });
     const { res, events } = fakeRes();
     await streamGemVerify({ query: { verifyId } }, res);
