@@ -28,6 +28,7 @@ import { streamGemVerify } from "./gemVerifyStream.js";
 import { streamScorecard } from "./scorecardStream.js";
 import { streamInsights } from "./insightsStream.js";
 import { streamWatch } from "./watchStream.js";
+import { streamWatchEvents } from "./watchEvents.js";
 import { listActiveSessions } from "./watchSessions.js";
 import { registerChatRoutes, chatConnectFn, goldmineMcpServers } from "./goldmine/chatRoutes.js";
 import { collectBehaviorFindings } from "./goldmine/behaviorFindings.js";
@@ -217,6 +218,9 @@ export async function createApp(port: number): Promise<RestApplication> {
   server.expressApp.get("/api/watch/sessions", originGuard, (_req, res) =>
     res.json({ sessions: listActiveSessions() } as never));
   server.expressApp.get("/api/watch/stream", originGuard, (req, res) => streamWatch(req as never, res as never));
+  // Flavor A live feed: SSE-stream the same session's ordered SessionEvents (messages,
+  // tool_calls, tool_results) as it runs — the data layer for a CopilotKit-style feed.
+  server.expressApp.get("/api/watch/events", originGuard, (req, res) => streamWatchEvents(req as never, res as never));
   // Goldmine chat: REST + SSE endpoints for multi-turn agent chat grounded in the
   // user's session goldmine. One ChatManager per server process; idle sessions are
   // swept every 60 s. The neutral cwd for each chat session is a stable directory

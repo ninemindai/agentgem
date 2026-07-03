@@ -13,6 +13,7 @@ import type { AgentBinding, GemArtifact } from "@agentgem/model";
 import type { AgentId, SessionStat } from "./observeAggregate.js";
 import { listFiles, jsonLines, parseClaudeTranscript, parseCodexTranscript } from "./observeScan.js";
 import { detectHtmlArtifacts, type HtmlArtifactVersion } from "./artifactScan.js";
+import { claudeSessionEvents, codexSessionEvents, type SessionEvent } from "./inspectSession.js";
 import { resolveCodexHtmlPaths } from "./sources/codexArtifacts.js";
 import { scanClineSessions, readClineArtifacts, parseClineMeta, detectClineArtifacts } from "./sources/cline.js";
 import { scanGeminiSessions, readGeminiArtifacts, parseGeminiMeta, resolveGeminiHtmlPaths } from "./sources/gemini.js";
@@ -48,6 +49,8 @@ export interface SourceSpec {
   detectArtifacts?(text: string, path: string): HtmlArtifactVersion[];
   /** Absolute *.html paths the session touched, for the file-driven fallback. */
   resolveArtifactPaths?(text: string): string[];
+  /** Flatten a transcript into ordered, unfolded SessionEvents for the live feed. */
+  detectEvents?(text: string, path: string): SessionEvent[];
 }
 
 /** Sources that can drive the Watch tab (have discovery + at least one detector). */
@@ -72,6 +75,7 @@ const claudeSource: SourceSpec = {
   parseMeta: parseClaudeTranscript,
   // Claude's Write/Edit records carry the full document, so we reconstruct snapshots.
   detectArtifacts: (text) => detectHtmlArtifacts(jsonLines(text)),
+  detectEvents: claudeSessionEvents,
 };
 
 const codexSource: SourceSpec = {
@@ -84,6 +88,7 @@ const codexSource: SourceSpec = {
   // Codex mutates files via apply_patch/shell (diffs, not whole writes), so we only
   // resolve the touched *.html paths and let the live layer watch them on disk.
   resolveArtifactPaths: resolveCodexHtmlPaths,
+  detectEvents: codexSessionEvents,
 };
 
 // macOS globalStorage roots for VS Code + forks that host the Cline extension. baseDir overrides for tests.

@@ -40,6 +40,24 @@ export interface TranscriptView {
   turns: TranscriptTurn[];
 }
 
+// ── Live Watch feed: flat, append-only session events ───────────────────────
+// Unlike TranscriptTurn (which folds a tool_result INTO its tool_use span for the
+// static Inspect viewer), the live feed emits tool_call and tool_result as SEPARATE
+// ordered events: the result lands in a later transcript record, so keeping them
+// unfolded makes the streaming endpoint's count-based "emit only what's new" both
+// correct (a result is never dropped for arriving after its call) and trivial. The
+// frontend re-pairs a result with its call by toolId. Every string is scrubbed here,
+// same as the turn spans — the feed inherits the secret-safe boundary.
+export type SessionEventSpan =
+  | { kind: "message"; role: "user" | "assistant"; text: string }
+  | { kind: "tool_call"; toolId: string | null; name: string; input: string }
+  | { kind: "tool_result"; toolId: string | null; output: string; error: boolean };
+
+export interface SessionEvent {
+  tsMs: number;
+  span: SessionEventSpan;
+}
+
 // Verbatim-but-bounded: a single Read of a huge file would otherwise ship
 // megabytes per open (no cache, scrub-on-read). Cap each content string and mark
 // the cut so truncation is visible, not silent. Virtualization/lazy expansion is
@@ -199,6 +217,77 @@ function codexText(content: unknown): string {
     }).filter(Boolean).join("\n");
   }
   return "";
+}
+
+// Flatten a Claude transcript into ordered, unfolded SessionEvents — one pass over
+// records in file order. Message/thinking → message; tool_use → tool_call; a
+// tool_result (which lands in a LATER user record) → its own tool_result event,
+// paired downstream by toolId. Non-transcripts and unknown shapes degrade to [].
+export function claudeSessionEvents(text: string, path: string): SessionEvent[] {
+  const meta = parseClaudeTranscript(text, path);
+  if (!meta) return [];
+  const out: SessionEvent[] = [];
+  for (const rec of jsonLines(text)) {
+    const role = rec.type === "user" ? "user" : rec.type === "assistant" ? "assistant" : null;
+    if (!role) continue;
+    const msg = rec.message as Record<string, unknown> | undefined;
+    const tsMs = typeof rec.timestamp === "string" ? Date.parse(rec.timestamp) : NaN;
+    const at = Number.isNaN(tsMs) ? meta.startMs : tsMs;
+    const push = (span: SessionEventSpan) => out.push({ tsMs: at, span });
+
+    const content = msg?.content;
+    if (typeof content === "string") {
+      if (content.trim()) push({ kind: "message", role, text: scrubContent(content) });
+    } else if (Array.isArray(content)) {
+      for (const item of content) {
+        const it = item as Record<string, unknown>;
+        if (it.type === "text" && typeof it.text === "string") {
+          if (it.text.trim()) push({ kind: "message", role, text: scrubContent(it.text) });
+        } else if (it.type === "thinking" && typeof it.thinking === "string") {
+          if (it.thinking.trim()) push({ kind: "message", role, text: scrubContent(it.thinking) });
+        } else if (it.type === "tool_use" && typeof it.name === "string") {
+          push({ kind: "tool_call", toolId: typeof it.id === "string" ? it.id : null, name: it.name, input: scrubContent(it.input) });
+        } else if (it.type === "tool_result") {
+          push({ kind: "tool_result", toolId: typeof it.tool_use_id === "string" ? it.tool_use_id : null, output: scrubContent(resultText(it.content)), error: it.is_error === true });
+        } else if (typeof it.text === "string" && it.text.trim()) {
+          push({ kind: "message", role, text: scrubContent(it.text) });
+        }
+      }
+    }
+  }
+  return out;
+}
+
+// Flatten a Codex rollout into ordered, unfolded SessionEvents — mirror of the
+// Claude path over response_item payloads: message/reasoning → message;
+// function_call → tool_call; function_call_output → its own tool_result event.
+export function codexSessionEvents(text: string, path: string): SessionEvent[] {
+  const meta = parseCodexTranscript(text, path);
+  if (!meta) return [];
+  const out: SessionEvent[] = [];
+  for (const rec of jsonLines(text)) {
+    if (rec.type !== "response_item") continue;
+    const p = rec.payload as Record<string, unknown> | undefined;
+    if (!p) continue;
+    const tsMs = typeof rec.timestamp === "string" ? Date.parse(rec.timestamp) : NaN;
+    const at = Number.isNaN(tsMs) ? meta.startMs : tsMs;
+    const push = (span: SessionEventSpan) => out.push({ tsMs: at, span });
+
+    if (p.type === "message") {
+      const role = p.role === "user" ? "user" : "assistant";
+      const txt = codexText(p.content);
+      if (txt.trim()) push({ kind: "message", role, text: scrubContent(txt) });
+    } else if (p.type === "reasoning") {
+      const txt = codexText(p.summary ?? p.content);
+      if (txt.trim()) push({ kind: "message", role: "assistant", text: scrubContent(txt) });
+    } else if (p.type === "function_call" && typeof p.name === "string") {
+      push({ kind: "tool_call", toolId: typeof p.call_id === "string" ? p.call_id : null, name: p.name, input: scrubContent(p.arguments) });
+    } else if (p.type === "function_call_output") {
+      const output = resultText((p.output as Record<string, unknown>)?.content ?? p.output);
+      push({ kind: "tool_result", toolId: typeof p.call_id === "string" ? p.call_id : null, output: scrubContent(output), error: false });
+    }
+  }
+  return out;
 }
 
 /** Load + parse + scrub one session's transcript on demand. Resolves the file by
