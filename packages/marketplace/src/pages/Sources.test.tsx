@@ -38,4 +38,26 @@ describe("Sources page", () => {
     expect(writeText).toHaveBeenCalledWith("agentgem sources install agency-agents engineering/ai-engineer.md");
     expect(await screen.findByText("Copied!")).toBeTruthy();
   });
+
+  it("renders a source picker and switches sources", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+      const u = String(url);
+      if (u.includes("/api/sources/divisions")) {
+        const src = new URL(u, "http://x").searchParams.get("source");
+        const div = src === "matt-skills" ? { key: "productivity", label: "Productivity" } : { key: "engineering", label: "Engineering" };
+        return res({ divisions: [div] });
+      }
+      if (u.includes("/api/sources/agents")) return res({ agents: [] });
+      if (u.includes("/api/sources")) return res({ sources: [
+        { id: "agency-agents", label: "The Agency", description: "d", repo: "o/agency-agents", ref: "main", kind: "agency-layout" },
+        { id: "matt-skills", label: "mattpocock/skills", description: "d2", repo: "mattpocock/skills", ref: "main", kind: "skills-layout" },
+      ] });
+      throw new Error(`unexpected: ${u}`);
+    }));
+    render(<Sources api={makeApi("")} />);
+    const select = await screen.findByRole("combobox");
+    expect(await screen.findByText("Engineering")).toBeTruthy();   // first source's division
+    fireEvent.change(select, { target: { value: "matt-skills" } });
+    expect(await screen.findByText("Productivity")).toBeTruthy();  // switched source refetched
+  });
 });
