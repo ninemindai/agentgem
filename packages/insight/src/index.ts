@@ -4,6 +4,7 @@
 export * from "./workflowScan.js";
 export * from "./facets.js";
 export * from "./detectors.js";
+export * from "./detectorRules.js";
 export * from "./judgeSession.js";
 export * from "./insightsReport.js";
 export * from "./narrateInsights.js";
