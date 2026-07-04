@@ -658,7 +658,7 @@ export const benchmarksRoute = defineRoute("GET", "/api/aggregator/benchmarks", 
 
 // Identity binding: link the local key to a GitHub account via device-flow OAuth.
 export const bindStatusRoute = defineRoute("GET", "/api/bind/status", {
-  response: z.object({ bound: z.boolean(), login: z.string().optional(), provider: z.string().optional(), avatarUrl: z.string().optional() }),
+  response: z.object({ bound: z.boolean(), login: z.string().optional(), provider: z.string().optional(), avatarUrl: z.string().optional(), sessionActive: z.boolean().optional() }),
 });
 export const bindStartRoute = defineRoute("POST", "/api/bind/start", {
   // The server requires an (empty) object body; without a body schema the client

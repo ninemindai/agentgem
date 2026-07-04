@@ -109,11 +109,14 @@ export function clearBinding(): { bound: false } {
   return { bound: false };
 }
 
-export function readBindingStatus(): { bound: boolean; login?: string; provider?: string; avatarUrl?: string } {
+export function readBindingStatus(): { bound: boolean; login?: string; provider?: string; avatarUrl?: string; sessionActive?: boolean } {
   try {
     if (!existsSync(bindingPath())) return { bound: false };
     const j = JSON.parse(readFileSync(bindingPath(), "utf8")) as { login?: string; provider?: string; avatarUrl?: string };
-    return j.login ? { bound: true, login: j.login, provider: j.provider, ...(j.avatarUrl ? { avatarUrl: j.avatarUrl } : {}) } : { bound: false };
+    // sessionActive tells the UI whether a live first-party session exists (F4): the bind is
+    // ~permanent (verified-publishing provenance), but web SSO / Bearer calls need a session, which
+    // expires (30d) or may predate the session bridge. The UI gates "Open on the web" on this.
+    return j.login ? { bound: true, login: j.login, provider: j.provider, ...(j.avatarUrl ? { avatarUrl: j.avatarUrl } : {}), sessionActive: readSession() !== null } : { bound: false };
   } catch {
     return { bound: false };
   }

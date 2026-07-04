@@ -7,7 +7,7 @@ import {
 } from "../../api/routes.js";
 
 type Backend = { id: string; label: string; ready: boolean };
-type BindStatus = { bound: boolean; login?: string; provider?: string; avatarUrl?: string } | null;
+type BindStatus = { bound: boolean; login?: string; provider?: string; avatarUrl?: string; sessionActive?: boolean } | null;
 type BindFlow =
   | { step: "code"; userCode: string; verificationUri: string; verificationUriComplete?: string; deviceCode: string; interval?: number }
   | { step: "unconfigured" }
@@ -176,7 +176,9 @@ export function Settings({ apiBase }: { apiBase: string }) {
               )}
               Verified as @{bindStatus.login}
             </span>
-            <button type="button" className="ledger-build" onClick={openOnWeb}>Open on the web ↗</button>
+            {bindStatus.sessionActive
+              ? <button type="button" className="ledger-build" onClick={openOnWeb}>Open on the web ↗</button>
+              : <span className="ws-note">Session expired — Disconnect then Connect to sign in on the web</span>}
             <button type="button" className="ledger-view" onClick={disconnectGitHub}>Disconnect</button>
           </div>
         ) : (

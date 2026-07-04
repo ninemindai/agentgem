@@ -281,7 +281,7 @@ const BindCompleteSchema = z.object({
   expiresAt: z.string().optional(),
 });
 const WebHandoffSchema = z.object({ authenticated: z.boolean(), url: z.string().optional() });
-const BindStatusSchema = z.object({ bound: z.boolean(), login: z.string().optional(), provider: z.string().optional(), avatarUrl: z.string().optional() });
+const BindStatusSchema = z.object({ bound: z.boolean(), login: z.string().optional(), provider: z.string().optional(), avatarUrl: z.string().optional(), sessionActive: z.boolean().optional() });
 
 let globalUsageRefreshing = false;
 
