@@ -4,8 +4,9 @@ import type { PopularSkillGroup, PopularSkillItem } from "../types";
 import { formatCount } from "../data";
 import { StarButton } from "../StarButton";
 import { Modal } from "../Modal";
-import type { StarsCtx } from "../Router";
+import type { StarsCtx, ReviewsCtx } from "../Router";
 import type { StarState } from "../stars";
+import type { ReviewSummary } from "../reviews";
 
 // Lazily fetches a skill's SKILL.md via the existing import endpoint and renders it as
 // raw text (same as Sources.tsx — React escapes, no markdown dep). Own loading/error state.
@@ -47,11 +48,17 @@ function matches(g: PopularSkillGroup, s: PopularSkillItem, q: string): boolean 
     .join(" ").toLowerCase().includes(q);
 }
 
-export function PopularSkills({ api, stars }: { api: ReturnType<typeof makeApi>; stars: StarsCtx }) {
+// The card's review-aggregate keys on the concrete catalog skill (repo+path), NOT the star's
+// name id — a written review must not cross-attribute same-named skills across repos.
+const reviewTargetId = (sourceId: string, path: string) => `${sourceId}/${path}`;
+const skillHref = (sourceId: string, path: string) => `/skill/${encodeURIComponent(sourceId)}/${path}`;
+
+export function PopularSkills({ api, stars, reviews }: { api: ReturnType<typeof makeApi>; stars: StarsCtx; reviews: ReviewsCtx }) {
   const [groups, setGroups] = useState<PopularSkillGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [starState, setStarState] = useState<StarState>({ counts: {}, mine: [] });
+  const [reviewSummaries, setReviewSummaries] = useState<Record<string, ReviewSummary>>({});
   const [query, setQuery] = useState("");
   const [preview, setPreview] = useState<{ sourceId: string; path: string; name: string } | null>(null);
 
@@ -73,6 +80,14 @@ export function PopularSkills({ api, stars }: { api: ReturnType<typeof makeApi>;
     stars.api.get("ingredient", ids).then((s) => { if (alive) setStarState(s); });
     return () => { alive = false; };
   }, [groups, stars.api]);
+
+  useEffect(() => {
+    if (groups.length === 0) return;
+    let alive = true;
+    const ids = groups.flatMap((g) => g.skills.map((s) => reviewTargetId(g.sourceId, s.path)));
+    reviews.api.getSummaries("skill", ids).then((s) => { if (alive) setReviewSummaries(s); });
+    return () => { alive = false; };
+  }, [groups, reviews.api]);
 
   const q = query.trim().toLowerCase();
   const visible = useMemo(() => {
@@ -103,12 +118,18 @@ export function PopularSkills({ api, stars }: { api: ReturnType<typeof makeApi>;
             <div className="ex-skillcards">
               {g.skills.map((s) => {
                 const iid = skillIngredientId(s.name);
+                const summary = reviewSummaries[reviewTargetId(g.sourceId, s.path)];
                 return (
                   <div key={g.sourceId + "/" + s.path} className="ex-skillcard">
                     <StarButton kind="ingredient" id={iid} count={starState.counts[iid] ?? 0}
                       starred={starState.mine.includes(iid)} signedIn={stars.signedIn}
                       loginUrl={stars.loginUrl} api={stars.api} />
-                    <div className="ex-skillcard-name">{s.name}</div>
+                    <a className="ex-skillcard-name" href={skillHref(g.sourceId, s.path)}>{s.name}</a>
+                    {summary && summary.count > 0 && (
+                      <span className="ex-skillcard-rating" aria-label={`${summary.avg} of 5 from ${summary.count} reviews`}>
+                        ★ {summary.avg} · {summary.count}
+                      </span>
+                    )}
                     {s.description && <p className="ex-skillcard-desc">{s.description}</p>}
                     <a className="ex-skillcard-author" href={`https://github.com/${owner}`} target="_blank" rel="noreferrer">
                       by {owner}

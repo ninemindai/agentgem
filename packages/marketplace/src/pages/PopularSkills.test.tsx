@@ -6,6 +6,8 @@ import { makeApi } from "../api";
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 const res = (body: unknown) => ({ ok: true, status: 200, text: async () => JSON.stringify(body) }) as unknown as Response;
 const stars = { signedIn: false, loginUrl: () => "/login", api: { get: async () => ({ counts: {}, mine: [] }), toggle: async () => ({ starred: false, count: 0 }) } as never };
+const emptyReviews = { signedIn: false, loginUrl: () => "/login", api: { getSummaries: async () => ({}), get: async () => ({ summary: { avg: 0, count: 0 }, reviews: [], mine: null }), submit: async () => ({}), remove: async () => ({}) } as never };
+const reviews = emptyReviews;
 
 const groups = [
   {
@@ -25,7 +27,7 @@ const groups = [
 describe("PopularSkills", () => {
   it("renders each group's header (source + stars) and its skill cards (name, description, GitHub link)", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => res({ groups })));
-    render(<PopularSkills api={makeApi("")} stars={stars} />);
+    render(<PopularSkills api={makeApi("")} stars={stars} reviews={reviews} />);
 
     expect(await screen.findByText("The Agency")).toBeTruthy();
     expect(screen.getByText(/14\.4k/)).toBeTruthy();
@@ -45,7 +47,7 @@ describe("PopularSkills", () => {
 
   it("renders a per-card author byline linking to the repo owner", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => res({ groups })));
-    render(<PopularSkills api={makeApi("")} stars={stars} />);
+    render(<PopularSkills api={makeApi("")} stars={stars} reviews={reviews} />);
     const author = await screen.findByText("by mattpocock");
     expect(author.getAttribute("href")).toBe("https://github.com/mattpocock");
     expect(screen.getByText("by o")).toBeTruthy();
@@ -53,14 +55,14 @@ describe("PopularSkills", () => {
 
   it("renders a StarButton on each card after load", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => res({ groups })));
-    render(<PopularSkills api={makeApi("")} stars={stars} />);
+    render(<PopularSkills api={makeApi("")} stars={stars} reviews={reviews} />);
     await screen.findByText("ai-engineer");
     expect((await screen.findAllByRole("button", { name: /star/i }))).toHaveLength(2);
   });
 
   it("filters cards by the search box (name / author / tag)", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => res({ groups })));
-    render(<PopularSkills api={makeApi("")} stars={stars} />);
+    render(<PopularSkills api={makeApi("")} stars={stars} reviews={reviews} />);
     await screen.findByText("ai-engineer");
 
     fireEvent.change(screen.getByLabelText("search skills"), { target: { value: "brainstorm" } });
@@ -74,7 +76,7 @@ describe("PopularSkills", () => {
 
   it("shows a no-match empty state when nothing matches the query", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => res({ groups })));
-    render(<PopularSkills api={makeApi("")} stars={stars} />);
+    render(<PopularSkills api={makeApi("")} stars={stars} reviews={reviews} />);
     await screen.findByText("ai-engineer");
     fireEvent.change(screen.getByLabelText("search skills"), { target: { value: "zzzznotreal" } });
     expect(screen.getByText(/No skills match/)).toBeTruthy();
@@ -87,7 +89,7 @@ describe("PopularSkills", () => {
         ? res({ name: "brainstorming", content: "---\nname: brainstorming\n---\nUse when..." })
         : res({ groups }),
     ));
-    render(<PopularSkills api={makeApi("")} stars={stars} />);
+    render(<PopularSkills api={makeApi("")} stars={stars} reviews={reviews} />);
     const previewBtns = await screen.findAllByRole("button", { name: "Preview" });
     fireEvent.click(previewBtns[0]!);
     expect(await screen.findByRole("dialog")).toBeTruthy();
@@ -97,9 +99,21 @@ describe("PopularSkills", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
+  it("shows the review aggregate only when count>0, and links the card title to /skill/…", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => res({ groups })));
+    const withSummary = { ...emptyReviews, api: { ...(emptyReviews as any).api,
+      getSummaries: async () => ({ "matt-skills/productivity/brainstorming.md": { avg: 4.6, count: 12 } }) } } as never;
+    render(<PopularSkills api={makeApi("")} stars={stars} reviews={withSummary} />);
+    // brainstorming card has a summary; ai-engineer does not → only one aggregate on the board
+    expect(await screen.findByText("★ 4.6 · 12")).toBeTruthy();
+    expect(screen.getAllByText(/★ \d/).filter((el) => /·/.test(el.textContent ?? ""))).toHaveLength(1);
+    const title = screen.getByText("brainstorming");
+    expect(title.getAttribute("href")).toBe("/skill/matt-skills/productivity/brainstorming.md");
+  });
+
   it("shows the empty state when the index hasn't run yet", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => res({ groups: [] })));
-    render(<PopularSkills api={makeApi("")} stars={stars} />);
+    render(<PopularSkills api={makeApi("")} stars={stars} reviews={reviews} />);
     expect(await screen.findByText("No skills indexed yet.")).toBeTruthy();
   });
 });

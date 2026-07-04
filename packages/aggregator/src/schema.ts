@@ -110,6 +110,20 @@ export const stars = pgTable("stars", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Written user reviews (rating + prose) on a target. Generic (kind + text id), no FK to the
+// target — same shape as `stars`, but reviews carry content so they key on the concrete catalog
+// skill (kind "skill", id "<sourceId>/<path>"), NOT the lossy skill-name id stars use.
+export const reviews = pgTable("reviews", {
+  id: uuid("id").primaryKey(),
+  accountId: uuid("account_id").notNull().references(() => accounts.id),
+  targetKind: text("target_kind").notNull(),
+  targetId: text("target_id").notNull(),
+  rating: integer("rating").notNull(),
+  body: text("body"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const gemAdoptions = pgTable("gem_adoptions", {
   gemKey: text("gem_key").notNull(),
   gemDigest: text("gem_digest").notNull(),
@@ -158,7 +172,7 @@ export const curatedSkills = pgTable("curated_skills", {
   indexedAt: timestamp("indexed_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.sourceId, t.path] })]);
 
-export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, webSessions, handoffCodes, stars, gemAdoptions, accountScopes, catalogGems, curatedSkills };
+export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, webSessions, handoffCodes, stars, reviews, gemAdoptions, accountScopes, catalogGems, curatedSkills };
 export type AppDb = PgDatabase<any, typeof schema>;
 
 // Idempotent DDL. (Schema-as-tables above is the query source of truth; this DDL
@@ -180,6 +194,8 @@ export async function ensureSchema(db: AppDb): Promise<void> {
   await db.execute(sql`create table if not exists handoff_codes (code_hash text primary key, account_id uuid not null references accounts(id), expires_at timestamptz not null)`);
   await db.execute(sql`create table if not exists stars (id uuid primary key, account_id uuid not null references accounts(id), target_kind text not null, target_id text not null, created_at timestamptz not null default now(), unique (account_id, target_kind, target_id))`);
   await db.execute(sql`create index if not exists stars_target_idx on stars (target_kind, target_id)`);
+  await db.execute(sql`create table if not exists reviews (id uuid primary key, account_id uuid not null references accounts(id), target_kind text not null, target_id text not null, rating int not null check (rating between 1 and 5), body text check (body is null or char_length(body) <= 4000), created_at timestamptz not null default now(), updated_at timestamptz not null default now(), unique (account_id, target_kind, target_id))`);
+  await db.execute(sql`create index if not exists reviews_target_idx on reviews (target_kind, target_id)`);
   await db.execute(sql`create table if not exists gem_adoptions (gem_key text not null, gem_digest text not null, producer_pubkey text not null references producers(pubkey), account_login text, event text not null default 'install', adopted_at timestamptz not null default now(), trust_score real not null default 1, quarantined boolean not null default false, primary key (gem_key, producer_pubkey))`);
   await db.execute(sql`create table if not exists account_scopes (account_id uuid not null references accounts(id), scope text not null, primary key (account_id, scope))`);
   await db.execute(sql`create table if not exists catalog_gems (gem_key text not null, version text not null, published_by text not null, author text, description text, tags jsonb, artifact_kinds jsonb, type text, grade integer, created_at_ms bigint not null, primary key (gem_key, version))`);

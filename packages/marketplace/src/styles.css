@@ -410,6 +410,35 @@ h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: -0.005em
   .ex-modal-close { width: 44px; height: 44px; }
 }
 
+/* card name is now a link to the catalog-skill page; keep the name look */
+a.ex-skillcard-name { text-decoration: none; color: var(--ink); display: block; }
+a.ex-skillcard-name:hover { color: var(--brand-strong); }
+/* crowd review aggregate on the card — distinct from the personal ★ star pill (top-right) */
+.ex-skillcard-rating { align-self: flex-start; color: var(--brand-strong); font-size: 0.78rem; font-variant-numeric: tabular-nums; }
+
+/* Reviews section (catalog-skill page) */
+.ex-reviews-summary { color: var(--brand-strong); font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.ex-review-form { display: grid; gap: 8px; margin: 6px 0 18px; }
+.ex-review-form-label { font-size: 0.85rem; font-weight: 600; color: var(--ink-2); }
+.ex-review-textarea { font: inherit; font-size: 0.9rem; min-height: 80px; padding: 9px 11px; background: var(--surface-2); border: 1px solid var(--line-2); border-radius: var(--r-sm); resize: vertical; color: var(--ink); }
+.ex-review-textarea:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-wash); }
+.ex-review-form-actions { display: flex; align-items: center; gap: 14px; }
+.ex-rating-input { display: inline-flex; gap: 2px; }
+.ex-rating-star { font-size: 1.5rem; line-height: 1; min-width: 32px; min-height: 32px; color: var(--line-2); background: none; border: none; cursor: pointer; transition: color var(--t); }
+.ex-rating-star.is-on { color: var(--brand); }
+.ex-rating-star:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: var(--r-xs); }
+.ex-reviews-list { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 16px; }
+.ex-review { display: grid; gap: 4px; }
+.ex-review-meta { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; flex-wrap: wrap; }
+.ex-review-meta > a { color: var(--ink); font-weight: 600; text-decoration: none; }
+.ex-review-meta > a:hover { color: var(--brand-strong); }
+.ex-avatar { border-radius: 50%; }
+.ex-review-rating { color: var(--brand); letter-spacing: 1px; }
+.ex-review-edited { color: var(--muted); font-size: 0.72rem; font-style: italic; }
+.ex-review-date { color: var(--muted); font-size: 0.78rem; margin-left: auto; }
+.ex-review-body { margin: 0; color: var(--ink-2); font-size: 0.9rem; line-height: 1.5; white-space: pre-wrap; }
+@media (max-width: 520px) { .ex-rating-star { min-width: 44px; min-height: 44px; } }
+
 /* staggered card entrance — each group's cards cascade in on load */
 @keyframes ex-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 .ex-skillcard:nth-child(1) { animation-delay: 0.03s; }
