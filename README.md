@@ -62,6 +62,31 @@ call exactly the same thing.
 - **An agent-native path** — every operation is also an MCP tool, so your local agent can
   build Gems over `/mcp` with no browser involved.
 
+## A tour of the console
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="docs/screenshots/inspect.png" alt="Inspect — a usage dashboard over your local sessions: session/message/token totals, activity charts, a by-model breakdown, and an activity heatmap">
+      <p align="center"><b>Inspect</b> — a usage dashboard over your local sessions: totals, activity, and a by-model breakdown.</p>
+    </td>
+    <td width="50%">
+      <img src="docs/screenshots/mine.png" alt="Mine — AgentGem scores your session log as a goldmine: reusable workflows found, battle-tested ones, and ones worth sharing, with a shareable card">
+      <p align="center"><b>Mine</b> — your session log, scored: reusable workflows, battle-tested wins, and the ones worth sharing.</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="docs/screenshots/watch.png" alt="Watch — a live feed of a running coding session, with every message and tool call streaming in and content redacted before it reaches the panel">
+      <p align="center"><b>Watch</b> — a live feed of a running session (Claude Code, Codex, Gemini, …), redacted before it reaches the panel.</p>
+    </td>
+    <td width="50%">
+      <img src="docs/screenshots/curate.png" alt="Curate — compose a Gem from your machine's artifacts: skills ranked by real usage, with search, select, and materialize into a workspace">
+      <p align="center"><b>Curate</b> — compose a Gem from your artifacts, ranked by how often you actually use them.</p>
+    </td>
+  </tr>
+</table>
+
 ## Quickstart
 
 Needs Node.js ≥ 22. From the directory of the agent project you want to package,
