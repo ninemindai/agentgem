@@ -10,18 +10,22 @@ import { AggregatorController } from "../aggregator.controller.js";
 function row(over: Partial<CuratedSkillRow>): CuratedSkillRow {
   return {
     sourceId: "src", source: "Src Label", division: "root", name: "a", path: "a/SKILL.md",
-    repo: "owner/src", homepage: null, stars: 0, installs: null, ...over,
+    repo: "owner/src", homepage: null, stars: 0, installs: null, description: null, ...over,
   };
 }
 
 describe("AggregatorController.popularSkills", () => {
-  it("returns { skills: [...] } in the shared response shape, defaulting limit to 50", async () => {
+  it("returns { skills, groups } in the shared response shape, defaulting limit to 50", async () => {
     const db = await makeTestDb();
-    await upsertCuratedSkills(db, [row({ path: "a/SKILL.md", name: "a", repo: "owner/repo", homepage: "https://x", stars: 3, installs: 1 })]);
+    await upsertCuratedSkills(db, [row({ path: "a/SKILL.md", name: "a", repo: "owner/repo", homepage: "https://x", stars: 3, installs: 1, description: "does a things" })]);
     const c = new AggregatorController(db);
     const res = await c.popularSkills({ query: {} });
     expect(res).toEqual({
-      skills: [{ sourceId: "src", source: "Src Label", division: "root", name: "a", path: "a/SKILL.md", repo: "owner/repo", homepage: "https://x", stars: 3, installs: 1 }],
+      skills: [{ sourceId: "src", source: "Src Label", division: "root", name: "a", path: "a/SKILL.md", repo: "owner/repo", homepage: "https://x", stars: 3, installs: 1, description: "does a things" }],
+      groups: [{
+        sourceId: "src", source: "Src Label", repo: "owner/repo", homepage: "https://x", stars: 3,
+        skills: [{ name: "a", path: "a/SKILL.md", division: "root", description: "does a things", installs: 1 }],
+      }],
     });
   });
 
@@ -46,5 +50,19 @@ describe("AggregatorController.popularSkills", () => {
     const c = new AggregatorController(db);
     const res = await c.popularSkills({ query: { limit: 1 } });
     expect(res.skills).toHaveLength(1);
+  });
+
+  it("groups by source ordered by stars desc, honoring `sources` and `perSource`", async () => {
+    const db = await makeTestDb();
+    await upsertCuratedSkills(db, [
+      row({ sourceId: "hi", source: "Hi", repo: "o/hi", stars: 90, path: "a/SKILL.md", name: "a" }),
+      row({ sourceId: "hi", source: "Hi", repo: "o/hi", stars: 90, path: "b/SKILL.md", name: "b" }),
+      row({ sourceId: "lo", source: "Lo", repo: "o/lo", stars: 10, path: "c/SKILL.md", name: "c" }),
+    ]);
+    const c = new AggregatorController(db);
+    const res = await c.popularSkills({ query: { sources: 1, perSource: 1 } });
+    expect(res.groups).toHaveLength(1);
+    expect(res.groups[0]).toMatchObject({ sourceId: "hi", stars: 90 });
+    expect(res.groups[0]!.skills).toHaveLength(1);
   });
 });
