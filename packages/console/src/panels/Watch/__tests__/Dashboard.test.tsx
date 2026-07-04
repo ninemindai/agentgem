@@ -25,7 +25,10 @@ describe("Dashboard", () => {
   it("first render lands HTML in a sandboxed iframe; a11y region announces it", async () => {
     vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
     render(<Dashboard apiBase="" file="/w/s.jsonl" />);
-    expect(screen.getByText(/Reading the session/i)).toBeTruthy();
+    // A `rendering` burst must have fired before the "building" copy applies (quiet-session
+    // vs. waiting-for-first-render is disambiguated by that signal — see other tests below).
+    FakeES.last!.emit("rendering", {});
+    await waitFor(() => expect(screen.getByText(/Reading the session/i)).toBeTruthy());
     FakeES.last!.emit("render", { html: "<h1>alpha</h1>", version: 1 });
     // FakeES.emit() calls listeners directly (no DOM event, no act()) — React 19's scheduler
     // needs a macrotask to flush the resulting state update, so wait for it like every other
@@ -62,5 +65,33 @@ describe("Dashboard", () => {
     FakeES.last!.emit("failed", { message: "render failed" });
     await waitFor(() => expect(screen.getByText(/showing last render/i)).toBeTruthy());
     expect(frames().some((f) => f.getAttribute("srcdoc")?.includes("good"))).toBe(true);
+  });
+
+  it("quiet session: a phase event with no rendering/render shows the quiet-session copy, not the building copy", async () => {
+    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
+    render(<Dashboard apiBase="" file="/w/s.jsonl" />);
+    FakeES.last!.emit("phase", { phase: "idle", agent: "claude" });
+    await waitFor(() => expect(screen.getByText(/Quiet session/i)).toBeTruthy());
+    expect(screen.queryByText(/Reading the session/i)).toBeNull();
+  });
+
+  it("a rendering event (still no render) switches from quiet-session copy to the building copy", async () => {
+    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
+    render(<Dashboard apiBase="" file="/w/s.jsonl" />);
+    expect(screen.getByText(/Quiet session/i)).toBeTruthy();
+    FakeES.last!.emit("rendering", {});
+    await waitFor(() => expect(screen.getByText(/Reading the session/i)).toBeTruthy());
+    expect(screen.queryByText(/Quiet session/i)).toBeNull();
+  });
+
+  it("first-render failure shows the couldn't-render-yet state instead of leaving the waiting copy stuck", async () => {
+    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
+    render(<Dashboard apiBase="" file="/w/s.jsonl" />);
+    FakeES.last!.emit("rendering", {});
+    await waitFor(() => expect(screen.getByText(/Reading the session/i)).toBeTruthy());
+    FakeES.last!.emit("failed", { message: "render failed" });
+    await waitFor(() => expect(screen.getByText(/couldn't render yet/i)).toBeTruthy());
+    expect(screen.queryByText(/Reading the session/i)).toBeNull();
+    expect(screen.queryByText(/showing last render/i)).toBeNull();
   });
 });
