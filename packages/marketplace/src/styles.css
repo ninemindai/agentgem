@@ -493,13 +493,13 @@ h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: -0.005em
 }
 .ex-gem-card:hover { border-color: color-mix(in srgb, var(--brand) 32%, var(--line)); box-shadow: var(--shadow-lg); transform: translateY(-3px); }
 .ex-gem-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-.ex-gem-key { font-weight: 650; letter-spacing: -0.01em; font-size: 1.02rem; }
+.ex-gem-key { font-family: var(--display); font-weight: 650; letter-spacing: -0.01em; font-size: 1.02rem; }
 .ex-gem-kinds, .ex-gem-tags { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .ex-gem-desc { color: var(--ink-2); font-size: 0.9rem; line-height: 1.5; max-width: 68ch; }
 .ex-tag { color: var(--muted); font-size: 0.78rem; }
 
 /* ── Gem: detail ─────────────────────────────────────────────── */
-.ex-gem-title { font-size: 1.6rem; letter-spacing: -0.02em; margin: 0 0 4px; }
+.ex-gem-title { font-family: var(--display); font-size: 1.6rem; letter-spacing: -0.02em; margin: 0 0 4px; }
 .ex-gem-version { color: var(--muted); font-size: 0.62em; font-weight: 500; margin-left: 6px; font-variant-numeric: tabular-nums; }
 .ex-gem-meta { display: flex; gap: 10px; align-items: center; color: var(--ink-2); font-size: 0.9rem; margin: 0 0 12px; }
 .ex-gem-detail > .ex-gem-desc { font-size: 1rem; color: var(--ink-2); max-width: 70ch; margin: 0 0 10px; }
@@ -602,11 +602,15 @@ h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: -0.005em
 .ex-agent-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
 .ex-agent {
   display: flex; flex-direction: column; gap: 9px;
-  background: var(--surface); border: 1px solid var(--line);
+  background: linear-gradient(180deg, var(--surface), var(--surface-2));
+  border: 1px solid var(--line);
   border-radius: var(--r-lg); padding: 14px 16px;
+  box-shadow: var(--shadow);
+  transition: box-shadow var(--t) var(--ease), border-color var(--t) var(--ease), transform var(--t) var(--ease);
 }
+.ex-agent:hover { box-shadow: var(--shadow-md); border-color: color-mix(in srgb, var(--brand) 24%, var(--line)); }
 .ex-agent-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.ex-agent-name { font-weight: 600; font-size: 0.95rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ex-agent-name { font-family: var(--display); font-weight: 600; font-size: 0.95rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .ex-install { display: flex; align-items: flex-start; gap: 8px; }
 .ex-install .ex-install-cmd { flex: 1 1 auto; min-width: 0; }
 .ex-install-cmd {
