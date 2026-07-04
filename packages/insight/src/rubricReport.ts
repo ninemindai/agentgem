@@ -27,9 +27,16 @@ export interface RubricReport {
   clean: boolean;                 // no findings across the whole run (the success state)
   degraded: boolean;              // Phase 1 cheap-only: always false (Phase 2 sets it for LLM fallback)
   skippedFactors: { factor: string; reason: "unknown" | "llm-phase2" }[];
-  // Present at scope "session" or for session-granular rubrics (§Scope).
+  // Present at scope "session" or for session-granular rubrics (§Scope). Lists ONLY
+  // sessions that tripped a factor — a row per clean session explodes the payload at
+  // scope "all" (1900+ sessions); the aggregate `factors` already carries the clean
+  // picture. Capped at PER_SESSION_CAP with `perSessionTruncated` when there are more.
   perSession?: { sessionId: string; transcript: string; factors: DetectorSummary[] }[];
+  perSessionTruncated?: boolean;
 }
+
+// Max per-session rows returned; beyond this, perSessionTruncated is set (no silent cap).
+export const PER_SESSION_CAP = 200;
 
 export interface EvaluateOpts {
   scope: RubricScope;
@@ -109,10 +116,12 @@ export function evaluateRubric(signal: WorkflowSignal, rubric: Rubric, opts: Eva
       arr.push(f);
       bySession.set(f.sessionId, arr);
     }
-    report.perSession = (signal.sequences?.sessions ?? []).map((s) => ({
+    const withFindings = (signal.sequences?.sessions ?? []).filter((s) => bySession.has(s.sessionId));
+    report.perSessionTruncated = withFindings.length > PER_SESSION_CAP;
+    report.perSession = withFindings.slice(0, PER_SESSION_CAP).map((s) => ({
       sessionId: s.sessionId,
       transcript: s.transcript,
-      factors: summariesForSpecs(resolved, bySession.get(s.sessionId) ?? []),
+      factors: summariesForSpecs(resolved, bySession.get(s.sessionId)!),
     }));
   }
 

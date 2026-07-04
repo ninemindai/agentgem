@@ -37,13 +37,12 @@ describe("evaluateRubric (cheap factors, Phase 1)", () => {
     expect(r.sessionsScanned).toBe(2);
   });
 
-  it("populates perSession for a session-granular rubric, keyed to each transcript", () => {
+  it("perSession lists only sessions that tripped a factor (clean sessions omitted)", () => {
     const r = evaluateRubric(signalOf([A, B]), hygiene, { scope: { kind: "project", root: "/proj" } });
-    expect(r.perSession?.map((p) => p.sessionId)).toEqual(["A", "B"]);
+    expect(r.perSession?.map((p) => p.sessionId)).toEqual(["A"]);   // B is clean → not listed
     const aRetry = r.perSession!.find((p) => p.sessionId === "A")!.factors.find((f) => f.id === "retry-storm")!;
-    const bRetry = r.perSession!.find((p) => p.sessionId === "B")!.factors.find((f) => f.id === "retry-storm")!;
     expect(aRetry.count).toBeGreaterThanOrEqual(1);
-    expect(bRetry.count).toBe(0);
+    expect(r.perSessionTruncated).toBe(false);
   });
 
   it("is clean (success state) when nothing fires, still listing the checks", () => {
