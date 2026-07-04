@@ -20,6 +20,14 @@ describe("blocksToMarkdown", () => {
     expect(md).toContain("- one");
     expect(md).toContain("- two");
   });
+
+  it("collapses newlines in table cells so the row stays on one line", () => {
+    const md = blocksToMarkdown([
+      { kind: "table", head: ["why"], rows: [["line one\nline two"]] },
+    ]);
+    expect(md).toContain("| line one line two |");
+    expect(md).not.toContain("line one\nline two");
+  });
 });
 
 describe("blocksToHtml", () => {

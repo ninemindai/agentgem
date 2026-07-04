@@ -9,7 +9,7 @@ export type ReportBlock =
   | { kind: "list"; items: string[] };
 
 export function blocksToMarkdown(blocks: ReportBlock[]): string {
-  const esc = (s: string) => s.replace(/\|/g, "\\|"); // keep table cells valid
+  const esc = (s: string) => s.replace(/\s*\n\s*/g, " ").replace(/\|/g, "\\|"); // one-line, valid table cells
   const out: string[] = [];
   for (const b of blocks) {
     if (b.kind === "heading") out.push(`## ${b.text}`);
