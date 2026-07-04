@@ -41,10 +41,29 @@ export const RubricSummarySchema = z.object({
   naturalScope: z.enum(["session", "project", "all"]).optional(),
   factors: z.array(z.object({ factor: z.string(), weight: z.number().optional() })),
   criteria: z.array(z.looseObject({ id: z.string() })).optional(),
+  builtin: z.boolean().optional(),   // built-in rubrics can't be edited/deleted
 });
 export type RubricSummary = z.infer<typeof RubricSummarySchema>;
 export const rubricsRoute = defineRoute("GET", "/api/rubrics", {
   response: z.object({ rubrics: z.array(RubricSummarySchema) }),
+});
+
+// Authoring: validate (live preview) / save / delete user rubrics. The request body
+// is the candidate rubric object (arbitrary — the server validates and reports errors).
+export const RubricValidationSchema = z.object({
+  valid: z.boolean(),
+  error: z.string().optional(),
+  rubric: RubricSummarySchema.optional(),
+  factors: z.array(z.object({ factor: z.string(), kind: z.enum(["detector", "rule", "criterion", "unknown"]) })).optional(),
+  unknownFactors: z.array(z.string()).optional(),
+  saved: z.boolean().optional(),
+});
+export type RubricValidation = z.infer<typeof RubricValidationSchema>;
+export const validateRubricRoute = defineRoute("POST", "/api/rubrics/validate", { body: z.looseObject({}), response: RubricValidationSchema });
+export const saveRubricRoute = defineRoute("POST", "/api/rubrics", { body: z.looseObject({}), response: RubricValidationSchema });
+export const deleteRubricRoute = defineRoute("POST", "/api/rubrics/delete", {
+  body: z.object({ id: z.string() }),
+  response: z.object({ deleted: z.boolean(), error: z.string().optional() }),
 });
 export const usageRoute = defineRoute("GET", "/api/usage", {
   query: z.object({ scope: z.enum(["global"]).optional() }),

@@ -1055,3 +1055,19 @@ button.scorecard-intent { line-height: 1.4; }
 .rub-lib-factors { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
 .rub-lib-factors li { font: 12px/1.4 var(--font-mono); color: var(--ink-soft); }
 .rub-lib-factors code { background: var(--paper-2); padding: 1px 6px; border-radius: 6px; }
+
+/* Catalog authoring */
+.rub-lib-top { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+.rub-lib-top .analyze-intro { flex: 1; }
+.rub-del { color: var(--accent); }
+.rub-editor { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 12px; margin: 8px 0 12px;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--raised); padding: 12px; }
+.rub-editor-text { font: 12.5px/1.5 var(--font-mono); color: var(--ink); background: var(--paper);
+  border: 1px solid var(--line); border-radius: 7px; padding: 10px; resize: vertical; width: 100%; }
+.rub-editor-side { display: flex; flex-direction: column; gap: 6px; }
+.rub-editor-ok { color: var(--muted); font: 600 12px/1.4 var(--font-mono); margin: 0; }
+.rub-editor-actions { display: flex; gap: 8px; margin-top: auto; }
+.rub-kind { font: 600 9.5px/1.4 var(--font-mono); text-transform: uppercase; letter-spacing: .05em;
+  padding: 1px 6px; border-radius: 999px; background: var(--paper-2); color: var(--muted); }
+.rub-kind-unknown { background: rgba(154, 51, 36, .1); color: var(--accent); }
+.rub-kind-criterion { color: var(--ink-soft); }
