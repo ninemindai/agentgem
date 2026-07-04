@@ -84,6 +84,21 @@ export interface PopularSkill {
   stars: number;
   installs: number | null;
 }
+export interface PopularSkillItem {
+  name: string;
+  path: string;
+  division: string;
+  description: string | null;
+  installs: number | null;
+}
+export interface PopularSkillGroup {
+  sourceId: string;
+  source: string;
+  repo: string;
+  homepage: string | null;
+  stars: number;
+  skills: PopularSkillItem[];
+}
 export interface CuratedSource {
   id: string; label: string; description: string;
   repo: string; ref: string; kind: string;

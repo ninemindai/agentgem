@@ -1,5 +1,5 @@
 import type { AggIngredient, AggCoOccurrence, AdoptionPoint, RegistryGem, Profile, OrgCatalog,
-  CuratedSource, SourceDivision, SourceAgentRef, ImportedSkill, PopularSkill } from "./types";
+  CuratedSource, SourceDivision, SourceAgentRef, ImportedSkill, PopularSkill, PopularSkillGroup } from "./types";
 
 type Query = Record<string, string | number | undefined>;
 
@@ -19,6 +19,8 @@ export function makeApi(base: string) {
       get<AggIngredient[]>(base, "/api/aggregator/popularity", q),
     getPopularSkills: (limit?: number) =>
       get<{ skills: PopularSkill[] }>(base, "/api/aggregator/popular-skills", limit ? { limit } : {}).then((r) => r.skills),
+    getPopularSkillGroups: (sources = 12, perSource = 6) =>
+      get<{ groups: PopularSkillGroup[] }>(base, "/api/aggregator/popular-skills", { sources, perSource }).then((r) => r.groups),
     getCoOccurrence: (q: { id: string; limit?: number }) =>
       get<AggCoOccurrence[]>(base, "/api/aggregator/co-occurrence", q),
     getAdoption: (q: { id: string; bucket?: "week" | "month" }) =>

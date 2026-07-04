@@ -21,7 +21,7 @@ function stubFetch() {
     vi.fn(async (url: string) => {
       if (url.includes("/co-occurrence")) return res([]);
       if (url.includes("/adoption")) return res([]);
-      if (url.includes("/popular-skills")) return res({ skills: [] });
+      if (url.includes("/popular-skills")) return res({ skills: [], groups: [] });
       return res(popularityRow);
     }),
   );
@@ -79,7 +79,7 @@ describe("App link interceptor", () => {
   it("shows a Sign in link when unauthenticated", async () => {
     vi.stubGlobal("fetch", vi.fn(async (u: string) => {
       if (u.includes("/api/auth/me")) return res({ authenticated: false });
-      if (u.includes("/popular-skills")) return res({ skills: [] });
+      if (u.includes("/popular-skills")) return res({ skills: [], groups: [] });
       return res([]); // leaderboard / other reads
     }));
     render(<App />);
@@ -90,7 +90,7 @@ describe("App link interceptor", () => {
   it("shows the login + Sign out when authenticated", async () => {
     vi.stubGlobal("fetch", vi.fn(async (u: string) => {
       if (u.includes("/api/auth/me")) return res({ login: "octocat", avatarUrl: null });
-      if (u.includes("/popular-skills")) return res({ skills: [] });
+      if (u.includes("/popular-skills")) return res({ skills: [], groups: [] });
       return res([]);
     }));
     render(<App />);
