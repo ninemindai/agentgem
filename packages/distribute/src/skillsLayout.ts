@@ -44,6 +44,13 @@ function divisionOf(path: string): string {
   return parts.at(-2) ?? "root";
 }
 
+// A {division,name,path} ref for a bare SKILL.md path with no extra network call — used by
+// sourceImport.ts's listSourceSkills to derive every skill's ref from one listSkillMd() tree
+// listing, instead of listSkillsAgents' per-division re-fetch.
+export function skillRefFromPath(path: string): { division: string; name: string; path: string } {
+  return { division: divisionOf(path), name: nameOf(path), path };
+}
+
 // Title-case a division key as a fallback label ("game-development" → "Game Development").
 function titleCase(key: string): string {
   return key.split(/[-_]/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");

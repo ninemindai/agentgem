@@ -40,7 +40,8 @@ Sharing a Gem (store-and-forward over NATS; set $NATS_URL, default nats://127.0.
   agentgem warm --uninstall-service     Remove the OS unit
   agentgem verify <archive-dir>         Verify a .gem archive across local agents (--agents claude,codex; --fetch)
   agentgem learn [root]                 Distill the latest session into the review queue (--session <id>; --dir <claude-home>)
-  agentgem sources install <src> <path>  Install a curated persona as a local skill (--dry-run)`;
+  agentgem sources install <src> <path>  Install a curated persona as a local skill (--dry-run)
+  agentgem index-sources                 Index curated sources' skills + GitHub stars (Popular Skills board)`;
 
 async function main(argv: string[]): Promise<void> {
   const has = (...names: string[]) => names.some((n) => argv.includes(n));
@@ -100,6 +101,14 @@ async function main(argv: string[]): Promise<void> {
   if (argv[0] === "sources") {
     const { runSourcesCommand } = await import("./sourcesCli.js");
     process.exitCode = await runSourcesCommand(argv.slice(1));
+    return;
+  }
+
+  // `agentgem index-sources` — index curated sources' skills + GitHub stars into curated_skills
+  // (the DB behind the marketplace "Popular Skills" board).
+  if (argv[0] === "index-sources") {
+    const { runIndexSourcesCommand } = await import("./indexSourcesCli.js");
+    process.exitCode = await runIndexSourcesCommand();
     return;
   }
 
