@@ -50,6 +50,29 @@
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
 
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg:        #16130e;
+  --surface:   #201c15;
+  --surface-2: #292319;
+  --ink:       #f1ece2;
+  --ink-2:     #c3bbac;
+  --muted:     #938a7b;
+  --line:      #342d22;
+  --line-2:    #43392c;
+  --brand:        #db7d5f;   /* terracotta lightened for dark bg */
+  --brand-strong: #e79b80;   /* links / hover on dark */
+  --brand-wash:   #2e1c14;
+  --verified:     #63b06f;
+  --verified-wash:#17281a;
+  --gold:      #e0b256;
+  --gold-2:    #edc06a;
+  --gold-wash: #2c2412;
+  --shadow:     0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md:  0 2px 6px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-lg:  0 12px 34px -12px rgba(0, 0, 0, 0.6), 0 3px 10px -4px rgba(0, 0, 0, 0.5);
+}
+
 * { box-sizing: border-box; }
 
 html { -webkit-text-size-adjust: 100%; }
@@ -70,6 +93,15 @@ body {
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+:root[data-theme="dark"] body {
+  background:
+    radial-gradient(120% 80% at 12% -8%, rgba(219, 125, 95, 0.12), transparent 55%),
+    radial-gradient(90% 70% at 100% 0%, rgba(224, 178, 86, 0.10), transparent 50%),
+    radial-gradient(70% 60% at 50% 120%, rgba(99, 176, 111, 0.07), transparent 60%),
+    var(--bg);
+  background-attachment: fixed;
 }
 
 a { color: var(--brand-strong); }
@@ -139,6 +171,19 @@ h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: -0.005em
 .ex-me:hover .ex-login { color: var(--ink); }
 .ex-avatar { width: 22px; height: 22px; border-radius: var(--r-pill); border: 1px solid var(--line); }
 .ex-login { font-size: 0.875rem; color: var(--ink-2); font-weight: 500; }
+
+.ex-theme-toggle {
+  font-size: 0.95rem;
+  line-height: 1;
+  color: var(--ink-2);
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  padding: 5px 9px;
+  cursor: pointer;
+  transition: color var(--t), background var(--t), border-color var(--t);
+}
+.ex-theme-toggle:hover { color: var(--brand-strong); border-color: color-mix(in srgb, var(--brand) 30%, var(--line-2)); }
 
 .ex-main { width: 100%; max-width: var(--content); margin: 0 auto; padding: clamp(20px, 4vw, 40px) clamp(16px, 5vw, 40px) 72px; flex: 1; }
 
@@ -583,7 +628,7 @@ h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: -0.005em
 /* ── Touch: comfortable ≥44px hit areas on touch devices (WCAG 2.5.5) ── */
 @media (pointer: coarse) {
   .ex-navlink, .ex-tab, .ex-bucket-btn, .ex-copy, .ex-signin, .ex-signout, .ex-btn,
-  .ex-star, .ex-cut-toggle, .ex-rubric-toggle, .ex-divisions .ex-chip {
+  .ex-star, .ex-cut-toggle, .ex-rubric-toggle, .ex-divisions .ex-chip, .ex-theme-toggle {
     min-height: 44px;
     display: inline-flex;
     align-items: center;

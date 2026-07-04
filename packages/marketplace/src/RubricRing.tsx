@@ -11,7 +11,7 @@ export function RubricRing({ checks }: { checks: RubricCheck[] }) {
       className="ex-rubric-ring"
       title={label}
       aria-label={label}
-      style={{ background: `conic-gradient(#3a7d44 ${pct}%, #e6e8eb ${pct}%)` }}
+      style={{ background: `conic-gradient(var(--verified) ${pct}%, var(--line-2) ${pct}%)` }}
     >
       <span className="ex-rubric-ring-num">{pass}/{total}</span>
     </span>

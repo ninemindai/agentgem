@@ -11,6 +11,7 @@ const starsApi = makeStars(defaultApiBase());
 export function App() {
   const [path, setPath] = useState(() => window.location.pathname);
   const [me, setMe] = useState<Me | null>(null);
+  const [theme, setTheme] = useState(() => (document.documentElement.dataset.theme === "dark" ? "dark" : "light"));
 
   useEffect(() => {
     let alive = true;
@@ -34,6 +35,12 @@ export function App() {
   const onSources = path.startsWith("/sources");
   const onIngredients = path === "/" || path.startsWith("/ingredient");
   const signOut = async () => { await auth.logout(); setMe(null); };
+  const toggleTheme = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem("theme", next); } catch {}
+    setTheme(next);
+  };
 
   return (
     <div className="ex-app">
@@ -46,6 +53,9 @@ export function App() {
           {me && <a href="/publish" className="ex-navlink">Publish</a>}
         </nav>
         <span className="ex-auth">
+          <button type="button" className="ex-theme-toggle" aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"} onClick={toggleTheme}>
+            <span aria-hidden="true">{theme === "dark" ? "☀" : "☾"}</span>
+          </button>
           {me ? (
             <>
               <a className="ex-me" href={`/@${me.login}`} title="Your profile">
