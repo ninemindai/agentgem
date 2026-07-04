@@ -1,7 +1,7 @@
 import { cutMeta } from "./gems/cuts";
 import { stoneRating, isDiamond } from "./gems/rating";
 
-const NEUTRAL = { fg: "#8a8f98", bg: "#e6e8eb" };
+const NEUTRAL = { fg: "var(--muted)", bg: "var(--line-2)" };
 const DIAMOND = { fg: "#7fd7ff", bg: "#e8f7ff" }; // crystal-blue apex (cross-type, not a cut color)
 
 /** N filled gemstones (of 5) in the cut's color — the gem's Stone rating. */
