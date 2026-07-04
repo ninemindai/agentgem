@@ -3,6 +3,8 @@ import { testbedRecentsRoute, testbedProjectsRoute, makeClient, type RecentEntry
 import { openAnalyzeStream, type AnalyzeCandidate } from "./analyzeStream.js";
 import { includeToKeys } from "./selection.js";
 import { Loading } from "../../shell/Loading.js";
+import { ReportActions } from "../../report/ReportActions.js";
+import { analyzeToBlocks, blocksToMarkdown, blocksToHtml } from "../../report/serialize.js";
 
 function short(path: string): string {
   const parts = path.split("/").filter(Boolean);
@@ -79,6 +81,8 @@ export function Analyze({ apiBase, onPick, initialPath }: { apiBase: string; onP
           <ul className="analyze-list">
             {rows.map((r) => {
               const active = activePath === r.path;
+              const analyzeBlocks = analyzeToBlocks(candidates);
+              const analyzeTitle = `AgentGem analysis — ${r.label}`;
               return (
                 <li className={"analyze-row" + (active ? " is-active" : "")} key={r.path}>
                   <div className="analyze-row-head">
@@ -102,6 +106,15 @@ export function Analyze({ apiBase, onPick, initialPath }: { apiBase: string; onP
                       {out && candidates.length === 0 && <pre className="run-transcript">{out}</pre>}
                       {!running && !error && phase === "done" && candidates.length === 0 && (
                         <p className="ledger-empty">No recurring workflow found in this project's sessions — nothing to suggest yet.</p>
+                      )}
+                      {candidates.length > 0 && (
+                        <ReportActions
+                          title={analyzeTitle}
+                          filename="agentgem-analyze"
+                          markdown={blocksToMarkdown(analyzeBlocks)}
+                          json={JSON.stringify(candidates, null, 2)}
+                          html={blocksToHtml(analyzeBlocks, analyzeTitle)}
+                        />
                       )}
                       {candidates.map((c) => (
                         <div className="analyze-candidate" key={c.name}>
