@@ -66,9 +66,14 @@ const ProfileGemSchema = z.object({
   key: z.string(), version: z.string(), description: z.string().nullable(), grade: z.number().nullable(),
   stars: z.number(), installs: z.number(), verifiedInstalls: z.number(),
 });
+const ProfileReviewSchema = z.object({
+  sourceId: z.string(), path: z.string(), name: z.string(),
+  rating: z.number(), body: z.string().nullable(), createdAt: z.string(),
+});
 const ProfileResult = z.object({
   login: z.string(), avatarUrl: z.string().nullable(), verified: z.boolean(),
   githubUrl: z.string(), totalStars: z.number(), gems: z.array(ProfileGemSchema),
+  reviews: z.array(ProfileReviewSchema),
 });
 
 const OrgCatalogQuery = z.object({ scope: z.string() });

@@ -7,6 +7,7 @@ import { sql, desc } from "drizzle-orm";
 import type { AppDb } from "./schema.js";
 import { accounts, accountBindings, catalogGems } from "./schema.js";
 import { starCounts } from "./stars.js";
+import { reviewsByAccount } from "./reviews.js";
 import { gemAdoption } from "./aggregates.js";
 
 const LOGIN_RE = /^[A-Za-z0-9-]+$/; // GitHub login charset
@@ -20,6 +21,14 @@ export interface ProfileGem {
   installs: number;
   verifiedInstalls: number;
 }
+export interface ProfileReview {
+  sourceId: string;
+  path: string;
+  name: string;
+  rating: number;
+  body: string | null;
+  createdAt: string;
+}
 export interface Profile {
   login: string;
   avatarUrl: string | null;
@@ -27,6 +36,16 @@ export interface Profile {
   githubUrl: string;
   totalStars: number;
   gems: ProfileGem[];
+  reviews: ProfileReview[];
+}
+
+// target_id "<sourceId>/<path>" → the concrete skill; name is the path basename sans .md.
+function parseSkillReview(r: { targetId: string; rating: number; body: string | null; createdAt: string }): ProfileReview {
+  const slash = r.targetId.indexOf("/");
+  const sourceId = slash > 0 ? r.targetId.slice(0, slash) : r.targetId;
+  const path = slash > 0 ? r.targetId.slice(slash + 1) : "";
+  const name = (path.split("/").pop() || path || r.targetId).replace(/\.md$/, "");
+  return { sourceId, path, name, rating: r.rating, body: r.body, createdAt: r.createdAt };
 }
 
 export async function buildProfile(db: AppDb, rawLogin: string): Promise<Profile | null> {
@@ -34,7 +53,7 @@ export async function buildProfile(db: AppDb, rawLogin: string): Promise<Profile
   if (!LOGIN_RE.test(login)) return null; // reject junk before any query or URL build
 
   const acct = (await db
-    .select({ login: accounts.login, avatarUrl: accounts.avatarUrl })
+    .select({ id: accounts.id, login: accounts.login, avatarUrl: accounts.avatarUrl })
     .from(accounts)
     .where(sql`lower(${accounts.login}) = lower(${login})`)
     .limit(1))[0];
@@ -78,6 +97,8 @@ export async function buildProfile(db: AppDb, rawLogin: string): Promise<Profile
     .sort((a, b) => b.stars - a.stars || a.key.localeCompare(b.key));
 
   const totalStars = gems.reduce((s, g) => s + g.stars, 0);
+  // Authored reviews (only accounts write them — a bind-only login with no accounts row has none).
+  const reviews = acct ? (await reviewsByAccount(db, acct.id, "skill")).map(parseSkillReview) : [];
   const canonical = acct?.login ?? login;
-  return { login: canonical, avatarUrl: acct?.avatarUrl ?? null, verified, githubUrl: `https://github.com/${canonical}`, totalStars, gems };
+  return { login: canonical, avatarUrl: acct?.avatarUrl ?? null, verified, githubUrl: `https://github.com/${canonical}`, totalStars, gems, reviews };
 }

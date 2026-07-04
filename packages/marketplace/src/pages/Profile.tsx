@@ -47,6 +47,25 @@ export function Profile({ api, login }: { api: ReturnType<typeof makeApi>; login
           ))}
         </ul>
       )}
+
+      {(p.reviews ?? []).length > 0 && (
+        <section className="ex-profile-reviews">
+          <h3 className="ex-profile-subhead">Reviews written</h3>
+          <ul className="ex-reviews-list">
+            {(p.reviews ?? []).map((r, i) => (
+              <li key={r.sourceId + "/" + r.path + i} className="ex-review">
+                <div className="ex-review-meta">
+                  <a href={`/skill/${encodeURIComponent(r.sourceId)}/${r.path}`}>{r.name}</a>
+                  <span className="ex-scope">{r.sourceId}</span>
+                  <span className="ex-review-rating" aria-label={`${r.rating} of 5`}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</span>
+                  <time className="ex-review-date" dateTime={r.createdAt}>{new Date(r.createdAt).toLocaleDateString()}</time>
+                </div>
+                {r.body && <p className="ex-review-body">{r.body}</p>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </div>
   );
 }

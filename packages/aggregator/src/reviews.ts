@@ -69,6 +69,19 @@ export async function listReviews(db: AppDb, kind: string, id: string, limit = 5
   return r.rows as ReviewView[];
 }
 
+// Reviews an account has authored (for their public profile), newest first. Returns the raw
+// target_id — the caller parses it into the concrete skill (sourceId/path).
+export interface AuthoredReview { targetId: string; rating: number; body: string | null; createdAt: string; updatedAt: string }
+export async function reviewsByAccount(db: AppDb, accountId: string, kind: string, limit = 50): Promise<AuthoredReview[]> {
+  const r = await db.execute<{ targetId: string; rating: number; body: string | null; createdAt: string; updatedAt: string }>(sql`
+    select target_id as "targetId", rating, body, created_at::text as "createdAt", updated_at::text as "updatedAt"
+    from reviews where account_id = ${accountId} and target_kind = ${kind}
+    order by created_at desc
+    limit ${limit}
+  `);
+  return r.rows as AuthoredReview[];
+}
+
 // The caller's own review for this target (so the write form can prefill for editing), or null.
 export async function myReview(db: AppDb, accountId: string, kind: string, id: string): Promise<Review | null> {
   const r = await db.execute<{ rating: number; body: string | null; createdAt: string; updatedAt: string }>(sql`

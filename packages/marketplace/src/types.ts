@@ -40,6 +40,14 @@ export interface ProfileGem {
   installs: number;
   verifiedInstalls: number;
 }
+export interface ProfileReview {
+  sourceId: string;
+  path: string;
+  name: string;
+  rating: number;
+  body: string | null;
+  createdAt: string;
+}
 export interface Profile {
   login: string;
   avatarUrl: string | null;
@@ -47,6 +55,7 @@ export interface Profile {
   githubUrl: string;
   totalStars: number;
   gems: ProfileGem[];
+  reviews: ProfileReview[];
 }
 
 export interface RubricCheck {

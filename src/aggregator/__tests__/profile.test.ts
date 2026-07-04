@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
 import { randomUUID } from "node:crypto";
-import { makeTestDb, buildProfile, accounts, accountBindings, catalogGems, producers, gemAdoptions, stars } from "@agentgem/aggregator";
+import { makeTestDb, buildProfile, upsertReview, accounts, accountBindings, catalogGems, producers, gemAdoptions, stars } from "@agentgem/aggregator";
 
 async function star(db: never, gemKey: string, n: number) {
   for (let i = 0; i < n; i++) {
@@ -95,6 +95,26 @@ describe("buildProfile", () => {
     await db.insert(accounts).values({ id: randomUUID(), provider: "github", providerAccountId: "1", login: "octocat", avatarUrl: null });
     const p = await buildProfile(db, "octocat");
     expect(p!.verified).toBe(false);
+  });
+
+  it("includes the account's authored skill reviews, newest first, parsed into sourceId/path/name", async () => {
+    const db = await makeTestDb();
+    const id = randomUUID();
+    await db.insert(accounts).values({ id, provider: "github", providerAccountId: "1", login: "octocat", avatarUrl: null });
+    await upsertReview(db, id, "skill", "agency-agents/engineering/ai-engineer.md", 5, "top notch");
+    await upsertReview(db, id, "skill", "matt-skills/productivity/brainstorming.md", 3, null);
+    const p = await buildProfile(db, "octocat");
+    expect(p!.reviews).toHaveLength(2);
+    const byName = Object.fromEntries(p!.reviews.map((r) => [r.name, r]));
+    expect(byName["brainstorming"]).toMatchObject({ sourceId: "matt-skills", path: "productivity/brainstorming.md", rating: 3, body: null });
+    expect(byName["ai-engineer"]).toMatchObject({ sourceId: "agency-agents", path: "engineering/ai-engineer.md", rating: 5, body: "top notch" });
+  });
+
+  it("has an empty reviews array for a profile with no authored reviews", async () => {
+    const db = await makeTestDb();
+    await db.insert(accounts).values({ id: randomUUID(), provider: "github", providerAccountId: "1", login: "octocat", avatarUrl: null });
+    const p = await buildProfile(db, "octocat");
+    expect(p!.reviews).toEqual([]);
   });
 
   it("returns null for an unknown login", async () => {

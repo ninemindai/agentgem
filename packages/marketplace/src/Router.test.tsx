@@ -44,7 +44,7 @@ describe("Router", () => {
   });
 
   it("renders the profile page at /@login", async () => {
-    const profile = { login: "octocat", avatarUrl: null, verified: false, githubUrl: "https://github.com/octocat", totalStars: 0, gems: [] };
+    const profile = { login: "octocat", avatarUrl: null, verified: false, githubUrl: "https://github.com/octocat", totalStars: 0, gems: [], reviews: [] };
     vi.stubGlobal("fetch", vi.fn(async () => res(profile)));
     window.history.pushState({}, "", "/@octocat");
     render(<Router api={makeApi("")} stars={stars} reviews={reviews} me={null} />);
