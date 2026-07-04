@@ -60,9 +60,10 @@ function fakeConnect(reply: string | (() => Promise<string>)) {
   }) as never;
 }
 
-const ev = (index: number): SessionEvent => ({ index, tsMs: 0, span: { kind: "message", role: "assistant", text: "hi" } });
+// SessionEvent is { tsMs, span } — `index` is added by the SSE layer, not part of the type (#2).
+const ev = (): SessionEvent => ({ tsMs: 0, span: { kind: "message", role: "assistant", text: "hi" } });
 const base = (over: Partial<RenderInput> = {}): RenderInput =>
-  ({ prevHtml: "", deltaEvents: [ev(0)], meta: { project: "p", agent: "claude" }, ...over });
+  ({ prevHtml: "", deltaEvents: [ev()], meta: { project: "p", agent: "claude" }, ...over });
 
 describe("extractHtml", () => {
   it("returns a bare document unchanged", () => {
@@ -117,14 +118,20 @@ Create `packages/insight/src/dashboardRender.ts` (drive pattern copied verbatim 
 // Mirrors narrateInsights: never throws — returns the last-good HTML on any failure.
 import {
   type AcpConnectFn, type AcpCtx, type AcpSessionHandle,
-  CLAUDE_AGENT, analysisWorkspace, currentTestConnectFn, defaultConnectFn, withTimeout,
+  CLAUDE_AGENT, analysisWorkspace, currentTestConnectFn, defaultConnectFn,
 } from "./acpRecommender.js";
 import type { SessionEvent } from "./inspectSession.js";
 import type { AgentId } from "./observeAggregate.js";
 import { createLogger } from "@agentgem/base";
 
 const log = createLogger("insight");
-const MAX_HTML = 80_000;
+export const MAX_HTML = 80_000;
+
+// acpRecommender does NOT export withTimeout (it's file-private there); define our own,
+// same shape as narrateInsights.ts (eng-review outside-voice #1).
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`agent timeout after ${ms}ms`)), ms))]);
+}
 
 export interface RenderInput {
   prevHtml: string;
@@ -133,7 +140,7 @@ export interface RenderInput {
   connectFn?: AcpConnectFn;
   timeoutMs?: number;
 }
-export interface RenderResult { html: string; ok: boolean; }
+export interface RenderResult { html: string; ok: boolean; truncated?: boolean; }
 
 // The visual contract (anti-slop). Kept terse; the agent gets the palette + rules and
 // the compact exemplar so it matches the AgentGem console rather than a generic panel.
@@ -204,7 +211,9 @@ export async function renderDashboard(input: RenderInput): Promise<RenderResult>
     const html = extractHtml(text);
     if (!html) return { html: input.prevHtml, ok: false };
     log.debug("dashboard: rendered in %dms (%d bytes)", Date.now() - t0, html.length);
-    return { html: html.slice(0, MAX_HTML), ok: true };
+    // Truncate before emit (cap the untrusted doc), and flag it so the endpoint forces a
+    // full-regenerate next burst rather than evolving a clipped document (eng-review Q2 + #7).
+    return { html: html.slice(0, MAX_HTML), ok: true, truncated: html.length > MAX_HTML };
   } catch (err) {
     log.warn("dashboard: fell back after %dms: %s", Date.now() - t0, (err as Error)?.message ?? err);
     return { html: input.prevHtml, ok: false };
@@ -297,38 +306,88 @@ function harness(file: string, render: (i: RenderInput) => Promise<RenderResult>
   return { parse, bump };
 }
 
+// Fresh transcript file per test (no cross-test event accumulation). Writes N tool_use
+// events. Each is a distinct assistant record so detectEvents yields N tool_call events.
+let fileSeq = 0;
+function mkFile(ids: string[]): string {
+  const cproj = join(process.env.HOME!, ".claude", "projects", "p");
+  const f = join(cproj, `d${fileSeq++}.jsonl`);
+  writeFileSync(f, ids.map((id) => assistantToolUse(id, "Bash")).join("\n") + "\n");
+  return f;
+}
+// The backlog tick arms a debounce at t=0; a poll that later sees a NEW mtime re-arms to
+// (poll+debounce). Advancing DEBOUNCE + one POLL (1000ms) + margin covers both.
+const SETTLE = DEBOUNCE + 1100;
+
 describe("streamWatchDashboard", () => {
-  it("rejects an out-of-scope file", () => {
+  it("rejects an out-of-scope file (fatal)", () => {
     const { parse } = harness("/etc/passwd.jsonl", async () => ({ html: "<x/>", ok: true }));
-    expect(parse()).toEqual([{ event: "failed", data: { message: "unknown or out-of-scope transcript file" } }]);
+    expect(parse()).toEqual([{ event: "failed", data: { message: "unknown or out-of-scope transcript file", fatal: true } }]);
   });
 
-  it("coalesces a burst into ONE render after the debounce, passing all events as the delta", async () => {
+  it("coalesces events that arrive DURING the window into ONE render (delta = all)", async () => {
     let calls = 0; let seenDelta = 0;
     const render = async (i: RenderInput) => { calls++; seenDelta = i.deltaEvents.length; return { html: `<h1>v${calls}</h1>`, ok: true }; };
-    const { parse, bump } = harness(claudeFile, render);
-    // backlog: one tool_use event exists; append two more within the window
-    appendFileSync(claudeFile, assistantToolUse("t2", "Read") + "\n" + assistantToolUse("t3", "Edit") + "\n");
-    bump();
-    await vi.advanceTimersByTimeAsync(DEBOUNCE + 10);
-    expect(calls).toBe(1);
+    const file = mkFile(["t1"]);                        // 1-event backlog at connect
+    const { parse, bump } = harness(file, render);
+    appendFileSync(file, assistantToolUse("t2", "Read") + "\n"); bump();   // …then two more within the debounce
+    appendFileSync(file, assistantToolUse("t3", "Edit") + "\n"); bump();
+    await vi.advanceTimersByTimeAsync(SETTLE);
+    expect(calls).toBe(1);                              // one render, not three (#8)
     expect(seenDelta).toBe(3);
-    const render1 = parse().filter((e) => e.event === "render");
-    expect(render1).toHaveLength(1);
-    expect(render1[0].data.html).toContain("v1");
-    expect(render1[0].data.version).toBe(1);
+    expect(parse().filter((e) => e.event === "render")).toHaveLength(1);
   });
 
-  it("keeps last render and does NOT advance on failure", async () => {
-    let calls = 0;
-    const render = async (): Promise<RenderResult> => { calls++; return { html: "", ok: false }; };
-    const { parse, bump } = harness(claudeFile, render);
-    bump();
-    await vi.advanceTimersByTimeAsync(DEBOUNCE + 10);
+  it("on failure keeps prevHtml and RETRIES the delta on the next burst (reflectedCount preserved)", async () => {
+    let calls = 0; const deltas: number[] = [];
+    const render = async (i: RenderInput): Promise<RenderResult> => {
+      calls++; deltas.push(i.deltaEvents.length);
+      return calls === 1 ? { html: "", ok: false } : { html: "<h1>ok</h1>", ok: true }; // fail once, then succeed
+    };
+    const file = mkFile(["t1"]);
+    const { parse, bump } = harness(file, render);
+    await vi.advanceTimersByTimeAsync(SETTLE);          // render1 → ok:false (no advance)
+    expect(calls).toBe(1); expect(deltas[0]).toBe(1);
+    appendFileSync(file, assistantToolUse("t2", "Read") + "\n"); bump();
+    await vi.advanceTimersByTimeAsync(SETTLE);          // render2 retries: delta still starts at 0 → 2 events
+    expect(calls).toBe(2); expect(deltas[1]).toBe(2);   // reflectedCount was NOT advanced by the failure
+    expect(parse().filter((e) => e.event === "render")).toHaveLength(1);
+  });
+
+  it("single in-flight: a burst during a render does not start a second call", async () => {
+    let calls = 0; let resolve!: (r: RenderResult) => void;
+    const render = (_i: RenderInput) => { calls++; return new Promise<RenderResult>((r) => { resolve = r; }); };
+    const file = mkFile(["t1"]);
+    const { bump } = harness(file, render);
+    await vi.advanceTimersByTimeAsync(SETTLE);       // render1 fires and stays pending
     expect(calls).toBe(1);
-    const evs = parse();
-    expect(evs.some((e) => e.event === "failed")).toBe(true);
-    expect(evs.some((e) => e.event === "render")).toBe(false);
+    appendFileSync(file, assistantToolUse("t2", "Read") + "\n"); bump();
+    await vi.advanceTimersByTimeAsync(SETTLE);       // tick arms, but inFlight → dirty, no 2nd call
+    expect(calls).toBe(1);
+    resolve({ html: "<h1>a</h1>", ok: true });       // finish render1 → finally re-arms (dirty)
+    await vi.advanceTimersByTimeAsync(SETTLE);        // render2 fires with the mid-render event
+    expect(calls).toBe(2);
+  });
+
+  it("ceiling: renders immediately (no debounce wait) when unreflected >= ceiling", async () => {
+    let calls = 0;
+    const render = async () => { calls++; return { html: "<h1>c</h1>", ok: true } as RenderResult; };
+    harness(mkFile(["t1", "t2", "t3"]), render, { ceiling: 2 });
+    await vi.advanceTimersByTimeAsync(1);            // well under DEBOUNCE — ceiling fires it now
+    expect(calls).toBe(1);
+  });
+
+  it("periodic full-regenerate: the Kth render gets prevHtml='' and the whole event list", async () => {
+    const inputs: RenderInput[] = [];
+    const render = async (i: RenderInput) => { inputs.push(i); return { html: `<h1>${inputs.length}</h1>`, ok: true } as RenderResult; };
+    const file = mkFile(["t1"]);
+    const { bump } = harness(file, render, { fullRegenEvery: 1 });
+    await vi.advanceTimersByTimeAsync(SETTLE);       // render 1 (prevHtml already "")
+    appendFileSync(file, assistantToolUse("t2", "Read") + "\n"); bump();
+    await vi.advanceTimersByTimeAsync(SETTLE);       // render 2 — rendersSinceFull(1) >= 1 → FULL
+    expect(inputs).toHaveLength(2);
+    expect(inputs[1].prevHtml).toBe("");            // rebuilt from scratch
+    expect(inputs[1].deltaEvents).toHaveLength(2);  // whole session, not just the delta
   });
 });
 ```
@@ -352,7 +411,7 @@ Expected: FAIL — `streamWatchDashboard` not found.
 // unreflected events and no render is in flight. A bad render keeps the last good HTML.
 import { statSync, readFileSync } from "node:fs";
 import { resolveTranscriptFile, sourceForFile } from "./watchSessions.js";
-import { renderDashboard, type RenderInput, type RenderResult } from "@agentgem/insight";
+import { renderDashboard, type RenderInput, type RenderResult, type SessionEvent } from "@agentgem/insight";
 
 interface SseReq { query: Record<string, unknown>; on?(event: string, cb: () => void): void; }
 interface SseRes { writeHead(s: number, h: Record<string, string>): void; write(c: string): void; end(): void; }
@@ -377,56 +436,71 @@ export function streamWatchDashboard(
     "Content-Type": "text/event-stream", "Cache-Control": "no-cache, no-transform",
     Connection: "keep-alive", "X-Accel-Buffering": "no",
   });
-  const send = (event: string, data: unknown) => { res.write(`event: ${event}\n`); res.write(`data: ${JSON.stringify(data)}\n\n`); };
+  let closed = false; // set on req close; guards every send/render (eng-review #6)
+  const send = (event: string, data: unknown) => { if (closed) return; res.write(`event: ${event}\n`); res.write(`data: ${JSON.stringify(data)}\n\n`); };
 
-  if (!resolved || !source?.detectEvents) {
-    send("failed", { message: "unknown or out-of-scope transcript file" }); res.end(); return;
+  if (!resolved) {
+    send("failed", { message: "unknown or out-of-scope transcript file", fatal: true }); res.end(); return;
+  }
+  if (!source?.detectEvents) {
+    // The session is valid but its agent can't drive the dashboard yet (eng-review #5).
+    send("failed", { message: `the dashboard doesn't support ${source?.id ?? "this agent"} yet`, fatal: true });
+    res.end(); return;
   }
 
   let prevHtml = "", reflectedCount = 0, rendersSinceFull = 0, version = 0;
-  let inFlight = false, lastMtime = -1;
+  let inFlight = false, dirtyDuringRender = false, lastMtime = -1, prevTruncated = false;
+  let latestEvents: SessionEvent[] = [];        // events from the MOST RECENT tick parse (eng-review A1)
+  let project: string | null = null;
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-  const project = source.parseMeta ? (source.parseMeta(safeRead(resolved), resolved)?.project ?? null) : null;
 
-  const fireRender = async () => {
-    debounceTimer = null;
-    if (inFlight) return;
-    const events = source.detectEvents!(safeRead(resolved), resolved);
-    if (events.length <= reflectedCount) return;
-    inFlight = true;
+  // Render against the latest parsed events. Single-in-flight; on failure keep prevHtml
+  // and do NOT advance reflectedCount so the delta retries next burst.
+  const runRender = async () => {
+    if (closed) return;
+    const events = latestEvents;
+    inFlight = true; dirtyDuringRender = false;
     send("rendering", {});
-    const full = rendersSinceFull >= fullRegenEvery || prevHtml.length > 80_000;
+    const full = rendersSinceFull >= fullRegenEvery || prevTruncated; // regen after an oversize/clipped doc (#7)
     const input: RenderInput = {
       prevHtml: full ? "" : prevHtml,
       deltaEvents: full ? events : events.slice(reflectedCount),
       meta: { project, agent: source.id },
     };
     try {
-      const { html, ok } = await render(input);
+      const { html, ok, truncated } = await render(input);
+      if (closed) return;                                       // client left mid-render — drop the result (#6)
       if (ok) {
-        prevHtml = html; reflectedCount = events.length; rendersSinceFull = full ? 0 : rendersSinceFull + 1;
+        prevHtml = html; prevTruncated = truncated ?? false;
+        reflectedCount = events.length; rendersSinceFull = full ? 0 : rendersSinceFull + 1;
         send("render", { html, version: ++version });
       } else {
-        send("failed", { message: "render failed" }); // keep prevHtml, do not advance reflectedCount
+        send("failed", { message: "render failed", fatal: false }); // recoverable: keep prevHtml, don't advance, don't close (#3)
       }
     } finally {
       inFlight = false;
-      if (source.detectEvents!(safeRead(resolved), resolved).length > reflectedCount) arm();
+      if (!closed && dirtyDuringRender && latestEvents.length > reflectedCount) arm(); // events arrived mid-render
     }
   };
 
   const arm = () => {
+    if (inFlight) { dirtyDuringRender = true; return; }          // let the in-flight render finish, then re-arm
     if (debounceTimer) clearTimeout(debounceTimer);
-    const unreflected = source.detectEvents!(safeRead(resolved), resolved).length - reflectedCount;
-    if (unreflected >= ceiling) { void fireRender(); return; }
-    debounceTimer = setTimeout(() => { void fireRender(); }, debounceMs);
+    if (latestEvents.length - reflectedCount >= ceiling) { debounceTimer = null; void runRender(); return; } // ceiling: don't wait
+    debounceTimer = setTimeout(() => {
+      debounceTimer = null;
+      if (!inFlight && latestEvents.length > reflectedCount) void runRender();
+    }, debounceMs);
   };
 
   const tick = () => {
     let m: number; try { m = statSync(resolved).mtimeMs; } catch { return; }
     if (m === lastMtime) return;
     lastMtime = m;
-    if (source.detectEvents!(safeRead(resolved), resolved).length > reflectedCount) arm();
+    const text = safeRead(resolved);                             // read ONCE per tick, thread the parse
+    if (project === null && source.parseMeta) project = source.parseMeta(text, resolved)?.project ?? null;
+    latestEvents = source.detectEvents!(text, resolved);
+    if (latestEvents.length > reflectedCount) arm();
   };
 
   send("phase", { phase: "watching", agent: source.id });
@@ -435,6 +509,7 @@ export function streamWatchDashboard(
   const poll = setInterval(tick, POLL_MS);
   const beat = setInterval(() => { try { res.write(": ping\n\n"); } catch { /* closed */ } }, HEARTBEAT_MS);
   req.on?.("close", () => {
+    closed = true; // stop any in-flight render from writing / re-arming (#6)
     clearInterval(poll); clearInterval(beat); if (debounceTimer) clearTimeout(debounceTimer);
     try { res.end(); } catch { /* ended */ }
   });
@@ -454,7 +529,7 @@ server.expressApp.get("/api/watch/dashboard", originGuard, (req, res) => streamW
 - [ ] **Step 4: Run the test, verify it passes**
 
 Run: `pnpm exec tsc -b && pnpm exec vitest run dist/__tests__/watchDashboard.test.js`
-Expected: PASS (3 tests).
+Expected: PASS (6 tests — reject, coalesce, failure, single-in-flight, ceiling, full-regen).
 
 - [ ] **Step 5: Commit**
 
@@ -470,15 +545,46 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 3: `dashboardStream.ts` client + `Dashboard.tsx` (double-buffer)
 
 **Files:**
+- Create: `packages/console/src/panels/Watch/sandboxDoc.ts` (extract from `index.tsx` — breaks a cycle, #10)
 - Create: `packages/console/src/panels/Watch/dashboardStream.ts`
 - Create: `packages/console/src/panels/Watch/Dashboard.tsx`
-- Modify: `packages/console/src/panels/Watch/index.tsx` (export `sandboxDoc` if not already; it is already exported)
+- Modify: `packages/console/src/panels/Watch/index.tsx` (move `sandboxDoc` out, re-export it)
 - Modify: `packages/console/src/shell/theme.css` (double-buffer iframe styles)
 - Test: `packages/console/src/panels/Watch/__tests__/Dashboard.test.tsx`
 
 **Interfaces:**
-- Consumes: `sandboxDoc` (from `./index.js`).
+- Consumes: `sandboxDoc` (from `./sandboxDoc.js`).
 - Produces: `openDashboardStream(apiBase, file, onEvent): () => void`; `DashMsg` union; `Dashboard({ apiBase, file }): JSX.Element`.
+
+- [ ] **Step 0: Extract `sandboxDoc` to break the import cycle (#10)**
+
+`index.tsx` imports `Dashboard`, and `Dashboard` needs `sandboxDoc` — importing it from `./index.js` would make `index → Dashboard → index` a cycle (fragile under ESM eval order). Move the pure helper out.
+
+Create `packages/console/src/panels/Watch/sandboxDoc.ts` by cutting the `CSP` const and `sandboxDoc` function out of `index.tsx` verbatim:
+
+```typescript
+// Wrap (already-redacted) artifact/dashboard HTML in a strict CSP so the sandboxed frame
+// can't reach the network. With sandbox="allow-scripts" (and NO allow-same-origin → null
+// origin), the doc runs its own inline JS/CSS but can't read the console's cookies/DOM.
+const CSP =
+  "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; " +
+  "img-src data:; font-src data:; media-src data:;";
+
+export function sandboxDoc(html: string): string {
+  const meta = `<meta http-equiv="Content-Security-Policy" content="${CSP}">`;
+  if (/<head[\s>]/i.test(html)) return html.replace(/<head([^>]*)>/i, `<head$1>${meta}`);
+  return `<!doctype html><html><head>${meta}</head><body>${html}</body></html>`;
+}
+```
+
+In `index.tsx`, delete the `CSP` const + `sandboxDoc` function and re-export from the new file so existing importers (`ArtifactPane`, `Watch.test.tsx` importing `sandboxDoc` from `../index.js`) keep working unchanged:
+
+```typescript
+export { sandboxDoc } from "./sandboxDoc.js";
+```
+
+Run: `cd packages/console && pnpm exec vitest run src/panels/Watch/__tests__/Watch.test.tsx`
+Expected: PASS (the existing `sandboxDoc` tests still resolve through the re-export).
 
 - [ ] **Step 1: Write the client**
 
@@ -499,7 +605,9 @@ export function openDashboardStream(apiBase: string, file: string, onEvent: (e: 
   es.addEventListener("phase", (m) => { const d = data(m); onEvent({ type: "phase", phase: d.phase, agent: d.agent }); });
   es.addEventListener("rendering", () => onEvent({ type: "rendering" }));
   es.addEventListener("render", (m) => { const d = data(m); onEvent({ type: "render", html: d.html, version: d.version }); });
-  es.addEventListener("failed", (m) => { onEvent({ type: "failed", message: data(m).message }); es.close(); });
+  // A render failure is RECOVERABLE (keep last, retry next burst) — only close on a fatal
+  // failure (out-of-scope / unsupported agent), else the stream dies on the first hiccup (#3).
+  es.addEventListener("failed", (m) => { const d = data(m); onEvent({ type: "failed", message: d.message }); if (d.fatal) es.close(); });
   es.addEventListener("error", () => onEvent({ type: "failed", message: "connection lost" }));
   return () => es.close();
 }
@@ -511,7 +619,7 @@ Create `packages/console/src/panels/Watch/__tests__/Dashboard.test.tsx`:
 
 ```typescript
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { Dashboard } from "../Dashboard.js";
 
 class FakeES {
@@ -544,15 +652,20 @@ describe("Dashboard", () => {
     expect(screen.getByRole("status").textContent).toMatch(/updated/i);
   });
 
-  it("double-buffers: the second render writes into the OTHER iframe", async () => {
+  it("double-buffers: second render writes the OTHER iframe and visibility flips to it on load", async () => {
     vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
     render(<Dashboard apiBase="" file="/w/s.jsonl" />);
     FakeES.last!.emit("render", { html: "<h1>one</h1>", version: 1 });
+    // jsdom does not auto-fire iframe load on srcDoc; fire it so the refs advance (eng-review Q1/#9).
+    fireEvent.load(frames().find((f) => f.getAttribute("srcdoc")?.includes("one"))!); // buffer 0 paints → visible 0
     FakeES.last!.emit("render", { html: "<h1>two</h1>", version: 2 });
-    const srcdocs = frames().map((f) => f.getAttribute("srcdoc") ?? "");
-    expect(srcdocs.some((s) => s.includes("one"))).toBe(true);
-    expect(srcdocs.some((s) => s.includes("two"))).toBe(true); // both buffers retained
-    expect(frames()).toHaveLength(2);
+    const one = frames().find((f) => f.getAttribute("srcdoc")?.includes("one"))!;
+    const two = frames().find((f) => f.getAttribute("srcdoc")?.includes("two"))!;
+    expect(one).toBeTruthy(); expect(two).toBeTruthy(); expect(one).not.toBe(two); // both buffers retained
+    fireEvent.load(two);                                                            // buffer 1 paints → flip
+    expect(two.className).toContain("is-visible");
+    expect(one.className).not.toContain("is-visible");
+    expect(frames().filter((f) => f.className.includes("is-visible"))).toHaveLength(1); // exactly one visible
   });
 
   it("keeps the last render and shows a note on failure", async () => {
@@ -578,7 +691,7 @@ Create `packages/console/src/panels/Watch/Dashboard.tsx`:
 ```typescript
 import { useEffect, useRef, useState } from "react";
 import { openDashboardStream } from "./dashboardStream.js";
-import { sandboxDoc } from "./index.js";
+import { sandboxDoc } from "./sandboxDoc.js"; // NOT ./index.js — avoids the index↔Dashboard cycle (#10)
 
 // Two stacked iframes, cross-faded. A new render is written into the HIDDEN buffer;
 // on its load we fade it in and flip `visible`. No white flash, no scroll-reset — this
@@ -590,32 +703,38 @@ export function Dashboard({ apiBase, file }: { apiBase: string; file: string }) 
   const [rendering, setRendering] = useState(false);
   const [failed, setFailed] = useState(false);
   const [announce, setAnnounce] = useState("");
+  // The stream callback is created ONCE per [apiBase,file], so it must NOT read `visible`/
+  // `rendered` state (stale — that broke the double-buffer entirely; see eng-review Q1).
+  // Mirror them in refs and compute the write-target from the refs.
+  const visibleRef = useRef(0);
+  const renderedRef = useRef(false);
   const targetRef = useRef(0); // buffer we last wrote into
 
   useEffect(() => {
     setBufs(["", ""]); setVisible(0); setRendered(false); setRendering(false); setFailed(false); setAnnounce("");
+    visibleRef.current = 0; renderedRef.current = false;
     return openDashboardStream(apiBase, file, (m) => {
       if (m.type === "rendering") setRendering(true);
-      else if (m.type === "failed") { setRendering(false); if (rendered) setFailed(true); }
+      else if (m.type === "failed") { setRendering(false); if (renderedRef.current) setFailed(true); }
       else if (m.type === "render") {
         setRendering(false); setFailed(false);
-        setBufs((prev) => {
-          const next: [string, string] = [prev[0], prev[1]];
-          const write = rendered ? (visible === 0 ? 1 : 0) : 0; // hidden buffer, or buffer 0 first time
-          next[write] = sandboxDoc(m.html);
-          targetRef.current = write;
-          return next;
-        });
-        setAnnounce(`dashboard updated`);
+        const write = renderedRef.current ? (visibleRef.current === 0 ? 1 : 0) : 0; // hidden buffer, or buffer 0 first time
+        targetRef.current = write;
+        setBufs((prev) => { const next: [string, string] = [prev[0], prev[1]]; next[write] = sandboxDoc(m.html); return next; });
+        setAnnounce("dashboard updated");
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiBase, file]);
 
-  // When the freshly-written buffer paints, flip visibility to it (cross-fade via CSS).
+  // When the freshly-written buffer paints, flip visibility to it (cross-fade via CSS)
+  // and advance the refs so the NEXT render targets the other buffer.
   const onBufLoad = (idx: number) => {
     if (!bufs[idx]) return;
-    if (idx === targetRef.current) { setVisible(idx); setRendered(true); }
+    if (idx === targetRef.current) {
+      visibleRef.current = idx; renderedRef.current = true;
+      setVisible(idx); setRendered(true);
+    }
   };
 
   return (
@@ -668,7 +787,7 @@ Append after the `.feed-*` block:
 - [ ] **Step 6: Run the test, verify it passes**
 
 Run: `cd packages/console && pnpm exec vitest run src/panels/Watch/__tests__/Dashboard.test.tsx`
-Expected: PASS (4 tests). Note: jsdom fires `iframe` `onLoad` synchronously on `srcDoc` set; if a test needs the load, `fireEvent.load(frame)`.
+Expected: PASS (4 tests). Note: jsdom does NOT auto-fire `iframe` `onLoad` on `srcDoc`; the tests call `fireEvent.load(frame)` to advance the buffer refs (that's what proves the double-buffer, per eng-review #9).
 
 - [ ] **Step 7: Commit**
 
@@ -764,7 +883,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 - [ ] **Step 1: Full backend suite**
 
 Run (repo root): `pnpm build && pnpm exec vitest run`
-Expected: all green (new: `dashboardRender` 7, `watchDashboard` 3). If `consoleMount` fails with "console not built", that's the known fresh-worktree artifact — `pnpm build` above already built it.
+Expected: all green (new: `dashboardRender` 7, `watchDashboard` 6). If `consoleMount` fails with "console not built", that's the known fresh-worktree artifact — `pnpm build` above already built it.
 
 - [ ] **Step 2: Console suite + typecheck**
 
@@ -773,13 +892,13 @@ Expected: all green (new: `Dashboard` 4, `Watch` +1).
 
 - [ ] **Step 3: Real-HTTP smoke (uses a stub render so no live agent needed)**
 
-The endpoint uses the real ACP agent by default. For a no-agent smoke test, temporarily set a fake by env is out of scope; instead verify the stream wiring with the injected default is exercised by the unit tests, and manually confirm the route is registered:
+The endpoint uses the real ACP agent by default (unit tests inject a stub). Confirm the route is registered and the fatal-reject path works over real HTTP:
 
 ```bash
 HOME=$(mktemp -d) PORT=4321 node dist/index.js >/tmp/dash-server.log 2>&1 &
 sleep 2
 curl -s -m 2 "http://127.0.0.1:4321/api/watch/dashboard?file=/etc/nope.jsonl" | head -3
-# Expected: event: failed  /  data: {"message":"unknown or out-of-scope transcript file"}
+# Expected: event: failed  /  data: {"message":"unknown or out-of-scope transcript file","fatal":true}
 pkill -f "dist/index.js"
 ```
 
@@ -793,4 +912,60 @@ Boot the server against a temp HOME with a Claude transcript (see the Flavor A s
 
 - **Spec coverage:** Unit 1 → Task 1; Unit 2 → Task 2; Unit 3 → Tasks 3-4; drift controls (debounce/ceiling/full-regen/single-in-flight) → Task 2 impl + one test each; states/a11y/double-buffer → Task 3; anti-slop contract → Task 1 `buildPrompt`. Security (sandbox/CSP/originGuard/resolveTranscriptFile) reused, asserted in Task 3 (`sandbox="allow-scripts"`) and Task 2 (out-of-scope reject).
 - **Type consistency:** `RenderInput`/`RenderResult` defined in Task 1, consumed by name in Task 2 (`deps.render`) and its test. `DashMsg` events (`phase`/`rendering`/`render`/`failed`) match between `watchDashboard.ts` `send(...)` calls and `dashboardStream.ts` listeners and the `Dashboard` handler.
-- **Known env notes:** backend tests run from `dist/`; run `tsc -b` before `vitest`. jsdom fires iframe `onLoad` on `srcDoc` set.
+- **Known env notes:** backend tests run from `dist/`; run `tsc -b` before `vitest`. jsdom does NOT auto-fire iframe `onLoad`; tests fire it explicitly.
+- **Eng-review fixes folded in:** local `withTimeout` (#1); `SessionEvent` has no `index` (#2); non-fatal `failed` doesn't close the stream (#3); `closed` guard stops write/render after client leaves (#6); truncate-and-flag drives full-regen (Q2/#7); `sandboxDoc.ts` breaks the `index↔Dashboard` cycle (#10); one-parse-per-tick (A1); refs fix the double-buffer (Q1); +3 endpoint tests, stronger coalesce/retry/visibility tests (T1/#8/#9).
+
+## NOT in scope (deferred, one-line rationale)
+
+- **Multi-tab render dedup (broker).** Duplicate Dashboard tabs on the same session each pay for their own ACP renders. v1 downgrades the "single agent per session" claim to "per open view"; a session-scoped broker is a follow-up.
+- **Per-agent tab gating.** The Dashboard (and Flavor A Feed) require `detectEvents`; only claude/codex are wired. v1 returns a clear "not supported yet" message; hiding/disabling the tab per source (a `canDashboard` capability threaded to the client) is a follow-up that also improves Feed.
+- **Cancelling in-flight ACP spend on disconnect.** v1 suppresses post-close writes/renders; true mid-render cancellation depends on ACP support — deferred.
+- **Deep responsive / dashboard lenses / snapshot-share** — from the spec's follow-ups; not v1.
+
+## What already exists (reused, not rebuilt)
+
+- `narrateInsights.ts` ACP drive pattern (prompt → agent → validate → fallback) → `renderDashboard` copies it. `withTimeout` is local there (not exported) — we mirror that.
+- `watchEvents.ts` SSE scaffold + `detectEvents` + `resolveTranscriptFile` + `originGuard` → the endpoint reuses all of it.
+- `sandboxDoc` + CSP + the null-origin iframe from `ArtifactPane` → reused (now extracted to `sandboxDoc.ts`).
+- `eventStream.ts` client + FakeES test pattern + console tokens (`run-badge`, `ledger-empty`) → mirrored.
+
+## Failure modes (per new codepath)
+
+| Codepath | Realistic failure | Test? | Error handling? | User sees |
+| --- | --- | --- | --- | --- |
+| `renderDashboard` ACP call | agent timeout / unavailable / non-markup | yes (fallback tests) | yes — returns last-good, `ok:false` | "showing last render" chip; stream stays open |
+| endpoint render loop | events arrive mid-render | yes (single-in-flight) | yes — `dirtyDuringRender` re-arm | next render reflects them |
+| endpoint | client disconnects mid-render | partial (guard) | yes — `closed` guard | nothing (silent, correct) |
+| endpoint | oversize HTML | yes (implied by truncated flag) | yes — truncate + full-regen | dashboard rebuilds cleanly |
+| `Dashboard.tsx` | rapid double render | yes (#9) | yes — ref-based buffer target | cross-fade, no flash |
+| endpoint | unsupported agent | add a test (issue #5) | yes — fatal message | "doesn't support <agent> yet" |
+
+No critical gaps (no failure is silent + untested + unhandled). One test to add during impl: the unsupported-agent fatal message (folds into Task 2).
+
+## Worktree parallelization
+
+Sequential — Task 2 consumes Task 1's `renderDashboard`/`RenderResult`; Tasks 3-4 consume the endpoint's event shape and each other's toggle. One lane. No parallelization opportunity.
+
+## Implementation Tasks (from eng-review findings)
+
+- [ ] **T1 (P1, human ~1h / CC ~10min)** — `dashboardRender.ts` — local `withTimeout` + `SessionEvent` test fix (compile blockers). Verify: `tsc -b`.
+- [ ] **T2 (P1, human ~1h / CC ~10min)** — `watchDashboard.ts` — one-parse-per-tick + `closed` guard + non-fatal `failed` + truncated-flag regen. Verify: 6 endpoint tests pass.
+- [ ] **T3 (P1, human ~1h / CC ~10min)** — `Dashboard.tsx` — ref-based double-buffer (Q1). Verify: visibility-flip test passes.
+- [ ] **T4 (P2, human ~20min / CC ~5min)** — `sandboxDoc.ts` — extract to break the cycle (#10). Verify: `Watch.test.tsx` still resolves `sandboxDoc`.
+- [ ] **T5 (P2, human ~15min / CC ~5min)** — `watchDashboard.ts` — unsupported-agent fatal message + its test (#5).
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
+| Codex Review | `/codex review` | Independent 2nd opinion | 1 | issues_found | 10 findings (2 compile blockers), all folded |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | clean | 13 issues, 0 critical gaps, all folded |
+| Design Review | `/plan-design-review` | UI/UX gaps | 1 | issues_open | score: 4/10 → 8/10, 2 decisions |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
+
+- **CODEX:** outside voice caught 2 compile blockers (`withTimeout` not exported, `SessionEvent.index`), a stream-killing `failed` close, an import cycle, and 6 more — all applied.
+- **CROSS-MODEL:** no tension — Codex found gaps the review missed; no disagreement with the review's own findings (A1/Q1/Q2/T1).
+- **VERDICT:** ENG CLEARED — ready to implement (design review 8/10 on the spec; eng review clean).
+
+NO UNRESOLVED DECISIONS
