@@ -83,7 +83,7 @@ export function Sources({ api }: { api: ReturnType<typeof makeApi> }) {
       {agents && (
         <ul className="ex-agent-list">
           {agents.map((a) => (
-            <li className="ex-agent" key={a.path}>
+            <li className={"ex-agent" + (skill?.sourceId === sourceId && skill?.path === a.path ? " is-open" : "")} key={a.path}>
               <div className="ex-agent-head">
                 <span className="ex-agent-name">{a.name}</span>
                 <button type="button" className="ex-btn" disabled={loading === a.path} onClick={() => void viewSkill(a)}>
