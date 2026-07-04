@@ -1,0 +1,40 @@
+# Scheduled indexer for the marketplace "Popular Skills" home board.
+# Runs `agentgem index-sources`, which walks each curated source's SKILL.md files +
+# GitHub stars into the `curated_skills` table that GET /api/aggregator/popular-skills reads.
+# Free on this public repo (GitHub Actions is unlimited for public repos).
+#
+# Requires ONE repository secret: DATABASE_URL = the same Neon connection string the
+# deployed API uses (include ?sslmode=require). The built-in GITHUB_TOKEN (auto-provided,
+# ~1000 req/hr) authenticates the GitHub reads so all 42 sources index without hitting the
+# 60/hr unauthenticated limit — no personal token needed.
+name: index-sources
+
+on:
+  schedule:
+    - cron: "0 6 * * *"   # daily at 06:00 UTC (repos + star counts change slowly)
+  workflow_dispatch: {}    # manual "Run workflow" button for an on-demand refresh
+
+permissions:
+  contents: read           # the job only READS this repo; it writes to Neon (external)
+
+concurrency:
+  group: index-sources
+  cancel-in-progress: false
+
+jobs:
+  index:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsc -b   # compiles dist/cli.js + the workspace packages (no console/test build needed)
+      - run: node dist/cli.js index-sources
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
