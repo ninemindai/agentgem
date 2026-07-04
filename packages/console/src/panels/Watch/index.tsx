@@ -2,20 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
 import { fetchSessions, openWatchStream, type WatchSession, type ArtifactVersion } from "./watchStream.js";
 import { SessionFeed } from "./SessionFeed.js";
+import { sandboxDoc } from "./sandboxDoc.js";
 
-// Wrap the (already-redacted) artifact HTML in a strict CSP so the sandboxed frame
-// can't reach the network — mirrors how Claude.ai renders artifacts. Combined with
-// sandbox="allow-scripts" (and NO allow-same-origin → null origin), the document
-// can run its own inline JS/CSS but cannot read the console's cookies/DOM or call out.
-const CSP =
-  "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; " +
-  "img-src data:; font-src data:; media-src data:;";
-
-export function sandboxDoc(html: string): string {
-  const meta = `<meta http-equiv="Content-Security-Policy" content="${CSP}">`;
-  if (/<head[\s>]/i.test(html)) return html.replace(/<head([^>]*)>/i, `<head$1>${meta}`);
-  return `<!doctype html><html><head>${meta}</head><body>${html}</body></html>`;
-}
+export { sandboxDoc };
 
 const ageLabel = (ms: number): string => {
   const s = Math.round(ms / 1000);
