@@ -39,3 +39,66 @@ describe("blocksToHtml", () => {
     expect(html).not.toContain("<script>x");
   });
 });
+
+import { insightsToBlocks, analyzeToBlocks } from "./serialize.js";
+import type { InsightsReportView } from "../panels/Insights/insightsStream.js";
+import type { AnalyzeCandidate } from "../panels/Curate/analyzeStream.js";
+
+const fullReport: InsightsReportView = {
+  totals: { sessions: 5, mostly: 3, partially: 1, not: 1 },
+  outcomes_summary: "Mostly good.",
+  narrative: "You worked on auth and billing.",
+  by_model: [
+    { model: "opus", mostly: 2, partially: 0, not: 0, total: 2 },
+    { model: "sonnet", mostly: 1, partially: 1, not: 1, total: 3 },
+  ],
+  friction: [{ sessionId: "s1", detail: "retry storm on tests" }],
+  publish_candidates: [{ sessionId: "s2", goal: "add JWT auth", why: "clean, reusable" }],
+};
+
+describe("insightsToBlocks", () => {
+  it("includes narrative, summary, totals, by-model, candidates and friction", () => {
+    const blocks = insightsToBlocks(fullReport, 12);
+    const md = blocksToMarkdown(blocks);
+    expect(md).toContain("You worked on auth and billing.");
+    expect(md).toContain("Mostly good.");
+    expect(md).toContain("5 sessions judged");
+    expect(md).toContain("most-recent 5 of 12 scanned");
+    expect(md).toContain("## By model");
+    expect(md).toContain("| opus | 2 | 0 | 0 | 2 |");
+    expect(md).toContain("## Worth publishing");
+    expect(md).toContain("add JWT auth");
+    expect(md).toContain("## Friction");
+    expect(md).toContain("- retry storm on tests");
+  });
+
+  it("omits empty sections and the by-model table when only one model", () => {
+    const bare: InsightsReportView = {
+      totals: { sessions: 1, mostly: 1, partially: 0, not: 0 },
+      outcomes_summary: "",
+      narrative: "",
+      by_model: [{ model: "opus", mostly: 1, partially: 0, not: 0, total: 1 }],
+      friction: [],
+      publish_candidates: [],
+    };
+    const md = blocksToMarkdown(insightsToBlocks(bare));
+    expect(md).not.toContain("## By model");
+    expect(md).not.toContain("## Worth publishing");
+    expect(md).not.toContain("## Friction");
+    expect(md).not.toContain("scanned"); // no cap note when scanned is undefined
+  });
+});
+
+describe("analyzeToBlocks", () => {
+  it("renders one section per candidate with meta, description and artifacts", () => {
+    const candidates: AnalyzeCandidate[] = [
+      { name: "test-runner", description: "runs the suite", confidence: "high", include: [{ type: "skill", name: "vitest" }, { type: "hook", name: "pre-push" }] },
+    ];
+    const md = blocksToMarkdown(analyzeToBlocks(candidates));
+    expect(md).toContain("## test-runner");
+    expect(md).toContain("Confidence: high · 2 artifacts");
+    expect(md).toContain("runs the suite");
+    expect(md).toContain("- skill: vitest");
+    expect(md).toContain("- hook: pre-push");
+  });
+});
