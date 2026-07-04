@@ -25,6 +25,8 @@ import {
   fetchSkillsEntry,
   importSkillsSkill,
   assertSkillsPath,
+  listSkillMd,
+  skillRefFromPath,
 } from "./skillsLayout.js";
 
 // Input containment: an agency-layout path is exactly "<division>/<file>.md" — bounds what we
@@ -62,4 +64,22 @@ export function importSourceSkill(source: CuratedSource, path: string, cfg: Gith
   return source.kind === "agency-layout"
     ? importAgencyAgentSkill(path, cfg, http)
     : importSkillsSkill(path, cfg, http, source.id);
+}
+
+// Every skill ref in a source, in one efficient pass — used by the "Popular Skills" indexer
+// (curatedSkillsIndexer.ts), which needs the full list rather than one division at a time.
+// skills-layout: a single listSkillMd() tree listing. agency-layout: one fetchAgencyDivisions()
+// call plus one listAgencyAgents() per division, flattened.
+export async function listSourceSkills(
+  source: CuratedSource,
+  cfg: GithubCfg,
+  http: Http = defaultHttp,
+): Promise<{ division: string; name: string; path: string }[]> {
+  if (source.kind === "skills-layout") {
+    const paths = await listSkillMd(cfg, http);
+    return paths.map(skillRefFromPath);
+  }
+  const divisions = await fetchAgencyDivisions(cfg, http);
+  const perDivision = await Promise.all(divisions.map((d) => listAgencyAgents(d.key, cfg, http)));
+  return perDivision.flat().map(({ division, name, path }) => ({ division, name, path }));
 }
