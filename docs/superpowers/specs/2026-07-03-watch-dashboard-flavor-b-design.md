@@ -71,6 +71,17 @@ The rendering-agent call. Modeled directly on `narrateInsights.ts`.
     fonts/img/scripts) — the CSP would block them anyway.
   - Evolve the existing structure rather than rebuild from scratch; keep it compact.
   - First render (`prevHtml === ""`): create the initial dashboard from the events.
+  - **Visual contract (anti-slop — see the design-review section).** The prompt carries the
+    console palette (`--paper #f1eadb`, `--ink #20190f`, one terracotta accent `#9a3324`,
+    emerald `#2f6b3a` for done only), typographic rules (serif headings, monospace for
+    paths/commands), and the composition rules: ONE visual anchor (current activity), a
+    vertical timeline (NOT a card grid), no gradients, no drop shadows, no emoji-as-UI,
+    dense-but-scannable. The approved exemplar (`designs/watch-dashboard-20260703/sketch.html`,
+    section 1) is embedded verbatim as a **one-shot example** so the agent matches the
+    console rather than inventing a generic SaaS look.
+  - **Compact / no internal scroll:** the dashboard must fit the panel height (~560px)
+    without its own scrollbar — this is what makes the double-buffer cross-fade (Unit 3)
+    read as "evolve in place" rather than "reset." Prefer summarizing over growing.
 - **Output handling:** extract the HTML (reuse the `extractJson`-style boundary trim,
   adapted for HTML — find the outermost `<html`/`<!doctype`/first tag … last close), and
   **validate** it looks like markup (contains a tag, non-empty, under the size cap). On
@@ -119,9 +130,23 @@ SSE unit tests use a synchronous stub and fake timers — no real agent.
   events `phase` / `rendering` / `render { html, version }` / `failed`.
 - `Dashboard.tsx`: subscribes on mount (keyed on `file`), holds the latest `html`; renders
   it via the **existing `sandboxDoc`** (export it from `index.tsx` — currently exported
-  already) into the same `sandbox="allow-scripts"` iframe used by `ArtifactPane`. Shows a
-  `rendering…` badge during a burst, a "waiting for the first render…" empty state before
-  it, and a subtle "showing last render" note after a `failed`.
+  already) into a `sandbox="allow-scripts"` iframe.
+- **Double-buffer cross-fade swap (design-review decision D2).** Do NOT swap a single
+  iframe's `srcDoc` in place — that white-flashes and resets scroll on every render. Keep
+  **two stacked absolutely-positioned iframes** (a small `useDoubleBuffer` hook). On a new
+  `render`, write the HTML into the hidden buffer via `sandboxDoc`; on its `onLoad`,
+  cross-fade opacity (~150ms) and flip which buffer is visible. Set both iframe backgrounds
+  to `--paper` so even the first paint has no flash. Combined with the Unit-1 "compact / no
+  internal scroll" rule, the update reads as evolve-in-place. `prefers-reduced-motion`:
+  skip the fade, hard-swap (still no flash — the new buffer is already painted).
+- **States:** `rendering…` badge (reuse `run-badge run-running`) during a burst; a
+  "Reading the session…" first-render empty state with warmth; a subtle "showing last
+  render" chip (`run-badge` muted) after a `failed`; a "Quiet session" state when connected
+  but no events yet. (See the interaction-states table in the design-review section.)
+- **Accessibility:** each iframe carries `title="session dashboard"`; an off-screen
+  `aria-live="polite"` region announces "dashboard updated" on each `render` so
+  screen-reader users know it changed (the iframe swap is otherwise silent). Desktop-first
+  (the console is a desktop tool); the panel keeps its existing `flex` min-width.
 - `index.tsx`: extend the existing `Feed | Artifact` toggle to `Feed | Dashboard |
   Artifact`; `Dashboard` mounts `<Dashboard key={selected} apiBase file={selected} />`.
   Each pane already owns its stream (the ArtifactPane refactor from Flavor A), so this is
@@ -134,8 +159,33 @@ SSE unit tests use a synchronous stub and fake timers — no real agent.
    unreflected events, arms the debounce.
 3. On ~4s quiet (or ceiling), the endpoint calls `renderDashboard(prevHtml, delta)`.
 4. The ACP agent returns evolved HTML; the endpoint emits `render`.
-5. `Dashboard.tsx` swaps the iframe `srcDoc` (via `sandboxDoc`) → the living dashboard
-   updates in place.
+5. `Dashboard.tsx` writes the HTML into the hidden buffer iframe and cross-fades (Unit 3)
+   → the living dashboard updates in place with no flash or scroll-reset.
+
+## Visual & interaction design (from the design review)
+
+Design-completeness review raised the plan from 4/10 to 8/10. The three decisions that
+matter for a generative-UI feature:
+
+**Visual contract (anti-slop).** The generated HTML must read as native to the console,
+not a generic SaaS panel. The approved exemplar lives at
+`~/.gstack/projects/ninemindai-agentgem/designs/watch-dashboard-20260703/sketch.html`
+(section 1) and is embedded as a one-shot in the `renderDashboard` prompt. It encodes:
+paper/ink surface · single terracotta accent · emerald only for done · serif headings ·
+monospace paths/commands · ONE anchor (current activity) · vertical timeline not a card
+grid · no gradients/shadows/emoji · compact (fits the panel, no internal scroll).
+
+**Interaction states** (what the user SEES, not backend behavior):
+
+| State | Trigger | User sees |
+| --- | --- | --- |
+| First render (waiting) | connected, no render yet, events exist | "Reading the session…" with a one-line "building the first dashboard" note (warmth, sets expectation) |
+| Rendering (subsequent) | a burst is rendering, a prior render is on screen | `rendering…` badge; **the last dashboard stays visible** — never blanks |
+| Live | `render` received | the dashboard, cross-faded in; a "updated Ns ago" affordance |
+| Render failed | `failed` | keep last dashboard + subtle "showing last render" chip; retries next burst |
+| Quiet session | connected, zero events | "Quiet session — the dashboard appears once the agent acts" (not an error) |
+
+**Render-swap:** double-buffer + cross-fade (D2) — see Unit 3.
 
 ## Drift & cost controls
 
@@ -193,8 +243,11 @@ Mirrors `narrateInsights`' never-throw discipline:
 - Fake timers + injected stub `renderDashboard`.
 
 **`Dashboard.tsx` (`packages/console`):**
-- An emitted `render` lands its HTML in the sandboxed iframe (`sandbox="allow-scripts"`,
+- An emitted `render` lands its HTML in a sandboxed iframe (`sandbox="allow-scripts"`,
   `srcdoc` contains the CSP + the HTML).
+- **Double-buffer:** a second `render` writes into the *other* iframe and cross-fades
+  (assert the previously-hidden buffer becomes visible; both remain in the DOM).
+- **a11y:** the `aria-live` region text updates to "dashboard updated" on `render`.
 - `rendering` shows the badge; first-render-absent shows the waiting state; `failed`
   after a good render shows "showing last render". FakeES pattern.
 
@@ -221,3 +274,44 @@ Edited:
 - Let the user pick a dashboard "lens" (progress tracker vs timeline vs diff view) via a
   prompt preset.
 - Persist/share a final dashboard snapshot (ties into the existing share-card machinery).
+
+## NOT in scope (design decisions considered and deferred)
+
+- **Deep responsive / mobile breakpoints** — the console is a desktop tool; the panel stays
+  desktop-first. Deferred, not needed for v1.
+- **Persistent-iframe + postMessage patching** (D2 option B) — would give zero-flicker but
+  reverses the locked "free-form HTML" decision toward a fixed renderer. Rejected.
+- **User-selectable dashboard lenses** — one default composition for v1; presets are a
+  follow-up.
+- **In-dashboard interactivity** (clicking a step to jump to the transcript) — observe-only
+  for v1; interactivity is the ACP Chat tab's domain.
+
+## What already exists (reuse, don't reinvent)
+
+- **Design tokens:** `packages/console/src/shell/theme.css` (paper/ink/terracotta palette,
+  `run-badge run-running`/`run-done`, `ws-chip`, `ledger-empty`, `analyze-intro`).
+- **Toggle pattern:** `feed-toggle .ledger-view.is-active` (Flavor A).
+- **Sandbox frame:** `sandboxDoc` + CSP and the `sandbox="allow-scripts"` iframe from
+  `ArtifactPane`.
+- **SSE + generation spine:** `watchEvents.ts` scaffold, `detectEvents`, `narrateInsights`'
+  ACP-agent + validate + fallback pattern.
+
+## Approved Mockups
+
+| Screen/Section | Mockup Path | Direction | Notes |
+|----------------|-------------|-----------|-------|
+| Generated dashboard exemplar + 4 states | `~/.gstack/projects/ninemindai-agentgem/designs/watch-dashboard-20260703/sketch.html` | On-brand console aesthetic (paper/ink/terracotta, vertical timeline, one anchor) | Hand-authored (image-gen unavailable). Embed section 1 as the prompt's one-shot; states drive Unit 3. |
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
+| Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 0 | — | — |
+| Design Review | `/plan-design-review` | UI/UX gaps | 1 | issues_open | score: 4/10 → 8/10, 2 decisions |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
+
+- **VERDICT:** Design Review complete (8/10). Eng Review required before implementation.
+
+NO UNRESOLVED DECISIONS
