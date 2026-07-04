@@ -439,6 +439,12 @@ a.ex-skillcard-name:hover { color: var(--brand-strong); }
 .ex-review-body { margin: 0; color: var(--ink-2); font-size: 0.9rem; line-height: 1.5; white-space: pre-wrap; }
 @media (max-width: 520px) { .ex-rating-star { min-width: 44px; min-height: 44px; } }
 
+/* "Reviews written" on a public profile */
+.ex-profile-reviews { margin-top: 28px; }
+.ex-profile-subhead { font-family: var(--display); font-weight: 600; font-size: 1.05rem; margin: 0 0 12px; color: var(--ink); }
+.ex-profile-reviews .ex-review-meta > a { color: var(--ink); font-weight: 600; text-decoration: none; }
+.ex-profile-reviews .ex-review-meta > a:hover { color: var(--brand-strong); }
+
 /* staggered card entrance — each group's cards cascade in on load */
 @keyframes ex-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 .ex-skillcard:nth-child(1) { animation-delay: 0.03s; }
