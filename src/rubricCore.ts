@@ -18,7 +18,7 @@ import {
   computeCached, type CacheHit,
   builtinRubrics, loadRubrics, evaluateRubric,
   DETECTORS, loadRuleDetectors,
-  type Rubric, type RubricScope, type RubricReport, type WorkflowSignal,
+  type Rubric, type RubricScope, type RubricReport, type WorkflowSignal, type AcpConnectFn,
 } from "@agentgem/insight";
 
 // Cache namespace for rubric reports (distinct from per-project analysis caches).
@@ -83,7 +83,11 @@ export interface RubricResult { payload: RubricReport; cached: boolean; updatedA
 export async function computeRubric(
   rubric: Rubric,
   scope: RubricScope,
-  opts: { dir?: string; force?: boolean; now?: () => number; registry?: ReturnType<typeof rubricRegistry> } = {},
+  opts: {
+    dir?: string; force?: boolean; now?: () => number; registry?: ReturnType<typeof rubricRegistry>;
+    // Forwarded to the LLM criterion path (Phase 2); ignored for cheap-only rubrics.
+    connectFn?: AcpConnectFn; timeoutMs?: number; onDelta?: (chunk: string) => void;
+  } = {},
 ): Promise<RubricResult> {
   const now = opts.now ?? Date.now;
   const dirs = resolveDirs(opts.dir);
@@ -108,7 +112,10 @@ export async function computeRubric(
           sessions: { ...signal.sessions, scanned: sessions.length },
         } as WorkflowSignal;
       }
-      return evaluateRubric(signal, rubric, { scope, registry: opts.registry ?? rubricRegistry() });
+      return evaluateRubric(signal, rubric, {
+        scope, registry: opts.registry ?? rubricRegistry(),
+        connectFn: opts.connectFn, timeoutMs: opts.timeoutMs, onDelta: opts.onDelta,
+      });
     },
   });
 }

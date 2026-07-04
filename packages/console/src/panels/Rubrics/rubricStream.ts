@@ -24,6 +24,7 @@ export interface RubricReportView {
 
 export type RubricEvent =
   | { type: "start"; rubric: string; title: string; target: string; scope: string }
+  | { type: "delta"; text: string }
   | { type: "done"; report: RubricReportView; cached: boolean; updatedAt: number | null }
   | { type: "failed"; message: string };
 
@@ -51,6 +52,7 @@ export function openRubricStream(
     const d = data(m);
     onEvent({ type: "start", rubric: d.rubric, title: d.title, target: d.target, scope: d.scope });
   });
+  es.addEventListener("delta", (m) => onEvent({ type: "delta", text: data(m).text }));
   es.addEventListener("done", (m) => {
     const d = data(m);
     onEvent({ type: "done", report: d.report, cached: !!d.cached, updatedAt: typeof d.updatedAt === "number" ? d.updatedAt : null });
