@@ -50,3 +50,62 @@ th { background: #f4f4f4; }
 ul { padding-left: 1.2em; }
 </style></head><body><h1>${escapeHtml(title)}</h1>${body}</body></html>`;
 }
+
+import type { InsightsReportView } from "../panels/Insights/insightsStream.js";
+import type { AnalyzeCandidate } from "../panels/Curate/analyzeStream.js";
+
+export function insightsToBlocks(report: InsightsReportView, scanned?: number | null): ReportBlock[] {
+  const blocks: ReportBlock[] = [];
+  const t = report.totals;
+  if (report.narrative) blocks.push({ kind: "para", text: report.narrative });
+  if (report.outcomes_summary) blocks.push({ kind: "para", text: report.outcomes_summary });
+
+  const capped = scanned != null && scanned > t.sessions;
+  blocks.push({
+    kind: "para",
+    text:
+      `${t.sessions} session${t.sessions === 1 ? "" : "s"} judged — ` +
+      `${t.mostly} mostly, ${t.partially} partially, ${t.not} not.` +
+      (capped ? ` (most-recent ${t.sessions} of ${scanned} scanned)` : ""),
+  });
+
+  const byModel = report.by_model ?? [];
+  if (byModel.length > 1) {
+    blocks.push({ kind: "heading", text: "By model" });
+    blocks.push({
+      kind: "table",
+      head: ["model", "mostly", "partially", "not", "sessions"],
+      rows: byModel.map((m) => [m.model, String(m.mostly), String(m.partially), String(m.not), String(m.total)]),
+    });
+  }
+
+  const candidates = report.publish_candidates ?? [];
+  if (candidates.length > 0) {
+    blocks.push({ kind: "heading", text: "Worth publishing" });
+    blocks.push({ kind: "table", head: ["goal", "why"], rows: candidates.map((c) => [c.goal, c.why]) });
+  }
+
+  const friction = report.friction ?? [];
+  if (friction.length > 0) {
+    blocks.push({ kind: "heading", text: "Friction" });
+    blocks.push({ kind: "list", items: friction.map((f) => f.detail) });
+  }
+
+  return blocks;
+}
+
+export function analyzeToBlocks(candidates: AnalyzeCandidate[]): ReportBlock[] {
+  const blocks: ReportBlock[] = [];
+  for (const c of candidates) {
+    blocks.push({ kind: "heading", text: c.name });
+    blocks.push({
+      kind: "para",
+      text: `Confidence: ${c.confidence} · ${c.include.length} artifact${c.include.length === 1 ? "" : "s"}`,
+    });
+    if (c.description) blocks.push({ kind: "para", text: c.description });
+    if (c.include.length > 0) {
+      blocks.push({ kind: "list", items: c.include.map((a) => `${a.type}: ${a.name}`) });
+    }
+  }
+  return blocks;
+}
