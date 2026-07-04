@@ -68,7 +68,7 @@ describe("readBindingStatus", () => {
       JSON.stringify({ provider: "github", login: "alice", accountId: "1", boundAt: new Date().toISOString() }),
       { mode: 0o600 },
     );
-    expect(readBindingStatus()).toEqual({ bound: true, login: "alice", provider: "github" });
+    expect(readBindingStatus()).toEqual({ bound: true, login: "alice", provider: "github", sessionActive: false });
   });
 });
 
