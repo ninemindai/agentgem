@@ -26,8 +26,10 @@ export function PublishToExplore({ apiBase, selected, skillCount, lessonCount }:
   const [result, setResult] = useState<{ exploreRef: string; shareUrl: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const [bindStatus, setBindStatus] = useState<{ bound: boolean; login?: string } | null>(null);
-  const [connecting, setConnecting] = useState<{ userCode: string; verificationUri: string } | null>(null);
+  const [connecting, setConnecting] = useState<{ userCode: string; verificationUri: string; deviceCode: string; interval?: number } | null>(null);
   const [connectBusy, setConnectBusy] = useState(false);
+  const [polling, setPolling] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
 
   const provenance = `distilled from ${skillCount} skill${skillCount === 1 ? "" : "s"} and ${lessonCount} lesson${lessonCount === 1 ? "" : "s"}`;
 
@@ -36,6 +38,10 @@ export function PublishToExplore({ apiBase, selected, skillCount, lessonCount }:
     bindStatusRoute.call(client).then(setBindStatus).catch(() => setBindStatus({ bound: false }));
   }, [apiBase]);
 
+  // Step 1: mint the device code and show it. Deliberately does NOT start polling
+  // yet — polling begins only when the user clicks "copy & open GitHub" (below), so
+  // the code being polled and the code they authorize are always the same, and the
+  // ~5-min poll window aligns with the moment they actually go to authorize.
   const connectGitHub = async () => {
     setError(null);
     setConnectBusy(true);
@@ -46,16 +52,34 @@ export function PublishToExplore({ apiBase, selected, skillCount, lessonCount }:
         setError("GitHub verification isn't set up on this server.");
         return;
       }
-      setConnecting({ userCode: start.userCode!, verificationUri: start.verificationUri! });
-      const res = await bindCompleteRoute.call(client, { body: { deviceCode: start.deviceCode!, interval: start.interval } });
-      if (res.bound) setBindStatus({ bound: true, login: res.login });
+      setConnecting({ userCode: start.userCode!, verificationUri: start.verificationUri!, deviceCode: start.deviceCode!, interval: start.interval });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't reach GitHub — try again.");
+    } finally {
+      setConnectBusy(false);
+    }
+  };
+
+  // Step 2: copy the code, open GitHub in the system browser, then poll for
+  // completion. The long-poll resolves once the user authorizes in the browser.
+  const copyOpenAndWait = async () => {
+    if (!connecting || polling) return;
+    void navigator.clipboard?.writeText(connecting.userCode);
+    setCodeCopied(true);
+    setTimeout(() => setCodeCopied(false), 1500);
+    window.open(connecting.verificationUri, "_blank", "noopener"); // desktop: main.ts routes to the system browser
+    setError(null);
+    setPolling(true);
+    try {
+      const client = makeClient(apiBase);
+      const res = await bindCompleteRoute.call(client, { body: { deviceCode: connecting.deviceCode, interval: connecting.interval } });
+      if (res.bound) { setBindStatus({ bound: true, login: res.login }); setConnecting(null); }
       else setError(res.rejected === "unknown-producer" ? "Share telemetry once first, then connect." : `Couldn't verify with GitHub (${res.rejected}).`);
     } catch (err) {
       // Any thrown error (network, expired/denied device code) must surface, not vanish.
       setError(err instanceof Error ? err.message : "Couldn't reach GitHub — try again.");
     } finally {
-      setConnecting(null);
-      setConnectBusy(false);
+      setPolling(false);
     }
   };
 
@@ -121,15 +145,25 @@ export function PublishToExplore({ apiBase, selected, skillCount, lessonCount }:
 
       {bindStatus && !bindStatus.bound && (
         <div className="explore-connect">
-          <button type="button" className="ledger-sort" onClick={connectGitHub} disabled={connectBusy}>
-            {connectBusy ? "Connecting…" : "Connect GitHub"}
-          </button>
-          <p>
-            Optional — verify authorship so your Playbook publishes as verified.
-            {connecting && (
-              <> Open <a href={connecting.verificationUri} target="_blank" rel="noreferrer">{connecting.verificationUri}</a> and enter <code>{connecting.userCode}</code>.</>
-            )}
-          </p>
+          {!connecting ? (
+            <>
+              <button type="button" className="ledger-sort" onClick={connectGitHub} disabled={connectBusy}>
+                {connectBusy ? "Generating code…" : "Connect GitHub"}
+              </button>
+              <p>Optional — verify authorship so your Playbook publishes as verified.</p>
+            </>
+          ) : (
+            <>
+              <p>Your code: <strong>{connecting.userCode}</strong></p>
+              <button type="button" className="ledger-build" onClick={copyOpenAndWait} disabled={polling}>
+                {polling ? "Waiting for authorization…" : codeCopied ? "✓ Copied — opening GitHub…" : "⧉ Copy code & open GitHub"}
+              </button>
+              <p className="deploy-hint">
+                Copies the code and opens GitHub in your browser — enter it there and authorize; this window verifies automatically.
+                {" "}Didn't open? <a href={connecting.verificationUri} target="_blank" rel="noreferrer">Open GitHub</a>.
+              </p>
+            </>
+          )}
         </div>
       )}
 

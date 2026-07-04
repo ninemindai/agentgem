@@ -83,6 +83,33 @@ describe("PublishToExplore", () => {
     await waitFor(() => expect(screen.getByText(/registry down|error/i)).toBeTruthy());
   });
 
+  it("device flow: Connect shows the code first; copy-&-open then opens the browser and verifies", async () => {
+    const seen: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+      const u = String(url);
+      if (u.includes("/api/bind/status")) return res({ bound: false });
+      if (u.includes("/api/bind/start")) { seen.push("start"); return res({ configured: true, userCode: "6DD8-7DC5", verificationUri: "https://github.com/login/device", deviceCode: "dc", interval: 5 }); }
+      if (u.includes("/api/bind/complete")) { seen.push("complete"); return res({ bound: true, login: "octocat" }); }
+      throw new Error(`unexpected: ${u}`);
+    }));
+    const openSpy = vi.fn();
+    vi.stubGlobal("open", openSpy);
+
+    render(<PublishToExplore apiBase="" selected={new Set(["skills::x"])} skillCount={1} lessonCount={0} />);
+    fireEvent.click(await screen.findByRole("button", { name: /connect github/i }));
+
+    // Code is shown, and the poll has NOT started yet (no /complete call, browser not opened).
+    await waitFor(() => expect(screen.getByText("6DD8-7DC5")).toBeTruthy());
+    expect(seen).toEqual(["start"]);
+    expect(openSpy).not.toHaveBeenCalled();
+
+    // Copy & open → opens the system browser and starts the poll → verifies.
+    fireEvent.click(screen.getByRole("button", { name: /copy code & open github/i }));
+    expect(openSpy).toHaveBeenCalledWith("https://github.com/login/device", "_blank", "noopener");
+    await waitFor(() => expect(screen.getByText(/verified as @octocat/i)).toBeTruthy());
+    expect(seen).toEqual(["start", "complete"]);
+  });
+
   it("shares without binding, and still offers optional Connect GitHub when unbound", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
       const u = String(url);
