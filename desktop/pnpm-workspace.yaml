@@ -1,0 +1,7 @@
+# Marks desktop/ as its own pnpm workspace root. desktop/ is a standalone Electron
+# app (its own electron/electron-builder toolchain + lockfile) and is deliberately
+# NOT a member of the repo's root workspace. Without this file, `pnpm install` run
+# here walks up to the repo's pnpm-workspace.yaml, treats desktop as a non-member,
+# and silently skips its own deps — electron never installs. pnpm stops walking up
+# at the first pnpm-workspace.yaml it finds, so this keeps the install self-contained.
+packages: []
