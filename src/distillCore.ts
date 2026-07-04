@@ -10,6 +10,7 @@ import {
   claudeTranscriptsForCwd, scanWorkflow,
   distillWorkflow, distillSessionLessons,
   distillToken, readDistillCacheEntry, writeDistillCache,
+  computeCached, type CacheHit,
   type DistilledSkill, type DistilledLesson,
 } from "@agentgem/insight";
 
@@ -32,19 +33,18 @@ export async function computeDistill(
 
   const paths = claudeTranscriptsForCwd(dirs.claudeDir, root);
   const token = distillToken(paths);
-  if (!opts.force) {
-    const entry = readDistillCacheEntry(root, token);
-    if (entry) return { payload: entry.result as DistillPayload, cached: true, updatedAt: entry.ts };
-  }
-
-  const signal = scanWorkflow(paths, scanInv, { retainSequences: true });
-  const [wf, ls] = await Promise.all([
-    (opts.distillWf ?? distillWorkflow)(signal, scanInv),
-    (opts.distillLessons ?? distillSessionLessons)(signal, scanInv),
-  ]);
-  const degraded = wf.degraded || ls.degraded;
-  const payload: DistillPayload = { skills: wf.distilled, lessons: ls.lessons, degraded };
-  let updatedAt: number | null = null;
-  if (!degraded) { const ts = now(); writeDistillCache(root, token, payload, ts); updatedAt = ts; }
-  return { payload, cached: false, updatedAt };
+  return computeCached<DistillPayload>({
+    token, force: opts.force, now,
+    read: (t) => readDistillCacheEntry(root, t) as CacheHit<DistillPayload> | null,
+    write: (t, payload, ts) => writeDistillCache(root, t, payload, ts),
+    degraded: (p) => p.degraded,
+    compute: async () => {
+      const signal = scanWorkflow(paths, scanInv, { retainSequences: true });
+      const [wf, ls] = await Promise.all([
+        (opts.distillWf ?? distillWorkflow)(signal, scanInv),
+        (opts.distillLessons ?? distillSessionLessons)(signal, scanInv),
+      ]);
+      return { skills: wf.distilled, lessons: ls.lessons, degraded: wf.degraded || ls.degraded };
+    },
+  });
 }
