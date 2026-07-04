@@ -144,10 +144,6 @@ body::before {
 .console-group-label { margin: 14px 8px 4px; font: 700 10px/1 var(--font-ui);
   text-transform: uppercase; letter-spacing: .16em; color: var(--muted); }
 .console-group-label:first-of-type { margin-top: 6px; }
-/* The active gem, echoed under the Build label — natural case + accent so it
-   reads as a live value, not a category. Truncates rather than wrapping. */
-.console-group-gem { color: var(--accent); text-transform: none; letter-spacing: .01em;
-  font-weight: 600; }
 .console-footer { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--line-soft); }
 
 .console-main { padding: 30px 36px 56px; max-width: 1100px; animation: fade .5s ease both; }

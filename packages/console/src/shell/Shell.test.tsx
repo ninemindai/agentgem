@@ -129,13 +129,21 @@ describe("Shell", () => {
     expect(screen.getByText("Settings")).toBeTruthy();
   });
 
-  it("echoes the active gem under the Build label (name when set, 'New Gem' when not)", () => {
-    resetGem();
-    const { rerender } = render(<Shell pages={pages} apiBase="" />);
-    expect(document.querySelector(".console-group-gem")?.textContent).toContain("New Gem");
-    act(() => { setName("shiny-kit"); setKeys(new Set(["a"])); });
-    rerender(<Shell pages={pages} apiBase="" />);
-    expect(document.querySelector(".console-group-gem")?.textContent).toContain("shiny-kit");
+  it("places the active-gem switcher under the Build label, not at the top of the rail", () => {
+    const gp = [
+      defineConsolePage({ id: "obs", title: "Observe", order: 10, group: "observe", route: "#/obs", component: () => <p>o</p> }),
+      defineConsolePage({ id: "cur", title: "Curate", order: 10, group: "build", route: "#/cur", component: () => <p>c</p> }),
+    ];
+    const { container } = render(<Shell pages={gp} apiBase="" />);
+    const switcher = container.querySelector(".console-switcher")!;
+    const buildLabel = screen.getByText("Build");
+    const observeItem = screen.getByRole("button", { name: "Observe" });
+    // The switcher now follows the Build label in DOM order (moved into the Build section)...
+    expect(buildLabel.compareDocumentPosition(switcher) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // ...and therefore also follows the Observe items — it is no longer pinned at the top.
+    expect(observeItem.compareDocumentPosition(switcher) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The duplicate gem-name echo in the Build label is gone.
+    expect(container.querySelector(".console-group-gem")).toBeNull();
   });
 
   it("dims a gem-scoped (requiresGem) nav item until a gem is active, and un-dims it once artifacts exist", () => {
