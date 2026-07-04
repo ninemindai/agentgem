@@ -392,6 +392,23 @@ h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: -0.005em
 .ex-skillcard > .ex-star { position: absolute; top: 12px; right: 13px; z-index: 1; }
 .ex-skillcard-author { align-self: flex-start; color: var(--muted); font-size: 0.78rem; text-decoration: none; transition: color var(--t); }
 .ex-skillcard-author:hover { color: var(--brand-strong); }
+.ex-skillcard-actions { display: inline-flex; align-items: center; gap: 12px; white-space: nowrap; }
+.ex-link-btn { font: inherit; font-weight: 500; color: var(--muted); background: none; border: none; padding: 0; cursor: pointer; transition: color var(--t); }
+.ex-link-btn:hover { color: var(--brand-strong); }
+
+/* Preview modal (also reused by the reviews page) */
+.ex-modal { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 24px; background: color-mix(in srgb, var(--ink) 45%, transparent); animation: ex-fade 0.15s var(--ease); }
+.ex-modal-panel { position: relative; width: min(640px, 100%); max-height: 85vh; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow-lg); padding: 22px 24px; }
+.ex-modal-panel:focus { outline: none; }
+.ex-modal-close { position: absolute; top: 8px; right: 10px; width: 32px; height: 32px; font-size: 1.3rem; line-height: 1; color: var(--muted); background: none; border: none; border-radius: var(--r-sm); cursor: pointer; transition: color var(--t), background var(--t); }
+.ex-modal-close:hover { color: var(--ink); background: var(--surface-2); }
+.ex-modal-title { font-family: var(--display); font-weight: 600; font-size: 1.1rem; margin: 0 32px 12px 0; color: var(--ink); }
+@keyframes ex-fade { from { opacity: 0; } to { opacity: 1; } }
+@media (max-width: 520px) {
+  .ex-modal { padding: 0; align-items: stretch; }
+  .ex-modal-panel { width: 100%; max-height: 100vh; border-radius: 0; padding: 20px 16px; }
+  .ex-modal-close { width: 44px; height: 44px; }
+}
 
 /* staggered card entrance — each group's cards cascade in on load */
 @keyframes ex-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
