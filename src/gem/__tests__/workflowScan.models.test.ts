@@ -1,6 +1,6 @@
 // src/gem/__tests__/workflowScan.models.test.ts
 import { describe, it, expect } from "vitest";
-import { collectModels, sessionPrimaryModel } from "@agentgem/insight";
+import { collectModels, sessionPrimaryModel, createModelTally } from "@agentgem/insight";
 
 describe("sessionPrimaryModel", () => {
   it("returns the most-frequent real model in one session", () => {
@@ -45,5 +45,37 @@ describe("collectModels", () => {
       [{ message: { role: "assistant", model: "<synthetic>" } }, { message: { role: "assistant", model: "claude-opus-4-8" } }],
     ];
     expect(collectModels(sessions)).toEqual([{ id: "claude-opus-4-8", sessions: 1 }]);
+  });
+});
+
+describe("createModelTally (streaming) equals collectModels (batch)", () => {
+  const tallyOf = (sessions: any[][]) => {
+    const t = createModelTally();
+    for (const s of sessions) t.addSession(s);   // folded one at a time, records not retained
+    return t.finalize();
+  };
+
+  it("matches collectModels across mixed sessions, casing, and synthetic markers", () => {
+    const sessions = [
+      [{ message: { model: "claude-opus-4-8" } }, { message: { model: "claude-opus-4-8" } }],
+      [{ message: { model: "Claude-Opus-4-8" } }, { message: { model: "gpt-5.1" } }],
+      [{ message: { model: "<synthetic>" } }],
+      [{ message: { role: "user" } }],
+      [{ message: { model: "gpt-5.1" } }],
+    ];
+    expect(tallyOf(sessions)).toEqual(collectModels(sessions));
+  });
+
+  it("preserves first-seen order under the sessions-desc / id-asc tie-break", () => {
+    const sessions = [
+      [{ message: { model: "b-model" } }],
+      [{ message: { model: "a-model" } }],
+      [{ message: { model: "b-model" } }],   // b now leads by session count
+    ];
+    expect(tallyOf(sessions)).toEqual(collectModels(sessions));
+  });
+
+  it("yields [] for an empty corpus", () => {
+    expect(tallyOf([])).toEqual(collectModels([]));
   });
 });
