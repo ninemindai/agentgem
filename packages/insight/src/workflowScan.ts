@@ -189,6 +189,33 @@ export function collectModels(sessions: RawRecord[][]): { id: string; sessions: 
     .sort((a, b) => b.sessions - a.sessions || a.id.localeCompare(b.id));
 }
 
+// Streaming form of collectModels: fold one session's records at a time so a
+// multi-session scan never has to retain every parsed record of the whole corpus
+// at once. addSession(records).finalize() equals collectModels([...all sessions]).
+export interface ModelTally { addSession(records: RawRecord[]): void; finalize(): { id: string; sessions: number }[] }
+export function createModelTally(): ModelTally {
+  const order: string[] = [];
+  const counts = new Map<string, number>();
+  return {
+    addSession(records) {
+      const seen = new Set<string>();
+      for (const r of records) {
+        const m = r.message?.model;
+        if (!m || m.startsWith("<")) continue;   // skip synthetic/placeholder markers
+        seen.add(m.toLowerCase());
+      }
+      for (const id of seen) {
+        if (!counts.has(id)) order.push(id);
+        counts.set(id, (counts.get(id) ?? 0) + 1);
+      }
+    },
+    finalize() {
+      return order.map((id) => ({ id, sessions: counts.get(id)! }))
+        .sort((a, b) => b.sessions - a.sessions || a.id.localeCompare(b.id));
+    },
+  };
+}
+
 // The dominant real model in ONE session (most-frequent message.model, lowercased,
 // synthetic markers skipped; lexicographic tie-break for determinism). Lets the
 // insights layer bucket a session's outcome by the model that did the work.
@@ -328,7 +355,11 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
   const used = new Map<string, { type: ArtifactType; acc: Acc }>();
   const unresolved = new Map<string, { kind: ArtifactType | "builtin"; count: number }>();
   const perSession: { ms: number; names: Set<string> }[] = [];
-  const sessionRecords: RawRecord[][] = [];
+  // Fold model usage per session instead of retaining every parsed record of the
+  // whole corpus (that array is the scan's dominant memory cost — it holds all of
+  // ~/.claude parsed at once just to tally models). Peak now scales with the
+  // largest single transcript, not total history.
+  const modelTally = createModelTally();
   const notes: string[] = [];
   let firstMs = Infinity, lastMs = 0;
 
@@ -427,7 +458,7 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
     }
     if (bad) notes.push(`${bad} unparseable line(s) skipped in ${path.split("/").pop()}`);
     perSession.push({ ms, names: sessionNames });
-    sessionRecords.push(currentSessionRecords);
+    modelTally.addSession(currentSessionRecords);   // fold + drop; not retained corpus-wide
     if (opts.retainSequences && steps.length > 0) {
       const missionHint: MissionHint | undefined =
         firstUserText !== null ? { task: scrubProse(firstUserText), outcome: scrubProse(lastAssistantText) } : undefined;
@@ -514,7 +545,7 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
       lastMs,
       spanDays: lastMs && firstMs !== Infinity ? Math.round((lastMs - firstMs) / 86_400_000) : 0,
     },
-    models: collectModels(sessionRecords),
+    models: modelTally.finalize(),
     artifacts,
     unresolved: [...unresolved.entries()].map(([name, v]) => ({ name, kind: v.kind, count: v.count })),
     coOccurrence,
