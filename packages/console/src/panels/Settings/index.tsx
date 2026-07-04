@@ -44,6 +44,7 @@ export function Settings({ apiBase }: { apiBase: string }) {
   const [bindFlow, setBindFlow] = useState<BindFlow>(null);
   const [bindError, setBindError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [polling, setPolling] = useState(false);
 
   useEffect(() => {
     deployTargetsRoute.call(makeClient(apiBase))
@@ -57,35 +58,48 @@ export function Settings({ apiBase }: { apiBase: string }) {
       .catch((e) => setBindError(e instanceof Error ? e.message : String(e)));
   }, [apiBase]);
 
+  // Step 1: mint the device code and show it. No polling and no browser launch yet —
+  // both happen when the user clicks "copy & open GitHub" (below), so the polled
+  // code and the code they authorize always match.
   const connectGitHub = async () => {
     setBindError(null);
     setBindFlow(null);
-    // Open the GitHub tab synchronously inside the click gesture so the popup
-    // blocker allows it, then redirect it to the device page once /bind/start
-    // returns the URL. (No `noopener` — we need the handle to set its location.)
-    const ghTab = typeof window !== "undefined" ? window.open("about:blank", "_blank") : null;
     try {
       const r = await bindStartRoute.call(makeClient(apiBase), { body: {} });
       if (!r.configured) {
-        ghTab?.close();
         setBindFlow({ step: "unconfigured" });
         return;
       }
-      const flow: BindFlow = {
+      setBindFlow({
         step: "code",
         userCode: r.userCode!,
         verificationUri: r.verificationUri!,
         verificationUriComplete: r.verificationUriComplete,
         deviceCode: r.deviceCode!,
         interval: r.interval,
-      };
-      setBindFlow(flow);
-      // Prefer the code-prefilled URL — the user lands on "just click Authorize".
-      const url = r.verificationUriComplete ?? r.verificationUri!;
-      if (ghTab) ghTab.location.href = url;              // browser: redirect the pre-opened tab
-      else window.open(url, "_blank", "noopener");       // desktop: main.ts routes this to the system browser
+      });
+    } catch (e) {
+      setBindError(e instanceof Error ? e.message : String(e));
+      setBindFlow(null);
+    }
+  };
+
+  // Step 2: copy the code, open GitHub in the system browser, then poll for
+  // completion until the user authorizes.
+  const copyOpenAndWait = async () => {
+    if (bindFlow?.step !== "code" || polling) return;
+    const flow = bindFlow;
+    // Prefer the code-prefilled URL — the user lands on "just click Authorize".
+    const url = flow.verificationUriComplete ?? flow.verificationUri;
+    void navigator.clipboard?.writeText(flow.userCode);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+    window.open(url, "_blank", "noopener"); // desktop: main.ts routes this to the system browser
+    setBindError(null);
+    setPolling(true);
+    try {
       const result = await bindCompleteRoute.call(makeClient(apiBase), {
-        body: { deviceCode: r.deviceCode!, interval: r.interval },
+        body: { deviceCode: flow.deviceCode, interval: flow.interval },
       });
       if (result.bound) {
         setBindStatus({ bound: true, login: result.login, avatarUrl: result.avatarUrl });
@@ -95,9 +109,9 @@ export function Settings({ apiBase }: { apiBase: string }) {
         setBindFlow(null);
       }
     } catch (e) {
-      ghTab?.close();
       setBindError(e instanceof Error ? e.message : String(e));
-      setBindFlow(null);
+    } finally {
+      setPolling(false);
     }
   };
 
@@ -167,24 +181,11 @@ export function Settings({ apiBase }: { apiBase: string }) {
             )}
             {bindFlow?.step === "code" && (
               <div>
-                <p className="ws-note">
-                  Your code: <strong>{bindFlow.userCode}</strong>
-                  <button
-                    type="button"
-                    className="ledger-view"
-                    style={{ marginLeft: 8 }}
-                    aria-label="Copy code"
-                    onClick={() => {
-                      void navigator.clipboard?.writeText(bindFlow.userCode);
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 1500);
-                    }}
-                  >
-                    {copied ? "✓ Copied" : "⧉ Copy"}
-                  </button>
-                </p>
-                <p className="deploy-hint">We opened GitHub in your browser — enter this code there. Didn't open? <a href={bindFlow.verificationUriComplete ?? bindFlow.verificationUri} target="_blank" rel="noreferrer">Open GitHub</a>.</p>
-                <p className="deploy-hint">Waiting for verification…</p>
+                <p className="ws-note">Your code: <strong>{bindFlow.userCode}</strong></p>
+                <button type="button" className="ledger-build" onClick={copyOpenAndWait} disabled={polling}>
+                  {polling ? "Waiting for authorization…" : copied ? "✓ Copied — opening GitHub…" : "⧉ Copy code & open GitHub"}
+                </button>
+                <p className="deploy-hint">Copies the code and opens GitHub in your browser — enter it there and authorize; this verifies automatically. Didn't open? <a href={bindFlow.verificationUriComplete ?? bindFlow.verificationUri} target="_blank" rel="noreferrer">Open GitHub</a>.</p>
               </div>
             )}
           </>
