@@ -32,6 +32,20 @@ export type UsageItem = z.infer<typeof UsageItemSchema>;
 export type Usage = z.infer<typeof UsageSchema>;
 
 export const inventoryRoute = defineRoute("GET", "/api/inventory", { response: InventorySchema });
+
+// Rubrics catalog (built-in + user rubrics) for the picker + library panels.
+export const RubricSummarySchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  target: z.string(),
+  naturalScope: z.enum(["session", "project", "all"]).optional(),
+  factors: z.array(z.object({ factor: z.string(), weight: z.number().optional() })),
+  criteria: z.array(z.looseObject({ id: z.string() })).optional(),
+});
+export type RubricSummary = z.infer<typeof RubricSummarySchema>;
+export const rubricsRoute = defineRoute("GET", "/api/rubrics", {
+  response: z.object({ rubrics: z.array(RubricSummarySchema) }),
+});
 export const usageRoute = defineRoute("GET", "/api/usage", {
   query: z.object({ scope: z.enum(["global"]).optional() }),
   response: UsageSchema,

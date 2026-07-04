@@ -1028,3 +1028,30 @@ button.scorecard-intent { line-height: 1.4; }
 .dream-diary-count { flex: 1; color: var(--ink-soft); }
 .dream-diary-degraded { padding: 1px 7px; border-radius: 999px; font: 600 9.5px/1.4 var(--font-mono);
   letter-spacing: .06em; text-transform: uppercase; background: rgba(154, 51, 36, .1); color: var(--accent); }
+
+/* Rubrics — report (observe) + catalog (library). Warm-paper, calm, list-based. */
+.rub-picker { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rub-picker-label { font: 700 11px/1.4 var(--font-mono); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.rub-verdict { margin: 0 0 10px; font: 13.5px/1.5 var(--font-ui); color: var(--ink-soft); }
+.rub-verdict strong { color: var(--ink); }
+.rub-clean { color: var(--muted); font-weight: 600; }
+.rub-needs { color: var(--accent); font-weight: 600; }
+.rub-factors { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.rub-factor { border: 1px solid var(--line); border-radius: var(--radius); background: var(--raised); padding: 10px 12px; }
+.rub-factor.rub-warn { border-left: 3px solid var(--accent); }
+.rub-factor.rub-ok { opacity: .7; }
+.rub-factor-head { display: flex; align-items: center; gap: 8px; }
+.rub-factor-head .analyze-include-name { font: 13px/1.4 var(--font-ui); color: var(--ink); }
+.rub-icon { width: 16px; text-align: center; font-size: 13px; }
+.rub-warn .rub-icon { color: var(--accent); }
+.rub-info .rub-icon, .rub-ok .rub-icon { color: var(--muted); }
+.rub-advice { margin: 6px 0 0 24px; font: 12.5px/1.5 var(--font-ui); color: var(--ink-soft); }
+
+/* Catalog */
+.rub-lib-group { margin-top: 14px; }
+.rub-lib-heading { margin: 0 0 6px; font: 700 11px/1.4 var(--font-mono); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.rub-lib-name { display: flex; align-items: center; gap: 6px; background: none; border: none; padding: 0; cursor: pointer; text-align: left; }
+.rub-caret { color: var(--muted); font-size: 11px; }
+.rub-lib-factors { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.rub-lib-factors li { font: 12px/1.4 var(--font-mono); color: var(--ink-soft); }
+.rub-lib-factors code { background: var(--paper-2); padding: 1px 6px; border-radius: 6px; }

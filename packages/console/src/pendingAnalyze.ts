@@ -30,3 +30,10 @@ export interface PendingContribution { keys: string[]; skillCount: number; lesso
 let pendingContribution: PendingContribution | null = null;
 export function setPendingContribution(d: PendingContribution): void { pendingContribution = d; }
 export function consumePendingContribution(): PendingContribution | null { const d = pendingContribution; pendingContribution = null; return d; }
+
+// One-shot hand-off of a rubric id from the Rubrics catalog (library) to the
+// Rubrics report panel (observe) — the manage→apply "Run ▶" deep-link. Consumed
+// once so a later navigation doesn't re-preselect it.
+let pendingRubric: string | null = null;
+export function setPendingRubric(id: string): void { pendingRubric = id; }
+export function consumePendingRubric(): string | null { const id = pendingRubric; pendingRubric = null; return id; }
