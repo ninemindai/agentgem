@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GemController } from "../../gem.controller.js";
-import { computeGlobalUsage } from "@agentgem/capture";
+import { computeGlobalUsage, closeSharedIndex } from "@agentgem/capture";
 import { readGlobalUsageCacheStale, writeGlobalUsageCache } from "@agentgem/capture";
 import { allClaudeTranscripts } from "@agentgem/insight";
 import { resolveDirs } from "@agentgem/model";
@@ -62,5 +62,14 @@ describe("stale-while-revalidate", () => {
     const d = res.artifacts.find((a) => a.name === "diagram");
     expect(d!.invocations).toBe(3);             // 2 (A) + 1 (B), same as computeGlobalUsage
     expect(d!.root).toBeNull();
+  });
+
+  it("closeSharedIndex closes the opened index; it is idempotent and a later usage call reopens", async () => {
+    const first = await new GemController().usage({ query: { dir: claudeDir, scope: "global" } });
+    expect(first.artifacts.map((a) => a.name)).toContain("diagram");   // opens the shared index
+    await closeSharedIndex();                                          // graceful-shutdown close
+    await closeSharedIndex();                                          // idempotent — safe to call twice
+    const again = await new GemController().usage({ query: { dir: claudeDir, scope: "global" } });
+    expect(again.artifacts.map((a) => a.name)).toContain("diagram");   // transparently reopened
   });
 });

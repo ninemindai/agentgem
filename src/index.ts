@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 // src/index.ts
 import { config as loadEnv } from "dotenv";
-import { credentialsEnvPath } from "@agentgem/capture";
+import { credentialsEnvPath, closeSharedIndex } from "@agentgem/capture";
 // Load env before anything reads it: cwd .env (a dev override) layered over the
 // persisted server credentials in ~/.agentgem/.env. `override` defaults to false,
 // so a value already set in the cwd .env wins. `quiet` silences dotenv's banner/
@@ -118,6 +118,11 @@ export async function createApp(port: number): Promise<RestApplication> {
     await mountGating(app, db);
     console.log(`aggregator: ${mode}${mode === "pglite" ? " (set DATABASE_URL for Postgres)" : ""}`);
   }
+  // The persistent transcript index (capture) is a separate, lazily-opened on-disk
+  // PGlite — not the aggregator DB. Close it on graceful shutdown too, so SIGTERM
+  // flushes its WASM instance cleanly instead of leaving it resident until exit
+  // (symmetric with the aggregator's registerDrizzle onStop). No-op if never opened.
+  app.onStop(async () => { await closeSharedIndex(); });
   // CSRF / drive-by guard: reject browser-initiated cross-site requests to the loopback API
   // (controller routes). Same-origin UI and non-browser clients (CLI/MCP/tests) pass. Mounted in
   // the framework middleware chain so it runs before controller dispatch.
