@@ -17,6 +17,14 @@ function intervalFromEnv(): number | undefined {
   return Number.isFinite(v) && v >= 1000 ? v : undefined;
 }
 
+// Set AGENTGEM_WARM_DISABLE=true to turn warming off entirely: no boot pass and
+// no idle timer. Use on memory-constrained hosts — a warm pass's transient
+// working set (transcript parsing) spikes RSS well above the idle footprint.
+// Endpoints still compute on demand; they're just not pre-warmed.
+function warmDisabled(): boolean {
+  return process.env.AGENTGEM_WARM_DISABLE === "true";
+}
+
 export interface WarmSchedule { stop(): void }
 
 export function startWarmSchedule(opts: {
@@ -27,6 +35,7 @@ export function startWarmSchedule(opts: {
   clearInterval?: (h: unknown) => void;
   runNow?: (fn: () => void) => void;
 } = {}): WarmSchedule {
+  if (warmDisabled()) return { stop() {} };
   const home = opts.home ?? agentgemHome();
   const intervalMs = opts.intervalMs ?? intervalFromEnv() ?? DEFAULT_INTERVAL_MS;
   const run = opts.run ?? (() => withWarmLock(home, () => runWarmPass(), () => undefined));
