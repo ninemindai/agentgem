@@ -6,7 +6,9 @@
 # Requires ONE repository secret: DATABASE_URL = the same Neon connection string the
 # deployed API uses (include ?sslmode=require). The built-in GITHUB_TOKEN (auto-provided,
 # ~1000 req/hr) authenticates the GitHub reads so all 42 sources index without hitting the
-# 60/hr unauthenticated limit — no personal token needed.
+# 60/hr unauthenticated limit — no personal token needed. Now that the indexer also fetches
+# each skill's description (~934 calls/run), an optional repository secret INDEX_GITHUB_TOKEN
+# (a PAT) lifts the rate limit to 5000/hr if the built-in token's headroom ever gets tight.
 name: index-sources
 
 on:
@@ -37,4 +39,4 @@ jobs:
       - run: node dist/cli.js index-sources
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.INDEX_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}

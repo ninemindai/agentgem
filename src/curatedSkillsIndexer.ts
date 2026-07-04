@@ -3,12 +3,13 @@
 // src/curatedSkillsIndexer.ts
 //
 // App-layer bridge: @agentgem/distribute (curated-source adapters) -> the aggregator DB. Walks
-// every CURATED_SOURCES repo, fetches its GitHub star count and skill list, and upserts a
-// curated_skills row per skill so the marketplace "Popular Skills" board (GET
-// /api/aggregator/popular-skills) can rank without hitting GitHub on every request. Run via
-// `agentgem index-sources` (indexSourcesCli.ts).
+// every CURATED_SOURCES repo, fetches its GitHub star count, skill list, and each skill's
+// description (one `sourceEntry` fetch per skill — ~1 tree + 1 star + N entry calls per source,
+// ~934 total across 42 sources), and upserts a curated_skills row per skill so the marketplace
+// "Popular Skills" board (GET /api/aggregator/popular-skills) can rank and render without hitting
+// GitHub on every request. Run via `agentgem index-sources` (indexSourcesCli.ts).
 import { upsertCuratedSkills, type CuratedSkillRow, type AppDb } from "@agentgem/aggregator";
-import { CURATED_SOURCES, cfgForCuratedSource, listSourceSkills, defaultHttp } from "@agentgem/distribute";
+import { CURATED_SOURCES, cfgForCuratedSource, listSourceSkills, sourceEntry, defaultHttp } from "@agentgem/distribute";
 import type { CuratedSource, Http } from "@agentgem/distribute";
 
 // GET /repos/{owner}/{name} -> stargazers_count. Defaults to 0 on any error (rate limit, 404,
@@ -39,7 +40,18 @@ export async function indexCuratedSkills(
       const cfg = cfgForCuratedSource(source);
       const stars = await fetchStars(source, http);
       const skills = await listSourceSkills(source, cfg, http);
-      const rows: CuratedSkillRow[] = skills.map((s) => ({
+      // Fetch each skill's description via the same dispatch used to browse/import it. A single
+      // skill's fetch failing (rate limit, malformed frontmatter) must not sink the whole source —
+      // it just indexes with description: null.
+      const descriptions = await Promise.all(skills.map(async (s) => {
+        try {
+          const entry = await sourceEntry(source, s.path, cfg, http);
+          return entry.description ?? null;
+        } catch {
+          return null;
+        }
+      }));
+      const rows: CuratedSkillRow[] = skills.map((s, i) => ({
         sourceId: source.id,
         source: source.label,
         division: s.division,
@@ -49,6 +61,7 @@ export async function indexCuratedSkills(
         homepage: source.homepage ?? null,
         stars,
         installs: null,
+        description: descriptions[i] ?? null,
       }));
       await upsertCuratedSkills(db, rows);
       sourceCount += 1;

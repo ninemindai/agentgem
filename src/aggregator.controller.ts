@@ -9,7 +9,7 @@ import { DrizzleBindings } from "@agentback/drizzle";
 import type { AppDb } from "@agentgem/aggregator";
 import { ingestAttestation, ingestGemAdoption } from "@agentgem/aggregator";
 import { popularity, coOccurrence, adoption, overview, coOccurrenceMatrix, modelBenchmark, gemAdoption } from "@agentgem/aggregator";
-import { popularSkills } from "@agentgem/aggregator";
+import { popularSkills, popularSkillGroups } from "@agentgem/aggregator";
 import { buildProfile, buildOrgCatalog } from "@agentgem/aggregator";
 import type { UsageAttestation, GemAdoption } from "@agentgem/insight";
 import { recordBinding } from "@agentgem/aggregator";
@@ -42,12 +42,24 @@ const BenchResult = z.array(z.object({ model: z.string(), mostly: z.number(), pa
 const GemAdoptionQuery = z.object({ keys: z.string().optional() });
 const GemAdoptionResult = z.object({ items: z.array(z.object({ gemKey: z.string(), installs: z.number(), verifiedInstalls: z.number() })) });
 
-const PopularSkillsQuery = z.object({ limit: z.coerce.number().int().min(1).max(200).optional() });
+const PopularSkillsQuery = z.object({
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+  sources: z.coerce.number().int().min(1).max(50).optional(),
+  perSource: z.coerce.number().int().min(1).max(50).optional(),
+});
 const CuratedSkillSchema = z.object({
   sourceId: z.string(), source: z.string(), division: z.string(), name: z.string(), path: z.string(),
   repo: z.string(), homepage: z.string().nullable(), stars: z.number(), installs: z.number().nullable(),
+  description: z.string().nullable(),
 });
-const PopularSkillsResult = z.object({ skills: z.array(CuratedSkillSchema) });
+const CuratedSkillGroupSchema = z.object({
+  sourceId: z.string(), source: z.string(), repo: z.string(), homepage: z.string().nullable(), stars: z.number(),
+  skills: z.array(z.object({
+    name: z.string(), path: z.string(), division: z.string(),
+    description: z.string().nullable(), installs: z.number().nullable(),
+  })),
+});
+const PopularSkillsResult = z.object({ skills: z.array(CuratedSkillSchema), groups: z.array(CuratedSkillGroupSchema) });
 
 const ProfileQuery = z.object({ login: z.string() });
 const ProfileGemSchema = z.object({
@@ -174,11 +186,16 @@ export class AggregatorController {
   }
 
   // Public "Popular Skills" board: skills discovered across the curated sources (see
-  // curatedSkillsIndexer.ts), ranked by installs (once skills.sh enrichment lands) then GitHub
-  // stars. No k-anon floor — this is public repo metadata, not producer-derived usage data.
+  // curatedSkillsIndexer.ts). `skills` (flat, installs-then-stars ranked) is kept for back-compat
+  // with the live marketplace; `groups` (by source, ordered by the source repo's GitHub stars) is
+  // the grouped board the current marketplace UI renders. No k-anon floor — this is public repo
+  // metadata, not producer-derived usage data.
   @get("/popular-skills", { query: PopularSkillsQuery, response: PopularSkillsResult })
   async popularSkills(input: { query: z.infer<typeof PopularSkillsQuery> }): Promise<z.infer<typeof PopularSkillsResult>> {
-    return { skills: await popularSkills(this.db, { limit: input.query.limit ?? 50 }) };
+    return {
+      skills: await popularSkills(this.db, { limit: input.query.limit ?? 50 }),
+      groups: await popularSkillGroups(this.db, { sources: input.query.sources, perSource: input.query.perSource }),
+    };
   }
 
   // Public profile: avatar + verified flag + published gems with k-anon engagement. login is a query
