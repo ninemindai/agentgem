@@ -71,7 +71,10 @@ export async function streamRubric(req: SseReq, res: SseRes): Promise<void> {
 
     send("start", { rubric: rubric.id, title: rubric.title, target: rubric.target, scope: scope.kind });
     const fresh = str(req.query.refresh) === "true";   // ?refresh=true bypasses the cache
-    const { payload, cached, updatedAt } = await computeRubric(rubric, scope, { dir, force: fresh });
+    // onDelta forwards LLM-criterion agent output as it streams (cheap-only rubrics never emit).
+    const { payload, cached, updatedAt } = await computeRubric(rubric, scope, {
+      dir, force: fresh, onDelta: (chunk) => send("delta", { text: chunk }),
+    });
     send("done", { report: payload, cached, updatedAt });
   } catch (err) {
     log.warn("streamRubric failed: %s", (err as Error)?.message ?? err);

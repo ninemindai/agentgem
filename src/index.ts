@@ -213,10 +213,14 @@ export async function createApp(port: number): Promise<RestApplication> {
     beginForeground();
     try { await streamInsights(req as never, res as never); } finally { endForeground(); }
   });
-  // SSE rubric evaluation: run one rubric's cheap factors over a scope's sessions →
-  // a per-rubric report. GET /api/rubric/stream?rubric=<id>&scope=session|project|all&root=&sessionId=&dir=
-  // Cheap-only (Phase 1) → no foreground guard, mirrors the scorecard route.
-  server.expressApp.get("/api/rubric/stream", originGuard, (req, res) => streamRubric(req as never, res as never));
+  // SSE rubric evaluation: run one rubric's factors over a scope's sessions → a
+  // per-rubric report. GET /api/rubric/stream?rubric=<id>&scope=session|project|all&root=&sessionId=&dir=
+  // A rubric may include LLM criteria (Phase 2) that drive the agent, so it takes the
+  // foreground guard like the insights route (harmless for cheap-only rubrics).
+  server.expressApp.get("/api/rubric/stream", originGuard, async (req, res) => {
+    beginForeground();
+    try { await streamRubric(req as never, res as never); } finally { endForeground(); }
+  });
   // The rubric picker's catalog: built-in + user rubrics. GET /api/rubrics?dir=...
   server.expressApp.get("/api/rubrics", originGuard, (req, res) =>
     res.json({ rubrics: listRubrics(typeof req.query.dir === "string" ? req.query.dir : undefined) } as never));

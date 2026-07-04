@@ -47,6 +47,9 @@ function RubricReportCard({ report }: { report: RubricReportView }) {
           ? <span className="rub-clean">clean — all {total} check{total === 1 ? "" : "s"} passed</span>
           : <span className="rub-needs">{actionable} of {total} check{total === 1 ? "" : "s"} need action</span>}
       </p>
+      {report.degraded && (
+        <p className="insights-hint">Some LLM criteria were skipped — the local agent was unavailable. Cheap-factor results are shown.</p>
+      )}
 
       <ul className="rub-factors">
         {report.factors.map((f) => <FactorRow key={f.id} f={f} />)}
@@ -75,6 +78,7 @@ export function Rubrics({ apiBase }: { apiBase: string }) {
   const [recents, setRecents] = useState<RecentEntry[] | null>(null);
   const [activePath, setActivePath] = useState<string | null>(null);
   const [phase, setPhase] = useState("");
+  const [out, setOut] = useState("");
   const [report, setReport] = useState<RubricReportView | null>(null);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -97,10 +101,11 @@ export function Rubrics({ apiBase }: { apiBase: string }) {
   const run = (path: string, fresh = false) => {
     if (!rubricId) return;
     closeRef.current?.();
-    setActivePath(path); setPhase(""); setReport(null); setUpdatedAt(null); setError(null); setRunning(true);
+    setActivePath(path); setPhase(""); setOut(""); setReport(null); setUpdatedAt(null); setError(null); setRunning(true);
     const scope = path === "*" ? { rubric: rubricId, scope: "all" as const } : { rubric: rubricId, scope: "project" as const, root: path };
     closeRef.current = openRubricStream(apiBase, scope, (e) => {
       if (e.type === "start") setPhase("evaluating");
+      else if (e.type === "delta") setOut((o) => o + e.text);
       else if (e.type === "done") { setPhase("done"); setReport(e.report); setUpdatedAt(e.updatedAt); setRunning(false); }
       else if (e.type === "failed") { setError(e.message); setRunning(false); }
     }, fresh);
@@ -165,6 +170,7 @@ export function Rubrics({ apiBase }: { apiBase: string }) {
                         )}
                       </div>
                       {error && <p className="ledger-error">{error}</p>}
+                      {out && !report && <pre className="run-transcript">{out}</pre>}
                       {report && <RubricReportCard report={report} />}
                     </div>
                   )}

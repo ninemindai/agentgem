@@ -12,7 +12,9 @@ import type { WorkflowSignal } from "./workflowScan.js";
 import type { DetectorSpec, DetectorFinding, DetectorSummary } from "./detectors.js";
 import { DETECTORS, summarizeFindings } from "./detectors.js";
 import { loadRuleDetectors } from "./detectorRules.js";
-import { type Rubric, type RubricScope, type RubricScopeKind, rubricGranularity, scopeAllowed } from "./rubrics.js";
+import { type Rubric, type RubricScope, type RubricScopeKind, type LlmCriterion, rubricGranularity, scopeAllowed } from "./rubrics.js";
+import { judgeCriteria } from "./criterionJudge.js";
+import type { AcpConnectFn } from "./acpRecommender.js";
 
 const log = createLogger("insight");
 
@@ -24,9 +26,9 @@ export interface RubricReport {
   // clean/zero-findings success state can list the checks that passed.
   factors: DetectorSummary[];
   sessionsScanned: number;
-  clean: boolean;                 // no findings across the whole run (the success state)
-  degraded: boolean;              // Phase 1 cheap-only: always false (Phase 2 sets it for LLM fallback)
-  skippedFactors: { factor: string; reason: "unknown" | "llm-phase2" }[];
+  clean: boolean;                 // no findings AND not degraded (the success state)
+  degraded: boolean;              // an LLM criterion chunk fell back (agent offline) — cheap findings still shown
+  skippedFactors: { factor: string; reason: "unknown" }[];
   // Present at scope "session" or for session-granular rubrics (§Scope). Lists ONLY
   // sessions that tripped a factor — a row per clean session explodes the payload at
   // scope "all" (1900+ sessions); the aggregate `factors` already carries the clean
@@ -41,6 +43,14 @@ export const PER_SESSION_CAP = 200;
 export interface EvaluateOpts {
   scope: RubricScope;
   registry?: DetectorSpec[];      // cheap-factor pool to resolve refs against (default: built-ins + user rules)
+  // LLM criterion evaluation (Phase 2). `judge` defaults to judgeCriteria; the rest
+  // are forwarded to it. A rubric with no inline criteria never invokes the agent.
+  judge?: typeof judgeCriteria;
+  connectFn?: AcpConnectFn;
+  timeoutMs?: number;
+  maxSessions?: number;
+  chunkSize?: number;
+  onDelta?: (chunk: string) => void;
 }
 
 function defaultRegistry(): DetectorSpec[] {
@@ -76,42 +86,61 @@ function summariesForSpecs(specs: DetectorSpec[], findings: DetectorFinding[]): 
  * with scopeAllowed and turns that into a clean error response; the throw here is
  * the defensive guard.
  */
-export function evaluateRubric(signal: WorkflowSignal, rubric: Rubric, opts: EvaluateOpts): RubricReport {
+// A criterion becomes a pseudo-spec so summariesForSpecs reports a row per criterion
+// (count 0 when it didn't fire) — its `detect` never runs (findings come from the agent).
+function criterionSpec(c: LlmCriterion): DetectorSpec {
+  return { id: c.id, title: c.title, advice: c.advice, severity: c.severity ?? "info", cost: "llm", detect: () => [] };
+}
+
+export async function evaluateRubric(signal: WorkflowSignal, rubric: Rubric, opts: EvaluateOpts): Promise<RubricReport> {
   const kind = opts.scope.kind;
   if (!scopeAllowed(rubric, kind)) {
     throw new Error(`rubric "${rubric.id}" is aggregate-only and cannot run at scope "session"`);
   }
 
   const byId = new Map((opts.registry ?? defaultRegistry()).map((s) => [s.id, s]));
-  const inlineIds = new Set(rubric.criteria?.map((c) => c.id) ?? []);
-  const resolved: DetectorSpec[] = [];
+  const inlineById = new Map((rubric.criteria ?? []).map((c) => [c.id, c]));
+  const cheapSpecs: DetectorSpec[] = [];
+  const usedCriteria: LlmCriterion[] = [];
   const skippedFactors: RubricReport["skippedFactors"] = [];
   for (const ref of rubric.factors) {
-    if (inlineIds.has(ref.factor)) { skippedFactors.push({ factor: ref.factor, reason: "llm-phase2" }); continue; }
+    const crit = inlineById.get(ref.factor);
+    if (crit) { usedCriteria.push(crit); continue; }
     const spec = byId.get(ref.factor);
     if (!spec) {
       skippedFactors.push({ factor: ref.factor, reason: "unknown" });
       log.warn("rubric %s: unknown factor %s (skipped)", rubric.id, ref.factor);
       continue;
     }
-    resolved.push(spec);
+    cheapSpecs.push(spec);
   }
 
-  const findings = runSpecs(signal, resolved);
+  const cheapFindings = runSpecs(signal, cheapSpecs);
+  const { findings: llmFindings, degraded } = usedCriteria.length
+    ? await (opts.judge ?? judgeCriteria)(signal, usedCriteria, {
+        connectFn: opts.connectFn, timeoutMs: opts.timeoutMs,
+        maxSessions: opts.maxSessions, chunkSize: opts.chunkSize, onDelta: opts.onDelta,
+      })
+    : { findings: [] as DetectorFinding[], degraded: false };
+
+  const allFindings = [...cheapFindings, ...llmFindings];
+  const allSpecs = [...cheapSpecs, ...usedCriteria.map(criterionSpec)];
+
   const report: RubricReport = {
     rubricId: rubric.id,
     target: rubric.target,
     scope: kind,
-    factors: summariesForSpecs(resolved, findings),
+    factors: summariesForSpecs(allSpecs, allFindings),
     sessionsScanned: signal.sessions?.scanned ?? (signal.sequences?.sessions?.length ?? 0),
-    clean: findings.length === 0,
-    degraded: false,
+    // Not "clean" when degraded: criteria weren't evaluated, so we can't claim all-clear.
+    clean: allFindings.length === 0 && !degraded,
+    degraded,
     skippedFactors,
   };
 
   if (kind === "session" || rubricGranularity(rubric) === "session") {
     const bySession = new Map<string, DetectorFinding[]>();
-    for (const f of findings) {
+    for (const f of allFindings) {
       const arr = bySession.get(f.sessionId) ?? [];
       arr.push(f);
       bySession.set(f.sessionId, arr);
@@ -121,7 +150,7 @@ export function evaluateRubric(signal: WorkflowSignal, rubric: Rubric, opts: Eva
     report.perSession = withFindings.slice(0, PER_SESSION_CAP).map((s) => ({
       sessionId: s.sessionId,
       transcript: s.transcript,
-      factors: summariesForSpecs(resolved, bySession.get(s.sessionId)!),
+      factors: summariesForSpecs(allSpecs, bySession.get(s.sessionId)!),
     }));
   }
 
