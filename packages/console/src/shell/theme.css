@@ -1067,3 +1067,10 @@ button.scorecard-intent { line-height: 1.4; }
   padding: 1px 6px; border-radius: 999px; background: var(--paper-2); color: var(--muted); }
 .rub-kind-unknown { background: rgba(154, 51, 36, .1); color: var(--accent); }
 .rub-kind-criterion { color: var(--ink-soft); }
+
+.report-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
