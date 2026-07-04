@@ -142,6 +142,9 @@ describe("Shell", () => {
     expect(buildLabel.compareDocumentPosition(switcher) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // ...and therefore also follows the Observe items — it is no longer pinned at the top.
     expect(observeItem.compareDocumentPosition(switcher) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const curateItem = screen.getByRole("button", { name: "Curate" });
+    // ...and precedes the Build stage items (directly under the label, above the stages).
+    expect(switcher.compareDocumentPosition(curateItem) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // The duplicate gem-name echo in the Build label is gone.
     expect(container.querySelector(".console-group-gem")).toBeNull();
   });
