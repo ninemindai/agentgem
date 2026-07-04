@@ -2,11 +2,13 @@ import { useEffect, useState } from "react";
 import { makeApi, defaultApiBase } from "./api";
 import { makeAuth, type Me } from "./auth";
 import { makeStars } from "./stars";
+import { makeReviews } from "./reviews";
 import { Router } from "./Router";
 
 const api = makeApi(defaultApiBase());
 const auth = makeAuth(defaultApiBase());
 const starsApi = makeStars(defaultApiBase());
+const reviewsApi = makeReviews(defaultApiBase());
 
 export function App() {
   const [path, setPath] = useState(() => window.location.pathname);
@@ -69,7 +71,7 @@ export function App() {
           )}
         </span>
       </header>
-      <main className="ex-main"><Router api={api} me={me} stars={{ signedIn: !!me, loginUrl: () => auth.loginUrl(window.location.href), api: starsApi }} /></main>
+      <main className="ex-main"><Router api={api} me={me} stars={{ signedIn: !!me, loginUrl: () => auth.loginUrl(window.location.href), api: starsApi }} reviews={{ signedIn: !!me, loginUrl: () => auth.loginUrl(window.location.href), api: reviewsApi }} /></main>
       <footer className="ex-footer">Trusted-adoption data, k-anonymized. <a href="https://agentgem.ai">agentgem.ai</a></footer>
     </div>
   );

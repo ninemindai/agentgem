@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import type { makeApi } from "./api";
 import { defaultApiBase } from "./api";
 import type { makeStars } from "./stars";
+import type { makeReviews } from "./reviews";
 import type { Me } from "./auth";
+import { CatalogSkill } from "./pages/CatalogSkill";
 import { Leaderboard } from "./pages/Leaderboard";
 import { PopularSkills } from "./pages/PopularSkills";
 import { Ingredient } from "./pages/Ingredient";
@@ -14,10 +16,11 @@ import { OrgCatalog } from "./pages/OrgCatalog";
 import { Sources } from "./pages/Sources";
 
 export interface StarsCtx { signedIn: boolean; loginUrl: () => string; api: ReturnType<typeof makeStars> }
+export interface ReviewsCtx { signedIn: boolean; loginUrl: () => string; api: ReturnType<typeof makeReviews> }
 
 // Navigation is intercepted globally in App (same-origin <a> clicks → pushState + popstate),
 // so pages just use plain <a href> and this Router reacts to popstate.
-export function Router({ api, stars, me }: { api: ReturnType<typeof makeApi>; stars: StarsCtx; me: Me | null }) {
+export function Router({ api, stars, reviews, me }: { api: ReturnType<typeof makeApi>; stars: StarsCtx; reviews: ReviewsCtx; me: Me | null }) {
   const [path, setPath] = useState(() => window.location.pathname);
   useEffect(() => {
     const onPop = () => setPath(window.location.pathname);
@@ -35,6 +38,10 @@ export function Router({ api, stars, me }: { api: ReturnType<typeof makeApi>; st
   const ing = path.match(/^\/ingredient\/(.+)$/);
   if (ing) return <Ingredient api={api} id={decodeURIComponent(ing[1])} stars={stars} />;
 
+  // /skill/:sourceId/*path — the catalog-skill page (repo+path identity) hosting reviews + preview.
+  const skill = path.match(/^\/skill\/([^/]+)\/(.+)$/);
+  if (skill) return <CatalogSkill api={api} reviews={reviews} sourceId={decodeURIComponent(skill[1])} path={skill[2]} />;
+
   const prof = path.match(/^\/@([^/]+)$/);
   if (prof) return <Profile api={api} login={decodeURIComponent(prof[1])} />;
 
@@ -43,7 +50,7 @@ export function Router({ api, stars, me }: { api: ReturnType<typeof makeApi>; st
 
   return (
     <>
-      <PopularSkills api={api} stars={stars} />
+      <PopularSkills api={api} stars={stars} reviews={reviews} />
       <h2 className="ex-section-title">Adoption leaderboard</h2>
       <Leaderboard api={api} stars={stars} />
     </>
