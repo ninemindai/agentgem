@@ -173,4 +173,18 @@ describe("originGuard — public aggregator reads (CORS + cross-site exemption)"
     expect(r.blocked).toBe(true);
     expect(r.status).toBe(403);
   });
+
+  it("allows a cross-site GET to /api/aggregator/popular-skills and sets permissive CORS", () => {
+    const r = run({ "sec-fetch-site": "cross-site" }, "agg.example", "GET", "/api/aggregator/popular-skills");
+    expect(r.nexted).toBe(true);
+    expect(r.blocked).toBe(false);
+    expect(r.set["access-control-allow-origin"]).toBe("*");
+  });
+
+  it("answers an OPTIONS preflight to popular-skills with 204 + CORS, without dispatching the route", () => {
+    const r = run({ "sec-fetch-site": "cross-site" }, "agg.example", "OPTIONS", "/api/aggregator/popular-skills");
+    expect(r.status).toBe(204);
+    expect(r.set["access-control-allow-origin"]).toBe("*");
+    expect(r.nexted).toBe(false);
+  });
 });
