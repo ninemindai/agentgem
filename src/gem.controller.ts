@@ -18,7 +18,7 @@ const ObserveQuerySchema = z.object({
   project: z.string().optional(),
   model: z.string().optional(),
   minMsgs: z.coerce.number().int().nonnegative().optional(),
-  refresh: z.coerce.boolean().optional(),   // ?refresh=true forces a re-scan past the 15s scan cache
+  refresh: z.coerce.boolean().optional(),   // ?refresh=true forces a re-scan past the 5min scan cache
 });
 const ObservePayloadSchema = z.object({
   pulse: z.object({ sessions: z.number(), msgs: z.number(), tokens: z.number(), activeMs: z.number() }),

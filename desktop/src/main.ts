@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, dialog, ipcMain } from "electron";
+import { app, BrowserWindow, Menu, dialog, ipcMain, shell } from "electron";
 import { join } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 import { autoUpdater } from "electron-updater";
@@ -48,6 +48,15 @@ async function createWindow(url: string): Promise<void> {
       contextIsolation: true,
       nodeIntegration: false,
     },
+  });
+  // Open external links (window.open, target=_blank, e.g. the GitHub device-flow
+  // sign-in page) in the user's default browser instead of an in-app Electron
+  // window. GitHub's Google sign-in and passkeys/WebAuthn don't work in an
+  // Electron BrowserWindow, so the loopback console must hand http(s) URLs to the
+  // real browser. Everything else is denied (no in-app popups).
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
+    return { action: "deny" };
   });
   // Closing the window hides to tray; the server keeps running until Quit.
   win.on("close", (e) => {

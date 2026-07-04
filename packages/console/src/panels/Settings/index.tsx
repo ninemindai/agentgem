@@ -43,6 +43,7 @@ export function Settings({ apiBase }: { apiBase: string }) {
   const [bindStatus, setBindStatus] = useState<BindStatus>(null);
   const [bindFlow, setBindFlow] = useState<BindFlow>(null);
   const [bindError, setBindError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     deployTargetsRoute.call(makeClient(apiBase))
@@ -80,7 +81,9 @@ export function Settings({ apiBase }: { apiBase: string }) {
       };
       setBindFlow(flow);
       // Prefer the code-prefilled URL — the user lands on "just click Authorize".
-      if (ghTab) ghTab.location.href = r.verificationUriComplete ?? r.verificationUri!;
+      const url = r.verificationUriComplete ?? r.verificationUri!;
+      if (ghTab) ghTab.location.href = url;              // browser: redirect the pre-opened tab
+      else window.open(url, "_blank", "noopener");       // desktop: main.ts routes this to the system browser
       const result = await bindCompleteRoute.call(makeClient(apiBase), {
         body: { deviceCode: r.deviceCode!, interval: r.interval },
       });
@@ -164,8 +167,23 @@ export function Settings({ apiBase }: { apiBase: string }) {
             )}
             {bindFlow?.step === "code" && (
               <div>
-                <p className="ws-note">Your code: <strong>{bindFlow.userCode}</strong></p>
-                <p className="deploy-hint">We opened GitHub in a new tab — enter this code there. Didn't open? <a href={bindFlow.verificationUriComplete ?? bindFlow.verificationUri} target="_blank" rel="noreferrer">Open GitHub</a>.</p>
+                <p className="ws-note">
+                  Your code: <strong>{bindFlow.userCode}</strong>
+                  <button
+                    type="button"
+                    className="ledger-view"
+                    style={{ marginLeft: 8 }}
+                    aria-label="Copy code"
+                    onClick={() => {
+                      void navigator.clipboard?.writeText(bindFlow.userCode);
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 1500);
+                    }}
+                  >
+                    {copied ? "✓ Copied" : "⧉ Copy"}
+                  </button>
+                </p>
+                <p className="deploy-hint">We opened GitHub in your browser — enter this code there. Didn't open? <a href={bindFlow.verificationUriComplete ?? bindFlow.verificationUri} target="_blank" rel="noreferrer">Open GitHub</a>.</p>
                 <p className="deploy-hint">Waiting for verification…</p>
               </div>
             )}

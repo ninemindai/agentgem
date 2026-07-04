@@ -93,7 +93,11 @@ export function parseCodexTranscript(text: string, path: string): SessionStat | 
 }
 
 let _cache: { atMs: number; stats: SessionStat[] } | null = null;
-const SCAN_TTL_MS = 15_000;
+// 5 minutes. The disk scan of ~/.claude is the heavy cost, so serve a cached
+// result across repeated panel opens; Inspect's manual Refresh (?refresh=true)
+// forces a fresh scan when the user wants current data. A short TTL made every
+// re-entry re-scan, which read as "scans every time".
+const SCAN_TTL_MS = 300_000;
 /** Cached scan for the request path: re-scans at most every SCAN_TTL_MS. nowMs injected for testability.
  *  Fix 4: when custom dirs are provided the result is never cached — only the default path is cacheable.
  *  refresh (the ?fresh=1 bypass) forces a re-scan even within the TTL and repopulates the cache. */

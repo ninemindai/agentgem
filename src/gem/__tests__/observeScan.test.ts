@@ -309,14 +309,14 @@ describe("scanSessionsCached", () => {
     // Use no-dirs path so the cache is populated and hit
     const nowMs = Date.now();
     const first = await scanSessionsCached(nowMs);
-    const second = await scanSessionsCached(nowMs + 1_000); // +1s < 15s TTL
+    const second = await scanSessionsCached(nowMs + 1_000); // +1s < 5min TTL
     expect(second).toBe(first);
   });
 
   it("re-scans when nowMs exceeds TTL (no custom dirs)", async () => {
     const nowMs = Date.now();
     const first = await scanSessionsCached(nowMs);
-    const second = await scanSessionsCached(nowMs + 20_000); // +20s > 15s TTL
+    const second = await scanSessionsCached(nowMs + 6 * 60_000); // +6min > 5min TTL
     expect(second).not.toBe(first);
   });
 
@@ -332,7 +332,7 @@ describe("scanSessionsCached", () => {
     const nowMs = Date.now();
     // Two calls with dirs within TTL must NOT share reference
     const first = await scanSessionsCached(nowMs, { claudeDir, codexDir });
-    const second = await scanSessionsCached(nowMs + 1_000, { claudeDir, codexDir }); // +1s < 15s TTL
+    const second = await scanSessionsCached(nowMs + 1_000, { claudeDir, codexDir }); // +1s < 5min TTL
     expect(second).not.toBe(first);
   });
 
