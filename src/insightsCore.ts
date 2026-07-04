@@ -12,6 +12,7 @@ import {
   judgeSessions, synthesizeInsights, narrateInsights,
   insightsToken, readInsightsCacheEntry, writeInsightsCache,
   runDetectors, summarizeFindings, loadRuleDetectors, DETECTORS,
+  computeCached, type CacheHit,
   type DetectorFinding, type DetectorSummary,
 } from "@agentgem/insight";
 
@@ -53,40 +54,39 @@ export async function computeInsights(
   const paths = allProjects ? allClaudeTranscripts(dirs.claudeDir) : claudeTranscriptsForCwd(dirs.claudeDir, root);
   const token = insightsToken(paths);
 
-  if (!opts.force) {
-    const entry = readInsightsCacheEntry(root, token);
-    if (entry) return { payload: entry.result as InsightsPayload, cached: true, updatedAt: entry.ts };
-  }
-  if (opts.cacheOnly) {
-    // Cache miss + cached-only caller (the dream harvest) — return an empty report without
+  return computeCached<InsightsPayload>({
+    token, force: opts.force, now,
+    read: (t) => readInsightsCacheEntry(root, t) as CacheHit<InsightsPayload> | null,
+    write: (t, payload, ts) => writeInsightsCache(root, t, payload, ts),
+    degraded: (p) => p.degraded,
+    cacheOnly: opts.cacheOnly,
+    // Cache miss + cached-only caller (the dream harvest) — empty report without
     // judging/synthesizing, so the harvest never spends LLM.
-    return { payload: { report: synthesizeInsights([]), facets: [], findings: [], detectorSummary: [], degraded: false, signalSummary: { sessionsScanned: 0, spanDays: 0, notes: null } }, cached: false, updatedAt: null };
-  }
+    onCacheOnlyMiss: () => ({ report: synthesizeInsights([]), facets: [], findings: [], detectorSummary: [], degraded: false, signalSummary: { sessionsScanned: 0, spanDays: 0, notes: null } }),
+    compute: async () => {
+      const signal = scanWorkflow(paths, scanInv, { retainSequences: true });
+      p?.onPhase?.("scanned", { transcripts: paths.length, sessions: signal.sessions.scanned });
 
-  const signal = scanWorkflow(paths, scanInv, { retainSequences: true });
-  p?.onPhase?.("scanned", { transcripts: paths.length, sessions: signal.sessions.scanned });
+      p?.onPhase?.("detecting");
+      const ruleSpecs = loadRuleDetectors();
+      const findings = runDetectors(signal, ruleSpecs);
+      const detectorSummary = summarizeFindings(findings, [...DETECTORS, ...ruleSpecs]);
 
-  p?.onPhase?.("detecting");
-  const ruleSpecs = loadRuleDetectors();
-  const findings = runDetectors(signal, ruleSpecs);
-  const detectorSummary = summarizeFindings(findings, [...DETECTORS, ...ruleSpecs]);
+      p?.onPhase?.("judging");
+      const { facets, degraded: judgeDegraded } = await (opts.judge ?? judgeSessions)(signal, { onDelta: (chunk) => p?.onDelta?.(chunk) });
 
-  p?.onPhase?.("judging");
-  const { facets, degraded: judgeDegraded } = await (opts.judge ?? judgeSessions)(signal, { onDelta: (chunk) => p?.onDelta?.(chunk) });
+      p?.onPhase?.("synthesizing");
+      const report = synthesizeInsights(facets);
 
-  p?.onPhase?.("synthesizing");
-  const report = synthesizeInsights(facets);
+      p?.onPhase?.("narrating");
+      const narr = await (opts.narrate ?? narrateInsights)(facets, report.narrative, { onDelta: (chunk) => p?.onDelta?.(chunk) });
+      report.narrative = narr.narrative;
 
-  p?.onPhase?.("narrating");
-  const narr = await (opts.narrate ?? narrateInsights)(facets, report.narrative, { onDelta: (chunk) => p?.onDelta?.(chunk) });
-  report.narrative = narr.narrative;
-
-  const payload: InsightsPayload = {
-    report, facets, findings, detectorSummary,
-    degraded: judgeDegraded || narr.degraded,
-    signalSummary: { sessionsScanned: signal.sessions.scanned, spanDays: signal.sessions.spanDays, notes: signal.notes },
-  };
-  let updatedAt: number | null = null;
-  if (!payload.degraded) { const ts = now(); writeInsightsCache(root, token, payload, ts); updatedAt = ts; }
-  return { payload, cached: false, updatedAt };
+      return {
+        report, facets, findings, detectorSummary,
+        degraded: judgeDegraded || narr.degraded,
+        signalSummary: { sessionsScanned: signal.sessions.scanned, spanDays: signal.sessions.spanDays, notes: signal.notes },
+      };
+    },
+  });
 }

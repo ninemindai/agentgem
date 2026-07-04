@@ -39,5 +39,6 @@ export * from "./sources/continue.js";
 export * from "./sources/cursor.js";
 export * from "./sources/codexArtifacts.js";
 export * from "./goldmineContext.js";
+export * from "./cachedCompute.js";
 export * from "./rubrics.js";
 export * from "./rubricReport.js";
