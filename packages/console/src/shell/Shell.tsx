@@ -7,9 +7,9 @@ import { WarmingPill } from "../components/WarmingPill.js";
 export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: string }) {
   const groups = groupedPages(pages);
   const ordered = sortedPages(pages);
-  // Drives both the "Build · <gem>" subheader and the dimming of gem-scoped
-  // build stages — one subscription so nav text and lock state never drift.
-  const { keys, name } = useActiveGem();
+  // Drives the dimming of gem-scoped build stages — one subscription so the
+  // lock state of Build items tracks the active gem.
+  const { keys } = useActiveGem();
   const hasGem = keys.size > 0;
   const [hash, setHash] = useState(() => window.location.hash);
 
@@ -53,13 +53,11 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
           </svg>
           AgentGem
         </div>
-        <ActiveGemSwitcher apiBase={apiBase} />
         <WarmingPill apiBase={apiBase} />
         {groups.observe.length > 0 && <div className="console-group-label">Observe</div>}
         {groups.observe.map(item)}
-        <div className="console-group-label">
-          Build <span className="console-group-gem">· {name || "New Gem"}</span>
-        </div>
+        <div className="console-group-label">Build</div>
+        <ActiveGemSwitcher apiBase={apiBase} />
         {groups.build.map(item)}
         {groups.library.length > 0 && <div className="console-group-label">Library</div>}
         {groups.library.map(item)}
