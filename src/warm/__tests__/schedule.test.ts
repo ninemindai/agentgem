@@ -81,6 +81,30 @@ describe("startWarmSchedule – AGENTGEM_WARM_INTERVAL_MS env override", () => {
   });
 });
 
+describe("startWarmSchedule – AGENTGEM_WARM_DISABLE", () => {
+  const KEY = "AGENTGEM_WARM_DISABLE";
+  const saved = process.env[KEY];
+  afterEach(() => {
+    if (saved === undefined) delete process.env[KEY];
+    else process.env[KEY] = saved;
+  });
+
+  it("='true' → no boot pass, no timer scheduled, stop() is a safe no-op", () => {
+    process.env[KEY] = "true";
+    let runs = 0;
+    let scheduled = false;
+    const sched = startWarmSchedule({
+      run: async () => { runs++; },
+      runNow: (fn) => fn(),                 // would fire the boot pass if reached
+      setInterval: () => { scheduled = true; return {}; },
+      clearInterval: () => {},
+    });
+    expect(runs).toBe(0);                   // schedule short-circuited
+    expect(scheduled).toBe(false);
+    expect(() => sched.stop()).not.toThrow();
+  });
+});
+
 describe("startWarmSchedule – home + lock integration", () => {
   it("default run still fires with the lock disabled (AGENTGEM_WARM_LOCK=false)", () => {
     const prev = process.env.AGENTGEM_WARM_LOCK; process.env.AGENTGEM_WARM_LOCK = "false";
