@@ -39,6 +39,13 @@ export function sparkPoints(values: number[], w: number, h: number, max = Math.m
   return values.map((v, i) => `${(i * step).toFixed(1)},${(h - (v / max) * h).toFixed(1)}`).join(" ");
 }
 
+/** Compact count formatting for star/install badges, e.g. 14400 -> "14.4k". */
+export function formatCount(n: number): string {
+  if (n < 1000) return String(n);
+  if (n < 1000000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
+  return (n / 1000000).toFixed(1).replace(/\.0$/, "") + "m";
+}
+
 /** Filter the leaderboard by a case-insensitive substring over name/scope/raw id.
  *  Rank is the row's 1-based position in the full (unfiltered) list, so ranks stay honest. */
 export function filterRows(rows: AggIngredient[], query: string): RankedRow[] {
