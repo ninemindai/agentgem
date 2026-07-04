@@ -4,6 +4,7 @@ import { defaultApiBase } from "./api";
 import type { makeStars } from "./stars";
 import type { Me } from "./auth";
 import { Leaderboard } from "./pages/Leaderboard";
+import { PopularSkills } from "./pages/PopularSkills";
 import { Ingredient } from "./pages/Ingredient";
 import { Gems } from "./pages/Gems";
 import { Gem } from "./pages/Gem";
@@ -40,5 +41,11 @@ export function Router({ api, stars, me }: { api: ReturnType<typeof makeApi>; st
   const org = path.match(/^\/orgs\/([^/]+)$/);
   if (org) return <OrgCatalog api={api} scope={decodeURIComponent(org[1])} />;
 
-  return <Leaderboard api={api} stars={stars} />;
+  return (
+    <>
+      <PopularSkills api={api} />
+      <h2 className="ex-section-title">Adoption leaderboard</h2>
+      <Leaderboard api={api} stars={stars} />
+    </>
+  );
 }

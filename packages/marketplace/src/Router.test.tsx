@@ -9,7 +9,10 @@ const stars = { signedIn: false, loginUrl: () => "/login", api: { get: async () 
 
 describe("Router", () => {
   it("renders the leaderboard at /", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => res([{ id: "skill:a/b", kind: "skill", producers: 5, verifiedProducers: 2, invocations: 9, sessions: 4 }])));
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (String(url).includes("/popular-skills")) return res({ skills: [] });
+      return res([{ id: "skill:a/b", kind: "skill", producers: 5, verifiedProducers: 2, invocations: 9, sessions: 4 }]);
+    }));
     window.history.pushState({}, "", "/");
     render(<Router api={makeApi("")} stars={stars} me={null} />);
     expect(await screen.findByText("b")).toBeTruthy();

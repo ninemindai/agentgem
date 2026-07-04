@@ -73,6 +73,17 @@ export interface OrgCatalog {
   ownerCount: number;
   gems: OrgCatalogGem[];
 }
+export interface PopularSkill {
+  sourceId: string;
+  source: string;
+  division: string;
+  name: string;
+  path: string;
+  repo: string;
+  homepage: string | null;
+  stars: number;
+  installs: number | null;
+}
 export interface CuratedSource {
   id: string; label: string; description: string;
   repo: string; ref: string; kind: string;
