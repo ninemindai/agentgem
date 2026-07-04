@@ -668,7 +668,7 @@ export const bindStartRoute = defineRoute("POST", "/api/bind/start", {
 });
 export const bindCompleteRoute = defineRoute("POST", "/api/bind/complete", {
   body: z.object({ deviceCode: z.string(), interval: z.number().optional() }),
-  response: z.object({ bound: z.boolean(), login: z.string().optional(), avatarUrl: z.string().optional(), rejected: z.string().optional() }),
+  response: z.object({ bound: z.boolean(), login: z.string().optional(), avatarUrl: z.string().optional(), rejected: z.string().optional(), sessionToken: z.string().optional(), expiresAt: z.string().optional() }),
 });
 // Disconnect: clear the local binding so this machine is no longer verified.
 // Returns the fresh (unbound) status; reconnect via the device flow re-links.

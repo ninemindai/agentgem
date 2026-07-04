@@ -1,7 +1,25 @@
 # Desktop ⇄ Web Session Bridge — Design
 
-**Status:** design approved, pre-implementation
+**Status:** design approved (eng-reviewed), implementing
 **Date:** 2026-07-04
+
+## Review outcome (supersedes conflicting detail below)
+
+- **No separate `/exchange`.** Fold session-mint into the existing `/bind`
+  (`recordBinding`): after saving the binding it captures the account id
+  `upsertAccount` already returns, calls `createSession`, and returns
+  `{ ...bindResult, sessionToken, expiresAt }`. One GitHub verify per connect.
+- **Bearer ≡ web session.** `Authorization: Bearer <sessionToken>` is honored
+  *exactly where the session cookie is* (via a shared `resolveSessionFrom(cookie
+  ∥ bearer)`), adding no new authorization surface. Pubkey-signature endpoints
+  (publish/catalog) are untouched.
+- **Marketplace needs zero changes** — the handoff redeem is an API route that
+  Set-Cookies + 302s; `app.agentgem.ai` already reads the cookie via `/api/auth/me`.
+- **"Connected" indicator** is driven by the session (live credential); expiry →
+  clear + prompt reconnect. `binding.json` stays as verified-publishing provenance.
+- **Guards:** redeem validates `return` against `webOrigins` (open-redirect); `/bind`
+  + `/handoff/start` inherit the anon per-IP limiter; `handoff_codes` pruned on read + swept.
+- Unchanged from approval: one-time-code handoff; 30-day session TTL, reconnect-on-expiry.
 
 ## Problem
 

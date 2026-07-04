@@ -4,7 +4,7 @@ import { generateKeyPairSync, sign as edSign } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { makeTestDb } from "@agentgem/aggregator";
 import { producers, accountBindings, accounts } from "@agentgem/aggregator";
-import { recordBinding, bindSigningPayload, type BindRequest } from "@agentgem/aggregator";
+import { recordBinding, bindSigningPayload, resolveSession, type BindRequest } from "@agentgem/aggregator";
 import type { AccountVerifier, VerifiedAccount } from "@agentgem/aggregator";
 
 function makeSigner() {
@@ -27,7 +27,7 @@ describe("recordBinding", () => {
     await db.insert(producers).values({ pubkey: s.pubkey });
     const now = 1_000_000;
     const res = await recordBinding(db, await req(s, "tok", now), fakeVerifier(OCTOCAT), now);
-    expect(res).toEqual({ bound: true, provider: "github", login: "octocat", accountId: "42" });
+    expect(res).toMatchObject({ bound: true, provider: "github", login: "octocat", accountId: "42" });
     const rows = await db.select().from(accountBindings);
     expect(rows).toHaveLength(1);
     expect(rows[0].accountId).toBe("42");
@@ -54,13 +54,27 @@ describe("recordBinding", () => {
     const now = 1_000_000;
     // No producer seeded — a valid signature + verified token is enough to bind now.
     const res = await recordBinding(db, await req(s, "tok", now), fakeVerifier(OCTOCAT), now);
-    expect(res).toEqual({ bound: true, provider: "github", login: "octocat", accountId: "42" });
+    expect(res).toMatchObject({ bound: true, provider: "github", login: "octocat", accountId: "42" });
     // The identity is now a registered (zero-attestation) producer.
     const prod = await db.select().from(producers).where(sql`pubkey = ${s.pubkey}`);
     expect(prod).toHaveLength(1);
     const rows = await db.select().from(accountBindings);
     expect(rows).toHaveLength(1);
     expect(rows[0].accountId).toBe("42");
+  });
+  it("returns a session token the web session store accepts (bearer ≡ cookie)", async () => {
+    const db = await makeTestDb();
+    const s = makeSigner();
+    await db.insert(producers).values({ pubkey: s.pubkey });
+    const now = 1_000_000;
+    const res = await recordBinding(db, await req(s, "tok", now), fakeVerifier(OCTOCAT), now);
+    expect(res.bound).toBe(true);
+    if (!res.bound) return;
+    expect(typeof res.sessionToken).toBe("string");
+    expect(res.expiresAt).toBeTruthy();
+    // The minted session bearer resolves to the same account — same token the web cookie carries.
+    const who = await resolveSession(db, res.sessionToken!);
+    expect(who?.login).toBe("octocat");
   });
   it("does NOT register a producer when the token is invalid", async () => {
     const db = await makeTestDb();

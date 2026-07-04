@@ -85,7 +85,7 @@ const OrgCatalogResult = z.object({
 
 const BindBody = z.object({ pubkey: z.string(), token: z.string(), signedAt: z.number(), signature: z.string() });
 const BindResultSchema = z.union([
-  z.object({ bound: z.literal(true), provider: z.string(), login: z.string(), accountId: z.string(), avatarUrl: z.string().optional() }),
+  z.object({ bound: z.literal(true), provider: z.string(), login: z.string(), accountId: z.string(), avatarUrl: z.string().optional(), sessionToken: z.string().optional(), expiresAt: z.string().optional() }),
   z.object({ bound: z.literal(false), rejected: z.string() }),
 ]);
 

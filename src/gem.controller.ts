@@ -276,6 +276,9 @@ const BindCompleteSchema = z.object({
   accountId: z.string().optional(),
   avatarUrl: z.string().optional(),
   rejected: z.string().optional(),
+  // First-party session minted by the aggregator bind — the bearer the API + web SSO honor.
+  sessionToken: z.string().optional(),
+  expiresAt: z.string().optional(),
 });
 const BindStatusSchema = z.object({ bound: z.boolean(), login: z.string().optional(), provider: z.string().optional(), avatarUrl: z.string().optional() });
 

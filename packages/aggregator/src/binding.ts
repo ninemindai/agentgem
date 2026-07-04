@@ -11,14 +11,17 @@ import { canonicalJSON } from "@agentgem/insight";
 import type { AppDb } from "./schema.js";
 import { accountBindings } from "./schema.js";
 import type { AccountVerifier } from "./accountVerifier.js";
-import { upsertAccount } from "./webAuth.js";
+import { upsertAccount, createSession, generateSessionToken } from "./webAuth.js";
 
 export interface BindRequest { pubkey: string; token: string; signedAt: number; signature: string; }
 export type BindResult =
-  | { bound: true; provider: string; login: string; accountId: string; avatarUrl?: string }
+  | { bound: true; provider: string; login: string; accountId: string; avatarUrl?: string; sessionToken?: string; expiresAt?: string }
   | { bound: false; rejected: "bad-signature" | "stale" | "unknown-producer" | "provider-error" };
 
 const FRESHNESS_MS = 300_000;
+// First-party session lifetime, mirrors the web sign-in cookie TTL (30 days). The bind mints a
+// session so the local app has one credential the API (Bearer) and the web (SSO handoff) both honor.
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 /** The exact string the client signs and the server verifies. Signs over sha256(token) — never the
  *  raw token — so the secret stays out of the canonical (loggable) payload. */
@@ -48,10 +51,13 @@ export async function recordBinding(
   // producer if it's new (satisfies the account_bindings -> producers FK); existing producers
   // are untouched. Zero-attestation producers simply have nothing to show yet.
   await db.execute(sql`insert into producers (pubkey) values (${req.pubkey}) on conflict (pubkey) do nothing`);
-  // 4b. reconcile with the web `accounts` identity + capture avatar. Best-effort: NEVER fail
-  // the bind over it — the account_bindings write below is what ratings depend on.
+  // 4b. reconcile with the web `accounts` identity + capture avatar, and capture the account row so
+  // we can mint a session for it below. Best-effort: NEVER fail the bind over it — the
+  // account_bindings write below is what ratings depend on. Without an account row we simply skip
+  // the session (bind still succeeds; the client can reconnect for a session later).
+  let account: Awaited<ReturnType<typeof upsertAccount>> | null = null;
   try {
-    await upsertAccount(db, { provider: acct.provider, accountId: acct.accountId, login: acct.login, avatarUrl: acct.avatarUrl ?? null });
+    account = await upsertAccount(db, { provider: acct.provider, accountId: acct.accountId, login: acct.login, avatarUrl: acct.avatarUrl ?? null });
   } catch { /* avatar/profile is best-effort */ }
   // 5. upsert (pubkey PK -> one account per key; rebind updates in place)
   await db.insert(accountBindings)
@@ -60,5 +66,15 @@ export async function recordBinding(
       target: accountBindings.pubkey,
       set: { provider: acct.provider, accountId: acct.accountId, accountLogin: acct.login, boundAt: sql`now()` },
     });
-  return { bound: true, provider: acct.provider, login: acct.login, accountId: acct.accountId, ...(acct.avatarUrl ? { avatarUrl: acct.avatarUrl } : {}) };
+  // 6. mint a first-party session for the reconciled account (the bearer the API + web SSO honor).
+  // Additive: a session failure never fails the bind, which already succeeded above.
+  let session: { sessionToken: string; expiresAt: string } | undefined;
+  if (account) {
+    try {
+      const { token: sessionToken } = generateSessionToken();
+      await createSession(db, account.id, sessionToken, SESSION_TTL_MS);
+      session = { sessionToken, expiresAt: new Date(now + SESSION_TTL_MS).toISOString() };
+    } catch { /* session is additive; bind already succeeded */ }
+  }
+  return { bound: true, provider: acct.provider, login: acct.login, accountId: acct.accountId, ...(acct.avatarUrl ? { avatarUrl: acct.avatarUrl } : {}), ...(session ?? {}) };
 }
