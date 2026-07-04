@@ -44,7 +44,8 @@ describe("Dashboard", () => {
     render(<Dashboard apiBase="" file="/w/s.jsonl" />);
     FakeES.last!.emit("render", { html: "<h1>one</h1>", version: 1 });
     await waitFor(() => expect(frames().some((f) => f.getAttribute("srcdoc")?.includes("one"))).toBe(true));
-    // jsdom does not auto-fire iframe load on srcDoc; fire it so the refs advance (eng-review Q1/#9).
+    // Deterministically fire iframe load so the refs advance regardless of jsdom's own
+    // (version-dependent, async) auto-fire — makes the double-buffer flip explicit (eng-review Q1/#9).
     fireEvent.load(frames().find((f) => f.getAttribute("srcdoc")?.includes("one"))!); // buffer 0 paints → visible 0
     FakeES.last!.emit("render", { html: "<h1>two</h1>", version: 2 });
     await waitFor(() => expect(frames().some((f) => f.getAttribute("srcdoc")?.includes("two"))).toBe(true));

@@ -28,8 +28,13 @@ afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); });
 function harness(file: string, render: (i: RenderInput) => Promise<RenderResult>, opts = {}) {
   vi.useFakeTimers();
   let buf = "";
+  let closeCb: (() => void) | null = null;
   const res = { writeHead() {}, write(c: string) { buf += c; }, end() {} };
-  streamWatchDashboard({ query: { file }, on() {} } as never, res as never, { render, debounceMs: DEBOUNCE, ...opts });
+  streamWatchDashboard(
+    { query: { file }, on(ev: string, cb: () => void) { if (ev === "close") closeCb = cb; } } as never,
+    res as never,
+    { render, debounceMs: DEBOUNCE, ...opts },
+  );
   const parse = () => {
     const out: { event: string; data: any }[] = [];
     for (const block of buf.split("\n\n")) {
@@ -39,7 +44,8 @@ function harness(file: string, render: (i: RenderInput) => Promise<RenderResult>
     return out;
   };
   const bump = () => { const t = Math.floor(statSync(file).mtimeMs / 1000) + 60; utimesSync(file, t, t); };
-  return { parse, bump };
+  const close = () => closeCb?.(); // simulate the client disconnecting (req "close")
+  return { parse, bump, close };
 }
 
 // Fresh transcript file per test (no cross-test event accumulation). Writes N tool_use
@@ -124,5 +130,17 @@ describe("streamWatchDashboard", () => {
     expect(inputs).toHaveLength(2);
     expect(inputs[1].prevHtml).toBe("");            // rebuilt from scratch
     expect(inputs[1].deltaEvents).toHaveLength(2);  // whole session, not just the delta
+  });
+
+  it("closed guard: a render that resolves AFTER the client disconnects is dropped (no send)", async () => {
+    let calls = 0; let resolve!: (r: RenderResult) => void;
+    const render = (_i: RenderInput) => { calls++; return new Promise<RenderResult>((r) => { resolve = r; }); };
+    const { parse, close } = harness(mkFile(["t1"]), render);
+    await vi.advanceTimersByTimeAsync(SETTLE);        // render1 fires, stays pending
+    expect(calls).toBe(1);
+    close();                                          // client disconnects mid-render
+    resolve({ html: "<h1>late</h1>", ok: true });     // render completes after close
+    await vi.advanceTimersByTimeAsync(SETTLE);
+    expect(parse().filter((e) => e.event === "render")).toHaveLength(0); // guard dropped the write (#6)
   });
 });

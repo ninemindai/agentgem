@@ -1,6 +1,20 @@
 import { describe, it, expect } from "vitest";
-import { renderDashboard, extractHtml, type RenderInput } from "@agentgem/insight";
+import { renderDashboard, extractHtml, MAX_HTML, type RenderInput } from "@agentgem/insight";
 import type { SessionEvent } from "@agentgem/insight";
+
+// Like fakeConnect, but records the prompt the agent received (for asserting prompt content).
+function capturingConnect(sink: { prompt: string }, reply = "<html><body>x</body></html>") {
+  return async () => ({
+    ctx: {
+      open: async () => ({
+        setMode: async () => {},
+        promptText: async (p: string) => { sink.prompt = p; return reply; },
+        dispose: () => {},
+      }),
+    },
+    close: () => {},
+  }) as never;
+}
 
 // A minimal fake ACP connect-fn: its agent returns whatever `reply` we pass, or throws.
 function fakeConnect(reply: string | (() => Promise<string>)) {
@@ -50,5 +64,18 @@ describe("renderDashboard", () => {
   it("falls back to empty string on first-render failure", async () => {
     const r = await renderDashboard(base({ prevHtml: "", connectFn: fakeConnect("") }));
     expect(r).toEqual({ html: "", ok: false });
+  });
+  it("injects the session's project name and agent into the prompt (not a placeholder)", async () => {
+    const sink = { prompt: "" };
+    await renderDashboard(base({ meta: { project: "acme-web", agent: "claude" }, connectFn: capturingConnect(sink) }));
+    expect(sink.prompt).toContain("acme-web");
+    expect(sink.prompt).toContain("claude");
+  });
+  it("truncates HTML over MAX_HTML and flags it (drives the endpoint's full-regenerate)", async () => {
+    const huge = "<html><body>" + "x".repeat(MAX_HTML + 10_000) + "</body></html>";
+    const r = await renderDashboard(base({ connectFn: fakeConnect(huge) }));
+    expect(r.ok).toBe(true);
+    expect(r.truncated).toBe(true);
+    expect(r.html.length).toBe(MAX_HTML);
   });
 });
