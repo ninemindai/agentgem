@@ -47,8 +47,10 @@ const EXEMPLAR =
 function buildPrompt(input: RenderInput): string {
   const events = JSON.stringify(input.deltaEvents.map((e) => e.span));
   const prev = input.prevHtml ? input.prevHtml : "(none — this is the first render)";
+  const project = input.meta.project ?? "this session";
   return (
-    `You render a LIVE dashboard of a running coding-agent session, for the AgentGem console.\n` +
+    `You render a LIVE dashboard of a running ${input.meta.agent} coding-agent session, for the AgentGem console.\n` +
+    `SESSION: project "${project}" (agent: ${input.meta.agent}). Put the project name in the dashboard header — do not use a placeholder.\n` +
     `PREVIOUS DASHBOARD HTML:\n${prev}\n\n` +
     `NEW EVENTS since it was rendered (JSON):\n${events}\n\n` +
     `Return ONE self-contained HTML document that EVOLVES the previous dashboard in place to reflect the new events. ` +
