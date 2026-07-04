@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
 import { fetchSessions, openWatchStream, type WatchSession, type ArtifactVersion } from "./watchStream.js";
 import { SessionFeed } from "./SessionFeed.js";
+import { Dashboard } from "./Dashboard.js";
 import { sandboxDoc } from "./sandboxDoc.js";
 
 export { sandboxDoc };
@@ -85,7 +86,7 @@ function ArtifactPane({ apiBase, file }: { apiBase: string; file: string }) {
 export function Watch({ apiBase }: { apiBase: string }) {
   const [sessions, setSessions] = useState<WatchSession[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
-  const [view, setView] = useState<"feed" | "artifact">("feed");
+  const [view, setView] = useState<"feed" | "dashboard" | "artifact">("feed");
 
   const loadSessions = () => {
     fetchSessions(apiBase).then(setSessions).catch(() => setSessions([]));
@@ -141,12 +142,16 @@ export function Watch({ apiBase }: { apiBase: string }) {
               <div className="feed-toggle" role="tablist" aria-label="watch mode" style={{ marginBottom: 8 }}>
                 <button type="button" role="tab" aria-selected={view === "feed"}
                   className={"ledger-view" + (view === "feed" ? " is-active" : "")} onClick={() => setView("feed")}>Feed</button>
+                <button type="button" role="tab" aria-selected={view === "dashboard"}
+                  className={"ledger-view" + (view === "dashboard" ? " is-active" : "")} onClick={() => setView("dashboard")}>Dashboard</button>
                 <button type="button" role="tab" aria-selected={view === "artifact"}
                   className={"ledger-view" + (view === "artifact" ? " is-active" : "")} onClick={() => setView("artifact")}>Artifact</button>
               </div>
               {/* key on file so switching sessions remounts the pane and resets its stream */}
               {view === "feed"
                 ? <SessionFeed key={selected} apiBase={apiBase} file={selected} />
+                : view === "dashboard"
+                ? <Dashboard key={selected} apiBase={apiBase} file={selected} />
                 : <ArtifactPane key={selected} apiBase={apiBase} file={selected} />}
             </>
           )}

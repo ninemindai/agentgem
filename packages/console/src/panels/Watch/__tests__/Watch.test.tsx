@@ -72,4 +72,13 @@ describe("Watch panel", () => {
     render(<Watch apiBase="" />);
     await waitFor(() => expect(screen.getByText(/No sessions active/)).toBeTruthy());
   });
+
+  it("switches to the Dashboard tab and opens the dashboard stream", async () => {
+    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ sessions: [SESSION] }) })) as unknown as typeof fetch);
+    render(<Watch apiBase="" />);
+    fireEvent.click(await screen.findByText("site"));
+    fireEvent.click(screen.getByRole("tab", { name: "Dashboard" }));
+    await waitFor(() => expect(FakeES.last!.url).toContain("/api/watch/dashboard"));
+  });
 });
