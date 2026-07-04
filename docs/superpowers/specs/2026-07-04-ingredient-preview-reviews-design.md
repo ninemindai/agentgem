@@ -77,6 +77,46 @@ already exists on the marketplace api client.
 
 Mirrors the existing `stars` subsystem end to end.
 
+> **Eng-review amendments (2026-07-04) — these SUPERSEDE the mirror-of-stars
+> details below where they conflict.** Driven by the eng review + Codex outside
+> voice; each folds a specific finding.
+>
+> 1. **Identity = repo+path, not `skill:<name>` (reverses Phase-1 keying for
+>    reviews only).** Prose reviews must not cross-attribute between same-named
+>    skills in different repos. Reviews target `{ kind: "skill", id:
+>    "<sourceId>/<path>" }`. Stars stay name-keyed (anonymous counts tolerate
+>    sharing). The `reviews` `KINDS` allowlist is **`{"skill"}` only** — no `gem`
+>    surface until a gem consumer exists (Codex #7).
+> 2. **Reviews live on a NEW catalog-skill page, not the `/ingredient/skill:<name>`
+>    usage page.** Route `/skill/:sourceId/*path` → `CatalogSkill.tsx`: header →
+>    **reviews-first** → SKILL.md preview inline. The card **title links here**
+>    (it carries `sourceId`+`path`). The usage-ingredient page is unchanged. This
+>    keeps the catalog node (repo+path) and usage node (name) honestly separate.
+> 3. **True upsert, not select-then-insert.** `upsertReview` is one
+>    `INSERT … ON CONFLICT (account_id,target_kind,target_id) DO UPDATE SET
+>    rating=…, body=…, updated_at=now()` so two concurrent first-writes can't 500
+>    on the unique index (Codex #4). Add a concurrency test.
+> 4. **DB constraints, not comments.** Table adds `CHECK (rating BETWEEN 1 AND 5)`
+>    and `CHECK (body IS NULL OR char_length(body) <= 4000)` (Codex #3).
+> 5. **`reviewSummary` avg is explicit.** Zero rows → `{ avg: 0, count: 0 }`;
+>    `avg(rating)` is coalesced null→0, cast to float, rounded to 1 decimal in JS
+>    (SQL `avg()` type varies by driver — Codex #5).
+> 6. **List order pinned.** `listReviews` orders by `created_at DESC` (a review's
+>    slot is when first written); returns `createdAt` AND `updatedAt`; the UI shows
+>    an "edited" tag when `updatedAt > createdAt` (Codex #6).
+> 7. **originGuard mirrors stars EXACTLY.** Add only the
+>    `req.path.startsWith("/api/reviews")` cross-site exemption (like `/api/stars`
+>    at `originGuard.ts:57`). CSRF on POST/DELETE is stopped by the **SameSite=Lax
+>    session cookie + 401**, same as stars — NOT by CORS. Do **not** add the review
+>    GETs to `PUBLIC_READ_PATHS` (redundant given the prefix; stars doesn't). Codex
+>    #2 + eng-review P2.
+> 8. **Per-account write rate-limit.** `POST /api/reviews` enforces a minimal guard
+>    (short per-target cooldown / ≤N writes per account per hour) → `429` on
+>    exceed. New content-bearing public write (eng-review P1).
+> 9. **Schema-contract test.** Adding the table breaks
+>    `src/aggregator/__tests__/schema.test.ts:12`'s expected-table list — update it
+>    in the same step (Codex #8).
+
 ### Data model
 
 New `reviews` table (created in `packages/aggregator/src/schema.ts`, parallel to
@@ -151,12 +191,14 @@ Parallels `stars.ts` (credentialed fetch; `NotSignedIn` on 401):
   nothing** — not a "No reviews yet" label on every card. With 72 cards mostly at
   zero early on, a per-card empty label is grid noise (subtraction default); the
   aggregate appears only once a skill has reviews.
-- The card **name becomes an `<a href="/ingredient/skill:<name>">`** — the
-  card → detail graph edge. Keeps the star button and Preview button as-is.
+- The card **name becomes a link to the catalog-skill page**
+  `/skill/:sourceId/*path` (eng-review D4 — NOT `/ingredient/skill:<name>`, which is
+  the separate name-keyed usage page). Keeps the star button and Preview button as-is.
 
-**Detail page (`Ingredient.tsx`):**
-- New **Reviews** `ex-card` section placed **first, directly under the header + star**
-  — page order becomes header+★ → **Reviews** → "Used together with" → "Adoption".
+**Catalog-skill page (`CatalogSkill.tsx`, `/skill/:sourceId/*path`)** — eng-review D4
+moved reviews here from the name-keyed `/ingredient` usage page:
+- **Reviews** `ex-card` section placed **first, directly under the header**
+  — page order becomes header → **Reviews** → SKILL.md preview (inline).
   Reviews lead because a visitor wants human social proof and to contribute before the
   machine stats (hierarchy as service). The section holds the summary
   (`★ avg · N reviews`), the list (avatar · login · ★rating · body · relative date),
@@ -276,13 +318,51 @@ STEP | USER DOES                    | FEELS                    | SUPPORTED BY
 
 ## Build order
 
-1. Backend: `reviews` schema + `reviews.ts` query module + tests.
-2. Backend: `src/reviews/install.ts` routes + `originGuard` exemptions.
-3. Marketplace client: `reviews.ts` + `App.tsx`/`Router` `ReviewsCtx` wiring.
-4. Preview: `Modal.tsx` + card Preview button + test.
-5. Card: aggregate rating + title→detail link.
-6. Detail page: reviews section (summary + list + write form) + tests.
-7. Full marketplace + aggregator suites + typecheck; live-browser verification.
+Two PRs (eng-review D1): **PR-A Preview** (frontend-only) ships first, **PR-B
+Reviews** (backend + catalog page) second.
+
+**PR-A — Preview:**
+1. `Modal.tsx` (focus-trap, ESC, return-focus, mobile sheet) + card Preview button
+   → modal via `importSourceSkill(sourceId, path)`.
+2. `Modal.test.tsx`; marketplace suite + typecheck; live-browser check.
+
+**PR-B — Reviews:**
+3. Backend: `reviews` schema (+ CHECK constraints) + `reviews.ts` (true
+   `ON CONFLICT` upsert, coalesced avg) + update `schema.test.ts` table list +
+   `reviews.test.ts`.
+4. Backend: `src/reviews/install.ts` (KINDS=`{"skill"}`, rate-limit, SameSite CSRF)
+   + `originGuard.ts` `startsWith("/api/reviews")` only + `reviewsInstall.test.ts`.
+5. Marketplace client: `reviews.ts` + `App.tsx`/`Router` `ReviewsCtx`.
+6. New `CatalogSkill.tsx` page (`/skill/:sourceId/*path`): reviews-first + list +
+   write form (`RatingInput.tsx` radiogroup) + inline preview + tests.
+7. Card: aggregate `★ avg · N` (repo+path key; zero → nothing) + title →
+   `/skill/:sourceId/*path`.
+8. Full marketplace + aggregator suites + typecheck; live-browser verification.
+
+## Implementation Tasks
+Synthesized from the design + eng review findings. Each derives from a specific finding.
+
+- [ ] **T1 (P2, human: ~1h / CC: ~10min)** — [PR-A] Preview modal + card wiring
+  - Surfaced by: spec §A + design Pass 6 (dialog focus-trap, ESC, return focus, mobile sheet)
+  - Files: `packages/marketplace/src/Modal.tsx`, `pages/PopularSkills.tsx`, `styles.css`
+  - Verify: `Modal.test.tsx`; Preview loads/errors in-browser
+- [ ] **T2 (P1, human: ~2.5h / CC: ~25min)** — [PR-B] reviews backend — table + query module + routes
+  - Surfaced by: spec §B + Codex #2/#3/#4/#5/#8 + eng-review P1 (rate-limit)
+  - Note: CHECK constraints, `ON CONFLICT` upsert, coalesced avg, KINDS=`{"skill"}`, rate-limit, originGuard prefix-only, **update `schema.test.ts:12`**
+  - Files: `packages/aggregator/src/schema.ts`, `packages/aggregator/src/reviews.ts`, `packages/aggregator/src/index.ts`, `src/reviews/install.ts`, `src/originGuard.ts`, `src/aggregator/__tests__/schema.test.ts`
+  - Verify: `src/aggregator/__tests__/reviews.test.ts` (+ concurrency) + `src/__tests__/reviewsInstall.test.ts` green
+- [ ] **T3 (P1, human: ~45min / CC: ~10min)** — [PR-B] marketplace client — `reviews.ts` + `ReviewsCtx`
+  - Surfaced by: spec §B — Marketplace client; Router/App plumbing (parallel to `StarsCtx`)
+  - Files: `packages/marketplace/src/reviews.ts`, `App.tsx`, `Router.tsx`
+  - Verify: typecheck; ctx reaches new page + `PopularSkills`
+- [ ] **T4 (P1, human: ~2h / CC: ~20min)** — [PR-B] new `CatalogSkill.tsx` page (repo+path) — reviews-first + states + a11y
+  - Surfaced by: eng-review D4 (reviews home) + design Pass 1/2/6
+  - Files: `packages/marketplace/src/pages/CatalogSkill.tsx`, `RatingInput.tsx`, `Router.tsx`, `styles.css`
+  - Verify: `CatalogSkill.test.tsx` + `RatingInput.test.tsx` (empty/error/edit/delete, keyboard)
+- [ ] **T5 (P2, human: ~30min / CC: ~5min)** — [PR-B] card aggregate `★ avg · N` (repo+path; zero→nothing) + title→`/skill/…`
+  - Surfaced by: design Pass 1 + eng-review D1/D3/D4
+  - Files: `packages/marketplace/src/pages/PopularSkills.tsx` (+ test), `styles.css`
+  - Verify: `PopularSkills.test.tsx` (aggregate shown, zero renders none, title links to /skill/…)
 
 ## Implementation Tasks
 Synthesized from the design-review findings. Each derives from a specific finding.
@@ -313,16 +393,22 @@ Synthesized from the design-review findings. Each derives from a specific findin
 | Review | Trigger | Why | Runs | Status | Findings |
 |--------|---------|-----|------|--------|----------|
 | CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
-| Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 0 | — | — |
-| Design Review | `/plan-design-review` | UI/UX gaps | 1 | issues_open→resolved | score 5/10 → 9/10, 6 decisions |
+| Codex Review | `/codex review` (outside voice) | Independent 2nd opinion | 1 | issues_found | 8 findings: 2 critical, 6 warning |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | clean | 10 issues, 0 critical gaps, 0 unresolved |
+| Design Review | `/plan-design-review` | UI/UX gaps | 1 | clean | score 5/10 → 9/10, 6 decisions |
 | DX Review | `/plan-devex-review` | Developer-experience gaps | 0 | — | — |
 
-Design passes: P1 IA 5→9 (reviews-first order), P2 states 4→9 (state table added),
-P3 journey 6→9 (storyboard + first-reviewer beat), P4 slop 8→9 (list not cards),
-P5 design-system 6→9 (★-not-◆ ruling, reuse map), P6 a11y 3→9 (radiogroup picker,
-visible label, modal focus-trap, 44px targets), P7 the one decision resolved.
+Eng review: scope split into two PRs (Preview, then Reviews). Sections — Architecture
+(2 findings: originGuard prefix-only, rate-limit), Code Quality (clean, DRY-vs-stars
+justified), Tests (~95% planned coverage + concurrency test added), Performance (clean,
+no N+1). Design passes P1–P7 all 8+.
 
-- **VERDICT:** DESIGN CLEARED — spec is design-complete (9/10). Eng review still required before ship.
+- **CODEX:** 8 findings, all absorbed — identity keying (repo+path), true `ON CONFLICT`
+  upsert, DB CHECK constraints, coalesced avg, list ordering, ingredient-only KINDS,
+  originGuard threat-model, schema-test sequencing.
+- **CROSS-MODEL:** one tension (review identity) — Codex + eng agreed reviews key by
+  repo+path; user approved (D3), which cascaded to a new catalog-skill page (D4).
+- **VERDICT:** DESIGN + ENG + CODEX CLEARED — plan is implementation-ready. Ship gate
+  (eng review) satisfied; run `/review` on the diff before landing each PR.
 
 NO UNRESOLVED DECISIONS
