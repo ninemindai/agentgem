@@ -478,7 +478,7 @@ h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: -0.005em
 .ex-dot-ver  { background: var(--verified); }
 
 /* ── Gems: browse ────────────────────────────────────────────── */
-.ex-gem-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+.ex-gem-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
 .ex-gem-card {
   display: grid;
   gap: 7px;
@@ -492,7 +492,7 @@ h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: -0.005em
   transition: border-color var(--t), box-shadow var(--t) var(--ease), transform var(--t) var(--ease);
 }
 .ex-gem-card:hover { border-color: color-mix(in srgb, var(--brand) 32%, var(--line)); box-shadow: var(--shadow-lg); transform: translateY(-3px); }
-.ex-gem-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.ex-gem-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 9px; padding-right: 42px; }
 .ex-gem-key { font-family: var(--display); font-weight: 650; letter-spacing: -0.01em; font-size: 1.02rem; }
 .ex-gem-kinds, .ex-gem-tags { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .ex-gem-desc { color: var(--ink-2); font-size: 0.9rem; line-height: 1.5; max-width: 68ch; }
@@ -550,8 +550,16 @@ h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: -0.005em
 /* ── Row/card wrappers for sibling StarButton placement ─────── */
 .ex-row-wrap { display: flex; align-items: center; gap: 8px; }
 .ex-row-wrap .ex-row { flex: 1 1 auto; min-width: 0; }
-.ex-gem-item { display: flex; align-items: flex-start; gap: 8px; }
+.ex-gem-item { position: relative; display: flex; flex-direction: column; animation: ex-rise 0.5s var(--ease) backwards; }
 .ex-gem-item .ex-gem-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.ex-gem-item .ex-gem-card { flex: 1 1 auto; }   /* card fills the grid cell height */
+.ex-gem-item > .ex-star { position: absolute; top: 13px; right: 15px; z-index: 1; }
+.ex-gem-item:nth-child(1) { animation-delay: 0.03s; }
+.ex-gem-item:nth-child(2) { animation-delay: 0.07s; }
+.ex-gem-item:nth-child(3) { animation-delay: 0.11s; }
+.ex-gem-item:nth-child(4) { animation-delay: 0.15s; }
+.ex-gem-item:nth-child(5) { animation-delay: 0.19s; }
+.ex-gem-item:nth-child(6) { animation-delay: 0.23s; }
 .ex-gem-author { align-self: flex-start; color: var(--muted); font-size: 0.8rem; text-decoration: none; }
 .ex-gem-author:hover { color: var(--brand); text-decoration: underline; }
 
@@ -599,7 +607,7 @@ h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: -0.005em
 .ex-divisions .ex-chip:hover { color: var(--ink); background: var(--surface); border-color: var(--line-2); }
 .ex-divisions .ex-chip.is-active { color: var(--brand-strong); background: var(--brand-wash); border-color: transparent; }
 
-.ex-agent-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.ex-agent-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); align-items: start; }
 .ex-agent {
   display: flex; flex-direction: column; gap: 9px;
   background: linear-gradient(180deg, var(--surface), var(--surface-2));
@@ -607,8 +615,10 @@ h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: -0.005em
   border-radius: var(--r-lg); padding: 14px 16px;
   box-shadow: var(--shadow);
   transition: box-shadow var(--t) var(--ease), border-color var(--t) var(--ease), transform var(--t) var(--ease);
+  animation: ex-rise 0.5s var(--ease) backwards;
 }
 .ex-agent:hover { box-shadow: var(--shadow-md); border-color: color-mix(in srgb, var(--brand) 24%, var(--line)); }
+.ex-agent.is-open { grid-column: 1 / -1; }   /* an expanded SKILL.md breaks out to full width */
 .ex-agent-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .ex-agent-name { font-family: var(--display); font-weight: 600; font-size: 0.95rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .ex-install { display: flex; align-items: flex-start; gap: 8px; }
@@ -626,6 +636,7 @@ h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: -0.005em
   color: var(--ink-2); background: var(--surface-2);
   border: 1px solid var(--line); border-radius: var(--r);
   padding: 12px 14px; max-width: 100%;
+  max-height: 440px; overflow-y: auto;   /* cap the expanded skill so a card can't blow up the grid */
   white-space: pre-wrap; overflow-wrap: anywhere;   /* long SKILL.md lines wrap inside — no page scroll */
 }
 
