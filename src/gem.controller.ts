@@ -258,7 +258,7 @@ import { resolveDirs, resolveProject, agentgemHome } from "@agentgem/model";
 import { pickFolder } from "./pickFolder.js";
 import { readShareAdoption, setShareAdoption } from "./agentgemConfig.js";
 import { emitAdoption } from "./registry/emitAdoption.js";
-import { bindConfig, startDeviceBind, completeDeviceBind, readBindingStatus, clearBinding, type StartDeps, type CompleteDeps } from "./bind/bindCore.js";
+import { bindConfig, startDeviceBind, completeDeviceBind, readBindingStatus, clearBinding, readSession, clearSession, type StartDeps, type CompleteDeps } from "./bind/bindCore.js";
 
 const BindStartSchema = z.object({
   configured: z.boolean(),
@@ -280,6 +280,7 @@ const BindCompleteSchema = z.object({
   sessionToken: z.string().optional(),
   expiresAt: z.string().optional(),
 });
+const WebHandoffSchema = z.object({ authenticated: z.boolean(), url: z.string().optional() });
 const BindStatusSchema = z.object({ bound: z.boolean(), login: z.string().optional(), provider: z.string().optional(), avatarUrl: z.string().optional() });
 
 let globalUsageRefreshing = false;
@@ -1085,7 +1086,36 @@ export class GemController {
   // verified. Idempotent; returns the fresh (unbound) status. Reconnect re-links.
   @post("/bind/disconnect", { body: z.object({}), response: BindStatusSchema })
   async bindDisconnect(_input: { body: Record<string, never> }): Promise<z.infer<typeof BindStatusSchema>> {
+    clearSession();
     return clearBinding();
+  }
+
+  // Desktop→web SSO: read the local first-party session, ask the aggregator (authenticated with the
+  // session BEARER — this is the local app's authenticated call to api.agentgem.ai) for a single-use
+  // handoff code, and return the redeem URL for the app to open in the system browser. A 401 means
+  // the session lapsed → clear it so the UI prompts a reconnect; other failures are transient.
+  @post("/auth/web-handoff", { body: z.object({}), response: WebHandoffSchema })
+  async webHandoff(_input: { body: Record<string, never> }): Promise<z.infer<typeof WebHandoffSchema>> {
+    const session = readSession();
+    const cfg = bindConfig();
+    if (!session || !cfg.base) return { authenticated: false };
+    let res: Response;
+    try {
+      res = await fetch(new URL("/api/auth/handoff/start", cfg.base), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.sessionToken}` },
+        body: "{}",
+      });
+    } catch {
+      return { authenticated: false };
+    }
+    if (res.status === 401) { clearSession(); return { authenticated: false }; }
+    if (!res.ok) return { authenticated: false };
+    const { code } = (await res.json()) as { code?: string };
+    if (!code) return { authenticated: false };
+    const webOrigin = process.env.AGENTGEM_WEB_ORIGIN ?? "https://app.agentgem.ai";
+    const url = `${cfg.base}/api/auth/github/handoff?code=${encodeURIComponent(code)}&return=${encodeURIComponent(webOrigin)}`;
+    return { authenticated: true, url };
   }
 
   // Pop the OS-native folder picker and return the chosen absolute path (null if cancelled).

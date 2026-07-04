@@ -676,6 +676,11 @@ export const bindDisconnectRoute = defineRoute("POST", "/api/bind/disconnect", {
   body: z.object({}),
   response: z.object({ bound: z.boolean(), login: z.string().optional(), provider: z.string().optional(), avatarUrl: z.string().optional() }),
 });
+// Desktop→web SSO: mint a handoff URL from the local session; open it to land signed in on the web.
+export const webHandoffRoute = defineRoute("POST", "/api/auth/web-handoff", {
+  body: z.object({}),
+  response: z.object({ authenticated: z.boolean(), url: z.string().optional() }),
+});
 
 // Curated import sources (bootstrap the Gem registry from trusted external repos).
 const CuratedSourceSchema = z.object({

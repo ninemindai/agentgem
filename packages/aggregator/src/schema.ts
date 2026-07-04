@@ -92,6 +92,16 @@ export const webSessions = pgTable("web_sessions", {
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
 });
 
+// Single-use, short-TTL codes for the desktop→web SSO handoff. The local app mints a code (bearer-
+// authenticated), opens the redeem URL in the browser, and the redeem route swaps the code for a
+// fresh web session cookie. Only the code's sha256 is stored, and it maps to an account (never a
+// live token), so a leaked row can't be replayed into a session on its own.
+export const handoffCodes = pgTable("handoff_codes", {
+  codeHash: text("code_hash").primaryKey(),
+  accountId: uuid("account_id").notNull().references(() => accounts.id),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+});
+
 export const stars = pgTable("stars", {
   id: uuid("id").primaryKey(),
   accountId: uuid("account_id").notNull().references(() => accounts.id),
@@ -148,7 +158,7 @@ export const curatedSkills = pgTable("curated_skills", {
   indexedAt: timestamp("indexed_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.sourceId, t.path] })]);
 
-export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, webSessions, stars, gemAdoptions, accountScopes, catalogGems, curatedSkills };
+export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, webSessions, handoffCodes, stars, gemAdoptions, accountScopes, catalogGems, curatedSkills };
 export type AppDb = PgDatabase<any, typeof schema>;
 
 // Idempotent DDL. (Schema-as-tables above is the query source of truth; this DDL
@@ -167,6 +177,7 @@ export async function ensureSchema(db: AppDb): Promise<void> {
   await db.execute(sql`create table if not exists api_keys (id uuid primary key, key_hash text not null unique, label text not null, created_at timestamptz not null default now(), revoked_at timestamptz)`);
   await db.execute(sql`create table if not exists accounts (id uuid primary key, provider text not null, provider_account_id text not null, login text not null, avatar_url text, created_at timestamptz not null default now(), unique (provider, provider_account_id))`);
   await db.execute(sql`create table if not exists web_sessions (id uuid primary key, token_hash text not null unique, account_id uuid not null references accounts(id), created_at timestamptz not null default now(), expires_at timestamptz not null)`);
+  await db.execute(sql`create table if not exists handoff_codes (code_hash text primary key, account_id uuid not null references accounts(id), expires_at timestamptz not null)`);
   await db.execute(sql`create table if not exists stars (id uuid primary key, account_id uuid not null references accounts(id), target_kind text not null, target_id text not null, created_at timestamptz not null default now(), unique (account_id, target_kind, target_id))`);
   await db.execute(sql`create index if not exists stars_target_idx on stars (target_kind, target_id)`);
   await db.execute(sql`create table if not exists gem_adoptions (gem_key text not null, gem_digest text not null, producer_pubkey text not null references producers(pubkey), account_login text, event text not null default 'install', adopted_at timestamptz not null default now(), trust_score real not null default 1, quarantined boolean not null default false, primary key (gem_key, producer_pubkey))`);

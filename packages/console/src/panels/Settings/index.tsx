@@ -3,7 +3,7 @@ import { defineConsolePage } from "../../registry.js";
 import { Loading } from "../../shell/Loading.js";
 import {
   deployTargetsRoute, setCredentialRoute, CREDENTIAL_KEYS, makeClient,
-  bindStatusRoute, bindStartRoute, bindCompleteRoute, bindDisconnectRoute,
+  bindStatusRoute, bindStartRoute, bindCompleteRoute, bindDisconnectRoute, webHandoffRoute,
 } from "../../api/routes.js";
 
 type Backend = { id: string; label: string; ready: boolean };
@@ -115,6 +115,19 @@ export function Settings({ apiBase }: { apiBase: string }) {
     }
   };
 
+  // Open app.agentgem.ai already signed in: the local session mints a one-time handoff code
+  // (server-side, bearer-authenticated), and we open the redeem URL in the system browser.
+  const openOnWeb = async () => {
+    setBindError(null);
+    try {
+      const r = await webHandoffRoute.call(makeClient(apiBase), { body: {} });
+      if (r.authenticated && r.url) window.open(r.url, "_blank", "noopener");
+      else setBindError("Session expired — reconnect GitHub to open on the web.");
+    } catch (e) {
+      setBindError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   const disconnectGitHub = async () => {
     setBindError(null);
     setBindFlow(null);
@@ -163,6 +176,7 @@ export function Settings({ apiBase }: { apiBase: string }) {
               )}
               Verified as @{bindStatus.login}
             </span>
+            <button type="button" className="ledger-build" onClick={openOnWeb}>Open on the web ↗</button>
             <button type="button" className="ledger-view" onClick={disconnectGitHub}>Disconnect</button>
           </div>
         ) : (
