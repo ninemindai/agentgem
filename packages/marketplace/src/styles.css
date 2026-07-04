@@ -360,7 +360,7 @@ h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: -0.005em
   border-color: color-mix(in srgb, var(--brand) 32%, var(--line));
 }
 .ex-skillcard:hover::before { transform: scaleY(1); }
-.ex-skillcard-name { font-family: var(--display); font-weight: 600; font-size: 1.03rem; letter-spacing: -0.01em; color: var(--ink); }
+.ex-skillcard-name { font-family: var(--display); font-weight: 600; font-size: 1.03rem; letter-spacing: -0.01em; color: var(--ink); padding-right: 52px; /* room for the absolute star pill */ }
 .ex-skillcard-desc {
   margin: 0;
   color: var(--ink-2);
@@ -389,6 +389,9 @@ h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: -0.005em
 }
 .ex-skillcard-foot > a { color: var(--muted); text-decoration: none; white-space: nowrap; font-weight: 500; transition: color var(--t); }
 .ex-skillcard-foot > a:hover { color: var(--brand-strong); }
+.ex-skillcard > .ex-star { position: absolute; top: 12px; right: 13px; z-index: 1; }
+.ex-skillcard-author { align-self: flex-start; color: var(--muted); font-size: 0.78rem; text-decoration: none; transition: color var(--t); }
+.ex-skillcard-author:hover { color: var(--brand-strong); }
 
 /* staggered card entrance — each group's cards cascade in on load */
 @keyframes ex-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }

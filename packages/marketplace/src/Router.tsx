@@ -43,7 +43,7 @@ export function Router({ api, stars, me }: { api: ReturnType<typeof makeApi>; st
 
   return (
     <>
-      <PopularSkills api={api} />
+      <PopularSkills api={api} stars={stars} />
       <h2 className="ex-section-title">Adoption leaderboard</h2>
       <Leaderboard api={api} stars={stars} />
     </>
