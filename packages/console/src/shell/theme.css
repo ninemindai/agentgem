@@ -495,6 +495,16 @@ body::before {
 .feed-tool-out { margin: 8px 0 0; padding: 8px; max-height: 220px; overflow: auto; border-radius: 6px;
   background: var(--paper-2); font: 12px/1.5 var(--font-mono); color: var(--ink-soft); white-space: pre-wrap; }
 
+/* Watch → Dashboard: double-buffered, cross-faded iframes (design D2) */
+.dash-frames { position: relative; width: 100%; height: 560px; }
+.dash-frames[data-empty="true"] { height: 0; }
+.dash-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 1px solid var(--line);
+  border-radius: var(--radius); background: var(--paper); opacity: 0; transition: opacity .15s ease; }
+.dash-frame.is-visible { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .dash-frame { transition: none; } }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
 /* Analyze candidate: header row + previewed artifact list */
 .analyze-candidate { margin-top: 10px; padding: 10px; border: 1px solid var(--line-soft);
   border-radius: 8px; background: var(--paper); }
