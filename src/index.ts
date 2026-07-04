@@ -28,7 +28,7 @@ import { streamGemVerify } from "./gemVerifyStream.js";
 import { streamScorecard } from "./scorecardStream.js";
 import { streamInsights } from "./insightsStream.js";
 import { streamRubric } from "./rubricStream.js";
-import { listRubrics } from "./rubricCore.js";
+import { listRubricsWithMeta, validateRubricInput, saveRubric, deleteRubric } from "./rubricCore.js";
 import { streamWatch } from "./watchStream.js";
 import { streamWatchEvents } from "./watchEvents.js";
 import { listActiveSessions } from "./watchSessions.js";
@@ -223,7 +223,15 @@ export async function createApp(port: number): Promise<RestApplication> {
   });
   // The rubric picker's catalog: built-in + user rubrics. GET /api/rubrics?dir=...
   server.expressApp.get("/api/rubrics", originGuard, (req, res) =>
-    res.json({ rubrics: listRubrics(typeof req.query.dir === "string" ? req.query.dir : undefined) } as never));
+    res.json({ rubrics: listRubricsWithMeta(typeof req.query.dir === "string" ? req.query.dir : undefined) } as never));
+  // Authoring (validated JSON editor). Validate always returns 200 with the result so
+  // the editor can render errors inline; save/delete write ~/.agentgem/rubrics/<id>.json.
+  server.expressApp.post("/api/rubrics/validate", originGuard, (req, res) =>
+    res.json(validateRubricInput((req as { body?: unknown }).body) as never));
+  server.expressApp.post("/api/rubrics", originGuard, (req, res) =>
+    res.json(saveRubric((req as { body?: unknown }).body) as never));
+  server.expressApp.post("/api/rubrics/delete", originGuard, (req, res) =>
+    res.json(deleteRubric((req as { body?: { id?: string } }).body?.id ?? "") as never));
   // Watch tab: live-preview HTML artifacts a regular coding session builds. List the
   // recently-active transcripts, then SSE-stream one session's HTML file snapshots
   // (redacted, sandbox-ready) as it writes/edits them. Read-only, metadata + scrubbed
