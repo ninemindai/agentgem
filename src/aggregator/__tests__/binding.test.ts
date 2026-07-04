@@ -48,11 +48,27 @@ describe("recordBinding", () => {
     const res = await recordBinding(db, await req(s, "tok", signedAt), fakeVerifier(OCTOCAT), signedAt + 300_001);
     expect(res).toEqual({ bound: false, rejected: "stale" });
   });
-  it("rejects an unknown producer (no producer row)", async () => {
+  it("self-registers a new identity (no prior producer row) and binds", async () => {
     const db = await makeTestDb();
     const s = makeSigner();
     const now = 1_000_000;
-    expect(await recordBinding(db, await req(s, "tok", now), fakeVerifier(OCTOCAT), now)).toEqual({ bound: false, rejected: "unknown-producer" });
+    // No producer seeded — a valid signature + verified token is enough to bind now.
+    const res = await recordBinding(db, await req(s, "tok", now), fakeVerifier(OCTOCAT), now);
+    expect(res).toEqual({ bound: true, provider: "github", login: "octocat", accountId: "42" });
+    // The identity is now a registered (zero-attestation) producer.
+    const prod = await db.select().from(producers).where(sql`pubkey = ${s.pubkey}`);
+    expect(prod).toHaveLength(1);
+    const rows = await db.select().from(accountBindings);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].accountId).toBe("42");
+  });
+  it("does NOT register a producer when the token is invalid", async () => {
+    const db = await makeTestDb();
+    const s = makeSigner();
+    const now = 1_000_000;
+    expect(await recordBinding(db, await req(s, "tok", now), throwingVerifier, now)).toEqual({ bound: false, rejected: "provider-error" });
+    const prod = await db.select().from(producers).where(sql`pubkey = ${s.pubkey}`);
+    expect(prod).toHaveLength(0); // bogus token must not create an identity
   });
   it("maps a provider error", async () => {
     const db = await makeTestDb();

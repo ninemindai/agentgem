@@ -38,13 +38,16 @@ export async function recordBinding(
   if (!Number.isFinite(req.signedAt) || Math.abs(now - req.signedAt) > FRESHNESS_MS) {
     return { bound: false, rejected: "stale" };
   }
-  // 3. producer must exist (FK + a clear "share before binding" signal)
-  const prod = await db.execute<{ pubkey: string }>(sql`select pubkey from producers where pubkey = ${req.pubkey}`);
-  if (prod.rows.length === 0) return { bound: false, rejected: "unknown-producer" };
-  // 4. account possession (live)
+  // 3. account possession (live) — verify the GitHub token BEFORE we register anything,
+  // so an invalid/forged token can never create a producer row.
   let acct;
   try { acct = await verifier.verify(req.token); }
   catch { return { bound: false, rejected: "provider-error" }; }
+  // 4. self-register the identity. A valid key signature + a live GitHub token are the only
+  // proofs required to bind — connecting no longer presupposes prior telemetry. Insert the
+  // producer if it's new (satisfies the account_bindings -> producers FK); existing producers
+  // are untouched. Zero-attestation producers simply have nothing to show yet.
+  await db.execute(sql`insert into producers (pubkey) values (${req.pubkey}) on conflict (pubkey) do nothing`);
   // 4b. reconcile with the web `accounts` identity + capture avatar. Best-effort: NEVER fail
   // the bind over it — the account_bindings write below is what ratings depend on.
   try {
