@@ -144,6 +144,7 @@ export const curatedSkills = pgTable("curated_skills", {
   homepage: text("homepage"),
   stars: integer("stars").notNull().default(0),
   installs: integer("installs"),
+  description: text("description"),
   indexedAt: timestamp("indexed_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.sourceId, t.path] })]);
 
@@ -172,5 +173,6 @@ export async function ensureSchema(db: AppDb): Promise<void> {
   await db.execute(sql`create table if not exists account_scopes (account_id uuid not null references accounts(id), scope text not null, primary key (account_id, scope))`);
   await db.execute(sql`create table if not exists catalog_gems (gem_key text not null, version text not null, published_by text not null, author text, description text, tags jsonb, artifact_kinds jsonb, type text, grade integer, created_at_ms bigint not null, primary key (gem_key, version))`);
   await db.execute(sql`create table if not exists curated_skills (source_id text not null, path text not null, division text not null, name text not null, repo text not null, source_label text not null, homepage text, stars int not null default 0, installs int, indexed_at timestamptz not null default now(), primary key (source_id, path))`);
+  await db.execute(sql`alter table curated_skills add column if not exists description text`);
   await db.execute(sql`create index if not exists curated_skills_rank on curated_skills (stars desc)`);
 }
