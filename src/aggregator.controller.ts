@@ -9,6 +9,7 @@ import { DrizzleBindings } from "@agentback/drizzle";
 import type { AppDb } from "@agentgem/aggregator";
 import { ingestAttestation, ingestGemAdoption } from "@agentgem/aggregator";
 import { popularity, coOccurrence, adoption, overview, coOccurrenceMatrix, modelBenchmark, gemAdoption } from "@agentgem/aggregator";
+import { popularSkills } from "@agentgem/aggregator";
 import { buildProfile, buildOrgCatalog } from "@agentgem/aggregator";
 import type { UsageAttestation, GemAdoption } from "@agentgem/insight";
 import { recordBinding } from "@agentgem/aggregator";
@@ -40,6 +41,13 @@ const BenchQuery = z.object({ gemDigest: z.string().optional(), limit: z.coerce.
 const BenchResult = z.array(z.object({ model: z.string(), mostly: z.number(), partially: z.number(), notAchieved: z.number(), producers: z.number(), verifiedProducers: z.number() }));
 const GemAdoptionQuery = z.object({ keys: z.string().optional() });
 const GemAdoptionResult = z.object({ items: z.array(z.object({ gemKey: z.string(), installs: z.number(), verifiedInstalls: z.number() })) });
+
+const PopularSkillsQuery = z.object({ limit: z.coerce.number().int().min(1).max(200).optional() });
+const CuratedSkillSchema = z.object({
+  sourceId: z.string(), source: z.string(), division: z.string(), name: z.string(), path: z.string(),
+  repo: z.string(), homepage: z.string().nullable(), stars: z.number(), installs: z.number().nullable(),
+});
+const PopularSkillsResult = z.object({ skills: z.array(CuratedSkillSchema) });
 
 const ProfileQuery = z.object({ login: z.string() });
 const ProfileGemSchema = z.object({
@@ -163,6 +171,14 @@ export class AggregatorController {
   async gemAdoption(input: { query: z.infer<typeof GemAdoptionQuery> }): Promise<z.infer<typeof GemAdoptionResult>> {
     const keys = input.query.keys ? input.query.keys.split(",").map((s) => s.trim()).filter(Boolean) : undefined;
     return { items: await gemAdoption(this.db, { keys }) };
+  }
+
+  // Public "Popular Skills" board: skills discovered across the curated sources (see
+  // curatedSkillsIndexer.ts), ranked by installs (once skills.sh enrichment lands) then GitHub
+  // stars. No k-anon floor — this is public repo metadata, not producer-derived usage data.
+  @get("/popular-skills", { query: PopularSkillsQuery, response: PopularSkillsResult })
+  async popularSkills(input: { query: z.infer<typeof PopularSkillsQuery> }): Promise<z.infer<typeof PopularSkillsResult>> {
+    return { skills: await popularSkills(this.db, { limit: input.query.limit ?? 50 }) };
   }
 
   // Public profile: avatar + verified flag + published gems with k-anon engagement. login is a query
