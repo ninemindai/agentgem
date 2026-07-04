@@ -27,6 +27,8 @@ import { streamGemRun } from "./gemRunStream.js";
 import { streamGemVerify } from "./gemVerifyStream.js";
 import { streamScorecard } from "./scorecardStream.js";
 import { streamInsights } from "./insightsStream.js";
+import { streamRubric } from "./rubricStream.js";
+import { listRubrics } from "./rubricCore.js";
 import { streamWatch } from "./watchStream.js";
 import { streamWatchEvents } from "./watchEvents.js";
 import { listActiveSessions } from "./watchSessions.js";
@@ -211,6 +213,13 @@ export async function createApp(port: number): Promise<RestApplication> {
     beginForeground();
     try { await streamInsights(req as never, res as never); } finally { endForeground(); }
   });
+  // SSE rubric evaluation: run one rubric's cheap factors over a scope's sessions →
+  // a per-rubric report. GET /api/rubric/stream?rubric=<id>&scope=session|project|all&root=&sessionId=&dir=
+  // Cheap-only (Phase 1) → no foreground guard, mirrors the scorecard route.
+  server.expressApp.get("/api/rubric/stream", originGuard, (req, res) => streamRubric(req as never, res as never));
+  // The rubric picker's catalog: built-in + user rubrics. GET /api/rubrics?dir=...
+  server.expressApp.get("/api/rubrics", originGuard, (req, res) =>
+    res.json({ rubrics: listRubrics(typeof req.query.dir === "string" ? req.query.dir : undefined) } as never));
   // Watch tab: live-preview HTML artifacts a regular coding session builds. List the
   // recently-active transcripts, then SSE-stream one session's HTML file snapshots
   // (redacted, sandbox-ready) as it writes/edits them. Read-only, metadata + scrubbed
