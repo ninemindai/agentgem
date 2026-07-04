@@ -4,7 +4,6 @@ import { ReportActions } from "./ReportActions.js";
 
 afterEach(() => {
   cleanup();
-  // @ts-expect-error test cleanup
   delete (navigator as any).share;
 });
 
