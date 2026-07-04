@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { testbedRecentsRoute, testbedProjectsRoute, makeClient, playbookPrepareRoute, type RecentEntry, type ProjectCandidate } from "../../api/routes.js";
 import { defineConsolePage } from "../../registry.js";
 import { openInsightsStream, type InsightsReportView } from "./insightsStream.js";
@@ -8,6 +8,8 @@ import { Loading } from "../../shell/Loading.js";
 import { useTableSort, type SortColumn } from "../../shell/useTableSort.js";
 import { SortTh } from "../../shell/SortTh.js";
 import { timeAgo } from "../../util/timeAgo.js";
+import { ReportActions } from "../../report/ReportActions.js";
+import { insightsToBlocks, blocksToMarkdown, blocksToHtml } from "../../report/serialize.js";
 
 // Sortable columns for the "Worth publishing" table (unsorted = report order).
 type PublishCandidate = InsightsReportView["publish_candidates"][number];
@@ -171,8 +173,13 @@ export function InsightsReportCard({ report, scanned, onBuild, onContribute }: {
   const byModel = report.by_model ?? [];
   const publishCandidates = report.publish_candidates ?? [];
   const friction = report.friction ?? [];
+  const blocks = useMemo(() => insightsToBlocks(report, scanned), [report, scanned]);
+  const markdown = useMemo(() => blocksToMarkdown(blocks), [blocks]);
+  const html = useMemo(() => blocksToHtml(blocks, "AgentGem Insights"), [blocks]);
+  const json = useMemo(() => JSON.stringify(report, null, 2), [report]);
   return (
     <div className="insights-report">
+      <ReportActions title="AgentGem Insights" filename="agentgem-insights" markdown={markdown} json={json} html={html} />
       {report.narrative && <p className="insights-narrative">{report.narrative}</p>}
       <p className="analyze-candidate-desc">{report.outcomes_summary}</p>
       {capped && <p className="insights-hint">Based on the {judged} most-recent of {scanned} sessions scanned.</p>}
