@@ -3,8 +3,35 @@ import type { makeApi } from "../api";
 import type { PopularSkillGroup, PopularSkillItem } from "../types";
 import { formatCount } from "../data";
 import { StarButton } from "../StarButton";
+import { Modal } from "../Modal";
 import type { StarsCtx } from "../Router";
 import type { StarState } from "../stars";
+
+// Lazily fetches a skill's SKILL.md via the existing import endpoint and renders it as
+// raw text (same as Sources.tsx — React escapes, no markdown dep). Own loading/error state.
+function PreviewBody({ api, sourceId, path }: { api: ReturnType<typeof makeApi>; sourceId: string; path: string }) {
+  const [content, setContent] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    setContent(null); setError(null);
+    api.importSourceSkill(sourceId, path)
+      .then((a) => { if (alive) setContent(a.content); })
+      .catch((e) => { if (alive) setError(String(e?.message ?? e)); });
+    return () => { alive = false; };
+  }, [sourceId, path, attempt]);
+
+  if (error) return (
+    <p className="ex-error">Couldn&apos;t load preview: {error}{" "}
+      <button type="button" className="ex-link-btn" onClick={() => setAttempt((n) => n + 1)}>Retry</button>
+    </p>
+  );
+  if (content === null) return <p className="ex-empty">Loading SKILL.md…</p>;
+  if (content.trim() === "") return <p className="ex-empty">This skill has no SKILL.md body.</p>;
+  return <pre className="ex-skill-body" aria-label="SKILL.md">{content}</pre>;
+}
 
 // A curated skill card joins the usage graph by name: it stars under the same (kind, id) the
 // adoption leaderboard/detail page use for that skill (kind "ingredient", id "skill:<name>"), so a
@@ -26,6 +53,7 @@ export function PopularSkills({ api, stars }: { api: ReturnType<typeof makeApi>;
   const [error, setError] = useState<string | null>(null);
   const [starState, setStarState] = useState<StarState>({ counts: {}, mine: [] });
   const [query, setQuery] = useState("");
+  const [preview, setPreview] = useState<{ sourceId: string; path: string; name: string } | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -87,13 +115,19 @@ export function PopularSkills({ api, stars }: { api: ReturnType<typeof makeApi>;
                     </a>
                     <div className="ex-skillcard-foot">
                       <span className="ex-skillcard-division">{s.division}</span>
-                      <a
-                        href={`https://github.com/${g.repo}/blob/HEAD/${s.path}`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        View on GitHub →
-                      </a>
+                      <span className="ex-skillcard-actions">
+                        <button type="button" className="ex-link-btn"
+                          onClick={() => setPreview({ sourceId: g.sourceId, path: s.path, name: s.name })}>
+                          Preview
+                        </button>
+                        <a
+                          href={`https://github.com/${g.repo}/blob/HEAD/${s.path}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          View on GitHub →
+                        </a>
+                      </span>
                     </div>
                   </div>
                 );
@@ -102,6 +136,12 @@ export function PopularSkills({ api, stars }: { api: ReturnType<typeof makeApi>;
           </div>
         );
       })}
+      {preview && (
+        <Modal title={preview.name} onClose={() => setPreview(null)}>
+          <h3 className="ex-modal-title">{preview.name}</h3>
+          <PreviewBody api={api} sourceId={preview.sourceId} path={preview.path} />
+        </Modal>
+      )}
     </section>
   );
 }

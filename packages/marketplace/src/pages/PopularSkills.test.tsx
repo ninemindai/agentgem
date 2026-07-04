@@ -81,6 +81,22 @@ describe("PopularSkills", () => {
     expect(screen.queryByText("ai-engineer")).toBeNull();
   });
 
+  it("opens a Preview modal and shows the fetched SKILL.md", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) =>
+      url.includes("/api/sources/import")
+        ? res({ name: "brainstorming", content: "---\nname: brainstorming\n---\nUse when..." })
+        : res({ groups }),
+    ));
+    render(<PopularSkills api={makeApi("")} stars={stars} />);
+    const previewBtns = await screen.findAllByRole("button", { name: "Preview" });
+    fireEvent.click(previewBtns[0]!);
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+    expect(await screen.findByLabelText("SKILL.md")).toBeTruthy();
+    expect(screen.getByText(/Use when/)).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
   it("shows the empty state when the index hasn't run yet", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => res({ groups: [] })));
     render(<PopularSkills api={makeApi("")} stars={stars} />);
