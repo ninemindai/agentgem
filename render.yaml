@@ -1,10 +1,14 @@
-# Render Blueprint — ONE blueprint, TWO services:
+# Render Blueprint — ONE blueprint, TWO services, BOTH now migrated off Render:
 #   1. agentgem  — the API (Docker web service), backed by a Neon Postgres (free).
 #      ⚠️ SUSPENDED since 2026-07-05: api.agentgem.ai moved to Fly.io (fly.toml,
 #      docs/deploy/fly-neon.md). Kept HERE (not deleted, not removed from this file)
 #      as the rollback path — removing it would let a Blueprint sync delete the
 #      suspended service. Trim this entry only at final decommission.
-#   2. agentgem-app — the public marketplace UI (static site, free, CDN-served, no sleep).
+#   2. agentgem-app — the public marketplace UI (static site).
+#      ⚠️ SUSPENDED since 2026-07-05: app.agentgem.ai moved to Cloudflare Workers
+#      static assets (packages/marketplace/wrangler.jsonc, deployed by
+#      .github/workflows/deploy-worker.yml). Kept here as the rollback path,
+#      same rule as above — trim only at final decommission.
 #
 # Pair the API with a Neon Postgres (free) for DURABLE data — Render's own free
 # Postgres self-deletes after 30 days, which would wipe the aggregator's moat.
@@ -47,8 +51,9 @@ services:
     # server binds to it (src/index.ts reads process.env.PORT).
 
   # The public marketplace UI (packages/marketplace) — a Vite/React SPA served as a
-  # Render static site. Static sites are free, CDN-served, and DON'T sleep (unlike the
-  # free web service above). It reads the agentgem API's public CORS-open endpoints.
+  # Render static site. ⚠️ SUSPENDED: superseded by the Cloudflare Worker deploy
+  # (see header). Rollback = re-enable this service + point the app.agentgem.ai
+  # CNAME back at Render.
   - name: agentgem-app        # globally-unique name → clean agentgem-app.onrender.com URL
     type: web
     runtime: static            # static sites have no plan tier (always free, CDN-served) — do NOT set `plan`

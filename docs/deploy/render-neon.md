@@ -125,6 +125,12 @@ spoofed here). If the burst does **not** 429, check that `CLIENT_IP_HEADER` is s
 
 ## Explore — the public marketplace UI (second service, same Blueprint)
 
+> **⚠️ Migrated (2026-07-05):** `app.agentgem.ai` now serves from **Cloudflare Workers
+> static assets** — config in `packages/marketplace/wrangler.jsonc`, deployed by
+> `.github/workflows/deploy-worker.yml`. The Render `agentgem-app` service is suspended
+> and kept in the Blueprint only as the rollback path. The rest of this section
+> describes the retired Render setup.
+
 The same `render.yaml` defines a second service, `agentgem-app`: a Vite/React **static site**
 (`packages/marketplace`) for the public ingredient-discovery app. Static sites on Render are
 **free, CDN-served, and don't sleep** (unlike the free web service). Topology:
