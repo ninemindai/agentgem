@@ -1,8 +1,8 @@
-// Inline 14px icons from GitHub's MIT-licensed Octicons (primer/octicons): eye, mark-github,
+// Inline 16px icons from GitHub's MIT-licensed Octicons (primer/octicons): eye, mark-github,
 // comment. fill="currentColor" + aria-hidden so they ride the surrounding text color/hover.
 function Icon({ d }: { d: string }) {
   return (
-    <svg className="ex-icon" viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">
+    <svg className="ex-icon" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
       <path d={d} />
     </svg>
   );

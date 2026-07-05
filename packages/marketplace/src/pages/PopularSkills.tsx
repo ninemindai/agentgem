@@ -139,12 +139,12 @@ export function PopularSkills({ api, stars, reviews }: { api: ReturnType<typeof 
                     <div className="ex-skillcard-foot">
                       <span className="ex-skillcard-division">{s.division}</span>
                       <span className="ex-skillcard-actions">
-                        <button type="button" className="ex-link-btn ex-action"
+                        <button type="button" className="ex-link-btn ex-action" aria-label="Preview" title="Preview"
                           onClick={() => setPreview({ sourceId: g.sourceId, path: s.path, name: s.name })}>
-                          <IconEye /> Preview
+                          <IconEye />
                         </button>
-                        <a className="ex-action" href={skillHref(g.sourceId, s.path)}>
-                          <IconComment /> Reviews
+                        <a className="ex-action" href={skillHref(g.sourceId, s.path)} aria-label="Reviews" title="Reviews">
+                          <IconComment />
                         </a>
                         <a
                           className="ex-action"
@@ -152,8 +152,9 @@ export function PopularSkills({ api, stars, reviews }: { api: ReturnType<typeof 
                           target="_blank"
                           rel="noreferrer"
                           aria-label="View on GitHub"
+                          title="View on GitHub"
                         >
-                          <IconGitHub /> GitHub
+                          <IconGitHub />
                         </a>
                       </span>
                     </div>
