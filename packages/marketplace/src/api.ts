@@ -56,5 +56,7 @@ export function makeApi(base: string) {
 }
 
 export function defaultApiBase(): string {
-  return (import.meta.env?.VITE_API_BASE as string | undefined) ?? "https://agentgem.onrender.com";
+  // Fallback must be the API's custom domain: the GitHub OAuth app + session cookies are
+  // registered against api.agentgem.ai, so auth via the raw onrender.com host fails.
+  return (import.meta.env?.VITE_API_BASE as string | undefined) ?? "https://api.agentgem.ai";
 }
