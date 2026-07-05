@@ -9,7 +9,8 @@ moves:
   never sleeps). Its `VITE_API_BASE` points at `https://api.agentgem.ai`, which moves
   *with* the API — no marketplace rebuild needed.
 - **Neon Postgres** → unchanged; same `DATABASE_URL` (see `render-neon.md` Step 1 for
-  connection-string guidance — direct endpoint, `?sslmode=require`).
+  connection-string guidance — direct endpoint, `?sslmode=require`). The live database
+  is in **aws-us-east-1**, hence `primary_region = "iad"` in fly.toml.
 
 Cost: one `shared-cpu-1x` / 512 MB machine ≈ $3.20/mo, billed per second. No dedicated
 IPv4 needed (a CNAME'd subdomain works on Fly's free shared IPv4).
@@ -20,11 +21,13 @@ IPv4 needed (a CNAME'd subdomain works on Fly's free shared IPv4).
 fly auth login
 fly apps create agentgem-api
 
-# Secrets — never in fly.toml. Reuse the Neon string from Render; the admin token can
-# be fresh (minted API keys live in Neon and survive) or copied from Render's dashboard.
-fly secrets set \
-  DATABASE_URL='postgresql://USER:PASSWORD@ep-xxxx.us-west-2.aws.neon.tech/neondb?sslmode=require' \
-  AGGREGATOR_ADMIN_TOKEN="$(openssl rand -hex 32)"
+# Secrets — never in fly.toml. The LIVE Render service carries more secrets than
+# render.yaml declares (added via the dashboard over time); copy ALL of them:
+# DATABASE_URL, AGGREGATOR_ADMIN_TOKEN, AGENTGEM_SESSION_SECRET,
+# AGENTGEM_GITHUB_CLIENT_ID, AGENTGEM_GITHUB_CLIENT_SECRET, ORIGIN_SHARED_SECRET,
+# GITHUB_TOKEN. Pull them with the Render API (GET /v1/services/{id}/env-vars,
+# key from ~/.render/cli.yaml) or copy from the dashboard, then:
+fly secrets import < render-env-file   # KEY=VALUE lines, one per secret
 
 fly deploy   # remote build of the Dockerfile, then boots with the /healthz check
 ```
