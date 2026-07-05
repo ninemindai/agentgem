@@ -177,7 +177,9 @@ export async function buildOrgUsage(db: AppDb, scope: string, range: OrgUsageRan
   const attributed = opts.includeUnattributed
     ? sql`${usageDays.scope} in (${scopeLc}, '')`
     : eq(usageDays.scope, scopeLc);
-  const memberOnly = opts.memberLogin ? eq(accounts.login, opts.memberLogin) : undefined;
+  // Case-insensitive like the scope filter: GitHub logins are case-insensitive, and a hand-typed
+  // ?member=Octocat must not render a false-empty view when the stored login is "octocat".
+  const memberOnly = opts.memberLogin ? sql`lower(${accounts.login}) = ${opts.memberLogin.toLowerCase()}` : undefined;
   const memberFilter = and(eq(accountScopes.scope, scope), attributed, ...(inRange ? [inRange] : []), ...(memberOnly ? [memberOnly] : []));
 
   const memberRows = await db

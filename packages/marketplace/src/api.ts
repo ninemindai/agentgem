@@ -79,7 +79,9 @@ export function makeApi(base: string) {
       if (!res.ok) throw new Error(`/api/usage/settings -> ${res.status}`);
       return { status: "ok", settings: JSON.parse(await res.text()) as OrgSettingsView };
     },
-    putOrgSettings: async (scope: string, values: { retentionDays: number | null; dashboardEnabled: boolean }): Promise<OrgSettingsResult> => {
+    // Partial update: send only the fields being changed — the server keeps the rest, so
+    // concurrent edits from two tabs can't clobber each other's untouched settings.
+    putOrgSettings: async (scope: string, values: { retentionDays?: number | null; dashboardEnabled?: boolean }): Promise<OrgSettingsResult> => {
       const res = await fetch(base + "/api/usage/settings?scope=" + encodeURIComponent(scope), {
         method: "PUT", credentials: "include",
         headers: { "Content-Type": "application/json" },

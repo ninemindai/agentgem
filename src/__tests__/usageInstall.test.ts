@@ -341,7 +341,8 @@ describe("v3: member drill-down + visibility toggle", () => {
     await recordUsageModels(db, bob.a.id, "m", [{ scope: "acme", date: "2026-07-02", agent: "codex", model: "m2", sessions: 1, tokens: 7 }]);
 
     const res = mockRes();
-    await orgUsageHandler(deps(db))(req({ headers: { cookie: `${SESSION_COOKIE}=${alice.token}` }, query: { scope: "acme", range: "all", member: "bob" } }) as any, res as any);
+    // member match is case-insensitive, like scope (a shared ?member=BOB URL must not go empty)
+    await orgUsageHandler(deps(db))(req({ headers: { cookie: `${SESSION_COOKIE}=${alice.token}` }, query: { scope: "acme", range: "all", member: "BOB" } }) as any, res as any);
     const u = res._body as any;
     expect(u.members.map((m: any) => m.login)).toEqual(["bob"]);
     expect(u.daily.map((d: any) => d.date)).toEqual(["2026-07-02"]);
@@ -381,11 +382,25 @@ describe("v3: member drill-down + visibility toggle", () => {
     expect((put._body as any)).toMatchObject({ retentionDays: 30, viewerRole: "self" });
   });
 
-  it("PUT 400s without a boolean dashboardEnabled", async () => {
+  it("PUT is a PARTIAL update: absent fields keep their stored value (old retention-only bodies work)", async () => {
     const db = await makeTestDb();
     const admin = await roleMember(db, "alice", "acme", "admin");
-    const bad = mockRes();
-    await orgSettingsHandler(deps(db))(req({ method: "PUT", headers: { authorization: `Bearer ${admin.token}` }, query: { scope: "acme" }, body: { retentionDays: 30 } }) as any, bad as any);
-    expect(bad._status).toBe(400);
+    // Disable the dashboard, then send a retention-only body (the pre-toggle client shape):
+    // the visibility flag must survive — the concurrent-admin / stale-bundle guarantee.
+    await orgSettingsHandler(deps(db))(req({ method: "PUT", headers: { authorization: `Bearer ${admin.token}` }, query: { scope: "acme" }, body: { dashboardEnabled: false } }) as any, mockRes() as any);
+    const put = mockRes();
+    await orgSettingsHandler(deps(db))(req({ method: "PUT", headers: { authorization: `Bearer ${admin.token}` }, query: { scope: "acme" }, body: { retentionDays: 30 } }) as any, put as any);
+    expect(put._body).toMatchObject({ retentionDays: 30, dashboardEnabled: false });
+  });
+
+  it("PUT 400s on a present-but-mistyped field", async () => {
+    const db = await makeTestDb();
+    const admin = await roleMember(db, "alice", "acme", "admin");
+    const badBool = mockRes();
+    await orgSettingsHandler(deps(db))(req({ method: "PUT", headers: { authorization: `Bearer ${admin.token}` }, query: { scope: "acme" }, body: { dashboardEnabled: "yes" } }) as any, badBool as any);
+    expect(badBool._status).toBe(400);
+    const badDays = mockRes();
+    await orgSettingsHandler(deps(db))(req({ method: "PUT", headers: { authorization: `Bearer ${admin.token}` }, query: { scope: "acme" }, body: { retentionDays: "30" } }) as any, badDays as any);
+    expect(badDays._status).toBe(400);
   });
 });

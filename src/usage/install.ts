@@ -86,11 +86,23 @@ export function orgSettingsHandler(deps: UsageDeps) {
     if (req.method === "PUT") {
       // Admins write org policy; "self" writes their own-login scope (personal retention).
       if (role !== "admin" && role !== "self") { res.status(403).json({ error: "org admins only" }); return; }
+      // PARTIAL update: fields absent from the body keep their stored value. This is what makes
+      // concurrent admins safe (changing retention can't clobber a visibility flip made from
+      // another tab) and keeps retention-only clients (pre-toggle bundles) working.
       const body = req.body ?? {};
-      const retentionDays = normalizeRetentionDays(body.retentionDays);
-      if (retentionDays === undefined) { res.status(400).json({ error: "retentionDays must be null or 7–730" }); return; }
-      if (typeof body.dashboardEnabled !== "boolean") { res.status(400).json({ error: "dashboardEnabled must be a boolean" }); return; }
-      const saved = await putOrgSettings(deps.db, scope, { retentionDays, dashboardEnabled: body.dashboardEnabled }, who.login);
+      const current = await getOrgSettings(deps.db, scope);
+      let retentionDays = current.retentionDays;
+      if ("retentionDays" in body) {
+        const norm = normalizeRetentionDays(body.retentionDays);
+        if (norm === undefined) { res.status(400).json({ error: "retentionDays must be null or 7–730" }); return; }
+        retentionDays = norm;
+      }
+      let dashboardEnabled = current.dashboardEnabled;
+      if ("dashboardEnabled" in body) {
+        if (typeof body.dashboardEnabled !== "boolean") { res.status(400).json({ error: "dashboardEnabled must be a boolean" }); return; }
+        dashboardEnabled = body.dashboardEnabled;
+      }
+      const saved = await putOrgSettings(deps.db, scope, { retentionDays, dashboardEnabled }, who.login);
       res.json({ ...saved, viewerRole: role });
       return;
     }
