@@ -7,9 +7,11 @@
 //                              (account_scopes, from GitHub org membership at sign-in) include it.
 //   GET  /api/usage/settings — org settings read (member); PUT-via-POST writes are ADMIN-gated on
 //                              the GitHub org role captured into account_scopes.
+//   Gates consult resolveOrgAccess (App-authoritative): an active GitHub App installation decides
+//   membership alone; otherwise the captured account_scopes (TTL'd) apply.
 import type { AppDb } from "@agentgem/aggregator";
 import {
-  resolveSession, accountScopeInfo, normalizeUsageReport, normalizeUsageModels, recordUsageDays, recordUsageModels,
+  resolveSession, resolveOrgAccess, normalizeUsageReport, normalizeUsageModels, recordUsageDays, recordUsageModels,
   buildOrgUsage, getOrgSettings, putOrgSettings, normalizeRetentionDays, applyRetentionForScopes,
   RANGE_DAYS, type OrgUsageRange,
 } from "@agentgem/aggregator";
@@ -68,14 +70,16 @@ export function reportHandler(deps: UsageDeps) {
   };
 }
 
-/** The shared membership gate: one account_scopes lookup answers ownership, freshness (bounding
+/** The shared membership gate. resolveOrgAccess is App-authoritative: an org with an active
+ *  GitHub App installation is decided by App-synced membership alone (removal on GitHub revokes
+ *  in seconds); otherwise the captured account_scopes answer ownership, freshness (bounding
  *  revocation lag), and role. Writes the 403 (with the reason the UI branches on) itself and
  *  returns null; a handler that skips this gate cannot exist. */
-async function memberGate(deps: UsageDeps, res: Res, who: { accountId: string }, scope: string): Promise<{ role: string } | null> {
-  const { status, role } = await accountScopeInfo(deps.db, who.accountId, scope, deps.scopeTtlMs ?? defaultScopeTtlMs());
-  if (status === "none") { res.status(403).json({ error: "not a member of this org" }); return null; }
-  if (status === "stale") { res.status(403).json({ error: "membership check expired — sign in again to refresh", reason: "stale" }); return null; }
-  return { role: role ?? "member" };
+async function memberGate(deps: UsageDeps, res: Res, who: { accountId: string; login: string }, scope: string): Promise<{ role: string } | null> {
+  const access = await resolveOrgAccess(deps.db, who, scope, deps.scopeTtlMs ?? defaultScopeTtlMs());
+  if (access.status === "none") { res.status(403).json({ error: "not a member of this org" }); return null; }
+  if (access.status === "stale") { res.status(403).json({ error: "membership check expired — sign in again to refresh", reason: "stale" }); return null; }
+  return { role: access.role ?? "member" };
 }
 
 /** GET (member) / PUT (admin) of the org's dashboard settings. Uses the GitHub org role captured

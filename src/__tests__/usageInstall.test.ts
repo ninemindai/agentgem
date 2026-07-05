@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import {
   makeTestDb, upsertAccount, createSession, generateSessionToken, setAccountScopes,
   normalizeUsageReport, normalizeUsageModels, recordUsageDays, recordUsageModels, buildOrgUsage, rangeCutoff,
+  upsertInstallation, upsertOrgMember, setInstallationSuspended,
 } from "@agentgem/aggregator";
 import { reportHandler, orgUsageHandler, orgSettingsHandler } from "../usage/install.js";
 import { SESSION_COOKIE } from "../auth/cookie.js";
@@ -453,6 +454,48 @@ describe("agent/model facets", () => {
     const bad = mockRes();
     await orgUsageHandler(deps(db))(req({ headers: { cookie: `${SESSION_COOKIE}=${token}` }, query: { scope: "acme", model: "x".repeat(101) } }) as any, bad as any);
     expect(bad._status).toBe(400);
+  });
+});
+
+async function appMember(db: any, login: string, org: string, role: "admin" | "member") {
+  const a = await upsertAccount(db, { provider: "github", accountId: login, login });
+  // NO setAccountScopes — this member exists only via the App sync.
+  const { token } = generateSessionToken();
+  await createSession(db, a.id, token, 60_000);
+  await upsertInstallation(db, { installationId: 7, orgScope: org, repoSelection: "selected", suspended: false });
+  await upsertOrgMember(db, org, login, role);
+  return { a, token };
+}
+
+describe("orgUsageHandler with GitHub App membership", () => {
+  it("App-synced member passes with no captured scopes", async () => {
+    const db = await makeTestDb();
+    const { token } = await appMember(db, "carol", "acme", "member");
+    const res = mockRes();
+    await orgUsageHandler(deps(db))(req({ query: { scope: "acme" }, headers: { authorization: `Bearer ${token}` } }) as any, res);
+    expect(res._status).toBe(200);
+  });
+  it("suspended installation does NOT grant access", async () => {
+    const db = await makeTestDb();
+    const { token } = await appMember(db, "carol", "acme", "member");
+    await setInstallationSuspended(db, 7, true);
+    const res = mockRes();
+    await orgUsageHandler(deps(db))(req({ query: { scope: "acme" }, headers: { authorization: `Bearer ${token}` } }) as any, res);
+    expect(res._status).toBe(403);
+  });
+});
+
+describe("orgSettingsHandler with GitHub App membership", () => {
+  it("App-synced admin can PUT settings; App-synced member cannot", async () => {
+    const db = await makeTestDb();
+    const admin = await appMember(db, "dana", "acme", "admin");
+    let res = mockRes();
+    await orgSettingsHandler(deps(db))(req({ method: "PUT", query: { scope: "acme" }, body: { retentionDays: 30 }, headers: { authorization: `Bearer ${admin.token}` } }) as any, res);
+    expect(res._status).toBe(200);
+    const m = await appMember(db, "erin", "acme", "member");
+    res = mockRes();
+    await orgSettingsHandler(deps(db))(req({ method: "PUT", query: { scope: "acme" }, body: { retentionDays: 30 }, headers: { authorization: `Bearer ${m.token}` } }) as any, res);
+    expect(res._status).toBe(403);
   });
 });
 
