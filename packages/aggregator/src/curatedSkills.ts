@@ -69,13 +69,14 @@ export async function upsertCuratedSkills(db: AppDb, rows: CuratedSkillRow[]): P
 // `source_id || '/' || path` here — so we reconstruct that key to look up the curated `name` (the
 // frontmatter name, e.g. "ask-matt", not the file basename "SKILL"). Returns targetId → name for
 // the rows that exist; callers fall back for skills not in the curated index.
+// IMPORTANT: Only returns public (org_scope IS NULL) rows — private org-scoped skills are never exposed here.
 export async function skillNamesByTargetId(db: AppDb, targetIds: string[]): Promise<Record<string, string>> {
   if (targetIds.length === 0) return {};
   const list = sql.join(targetIds.map((t) => sql`${t}`), sql`, `);
   const r = await db.execute<{ tid: string; name: string }>(sql`
     select (source_id || '/' || path) as "tid", name
     from curated_skills
-    where (source_id || '/' || path) in (${list})
+    where org_scope is null and (source_id || '/' || path) in (${list})
   `);
   const out: Record<string, string> = {};
   for (const row of r.rows) out[row.tid] = row.name;
@@ -83,7 +84,7 @@ export async function skillNamesByTargetId(db: AppDb, targetIds: string[]): Prom
 }
 
 // Ranked for the "Popular Skills" board: highest `installs` first (once the enrichment lands),
-// then stars, then name for a stable tie-break.
+// then stars, then name for a stable tie-break. Only includes public (org_scope IS NULL) rows.
 export async function popularSkills(db: AppDb, opts: { limit?: number } = {}): Promise<CuratedSkillRow[]> {
   const limit = opts.limit ?? 50;
   const r = await db.execute<{
@@ -92,6 +93,7 @@ export async function popularSkills(db: AppDb, opts: { limit?: number } = {}): P
   }>(sql`
     select source_id as "sourceId", source_label as "source", division, name, path, repo, homepage, stars, installs, description
     from curated_skills
+    where org_scope is null
     order by coalesce(installs, 0) desc, stars desc, name asc
     limit ${limit}
   `);
@@ -101,7 +103,7 @@ export async function popularSkills(db: AppDb, opts: { limit?: number } = {}): P
 // Grouped for the "Popular Skills" board: one group per source (ordered by the source repo's
 // GitHub stars — stars belong to the repo, not the skill), each with its skills ranked
 // installs-desc-then-name (same tie-break as popularSkills, minus the stars term since every
-// skill in a group shares the same repo/stars).
+// skill in a group shares the same repo/stars). Only includes public (org_scope IS NULL) rows.
 export async function popularSkillGroups(
   db: AppDb,
   opts: { sources?: number; perSource?: number } = {},
@@ -114,6 +116,7 @@ export async function popularSkillGroups(
   }>(sql`
     select source_id as "sourceId", source_label as "source", repo, homepage, stars, division, name, path, description, installs
     from curated_skills
+    where org_scope is null
     order by stars desc, source_id, coalesce(installs, 0) desc, name asc
   `);
 
@@ -133,4 +136,60 @@ export async function popularSkillGroups(
     }
   }
   return groups;
+}
+
+// ── org-scoped (private) skills — GitHub App sources ────────────────────────────────────────
+// Same table, org_scope NOT NULL, source_id "org:<owner>/<repo>". Public reads above filter
+// org_scope IS NULL; these rows are served only through the member-gated /api/orgs endpoints.
+
+export interface OrgSkillRow { sourceId: string; path: string; division: string; name: string; repo: string; description: string | null }
+
+/** Replace the indexed skill set for one (org, repo): delete-then-insert so upstream deletions
+ *  disappear. Metadata only — bodies are never stored. Returns the new row count. */
+export async function replaceOrgRepoSkills(db: AppDb, orgScope: string, repo: string, rows: OrgSkillRow[]): Promise<number> {
+  const scope = orgScope.toLowerCase();
+  await db.execute(sql`delete from curated_skills where org_scope = ${scope} and repo = ${repo}`);
+  for (let i = 0; i < rows.length; i += UPSERT_CHUNK) {
+    const chunk = rows.slice(i, i + UPSERT_CHUNK);
+    if (chunk.length === 0) continue;
+    const values = sql.join(
+      chunk.map((r) => sql`(${r.sourceId}, ${r.path}, ${r.division}, ${r.name}, ${r.repo}, ${r.repo}, ${null}, ${0}, ${null}, ${r.description}, ${scope})`),
+      sql`, `,
+    );
+    await db.execute(sql`
+      insert into curated_skills (source_id, path, division, name, repo, source_label, homepage, stars, installs, description, org_scope)
+      values ${values}
+      on conflict (source_id, path) do update set
+        division = excluded.division, name = excluded.name, repo = excluded.repo,
+        source_label = excluded.source_label, description = excluded.description,
+        org_scope = excluded.org_scope, indexed_at = now()
+    `);
+  }
+  return rows.length;
+}
+
+export async function deleteOrgRepoSkills(db: AppDb, orgScope: string, repo: string): Promise<void> {
+  await db.execute(sql`delete from curated_skills where org_scope = ${orgScope.toLowerCase()} and repo = ${repo}`);
+}
+
+export async function deleteOrgSkills(db: AppDb, orgScope: string): Promise<void> {
+  await db.execute(sql`delete from curated_skills where org_scope = ${orgScope.toLowerCase()}`);
+}
+
+export async function listOrgSkills(db: AppDb, orgScope: string): Promise<OrgSkillRow[]> {
+  const r = await db.execute<{ sourceId: string; path: string; division: string; name: string; repo: string; description: string | null }>(sql`
+    select source_id as "sourceId", path, division, name, repo, description
+    from curated_skills where org_scope = ${orgScope.toLowerCase()}
+    order by repo, division, name
+  `);
+  return r.rows as OrgSkillRow[];
+}
+
+/** True iff (sourceId, path) is an indexed private skill of THIS org — the body-proxy boundary. */
+export async function orgSkillExists(db: AppDb, orgScope: string, sourceId: string, path: string): Promise<boolean> {
+  const r = await db.execute<{ one: number }>(sql`
+    select 1 as one from curated_skills
+    where org_scope = ${orgScope.toLowerCase()} and source_id = ${sourceId} and path = ${path} limit 1
+  `);
+  return r.rows.length > 0;
 }

@@ -10,10 +10,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { appInstallations, orgMembers, type AppDb } from "./schema.js";
 import { accountScopeStatus } from "./webAuth.js";
 import { accountScopeRole } from "./orgSettings.js";
-
-// Temporary stub for Task 3 integration; swapped for the real import in curatedSkills task.
-// cascade added in curatedSkills task
-async function deleteOrgSkills(_db: AppDb, _scope: string): Promise<void> {}
+import { deleteOrgSkills } from "./curatedSkills.js";
 
 export interface AppInstallation { installationId: number; orgScope: string; repoSelection: "all" | "selected"; suspended: boolean }
 
