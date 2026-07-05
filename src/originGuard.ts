@@ -50,12 +50,13 @@ export function originGuard(req: GuardReq, res: GuardRes, next: GuardNext): void
     next();
     return;
   }
-  // Web sign-in (/api/auth/*), stars (/api/stars*), and reviews (/api/reviews*) are reachable
-  // cross-site by design (SPA on app.agentgem.ai → API on api.agentgem.ai). CSRF defense: the OAuth
-  // `state`, the SameSite=Lax cookie, and (stars/reviews) a 401 on the authed writes. The handlers
+  // Web sign-in (/api/auth/*), stars (/api/stars*), reviews (/api/reviews*), and team usage
+  // (/api/usage*) are reachable cross-site by design (SPA on app.agentgem.ai → API on
+  // api.agentgem.ai). CSRF defense: the OAuth
+  // `state`, the SameSite=Lax cookie, and (stars/reviews/usage) a 401 on the authed routes. The handlers
   // set their own credentialed CORS for the AGENTGEM_WEB_ORIGINS allowlist. (The public review GETs
   // are covered by this prefix too — no PUBLIC_READ_PATHS entry needed, same as stars.)
-  if (req.path.startsWith("/api/auth/") || req.path.startsWith("/api/stars") || req.path.startsWith("/api/reviews") || req.path.startsWith("/api/registry/upload-publish")) { next(); return; }
+  if (req.path.startsWith("/api/auth/") || req.path.startsWith("/api/stars") || req.path.startsWith("/api/reviews") || req.path.startsWith("/api/usage") || req.path.startsWith("/api/registry/upload-publish")) { next(); return; }
   const site = req.get("sec-fetch-site");
   if (site !== undefined) {
     if (site === "same-origin") { next(); return; }

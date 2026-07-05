@@ -56,6 +56,7 @@ import { mountGating } from "./gating.js";
 import { installAuth, githubExchangeCode } from "./auth/install.js";
 import { installStars } from "./stars/install.js";
 import { installReviews } from "./reviews/install.js";
+import { installUsage } from "./usage/install.js";
 import { installRegistryUploadPublish } from "./registry/uploadPublish.js";
 import { registryConfigFromEnv, githubRegistrySource, githubRegistryPublisher } from "@agentgem/distribute";
 import { defaultGemTypeRegistry } from "./gem/gemTypeRegistry.js";
@@ -167,10 +168,11 @@ export async function createApp(port: number): Promise<RestApplication> {
       },
     });
   }
-  // Stars + reviews need the DB + an allowlisted web origin; they don't need the GitHub OAuth secret.
+  // Stars + reviews + team usage need the DB + an allowlisted web origin; they don't need the GitHub OAuth secret.
   if (aggDb && webOrigins.length > 0) {
     installStars(server.expressApp as never, { db: aggDb, webOrigins });
     installReviews(server.expressApp as never, { db: aggDb, webOrigins });
+    installUsage(server.expressApp as never, { db: aggDb, webOrigins });
   }
   // Registry upload-publish: requires DB, a web origin allowlist, and a GitHub registry with a
   // write token. Gate on `regCfg.token` — githubRegistryPublisher() throws without it, and a

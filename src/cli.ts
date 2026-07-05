@@ -38,6 +38,7 @@ Sharing a Gem (store-and-forward over NATS; set $NATS_URL, default nats://127.0.
   agentgem warm --watch                 Background daemon: keep insights/scorecard caches warm on change
   agentgem warm --install-service       Install an OS unit (launchd/systemd) to auto-start the daemon at login
   agentgem warm --uninstall-service     Remove the OS unit
+  agentgem usage report                 Push local daily usage rollups to your team dashboard now
   agentgem verify <archive-dir>         Verify a .gem archive across local agents (--agents claude,codex; --fetch)
   agentgem learn [root]                 Distill the latest session into the review queue (--session <id>; --dir <claude-home>)
   agentgem sources install <src> <path>  Install a curated persona as a local skill (--dry-run)
@@ -79,6 +80,14 @@ async function main(argv: string[]): Promise<void> {
     }
     const { runWarmCommand } = await import("./warm/daemon.js");
     runWarmCommand(argv.slice(1));
+    return;
+  }
+
+  // `agentgem usage report` — push local daily usage rollups to the aggregator now
+  // (the warm daemon also does this on a schedule; this is the manual, un-throttled path).
+  if (argv[0] === "usage") {
+    const { runUsageCommand } = await import("./usage/reporter.js");
+    process.exitCode = await runUsageCommand(argv.slice(1));
     return;
   }
 

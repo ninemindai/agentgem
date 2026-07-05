@@ -11,6 +11,7 @@ import { runWarmPass } from "./orchestrator.js";
 import { startWarmWatch, warmRootsIndividually } from "./watch.js";
 import { acquirePidfile, releasePidfile } from "./pidfile.js";
 import { withWarmLock } from "./lock.js";
+import { startUsageReporter, type UsageReporter } from "../usage/reporter.js";
 import { createLogger } from "@agentgem/base";
 
 const warmLog = createLogger("warm");
@@ -22,6 +23,7 @@ export function startWarmDaemon(opts: {
   onLog?: (m: string) => void;
   watch?: typeof startWarmWatch;
   initialPass?: () => Promise<unknown>;
+  usageReporter?: typeof startUsageReporter;
 } = {}): WarmDaemon | null {
   const home = opts.home ?? agentgemHome();
   const log = opts.onLog ?? ((m: string) => warmLog.info("%s", m));
@@ -31,8 +33,11 @@ export function startWarmDaemon(opts: {
 
   if (!acquirePidfile(pidPath)) { log("agentgem warm: another daemon is already running; exiting."); return null; }
   void initialPass();                        // fire-and-forget: warm current state
+  // The daemon is the schedule host for team-usage reporting: bound machines push their daily
+  // rollups to the aggregator on an interval (throttled + signed-out-safe inside the reporter).
+  const reporter: UsageReporter = (opts.usageReporter ?? startUsageReporter)({ home });
   const w = startWatch({ run: (roots) => withWarmLock(home, () => warmRootsIndividually(roots), () => undefined) });
-  return { async stop() { try { w.stop(); } finally { releasePidfile(pidPath); } } };
+  return { async stop() { try { w.stop(); reporter.stop(); } finally { releasePidfile(pidPath); } } };
 }
 
 export function runWarmCommand(argv: string[], deps: {
