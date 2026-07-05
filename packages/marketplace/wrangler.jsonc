@@ -22,10 +22,11 @@
   "compatibility_date": "2026-06-23",
   "account_id": "8c60d6f6b0408a55768ec315042db967",
 
-  // Phase 1: verify at https://agentgem-app.workers.dev before touching DNS.
-  // Phase 2 (cutover): flip to false and enable the custom domain below.
-  "workers_dev": true,
-  // "routes": [{ "pattern": "app.agentgem.ai", "custom_domain": true }],
+  // No *.workers.dev URL — this Worker only runs on its custom domain (below).
+  // custom_domain = true makes `wrangler deploy` provision the proxied DNS record
+  // and edge cert (the old Render CNAME was deleted first; see CUTOVER above).
+  "workers_dev": false,
+  "routes": [{ "pattern": "app.agentgem.ai", "custom_domain": true }],
 
   "assets": {
     "directory": "./dist",
