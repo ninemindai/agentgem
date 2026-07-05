@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 describe("agentgem-share skill", () => {
   it("exists and forbids the word 'verified' for self-reported telemetry", () => {
-    const md = readFileSync(join(process.cwd(), "assets/skills/agentgem-share/SKILL.md"), "utf8");
+    const md = readFileSync(join(process.cwd(), "skills/agentgem-share/SKILL.md"), "utf8");
     expect(md).toContain("self-reported telemetry");
     expect(md.toLowerCase()).toContain("privacy gate");
     // Exact prohibition: must say attestation is NOT verified (not merely mention the word)

@@ -1,4 +1,4 @@
-<!-- assets/skills/agentgem-share/SKILL.md -->
+<!-- skills/agentgem-share/SKILL.md -->
 ---
 name: agentgem-share
 description: Use when the user wants to share/publish a Gem from their real usage. Drives scan → review → privacy gate → sign & publish via the agentgem-distill MCP tools.
