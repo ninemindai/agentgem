@@ -279,15 +279,15 @@ describe("org settings (admin-gated) + retention", () => {
     expect(g._body).toMatchObject({ retentionDays: null, viewerRole: "member" });
 
     const deniedPut = mockRes();
-    await orgSettingsHandler(deps(db))(req({ method: "PUT", headers: { authorization: `Bearer ${plain.token}` }, query: { scope: "acme" }, body: { retentionDays: 30 } }) as any, deniedPut as any);
+    await orgSettingsHandler(deps(db))(req({ method: "PUT", headers: { authorization: `Bearer ${plain.token}` }, query: { scope: "acme" }, body: { retentionDays: 30, dashboardEnabled: true } }) as any, deniedPut as any);
     expect(deniedPut._status).toBe(403);
 
     const okPut = mockRes();
-    await orgSettingsHandler(deps(db))(req({ method: "PUT", headers: { authorization: `Bearer ${admin.token}` }, query: { scope: "acme" }, body: { retentionDays: 30 } }) as any, okPut as any);
+    await orgSettingsHandler(deps(db))(req({ method: "PUT", headers: { authorization: `Bearer ${admin.token}` }, query: { scope: "acme" }, body: { retentionDays: 30, dashboardEnabled: true } }) as any, okPut as any);
     expect(okPut._body).toMatchObject({ retentionDays: 30, updatedBy: "alice", viewerRole: "admin" });
 
     const badPut = mockRes();
-    await orgSettingsHandler(deps(db))(req({ method: "PUT", headers: { authorization: `Bearer ${admin.token}` }, query: { scope: "acme" }, body: { retentionDays: 3 } }) as any, badPut as any);
+    await orgSettingsHandler(deps(db))(req({ method: "PUT", headers: { authorization: `Bearer ${admin.token}` }, query: { scope: "acme" }, body: { retentionDays: 3, dashboardEnabled: true } }) as any, badPut as any);
     expect(badPut._status).toBe(400); // below the 7-day floor
 
     const anon = mockRes();
@@ -306,7 +306,7 @@ describe("org settings (admin-gated) + retention", () => {
     await recordUsageModels(db, admin.a.id, "m", [{ scope: "acme", date: old, agent: "claude", model: "x", sessions: 1, tokens: 5 }]);
 
     const put = mockRes();
-    await orgSettingsHandler(deps(db))(req({ method: "PUT", headers: { authorization: `Bearer ${admin.token}` }, query: { scope: "acme" }, body: { retentionDays: 30 } }) as any, put as any);
+    await orgSettingsHandler(deps(db))(req({ method: "PUT", headers: { authorization: `Bearer ${admin.token}` }, query: { scope: "acme" }, body: { retentionDays: 30, dashboardEnabled: true } }) as any, put as any);
 
     const org = await buildOrgUsage(db, "acme", "all");
     expect(org.daily.map((d) => d.date)).toEqual(["2026-07-01"]); // old acme day pruned
@@ -319,5 +319,73 @@ describe("org settings (admin-gated) + retention", () => {
     await reportHandler(deps(db))(req({ method: "POST", headers: { authorization: `Bearer ${admin.token}` }, body: { days: [day("2020-02-02")] } }) as any, rep as any);
     const after = await buildOrgUsage(db, "acme", "all");
     expect(after.daily.map((d) => d.date)).toEqual(["2026-07-01"]);
+  });
+});
+
+describe("v3: member drill-down + visibility toggle", () => {
+  async function roleMember(db: any, login: string, scope: string, role: "admin" | "member") {
+    const a = await upsertAccount(db, { provider: "github", accountId: login, login });
+    await setAccountScopes(db, a.id, [{ scope: login, role: "self" }, { scope, role }]);
+    const { token } = generateSessionToken();
+    await createSession(db, a.id, token, 60_000);
+    return { a, token };
+  }
+
+  it("?member= narrows members, daily, and models to that member (still org-scope-bounded)", async () => {
+    const db = await makeTestDb();
+    const alice = await roleMember(db, "alice", "acme", "member");
+    const bob = await roleMember(db, "bob", "acme", "member");
+    await recordUsageDays(db, alice.a.id, "m", [day("2026-07-01", { tokensIn: 10 })]);
+    await recordUsageDays(db, bob.a.id, "m", [day("2026-07-02", { tokensIn: 999 })]);
+    await recordUsageModels(db, alice.a.id, "m", [{ scope: "acme", date: "2026-07-01", agent: "claude", model: "m1", sessions: 1, tokens: 5 }]);
+    await recordUsageModels(db, bob.a.id, "m", [{ scope: "acme", date: "2026-07-02", agent: "codex", model: "m2", sessions: 1, tokens: 7 }]);
+
+    const res = mockRes();
+    await orgUsageHandler(deps(db))(req({ headers: { cookie: `${SESSION_COOKIE}=${alice.token}` }, query: { scope: "acme", range: "all", member: "bob" } }) as any, res as any);
+    const u = res._body as any;
+    expect(u.members.map((m: any) => m.login)).toEqual(["bob"]);
+    expect(u.daily.map((d: any) => d.date)).toEqual(["2026-07-02"]);
+    expect(u.models).toEqual([{ agent: "codex", model: "m2", sessions: 1, tokens: 7 }]);
+  });
+
+  it("disabling the dashboard 403s members with reason=disabled, but admins still see it", async () => {
+    const db = await makeTestDb();
+    const admin = await roleMember(db, "alice", "acme", "admin");
+    const plain = await roleMember(db, "bob", "acme", "member");
+    await recordUsageDays(db, admin.a.id, "m", [day("2026-07-01")]);
+
+    const put = mockRes();
+    await orgSettingsHandler(deps(db))(req({ method: "PUT", headers: { authorization: `Bearer ${admin.token}` }, query: { scope: "acme" }, body: { retentionDays: null, dashboardEnabled: false } }) as any, put as any);
+    expect((put._body as any).dashboardEnabled).toBe(false);
+
+    const blocked = mockRes();
+    await orgUsageHandler(deps(db))(req({ headers: { cookie: `${SESSION_COOKIE}=${plain.token}` }, query: { scope: "acme", range: "all" } }) as any, blocked as any);
+    expect(blocked._status).toBe(403);
+    expect((blocked._body as any).reason).toBe("disabled");
+
+    const adminView = mockRes();
+    await orgUsageHandler(deps(db))(req({ headers: { cookie: `${SESSION_COOKIE}=${admin.token}` }, query: { scope: "acme", range: "all" } }) as any, adminView as any);
+    expect(adminView._status).toBe(200);
+
+    // personal view is never affected by org policy
+    const own = mockRes();
+    await orgUsageHandler(deps(db))(req({ headers: { cookie: `${SESSION_COOKIE}=${plain.token}` }, query: { scope: "bob", range: "all" } }) as any, own as any);
+    expect(own._status).toBe(200);
+  });
+
+  it("the self role may PUT settings for their own-login scope", async () => {
+    const db = await makeTestDb();
+    const { token } = await roleMember(db, "alice", "acme", "member");
+    const put = mockRes();
+    await orgSettingsHandler(deps(db))(req({ method: "PUT", headers: { authorization: `Bearer ${token}` }, query: { scope: "alice" }, body: { retentionDays: 30, dashboardEnabled: true } }) as any, put as any);
+    expect((put._body as any)).toMatchObject({ retentionDays: 30, viewerRole: "self" });
+  });
+
+  it("PUT 400s without a boolean dashboardEnabled", async () => {
+    const db = await makeTestDb();
+    const admin = await roleMember(db, "alice", "acme", "admin");
+    const bad = mockRes();
+    await orgSettingsHandler(deps(db))(req({ method: "PUT", headers: { authorization: `Bearer ${admin.token}` }, query: { scope: "acme" }, body: { retentionDays: 30 } }) as any, bad as any);
+    expect(bad._status).toBe(400);
   });
 });

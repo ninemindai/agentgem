@@ -58,34 +58,73 @@ type View =
   | { status: "signedout" }
   | { status: "forbidden" }
   | { status: "stale" }
+  | { status: "disabled" }
   | { status: "error"; message: string }
   | { status: "ok"; usage: OrgUsage };
 
+/** The ?member= drill-down target from the current URL (same route, query-param navigation). */
+const memberFromLocation = (): string => new URLSearchParams(window.location.search).get("member") ?? "";
+
+/** Leaderboard rows as a CSV document (spreadsheet-ready export of the current view). Pure. */
+export function membersCsv(usage: OrgUsage): string {
+  const esc = (v: string | number | null) => {
+    const s = String(v ?? "");
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const header = "rank,login,sessions,messages,active_hours,active_days,tokens_in,tokens_out,tokens_cache,tokens_total,last_active";
+  const rows = usage.members.map((m, i) =>
+    [i + 1, m.login, m.sessions, m.msgs, (m.activeMs / 3_600_000).toFixed(2), m.activeDays, m.tokensIn, m.tokensOut, m.tokensCache, m.tokens, m.lastActive ?? ""].map(esc).join(","));
+  return [header, ...rows].join("\n") + "\n";
+}
+
+function downloadCsv(usage: OrgUsage): void {
+  const blob = new Blob([membersCsv(usage)], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${usage.scope}-usage-${usage.range}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 export function TeamUsage({ api, scope, stars }: { api: ReturnType<typeof makeApi>; scope: string; stars: StarsCtx }) {
   const [range, setRange] = useState<OrgUsageRange>("7d");
+  const [member, setMember] = useState<string>(() => memberFromLocation());
   const [view, setView] = useState<View>({ status: "loading" });
+
+  // The drill-down navigates by query param on the same path; the Router only re-renders on
+  // pathname changes, so track ?member= here (App's link interception dispatches popstate).
+  useEffect(() => {
+    const onPop = () => setMember(memberFromLocation());
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
 
   useEffect(() => {
     let alive = true;
     setView({ status: "loading" });
-    api.getOrgUsage(scope, range)
+    api.getOrgUsage(scope, range, member || undefined)
       .then((r) => {
         if (!alive) return;
         if (r.status === "unauthenticated") setView({ status: "signedout" });
         else if (r.status === "forbidden") setView({ status: "forbidden" });
         else if (r.status === "stale") setView({ status: "stale" });
+        else if (r.status === "disabled") setView({ status: "disabled" });
         else setView({ status: "ok", usage: r.usage });
       })
       .catch((e) => { if (alive) setView({ status: "error", message: String((e as Error)?.message ?? e) }); });
     return () => { alive = false; };
     // api is a stable module-level singleton (App.tsx) — excluded so re-renders don't refetch.
-  }, [scope, range]);
+  }, [scope, range, member]);
 
   return (
     <div className="ex-usage">
       <header className="ex-usage-head">
-        <h1><a href={"/orgs/" + encodeURIComponent(scope)} className="ex-usage-scope">{scope}</a> · Team Pulse</h1>
+        <h1>
+          <a href={"/orgs/" + encodeURIComponent(scope)} className="ex-usage-scope">{scope}</a> · Team Pulse
+          {member && <span className="ex-usage-member-crumb"> · @{member}</span>}
+        </h1>
         <p className="ex-sub">Agent usage across the team — each member&apos;s local agentgem reports it on a schedule. Members only. Counts only work in <strong>{scope}</strong>-owned repos; personal and other-org sessions stay out.</p>
+        {member && <p className="ex-usage-backlink"><a href={`/orgs/${encodeURIComponent(scope)}/usage`}>← Full team</a></p>}
       </header>
       <div className="ex-tabs" role="tablist" aria-label="time range">
         {RANGES.map((r) => (
@@ -117,8 +156,16 @@ export function TeamUsage({ api, scope, stars }: { api: ReturnType<typeof makeAp
         </div>
       )}
 
-      {view.status === "ok" && <TeamUsageBody usage={view.usage} />}
-      {view.status === "ok" && <OrgSettingsPanel api={api} scope={scope} />}
+      {view.status === "disabled" && (
+        <div className="ex-usage-gate">
+          <p>The <strong>{scope}</strong> dashboard is currently disabled by an org admin.</p>
+          <p className="ex-sub">Your usage is still reported and retained per org policy — only the view is off.</p>
+        </div>
+      )}
+
+      {view.status === "ok" && <TeamUsageBody usage={view.usage} member={member} scope={scope} />}
+      {/* Settings stay reachable on the disabled state so an admin can flip the dashboard back on. */}
+      {(view.status === "ok" || view.status === "disabled") && !member && <OrgSettingsPanel api={api} scope={scope} />}
     </div>
   );
 }
@@ -149,11 +196,11 @@ function OrgSettingsPanel({ api, scope }: { api: ReturnType<typeof makeApi>; sco
 
   if (!settings) return null;
   const current = settings.retentionDays === null ? "forever" : String(settings.retentionDays);
+  const isAdmin = settings.viewerRole === "admin" || settings.viewerRole === "self";
 
-  const save = (value: string) => {
-    const retentionDays = value === "forever" ? null : Number(value);
+  const save = (next: { retentionDays: number | null; dashboardEnabled: boolean }) => {
     setSaving(true); setError(null);
-    api.putOrgSettings(scope, retentionDays)
+    api.putOrgSettings(scope, next)
       .then((r) => {
         if (r.status === "ok") setSettings(r.settings);
         else setError("org admins only");
@@ -165,13 +212,20 @@ function OrgSettingsPanel({ api, scope }: { api: ReturnType<typeof makeApi>; sco
   return (
     <section className="ex-usage-settings" aria-label="org settings">
       <span className="ex-usage-settings-label">Usage retention</span>
-      {settings.viewerRole === "admin" ? (
+      {isAdmin ? (
         <select className="ex-usage-settings-select" aria-label="usage retention" value={current} disabled={saving}
-          onChange={(e) => save(e.target.value)}>
+          onChange={(e) => save({ retentionDays: e.target.value === "forever" ? null : Number(e.target.value), dashboardEnabled: settings.dashboardEnabled })}>
           {RETENTION_CHOICES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
         </select>
       ) : (
         <span className="ex-usage-settings-value">{RETENTION_CHOICES.find((c) => c.value === current)?.label ?? current}</span>
+      )}
+      {isAdmin && (
+        <label className="ex-usage-settings-toggle">
+          <input type="checkbox" aria-label="dashboard visible to members" checked={settings.dashboardEnabled} disabled={saving}
+            onChange={(e) => save({ retentionDays: settings.retentionDays, dashboardEnabled: e.target.checked })} />
+          Visible to members
+        </label>
       )}
       {settings.updatedBy && <span className="ex-usage-settings-meta">set by {settings.updatedBy}</span>}
       {error && <span className="ex-error">{error}</span>}
@@ -179,13 +233,19 @@ function OrgSettingsPanel({ api, scope }: { api: ReturnType<typeof makeApi>; sco
   );
 }
 
-function TeamUsageBody({ usage }: { usage: OrgUsage }) {
+function TeamUsageBody({ usage, member, scope }: { usage: OrgUsage; member: string; scope: string }) {
   const { totals, members, daily } = usage;
   if (members.length === 0) {
     return (
       <div className="ex-usage-gate">
-        <p>No usage reported for this range yet.</p>
-        <p className="ex-sub">Each member reports from their machine: run <code>agentgem bind</code> once, then <code>agentgem warm --watch</code> (or <code>agentgem usage report</code> to push now).</p>
+        {member ? (
+          <p>No usage attributed to <strong>{scope}</strong> by @{member} in this range.</p>
+        ) : (
+          <>
+            <p>No usage reported for this range yet.</p>
+            <p className="ex-sub">Each member reports from their machine: run <code>agentgem bind</code> once, then <code>agentgem warm --watch</code> (or <code>agentgem usage report</code> to push now).</p>
+          </>
+        )}
       </div>
     );
   }
@@ -250,7 +310,10 @@ function TeamUsageBody({ usage }: { usage: OrgUsage }) {
       )}
 
       <section aria-label="leaderboard">
-        <h2 className="ex-section-title">Leaderboard</h2>
+        <div className="ex-usage-lb-head">
+          <h2 className="ex-section-title">{member ? "Member" : "Leaderboard"}</h2>
+          <button type="button" className="ex-usage-export" onClick={() => downloadCsv(usage)}>Export CSV</button>
+        </div>
         <p className="ex-usage-cols" aria-hidden="true"><span>rank · member</span><span>sessions</span><span>duration</span><span>tokens</span></p>
         <ol className="ex-usage-rows">
           {members.map((m, i) => {
@@ -263,7 +326,10 @@ function TeamUsageBody({ usage }: { usage: OrgUsage }) {
                   : <span className="ex-usage-avatar ex-usage-avatar-fallback">{m.login.slice(0, 1).toUpperCase()}</span>}
                 <span className="ex-usage-who">
                   <a href={"/@" + encodeURIComponent(m.login)}>{m.login}</a>
-                  <span className="ex-usage-meta">{m.activeDays} active day{m.activeDays === 1 ? "" : "s"}{m.lastActive ? ` · last ${m.lastActive}` : ""}</span>
+                  <span className="ex-usage-meta">
+                    {m.activeDays} active day{m.activeDays === 1 ? "" : "s"}{m.lastActive ? ` · last ${m.lastActive}` : ""}
+                    {!member && <> · <a className="ex-usage-drill" href={`/orgs/${encodeURIComponent(scope)}/usage?member=${encodeURIComponent(m.login)}`}>usage →</a></>}
+                  </span>
                 </span>
                 <span className="ex-usage-sessions">{fmtFull(m.sessions)}</span>
                 <span className="ex-usage-duration">{fmtDuration(m.activeMs)}</span>

@@ -7,7 +7,8 @@ export type OrgUsageResult =
   | { status: "ok"; usage: OrgUsage }
   | { status: "unauthenticated" }
   | { status: "forbidden" }
-  | { status: "stale" };
+  | { status: "stale" }
+  | { status: "disabled" };
 
 export type OrgSettingsResult =
   | { status: "ok"; settings: OrgSettingsView }
@@ -56,13 +57,18 @@ export function makeApi(base: string) {
       if (!res.ok) throw new Error(`/api/aggregator/org-catalog -> ${res.status}`);
       return JSON.parse(await res.text()) as OrgCatalog;
     },
-    getOrgUsage: async (scope: string, range: OrgUsageRange): Promise<OrgUsageResult> => {
-      // credentialed: the org dashboard is member-only, gated by the web session cookie
-      const res = await fetch(base + "/api/usage/org?scope=" + encodeURIComponent(scope) + "&range=" + range, { credentials: "include" });
+    getOrgUsage: async (scope: string, range: OrgUsageRange, member?: string): Promise<OrgUsageResult> => {
+      // credentialed: the org dashboard is member-only, gated by the web session cookie.
+      // `member` narrows to one member's org-attributed usage (the drill-down).
+      const url = base + "/api/usage/org?scope=" + encodeURIComponent(scope) + "&range=" + range
+        + (member ? "&member=" + encodeURIComponent(member) : "");
+      const res = await fetch(url, { credentials: "include" });
       if (res.status === 401) return { status: "unauthenticated" };
       if (res.status === 403) {
         const body = await res.json().catch(() => ({})) as { reason?: string };
-        return body.reason === "stale" ? { status: "stale" } : { status: "forbidden" };
+        if (body.reason === "stale") return { status: "stale" };
+        if (body.reason === "disabled") return { status: "disabled" };
+        return { status: "forbidden" };
       }
       if (!res.ok) throw new Error(`/api/usage/org -> ${res.status}`);
       return { status: "ok", usage: JSON.parse(await res.text()) as OrgUsage };
@@ -73,11 +79,11 @@ export function makeApi(base: string) {
       if (!res.ok) throw new Error(`/api/usage/settings -> ${res.status}`);
       return { status: "ok", settings: JSON.parse(await res.text()) as OrgSettingsView };
     },
-    putOrgSettings: async (scope: string, retentionDays: number | null): Promise<OrgSettingsResult> => {
+    putOrgSettings: async (scope: string, values: { retentionDays: number | null; dashboardEnabled: boolean }): Promise<OrgSettingsResult> => {
       const res = await fetch(base + "/api/usage/settings?scope=" + encodeURIComponent(scope), {
         method: "PUT", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ retentionDays }),
+        body: JSON.stringify(values),
       });
       if (res.status === 401 || res.status === 403) return { status: "denied" };
       if (!res.ok) throw new Error(`/api/usage/settings -> ${res.status}`);

@@ -7,17 +7,17 @@ import { and, eq, inArray, lt } from "drizzle-orm";
 import type { AppDb } from "./schema.js";
 import { orgSettings, usageDays, usageDayModels, accountScopes } from "./schema.js";
 
-export interface OrgSettings { scope: string; retentionDays: number | null; updatedBy: string | null; updatedAt: string | null }
+export interface OrgSettings { scope: string; retentionDays: number | null; dashboardEnabled: boolean; updatedBy: string | null; updatedAt: string | null }
 
 const MIN_RETENTION_DAYS = 7;
 const MAX_RETENTION_DAYS = 730;
 
-/** Current settings for an org; defaults (retention: keep forever) when never configured. */
+/** Current settings for an org; defaults (retention: keep forever, dashboard on) when never configured. */
 export async function getOrgSettings(db: AppDb, scope: string): Promise<OrgSettings> {
   const rows = await db.select().from(orgSettings).where(eq(orgSettings.scope, scope.toLowerCase())).limit(1);
   const r = rows[0];
-  if (!r) return { scope: scope.toLowerCase(), retentionDays: null, updatedBy: null, updatedAt: null };
-  return { scope: r.scope, retentionDays: r.retentionDays ?? null, updatedBy: r.updatedBy, updatedAt: r.updatedAt.toISOString() };
+  if (!r) return { scope: scope.toLowerCase(), retentionDays: null, dashboardEnabled: true, updatedBy: null, updatedAt: null };
+  return { scope: r.scope, retentionDays: r.retentionDays ?? null, dashboardEnabled: r.dashboardEnabled, updatedBy: r.updatedBy, updatedAt: r.updatedAt.toISOString() };
 }
 
 /** Validate a retention value: null = keep forever; otherwise clamp into [7, 730] whole days. */
@@ -29,12 +29,13 @@ export function normalizeRetentionDays(v: unknown): number | null | undefined {
 }
 
 /** Upsert an org's settings (admin-gated by the caller) and apply retention immediately. */
-export async function putOrgSettings(db: AppDb, scope: string, retentionDays: number | null, updatedBy: string, nowMs: number = Date.now()): Promise<OrgSettings> {
+export async function putOrgSettings(db: AppDb, scope: string, values: { retentionDays: number | null; dashboardEnabled: boolean }, updatedBy: string, nowMs: number = Date.now()): Promise<OrgSettings> {
   const scopeLc = scope.toLowerCase();
+  const { retentionDays, dashboardEnabled } = values;
   await db
     .insert(orgSettings)
-    .values({ scope: scopeLc, retentionDays, updatedBy })
-    .onConflictDoUpdate({ target: [orgSettings.scope], set: { retentionDays, updatedBy, updatedAt: new Date(nowMs) } });
+    .values({ scope: scopeLc, retentionDays, dashboardEnabled, updatedBy })
+    .onConflictDoUpdate({ target: [orgSettings.scope], set: { retentionDays, dashboardEnabled, updatedBy, updatedAt: new Date(nowMs) } });
   await applyRetention(db, scopeLc, retentionDays, nowMs);
   return getOrgSettings(db, scopeLc);
 }
