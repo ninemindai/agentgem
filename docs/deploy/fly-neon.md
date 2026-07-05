@@ -45,11 +45,14 @@ curl https://agentgem-api.fly.dev/api/registry/gems  # public read, no auth
 fly certs add api.agentgem.ai
 ```
 
-Then change the `api` DNS record to `CNAME agentgem-api.fly.dev` (**DNS-only / gray
-cloud** — `fly.toml` sets `CLIENT_IP_HEADER=fly-client-ip`, which is only correct when
-Fly terminates the client connection; behind an orange-clouded Cloudflare proxy, switch
-it back to `cf-connecting-ip`). Watch `fly certs check api.agentgem.ai` until the cert
-issues, then re-run the smoke tests against the real domain.
+`api.agentgem.ai` stays **orange-clouded (proxied) through our Cloudflare zone**, same
+as the Render era — that's why `fly.toml` keeps `CLIENT_IP_HEADER=cf-connecting-ip`.
+Behind the proxy, Fly can't see the hostname to validate the cert, so add the
+`_acme-challenge.api` CNAME that `fly certs setup api.agentgem.ai` prints (DNS-only),
+wait for `fly certs check api.agentgem.ai` to issue, THEN flip the `api` record to
+`CNAME agentgem-api.fly.dev` (proxied). Re-run the smoke tests against the real domain.
+(If the record ever goes DNS-only/gray-cloud instead, switch `CLIENT_IP_HEADER` to
+`fly-client-ip`.)
 
 ## Continuous deploys
 
