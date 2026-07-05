@@ -4,7 +4,7 @@ import { generateKeyPairSync, sign as edSign } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { makeTestDb } from "@agentgem/aggregator";
 import { producers, accountBindings, accounts } from "@agentgem/aggregator";
-import { recordBinding, bindSigningPayload, resolveSession, type BindRequest } from "@agentgem/aggregator";
+import { recordBinding, bindSigningPayload, resolveSession, accountOwnsScope, getAccountScopes, type BindRequest } from "@agentgem/aggregator";
 import type { AccountVerifier, VerifiedAccount } from "@agentgem/aggregator";
 
 function makeSigner() {
@@ -15,6 +15,8 @@ function makeSigner() {
 const fakeVerifier = (acct: VerifiedAccount): AccountVerifier => ({ verify: async () => acct });
 const throwingVerifier: AccountVerifier = { verify: async () => { throw new Error("bad token"); } };
 const OCTOCAT: VerifiedAccount = { provider: "github", accountId: "42", login: "octocat" };
+// Stub the org-membership fetch so unit tests never touch the real GitHub API.
+const NO_ORGS = async () => [] as { login: string; role: "admin" | "member" }[];
 
 async function req(signer: ReturnType<typeof makeSigner>, token: string, signedAt: number): Promise<BindRequest> {
   return { pubkey: signer.pubkey, token, signedAt, signature: signer.sign(bindSigningPayload(signer.pubkey, token, signedAt)) };
@@ -26,7 +28,7 @@ describe("recordBinding", () => {
     const s = makeSigner();
     await db.insert(producers).values({ pubkey: s.pubkey });
     const now = 1_000_000;
-    const res = await recordBinding(db, await req(s, "tok", now), fakeVerifier(OCTOCAT), now);
+    const res = await recordBinding(db, await req(s, "tok", now), fakeVerifier(OCTOCAT), now, NO_ORGS);
     expect(res).toMatchObject({ bound: true, provider: "github", login: "octocat", accountId: "42" });
     const rows = await db.select().from(accountBindings);
     expect(rows).toHaveLength(1);
@@ -38,14 +40,14 @@ describe("recordBinding", () => {
     await db.insert(producers).values({ pubkey: s.pubkey });
     const now = 1_000_000;
     const bad = { ...(await req(s, "tok", now)), signature: "AAAA" };
-    expect(await recordBinding(db, bad, fakeVerifier(OCTOCAT), now)).toEqual({ bound: false, rejected: "bad-signature" });
+    expect(await recordBinding(db, bad, fakeVerifier(OCTOCAT), now, NO_ORGS)).toEqual({ bound: false, rejected: "bad-signature" });
   });
   it("rejects a stale signedAt (> 300s skew)", async () => {
     const db = await makeTestDb();
     const s = makeSigner();
     await db.insert(producers).values({ pubkey: s.pubkey });
     const signedAt = 1_000_000;
-    const res = await recordBinding(db, await req(s, "tok", signedAt), fakeVerifier(OCTOCAT), signedAt + 300_001);
+    const res = await recordBinding(db, await req(s, "tok", signedAt), fakeVerifier(OCTOCAT), signedAt + 300_001, NO_ORGS);
     expect(res).toEqual({ bound: false, rejected: "stale" });
   });
   it("self-registers a new identity (no prior producer row) and binds", async () => {
@@ -53,7 +55,7 @@ describe("recordBinding", () => {
     const s = makeSigner();
     const now = 1_000_000;
     // No producer seeded — a valid signature + verified token is enough to bind now.
-    const res = await recordBinding(db, await req(s, "tok", now), fakeVerifier(OCTOCAT), now);
+    const res = await recordBinding(db, await req(s, "tok", now), fakeVerifier(OCTOCAT), now, NO_ORGS);
     expect(res).toMatchObject({ bound: true, provider: "github", login: "octocat", accountId: "42" });
     // The identity is now a registered (zero-attestation) producer.
     const prod = await db.select().from(producers).where(sql`pubkey = ${s.pubkey}`);
@@ -67,7 +69,7 @@ describe("recordBinding", () => {
     const s = makeSigner();
     await db.insert(producers).values({ pubkey: s.pubkey });
     const now = 1_000_000;
-    const res = await recordBinding(db, await req(s, "tok", now), fakeVerifier(OCTOCAT), now);
+    const res = await recordBinding(db, await req(s, "tok", now), fakeVerifier(OCTOCAT), now, NO_ORGS);
     expect(res.bound).toBe(true);
     if (!res.bound) return;
     expect(typeof res.sessionToken).toBe("string");
@@ -80,7 +82,7 @@ describe("recordBinding", () => {
     const db = await makeTestDb();
     const s = makeSigner();
     const now = 1_000_000;
-    expect(await recordBinding(db, await req(s, "tok", now), throwingVerifier, now)).toEqual({ bound: false, rejected: "provider-error" });
+    expect(await recordBinding(db, await req(s, "tok", now), throwingVerifier, now, NO_ORGS)).toEqual({ bound: false, rejected: "provider-error" });
     const prod = await db.select().from(producers).where(sql`pubkey = ${s.pubkey}`);
     expect(prod).toHaveLength(0); // bogus token must not create an identity
   });
@@ -89,15 +91,15 @@ describe("recordBinding", () => {
     const s = makeSigner();
     await db.insert(producers).values({ pubkey: s.pubkey });
     const now = 1_000_000;
-    expect(await recordBinding(db, await req(s, "tok", now), throwingVerifier, now)).toEqual({ bound: false, rejected: "provider-error" });
+    expect(await recordBinding(db, await req(s, "tok", now), throwingVerifier, now, NO_ORGS)).toEqual({ bound: false, rejected: "provider-error" });
   });
   it("is idempotent and updates in place on rebind to a different account", async () => {
     const db = await makeTestDb();
     const s = makeSigner();
     await db.insert(producers).values({ pubkey: s.pubkey });
     const now = 1_000_000;
-    await recordBinding(db, await req(s, "tok", now), fakeVerifier(OCTOCAT), now);
-    await recordBinding(db, await req(s, "tok2", now), fakeVerifier({ provider: "github", accountId: "99", login: "hubot" }), now);
+    await recordBinding(db, await req(s, "tok", now), fakeVerifier(OCTOCAT), now, NO_ORGS);
+    await recordBinding(db, await req(s, "tok2", now), fakeVerifier({ provider: "github", accountId: "99", login: "hubot" }), now, NO_ORGS);
     const rows = await db.select().from(accountBindings);
     expect(rows).toHaveLength(1);              // still one row for this pubkey
     expect(rows[0].accountId).toBe("99");      // updated in place
@@ -108,9 +110,33 @@ describe("recordBinding", () => {
     await db.insert(producers).values({ pubkey: s.pubkey });
     const now = 1_000_000;
     const verifier = fakeVerifier({ provider: "github", accountId: "42", login: "octocat", avatarUrl: "https://a/42.png" });
-    const res = await recordBinding(db, await req(s, "tok", now), verifier, now);
+    const res = await recordBinding(db, await req(s, "tok", now), verifier, now, NO_ORGS);
     expect(res).toMatchObject({ bound: true, login: "octocat", avatarUrl: "https://a/42.png" });
     const rows = await db.select().from(accounts).where(sql`provider = 'github' and provider_account_id = '42'`);
     expect(rows[0]?.avatarUrl).toBe("https://a/42.png");
+  });
+});
+
+describe("recordBinding org-scope capture", () => {
+  it("captures self + org scopes (with role) so CLI-only users pass membership gates", async () => {
+    const db = await makeTestDb();
+    const s = makeSigner();
+    const now = 1_000_000;
+    const orgs = async () => [{ login: "ninemind", role: "admin" as const }, { login: "acme", role: "member" as const }];
+    await recordBinding(db, await req(s, "tok", now), fakeVerifier(OCTOCAT), now, orgs);
+    const rows = await db.select().from(accounts);
+    const scopes = await getAccountScopes(db, rows[0].id);
+    const byScope = Object.fromEntries(scopes.map((x) => [x.scope, x.role]));
+    expect(byScope).toEqual({ octocat: "self", ninemind: "admin", acme: "member" });
+    expect(await accountOwnsScope(db, rows[0].id, "ninemind")).toBe(true);
+  });
+  it("an org-fetch failure still captures the self scope and never fails the bind", async () => {
+    const db = await makeTestDb();
+    const s = makeSigner();
+    const now = 1_000_000;
+    const res = await recordBinding(db, await req(s, "tok", now), fakeVerifier(OCTOCAT), now, async () => { throw new Error("orgs down"); });
+    expect(res).toMatchObject({ bound: true });
+    const rows = await db.select().from(accounts);
+    expect(await accountOwnsScope(db, rows[0].id, "octocat")).toBe(true);
   });
 });

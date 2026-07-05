@@ -9,7 +9,7 @@ describe("makeAuth", () => {
     let opts: RequestInit | undefined;
     vi.stubGlobal("fetch", vi.fn(async (_u: string, o?: RequestInit) => { opts = o; return res({ login: "octocat", avatarUrl: "a.png" }); }));
     const auth = makeAuth("https://app.x");
-    expect(await auth.getMe()).toEqual({ login: "octocat", avatarUrl: "a.png" });
+    expect(await auth.getMe()).toEqual({ login: "octocat", avatarUrl: "a.png", orgs: [] });
     expect(opts?.credentials).toBe("include");
   });
   it("getMe returns null when unauthenticated", async () => {

@@ -15,6 +15,7 @@ export interface SessionStat {
   agent: AgentId;
   sessionId: string;
   project: string | null;   // basename of session cwd, or null
+  cwd?: string | null;      // full session cwd when the source records it (used for repo-owner attribution)
   model: string | null;
   gitBranch: string | null; // top-level gitBranch from Claude records; null for Codex
   startMs: number;

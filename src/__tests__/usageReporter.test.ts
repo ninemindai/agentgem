@@ -5,7 +5,7 @@ import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SessionStat } from "@agentgem/insight";
-import { usageDaysFromStats, reportUsageOnce, startUsageReporter, REPORT_WINDOW_DAYS } from "../usage/reporter.js";
+import { usageDaysFromStats, reportUsageOnce, startUsageReporter, ownerFromRemoteUrl, scopeForCwd, REPORT_WINDOW_DAYS } from "../usage/reporter.js";
 
 const DAY = 86_400_000;
 const T0 = Date.parse("2026-07-04T10:00:00Z");
@@ -105,5 +105,52 @@ describe("startUsageReporter", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("repo-owner attribution", () => {
+  it("ownerFromRemoteUrl parses ssh/https/scp remote forms, lowercased", () => {
+    expect(ownerFromRemoteUrl("git@github.com:NineMind/agentgem.git")).toBe("ninemind");
+    expect(ownerFromRemoteUrl("https://github.com/ninemindai/agentgem.git")).toBe("ninemindai");
+    expect(ownerFromRemoteUrl("https://github.com/acme/repo")).toBe("acme");
+    expect(ownerFromRemoteUrl("ssh://git@github.com/Acme/repo.git")).toBe("acme");
+    expect(ownerFromRemoteUrl("not a url")).toBe("");
+  });
+
+  it("scopeForCwd walks up to the repo root and reads remote origin", () => {
+    const files: Record<string, string> = { "/repo/.git/config": '[remote "origin"]\n\turl = git@github.com:ninemind/agentgem.git\n' };
+    const fs = { readFile: (p: string) => files[p] ?? null, isDir: (p: string) => p === "/repo/.git" };
+    expect(scopeForCwd("/repo/packages/console/src", fs)).toBe("ninemind");
+    expect(scopeForCwd("/elsewhere/no-repo", fs)).toBe("");
+    expect(scopeForCwd(null, fs)).toBe("");
+  });
+
+  it("scopeForCwd resolves a linked worktree's .git FILE to the main repo config", () => {
+    const files: Record<string, string> = {
+      "/wt/.git": "gitdir: /main/.git/worktrees/wt\n",
+      "/main/.git/config": '[remote "origin"]\n\turl = https://github.com/acme/repo.git\n',
+    };
+    const fs = { readFile: (p: string) => files[p] ?? null, isDir: () => false };
+    expect(scopeForCwd("/wt", fs)).toBe("acme");
+  });
+
+  it("scopeForCwd yields '' when the repo has no origin remote", () => {
+    const files: Record<string, string> = { "/repo/.git/config": "[core]\n\tbare = false\n" };
+    const fs = { readFile: (p: string) => files[p] ?? null, isDir: (p: string) => p === "/repo/.git" };
+    expect(scopeForCwd("/repo", fs)).toBe("");
+  });
+
+  it("usageDaysFromStats buckets per (scope, day) so org rows never mix with personal rows", () => {
+    const scopeOf = (cwd: string | null | undefined) => (cwd === "/work/agentgem" ? "ninemind" : cwd === "/me/dotfiles" ? "alice" : "");
+    const rows = usageDaysFromStats([
+      stat({ cwd: "/work/agentgem", tokensIn: 100 }),
+      stat({ sessionId: "s2", cwd: "/work/agentgem", tokensIn: 20 }),
+      stat({ sessionId: "s3", cwd: "/me/dotfiles", tokensIn: 7 }),
+      stat({ sessionId: "s4", cwd: null, tokensIn: 3 }),
+    ], 0, scopeOf);
+    expect(rows.map((r) => [r.scope, r.tokensIn, r.sessions])).toEqual([
+      ["", 3, 1], ["alice", 7, 1], ["ninemind", 120, 2],
+    ]);
+    expect(rows.every((r) => r.date === "2026-07-04")).toBe(true);
   });
 });

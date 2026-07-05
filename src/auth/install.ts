@@ -4,8 +4,8 @@
 // framework can't do). Raw routes are OUTSIDE originGuard (like /healthz), so they set their own
 // credentialed CORS for the AGENTGEM_WEB_ORIGINS allowlist. SameSite=Lax + the OAuth `state` are the
 // CSRF defenses (a cross-site POST carries no session cookie under Lax).
-import type { AppDb, AccountVerifier } from "@agentgem/aggregator";
-import { upsertAccount, createSession, deleteSession, resolveSession, generateSessionToken, setAccountScopes, createHandoffCode, redeemHandoffCode } from "@agentgem/aggregator";
+import type { AppDb, AccountVerifier, OrgMembership } from "@agentgem/aggregator";
+import { upsertAccount, createSession, deleteSession, resolveSession, generateSessionToken, setAccountScopes, getAccountScopes, createHandoffCode, redeemHandoffCode } from "@agentgem/aggregator";
 import { signState, verifyState } from "./state.js";
 import { SESSION_COOKIE, parseCookies, serializeSessionCookie, clearSessionCookie } from "./cookie.js";
 import { createLogger } from "@agentgem/base";
@@ -16,7 +16,7 @@ export interface AuthConfig {
   clientId: string; clientSecret: string; webOrigins: string[];
   cookieDomain?: string; callbackUrl: string; stateSecret: string; sessionTtlMs: number;
 }
-export interface AuthDeps { db: AppDb; verifier: AccountVerifier; exchangeCode: (code: string) => Promise<string>; fetchOrgs: (token: string) => Promise<string[]>; config: AuthConfig }
+export interface AuthDeps { db: AppDb; verifier: AccountVerifier; exchangeCode: (code: string) => Promise<string>; fetchOrgs: (token: string) => Promise<OrgMembership[]>; config: AuthConfig }
 
 // duck-typed Express req/res (no @types/express dependency, matching originGuard / the SSE handlers)
 interface Req { method: string; path: string; query: Record<string, unknown>; headers: Record<string, string | undefined>; get(name: string): string | undefined }
@@ -63,7 +63,7 @@ export function loginHandler(deps: AuthDeps) {
     const u = new URL("https://github.com/login/oauth/authorize");
     u.searchParams.set("client_id", deps.config.clientId);
     u.searchParams.set("redirect_uri", deps.config.callbackUrl);
-    u.searchParams.set("scope", "read:user");
+    u.searchParams.set("scope", "read:user read:org"); // read:org → /user/orgs includes private memberships
     u.searchParams.set("state", state);
     res.redirect(302, u.toString());
   };
@@ -82,11 +82,11 @@ export function callbackHandler(deps: AuthDeps) {
       // Capture the GitHub avatar at web login too (mirrors the device-flow bind path
       // in recordBinding) so the logged-in user's avatar shows in the nav and on /@login.
       const row = await upsertAccount(deps.db, { provider: acct.provider, accountId: acct.accountId, login: acct.login, avatarUrl: acct.avatarUrl ?? null });
-      // #4b: capture owned scopes (login + public org memberships) at login. Best-effort —
+      // #4b: capture owned scopes (login + org memberships w/ role) at login. Best-effort —
       // an org-fetch failure must never fail login; the user still owns at least their login.
-      let orgs: string[] = [];
+      let orgs: OrgMembership[] = [];
       try { orgs = await deps.fetchOrgs(token); } catch (err) { log.warn("org scope fetch failed for %s; continuing with login-only scope: %s", acct.login, (err as Error)?.message ?? err); orgs = []; }
-      await setAccountScopes(deps.db, row.id, [acct.login, ...orgs]);
+      await setAccountScopes(deps.db, row.id, [{ scope: acct.login, role: "self" }, ...orgs.map((o) => ({ scope: o.login, role: o.role }))]);
       const { token: sessionToken } = generateSessionToken();
       await createSession(deps.db, row.id, sessionToken, deps.config.sessionTtlMs);
       res.setHeader("Set-Cookie", serializeSessionCookie(sessionToken, { domain: deps.config.cookieDomain, maxAgeSec: Math.floor(deps.config.sessionTtlMs / 1000) }));
@@ -105,7 +105,13 @@ export function meHandler(deps: AuthDeps) {
     const token = sessionTokenFromReq(req);
     const who = token ? await resolveSession(deps.db, token) : null;
     if (!who) { res.json({ authenticated: false }); return; }
-    res.json({ login: who.login, avatarUrl: who.avatarUrl });
+    // Include the caller's captured org scopes (with role) — the "my orgs" nav on the profile
+    // page. Authed-only and self-only, so private org memberships are never exposed publicly.
+    const orgs = (await getAccountScopes(deps.db, who.accountId))
+      .filter((s) => s.role !== "self")
+      .map((s) => ({ scope: s.scope, role: s.role }))
+      .sort((a, b) => a.scope.localeCompare(b.scope));
+    res.json({ login: who.login, avatarUrl: who.avatarUrl, orgs });
   };
 }
 

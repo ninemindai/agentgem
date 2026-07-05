@@ -788,3 +788,21 @@ a.ex-skillcard-rating:hover { text-decoration: underline; }
   .ex-usage-row { grid-template-columns: 26px 30px 1fr 110px; }
   .ex-usage-sessions, .ex-usage-duration { display: none; }
 }
+
+/* ── Profile: own-orgs navigation chips ────────────────────────────────────────── */
+.ex-profile-orgs { margin: 6px 0 18px; }
+.ex-profile-orgs-note { font-size: 0.72rem; font-weight: 400; color: var(--muted); }
+.ex-org-chips { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.ex-org-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-pill);
+  box-shadow: var(--shadow); padding: 6px 12px; font-size: 0.86rem;
+}
+.ex-org-chip-name { color: var(--ink); font-weight: 600; text-decoration: none; }
+.ex-org-chip-name:hover { color: var(--brand-strong); }
+.ex-org-chip-role {
+  font-size: 0.66rem; letter-spacing: 0.05em; text-transform: uppercase; font-weight: 700;
+  color: var(--gold); background: var(--gold-wash); border-radius: var(--r-pill); padding: 2px 7px;
+}
+.ex-org-chip-usage { color: var(--brand-strong); text-decoration: none; font-size: 0.8rem; }
+.ex-org-chip-usage:hover { text-decoration: underline; }

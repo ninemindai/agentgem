@@ -9,7 +9,7 @@ describe("Publish", () => {
     expect(screen.getByText(/sign in to publish/i)).toBeTruthy();
   });
   it("shows the publish form (scope defaults to the login) when signed in", () => {
-    render(<Publish api={{} as never} me={{ login: "alice", avatarUrl: null }} base="" />);
+    render(<Publish api={{} as never} me={{ login: "alice", avatarUrl: null, orgs: [] }} base="" />);
     expect((screen.getByLabelText(/scope/i) as HTMLInputElement).value).toBe("alice");
     expect(screen.getByLabelText(/\.gem/i)).toBeTruthy(); // the file input
   });

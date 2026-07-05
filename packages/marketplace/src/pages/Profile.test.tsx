@@ -55,3 +55,28 @@ describe("Profile page", () => {
     expect(await screen.findByText(/no profile for @ghost/i)).toBeTruthy();
   });
 });
+
+describe("Profile own-orgs navigation", () => {
+  const profile = { login: "alice", avatarUrl: null, verified: true, githubUrl: "https://github.com/alice", totalStars: 0, gems: [], reviews: [] };
+  const apiP = { getProfile: () => Promise.resolve(profile) } as never;
+  const orgs = [{ scope: "ninemind", role: "admin" }, { scope: "acme", role: "member" }];
+
+  it("shows the signed-in owner their orgs with role badges and Team Pulse links", async () => {
+    render(<Profile api={apiP} login="alice" me={{ login: "alice", avatarUrl: null, orgs }} />);
+    expect(await screen.findByLabelText("your orgs")).toBeTruthy();
+    expect(screen.getByText("@ninemind").getAttribute("href")).toBe("/orgs/ninemind");
+    expect(screen.getByText("admin")).toBeTruthy(); // role badge on ninemind only
+    const pulses = screen.getAllByText("Team Pulse →");
+    expect(pulses.map((a) => a.getAttribute("href"))).toEqual(["/orgs/ninemind/usage", "/orgs/acme/usage"]);
+  });
+
+  it("hides the section from other viewers and when signed out", async () => {
+    const { unmount } = render(<Profile api={apiP} login="alice" me={{ login: "bob", avatarUrl: null, orgs }} />);
+    await screen.findByText("@alice");
+    expect(screen.queryByLabelText("your orgs")).toBeNull();
+    unmount();
+    render(<Profile api={apiP} login="alice" me={null} />);
+    await screen.findByText("@alice");
+    expect(screen.queryByLabelText("your orgs")).toBeNull();
+  });
+});

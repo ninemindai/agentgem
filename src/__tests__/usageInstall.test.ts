@@ -1,6 +1,7 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
+import { sql } from "drizzle-orm";
 import {
   makeTestDb, upsertAccount, createSession, generateSessionToken, setAccountScopes,
   normalizeUsageReport, recordUsageDays, buildOrgUsage, rangeCutoff,
@@ -29,7 +30,9 @@ async function member(db: any, login: string, scopes: string[]) {
   return { a, token };
 }
 
-const day = (date: string, over: Partial<Record<string, number>> = {}) => ({ date, sessions: 2, msgs: 10, tokensIn: 100, tokensOut: 50, tokensCache: 1000, activeMs: 3_600_000, ...over });
+// Rows default to scope "acme" (repo-owner attribution) so the acme org dashboard sees them;
+// leak tests override scope.
+const day = (date: string, over: Partial<{ scope: string; sessions: number; msgs: number; tokensIn: number; tokensOut: number; tokensCache: number; activeMs: number }> = {}) => ({ scope: "acme", date, sessions: 2, msgs: 10, tokensIn: 100, tokensOut: 50, tokensCache: 1000, activeMs: 3_600_000, ...over });
 
 describe("normalizeUsageReport", () => {
   it("accepts a valid batch and defaults machine", () => {
@@ -47,6 +50,11 @@ describe("normalizeUsageReport", () => {
     const r = normalizeUsageReport({ days: [day("2026-07-01", { sessions: -5, tokensIn: Number.NaN })] });
     expect(r?.days[0].sessions).toBe(0);
     expect(r?.days[0].tokensIn).toBe(0);
+  });
+  it("normalizes scope: lowercased + trimmed, missing → unattributed", () => {
+    const r = normalizeUsageReport({ days: [day("2026-07-01", { scope: "  NineMind " }), { ...day("2026-07-02"), scope: undefined }] });
+    expect(r?.days[0].scope).toBe("ninemind");
+    expect(r?.days[1].scope).toBe("");
   });
 });
 
@@ -88,6 +96,30 @@ describe("recordUsageDays + buildOrgUsage", () => {
     expect(u.members[0].activeDays).toBe(1);
     expect(rangeCutoff("7d", now)).toBe("2026-06-29");
     expect(rangeCutoff("all", now)).toBeNull();
+  });
+
+  it("anti-leak: only rows attributed to the org count; personal view folds in unattributed", async () => {
+    const db = await makeTestDb();
+    const { a } = await member(db, "alice", ["acme"]);
+    await recordUsageDays(db, a.id, "m", [
+      day("2026-07-01", { tokensIn: 100 }),                          // acme work
+      day("2026-07-01", { scope: "alice", tokensIn: 40 }),           // personal repo
+      day("2026-07-01", { scope: "other-org", tokensIn: 7 }),        // different org
+      day("2026-07-02", { scope: "", tokensIn: 3 }),                 // no repo / no remote
+    ]);
+    const org = await buildOrgUsage(db, "acme", "all");
+    expect(org.members[0].tokensIn).toBe(100);                        // ONLY the acme-attributed row
+    expect(org.daily).toHaveLength(1);
+    const personal = await buildOrgUsage(db, "alice", "all", Date.now(), { includeUnattributed: true });
+    expect(personal.members[0].tokensIn).toBe(43);                    // own repos + unattributed, no org rows
+  });
+
+  it("matches scope case-insensitively (reporter lowercases, query lowercases)", async () => {
+    const db = await makeTestDb();
+    const { a } = await member(db, "alice", ["AcmeOrg"]);
+    await recordUsageDays(db, a.id, "m", [day("2026-07-01", { scope: "acmeorg" })]);
+    const u = await buildOrgUsage(db, "AcmeOrg", "all");              // scope param as GitHub cases it
+    expect(u.members).toHaveLength(1);
   });
 
   it("survives bigint-scale token sums", async () => {
@@ -151,5 +183,36 @@ describe("usage endpoints", () => {
     const missing = mockRes();
     await orgUsageHandler(deps(db))(req({ headers: { cookie: `${SESSION_COOKIE}=${token}` }, query: {} }) as any, missing as any);
     expect(missing._status).toBe(400);
+  });
+});
+
+describe("membership freshness on GET /api/usage/org", () => {
+  it("403s with reason=stale when the org grant aged out, but the OWN-login scope never goes stale", async () => {
+    const db = await makeTestDb();
+    const { a, token } = await member(db, "alice", ["acme"]);
+    await recordUsageDays(db, a.id, "m", [day("2026-07-01"), day("2026-07-02", { scope: "" })]);
+    await db.execute(sql`update account_scopes set captured_at = now() - interval '30 days' where account_id = ${a.id}::uuid`);
+
+    const stale = mockRes();
+    await orgUsageHandler(deps(db))(req({ headers: { cookie: `${SESSION_COOKIE}=${token}` }, query: { scope: "acme" } }) as any, stale as any);
+    expect(stale._status).toBe(403);
+    expect((stale._body as any).reason).toBe("stale");
+
+    // scope = the caller's own login: personal view stays available regardless of capture age
+    const own = mockRes();
+    await orgUsageHandler(deps(db))(req({ headers: { cookie: `${SESSION_COOKIE}=${token}` }, query: { scope: "alice", range: "all" } }) as any, own as any);
+    expect(own._status).toBe(200);
+    expect((own._body as any).members[0].login).toBe("alice");
+  });
+
+  it("a fresh re-capture clears the stale gate", async () => {
+    const db = await makeTestDb();
+    const { a, token } = await member(db, "alice", ["acme"]);
+    await recordUsageDays(db, a.id, "m", [day("2026-07-01")]);
+    await db.execute(sql`update account_scopes set captured_at = now() - interval '30 days' where account_id = ${a.id}::uuid`);
+    await setAccountScopes(db, a.id, ["alice", "acme"]); // simulates re-sign-in / re-bind
+    const ok = mockRes();
+    await orgUsageHandler(deps(db))(req({ headers: { cookie: `${SESSION_COOKIE}=${token}` }, query: { scope: "acme", range: "all" } }) as any, ok as any);
+    expect(ok._status).toBe(200);
   });
 });

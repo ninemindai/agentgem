@@ -1,11 +1,13 @@
 import type { AggIngredient, AggCoOccurrence, AdoptionPoint, RegistryGem, Profile, OrgCatalog, OrgUsage, OrgUsageRange,
   CuratedSource, SourceDivision, SourceAgentRef, ImportedSkill, PopularSkill, PopularSkillGroup } from "./types";
 
-/** The team-usage read is auth-gated: the caller distinguishes "sign in" from "not a member". */
+/** The team-usage read is auth-gated: the caller distinguishes "sign in" from "not a member"
+ *  from "member, but the GitHub-org capture aged out" (stale → offer a one-click refresh). */
 export type OrgUsageResult =
   | { status: "ok"; usage: OrgUsage }
   | { status: "unauthenticated" }
-  | { status: "forbidden" };
+  | { status: "forbidden" }
+  | { status: "stale" };
 
 type Query = Record<string, string | number | undefined>;
 
@@ -54,7 +56,10 @@ export function makeApi(base: string) {
       // credentialed: the org dashboard is member-only, gated by the web session cookie
       const res = await fetch(base + "/api/usage/org?scope=" + encodeURIComponent(scope) + "&range=" + range, { credentials: "include" });
       if (res.status === 401) return { status: "unauthenticated" };
-      if (res.status === 403) return { status: "forbidden" };
+      if (res.status === 403) {
+        const body = await res.json().catch(() => ({})) as { reason?: string };
+        return body.reason === "stale" ? { status: "stale" } : { status: "forbidden" };
+      }
       if (!res.ok) throw new Error(`/api/usage/org -> ${res.status}`);
       return { status: "ok", usage: JSON.parse(await res.text()) as OrgUsage };
     },

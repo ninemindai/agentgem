@@ -10,7 +10,9 @@ export interface DeviceCode { deviceCode: string; userCode: string; verification
 export async function requestDeviceCode(clientId: string, fetchImpl: typeof fetch = fetch): Promise<DeviceCode> {
   const res = await fetchImpl("https://github.com/login/device/code", {
     method: "POST", headers: { Accept: "application/json", "Content-Type": "application/json" },
-    body: JSON.stringify({ client_id: clientId, scope: "read:user" }),
+    // read:org lets /user/orgs return PRIVATE org memberships too (public-only without it),
+    // so team-usage membership gating works for the GitHub default of private membership.
+    body: JSON.stringify({ client_id: clientId, scope: "read:user read:org" }),
   });
   if (!res.ok) throw new Error(`device/code: ${res.status}`);
   const j = (await res.json()) as { device_code: string; user_code: string; verification_uri: string; verification_uri_complete?: string; interval?: number };

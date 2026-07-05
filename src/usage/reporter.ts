@@ -7,9 +7,9 @@
 // `agentgem bind`). Signed-out or disabled machines skip silently — reporting is a side
 // effect of being bound, never a requirement. Re-reports overwrite server-side (idempotent
 // upsert per account/machine/day), so each pass simply re-sends the trailing window.
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, statSync } from "node:fs";
 import { hostname } from "node:os";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { agentgemHome } from "@agentgem/model";
 import { scanSessionsCached, type SessionStat } from "@agentgem/insight";
 import { readSession, bindConfig } from "../bind/bindCore.js";
@@ -17,7 +17,7 @@ import { createLogger } from "@agentgem/base";
 
 const log = createLogger("usage");
 
-export interface UsageDayRow { date: string; sessions: number; msgs: number; tokensIn: number; tokensOut: number; tokensCache: number; activeMs: number }
+export interface UsageDayRow { scope: string; date: string; sessions: number; msgs: number; tokensIn: number; tokensOut: number; tokensCache: number; activeMs: number }
 
 const DAY_MS = 86_400_000;
 export const REPORT_WINDOW_DAYS = 30;
@@ -25,22 +25,82 @@ export const REPORT_EVERY_MS = 6 * 60 * 60 * 1000; // at most one report per 6h,
 
 const utcDate = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
-/** Bucket a transcript scan into per-UTC-day rollups (a session lands on its END day). Pure. */
-export function usageDaysFromStats(stats: SessionStat[], sinceMs: number): UsageDayRow[] {
-  const byDay = new Map<string, UsageDayRow>();
+// ── Repo-owner attribution ─────────────────────────────────────────────────────
+// A session's usage is attributed to the OWNER of the repo it ran in (github.com/<owner>/…),
+// derived locally from the repo's `remote "origin"` URL. This is the anti-leak boundary: the org
+// dashboard only aggregates rows attributed to that org, so personal-repo and other-org work never
+// shows up there. Sessions outside a repo (or with no remote) report scope "" (unattributed) and
+// surface only on the reporter's own personal view.
+
+/** Owner segment of a git remote URL: git@host:owner/repo.git | https://host/owner/repo(.git) |
+ *  ssh://git@host/owner/repo. Lowercased (GitHub logins are case-insensitive). Pure. */
+export function ownerFromRemoteUrl(url: string): string {
+  const m = /^(?:[a-z+]+:\/\/)?(?:[^@/]+@)?[^:/]+[:/]([^/]+)\/[^/]+?(?:\.git)?\/?$/i.exec(url.trim());
+  return m ? m[1].toLowerCase() : "";
+}
+
+/** Resolve the repo-owner scope for a session cwd by walking up to the repo's .git and reading
+ *  `remote "origin"`'s url from its config. Worktree-aware (.git FILE → gitdir → main .git/config).
+ *  Returns "" when the cwd is gone, outside a repo, or has no parseable remote. Injected fs for tests. */
+export function scopeForCwd(
+  cwd: string | null | undefined,
+  fs: { readFile: (p: string) => string | null; isDir: (p: string) => boolean } = defaultScopeFs,
+): string {
+  if (!cwd) return "";
+  let dir = cwd;
+  for (let depth = 0; depth < 20; depth++) {
+    const dotGit = join(dir, ".git");
+    let configPath: string | null = null;
+    if (fs.isDir(dotGit)) {
+      configPath = join(dotGit, "config");
+    } else {
+      const gitFile = fs.readFile(dotGit); // worktree/submodule: `.git` is a file "gitdir: <path>"
+      const gitdir = gitFile ? /^gitdir:\s*(.+)\s*$/m.exec(gitFile)?.[1] : undefined;
+      if (gitdir) {
+        const abs = gitdir.startsWith("/") ? gitdir : join(dir, gitdir);
+        const wt = /(.*\/\.git)\/worktrees\/[^/]+\/?$/.exec(abs); // <main>/.git/worktrees/<name>
+        configPath = join(wt ? wt[1] : abs, "config");
+      }
+    }
+    if (configPath) {
+      const config = fs.readFile(configPath) ?? "";
+      const origin = /\[remote "origin"\][^[]*?url\s*=\s*(.+)/.exec(config);
+      return origin ? ownerFromRemoteUrl(origin[1]) : "";
+    }
+    const parent = dirname(dir);
+    if (parent === dir) return "";
+    dir = parent;
+  }
+  return "";
+}
+
+const defaultScopeFs = {
+  readFile: (p: string): string | null => { try { return readFileSync(p, "utf8"); } catch { return null; } },
+  isDir: (p: string): boolean => { try { return statSync(p).isDirectory(); } catch { return false; } },
+};
+
+/** Bucket a transcript scan into per-(repo-owner scope, UTC day) rollups (a session lands on its
+ *  END day). scopeOf is injected for tests; results are cached per distinct cwd. Pure given scopeOf. */
+export function usageDaysFromStats(stats: SessionStat[], sinceMs: number, scopeOf: (cwd: string | null | undefined) => string = scopeForCwd): UsageDayRow[] {
+  const byKey = new Map<string, UsageDayRow>();
+  const scopeCache = new Map<string, string>();
   for (const s of stats) {
     if (s.endMs < sinceMs) continue;
+    const cwd = s.cwd ?? "";
+    let scope = scopeCache.get(cwd);
+    if (scope === undefined) { scope = scopeOf(s.cwd); scopeCache.set(cwd, scope); }
     const date = utcDate(s.endMs);
-    const row = byDay.get(date) ?? { date, sessions: 0, msgs: 0, tokensIn: 0, tokensOut: 0, tokensCache: 0, activeMs: 0 };
+    const key = scope + "\n" + date;
+    const row = byKey.get(key) ?? { scope, date, sessions: 0, msgs: 0, tokensIn: 0, tokensOut: 0, tokensCache: 0, activeMs: 0 };
     row.sessions += 1;
     row.msgs += s.msgs;
     row.tokensIn += s.tokensIn;
     row.tokensOut += s.tokensOut;
     row.tokensCache += s.tokensCache;
     row.activeMs += Math.max(0, s.endMs - s.startMs);
-    byDay.set(date, row);
+    byKey.set(key, row);
   }
-  return [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date));
+  return [...byKey.values()].sort((a, b) => a.date.localeCompare(b.date) || a.scope.localeCompare(b.scope));
 }
 
 const statePath = (home: string) => join(home, ".agentgem", "usage-report.json");

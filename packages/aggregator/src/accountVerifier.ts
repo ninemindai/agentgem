@@ -19,22 +19,31 @@ export class GitHubVerifier implements AccountVerifier {
   }
 }
 
+export interface OrgMembership { login: string; role: "admin" | "member" }
+
 /**
- * Public GitHub org memberships for the token's user. Failure-tolerant by design:
- * any non-2xx, malformed, or thrown error yields [] so login never fails over it.
- * v1 is PUBLIC orgs only (no read:org scope requested).
+ * GitHub org memberships (with role) for the token's user, via /user/memberships/orgs — unlike
+ * /user/orgs it carries `role` (admin|member), which downstream ACL can gate on. Failure-tolerant
+ * by design: any non-2xx, malformed, or thrown error yields [] so sign-in/bind never fails over it.
+ * Both auth flows request `read:org`, so PRIVATE memberships are included; tokens granted before
+ * that scope change (or restricted by an org's OAuth-app policy) degrade to public-only.
  */
-export async function fetchOrgs(token: string, fetchImpl: typeof fetch = fetch): Promise<string[]> {
+export async function fetchOrgMemberships(token: string, fetchImpl: typeof fetch = fetch): Promise<OrgMembership[]> {
   try {
-    const res = await fetchImpl("https://api.github.com/user/orgs", {
+    const res = await fetchImpl("https://api.github.com/user/memberships/orgs?state=active&per_page=100", {
       headers: { Authorization: `Bearer ${token}`, "User-Agent": "agentgem", Accept: "application/vnd.github+json" },
     });
     if (!res.ok) return [];
     const body = (await res.json()) as unknown;
     if (!Array.isArray(body)) return [];
     return body
-      .map((o) => (o && typeof (o as { login?: unknown }).login === "string" ? (o as { login: string }).login : null))
-      .filter((l): l is string => l !== null);
+      .map((m) => {
+        const login = (m as { organization?: { login?: unknown } })?.organization?.login;
+        if (typeof login !== "string") return null;
+        const role = (m as { role?: unknown }).role === "admin" ? "admin" as const : "member" as const;
+        return { login, role };
+      })
+      .filter((m): m is OrgMembership => m !== null);
   } catch {
     return [];
   }
