@@ -22,11 +22,11 @@ swap_size_mb = 512        # rare memory spike (large ingest, warm scan) degrades
   SERVE_CONSOLE = "false"             # API-only: the desktop console UI is a LOCAL app,
                                       # not served on api.agentgem.ai (same as Render)
   TRUST_PROXY = "1"                   # one hop: fly-proxy terminates TLS
-  CLIENT_IP_HEADER = "fly-client-ip"  # Fly's trusted real-client-IP header. Render used
-                                      # cf-connecting-ip because Render itself fronts with
-                                      # Cloudflare; Fly does not. If api.agentgem.ai is ever
-                                      # proxied (orange-clouded) through our own Cloudflare,
-                                      # switch back to cf-connecting-ip.
+  CLIENT_IP_HEADER = "cf-connecting-ip"  # api.agentgem.ai stays orange-clouded (proxied)
+                                      # through OUR Cloudflare zone, same as the Render era,
+                                      # so CF's real-client-IP header remains the rate-limit
+                                      # key. If the record ever goes DNS-only (gray cloud,
+                                      # direct to Fly), switch to fly-client-ip.
   AGENTGEM_REGISTRY_REPO = "ninemindai/agentgem-registry"
   AGENTGEM_PUBLIC_BASE = "https://api.agentgem.ai"
   AGENTGEM_SESSION_COOKIE_DOMAIN = ".agentgem.ai"
