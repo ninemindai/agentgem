@@ -1,0 +1,52 @@
+# Fly.io config for the agentgem API (api.agentgem.ai) — replaces the Render web
+# service in render.yaml. Only the API moves: the agentgem-app static site STAYS on
+# Render (free, CDN-served), and Neon Postgres is unchanged (same DATABASE_URL).
+# Full cutover runbook: docs/deploy/fly-neon.md
+#
+# Machine: shared-cpu-1x / 512 MB, always-on (~$3.20/mo billed per second) — the
+# whole point of leaving Render's free tier is escaping its 15-min-idle spin-down.
+app = "agentgem-api"
+primary_region = "sea"    # closest Fly region to Neon in aws-us-west-2 (Oregon)
+
+kill_timeout = "30s"      # Fly's default 5s is too short for installGracefulShutdown's
+                          # drain (pg pool + persistent transcript index close)
+
+swap_size_mb = 512        # rare memory spike (large ingest, warm scan) degrades to
+                          # slow instead of an OOM kill
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  SERVE_CONSOLE = "false"             # API-only: the desktop console UI is a LOCAL app,
+                                      # not served on api.agentgem.ai (same as Render)
+  TRUST_PROXY = "1"                   # one hop: fly-proxy terminates TLS
+  CLIENT_IP_HEADER = "fly-client-ip"  # Fly's trusted real-client-IP header. Render used
+                                      # cf-connecting-ip because Render itself fronts with
+                                      # Cloudflare; Fly does not. If api.agentgem.ai is ever
+                                      # proxied (orange-clouded) through our own Cloudflare,
+                                      # switch back to cf-connecting-ip.
+  AGENTGEM_REGISTRY_REPO = "ninemindai/agentgem-registry"
+  # HOST=0.0.0.0 and PORT=4317 come from the Dockerfile.
+  # Secrets (set via `fly secrets set`, never committed here):
+  #   DATABASE_URL           — Neon connection string (include ?sslmode=require)
+  #   AGGREGATOR_ADMIN_TOKEN — gates POST /api/aggregator/keys
+
+[http_service]
+  internal_port = 4317        # must match the Dockerfile's PORT — unlike Render, Fly
+                              # does NOT inject a PORT env var
+  force_https = true
+  auto_stop_machines = "off"  # never auto-stop: always-on is the migration's purpose
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/healthz"         # unauthenticated liveness route (src/index.ts)
+    interval = "30s"
+    timeout = "3s"
+    grace_period = "25s"      # mirrors the Dockerfile HEALTHCHECK start-period
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

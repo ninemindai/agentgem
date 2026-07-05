@@ -1,0 +1,28 @@
+name: Fly Deploy
+
+# Deploy the API to Fly.io on every push to main — replaces Render's built-in
+# auto-deploy-on-push. Needs the FLY_API_TOKEN repo secret, minted with:
+#   fly tokens create deploy -a agentgem-api
+# Until that secret exists this workflow fails fast and deploys nothing.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fly-deploy
+  cancel-in-progress: false   # let an in-flight deploy finish; queue the next
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      # --remote-only builds the Docker image on Fly's builders, so the runner
+      # needs no Docker setup and the build cache lives with Fly.
+      - run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
