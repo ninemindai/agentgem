@@ -1,5 +1,10 @@
 # Deploy: Fly.io (compute) + Neon (Postgres)
 
+> **✅ This is the live topology (cut over 2026-07-05):** app `agentgem-api`, NineMind
+> org, region `iad`, one always-on machine. CI deploys on push to main via
+> `.github/workflows/fly-deploy.yml`. The old Render web service is suspended as
+> rollback. Diagram: [`deployment-architecture.html`](./deployment-architecture.html).
+
 Run the agentgem API as an always-on Fly Machine, replacing the Render free-tier web
 service (which spins down after 15 idle minutes → 30–50 s cold starts). Only the API
 moves:
