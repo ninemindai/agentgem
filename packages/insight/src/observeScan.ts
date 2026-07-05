@@ -62,7 +62,7 @@ export function parseClaudeTranscript(text: string, path: string): SessionStat |
     }
   }
   if (!sessionId || endMs < startMs) return null;
-  return { agent: "claude", sessionId, project: cwd ? basename(cwd) : null, model, gitBranch, startMs, endMs, msgs, tokensIn, tokensOut, tokensCache };
+  return { agent: "claude", sessionId, project: cwd ? basename(cwd) : null, cwd, model, gitBranch, startMs, endMs, msgs, tokensIn, tokensOut, tokensCache };
 }
 
 export function parseCodexTranscript(text: string, path: string): SessionStat | null {
@@ -89,7 +89,7 @@ export function parseCodexTranscript(text: string, path: string): SessionStat | 
   const input = total?.input_tokens ?? 0, cached = total?.cached_input_tokens ?? 0;
   const tokensIn = Math.max(0, input - cached);
   const tokensOut = (total?.output_tokens ?? 0) + (total?.reasoning_output_tokens ?? 0);
-  return { agent: "codex", sessionId, project: cwd ? basename(cwd) : null, model, gitBranch: null, startMs, endMs, msgs, tokensIn, tokensOut, tokensCache: cached };
+  return { agent: "codex", sessionId, project: cwd ? basename(cwd) : null, cwd, model, gitBranch: null, startMs, endMs, msgs, tokensIn, tokensOut, tokensCache: cached };
 }
 
 let _cache: { atMs: number; stats: SessionStat[] } | null = null;

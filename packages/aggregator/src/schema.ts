@@ -135,19 +135,30 @@ export const gemAdoptions = pgTable("gem_adoptions", {
   quarantined: boolean("quarantined").notNull().default(false),
 }, (t) => [primaryKey({ columns: [t.gemKey, t.producerPubkey] })]);
 
+// `capturedAt` timestamps each capture (scopes are REPLACED wholesale at sign-in/bind), so
+// membership-gated reads can demand freshness: a member removed from the GitHub org stops passing
+// once their capture ages out, instead of coasting on a months-old grant. `role` mirrors GitHub's
+// org role at capture ("admin" | "member"; "self" for the login's own scope) — read surfaces don't
+// gate on it, but future org-admin actions (settings, retention, member ops) will.
 export const accountScopes = pgTable("account_scopes", {
   accountId: uuid("account_id").notNull().references(() => accounts.id),
   scope: text("scope").notNull(),
+  role: text("role").notNull().default("member"),
+  capturedAt: timestamp("captured_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.accountId, t.scope] })]);
 
 // Self-reported daily usage rollups (tokens/sessions/duration) pushed on a schedule by the local
-// agentgem process, keyed to the signed-in account. One row per (account, machine, UTC day) so a
-// re-report of the same window is an idempotent upsert and multi-machine users don't clobber each
-// other's days. `date` is a UTC "YYYY-MM-DD" string (lexicographic order == chronological order).
-// Token columns are bigints: a single heavy user crosses int4 within months.
+// agentgem process, keyed to the signed-in account. One row per (account, machine, repo-owner
+// scope, UTC day) so a re-report of the same window is an idempotent upsert and multi-machine
+// users don't clobber each other's days. `scope` is the lowercased owner of the repo the work
+// happened in (from the local git remote; "" = unattributed) — the org dashboard only aggregates
+// its own scope, so personal/other-org work never leaks into it. `date` is a UTC "YYYY-MM-DD"
+// string (lexicographic order == chronological order). Token columns are bigints: a single heavy
+// user crosses int4 within months.
 export const usageDays = pgTable("usage_days", {
   accountId: uuid("account_id").notNull().references(() => accounts.id),
   machine: text("machine").notNull().default("default"),
+  scope: text("scope").notNull().default(""),
   date: text("date").notNull(),
   sessions: integer("sessions").notNull().default(0),
   msgs: integer("msgs").notNull().default(0),
@@ -156,7 +167,7 @@ export const usageDays = pgTable("usage_days", {
   tokensCache: bigint("tokens_cache", { mode: "number" }).notNull().default(0),
   activeMs: bigint("active_ms", { mode: "number" }).notNull().default(0),
   reportedAt: timestamp("reported_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [primaryKey({ columns: [t.accountId, t.machine, t.date] })]);
+}, (t) => [primaryKey({ columns: [t.accountId, t.machine, t.scope, t.date] })]);
 
 export const catalogGems = pgTable("catalog_gems", {
   gemKey: text("gem_key").notNull(),
@@ -215,8 +226,19 @@ export async function ensureSchema(db: AppDb): Promise<void> {
   await db.execute(sql`create table if not exists reviews (id uuid primary key, account_id uuid not null references accounts(id), target_kind text not null, target_id text not null, rating int not null check (rating between 1 and 5), body text check (body is null or char_length(body) <= 4000), created_at timestamptz not null default now(), updated_at timestamptz not null default now(), unique (account_id, target_kind, target_id))`);
   await db.execute(sql`create index if not exists reviews_target_idx on reviews (target_kind, target_id)`);
   await db.execute(sql`create table if not exists gem_adoptions (gem_key text not null, gem_digest text not null, producer_pubkey text not null references producers(pubkey), account_login text, event text not null default 'install', adopted_at timestamptz not null default now(), trust_score real not null default 1, quarantined boolean not null default false, primary key (gem_key, producer_pubkey))`);
-  await db.execute(sql`create table if not exists account_scopes (account_id uuid not null references accounts(id), scope text not null, primary key (account_id, scope))`);
-  await db.execute(sql`create table if not exists usage_days (account_id uuid not null references accounts(id), machine text not null default 'default', date text not null, sessions int not null default 0, msgs int not null default 0, tokens_in bigint not null default 0, tokens_out bigint not null default 0, tokens_cache bigint not null default 0, active_ms bigint not null default 0, reported_at timestamptz not null default now(), primary key (account_id, machine, date))`);
+  await db.execute(sql`create table if not exists account_scopes (account_id uuid not null references accounts(id), scope text not null, role text not null default 'member', captured_at timestamptz not null default now(), primary key (account_id, scope))`);
+  await db.execute(sql`alter table account_scopes add column if not exists captured_at timestamptz not null default now()`);
+  await db.execute(sql`alter table account_scopes add column if not exists role text not null default 'member'`);
+  await db.execute(sql`create table if not exists usage_days (account_id uuid not null references accounts(id), machine text not null default 'default', scope text not null default '', date text not null, sessions int not null default 0, msgs int not null default 0, tokens_in bigint not null default 0, tokens_out bigint not null default 0, tokens_cache bigint not null default 0, active_ms bigint not null default 0, reported_at timestamptz not null default now(), primary key (account_id, machine, scope, date))`);
+  await db.execute(sql`alter table usage_days add column if not exists scope text not null default ''`);
+  // Re-key a pre-scope deployment's 3-column PK to include scope (idempotent: only fires when the
+  // existing PK has 3 columns). Existing rows keep scope '' (unattributed) — the next report re-fills.
+  await db.execute(sql`do $$ begin
+    if (select count(*) from information_schema.key_column_usage where table_name = 'usage_days' and constraint_name = 'usage_days_pkey') = 3 then
+      alter table usage_days drop constraint usage_days_pkey;
+      alter table usage_days add primary key (account_id, machine, scope, date);
+    end if;
+  end $$`);
   await db.execute(sql`create index if not exists usage_days_date_idx on usage_days (date)`);
   await db.execute(sql`create table if not exists catalog_gems (gem_key text not null, version text not null, published_by text not null, author text, description text, tags jsonb, artifact_kinds jsonb, type text, grade integer, created_at_ms bigint not null, primary key (gem_key, version))`);
   await db.execute(sql`create table if not exists curated_skills (source_id text not null, path text not null, division text not null, name text not null, repo text not null, source_label text not null, homepage text, stars int not null default 0, installs int, indexed_at timestamptz not null default now(), primary key (source_id, path))`);

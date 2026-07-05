@@ -6,10 +6,18 @@
 //   GET  /api/usage/org    — the org dashboard read; 403 unless the caller's captured scopes
 //                            (account_scopes, from GitHub org membership at sign-in) include it.
 import type { AppDb } from "@agentgem/aggregator";
-import { resolveSession, accountOwnsScope, normalizeUsageReport, recordUsageDays, buildOrgUsage, RANGE_DAYS, type OrgUsageRange } from "@agentgem/aggregator";
+import { resolveSession, accountScopeStatus, normalizeUsageReport, recordUsageDays, buildOrgUsage, RANGE_DAYS, type OrgUsageRange } from "@agentgem/aggregator";
 import { SESSION_COOKIE, parseCookies } from "../auth/cookie.js";
 
-export interface UsageDeps { db: AppDb; webOrigins: string[] }
+export interface UsageDeps { db: AppDb; webOrigins: string[]; scopeTtlMs?: number }
+
+// Membership grants are only re-captured from GitHub at sign-in/bind, so bound revocation lag by
+// refusing grants older than this: the member still matched, but must refresh (one-click re-auth
+// for an already-authorized OAuth app) before reading again. Override via AGENTGEM_SCOPE_TTL_DAYS.
+export function defaultScopeTtlMs(): number {
+  const days = Number(process.env.AGENTGEM_SCOPE_TTL_DAYS ?? 7);
+  return (Number.isFinite(days) && days > 0 ? days : 7) * 86_400_000;
+}
 
 interface Req { method: string; path: string; query: Record<string, unknown>; body: Record<string, unknown>; headers: Record<string, string | undefined>; get(n: string): string | undefined }
 interface Res { status(c: number): Res; set(k: string, v: string): Res; setHeader(k: string, v: string): Res; json(b: unknown): Res; send(b: unknown): Res }
@@ -57,10 +65,18 @@ export function orgUsageHandler(deps: UsageDeps) {
     const scope = String((req.query.scope as string | undefined) ?? "").trim();
     const range = String((req.query.range as string | undefined) ?? "7d");
     if (scope.length === 0 || scope.length > 100 || !(range in RANGE_DAYS)) { res.status(400).json({ error: "invalid scope or range" }); return; }
-    // Internal dashboard: the caller must be a member of the org (captured at sign-in). Their own
-    // login scope always exists, so /api/usage/org?scope=<their-login> doubles as a personal view.
-    if (!(await accountOwnsScope(deps.db, who.accountId, scope))) { res.status(403).json({ error: "not a member of this org" }); return; }
-    res.json(await buildOrgUsage(deps.db, scope, range as OrgUsageRange));
+    // Internal dashboard: the caller must be a member of the org (captured at sign-in/bind), and
+    // the capture must be fresh — a stale grant 403s with reason "stale" so the UI can offer a
+    // one-click membership refresh instead of a dead end. The caller's own login is exempt from
+    // freshness (it IS their identity), so /api/usage/org?scope=<their-login> stays a personal view.
+    if (scope !== who.login) {
+      const status = await accountScopeStatus(deps.db, who.accountId, scope, deps.scopeTtlMs ?? defaultScopeTtlMs());
+      if (status === "none") { res.status(403).json({ error: "not a member of this org" }); return; }
+      if (status === "stale") { res.status(403).json({ error: "membership check expired — sign in again to refresh", reason: "stale" }); return; }
+    }
+    // Personal view folds in unattributed ("") rows — sessions outside any repo are still the
+    // caller's own work. Org views stay strictly scope-attributed (the anti-leak boundary).
+    res.json(await buildOrgUsage(deps.db, scope, range as OrgUsageRange, Date.now(), { includeUnattributed: scope === who.login }));
   };
 }
 

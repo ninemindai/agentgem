@@ -10,8 +10,9 @@ import { verify } from "@agentgem/model";
 import { canonicalJSON } from "@agentgem/insight";
 import type { AppDb } from "./schema.js";
 import { accountBindings } from "./schema.js";
-import type { AccountVerifier } from "./accountVerifier.js";
-import { upsertAccount, createSession, generateSessionToken } from "./webAuth.js";
+import type { AccountVerifier, OrgMembership } from "./accountVerifier.js";
+import { fetchOrgMemberships } from "./accountVerifier.js";
+import { upsertAccount, createSession, generateSessionToken, setAccountScopes } from "./webAuth.js";
 
 export interface BindRequest { pubkey: string; token: string; signedAt: number; signature: string; }
 export type BindResult =
@@ -32,6 +33,7 @@ export function bindSigningPayload(pubkey: string, token: string, signedAt: numb
 
 export async function recordBinding(
   db: AppDb, req: BindRequest, verifier: AccountVerifier, now: number = Date.now(),
+  orgs: (token: string) => Promise<OrgMembership[]> = fetchOrgMemberships,
 ): Promise<BindResult> {
   // 1. key possession (cheap, no DB, no leak)
   if (!verify(req.pubkey, bindSigningPayload(req.pubkey, req.token, req.signedAt), req.signature)) {
@@ -59,6 +61,16 @@ export async function recordBinding(
   try {
     account = await upsertAccount(db, { provider: acct.provider, accountId: acct.accountId, login: acct.login, avatarUrl: acct.avatarUrl ?? null });
   } catch { /* avatar/profile is best-effort */ }
+  // 4c. capture owned scopes (login + org memberships w/ role) at bind, mirroring the web sign-in
+  // path — CLI-only users must pass membership-gated reads (team usage) without ever visiting the
+  // web. Best-effort: an org-fetch failure still records the self-login scope; never fails the bind.
+  if (account) {
+    try {
+      let memberships: OrgMembership[] = [];
+      try { memberships = await orgs(req.token); } catch { memberships = []; }
+      await setAccountScopes(db, account.id, [{ scope: acct.login, role: "self" }, ...memberships.map((m) => ({ scope: m.login, role: m.role }))]);
+    } catch { /* scopes are additive to the bind */ }
+  }
   // 5. upsert (pubkey PK -> one account per key; rebind updates in place)
   await db.insert(accountBindings)
     .values({ pubkey: req.pubkey, provider: acct.provider, accountId: acct.accountId, accountLogin: acct.login })

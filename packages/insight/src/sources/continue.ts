@@ -45,7 +45,7 @@ export function parseContinueSession(
   if (Number.isNaN(startMs)) startMs = meta.mtimeMs;
   const endMs = Math.max(meta.mtimeMs, startMs);
   return {
-    agent: "continue", sessionId: s.sessionId ?? "", project: s.workspaceDirectory ? basename(s.workspaceDirectory) : null,
+    agent: "continue", sessionId: s.sessionId ?? "", project: s.workspaceDirectory ? basename(s.workspaceDirectory) : null, cwd: s.workspaceDirectory ?? null,
     model: s.chatModelTitle ?? null, gitBranch: null,
     startMs, endMs, msgs, tokensIn: tIn, tokensOut: tOut, tokensCache: tCache,
   };

@@ -76,13 +76,30 @@ export async function redeemHandoffCode(db: AppDb, code: string, now: number = D
   return row.accountId;
 }
 
-/** REPLACE the account's owned scope set (login + org logins). Deduped; empty clears it. */
-export async function setAccountScopes(db: AppDb, accountId: string, scopes: string[]): Promise<void> {
-  const unique = [...new Set(scopes)];
-  await db.delete(accountScopes).where(eq(accountScopes.accountId, accountId));
-  if (unique.length > 0) {
-    await db.insert(accountScopes).values(unique.map((scope) => ({ accountId, scope })));
+/** A scope grant: bare string = role "member" (an org the account belongs to); pass an object to
+ *  carry GitHub's org role ("admin") or "self" for the account's own login scope. */
+export type ScopeGrant = string | { scope: string; role: "self" | "admin" | "member" };
+
+/** REPLACE the account's owned scope set (login + org logins). Deduped (first grant wins);
+ *  empty clears it. Rows get a fresh captured_at, which freshness-gated reads rely on. */
+export async function setAccountScopes(db: AppDb, accountId: string, scopes: ScopeGrant[]): Promise<void> {
+  const byScope = new Map<string, { scope: string; role: string }>();
+  for (const g of scopes) {
+    const entry = typeof g === "string" ? { scope: g, role: "member" } : g;
+    if (!byScope.has(entry.scope)) byScope.set(entry.scope, entry);
   }
+  await db.delete(accountScopes).where(eq(accountScopes.accountId, accountId));
+  if (byScope.size > 0) {
+    await db.insert(accountScopes).values([...byScope.values()].map((e) => ({ accountId, scope: e.scope, role: e.role })));
+  }
+}
+
+/** All scopes the account owns, with role + capture time — the authed "my orgs" listing. */
+export async function getAccountScopes(db: AppDb, accountId: string): Promise<{ scope: string; role: string; capturedAt: Date }[]> {
+  return db
+    .select({ scope: accountScopes.scope, role: accountScopes.role, capturedAt: accountScopes.capturedAt })
+    .from(accountScopes)
+    .where(eq(accountScopes.accountId, accountId));
 }
 
 /** True iff the account owns `scope` (its login or a captured org membership). */
@@ -93,4 +110,19 @@ export async function accountOwnsScope(db: AppDb, accountId: string, scope: stri
     .where(and(eq(accountScopes.accountId, accountId), eq(accountScopes.scope, scope)))
     .limit(1);
   return rows.length > 0;
+}
+
+/** Ownership + freshness in one check, for reads that must bound revocation lag: scopes are only
+ *  re-captured from GitHub at sign-in/bind, so a grant older than `maxAgeMs` is "stale" — the
+ *  caller still matched, but should be asked to refresh (re-auth) rather than served. */
+export async function accountScopeStatus(
+  db: AppDb, accountId: string, scope: string, maxAgeMs: number, now: number = Date.now(),
+): Promise<"ok" | "stale" | "none"> {
+  const rows = await db
+    .select({ capturedAt: accountScopes.capturedAt })
+    .from(accountScopes)
+    .where(and(eq(accountScopes.accountId, accountId), eq(accountScopes.scope, scope)))
+    .limit(1);
+  if (rows.length === 0) return "none";
+  return now - new Date(rows[0].capturedAt).getTime() <= maxAgeMs ? "ok" : "stale";
 }

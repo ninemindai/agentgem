@@ -51,7 +51,7 @@ import { ShareController } from "./share.controller.js";
 import { requireShareOriginSecret } from "./originSecret.js";
 import { ShareProxyController } from "./share.proxy.controller.js";
 import { SourcesController } from "./sources.controller.js";
-import { resolveAggregatorDb, type AppDb, GitHubVerifier, fetchOrgs } from "@agentgem/aggregator";
+import { resolveAggregatorDb, type AppDb, GitHubVerifier, fetchOrgMemberships } from "@agentgem/aggregator";
 import { mountGating } from "./gating.js";
 import { installAuth, githubExchangeCode } from "./auth/install.js";
 import { installStars } from "./stars/install.js";
@@ -158,7 +158,7 @@ export async function createApp(port: number): Promise<RestApplication> {
       db: aggDb,
       verifier: new GitHubVerifier(),
       exchangeCode: githubExchangeCode(ghClientId, ghSecret),
-      fetchOrgs,
+      fetchOrgs: fetchOrgMemberships,
       config: {
         clientId: ghClientId, clientSecret: ghSecret, webOrigins,
         cookieDomain: process.env.AGENTGEM_SESSION_COOKIE_DOMAIN,

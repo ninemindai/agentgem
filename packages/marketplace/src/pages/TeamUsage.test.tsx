@@ -97,3 +97,12 @@ describe("TeamUsage page", () => {
     expect(await screen.findByText(/Couldn't load team usage/)).toBeTruthy();
   });
 });
+
+describe("TeamUsage stale membership", () => {
+  it("offers a one-click membership refresh on a stale 403", async () => {
+    render(<TeamUsage api={apiWith({ status: "stale" })} scope="acme" stars={stars} />);
+    expect(await screen.findByText(/membership check has expired/)).toBeTruthy();
+    const link = screen.getByText("Refresh membership");
+    expect((link as HTMLAnchorElement).getAttribute("href")).toBe("https://api.example/login");
+  });
+});

@@ -57,6 +57,7 @@ type View =
   | { status: "loading" }
   | { status: "signedout" }
   | { status: "forbidden" }
+  | { status: "stale" }
   | { status: "error"; message: string }
   | { status: "ok"; usage: OrgUsage };
 
@@ -72,6 +73,7 @@ export function TeamUsage({ api, scope, stars }: { api: ReturnType<typeof makeAp
         if (!alive) return;
         if (r.status === "unauthenticated") setView({ status: "signedout" });
         else if (r.status === "forbidden") setView({ status: "forbidden" });
+        else if (r.status === "stale") setView({ status: "stale" });
         else setView({ status: "ok", usage: r.usage });
       })
       .catch((e) => { if (alive) setView({ status: "error", message: String((e as Error)?.message ?? e) }); });
@@ -83,7 +85,7 @@ export function TeamUsage({ api, scope, stars }: { api: ReturnType<typeof makeAp
     <div className="ex-usage">
       <header className="ex-usage-head">
         <h1><a href={"/orgs/" + encodeURIComponent(scope)} className="ex-usage-scope">{scope}</a> · Team Pulse</h1>
-        <p className="ex-sub">Agent usage across the team — each member&apos;s local agentgem reports it on a schedule. Members only.</p>
+        <p className="ex-sub">Agent usage across the team — each member&apos;s local agentgem reports it on a schedule. Members only. Counts only work in <strong>{scope}</strong>-owned repos; personal and other-org sessions stay out.</p>
       </header>
       <div className="ex-tabs" role="tablist" aria-label="time range">
         {RANGES.map((r) => (
@@ -104,7 +106,14 @@ export function TeamUsage({ api, scope, stars }: { api: ReturnType<typeof makeAp
       {view.status === "forbidden" && (
         <div className="ex-usage-gate">
           <p>You&apos;re signed in, but not a member of <strong>{scope}</strong>.</p>
-          <p className="ex-sub">Membership comes from your public GitHub orgs, captured when you sign in.</p>
+          <p className="ex-sub">Membership comes from your GitHub orgs, captured when you sign in or bind.</p>
+        </div>
+      )}
+      {view.status === "stale" && (
+        <div className="ex-usage-gate">
+          <p>Your <strong>{scope}</strong> membership check has expired.</p>
+          <p className="ex-sub">Memberships are re-checked against GitHub periodically — refresh to continue.</p>
+          <a className="ex-usage-signin" href={stars.loginUrl()}>Refresh membership</a>
         </div>
       )}
 

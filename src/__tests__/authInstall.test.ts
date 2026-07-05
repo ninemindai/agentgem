@@ -24,7 +24,7 @@ function mockRes() {
 }
 const mockReq = (over: any = {}) => ({ method: "GET", path: "/", query: {}, headers: {}, get(n: string) { return (this.headers as any)[n.toLowerCase()]; }, ...over });
 
-const deps = (db: any, over: Partial<{ fetchOrgs: (t: string) => Promise<string[]>; verify: () => Promise<any> }> = {}) => ({
+const deps = (db: any, over: Partial<{ fetchOrgs: (t: string) => Promise<{ login: string; role: "admin" | "member" }[]>; verify: () => Promise<any> }> = {}) => ({
   db,
   verifier: { verify: over.verify ?? (async () => ({ provider: "github", accountId: "42", login: "octocat" })) },
   exchangeCode: async () => "gh-token",
@@ -102,7 +102,7 @@ describe("auth handlers", () => {
 
       const me = mockRes();
       await meHandler(deps(db))(mockReq({ headers: { cookie: `${SESSION_COOKIE}=${token}`, origin: "https://app.agentgem.ai" } }) as any, me as any);
-      expect(me._body).toEqual({ login: "octocat", avatarUrl: null });
+      expect(me._body).toEqual({ login: "octocat", avatarUrl: null, orgs: [] });
       expect(me._headers["access-control-allow-origin"]).toBe("https://app.agentgem.ai");
       expect(me._headers["access-control-allow-credentials"]).toBe("true");
     }
@@ -147,7 +147,7 @@ describe("auth handlers", () => {
 
   it("callback captures login + org scopes into account_scopes", async () => {
     { const db = await makeTestDb();
-      const d = deps(db, { fetchOrgs: async () => ["ninemind", "acme"] });
+      const d = deps(db, { fetchOrgs: async () => [{ login: "ninemind", role: "admin" as const }, { login: "acme", role: "member" as const }] });
       const login = mockRes();
       await loginHandler(d)(mockReq({ query: { return: "https://app.agentgem.ai" } }) as any, login as any);
       const state = new URL(login._redirect!).searchParams.get("state")!;
@@ -178,7 +178,7 @@ describe("auth handlers", () => {
       const token = await bearerFor(db);
       const me = mockRes();
       await meHandler(deps(db))(mockReq({ headers: { authorization: `Bearer ${token}` } }) as any, me as any);
-      expect(me._body).toEqual({ login: "octocat", avatarUrl: null });
+      expect(me._body).toEqual({ login: "octocat", avatarUrl: null, orgs: [] });
     }
   });
 
@@ -235,5 +235,26 @@ describe("auth handlers", () => {
       expect(await accountOwnsScope(db, who!.accountId, "octocat")).toBe(true);
       expect(await accountOwnsScope(db, who!.accountId, "ninemind")).toBe(false);
     }
+  });
+});
+
+describe("me org listing", () => {
+  it("me returns captured org scopes with role, excluding the self scope", async () => {
+    const db = await makeTestDb();
+    const d = deps(db, { fetchOrgs: async () => [{ login: "ninemind", role: "admin" as const }, { login: "acme", role: "member" as const }] });
+    const login = mockRes();
+    await loginHandler(d)(mockReq({ query: { return: "https://app.agentgem.ai" } }) as any, login as any);
+    const state = new URL(login._redirect!).searchParams.get("state")!;
+    const cb = mockRes();
+    await callbackHandler(d)(mockReq({ query: { code: "abc", state } }) as any, cb as any);
+    const token = (cb._headers["set-cookie"] as string).split(";")[0].split("=")[1];
+
+    const me = mockRes();
+    await meHandler(d)(mockReq({ headers: { cookie: `${SESSION_COOKIE}=${token}` } }) as any, me as any);
+    expect((me._body as any).login).toBe("octocat");
+    expect((me._body as any).orgs).toEqual([
+      { scope: "acme", role: "member" },
+      { scope: "ninemind", role: "admin" },
+    ]);
   });
 });

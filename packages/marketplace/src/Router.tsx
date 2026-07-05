@@ -44,7 +44,7 @@ export function Router({ api, stars, reviews, me }: { api: ReturnType<typeof mak
   if (skill) return <CatalogSkill api={api} reviews={reviews} sourceId={decodeURIComponent(skill[1])} path={skill[2]} />;
 
   const prof = path.match(/^\/@([^/]+)$/);
-  if (prof) return <Profile api={api} login={decodeURIComponent(prof[1])} />;
+  if (prof) return <Profile api={api} login={decodeURIComponent(prof[1])} me={me} />;
 
   // Member-only team dashboard — must match before the public /orgs/:scope catalog.
   const orgUsage = path.match(/^\/orgs\/([^/]+)\/usage$/);

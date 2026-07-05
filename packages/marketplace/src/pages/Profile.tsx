@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import type { makeApi } from "../api";
+import type { Me } from "../auth";
 import type { Profile as ProfileT } from "../types";
 import { StoneRating } from "../StoneRating";
 
 type View = { status: "loading" } | { status: "notfound" } | { status: "ok"; profile: ProfileT };
 
-export function Profile({ api, login }: { api: ReturnType<typeof makeApi>; login: string }) {
+export function Profile({ api, login, me }: { api: ReturnType<typeof makeApi>; login: string; me?: Me | null }) {
   const [view, setView] = useState<View>({ status: "loading" });
 
   useEffect(() => {
@@ -30,6 +31,23 @@ export function Profile({ api, login }: { api: ReturnType<typeof makeApi>; login
         </h2>
         <span className="ex-profile-stars">★ {p.totalStars}</span>
       </header>
+
+      {/* Own-profile only: org memberships come from the authed /api/auth/me (never the public
+          profile payload), so private org memberships are visible to their owner alone. */}
+      {me && me.login === p.login && me.orgs.length > 0 && (
+        <section className="ex-profile-orgs" aria-label="your orgs">
+          <h3 className="ex-profile-subhead">Your orgs <span className="ex-profile-orgs-note">(only you see this)</span></h3>
+          <ul className="ex-org-chips">
+            {me.orgs.map((o) => (
+              <li key={o.scope} className="ex-org-chip">
+                <a className="ex-org-chip-name" href={"/orgs/" + encodeURIComponent(o.scope)}>@{o.scope}</a>
+                {o.role === "admin" && <span className="ex-org-chip-role">admin</span>}
+                <a className="ex-org-chip-usage" href={`/orgs/${encodeURIComponent(o.scope)}/usage`}>Team Pulse →</a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {p.gems.length === 0 ? (
         <p className="ex-empty">@{p.login} hasn't published any gems yet.</p>
       ) : (

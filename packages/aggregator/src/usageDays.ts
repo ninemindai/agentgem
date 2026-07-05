@@ -7,8 +7,11 @@ import { and, eq, gte, sql } from "drizzle-orm";
 import type { AppDb } from "./schema.js";
 import { usageDays, accounts, accountScopes } from "./schema.js";
 
-/** One UTC day of local agent usage, as scanned from the machine's transcripts. */
+/** One UTC day of local agent usage in one repo-owner scope, as scanned from the machine's
+ *  transcripts. `scope` = lowercased owner of the repo the sessions ran in ("" = unattributed) —
+ *  the client-side attribution that keeps an org's dashboard free of other scopes' work. */
 export interface UsageDayReport {
+  scope: string;
   date: string; // "YYYY-MM-DD" (UTC)
   sessions: number;
   msgs: number;
@@ -21,6 +24,7 @@ export interface UsageDayReport {
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_DAYS_PER_REPORT = 400;
 const MAX_MACHINE_LEN = 64;
+const MAX_SCOPE_LEN = 100;
 
 // Clamp to a safe non-negative integer; garbage (NaN, negatives, floats) becomes 0/floor rather
 // than a rejected report — a partial rollup is more useful than none for a dashboard.
@@ -38,7 +42,9 @@ export function normalizeUsageReport(body: { machine?: unknown; days?: unknown }
     if (typeof raw !== "object" || raw === null) return null;
     const date = String(raw.date ?? "");
     if (!DATE_RE.test(date)) return null;
+    const scope = typeof raw.scope === "string" ? raw.scope.trim().toLowerCase().slice(0, MAX_SCOPE_LEN) : "";
     days.push({
+      scope,
       date,
       sessions: clamp(raw.sessions),
       msgs: clamp(raw.msgs),
@@ -51,15 +57,15 @@ export function normalizeUsageReport(body: { machine?: unknown; days?: unknown }
   return { machine, days };
 }
 
-/** Upsert a batch of daily rollups for (account, machine). Re-reports overwrite: the local scan is
- *  the source of truth for that machine's day, so the freshest report wins. */
+/** Upsert a batch of daily rollups for (account, machine, scope). Re-reports overwrite: the local
+ *  scan is the source of truth for that machine's day, so the freshest report wins. */
 export async function recordUsageDays(db: AppDb, accountId: string, machine: string, days: UsageDayReport[]): Promise<{ recorded: number }> {
   for (const d of days) {
     await db
       .insert(usageDays)
-      .values({ accountId, machine, date: d.date, sessions: d.sessions, msgs: d.msgs, tokensIn: d.tokensIn, tokensOut: d.tokensOut, tokensCache: d.tokensCache, activeMs: d.activeMs })
+      .values({ accountId, machine, scope: d.scope ?? "", date: d.date, sessions: d.sessions, msgs: d.msgs, tokensIn: d.tokensIn, tokensOut: d.tokensOut, tokensCache: d.tokensCache, activeMs: d.activeMs })
       .onConflictDoUpdate({
-        target: [usageDays.accountId, usageDays.machine, usageDays.date],
+        target: [usageDays.accountId, usageDays.machine, usageDays.scope, usageDays.date],
         set: { sessions: d.sessions, msgs: d.msgs, tokensIn: d.tokensIn, tokensOut: d.tokensOut, tokensCache: d.tokensCache, activeMs: d.activeMs, reportedAt: new Date() },
       });
   }
@@ -103,11 +109,18 @@ export function rangeCutoff(range: OrgUsageRange, nowMs: number): string | null 
 }
 
 /** Aggregate the org's usage: per-member leaderboard rows + org totals + org-wide daily series.
- *  Members = accounts whose captured scopes include `scope` AND that reported usage in range. */
-export async function buildOrgUsage(db: AppDb, scope: string, range: OrgUsageRange, nowMs: number = Date.now()): Promise<OrgUsage> {
+ *  Members = accounts whose captured scopes include `scope` AND that reported usage in range.
+ *  Anti-leak: only rows ATTRIBUTED to this scope count (usage_days.scope, from the reporter's
+ *  repo-owner detection) — a member's personal or other-org work never shows here. The personal
+ *  view (scope = caller's own login) also folds in unattributed ("") rows via includeUnattributed. */
+export async function buildOrgUsage(db: AppDb, scope: string, range: OrgUsageRange, nowMs: number = Date.now(), opts: { includeUnattributed?: boolean } = {}): Promise<OrgUsage> {
   const cutoff = rangeCutoff(range, nowMs);
   const inRange = cutoff === null ? undefined : gte(usageDays.date, cutoff);
-  const memberFilter = and(eq(accountScopes.scope, scope), ...(inRange ? [inRange] : []));
+  const scopeLc = scope.toLowerCase();
+  const attributed = opts.includeUnattributed
+    ? sql`${usageDays.scope} in (${scopeLc}, '')`
+    : eq(usageDays.scope, scopeLc);
+  const memberFilter = and(eq(accountScopes.scope, scope), attributed, ...(inRange ? [inRange] : []));
 
   const memberRows = await db
     .select({
