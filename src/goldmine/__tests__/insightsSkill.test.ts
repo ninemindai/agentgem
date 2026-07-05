@@ -9,7 +9,7 @@ describe("agentgem-insights skill", () => {
   const md = () => read("skills/agentgem-insights/SKILL.md");
 
   it("exists with frontmatter name and description", () => {
-    expect(md()).toMatch(/^<!--[^]*?-->\n---\nname: agentgem-insights\ndescription: /);
+    expect(md()).toMatch(/^---\nname: agentgem-insights\ndescription: /); // frontmatter on line 1 — a leading comment hides the skill from the skills.sh CLI
   });
 
   it("uses the exact SessionOutcome enum spellings so reports stay comparable", () => {
@@ -39,7 +39,7 @@ describe("agentgem-retro skill", () => {
   const md = () => read("skills/agentgem-retro/SKILL.md");
 
   it("exists with frontmatter name and description", () => {
-    expect(md()).toMatch(/^<!--[^]*?-->\n---\nname: agentgem-retro\ndescription: /);
+    expect(md()).toMatch(/^---\nname: agentgem-retro\ndescription: /);
   });
 
   it("drives get_behavior_findings and verifies against transcripts before advising", () => {

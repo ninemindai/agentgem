@@ -1,4 +1,3 @@
-<!-- skills/agentgem-insights/SKILL.md -->
 ---
 name: agentgem-insights
 description: Use when the user asks for an insights report over their coding sessions ("how am I using my agent", "/insights-style report", "what's working / where do sessions go wrong"). Runs the 3-layer insights pipeline over AgentGem's goldmine tools and ends at publishing high-outcome sessions as Gems.
