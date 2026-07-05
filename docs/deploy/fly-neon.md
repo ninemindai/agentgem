@@ -10,9 +10,10 @@ service (which spins down after 15 idle minutes → 30–50 s cold starts). Only
 moves:
 
 - **api.agentgem.ai** → Fly (`fly.toml` at the repo root, reuses the `Dockerfile` as-is).
-- **app.agentgem.ai** (marketplace static site) → **stays on Render** (free, CDN-served,
-  never sleeps). Its `VITE_API_BASE` points at `https://api.agentgem.ai`, which moves
-  *with* the API — no marketplace rebuild needed.
+- **app.agentgem.ai** (marketplace SPA) → moved the same day to **Cloudflare Workers
+  static assets** (`packages/marketplace/wrangler.jsonc`, deployed by
+  `.github/workflows/deploy-worker.yml`). Its `VITE_API_BASE` points at
+  `https://api.agentgem.ai`, which moves *with* the API — no coupling between the moves.
 - **Neon Postgres** → unchanged; same `DATABASE_URL` (see `render-neon.md` Step 1 for
   connection-string guidance — direct endpoint, `?sslmode=require`). The live database
   is in **aws-us-east-1**, hence `primary_region = "iad"` in fly.toml.
@@ -71,9 +72,10 @@ fly tokens create deploy -a agentgem-api
 
 ## Decommission Render (after ~a week of quiet)
 
-Keep the Render web service **suspended, not deleted**, as the rollback path — undo is
-flipping the CNAME back. Once confident: delete the `agentgem` web service in the Render
-dashboard and trim `render.yaml` down to just the `agentgem-app` static site.
+Keep both Render services (**`agentgem`** web + **`agentgem-app`** static, now also
+migrated — to Cloudflare Workers static assets) **suspended, not deleted**, as the
+rollback path — undo is flipping the CNAME back. Once confident: delete both services
+in the Render dashboard and remove `render.yaml`.
 
 ## Operations
 
