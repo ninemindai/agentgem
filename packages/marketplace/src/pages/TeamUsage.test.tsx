@@ -36,9 +36,9 @@ const usage = (over: Partial<OrgUsage> = {}): OrgUsage => ({
 const apiWith = (result: OrgUsageResult, settings?: OrgSettingsResult, onPut?: (retentionDays: number | null) => void) => ({
   getOrgUsage: () => Promise.resolve(result),
   getOrgSettings: () => Promise.resolve(settings ?? { status: "denied" }),
-  putOrgSettings: (_scope: string, values: { retentionDays: number | null; dashboardEnabled: boolean }) => {
-    onPut?.(values.retentionDays);
-    return Promise.resolve({ status: "ok", settings: { scope: "acme", ...values, updatedBy: "alice", updatedAt: null, viewerRole: "admin" } satisfies OrgSettingsView });
+  putOrgSettings: (_scope: string, values: { retentionDays?: number | null; dashboardEnabled?: boolean }) => {
+    onPut?.(values.retentionDays ?? null);
+    return Promise.resolve({ status: "ok", settings: { scope: "acme", retentionDays: values.retentionDays ?? null, dashboardEnabled: values.dashboardEnabled ?? true, updatedBy: "alice", updatedAt: null, viewerRole: "admin" } satisfies OrgSettingsView });
   },
 }) as never;
 
@@ -204,7 +204,7 @@ describe("TeamUsage v3: drill-down, CSV, visibility", () => {
     expect(toggle.checked).toBe(false);
   });
 
-  it("admins can flip visibility; the toggle PUTs both fields", async () => {
+  it("admins can flip visibility; each control PUTs ONLY its own field (no cross-tab clobber)", async () => {
     const bodies: unknown[] = [];
     const settings: OrgSettingsResult = { status: "ok", settings: { scope: "acme", retentionDays: 90, dashboardEnabled: true, updatedBy: null, updatedAt: null, viewerRole: "admin" } };
     const api = {
@@ -215,6 +215,15 @@ describe("TeamUsage v3: drill-down, CSV, visibility", () => {
     render(<TeamUsage api={api} scope="acme" stars={stars} />);
     const toggle = await screen.findByLabelText("dashboard visible to members");
     fireEvent.click(toggle);
-    await waitFor(() => expect(bodies).toEqual([{ retentionDays: 90, dashboardEnabled: false }]));
+    await waitFor(() => expect(bodies).toEqual([{ dashboardEnabled: false }]));
+    fireEvent.change(screen.getByLabelText("usage retention"), { target: { value: "30" } });
+    await waitFor(() => expect(bodies).toEqual([{ dashboardEnabled: false }, { retentionDays: 30 }]));
+  });
+
+  it("the 'self' viewer keeps the retention select but never sees the visibility toggle (no-op on personal view)", async () => {
+    const settings: OrgSettingsResult = { status: "ok", settings: { scope: "alice", retentionDays: null, dashboardEnabled: true, updatedBy: null, updatedAt: null, viewerRole: "self" } };
+    render(<TeamUsage api={apiWith({ status: "ok", usage: usage() }, settings)} scope="alice" stars={stars} />);
+    expect(await screen.findByLabelText("usage retention")).toBeTruthy();
+    expect(screen.queryByLabelText("dashboard visible to members")).toBeNull();
   });
 });

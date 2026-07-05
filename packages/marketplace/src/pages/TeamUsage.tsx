@@ -79,11 +79,16 @@ export function membersCsv(usage: OrgUsage): string {
 
 function downloadCsv(usage: OrgUsage): void {
   const blob = new Blob([membersCsv(usage)], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
+  a.href = url;
   a.download = `${usage.scope}-usage-${usage.range}.csv`;
+  // Firefox needs the anchor in the document for a programmatic download click, and the
+  // revoke must wait until the navigation has read the blob — synchronous revoke can abort it.
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(a.href);
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1_000);
 }
 
 export function TeamUsage({ api, scope, stars }: { api: ReturnType<typeof makeApi>; scope: string; stars: StarsCtx }) {
@@ -198,9 +203,11 @@ function OrgSettingsPanel({ api, scope }: { api: ReturnType<typeof makeApi>; sco
   const current = settings.retentionDays === null ? "forever" : String(settings.retentionDays);
   const isAdmin = settings.viewerRole === "admin" || settings.viewerRole === "self";
 
-  const save = (next: { retentionDays: number | null; dashboardEnabled: boolean }) => {
+  // Each control saves ONLY its own field (server merges) — two admins editing different
+  // settings from different tabs can't overwrite each other's changes.
+  const save = (patch: { retentionDays?: number | null; dashboardEnabled?: boolean }) => {
     setSaving(true); setError(null);
-    api.putOrgSettings(scope, next)
+    api.putOrgSettings(scope, patch)
       .then((r) => {
         if (r.status === "ok") setSettings(r.settings);
         else setError("org admins only");
@@ -214,16 +221,18 @@ function OrgSettingsPanel({ api, scope }: { api: ReturnType<typeof makeApi>; sco
       <span className="ex-usage-settings-label">Usage retention</span>
       {isAdmin ? (
         <select className="ex-usage-settings-select" aria-label="usage retention" value={current} disabled={saving}
-          onChange={(e) => save({ retentionDays: e.target.value === "forever" ? null : Number(e.target.value), dashboardEnabled: settings.dashboardEnabled })}>
+          onChange={(e) => save({ retentionDays: e.target.value === "forever" ? null : Number(e.target.value) })}>
           {RETENTION_CHOICES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
         </select>
       ) : (
         <span className="ex-usage-settings-value">{RETENTION_CHOICES.find((c) => c.value === current)?.label ?? current}</span>
       )}
-      {isAdmin && (
+      {/* Admin-only (NOT "self"): the personal view is never gated by org policy, so a
+          visibility toggle there would persist a flag that has no effect. */}
+      {settings.viewerRole === "admin" && (
         <label className="ex-usage-settings-toggle">
           <input type="checkbox" aria-label="dashboard visible to members" checked={settings.dashboardEnabled} disabled={saving}
-            onChange={(e) => save({ retentionDays: settings.retentionDays, dashboardEnabled: e.target.checked })} />
+            onChange={(e) => save({ dashboardEnabled: e.target.checked })} />
           Visible to members
         </label>
       )}
