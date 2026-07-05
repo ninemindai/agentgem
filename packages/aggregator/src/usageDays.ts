@@ -166,15 +166,19 @@ export function rangeCutoff(range: OrgUsageRange, nowMs: number): string | null 
  *  Members = accounts whose captured scopes include `scope` AND that reported usage in range.
  *  Anti-leak: only rows ATTRIBUTED to this scope count (usage_days.scope, from the reporter's
  *  repo-owner detection) — a member's personal or other-org work never shows here. The personal
- *  view (scope = caller's own login) also folds in unattributed ("") rows via includeUnattributed. */
-export async function buildOrgUsage(db: AppDb, scope: string, range: OrgUsageRange, nowMs: number = Date.now(), opts: { includeUnattributed?: boolean } = {}): Promise<OrgUsage> {
+ *  view (scope = caller's own login) also folds in unattributed ("") rows via includeUnattributed.
+ *  `memberLogin` narrows everything (member row, daily series, models) to one member — the org
+ *  drill-down. It stays INSIDE the org-scope boundary: it is that member's work for this org, not
+ *  their personal view. */
+export async function buildOrgUsage(db: AppDb, scope: string, range: OrgUsageRange, nowMs: number = Date.now(), opts: { includeUnattributed?: boolean; memberLogin?: string } = {}): Promise<OrgUsage> {
   const cutoff = rangeCutoff(range, nowMs);
   const inRange = cutoff === null ? undefined : gte(usageDays.date, cutoff);
   const scopeLc = scope.toLowerCase();
   const attributed = opts.includeUnattributed
     ? sql`${usageDays.scope} in (${scopeLc}, '')`
     : eq(usageDays.scope, scopeLc);
-  const memberFilter = and(eq(accountScopes.scope, scope), attributed, ...(inRange ? [inRange] : []));
+  const memberOnly = opts.memberLogin ? eq(accounts.login, opts.memberLogin) : undefined;
+  const memberFilter = and(eq(accountScopes.scope, scope), attributed, ...(inRange ? [inRange] : []), ...(memberOnly ? [memberOnly] : []));
 
   const memberRows = await db
     .select({
@@ -220,6 +224,7 @@ export async function buildOrgUsage(db: AppDb, scope: string, range: OrgUsageRan
       tokens: sql<number>`(sum(${usageDays.tokensIn}) + sum(${usageDays.tokensOut}) + sum(${usageDays.tokensCache}))::bigint`,
     })
     .from(usageDays)
+    .innerJoin(accounts, eq(usageDays.accountId, accounts.id))
     .innerJoin(accountScopes, eq(accountScopes.accountId, usageDays.accountId))
     .where(memberFilter)
     .groupBy(usageDays.date)
@@ -232,7 +237,7 @@ export async function buildOrgUsage(db: AppDb, scope: string, range: OrgUsageRan
   const modelAttributed = opts.includeUnattributed
     ? sql`${usageDayModels.scope} in (${scopeLc}, '')`
     : eq(usageDayModels.scope, scopeLc);
-  const modelFilter = and(eq(accountScopes.scope, scope), modelAttributed, ...(modelInRange ? [modelInRange] : []));
+  const modelFilter = and(eq(accountScopes.scope, scope), modelAttributed, ...(modelInRange ? [modelInRange] : []), ...(memberOnly ? [memberOnly] : []));
   const modelRows = await db
     .select({
       agent: usageDayModels.agent,
@@ -241,6 +246,7 @@ export async function buildOrgUsage(db: AppDb, scope: string, range: OrgUsageRan
       tokens: sql<number>`sum(${usageDayModels.tokens})::bigint`,
     })
     .from(usageDayModels)
+    .innerJoin(accounts, eq(usageDayModels.accountId, accounts.id))
     .innerJoin(accountScopes, eq(accountScopes.accountId, usageDayModels.accountId))
     .where(modelFilter)
     .groupBy(usageDayModels.agent, usageDayModels.model);

@@ -841,3 +841,18 @@ a.ex-skillcard-rating:hover { text-decoration: underline; }
   .ex-usage-model { grid-template-columns: 1fr 110px; }
   .ex-usage-model-sessions { display: none; }
 }
+
+/* ── Team Pulse v3: drill-down, export, visibility toggle ──────────────────────── */
+.ex-usage-member-crumb { color: var(--muted); font-weight: 500; }
+.ex-usage-backlink { margin: 4px 0 0; font-size: 0.84rem; }
+.ex-usage-backlink a { color: var(--brand-strong); text-decoration: none; }
+.ex-usage-backlink a:hover { text-decoration: underline; }
+.ex-usage-lb-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.ex-usage-export {
+  font-size: 0.78rem; padding: 4px 12px; border: 1px solid var(--line-2); border-radius: var(--r-pill);
+  background: var(--surface); color: var(--ink-2); cursor: pointer;
+}
+.ex-usage-export:hover { border-color: var(--brand); color: var(--brand-strong); }
+.ex-usage-drill { color: var(--brand-strong); text-decoration: none; }
+.ex-usage-drill:hover { text-decoration: underline; }
+.ex-usage-settings-toggle { display: inline-flex; align-items: center; gap: 5px; color: var(--ink-2); font-size: 0.82rem; }

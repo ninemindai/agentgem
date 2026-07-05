@@ -84,10 +84,13 @@ export function orgSettingsHandler(deps: UsageDeps) {
     const role = (await accountScopeRole(deps.db, who.accountId, scope)) ?? "member";
 
     if (req.method === "PUT") {
-      if (role !== "admin") { res.status(403).json({ error: "org admins only" }); return; }
-      const retentionDays = normalizeRetentionDays((req.body ?? {}).retentionDays);
+      // Admins write org policy; "self" writes their own-login scope (personal retention).
+      if (role !== "admin" && role !== "self") { res.status(403).json({ error: "org admins only" }); return; }
+      const body = req.body ?? {};
+      const retentionDays = normalizeRetentionDays(body.retentionDays);
       if (retentionDays === undefined) { res.status(400).json({ error: "retentionDays must be null or 7–730" }); return; }
-      const saved = await putOrgSettings(deps.db, scope, retentionDays, who.login);
+      if (typeof body.dashboardEnabled !== "boolean") { res.status(400).json({ error: "dashboardEnabled must be a boolean" }); return; }
+      const saved = await putOrgSettings(deps.db, scope, { retentionDays, dashboardEnabled: body.dashboardEnabled }, who.login);
       res.json({ ...saved, viewerRole: role });
       return;
     }
@@ -112,10 +115,24 @@ export function orgUsageHandler(deps: UsageDeps) {
       const status = await accountScopeStatus(deps.db, who.accountId, scope, deps.scopeTtlMs ?? defaultScopeTtlMs());
       if (status === "none") { res.status(403).json({ error: "not a member of this org" }); return; }
       if (status === "stale") { res.status(403).json({ error: "membership check expired — sign in again to refresh", reason: "stale" }); return; }
+      // Visibility toggle: an org admin can switch the dashboard off for members. Admins still
+      // see it (they control the toggle and need the settings footer to flip it back). The
+      // personal view (scope = own login) is never affected by org policy.
+      const settings = await getOrgSettings(deps.db, scope);
+      if (!settings.dashboardEnabled) {
+        const role = (await accountScopeRole(deps.db, who.accountId, scope)) ?? "member";
+        if (role !== "admin") { res.status(403).json({ error: "dashboard disabled by an org admin", reason: "disabled" }); return; }
+      }
     }
+    // Optional drill-down: narrow everything to one member, still inside the org-scope boundary.
+    const member = String((req.query.member as string | undefined) ?? "").trim();
+    if (member.length > 100) { res.status(400).json({ error: "invalid member" }); return; }
     // Personal view folds in unattributed ("") rows — sessions outside any repo are still the
     // caller's own work. Org views stay strictly scope-attributed (the anti-leak boundary).
-    res.json(await buildOrgUsage(deps.db, scope, range as OrgUsageRange, Date.now(), { includeUnattributed: scope === who.login }));
+    res.json(await buildOrgUsage(deps.db, scope, range as OrgUsageRange, Date.now(), {
+      includeUnattributed: scope === who.login,
+      ...(member ? { memberLogin: member } : {}),
+    }));
   };
 }
 

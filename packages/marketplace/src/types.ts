@@ -137,4 +137,4 @@ export interface OrgUsage {
   agents: OrgUsageAgent[];
 }
 // Org dashboard settings — admin-writable (GitHub org role captured at sign-in).
-export interface OrgSettingsView { scope: string; retentionDays: number | null; updatedBy: string | null; updatedAt: string | null; viewerRole: string }
+export interface OrgSettingsView { scope: string; retentionDays: number | null; dashboardEnabled: boolean; updatedBy: string | null; updatedAt: string | null; viewerRole: string }

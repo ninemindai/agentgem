@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
-import { TeamUsage, fmtCompact, fmtFull, fmtDuration, heatCells } from "./TeamUsage";
+import { TeamUsage, membersCsv, fmtCompact, fmtFull, fmtDuration, heatCells } from "./TeamUsage";
 import type { OrgUsage, OrgSettingsView } from "../types";
 import type { OrgUsageResult, OrgSettingsResult } from "../api";
 
@@ -36,9 +36,9 @@ const usage = (over: Partial<OrgUsage> = {}): OrgUsage => ({
 const apiWith = (result: OrgUsageResult, settings?: OrgSettingsResult, onPut?: (retentionDays: number | null) => void) => ({
   getOrgUsage: () => Promise.resolve(result),
   getOrgSettings: () => Promise.resolve(settings ?? { status: "denied" }),
-  putOrgSettings: (_scope: string, retentionDays: number | null) => {
-    onPut?.(retentionDays);
-    return Promise.resolve({ status: "ok", settings: { scope: "acme", retentionDays, updatedBy: "alice", updatedAt: null, viewerRole: "admin" } satisfies OrgSettingsView });
+  putOrgSettings: (_scope: string, values: { retentionDays: number | null; dashboardEnabled: boolean }) => {
+    onPut?.(values.retentionDays);
+    return Promise.resolve({ status: "ok", settings: { scope: "acme", ...values, updatedBy: "alice", updatedAt: null, viewerRole: "admin" } satisfies OrgSettingsView });
   },
 }) as never;
 
@@ -142,7 +142,7 @@ describe("TeamUsage models + settings", () => {
 
   it("shows admins an editable retention select and saves changes", async () => {
     const puts: (number | null)[] = [];
-    const settings: OrgSettingsResult = { status: "ok", settings: { scope: "acme", retentionDays: null, updatedBy: null, updatedAt: null, viewerRole: "admin" } };
+    const settings: OrgSettingsResult = { status: "ok", settings: { scope: "acme", retentionDays: null, dashboardEnabled: true, updatedBy: null, updatedAt: null, viewerRole: "admin" } };
     render(<TeamUsage api={apiWith({ status: "ok", usage: usage() }, settings, (d) => puts.push(d))} scope="acme" stars={stars} />);
     const select = await screen.findByLabelText("usage retention");
     fireEvent.change(select, { target: { value: "90" } });
@@ -151,7 +151,7 @@ describe("TeamUsage models + settings", () => {
   });
 
   it("shows members the retention policy read-only, and nothing when settings are denied", async () => {
-    const settings: OrgSettingsResult = { status: "ok", settings: { scope: "acme", retentionDays: 30, updatedBy: "root", updatedAt: null, viewerRole: "member" } };
+    const settings: OrgSettingsResult = { status: "ok", settings: { scope: "acme", retentionDays: 30, dashboardEnabled: true, updatedBy: "root", updatedAt: null, viewerRole: "member" } };
     const { unmount } = render(<TeamUsage api={apiWith({ status: "ok", usage: usage() }, settings)} scope="acme" stars={stars} />);
     expect(await screen.findByText("30 days")).toBeTruthy();
     expect(screen.queryByLabelText("usage retention")).toBeNull(); // no select for members
@@ -159,5 +159,62 @@ describe("TeamUsage models + settings", () => {
     render(<TeamUsage api={apiWith({ status: "ok", usage: usage() })} scope="acme" stars={stars} />);
     await screen.findByText("zheng");
     expect(screen.queryByLabelText("org settings")).toBeNull();
+  });
+});
+
+describe("TeamUsage v3: drill-down, CSV, visibility", () => {
+  it("membersCsv renders spreadsheet-ready rows with escaping", () => {
+    const csv = membersCsv(usage({ members: [member('zheng"the,best', 100, { activeMs: 3_600_000, lastActive: "2026-07-04" })] }));
+    const lines = csv.trim().split("\n");
+    expect(lines[0]).toBe("rank,login,sessions,messages,active_hours,active_days,tokens_in,tokens_out,tokens_cache,tokens_total,last_active");
+    expect(lines[1]).toBe('1,"zheng""the,best",10,40,1.00,3,100,0,0,100,2026-07-04');
+  });
+
+  it("leaderboard rows link to the org drill-down, and the member view narrows + offers a way back", async () => {
+    const calls: (string | undefined)[] = [];
+    const api = {
+      getOrgUsage: (_s: string, _r: string, member?: string) => { calls.push(member); return Promise.resolve({ status: "ok", usage: usage() } as OrgUsageResult); },
+      getOrgSettings: () => Promise.resolve({ status: "denied" }),
+    } as never;
+    const { unmount } = render(<TeamUsage api={api} scope="acme" stars={stars} />);
+    await screen.findByText("zheng");
+    const drill = screen.getAllByText("usage →")[0] as HTMLAnchorElement;
+    expect(drill.getAttribute("href")).toBe("/orgs/acme/usage?member=zheng");
+    expect(calls).toEqual([undefined]);
+    unmount();
+
+    window.history.pushState({}, "", "/orgs/acme/usage?member=zheng");
+    try {
+      render(<TeamUsage api={api} scope="acme" stars={stars} />);
+      await screen.findByText(/· @zheng/);
+      expect(calls).toEqual([undefined, "zheng"]);
+      expect(screen.getByText("← Full team")).toBeTruthy();
+      expect(screen.queryByText("usage →")).toBeNull();          // no drill links inside the drill-down
+      expect(screen.queryByLabelText("org settings")).toBeNull(); // settings only on the team view
+    } finally {
+      window.history.pushState({}, "", "/orgs/acme/usage");
+    }
+  });
+
+  it("shows the disabled gate (with settings still reachable for the admin flip-back)", async () => {
+    const settings: OrgSettingsResult = { status: "ok", settings: { scope: "acme", retentionDays: null, dashboardEnabled: false, updatedBy: "root", updatedAt: null, viewerRole: "admin" } };
+    render(<TeamUsage api={apiWith({ status: "disabled" }, settings)} scope="acme" stars={stars} />);
+    expect(await screen.findByText(/disabled by an org admin/)).toBeTruthy();
+    const toggle = await screen.findByLabelText("dashboard visible to members") as HTMLInputElement;
+    expect(toggle.checked).toBe(false);
+  });
+
+  it("admins can flip visibility; the toggle PUTs both fields", async () => {
+    const bodies: unknown[] = [];
+    const settings: OrgSettingsResult = { status: "ok", settings: { scope: "acme", retentionDays: 90, dashboardEnabled: true, updatedBy: null, updatedAt: null, viewerRole: "admin" } };
+    const api = {
+      getOrgUsage: () => Promise.resolve({ status: "ok", usage: usage() } as OrgUsageResult),
+      getOrgSettings: () => Promise.resolve(settings),
+      putOrgSettings: (_s: string, values: unknown) => { bodies.push(values); return Promise.resolve(settings); },
+    } as never;
+    render(<TeamUsage api={api} scope="acme" stars={stars} />);
+    const toggle = await screen.findByLabelText("dashboard visible to members");
+    fireEvent.click(toggle);
+    await waitFor(() => expect(bodies).toEqual([{ retentionDays: 90, dashboardEnabled: false }]));
   });
 });
