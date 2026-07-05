@@ -1,5 +1,11 @@
 # Deploy: Render (compute) + Neon (Postgres)
 
+> **⚠️ Superseded for the API (2026-07-05):** `api.agentgem.ai` now runs on **Fly.io**
+> — see [`fly-neon.md`](./fly-neon.md). The Render `agentgem` web service is
+> **suspended** (kept as the rollback path: resume it + flip the `api` CNAME back to
+> `agentgem.onrender.com`). This doc remains current for the `agentgem-app` static
+> site and as the historical record of the Render-era API deploy.
+
 Deploy the agentgem server as a Docker web service on **Render**, backed by a free
 **Neon** Postgres. This is the lowest-friction free-tier path that reuses the existing
 `Dockerfile` as-is (no edge/serverless rewrite).

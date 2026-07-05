@@ -1,5 +1,9 @@
 # Render Blueprint — ONE blueprint, TWO services:
 #   1. agentgem  — the API (Docker web service), backed by a Neon Postgres (free).
+#      ⚠️ SUSPENDED since 2026-07-05: api.agentgem.ai moved to Fly.io (fly.toml,
+#      docs/deploy/fly-neon.md). Kept HERE (not deleted, not removed from this file)
+#      as the rollback path — removing it would let a Blueprint sync delete the
+#      suspended service. Trim this entry only at final decommission.
 #   2. agentgem-app — the public marketplace UI (static site, free, CDN-served, no sleep).
 #
 # Pair the API with a Neon Postgres (free) for DURABLE data — Render's own free
