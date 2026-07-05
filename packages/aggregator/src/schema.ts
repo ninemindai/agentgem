@@ -140,6 +140,24 @@ export const accountScopes = pgTable("account_scopes", {
   scope: text("scope").notNull(),
 }, (t) => [primaryKey({ columns: [t.accountId, t.scope] })]);
 
+// Self-reported daily usage rollups (tokens/sessions/duration) pushed on a schedule by the local
+// agentgem process, keyed to the signed-in account. One row per (account, machine, UTC day) so a
+// re-report of the same window is an idempotent upsert and multi-machine users don't clobber each
+// other's days. `date` is a UTC "YYYY-MM-DD" string (lexicographic order == chronological order).
+// Token columns are bigints: a single heavy user crosses int4 within months.
+export const usageDays = pgTable("usage_days", {
+  accountId: uuid("account_id").notNull().references(() => accounts.id),
+  machine: text("machine").notNull().default("default"),
+  date: text("date").notNull(),
+  sessions: integer("sessions").notNull().default(0),
+  msgs: integer("msgs").notNull().default(0),
+  tokensIn: bigint("tokens_in", { mode: "number" }).notNull().default(0),
+  tokensOut: bigint("tokens_out", { mode: "number" }).notNull().default(0),
+  tokensCache: bigint("tokens_cache", { mode: "number" }).notNull().default(0),
+  activeMs: bigint("active_ms", { mode: "number" }).notNull().default(0),
+  reportedAt: timestamp("reported_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.accountId, t.machine, t.date] })]);
+
 export const catalogGems = pgTable("catalog_gems", {
   gemKey: text("gem_key").notNull(),
   version: text("version").notNull(),
@@ -172,7 +190,7 @@ export const curatedSkills = pgTable("curated_skills", {
   indexedAt: timestamp("indexed_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.sourceId, t.path] })]);
 
-export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, webSessions, handoffCodes, stars, reviews, gemAdoptions, accountScopes, catalogGems, curatedSkills };
+export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, webSessions, handoffCodes, stars, reviews, gemAdoptions, accountScopes, usageDays, catalogGems, curatedSkills };
 export type AppDb = PgDatabase<any, typeof schema>;
 
 // Idempotent DDL. (Schema-as-tables above is the query source of truth; this DDL
@@ -198,6 +216,8 @@ export async function ensureSchema(db: AppDb): Promise<void> {
   await db.execute(sql`create index if not exists reviews_target_idx on reviews (target_kind, target_id)`);
   await db.execute(sql`create table if not exists gem_adoptions (gem_key text not null, gem_digest text not null, producer_pubkey text not null references producers(pubkey), account_login text, event text not null default 'install', adopted_at timestamptz not null default now(), trust_score real not null default 1, quarantined boolean not null default false, primary key (gem_key, producer_pubkey))`);
   await db.execute(sql`create table if not exists account_scopes (account_id uuid not null references accounts(id), scope text not null, primary key (account_id, scope))`);
+  await db.execute(sql`create table if not exists usage_days (account_id uuid not null references accounts(id), machine text not null default 'default', date text not null, sessions int not null default 0, msgs int not null default 0, tokens_in bigint not null default 0, tokens_out bigint not null default 0, tokens_cache bigint not null default 0, active_ms bigint not null default 0, reported_at timestamptz not null default now(), primary key (account_id, machine, date))`);
+  await db.execute(sql`create index if not exists usage_days_date_idx on usage_days (date)`);
   await db.execute(sql`create table if not exists catalog_gems (gem_key text not null, version text not null, published_by text not null, author text, description text, tags jsonb, artifact_kinds jsonb, type text, grade integer, created_at_ms bigint not null, primary key (gem_key, version))`);
   await db.execute(sql`create table if not exists curated_skills (source_id text not null, path text not null, division text not null, name text not null, repo text not null, source_label text not null, homepage text, stars int not null default 0, installs int, indexed_at timestamptz not null default now(), primary key (source_id, path))`);
   await db.execute(sql`alter table curated_skills add column if not exists description text`);

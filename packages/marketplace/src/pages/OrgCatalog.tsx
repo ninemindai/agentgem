@@ -46,6 +46,7 @@ export function OrgCatalog({ api, scope }: { api: ReturnType<typeof makeApi>; sc
       <header className="ex-orgcat-head">
         <h2 className="ex-orgcat-title">@{c.scope}</h2>
         <span className="ex-orgcat-counts">{c.gemCount} gems · {c.ownerCount} owners</span>
+        <a className="ex-orgcat-usage-link" href={`/orgs/${encodeURIComponent(c.scope)}/usage`}>Team Pulse (members) →</a>
       </header>
       {c.gemCount === 0 ? (
         <p className="ex-empty">No gems published under @{c.scope} yet.</p>

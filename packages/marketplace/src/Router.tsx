@@ -13,6 +13,7 @@ import { Gem } from "./pages/Gem";
 import { Publish } from "./pages/Publish";
 import { Profile } from "./pages/Profile";
 import { OrgCatalog } from "./pages/OrgCatalog";
+import { TeamUsage } from "./pages/TeamUsage";
 import { Sources } from "./pages/Sources";
 
 export interface StarsCtx { signedIn: boolean; loginUrl: () => string; api: ReturnType<typeof makeStars> }
@@ -44,6 +45,10 @@ export function Router({ api, stars, reviews, me }: { api: ReturnType<typeof mak
 
   const prof = path.match(/^\/@([^/]+)$/);
   if (prof) return <Profile api={api} login={decodeURIComponent(prof[1])} />;
+
+  // Member-only team dashboard — must match before the public /orgs/:scope catalog.
+  const orgUsage = path.match(/^\/orgs\/([^/]+)\/usage$/);
+  if (orgUsage) return <TeamUsage api={api} scope={decodeURIComponent(orgUsage[1])} stars={stars} />;
 
   const org = path.match(/^\/orgs\/([^/]+)$/);
   if (org) return <OrgCatalog api={api} scope={decodeURIComponent(org[1])} />;

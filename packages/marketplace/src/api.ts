@@ -1,5 +1,11 @@
-import type { AggIngredient, AggCoOccurrence, AdoptionPoint, RegistryGem, Profile, OrgCatalog,
+import type { AggIngredient, AggCoOccurrence, AdoptionPoint, RegistryGem, Profile, OrgCatalog, OrgUsage, OrgUsageRange,
   CuratedSource, SourceDivision, SourceAgentRef, ImportedSkill, PopularSkill, PopularSkillGroup } from "./types";
+
+/** The team-usage read is auth-gated: the caller distinguishes "sign in" from "not a member". */
+export type OrgUsageResult =
+  | { status: "ok"; usage: OrgUsage }
+  | { status: "unauthenticated" }
+  | { status: "forbidden" };
 
 type Query = Record<string, string | number | undefined>;
 
@@ -43,6 +49,14 @@ export function makeApi(base: string) {
       if (res.status === 400 || res.status === 404) return null;
       if (!res.ok) throw new Error(`/api/aggregator/org-catalog -> ${res.status}`);
       return JSON.parse(await res.text()) as OrgCatalog;
+    },
+    getOrgUsage: async (scope: string, range: OrgUsageRange): Promise<OrgUsageResult> => {
+      // credentialed: the org dashboard is member-only, gated by the web session cookie
+      const res = await fetch(base + "/api/usage/org?scope=" + encodeURIComponent(scope) + "&range=" + range, { credentials: "include" });
+      if (res.status === 401) return { status: "unauthenticated" };
+      if (res.status === 403) return { status: "forbidden" };
+      if (!res.ok) throw new Error(`/api/usage/org -> ${res.status}`);
+      return { status: "ok", usage: JSON.parse(await res.text()) as OrgUsage };
     },
     getSources: () =>
       get<{ sources: CuratedSource[] }>(base, "/api/sources").then((r) => r.sources),

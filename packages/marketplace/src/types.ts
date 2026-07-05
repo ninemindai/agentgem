@@ -116,3 +116,19 @@ export interface CuratedSource {
 export interface SourceDivision { key: string; label: string; icon?: string; color?: string }
 export interface SourceAgentRef { division: string; slug: string; name: string; path: string }
 export interface ImportedSkill { name: string; description?: string; content: string; source?: string }
+
+// Team usage dashboard (/orgs/:scope/usage) — mirrors the aggregator's OrgUsage payload.
+export type OrgUsageRange = "7d" | "30d" | "all";
+export interface OrgUsageMember {
+  login: string; avatarUrl: string | null;
+  sessions: number; msgs: number;
+  tokensIn: number; tokensOut: number; tokensCache: number; tokens: number;
+  activeMs: number; activeDays: number; lastActive: string | null;
+}
+export interface OrgUsageDay { date: string; sessions: number; tokens: number }
+export interface OrgUsage {
+  scope: string; range: OrgUsageRange; memberCount: number;
+  totals: { sessions: number; msgs: number; tokensIn: number; tokensOut: number; tokensCache: number; tokens: number; activeMs: number; activeDays: number };
+  members: OrgUsageMember[];
+  daily: OrgUsageDay[];
+}
