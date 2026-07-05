@@ -1,4 +1,4 @@
-import type { AggIngredient, AggCoOccurrence, AdoptionPoint, RegistryGem, Profile, OrgCatalog, OrgUsage, OrgUsageRange,
+import type { AggIngredient, AggCoOccurrence, AdoptionPoint, RegistryGem, Profile, OrgCatalog, OrgUsage, OrgUsageRange, OrgSettingsView,
   CuratedSource, SourceDivision, SourceAgentRef, ImportedSkill, PopularSkill, PopularSkillGroup } from "./types";
 
 /** The team-usage read is auth-gated: the caller distinguishes "sign in" from "not a member"
@@ -8,6 +8,10 @@ export type OrgUsageResult =
   | { status: "unauthenticated" }
   | { status: "forbidden" }
   | { status: "stale" };
+
+export type OrgSettingsResult =
+  | { status: "ok"; settings: OrgSettingsView }
+  | { status: "denied" };
 
 type Query = Record<string, string | number | undefined>;
 
@@ -62,6 +66,22 @@ export function makeApi(base: string) {
       }
       if (!res.ok) throw new Error(`/api/usage/org -> ${res.status}`);
       return { status: "ok", usage: JSON.parse(await res.text()) as OrgUsage };
+    },
+    getOrgSettings: async (scope: string): Promise<OrgSettingsResult> => {
+      const res = await fetch(base + "/api/usage/settings?scope=" + encodeURIComponent(scope), { credentials: "include" });
+      if (res.status === 401 || res.status === 403) return { status: "denied" };
+      if (!res.ok) throw new Error(`/api/usage/settings -> ${res.status}`);
+      return { status: "ok", settings: JSON.parse(await res.text()) as OrgSettingsView };
+    },
+    putOrgSettings: async (scope: string, retentionDays: number | null): Promise<OrgSettingsResult> => {
+      const res = await fetch(base + "/api/usage/settings?scope=" + encodeURIComponent(scope), {
+        method: "PUT", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ retentionDays }),
+      });
+      if (res.status === 401 || res.status === 403) return { status: "denied" };
+      if (!res.ok) throw new Error(`/api/usage/settings -> ${res.status}`);
+      return { status: "ok", settings: JSON.parse(await res.text()) as OrgSettingsView };
     },
     getSources: () =>
       get<{ sources: CuratedSource[] }>(base, "/api/sources").then((r) => r.sources),

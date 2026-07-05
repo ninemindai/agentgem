@@ -5,7 +5,7 @@
 // the org catalog uses; the caller (src/usage/install.ts) enforces accountOwnsScope before reading.
 import { and, eq, gte, sql } from "drizzle-orm";
 import type { AppDb } from "./schema.js";
-import { usageDays, accounts, accountScopes } from "./schema.js";
+import { usageDays, usageDayModels, accounts, accountScopes } from "./schema.js";
 
 /** One UTC day of local agent usage in one repo-owner scope, as scanned from the machine's
  *  transcripts. `scope` = lowercased owner of the repo the sessions ran in ("" = unattributed) —
@@ -57,6 +57,54 @@ export function normalizeUsageReport(body: { machine?: unknown; days?: unknown }
   return { machine, days };
 }
 
+/** One (agent, model) slice of a usage day in one scope — the "By Model" breakdown. */
+export interface UsageModelReport {
+  scope: string;
+  date: string;
+  agent: string;
+  model: string;
+  sessions: number;
+  tokens: number;
+}
+
+const MAX_MODEL_ROWS_PER_REPORT = 2000;
+const MAX_NAME_LEN = 100;
+
+/** Validate + normalize the optional per-model rows of a report. Never rejects the whole report:
+ *  malformed rows are dropped (the day rollup above is the part that must land). */
+export function normalizeUsageModels(models: unknown): UsageModelReport[] {
+  if (!Array.isArray(models)) return [];
+  const out: UsageModelReport[] = [];
+  for (const raw of models.slice(0, MAX_MODEL_ROWS_PER_REPORT) as Array<Record<string, unknown>>) {
+    if (typeof raw !== "object" || raw === null) continue;
+    const date = String(raw.date ?? "");
+    if (!DATE_RE.test(date)) continue;
+    out.push({
+      scope: typeof raw.scope === "string" ? raw.scope.trim().toLowerCase().slice(0, MAX_SCOPE_LEN) : "",
+      date,
+      agent: typeof raw.agent === "string" ? raw.agent.trim().slice(0, MAX_NAME_LEN) : "",
+      model: typeof raw.model === "string" ? raw.model.trim().slice(0, MAX_NAME_LEN) : "",
+      sessions: clamp(raw.sessions),
+      tokens: clamp(raw.tokens),
+    });
+  }
+  return out;
+}
+
+/** Upsert per-(agent, model) day slices, same overwrite semantics as recordUsageDays. */
+export async function recordUsageModels(db: AppDb, accountId: string, machine: string, models: UsageModelReport[]): Promise<{ recorded: number }> {
+  for (const m of models) {
+    await db
+      .insert(usageDayModels)
+      .values({ accountId, machine, scope: m.scope ?? "", date: m.date, agent: m.agent, model: m.model, sessions: m.sessions, tokens: m.tokens })
+      .onConflictDoUpdate({
+        target: [usageDayModels.accountId, usageDayModels.machine, usageDayModels.scope, usageDayModels.date, usageDayModels.agent, usageDayModels.model],
+        set: { sessions: m.sessions, tokens: m.tokens, reportedAt: new Date() },
+      });
+  }
+  return { recorded: models.length };
+}
+
 /** Upsert a batch of daily rollups for (account, machine, scope). Re-reports overwrite: the local
  *  scan is the source of truth for that machine's day, so the freshest report wins. */
 export async function recordUsageDays(db: AppDb, accountId: string, machine: string, days: UsageDayReport[]): Promise<{ recorded: number }> {
@@ -89,6 +137,8 @@ export interface OrgUsageMember {
 }
 
 export interface OrgUsageDay { date: string; sessions: number; tokens: number }
+export interface OrgUsageModel { agent: string; model: string; sessions: number; tokens: number }
+export interface OrgUsageAgent { agent: string; sessions: number; tokens: number }
 
 export interface OrgUsage {
   scope: string;
@@ -97,7 +147,11 @@ export interface OrgUsage {
   totals: { sessions: number; msgs: number; tokensIn: number; tokensOut: number; tokensCache: number; tokens: number; activeMs: number; activeDays: number };
   members: OrgUsageMember[];
   daily: OrgUsageDay[]; // org-wide series, ascending by date (heatmap + trend)
+  models: OrgUsageModel[]; // top models by tokens within range (same scope boundary)
+  agents: OrgUsageAgent[]; // per-agent rollup within range
 }
+
+const MODELS_LIMIT = 12;
 
 export const RANGE_DAYS: Record<OrgUsageRange, number | null> = { "7d": 7, "30d": 30, all: null };
 
@@ -173,6 +227,36 @@ export async function buildOrgUsage(db: AppDb, scope: string, range: OrgUsageRan
 
   const daily: OrgUsageDay[] = dailyRows.map((r) => ({ date: r.date, sessions: Number(r.sessions ?? 0), tokens: Number(r.tokens ?? 0) }));
 
+  // "By model" / "by agent" slices, same membership + scope-attribution + range boundary as above.
+  const modelInRange = cutoff === null ? undefined : gte(usageDayModels.date, cutoff);
+  const modelAttributed = opts.includeUnattributed
+    ? sql`${usageDayModels.scope} in (${scopeLc}, '')`
+    : eq(usageDayModels.scope, scopeLc);
+  const modelFilter = and(eq(accountScopes.scope, scope), modelAttributed, ...(modelInRange ? [modelInRange] : []));
+  const modelRows = await db
+    .select({
+      agent: usageDayModels.agent,
+      model: usageDayModels.model,
+      sessions: sql<number>`sum(${usageDayModels.sessions})::int`,
+      tokens: sql<number>`sum(${usageDayModels.tokens})::bigint`,
+    })
+    .from(usageDayModels)
+    .innerJoin(accountScopes, eq(accountScopes.accountId, usageDayModels.accountId))
+    .where(modelFilter)
+    .groupBy(usageDayModels.agent, usageDayModels.model);
+  const allModels = modelRows
+    .map((r) => ({ agent: r.agent, model: r.model, sessions: Number(r.sessions ?? 0), tokens: Number(r.tokens ?? 0) }))
+    .sort((a, b) => b.tokens - a.tokens || a.model.localeCompare(b.model));
+  const models = allModels.slice(0, MODELS_LIMIT);
+  const agentMap = new Map<string, OrgUsageAgent>();
+  for (const m of allModels) {
+    const a = agentMap.get(m.agent) ?? { agent: m.agent, sessions: 0, tokens: 0 };
+    a.sessions += m.sessions;
+    a.tokens += m.tokens;
+    agentMap.set(m.agent, a);
+  }
+  const agents = [...agentMap.values()].sort((a, b) => b.tokens - a.tokens);
+
   const totals = members.reduce(
     (t, m) => ({
       sessions: t.sessions + m.sessions, msgs: t.msgs + m.msgs,
@@ -182,5 +266,5 @@ export async function buildOrgUsage(db: AppDb, scope: string, range: OrgUsageRan
     { sessions: 0, msgs: 0, tokensIn: 0, tokensOut: 0, tokensCache: 0, tokens: 0, activeMs: 0, activeDays: daily.length },
   );
 
-  return { scope, range, memberCount: members.length, totals, members, daily };
+  return { scope, range, memberCount: members.length, totals, members, daily, models, agents };
 }

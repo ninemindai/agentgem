@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { makeApi } from "../api";
-import type { OrgUsage, OrgUsageRange, OrgUsageDay } from "../types";
+import type { OrgUsage, OrgUsageRange, OrgUsageDay, OrgSettingsView } from "../types";
 import type { StarsCtx } from "../Router";
 
 const RANGES: { value: OrgUsageRange; label: string }[] = [
@@ -118,7 +118,64 @@ export function TeamUsage({ api, scope, stars }: { api: ReturnType<typeof makeAp
       )}
 
       {view.status === "ok" && <TeamUsageBody usage={view.usage} />}
+      {view.status === "ok" && <OrgSettingsPanel api={api} scope={scope} />}
     </div>
+  );
+}
+
+const RETENTION_CHOICES: { value: string; label: string }[] = [
+  { value: "forever", label: "Keep forever" },
+  { value: "30", label: "30 days" },
+  { value: "90", label: "90 days" },
+  { value: "180", label: "180 days" },
+  { value: "365", label: "1 year" },
+];
+
+/** Org settings footer. Everyone sees the policy; only GitHub org ADMINS (role captured at
+ *  sign-in) get the editable control — the first role-gated write surface. */
+function OrgSettingsPanel({ api, scope }: { api: ReturnType<typeof makeApi>; scope: string }) {
+  const [settings, setSettings] = useState<OrgSettingsView | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    api.getOrgSettings(scope)
+      .then((r) => { if (alive && r.status === "ok") setSettings(r.settings); })
+      .catch(() => { /* settings are an extra — never break the dashboard */ });
+    return () => { alive = false; };
+    // api is a stable module-level singleton (App.tsx) — excluded so re-renders don't refetch.
+  }, [scope]);
+
+  if (!settings) return null;
+  const current = settings.retentionDays === null ? "forever" : String(settings.retentionDays);
+
+  const save = (value: string) => {
+    const retentionDays = value === "forever" ? null : Number(value);
+    setSaving(true); setError(null);
+    api.putOrgSettings(scope, retentionDays)
+      .then((r) => {
+        if (r.status === "ok") setSettings(r.settings);
+        else setError("org admins only");
+      })
+      .catch((e) => setError(String((e as Error)?.message ?? e)))
+      .finally(() => setSaving(false));
+  };
+
+  return (
+    <section className="ex-usage-settings" aria-label="org settings">
+      <span className="ex-usage-settings-label">Usage retention</span>
+      {settings.viewerRole === "admin" ? (
+        <select className="ex-usage-settings-select" aria-label="usage retention" value={current} disabled={saving}
+          onChange={(e) => save(e.target.value)}>
+          {RETENTION_CHOICES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+        </select>
+      ) : (
+        <span className="ex-usage-settings-value">{RETENTION_CHOICES.find((c) => c.value === current)?.label ?? current}</span>
+      )}
+      {settings.updatedBy && <span className="ex-usage-settings-meta">set by {settings.updatedBy}</span>}
+      {error && <span className="ex-error">{error}</span>}
+    </section>
   );
 }
 
@@ -159,6 +216,36 @@ function TeamUsageBody({ usage }: { usage: OrgUsage }) {
               ))}
             </div>
           </div>
+        </section>
+      )}
+
+      {usage.models.length > 0 && (
+        <section aria-label="models">
+          <h2 className="ex-section-title">Models</h2>
+          {usage.agents.length > 0 && (
+            <p className="ex-usage-agents">
+              {usage.agents.map((a) => (
+                <span key={a.agent} className="ex-usage-agent-chip">
+                  <strong>{a.agent || "unknown"}</strong> {fmtFull(a.sessions)} sessions · {fmtCompact(a.tokens)}
+                </span>
+              ))}
+            </p>
+          )}
+          <ol className="ex-usage-models">
+            {usage.models.map((m) => {
+              const top = usage.models[0]?.tokens ?? 0;
+              return (
+                <li key={m.agent + "\n" + m.model} className="ex-usage-model">
+                  <span className="ex-usage-model-name">{m.model || "unknown"}<span className="ex-usage-model-agent">{m.agent}</span></span>
+                  <span className="ex-usage-model-sessions">{fmtFull(m.sessions)}</span>
+                  <span className="ex-usage-tokens">
+                    <span className="ex-usage-tokens-n">{fmtCompact(m.tokens)}</span>
+                    <span className="ex-usage-bar"><span className="ex-usage-bar-fill" style={{ width: `${top > 0 ? Math.max(2, Math.round((m.tokens / top) * 100)) : 0}%` }} /></span>
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
         </section>
       )}
 

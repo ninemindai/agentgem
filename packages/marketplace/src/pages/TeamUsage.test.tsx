@@ -1,8 +1,8 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { TeamUsage, fmtCompact, fmtFull, fmtDuration, heatCells } from "./TeamUsage";
-import type { OrgUsage } from "../types";
-import type { OrgUsageResult } from "../api";
+import type { OrgUsage, OrgSettingsView } from "../types";
+import type { OrgUsageResult, OrgSettingsResult } from "../api";
 
 afterEach(() => cleanup());
 
@@ -22,10 +22,25 @@ const usage = (over: Partial<OrgUsage> = {}): OrgUsage => ({
     { date: "2026-06-29", sessions: 4, tokens: 100 },
     { date: "2026-07-04", sessions: 16, tokens: 400 },
   ],
+  models: [
+    { agent: "claude", model: "claude-fable-5", sessions: 14, tokens: 6_000_000_000 },
+    { agent: "codex", model: "gpt-5.2-codex", sessions: 6, tokens: 1_300_000_000 },
+  ],
+  agents: [
+    { agent: "claude", sessions: 14, tokens: 6_000_000_000 },
+    { agent: "codex", sessions: 6, tokens: 1_300_000_000 },
+  ],
   ...over,
 });
 
-const apiWith = (result: OrgUsageResult) => ({ getOrgUsage: () => Promise.resolve(result) }) as never;
+const apiWith = (result: OrgUsageResult, settings?: OrgSettingsResult, onPut?: (retentionDays: number | null) => void) => ({
+  getOrgUsage: () => Promise.resolve(result),
+  getOrgSettings: () => Promise.resolve(settings ?? { status: "denied" }),
+  putOrgSettings: (_scope: string, retentionDays: number | null) => {
+    onPut?.(retentionDays);
+    return Promise.resolve({ status: "ok", settings: { scope: "acme", retentionDays, updatedBy: "alice", updatedAt: null, viewerRole: "admin" } satisfies OrgSettingsView });
+  },
+}) as never;
 
 describe("TeamUsage helpers", () => {
   it("formats tokens compactly and in full", () => {
@@ -83,7 +98,10 @@ describe("TeamUsage page", () => {
 
   it("refetches when the range tab changes", async () => {
     const calls: string[] = [];
-    const api = { getOrgUsage: (_scope: string, range: string) => { calls.push(range); return Promise.resolve({ status: "ok", usage: usage() } as OrgUsageResult); } } as never;
+    const api = {
+      getOrgUsage: (_scope: string, range: string) => { calls.push(range); return Promise.resolve({ status: "ok", usage: usage() } as OrgUsageResult); },
+      getOrgSettings: () => Promise.resolve({ status: "denied" }),
+    } as never;
     render(<TeamUsage api={api} scope="acme" stars={stars} />);
     await screen.findByText("zheng");
     fireEvent.click(screen.getByRole("tab", { name: "All Time" }));
@@ -104,5 +122,42 @@ describe("TeamUsage stale membership", () => {
     expect(await screen.findByText(/membership check has expired/)).toBeTruthy();
     const link = screen.getByText("Refresh membership");
     expect((link as HTMLAnchorElement).getAttribute("href")).toBe("https://api.example/login");
+  });
+});
+
+describe("TeamUsage models + settings", () => {
+  it("renders the models breakdown with agent chips", async () => {
+    render(<TeamUsage api={apiWith({ status: "ok", usage: usage() })} scope="acme" stars={stars} />);
+    expect(await screen.findByText("claude-fable-5")).toBeTruthy();
+    expect(screen.getByLabelText("models")).toBeTruthy();
+    expect(screen.getByText("6.0B")).toBeTruthy();          // model tokens, compact
+    expect(screen.getByText(/14 sessions/)).toBeTruthy();   // agent chip
+  });
+
+  it("hides the models section when no model rows were reported", async () => {
+    render(<TeamUsage api={apiWith({ status: "ok", usage: usage({ models: [], agents: [] }) })} scope="acme" stars={stars} />);
+    await screen.findByText("zheng");
+    expect(screen.queryByLabelText("models")).toBeNull();
+  });
+
+  it("shows admins an editable retention select and saves changes", async () => {
+    const puts: (number | null)[] = [];
+    const settings: OrgSettingsResult = { status: "ok", settings: { scope: "acme", retentionDays: null, updatedBy: null, updatedAt: null, viewerRole: "admin" } };
+    render(<TeamUsage api={apiWith({ status: "ok", usage: usage() }, settings, (d) => puts.push(d))} scope="acme" stars={stars} />);
+    const select = await screen.findByLabelText("usage retention");
+    fireEvent.change(select, { target: { value: "90" } });
+    await waitFor(() => expect(puts).toEqual([90]));
+    expect(await screen.findByText(/set by alice/)).toBeTruthy();
+  });
+
+  it("shows members the retention policy read-only, and nothing when settings are denied", async () => {
+    const settings: OrgSettingsResult = { status: "ok", settings: { scope: "acme", retentionDays: 30, updatedBy: "root", updatedAt: null, viewerRole: "member" } };
+    const { unmount } = render(<TeamUsage api={apiWith({ status: "ok", usage: usage() }, settings)} scope="acme" stars={stars} />);
+    expect(await screen.findByText("30 days")).toBeTruthy();
+    expect(screen.queryByLabelText("usage retention")).toBeNull(); // no select for members
+    unmount();
+    render(<TeamUsage api={apiWith({ status: "ok", usage: usage() })} scope="acme" stars={stars} />);
+    await screen.findByText("zheng");
+    expect(screen.queryByLabelText("org settings")).toBeNull();
   });
 });

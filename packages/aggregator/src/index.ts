@@ -22,4 +22,5 @@ export * from "./profile.js";
 export * from "./orgRubric.js";
 export * from "./orgCatalog.js";
 export * from "./usageDays.js";
+export * from "./orgSettings.js";
 export * from "./curatedSkills.js";
