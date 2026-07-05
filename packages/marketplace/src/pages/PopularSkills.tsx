@@ -4,6 +4,7 @@ import type { PopularSkillGroup, PopularSkillItem } from "../types";
 import { formatCount } from "../data";
 import { StarButton } from "../StarButton";
 import { Modal } from "../Modal";
+import { IconEye, IconGitHub, IconComment } from "../icons";
 import type { StarsCtx, ReviewsCtx } from "../Router";
 import type { StarState } from "../stars";
 import type { ReviewSummary } from "../reviews";
@@ -126,9 +127,10 @@ export function PopularSkills({ api, stars, reviews }: { api: ReturnType<typeof 
                       loginUrl={stars.loginUrl} api={stars.api} />
                     <a className="ex-skillcard-name" href={skillHref(g.sourceId, s.path)}>{s.name}</a>
                     {summary && summary.count > 0 && (
-                      <span className="ex-skillcard-rating" aria-label={`${summary.avg} of 5 from ${summary.count} reviews`}>
+                      <a className="ex-skillcard-rating" href={skillHref(g.sourceId, s.path)}
+                        aria-label={`${summary.avg} of 5 from ${summary.count} reviews`}>
                         ★ {summary.avg} · {summary.count}
-                      </span>
+                      </a>
                     )}
                     {s.description && <p className="ex-skillcard-desc">{s.description}</p>}
                     <a className="ex-skillcard-author" href={`https://github.com/${owner}`} target="_blank" rel="noreferrer">
@@ -137,16 +139,21 @@ export function PopularSkills({ api, stars, reviews }: { api: ReturnType<typeof 
                     <div className="ex-skillcard-foot">
                       <span className="ex-skillcard-division">{s.division}</span>
                       <span className="ex-skillcard-actions">
-                        <button type="button" className="ex-link-btn"
+                        <button type="button" className="ex-link-btn ex-action"
                           onClick={() => setPreview({ sourceId: g.sourceId, path: s.path, name: s.name })}>
-                          Preview
+                          <IconEye /> Preview
                         </button>
+                        <a className="ex-action" href={skillHref(g.sourceId, s.path)}>
+                          <IconComment /> Reviews
+                        </a>
                         <a
+                          className="ex-action"
                           href={`https://github.com/${g.repo}/blob/HEAD/${s.path}`}
                           target="_blank"
                           rel="noreferrer"
+                          aria-label="View on GitHub"
                         >
-                          View on GitHub →
+                          <IconGitHub /> GitHub
                         </a>
                       </span>
                     </div>

@@ -38,11 +38,21 @@ describe("PopularSkills", () => {
     expect(screen.getByText("Builds and ships AI features end to end.")).toBeTruthy();
     expect(screen.getByText("brainstorming")).toBeTruthy();
 
-    const links = screen.getAllByText("View on GitHub →");
+    const links = screen.getAllByRole("link", { name: "View on GitHub" });
     expect(links).toHaveLength(2);
     expect(links[0]!.getAttribute("href")).toBe("https://github.com/o/agency-agents/blob/HEAD/engineering/ai-engineer.md");
     expect(links[0]!.getAttribute("target")).toBe("_blank");
     expect(links[0]!.getAttribute("rel")).toBe("noreferrer");
+  });
+
+  it("renders a Reviews action linking each card to its /skill/… page", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => res({ groups })));
+    render(<PopularSkills api={makeApi("")} stars={stars} reviews={reviews} />);
+    await screen.findByText("ai-engineer");
+    const reviewLinks = screen.getAllByRole("link", { name: "Reviews" });
+    expect(reviewLinks).toHaveLength(2);
+    expect(reviewLinks[0]!.getAttribute("href")).toBe("/skill/agency-agents/engineering/ai-engineer.md");
+    expect(reviewLinks[1]!.getAttribute("href")).toBe("/skill/matt-skills/productivity/brainstorming.md");
   });
 
   it("renders a per-card author byline linking to the repo owner", async () => {
@@ -105,8 +115,10 @@ describe("PopularSkills", () => {
       getSummaries: async () => ({ "matt-skills/productivity/brainstorming.md": { avg: 4.6, count: 12 } }) } } as never;
     render(<PopularSkills api={makeApi("")} stars={stars} reviews={withSummary} />);
     // brainstorming card has a summary; ai-engineer does not → only one aggregate on the board
-    expect(await screen.findByText("★ 4.6 · 12")).toBeTruthy();
+    const chip = await screen.findByText("★ 4.6 · 12");
     expect(screen.getAllByText(/★ \d/).filter((el) => /·/.test(el.textContent ?? ""))).toHaveLength(1);
+    // the aggregate chip links to the skill page, same as the title
+    expect(chip.getAttribute("href")).toBe("/skill/matt-skills/productivity/brainstorming.md");
     const title = screen.getByText("brainstorming");
     expect(title.getAttribute("href")).toBe("/skill/matt-skills/productivity/brainstorming.md");
   });

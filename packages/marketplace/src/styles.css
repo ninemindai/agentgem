@@ -392,7 +392,11 @@ h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: -0.005em
 .ex-skillcard > .ex-star { position: absolute; top: 12px; right: 13px; z-index: 1; }
 .ex-skillcard-author { align-self: flex-start; color: var(--muted); font-size: 0.78rem; text-decoration: none; transition: color var(--t); }
 .ex-skillcard-author:hover { color: var(--brand-strong); }
-.ex-skillcard-actions { display: inline-flex; align-items: center; gap: 12px; white-space: nowrap; }
+.ex-skillcard-actions { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; white-space: nowrap; }
+.ex-action { display: inline-flex; align-items: center; gap: 5px; }
+.ex-action .ex-icon { flex: none; opacity: 0.85; }
+a.ex-action { color: var(--muted); text-decoration: none; font-weight: 500; transition: color var(--t); }
+a.ex-action:hover { color: var(--brand-strong); }
 .ex-link-btn { font: inherit; font-weight: 500; color: var(--muted); background: none; border: none; padding: 0; cursor: pointer; transition: color var(--t); }
 .ex-link-btn:hover { color: var(--brand-strong); }
 
@@ -414,7 +418,8 @@ h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: -0.005em
 a.ex-skillcard-name { text-decoration: none; color: var(--ink); display: block; }
 a.ex-skillcard-name:hover { color: var(--brand-strong); }
 /* crowd review aggregate on the card — distinct from the personal ★ star pill (top-right) */
-.ex-skillcard-rating { align-self: flex-start; color: var(--brand-strong); font-size: 0.78rem; font-variant-numeric: tabular-nums; }
+.ex-skillcard-rating { align-self: flex-start; color: var(--brand-strong); font-size: 0.78rem; font-variant-numeric: tabular-nums; text-decoration: none; transition: color var(--t); }
+a.ex-skillcard-rating:hover { text-decoration: underline; }
 
 /* Reviews section (catalog-skill page) */
 .ex-reviews-summary { color: var(--brand-strong); font-size: 0.9rem; font-variant-numeric: tabular-nums; }
