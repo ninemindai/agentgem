@@ -62,8 +62,12 @@ type View =
   | { status: "error"; message: string }
   | { status: "ok"; usage: OrgUsage };
 
-/** The ?member= drill-down target from the current URL (same route, query-param navigation). */
-const memberFromLocation = (): string => new URLSearchParams(window.location.search).get("member") ?? "";
+/** The facet filters from the current URL (same route, query-param navigation). */
+export interface UsageFilters { member: string; agent: string; model: string }
+const filtersFromLocation = (): UsageFilters => {
+  const p = new URLSearchParams(window.location.search);
+  return { member: p.get("member") ?? "", agent: p.get("agent") ?? "", model: p.get("model") ?? "" };
+};
 
 /** Leaderboard rows as a CSV document (spreadsheet-ready export of the current view). Pure. */
 export function membersCsv(usage: OrgUsage): string {
@@ -93,21 +97,32 @@ function downloadCsv(usage: OrgUsage): void {
 
 export function TeamUsage({ api, scope, stars }: { api: ReturnType<typeof makeApi>; scope: string; stars: StarsCtx }) {
   const [range, setRange] = useState<OrgUsageRange>("7d");
-  const [member, setMember] = useState<string>(() => memberFromLocation());
+  const [filters, setFilters] = useState<UsageFilters>(() => filtersFromLocation());
+  const { member, agent, model } = filters;
   const [view, setView] = useState<View>({ status: "loading" });
 
-  // The drill-down navigates by query param on the same path; the Router only re-renders on
-  // pathname changes, so track ?member= here (App's link interception dispatches popstate).
+  // Facets navigate by query params on the same path; the Router only re-renders on pathname
+  // changes, so track ?member=&agent=&model= here (App's link interception dispatches popstate).
   useEffect(() => {
-    const onPop = () => setMember(memberFromLocation());
+    const onPop = () => setFilters(filtersFromLocation());
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
 
+  // Facet select changes write the URL (shareable, back-button-friendly) through the same
+  // pushState + synthetic-popstate mechanism App uses for link clicks.
+  const setFilter = (key: keyof UsageFilters, value: string) => {
+    const params = new URLSearchParams(window.location.search);
+    if (value) params.set(key, value); else params.delete(key);
+    const qs = params.toString();
+    window.history.pushState({}, "", window.location.pathname + (qs ? `?${qs}` : ""));
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  };
+
   useEffect(() => {
     let alive = true;
     setView({ status: "loading" });
-    api.getOrgUsage(scope, range, member || undefined)
+    api.getOrgUsage(scope, range, { member: member || undefined, agent: agent || undefined, model: model || undefined })
       .then((r) => {
         if (!alive) return;
         if (r.status === "unauthenticated") setView({ status: "signedout" });
@@ -119,7 +134,7 @@ export function TeamUsage({ api, scope, stars }: { api: ReturnType<typeof makeAp
       .catch((e) => { if (alive) setView({ status: "error", message: String((e as Error)?.message ?? e) }); });
     return () => { alive = false; };
     // api is a stable module-level singleton (App.tsx) — excluded so re-renders don't refetch.
-  }, [scope, range, member]);
+  }, [scope, range, member, agent, model]);
 
   return (
     <div className="ex-usage">
@@ -131,12 +146,30 @@ export function TeamUsage({ api, scope, stars }: { api: ReturnType<typeof makeAp
         <p className="ex-sub">Agent usage across the team — each member&apos;s local agentgem reports it on a schedule. Members only. Counts only work in <strong>{scope}</strong>-owned repos; personal and other-org sessions stay out.</p>
         {member && <p className="ex-usage-backlink"><a href={`/orgs/${encodeURIComponent(scope)}/usage`}>← Full team</a></p>}
       </header>
-      <div className="ex-tabs" role="tablist" aria-label="time range">
-        {RANGES.map((r) => (
-          <button key={r.value} type="button" role="tab" aria-selected={r.value === range}
-            className={"ex-tab" + (r.value === range ? " is-active" : "")}
-            onClick={() => setRange(r.value)}>{r.label}</button>
-        ))}
+      <div className="ex-usage-controls">
+        <div className="ex-tabs" role="tablist" aria-label="time range">
+          {RANGES.map((r) => (
+            <button key={r.value} type="button" role="tab" aria-selected={r.value === range}
+              className={"ex-tab" + (r.value === range ? " is-active" : "")}
+              onClick={() => setRange(r.value)}>{r.label}</button>
+          ))}
+        </div>
+        {view.status === "ok" && (view.usage.facets.agents.length > 0 || agent || model) && (
+          <div className="ex-usage-facets">
+            <select className="ex-usage-facet" aria-label="filter by agent" value={agent}
+              onChange={(e) => setFilter("agent", e.target.value)}>
+              <option value="">All agents</option>
+              {view.usage.facets.agents.map((a) => <option key={a} value={a}>{a}</option>)}
+              {agent && !view.usage.facets.agents.includes(agent) && <option value={agent}>{agent}</option>}
+            </select>
+            <select className="ex-usage-facet" aria-label="filter by model" value={model}
+              onChange={(e) => setFilter("model", e.target.value)}>
+              <option value="">All models</option>
+              {view.usage.facets.models.map((m) => <option key={m} value={m}>{m}</option>)}
+              {model && !view.usage.facets.models.includes(model) && <option value={model}>{model}</option>}
+            </select>
+          </div>
+        )}
       </div>
 
       {view.status === "loading" && <p className="ex-empty">Loading…</p>}
@@ -261,16 +294,25 @@ function TeamUsageBody({ usage, member, scope }: { usage: OrgUsage; member: stri
   const cells = heatCells(daily);
   const weeks = cells.length > 0 ? Math.max(...cells.map((c) => c.week)) + 1 : 0;
   const maxTokens = members[0]?.tokens ?? 0;
+  // Agent/model-filtered payloads are re-aggregated from the per-model slices, which only carry
+  // sessions + total tokens — hide the metrics that don't exist there.
+  const filtered = usage.filtered;
   return (
     <>
-      <div className="ex-usage-cards">
+      <div className={"ex-usage-cards" + (filtered ? " ex-usage-cards-filtered" : "")}>
         <StatCard label="Total Tokens" value={totals.tokens} sub={`${fmtFull(totals.tokens)} all counted`} />
-        <StatCard label="Input Tokens" value={totals.tokensIn} sub="prompts & context" />
-        <StatCard label="Output Tokens" value={totals.tokensOut} sub="responses & reasoning" />
-        <StatCard label="Cached Tokens" value={totals.tokensCache} sub={totals.tokensIn > 0 ? `${Math.round((totals.tokensCache / totals.tokensIn) * 100)}% hit rate` : "cache reads"} />
+        {filtered ? (
+          <StatCard label="Sessions" value={totals.sessions} sub="matching the filter" />
+        ) : (
+          <>
+            <StatCard label="Input Tokens" value={totals.tokensIn} sub="prompts & context" />
+            <StatCard label="Output Tokens" value={totals.tokensOut} sub="responses & reasoning" />
+            <StatCard label="Cached Tokens" value={totals.tokensCache} sub={totals.tokensIn > 0 ? `${Math.round((totals.tokensCache / totals.tokensIn) * 100)}% hit rate` : "cache reads"} />
+          </>
+        )}
       </div>
       <p className="ex-usage-pulse">
-        <span>{fmtFull(totals.sessions)} sessions</span> · <span>{fmtDuration(totals.activeMs)}</span> · <span>{usage.memberCount} active member{usage.memberCount === 1 ? "" : "s"}</span> · <span>{totals.activeDays} active day{totals.activeDays === 1 ? "" : "s"}</span>
+        <span>{fmtFull(totals.sessions)} sessions</span>{!filtered && <> · <span>{fmtDuration(totals.activeMs)}</span></>} · <span>{usage.memberCount} active member{usage.memberCount === 1 ? "" : "s"}</span> · <span>{totals.activeDays} active day{totals.activeDays === 1 ? "" : "s"}</span>
       </p>
 
       {cells.length > 0 && (
@@ -323,7 +365,7 @@ function TeamUsageBody({ usage, member, scope }: { usage: OrgUsage; member: stri
           <h2 className="ex-section-title">{member ? "Member" : "Leaderboard"}</h2>
           <button type="button" className="ex-usage-export" onClick={() => downloadCsv(usage)}>Export CSV</button>
         </div>
-        <p className="ex-usage-cols" aria-hidden="true"><span>rank · member</span><span>sessions</span><span>duration</span><span>tokens</span></p>
+        <p className="ex-usage-cols" aria-hidden="true"><span>rank · member</span><span>sessions</span><span>{filtered ? "" : "duration"}</span><span>tokens</span></p>
         <ol className="ex-usage-rows">
           {members.map((m, i) => {
             const rank = i + 1;
@@ -341,7 +383,7 @@ function TeamUsageBody({ usage, member, scope }: { usage: OrgUsage; member: stri
                   </span>
                 </span>
                 <span className="ex-usage-sessions">{fmtFull(m.sessions)}</span>
-                <span className="ex-usage-duration">{fmtDuration(m.activeMs)}</span>
+                <span className="ex-usage-duration">{filtered ? "—" : fmtDuration(m.activeMs)}</span>
                 <span className="ex-usage-tokens">
                   <span className="ex-usage-tokens-n">{fmtFull(m.tokens)}</span>
                   <span className="ex-usage-bar"><span className="ex-usage-bar-fill" style={{ width: `${maxTokens > 0 ? Math.max(2, Math.round((m.tokens / maxTokens) * 100)) : 0}%` }} /></span>

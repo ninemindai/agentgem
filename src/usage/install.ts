@@ -136,14 +136,19 @@ export function orgUsageHandler(deps: UsageDeps) {
         if (role !== "admin") { res.status(403).json({ error: "dashboard disabled by an org admin", reason: "disabled" }); return; }
       }
     }
-    // Optional drill-down: narrow everything to one member, still inside the org-scope boundary.
+    // Optional facets: narrow to one member (drill-down) and/or one agent/model. All compose,
+    // and all stay inside the org-scope attribution boundary.
     const member = String((req.query.member as string | undefined) ?? "").trim();
-    if (member.length > 100) { res.status(400).json({ error: "invalid member" }); return; }
+    const agent = String((req.query.agent as string | undefined) ?? "").trim();
+    const model = String((req.query.model as string | undefined) ?? "").trim();
+    if (member.length > 100 || agent.length > 100 || model.length > 100) { res.status(400).json({ error: "invalid filter" }); return; }
     // Personal view folds in unattributed ("") rows — sessions outside any repo are still the
     // caller's own work. Org views stay strictly scope-attributed (the anti-leak boundary).
     res.json(await buildOrgUsage(deps.db, scope, range as OrgUsageRange, Date.now(), {
       includeUnattributed: scope === who.login,
       ...(member ? { memberLogin: member } : {}),
+      ...(agent ? { agent } : {}),
+      ...(model ? { model } : {}),
     }));
   };
 }

@@ -404,3 +404,61 @@ describe("v3: member drill-down + visibility toggle", () => {
     expect(badDays._status).toBe(400);
   });
 });
+
+describe("agent/model facets", () => {
+  const slice = (over: Partial<{ scope: string; date: string; agent: string; model: string; sessions: number; tokens: number }> = {}) =>
+    ({ scope: "acme", date: "2026-07-01", agent: "claude", model: "claude-fable-5", sessions: 3, tokens: 900, ...over });
+
+  async function seeded() {
+    const db = await makeTestDb();
+    const alice = await member(db, "alice", ["acme"]);
+    const bob = await member(db, "bob", ["acme"]);
+    await recordUsageDays(db, alice.a.id, "m", [day("2026-07-01", { tokensIn: 10 })]);
+    await recordUsageDays(db, bob.a.id, "m", [day("2026-07-02", { tokensIn: 20 })]);
+    await recordUsageModels(db, alice.a.id, "m", [slice(), slice({ agent: "codex", model: "gpt-5.2-codex", tokens: 100 })]);
+    await recordUsageModels(db, bob.a.id, "m", [slice({ date: "2026-07-02", tokens: 500 })]);
+    return { db, alice, bob };
+  }
+
+  it("unfiltered payload carries facets and filtered:false, day-rollup metrics intact", async () => {
+    const { db } = await seeded();
+    const u = await buildOrgUsage(db, "acme", "all");
+    expect(u.filtered).toBe(false);
+    expect(u.facets.agents).toEqual(["claude", "codex"]);
+    expect(u.facets.models).toEqual(["claude-fable-5", "gpt-5.2-codex"]);
+    expect(u.totals.tokensIn).toBe(30); // from usage_days, untouched
+  });
+
+  it("agent filter re-aggregates members/daily/models from the slices (sessions+tokens only)", async () => {
+    const { db } = await seeded();
+    const u = await buildOrgUsage(db, "acme", "all", Date.now(), { agent: "claude" });
+    expect(u.filtered).toBe(true);
+    expect(u.members.map((m) => [m.login, m.tokens, m.sessions])).toEqual([["alice", 900, 3], ["bob", 500, 3]]);
+    expect(u.members.every((m) => m.tokensIn === 0 && m.activeMs === 0)).toBe(true); // zeroed, not fabricated
+    expect(u.daily.map((d) => [d.date, d.tokens])).toEqual([["2026-07-01", 900], ["2026-07-02", 500]]);
+    expect(u.models.every((m) => m.agent === "claude")).toBe(true);
+    expect(u.facets.agents).toEqual(["claude", "codex"]); // options stay unfiltered
+    expect(u.totals.tokens).toBe(1400);
+  });
+
+  it("model filter composes with the member drill-down and the scope boundary", async () => {
+    const { db, alice } = await seeded();
+    await recordUsageModels(db, alice.a.id, "m", [slice({ scope: "other-org", model: "leaky", tokens: 9999 })]);
+    const u = await buildOrgUsage(db, "acme", "all", Date.now(), { model: "claude-fable-5", memberLogin: "ALICE" });
+    expect(u.members.map((m) => m.login)).toEqual(["alice"]);
+    expect(u.totals.tokens).toBe(900);
+    expect(u.facets.models).not.toContain("leaky"); // other-scope slices never leak into facets
+  });
+
+  it("GET /api/usage/org passes agent/model through and 400s oversized values", async () => {
+    const { db } = await seeded();
+    const { token } = await member(db, "carol", ["acme"]);
+    const ok = mockRes();
+    await orgUsageHandler(deps(db))(req({ headers: { cookie: `${SESSION_COOKIE}=${token}` }, query: { scope: "acme", range: "all", agent: "codex" } }) as any, ok as any);
+    expect((ok._body as any).filtered).toBe(true);
+    expect((ok._body as any).totals.tokens).toBe(100);
+    const bad = mockRes();
+    await orgUsageHandler(deps(db))(req({ headers: { cookie: `${SESSION_COOKIE}=${token}` }, query: { scope: "acme", model: "x".repeat(101) } }) as any, bad as any);
+    expect(bad._status).toBe(400);
+  });
+});

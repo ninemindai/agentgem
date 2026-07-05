@@ -856,3 +856,12 @@ a.ex-skillcard-rating:hover { text-decoration: underline; }
 .ex-usage-drill { color: var(--brand-strong); text-decoration: none; }
 .ex-usage-drill:hover { text-decoration: underline; }
 .ex-usage-settings-toggle { display: inline-flex; align-items: center; gap: 5px; color: var(--ink-2); font-size: 0.82rem; }
+
+/* ── Team Pulse facets: agent/model filters ────────────────────────────────────── */
+.ex-usage-controls { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.ex-usage-facets { display: flex; gap: 8px; margin-bottom: 14px; }
+.ex-usage-facet {
+  font-size: 0.84rem; padding: 5px 10px; border: 1px solid var(--line-2); border-radius: var(--r-sm);
+  background: var(--surface); color: var(--ink); max-width: 220px;
+}
+.ex-usage-cards-filtered { grid-template-columns: repeat(2, 1fr); }
