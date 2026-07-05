@@ -38,7 +38,7 @@ Sharing a Gem (store-and-forward over NATS; set $NATS_URL, default nats://127.0.
   agentgem warm --watch                 Background daemon: keep insights/scorecard caches warm on change
   agentgem warm --install-service       Install an OS unit (launchd/systemd) to auto-start the daemon at login
   agentgem warm --uninstall-service     Remove the OS unit
-  agentgem usage report                 Push local daily usage rollups to your team dashboard now
+  agentgem usage report [--backfill]    Push local daily usage rollups now (--backfill: full history, not just 30d)
   agentgem verify <archive-dir>         Verify a .gem archive across local agents (--agents claude,codex; --fetch)
   agentgem learn [root]                 Distill the latest session into the review queue (--session <id>; --dir <claude-home>)
   agentgem sources install <src> <path>  Install a curated persona as a local skill (--dry-run)

@@ -153,9 +153,25 @@ export interface ReportDeps {
   base?: string;
   machine?: string;
   force?: boolean; // manual `agentgem usage report` skips the 6h throttle
+  fullHistory?: boolean; // --backfill: report every day in the transcripts, not just the 30-day window
 }
 
-/** One reporting pass: scan → bucket → POST. Never throws; returns why it was skipped. */
+// The server caps one report at 400 day-rows and 2000 model-rows (normalizeUsageReport /
+// normalizeUsageModels). The normal 30-day window fits easily; a full-history backfill can
+// exceed both, so batches are split and sent as multiple idempotent POSTs.
+const DAYS_PER_POST = 400;
+const MODELS_PER_POST = 2000;
+
+const chunk = <T>(arr: T[], size: number): T[][] => {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+};
+
+/** One reporting pass: scan → bucket → POST (chunked to the server's per-request caps).
+ *  Never throws; returns why it was skipped. `fullHistory` drops the 30-day window and
+ *  re-sends every day found in the local transcripts (the --backfill path) — safe because
+ *  the server upserts per (machine, scope, day), so a backfill converges, never double-counts. */
 export async function reportUsageOnce(deps: ReportDeps = {}): Promise<ReportOutcome> {
   if (process.env.AGENTGEM_USAGE_DISABLE === "1") return { ok: false, reason: "disabled" };
   const home = deps.home ?? agentgemHome();
@@ -167,21 +183,33 @@ export async function reportUsageOnce(deps: ReportDeps = {}): Promise<ReportOutc
     if (Number.isFinite(last) && now - last < REPORT_EVERY_MS) return { ok: false, reason: "throttled" };
   }
   const stats = await (deps.scan ?? ((n: number) => scanSessionsCached(n)))(now);
-  const sinceMs = now - REPORT_WINDOW_DAYS * DAY_MS;
+  const sinceMs = deps.fullHistory ? 0 : now - REPORT_WINDOW_DAYS * DAY_MS;
   const days = usageDaysFromStats(stats, sinceMs);
   if (days.length === 0) return { ok: false, reason: "no-usage" };
   const models = usageModelsFromStats(stats, sinceMs);
   const base = deps.base ?? bindConfig().base ?? "https://api.agentgem.ai";
+  const machine = deps.machine ?? hostname();
   try {
-    const res = await (deps.fetchImpl ?? fetch)(new URL("/api/usage/report", base), {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.sessionToken}` },
-      body: JSON.stringify({ machine: deps.machine ?? hostname(), days, models }),
-    });
-    if (!res.ok) return { ok: false, reason: `http-${res.status}` };
-    const out = (await res.json()) as { recorded?: number };
+    // Pair up day- and model-chunks into requests; the two arrays are independent server-side,
+    // so any batch failure just leaves earlier (already-upserted) batches in place — the next
+    // run re-sends and converges.
+    const dayChunks = chunk(days, DAYS_PER_POST);
+    const modelChunks = chunk(models, MODELS_PER_POST);
+    let recorded = 0;
+    for (let i = 0; i < Math.max(dayChunks.length, modelChunks.length); i++) {
+      const res = await (deps.fetchImpl ?? fetch)(new URL("/api/usage/report", base), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.sessionToken}` },
+        // A models-only tail batch still needs a non-empty days array to pass validation —
+        // resend the last day-chunk's final row (idempotent overwrite, no effect).
+        body: JSON.stringify({ machine, days: dayChunks[i] ?? [days[days.length - 1]], models: modelChunks[i] ?? [] }),
+      });
+      if (!res.ok) return { ok: false, reason: `http-${res.status}` };
+      const out = (await res.json()) as { recorded?: number };
+      recorded += out.recorded ?? (dayChunks[i]?.length ?? 0);
+    }
     writeReportState(home, new Date(now).toISOString());
-    return { ok: true, recorded: out.recorded ?? days.length };
+    return { ok: true, recorded };
   } catch (err) {
     return { ok: false, reason: (err as Error)?.message ?? "network" };
   }
@@ -203,17 +231,20 @@ export function startUsageReporter(deps: ReportDeps & { intervalMs?: number } = 
   return { stop() { clearInterval(t); } };
 }
 
-/** `agentgem usage report` — manual, un-throttled push; prints the outcome. */
+/** `agentgem usage report [--backfill]` — manual, un-throttled push; prints the outcome.
+ *  --backfill re-sends the FULL local history (all transcript days), for first-time setup or a
+ *  machine that was offline past the 30-day window. Idempotent: re-running never double-counts. */
 export async function runUsageCommand(argv: string[], deps: ReportDeps = {}): Promise<number> {
   if (argv[0] !== "report") {
-    console.error("agentgem usage: use `agentgem usage report` to push usage rollups now");
+    console.error("agentgem usage: use `agentgem usage report [--backfill]` to push usage rollups now");
     return 1;
   }
-  const out = await reportUsageOnce({ ...deps, force: true });
-  if (out.ok) { console.log(`agentgem usage: reported ${out.recorded} day(s)`); return 0; }
+  const fullHistory = argv.includes("--backfill");
+  const out = await reportUsageOnce({ ...deps, force: true, fullHistory });
+  if (out.ok) { console.log(`agentgem usage: ${fullHistory ? "backfilled" : "reported"} ${out.recorded} day-row(s)`); return 0; }
   if (out.reason === "signed-out") { console.error("agentgem usage: not signed in — run `agentgem bind` first"); return 1; }
   if (out.reason === "disabled") { console.error("agentgem usage: reporting is disabled (AGENTGEM_USAGE_DISABLE=1)"); return 1; }
-  if (out.reason === "no-usage") { console.log("agentgem usage: no local sessions in the last 30 days — nothing to report"); return 0; }
+  if (out.reason === "no-usage") { console.log(`agentgem usage: no local sessions ${fullHistory ? "found" : "in the last 30 days"} — nothing to report`); return 0; }
   console.error(`agentgem usage: report failed (${out.reason})`);
   return 1;
 }

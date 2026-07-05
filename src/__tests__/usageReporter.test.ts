@@ -5,7 +5,7 @@ import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SessionStat } from "@agentgem/insight";
-import { usageDaysFromStats, usageModelsFromStats, reportUsageOnce, startUsageReporter, ownerFromRemoteUrl, scopeForCwd, REPORT_WINDOW_DAYS } from "../usage/reporter.js";
+import { usageDaysFromStats, usageModelsFromStats, reportUsageOnce, startUsageReporter, runUsageCommand, ownerFromRemoteUrl, scopeForCwd, REPORT_WINDOW_DAYS } from "../usage/reporter.js";
 
 const DAY = 86_400_000;
 const T0 = Date.parse("2026-07-04T10:00:00Z");
@@ -169,5 +169,62 @@ describe("usageModelsFromStats", () => {
       { scope: "ninemind", date: "2026-07-04", agent: "claude", model: "claude-fable-5", sessions: 2, tokens: 118 },
       { scope: "ninemind", date: "2026-07-04", agent: "codex", model: "gpt-5.2-codex", sessions: 1, tokens: 7 },
     ]);
+  });
+});
+
+describe("--backfill (full history, chunked)", () => {
+  it("fullHistory drops the 30-day window and chunks POSTs to the server caps", async () => {
+    // 450 distinct days -> 450 day-rows and 450 model-rows: must split into 400 + 50 day chunks.
+    const stats = Array.from({ length: 450 }, (_, i) =>
+      stat({ sessionId: `s${i}`, startMs: T0 - i * DAY, endMs: T0 - i * DAY + 60_000 }));
+    const bodies: { days: unknown[]; models: unknown[] }[] = [];
+    const fetchImpl = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { days: unknown[]; models: unknown[] };
+      bodies.push(body);
+      return { ok: true, json: async () => ({ recorded: body.days.length }) } as unknown as Response;
+    });
+    const out = await reportUsageOnce({
+      home: tmpHome(), now: T0, force: true, fullHistory: true,
+      session: session as never, base: "https://agg.example", machine: "m",
+      scan: async () => stats, fetchImpl: fetchImpl as never,
+    });
+    expect(out).toEqual({ ok: true, recorded: 450 });
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0].days).toHaveLength(400);
+    expect(bodies[1].days).toHaveLength(50);
+    expect(bodies[0].models.length + bodies[1].models.length).toBe(450);
+    expect(bodies.every((b) => b.days.length > 0 && b.days.length <= 400 && b.models.length <= 2000)).toBe(true);
+  });
+
+  it("without fullHistory the 30-day window still applies", async () => {
+    const old = stat({ endMs: T0 - (REPORT_WINDOW_DAYS + 5) * DAY, startMs: T0 - (REPORT_WINDOW_DAYS + 5) * DAY - 1000 });
+    const bodies: { days: { date: string }[] }[] = [];
+    const fetchImpl = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return { ok: true, json: async () => ({ recorded: 1 }) } as unknown as Response;
+    });
+    await reportUsageOnce({ home: tmpHome(), now: T0, force: true, session: session as never, base: "https://agg.example", scan: async () => [stat(), old], fetchImpl: fetchImpl as never });
+    expect(bodies[0].days).toHaveLength(1); // the old day is excluded
+
+    await reportUsageOnce({ home: tmpHome(), now: T0, force: true, fullHistory: true, session: session as never, base: "https://agg.example", scan: async () => [stat(), old], fetchImpl: fetchImpl as never });
+    expect(bodies[1].days).toHaveLength(2); // backfill includes it
+  });
+
+  it("runUsageCommand parses --backfill and reports the summed rows", async () => {
+    const fetchImpl = vi.fn(async () => ({ ok: true, json: async () => ({ recorded: 2 }) }) as unknown as Response);
+    const logs: string[] = [];
+    const orig = console.log;
+    console.log = (m: string) => logs.push(m);
+    try {
+      const code = await runUsageCommand(["report", "--backfill"], {
+        home: tmpHome(), now: T0, session: session as never, base: "https://agg.example",
+        scan: async () => [stat(), stat({ sessionId: "s2", endMs: T0 - 100 * DAY, startMs: T0 - 100 * DAY - 1000 })],
+        fetchImpl: fetchImpl as never,
+      });
+      expect(code).toBe(0);
+      expect(logs[0]).toContain("backfilled 2 day-row(s)");
+    } finally {
+      console.log = orig;
+    }
   });
 });
