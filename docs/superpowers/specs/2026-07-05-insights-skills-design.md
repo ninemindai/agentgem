@@ -6,7 +6,7 @@ _Base: `origin/main` @ 26980ba (worktree `agentgem-insights-skills`)._
 
 Package the reverse-engineered Claude Code `/insights` pipeline (see
 `docs/proposals/session-insights.md`) as **skills that ride AgentGem's own tool
-surface**, following the `assets/skills/agentgem-share` precedent (a short
+surface**, following the `skills/agentgem-share` precedent (a short
 procedure SKILL.md that drives a companion AgentGem MCP server, guarded by a
 content test).
 
@@ -61,7 +61,7 @@ transcript where `/insights` ran:
 
 ## Deliverables
 
-### 1. `assets/skills/agentgem-insights/SKILL.md`
+### 1. `skills/agentgem-insights/SKILL.md`
 
 The `/insights` analog. Procedure:
 
@@ -86,7 +86,7 @@ Honesty rules: outcomes are the judging agent's opinion (never "verified");
 friction claims must be grounded in a transcript read; no invented numbers —
 counts come from tool output.
 
-### 2. `assets/skills/agentgem-retro/SKILL.md`
+### 2. `skills/agentgem-retro/SKILL.md`
 
 Focused friction retro — a distinct trigger ("what keeps going wrong", "how
 can I improve my habits") that doesn't warrant the full report. Drives
@@ -106,10 +106,19 @@ Content-guard test mirroring `src/distill/__tests__/shareSkill.test.ts`:
 - the publish twist is present (mentions `agentgem-share`);
 - the retro skill requires transcript verification before advising.
 
+## Placement: top-level `skills/`
+
+Skills live at `skills/<name>/SKILL.md` (moved from `assets/skills/`) because
+that is a **standard location the skills.sh CLI scans** (`npx skills add
+ninemindai/agentgem`); non-standard paths are only found by a recursive
+fallback that stops running as soon as any standard location matches — so a
+partial move would have hidden the skills left behind in `assets/skills/`.
+All three first-party skills (`agentgem-share` included) moved together.
+
 ## Non-goals
 
 - No engine changes (`packages/insight` untouched).
-- No registration/manifest changes — `assets/skills/` is the existing home for
+- No registration/manifest changes — `skills/` is the existing home for
   first-party skills; distribution is via the normal Gem/marketplace paths.
 - No new MCP tools; the skills only orchestrate existing ones.
 

@@ -1,4 +1,4 @@
-<!-- assets/skills/agentgem-retro/SKILL.md -->
+<!-- skills/agentgem-retro/SKILL.md -->
 ---
 name: agentgem-retro
 description: Use when the user asks what keeps going wrong in their coding sessions, wants a quick retro on their agent habits, or asks how to make sessions smoother. Verifies detector findings against real transcripts before advising. For a full narrative report, use agentgem-insights instead.

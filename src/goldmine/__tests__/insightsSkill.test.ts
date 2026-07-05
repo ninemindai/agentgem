@@ -6,7 +6,7 @@ import { join } from "node:path";
 const read = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
 
 describe("agentgem-insights skill", () => {
-  const md = () => read("assets/skills/agentgem-insights/SKILL.md");
+  const md = () => read("skills/agentgem-insights/SKILL.md");
 
   it("exists with frontmatter name and description", () => {
     expect(md()).toMatch(/^<!--[^]*?-->\n---\nname: agentgem-insights\ndescription: /);
@@ -36,7 +36,7 @@ describe("agentgem-insights skill", () => {
 });
 
 describe("agentgem-retro skill", () => {
-  const md = () => read("assets/skills/agentgem-retro/SKILL.md");
+  const md = () => read("skills/agentgem-retro/SKILL.md");
 
   it("exists with frontmatter name and description", () => {
     expect(md()).toMatch(/^<!--[^]*?-->\n---\nname: agentgem-retro\ndescription: /);
