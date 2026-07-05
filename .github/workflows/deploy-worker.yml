@@ -11,6 +11,7 @@ on:
     paths:
       - 'website/**'
       - 'docs/**'
+      - 'packages/marketplace/**'
   workflow_dispatch:
 
 permissions:
@@ -33,6 +34,29 @@ jobs:
       # in its own cache, independent of the repo's deps.
       - name: Deploy Worker
         working-directory: website/edge
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx --yes wrangler@4.103.0 deploy
+
+  # The public marketplace SPA (packages/marketplace) as a Workers Static Assets
+  # deploy — the Cloudflare twin of the agentgem-app Render static site. Serves at
+  # agentgem-app.workers.dev until the app.agentgem.ai cutover (see the CUTOVER
+  # steps in packages/marketplace/wrangler.jsonc).
+  deploy-marketplace:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Build marketplace
+        env:
+          VITE_API_BASE: https://api.agentgem.ai
+        run: pnpm --filter @agentgem/marketplace build
+      - name: Deploy Worker
+        working-directory: packages/marketplace
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: npx --yes wrangler@4.103.0 deploy

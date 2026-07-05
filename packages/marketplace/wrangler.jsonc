@@ -1,0 +1,34 @@
+// Cloudflare Worker that serves the public marketplace SPA (app.agentgem.ai) from
+// Workers Static Assets — assets-only, no worker script. Mirrors website/edge/ but
+// without markdown negotiation: the SPA needs only static serving + an SPA fallback
+// (Cloudflare rewrites unknown paths to /index.html, replacing Render's rewrite rule).
+//
+// Deployed by .github/workflows/deploy-worker.yml, which builds dist/ with
+// VITE_API_BASE=https://api.agentgem.ai first.
+//
+// CUTOVER (Render → Cloudflare), in order:
+//   1. In the Cloudflare dashboard (agentgem.ai zone), delete the existing
+//      app.agentgem.ai CNAME that points at Render — a Worker Custom Domain
+//      409-conflicts with any pre-existing record (see website/edge/wrangler.toml).
+//   2. Uncomment "routes" below and set "workers_dev" to false; push. The deploy
+//      provisions the proxied DNS record + edge cert automatically.
+//   3. Verify on https://app.agentgem.ai: sign-in, star, review (cookies/CORS are
+//      origin-exact; the origin doesn't change, so they should be untouched).
+//   4. Retire the agentgem-app static site: remove it from render.yaml and delete
+//      the service in the Render dashboard so it can't serve stale builds.
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "agentgem-app",
+  "compatibility_date": "2026-06-23",
+  "account_id": "8c60d6f6b0408a55768ec315042db967",
+
+  // Phase 1: verify at https://agentgem-app.workers.dev before touching DNS.
+  // Phase 2 (cutover): flip to false and enable the custom domain below.
+  "workers_dev": true,
+  // "routes": [{ "pattern": "app.agentgem.ai", "custom_domain": true }],
+
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}
