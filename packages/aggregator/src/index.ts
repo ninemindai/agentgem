@@ -24,3 +24,4 @@ export * from "./orgCatalog.js";
 export * from "./usageDays.js";
 export * from "./orgSettings.js";
 export * from "./curatedSkills.js";
+export * from "./githubApp.js";
