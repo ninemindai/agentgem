@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { makeTestDb, upsertAccount, createSession, generateSessionToken, setAccountScopes } from "@agentgem/aggregator";
+import { makeTestDb, upsertAccount, createSession, generateSessionToken, setAccountScopes, upsertInstallation, upsertOrgMember } from "@agentgem/aggregator";
 import { exportGem, type RegistryPublisher, type RegistrySource, type RegistryIndex } from "@agentgem/distribute";
 import { uploadPublishHandler } from "../uploadPublish.js";
 import { SESSION_COOKIE } from "../../auth/cookie.js";
@@ -87,5 +87,18 @@ describe("upload-publish", () => {
     await uploadPublishHandler(deps(db, publisher))(mkReq({ method:"OPTIONS", headers:{ origin:"https://app.agentgem.ai" } }) as any, res as any);
     expect(res._s).toBe(204);
     expect(res._h["access-control-allow-origin"]).toBe("https://app.agentgem.ai");
+  });
+  it("App-synced org member may publish to the org scope with no captured scopes", async () => {
+    const db = await makeTestDb();
+    const a = await upsertAccount(db, { provider: "github", accountId: "carol", login: "carol" });
+    const { token } = generateSessionToken();
+    await createSession(db, a.id, token, 60_000);
+    // NO setAccountScopes — membership arrives only via the App sync.
+    await upsertInstallation(db, { installationId: 7, orgScope: "acme", repoSelection: "selected", suspended: false });
+    await upsertOrgMember(db, "acme", "carol", "member");
+    const { publisher } = capturing();
+    const res = mkRes();
+    await uploadPublishHandler(deps(db, publisher))(mkReq({ headers: { cookie: `${SESSION_COOKIE}=${token}`, origin: "https://app.agentgem.ai" }, body: { scope: "acme", version: "1.0.0", bytesBase64: gemBase64() } }) as any, res as any);
+    expect(res._s).toBe(200);
   });
 });
