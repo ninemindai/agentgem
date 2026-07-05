@@ -194,6 +194,25 @@ export const orgSettings = pgTable("org_settings", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// GitHub App installations (one row per installed org) + the member lists they sync. Written by
+// the src/githubApp webhook/reconcile path; read by resolveOrgAccess as the authoritative
+// membership gate. org_scope and gh_login are lowercased at write time (case-insensitive gate).
+export const appInstallations = pgTable("app_installations", {
+  installationId: bigint("installation_id", { mode: "number" }).primaryKey(),
+  orgScope: text("org_scope").notNull(),
+  repoSelection: text("repo_selection").notNull().default("selected"),
+  suspended: boolean("suspended").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const orgMembers = pgTable("org_members", {
+  orgScope: text("org_scope").notNull(),
+  ghLogin: text("gh_login").notNull(),
+  role: text("role").notNull().default("member"),
+  syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.orgScope, t.ghLogin] })]);
+
 export const catalogGems = pgTable("catalog_gems", {
   gemKey: text("gem_key").notNull(),
   version: text("version").notNull(),
@@ -223,10 +242,12 @@ export const curatedSkills = pgTable("curated_skills", {
   stars: integer("stars").notNull().default(0),
   installs: integer("installs"),
   description: text("description"),
+  // Non-null = a private org source row (GitHub App), visible only to that org's members.
+  orgScope: text("org_scope"),
   indexedAt: timestamp("indexed_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.sourceId, t.path] })]);
 
-export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, webSessions, handoffCodes, stars, reviews, gemAdoptions, accountScopes, usageDays, usageDayModels, orgSettings, catalogGems, curatedSkills };
+export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, webSessions, handoffCodes, stars, reviews, gemAdoptions, accountScopes, usageDays, usageDayModels, orgSettings, catalogGems, curatedSkills, appInstallations, orgMembers };
 export type AppDb = PgDatabase<any, typeof schema>;
 
 // Idempotent DDL. (Schema-as-tables above is the query source of truth; this DDL
@@ -272,5 +293,10 @@ export async function ensureSchema(db: AppDb): Promise<void> {
   await db.execute(sql`create table if not exists catalog_gems (gem_key text not null, version text not null, published_by text not null, author text, description text, tags jsonb, artifact_kinds jsonb, type text, grade integer, created_at_ms bigint not null, primary key (gem_key, version))`);
   await db.execute(sql`create table if not exists curated_skills (source_id text not null, path text not null, division text not null, name text not null, repo text not null, source_label text not null, homepage text, stars int not null default 0, installs int, indexed_at timestamptz not null default now(), primary key (source_id, path))`);
   await db.execute(sql`alter table curated_skills add column if not exists description text`);
+  await db.execute(sql`alter table curated_skills add column if not exists org_scope text`);
+  await db.execute(sql`create index if not exists curated_skills_org_idx on curated_skills (org_scope) where org_scope is not null`);
   await db.execute(sql`create index if not exists curated_skills_rank on curated_skills (stars desc)`);
+  await db.execute(sql`create table if not exists app_installations (installation_id bigint primary key, org_scope text not null, repo_selection text not null default 'selected', suspended boolean not null default false, created_at timestamptz not null default now(), updated_at timestamptz not null default now())`);
+  await db.execute(sql`create index if not exists app_installations_scope_idx on app_installations (org_scope)`);
+  await db.execute(sql`create table if not exists org_members (org_scope text not null, gh_login text not null, role text not null default 'member', synced_at timestamptz not null default now(), primary key (org_scope, gh_login))`);
 }
