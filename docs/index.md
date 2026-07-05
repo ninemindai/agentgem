@@ -42,7 +42,8 @@ OpenAPI 3.1 document — so the web page and your local agent call exactly the s
 - **[A2A](a2a.md)** — export a Gem as an A2A Agent Card or a runnable agent-to-agent
   server so other agents can discover and call it.
 - **[Registry](registry.md)** — the GitHub-backed Gem registry: publish, resolve, merge,
-  and install composable Gems.
+  and install composable Gems. Its hosted face is the **public marketplace at
+  [app.agentgem.ai](https://app.agentgem.ai)** — browse, star, review, and install.
 - **[Testbed & run](testbed-and-run.md)** — install a Gem into a local testbed; run or
   deploy a materialized target locally, to Vercel, or to Cloudflare.
 

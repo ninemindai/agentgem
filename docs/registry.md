@@ -20,9 +20,10 @@ can't profit from a markdown file.** A Gem is a different kind of unit: not a fi
 | **Discovery** | A link you promote on X | Agent-to-agent over A2A *(roadmap)* |
 | **Revenue** | Stars, not dollars | Paid per call *(roadmap)* |
 
-The registry is where that shift starts: it's the [marketplace v0](../vision.html) — a
-catalog today, a live, callable [agent service network](../vision.html) as deploy-on-demand
-and per-call payments land.
+The registry is where that shift starts: it's the marketplace v0 — browse it live at
+[app.agentgem.ai](https://app.agentgem.ai) (star, review, preview, and install published
+Gems and curated skills). A catalog today, a live, callable
+[agent service network](../vision.html) as deploy-on-demand and per-call payments land.
 
 ## The operations
 

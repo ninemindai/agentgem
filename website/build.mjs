@@ -192,6 +192,7 @@ ${FONTS}
     <span class="tag">Docs</span>
     <span class="spacer"></span>
     <div class="nav-links">
+      <a href="https://app.agentgem.ai">Marketplace</a>
       <a href="${rel}docs/index.html">Docs</a>
       <a href="${rel}docs/getting-started.html">Get started</a>
       <a href="${rel}blog/index.html">Blog</a>

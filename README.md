@@ -22,7 +22,8 @@
 > A local web UI that introspects your coding-agent config, redacts secrets at
 > capture, and builds a portable, composable **Gem**.
 >
-> **[agentgem.ninemind.ai](https://agentgem.ninemind.ai)**
+> **[agentgem.ninemind.ai](https://agentgem.ninemind.ai)** ·
+> browse the public marketplace at **[app.agentgem.ai](https://app.agentgem.ai)**
 
 AgentGem reads your coding-agent config — skills, MCP servers, and `CLAUDE.md` —
 **redacts secrets the moment they're read**, and produces a **Gem**: a manifest + lock
@@ -57,8 +58,10 @@ call exactly the same thing.
   runnable A2A server so other agents can discover and call it.
 - **A native desktop app** — a [macOS/Windows/Linux build](docs/desktop.md) alongside the
   `npx` CLI, hosting the same local server in its own window.
-- **A GitHub-backed registry** — publish, resolve, merge, and install composable Gems over
-  the same archive format.
+- **A GitHub-backed registry + public marketplace** — publish, resolve, merge, and
+  install composable Gems over the same archive format, and browse published Gems and
+  curated skills at [app.agentgem.ai](https://app.agentgem.ai) — star, review, preview,
+  and copy an install command.
 - **An agent-native path** — every operation is also an MCP tool, so your local agent can
   build Gems over `/mcp` with no browser involved.
 

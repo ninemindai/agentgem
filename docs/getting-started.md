@@ -80,5 +80,6 @@ pnpm dev         # or: npm run dev   — build + start in one step
 pnpm test        # or: npm test      — tsc -b && vitest run
 ```
 
-Next: read **[Concepts](concepts.md)** to understand what's inside a Gem, or jump to
-**[Targets & deploy](targets.md)**.
+Next: read **[Concepts](concepts.md)** to understand what's inside a Gem, jump to
+**[Targets & deploy](targets.md)**, or browse what others have published on the
+**[public marketplace](https://app.agentgem.ai)**.
