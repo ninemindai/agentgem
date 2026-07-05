@@ -65,6 +65,23 @@ export async function upsertCuratedSkills(db: AppDb, rows: CuratedSkillRow[]): P
   return rows.length;
 }
 
+// Real display names for review targets. A review's target id is "<sourceId>/<path>", which equals
+// `source_id || '/' || path` here — so we reconstruct that key to look up the curated `name` (the
+// frontmatter name, e.g. "ask-matt", not the file basename "SKILL"). Returns targetId → name for
+// the rows that exist; callers fall back for skills not in the curated index.
+export async function skillNamesByTargetId(db: AppDb, targetIds: string[]): Promise<Record<string, string>> {
+  if (targetIds.length === 0) return {};
+  const list = sql.join(targetIds.map((t) => sql`${t}`), sql`, `);
+  const r = await db.execute<{ tid: string; name: string }>(sql`
+    select (source_id || '/' || path) as "tid", name
+    from curated_skills
+    where (source_id || '/' || path) in (${list})
+  `);
+  const out: Record<string, string> = {};
+  for (const row of r.rows) out[row.tid] = row.name;
+  return out;
+}
+
 // Ranked for the "Popular Skills" board: highest `installs` first (once the enrichment lands),
 // then stars, then name for a stable tie-break.
 export async function popularSkills(db: AppDb, opts: { limit?: number } = {}): Promise<CuratedSkillRow[]> {

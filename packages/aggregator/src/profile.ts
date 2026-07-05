@@ -8,6 +8,7 @@ import type { AppDb } from "./schema.js";
 import { accounts, accountBindings, catalogGems } from "./schema.js";
 import { starCounts } from "./stars.js";
 import { reviewsByAccount } from "./reviews.js";
+import { skillNamesByTargetId } from "./curatedSkills.js";
 import { gemAdoption } from "./aggregates.js";
 
 const LOGIN_RE = /^[A-Za-z0-9-]+$/; // GitHub login charset
@@ -40,11 +41,23 @@ export interface Profile {
 }
 
 // target_id "<sourceId>/<path>" → the concrete skill; name is the path basename sans .md.
-function parseSkillReview(r: { targetId: string; rating: number; body: string | null; createdAt: string }): ProfileReview {
+// Fallback name when the target isn't in the curated index: the file basename, but a bare
+// "SKILL.md" is named by its parent directory (the `<name>/SKILL.md` convention), not "SKILL".
+function fallbackName(path: string, targetId: string): string {
+  const segs = path.split("/").filter(Boolean);
+  let base = (segs.pop() || path || targetId).replace(/\.md$/i, "");
+  if (base.toUpperCase() === "SKILL" && segs.length > 0) base = segs[segs.length - 1]!;
+  return base;
+}
+
+function parseSkillReview(
+  r: { targetId: string; rating: number; body: string | null; createdAt: string },
+  curatedName?: string,
+): ProfileReview {
   const slash = r.targetId.indexOf("/");
   const sourceId = slash > 0 ? r.targetId.slice(0, slash) : r.targetId;
   const path = slash > 0 ? r.targetId.slice(slash + 1) : "";
-  const name = (path.split("/").pop() || path || r.targetId).replace(/\.md$/, "");
+  const name = curatedName ?? fallbackName(path, r.targetId);
   return { sourceId, path, name, rating: r.rating, body: r.body, createdAt: r.createdAt };
 }
 
@@ -98,7 +111,14 @@ export async function buildProfile(db: AppDb, rawLogin: string): Promise<Profile
 
   const totalStars = gems.reduce((s, g) => s + g.stars, 0);
   // Authored reviews (only accounts write them — a bind-only login with no accounts row has none).
-  const reviews = acct ? (await reviewsByAccount(db, acct.id, "skill")).map(parseSkillReview) : [];
+  // Authored reviews (only accounts write them). Resolve each target's real display name from the
+  // curated index (target id == `source_id || '/' || path`); fall back to the path for uncurated skills.
+  let reviews: ProfileReview[] = [];
+  if (acct) {
+    const authored = await reviewsByAccount(db, acct.id, "skill");
+    const nameMap = await skillNamesByTargetId(db, authored.map((r) => r.targetId));
+    reviews = authored.map((r) => parseSkillReview(r, nameMap[r.targetId]));
+  }
   const canonical = acct?.login ?? login;
   return { login: canonical, avatarUrl: acct?.avatarUrl ?? null, verified, githubUrl: `https://github.com/${canonical}`, totalStars, gems, reviews };
 }

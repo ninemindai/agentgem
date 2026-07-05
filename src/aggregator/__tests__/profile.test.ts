@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
 import { randomUUID } from "node:crypto";
-import { makeTestDb, buildProfile, upsertReview, accounts, accountBindings, catalogGems, producers, gemAdoptions, stars } from "@agentgem/aggregator";
+import { makeTestDb, buildProfile, upsertReview, accounts, accountBindings, catalogGems, curatedSkills, producers, gemAdoptions, stars } from "@agentgem/aggregator";
 
 async function star(db: never, gemKey: string, n: number) {
   for (let i = 0; i < n; i++) {
@@ -108,6 +108,25 @@ describe("buildProfile", () => {
     const byName = Object.fromEntries(p!.reviews.map((r) => [r.name, r]));
     expect(byName["brainstorming"]).toMatchObject({ sourceId: "matt-skills", path: "productivity/brainstorming.md", rating: 3, body: null });
     expect(byName["ai-engineer"]).toMatchObject({ sourceId: "agency-agents", path: "engineering/ai-engineer.md", rating: 5, body: "top notch" });
+  });
+
+  it("uses the curated skill name (not the file basename) for a SKILL.md-convention review", async () => {
+    const db = await makeTestDb();
+    const id = randomUUID();
+    await db.insert(accounts).values({ id, provider: "github", providerAccountId: "1", login: "octocat", avatarUrl: null });
+    await db.insert(curatedSkills).values({ sourceId: "matt-skills", path: "skills/engineering/ask-matt/SKILL.md", division: "engineering", name: "ask-matt", repo: "mattpocock/skills", sourceLabel: "mattpocock/skills" });
+    await upsertReview(db, id, "skill", "matt-skills/skills/engineering/ask-matt/SKILL.md", 5, "great router");
+    const p = await buildProfile(db, "octocat");
+    expect(p!.reviews[0]).toMatchObject({ name: "ask-matt", sourceId: "matt-skills", rating: 5 }); // NOT "SKILL"
+  });
+
+  it("falls back to the parent dir name for an uncurated SKILL.md review", async () => {
+    const db = await makeTestDb();
+    const id = randomUUID();
+    await db.insert(accounts).values({ id, provider: "github", providerAccountId: "1", login: "octocat", avatarUrl: null });
+    await upsertReview(db, id, "skill", "some-src/foo/bar-skill/SKILL.md", 4, null); // not in curated_skills
+    const p = await buildProfile(db, "octocat");
+    expect(p!.reviews[0].name).toBe("bar-skill"); // parent dir, not "SKILL"
   });
 
   it("has an empty reviews array for a profile with no authored reviews", async () => {
