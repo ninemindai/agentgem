@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, within, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { TeamUsage, membersCsv, fmtCompact, fmtFull, fmtDuration, heatCells } from "./TeamUsage";
 import type { OrgUsage, OrgSettingsView } from "../types";
 import type { OrgUsageResult, OrgSettingsResult } from "../api";
@@ -30,6 +30,8 @@ const usage = (over: Partial<OrgUsage> = {}): OrgUsage => ({
     { agent: "claude", sessions: 14, tokens: 6_000_000_000 },
     { agent: "codex", sessions: 6, tokens: 1_300_000_000 },
   ],
+  facets: { agents: ["claude", "codex"], models: ["claude-fable-5", "gpt-5.2-codex"] },
+  filtered: false,
   ...over,
 });
 
@@ -128,10 +130,10 @@ describe("TeamUsage stale membership", () => {
 describe("TeamUsage models + settings", () => {
   it("renders the models breakdown with agent chips", async () => {
     render(<TeamUsage api={apiWith({ status: "ok", usage: usage() })} scope="acme" stars={stars} />);
-    expect(await screen.findByText("claude-fable-5")).toBeTruthy();
-    expect(screen.getByLabelText("models")).toBeTruthy();
-    expect(screen.getByText("6.0B")).toBeTruthy();          // model tokens, compact
-    expect(screen.getByText(/14 sessions/)).toBeTruthy();   // agent chip
+    const modelsSection = await screen.findByLabelText("models");
+    expect(within(modelsSection).getByText("claude-fable-5")).toBeTruthy();
+    expect(within(modelsSection).getByText("6.0B")).toBeTruthy();          // model tokens, compact
+    expect(within(modelsSection).getByText(/14 sessions/)).toBeTruthy();   // agent chip
   });
 
   it("hides the models section when no model rows were reported", async () => {
@@ -173,7 +175,7 @@ describe("TeamUsage v3: drill-down, CSV, visibility", () => {
   it("leaderboard rows link to the org drill-down, and the member view narrows + offers a way back", async () => {
     const calls: (string | undefined)[] = [];
     const api = {
-      getOrgUsage: (_s: string, _r: string, member?: string) => { calls.push(member); return Promise.resolve({ status: "ok", usage: usage() } as OrgUsageResult); },
+      getOrgUsage: (_s: string, _r: string, filters?: { member?: string }) => { calls.push(filters?.member); return Promise.resolve({ status: "ok", usage: usage() } as OrgUsageResult); },
       getOrgSettings: () => Promise.resolve({ status: "denied" }),
     } as never;
     const { unmount } = render(<TeamUsage api={api} scope="acme" stars={stars} />);
@@ -225,5 +227,47 @@ describe("TeamUsage v3: drill-down, CSV, visibility", () => {
     render(<TeamUsage api={apiWith({ status: "ok", usage: usage() }, settings)} scope="alice" stars={stars} />);
     expect(await screen.findByLabelText("usage retention")).toBeTruthy();
     expect(screen.queryByLabelText("dashboard visible to members")).toBeNull();
+  });
+});
+
+describe("TeamUsage facets", () => {
+  it("renders agent/model selects from facets and refetches with the chosen filter in the URL", async () => {
+    const calls: ({ agent?: string; model?: string } | undefined)[] = [];
+    const api = {
+      getOrgUsage: (_s: string, _r: string, filters?: { agent?: string; model?: string }) => {
+        calls.push(filters);
+        const filtered = Boolean(filters?.agent || filters?.model);
+        return Promise.resolve({ status: "ok", usage: usage({ filtered }) } as OrgUsageResult);
+      },
+      getOrgSettings: () => Promise.resolve({ status: "denied" }),
+    } as never;
+    try {
+      render(<TeamUsage api={api} scope="acme" stars={stars} />);
+      const agentSelect = await screen.findByLabelText("filter by agent");
+      fireEvent.change(agentSelect, { target: { value: "codex" } });
+      await waitFor(() => expect(calls).toHaveLength(2));
+      expect(calls[1]).toMatchObject({ agent: "codex" });
+      expect(window.location.search).toContain("agent=codex");
+      // facet options stay visible while filtered (server returns unfiltered facets)
+      expect((screen.getByLabelText("filter by model") as HTMLSelectElement).options.length).toBeGreaterThan(1);
+    } finally {
+      window.history.pushState({}, "", "/orgs/acme/usage");
+    }
+  });
+
+  it("filtered view shows Tokens+Sessions cards and hides duration/cache metrics", async () => {
+    render(<TeamUsage api={apiWith({ status: "ok", usage: usage({ filtered: true, totals: { ...usage().totals, tokensIn: 0, tokensOut: 0, tokensCache: 0, activeMs: 0 } }) })} scope="acme" stars={stars} />);
+    await screen.findByText("zheng");
+    expect(screen.getByText("Sessions")).toBeTruthy();          // filtered second card
+    expect(screen.queryByText("Cached Tokens")).toBeNull();     // token-split cards hidden
+    expect(screen.queryByText("Input Tokens")).toBeNull();
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0); // duration column blanked
+  });
+
+  it("unfiltered view keeps the four token cards", async () => {
+    render(<TeamUsage api={apiWith({ status: "ok", usage: usage() })} scope="acme" stars={stars} />);
+    await screen.findByText("zheng");
+    expect(screen.getByText("Cached Tokens")).toBeTruthy();
+    expect(screen.queryByText("Sessions")).toBeNull();
   });
 });

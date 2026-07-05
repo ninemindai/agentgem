@@ -57,11 +57,14 @@ export function makeApi(base: string) {
       if (!res.ok) throw new Error(`/api/aggregator/org-catalog -> ${res.status}`);
       return JSON.parse(await res.text()) as OrgCatalog;
     },
-    getOrgUsage: async (scope: string, range: OrgUsageRange, member?: string): Promise<OrgUsageResult> => {
+    getOrgUsage: async (scope: string, range: OrgUsageRange, filters: { member?: string; agent?: string; model?: string } = {}): Promise<OrgUsageResult> => {
       // credentialed: the org dashboard is member-only, gated by the web session cookie.
-      // `member` narrows to one member's org-attributed usage (the drill-down).
-      const url = base + "/api/usage/org?scope=" + encodeURIComponent(scope) + "&range=" + range
-        + (member ? "&member=" + encodeURIComponent(member) : "");
+      // Filters compose: member (drill-down), agent, model — all inside the org-scope boundary.
+      const qs = (Object.entries(filters) as [string, string | undefined][])
+        .filter(([, v]) => v)
+        .map(([k, v]) => `&${k}=${encodeURIComponent(v as string)}`)
+        .join("");
+      const url = base + "/api/usage/org?scope=" + encodeURIComponent(scope) + "&range=" + range + qs;
       const res = await fetch(url, { credentials: "include" });
       if (res.status === 401) return { status: "unauthenticated" };
       if (res.status === 403) {

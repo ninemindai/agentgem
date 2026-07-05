@@ -135,6 +135,8 @@ export interface OrgUsage {
   daily: OrgUsageDay[];
   models: OrgUsageModel[];
   agents: OrgUsageAgent[];
+  facets: { agents: string[]; models: string[] };
+  filtered: boolean; // agent/model filter active: only sessions+tokens are real, other metrics zeroed
 }
 // Org dashboard settings — admin-writable (GitHub org role captured at sign-in).
 export interface OrgSettingsView { scope: string; retentionDays: number | null; dashboardEnabled: boolean; updatedBy: string | null; updatedAt: string | null; viewerRole: string }
