@@ -72,7 +72,7 @@ export function App() {
         </span>
       </header>
       <main className="ex-main"><Router api={api} me={me} stars={{ signedIn: !!me, loginUrl: () => auth.loginUrl(window.location.href), api: starsApi }} reviews={{ signedIn: !!me, loginUrl: () => auth.loginUrl(window.location.href), api: reviewsApi }} /></main>
-      <footer className="ex-footer">Trusted-adoption data, k-anonymized. <a href="https://agentgem.ai">agentgem.ai</a></footer>
+      <footer className="ex-footer">Early testbed — accounts, stars, and reviews may be reset. Trusted-adoption data, k-anonymized. <a href="https://agentgem.ai">agentgem.ai</a></footer>
     </div>
   );
 }

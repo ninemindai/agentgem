@@ -24,6 +24,7 @@
 >
 > **[agentgem.ninemind.ai](https://agentgem.ninemind.ai)** ·
 > browse the public marketplace at **[app.agentgem.ai](https://app.agentgem.ai)**
+> *(early testbed — hosted data may be reset)*
 
 AgentGem reads your coding-agent config — skills, MCP servers, and `CLAUDE.md` —
 **redacts secrets the moment they're read**, and produces a **Gem**: a manifest + lock
@@ -61,7 +62,8 @@ call exactly the same thing.
 - **A GitHub-backed registry + public marketplace** — publish, resolve, merge, and
   install composable Gems over the same archive format, and browse published Gems and
   curated skills at [app.agentgem.ai](https://app.agentgem.ai) — star, review, preview,
-  and copy an install command.
+  and copy an install command. The hosted marketplace is an **early testbed**: treat it
+  as a preview, and expect accounts, stars, and reviews to be reset occasionally.
 - **An agent-native path** — every operation is also an MCP tool, so your local agent can
   build Gems over `/mcp` with no browser involved.
 

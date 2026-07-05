@@ -22,7 +22,8 @@ can't profit from a markdown file.** A Gem is a different kind of unit: not a fi
 
 The registry is where that shift starts: it's the marketplace v0 — browse it live at
 [app.agentgem.ai](https://app.agentgem.ai) (star, review, preview, and install published
-Gems and curated skills). A catalog today, a live, callable
+Gems and curated skills). It's an **early testbed** — hosted data (accounts, stars,
+reviews) may be reset as the platform evolves. A catalog today, a live, callable
 [agent service network](../vision.html) as deploy-on-demand and per-call payments land.
 
 ## The operations
