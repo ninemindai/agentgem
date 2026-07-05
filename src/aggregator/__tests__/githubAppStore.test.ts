@@ -5,6 +5,7 @@ import {
   makeTestDb, upsertAccount, setAccountScopes,
   upsertInstallation, setInstallationSuspended, deleteInstallation, installationForScope, listInstallations,
   replaceOrgMembers, upsertOrgMember, deleteOrgMember, appOrgRole, resolveOrgAccess,
+  orgMembers,
 } from "@agentgem/aggregator";
 
 const inst = (over: Partial<{ installationId: number; orgScope: string; repoSelection: "all" | "selected"; suspended: boolean }> = {}) =>
@@ -29,6 +30,7 @@ describe("app installations store", () => {
     await deleteInstallation(db, 101);
     expect(await listInstallations(db)).toEqual([]);
     expect(await appOrgRole(db, "alice", "acme")).toBeNull();
+    expect(await db.select().from(orgMembers)).toEqual([]); // cascade pinned at the row level, not via the gate
   });
 });
 
