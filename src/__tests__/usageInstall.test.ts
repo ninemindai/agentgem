@@ -4,9 +4,9 @@ import { describe, it, expect } from "vitest";
 import { sql } from "drizzle-orm";
 import {
   makeTestDb, upsertAccount, createSession, generateSessionToken, setAccountScopes,
-  normalizeUsageReport, recordUsageDays, buildOrgUsage, rangeCutoff,
+  normalizeUsageReport, normalizeUsageModels, recordUsageDays, recordUsageModels, buildOrgUsage, rangeCutoff,
 } from "@agentgem/aggregator";
-import { reportHandler, orgUsageHandler } from "../usage/install.js";
+import { reportHandler, orgUsageHandler, orgSettingsHandler } from "../usage/install.js";
 import { SESSION_COOKIE } from "../auth/cookie.js";
 
 const webOrigins = ["https://app.agentgem.ai"];
@@ -214,5 +214,110 @@ describe("membership freshness on GET /api/usage/org", () => {
     const ok = mockRes();
     await orgUsageHandler(deps(db))(req({ headers: { cookie: `${SESSION_COOKIE}=${token}` }, query: { scope: "acme", range: "all" } }) as any, ok as any);
     expect(ok._status).toBe(200);
+  });
+});
+
+describe("model breakdowns", () => {
+  const modelRow = (over: Partial<{ scope: string; date: string; agent: string; model: string; sessions: number; tokens: number }> = {}) =>
+    ({ scope: "acme", date: "2026-07-01", agent: "claude", model: "claude-fable-5", sessions: 3, tokens: 500, ...over });
+
+  it("normalizeUsageModels drops malformed rows, lowercases scope, never rejects", () => {
+    expect(normalizeUsageModels(undefined)).toEqual([]);
+    expect(normalizeUsageModels([modelRow({ scope: " ACME " }), { date: "bad" }, "junk"])).toEqual([
+      { scope: "acme", date: "2026-07-01", agent: "claude", model: "claude-fable-5", sessions: 3, tokens: 500 },
+    ]);
+  });
+
+  it("records + aggregates per model/agent under the same scope boundary", async () => {
+    const db = await makeTestDb();
+    const { a } = await member(db, "alice", ["acme"]);
+    await recordUsageDays(db, a.id, "m", [day("2026-07-01")]);
+    await recordUsageModels(db, a.id, "m", [
+      modelRow({ tokens: 900 }),
+      modelRow({ date: "2026-07-02", tokens: 100 }),                         // same model, second day
+      modelRow({ agent: "codex", model: "gpt-5.2-codex", tokens: 400 }),
+      modelRow({ scope: "other-org", model: "leaky-model", tokens: 9_999 }), // must NOT appear for acme
+    ]);
+    const u = await buildOrgUsage(db, "acme", "all");
+    expect(u.models).toEqual([
+      { agent: "claude", model: "claude-fable-5", sessions: 6, tokens: 1000 },
+      { agent: "codex", model: "gpt-5.2-codex", sessions: 3, tokens: 400 },
+    ]);
+    expect(u.agents).toEqual([
+      { agent: "claude", sessions: 6, tokens: 1000 },
+      { agent: "codex", sessions: 3, tokens: 400 },
+    ]);
+  });
+
+  it("POST /api/usage/report accepts the models array", async () => {
+    const db = await makeTestDb();
+    const { token } = await member(db, "alice", ["acme"]);
+    const res = mockRes();
+    await reportHandler(deps(db))(req({ method: "POST", headers: { authorization: `Bearer ${token}` }, body: { days: [day("2026-07-01")], models: [modelRow()] } }) as any, res as any);
+    expect(res._body).toEqual({ recorded: 1 });
+    const u = await buildOrgUsage(db, "acme", "all");
+    expect(u.models).toHaveLength(1);
+  });
+});
+
+describe("org settings (admin-gated) + retention", () => {
+  async function adminMember(db: any, login: string, scope: string, role: "admin" | "member") {
+    const a = await upsertAccount(db, { provider: "github", accountId: login, login });
+    await setAccountScopes(db, a.id, [{ scope: login, role: "self" }, { scope, role }]);
+    const { token } = generateSessionToken();
+    await createSession(db, a.id, token, 60_000);
+    return { a, token };
+  }
+
+  it("GET returns defaults + viewerRole; PUT is admin-only", async () => {
+    const db = await makeTestDb();
+    const admin = await adminMember(db, "alice", "acme", "admin");
+    const plain = await adminMember(db, "bob", "acme", "member");
+
+    const g = mockRes();
+    await orgSettingsHandler(deps(db))(req({ headers: { authorization: `Bearer ${plain.token}` }, query: { scope: "acme" } }) as any, g as any);
+    expect(g._body).toMatchObject({ retentionDays: null, viewerRole: "member" });
+
+    const deniedPut = mockRes();
+    await orgSettingsHandler(deps(db))(req({ method: "PUT", headers: { authorization: `Bearer ${plain.token}` }, query: { scope: "acme" }, body: { retentionDays: 30 } }) as any, deniedPut as any);
+    expect(deniedPut._status).toBe(403);
+
+    const okPut = mockRes();
+    await orgSettingsHandler(deps(db))(req({ method: "PUT", headers: { authorization: `Bearer ${admin.token}` }, query: { scope: "acme" }, body: { retentionDays: 30 } }) as any, okPut as any);
+    expect(okPut._body).toMatchObject({ retentionDays: 30, updatedBy: "alice", viewerRole: "admin" });
+
+    const badPut = mockRes();
+    await orgSettingsHandler(deps(db))(req({ method: "PUT", headers: { authorization: `Bearer ${admin.token}` }, query: { scope: "acme" }, body: { retentionDays: 3 } }) as any, badPut as any);
+    expect(badPut._status).toBe(400); // below the 7-day floor
+
+    const anon = mockRes();
+    await orgSettingsHandler(deps(db))(req({ query: { scope: "acme" } }) as any, anon as any);
+    expect(anon._status).toBe(401);
+  });
+
+  it("retention prunes ONLY this org's old rows (scope-bounded), and runs post-ingest", async () => {
+    const db = await makeTestDb();
+    const admin = await adminMember(db, "alice", "acme", "admin");
+    const old = "2020-01-01";
+    await recordUsageDays(db, admin.a.id, "m", [
+      day(old), day("2026-07-01"),
+      day(old, { scope: "alice", tokensIn: 77 }), // personal history must survive org retention
+    ]);
+    await recordUsageModels(db, admin.a.id, "m", [{ scope: "acme", date: old, agent: "claude", model: "x", sessions: 1, tokens: 5 }]);
+
+    const put = mockRes();
+    await orgSettingsHandler(deps(db))(req({ method: "PUT", headers: { authorization: `Bearer ${admin.token}` }, query: { scope: "acme" }, body: { retentionDays: 30 } }) as any, put as any);
+
+    const org = await buildOrgUsage(db, "acme", "all");
+    expect(org.daily.map((d) => d.date)).toEqual(["2026-07-01"]); // old acme day pruned
+    expect(org.models).toEqual([]);                                // old model slice pruned
+    const personal = await buildOrgUsage(db, "alice", "all", Date.now(), { includeUnattributed: true });
+    expect(personal.members[0].tokensIn).toBe(77);                 // personal history intact
+
+    // post-ingest: a new report containing an out-of-window acme day gets pruned immediately
+    const rep = mockRes();
+    await reportHandler(deps(db))(req({ method: "POST", headers: { authorization: `Bearer ${admin.token}` }, body: { days: [day("2020-02-02")] } }) as any, rep as any);
+    const after = await buildOrgUsage(db, "acme", "all");
+    expect(after.daily.map((d) => d.date)).toEqual(["2026-07-01"]);
   });
 });

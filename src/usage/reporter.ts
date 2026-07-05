@@ -103,6 +103,30 @@ export function usageDaysFromStats(stats: SessionStat[], sinceMs: number, scopeO
   return [...byKey.values()].sort((a, b) => a.date.localeCompare(b.date) || a.scope.localeCompare(b.scope));
 }
 
+export interface UsageModelRow { scope: string; date: string; agent: string; model: string; sessions: number; tokens: number }
+
+/** Bucket the scan into per-(scope, day, agent, model) slices — the "By Model" breakdown. Same
+ *  attribution + end-day rules as usageDaysFromStats. Sessions with no model land on "". */
+export function usageModelsFromStats(stats: SessionStat[], sinceMs: number, scopeOf: (cwd: string | null | undefined) => string = scopeForCwd): UsageModelRow[] {
+  const byKey = new Map<string, UsageModelRow>();
+  const scopeCache = new Map<string, string>();
+  for (const s of stats) {
+    if (s.endMs < sinceMs) continue;
+    const cwd = s.cwd ?? "";
+    let scope = scopeCache.get(cwd);
+    if (scope === undefined) { scope = scopeOf(s.cwd); scopeCache.set(cwd, scope); }
+    const date = utcDate(s.endMs);
+    const agent = s.agent ?? "";
+    const model = s.model ?? "";
+    const key = [scope, date, agent, model].join("\n");
+    const row = byKey.get(key) ?? { scope, date, agent, model, sessions: 0, tokens: 0 };
+    row.sessions += 1;
+    row.tokens += s.tokensIn + s.tokensOut + s.tokensCache;
+    byKey.set(key, row);
+  }
+  return [...byKey.values()].sort((a, b) => a.date.localeCompare(b.date) || a.scope.localeCompare(b.scope) || a.model.localeCompare(b.model));
+}
+
 const statePath = (home: string) => join(home, ".agentgem", "usage-report.json");
 
 export function readReportState(home: string): { lastReportAt?: string } {
@@ -143,14 +167,16 @@ export async function reportUsageOnce(deps: ReportDeps = {}): Promise<ReportOutc
     if (Number.isFinite(last) && now - last < REPORT_EVERY_MS) return { ok: false, reason: "throttled" };
   }
   const stats = await (deps.scan ?? ((n: number) => scanSessionsCached(n)))(now);
-  const days = usageDaysFromStats(stats, now - REPORT_WINDOW_DAYS * DAY_MS);
+  const sinceMs = now - REPORT_WINDOW_DAYS * DAY_MS;
+  const days = usageDaysFromStats(stats, sinceMs);
   if (days.length === 0) return { ok: false, reason: "no-usage" };
+  const models = usageModelsFromStats(stats, sinceMs);
   const base = deps.base ?? bindConfig().base ?? "https://api.agentgem.ai";
   try {
     const res = await (deps.fetchImpl ?? fetch)(new URL("/api/usage/report", base), {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.sessionToken}` },
-      body: JSON.stringify({ machine: deps.machine ?? hostname(), days }),
+      body: JSON.stringify({ machine: deps.machine ?? hostname(), days, models }),
     });
     if (!res.ok) return { ok: false, reason: `http-${res.status}` };
     const out = (await res.json()) as { recorded?: number };

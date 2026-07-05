@@ -126,9 +126,15 @@ export interface OrgUsageMember {
   activeMs: number; activeDays: number; lastActive: string | null;
 }
 export interface OrgUsageDay { date: string; sessions: number; tokens: number }
+export interface OrgUsageModel { agent: string; model: string; sessions: number; tokens: number }
+export interface OrgUsageAgent { agent: string; sessions: number; tokens: number }
 export interface OrgUsage {
   scope: string; range: OrgUsageRange; memberCount: number;
   totals: { sessions: number; msgs: number; tokensIn: number; tokensOut: number; tokensCache: number; tokens: number; activeMs: number; activeDays: number };
   members: OrgUsageMember[];
   daily: OrgUsageDay[];
+  models: OrgUsageModel[];
+  agents: OrgUsageAgent[];
 }
+// Org dashboard settings — admin-writable (GitHub org role captured at sign-in).
+export interface OrgSettingsView { scope: string; retentionDays: number | null; updatedBy: string | null; updatedAt: string | null; viewerRole: string }

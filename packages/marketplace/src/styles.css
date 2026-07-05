@@ -807,3 +807,37 @@ a.ex-skillcard-rating:hover { text-decoration: underline; }
 }
 .ex-org-chip-usage { color: var(--brand-strong); text-decoration: none; font-size: 0.8rem; }
 .ex-org-chip-usage:hover { text-decoration: underline; }
+
+/* ── Team Pulse v2: models breakdown + org settings ────────────────────────────── */
+.ex-usage-agents { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; }
+.ex-usage-agent-chip {
+  display: inline-flex; align-items: baseline; gap: 6px; font-size: 0.82rem; color: var(--ink-2);
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-pill); padding: 4px 12px;
+}
+.ex-usage-agent-chip strong { color: var(--ink); text-transform: capitalize; }
+.ex-usage-models { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ex-usage-model {
+  display: grid; grid-template-columns: 1fr 90px 220px; gap: 10px; align-items: center;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
+  box-shadow: var(--shadow); padding: 7px 14px;
+}
+.ex-usage-model-name { font-family: var(--mono); font-size: 0.86rem; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ex-usage-model-agent {
+  margin-left: 8px; font-family: var(--font); font-size: 0.68rem; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--muted); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-pill); padding: 1px 7px;
+}
+.ex-usage-model-sessions { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-2); font-size: 0.88rem; }
+
+.ex-usage-settings {
+  display: flex; align-items: center; gap: 10px; margin-top: 22px; padding: 10px 14px;
+  border-top: 1px solid var(--line); color: var(--muted); font-size: 0.82rem;
+}
+.ex-usage-settings-label { letter-spacing: 0.06em; text-transform: uppercase; font-size: 0.7rem; }
+.ex-usage-settings-select { font-size: 0.84rem; padding: 3px 8px; border: 1px solid var(--line-2); border-radius: var(--r-sm); background: var(--surface); color: var(--ink); }
+.ex-usage-settings-value { color: var(--ink-2); }
+.ex-usage-settings-meta { font-size: 0.74rem; }
+
+@media (max-width: 720px) {
+  .ex-usage-model { grid-template-columns: 1fr 110px; }
+  .ex-usage-model-sessions { display: none; }
+}

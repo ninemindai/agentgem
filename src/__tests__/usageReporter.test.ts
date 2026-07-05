@@ -5,7 +5,7 @@ import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SessionStat } from "@agentgem/insight";
-import { usageDaysFromStats, reportUsageOnce, startUsageReporter, ownerFromRemoteUrl, scopeForCwd, REPORT_WINDOW_DAYS } from "../usage/reporter.js";
+import { usageDaysFromStats, usageModelsFromStats, reportUsageOnce, startUsageReporter, ownerFromRemoteUrl, scopeForCwd, REPORT_WINDOW_DAYS } from "../usage/reporter.js";
 
 const DAY = 86_400_000;
 const T0 = Date.parse("2026-07-04T10:00:00Z");
@@ -152,5 +152,22 @@ describe("repo-owner attribution", () => {
       ["", 3, 1], ["alice", 7, 1], ["ninemind", 120, 2],
     ]);
     expect(rows.every((r) => r.date === "2026-07-04")).toBe(true);
+  });
+});
+
+describe("usageModelsFromStats", () => {
+  it("buckets per (scope, day, agent, model) with total tokens", () => {
+    const scopeOf = (cwd: string | null | undefined) => (cwd ? "ninemind" : "");
+    const rows = usageModelsFromStats([
+      stat({ cwd: "/w", model: "claude-fable-5", tokensIn: 10, tokensOut: 5, tokensCache: 100 }),
+      stat({ sessionId: "s2", cwd: "/w", model: "claude-fable-5", tokensIn: 1, tokensOut: 1, tokensCache: 1 }),
+      stat({ sessionId: "s3", cwd: "/w", agent: "codex", model: "gpt-5.2-codex", tokensIn: 7, tokensOut: 0, tokensCache: 0 }),
+      stat({ sessionId: "s4", cwd: null, model: null }),
+    ], 0, scopeOf);
+    expect(rows).toEqual([
+      { scope: "", date: "2026-07-04", agent: "claude", model: "", sessions: 1, tokens: 1150 },
+      { scope: "ninemind", date: "2026-07-04", agent: "claude", model: "claude-fable-5", sessions: 2, tokens: 118 },
+      { scope: "ninemind", date: "2026-07-04", agent: "codex", model: "gpt-5.2-codex", sessions: 1, tokens: 7 },
+    ]);
   });
 });

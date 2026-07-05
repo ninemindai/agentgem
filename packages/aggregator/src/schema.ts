@@ -169,6 +169,30 @@ export const usageDays = pgTable("usage_days", {
   reportedAt: timestamp("reported_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.accountId, t.machine, t.scope, t.date] })]);
 
+// Per-(agent, model) slice of a usage day — the "By Model" / "By Agent" breakdown. Kept in a side
+// table (not extra usage_days columns) so the day rollup stays cheap and the model cardinality
+// can't distort the leaderboard math. Same idempotent-upsert + scope-attribution semantics.
+export const usageDayModels = pgTable("usage_day_models", {
+  accountId: uuid("account_id").notNull().references(() => accounts.id),
+  machine: text("machine").notNull().default("default"),
+  scope: text("scope").notNull().default(""),
+  date: text("date").notNull(),
+  agent: text("agent").notNull().default(""),
+  model: text("model").notNull().default(""),
+  sessions: integer("sessions").notNull().default(0),
+  tokens: bigint("tokens", { mode: "number" }).notNull().default(0),
+  reportedAt: timestamp("reported_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.accountId, t.machine, t.scope, t.date, t.agent, t.model] })]);
+
+// Per-org dashboard settings, admin-writable (account_scopes.role = 'admin'). `retentionDays`
+// null = keep usage forever; otherwise reports + reads prune this org's usage rows past the window.
+export const orgSettings = pgTable("org_settings", {
+  scope: text("scope").primaryKey(),
+  retentionDays: integer("retention_days"),
+  updatedBy: text("updated_by").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const catalogGems = pgTable("catalog_gems", {
   gemKey: text("gem_key").notNull(),
   version: text("version").notNull(),
@@ -201,7 +225,7 @@ export const curatedSkills = pgTable("curated_skills", {
   indexedAt: timestamp("indexed_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.sourceId, t.path] })]);
 
-export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, webSessions, handoffCodes, stars, reviews, gemAdoptions, accountScopes, usageDays, catalogGems, curatedSkills };
+export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, webSessions, handoffCodes, stars, reviews, gemAdoptions, accountScopes, usageDays, usageDayModels, orgSettings, catalogGems, curatedSkills };
 export type AppDb = PgDatabase<any, typeof schema>;
 
 // Idempotent DDL. (Schema-as-tables above is the query source of truth; this DDL
@@ -240,6 +264,9 @@ export async function ensureSchema(db: AppDb): Promise<void> {
     end if;
   end $$`);
   await db.execute(sql`create index if not exists usage_days_date_idx on usage_days (date)`);
+  await db.execute(sql`create table if not exists usage_day_models (account_id uuid not null references accounts(id), machine text not null default 'default', scope text not null default '', date text not null, agent text not null default '', model text not null default '', sessions int not null default 0, tokens bigint not null default 0, reported_at timestamptz not null default now(), primary key (account_id, machine, scope, date, agent, model))`);
+  await db.execute(sql`create index if not exists usage_day_models_date_idx on usage_day_models (date)`);
+  await db.execute(sql`create table if not exists org_settings (scope text primary key, retention_days int, updated_by text not null, updated_at timestamptz not null default now())`);
   await db.execute(sql`create table if not exists catalog_gems (gem_key text not null, version text not null, published_by text not null, author text, description text, tags jsonb, artifact_kinds jsonb, type text, grade integer, created_at_ms bigint not null, primary key (gem_key, version))`);
   await db.execute(sql`create table if not exists curated_skills (source_id text not null, path text not null, division text not null, name text not null, repo text not null, source_label text not null, homepage text, stars int not null default 0, installs int, indexed_at timestamptz not null default now(), primary key (source_id, path))`);
   await db.execute(sql`alter table curated_skills add column if not exists description text`);
