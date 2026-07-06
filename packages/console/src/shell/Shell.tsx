@@ -10,7 +10,7 @@ const PHASES: { id: Phase; label: string }[] = [
   { id: "build", label: "Build" },
 ];
 const CATEGORY_LABEL: Record<ArtifactCategory, string> = {
-  setup: "Setup",
+  setup: "Configuration",
   sessions: "Sessions",
   projects: "Projects",
   usage: "Usage",

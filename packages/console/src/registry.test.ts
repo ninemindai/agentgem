@@ -21,7 +21,8 @@ describe("phaseGroups", () => {
       // no "projects" page → that category is omitted
     ];
     const groups = phaseGroups(pages, "observe");
-    expect(groups.map((g) => g.category)).toEqual(["setup", "sessions", "usage"]);
+    // Observe leads with Usage, Configuration (setup) last.
+    expect(groups.map((g) => g.category)).toEqual(["usage", "sessions", "setup"]);
   });
 
   it("sorts pages within a category bucket by order", () => {
