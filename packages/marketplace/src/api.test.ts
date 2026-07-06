@@ -31,6 +31,21 @@ describe("makeApi", () => {
     expect(calls[1]).toBe("https://x/api/aggregator/adoption?id=skill%3Aa%2Fb&bucket=month");
   });
 
+  it("getEffectiveness passes sort/minConfidence and returns the leaderboard", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => { calls.push(String(url)); return res([{ gemName: "deploy", mostly: 40, partially: 5, notAchieved: 5, judged: 50, producers: 6, verifiedProducers: 2, organic: 85, confidence: 1, score: 85 }]); }));
+    const out = await makeApi("https://x").getEffectiveness({ sort: "score", minConfidence: 0.3 });
+    expect(out[0].score).toBe(85);
+    expect(calls[0]).toBe("https://x/api/aggregator/effectiveness?sort=score&minConfidence=0.3");
+  });
+
+  it("getEffectiveness with no query omits the querystring", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => { calls.push(String(url)); return res([]); }));
+    await makeApi("https://x").getEffectiveness();
+    expect(calls[0]).toBe("https://x/api/aggregator/effectiveness");
+  });
+
   it("rejects on a non-2xx response", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 500, text: async () => "" }) as unknown as Response));
     await expect(makeApi("https://x").getPopularity()).rejects.toThrow(/500/);

@@ -59,6 +59,78 @@ export async function modelBenchmark(
   return r.rows as { model: string; mostly: number; partially: number; notAchieved: number; producers: number; verifiedProducers: number }[];
 }
 
+/** Judged sessions needed for the organic score to fully displace the prior
+ *  (confidence -> 1). Mirrors SkillGem's `min(1, total/50)` curve. */
+export const EFFECTIVENESS_FULL_CONFIDENCE = 50;
+/** Neutral prior a low-evidence gem sits at, in place of an author-submitted
+ *  benchmark. A gem with no judged sessions scores 50; real outcomes pull it
+ *  up or down as confidence grows. */
+export const EFFECTIVENESS_PRIOR = 50;
+
+export interface EffectivenessRow {
+  gemName: string;
+  mostly: number; partially: number; notAchieved: number;
+  judged: number;
+  producers: number; verifiedProducers: number;
+  organic: number;     // 0-100 partial-credit success rate over judged sessions
+  confidence: number;  // 0-1, grows with judged-session volume
+  score: number;       // 0-100, organic shrunk toward the prior by (1 - confidence)
+}
+
+/** Pure effectiveness math, separated from the query so it is unit-testable
+ *  without a DB. `partially` counts as half credit (3-level judged outcome).
+ *  score = organic*confidence + prior*(1 - confidence), i.e. SkillGem's hybrid
+ *  formula with the author benchmark replaced by a neutral prior. */
+export function effectivenessScore(
+  o: { mostly: number; partially: number; notAchieved: number },
+  prior = EFFECTIVENESS_PRIOR,
+): { judged: number; organic: number; confidence: number; score: number } {
+  const judged = o.mostly + o.partially + o.notAchieved;
+  const organic = judged > 0 ? ((o.mostly + 0.5 * o.partially) / judged) * 100 : 0;
+  const confidence = Math.min(1, judged / EFFECTIVENESS_FULL_CONFIDENCE);
+  const score = organic * confidence + prior * (1 - confidence);
+  return { judged, organic, confidence, score };
+}
+
+/** Per-gem effectiveness: outcome counts summed across all models and versions
+ *  of a gem (grouped by gem_name), k-anonymised on distinct producers, quarantine-
+ *  aware — same trust shape as `modelBenchmark`. Each row is passed through
+ *  `effectivenessScore` so the confidence-weighted score is materialised here
+ *  rather than left to the caller.
+ *
+ *  `sort: "score"` ranks by the confidence-weighted score (an effectiveness
+ *  leaderboard); `minConfidence` gates out gems too sparse to trust (SkillGem
+ *  uses `confidence > 0.3`). Both act on the score/confidence, which are derived
+ *  in JS — so ranking/gating happen AFTER mapping over the full k-anon set, never
+ *  truncated by a producer-ordered SQL LIMIT. k-anon + quarantine stay in SQL. */
+export async function effectiveness(
+  db: AppDb,
+  opts: { gemName?: string; limit?: number; k?: number; sort?: "producers" | "score"; minConfidence?: number } = {},
+): Promise<EffectivenessRow[]> {
+  const k = opts.k ?? DEFAULT_K, limit = opts.limit ?? 100, minConfidence = opts.minConfidence ?? 0;
+  const r = await db.execute<{ gemName: string; mostly: number; partially: number; notAchieved: number; producers: number; verifiedProducers: number }>(sql`
+    select a.gem_name as "gemName",
+           sum(mo.mostly)::int as mostly,
+           sum(mo.partially)::int as partially,
+           sum(mo.not_achieved)::int as "notAchieved",
+           count(distinct a.producer_pubkey)::int as producers,
+           count(distinct b.provider || ':' || b.account_id)::int as "verifiedProducers"
+    from model_outcomes mo
+    join attestations a on a.id = mo.attestation_id and not a.quarantined
+    left join account_bindings b on b.pubkey = a.producer_pubkey
+    where (${opts.gemName ?? null}::text is null or a.gem_name = ${opts.gemName ?? null})
+    group by a.gem_name
+    having count(distinct a.producer_pubkey) >= ${k}
+  `);
+  const rows = (r.rows as { gemName: string; mostly: number; partially: number; notAchieved: number; producers: number; verifiedProducers: number }[])
+    .map((row) => ({ ...row, ...effectivenessScore(row) }));
+  const gated = minConfidence > 0 ? rows.filter((x) => x.confidence >= minConfidence) : rows;
+  gated.sort(opts.sort === "score"
+    ? (a, b) => b.score - a.score || b.producers - a.producers || a.gemName.localeCompare(b.gemName)
+    : (a, b) => b.producers - a.producers || a.gemName.localeCompare(b.gemName));
+  return gated.slice(0, limit);
+}
+
 export async function coOccurrence(
   db: AppDb, opts: { id: string; limit?: number; k?: number },
 ): Promise<{ id: string; producers: number; verifiedProducers: number }[]> {

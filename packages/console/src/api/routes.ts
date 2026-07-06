@@ -689,6 +689,18 @@ export const benchmarksRoute = defineRoute("GET", "/api/aggregator/benchmarks", 
   response: BenchmarkSchema,
 });
 
+// Per-gem effectiveness leaderboard (aggregator, k-anonymised): confidence-weighted
+// success rate over judged sessions, summed across models/versions of a gem.
+export const EffectivenessSchema = z.array(z.object({
+  gemName: z.string(), mostly: z.number(), partially: z.number(), notAchieved: z.number(), judged: z.number(),
+  producers: z.number(), verifiedProducers: z.number(), organic: z.number(), confidence: z.number(), score: z.number(),
+}));
+export type EffectivenessRow = z.infer<typeof EffectivenessSchema>[number];
+export const effectivenessRoute = defineRoute("GET", "/api/aggregator/effectiveness", {
+  query: z.object({ gemName: z.string().optional(), sort: z.enum(["producers", "score"]).optional(), minConfidence: z.coerce.number().optional() }),
+  response: EffectivenessSchema,
+});
+
 // Identity binding: link the local key to a GitHub account via device-flow OAuth.
 export const bindStatusRoute = defineRoute("GET", "/api/bind/status", {
   response: z.object({ bound: z.boolean(), login: z.string().optional(), provider: z.string().optional(), avatarUrl: z.string().optional(), sessionActive: z.boolean().optional() }),

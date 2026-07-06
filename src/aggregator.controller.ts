@@ -8,7 +8,7 @@ import { inject } from "@agentback/core";
 import { DrizzleBindings } from "@agentback/drizzle";
 import type { AppDb } from "@agentgem/aggregator";
 import { ingestAttestation, ingestGemAdoption } from "@agentgem/aggregator";
-import { popularity, coOccurrence, adoption, overview, coOccurrenceMatrix, modelBenchmark, gemAdoption } from "@agentgem/aggregator";
+import { popularity, coOccurrence, adoption, overview, coOccurrenceMatrix, modelBenchmark, effectiveness, gemAdoption } from "@agentgem/aggregator";
 import { popularSkills, popularSkillGroups } from "@agentgem/aggregator";
 import { buildProfile, buildOrgCatalog } from "@agentgem/aggregator";
 import type { UsageAttestation, GemAdoption } from "@agentgem/insight";
@@ -39,6 +39,11 @@ const AdoptResult = z.array(z.object({ bucket: z.string(), producers: z.number()
 const OverviewResult = z.object({ ingredients: z.number(), producers: z.number(), verifiedProducers: z.number(), invocations: z.number(), sessions: z.number() });
 const BenchQuery = z.object({ gemDigest: z.string().optional(), limit: z.coerce.number().optional() }); // NOTE: no `k`
 const BenchResult = z.array(z.object({ model: z.string(), mostly: z.number(), partially: z.number(), notAchieved: z.number(), producers: z.number(), verifiedProducers: z.number() }));
+const EffQuery = z.object({ gemName: z.string().optional(), limit: z.coerce.number().optional(), sort: z.enum(["producers", "score"]).optional(), minConfidence: z.coerce.number().min(0).max(1).optional() }); // NOTE: no `k`
+const EffResult = z.array(z.object({
+  gemName: z.string(), mostly: z.number(), partially: z.number(), notAchieved: z.number(), judged: z.number(),
+  producers: z.number(), verifiedProducers: z.number(), organic: z.number(), confidence: z.number(), score: z.number(),
+}));
 const GemAdoptionQuery = z.object({ keys: z.string().optional() });
 const GemAdoptionResult = z.object({ items: z.array(z.object({ gemKey: z.string(), installs: z.number(), verifiedInstalls: z.number() })) });
 
@@ -181,6 +186,14 @@ export class AggregatorController {
   @get("/benchmarks", { query: BenchQuery, response: BenchResult })
   async benchmarks(input: { query: z.infer<typeof BenchQuery> }): Promise<z.infer<typeof BenchResult>> {
     return modelBenchmark(this.db, { gemDigest: input.query.gemDigest, limit: input.query.limit });
+  }
+
+  // Per-gem effectiveness: confidence-weighted success rate over judged sessions,
+  // aggregated across models/versions and k-anonymised on producers. `sort=score`
+  // + `minConfidence` yield an effectiveness leaderboard. k is server policy.
+  @get("/effectiveness", { query: EffQuery, response: EffResult })
+  async effectiveness(input: { query: z.infer<typeof EffQuery> }): Promise<z.infer<typeof EffResult>> {
+    return effectiveness(this.db, { gemName: input.query.gemName, limit: input.query.limit, sort: input.query.sort, minConfidence: input.query.minConfidence });
   }
 
   // Gem-level k-anon install counts. k is server policy (DEFAULT_K), never caller-supplied.
