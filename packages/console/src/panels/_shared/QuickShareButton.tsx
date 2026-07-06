@@ -1,60 +1,48 @@
 import { useState } from "react";
 import { createGemShareRoute, makeClient } from "../../api/routes.js";
 import { ShareLinks } from "../Mine/ShareLinks.js";
+import { useShareMint } from "./useShareMint.js";
 
-type CreateGemShare = (body: { kind: "gem"; name: string; provenance: string; generatedAtMs: number }) => Promise<{ id: string; url: string }>;
+type GemBody = { kind: "gem"; name: string; provenance: string; generatedAtMs: number };
+type CreateGemShare = (body: GemBody) => Promise<{ id: string; url: string }>;
 
 // The light "Share link" path: mints a hosted gem card (createGemShareRoute) and
-// reveals ShareLinks inline. Lifts Mine/Scorecard's mint state machine (busy/slow/
-// error) so every surface inherits cold-start handling. `disabled` guards empty
-// payloads (D3); `onUpgrade`, when set, renders the Publish nudge after success (D4).
+// reveals ShareLinks inline. Shares Mine/Scorecard's mint state machine via
+// useShareMint, so every surface gets the same cold-start handling.
+//
+// `resolve`, when provided, produces the name+provenance at click time — used by
+// "Share my setup" so Inspect scans inventory only when the user actually shares,
+// and always with fresh data. It may throw a user-facing message (e.g. an empty
+// setup), which surfaces as the inline error instead of minting a hollow card.
+// When absent, the static `name`/`provenance` props are used (e.g. a lesson).
+//
+// `onUpgrade`, when set, renders the "Publish to Explore" nudge after a success.
 export function QuickShareButton({
-  apiBase, name, provenance, title,
-  label = "Share link",
-  disabled = false, disabledReason,
-  onUpgrade, createGemShare,
+  apiBase, name, provenance, title, onUpgrade, createGemShare, resolve,
 }: {
   apiBase: string;
   name: string;
   provenance: string;
   title?: string;
-  label?: string;
-  disabled?: boolean;
-  disabledReason?: string;
   onUpgrade?: () => void;
   createGemShare?: CreateGemShare;
+  resolve?: () => Promise<{ name: string; provenance: string }>;
 }) {
   const doCreate: CreateGemShare = createGemShare ?? ((body) => createGemShareRoute.call(makeClient(apiBase), { body }));
   const [url, setUrl] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [slow, setSlow] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const { busy, slow, err, run } = useShareMint();
 
-  // Mirrors Scorecard.tsx: show a spinner, and past ~3s a "waking the server" hint
-  // for the hosted cold start, instead of a silent wait.
-  const onShare = async () => {
-    setBusy(true); setErr(null); setSlow(false);
-    const slowTimer = setTimeout(() => setSlow(true), 3000);
-    try {
-      const res = await doCreate({ kind: "gem", name, provenance, generatedAtMs: Date.now() });
-      setUrl(res.url);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Couldn't create a share link — try again.");
-    } finally { clearTimeout(slowTimer); setBusy(false); setSlow(false); }
-  };
+  const onShare = () => run(async () => {
+    const payload = resolve ? await resolve() : { name, provenance };
+    const res = await doCreate({ kind: "gem", ...payload, generatedAtMs: Date.now() });
+    setUrl(res.url);
+  });
 
   return (
     <span className="quick-share">
-      <button
-        type="button"
-        className="mine-wf-share"
-        aria-disabled={disabled || undefined}
-        disabled={busy}
-        onClick={disabled ? undefined : onShare}
-      >
-        {busy ? "Creating link…" : label}
+      <button type="button" className="mine-wf-share" disabled={busy} onClick={onShare}>
+        {busy ? "Creating link…" : "Share link"}
       </button>
-      {disabled && disabledReason && <span className="quick-share-hint">{disabledReason}</span>}
       {busy && slow && <p className="scorecard-pending">Waking the server — the first share after a while can take up to ~30s.</p>}
       {err && <span className="obs-error">{err}</span>}
       {(busy || url) && (

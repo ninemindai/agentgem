@@ -1,8 +1,8 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
-import { TranscriptViewer, DraftCard } from "./TranscriptViewer.js";
+import { TranscriptViewer, DraftCard, LessonCard } from "./TranscriptViewer.js";
 import * as routes from "../../api/routes.js";
-import type { TranscriptView } from "../../api/routes.js";
+import type { TranscriptView, DistilledLesson } from "../../api/routes.js";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
@@ -129,5 +129,21 @@ describe("TranscriptViewer", () => {
     render(<TranscriptViewer apiBase="" agent="codex" sessionId="s1" onBack={() => {}} />);
     await waitFor(() => expect(screen.getAllByText("do the thing").length).toBeGreaterThan(0));
     expect(screen.queryByText(/Distill this session/)).toBeNull();
+  });
+});
+
+describe("LessonCard share link", () => {
+  const lesson: DistilledLesson = {
+    name: "prefer-rg", body: "use rg not grep", importance: "high", status: "draft",
+    evidence: { sessions: 1, root: "/work/app", provenance: { occurrences: [] } },
+  };
+
+  it("mints a gem card for the lesson via Share link", async () => {
+    const createGemShare = vi.fn(async () => ({ id: "l1", url: "https://agentgem.ai/share/l1" }));
+    render(<LessonCard apiBase="" lesson={lesson} createGemShare={createGemShare} />);
+    fireEvent.click(screen.getByRole("button", { name: /share link/i }));
+    await waitFor(() => expect(createGemShare).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "gem", name: "prefer-rg" }),
+    ));
   });
 });

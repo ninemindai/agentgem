@@ -132,4 +132,9 @@ describe("PublishToExplore", () => {
     fireEvent.click(btn);
     await waitFor(() => expect(screen.getByText(/@me\/p/)).toBeTruthy());
   });
+
+  it("prefills the name field from defaultName", () => {
+    render(<PublishToExplore apiBase="" selected={new Set()} skillCount={3} lessonCount={0} defaultName="my-setup" />);
+    expect((screen.getByLabelText("name") as HTMLInputElement).value).toBe("my-setup");
+  });
 });
