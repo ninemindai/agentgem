@@ -20,6 +20,12 @@ const log = createLogger("insight");
 export type { ProcedureCandidate, DistilledSkill } from "./distillTypes.js";
 export { distillCandidates, MIN_RECURRENCE, MIN_STEPS } from "./extract.js";
 
+// The distill agent generates a full skill document per candidate (~50s each), so
+// the whole set (25+ on a busy project) never finishes. extractCandidates ranks
+// strongest-first, so the top N is the best playbook AND small enough that the
+// agent completes → a real, cacheable result instead of a timeout → skeletons.
+export const MAX_DISTILL_CANDIDATES = 5;
+
 const KEBAB_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MUTATING_TOOL_RE = /^(Bash|Edit|Write|NotebookEdit)$/;
 
@@ -166,10 +172,12 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 export async function distillWorkflow(
   signal: WorkflowSignal,
   inv: ScanInventory,
-  opts: { connectFn?: AcpConnectFn; timeoutMs?: number; minRecurrence?: number; minSteps?: number } = {},
+  opts: { connectFn?: AcpConnectFn; timeoutMs?: number; minRecurrence?: number; minSteps?: number; maxCandidates?: number } = {},
 ): Promise<{ distilled: DistilledSkill[]; degraded: boolean }> {
-  const { candidates } = extractCandidates(signal, inv, opts);
-  if (!candidates.length) return { distilled: [], degraded: false };
+  const { candidates: ranked } = extractCandidates(signal, inv, opts);
+  if (!ranked.length) return { distilled: [], degraded: false };
+  // Cap to the strongest N so the agent actually finishes (see MAX_DISTILL_CANDIDATES).
+  const candidates = ranked.slice(0, opts.maxCandidates ?? MAX_DISTILL_CANDIDATES);
   const skeletons = candidates.map((c) => c.skeleton);
 
   const connectFn = opts.connectFn ?? currentTestConnectFn() ?? defaultConnectFn;

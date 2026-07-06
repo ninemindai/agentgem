@@ -14,7 +14,7 @@ import { collectScorecard, selectScorecardRoots, scorecardTranscriptPaths, defau
 import { SCORECARD_CACHE_ROOT } from "../scorecardStream.js";
 import { computeInsights } from "../insightsCore.js";
 import { computeWorkflowAnalysis } from "../workflowCore.js";
-import { computeDistill } from "../distillCore.js";
+import { computeDistill, DISTILL_BACKGROUND_TIMEOUT_MS } from "../distillCore.js";
 import { dreamRoot } from "../dream/dreamPass.js";
 
 export type WarmStatusValue = "warmed" | "hit";
@@ -66,7 +66,9 @@ export const WARMABLES: Warmable[] = [
   {
     id: "distill", cost: "llm", scope: "per-root",
     async warm(root, { dir, force }) {
-      const r = await computeDistill(root as string, { dir, force });
+      // Generous per-run budget so the capped distill (~50s/skill) actually
+      // completes and caches, rather than timing out into a degraded result.
+      const r = await computeDistill(root as string, { dir, force, timeoutMs: DISTILL_BACKGROUND_TIMEOUT_MS });
       return r.cached ? "hit" : "warmed";
     },
   },

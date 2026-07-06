@@ -673,7 +673,7 @@ export const installSkillRoute = defineRoute("POST", "/api/optimize/discover/ins
 // Playbook: distill a project's sessions into a draft playbook, then publish to Explore.
 export const playbookPrepareRoute = defineRoute("POST", "/api/playbook/prepare", {
   body: z.object({ root: z.string() }),
-  response: z.object({ skills: z.array(z.string()), lessons: z.array(z.string()), root: z.string(), degraded: z.boolean() }),
+  response: z.object({ skills: z.array(z.string()), lessons: z.array(z.string()), root: z.string(), degraded: z.boolean(), preparing: z.boolean() }),
 });
 export const playbookPublishRoute = defineRoute("POST", "/api/playbook/publish", {
   body: z.object({ workspace: z.string(), scope: z.string(), name: z.string().optional(), version: z.string(), description: z.string().optional(), tags: z.array(z.string()).optional(), provenance: z.string() }),

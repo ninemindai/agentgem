@@ -214,7 +214,7 @@ describe("Curate", () => {
     setPendingPlaybook({ root: "/work/myproj" });
     vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
       const u = String(url);
-      if (u.includes("/api/playbook/prepare")) return res({ skills: ["ship-loop"], lessons: ["lesson-one"], root: "/work/myproj", degraded: false });
+      if (u.includes("/api/playbook/prepare")) return res({ skills: ["ship-loop"], lessons: ["lesson-one"], root: "/work/myproj", degraded: false, preparing: false });
       if (u.includes("/api/inventory")) return res({ skills: [{ name: "ship-loop" }], mcpServers: [], instructions: [{ name: "lesson-one" }], hooks: [], subagents: [] });
       if (u.includes("/api/usage")) return res({ artifacts: [] });
       if (u.includes("/api/bind")) return res({ bound: false });
@@ -233,7 +233,7 @@ describe("Curate", () => {
     setPendingPlaybook({ root: "/work/empty" });
     vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
       const u = String(url);
-      if (u.includes("/api/playbook/prepare")) return res({ skills: [], lessons: [], root: "/work/empty", degraded: true });
+      if (u.includes("/api/playbook/prepare")) return res({ skills: [], lessons: [], root: "/work/empty", degraded: true, preparing: false });
       if (u.includes("/api/inventory")) return res({ skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [] });
       if (u.includes("/api/usage")) return res({ artifacts: [] });
       throw new Error(`unexpected url ${u}`);
@@ -243,6 +243,24 @@ describe("Curate", () => {
     expect(await screen.findByText(/nothing distilled worth publishing/i)).toBeTruthy();
     // No hollow gem: the Publish form must not render for an empty distill.
     expect(screen.queryByRole("heading", { name: "Publish to Explore" })).toBeNull();
+  });
+
+  it("shows a background 'distilling' state while the heavy distill runs (preparing), not the form", async () => {
+    setPendingPlaybook({ root: "/work/slow" });
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+      const u = String(url);
+      // Cold cache: the server kicked off the background distill and says "preparing".
+      if (u.includes("/api/playbook/prepare")) return res({ skills: [], lessons: [], root: "/work/slow", degraded: false, preparing: true });
+      if (u.includes("/api/inventory")) return res({ skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [] });
+      if (u.includes("/api/usage")) return res({ artifacts: [] });
+      throw new Error(`unexpected url ${u}`);
+    }));
+
+    render(<Curate apiBase="" />);
+    // While the background distill runs, show progress + set expectations — not the form, not an empty state.
+    expect(await screen.findByText(/first run can take a few minutes/i)).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Publish to Explore" })).toBeNull();
+    expect(screen.queryByText(/nothing distilled worth publishing/i)).toBeNull();
   });
 
 });

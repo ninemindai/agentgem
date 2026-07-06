@@ -455,7 +455,7 @@ export const WorkflowDraftWriteResponseSchema = z.object({ path: z.string() });
 
 // ── Playbook prepare ──
 export const PlaybookPrepareBodySchema = z.object({ root: z.string() });
-export const PlaybookPrepareResponseSchema = z.object({ skills: z.array(z.string()), lessons: z.array(z.string()), root: z.string(), degraded: z.boolean() });
+export const PlaybookPrepareResponseSchema = z.object({ skills: z.array(z.string()), lessons: z.array(z.string()), root: z.string(), degraded: z.boolean(), preparing: z.boolean() });
 
 // ── Playbook publish ──
 export const PlaybookPublishBodySchema = z.object({

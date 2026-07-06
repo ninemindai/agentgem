@@ -11,6 +11,11 @@ import { ContentView } from "./ContentView.js";
 import { PublishToExplore } from "./PublishToExplore.js";
 import { Loading } from "../../shell/Loading.js";
 
+// The distill runs in the background; prepare polls the cache until it's ready.
+// The limit sits above the server's background-distill budget, then we give up.
+const PREPARE_POLL_INTERVAL_MS = 5_000;
+const PREPARE_POLL_LIMIT_MS = 6 * 60_000;
+
 // Project basename for display ("/work/myproj" → "myproj").
 const projectLabel = (root: string): string => root.split("/").filter(Boolean).pop() || root;
 
@@ -56,9 +61,19 @@ export function Curate({ apiBase }: { apiBase: string }) {
   const runPrepare = async (root: string) => {
     setPrepareRoot(root);
     setPrepareError(null); setPrepareEmpty(false); setPreparing(true);
+    const deadline = Date.now() + PREPARE_POLL_LIMIT_MS;
     try {
-      const r = await playbookPrepareRoute.call(makeClient(apiBase), { body: { root } });
+      const client = makeClient(apiBase);
+      let r = await playbookPrepareRoute.call(client, { body: { root } });
+      // The distill is heavy (runs in the background); prepare reads a cache. Poll
+      // until it's ready — bounded so a distill that keeps failing doesn't spin forever.
+      while (r.preparing && mounted.current && Date.now() < deadline) {
+        await new Promise((res) => setTimeout(res, PREPARE_POLL_INTERVAL_MS));
+        if (!mounted.current) return;
+        r = await playbookPrepareRoute.call(client, { body: { root } });
+      }
       if (!mounted.current) return;
+      if (r.preparing) { setPrepareError("Still distilling — this project is taking a while. Try again shortly, or curate a playbook manually below."); return; }
       if (r.skills.length + r.lessons.length === 0) { setPrepareEmpty(true); return; }
       setKeys(new Set([
         ...r.skills.map((k) => selKey("skills", k)),
@@ -237,7 +252,7 @@ export function Curate({ apiBase }: { apiBase: string }) {
         <div className="publish-panel">
           {preparing && (
             <p className="publish-prep" role="status" aria-live="polite">
-              <span className="scorecard-spin" aria-hidden="true" /> Distilling {prepareRoot ? projectLabel(prepareRoot) : "your project"} into a playbook…
+              <span className="scorecard-spin" aria-hidden="true" /> Distilling {prepareRoot ? projectLabel(prepareRoot) : "your project"} into a playbook… <span className="ledger-muted">the first run can take a few minutes — you can leave this open.</span>
             </p>
           )}
           {prepareError && (
