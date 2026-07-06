@@ -9,19 +9,17 @@
     "strictPropertyInitialization": false,
     "useUnknownInCatchVariables": false,
     "noFallthroughCasesInSwitch": true,
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
-    "useDefineForClassFields": false,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "resolveJsonModule": true,
     "skipLibCheck": true,
-    "importHelpers": true,
+    "composite": true,
+    "declaration": true,
     "rootDir": "src",
     "outDir": "dist",
     "incremental": true
   },
   "include": ["src/**/*"],
   "exclude": ["dist", "node_modules"],
-  "references": [{ "path": "packages/model" }, { "path": "packages/archive" }, { "path": "packages/distribute" }, { "path": "packages/testbed" }, { "path": "packages/base" }, { "path": "packages/build" }, { "path": "packages/run" }, { "path": "packages/insight" }, { "path": "packages/capture" }, { "path": "packages/deploy" }, { "path": "packages/aggregator" }, { "path": "packages/transfer" }, { "path": "packages/play" }]
+  "references": [{ "path": "../model" }]
 }

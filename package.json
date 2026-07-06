@@ -88,6 +88,7 @@
     "@agentgem/distribute": "workspace:*",
     "@agentgem/insight": "workspace:*",
     "@agentgem/model": "workspace:*",
+    "@agentgem/play": "workspace:*",
     "@agentgem/run": "workspace:*",
     "@agentgem/testbed": "workspace:*",
     "@agentgem/transfer": "workspace:*",
