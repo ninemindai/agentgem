@@ -392,6 +392,7 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
     const sessionNames = new Set<string>();
     const currentSessionRecords: RawRecord[] = [];
     const steps: ProcedureStep[] = [];     // ordered scrubbed builtin calls (retainSequences)
+    const contextSeries: TurnUsage[] = [];
     let firstUserText: string | null = null;
     let lastAssistantText = "";
     const basename = path.split("/").pop() ?? path;
@@ -411,6 +412,16 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
       // never reaches this branch — that is the availability-vs-usage guard.
       const role = rec?.message?.role ?? rec?.role;
       const content = rec?.message?.content;
+
+      if (opts.retainSequences && role === "assistant") {
+        const usage = rec?.message?.usage as Record<string, number> | undefined;
+        if (usage) contextSeries.push({
+          turn: contextSeries.length, msgIndex: lineIdx,
+          ctxTokens: contextTokens(usage),
+          cacheCreation: usage.cache_creation_input_tokens ?? 0,
+          outTokens: usage.output_tokens ?? 0,
+        });
+      }
 
       // Mission hint (§3b): first genuine human turn = the task. Skip sub-agent
       // dispatch (isSidechain), continuation summaries (isCompactSummary), and
@@ -473,7 +484,7 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
     if (opts.retainSequences && steps.length > 0) {
       const missionHint: MissionHint | undefined =
         firstUserText !== null ? { task: scrubProse(firstUserText), outcome: scrubProse(lastAssistantText) } : undefined;
-      const coords = { sessionId: sessionId || basename.replace(/\.jsonl$/, ""), transcript: basename, atMs: ms, model: sessionPrimaryModel(currentSessionRecords) };
+      const coords = { sessionId: sessionId || basename.replace(/\.jsonl$/, ""), transcript: basename, atMs: ms, model: sessionPrimaryModel(currentSessionRecords), ...(contextSeries.length ? { contextSeries } : {}) };
       seqSessions.push(missionHint ? { steps, missionHint, ...coords } : { steps, ...coords });
     }
   }
