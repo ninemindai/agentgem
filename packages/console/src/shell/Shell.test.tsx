@@ -98,6 +98,17 @@ describe("Shell — phase-primary nav", () => {
     expect(window.location.hash).toBe("#/deploy");
   });
 
+  it("normalizes a legacy route on cold start (#/your-gems → #/gems)", () => {
+    const withGems = [
+      p({ id: "inspect", phase: "observe", category: "setup", order: 10 }),
+      p({ id: "gems", phase: "build", category: "setup", order: 30 }),
+    ];
+    window.location.hash = "#/your-gems"; // no hashchange fires on first render
+    render(<Shell pages={withGems} apiBase="" />);
+    expect(window.location.hash).toBe("#/gems");
+    expect(screen.getByText("panel-gems")).toBeTruthy();
+  });
+
   it("navigates when a nav button is clicked", () => {
     render(<Shell pages={pages} apiBase="" />);
     fireEvent.click(screen.getByRole("button", { name: "watch" }));
