@@ -51,3 +51,4 @@ export * from "./rubrics.js";
 export * from "./criterionJudge.js";
 export * from "./rubricReport.js";
 export * from "./dashboardRender.js";
+export * from "./contextCap.js";
