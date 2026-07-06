@@ -24,8 +24,9 @@ const p = (o: P): ConsolePage =>
 
 // A small two-phase registry used by most tests.
 const pages = [
-  p({ id: "inspect", phase: "observe", category: "setup", order: 10 }),
+  p({ id: "inspect", phase: "observe", category: "usage", order: 10 }), // Usage leads Observe
   p({ id: "watch", phase: "observe", category: "sessions", order: 10 }),
+  p({ id: "rubrics", phase: "observe", category: "setup", order: 10 }), // Configuration, last
   p({ id: "curate", phase: "build", category: "setup", order: 10 }),
   p({ id: "deploy", phase: "build", category: "projects", order: 10, requiresGem: true }),
   p({ id: "settings", footer: true }),
@@ -46,7 +47,7 @@ describe("Shell — phase-primary nav", () => {
 
   it("renders artifact category labels for the active phase", () => {
     render(<Shell pages={pages} apiBase="" />);
-    expect(screen.getByText("Setup")).toBeTruthy();
+    expect(screen.getByText("Configuration")).toBeTruthy();
     expect(screen.getByText("Sessions")).toBeTruthy();
     // Build-only categories are not shown while in Observe
     expect(screen.queryByText("Projects")).toBeNull();

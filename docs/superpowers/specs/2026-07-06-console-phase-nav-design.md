@@ -31,15 +31,17 @@ Phase switch renders `[ Observe | Build ]` at the top of the sidebar. Settings l
 phase-independent footer, unchanged.
 
 ### Observe — read across all four artifact types
-| Category | Screens (in order) |
+| Category (Observe order) | Screens (in order) |
 |---|---|
-| Setup | Rubrics |
+| Usage | Inspect, Insights, Benchmark |
 | Sessions | Watch, Chat, Journey |
 | Projects | Mine, Optimize |
-| Usage | Inspect, Insights, Benchmark |
+| Configuration | Rubrics |
 
-> Inspect lives under **Usage** (not Setup): it is the session-history analytics dashboard, so
-> it groups with Insights/Benchmark. It stays the `#/inspect` cold-start default.
+> **Per-phase category order** (`registry.ts`): Observe leads with **Usage** (Inspect is the home
+> dashboard and the `#/inspect` default) and drops **Configuration** to the bottom; Build keeps
+> **Setup**-first (Curate is the entry point). The `setup` category renders under the label
+> **Configuration**. Inspect lives under Usage — it is the session-history analytics dashboard.
 
 ### Build — assemble & ship gems
 | Category | Screens (in order) |

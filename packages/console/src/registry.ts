@@ -2,8 +2,13 @@ import type { ConsolePage, Phase, ArtifactCategory } from "./contract.js";
 export { defineConsolePage } from "./contract.js";
 export type { ConsolePage, Phase, ArtifactCategory } from "./contract.js";
 
-/** Fixed order of the artifact sub-labels within a phase. */
-const CATEGORY_ORDER: ArtifactCategory[] = ["setup", "sessions", "projects", "usage"];
+/** Order of the artifact sub-labels, per phase. Observe leads with Usage (Inspect is the
+ *  home dashboard) and drops Configuration to the bottom; Build leads with Setup (Curate is
+ *  the entry point). */
+const CATEGORY_ORDER: Record<Phase, ArtifactCategory[]> = {
+  observe: ["usage", "sessions", "projects", "setup"],
+  build: ["setup", "sessions", "projects", "usage"],
+};
 
 /** Legacy hash routes → their new home after the Gems merge. Exact-path match only. */
 const LEGACY_ROUTES: Record<string, string> = {
@@ -52,7 +57,7 @@ export function phaseGroups(
 ): { category: ArtifactCategory; pages: ConsolePage[] }[] {
   const ordered = sortedPages(pages); // duplicate-id guard
   assertPlacement(ordered);
-  return CATEGORY_ORDER.map((category) => ({
+  return CATEGORY_ORDER[phase].map((category) => ({
     category,
     pages: ordered.filter((p) => p.phase === phase && p.category === category),
   })).filter((g) => g.pages.length > 0);

@@ -11,12 +11,12 @@ describe("pages registry", () => {
 
   it("groups the Observe phase by artifact category in order", () => {
     const g = phaseGroups(pages, "observe");
-    expect(g.map((x) => x.category)).toEqual(["setup", "sessions", "projects", "usage"]);
+    expect(g.map((x) => x.category)).toEqual(["usage", "sessions", "projects", "setup"]);
     expect(g.map((x) => x.pages.map((p) => p.id))).toEqual([
-      ["rubrics"],
+      ["observe", "insights", "benchmark"],
       ["watch", "chat", "dreaming"],
       ["mine", "optimize"],
-      ["observe", "insights", "benchmark"],
+      ["rubrics"],
     ]);
   });
 
