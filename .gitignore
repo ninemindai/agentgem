@@ -5,3 +5,4 @@ dist/
 sdd/
 website/dist/
 .DS_Store
+.superpowers/
