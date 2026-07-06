@@ -27,8 +27,10 @@ that actually bites is a **divergent local `main`**: with many concurrent
 worktrees, `main` drifts if it's committed to directly or left stale, and ends up
 both ahead of and behind `origin/main` (not fast-forwardable) — and it's often
 **checked out in another worktree** (e.g. `../agentgem-run`) you must not disturb.
-Keep `main` clean and **local merge is the default integration path**; a PR is the
-exception.
+Keep `main` clean and **a PR is the default integration path**; a direct local
+merge is the exception. The PR route runs CI (`test (24)` + `test (26)`) before
+anything lands, never touches the `main` checkout, and serializes safely when
+several sessions integrate at once — worth the round-trip as the default.
 
 - **Never commit directly to `main`.** Treat it as a read-only mirror of
   `origin/main` — only ever fast-forward it
@@ -37,18 +39,19 @@ exception.
   and stop fast-forwarding.
 - **Branch off freshly-fetched `origin/main`**, not local `main`, so your diff is
   against the real trunk.
-- **Finish with a local merge (default):** in the one checkout that holds `main`,
-  `git fetch` then **sync down** (`git merge --ff-only origin/main` — local only,
-  *no push*; it just advances local `main` up to the remote), `git merge <branch>`
-  (new commits, now ahead of the remote), run tests, then **push up**
-  (`git push` — this is the step that publishes the merge to `origin/main`). The
-  ff-only sync and the push move in opposite directions; only the push leaves your
-  machine. Don't check `main` out where it's already checked out in another
-  worktree.
-- **Reach for a PR only when** integrations may overlap (two sessions merging at
-  once — git won't let `main` be checked out in two worktrees, so they'd serialize
-  anyway and the remote is the safer rendezvous) or when you want CI/review before
-  it lands.
+- **Finish with a PR (default):** push the branch and open a PR; let CI gate it and
+  merge once green (`gh run watch <run-id> --exit-status` then
+  `gh pr merge --rebase --delete-branch`). See **PR lifecycle** below for the
+  gating facts and the verify-each-commit-landed check — the PR path is where the
+  dropped-commit trap lives, so follow it.
+- **Local merge (the exception)** — only for a trivial change you deliberately want
+  to skip CI/review on, *and* when `main` isn't checked out in another worktree: in
+  the one checkout that holds `main`, `git fetch` then **sync down**
+  (`git merge --ff-only origin/main` — local only, *no push*; it just advances local
+  `main` up to the remote), `git merge <branch>` (new commits, now ahead of the
+  remote), run tests, then **push up** (`git push` — the step that publishes to
+  `origin/main`). The ff-only sync and the push move in opposite directions; only
+  the push leaves your machine.
 - **Before finishing, confirm** your branch is ahead of `origin/main` *only* (not
   built on a stale/divergent local `main`).
 
