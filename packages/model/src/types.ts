@@ -1,7 +1,7 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 // src/gem/types.ts
-export type ArtifactType = "skill" | "mcp_server" | "instructions" | "hook" | "channel" | "subagent";
+export type ArtifactType = "skill" | "mcp_server" | "instructions" | "hook" | "channel" | "subagent" | "game";
 
 export interface SecretRef {
   name: string;     // leaf key, e.g. "OPENAI_API_KEY"
@@ -38,6 +38,33 @@ export interface SubagentArtifact {
   content: string;
   tools?: string[];
   model?: string;
+}
+
+// A pre-bundled, self-contained mini-game authored by the Play feature. `html` carries its own
+// inline JS/CSS and data: assets — it is run in a sealed sandboxed iframe (no network, no LLM at
+// runtime). `createdFrom` is provenance only (a reference + one-line summary), never the raw source.
+export type GameGenre = "replay" | "skill-run" | "project-fun"; // v2: "watch" | "team"
+
+// A read-only live-data capability a game may DECLARE. The trusted Play host, not the game, decides
+// whether to forward it (consent-gated). Absent `needs` = a pure sealed snapshot. v1 defines one.
+export type GameCapability = "live-session-events";
+
+export type GameSource =
+  | { kind: "session"; agent: string; project?: string; sessionId: string; summary: string }
+  | { kind: "skill"; skillName: string; sourceId?: string }
+  | { kind: "project"; path: string; flavor: string };
+
+export interface GameArtifact {
+  type: "game";
+  name: string;             // slug, e.g. "auth-bugfix-replay"
+  title: string;            // display, e.g. "The Great Auth Bug Hunt"
+  genre: GameGenre;
+  html: string;             // the pre-bundled, self-contained game
+  poster?: string;          // data-URI thumbnail (the preview gate's screenshot)
+  createdFrom: GameSource;  // provenance reference + summary — NOT the raw source
+  engineVersion: string;    // scaffold/genre version, for future migration
+  needs?: GameCapability[]; // declared, read-only; host decides. Absent = pure snapshot.
+  meta?: { controls?: string; estPlaySeconds?: number };
 }
 
 export interface McpServerArtifact {
@@ -94,7 +121,7 @@ export interface ReferenceArtifact {
   ref: ArtifactRef;
 }
 
-export type GemArtifact = SkillArtifact | McpServerArtifact | InstructionsArtifact | HookArtifact | ChannelArtifact | SubagentArtifact | ReferenceArtifact;
+export type GemArtifact = SkillArtifact | McpServerArtifact | InstructionsArtifact | HookArtifact | ChannelArtifact | SubagentArtifact | GameArtifact | ReferenceArtifact;
 
 export interface ProjectInventory {
   root: string;

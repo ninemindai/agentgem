@@ -60,6 +60,23 @@ export const SubagentArtifactSchema = z.object({
   model: z.string().optional(),
 });
 
+export const GameArtifactSchema = z.object({
+  type: z.literal("game"),
+  name: z.string(),
+  title: z.string(),
+  genre: z.enum(["replay", "skill-run", "project-fun"]),
+  html: z.string(),
+  poster: z.string().optional(),
+  createdFrom: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("session"), agent: z.string(), project: z.string().optional(), sessionId: z.string(), summary: z.string() }),
+    z.object({ kind: z.literal("skill"), skillName: z.string(), sourceId: z.string().optional() }),
+    z.object({ kind: z.literal("project"), path: z.string(), flavor: z.string() }),
+  ]),
+  engineVersion: z.string(),
+  needs: z.array(z.literal("live-session-events")).optional(),
+  meta: z.object({ controls: z.string().optional(), estPlaySeconds: z.number().optional() }).optional(),
+});
+
 export const ChannelPlatformSchema = z.enum(["slack", "telegram", "discord", "teams", "twilio", "github"]);
 
 export const ChannelArtifactSchema = z.object({
@@ -84,7 +101,7 @@ export const ArtifactRefSchema = z.object({
 export const ReferenceArtifactSchema = z.object({
   type: z.literal("reference"),
   name: z.string(),
-  refKind: z.enum(["skill", "mcp_server", "instructions", "hook", "channel", "subagent"]),
+  refKind: z.enum(["skill", "mcp_server", "instructions", "hook", "channel", "subagent", "game"]),
   ref: ArtifactRefSchema,
 });
 
@@ -95,6 +112,7 @@ export const GemArtifactSchema = z.discriminatedUnion("type", [
   HookArtifactSchema,
   ChannelArtifactSchema,
   SubagentArtifactSchema,
+  GameArtifactSchema,
   ReferenceArtifactSchema,
 ]);
 
@@ -270,7 +288,7 @@ export const TargetIdSchema = z.enum(TARGET_IDS);
 
 export const SkippedArtifactSchema = z.object({
   artifact: z.string(),
-  type: z.enum(["skill", "mcp_server", "instructions", "hook", "channel", "subagent", "reference"]),
+  type: z.enum(["skill", "mcp_server", "instructions", "hook", "channel", "subagent", "game", "reference"]),
   reason: z.string(),
 });
 
@@ -290,13 +308,14 @@ export const GemLockSchema = z.object({
 });
 
 export const GemManifestArtifactSchema = z.object({
-  type: z.enum(["skill", "mcp_server", "instructions", "hook", "channel", "subagent"]),
+  type: z.enum(["skill", "mcp_server", "instructions", "hook", "channel", "subagent", "game", "reference"]),
   name: z.string(),
   path: z.string(),
   description: z.string().optional(),
   source: z.string().optional(),
   tools: z.array(z.string()).optional(),
   model: z.string().optional(),
+  metadata: z.string().optional(),
 });
 
 export const GemManifestSchema = z.object({
