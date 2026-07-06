@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { makeApi } from "../api";
-import type { OrgCatalog as OrgCatalogT } from "../types";
+import type { OrgCatalog as OrgCatalogT, OrgAppStatus, OrgSkill } from "../types";
 import { CutBadge } from "../CutBadge";
 import { StoneRating } from "../StoneRating";
 import { RubricRing } from "../RubricRing";
@@ -14,12 +14,24 @@ export function OrgCatalog({ api, scope }: { api: ReturnType<typeof makeApi>; sc
   const [cut, setCut] = useState("");
   const [sort, setSort] = useState<Sort>("grade");
   const [open, setOpen] = useState<string | null>(null);
+  const [appStatus, setAppStatus] = useState<OrgAppStatus | null>(null);
+  const [internal, setInternal] = useState<OrgSkill[] | null>(null);
 
   useEffect(() => {
     let alive = true;
     api.getOrgCatalog(scope)
       .then((c) => { if (alive) setView(c ? { status: "ok", catalog: c } : { status: "notfound" }); })
       .catch(() => { if (alive) setView({ status: "error" }); });
+    return () => { alive = false; };
+  }, [api, scope]);
+
+  useEffect(() => {
+    let alive = true;
+    api.getOrgApp(scope).then((s) => {
+      if (!alive) return;
+      setAppStatus(s);
+      if (s?.isMember) api.getOrgSkills(scope).then((sk) => { if (alive) setInternal(sk); });
+    });
     return () => { alive = false; };
   }, [api, scope]);
 
@@ -48,6 +60,28 @@ export function OrgCatalog({ api, scope }: { api: ReturnType<typeof makeApi>; sc
         <span className="ex-orgcat-counts">{c.gemCount} gems · {c.ownerCount} owners</span>
         <a className="ex-orgcat-usage-link" href={`/orgs/${encodeURIComponent(c.scope)}/usage`}>Team Pulse (members) →</a>
       </header>
+      {appStatus && !appStatus.installed && (
+        <p className="ex-orgcat-appcta">
+          <a href="https://github.com/apps/agentgem/installations/new" target="_blank" rel="noreferrer">
+            Install the AgentGem GitHub App
+          </a>
+          {" "}to sync private membership and index internal skills.
+        </p>
+      )}
+      {appStatus?.isMember && internal && internal.length > 0 && (
+        <section className="ex-orgcat-internal">
+          <h3>Internal skills</h3>
+          <ul className="ex-internal-list">
+            {internal.map((s) => (
+              <li key={s.sourceId + "/" + s.path} className="ex-internal-item">
+                <span className="ex-internal-name">{s.name}</span>
+                <span className="ex-internal-repo">{s.repo}</span>
+                {s.description && <span className="ex-internal-desc">{s.description}</span>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {c.gemCount === 0 ? (
         <p className="ex-empty">No gems published under @{c.scope} yet.</p>
       ) : (

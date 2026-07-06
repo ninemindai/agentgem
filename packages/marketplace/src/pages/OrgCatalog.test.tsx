@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { OrgCatalog } from "./OrgCatalog";
-import type { OrgCatalog as OrgCatalogT, OrgCatalogGem } from "../types";
+import type { OrgCatalog as OrgCatalogT, OrgCatalogGem, OrgAppStatus, OrgSkill } from "../types";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
@@ -15,7 +15,12 @@ const gem = (over: Partial<OrgCatalogGem>): OrgCatalogGem => ({
   ...over,
 });
 const cat = (gems: OrgCatalogGem[]): OrgCatalogT => ({ scope: "acme", gemCount: gems.length, ownerCount: new Set(gems.map((g) => g.owner)).size, gems });
-const apiWith = (c: OrgCatalogT | null) => ({ getOrgCatalog: () => Promise.resolve(c) }) as never;
+// Every pre-existing stub also needs getOrgApp/getOrgSkills — OrgCatalog calls both on mount.
+const apiWith = (c: OrgCatalogT | null) => ({
+  getOrgCatalog: () => Promise.resolve(c),
+  getOrgApp: async () => null,
+  getOrgSkills: async () => null,
+}) as never;
 
 describe("OrgCatalog page", () => {
   it("renders header counts and a gem row linking to the gem", async () => {
@@ -37,7 +42,7 @@ describe("OrgCatalog page", () => {
   });
 
   it("shows a distinct error state when the catalog request fails", async () => {
-    const api = { getOrgCatalog: () => Promise.reject(new Error("500")) } as never;
+    const api = { getOrgCatalog: () => Promise.reject(new Error("500")), getOrgApp: async () => null, getOrgSkills: async () => null } as never;
     render(<OrgCatalog api={api} scope="acme" />);
     expect(await screen.findByText(/couldn't load the catalog for @acme/i)).toBeTruthy();
   });
@@ -75,5 +80,39 @@ describe("OrgCatalog page", () => {
     fireEvent.click(screen.getByRole("button", { name: /rubric/i }));
     expect(screen.getByText("Battle-tested")).toBeTruthy();
     expect(screen.getByText("raise the grade")).toBeTruthy();
+  });
+
+  it("shows the install CTA when the App is not installed", async () => {
+    const api = {
+      getOrgCatalog: () => Promise.resolve(cat([gem({})])),
+      getOrgApp: async (): Promise<OrgAppStatus> => ({ installed: false, isMember: false, role: null }),
+      getOrgSkills: async () => null,
+    } as never;
+    render(<OrgCatalog api={api} scope="acme" />);
+    expect(await screen.findByText(/Install the AgentGem GitHub App/)).toBeTruthy();
+  });
+
+  it("shows Internal skills to a member; hides them from non-members", async () => {
+    const skills: OrgSkill[] = [
+      { sourceId: "org:acme/skills", path: "eng/deploy/SKILL.md", division: "eng", name: "deploy", repo: "acme/skills", description: "How we deploy" },
+    ];
+    const memberApi = {
+      getOrgCatalog: () => Promise.resolve(cat([gem({})])),
+      getOrgApp: async (): Promise<OrgAppStatus> => ({ installed: true, isMember: true, role: "member" }),
+      getOrgSkills: async () => skills,
+    } as never;
+    render(<OrgCatalog api={memberApi} scope="acme" />);
+    expect(await screen.findByText("Internal skills")).toBeTruthy();
+    expect(await screen.findByText("deploy")).toBeTruthy();
+    cleanup();
+
+    const nonMemberApi = {
+      getOrgCatalog: () => Promise.resolve(cat([gem({})])),
+      getOrgApp: async (): Promise<OrgAppStatus> => ({ installed: true, isMember: false, role: null }),
+      getOrgSkills: async () => null,
+    } as never;
+    render(<OrgCatalog api={nonMemberApi} scope="acme" />);
+    await screen.findByText("@acme/a");
+    expect(screen.queryByText("Internal skills")).toBeNull();
   });
 });
