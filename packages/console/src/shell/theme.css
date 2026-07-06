@@ -277,6 +277,18 @@ body::before {
 .ledger-loading, .ledger-empty { color: var(--muted); font-style: italic; }
 .ledger-error { color: var(--accent); font-weight: 500; }
 
+/* Warm empty / first-run states — a doorway, not a dead end: title + context + a primary action. */
+.ledger-empty-state, .getgems-empty, .obs-firstrun {
+  max-width: 46ch; margin: 44px auto; text-align: center;
+}
+.ledger-empty-title, .getgems-empty-title, .obs-firstrun-title {
+  font: 600 19px/1.25 var(--font-display); color: var(--ink); margin: 0 0 8px;
+}
+.ledger-empty-text, .getgems-empty-text, .obs-firstrun-text {
+  color: var(--muted); font-size: 14px; margin: 0 0 18px;
+}
+.ledger-empty-cta { display: inline-flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+
 /* ── Preview (the certified gem) ── */
 .preview {
   position: relative; border: 1px solid var(--accent); border-radius: var(--radius);

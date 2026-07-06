@@ -107,9 +107,16 @@ export function GetGems({ apiBase }: { apiBase: string }) {
       <div className="getgems">
         {directBanner}
         {!directKey && (
-          <p className="ledger-empty">
-            Registry not configured. Set the registry source (GitHub repo + token) to search and install shared gems.
-          </p>
+          <div className="getgems-empty">
+            <h3 className="getgems-empty-title">Registry not configured</h3>
+            <p className="getgems-empty-text">
+              Point the console at a registry (a GitHub repo + token) to search and install shared
+              gems. Until then this tab stays empty.
+            </p>
+            <button type="button" className="ledger-sort" onClick={() => { window.location.hash = "#/settings"; }}>
+              Configure registry →
+            </button>
+          </div>
         )}
       </div>
     );

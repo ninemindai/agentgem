@@ -44,10 +44,11 @@ describe("Workspaces", () => {
     expect(targetChips).toEqual(["claude", "codex"]);
   });
 
-  it("shows an empty state when there are no workspaces", async () => {
+  it("shows a warm empty state with a primary action when there are no workspaces", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => res({ workspaces: [] })));
     render(<Workspaces apiBase="" />);
-    expect(await screen.findByText(/no saved workspaces/i)).toBeTruthy();
+    expect(await screen.findByText(/mine your first/i)).toBeTruthy();
+    expect(screen.getByText(/browse marketplace/i)).toBeTruthy();
   });
 
   it("renders a workspace to a target", async () => {
@@ -98,6 +99,6 @@ describe("Workspaces", () => {
     render(<Workspaces apiBase="" />);
     await screen.findByText("my-ws");
     fireEvent.click(screen.getByText("Delete"));
-    await waitFor(() => expect(screen.getByText(/no saved workspaces/i)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/mine your first/i)).toBeTruthy());
   });
 });
