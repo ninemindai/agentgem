@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 // src/gem/__tests__/contextHygiene.test.ts
 import { describe, it, expect } from "vitest";
-import { contextCap, contextTokens, clusterOf } from "@agentgem/insight";
-import type { TurnUsage } from "@agentgem/insight";
+import { contextCap, contextTokens, clusterOf, runDetectors, SPRAWL_MIN, SWITCH_MIN, REREAD_MIN } from "@agentgem/insight";
+import type { TurnUsage, ProcedureStep, SessionSequence, WorkflowSignal } from "@agentgem/insight";
 
 describe("contextCap", () => {
   it("returns 1M for a model id that signals a 1M window", () => {
@@ -45,5 +45,66 @@ describe("clusterOf", () => {
     expect(clusterOf("npm test")).toBeNull();
     expect(clusterOf("")).toBeNull();
     expect(clusterOf(undefined)).toBeNull();
+  });
+});
+
+function step(tool: string, verb: string, arg: string, msgIndex: number): ProcedureStep {
+  return { tool, verb, arg, msgIndex };
+}
+function sess(steps: ProcedureStep[], series?: TurnUsage[], id = "s1"): SessionSequence {
+  return { steps, sessionId: id, transcript: `${id}.jsonl`, atMs: 100, ...(series ? { contextSeries: series } : {}) };
+}
+function signalWith(sessions: SessionSequence[]): WorkflowSignal {
+  return {
+    root: "/r", flavor: "claude",
+    sessions: { scanned: sessions.length, firstMs: 0, lastMs: 0, spanDays: 0 },
+    models: [], artifacts: [], unresolved: [], coOccurrence: [], shapes: [], notes: [],
+    sequences: { root: "/r", sessions },
+  };
+}
+const fire = (sig: WorkflowSignal, id: string) => runDetectors(sig).filter((f) => f.detectorId === id);
+
+describe("task-sprawl detector", () => {
+  it("fires when a session touches SPRAWL_MIN or more distinct clusters", () => {
+    const steps = Array.from({ length: SPRAWL_MIN }, (_, i) =>
+      step("Read", "Read", `packages/p${i}/src/f.ts`, i));
+    const f = fire(signalWith([sess(steps)]), "task-sprawl");
+    expect(f).toHaveLength(1);
+    expect(f[0].severity).toBe("warn");
+    expect(f[0].detail).toContain(String(SPRAWL_MIN));
+    expect(f[0].detail).not.toContain("packages/p0/src/f.ts"); // args never leak
+  });
+  it("stays quiet for a bounded session below the cluster threshold", () => {
+    const steps = Array.from({ length: SPRAWL_MIN - 1 }, (_, i) =>
+      step("Read", "Read", `packages/p${i}/src/f.ts`, i));
+    expect(fire(signalWith([sess(steps)]), "task-sprawl")).toHaveLength(0);
+  });
+});
+
+describe("task-pingpong detector", () => {
+  it("fires when cluster transitions reach SWITCH_MIN", () => {
+    // alternate between two clusters -> a switch on every step after the first
+    const steps = Array.from({ length: SWITCH_MIN + 1 }, (_, i) =>
+      step("Read", "Read", `packages/${i % 2 ? "a" : "b"}/f.ts`, i));
+    expect(fire(signalWith([sess(steps)]), "task-pingpong")).toHaveLength(1);
+  });
+  it("stays quiet when work stays in one cluster", () => {
+    const steps = Array.from({ length: SWITCH_MIN + 5 }, (_, i) =>
+      step("Read", "Read", `packages/a/f${i}.ts`, i));
+    expect(fire(signalWith([sess(steps)]), "task-pingpong")).toHaveLength(0);
+  });
+});
+
+describe("reread-churn detector", () => {
+  it("fires when the same file is Read REREAD_MIN+ times", () => {
+    const steps = Array.from({ length: REREAD_MIN }, (_, i) =>
+      step("Read", "Read", "packages/a/big.ts", i * 10));
+    const f = fire(signalWith([sess(steps)]), "reread-churn");
+    expect(f).toHaveLength(1);
+    expect(f[0].detail).not.toContain("big.ts"); // path never leaks
+  });
+  it("ignores files read fewer than REREAD_MIN times", () => {
+    const steps = [step("Read", "Read", "packages/a/x.ts", 1), step("Read", "Read", "packages/a/x.ts", 2)];
+    expect(fire(signalWith([sess(steps)]), "reread-churn")).toHaveLength(0);
   });
 });

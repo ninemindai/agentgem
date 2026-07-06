@@ -12,6 +12,7 @@
 import type { ProcedureStep, SessionSequence, WorkflowSignal } from "./workflowScan.js";
 import { createLogger } from "@agentgem/base";
 import { isEdit, isVerify } from "./stageLabels.js";
+import { taskSprawl, taskPingpong, rereadChurn } from "./contextHygiene.js";
 
 const log = createLogger("insight");
 
@@ -195,7 +196,10 @@ const unverifiedTail: DetectorSpec = {
   },
 };
 
-export const DETECTORS: DetectorSpec[] = [retryStorm, thrashLoop, noVerifyFinish, regressionCycle, unverifiedTail];
+export const DETECTORS: DetectorSpec[] = [
+  retryStorm, thrashLoop, noVerifyFinish, regressionCycle, unverifiedTail,
+  taskSprawl, taskPingpong, rereadChurn,
+];
 
 /**
  * Run every registered detector (plus any extras — e.g. compiled declarative
