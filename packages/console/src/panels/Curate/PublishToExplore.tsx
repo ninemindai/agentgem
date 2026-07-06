@@ -196,7 +196,7 @@ export function PublishToExplore({ apiBase, selected, skillCount, lessonCount, d
           className="ledger-build"
           disabled={busy || !name.trim() || !scope.trim()}
         >
-          {busy ? "Sharing…" : "Share to Explore"}
+          {busy ? "Publishing…" : "Publish"}
         </button>
       </div>
       {error && <p className="publish-error">{error}</p>}

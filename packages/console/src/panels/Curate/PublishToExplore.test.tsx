@@ -49,7 +49,7 @@ describe("PublishToExplore", () => {
     );
     fireEvent.change(screen.getByLabelText("scope"), { target: { value: "@me" } });
     fireEvent.change(screen.getByLabelText("name"), { target: { value: "my-playbook" } });
-    const btn = await screen.findByRole("button", { name: /share to explore/i });
+    const btn = await screen.findByRole("button", { name: /^publish$/i });
     await waitFor(() => expect((btn as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(btn);
     await waitFor(() => expect(screen.getByText(/@me\/my-playbook/)).toBeTruthy());
@@ -77,7 +77,7 @@ describe("PublishToExplore", () => {
     );
     fireEvent.change(screen.getByLabelText("scope"), { target: { value: "@me" } });
     fireEvent.change(screen.getByLabelText("name"), { target: { value: "p" } });
-    const btn = await screen.findByRole("button", { name: /share to explore/i });
+    const btn = await screen.findByRole("button", { name: /^publish$/i });
     await waitFor(() => expect((btn as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(btn);
     await waitFor(() => expect(screen.getByText(/registry down|error/i)).toBeTruthy());
@@ -127,7 +127,7 @@ describe("PublishToExplore", () => {
     expect(await screen.findByRole("button", { name: /connect github/i })).toBeTruthy();
     fireEvent.change(screen.getByLabelText("scope"), { target: { value: "@me" } });
     fireEvent.change(screen.getByLabelText("name"), { target: { value: "p" } });
-    const btn = screen.getByRole("button", { name: /share to explore/i }) as HTMLButtonElement;
+    const btn = screen.getByRole("button", { name: /^publish$/i }) as HTMLButtonElement;
     await waitFor(() => expect(btn.disabled).toBe(false));
     fireEvent.click(btn);
     await waitFor(() => expect(screen.getByText(/@me\/p/)).toBeTruthy());
