@@ -66,3 +66,15 @@ describe("buildHygieneReport", () => {
     expect(rep.hygiene.verdict).toBe("bounded");
   });
 });
+
+import { HygieneReportSchema } from "../../gem.controller.js";
+
+describe("HygieneReportSchema", () => {
+  it("accepts a buildHygieneReport output unchanged (server schema matches core shape)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "hyg2-"));
+    const path = writeTranscript(dir, [{ input: 100, cacheRead: 400_000, cacheCreate: 2000 }]);
+    const rep = buildHygieneReport(scanWorkflow([path], emptyInv, { retainSequences: true }));
+    const parsed = HygieneReportSchema.parse(rep);
+    expect(parsed).toEqual(rep);
+  });
+});

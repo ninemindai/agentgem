@@ -54,6 +54,21 @@ const InspectSessionQuerySchema = z.object({
   // loadSessionTranscript's concern — unknown agents already return null → InvalidInputError.
   agent: z.string(),
 });
+export const HygieneReportSchema = z.object({
+  meta: z.object({
+    sessionId: z.string(), transcript: z.string(),
+    model: z.string().nullable(), cap: z.number(),
+  }),
+  curve: z.array(z.object({
+    turn: z.number(), msgIndex: z.number(),
+    ctxTokens: z.number(), cacheCreation: z.number(), outTokens: z.number(),
+  })),
+  factors: z.array(z.object({
+    id: z.string(), title: z.string(), advice: z.string(),
+    severity: z.enum(["info", "warn"]), count: z.number(), sessions: z.number(),
+  })),
+  hygiene: z.object({ score: z.number(), verdict: z.enum(["bounded", "mixed", "bloated"]) }),
+});
 const TokenBreakdownSchema = z.object({ in: z.number(), out: z.number(), cache: z.number() });
 const TranscriptSpanSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("message"), role: z.enum(["user", "assistant"]), text: z.string() }),
@@ -246,6 +261,7 @@ import { claudeTranscriptsForCwd, scanWorkflow, allClaudeTranscripts, bucketTran
 import { distillWorkflow, distillSessionLessons, type DistilledSkill } from "@agentgem/insight";
 import { computeWorkflowAnalysis } from "./workflowCore.js";
 import { computeDistill, DISTILL_BACKGROUND_TIMEOUT_MS } from "./distillCore.js";
+import { sessionHygiene, type HygieneReport } from "./sessionHygieneCore.js";
 
 // A playbook prepare that misses the cache kicks off the heavy distill in the
 // background (capped batch + generous budget so it actually completes and caches).
@@ -424,6 +440,16 @@ export class GemController {
     const view = await loadSessionTranscript(input.query.id, input.query.agent);
     if (!view) throw new InvalidInputError(`No ${input.query.agent} session '${input.query.id}' found.`);
     return sessionToAtif(view) as unknown as z.infer<typeof AtifTrajectorySchema>;
+  }
+
+  @get("/inspect/session/hygiene", { query: InspectSessionQuerySchema, response: HygieneReportSchema })
+  async inspectSessionHygiene(input: { query: z.infer<typeof InspectSessionQuerySchema> }): Promise<HygieneReport> {
+    if (input.query.agent !== "claude") throw new InvalidInputError("Context hygiene is available for Claude sessions only.");
+    try {
+      return await sessionHygiene(input.query.id, input.query.agent);
+    } catch (err) {
+      throw new InvalidInputError((err as Error).message);
+    }
   }
 
   @post("/inspect/distill", { body: InspectDistillBodySchema, response: InspectDistillResponseSchema })
