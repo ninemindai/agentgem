@@ -9,6 +9,7 @@ export const CUTS: Record<string, CutMeta> = {
   setup: { label: "Setup", gemstone: "Opal", bg: "#dbf1ec", fg: "#1f7a6a" },
   kit: { label: "Kit", gemstone: "Amethyst", bg: "#efe6f7", fg: "#8e44ad" },
   skill: { label: "Skill", gemstone: "Emerald", bg: "#d8f0e3", fg: "#1f7a52" },
+  game: { label: "Game", gemstone: "Ruby", bg: "#f7dede", fg: "#b23a48" },
   integration: { label: "Integration", gemstone: "Sapphire", bg: "#dde7f6", fg: "#2f5fa0" },
   guide: { label: "Guide", gemstone: "Topaz", bg: "#f7ecd0", fg: "#a9760a" },
 };

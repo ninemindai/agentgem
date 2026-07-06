@@ -3,7 +3,11 @@ import { CUTS, cutMeta } from "./cuts";
 
 describe("cuts", () => {
   it("has the 6 built-in cut ids", () => {
-    expect(Object.keys(CUTS).sort()).toEqual(["guide", "integration", "kit", "playbook", "setup", "skill"]);
+    expect(Object.keys(CUTS).sort()).toEqual(["game", "guide", "integration", "kit", "playbook", "setup", "skill"]);
+  });
+  it("has a Ruby game cut", () => {
+    expect(CUTS.game).toEqual({ label: "Game", gemstone: "Ruby", bg: "#f7dede", fg: "#b23a48" });
+    expect(cutMeta("game")?.gemstone).toBe("Ruby");
   });
   it("cutMeta resolves a known cut", () => {
     expect(cutMeta("playbook")?.gemstone).toBe("Pearl");
