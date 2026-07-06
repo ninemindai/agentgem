@@ -9,6 +9,7 @@
   "files": ["dist"],
   "scripts": { "build": "tsc -b" },
   "dependencies": {
+    "@agentgem/base": "workspace:*",
     "@agentgem/model": "workspace:*",
     "jsdom": "^24"
   },
