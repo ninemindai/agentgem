@@ -424,6 +424,27 @@ describe("GemController", () => {
       clearDeployRecord("test-ws-record", "eve");
     }
   });
+
+  // Proves the widened query schema (agent: z.string(), was z.enum(["claude","codex"]))
+  // no longer 400s on agent=atif. The atif drop dir resolves off AGENTGEM_HOME (set in
+  // beforeAll), so dropping a trajectory into <AGENTGEM_HOME>/atif makes it resolvable
+  // over HTTP without any dirs override.
+  it("GET /api/inspect/session accepts agent=atif and returns the imported trajectory", async () => {
+    const atifDir = join(agentgemHomeDir, "atif");
+    mkdirSync(atifDir, { recursive: true });
+    writeFileSync(join(atifDir, "sess-1.json"), JSON.stringify({
+      schema_version: "ATIF-v1.7",
+      session_id: "sess-1",
+      agent: { name: "harbor-agent", version: "1.0.0", model_name: "gemini-2.5-flash" },
+      steps: [
+        { step_id: 1, source: "user", message: "What is the price of GOOGL?", timestamp: "2026-07-01T10:00:00Z" },
+        { step_id: 2, source: "agent", message: "Searching.", timestamp: "2026-07-01T10:00:05Z" },
+      ],
+    }));
+    const r = await client.get("/api/inspect/session?id=sess-1&agent=atif").expect(200);
+    expect(r.body.sessionId).toBe("sess-1");
+    expect(r.body.agent).toBe("atif");
+  });
 });
 
 describe("POST /api/archive", () => {
