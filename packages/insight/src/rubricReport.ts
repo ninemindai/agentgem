@@ -15,6 +15,7 @@ import { loadRuleDetectors } from "./detectorRules.js";
 import { type Rubric, type RubricScope, type RubricScopeKind, type LlmCriterion, rubricGranularity, scopeAllowed } from "./rubrics.js";
 import { judgeCriteria } from "./criterionJudge.js";
 import type { AcpConnectFn } from "./acpRecommender.js";
+import { hygieneScore, type HygieneVerdict } from "./contextHygiene.js";
 
 const log = createLogger("insight");
 
@@ -25,6 +26,7 @@ export interface RubricReport {
   // One row per RESOLVED cheap factor — count 0 when it did not fire, so the
   // clean/zero-findings success state can list the checks that passed.
   factors: DetectorSummary[];
+  hygiene?: HygieneVerdict;
   sessionsScanned: number;
   clean: boolean;                 // no findings AND not degraded (the success state)
   degraded: boolean;              // an LLM criterion chunk fell back (agent offline) — cheap findings still shown
@@ -126,11 +128,13 @@ export async function evaluateRubric(signal: WorkflowSignal, rubric: Rubric, opt
   const allFindings = [...cheapFindings, ...llmFindings];
   const allSpecs = [...cheapSpecs, ...usedCriteria.map(criterionSpec)];
 
+  const factors = summariesForSpecs(allSpecs, allFindings);
   const report: RubricReport = {
     rubricId: rubric.id,
     target: rubric.target,
     scope: kind,
-    factors: summariesForSpecs(allSpecs, allFindings),
+    factors,
+    hygiene: hygieneScore(factors),
     sessionsScanned: signal.sessions?.scanned ?? (signal.sequences?.sessions?.length ?? 0),
     // Not "clean" when degraded: criteria weren't evaluated, so we can't claim all-clear.
     clean: allFindings.length === 0 && !degraded,
