@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
 import { randomUUID } from "node:crypto";
-import { makeTestDb, buildProfile, upsertReview, accounts, accountBindings, catalogGems, curatedSkills, producers, gemAdoptions, stars } from "@agentgem/aggregator";
+import { sql } from "drizzle-orm";
+import { makeTestDb, ensureSchema, buildProfile, upsertReview, accounts, accountBindings, catalogGems, curatedSkills, producers, gemAdoptions, stars } from "@agentgem/aggregator";
 
 async function star(db: never, gemKey: string, n: number) {
   for (let i = 0; i < n; i++) {
@@ -134,6 +135,23 @@ describe("buildProfile", () => {
     await db.insert(accounts).values({ id: randomUUID(), provider: "github", providerAccountId: "1", login: "octocat", avatarUrl: null });
     const p = await buildProfile(db, "octocat");
     expect(p!.reviews).toEqual([]);
+  });
+
+  it("survives a gem_adoptions table created before the quarantine columns existed (regression: profile 500)", async () => {
+    const db = await makeTestDb();
+    // Simulate a database provisioned before commit 52e3d3c: recreate gem_adoptions in its original
+    // shape, without trust_score / quarantined. `create table if not exists` won't touch it, so only
+    // the paired `alter table ... add column if not exists` in ensureSchema can back-fill the columns.
+    await db.execute(sql`drop table if exists gem_adoptions`);
+    await db.execute(sql`create table gem_adoptions (gem_key text not null, gem_digest text not null, producer_pubkey text not null references producers(pubkey), account_login text, event text not null default 'install', adopted_at timestamptz not null default now(), primary key (gem_key, producer_pubkey))`);
+    await ensureSchema(db); // must forward-migrate the old table, not skip it
+
+    // An author with a published gem exercises gemAdoption(), which reads `quarantined` — the query
+    // that threw "column g.quarantined does not exist" on the live profile page before the fix.
+    await db.insert(catalogGems).values({ gemKey: "@octocat/g", version: "1.0.0", publishedBy: "octocat", createdAtMs: 1 });
+    const p = await buildProfile(db, "octocat");
+    expect(p).not.toBeNull();
+    expect(p!.gems).toHaveLength(1);
   });
 
   it("returns null for an unknown login", async () => {
