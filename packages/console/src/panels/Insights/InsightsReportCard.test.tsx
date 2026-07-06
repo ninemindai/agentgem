@@ -66,7 +66,7 @@ describe("InsightsReportCard", () => {
       publish_candidates: [{ sessionId: "b", goal: "write tests", why: "Succeeded" }],
     };
     render(<InsightsReportCard report={report} onContribute={() => {}} />);
-    expect(screen.getByText("Contribute to explore →")).toBeTruthy();
+    expect(screen.getByText("Publish")).toBeTruthy();
   });
 
   const contributeReport: InsightsReportView = {
@@ -83,7 +83,7 @@ describe("InsightsReportCard", () => {
     const onContribute = () => new Promise<void>((r) => { resolveContribute = r; });
 
     render(<InsightsReportCard report={contributeReport} onContribute={onContribute} />);
-    const btn = screen.getByText("Contribute to explore →") as HTMLButtonElement;
+    const btn = screen.getByText("Publish") as HTMLButtonElement;
     expect(btn.disabled).toBe(false);
 
     fireEvent.click(btn);
@@ -97,7 +97,7 @@ describe("InsightsReportCard", () => {
     act(() => { resolveContribute(); });
 
     await waitFor(() => {
-      const restored = screen.getByText("Contribute to explore →") as HTMLButtonElement;
+      const restored = screen.getByText("Publish") as HTMLButtonElement;
       expect(restored.disabled).toBe(false);
     });
   });
@@ -107,7 +107,7 @@ describe("InsightsReportCard", () => {
     const onContribute = () => Promise.reject(new Error("server blew up"));
 
     render(<InsightsReportCard report={contributeReport} onContribute={onContribute} />);
-    const btn = screen.getByText("Contribute to explore →");
+    const btn = screen.getByText("Publish");
     fireEvent.click(btn);
 
     await waitFor(() => {
@@ -115,6 +115,6 @@ describe("InsightsReportCard", () => {
     });
 
     expect(window.location.hash).toBe(originalHash);
-    expect((screen.getByText("Contribute to explore →") as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByText("Publish") as HTMLButtonElement).disabled).toBe(false);
   });
 });

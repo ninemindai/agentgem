@@ -89,4 +89,14 @@ describe("workspaces", () => {
     expect(existsSync(join(home, "workspaces", "gone"))).toBe(false);
     expect(listWorkspaces()).toEqual([]);
   });
+
+  it("read/render/delete on a missing workspace throw a client error (400), not an opaque 500", () => {
+    // A valid name for a workspace that doesn't exist is a caller error — the reason
+    // ("no workspace 'nope'") must reach the caller as a 4xx, not be swallowed behind a
+    // 500. This is the Publish flow: playbookPublish → readWorkspace('<name>').
+    for (const fn of [() => readWorkspace("nope"), () => renderTarget("nope", "claude"), () => deleteWorkspace("nope")]) {
+      expect(fn).toThrow(/no workspace 'nope'/);
+      expect(fn).toThrow(expect.objectContaining({ statusCode: 400 }));
+    }
+  });
 });
