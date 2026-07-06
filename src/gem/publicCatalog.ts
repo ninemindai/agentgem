@@ -18,6 +18,7 @@ export interface RegistryGem {
   publishedBy?: string;
   grade?: number;
   installable: boolean;
+  artifacts?: { name: string; type: string }[];
 }
 
 /** Flatten the index's per-item discovery block into a browse list. No ingredients (browse-only). */
@@ -36,14 +37,15 @@ export function mapIndexToGems(index: RegistryIndex): RegistryGem[] {
   }));
 }
 
-/** DB-shared gems are browse-only teasers, never installable. Grade is re-clamped defensively:
- *  writes already clamp (recordCatalogShare), but an out-of-band DB row with an out-of-range grade
- *  must not reach the response schema's min(1).max(3) and 500 the public (never-500) catalog. */
+/** DB-shared gems: installable when their .gem archive was uploaded (row.installable, derived from
+ *  the gem_archives join), and they carry the per-artifact preview list. Grade is re-clamped
+ *  defensively: writes already clamp (recordCatalogShare), but an out-of-band DB row with an
+ *  out-of-range grade must not reach the response schema's min(1).max(3) and 500 the public catalog. */
 export function mapDbToGems(rows: CatalogRow[]): RegistryGem[] {
   return rows.map((r) => ({
     key: r.gemKey, version: r.version, author: r.author, description: r.description,
     tags: r.tags, artifactKinds: r.artifactKinds, type: r.type, publishedBy: r.publishedBy,
-    grade: clampGrade(r.grade), installable: false,
+    grade: clampGrade(r.grade), installable: r.installable ?? false, artifacts: r.artifacts,
   }));
 }
 
