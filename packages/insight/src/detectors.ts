@@ -138,7 +138,47 @@ const noVerifyFinish: DetectorSpec = {
   },
 };
 
-export const DETECTORS: DetectorSpec[] = [retryStorm, thrashLoop, noVerifyFinish];
+// A file whose edit was followed by a verify step is "completed"; this many
+// LATER edits to it read as regressing on finished work (AgentLens regression
+// cycles, arXiv:2605.12925 — steps carry no test results, so completed-then-
+// re-edited is the honest spine-level proxy).
+export const REGRESSION_MIN = 2;
+
+const regressionCycle: DetectorSpec = {
+  id: "regression-cycle",
+  title: "Completed file reworked again later",
+  cost: "cheap",
+  severity: "warn",
+  advice: "When you return to a file you already finished and verified, first re-read it and state what the earlier change missed — repeated rework of completed files usually means the verification was too shallow the first time.",
+  detect(session) {
+    const completed = new Set<string>();
+    const editedSinceVerify = new Set<string>();
+    const reworks = new Map<string, number[]>();   // file -> msgIndices of reworking edits
+    for (const s of session.steps) {
+      if (isEdit(s)) {
+        if (completed.has(s.arg)) {
+          const list = reworks.get(s.arg) ?? [];
+          list.push(s.msgIndex);
+          reworks.set(s.arg, list);
+        }
+        editedSinceVerify.add(s.arg);
+      } else if (isVerify(s)) {
+        for (const f of editedSinceVerify) completed.add(f);
+        editedSinceVerify.clear();
+      }
+    }
+    const out: DetectorFinding[] = [];
+    for (const [, msgIndices] of reworks) {
+      if (msgIndices.length >= REGRESSION_MIN) {
+        out.push(mkFinding(regressionCycle, session,
+          `completed file reworked ${msgIndices.length}x after verification`, msgIndices));
+      }
+    }
+    return out;
+  },
+};
+
+export const DETECTORS: DetectorSpec[] = [retryStorm, thrashLoop, noVerifyFinish, regressionCycle];
 
 /**
  * Run every registered detector (plus any extras — e.g. compiled declarative

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
 import type { ProcedureStep, SessionSequence, WorkflowSignal } from "@agentgem/insight";
-import { stageOf, stageProfile } from "@agentgem/insight";
+import { stageOf, stageProfile, runDetectors, REGRESSION_MIN } from "@agentgem/insight";
 
 let mi = 0;
 const step = (verb: string, arg: string, tool = verb.startsWith("Bash:") ? "Bash" : verb): ProcedureStep =>
@@ -32,5 +32,31 @@ describe("stageLabels", () => {
   it("profiles a session's stage mix", () => {
     const p = stageProfile([read("a"), read("b"), edit("a"), test_(), task()]);
     expect(p).toEqual({ exploration: 2, implementation: 1, verification: 1, orchestration: 1, other: 0 });
+  });
+});
+
+const byId = <T extends { detectorId: string }>(findings: T[], id: string) => findings.filter((f) => f.detectorId === id);
+
+describe("regression-cycle", () => {
+  it("fires when a completed file is reworked repeatedly", () => {
+    const s = session([
+      edit("src/a.ts"), test_(),            // a.ts completed
+      edit("src/b.ts"), test_(),            // move on (b.ts completed)
+      edit("src/a.ts"), test_(),            // rework 1
+      edit("src/a.ts"), test_(),            // rework 2 → fires (REGRESSION_MIN = 2)
+    ]);
+    const found = byId(runDetectors(signalOf(s)), "regression-cycle");
+    expect(found).toHaveLength(1);
+    expect(found[0].detail).toContain("2x");
+    expect(found[0].evidence.msgIndices.length).toBeGreaterThanOrEqual(REGRESSION_MIN);
+  });
+
+  it("does not fire for iterative work that never verified in between, or single rework", () => {
+    // never completed → edits to a.ts are iteration, not regression
+    const iterating = session([edit("a.ts"), edit("a.ts"), edit("a.ts"), test_()]);
+    expect(byId(runDetectors(signalOf(iterating)), "regression-cycle")).toHaveLength(0);
+    // one rework only → below threshold
+    const once = session([edit("a.ts"), test_(), edit("a.ts"), test_()]);
+    expect(byId(runDetectors(signalOf(once)), "regression-cycle")).toHaveLength(0);
   });
 });
