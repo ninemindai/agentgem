@@ -26,10 +26,21 @@ export interface ArtifactUsage {
 // One captured builtin tool call: the tool name, its scrubbed { verb, arg }, and
 // the JSONL line index it was parsed from (provenance coordinate).
 export interface ProcedureStep extends ScrubbedStep { tool: string; msgIndex: number }
+
+// per-assistant-turn token accounting — the bloat curve. Optional: only present
+// when retainSequences is on (see scanWorkflow). `ctxTokens` is the full window
+// size sent that turn; `cacheCreation` alone is the churn signal.
+export interface TurnUsage { turn: number; msgIndex: number; ctxTokens: number; cacheCreation: number; outTokens: number }
+
+export function contextTokens(usage: Record<string, number> | undefined): number {
+  if (!usage) return 0;
+  return (usage.input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0);
+}
+
 export interface MissionHint { task: string; outcome: string }
 // `sessionId`/`transcript`/`atMs` are provenance coordinates: which transcript a
 // run came from and when. `transcript` is a basename, never an absolute path.
-export interface SessionSequence { steps: ProcedureStep[]; missionHint?: MissionHint; sessionId: string; transcript: string; atMs: number; model?: string }
+export interface SessionSequence { steps: ProcedureStep[]; missionHint?: MissionHint; sessionId: string; transcript: string; atMs: number; model?: string; contextSeries?: TurnUsage[] }
 // A recurring procedure (verb spine), the sessions exercising it, a representative
 // sample index, and ALL exercising session indices (for provenance fan-out).
 export interface ProcedureGroup { key: string; verbs: string[]; sessions: number; sampleSessionIdx: number; sessionIdxs: number[] }
