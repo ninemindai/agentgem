@@ -5,7 +5,7 @@ import type { FileTree, SkippedArtifact } from "@agentgem/model";
 import type {
   Gem, GemArtifact, ArtifactType,
   SkillArtifact, McpServerArtifact, HookArtifact, GemCheck,
-  ChannelArtifact, SecretRef, ReferenceArtifact, SubagentArtifact, GemContract,
+  ChannelArtifact, SecretRef, ReferenceArtifact, SubagentArtifact, GemContract, GameArtifact,
 } from "@agentgem/model";
 import { safePathSegment } from "@agentgem/model";
 
@@ -66,7 +66,7 @@ export function verifyLock(files: FileTree, lock: GemLock): VerifyResult {
   return { ok, mismatches, missing, extra };
 }
 
-interface ManifestArtifactEntry { type: ArtifactType | "reference"; name: string; path: string; description?: string; source?: string; tools?: string[]; model?: string }
+interface ManifestArtifactEntry { type: ArtifactType | "reference"; name: string; path: string; description?: string; source?: string; tools?: string[]; model?: string; metadata?: string }
 interface ManifestCheckEntry { name: string; path: string }
 interface GemManifest {
   formatVersion: number;
@@ -132,7 +132,16 @@ export function writeGemArchive(gem: Gem, opts: { version?: string; dependencies
         if (a.model !== undefined) e.model = a.model;
         artifacts.push(e);
       }
-    } else {
+    } else if (a.type === "game") {
+      const path = `games/${withExt(seg, ".html")}`;
+      const body: Record<string, unknown> = { title: a.title, genre: a.genre, createdFrom: a.createdFrom, engineVersion: a.engineVersion };
+      if (a.poster !== undefined) body.poster = a.poster;
+      if (a.needs !== undefined) body.needs = a.needs;
+      if (a.meta !== undefined) body.meta = a.meta;
+      if (place(path, a.html, a.name, "game")) {
+        artifacts.push({ type: "game", name: a.name, path, metadata: JSON.stringify(body, null, 2) });
+      }
+    } else if (a.type === "hook") {
       const path = `hooks/${withExt(seg, ".json")}`;
       const body: Record<string, unknown> = { event: a.event, config: a.config };
       if (a.matcher !== undefined) body.matcher = a.matcher;
@@ -235,6 +244,23 @@ export function readGemArchive(files: FileTree): Gem {
       if (e.tools !== undefined) a.tools = e.tools;
       if (e.model !== undefined) a.model = e.model;
       return a;
+    }
+    if (e.type === "game") {
+      const metadata = JSON.parse(e.metadata ?? "{}") as { title?: string; genre?: string; createdFrom?: unknown; engineVersion?: string; poster?: string; needs?: unknown[]; meta?: unknown };
+      const createdFrom = (metadata.createdFrom ?? { kind: "session", agent: "", sessionId: "", summary: "" }) as any;
+      const a: any = {
+        type: "game" as const,
+        name: e.name,
+        title: metadata.title ?? "",
+        genre: metadata.genre ?? "replay",
+        html: body(e.path),
+        createdFrom: createdFrom,
+        engineVersion: metadata.engineVersion ?? "1",
+      };
+      if (metadata.poster !== undefined) a.poster = metadata.poster;
+      if (metadata.needs !== undefined) a.needs = metadata.needs;
+      if (metadata.meta !== undefined) a.meta = metadata.meta;
+      return a as GemArtifact;
     }
     if (e.type !== "hook") throw new Error(`unknown artifact type '${e.type}' in manifest`);
     const o = JSON.parse(body(e.path)) as { event: string; matcher?: string; config: Record<string, unknown>; source?: string; secretRefs?: HookArtifact["secretRefs"] };
