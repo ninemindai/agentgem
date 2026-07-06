@@ -28,6 +28,7 @@ export function Curate({ apiBase }: { apiBase: string }) {
   // the compose tab and shows the Publish to Explore form.
   const [showPublish, setShowPublish] = useState(false);
   const [publishCounts, setPublishCounts] = useState({ skills: 0, lessons: 0 });
+  const [publishDefaultName, setPublishDefaultName] = useState<string | undefined>(undefined);
   useEffect(() => {
     const pending = consumePendingAnalyze();
     if (pending) { setAnalyzeTarget(pending); setTab("suggest"); }
@@ -47,6 +48,7 @@ export function Curate({ apiBase }: { apiBase: string }) {
     if (contrib) {
       setKeys(new Set(contrib.keys));
       if (contrib.name) setNameStore(contrib.name);
+      setPublishDefaultName(contrib.name);
       setTab("compose");
       setShowPublish(true);
       setPublishCounts({ skills: contrib.skillCount, lessons: contrib.lessonCount });
@@ -238,6 +240,7 @@ export function Curate({ apiBase }: { apiBase: string }) {
           selected={selected}
           skillCount={publishCounts.skills}
           lessonCount={publishCounts.lessons}
+          defaultName={publishDefaultName}
         />
       )}
 

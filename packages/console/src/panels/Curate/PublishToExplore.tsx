@@ -15,11 +15,12 @@ export interface PublishToExploreProps {
   selected: Set<string>;
   skillCount: number;
   lessonCount: number;
+  defaultName?: string;
 }
 
-export function PublishToExplore({ apiBase, selected, skillCount, lessonCount }: PublishToExploreProps) {
+export function PublishToExplore({ apiBase, selected, skillCount, lessonCount, defaultName }: PublishToExploreProps) {
   const [scope, setScope] = useState("");
-  const [name, setName] = useState("");
+  const [name, setName] = useState(defaultName ?? "");
   const [version, setVersion] = useState("1.0.0");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +36,10 @@ export function PublishToExplore({ apiBase, selected, skillCount, lessonCount }:
 
   useEffect(() => {
     const client = makeClient(apiBase);
-    bindStatusRoute.call(client).then(setBindStatus).catch(() => setBindStatus({ bound: false }));
+    bindStatusRoute.call(client).then((s) => {
+      setBindStatus(s);
+      if (s.bound && s.login) setScope((cur) => cur || `@${s.login}`);
+    }).catch(() => setBindStatus({ bound: false }));
   }, [apiBase]);
 
   // Step 1: mint the device code and show it. Deliberately does NOT start polling
@@ -136,7 +140,7 @@ export function PublishToExplore({ apiBase, selected, skillCount, lessonCount }:
   return (
     <form className="publish-form" onSubmit={handleSubmit}>
       <div className="publish-head">
-        <h3>Share to Explore</h3>
+        <h3>Publish to Explore</h3>
         {bindStatus?.bound && (
           <span className="publish-verified">✓ Verified as @{bindStatus.login}</span>
         )}
@@ -168,32 +172,21 @@ export function PublishToExplore({ apiBase, selected, skillCount, lessonCount }:
       )}
 
       <div className="publish-fields">
-        <input
-          id="publish-scope"
-          aria-label="scope"
-          className="ledger-search publish-scope"
-          placeholder="scope (e.g. @me)"
-          value={scope}
-          onChange={(e) => setScope(e.target.value)}
-          required
-        />
-        <input
-          id="publish-name"
-          aria-label="name"
-          className="ledger-search"
-          placeholder="playbook name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-        />
-        <input
-          id="publish-version"
-          aria-label="version"
-          className="ledger-search publish-version"
-          placeholder="version"
-          value={version}
-          onChange={(e) => setVersion(e.target.value)}
-        />
+        <label className="publish-field">
+          <span className="publish-label">scope</span>
+          <input id="publish-scope" className="ledger-search publish-scope" placeholder="e.g. @me"
+            value={scope} onChange={(e) => setScope(e.target.value)} required />
+        </label>
+        <label className="publish-field">
+          <span className="publish-label">name</span>
+          <input id="publish-name" className="ledger-search" placeholder="playbook name"
+            value={name} onChange={(e) => setName(e.target.value)} required />
+        </label>
+        <label className="publish-field">
+          <span className="publish-label">version</span>
+          <input id="publish-version" className="ledger-search publish-version" placeholder="1.0.0"
+            value={version} onChange={(e) => setVersion(e.target.value)} />
+        </label>
       </div>
 
       <div className="publish-foot">

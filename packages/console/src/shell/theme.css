@@ -1090,3 +1090,6 @@ button.scorecard-intent { line-height: 1.4; }
 .quick-share-result { margin-top: 4px; }
 .quick-share-upgrade { background: none; border: none; padding: 2px 0; cursor: pointer; font-size: 0.75rem; color: var(--accent); text-align: left; }
 .quick-share-upgrade:hover { text-decoration: underline; }
+
+.publish-field { display: flex; flex-direction: column; gap: 3px; }
+.publish-label { font-size: 0.68rem; color: var(--muted); text-transform: lowercase; }
