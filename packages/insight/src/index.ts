@@ -38,6 +38,7 @@ export * from "./sources/gemini.js";
 export * from "./sources/continue.js";
 export * from "./sources/cursor.js";
 export * from "./sources/codexArtifacts.js";
+export * from "./atif/atifTypes.js";
 export * from "./goldmineContext.js";
 export * from "./cachedCompute.js";
 export * from "./rubrics.js";
