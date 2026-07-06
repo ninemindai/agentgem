@@ -849,7 +849,6 @@ button.scorecard-intent { line-height: 1.4; }
 .hyg {
   margin: 0 0 16px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius);
   background: var(--raised); box-shadow: var(--shadow-sm);
-  --obs-accent: var(--accent); --obs-muted: var(--muted);
 }
 .hyg-head { font: 600 11px/1 var(--font-ui); text-transform: uppercase; letter-spacing: .09em; color: var(--muted); margin-bottom: 8px; }
 .hyg-verdict { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
