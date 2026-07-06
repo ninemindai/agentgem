@@ -109,6 +109,11 @@ describe("subagent recommendations", () => {
     expect(sel.projects[ROOT].subagents).toEqual(["reviewer"]);
   });
 
+  it("surfaces an unresolved subagent (used but not installed) as a gap", () => {
+    const sigGap: WorkflowSignal = { ...sigSub, unresolved: [{ name: "ghost", kind: "subagent", count: 2 }] };
+    expect(deterministicAnalysis(sigGap).gaps).toContain("ghost");
+  });
+
   it("validateAnalysis resolves a subagent include and drops a hallucinated one", () => {
     const a = validateAnalysis({
       candidates: [{ name: "Review", description: "r", include: [

@@ -424,6 +424,9 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
             const g = p ? undefined : matchSkill(global.subagents ?? [], sub);
             if (p) { touch("p", p.name, "subagent", ms, path, `Task(${sub})`); sessionNames.add(p.name); }
             else if (g) { touch("g", g.name, "subagent", ms, path, `Task(${sub})`); sessionNames.add(g.name); }
+            // A subagent dispatched but not installed here is a gap — a missing subagent worth
+            // installing (like an unresolved MCP server), keyed by name so it isn't lost as a bare "Task".
+            else bumpUnresolved(unresolved, sub, "subagent");
           }
           if (name === "Skill" && typeof block.input?.skill === "string") {
             const skill = block.input.skill as string;

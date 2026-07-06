@@ -102,6 +102,8 @@ describe("scanWorkflow subagents", () => {
     // Task detection is additive — the step still flows to the builtin/distillation handling.
     const unresolved = Object.fromEntries(sig.unresolved.map((u) => [u.name, u]));
     expect(unresolved["Task"].kind).toBe("builtin");
+    // …but the unmatched subagent name surfaces as a gap (a missing subagent worth installing).
+    expect(unresolved["ghost"].kind).toBe("subagent");
     rmSync(dir, { recursive: true, force: true });
   });
 });
