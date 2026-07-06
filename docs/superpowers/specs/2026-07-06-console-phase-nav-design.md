@@ -34,9 +34,15 @@ phase-independent footer, unchanged.
 | Category (Observe order) | Screens (in order) |
 |---|---|
 | Usage | Inspect, Insights, Benchmark |
-| Sessions | Watch, Chat, Journey |
+| Sessions | History, Watch, Chat, Journey |
 | Projects | Mine, Optimize |
 | Configuration | Rubrics |
+
+> **Inspect / Sessions split:** Inspect (Usage) is the aggregate dashboard (pulse, charts,
+> by-model, heatmap). The per-session **ledger table + transcript drill-down** are a separate
+> **History** screen (`#/sessions`) under Sessions. Legacy `#/inspect/<agent>/<session>` links
+> rewrite to `#/sessions/<agent>/<session>` via `normalizeHash`. Both screens share
+> `useObserveData` + `RangeTabs`/`ObserveFilters` (one scan, DRY controls).
 
 > **Per-phase category order** (`registry.ts`): Observe leads with **Usage** (Inspect is the home
 > dashboard and the `#/inspect` default) and drops **Configuration** to the bottom; Build keeps

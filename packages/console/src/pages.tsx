@@ -1,6 +1,7 @@
 // The composable seam: add a screen with one import + one array entry.
 import type { ConsolePage } from "./registry.js";
 import { observePage } from "./panels/Observe/index.js";
+import { sessionsPage } from "./panels/Sessions/index.js";
 import { insightsPage } from "./panels/Insights/index.js";
 import { rubricsPage } from "./panels/Rubrics/index.js";
 import { rubricLibraryPage } from "./panels/RubricLibrary/index.js";
@@ -20,4 +21,4 @@ import { watchPage } from "./panels/Watch/index.js";
 
 // Yours / Received / Get-more are folded into the single tabbed `gemsPage` (Variant B);
 // their component bodies are reused inside packages/console/src/panels/Gems/Gems.tsx.
-export const pages: ConsolePage[] = [observePage, watchPage, insightsPage, rubricsPage, dreamingPage, benchmarkPage, optimizePage, minePage, curatePage, materializePage, gemsPage, publishPage, sourcesPage, rubricLibraryPage, settingsPage, deployPage, chatPage];
+export const pages: ConsolePage[] = [observePage, sessionsPage, watchPage, insightsPage, rubricsPage, dreamingPage, benchmarkPage, optimizePage, minePage, curatePage, materializePage, gemsPage, publishPage, sourcesPage, rubricLibraryPage, settingsPage, deployPage, chatPage];

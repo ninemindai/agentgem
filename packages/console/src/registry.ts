@@ -23,8 +23,13 @@ const LEGACY_ROUTES: Record<string, string> = {
 export function normalizeHash(hash: string): string {
   const qIdx = hash.indexOf("?");
   const path = qIdx === -1 ? hash : hash.slice(0, qIdx);
+  const query = qIdx === -1 ? "" : hash.slice(qIdx);
   const mapped = LEGACY_ROUTES[path];
-  return mapped ? mapped + (qIdx === -1 ? "" : hash.slice(qIdx)) : hash;
+  if (mapped) return mapped + query;
+  // The transcript drill-down moved from Inspect to the Sessions screen. Bare #/inspect
+  // (the dashboard) stays; only the /<agent>/<sessionId> sub-paths rewrite.
+  if (path.startsWith("#/inspect/")) return "#/sessions/" + path.slice("#/inspect/".length) + query;
+  return hash;
 }
 
 /** Sort pages for the sidebar; reject duplicate ids (a wiring mistake). */

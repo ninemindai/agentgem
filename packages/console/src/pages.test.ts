@@ -14,7 +14,7 @@ describe("pages registry", () => {
     expect(g.map((x) => x.category)).toEqual(["usage", "sessions", "projects", "setup"]);
     expect(g.map((x) => x.pages.map((p) => p.id))).toEqual([
       ["observe", "insights", "benchmark"],
-      ["watch", "chat", "dreaming"],
+      ["sessions", "watch", "chat", "dreaming"],
       ["mine", "optimize"],
       ["rubrics"],
     ]);
