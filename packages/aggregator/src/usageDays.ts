@@ -91,8 +91,27 @@ export function normalizeUsageModels(models: unknown): UsageModelReport[] {
   return out;
 }
 
-/** Upsert per-(agent, model) day slices, same overwrite semantics as recordUsageDays. */
+/** REPLACE-BY-GROUP per-(agent, model) day slices: a report is authoritative for every
+ *  (scope, day) group it covers, so all existing slices in those groups are deleted first.
+ *  A plain upsert is NOT enough here — a session's last-seen model can change between two
+ *  reports of the same day, moving it to a different (agent, model) key; the stale key's row
+ *  would survive an upsert and double-count that session in every slice-derived view. The
+ *  reporter keeps each group intact within one POST (group-aware chunking), so a partial
+ *  batch never wipes a group it doesn't fully re-send. */
 export async function recordUsageModels(db: AppDb, accountId: string, machine: string, models: UsageModelReport[]): Promise<{ recorded: number }> {
+  const groups = new Map<string, { scope: string; date: string }>();
+  for (const m of models) {
+    const scope = m.scope ?? "";
+    groups.set(`${scope}\n${m.date}`, { scope, date: m.date });
+  }
+  for (const g of groups.values()) {
+    await db.delete(usageDayModels).where(and(
+      eq(usageDayModels.accountId, accountId),
+      eq(usageDayModels.machine, machine),
+      eq(usageDayModels.scope, g.scope),
+      eq(usageDayModels.date, g.date),
+    ));
+  }
   for (const m of models) {
     await db
       .insert(usageDayModels)
@@ -309,9 +328,12 @@ export async function buildOrgUsage(
   const allSlices: OrgUsageModel[] = facetRows
     .map((r: Record<string, unknown>) => ({ agent: String(r.agent), model: String(r.model), sessions: Number(r.sessions ?? 0), tokens: Number(r.tokens ?? 0) }))
     .sort((a: OrgUsageModel, b: OrgUsageModel) => b.tokens - a.tokens || a.model.localeCompare(b.model));
+  // Agent options never narrow (switching agents must always be possible); MODEL options cascade
+  // under a selected agent — offering another agent's models would only build guaranteed-empty
+  // agent+model combinations.
   const facets = {
     agents: [...new Set(allSlices.map((m) => m.agent).filter(Boolean))],
-    models: [...new Set(allSlices.map((m) => m.model).filter(Boolean))],
+    models: [...new Set(allSlices.filter((m) => !opts.agent || m.agent === opts.agent).map((m) => m.model).filter(Boolean))],
   };
 
   const visibleSlices = filtered

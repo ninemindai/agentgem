@@ -271,3 +271,66 @@ describe("TeamUsage facets", () => {
     expect(screen.queryByText("Sessions")).toBeNull();
   });
 });
+
+describe("TeamUsage review fixes", () => {
+  it("facet selects survive a fetch error so a failing filter can still be cleared", async () => {
+    let fail = false;
+    const api = {
+      getOrgUsage: () => (fail ? Promise.reject(new Error("boom")) : Promise.resolve({ status: "ok", usage: usage() } as OrgUsageResult)),
+      getOrgSettings: () => Promise.resolve({ status: "denied" }),
+    } as never;
+    render(<TeamUsage api={api} scope="acme" stars={stars} />);
+    await screen.findByText("zheng"); // first load ok → facets cached
+    fail = true;
+    fireEvent.change(screen.getByLabelText("filter by agent"), { target: { value: "codex" } });
+    await screen.findByText(/Couldn't load team usage/);
+    const select = screen.getByLabelText("filter by agent") as HTMLSelectElement; // still mounted
+    expect(select.value).toBe("codex");
+    fail = false;
+    fireEvent.change(select, { target: { value: "" } }); // ...and can clear the filter
+    await screen.findByText("zheng");
+    window.history.pushState({}, "", "/orgs/acme/usage");
+  });
+
+  it("membersCsv omits the zeroed columns for filtered payloads", () => {
+    const filteredCsv = membersCsv(usage({ filtered: true }));
+    expect(filteredCsv.split("\n")[0]).toBe("rank,login,sessions,tokens_total,active_days,last_active");
+    expect(filteredCsv).not.toContain("active_hours");
+    const fullCsv = membersCsv(usage());
+    expect(fullCsv.split("\n")[0]).toContain("tokens_cache"); // unfiltered keeps the full set
+  });
+
+  it("drill-down and backlink preserve active facets; changing agent clears the model", async () => {
+    window.history.pushState({}, "", "/orgs/acme/usage?agent=codex");
+    try {
+      const calls: unknown[] = [];
+      const api = {
+        getOrgUsage: (_s: string, _r: string, f?: unknown) => { calls.push(f); return Promise.resolve({ status: "ok", usage: usage({ filtered: true }) } as OrgUsageResult); },
+        getOrgSettings: () => Promise.resolve({ status: "denied" }),
+      } as never;
+      render(<TeamUsage api={api} scope="acme" stars={stars} />);
+      await screen.findByText("zheng");
+      const drill = screen.getAllByText("usage →")[0] as HTMLAnchorElement;
+      expect(drill.getAttribute("href")).toBe("/orgs/acme/usage?member=zheng&agent=codex"); // facet preserved
+      // agent change clears model (cascaded options may not contain it)
+      window.history.pushState({}, "", "/orgs/acme/usage?agent=codex&model=gpt-5.2-codex");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+      await waitFor(() => expect((screen.getByLabelText("filter by model") as HTMLSelectElement).value).toBe("gpt-5.2-codex"));
+      fireEvent.change(screen.getByLabelText("filter by agent"), { target: { value: "claude" } });
+      await waitFor(() => expect(window.location.search).toBe("?agent=claude")); // model dropped
+    } finally {
+      window.history.pushState({}, "", "/orgs/acme/usage");
+    }
+  });
+
+  it("filtered empty result explains the filter instead of the onboarding hint", async () => {
+    window.history.pushState({}, "", "/orgs/acme/usage?agent=codex");
+    try {
+      render(<TeamUsage api={apiWith({ status: "ok", usage: usage({ filtered: true, members: [], memberCount: 0, daily: [] }) })} scope="acme" stars={stars} />);
+      expect(await screen.findByText(/No usage matches the current filter/)).toBeTruthy();
+      expect(screen.queryByText("agentgem bind")).toBeNull();
+    } finally {
+      window.history.pushState({}, "", "/orgs/acme/usage");
+    }
+  });
+});

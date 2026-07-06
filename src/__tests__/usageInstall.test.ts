@@ -462,3 +462,50 @@ describe("agent/model facets", () => {
     expect(bad._status).toBe(400);
   });
 });
+
+describe("stale-slice purge (replace-by-group)", () => {
+  it("a re-report of the same (scope, day) deletes slices whose (agent, model) key vanished", async () => {
+    const db = await makeTestDb();
+    const { a } = await member(db, "alice", ["acme"]);
+    // Report 1: ongoing session's last-seen model is sonnet.
+    await recordUsageModels(db, a.id, "m", [{ scope: "acme", date: "2026-07-01", agent: "claude", model: "claude-sonnet-5", sessions: 1, tokens: 100 }]);
+    // Report 2 (same day re-sent): the session switched — only fable appears now.
+    await recordUsageModels(db, a.id, "m", [{ scope: "acme", date: "2026-07-01", agent: "claude", model: "claude-fable-5", sessions: 1, tokens: 500 }]);
+    const u = await buildOrgUsage(db, "acme", "all");
+    expect(u.models).toEqual([{ agent: "claude", model: "claude-fable-5", sessions: 1, tokens: 500 }]); // sonnet slice purged
+    const f = await buildOrgUsage(db, "acme", "all", Date.now(), { agent: "claude" });
+    expect(f.totals.sessions).toBe(1); // no double count in the filtered view
+  });
+
+  it("the purge is group-bounded: other days, scopes, and machines survive", async () => {
+    const db = await makeTestDb();
+    const { a } = await member(db, "alice", ["acme"]);
+    await recordUsageModels(db, a.id, "laptop", [
+      { scope: "acme", date: "2026-07-01", agent: "claude", model: "m1", sessions: 1, tokens: 10 },
+      { scope: "acme", date: "2026-06-30", agent: "claude", model: "m2", sessions: 1, tokens: 20 },
+      { scope: "alice", date: "2026-07-01", agent: "claude", model: "m3", sessions: 1, tokens: 30 },
+    ]);
+    await recordUsageModels(db, a.id, "desktop", [{ scope: "acme", date: "2026-07-01", agent: "codex", model: "m4", sessions: 1, tokens: 40 }]);
+    // Re-report ONLY laptop's acme/2026-07-01 group with a different model.
+    await recordUsageModels(db, a.id, "laptop", [{ scope: "acme", date: "2026-07-01", agent: "claude", model: "m1b", sessions: 1, tokens: 11 }]);
+    const u = await buildOrgUsage(db, "acme", "all");
+    const keys = u.models.map((m) => m.model).sort();
+    expect(keys).toEqual(["m1b", "m2", "m4"]); // m1 replaced; other day + other machine intact
+    const personal = await buildOrgUsage(db, "alice", "all", Date.now(), { includeUnattributed: true });
+    expect(personal.models.map((m) => m.model)).toEqual(["m3"]); // other scope untouched
+  });
+});
+
+describe("model-facet cascade", () => {
+  it("model options narrow under a selected agent; agent options never narrow", async () => {
+    const db = await makeTestDb();
+    const { a } = await member(db, "alice", ["acme"]);
+    await recordUsageModels(db, a.id, "m", [
+      { scope: "acme", date: "2026-07-01", agent: "claude", model: "claude-fable-5", sessions: 1, tokens: 10 },
+      { scope: "acme", date: "2026-07-01", agent: "codex", model: "gpt-5.2-codex", sessions: 1, tokens: 20 },
+    ]);
+    const u = await buildOrgUsage(db, "acme", "all", Date.now(), { agent: "codex" });
+    expect([...u.facets.agents].sort()).toEqual(["claude", "codex"]); // full — switching stays possible
+    expect(u.facets.models).toEqual(["gpt-5.2-codex"]);     // narrowed — no impossible combos offered
+  });
+});
