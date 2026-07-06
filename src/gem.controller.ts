@@ -241,7 +241,7 @@ import { sanitizeShareText } from "@agentgem/insight";
 import { claudeTranscriptsForCwd, scanWorkflow, allClaudeTranscripts, bucketTranscriptsByCwd } from "@agentgem/insight";
 import { distillWorkflow, distillSessionLessons, type DistilledSkill } from "@agentgem/insight";
 import { computeWorkflowAnalysis } from "./workflowCore.js";
-import { computeDistill } from "./distillCore.js";
+import { computeDistill, PREPARE_DISTILL_TIMEOUT_MS } from "./distillCore.js";
 import { writeDistilledDraft, writeDistilledLesson, stageDraftsByEvidence, stageLessonsByEvidence } from "@agentgem/capture";
 import { runReadiness, startLocal, stopLocal, getRunStatus, deployVercel, deployCloudflare, undeployVercel, undeployCloudflare } from "@agentgem/run";
 import { setCredential } from "@agentgem/capture";
@@ -439,7 +439,10 @@ export class GemController {
     if (!project) throw new InvalidInputError(`Project '${root}' not found in inventory.`);
     return preparePlaybook({
       root,
-      distill: async () => (await computeDistill(root)).payload,
+      // Cap the interactive distill so "Publish" isn't stuck on the full 60s LLM
+      // budget; the background `distill` warmable computes + caches the full-quality
+      // result, which a later prepare of the same project then serves instantly.
+      distill: async () => (await computeDistill(root, { timeoutMs: PREPARE_DISTILL_TIMEOUT_MS })).payload,
       persistSkill: (s) => { writeDistilledDraft(s); },
       persistLesson: (l) => { writeDistilledLesson(l); },
     });
