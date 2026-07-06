@@ -65,11 +65,13 @@ export function Observe({ apiBase }: { apiBase: string }) {
   // this can't defer the fetch to click-time because the button itself needs to
   // know whether to disable.
   const [setupShare, setSetupShare] = useState<{ name: string; provenance: string; empty: boolean } | null>(null);
+  const inventoryRef = useRef<Awaited<ReturnType<typeof inventoryRoute.call>> | null>(null);
 
   useEffect(() => {
     let alive = true;
     inventoryRoute.call(makeClient(apiBase)).then((inv) => {
       if (!alive) return;
+      inventoryRef.current = inv;
       const parts = [
         [inv.skills.length, "skill"], [inv.mcpServers.length, "MCP"],
         [inv.instructions.length, "instruction"], [inv.hooks.length, "hook"],
@@ -83,10 +85,11 @@ export function Observe({ apiBase }: { apiBase: string }) {
   }, [apiBase]);
 
   // "Publish": bundle the whole inventory into a Gem via Curate's Publish
-  // flow. Fetched lazily on click (separate from the setupShare effect above).
+  // flow. Reuses the inventory fetched by the setupShare effect above; only
+  // refetches if the click races ahead of that effect resolving.
   const onPublishSetup = async () => {
     try {
-      const inv = await inventoryRoute.call(makeClient(apiBase));
+      const inv = inventoryRef.current ?? await inventoryRoute.call(makeClient(apiBase));
       const keys = [
         ...inv.skills.map((a) => `skills::${a.name}`),
         ...inv.mcpServers.map((a) => `mcpServers::${a.name}`),

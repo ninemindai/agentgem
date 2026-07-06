@@ -916,6 +916,8 @@ button.scorecard-intent { line-height: 1.4; }
 .mine-wf-view:hover { color: var(--ink); }
 .mine-wf-share { background: none; border: 1px solid var(--line); cursor: pointer; font-size: 0.7rem; color: var(--muted); padding: 0.1rem 0.4rem; border-radius: 4px; line-height: 1.4; margin-left: auto; white-space: nowrap; }
 .mine-wf-share:hover { color: var(--accent); border-color: var(--accent); }
+.mine-wf-share[aria-disabled="true"] { opacity: .5; cursor: default; }
+.mine-wf-share[aria-disabled="true"]:hover { color: var(--muted); border-color: var(--line); }
 .mine-wf-detail { flex-basis: 100%; width: 100%; margin: 0.15rem 0 0.4rem 2rem; padding: 0.5rem 0.75rem; border-left: 2px solid var(--line); font-size: 0.8rem; color: var(--ink-soft); }
 .mine-wf-detail p { margin: 0.2rem 0; }
 .mine-wf-detail ol.steps { margin: 0.25rem 0; padding-left: 1.25rem; }
