@@ -24,6 +24,18 @@ export interface AggCoOccurrence {
   producers: number;
   verifiedProducers: number;
 }
+export interface AggEffectiveness {
+  gemName: string;
+  mostly: number;
+  partially: number;
+  notAchieved: number;
+  judged: number;
+  producers: number;
+  verifiedProducers: number;
+  organic: number;
+  confidence: number;
+  score: number;
+}
 export interface AdoptionPoint {
   bucket: string;
   producers: number;

@@ -1,4 +1,4 @@
-import type { AggIngredient, AggCoOccurrence, AdoptionPoint, RegistryGem, Profile, OrgCatalog, OrgUsage, OrgUsageRange, OrgSettingsView,
+import type { AggIngredient, AggCoOccurrence, AggEffectiveness, AdoptionPoint, RegistryGem, Profile, OrgCatalog, OrgUsage, OrgUsageRange, OrgSettingsView,
   CuratedSource, SourceDivision, SourceAgentRef, ImportedSkill, PopularSkill, PopularSkillGroup } from "./types";
 
 /** The team-usage read is auth-gated: the caller distinguishes "sign in" from "not a member"
@@ -42,6 +42,8 @@ export function makeApi(base: string) {
       get<{ groups: PopularSkillGroup[] }>(base, "/api/aggregator/popular-skills", { sources, perSource }).then((r) => r.groups),
     getCoOccurrence: (q: { id: string; limit?: number }) =>
       get<AggCoOccurrence[]>(base, "/api/aggregator/co-occurrence", q),
+    getEffectiveness: (q: { gemName?: string; sort?: "producers" | "score"; minConfidence?: number } = {}) =>
+      get<AggEffectiveness[]>(base, "/api/aggregator/effectiveness", q),
     getAdoption: (q: { id: string; bucket?: "week" | "month" }) =>
       get<AdoptionPoint[]>(base, "/api/aggregator/adoption", q),
     getGems: () =>
