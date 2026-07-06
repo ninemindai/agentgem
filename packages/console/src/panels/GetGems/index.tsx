@@ -59,6 +59,15 @@ export function GetGems({ apiBase }: { apiBase: string }) {
     }
   };
 
+  // Deep-link entry: a "…/#/get-gems?q=<gemKey>" link (e.g. "Open in AgentGem" on the marketplace)
+  // pre-fills the box and runs the search once on mount, landing the reader on the gem to install.
+  // Absent the param this is a no-op, so the default "does not auto-search on mount" behaviour holds.
+  useEffect(() => {
+    const q0 = new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("q");
+    if (q0) { setQ(q0); void search(q0); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   if (ready === null) return <Loading />;
   if (!ready) {
     return (
