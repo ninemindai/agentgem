@@ -14,10 +14,12 @@ export function consumePendingAnalyze(): string | null {
   return t;
 }
 
-// One-shot hand-off of a distilled playbook draft from the Insights panel to
-// Curate. Consumed (read-and-cleared) once so a later navigation to Curate
-// doesn't re-trigger.
-export interface PendingPlaybook { root: string; skills: string[]; lessons: string[] }
+// One-shot hand-off of a playbook from the Insights panel to Curate. Consumed
+// (read-and-cleared) once so a later navigation to Curate doesn't re-trigger.
+// `skills`/`lessons` are OPTIONAL: the "Publish" button hands off just the
+// `root` and navigates instantly, letting Curate run the (slow) distill itself
+// with visible progress. When they ARE present, Curate uses them directly.
+export interface PendingPlaybook { root: string; skills?: string[]; lessons?: string[] }
 let pendingPlaybook: PendingPlaybook | null = null;
 export function setPendingPlaybook(d: PendingPlaybook): void { pendingPlaybook = d; }
 export function consumePendingPlaybook(): PendingPlaybook | null { const d = pendingPlaybook; pendingPlaybook = null; return d; }

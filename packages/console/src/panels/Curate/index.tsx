@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
-import { inventoryRoute, usageRoute, createWorkspaceRoute, scaffoldChecksRoute, makeClient, type Usage, type GemCheck } from "../../api/routes.js";
+import { inventoryRoute, usageRoute, createWorkspaceRoute, scaffoldChecksRoute, playbookPrepareRoute, makeClient, type Usage, type GemCheck } from "../../api/routes.js";
 import { groupInventory, mergeUsage, applyView, sortGroupItems, relativeTime, formatSource, DEFAULT_VIEW, type LedgerGroup, type SortKey, type SortDir } from "./data.js";
 import { selKey, visibleKeys, buildSelection } from "./selection.js";
 import { useActiveGem, setKeys, toggleKey as toggleKeyStore, clearKeys, setName as setNameStore } from "../../activeGem.js";
@@ -10,6 +10,17 @@ import { Checks } from "./Checks.js";
 import { ContentView } from "./ContentView.js";
 import { PublishToExplore } from "./PublishToExplore.js";
 import { Loading } from "../../shell/Loading.js";
+
+// Project basename for display ("/work/myproj" → "myproj").
+const projectLabel = (root: string): string => root.split("/").filter(Boolean).pop() || root;
+
+// A sensible default gem name from the project: basename, sanitized to the
+// workspace-name charset ([A-Za-z0-9._-]), leading dots stripped, never empty —
+// so publishing is one click instead of naming homework.
+function defaultGemName(root: string): string {
+  const seg = root.split("/").filter(Boolean).pop() ?? "";
+  return seg.replace(/[^A-Za-z0-9._-]/g, "-").replace(/^\.+/, "") || "playbook";
+}
 
 export function Curate({ apiBase }: { apiBase: string }) {
   const [groups, setGroups] = useState<LedgerGroup[] | null>(null);
@@ -29,18 +40,59 @@ export function Curate({ apiBase }: { apiBase: string }) {
   const [showPublish, setShowPublish] = useState(false);
   const [publishCounts, setPublishCounts] = useState({ skills: 0, lessons: 0 });
   const [publishDefaultName, setPublishDefaultName] = useState<string | undefined>(undefined);
+  // Publish-intent (Insights "Publish") prep: Curate runs the slow distill itself
+  // with visible progress, so the button never hangs. prepareRoot is retained for Retry.
+  const [prepareRoot, setPrepareRoot] = useState<string | null>(null);
+  const [preparing, setPreparing] = useState(false);
+  const [prepareError, setPrepareError] = useState<string | null>(null);
+  const [prepareEmpty, setPrepareEmpty] = useState(false);
+  const [prepareDegraded, setPrepareDegraded] = useState(false);
+  const mounted = useRef(true);
+  useEffect(() => () => { mounted.current = false; }, []);
+
+  // Distill the project into a playbook, then open the prefilled Publish form. An
+  // empty distill yields an empty state — never a hollow, publishable gem (the
+  // Publish form doesn't guard an empty selection).
+  const runPrepare = async (root: string) => {
+    setPrepareRoot(root);
+    setPrepareError(null); setPrepareEmpty(false); setPreparing(true);
+    try {
+      const r = await playbookPrepareRoute.call(makeClient(apiBase), { body: { root } });
+      if (!mounted.current) return;
+      if (r.skills.length + r.lessons.length === 0) { setPrepareEmpty(true); return; }
+      setKeys(new Set([
+        ...r.skills.map((k) => selKey("skills", k)),
+        ...r.lessons.map((k) => selKey("instructions", k)),
+      ]));
+      setPublishCounts({ skills: r.skills.length, lessons: r.lessons.length });
+      setPublishDefaultName(defaultGemName(root));
+      setPrepareDegraded(r.degraded);
+      setShowPublish(true);
+    } catch (e) {
+      if (mounted.current) setPrepareError(e instanceof Error ? e.message : String(e));
+    } finally {
+      if (mounted.current) setPreparing(false);
+    }
+  };
+
   useEffect(() => {
     const pending = consumePendingAnalyze();
     if (pending) { setAnalyzeTarget(pending); setTab("suggest"); }
     const playbook = consumePendingPlaybook();
     if (playbook) {
-      setKeys(new Set([
-        ...playbook.skills.map(k => selKey("skills", k)),
-        ...playbook.lessons.map(k => selKey("instructions", k)),
-      ]));
       setTab("compose");
-      setShowPublish(true);
-      setPublishCounts({ skills: playbook.skills.length, lessons: playbook.lessons.length });
+      if (playbook.skills && playbook.lessons) {
+        // Present path (back-compat): use the handed-off distill directly.
+        setKeys(new Set([
+          ...playbook.skills.map(k => selKey("skills", k)),
+          ...playbook.lessons.map(k => selKey("instructions", k)),
+        ]));
+        setShowPublish(true);
+        setPublishCounts({ skills: playbook.skills.length, lessons: playbook.lessons.length });
+      } else {
+        // Instant path: distill here with visible progress.
+        void runPrepare(playbook.root);
+      }
     }
     // "Share my setup" / a single lesson's "Share" arrive with their selection
     // keys already resolved — pre-select them and open the Publish form.
@@ -179,6 +231,36 @@ export function Curate({ apiBase }: { apiBase: string }) {
       )}
 
       {tab === "compose" && (<>
+      {/* Publish is the focus when you arrive here to publish: the form (and the
+          distill progress that precedes it) sits above the artifact workbench. */}
+      {(preparing || prepareError || prepareEmpty || showPublish) && (
+        <div className="publish-panel">
+          {preparing && (
+            <p className="publish-prep" role="status" aria-live="polite">
+              <span className="scorecard-spin" aria-hidden="true" /> Distilling {prepareRoot ? projectLabel(prepareRoot) : "your project"} into a playbook…
+            </p>
+          )}
+          {prepareError && (
+            <p className="ledger-error">
+              Couldn't prepare the playbook: {prepareError}{" "}
+              {prepareRoot && <button type="button" className="ledger-sort" onClick={() => void runPrepare(prepareRoot)}>Retry</button>}
+            </p>
+          )}
+          {prepareEmpty && (
+            <p className="ledger-empty">Nothing distilled worth publishing from {prepareRoot ? projectLabel(prepareRoot) : "this project"} yet — keep working on it and try again.</p>
+          )}
+          {showPublish && (<>
+            {prepareDegraded && <p className="insights-hint">Basic distill — few reusable pieces found. Review before publishing.</p>}
+            <PublishToExplore
+              apiBase={apiBase}
+              selected={selected}
+              skillCount={publishCounts.skills}
+              lessonCount={publishCounts.lessons}
+              defaultName={publishDefaultName}
+            />
+          </>)}
+        </div>
+      )}
       <div className="ledger-bar">
         <div className="ledger-search-wrap">
           <input
@@ -232,16 +314,6 @@ export function Curate({ apiBase }: { apiBase: string }) {
 
       {selected.size > 0 && (
         <Checks suggested={suggested} included={included} busy={checksBusy} error={checksError} onSuggest={suggestChecks} onToggle={toggleCheck} />
-      )}
-
-      {showPublish && (
-        <PublishToExplore
-          apiBase={apiBase}
-          selected={selected}
-          skillCount={publishCounts.skills}
-          lessonCount={publishCounts.lessons}
-          defaultName={publishDefaultName}
-        />
       )}
 
       {visible.length === 0 ? (

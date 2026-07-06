@@ -961,6 +961,12 @@ button.scorecard-intent { line-height: 1.4; }
   margin: 18px 0 26px; padding: 16px; border: 1px solid var(--line);
   border-radius: var(--radius); background: var(--raised); box-shadow: var(--shadow-sm);
 }
+
+/* Publish-intent panel (Insights "Publish"): the distill progress + Publish form,
+   surfaced above the artifact workbench so publishing is the focus. */
+.publish-panel { margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.publish-panel .publish-form { margin-top: 8px; }
+.publish-prep { display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: 0.9rem; margin: 8px 0; }
 .publish-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .publish-form h3 { margin: 0; font: 600 15px/1.2 var(--font-ui); color: var(--ink); }
 .publish-verified {

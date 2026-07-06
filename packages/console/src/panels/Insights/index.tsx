@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { testbedRecentsRoute, testbedProjectsRoute, makeClient, playbookPrepareRoute, type RecentEntry, type ProjectCandidate } from "../../api/routes.js";
+import { testbedRecentsRoute, testbedProjectsRoute, makeClient, type RecentEntry, type ProjectCandidate } from "../../api/routes.js";
 import { defineConsolePage } from "../../registry.js";
 import { openInsightsStream, type InsightsReportView } from "./insightsStream.js";
 import { OutcomesDonut, ByModelBars } from "./InsightsCharts.js";
@@ -128,9 +128,10 @@ export function Insights({ apiBase }: { apiBase: string }) {
                           report={report}
                           scanned={scanned}
                           onBuild={r.path === "*" ? undefined : () => { setPendingAnalyze(r.path); window.location.hash = "#/curate"; }}
-                          onContribute={r.path === "*" ? undefined : async () => {
-                            const { skills, lessons } = await playbookPrepareRoute.call(makeClient(apiBase), { body: { root: r.path } });
-                            setPendingPlaybook({ root: r.path, skills, lessons });
+                          onContribute={r.path === "*" ? undefined : () => {
+                            // Navigate instantly with just the project root — Curate runs the
+                            // (slow) distill itself with visible progress, so the button never hangs.
+                            setPendingPlaybook({ root: r.path });
                             window.location.hash = "#/curate";
                           }}
                         />

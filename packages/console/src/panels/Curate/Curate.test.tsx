@@ -208,4 +208,41 @@ describe("Curate", () => {
     expect((screen.getByLabelText("workspace name") as HTMLInputElement).value).toBe("my-setup");
   });
 
+  it("root-only playbook hand-off distills in Curate, then opens the prefilled Publish form", async () => {
+    // The Insights "Publish" button now navigates instantly with just the project root;
+    // Curate runs the (slow) distill itself with progress, then shows the publish form.
+    setPendingPlaybook({ root: "/work/myproj" });
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+      const u = String(url);
+      if (u.includes("/api/playbook/prepare")) return res({ skills: ["ship-loop"], lessons: ["lesson-one"], root: "/work/myproj", degraded: false });
+      if (u.includes("/api/inventory")) return res({ skills: [{ name: "ship-loop" }], mcpServers: [], instructions: [{ name: "lesson-one" }], hooks: [], subagents: [] });
+      if (u.includes("/api/usage")) return res({ artifacts: [] });
+      if (u.includes("/api/bind")) return res({ bound: false });
+      throw new Error(`unexpected url ${u}`);
+    }));
+
+    render(<Curate apiBase="" />);
+    // The publish form appears after the distill, prefilled with the project basename.
+    expect(await screen.findByRole("heading", { name: "Publish to Explore" })).toBeTruthy();
+    expect((screen.getByLabelText("name") as HTMLInputElement).value).toBe("myproj");
+    // 1 skill + 1 lesson distilled → 2 selected.
+    expect(screen.getByText("2 selected")).toBeTruthy();
+  });
+
+  it("root-only playbook with an empty distill shows an empty state, not the Publish form", async () => {
+    setPendingPlaybook({ root: "/work/empty" });
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+      const u = String(url);
+      if (u.includes("/api/playbook/prepare")) return res({ skills: [], lessons: [], root: "/work/empty", degraded: true });
+      if (u.includes("/api/inventory")) return res({ skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [] });
+      if (u.includes("/api/usage")) return res({ artifacts: [] });
+      throw new Error(`unexpected url ${u}`);
+    }));
+
+    render(<Curate apiBase="" />);
+    expect(await screen.findByText(/nothing distilled worth publishing/i)).toBeTruthy();
+    // No hollow gem: the Publish form must not render for an empty distill.
+    expect(screen.queryByRole("heading", { name: "Publish to Explore" })).toBeNull();
+  });
+
 });
