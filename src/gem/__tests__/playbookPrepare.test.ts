@@ -28,4 +28,32 @@ describe("preparePlaybook (core)", () => {
     });
     expect(r).toEqual({ skills: [], lessons: [], root: "/r", degraded: true });
   });
+
+  const skill = (name: string, origin: "llm" | "heuristic"): DistilledSkill =>
+    ({ name, description: "d", triggers: ["t"], tools: ["Bash"], mutating: false, body: "x", evidence: { sessions: 2, exampleSequence: [], root: "/r", provenance: { occurrences: [] } }, status: "draft", confidence: "high", origin });
+
+  it("publishes + persists only genuinely-distilled skills, dropping heuristic skeletons", async () => {
+    const written: string[] = [];
+    const r = await preparePlaybook({
+      root: "/r",
+      distill: async () => ({ skills: [skill("ship-loop", "llm"), skill("let-s-resume-work-on-8", "heuristic")], lessons: [], degraded: true }),
+      persistSkill: (s) => { written.push(s.name); },
+      persistLesson: () => {},
+    });
+    // The heuristic skeleton is neither published nor persisted (no ~/.agentgem/distilled junk).
+    expect(r.skills).toEqual(["ship-loop"]);
+    expect(written).toEqual(["ship-loop"]);
+  });
+
+  it("returns no skills when the distill produced only skeletons (→ Curate shows the empty state)", async () => {
+    const written: string[] = [];
+    const r = await preparePlaybook({
+      root: "/r",
+      distill: async () => ({ skills: [skill("read-strategy-doc-3", "heuristic")], lessons: [], degraded: true }),
+      persistSkill: (s) => { written.push(s.name); },
+      persistLesson: () => {},
+    });
+    expect(r.skills).toEqual([]);
+    expect(written).toEqual([]);
+  });
 });
