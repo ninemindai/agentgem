@@ -7,17 +7,10 @@
 // Timestamps are optional in ATIF: absent → startMs/endMs are 0 and the
 // SourceSpec scanner backfills file mtime (parsers are fs-free).
 import { basename } from "node:path";
-import { scrubText } from "../scrub.js";
+import { scrubTruncate } from "../scrub.js";
 import type { SessionStat } from "../observeAggregate.js";
 import type { SessionEvent, SessionEventSpan } from "../inspectSession.js";
 import { parseAtifDocument, flattenAtifContent, type AtifTrajectory, type AtifStep } from "./atifTypes.js";
-
-const MAX_STR = 50_000; // same visible-truncation valve as inspectSession
-
-function scrub(s: string): string {
-  const out = scrubText(s);
-  return out.length > MAX_STR ? out.slice(0, MAX_STR) + "\n…(truncated)" : out;
-}
 
 export function atifSessionId(doc: AtifTrajectory, path: string): string {
   return doc.trajectory_id ?? doc.session_id ?? basename(path).replace(/\.json$/, "");
@@ -79,16 +72,16 @@ export function atifSessionEvents(text: string, path: string): SessionEvent[] {
     const push = (span: SessionEventSpan) => out.push({ tsMs: ms, span });
     const role = step.source === "user" ? "user" as const : "assistant" as const;
     const txt = flattenAtifContent(step.message);
-    if (txt.trim()) push({ kind: "message", role, text: scrub(txt) });
+    if (txt.trim()) push({ kind: "message", role, text: scrubTruncate(txt) });
     if (typeof step.reasoning_content === "string" && step.reasoning_content.trim()) {
-      push({ kind: "message", role: "assistant", text: scrub(step.reasoning_content) });
+      push({ kind: "message", role: "assistant", text: scrubTruncate(step.reasoning_content) });
     }
     for (const call of step.tool_calls ?? []) {
       let input: string; try { input = JSON.stringify(call.arguments); } catch { input = String(call.arguments); }
-      push({ kind: "tool_call", toolId: call.tool_call_id ?? null, name: call.function_name, input: scrub(input) });
+      push({ kind: "tool_call", toolId: call.tool_call_id ?? null, name: call.function_name, input: scrubTruncate(input) });
     }
     for (const res of step.observation?.results ?? []) {
-      push({ kind: "tool_result", toolId: res.source_call_id ?? null, output: scrub(flattenAtifContent(res.content)), error: false });
+      push({ kind: "tool_result", toolId: res.source_call_id ?? null, output: scrubTruncate(flattenAtifContent(res.content)), error: false });
     }
   }
   return out;

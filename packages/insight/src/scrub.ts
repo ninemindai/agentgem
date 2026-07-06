@@ -51,6 +51,13 @@ export function scrubText(s: string): string {
     .join("");
 }
 
+/** scrubText + a visible-truncation valve: caps very large content so a single
+ *  Read/scan can't ship megabytes per open. The cut is marked, not silent. */
+export function scrubTruncate(s: string, max = 50_000): string {
+  const out = scrubText(s);
+  return out.length > max ? out.slice(0, max) + "\n…(truncated)" : out;
+}
+
 // A token may carry a secret embedded in surrounding syntax (https://SECRET@host).
 // Redact the embedded secret, not the whole token, so structure survives.
 function redactToken(tok: string): string {

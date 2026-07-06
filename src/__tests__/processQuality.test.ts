@@ -3,7 +3,7 @@
 import { describe, it, expect } from "vitest";
 import type { ProcedureStep, SessionSequence, WorkflowSignal } from "@agentgem/insight";
 import { stageOf, stageProfile, runDetectors, REGRESSION_MIN } from "@agentgem/insight";
-import { sessionProcessQuality, processQualityReport, DETECTORS } from "@agentgem/insight";
+import { sessionProcessQuality, processQualityReport } from "@agentgem/insight";
 
 let mi = 0;
 const step = (verb: string, arg: string, tool = verb.startsWith("Bash:") ? "Bash" : verb): ProcedureStep =>

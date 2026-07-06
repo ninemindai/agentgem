@@ -7,16 +7,10 @@
 // identical to atifImport.
 import { join } from "node:path";
 import { agentgemHome } from "@agentgem/model";
-import { scrubText } from "../scrub.js";
+import { scrubTruncate } from "../scrub.js";
 import type { TranscriptSpan, TranscriptTurn, TranscriptView, TokenBreakdown } from "../inspectSession.js";
 import { parseAtifDocument, flattenAtifContent, type AtifStep } from "./atifTypes.js";
 import { parseAtifMeta } from "./atifImport.js";
-
-const MAX_STR = 50_000;
-function scrub(s: string): string {
-  const out = scrubText(s);
-  return out.length > MAX_STR ? out.slice(0, MAX_STR) + "\n…(truncated)" : out;
-}
 
 /** The drop directory the atif source scans: <agentgemHome>/atif (baseDir = test
  *  override pointing at an alternative drop dir directly). */
@@ -45,9 +39,9 @@ export function parseAtifTranscriptView(text: string, path: string): TranscriptV
     lastMs = tsMs;
     const spans: TranscriptSpan[] = [];
     const txt = flattenAtifContent(step.message);
-    if (txt.trim()) spans.push({ kind: "message", role, text: scrub(txt) });
+    if (txt.trim()) spans.push({ kind: "message", role, text: scrubTruncate(txt) });
     if (typeof step.reasoning_content === "string" && step.reasoning_content.trim()) {
-      spans.push({ kind: "message", role: "assistant", text: scrub(step.reasoning_content) });
+      spans.push({ kind: "message", role: "assistant", text: scrubTruncate(step.reasoning_content) });
     }
     const outputs = new Map<string, string>();
     for (const res of step.observation?.results ?? []) {
@@ -57,8 +51,8 @@ export function parseAtifTranscriptView(text: string, path: string): TranscriptV
       let input: string; try { input = JSON.stringify(call.arguments); } catch { input = String(call.arguments); }
       const out = outputs.get(call.tool_call_id);
       spans.push({
-        kind: "tool_call", name: call.function_name, input: scrub(input),
-        ...(out !== undefined ? { output: scrub(out) } : {}),
+        kind: "tool_call", name: call.function_name, input: scrubTruncate(input),
+        ...(out !== undefined ? { output: scrubTruncate(out) } : {}),
       });
     }
     if (!spans.length) continue;
