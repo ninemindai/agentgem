@@ -245,7 +245,20 @@ import { sanitizeShareText } from "@agentgem/insight";
 import { claudeTranscriptsForCwd, scanWorkflow, allClaudeTranscripts, bucketTranscriptsByCwd } from "@agentgem/insight";
 import { distillWorkflow, distillSessionLessons, type DistilledSkill } from "@agentgem/insight";
 import { computeWorkflowAnalysis } from "./workflowCore.js";
-import { computeDistill, PREPARE_DISTILL_TIMEOUT_MS } from "./distillCore.js";
+import { computeDistill, DISTILL_BACKGROUND_TIMEOUT_MS } from "./distillCore.js";
+
+// A playbook prepare that misses the cache kicks off the heavy distill in the
+// background (capped batch + generous budget so it actually completes and caches).
+// The in-flight set means the client's poll loop doesn't spawn a new distill on
+// every re-check — one background run per root at a time.
+const inFlightDistill = new Set<string>();
+function kickOffBackgroundDistill(root: string): void {
+  if (inFlightDistill.has(root)) return;
+  inFlightDistill.add(root);
+  void computeDistill(root, { timeoutMs: DISTILL_BACKGROUND_TIMEOUT_MS })
+    .catch((e) => log.debug("background distill failed for %s: %s", root, (e as Error)?.message ?? e))
+    .finally(() => inFlightDistill.delete(root));
+}
 import { writeDistilledDraft, writeDistilledLesson, stageDraftsByEvidence, stageLessonsByEvidence } from "@agentgem/capture";
 import { runReadiness, startLocal, stopLocal, getRunStatus, deployVercel, deployCloudflare, undeployVercel, undeployCloudflare } from "@agentgem/run";
 import { setCredential } from "@agentgem/capture";
@@ -441,15 +454,23 @@ export class GemController {
     const inventory = introspectAll(undefined, [root]);
     const project = (inventory.projects ?? []).find((p) => p.root === resolveProject(root));
     if (!project) throw new InvalidInputError(`Project '${root}' not found in inventory.`);
-    return preparePlaybook({
+
+    // The distill is heavy (~50s/skill) — never block a Publish click on it. Read
+    // the cache ONLY: a warm hit (the warm daemon, or a prior kickoff) is instant.
+    // On a miss, kick off the capped distill in the background and tell the client
+    // to poll; it'll be a hit once the background run caches its result.
+    const cached = await computeDistill(root, { cacheOnly: true });
+    if (!cached.cached) {
+      kickOffBackgroundDistill(root);
+      return { skills: [], lessons: [], root, degraded: false, preparing: true };
+    }
+    const prepared = await preparePlaybook({
       root,
-      // Cap the interactive distill so "Publish" isn't stuck on the full 60s LLM
-      // budget; the background `distill` warmable computes + caches the full-quality
-      // result, which a later prepare of the same project then serves instantly.
-      distill: async () => (await computeDistill(root, { timeoutMs: PREPARE_DISTILL_TIMEOUT_MS })).payload,
+      distill: async () => cached.payload,
       persistSkill: (s) => { writeDistilledDraft(s); },
       persistLesson: (l) => { writeDistilledLesson(l); },
     });
+    return { ...prepared, preparing: false };
   }
 
   @post("/playbook/publish", { body: PlaybookPublishBodySchema, response: PlaybookPublishResponseSchema })

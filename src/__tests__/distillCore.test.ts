@@ -77,4 +77,21 @@ describe("computeDistill", () => {
     // it dedups every candidate as "already covered", emits nothing, and degrades forever.
     expect(seenGlobalSkills).not.toContain("prior-skeleton");
   });
+
+  it("cacheOnly: hit returns the cached payload; miss returns empty and NEVER computes", async () => {
+    const claudeDir = seedTranscript();
+    const token = distillToken(claudeTranscriptsForCwd(claudeDir, "/proj"));
+    const boom = (async () => { throw new Error("cacheOnly must not compute"); });
+
+    // Miss: no cache entry → empty, not cached, and the (throwing) distill fakes are never called.
+    const miss = await computeDistill("/proj", { dir: claudeDir, cacheOnly: true, distillWf: boom as never, distillLessons: boom as never });
+    expect(miss.cached).toBe(false);
+    expect(miss.payload).toEqual({ skills: [], lessons: [], degraded: false });
+
+    // Hit: seed the cache → cacheOnly serves it.
+    writeDistillCache("/proj", token, { skills: [], lessons: [], degraded: false }, 555);
+    const hit = await computeDistill("/proj", { dir: claudeDir, cacheOnly: true });
+    expect(hit.cached).toBe(true);
+    expect(hit.updatedAt).toBe(555);
+  });
 });
