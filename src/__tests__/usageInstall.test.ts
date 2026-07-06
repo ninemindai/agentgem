@@ -22,6 +22,15 @@ function mockRes() {
 const req = (over: any = {}) => ({ method: "GET", path: "/", query: {}, body: {}, headers: {}, get(n: string) { return (this.headers as any)[n.toLowerCase()]; }, ...over });
 const deps = (db: any) => ({ db, webOrigins });
 
+/** A member whose grant carries an explicit GitHub role (self scope + org scope with role). */
+async function roleMember(db: any, login: string, scope: string, role: "admin" | "member") {
+  const a = await upsertAccount(db, { provider: "github", accountId: login, login });
+  await setAccountScopes(db, a.id, [{ scope: login, role: "self" }, { scope, role }]);
+  const { token } = generateSessionToken();
+  await createSession(db, a.id, token, 60_000);
+  return { a, token };
+}
+
 async function member(db: any, login: string, scopes: string[]) {
   const a = await upsertAccount(db, { provider: "github", accountId: login, login });
   await setAccountScopes(db, a.id, [login, ...scopes]);
@@ -261,18 +270,10 @@ describe("model breakdowns", () => {
 });
 
 describe("org settings (admin-gated) + retention", () => {
-  async function adminMember(db: any, login: string, scope: string, role: "admin" | "member") {
-    const a = await upsertAccount(db, { provider: "github", accountId: login, login });
-    await setAccountScopes(db, a.id, [{ scope: login, role: "self" }, { scope, role }]);
-    const { token } = generateSessionToken();
-    await createSession(db, a.id, token, 60_000);
-    return { a, token };
-  }
-
   it("GET returns defaults + viewerRole; PUT is admin-only", async () => {
     const db = await makeTestDb();
-    const admin = await adminMember(db, "alice", "acme", "admin");
-    const plain = await adminMember(db, "bob", "acme", "member");
+    const admin = await roleMember(db, "alice", "acme", "admin");
+    const plain = await roleMember(db, "bob", "acme", "member");
 
     const g = mockRes();
     await orgSettingsHandler(deps(db))(req({ headers: { authorization: `Bearer ${plain.token}` }, query: { scope: "acme" } }) as any, g as any);
@@ -297,7 +298,7 @@ describe("org settings (admin-gated) + retention", () => {
 
   it("retention prunes ONLY this org's old rows (scope-bounded), and runs post-ingest", async () => {
     const db = await makeTestDb();
-    const admin = await adminMember(db, "alice", "acme", "admin");
+    const admin = await roleMember(db, "alice", "acme", "admin");
     const old = "2020-01-01";
     await recordUsageDays(db, admin.a.id, "m", [
       day(old), day("2026-07-01"),
@@ -323,14 +324,6 @@ describe("org settings (admin-gated) + retention", () => {
 });
 
 describe("v3: member drill-down + visibility toggle", () => {
-  async function roleMember(db: any, login: string, scope: string, role: "admin" | "member") {
-    const a = await upsertAccount(db, { provider: "github", accountId: login, login });
-    await setAccountScopes(db, a.id, [{ scope: login, role: "self" }, { scope, role }]);
-    const { token } = generateSessionToken();
-    await createSession(db, a.id, token, 60_000);
-    return { a, token };
-  }
-
   it("?member= narrows members, daily, and models to that member (still org-scope-bounded)", async () => {
     const db = await makeTestDb();
     const alice = await roleMember(db, "alice", "acme", "member");
@@ -507,5 +500,18 @@ describe("model-facet cascade", () => {
     const u = await buildOrgUsage(db, "acme", "all", Date.now(), { agent: "codex" });
     expect([...u.facets.agents].sort()).toEqual(["claude", "codex"]); // full — switching stays possible
     expect(u.facets.models).toEqual(["gpt-5.2-codex"]);     // narrowed — no impossible combos offered
+  });
+});
+
+describe("member early-return", () => {
+  it("an unknown ?member= login yields an empty payload (same shape, no crash)", async () => {
+    const db = await makeTestDb();
+    const { a } = await member(db, "alice", ["acme"]);
+    await recordUsageDays(db, a.id, "m", [day("2026-07-01")]);
+    const u = await buildOrgUsage(db, "acme", "all", Date.now(), { memberLogin: "ghost" });
+    expect(u.members).toEqual([]);
+    expect(u.daily).toEqual([]);
+    expect(u.facets).toEqual({ agents: [], models: [] });
+    expect(u.totals.tokens).toBe(0);
   });
 });

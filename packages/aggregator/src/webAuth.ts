@@ -112,17 +112,28 @@ export async function accountOwnsScope(db: AppDb, accountId: string, scope: stri
   return rows.length > 0;
 }
 
-/** Ownership + freshness in one check, for reads that must bound revocation lag: scopes are only
- *  re-captured from GitHub at sign-in/bind, so a grant older than `maxAgeMs` is "stale" — the
- *  caller still matched, but should be asked to refresh (re-auth) rather than served. */
-export async function accountScopeStatus(
+export type ScopeStatus = "ok" | "stale" | "none";
+
+/** Ownership + freshness + role in ONE lookup — the membership-gate primitive. Scopes are only
+ *  re-captured from GitHub at sign-in/bind, so a grant older than `maxAgeMs` is "stale": the
+ *  caller still matched, but should be asked to refresh (re-auth) rather than served. `role` is
+ *  the grant's captured GitHub role ("self" | "admin" | "member"), null when no grant exists. */
+export async function accountScopeInfo(
   db: AppDb, accountId: string, scope: string, maxAgeMs: number, now: number = Date.now(),
-): Promise<"ok" | "stale" | "none"> {
+): Promise<{ status: ScopeStatus; role: string | null }> {
   const rows = await db
-    .select({ capturedAt: accountScopes.capturedAt })
+    .select({ capturedAt: accountScopes.capturedAt, role: accountScopes.role })
     .from(accountScopes)
     .where(and(eq(accountScopes.accountId, accountId), eq(accountScopes.scope, scope)))
     .limit(1);
-  if (rows.length === 0) return "none";
-  return now - new Date(rows[0].capturedAt).getTime() <= maxAgeMs ? "ok" : "stale";
+  if (rows.length === 0) return { status: "none", role: null };
+  const fresh = now - new Date(rows[0].capturedAt).getTime() <= maxAgeMs;
+  return { status: fresh ? "ok" : "stale", role: rows[0].role };
+}
+
+/** Freshness-only view of accountScopeInfo (kept for existing callers). */
+export async function accountScopeStatus(
+  db: AppDb, accountId: string, scope: string, maxAgeMs: number, now: number = Date.now(),
+): Promise<ScopeStatus> {
+  return (await accountScopeInfo(db, accountId, scope, maxAgeMs, now)).status;
 }

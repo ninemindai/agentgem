@@ -9,8 +9,8 @@
 //                              the GitHub org role captured into account_scopes.
 import type { AppDb } from "@agentgem/aggregator";
 import {
-  resolveSession, accountScopeStatus, normalizeUsageReport, normalizeUsageModels, recordUsageDays, recordUsageModels,
-  buildOrgUsage, getOrgSettings, putOrgSettings, normalizeRetentionDays, applyRetentionForScopes, accountScopeRole,
+  resolveSession, accountScopeInfo, normalizeUsageReport, normalizeUsageModels, recordUsageDays, recordUsageModels,
+  buildOrgUsage, getOrgSettings, putOrgSettings, normalizeRetentionDays, applyRetentionForScopes,
   RANGE_DAYS, type OrgUsageRange,
 } from "@agentgem/aggregator";
 import { SESSION_COOKIE, parseCookies } from "../auth/cookie.js";
@@ -68,6 +68,16 @@ export function reportHandler(deps: UsageDeps) {
   };
 }
 
+/** The shared membership gate: one account_scopes lookup answers ownership, freshness (bounding
+ *  revocation lag), and role. Writes the 403 (with the reason the UI branches on) itself and
+ *  returns null; a handler that skips this gate cannot exist. */
+async function memberGate(deps: UsageDeps, res: Res, who: { accountId: string }, scope: string): Promise<{ role: string } | null> {
+  const { status, role } = await accountScopeInfo(deps.db, who.accountId, scope, deps.scopeTtlMs ?? defaultScopeTtlMs());
+  if (status === "none") { res.status(403).json({ error: "not a member of this org" }); return null; }
+  if (status === "stale") { res.status(403).json({ error: "membership check expired — sign in again to refresh", reason: "stale" }); return null; }
+  return { role: role ?? "member" };
+}
+
 /** GET (member) / PUT (admin) of the org's dashboard settings. Uses the GitHub org role captured
  *  into account_scopes — the first role-gated write surface. */
 export function orgSettingsHandler(deps: UsageDeps) {
@@ -78,10 +88,9 @@ export function orgSettingsHandler(deps: UsageDeps) {
     if (!who) { res.status(401).json({ error: "sign in required" }); return; }
     const scope = String((req.query.scope as string | undefined) ?? "").trim();
     if (scope.length === 0 || scope.length > 100) { res.status(400).json({ error: "invalid scope" }); return; }
-    const status = await accountScopeStatus(deps.db, who.accountId, scope, deps.scopeTtlMs ?? defaultScopeTtlMs());
-    if (status === "none") { res.status(403).json({ error: "not a member of this org" }); return; }
-    if (status === "stale") { res.status(403).json({ error: "membership check expired — sign in again to refresh", reason: "stale" }); return; }
-    const role = (await accountScopeRole(deps.db, who.accountId, scope)) ?? "member";
+    const gate = await memberGate(deps, res, who, scope);
+    if (!gate) return;
+    const { role } = gate;
 
     if (req.method === "PUT") {
       // Admins write org policy; "self" writes their own-login scope (personal retention).
@@ -124,16 +133,18 @@ export function orgUsageHandler(deps: UsageDeps) {
     // one-click membership refresh instead of a dead end. The caller's own login is exempt from
     // freshness (it IS their identity), so /api/usage/org?scope=<their-login> stays a personal view.
     if (scope !== who.login) {
-      const status = await accountScopeStatus(deps.db, who.accountId, scope, deps.scopeTtlMs ?? defaultScopeTtlMs());
-      if (status === "none") { res.status(403).json({ error: "not a member of this org" }); return; }
-      if (status === "stale") { res.status(403).json({ error: "membership check expired — sign in again to refresh", reason: "stale" }); return; }
+      // The settings read is independent of the gate — overlap them instead of stacking.
+      const [gate, settings] = await Promise.all([
+        memberGate(deps, res, who, scope),
+        getOrgSettings(deps.db, scope),
+      ]);
+      if (!gate) return;
       // Visibility toggle: an org admin can switch the dashboard off for members. Admins still
       // see it (they control the toggle and need the settings footer to flip it back). The
       // personal view (scope = own login) is never affected by org policy.
-      const settings = await getOrgSettings(deps.db, scope);
-      if (!settings.dashboardEnabled) {
-        const role = (await accountScopeRole(deps.db, who.accountId, scope)) ?? "member";
-        if (role !== "admin") { res.status(403).json({ error: "dashboard disabled by an org admin", reason: "disabled" }); return; }
+      if (!settings.dashboardEnabled && gate.role !== "admin") {
+        res.status(403).json({ error: "dashboard disabled by an org admin", reason: "disabled" });
+        return;
       }
     }
     // Optional facets: narrow to one member (drill-down) and/or one agent/model. All compose,

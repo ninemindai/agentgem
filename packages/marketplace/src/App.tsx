@@ -4,6 +4,7 @@ import { makeAuth, type Me } from "./auth";
 import { makeStars } from "./stars";
 import { makeReviews } from "./reviews";
 import { Router } from "./Router";
+import { navigate } from "./nav";
 
 const api = makeApi(defaultApiBase());
 const auth = makeAuth(defaultApiBase());
@@ -25,8 +26,7 @@ export function App() {
       const href = a.getAttribute("href");
       if (!href || !href.startsWith("/") || href.startsWith("//") || a.target === "_blank" || e.metaKey || e.ctrlKey || e.shiftKey) return;
       e.preventDefault();
-      window.history.pushState({}, "", href);
-      window.dispatchEvent(new PopStateEvent("popstate"));
+      navigate(href);
     };
     document.addEventListener("click", onClick);
     window.addEventListener("popstate", onPop);

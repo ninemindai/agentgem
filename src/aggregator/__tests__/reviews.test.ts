@@ -48,6 +48,9 @@ describe("reviews store", () => {
     const db = await makeTestDb();
     const a = await acct(db, "1", "alice"); const b = await acct(db, "2", "bob");
     await upsertReview(db, a.id, "skill", ID, 4, "from alice");
+    // Deterministic ordering: both inserts can land in the same now() tick under load, making
+    // "newest first" a coin flip — backdate alice's row so bob's is strictly newer.
+    await db.execute(sql`update reviews set created_at = created_at - interval '1 minute' where account_id = ${a.id}::uuid`);
     await upsertReview(db, b.id, "skill", ID, 5, "from bob");
     const all = await listReviews(db, "skill", ID);
     expect(all).toHaveLength(2);

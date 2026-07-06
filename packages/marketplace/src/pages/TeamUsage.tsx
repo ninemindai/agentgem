@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { makeApi } from "../api";
 import type { OrgUsage, OrgUsageRange, OrgUsageDay, OrgSettingsView } from "../types";
 import type { StarsCtx } from "../Router";
+import { navigate, useLocationSearch } from "../nav";
 
 const RANGES: { value: OrgUsageRange; label: string }[] = [
   { value: "7d", label: "Last 7 Days" },
@@ -62,10 +63,10 @@ type View =
   | { status: "error"; message: string }
   | { status: "ok"; usage: OrgUsage };
 
-/** The facet filters from the current URL (same route, query-param navigation). */
+/** The facet filters carried in a location.search string (same route, query-param navigation). */
 export interface UsageFilters { member: string; agent: string; model: string }
-const filtersFromLocation = (): UsageFilters => {
-  const p = new URLSearchParams(window.location.search);
+const filtersFrom = (search: string): UsageFilters => {
+  const p = new URLSearchParams(search);
   return { member: p.get("member") ?? "", agent: p.get("agent") ?? "", model: p.get("model") ?? "" };
 };
 
@@ -121,31 +122,24 @@ function downloadCsv(usage: OrgUsage): void {
 
 export function TeamUsage({ api, scope, stars }: { api: ReturnType<typeof makeApi>; scope: string; stars: StarsCtx }) {
   const [range, setRange] = useState<OrgUsageRange>("7d");
-  const [filters, setFilters] = useState<UsageFilters>(() => filtersFromLocation());
+  // Filters live in the URL (shareable, back-button-friendly); useLocationSearch reacts to both
+  // browser navigation and in-app navigate() calls, so no bespoke popstate wiring here.
+  const search = useLocationSearch();
+  const filters = useMemo(() => filtersFrom(search), [search]);
   const { member, agent, model } = filters;
   const [view, setView] = useState<View>({ status: "loading" });
   // Last-known facet options, kept OUTSIDE the view state so the selectors survive loading and
   // error states — a failed refetch must never remove the only control that can clear a filter.
   const [facets, setFacets] = useState<{ agents: string[]; models: string[] }>({ agents: [], models: [] });
 
-  // Facets navigate by query params on the same path; the Router only re-renders on pathname
-  // changes, so track ?member=&agent=&model= here (App's link interception dispatches popstate).
-  useEffect(() => {
-    const onPop = () => setFilters(filtersFromLocation());
-    window.addEventListener("popstate", onPop);
-    return () => window.removeEventListener("popstate", onPop);
-  }, []);
-
-  // Facet select changes write the URL (shareable, back-button-friendly) through the same
-  // pushState + synthetic-popstate mechanism App uses for link clicks.
+  // Facet select changes rewrite the URL through the shared navigate() primitive.
   const setFilter = (patch: Partial<UsageFilters>) => {
     const params = new URLSearchParams(window.location.search);
     for (const [key, value] of Object.entries(patch)) {
       if (value) params.set(key, value); else params.delete(key);
     }
     const qs = params.toString();
-    window.history.pushState({}, "", window.location.pathname + (qs ? `?${qs}` : ""));
-    window.dispatchEvent(new PopStateEvent("popstate"));
+    navigate(window.location.pathname + (qs ? `?${qs}` : ""));
   };
 
   useEffect(() => {
