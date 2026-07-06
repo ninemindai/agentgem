@@ -122,8 +122,8 @@ export function Dashboard({ data, range, onRange, filter, onFilter, pending, onR
             {(data.byTool.length > 0 || data.bySubagent.length > 0 || data.bySkill.length > 0) && (
               <div className="obs-charts obs-usage-charts">
                 <UsageBars title="By tool" rows={data.byTool} />
-                <UsageBars title="By subagent" rows={data.bySubagent} />
-                <UsageBars title="By skill" rows={data.bySkill} />
+                <UsageBars title="By subagent" rows={data.bySubagent} linkable />
+                <UsageBars title="By skill" rows={data.bySkill} linkable />
               </div>
             )}
 
@@ -199,10 +199,13 @@ export function Dashboard({ data, range, onRange, filter, onFilter, pending, onR
 function Stat({ label, value }: { label: string; value: string }) {
   return <div className="obs-stat"><div className="obs-stat-value">{value}</div><div className="obs-stat-label">{label}</div></div>;
 }
-// A ranked usage breakdown (top 8) — used for By tool / By subagent / By skill.
-function UsageBars({ title, rows }: { title: string; rows: { name: string; count: number }[] }) {
+// A ranked usage breakdown (top 8) — used for By tool / By subagent / By skill. When
+// `linkable`, each name deep-links into the Setup browser filtered to that artifact (the
+// bare name after any `plugin:` prefix, which matches the inventory's artifact names).
+function UsageBars({ title, rows, linkable }: { title: string; rows: { name: string; count: number }[]; linkable?: boolean }) {
   if (!rows.length) return null;
   const max = rows[0].count || 1;
+  const viewInSetup = (name: string) => { window.location.hash = "#/setup?q=" + encodeURIComponent(name.split(":").pop() ?? name); };
   return (
     <div className="obs-card obs-usage-card">
       <div className="obs-card-title">{title}</div>
@@ -210,7 +213,9 @@ function UsageBars({ title, rows }: { title: string; rows: { name: string; count
         {rows.slice(0, 8).map((r) => (
           <li key={r.name} className="obs-usage-row">
             <div className="obs-usage-head">
-              <span className="obs-usage-name" title={r.name}>{r.name}</span>
+              {linkable
+                ? <button type="button" className="obs-usage-name obs-usage-link" title={`View ${r.name} in Setup`} onClick={() => viewInSetup(r.name)}>{r.name}</button>
+                : <span className="obs-usage-name" title={r.name}>{r.name}</span>}
               <span className="obs-usage-count">{r.count}</span>
             </div>
             <span className="obs-usage-track"><span className="obs-usage-fill" style={{ width: `${(r.count / max) * 100}%` }} /></span>

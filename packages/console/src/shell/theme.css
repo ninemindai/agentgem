@@ -686,6 +686,40 @@ body::before {
 .obs-usage-count { font-variant-numeric: tabular-nums; color: var(--muted); flex: none; }
 .obs-usage-track { height: 6px; border-radius: 4px; background: var(--paper-2); overflow: hidden; }
 .obs-usage-fill { display: block; height: 100%; border-radius: 4px; background: var(--accent); }
+.obs-usage-link { border: 0; background: none; padding: 0; cursor: pointer; color: var(--accent);
+  font: inherit; text-align: left; }
+.obs-usage-link:hover { text-decoration: underline; }
+
+/* Setup — the local .claude inventory browser + artifact viewer. */
+.setup { animation: fade .4s ease both; }
+.setup-search { display: inline-flex; align-items: center; gap: 6px; background: var(--paper); border: 1px solid var(--line);
+  border-radius: 8px; padding: 6px 10px; margin-left: auto; color: var(--muted); font-size: 13px; }
+.setup-search input { border: 0; background: transparent; outline: none; font: inherit; color: var(--ink); width: 220px; }
+.setup-group { margin-bottom: 8px; }
+.setup-count { color: var(--muted); font-weight: 600; }
+.setup-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.setup-item { display: flex; align-items: baseline; gap: 10px; width: 100%; text-align: left; cursor: pointer;
+  background: none; border: 0; border-radius: 7px; padding: 8px 10px; color: var(--ink-soft); font: 13.5px/1.3 var(--font-ui); }
+.setup-item:hover { background: color-mix(in srgb, var(--accent) 7%, transparent); color: var(--ink); }
+.setup-item-name { font-weight: 600; color: var(--ink); flex: none; }
+.setup-item-source { font: 700 9px/1 var(--font-ui); letter-spacing: .04em; text-transform: uppercase; color: var(--gold);
+  background: color-mix(in srgb, var(--gold) 14%, transparent); padding: 3px 6px; border-radius: 5px; flex: none; }
+.setup-item-desc { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.setup-empty { margin: 24px 0; }
+
+.setup-modal { position: fixed; inset: 0; z-index: 60; background: rgba(32, 25, 15, .38); backdrop-filter: blur(3px);
+  display: flex; align-items: center; justify-content: center; padding: 4vh 4vw; }
+.setup-modal-panel { background: var(--raised); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-md);
+  width: min(820px, 100%); max-height: 92vh; display: flex; flex-direction: column; overflow: hidden; }
+.setup-modal-head { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line-soft); }
+.setup-modal-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; overflow: hidden; }
+.setup-modal-title strong { font: 600 16px/1.2 var(--font-display); color: var(--ink); }
+.setup-modal-close { margin-left: auto; flex: none; border: 1px solid var(--line); background: var(--paper-2); color: var(--ink-soft);
+  border-radius: 7px; width: 28px; height: 28px; cursor: pointer; font-size: 13px; }
+.setup-modal-close:hover { border-color: var(--accent); color: var(--accent); }
+.setup-modal-desc { margin: 0; padding: 10px 16px 0; color: var(--muted); font-size: 13px; }
+.setup-modal-body { margin: 0; padding: 14px 16px; overflow: auto; white-space: pre-wrap; word-break: break-word;
+  font: 12.5px/1.6 var(--font-mono); color: var(--ink-soft); }
 
 .obs-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius);
   box-shadow: var(--shadow-sm); }
