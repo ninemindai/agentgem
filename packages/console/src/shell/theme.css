@@ -1084,3 +1084,9 @@ button.scorecard-intent { line-height: 1.4; }
   flex-wrap: wrap;
   margin-bottom: 12px;
 }
+
+.quick-share { display: inline-flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.quick-share-hint { font-size: 0.7rem; color: var(--muted); }
+.quick-share-result { margin-top: 4px; }
+.quick-share-upgrade { background: none; border: none; padding: 2px 0; cursor: pointer; font-size: 0.75rem; color: var(--accent); text-align: left; }
+.quick-share-upgrade:hover { text-decoration: underline; }
