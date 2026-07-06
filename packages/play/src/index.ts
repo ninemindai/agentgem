@@ -1,3 +1,3 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
-export { staticGate, type GateResult, type GateOptions } from "./gameGate.js";
+export { staticGate, gameGate, type GateResult, type GateOptions } from "./gameGate.js";
