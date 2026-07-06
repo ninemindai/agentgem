@@ -1,0 +1,113 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
+import { describe, it, expect } from "vitest";
+import { generateKeyPairSync } from "node:crypto";
+import {
+  makeTestDb, upsertAccount, createSession, generateSessionToken,
+  upsertInstallation, upsertOrgMember, replaceOrgRepoSkills,
+} from "@agentgem/aggregator";
+import type { Http } from "@agentgem/distribute";
+import { InstallationTokens } from "../client.js";
+import { orgAppHandler, orgSkillsHandler, orgSkillBodyHandler, type OrgsApiDeps } from "../orgsApi.js";
+
+const pem = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({ type: "pkcs8", format: "pem" }) as string;
+const webOrigins = ["https://app.agentgem.ai"];
+
+function mockRes() {
+  const r: any = { _status: 200, _headers: {} as Record<string, string>, _body: undefined };
+  r.status = (c: number) => { r._status = c; return r; };
+  r.set = (k: string, v: string) => { r._headers[k.toLowerCase()] = v; return r; };
+  r.setHeader = r.set;
+  r.type = (t: string) => { r._headers["content-type"] = t; return r; };
+  r.json = (b: unknown) => { r._body = b; return r; };
+  r.send = (b: unknown) => { r._body = b; return r; };
+  return r;
+}
+const req = (over: any = {}) => ({ method: "GET", path: "/", query: {}, body: {}, headers: {}, get(n: string) { return (this.headers as any)[n.toLowerCase()]; }, ...over });
+
+const bodyHttp: Http = async (url) => {
+  if (url.includes("/contents/eng/deploy/SKILL.md")) {
+    return { status: 200, text: async () => JSON.stringify({ content: Buffer.from("# deploy body").toString("base64"), encoding: "base64" }) };
+  }
+  return { status: 404, text: async () => "{}" };
+};
+const tokenFetch = (async () => ({ ok: true, status: 200, json: async () => ({ token: "itok", expires_at: new Date(Date.now() + 3_600_000).toISOString() }) })) as unknown as typeof fetch;
+
+async function setup(): Promise<{ deps: OrgsApiDeps; memberToken: string; strangerToken: string }> {
+  const db = await makeTestDb();
+  await upsertInstallation(db, { installationId: 7, orgScope: "acme", repoSelection: "selected", suspended: false });
+  await upsertOrgMember(db, "acme", "alice", "member");
+  await replaceOrgRepoSkills(db, "acme", "acme/skills", [
+    { sourceId: "org:acme/skills", path: "eng/deploy/SKILL.md", division: "eng", name: "deploy", repo: "acme/skills", description: "d" },
+  ]);
+  const mk = async (login: string) => {
+    const a = await upsertAccount(db, { provider: "github", accountId: login, login });
+    const { token } = generateSessionToken();
+    await createSession(db, a.id, token, 60_000);
+    return token;
+  };
+  return {
+    deps: { db, webOrigins, tokens: new InstallationTokens({ appId: "1", privateKey: pem }, tokenFetch), http: bodyHttp },
+    memberToken: await mk("alice"),
+    strangerToken: await mk("mallory"),
+  };
+}
+const authed = (token: string, query: any) => req({ query, headers: { authorization: `Bearer ${token}` } });
+
+describe("GET /api/orgs/app", () => {
+  it("reports install + membership; signed-out callers get isMember:false", async () => {
+    const { deps, memberToken } = await setup();
+    let res = mockRes();
+    await orgAppHandler(deps)(authed(memberToken, { scope: "acme" }) as any, res);
+    expect(res._body).toEqual({ installed: true, isMember: true, role: "member" });
+    res = mockRes();
+    await orgAppHandler(deps)(req({ query: { scope: "acme" } }) as any, res);
+    expect(res._body).toEqual({ installed: true, isMember: false, role: null });
+    res = mockRes();
+    await orgAppHandler(deps)(req({ query: { scope: "globex" } }) as any, res);
+    expect(res._body).toEqual({ installed: false, isMember: false, role: null });
+  });
+});
+
+describe("GET /api/orgs/skills", () => {
+  it("401 unsigned, 403 non-member, 200 member with the list", async () => {
+    const { deps, memberToken, strangerToken } = await setup();
+    let res = mockRes();
+    await orgSkillsHandler(deps)(req({ query: { scope: "acme" } }) as any, res);
+    expect(res._status).toBe(401);
+    res = mockRes();
+    await orgSkillsHandler(deps)(authed(strangerToken, { scope: "acme" }) as any, res);
+    expect(res._status).toBe(403);
+    res = mockRes();
+    await orgSkillsHandler(deps)(authed(memberToken, { scope: "acme" }) as any, res);
+    expect(res._status).toBe(200);
+    expect((res._body as { skills: { name: string }[] }).skills.map((s) => s.name)).toEqual(["deploy"]);
+  });
+});
+
+describe("GET /api/orgs/skill-body", () => {
+  it("member gets the markdown; boundary violations 404; non-member 403", async () => {
+    const { deps, memberToken, strangerToken } = await setup();
+    const q = { scope: "acme", source: "org:acme/skills", path: "eng/deploy/SKILL.md" };
+    let res = mockRes();
+    await orgSkillBodyHandler(deps)(authed(memberToken, q) as any, res);
+    expect(res._status).toBe(200);
+    expect(res._body).toBe("# deploy body");
+    res = mockRes();
+    await orgSkillBodyHandler(deps)(authed(strangerToken, q) as any, res);
+    expect(res._status).toBe(403);
+    res = mockRes(); // unknown (source,path) for this org → 404, no GitHub fetch
+    await orgSkillBodyHandler(deps)(authed(memberToken, { ...q, path: "eng/other/SKILL.md" }) as any, res);
+    expect(res._status).toBe(404);
+    res = mockRes(); // traversal-shaped path → 400
+    await orgSkillBodyHandler(deps)(authed(memberToken, { ...q, path: "../../etc/passwd" }) as any, res);
+    expect(res._status).toBe(400);
+  });
+
+  it("503 when the App tokens are unconfigured", async () => {
+    const { deps, memberToken } = await setup();
+    const res = mockRes();
+    await orgSkillBodyHandler({ ...deps, tokens: null })(authed(memberToken, { scope: "acme", source: "org:acme/skills", path: "eng/deploy/SKILL.md" }) as any, res);
+    expect(res._status).toBe(503);
+  });
+});
