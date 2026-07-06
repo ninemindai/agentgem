@@ -87,6 +87,19 @@ describe("GET /api/orgs/skills", () => {
     expect(res._status).toBe(200);
     expect((res._body as { skills: { name: string }[] }).skills.map((s) => s.name)).toEqual(["deploy"]);
   });
+
+  it("suspended installation serves zero rows even to a member who still passes the gate", async () => {
+    const { deps, memberToken, aliceAccountId } = await setup();
+    await setInstallationSuspended(deps.db, 7, true);
+    // Same pattern as the skill-body suspended-404 test: capture acme for alice so
+    // resolveOrgAccess falls back to captured scopes and the member gate still passes,
+    // reaching the suspended-installation check inside orgSkillsHandler.
+    await setAccountScopes(deps.db, aliceAccountId, [{ scope: "acme", role: "member" }]);
+    const res = mockRes();
+    await orgSkillsHandler(deps)(authed(memberToken, { scope: "acme" }) as any, res);
+    expect(res._status).toBe(200);
+    expect(res._body).toEqual({ scope: "acme", skills: [] }); // suspended behaves as uninstalled
+  });
 });
 
 describe("GET /api/orgs/skill-body", () => {

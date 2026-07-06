@@ -82,4 +82,22 @@ describe("resolveOrgAccess", () => {
     expect((await resolveOrgAccess(db, { accountId: a.id, login: "alice" }, "acme", 60_000, Date.now() + 120_000)).status).toBe("stale");
     expect((await resolveOrgAccess(db, { accountId: a.id, login: "alice" }, "globex", 60_000)).status).toBe("none");
   });
+
+  it("active installation is authoritative — a removed member's fresh captured scope no longer grants access", async () => {
+    const db = await makeTestDb();
+    const a = await upsertAccount(db, { provider: "github", accountId: "1", login: "alice" });
+    await setAccountScopes(db, a.id, ["alice", { scope: "acme", role: "member" }]); // fresh capture
+    await upsertInstallation(db, inst()); // active installation
+    // alice is NOT in org_members — removed from the org on GitHub since she signed in.
+    expect(await resolveOrgAccess(db, { accountId: a.id, login: "alice" }, "acme", 60_000)).toEqual({ status: "none", role: null, via: "app" });
+  });
+
+  it("suspended installation falls back to captured scopes", async () => {
+    const db = await makeTestDb();
+    const a = await upsertAccount(db, { provider: "github", accountId: "1", login: "alice" });
+    await setAccountScopes(db, a.id, ["alice", { scope: "acme", role: "member" }]);
+    await upsertInstallation(db, inst());
+    await setInstallationSuspended(db, 101, true); // suspended = no active installation
+    expect(await resolveOrgAccess(db, { accountId: a.id, login: "alice" }, "acme", 60_000)).toEqual({ status: "ok", role: "member", via: "scopes" });
+  });
 });

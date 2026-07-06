@@ -4,8 +4,9 @@
 //
 // Store + gate for the GitHub App integration: installations (one row per installed org), the
 // member lists the webhook/reconcile path syncs from GitHub, and resolveOrgAccess — the combined
-// org-access check (self → App membership → captured account_scopes). org_scope/gh_login are
-// lowercased at write time so the gate is case-insensitive without lower() on every read.
+// org-access check (self → App-authoritative membership when an active installation exists,
+// else captured account_scopes). org_scope/gh_login are lowercased at write time so the gate is
+// case-insensitive without lower() on every read.
 import { and, eq, sql } from "drizzle-orm";
 import { appInstallations, orgMembers, type AppDb } from "./schema.js";
 import { accountScopeStatus } from "./webAuth.js";
@@ -69,14 +70,19 @@ export async function deleteOrgMember(db: AppDb, orgScope: string, login: string
   await db.delete(orgMembers).where(and(eq(orgMembers.orgScope, orgScope.toLowerCase()), eq(orgMembers.ghLogin, login.toLowerCase())));
 }
 
+/** org_members lookup only — caller has already resolved (and validated) the installation. */
+async function memberRole(db: AppDb, login: string, orgScope: string): Promise<"admin" | "member" | null> {
+  const rows = await db.select({ role: orgMembers.role }).from(orgMembers)
+    .where(and(eq(orgMembers.orgScope, orgScope), eq(orgMembers.ghLogin, login.toLowerCase()))).limit(1);
+  return rows.length > 0 ? (rows[0].role === "admin" ? "admin" : "member") : null;
+}
+
 /** App-synced role for login in orgScope — null unless a NON-suspended installation exists. */
 export async function appOrgRole(db: AppDb, login: string, orgScope: string): Promise<"admin" | "member" | null> {
   const scope = orgScope.toLowerCase();
   const inst = await installationForScope(db, scope);
   if (!inst || inst.suspended) return null;
-  const rows = await db.select({ role: orgMembers.role }).from(orgMembers)
-    .where(and(eq(orgMembers.orgScope, scope), eq(orgMembers.ghLogin, login.toLowerCase()))).limit(1);
-  return rows.length > 0 ? (rows[0].role === "admin" ? "admin" : "member") : null;
+  return memberRole(db, login, scope);
 }
 
 export type OrgAccess = { status: "ok" | "stale" | "none"; role: "self" | "admin" | "member" | null; via: "self" | "app" | "scopes" | null };
@@ -84,16 +90,27 @@ export type OrgAccess = { status: "ok" | "stale" | "none"; role: "self" | "admin
 /**
  * Combined org-access check, in precedence order:
  *   1. self — scope IS the caller's login (their identity; never stale).
- *   2. App membership — webhook-synced, so always fresh; includes private members.
- *   3. Captured account_scopes — today's sign-in capture, with the freshness TTL.
+ *   2. App-authoritative — when the scope has an ACTIVE (non-suspended) installation,
+ *      webhook-synced App membership decides ALONE: in org_members → "ok", otherwise "none".
+ *      Captured account_scopes are NOT consulted in this case. Rationale: on GitHub, removing a
+ *      member from an org revokes them within seconds via the webhook sync; a captured sign-in
+ *      scope must not keep granting access for up to its TTL afterward — that would defeat
+ *      enterprise offboarding for anyone who happened to sign in recently.
+ *   3. Captured account_scopes — today's sign-in capture, with the freshness TTL. Reached only
+ *      when there is no active installation (App not installed, or installation suspended — a
+ *      suspended installation behaves as uninstalled for gating purposes).
  * Orgs without the App get exactly today's behavior (path 3).
  */
 export async function resolveOrgAccess(
   db: AppDb, who: { accountId: string; login: string }, scope: string, scopeTtlMs: number, now: number = Date.now(),
 ): Promise<OrgAccess> {
   if (who.login.toLowerCase() === scope.toLowerCase()) return { status: "ok", role: "self", via: "self" };
-  const appRole = await appOrgRole(db, who.login, scope);
-  if (appRole) return { status: "ok", role: appRole, via: "app" };
+  const scopeLower = scope.toLowerCase();
+  const inst = await installationForScope(db, scopeLower);
+  if (inst && !inst.suspended) {
+    const role = await memberRole(db, who.login, scopeLower);
+    return role ? { status: "ok", role, via: "app" } : { status: "none", role: null, via: "app" };
+  }
   const status = await accountScopeStatus(db, who.accountId, scope, scopeTtlMs, now);
   if (status === "none") return { status: "none", role: null, via: null };
   const role = ((await accountScopeRole(db, who.accountId, scope)) ?? "member") as "self" | "admin" | "member";
