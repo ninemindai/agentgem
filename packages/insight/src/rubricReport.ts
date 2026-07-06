@@ -75,7 +75,7 @@ function runSpecs(signal: WorkflowSignal, specs: DetectorSpec[]): DetectorFindin
 }
 
 // One summary row per resolved spec, count 0 when it did not fire.
-function summariesForSpecs(specs: DetectorSpec[], findings: DetectorFinding[]): DetectorSummary[] {
+export function summariesForSpecs(specs: DetectorSpec[], findings: DetectorFinding[]): DetectorSummary[] {
   const fired = new Map(summarizeFindings(findings, specs).map((s) => [s.id, s]));
   return specs.map((spec) => fired.get(spec.id) ?? {
     id: spec.id, title: spec.title, advice: spec.advice, severity: spec.severity, count: 0, sessions: 0,

@@ -135,8 +135,12 @@ export function hygieneScore(summaries: DetectorSummary[]): HygieneVerdict {
   return { score, verdict };
 }
 
+// The five context-hygiene factor ids (the WEIGHTS keys), exported so consumers
+// can filter DETECTORS / gate the hygiene verdict without re-listing them.
+export const HYGIENE_FACTOR_IDS: ReadonlySet<string> = new Set(Object.keys(WEIGHTS));
+
 // True when the rubric's factors include at least one context-hygiene factor —
 // used to avoid emitting a vacuous "bounded/100" verdict for unrelated rubrics.
 export function assessesHygiene(summaries: DetectorSummary[]): boolean {
-  return summaries.some((s) => s.id in WEIGHTS);
+  return summaries.some((s) => HYGIENE_FACTOR_IDS.has(s.id));
 }
