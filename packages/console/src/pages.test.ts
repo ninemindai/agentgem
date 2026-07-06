@@ -16,7 +16,7 @@ describe("pages registry", () => {
       ["observe", "insights", "benchmark"],
       ["sessions", "watch", "chat", "dreaming"],
       ["mine", "optimize"],
-      ["rubrics"],
+      ["setup", "rubrics"],
     ]);
   });
 
