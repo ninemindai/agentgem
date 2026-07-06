@@ -33,10 +33,13 @@ phase-independent footer, unchanged.
 ### Observe — read across all four artifact types
 | Category | Screens (in order) |
 |---|---|
-| Setup | Inspect, Rubrics |
+| Setup | Rubrics |
 | Sessions | Watch, Chat, Journey |
 | Projects | Mine, Optimize |
-| Usage | Insights, Benchmark |
+| Usage | Inspect, Insights, Benchmark |
+
+> Inspect lives under **Usage** (not Setup): it is the session-history analytics dashboard, so
+> it groups with Insights/Benchmark. It stays the `#/inspect` cold-start default.
 
 ### Build — assemble & ship gems
 | Category | Screens (in order) |
@@ -263,7 +266,7 @@ thing a new install shows.
 
 | id | route | old group | phase | category | notes |
 |---|---|---|---|---|---|
-| observe (Inspect) | `#/inspect` | observe | observe | setup | |
+| observe (Inspect) | `#/inspect` | observe | observe | usage | session-history dashboard; leads Usage |
 | rubrics | `#/rubrics` | observe | observe | setup | |
 | watch | `#/watch` | observe | observe | sessions | |
 | chat | `#/chat` | observe | observe | sessions | |
