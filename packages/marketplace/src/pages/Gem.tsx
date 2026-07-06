@@ -6,6 +6,7 @@ import { prettifyId, kindLabel } from "../data";
 import { StarButton } from "../StarButton";
 import { CutBadge } from "../CutBadge";
 import { StoneRating } from "../StoneRating";
+import { GemContents } from "./GemContents";
 import type { StarsCtx } from "../Router";
 import type { StarState } from "../stars";
 
@@ -48,6 +49,8 @@ export function Gem({ api, keyName, stars }: { api: ReturnType<typeof makeApi>; 
       </p>
       <p className="ex-gem-desc">{gem.description}</p>
       <p className="ex-gem-tags">{gem.tags.map((t) => <span key={t} className="ex-tag">#{t}</span>)}</p>
+
+      <GemContents artifacts={gem.artifacts ?? []} />
 
       <section className="ex-card">
         <h3>Get this gem</h3>
