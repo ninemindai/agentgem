@@ -3,6 +3,7 @@
 import { describe, it, expect } from "vitest";
 import type { ProcedureStep, SessionSequence, WorkflowSignal } from "@agentgem/insight";
 import { stageOf, stageProfile, runDetectors, REGRESSION_MIN } from "@agentgem/insight";
+import { sessionProcessQuality, processQualityReport, DETECTORS } from "@agentgem/insight";
 
 let mi = 0;
 const step = (verb: string, arg: string, tool = verb.startsWith("Bash:") ? "Bash" : verb): ProcedureStep =>
@@ -75,5 +76,48 @@ describe("unverified-tail", () => {
     expect(byId(runDetectors(signalOf(clean)), "unverified-tail")).toHaveLength(0);
     const neverVerified = session([edit("a.ts"), edit("b.ts")]);   // no-verify-finish's territory
     expect(byId(runDetectors(signalOf(neverVerified)), "unverified-tail")).toHaveLength(0);
+  });
+});
+
+describe("processQuality", () => {
+  it("scores a clean session as disciplined with a full stage profile", () => {
+    const s = session([read("a.ts"), edit("a.ts"), test_()], "clean");
+    const q = sessionProcessQuality(s, []);
+    expect(q).toMatchObject({ sessionId: "clean", score: 100, label: "disciplined" });
+    expect(q.stages).toMatchObject({ exploration: 1, implementation: 1, verification: 1 });
+  });
+
+  it("deducts per finding severity and floors at 0", () => {
+    const s = session([edit("a.ts")], "messy");
+    const finding = (severity: "warn" | "info") => ({
+      detectorId: "x", sessionId: "messy", transcript: "t.jsonl", atMs: 0,
+      severity, detail: "", evidence: { msgIndices: [] },
+    });
+    expect(sessionProcessQuality(s, [finding("warn")]).score).toBe(80);
+    expect(sessionProcessQuality(s, [finding("warn"), finding("info")]).label).toBe("loose"); // 70
+    expect(sessionProcessQuality(s, Array(8).fill(finding("warn"))).score).toBe(0);
+    // findings for OTHER sessions do not count
+    expect(sessionProcessQuality(s, [{ ...finding("warn"), sessionId: "other" }]).score).toBe(100);
+  });
+
+  it("reports across a signal end-to-end with real detectors", () => {
+    const messy = session([
+      edit("a.ts"), test_(), edit("b.ts"), test_(),
+      edit("a.ts"), test_(), edit("a.ts"), test_(),  // regression-cycle (warn)
+      edit("c.ts"),                                   // unverified-tail (info)
+    ], "messy");
+    const clean = session([read("a.ts"), edit("a.ts"), test_()], "clean");
+    const signal = signalOf(messy, clean);
+    const findings = runDetectors(signal);
+    const report = processQualityReport(signal, findings);
+    expect(report.sessions).toHaveLength(2);
+    const byIdMap = Object.fromEntries(report.sessions.map((q) => [q.sessionId, q]));
+    expect(byIdMap.clean.label).toBe("disciplined");
+    // −20 regression-cycle (warn), −10 unverified-tail (info), −10 no-verify-finish
+    // (info — the trailing edit is also never verified, so the pre-existing detector
+    // fires too): 100 − 40 = 60.
+    expect(byIdMap.messy.score).toBe(60);
+    expect(byIdMap.messy.label).toBe("loose");
+    expect(report.atRiskRate).toBe(0.5);
   });
 });
