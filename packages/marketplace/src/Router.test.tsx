@@ -53,7 +53,7 @@ describe("Router", () => {
 
   it("routes /orgs/:scope to the OrgCatalog page", async () => {
     window.history.pushState({}, "", "/orgs/acme");
-    const api = { getOrgCatalog: () => Promise.resolve({ scope: "acme", gemCount: 0, ownerCount: 0, gems: [] }) } as never;
+    const api = { getOrgCatalog: () => Promise.resolve({ scope: "acme", gemCount: 0, ownerCount: 0, gems: [] }), getOrgApp: async () => null, getOrgSkills: async () => null } as never;
     render(<Router api={api} stars={{ signedIn: false, loginUrl: () => "", api: {} as never }} reviews={{ signedIn: false, loginUrl: () => "", api: {} as never }} me={null} />);
     expect(await screen.findByText(/no gems published under @acme yet/i)).toBeTruthy();
   });

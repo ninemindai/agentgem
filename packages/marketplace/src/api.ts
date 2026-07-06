@@ -1,5 +1,5 @@
 import type { AggIngredient, AggCoOccurrence, AggEffectiveness, AdoptionPoint, RegistryGem, Profile, OrgCatalog, OrgUsage, OrgUsageRange, OrgSettingsView,
-  CuratedSource, SourceDivision, SourceAgentRef, ImportedSkill, PopularSkill, PopularSkillGroup } from "./types";
+  CuratedSource, SourceDivision, SourceAgentRef, ImportedSkill, PopularSkill, PopularSkillGroup, OrgAppStatus, OrgSkill } from "./types";
 
 /** The team-usage read is auth-gated: the caller distinguishes "sign in" from "not a member"
  *  from "member, but the GitHub-org capture aged out" (stale → offer a one-click refresh). */
@@ -100,6 +100,19 @@ export function makeApi(base: string) {
       if (res.status === 401 || res.status === 403) return { status: "denied" };
       if (!res.ok) throw new Error(`/api/usage/settings -> ${res.status}`);
       return { status: "ok", settings: JSON.parse(await res.text()) as OrgSettingsView };
+    },
+    getOrgApp: async (scope: string): Promise<OrgAppStatus | null> => {
+      try {
+        const res = await fetch(base + "/api/orgs/app?scope=" + encodeURIComponent(scope), { credentials: "include" });
+        return res.ok ? ((await res.json()) as OrgAppStatus) : null;
+      } catch { return null; }
+    },
+    getOrgSkills: async (scope: string): Promise<OrgSkill[] | null> => {
+      try {
+        const res = await fetch(base + "/api/orgs/skills?scope=" + encodeURIComponent(scope), { credentials: "include" });
+        if (!res.ok) return null;
+        return ((await res.json()) as { skills: OrgSkill[] }).skills;
+      } catch { return null; }
     },
     getSources: () =>
       get<{ sources: CuratedSource[] }>(base, "/api/sources").then((r) => r.sources),

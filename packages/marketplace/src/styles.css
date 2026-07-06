@@ -783,6 +783,14 @@ a.ex-skillcard-rating:hover { text-decoration: underline; }
 .ex-orgcat-usage-link { margin-left: auto; font-size: 0.84rem; color: var(--brand-strong); text-decoration: none; }
 .ex-orgcat-usage-link:hover { text-decoration: underline; }
 
+.ex-orgcat-appcta { margin: 0.5rem 0 0; font-size: 0.84rem; color: var(--muted); }
+.ex-orgcat-internal { margin-top: 1rem; }
+.ex-internal-list { list-style: none; margin: 0.5rem 0 0; padding: 0; display: grid; gap: 0.4rem; }
+.ex-internal-item { display: flex; gap: 0.6rem; align-items: baseline; flex-wrap: wrap; }
+.ex-internal-name { font-weight: 600; }
+.ex-internal-repo { font-size: 0.76rem; color: var(--muted); }
+.ex-internal-desc { font-size: 0.84rem; color: var(--ink-2); flex-basis: 100%; }
+
 @media (max-width: 720px) {
   .ex-usage-cards { grid-template-columns: repeat(2, 1fr); }
   .ex-usage-cols { display: none; }

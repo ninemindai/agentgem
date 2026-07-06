@@ -152,3 +152,7 @@ export interface OrgUsage {
 }
 // Org dashboard settings — admin-writable (GitHub org role captured at sign-in).
 export interface OrgSettingsView { scope: string; retentionDays: number | null; dashboardEnabled: boolean; updatedBy: string | null; updatedAt: string | null; viewerRole: string }
+
+// GitHub App install status + org-internal skills (gated on App install + membership).
+export interface OrgAppStatus { installed: boolean; isMember: boolean; role: "self" | "admin" | "member" | null }
+export interface OrgSkill { sourceId: string; path: string; division: string; name: string; repo: string; description: string | null }
