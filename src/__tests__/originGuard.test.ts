@@ -187,4 +187,11 @@ describe("originGuard — public aggregator reads (CORS + cross-site exemption)"
     expect(r.set["access-control-allow-origin"]).toBe("*");
     expect(r.nexted).toBe(false);
   });
+
+  it("exempts the orgs endpoints and the github webhook (cross-site SPA reads + server-to-server POST)", () => {
+    for (const path of ["/api/orgs/app", "/api/orgs/skills", "/api/orgs/skill-body"]) {
+      expect(run({ "sec-fetch-site": "cross-site" }, "app.agentgem.ai", "GET", path).nexted).toBe(true);
+    }
+    expect(run({ "sec-fetch-site": "cross-site" }, "app.agentgem.ai", "POST", "/api/github/webhook").nexted).toBe(true);
+  });
 });

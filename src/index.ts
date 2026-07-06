@@ -58,8 +58,12 @@ import { installStars } from "./stars/install.js";
 import { installReviews } from "./reviews/install.js";
 import { installUsage } from "./usage/install.js";
 import { installRegistryUploadPublish } from "./registry/uploadPublish.js";
-import { registryConfigFromEnv, githubRegistrySource, githubRegistryPublisher } from "@agentgem/distribute";
+import { registryConfigFromEnv, githubRegistrySource, githubRegistryPublisher, defaultHttp } from "@agentgem/distribute";
 import { defaultGemTypeRegistry } from "./gem/gemTypeRegistry.js";
+import { appConfigFromEnv, InstallationTokens } from "./githubApp/client.js";
+import { installGithubWebhook } from "./githubApp/webhook.js";
+import { installOrgsApi } from "./githubApp/orgsApi.js";
+import { reconcileAll, type GithubAppDeps } from "./githubApp/sync.js";
 
 const serverLog = createLogger("server");
 
@@ -91,7 +95,17 @@ export async function createApp(port: number): Promise<RestApplication> {
   // routinely exceeds 100kb. A generous ceiling is safe; originGuard + the public-read allowlist
   // are the real boundary. bodyParser lives on the RestServer config (alongside port/host), not
   // the top-level app config. Host comes from serverHost() so a deploy can bind 0.0.0.0.
-  app.configure("servers.RestServer").to({ port, host: serverHost(), bodyParser: { json: { limit: "25mb" } } });
+  // `verify` captures the raw bytes for the github webhook route only — HMAC verification needs
+  // the exact bytes GitHub signed, and re-serializing req.body is not byte-faithful. Passed straight
+  // through to express.json (which supports `verify` natively); agentback's bodyParser.json option
+  // type doesn't declare it, hence the cast.
+  const jsonBodyOptions = {
+    limit: "25mb",
+    verify: (req: { url?: string; rawBody?: Buffer }, _res: unknown, buf: Buffer) => {
+      if (req.url?.startsWith("/api/github/webhook")) req.rawBody = buf;
+    },
+  } as never;
+  app.configure("servers.RestServer").to({ port, host: serverHost(), bodyParser: { json: jsonBodyOptions } });
   app.component(MCPComponent);
   app.component(GemTypesComponent);
   app.component(AgentSourcesComponent);
@@ -174,6 +188,30 @@ export async function createApp(port: number): Promise<RestApplication> {
     installReviews(server.expressApp as never, { db: aggDb, webOrigins });
     installUsage(server.expressApp as never, { db: aggDb, webOrigins });
   }
+  // GitHub App (enterprise orgs): webhook always mounts when the DB exists (503s until the three
+  // GITHUB_APP_* secrets are set — the dormant contract); the /api/orgs reads mount with the same
+  // preconditions as usage. Daily reconcile heals missed webhooks; 30s boot kick heals downtime.
+  const ghAppCfg = appConfigFromEnv();
+  const ghAppTokens = ghAppCfg ? new InstallationTokens(ghAppCfg) : null;
+  const ghAppTimers: { interval?: NodeJS.Timeout; kick?: NodeJS.Timeout } = {};
+  if (aggDb) {
+    const ghAppDeps: GithubAppDeps = { db: aggDb, cfg: ghAppCfg, tokens: ghAppTokens, http: defaultHttp, fetchImpl: fetch };
+    installGithubWebhook(server.expressApp as never, ghAppDeps);
+    if (webOrigins.length > 0) installOrgsApi(server.expressApp as never, { db: aggDb, webOrigins, tokens: ghAppTokens, http: defaultHttp });
+    if (ghAppCfg) {
+      const runReconcile = () => void reconcileAll(ghAppDeps).catch((e) => console.error(`githubApp: reconcile failed: ${(e as Error).message}`));
+      ghAppTimers.kick = setTimeout(runReconcile, 30_000);
+      ghAppTimers.interval = setInterval(runReconcile, 24 * 60 * 60 * 1000);
+      ghAppTimers.kick.unref?.(); ghAppTimers.interval.unref?.();
+    }
+  }
+  // Clear the reconcile timers on graceful shutdown (same onStop pattern as closeSharedIndex above) —
+  // scoped here rather than threaded out to run()'s installGracefulShutdown closure, since the timers
+  // depend on aggDb/ghAppCfg which only exist inside this function.
+  app.onStop(() => {
+    if (ghAppTimers.kick) clearTimeout(ghAppTimers.kick);
+    if (ghAppTimers.interval) clearInterval(ghAppTimers.interval);
+  });
   // Registry upload-publish: requires DB, a web origin allowlist, and a GitHub registry with a
   // write token. Gate on `regCfg.token` — githubRegistryPublisher() throws without it, and a
   // deploy that sets AGENTGEM_REGISTRY_REPO but not GITHUB_TOKEN (e.g. render.yaml, where

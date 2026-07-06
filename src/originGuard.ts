@@ -55,8 +55,11 @@ export function originGuard(req: GuardReq, res: GuardRes, next: GuardNext): void
   // api.agentgem.ai). CSRF defense: the OAuth
   // `state`, the SameSite=Lax cookie, and (stars/reviews/usage) a 401 on the authed routes. The handlers
   // set their own credentialed CORS for the AGENTGEM_WEB_ORIGINS allowlist. (The public review GETs
-  // are covered by this prefix too — no PUBLIC_READ_PATHS entry needed, same as stars.)
-  if (req.path.startsWith("/api/auth/") || req.path.startsWith("/api/stars") || req.path.startsWith("/api/reviews") || req.path.startsWith("/api/usage") || req.path.startsWith("/api/registry/upload-publish")) { next(); return; }
+  // are covered by this prefix too — no PUBLIC_READ_PATHS entry needed, same as stars.) The GitHub
+  // App surfaces are covered too: /api/orgs/* is the SPA's member-gated reads (own credentialed CORS
+  // + 401/403), and /api/github/webhook is a server-to-server HMAC-verified POST (no browser context
+  // at all).
+  if (req.path.startsWith("/api/auth/") || req.path.startsWith("/api/stars") || req.path.startsWith("/api/reviews") || req.path.startsWith("/api/usage") || req.path.startsWith("/api/orgs/") || req.path === "/api/github/webhook" || req.path.startsWith("/api/registry/upload-publish")) { next(); return; }
   const site = req.get("sec-fetch-site");
   if (site !== undefined) {
     if (site === "same-origin") { next(); return; }
