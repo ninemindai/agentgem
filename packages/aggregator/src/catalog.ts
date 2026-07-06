@@ -2,16 +2,19 @@
 // SPDX-License-Identifier: MIT
 // Browse-only "shared" gem catalog. Manifest metadata only (no archive bytes).
 import { createHash } from "node:crypto";
-import { sql, desc } from "drizzle-orm";
+import { sql, desc, and, eq } from "drizzle-orm";
 import { verify } from "@agentgem/model";
 import { canonicalJSON } from "@agentgem/insight";
 import type { AppDb } from "./schema.js";
-import { catalogGems, producers, accountBindings } from "./schema.js";
+import { catalogGems, gemArchives, producers, accountBindings } from "./schema.js";
 
+export interface GemArtifactRef { name: string; type: string }
 export interface CatalogRow {
   gemKey: string; version: string; publishedBy: string;
   author?: string; description?: string; tags?: string[]; artifactKinds?: string[];
   type?: string; grade?: number; createdAtMs: number;
+  artifacts?: GemArtifactRef[];
+  installable?: boolean; // derived: a gem_archives row exists (read path only)
 }
 
 export async function upsertCatalogGem(db: AppDb, row: CatalogRow): Promise<void> {
@@ -19,25 +22,46 @@ export async function upsertCatalogGem(db: AppDb, row: CatalogRow): Promise<void
     gemKey: row.gemKey, version: row.version, publishedBy: row.publishedBy,
     author: row.author ?? null, description: row.description ?? null,
     tags: row.tags ?? null, artifactKinds: row.artifactKinds ?? null,
-    type: row.type ?? null, grade: row.grade ?? null, createdAtMs: row.createdAtMs,
+    type: row.type ?? null, grade: row.grade ?? null, artifacts: row.artifacts ?? null,
+    createdAtMs: row.createdAtMs,
   }).onConflictDoUpdate({
     target: [catalogGems.gemKey, catalogGems.version],
     set: {
       publishedBy: row.publishedBy, author: row.author ?? null, description: row.description ?? null,
       tags: row.tags ?? null, artifactKinds: row.artifactKinds ?? null, type: row.type ?? null,
-      grade: row.grade ?? null, createdAtMs: row.createdAtMs,
+      grade: row.grade ?? null, artifacts: row.artifacts ?? null, createdAtMs: row.createdAtMs,
     },
   });
 }
 
 export async function listCatalogGems(db: AppDb): Promise<CatalogRow[]> {
-  const rows = await db.select().from(catalogGems).orderBy(desc(catalogGems.createdAtMs));
+  // Left-join gem_archives so `installable` reflects whether the content was uploaded.
+  const rows = await db.select({
+    gemKey: catalogGems.gemKey, version: catalogGems.version, publishedBy: catalogGems.publishedBy,
+    author: catalogGems.author, description: catalogGems.description, tags: catalogGems.tags,
+    artifactKinds: catalogGems.artifactKinds, type: catalogGems.type, grade: catalogGems.grade,
+    artifacts: catalogGems.artifacts, createdAtMs: catalogGems.createdAtMs, archiveKey: gemArchives.gemKey,
+  }).from(catalogGems)
+    .leftJoin(gemArchives, and(eq(catalogGems.gemKey, gemArchives.gemKey), eq(catalogGems.version, gemArchives.version)))
+    .orderBy(desc(catalogGems.createdAtMs));
   return rows.map((r) => ({
     gemKey: r.gemKey, version: r.version, publishedBy: r.publishedBy,
     author: r.author ?? undefined, description: r.description ?? undefined,
     tags: r.tags ?? undefined, artifactKinds: r.artifactKinds ?? undefined,
-    type: r.type ?? undefined, grade: r.grade ?? undefined, createdAtMs: r.createdAtMs,
+    type: r.type ?? undefined, grade: r.grade ?? undefined, artifacts: r.artifacts ?? undefined,
+    createdAtMs: r.createdAtMs, installable: r.archiveKey != null,
   }));
+}
+
+export async function upsertGemArchive(db: AppDb, a: { gemKey: string; version: string; bytes: Uint8Array; digest: string; createdAtMs: number }): Promise<void> {
+  await db.insert(gemArchives).values({ gemKey: a.gemKey, version: a.version, bytes: a.bytes, size: a.bytes.length, digest: a.digest, createdAtMs: a.createdAtMs })
+    .onConflictDoUpdate({ target: [gemArchives.gemKey, gemArchives.version], set: { bytes: a.bytes, size: a.bytes.length, digest: a.digest, createdAtMs: a.createdAtMs } });
+}
+
+export async function getGemArchive(db: AppDb, gemKey: string, version: string): Promise<{ bytes: Uint8Array; digest: string } | null> {
+  const r = (await db.select({ bytes: gemArchives.bytes, digest: gemArchives.digest }).from(gemArchives)
+    .where(and(eq(gemArchives.gemKey, gemKey), eq(gemArchives.version, version))).limit(1))[0];
+  return r ? { bytes: r.bytes, digest: r.digest } : null;
 }
 
 export interface CatalogManifest {

@@ -1,6 +1,6 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
-import { pgTable, text, integer, uuid, timestamp, boolean, real, primaryKey, jsonb, bigint } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, uuid, timestamp, boolean, real, primaryKey, jsonb, bigint, customType } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { PgDatabase } from "drizzle-orm/pg-core";
 
@@ -223,6 +223,25 @@ export const catalogGems = pgTable("catalog_gems", {
   artifactKinds: jsonb("artifact_kinds").$type<string[]>(),
   type: text("type"),
   grade: integer("grade"),
+  // Per-artifact list (name + type) for the marketplace contents preview — set by the archive
+  // publish path. Distinct from artifactKinds (the deduped kind summary).
+  artifacts: jsonb("artifacts").$type<{ name: string; type: string }[]>(),
+  createdAtMs: bigint("created_at_ms", { mode: "number" }).notNull(),
+}, (t) => [primaryKey({ columns: [t.gemKey, t.version] })]);
+
+// Installable gem content: the .gem archive bytes for a published (gem_key, version). A row here
+// makes the matching catalog_gems row installable; the public download streams these bytes.
+const bytea = customType<{ data: Uint8Array; driverData: Buffer }>({
+  dataType: () => "bytea",
+  toDriver: (v) => Buffer.from(v),
+  fromDriver: (v) => new Uint8Array(v),
+});
+export const gemArchives = pgTable("gem_archives", {
+  gemKey: text("gem_key").notNull(),
+  version: text("version").notNull(),
+  bytes: bytea("bytes").notNull(),
+  size: integer("size").notNull(),
+  digest: text("digest").notNull(),
   createdAtMs: bigint("created_at_ms", { mode: "number" }).notNull(),
 }, (t) => [primaryKey({ columns: [t.gemKey, t.version] })]);
 
@@ -247,7 +266,7 @@ export const curatedSkills = pgTable("curated_skills", {
   indexedAt: timestamp("indexed_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.sourceId, t.path] })]);
 
-export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, webSessions, handoffCodes, stars, reviews, gemAdoptions, accountScopes, usageDays, usageDayModels, orgSettings, catalogGems, curatedSkills, appInstallations, orgMembers };
+export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, webSessions, handoffCodes, stars, reviews, gemAdoptions, accountScopes, usageDays, usageDayModels, orgSettings, catalogGems, gemArchives, curatedSkills, appInstallations, orgMembers };
 export type AppDb = PgDatabase<any, typeof schema>;
 
 // Idempotent DDL. (Schema-as-tables above is the query source of truth; this DDL
@@ -291,6 +310,9 @@ export async function ensureSchema(db: AppDb): Promise<void> {
   await db.execute(sql`create table if not exists org_settings (scope text primary key, retention_days int, dashboard_enabled boolean not null default true, updated_by text not null, updated_at timestamptz not null default now())`);
   await db.execute(sql`alter table org_settings add column if not exists dashboard_enabled boolean not null default true`);
   await db.execute(sql`create table if not exists catalog_gems (gem_key text not null, version text not null, published_by text not null, author text, description text, tags jsonb, artifact_kinds jsonb, type text, grade integer, created_at_ms bigint not null, primary key (gem_key, version))`);
+  // Added post-creation (installable shared setups): the per-artifact preview list + the archive store.
+  await db.execute(sql`alter table catalog_gems add column if not exists artifacts jsonb`);
+  await db.execute(sql`create table if not exists gem_archives (gem_key text not null, version text not null, bytes bytea not null, size int not null, digest text not null, created_at_ms bigint not null, primary key (gem_key, version))`);
   await db.execute(sql`create table if not exists curated_skills (source_id text not null, path text not null, division text not null, name text not null, repo text not null, source_label text not null, homepage text, stars int not null default 0, installs int, indexed_at timestamptz not null default now(), primary key (source_id, path))`);
   await db.execute(sql`alter table curated_skills add column if not exists description text`);
   await db.execute(sql`alter table curated_skills add column if not exists org_scope text`);
