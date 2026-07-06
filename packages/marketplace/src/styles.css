@@ -578,6 +578,17 @@ a.ex-skillcard-rating:hover { text-decoration: underline; }
 .ex-getit-steps { color: var(--ink-2); font-size: 0.9rem; margin: 0; }
 .ex-getit-steps strong { color: var(--ink); font-weight: 600; }
 
+.ex-contents-warn { color: var(--brand-strong); font-size: 0.85rem; margin: 0 0 12px; }
+.ex-contents-groups { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.ex-contents-group > summary { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 6px 0; font-size: 0.92rem; list-style: none; }
+.ex-contents-group > summary::-webkit-details-marker { display: none; }
+.ex-contents-group > summary::before { content: "▸"; color: var(--ink-3, var(--ink-2)); transition: transform 0.15s; }
+.ex-contents-group[open] > summary::before { transform: rotate(90deg); }
+.ex-contents-kind { font-weight: 600; color: var(--ink); }
+.ex-contents-count { color: var(--ink-2); font-size: 0.82rem; background: var(--surface-2); border-radius: var(--r-xs); padding: 1px 7px; }
+.ex-exec-badge { color: var(--brand); }
+.ex-contents-items { list-style: none; padding: 2px 0 6px 22px; margin: 0; display: flex; flex-direction: column; gap: 3px; }
+.ex-contents-item { color: var(--ink-2); font-size: 0.88rem; }
 .ex-ingredients { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; }
 .ex-ingredients li { display: flex; align-items: center; gap: 10px; padding: 9px 0; font-size: 0.92rem; }
 .ex-ingredients li + li { border-top: 1px solid var(--line); }
