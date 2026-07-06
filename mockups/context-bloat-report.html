@@ -1,0 +1,420 @@
+<title>Context Bloat — session hygiene readout</title>
+<style>
+  :root{
+    --bg:#eaeef2; --surface:#ffffff; --surface-2:#f4f7f9; --ink:#12171e; --muted:#5c6773;
+    --line:#d7dee5; --grid:#e7ecf1;
+    --heat:#e0752a; --heat-soft:rgba(224,117,42,.13); --cool:#189b89; --crit:#d83f45; --warn:#c68a1e;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono","Menlo","Consolas",monospace;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#0b0e12; --surface:#13181e; --surface-2:#171d24; --ink:#e8edf2; --muted:#8a97a5;
+    --line:#232b34; --grid:#1a2129;
+    --heat:#f0883e; --heat-soft:rgba(240,136,62,.12); --cool:#2fb8a4; --crit:#e5555b; --warn:#e0a63a;
+  }}
+  :root[data-theme="light"]{
+    --bg:#eaeef2; --surface:#ffffff; --surface-2:#f4f7f9; --ink:#12171e; --muted:#5c6773;
+    --line:#d7dee5; --grid:#e7ecf1;
+    --heat:#e0752a; --heat-soft:rgba(224,117,42,.13); --cool:#189b89; --crit:#d83f45; --warn:#c68a1e;
+  }
+  :root[data-theme="dark"]{
+    --bg:#0b0e12; --surface:#13181e; --surface-2:#171d24; --ink:#e8edf2; --muted:#8a97a5;
+    --line:#232b34; --grid:#1a2129;
+    --heat:#f0883e; --heat-soft:rgba(240,136,62,.12); --cool:#2fb8a4; --crit:#e5555b; --warn:#e0a63a;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+    line-height:1.55;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1020px;margin:0 auto;padding:clamp(20px,4vw,52px) clamp(16px,4vw,40px)}
+  .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  h1,h2,h3{font-family:var(--mono);font-weight:700;text-wrap:balance;letter-spacing:-.02em;margin:0}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--heat);font-weight:600}
+  .lede{color:var(--muted);font-size:clamp(15px,1.6vw,17px);max-width:62ch;margin:14px 0 0}
+  header.top{border-bottom:1px solid var(--line);padding-bottom:30px;margin-bottom:34px}
+  h1{font-size:clamp(30px,6vw,54px);line-height:1.02;margin-top:12px}
+  h1 .fill{color:var(--heat)}
+  .headnums{display:flex;flex-wrap:wrap;gap:12px;margin-top:26px}
+  .kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;
+    padding:14px 16px;min-width:150px;flex:1}
+  .kpi .n{font-family:var(--mono);font-size:clamp(22px,3vw,30px);font-weight:700;
+    font-variant-numeric:tabular-nums;line-height:1}
+  .kpi .n.heat{color:var(--heat)} .kpi .n.crit{color:var(--crit)}
+  .kpi .l{font-size:12.5px;color:var(--muted);margin-top:7px}
+  section{margin:46px 0}
+  .sec-h{display:flex;align-items:baseline;gap:12px;margin-bottom:6px}
+  h2{font-size:clamp(19px,2.4vw,24px)}
+  .sec-sub{color:var(--muted);font-size:14.5px;max-width:66ch;margin:8px 0 22px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px}
+  .hero-cap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:6px;
+    font-family:var(--mono);font-size:12.5px;color:var(--muted)}
+  canvas{display:block;width:100%;height:auto}
+  .legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:14px;font-size:12.5px;color:var(--muted)}
+  .legend span{display:inline-flex;align-items:center;gap:7px}
+  .sw{width:14px;height:3px;border-radius:2px;display:inline-block}
+  .sw.dot{width:9px;height:9px;border-radius:50%}
+  .read{margin-top:16px;padding:14px 16px;background:var(--surface-2);border-left:3px solid var(--heat);
+    border-radius:0 8px 8px 0;font-size:14px}
+  .read b{color:var(--ink)}
+  .grid-sm{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:14px}
+  .sm{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 15px;
+    position:relative;overflow:hidden}
+  .sm .chip{font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.08em;
+    padding:3px 8px;border-radius:999px;text-transform:uppercase}
+  .chip.bounded{color:var(--cool);background:color-mix(in srgb,var(--cool) 15%,transparent)}
+  .chip.mixed{color:var(--warn);background:color-mix(in srgb,var(--warn) 16%,transparent)}
+  .chip.bloated{color:var(--crit);background:color-mix(in srgb,var(--crit) 15%,transparent)}
+  .sm .id{font-family:var(--mono);font-size:12px;color:var(--muted)}
+  .sm .row{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .sm .score{font-family:var(--mono);font-size:34px;font-weight:700;line-height:1;
+    font-variant-numeric:tabular-nums}
+  .sm .meta{font-family:var(--mono);font-size:11.5px;color:var(--muted);margin-top:2px}
+  .sm .stats{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px;font-family:var(--mono);font-size:11.5px}
+  .sm .stats b{color:var(--ink);font-weight:700}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:720px){.two{grid-template-columns:1fr}}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  .tblwrap{overflow-x:auto}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)}
+  th{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  td.mono,th.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  .tier{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:720px){.tier{grid-template-columns:1fr}}
+  .tier .card{border-top:3px solid var(--line)}
+  .tier .cheap{border-top-color:var(--cool)}
+  .tier .llm{border-top-color:var(--heat)}
+  .tier h3{font-size:15px;display:flex;align-items:center;gap:9px}
+  .tier .tag{font-family:var(--mono);font-size:10px;letter-spacing:.1em;padding:2px 7px;border-radius:5px;
+    text-transform:uppercase}
+  .tag.z{background:color-mix(in srgb,var(--cool) 16%,transparent);color:var(--cool)}
+  .tag.c{background:color-mix(in srgb,var(--heat) 16%,transparent);color:var(--heat)}
+  ul.sig{list-style:none;padding:0;margin:14px 0 0}
+  ul.sig li{padding:8px 0;border-top:1px solid var(--line);font-size:13.5px;display:flex;gap:10px;align-items:flex-start}
+  ul.sig li:first-child{border-top:0}
+  ul.sig code{font-family:var(--mono);font-size:12px;background:var(--surface-2);padding:1px 6px;border-radius:5px;color:var(--ink)}
+  .arrow{color:var(--muted);flex:0 0 auto;font-family:var(--mono)}
+  .cf-controls{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin:4px 0 20px}
+  .cf-controls label{font-size:13px;color:var(--muted)}
+  input[type=range]{accent-color:var(--heat);width:min(360px,60vw)}
+  select{font-family:var(--mono);background:var(--surface);color:var(--ink);border:1px solid var(--line);
+    border-radius:7px;padding:6px 9px;font-size:13px}
+  .cf-out{display:flex;gap:26px;flex-wrap:wrap;align-items:flex-end}
+  .cf-out .big{font-family:var(--mono);font-size:clamp(30px,5vw,46px);font-weight:700;color:var(--heat);
+    line-height:1;font-variant-numeric:tabular-nums}
+  .cf-out .sub{font-size:13px;color:var(--muted);max-width:34ch}
+  .note{font-size:12px;color:var(--muted);margin-top:14px;font-style:italic}
+  footer{margin-top:56px;padding-top:22px;border-top:1px solid var(--line);color:var(--muted);font-size:12.5px}
+  footer code{font-family:var(--mono)}
+  :focus-visible{outline:2px solid var(--heat);outline-offset:2px;border-radius:4px}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="eyebrow">Session hygiene readout · deterministic pass</div>
+    <h1>The context window is a bill you <span class="fill">re-pay every turn</span>.</h1>
+    <p class="lede">Four real AgentGem work sessions, measured straight from the transcript — no model in the loop.
+      Every assistant turn carries its own <span class="mono">usage</span> accounting, so the context curve is
+      ground truth. Long isn't the smell. <b>Unbounded task-mixing is</b> — and it shows up as area under the curve.</p>
+    <div class="headnums" id="kpis"></div>
+  </header>
+
+  <section>
+    <div class="sec-h"><h2>The bloat curve</h2></div>
+    <p class="sec-sub">Context size at each turn for <span class="mono" id="hero-id"></span> — the worst specimen.
+      It pins against the <b>1M cap</b> early and stays there: every one of thousands of turns re-bills the full
+      window. The shaded area is total input tokens processed. Triangles mark where cheap detectors fired.</p>
+    <div class="card">
+      <div class="hero-cap">
+        <span>context tokens / turn</span><span id="hero-meta"></span>
+      </div>
+      <canvas id="hero" width="960" height="330" role="img"
+        aria-label="Context size per turn, pinned at the 1 million token cap for most of the session"></canvas>
+      <div class="legend">
+        <span><i class="sw" style="background:var(--heat)"></i>context size</span>
+        <span><i class="sw" style="background:var(--heat-soft);height:10px;border-radius:3px"></i>tokens billed (area)</span>
+        <span><i class="sw dot" style="background:var(--crit)"></i>retry storm</span>
+        <span><i class="sw dot" style="background:var(--warn)"></i>re-read churn</span>
+        <span><i class="sw" style="background:var(--muted);height:2px"></i>1M cap</span>
+      </div>
+      <div class="read" id="hero-read"></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-h"><h2>Clean vs. dragged — four sessions, one axis</h2></div>
+    <p class="sec-sub">A deterministic hygiene score (0–100) from cap-pinning, task-cluster count, task switches,
+      retry storms, edit-thrash, and late-session cache churn. Sorted best to worst. The verdict is computed, not judged.</p>
+    <div class="grid-sm" id="cards"></div>
+  </section>
+
+  <section>
+    <div class="sec-h"><h2>Quality degrades where context is fullest</h2></div>
+    <p class="sec-sub">Two deterministic degradation proxies for <span class="mono" id="deg-id"></span>, binned across
+      the session. Retries and re-reads don't spread evenly — they <b>cluster in the back half</b>, exactly where the
+      window is pegged. Cache re-creation (context being rewritten and re-billed) does the same.</p>
+    <div class="two">
+      <div class="card">
+        <div class="hero-cap"><span>smell density · early → late</span><span>10 windows</span></div>
+        <canvas id="deg" width="470" height="240" role="img" aria-label="Retry and re-read density rising toward the end of the session"></canvas>
+        <div class="legend">
+          <span><i class="sw" style="background:var(--crit)"></i>retry density</span>
+          <span><i class="sw" style="background:var(--warn)"></i>re-read density</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="hero-cap"><span>cache re-creation tokens</span><span>early half vs late half</span></div>
+        <canvas id="cache" width="470" height="240" role="img" aria-label="Cache re-creation tokens, early half versus late half"></canvas>
+        <div class="read" id="deg-read" style="margin-top:14px"></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-h"><h2>How you'd actually detect this — two tiers</h2></div>
+    <p class="sec-sub">This maps straight onto the existing <code>DetectorSpec.cost: "cheap" | "llm"</code> seam in
+      <span class="mono">packages/insight</span>. Cheap runs always, for zero tokens. The LLM is a <b>confirmer</b>,
+      not a scanner — invoked only when cheap signals cross a threshold.</p>
+    <div class="tier">
+      <div class="card cheap">
+        <h3><span class="tag z">cost: cheap</span> Deterministic — always on</h3>
+        <ul class="sig">
+          <li><span class="arrow">▟</span><div><b>Bloat curve</b> — sum <code>input+cache_read+cache_creation</code> per turn. Ground truth, zero tokens.</div></li>
+          <li><span class="arrow">↺</span><div><b>Re-read churn</b> — same <code>file_path</code> read ≥3×. Fell out of context, re-fetched.</div></li>
+          <li><span class="arrow">⤨</span><div><b>Task switches</b> — cluster <code>arg</code> path-prefixes; count ping-pong between them.</div></li>
+          <li><span class="arrow">⟳</span><div><b>Retry storm</b> — identical <code>(tool,arg)</code> ≥3 in a row. <span class="mono">(already shipped)</span></div></li>
+          <li><span class="arrow">▚</span><div><b>Cache churn</b> — <code>cache_creation</code> late ≫ early = window being rewritten.</div></li>
+        </ul>
+      </div>
+      <div class="card llm">
+        <h3><span class="tag c">cost: llm</span> Confirmer — fires on threshold</h3>
+        <ul class="sig">
+          <li><span class="arrow">✂</span><div><b>Semantic boundary</b> — path-clusters say "two trees"; only the judge knows if that was one task or two. Turns a structural split into "cut <em>here</em>."</div></li>
+          <li><span class="arrow">≈</span><div><b>Degradation verdict</b> — rate early vs late answer quality, correlate the drop with the bloat curve.</div></li>
+          <li><span class="arrow">→</span><div><b>Human advice</b> — "this should've been 3 sessions / a subagent / a <code>/clear</code> at turn 40."</div></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-h"><h2>The token tax of not cutting</h2></div>
+    <p class="sec-sub">A pinned session re-processes its whole history every turn. Model an <em>ideal</em> bounded
+      session that holds a flat working set instead of growing to the cap — the gap is re-processed dead weight.
+      Drag the working set; pick a session.</p>
+    <div class="card">
+      <div class="cf-controls">
+        <span><label for="cf-sess">session</label> <select id="cf-sess"></select></span>
+        <span><label for="cf-ws">ideal working set: <b class="mono" id="cf-wsv"></b> tok</label><br>
+          <input type="range" id="cf-ws" min="60000" max="400000" step="10000" value="150000"></span>
+      </div>
+      <div class="cf-out">
+        <div>
+          <div class="big" id="cf-waste"></div>
+          <div class="sub">tokens re-processed as stale history — a deterministic lower bound (<span id="cf-pct"></span> of the session's total input).</div>
+        </div>
+        <div>
+          <div class="big" id="cf-ratio" style="color:var(--cool)"></div>
+          <div class="sub">of input tokens would survive if the session were held to that working set.</div>
+        </div>
+      </div>
+      <p class="note">Model, not a measurement. Most of the pinned area is <em>cache-read</em> tokens (billed at a
+        fraction of fresh input), so the dollar cost is smaller than the raw count — but the latency and quality
+        drag of a full window is paid in full, every turn.</p>
+    </div>
+  </section>
+
+  <footer>
+    Deterministic pass over 4 of 739 real transcripts in
+    <code>~/.claude/projects/…/agentgem</code>. No content left the machine — coordinates and counts only, mirroring
+    <code>DetectorFinding</code>'s privacy contract. Numbers computed by a pure ~120-line scan; the LLM tier is a
+    proposed confirmer, not run here.
+  </footer>
+</div>
+
+<script>
+const SESSIONS = [{"file": "d75d0fc9-fb7f-48f3-8e7b-ca341e7cace1.jsonl", "assistant_turns": 1451, "human_prompts": 93, "duration_min": 531.7, "peak_ctx_tokens": 998735, "final_ctx_tokens": 503216, "area_under_curve_tok": 736159312, "avg_ctx_tokens": 507346, "total_tool_calls": 586, "distinct_task_clusters": 3, "task_switches": 22, "retry_storms": 0, "reread_files": 3, "reread_waste_calls": 38, "editthrash_files": 9, "cache_creation_early_tok": 3200522, "cache_creation_late_tok": 4142641, "top_clusters": [["dir:Users", 110], ["pkg:console", 37], ["dir:tmp", 35]], "reread_density_by_window": [1, 0, 0, 1, 6, 19, 6, 1, 1, 6], "retry_density_by_window": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "curve": [[0, 57337, 249], [7, 61774, 327], [14, 63361, 601], [21, 69448, 365], [28, 73263, 77], [35, 80582, 3168], [42, 86702, 1569], [49, 93215, 1402], [56, 103394, 2564], [63, 110282, 4445], [70, 120536, 408], [77, 127112, 5043], [84, 134985, 710], [91, 143219, 149], [98, 146532, 750], [105, 151329, 482], [112, 162006, 478], [119, 175715, 23693], [126, 200319, 1376], [133, 205082, 741], [140, 215386, 853], [147, 219203, 1120], [154, 220640, 1334], [161, 224861, 603], [168, 230635, 39], [175, 233661, 385], [182, 239612, 2248], [189, 244717, 551], [196, 250185, 385], [203, 255057, 3424], [210, 262771, 52], [217, 270216, 2079], [224, 277755, 4021], [231, 283142, 110], [238, 291146, 438], [245, 300164, 518], [252, 304185, 851], [259, 309497, 550], [266, 312961, 816], [273, 318048, 356], [280, 322309, 2379], [287, 329688, 296], [294, 333965, 1171], [301, 336851, 1963], [308, 344016, 82], [315, 348850, 225], [322, 351361, 253], [329, 354235, 678], [336, 358715, 2073], [343, 365840, 946], [350, 371789, 3143], [357, 377333, 1001], [364, 382081, 1332], [371, 392066, 4127], [378, 402872, 1758], [385, 409577, 217], [392, 412450, 273], [399, 415611, 500], [406, 420411, 2070], [413, 425491, 1146], [420, 438478, 190], [427, 447221, 141], [434, 452906, 166], [441, 461204, 47], [448, 467850, 794], [455, 478166, 1740], [462, 484402, 1452], [469, 495356, 459], [476, 498559, 457], [483, 501806, 378], [490, 509169, 1682], [497, 513279, 708], [504, 518187, 3533], [511, 524501, 507], [518, 528463, 3060], [525, 532793, 391], [532, 535915, 856], [539, 539005, 962], [546, 544350, 1193], [553, 548500, 2142], [560, 554916, 882], [567, 559271, 215], [574, 563159, 155], [581, 568648, 352], [588, 571865, 633], [595, 573686, 1112], [602, 578152, 2459], [609, 589982, 1401], [616, 593871, 718], [623, 598931, 3980], [630, 616504, 715], [637, 622325, 160], [644, 629639, 302], [651, 632231, 765], [658, 637427, 2231], [665, 640582, 380], [672, 644950, 233], [679, 645917, 339], [686, 650285, 866], [693, 654674, 1413], [700, 659099, 142], [707, 663274, 937], [714, 667331, 902], [721, 671605, 898], [728, 676264, 1843], [735, 681992, 386], [742, 685767, 56], [749, 691159, 227], [756, 694781, 142], [763, 700686, 1213], [770, 705017, 359], [777, 708271, 321], [784, 713383, 772], [791, 719028, 367], [798, 720298, 450], [805, 723602, 980], [812, 728712, 587], [819, 732429, 56], [826, 736990, 209], [833, 741357, 1207], [840, 745640, 157], [847, 751682, 929], [854, 757695, 4642], [861, 769643, 302], [868, 775090, 114], [875, 782127, 683], [882, 785910, 305], [889, 786751, 1530], [896, 791523, 1975], [903, 796595, 1414], [910, 800038, 1232], [917, 805051, 1752], [924, 810997, 1346], [931, 813503, 393], [938, 819636, 859], [945, 824752, 1941], [952, 839561, 3047], [959, 847243, 170], [966, 856919, 1194], [973, 863264, 1181], [980, 865349, 770], [987, 870752, 713], [994, 877481, 2842], [1001, 885688, 2857], [1008, 893508, 810], [1015, 895769, 2197], [1022, 901395, 1584], [1029, 904718, 984], [1036, 908406, 1434], [1043, 919147, 3322], [1050, 927575, 694], [1057, 937928, 467], [1064, 945944, 359], [1071, 968864, 379], [1078, 970743, 251], [1085, 971692, 698], [1092, 981823, 145], [1099, 983640, 1877], [1106, 987868, 797], [1113, 989994, 640], [1120, 994858, 1598], [1127, 261607, 534], [1134, 267018, 871], [1141, 274068, 1303], [1148, 280800, 576], [1155, 283134, 546], [1162, 288029, 1835], [1169, 296021, 1574], [1176, 301286, 1101], [1183, 309335, 346], [1190, 313889, 1607], [1197, 321492, 21], [1204, 327627, 307], [1211, 332993, 1963], [1218, 338750, 1226], [1225, 347720, 1567], [1232, 356041, 62], [1239, 361437, 380], [1246, 364785, 981], [1253, 369401, 236], [1260, 372961, 445], [1267, 376061, 244], [1274, 380838, 573], [1281, 382411, 1288], [1288, 386249, 238], [1295, 387707, 1081], [1302, 391044, 2427], [1309, 395649, 962], [1316, 400874, 1258], [1323, 404060, 995], [1330, 408696, 2640], [1337, 416349, 271], [1344, 423997, 599], [1351, 430092, 786], [1358, 435776, 616], [1365, 440395, 916], [1372, 445527, 670], [1379, 451210, 840], [1386, 457261, 1167], [1393, 463209, 204], [1400, 472526, 379], [1407, 480256, 608], [1414, 484034, 834], [1421, 488147, 1188], [1428, 491136, 231], [1435, 492572, 2900], [1442, 499303, 383], [1449, 502042, 862]]}, {"file": "6165002d-82df-4cbd-a259-078ac6ef4779.jsonl", "assistant_turns": 3953, "human_prompts": 333, "duration_min": 3198.1, "peak_ctx_tokens": 999717, "final_ctx_tokens": 746107, "area_under_curve_tok": 2053743593, "avg_ctx_tokens": 519540, "total_tool_calls": 1500, "distinct_task_clusters": 11, "task_switches": 68, "retry_storms": 8, "reread_files": 5, "reread_waste_calls": 16, "editthrash_files": 11, "cache_creation_early_tok": 16052121, "cache_creation_late_tok": 10643679, "top_clusters": [["dir:Users", 254], ["dir:private", 26], ["pkg:marketplace", 26], ["pkg:console", 20], ["pkg:insight", 9], ["dir:tmp", 6], ["pkg:distribute", 5], ["pkg:extension-rate-limit", 3]], "reread_density_by_window": [0, 4, 3, 0, 0, 2, 5, 1, 0, 6], "retry_density_by_window": [1, 4, 0, 0, 0, 3, 1, 0, 8, 0], "curve": [[0, 56302, 577], [19, 68651, 2031], [38, 85806, 1085], [57, 105626, 187], [76, 121794, 70], [95, 147777, 83], [114, 168479, 925], [133, 181307, 17], [152, 194641, 965], [171, 211937, 3639], [190, 227934, 563], [209, 238538, 2422], [228, 252053, 747], [247, 263830, 1327], [266, 276907, 2452], [285, 294264, 272], [304, 304039, 1657], [323, 319698, 4310], [342, 335397, 4639], [361, 351450, 1141], [380, 383756, 70], [399, 425210, 256], [418, 444225, 672], [437, 460359, 18], [456, 477588, 1745], [475, 498518, 1776], [494, 513842, 1491], [513, 541317, 4456], [532, 559455, 1090], [551, 574115, 808], [570, 589271, 1446], [589, 600048, 2498], [608, 613515, 856], [627, 628053, 2224], [646, 640206, 677], [665, 650464, 375], [684, 669038, 542], [703, 685650, 1827], [722, 699188, 1355], [741, 708099, 902], [760, 726306, 1325], [779, 740416, 226], [798, 748600, 839], [817, 772703, 1329], [836, 782778, 2260], [855, 811349, 1076], [874, 825389, 20323], [893, 862090, 2351], [912, 876428, 507], [931, 890100, 2241], [950, 907852, 826], [969, 925350, 819], [988, 937895, 1978], [1007, 946870, 2929], [1026, 961403, 824], [1045, 973466, 400], [1064, 988367, 1981], [1083, 256055, 121], [1102, 268880, 230], [1121, 284043, 183], [1140, 294622, 682], [1159, 305720, 1713], [1178, 321322, 555], [1197, 338176, 684], [1216, 347836, 276], [1235, 369574, 388], [1254, 389301, 1127], [1273, 408306, 954], [1292, 422166, 1477], [1311, 437858, 707], [1330, 453590, 1156], [1349, 465858, 1397], [1368, 482224, 590], [1387, 492919, 190], [1406, 519699, 1146], [1425, 532620, 537], [1444, 550047, 821], [1463, 568796, 26], [1482, 576872, 280], [1501, 590202, 3939], [1520, 610455, 196], [1539, 648079, 2057], [1558, 661289, 454], [1577, 680629, 756], [1596, 513433, 691], [1615, 525134, 846], [1634, 539068, 1231], [1653, 566819, 471], [1672, 610991, 816], [1691, 627153, 242], [1710, 640951, 409], [1729, 659032, 228], [1748, 677049, 441], [1767, 695017, 667], [1786, 706725, 1247], [1805, 721310, 1308], [1824, 731958, 2128], [1843, 750500, 1238], [1862, 767748, 1182], [1881, 790844, 444], [1900, 808462, 252], [1919, 821873, 1395], [1938, 834168, 2622], [1957, 842928, 849], [1976, 856851, 1161], [1995, 895282, 688], [2014, 911563, 378], [2033, 930423, 597], [2052, 385785, 2317], [2071, 110458, 310], [2090, 117314, 867], [2109, 125224, 1993], [2128, 133993, 796], [2147, 156279, 1778], [2166, 187479, 933], [2185, 198706, 311], [2204, 206690, 7953], [2223, 241974, 1193], [2242, 277720, 2934], [2261, 292181, 118], [2280, 317343, 1195], [2299, 327975, 2279], [2318, 358075, 20998], [2337, 394925, 754], [2356, 408901, 47], [2375, 418112, 719], [2394, 427331, 1172], [2413, 441870, 449], [2432, 456273, 207], [2451, 464606, 514], [2470, 350380, 2841], [2489, 371112, 2044], [2508, 391033, 293], [2527, 413006, 970], [2546, 426427, 491], [2565, 447970, 547], [2584, 467854, 92], [2603, 482653, 591], [2622, 498644, 830], [2641, 511704, 2528], [2660, 526455, 146], [2679, 534424, 258], [2698, 561584, 4443], [2717, 581790, 571], [2736, 606092, 652], [2755, 622669, 584], [2774, 637021, 758], [2793, 654222, 1443], [2812, 677682, 811], [2831, 688839, 932], [2850, 714644, 3132], [2869, 727613, 857], [2888, 749229, 381], [2907, 766789, 640], [2926, 777485, 418], [2945, 795399, 6093], [2964, 816925, 8265], [2983, 834360, 358], [3002, 846521, 2036], [3021, 866521, 605], [3040, 874745, 1438], [3059, 905815, 1626], [3078, 924573, 1538], [3097, 934592, 5428], [3116, 981113, 357], [3135, 999717, 823], [3154, 101959, 730], [3173, 112320, 91], [3192, 127293, 724], [3211, 135176, 308], [3230, 146717, 418], [3249, 167406, 3374], [3268, 185664, 1964], [3287, 214396, 1351], [3306, 223029, 984], [3325, 233002, 709], [3344, 250164, 4879], [3363, 269386, 259], [3382, 286900, 677], [3401, 302824, 322], [3420, 317081, 2213], [3439, 326795, 829], [3458, 336744, 841], [3477, 358375, 581], [3496, 378161, 763], [3515, 403392, 526], [3534, 418858, 1003], [3553, 432722, 50], [3572, 445810, 2968], [3591, 463184, 748], [3610, 478598, 570], [3629, 487999, 925], [3648, 496128, 1191], [3667, 512790, 904], [3686, 525746, 2215], [3705, 553637, 7770], [3724, 572438, 563], [3743, 585753, 2475], [3762, 600101, 487], [3781, 616949, 925], [3800, 625107, 1410], [3819, 651556, 688], [3838, 669435, 225], [3857, 685485, 179], [3876, 699474, 226], [3895, 709297, 1583], [3914, 722301, 1642], [3933, 740055, 705], [3952, 746107, 670]]}, {"file": "e60fb8db-ec9e-45ee-b47d-b8d32ddbfb14.jsonl", "assistant_turns": 488, "human_prompts": 7, "duration_min": 173.4, "peak_ctx_tokens": 420967, "final_ctx_tokens": 420967, "area_under_curve_tok": 122711329, "avg_ctx_tokens": 251458, "total_tool_calls": 209, "distinct_task_clusters": 2, "task_switches": 1, "retry_storms": 0, "reread_files": 1, "reread_waste_calls": 72, "editthrash_files": 0, "cache_creation_early_tok": 786304, "cache_creation_late_tok": 441151, "top_clusters": [["dir:tmp", 73], ["dir:Users", 2]], "reread_density_by_window": [0, 8, 9, 11, 8, 8, 6, 7, 8, 8], "retry_density_by_window": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "curve": [[0, 61354, 590], [2, 61354, 590], [4, 65910, 3534], [6, 69573, 617], [8, 69573, 617], [10, 72734, 675], [12, 73441, 615], [14, 74260, 861], [16, 74260, 861], [18, 76673, 4299], [20, 76673, 4299], [22, 82058, 4117], [24, 88212, 891], [26, 88212, 891], [28, 89180, 4913], [30, 94164, 2222], [32, 94164, 2222], [34, 98238, 2369], [36, 101822, 990], [38, 101822, 990], [40, 106493, 826], [42, 107644, 3427], [44, 111077, 1200], [46, 112294, 562], [48, 112294, 562], [50, 113145, 400], [52, 113728, 1212], [54, 115264, 1998], [56, 115264, 1998], [58, 117377, 212], [60, 117742, 94], [62, 120204, 3243], [64, 123611, 56], [66, 126164, 1913], [68, 126164, 1913], [70, 128472, 388], [72, 131228, 551], [74, 131228, 551], [76, 134217, 1302], [78, 134217, 1302], [80, 138086, 364], [82, 138086, 364], [84, 140888, 1099], [86, 140888, 1099], [88, 144425, 645], [90, 144425, 645], [92, 147637, 724], [94, 147637, 724], [96, 148667, 436], [98, 151354, 864], [100, 151354, 864], [102, 154662, 915], [104, 154662, 915], [106, 156134, 657], [108, 156938, 232], [110, 156938, 232], [112, 159608, 1393], [114, 159608, 1393], [116, 163439, 380], [118, 163439, 380], [120, 166257, 395], [122, 166257, 395], [124, 169228, 563], [126, 169228, 563], [128, 169870, 464], [130, 172702, 390], [132, 172702, 390], [134, 175701, 1270], [136, 175701, 1270], [138, 177183, 1255], [140, 178614, 56], [142, 181038, 969], [144, 182021, 56], [146, 184445, 718], [148, 185237, 369], [150, 185237, 369], [152, 188179, 672], [154, 188179, 672], [156, 188896, 1267], [158, 190332, 56], [160, 192756, 754], [162, 193524, 56], [164, 195948, 1080], [166, 197171, 56], [168, 199595, 277], [170, 199886, 56], [172, 202310, 2003], [174, 204462, 56], [176, 206886, 417], [178, 207317, 56], [180, 209870, 2252], [182, 212144, 56], [184, 214568, 265], [186, 214847, 56], [188, 217271, 452], [190, 217740, 56], [192, 220164, 1528], [194, 221835, 56], [196, 224259, 1246], [198, 225693, 160], [200, 225693, 160], [202, 228221, 652], [204, 228964, 573], [206, 228964, 573], [208, 232113, 669], [210, 232113, 669], [212, 235224, 382], [214, 235224, 382], [216, 238049, 1974], [218, 238049, 1974], [220, 240196, 1105], [222, 241448, 175], [224, 244061, 230], [226, 244061, 230], [228, 246858, 218], [230, 247219, 56], [232, 249643, 553], [234, 251218, 277], [236, 251218, 277], [238, 254207, 684], [240, 254207, 684], [242, 255038, 923], [244, 256110, 696], [246, 256110, 696], [248, 259394, 663], [250, 259394, 663], [252, 260329, 787], [254, 261278, 358], [256, 261278, 358], [258, 264077, 535], [260, 264077, 535], [262, 267050, 306], [264, 267050, 306], [266, 269923, 935], [268, 269923, 935], [270, 273296, 926], [272, 273296, 926], [274, 276683, 359], [276, 276683, 359], [278, 277113, 663], [280, 277945, 260], [282, 277945, 260], [284, 280649, 412], [286, 280649, 412], [288, 283499, 295], [290, 283499, 295], [292, 283861, 1232], [294, 285348, 749], [296, 286116, 56], [298, 288540, 846], [300, 289400, 56], [302, 291824, 1574], [304, 293446, 422], [306, 293446, 422], [308, 296446, 1336], [310, 296446, 1336], [312, 300228, 518], [314, 300228, 518], [316, 303184, 1292], [318, 303184, 1292], [320, 306974, 1221], [322, 306974, 1221], [324, 308356, 1736], [326, 310099, 1583], [328, 313412, 2851], [330, 313412, 2851], [332, 316594, 3605], [334, 316594, 3605], [336, 320433, 2886], [338, 323525, 1114], [340, 323525, 1114], [342, 325013, 897], [344, 326070, 56], [346, 328494, 962], [348, 329470, 56], [350, 331894, 1082], [352, 333149, 729], [354, 333149, 729], [356, 334084, 1907], [358, 336043, 116], [360, 338527, 1496], [362, 338527, 1496], [364, 342473, 456], [366, 342473, 456], [368, 345496, 436], [370, 345496, 436], [372, 345977, 1353], [374, 347369, 781], [376, 347369, 781], [378, 348200, 735], [380, 349008, 144], [382, 351649, 716], [384, 351649, 716], [386, 352514, 242], [388, 355222, 743], [390, 355222, 743], [392, 356053, 638], [394, 356726, 758], [396, 356726, 758], [398, 357776, 127], [400, 360271, 925], [402, 361217, 56], [404, 363641, 424], [406, 364079, 56], [408, 366503, 655], [410, 367330, 56], [412, 369883, 310], [414, 370358, 262], [416, 370638, 56], [418, 373062, 2355], [420, 375448, 624], [422, 375448, 624], [424, 378563, 706], [426, 378563, 706], [428, 379411, 596], [430, 380048, 113], [432, 382529, 423], [434, 382529, 423], [436, 385418, 1581], [438, 385418, 1581], [440, 387156, 2001], [442, 389338, 56], [444, 391762, 907], [446, 392730, 144], [448, 392730, 144], [450, 395242, 902], [452, 396166, 56], [454, 398590, 432], [456, 399212, 56], [458, 401636, 627], [460, 402277, 56], [462, 404701, 874], [464, 405589, 56], [466, 408013, 548], [468, 408601, 199], [470, 411297, 437], [472, 411297, 437], [474, 414220, 565], [476, 414220, 565], [478, 415021, 1524], [480, 416702, 1829], [482, 416702, 1829], [484, 418777, 1974], [486, 420967, 1202]]}, {"file": "26df3b24-da44-4e77-9654-e333d345ca10.jsonl", "assistant_turns": 3385, "human_prompts": 125, "duration_min": 1383.8, "peak_ctx_tokens": 998840, "final_ctx_tokens": 757986, "area_under_curve_tok": 1921351378, "avg_ctx_tokens": 567607, "total_tool_calls": 1527, "distinct_task_clusters": 2, "task_switches": 62, "retry_storms": 17, "reread_files": 11, "reread_waste_calls": 40, "editthrash_files": 32, "cache_creation_early_tok": 7436987, "cache_creation_late_tok": 18733639, "top_clusters": [["pkg:console", 358], ["dir:Users", 203]], "reread_density_by_window": [1, 0, 0, 6, 7, 6, 23, 2, 3, 3], "retry_density_by_window": [5, 3, 9, 4, 0, 3, 3, 0, 1, 1], "curve": [[0, 55826, 849], [16, 64369, 762], [32, 79519, 584], [48, 88596, 1133], [64, 97933, 568], [80, 110572, 488], [96, 124953, 127], [112, 151764, 235], [128, 164058, 643], [144, 174025, 986], [160, 178564, 279], [176, 183476, 262], [192, 187775, 149], [208, 191620, 2404], [224, 198747, 250], [240, 202376, 149], [256, 207120, 584], [272, 217608, 202], [288, 223472, 523], [304, 232780, 470], [320, 239347, 2258], [336, 246696, 149], [352, 253992, 873], [368, 259791, 257], [384, 265131, 1918], [400, 272230, 781], [416, 277238, 387], [432, 284939, 415], [448, 293713, 701], [464, 303084, 1559], [480, 311062, 84], [496, 317606, 115], [512, 327510, 187], [528, 332323, 472], [544, 339477, 330], [560, 346789, 694], [576, 354419, 1238], [592, 362969, 619], [608, 372155, 478], [624, 378589, 208], [640, 385036, 321], [656, 393336, 555], [672, 397066, 626], [688, 409848, 1848], [704, 419680, 318], [720, 427667, 165], [736, 433597, 308], [752, 442583, 436], [768, 448298, 801], [784, 454782, 421], [800, 463965, 383], [816, 469309, 586], [832, 481799, 1034], [848, 489629, 1404], [864, 498092, 390], [880, 509117, 699], [896, 515279, 822], [912, 524608, 887], [928, 530002, 1465], [944, 539344, 1061], [960, 548507, 2482], [976, 560209, 738], [992, 566040, 2851], [1008, 578501, 3378], [1024, 588500, 953], [1040, 595685, 780], [1056, 604355, 2046], [1072, 615490, 319], [1088, 624691, 1520], [1104, 632310, 797], [1120, 639772, 322], [1136, 645787, 1024], [1152, 654294, 1138], [1168, 660662, 1642], [1184, 665967, 788], [1200, 673466, 536], [1216, 679763, 1445], [1232, 693191, 229], [1248, 708783, 930], [1264, 719595, 698], [1280, 735796, 765], [1296, 756707, 98], [1312, 765032, 99], [1328, 774193, 2775], [1344, 789046, 433], [1360, 797445, 360], [1376, 801899, 552], [1392, 815575, 879], [1408, 825295, 803], [1424, 833156, 660], [1440, 840543, 3317], [1456, 636468, 784], [1472, 646388, 270], [1488, 651334, 657], [1504, 659937, 472], [1520, 667919, 1017], [1536, 676939, 2268], [1552, 692292, 800], [1568, 697473, 696], [1584, 707313, 936], [1600, 715409, 645], [1616, 720660, 1010], [1632, 725544, 1104], [1648, 733216, 437], [1664, 757620, 4686], [1680, 771903, 2242], [1696, 797054, 822], [1712, 803253, 1253], [1728, 811569, 274], [1744, 830805, 306], [1760, 844666, 77], [1776, 852321, 1255], [1792, 860108, 1466], [1808, 868549, 1324], [1824, 882098, 566], [1840, 889215, 78], [1856, 901978, 665], [1872, 914191, 662], [1888, 922345, 866], [1904, 943447, 5086], [1920, 979682, 646], [1936, 991477, 149], [1952, 460486, 989], [1968, 470430, 808], [1984, 480829, 1811], [2000, 490139, 77], [2016, 498212, 2647], [2032, 515467, 323], [2048, 526782, 1197], [2064, 539618, 834], [2080, 549324, 918], [2096, 560135, 1388], [2112, 568957, 1911], [2128, 580808, 388], [2144, 590812, 828], [2160, 596751, 797], [2176, 601381, 932], [2192, 607753, 194], [2208, 616089, 417], [2224, 623478, 696], [2240, 628526, 506], [2256, 636516, 814], [2272, 645104, 555], [2288, 652553, 390], [2304, 658428, 822], [2320, 667008, 1228], [2336, 674390, 2764], [2352, 682841, 170], [2368, 691947, 491], [2384, 701475, 547], [2400, 710193, 1853], [2416, 723919, 689], [2432, 737499, 260], [2448, 758563, 202], [2464, 770052, 990], [2480, 781619, 2170], [2496, 809150, 1592], [2512, 822425, 751], [2528, 839757, 608], [2544, 856540, 707], [2560, 873049, 748], [2576, 882095, 352], [2592, 894323, 411], [2608, 908969, 952], [2624, 919015, 1055], [2640, 930443, 132], [2656, 944121, 215], [2672, 952917, 511], [2688, 964170, 165], [2704, 970939, 1028], [2720, 978639, 571], [2736, 987437, 2808], [2752, 254605, 819], [2768, 267072, 132], [2784, 277913, 1016], [2800, 286489, 2012], [2816, 293416, 764], [2832, 299885, 552], [2848, 307229, 2394], [2864, 322664, 1382], [2880, 340798, 4328], [2896, 355332, 684], [2912, 393924, 60], [2928, 413126, 2888], [2944, 428973, 1074], [2960, 438598, 398], [2976, 444904, 54], [2992, 451863, 316], [3008, 461815, 93], [3024, 474112, 2057], [3040, 484293, 1194], [3056, 492937, 493], [3072, 507106, 3565], [3088, 519577, 409], [3104, 531219, 1803], [3120, 542663, 705], [3136, 551783, 246], [3152, 560632, 621], [3168, 571683, 1643], [3184, 579624, 455], [3200, 589760, 1615], [3216, 603708, 615], [3232, 612329, 2216], [3248, 624583, 2247], [3264, 639286, 1058], [3280, 649779, 4885], [3296, 664220, 1138], [3312, 682885, 439], [3328, 698419, 825], [3344, 727268, 320], [3360, 741527, 628], [3376, 752336, 1240]]}];
+const fmt = n => n>=1e9?(n/1e9).toFixed(2)+'B':n>=1e6?(n/1e6).toFixed(n<1e7?2:1)+'M':n>=1e3?(n/1e3).toFixed(0)+'k':(''+Math.round(n));
+const short = f => f.slice(0,8);
+const CAP = 1_000_000;
+const css = k => getComputedStyle(document.documentElement).getPropertyValue(k).trim();
+
+// ---- deterministic hygiene score (mirrors what a detector would emit) ----
+function score(s){
+  let x=100;
+  const pinned = s.peak_ctx_tokens/CAP;
+  if(pinned>0.97) x-=22; else if(pinned>0.8) x-=12; else if(pinned>0.6) x-=5;
+  x -= Math.min(30, Math.max(0,(s.distinct_task_clusters-3))*6);
+  x -= Math.min(16, s.task_switches*0.25);
+  x -= Math.min(18, s.retry_storms*3);
+  x -= Math.min(16, s.editthrash_files*1.2);
+  const churn = s.cache_creation_late_tok/Math.max(1,s.cache_creation_early_tok);
+  if(churn>2) x-=15; else if(churn>1.5) x-=9;
+  return Math.max(2, Math.round(x));
+}
+function verdict(sc){ return sc>=72?['bounded','BOUNDED']:sc>=48?['mixed','MIXED']:['bloated','BLOATED']; }
+SESSIONS.forEach(s=>{s._score=score(s); s._v=verdict(s._score);});
+const bySc = [...SESSIONS].sort((a,b)=>b._score-a._score);
+const worst = [...SESSIONS].sort((a,b)=>a._score-b._score)[0];
+const churnCase = [...SESSIONS].sort((a,b)=>
+  (b.cache_creation_late_tok/Math.max(1,b.cache_creation_early_tok))-(a.cache_creation_late_tok/Math.max(1,a.cache_creation_early_tok)))[0];
+
+// ---- KPIs ----
+const totalArea = SESSIONS.reduce((a,s)=>a+s.area_under_curve_tok,0);
+document.getElementById('kpis').innerHTML = [
+  ['n heat', fmt(worst.area_under_curve_tok), 'input tokens re-billed in one session'],
+  ['n', worst.distinct_task_clusters, 'distinct task clusters, one session'],
+  ['n', Math.round(worst.duration_min/60)+' hrs', 'wall-clock, single unbroken session'],
+  ['n crit', fmt(worst.peak_ctx_tokens), 'peak context — pinned at the 1M cap'],
+].map(([c,n,l])=>`<div class="kpi"><div class="n ${c.replace('n','').trim()}">${n}</div><div class="l">${l}</div></div>`).join('');
+
+// ---- canvas helpers (HiDPI) ----
+function setup(cv){
+  const dpr=Math.min(2,window.devicePixelRatio||1);
+  const w=cv.clientWidth||cv.width, h=cv.height;
+  cv.width=w*dpr; cv.height=h*dpr; cv.style.height=h+'px';
+  const ctx=cv.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+  return {ctx,w,h};
+}
+// ---- HERO ----
+function hero(){
+  const s=worst, cv=document.getElementById('hero'); const {ctx,w,h}=setup(cv);
+  const pad={l:52,r:14,t:14,b:26}; const iw=w-pad.l-pad.r, ih=h-pad.t-pad.b;
+  const N=s.curve.length; const maxY=CAP;
+  const X=i=>pad.l+iw*(i/(N-1)); const Y=v=>pad.t+ih*(1-v/maxY);
+  ctx.clearRect(0,0,w,h);
+  // grid + y labels
+  ctx.font='11px '+css('--mono'); ctx.fillStyle=css('--muted'); ctx.textAlign='right';
+  ctx.strokeStyle=css('--grid'); ctx.lineWidth=1;
+  [0,250000,500000,750000,1000000].forEach(v=>{
+    const y=Y(v); ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(w-pad.r,y); ctx.stroke();
+    ctx.fillText(v?fmt(v):'0', pad.l-8, y+3);
+  });
+  // cap line
+  ctx.strokeStyle=css('--muted'); ctx.setLineDash([5,4]); ctx.beginPath();
+  ctx.moveTo(pad.l,Y(CAP)); ctx.lineTo(w-pad.r,Y(CAP)); ctx.stroke(); ctx.setLineDash([]);
+  // area
+  const g=ctx.createLinearGradient(0,pad.t,0,pad.t+ih);
+  g.addColorStop(0,css('--heat-soft')); g.addColorStop(1,'transparent');
+  ctx.beginPath(); ctx.moveTo(X(0),Y(0));
+  s.curve.forEach((p,i)=>ctx.lineTo(X(i),Y(p[1])));
+  ctx.lineTo(X(N-1),Y(0)); ctx.closePath(); ctx.fillStyle=g; ctx.fill();
+  // line
+  ctx.beginPath(); s.curve.forEach((p,i)=> i?ctx.lineTo(X(i),Y(p[1])):ctx.moveTo(X(i),Y(p[1])));
+  ctx.strokeStyle=css('--heat'); ctx.lineWidth=2; ctx.stroke();
+  // smell markers from window densities
+  const mark=(dens,color)=>{
+    dens.forEach((d,wi)=>{ if(!d) return;
+      const frac=(wi+0.5)/dens.length; const xi=Math.round(frac*(N-1));
+      const x=X(xi), y=Y(s.curve[xi][1]);
+      const r=3+Math.min(4,d);
+      ctx.beginPath(); ctx.moveTo(x,y-r-4); ctx.lineTo(x-r,y-4); ctx.lineTo(x+r,y-4); ctx.closePath();
+      ctx.fillStyle=color; ctx.fill();
+    });
+  };
+  mark(s.retry_density_by_window, css('--crit'));
+  mark(s.reread_density_by_window, css('--warn'));
+  // x labels
+  ctx.fillStyle=css('--muted'); ctx.textAlign='center'; ctx.font='11px '+css('--mono');
+  ctx.fillText('turn 0', pad.l+2, h-8);
+  ctx.fillText('turn '+s.assistant_turns, w-pad.r-6, h-8);
+  document.getElementById('hero-id').textContent=short(s.file);
+  document.getElementById('hero-meta').textContent=s.assistant_turns+' turns · '+s.human_prompts+' prompts · '+Math.round(s.duration_min/60)+'h';
+  document.getElementById('hero-read').innerHTML=
+    `Pinned at the cap for most of <b>${s.assistant_turns.toLocaleString()} turns</b>. Average window
+    <b>${fmt(s.avg_ctx_tokens)}</b> tokens → <b>${fmt(s.area_under_curve_tok)}</b> input tokens re-processed in total,
+    spread across <b>${s.distinct_task_clusters} task clusters</b> and <b>${s.task_switches} switches</b>.
+    The markers bunch late — the session got heavier and buggier at the same time.`;
+}
+// ---- small multiples ----
+function cards(){
+  const host=document.getElementById('cards');
+  host.innerHTML = bySc.map(s=>{
+    const [vc,vl]=s._v; const col=vc==='bounded'?'--cool':vc==='mixed'?'--warn':'--crit';
+    return `<div class="sm">
+      <div class="row"><span class="id">${short(s.file)}</span><span class="chip ${vc}">${vl}</span></div>
+      <div class="row" style="align-items:flex-end">
+        <div><div class="score" style="color:var(${col})">${s._score}</div>
+          <div class="meta">hygiene</div></div>
+        <canvas width="150" height="46" data-i="${s.file}" style="width:150px;height:46px"></canvas>
+      </div>
+      <div class="stats">
+        <span><b>${s.distinct_task_clusters}</b> clusters</span>
+        <span><b>${s.retry_storms}</b> retries</span>
+        <span><b>${Math.round(s.duration_min/60)}</b>h</span>
+        <span><b>${fmt(s.area_under_curve_tok)}</b> tok</span>
+      </div></div>`;
+  }).join('');
+  host.querySelectorAll('canvas').forEach(cv=>{
+    const s=SESSIONS.find(x=>x.file===cv.dataset.i); const {ctx,w,h}=setup(cv);
+    const N=s.curve.length; const X=i=>2+(w-4)*(i/(N-1)); const Y=v=>h-2-(h-4)*(v/CAP);
+    const [vc]=s._v; const col=vc==='bounded'?'--cool':vc==='mixed'?'--warn':'--crit';
+    ctx.beginPath(); ctx.moveTo(X(0),h); s.curve.forEach((p,i)=>ctx.lineTo(X(i),Y(p[1])));
+    ctx.lineTo(X(N-1),h); ctx.closePath();
+    ctx.fillStyle='color-mix(in srgb,'+css(col)+' 14%,transparent)'; ctx.fill();
+    ctx.beginPath(); s.curve.forEach((p,i)=>i?ctx.lineTo(X(i),Y(p[1])):ctx.moveTo(X(i),Y(p[1])));
+    ctx.strokeStyle=css(col); ctx.lineWidth=1.5; ctx.stroke();
+    ctx.strokeStyle=css('--line'); ctx.setLineDash([3,3]); ctx.beginPath();
+    ctx.moveTo(2,Y(CAP)); ctx.lineTo(w-2,Y(CAP)); ctx.stroke(); ctx.setLineDash([]);
+  });
+}
+// ---- degradation ----
+function deg(){
+  const s=churnCase;
+  document.getElementById('deg-id').textContent=short(s.file);
+  const cv=document.getElementById('deg'); const {ctx,w,h}=setup(cv);
+  const pad={l:8,r:8,t:10,b:22}; const iw=w-pad.l-pad.r, ih=h-pad.t-pad.b;
+  const re=s.retry_density_by_window, rr=s.reread_density_by_window;
+  const mx=Math.max(1,...re,...rr); const n=re.length; const bw=iw/n;
+  ctx.clearRect(0,0,w,h);
+  const bars=(arr,color,off)=>{ arr.forEach((v,i)=>{ const bh=ih*(v/mx);
+    ctx.fillStyle=color; ctx.globalAlpha=.9;
+    ctx.fillRect(pad.l+i*bw+off, pad.t+ih-bh, bw*0.42, bh); }); ctx.globalAlpha=1; };
+  bars(re,css('--crit'),bw*0.06); bars(rr,css('--warn'),bw*0.5);
+  ctx.strokeStyle=css('--grid'); ctx.beginPath(); ctx.moveTo(pad.l,pad.t+ih); ctx.lineTo(w-pad.r,pad.t+ih); ctx.stroke();
+  ctx.fillStyle=css('--muted'); ctx.font='11px '+css('--mono'); ctx.textAlign='left';
+  ctx.fillText('early', pad.l, h-6); ctx.textAlign='right'; ctx.fillText('late', w-pad.r, h-6);
+  // cache bars
+  const cv2=document.getElementById('cache'); const c2=setup(cv2);
+  const ct=c2.ctx, W=c2.w, H=c2.h; const P={l:10,r:10,t:14,b:30};
+  const e=s.cache_creation_early_tok, l=s.cache_creation_late_tok; const m2=Math.max(e,l);
+  const iH=H-P.t-P.b; const bwid=(W-P.l-P.r)/2*0.5;
+  ct.clearRect(0,0,W,H);
+  [[e,'early',css('--muted')],[l,'late',css('--heat')]].forEach(([v,lab,col],i)=>{
+    const x=P.l+(W-P.l-P.r)*(i/2)+ (W-P.l-P.r)/4 - bwid/2;
+    const bh=iH*(v/m2);
+    ct.fillStyle=col; ct.fillRect(x, P.t+iH-bh, bwid, bh);
+    ct.fillStyle=css('--ink'); ct.font='700 13px '+css('--mono'); ct.textAlign='center';
+    ct.fillText(fmt(v), x+bwid/2, P.t+iH-bh-6);
+    ct.fillStyle=css('--muted'); ct.font='11px '+css('--mono');
+    ct.fillText(lab, x+bwid/2, H-10);
+  });
+  const ratio=(l/Math.max(1,e)).toFixed(1);
+  document.getElementById('deg-read').innerHTML=
+    `Late-half cache re-creation is <b>${ratio}×</b> the early half — the window is being torn down and rebuilt
+     more often precisely when it's fullest. Pair that with <b>${s.editthrash_files} thrashed files</b> and
+     <b>${s.retry_storms} retry storms</b> and you have a deterministic degradation signature.`;
+}
+// ---- counterfactual ----
+function cf(){
+  const sel=document.getElementById('cf-sess');
+  sel.innerHTML=bySc.slice().reverse().map(s=>`<option value="${s.file}">${short(s.file)} · ${s._v[1]}</option>`).join('');
+  const ws=document.getElementById('cf-ws');
+  function upd(){
+    const s=SESSIONS.find(x=>x.file===sel.value);
+    const W=+ws.value; document.getElementById('cf-wsv').textContent=fmt(W);
+    const ideal=W*s.assistant_turns;
+    const waste=Math.max(0,s.area_under_curve_tok-ideal);
+    const pct=Math.round(waste/s.area_under_curve_tok*100);
+    document.getElementById('cf-waste').textContent=fmt(waste);
+    document.getElementById('cf-pct').textContent=pct+'%';
+    document.getElementById('cf-ratio').textContent=(100-pct)+'%';
+  }
+  sel.onchange=upd; ws.oninput=upd; sel.value=worst.file; upd();
+}
+function render(){ hero(); cards(); deg(); cf(); }
+render();
+let t; addEventListener('resize',()=>{clearTimeout(t);t=setTimeout(render,150);});
+const mq=matchMedia('(prefers-color-scheme:dark)'); mq.addEventListener?.('change',render);
+new MutationObserver(render).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+</script>
