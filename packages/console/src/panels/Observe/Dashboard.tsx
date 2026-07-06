@@ -7,6 +7,7 @@ import {
 import type { ObservePayload, ObserveRange, ObserveFilter } from "../../api/routes.js";
 import { fmtTokens, fmtDuration, tokenSeries, fmtTime, flameLevel, heatmapCells, heatmapMonths, utcDay } from "./data.js";
 import { RefreshButton } from "../../shell/RefreshButton.js";
+import { QuickShareButton } from "../_shared/QuickShareButton.js";
 
 const WEEKDAY_LABELS = ["", "Mon", "", "Wed", "", "Fri", ""];
 
@@ -16,10 +17,12 @@ const SLICE_COLORS = ["var(--accent)", "var(--emerald, #34d399)", "#f59e0b", "#8
 
 type SortKey = "tokens" | "msgs" | "durationMs" | "endMs";
 
-export function Dashboard({ data, range, onRange, filter, onFilter, pending, onRefresh, onShareSetup }: {
+export function Dashboard({ data, range, onRange, filter, onFilter, pending, onRefresh, apiBase, setupShare, onPublishSetup }: {
   data: ObservePayload; range: ObserveRange; onRange: (r: ObserveRange) => void;
   filter: ObserveFilter; onFilter: (f: ObserveFilter) => void; pending?: boolean;
-  onRefresh?: () => void; onShareSetup?: () => void;
+  onRefresh?: () => void; apiBase: string;
+  setupShare?: { name: string; provenance: string; empty: boolean } | null;
+  onPublishSetup?: () => void;
 }) {
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "endMs", dir: "desc" });
   const [openId, setOpenId] = useState<string | null>(null);
@@ -55,13 +58,27 @@ export function Dashboard({ data, range, onRange, filter, onFilter, pending, onR
             </button>
           ))}
         </div>
-        {onShareSetup && (
-          <button type="button" className="obs-range-btn obs-share-setup" onClick={onShareSetup}>
-            Share my setup ↗
+        {onPublishSetup && (
+          <button type="button" className="obs-range-btn obs-share-setup" onClick={onPublishSetup}>
+            Publish ↗
           </button>
         )}
         {onRefresh && <RefreshButton onClick={onRefresh} busy={pending} />}
       </div>
+
+      {setupShare && (
+        <div className="obs-share-strip">
+          <QuickShareButton
+            apiBase={apiBase}
+            name={setupShare.name}
+            provenance={setupShare.provenance}
+            title="My agent setup"
+            disabled={setupShare.empty}
+            disabledReason={setupShare.empty ? "Nothing to share yet — add skills first" : undefined}
+            onUpgrade={onPublishSetup}
+          />
+        </div>
+      )}
 
       <div className="obs-filters">
         <select aria-label="agent" value={filter.agent ?? ""}

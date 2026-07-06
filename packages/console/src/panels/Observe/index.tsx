@@ -60,9 +60,31 @@ export function Observe({ apiBase }: { apiBase: string }) {
 
   const onRefresh = () => { freshRef.current = true; setReloadKey((k) => k + 1); };
 
-  // "Share my setup": bundle the whole inventory into a Gem via Curate's Publish
-  // flow. Fetched lazily on click (Inspect doesn't otherwise need inventory).
-  const onShareSetup = async () => {
+  // Light "Share link" path: fetch inventory once on load to build provenance
+  // (counts by kind) and detect an empty setup, up front — unlike Publish below,
+  // this can't defer the fetch to click-time because the button itself needs to
+  // know whether to disable.
+  const [setupShare, setSetupShare] = useState<{ name: string; provenance: string; empty: boolean } | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    inventoryRoute.call(makeClient(apiBase)).then((inv) => {
+      if (!alive) return;
+      const parts = [
+        [inv.skills.length, "skill"], [inv.mcpServers.length, "MCP"],
+        [inv.instructions.length, "instruction"], [inv.hooks.length, "hook"],
+      ] as const;
+      const total = parts.reduce((n, [c]) => n + c, 0);
+      const provenance = parts.filter(([c]) => c > 0)
+        .map(([c, w]) => `${c} ${w}${c === 1 ? "" : "s"}`).join(" · ");
+      setSetupShare({ name: "my-setup", provenance, empty: total === 0 });
+    }).catch(() => setSetupShare({ name: "my-setup", provenance: "", empty: true }));
+    return () => { alive = false; };
+  }, [apiBase]);
+
+  // "Publish": bundle the whole inventory into a Gem via Curate's Publish
+  // flow. Fetched lazily on click (separate from the setupShare effect above).
+  const onPublishSetup = async () => {
     try {
       const inv = await inventoryRoute.call(makeClient(apiBase));
       const keys = [
@@ -99,7 +121,11 @@ export function Observe({ apiBase }: { apiBase: string }) {
   if (!data) return <div className="obs"><Loading /></div>;
   return (
     <div className="obs">
-      <Dashboard data={data} range={range} onRange={setRange} filter={filter} onFilter={setFilter} pending={pending} onRefresh={onRefresh} onShareSetup={onShareSetup} />
+      <Dashboard
+        data={data} range={range} onRange={setRange} filter={filter} onFilter={setFilter}
+        pending={pending} onRefresh={onRefresh}
+        apiBase={apiBase} setupShare={setupShare} onPublishSetup={onPublishSetup}
+      />
     </div>
   );
 }

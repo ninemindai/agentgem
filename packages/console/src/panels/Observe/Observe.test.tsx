@@ -21,20 +21,20 @@ const payload: ObservePayload = {
 
 describe("Observe Dashboard", () => {
   it("renders the pulse and a session row", () => {
-    render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} />);
+    render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} apiBase="" />);
     expect(screen.getByText("1.2M")).toBeDefined();                    // pulse tokens
     expect(screen.getAllByText("agentgem").length).toBeGreaterThan(0); // session row project (also in dropdown)
   });
 
   it("renders filter controls with facet values", () => {
-    render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} />);
+    render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} apiBase="" />);
     expect(screen.getByLabelText(/agent/i)).toBeDefined();              // agent dropdown
     expect(screen.getByLabelText(/model/i)).toBeDefined();             // model dropdown
     expect(screen.getAllByText("claude-opus-4-8").length).toBeGreaterThan(0); // model option present
   });
 
   it("clicking a session row reveals detail; clicking again hides it", () => {
-    const { container } = render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} />);
+    const { container } = render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} apiBase="" />);
 
     // detail row not visible initially
     expect(screen.queryByText(/branch/)).toBeNull();
@@ -55,7 +55,7 @@ describe("Observe Dashboard", () => {
   });
 
   it("renders a flame badge for the hottest session", () => {
-    const { container } = render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} />);
+    const { container } = render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} apiBase="" />);
     const flameBadge = container.querySelector(".obs-flame");
     expect(flameBadge).not.toBeNull();
     // only 1 session and it's the max → level 3 → three flames
@@ -63,15 +63,15 @@ describe("Observe Dashboard", () => {
   });
 
   it("renders at least one heatmap cell", () => {
-    const { container } = render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} />);
+    const { container } = render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} apiBase="" />);
     const cell = container.querySelector(".obs-heat-cell");
     expect(cell).not.toBeNull();
   });
 
   it("shows 'Updating…' pill when pending=true, hides it when pending=false", () => {
-    const { rerender } = render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} pending={true} />);
+    const { rerender } = render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} apiBase="" pending={true} />);
     expect(screen.getByText("Updating…")).toBeDefined();
-    rerender(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} pending={false} />);
+    rerender(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} apiBase="" pending={false} />);
     expect(screen.queryByText("Updating…")).toBeNull();
   });
 
@@ -80,7 +80,7 @@ describe("Observe Dashboard", () => {
       ...payload,
       pulse: { ...payload.pulse, sessions: 500 },
     };
-    render(<Dashboard data={bigPayload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} />);
+    render(<Dashboard data={bigPayload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} apiBase="" />);
     // 1 session row, pulse.sessions=500
     expect(screen.getByText(/Showing 1 of 500 sessions/)).toBeDefined();
   });
@@ -90,13 +90,13 @@ describe("Observe Dashboard", () => {
       ...payload,
       pulse: { ...payload.pulse, sessions: 1 },
     };
-    render(<Dashboard data={exactPayload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} />);
+    render(<Dashboard data={exactPayload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} apiBase="" />);
     // pulse.sessions=1, rows.length=1 → no hint
     expect(screen.queryByText(/Showing \d+ of \d+ sessions/)).toBeNull();
   });
 
   it("keyboard Enter on session row toggles detail", () => {
-    const { container } = render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} />);
+    const { container } = render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} apiBase="" />);
     const rowBtn = container.querySelector('tr[role="button"]') as HTMLElement;
     fireEvent.keyDown(rowBtn, { key: "Enter" });
     expect(screen.getByText(/branch/)).toBeDefined();
@@ -105,26 +105,26 @@ describe("Observe Dashboard", () => {
   });
 
   it("renders weekday Y-axis label Mon", () => {
-    render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} />);
+    render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} apiBase="" />);
     expect(screen.getAllByText("Mon").length).toBeGreaterThan(0);
   });
 
   it("renders heatmap legend with Less and More", () => {
-    render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} />);
+    render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} apiBase="" />);
     expect(screen.getByText("Less")).toBeDefined();
     expect(screen.getByText("More")).toBeDefined();
   });
 
   it("'Open transcript' in the expanded row navigates to the drill-down sub-route", () => {
     window.location.hash = "";
-    const { container } = render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} />);
+    const { container } = render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} apiBase="" />);
     fireEvent.click(container.querySelector('tr[role="button"]') as HTMLElement); // expand detail
     fireEvent.click(screen.getByText(/Open transcript/));
     expect(window.location.hash).toBe("#/inspect/claude/s1");
   });
 
   it("min-msgs filter input shows value 100 when filter.minMsgs is 100", () => {
-    render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{ minMsgs: 100 }} onFilter={() => {}} />);
+    render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{ minMsgs: 100 }} onFilter={() => {}} apiBase="" />);
     const input = screen.getByLabelText(/minimum messages/i) as HTMLInputElement;
     expect(input.value).toBe("100");
   });
