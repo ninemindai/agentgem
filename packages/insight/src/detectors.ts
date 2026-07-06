@@ -11,6 +11,7 @@
 // a closed union at every dispatch site.
 import type { ProcedureStep, SessionSequence, WorkflowSignal } from "./workflowScan.js";
 import { createLogger } from "@agentgem/base";
+import { isEdit, isVerify } from "./stageLabels.js";
 
 const log = createLogger("insight");
 
@@ -80,15 +81,6 @@ const retryStorm: DetectorSpec = {
     return out;
   },
 };
-
-const EDIT_RE = /^(Edit|Write|NotebookEdit)$/;
-// "Did they check their work?" — matched against `${verb} ${arg}` of Bash steps.
-const VERIFY_RE = /\b(tests?|vitest|jest|pytest|tsc|build|lint|typecheck|check)\b/i;
-
-function isEdit(s: ProcedureStep): boolean { return EDIT_RE.test(s.verb); }
-function isVerify(s: ProcedureStep): boolean {
-  return s.verb.startsWith("Bash:") && VERIFY_RE.test(`${s.verb} ${s.arg}`);
-}
 
 // Same file edited + same command re-run this many consecutive cycles reads as
 // grinding on one spot. Healthy TDD moves across files/tests; thrash doesn't.
