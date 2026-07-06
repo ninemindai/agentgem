@@ -6,6 +6,7 @@ export * from "./facets.js";
 export * from "./detectors.js";
 export * from "./stageLabels.js";
 export * from "./processQuality.js";
+export * from "./sessionSummary.js";
 export * from "./detectorRules.js";
 export * from "./judgeSession.js";
 export * from "./insightsReport.js";
