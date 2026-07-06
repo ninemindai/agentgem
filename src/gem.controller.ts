@@ -261,7 +261,7 @@ import { claudeTranscriptsForCwd, scanWorkflow, allClaudeTranscripts, bucketTran
 import { distillWorkflow, distillSessionLessons, type DistilledSkill } from "@agentgem/insight";
 import { computeWorkflowAnalysis } from "./workflowCore.js";
 import { computeDistill, DISTILL_BACKGROUND_TIMEOUT_MS } from "./distillCore.js";
-import { sessionHygiene, type HygieneReport } from "./sessionHygieneCore.js";
+import { sessionHygiene, HygieneInputError, type HygieneReport } from "./sessionHygieneCore.js";
 
 // A playbook prepare that misses the cache kicks off the heavy distill in the
 // background (capped batch + generous budget so it actually completes and caches).
@@ -448,7 +448,8 @@ export class GemController {
     try {
       return await sessionHygiene(input.query.id, input.query.agent);
     } catch (err) {
-      throw new InvalidInputError((err as Error).message);
+      if (err instanceof HygieneInputError) throw new InvalidInputError(err.message);
+      throw err; // unexpected internal fault → 500, no echoed message
     }
   }
 

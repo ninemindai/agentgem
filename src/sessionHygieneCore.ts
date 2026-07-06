@@ -14,6 +14,11 @@ import {
 import { introspectConfig, introspectProject } from "@agentgem/capture";
 import { resolveDirs, resolveProject, type ConfigInventory, type ProjectInventory } from "@agentgem/model";
 
+// Tags the user-facing guard failures so the controller can map exactly these
+// to a 400 (InvalidInputError) and let unexpected internal faults become 500s
+// instead of echoing a raw error message (which could contain a path).
+export class HygieneInputError extends Error {}
+
 // Same composition as the private introspectAll() in gem.controller.ts (not itself
 // exported from @agentgem/capture) — scoped here to the single project root a
 // resolved session carries.
@@ -50,12 +55,12 @@ export function buildHygieneReport(signal: WorkflowSignal): HygieneReport {
 }
 
 export async function sessionHygiene(id: string, agent: string): Promise<HygieneReport> {
-  if (agent !== "claude") throw new Error("Context hygiene is available for Claude sessions only.");
+  if (agent !== "claude") throw new HygieneInputError("Context hygiene is available for Claude sessions only.");
   const found = await resolveClaudeSession(id);
-  if (!found || !found.cwd) throw new Error(`No Claude session '${id}' found (or it has no recorded project).`);
+  if (!found || !found.cwd) throw new HygieneInputError(`No Claude session '${id}' found (or it has no recorded project).`);
   const inventory = introspectAll(undefined, [found.cwd]);
   const project = (inventory.projects ?? []).find((p: ProjectInventory) => p.root === resolveProject(found.cwd!));
-  if (!project) throw new Error(`Project for session '${id}' not found in inventory.`);
+  if (!project) throw new HygieneInputError(`Project for session '${id}' not found in inventory.`);
   const scanInv = { project, global: { skills: inventory.skills, mcpServers: inventory.mcpServers, hooks: inventory.hooks } };
   const signal = scanWorkflow([found.path], scanInv, { retainSequences: true });
   return buildHygieneReport(signal);
