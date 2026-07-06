@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, it, expect } from "vitest";
 import { HYGIENE_FACTOR_IDS, summariesForSpecs, DETECTORS, scanWorkflow } from "@agentgem/insight";
-import { buildHygieneReport } from "../../sessionHygieneCore.js";
+import { buildHygieneReport, sessionHygiene, HygieneInputError } from "../../sessionHygieneCore.js";
 
 describe("HYGIENE_FACTOR_IDS", () => {
   it("is exactly the five context-hygiene detector ids", () => {
@@ -68,6 +68,12 @@ describe("buildHygieneReport", () => {
 });
 
 import { HygieneReportSchema } from "../../gem.controller.js";
+
+describe("sessionHygiene guards", () => {
+  it("throws HygieneInputError (not a bare Error) for a non-claude agent", async () => {
+    await expect(sessionHygiene("whatever", "codex")).rejects.toBeInstanceOf(HygieneInputError);
+  });
+});
 
 describe("HygieneReportSchema", () => {
   it("accepts a buildHygieneReport output unchanged (server schema matches core shape)", () => {
