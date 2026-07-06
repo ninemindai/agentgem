@@ -71,4 +71,17 @@ The payoff is coherence: there's no second schema to drift out of sync. A tool i
 re-implemented endpoint — it's the same contract surfaced at a different boundary. The web
 UI is just one client of that contract.
 
+## ATIF trajectory interchange
+
+**ATIF** — the Agent Trajectory Interchange Format (Harbor RFC 0001) — is the format AgentGem uses for both
+importing and exporting trajectories.
+
+**Importing** is simple: drop `*.json` files into `~/.agentgem/atif/`, and they appear in **Observe** immediately,
+visible in the **Watch** tab and **Inspect** drill-down as agent `atif`.
+
+**Exporting** works from any session — Claude, Codex, Hermes, or an imported ATIF trajectory. Use the endpoint
+`GET /api/inspect/session/atif?id=<sessionId>&agent=<agentId>` to fetch a scrubbed ATIF v1.7 document marked
+with `schema_version: "ATIF-v1.7"`. Exports are secret-safe by default (redacted at capture), so you can share
+them freely without exposing API keys or credentials. See the **[ATIF specification](https://github.com/harbor-framework/harbor/blob/main/rfcs/0001-trajectory-format.md)**.
+
 Continue to **[Targets & deploy](targets.md)** to see where a Gem can go.
