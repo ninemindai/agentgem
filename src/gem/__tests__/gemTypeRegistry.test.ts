@@ -9,13 +9,13 @@ const gem = (artifacts: GemArtifact[]): Gem => ({ name: "g", createdFrom: "t", a
 describe("GemTypeRegistry (direct)", () => {
   const r = new GemTypeRegistry(BUILTIN_CUTS);
   it("all() returns cuts sorted by order; byId resolves; derive matches deriveCut", () => {
-    expect(r.all().map((c) => c.id)).toEqual(["playbook", "setup", "integration", "guide", "skill", "kit"]);
+    expect(r.all().map((c) => c.id)).toEqual(["playbook", "setup", "integration", "guide", "game", "skill", "kit"]);
     expect(r.byId("playbook")?.gemstone).toBe("Pearl");
     expect(r.byId("nope")).toBeUndefined();
     expect(r.derive(gem([{ type: "mcp_server", name: "m", transport: "stdio", config: {} }]))).toBe("integration");
   });
   it("defaultGemTypeRegistry carries the built-ins", () => {
-    expect(defaultGemTypeRegistry.all().length).toBe(6);
+    expect(defaultGemTypeRegistry.all().length).toBe(7);
   });
 });
 
@@ -32,8 +32,8 @@ describe("GEM_TYPES extension point (wired container)", () => {
     const registry = await ctx.get<GemTypeRegistry>("services.GemTypeRegistry");
     expect(registry.byId("starter")?.label).toBe("Starter");
     expect(registry.all().map((c) => c.id)).toContain("playbook");
-    // Falsifiable against partial injection: all 6 built-ins + the 1 plugin cut must wire through.
-    expect(registry.all().length).toBe(7);
+    // Falsifiable against partial injection: all 7 built-ins + the 1 plugin cut must wire through.
+    expect(registry.all().length).toBe(8);
   });
 
   it("a container-resolved GemController receives the CONTAINER registry, not the default", async () => {
