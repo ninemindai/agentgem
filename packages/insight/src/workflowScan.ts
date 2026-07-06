@@ -242,6 +242,7 @@ export interface GlobalArtifacts {
   skills: { name: string }[];
   mcpServers: { name: string }[];
   hooks: HookArtifact[];
+  subagents?: { name: string }[];  // optional: global subagents are resolved when provided
 }
 export interface ScanInventory {
   project: ProjectInventory;
@@ -414,6 +415,16 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
           if (block?.type === "text" && typeof block.text === "string") { lastAssistantText = block.text; continue; }
           if (block?.type !== "tool_use" || typeof block.name !== "string") continue;
           const name: string = block.name;
+          // Subagent dispatch: a Task/Agent tool_use carries `subagent_type` = the subagent's
+          // name. Resolve it against the inventory as its own usage signal (additive — the Task
+          // step still flows to the builtin/distillation handling below unchanged).
+          if ((name === "Task" || name === "Agent") && typeof block.input?.subagent_type === "string") {
+            const sub = block.input.subagent_type as string;
+            const p = matchSkill(project.subagents ?? [], sub);
+            const g = p ? undefined : matchSkill(global.subagents ?? [], sub);
+            if (p) { touch("p", p.name, "subagent", ms, path, `Task(${sub})`); sessionNames.add(p.name); }
+            else if (g) { touch("g", g.name, "subagent", ms, path, `Task(${sub})`); sessionNames.add(g.name); }
+          }
           if (name === "Skill" && typeof block.input?.skill === "string") {
             const skill = block.input.skill as string;
             const p = matchSkill(project.skills, skill);
@@ -492,6 +503,7 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
     });
   };
   for (const s of project.skills) add("p", "skill", s.name, "high");
+  for (const s of project.subagents ?? []) add("p", "subagent", s.name, "high");
   for (const m of project.mcpServers) add("p", "mcp_server", m.name, "high");
   for (const h of project.hooks) add("p", "hook", h.name, "low");
   // Instructions are presence-only: loaded every session, never "invoked".

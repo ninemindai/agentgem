@@ -75,6 +75,37 @@ describe("scanWorkflow skills + mcp", () => {
   });
 });
 
+describe("scanWorkflow subagents", () => {
+  it("resolves Task/Agent subagent_type dispatches; unused subagents still surface; plain Task stays builtin", () => {
+    const dir = mkdtempSync(join(tmpdir(), "wfscan-sub-"));
+    const file = join(dir, "s.jsonl");
+    const inv: ProjectInventory = { ...inventory, subagents: [
+      { type: "subagent", name: "reviewer", source: "project", content: "x" },
+      { type: "subagent", name: "planner", source: "project", content: "y" }, // installed, never used
+    ] };
+    writeFileSync(file, [
+      assistantToolUse("Task", { subagent_type: "reviewer", description: "review the PR" }),
+      assistantToolUse("Agent", { subagent_type: "reviewer" }),
+      assistantToolUse("Task", { subagent_type: "ghost" }), // not in inventory → not resolved as a subagent
+      assistantToolUse("Task", { description: "no subagent_type" }), // plain Task
+    ].join("\n") + "\n");
+
+    const sig = scanWorkflow([file], { project: inv });
+    const byName = Object.fromEntries(sig.artifacts.map((a) => [a.name, a]));
+    expect(byName["reviewer"].type).toBe("subagent");
+    expect(byName["reviewer"].invocations).toBe(2); // Task + Agent
+    expect(byName["reviewer"].confidence).toBe("high");
+    expect(byName["reviewer"].sessionsUsedIn).toBe(1);
+    expect(byName["planner"].type).toBe("subagent");
+    expect(byName["planner"].invocations).toBe(0); // installed-but-unused still surfaces
+    expect(byName["ghost"]).toBeUndefined();        // unmatched subagent_type isn't invented as an artifact
+    // Task detection is additive — the step still flows to the builtin/distillation handling.
+    const unresolved = Object.fromEntries(sig.unresolved.map((u) => [u.name, u]));
+    expect(unresolved["Task"].kind).toBe("builtin");
+    rmSync(dir, { recursive: true, force: true });
+  });
+});
+
 describe("scanWorkflow hooks, instructions, co-occurrence", () => {
   const invWithHook: ProjectInventory = {
     ...inventory,
