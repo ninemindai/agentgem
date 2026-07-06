@@ -101,4 +101,16 @@ describe("upload-publish", () => {
     await uploadPublishHandler(deps(db, publisher))(mkReq({ headers: { cookie: `${SESSION_COOKIE}=${token}`, origin: "https://app.agentgem.ai" }, body: { scope: "acme", version: "1.0.0", bytesBase64: gemBase64() } }) as any, res as any);
     expect(res._s).toBe(200);
   });
+  it("removed member with captured scope cannot publish to an org with an active installation", async () => {
+    const db = await makeTestDb();
+    // alice signed in a while ago and captured "acme" as an owned scope, but was since removed
+    // from the org on GitHub — org_members has no row for her. An active installation makes App
+    // membership authoritative, so the stale captured scope must not grant publish access.
+    const token = await session(db, "alice", ["alice", "acme"]);
+    await upsertInstallation(db, { installationId: 7, orgScope: "acme", repoSelection: "selected", suspended: false });
+    const { publisher } = capturing();
+    const res = mkRes();
+    await uploadPublishHandler(deps(db, publisher))(mkReq({ headers: { cookie: `${SESSION_COOKIE}=${token}`, origin: "https://app.agentgem.ai" }, body: { scope: "acme", version: "1.0.0", bytesBase64: gemBase64() } }) as any, res as any);
+    expect(res._s).toBe(403);
+  });
 });

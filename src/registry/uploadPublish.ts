@@ -9,7 +9,7 @@
 // populated at login, so a pre-#4b session with no rows is fail-closed (403 on its own
 // login) until the user signs in again. importGem rejects tampering.
 import type { AppDb } from "@agentgem/aggregator";
-import { resolveSession, accountOwnsScope, appOrgRole } from "@agentgem/aggregator";
+import { resolveSession, accountOwnsScope, appOrgRole, installationForScope } from "@agentgem/aggregator";
 import { importGem, publishGem, type RegistrySource, type RegistryPublisher } from "@agentgem/distribute";
 import { parseCookies, SESSION_COOKIE } from "../auth/cookie.js";
 import { resolvePublishType, type GemTypeRegistry } from "../gem/gemTypeRegistry.js";
@@ -46,9 +46,16 @@ export function uploadPublishHandler(deps: UploadPublishDeps) {
     const scope = typeof body.scope === "string" ? body.scope.trim() : "";
     const version = typeof body.version === "string" ? body.version.trim() : "";
     if (!scope || !version) { res.status(400).json({ error: "scope and version are required" }); return; }
-    // #4b: enforce account-scope ownership — a captured scope (login + GitHub orgs at sign-in)
-    // OR live GitHub-App-synced membership (private members, no re-sign-in needed).
-    if (!(await accountOwnsScope(deps.db, who.accountId, scope)) && !(await appOrgRole(deps.db, who.login, scope))) {
+    // #4b: enforce account-scope ownership. App-authoritative: when the scope has an active
+    // (non-suspended) installation, live GitHub-App-synced membership decides ALONE — this also
+    // closes an unbounded hole, since accountOwnsScope's captured scope has no TTL and would
+    // otherwise let a removed member publish forever. Otherwise, fall back to the captured scope
+    // (covers the caller's own login and App-less orgs).
+    const inst = await installationForScope(deps.db, scope);
+    const owns = inst && !inst.suspended
+      ? (await appOrgRole(deps.db, who.login, scope)) !== null
+      : await accountOwnsScope(deps.db, who.accountId, scope);
+    if (!owns) {
       res.status(403).json({ error: `you don't own the scope @${scope}` }); return;
     }
     if (typeof body.bytesBase64 !== "string") { res.status(400).json({ error: "bytesBase64 is required" }); return; }

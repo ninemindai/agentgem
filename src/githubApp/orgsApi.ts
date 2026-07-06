@@ -76,6 +76,10 @@ export function orgSkillsHandler(deps: OrgsApiDeps) {
     const scope = scopeParam(req);
     if (!scope) { res.status(400).json({ error: "invalid scope" }); return; }
     if (!(await requireMember(deps, req, res, scope))) return;
+    // Suspended behaves as uninstalled: rows persist in curated_skills until uninstall, but a
+    // suspended installation must not keep serving private metadata (mirrors /api/orgs/app).
+    const inst = await installationForScope(deps.db, scope);
+    if (!inst || inst.suspended) { res.json({ scope: scope.toLowerCase(), skills: [] }); return; }
     res.json({ scope: scope.toLowerCase(), skills: await listOrgSkills(deps.db, scope) });
   };
 }

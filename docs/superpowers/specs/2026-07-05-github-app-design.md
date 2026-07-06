@@ -69,12 +69,14 @@ create table if not exists org_members (
 
 ## 4. Gating changes
 
-`accountOwnsScope(db, accountId, scope)` gains a companion check; the effective gate for `/api/usage/org`, publish-ownership (`uploadPublish`), and org-settings admin writes becomes:
+`accountOwnsScope(db, accountId, scope)` gains a companion check; the effective gate for `/api/usage/org`, publish-ownership (`uploadPublish`), and org-settings admin writes is **App-authoritative**, not an OR:
 
-> captured scope (today's behavior) **OR** App-synced membership (session login ∈ `org_members[scope]` with a non-suspended installation)
+> if the scope has an ACTIVE (non-suspended) installation: App-synced membership (session login ∈ `org_members[scope]`) decides ALONE. Otherwise: fall back to the captured scope (today's behavior).
 
-- Orgs without the App: behavior is byte-for-byte today's.
-- Orgs with the App: private members now pass; the synced `role` column becomes the authoritative source for admin-gated writes (org_settings, PR #132 precedent), with the existing role capture as fallback.
+- Orgs without the App: behavior is byte-for-byte today's (no installation row → captured-scope path).
+- Orgs with the App (active installation): private members now pass, and — just as importantly — a member removed on GitHub is denied immediately, even if they still hold a fresh captured scope from a recent sign-in. A captured scope has no freshness ceiling that beats App truth; letting it win would silently reopen access an enterprise admin just revoked.
+- A suspended installation behaves as uninstalled: gates fall back to the captured scope, exactly as if the App had never been installed.
+- The synced `role` column becomes the authoritative source for admin-gated writes (org_settings, PR #132 precedent) when App-authoritative; the existing role capture applies only on the captured-scope fallback path.
 - Login matching is case-insensitive (logins lowercased at write time).
 
 ## 5. Private source indexing
