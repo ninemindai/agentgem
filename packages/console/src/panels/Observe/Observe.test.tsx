@@ -19,6 +19,9 @@ const payload: ObservePayload = {
     tokensIn: 700_000, tokensOut: 150_000, tokensCache: 50_000, gitBranch: "main",
   }],
   models: [{ model: "claude-opus-4-8", agent: "claude", sessions: 2, tokens: 1_200_000 }],
+  byTool: [{ name: "Read", count: 12 }, { name: "Bash", count: 5 }],
+  bySubagent: [{ name: "Explore", count: 2 }],
+  bySkill: [],
   facets: { agents: ["claude"], projects: ["agentgem"], models: ["claude-opus-4-8"] },
   range: "7d",
 };
@@ -37,6 +40,15 @@ describe("Observe Dashboard", () => {
     expect(screen.getByLabelText(/agent/i)).toBeDefined();
     expect(screen.getByLabelText(/model/i)).toBeDefined();
     expect(screen.getAllByText("claude-opus-4-8").length).toBeGreaterThan(0);
+  });
+
+  it("renders the usage-by-artifact breakdown, omitting empty categories", () => {
+    render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} apiBase="" />);
+    expect(screen.getByText("By tool")).toBeDefined();
+    expect(screen.getByText("Read")).toBeDefined();
+    expect(screen.getByText("By subagent")).toBeDefined();
+    expect(screen.getByText("Explore")).toBeDefined();
+    expect(screen.queryByText("By skill")).toBeNull(); // bySkill empty → card omitted
   });
 
   it("renders at least one heatmap cell", () => {

@@ -15,6 +15,7 @@ const payload: ObservePayload = {
     tokensIn: 700_000, tokensOut: 150_000, tokensCache: 50_000, gitBranch: "main",
   }],
   models: [{ model: "claude-opus-4-8", agent: "claude", sessions: 2, tokens: 1_200_000 }],
+  byTool: [], bySkill: [], bySubagent: [],
   facets: { agents: ["claude"], projects: ["agentgem"], models: ["claude-opus-4-8"] },
   range: "7d",
 };

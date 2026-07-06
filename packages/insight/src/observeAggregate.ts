@@ -24,6 +24,11 @@ export interface SessionStat {
   tokensIn: number;         // fresh input (cache excluded)
   tokensOut: number;        // output (+ reasoning for codex)
   tokensCache: number;      // cache read+creation (claude) / cached_input (codex)
+  // Per-session usage counts, captured cheaply during the same transcript walk that
+  // computes tokens/msgs. Optional — older/partial stats omit them.
+  tools?: Record<string, number>;      // tool_use / function_call name → count
+  skills?: Record<string, number>;     // skill name (from the Skill tool) → count
+  subagents?: Record<string, number>;  // subagent_type (from the Task tool) → count
 }
 
 export type ObserveRange = "today" | "7d" | "30d" | "all";
@@ -35,9 +40,21 @@ export interface ObservePayload {
   daily: { date: string; sessions: number; msgs: number; tokensIn: number; tokensOut: number; tokensCache: number }[];
   sessions: { agent: AgentId; sessionId: string; project: string | null; model: string | null; startMs: number; endMs: number; durationMs: number; msgs: number; tokens: number; tokensIn: number; tokensOut: number; tokensCache: number; gitBranch: string | null }[];
   models: { model: string; agent: AgentId; sessions: number; tokens: number }[];
+  // Usage breakdowns across the filtered sessions, desc by count (empty when unavailable).
+  byTool: { name: string; count: number }[];
+  bySkill: { name: string; count: number }[];
+  bySubagent: { name: string; count: number }[];
   facets: { agents: string[]; projects: string[]; models: string[] };
   range: ObserveRange;
 }
+
+/** Fold a per-session count map into a running total map. */
+function addCounts(into: Map<string, number>, from: Record<string, number> | undefined): void {
+  if (!from) return;
+  for (const [k, v] of Object.entries(from)) into.set(k, (into.get(k) ?? 0) + v);
+}
+const rankCounts = (m: Map<string, number>) =>
+  [...m.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
 
 const DAY_MS = 86_400_000;
 const tokensOf = (s: SessionStat) => s.tokensIn + s.tokensOut + s.tokensCache;
@@ -69,8 +86,12 @@ export function aggregateObserve(stats: SessionStat[], range: ObserveRange, nowM
 
   const byDay = new Map<string, ObservePayload["daily"][number]>();
   const byModel = new Map<string, ObservePayload["models"][number]>();
+  const byTool = new Map<string, number>(), bySkill = new Map<string, number>(), bySubagent = new Map<string, number>();
   let pTokens = 0, pMsgs = 0, pActive = 0;
   for (const s of filtered) {
+    addCounts(byTool, s.tools);
+    addCounts(bySkill, s.skills);
+    addCounts(bySubagent, s.subagents);
     const date = utcDate(s.startMs);
     const d = byDay.get(date) ?? { date, sessions: 0, msgs: 0, tokensIn: 0, tokensOut: 0, tokensCache: 0 };
     d.sessions++; d.msgs += s.msgs; d.tokensIn += s.tokensIn; d.tokensOut += s.tokensOut; d.tokensCache += s.tokensCache;
@@ -92,6 +113,9 @@ export function aggregateObserve(stats: SessionStat[], range: ObserveRange, nowM
       .sort((a, b) => b.endMs - a.endMs)
       .slice(0, 200),
     models: [...byModel.values()].sort((a, b) => b.tokens - a.tokens),
+    byTool: rankCounts(byTool),
+    bySkill: rankCounts(bySkill),
+    bySubagent: rankCounts(bySubagent),
     facets,
     range,
   };

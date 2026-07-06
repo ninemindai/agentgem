@@ -38,12 +38,28 @@ export function listFiles(dir: string, suffix: string): string[] {
   return out;
 }
 
+// --- per-session usage capture (tools / skills / subagents), folded into the scan walk ---
+const bump = (rec: Record<string, number>, key: string | undefined): void => {
+  if (key) rec[key] = (rec[key] ?? 0) + 1;
+};
+const firstString = (input: Record<string, unknown> | undefined, keys: string[]): string | undefined => {
+  for (const k of keys) { const v = input?.[k]; if (typeof v === "string" && v) return v; }
+  return undefined;
+};
+/** Spread only the non-empty usage maps, so tool-free sessions stay lean and back-compatible. */
+const usageFields = (tools: Record<string, number>, skills: Record<string, number>, subagents: Record<string, number>) => ({
+  ...(Object.keys(tools).length ? { tools } : {}),
+  ...(Object.keys(skills).length ? { skills } : {}),
+  ...(Object.keys(subagents).length ? { subagents } : {}),
+});
+
 export function parseClaudeTranscript(text: string, path: string): SessionStat | null {
   // Fix 1: canonical sessionId comes from the transcript filename (the UUID), not inline record fields.
   // Subagent/sidechain records carry a shared parent sessionId which would cause collisions.
   const sessionId = basename(path).replace(/\.jsonl$/, "");
   let cwd: string | null = null, model: string | null = null, gitBranch: string | null = null;
   let startMs = Infinity, endMs = -Infinity, msgs = 0, tokensIn = 0, tokensOut = 0, tokensCache = 0;
+  const tools: Record<string, number> = {}, skills: Record<string, number> = {}, subagents: Record<string, number> = {};
   for (const rec of jsonLines(text)) {
     const type = rec.type as string | undefined;
     if (typeof rec.cwd === "string") cwd = rec.cwd;
@@ -60,15 +76,29 @@ export function parseClaudeTranscript(text: string, path: string): SessionStat |
       tokensOut += u.output_tokens ?? 0;
       tokensCache += (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
     }
+    // Tool usage lives in assistant message content items; Skill/Task carry the specific
+    // skill name / subagent type in their input.
+    if (type === "assistant" && Array.isArray(msg?.content)) {
+      for (const raw of msg.content as unknown[]) {
+        const it = raw as Record<string, unknown>;
+        if (it.type !== "tool_use" || typeof it.name !== "string") continue;
+        tools[it.name] = (tools[it.name] ?? 0) + 1;
+        const input = it.input as Record<string, unknown> | undefined;
+        if (it.name === "Skill") bump(skills, firstString(input, ["skill", "command", "name"]));
+        // Subagents are spawned via the Task tool (classic) or the Agent tool (this harness).
+        else if (it.name === "Task" || it.name === "Agent") bump(subagents, firstString(input, ["subagent_type", "subagentType"]));
+      }
+    }
   }
   if (!sessionId || endMs < startMs) return null;
-  return { agent: "claude", sessionId, project: cwd ? basename(cwd) : null, cwd, model, gitBranch, startMs, endMs, msgs, tokensIn, tokensOut, tokensCache };
+  return { agent: "claude", sessionId, project: cwd ? basename(cwd) : null, cwd, model, gitBranch, startMs, endMs, msgs, tokensIn, tokensOut, tokensCache, ...usageFields(tools, skills, subagents) };
 }
 
 export function parseCodexTranscript(text: string, path: string): SessionStat | null {
   let sessionId = "", cwd: string | null = null, model: string | null = null;
   let startMs = Infinity, endMs = -Infinity, msgs = 0;
   let total: Record<string, number> | null = null;   // cumulative; keep the last seen
+  const tools: Record<string, number> = {};
   for (const rec of jsonLines(text)) {
     const ts = typeof rec.timestamp === "string" ? Date.parse(rec.timestamp) : NaN;
     if (!Number.isNaN(ts)) { startMs = Math.min(startMs, ts); endMs = Math.max(endMs, ts); }
@@ -79,6 +109,9 @@ export function parseCodexTranscript(text: string, path: string): SessionStat | 
     }
     if (payload && typeof payload.model === "string") model = payload.model;     // best-effort (turn_context)
     if (rec.type === "response_item" && (payload?.type === "message")) msgs++;
+    if (rec.type === "response_item" && payload?.type === "function_call" && typeof payload.name === "string") {
+      tools[payload.name] = (tools[payload.name] ?? 0) + 1;
+    }
     if (rec.type === "event_msg" && payload?.type === "token_count") {
       const info = payload.info as Record<string, unknown> | undefined;
       const tu = info?.total_token_usage as Record<string, number> | undefined;
@@ -89,7 +122,7 @@ export function parseCodexTranscript(text: string, path: string): SessionStat | 
   const input = total?.input_tokens ?? 0, cached = total?.cached_input_tokens ?? 0;
   const tokensIn = Math.max(0, input - cached);
   const tokensOut = (total?.output_tokens ?? 0) + (total?.reasoning_output_tokens ?? 0);
-  return { agent: "codex", sessionId, project: cwd ? basename(cwd) : null, cwd, model, gitBranch: null, startMs, endMs, msgs, tokensIn, tokensOut, tokensCache: cached };
+  return { agent: "codex", sessionId, project: cwd ? basename(cwd) : null, cwd, model, gitBranch: null, startMs, endMs, msgs, tokensIn, tokensOut, tokensCache: cached, ...usageFields(tools, {}, {}) };
 }
 
 let _cache: { atMs: number; stats: SessionStat[] } | null = null;
