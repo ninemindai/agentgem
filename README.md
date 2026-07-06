@@ -181,6 +181,7 @@ For deeper reference, see [`docs/`](docs/index.md):
 [analyze](docs/analyze.md) ·
 [concepts](docs/concepts.md) ·
 [targets & deploy](docs/targets.md) ·
+[GitHub App](docs/deploy/github-app.md) ·
 [A2A](docs/a2a.md) ·
 [registry](docs/registry.md).
 
