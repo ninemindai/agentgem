@@ -3,7 +3,7 @@ import { defineConsolePage } from "../../registry.js";
 import {
   registryReadyRoute,
   registrySearchRoute,
-  registryInstallRoute,
+  installHostedRoute,
   makeClient,
   type RegistryResult,
 } from "../../api/routes.js";
@@ -16,6 +16,7 @@ export function GetGems({ apiBase }: { apiBase: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [installed, setInstalled] = useState<Record<string, string>>({});
+  const [consentFor, setConsentFor] = useState<string | null>(null); // gem key awaiting executable-artifact consent
 
   useEffect(() => {
     let alive = true;
@@ -41,14 +42,20 @@ export function GetGems({ apiBase }: { apiBase: string }) {
     }
   };
 
-  const install = async (key: string) => {
+  // Zero-config hosted install. Executable artifacts (MCP servers / hooks) require a consent step:
+  // the first attempt (consent=false) is refused with a 409 that flips the card to a confirm; the
+  // confirm retries with consent=true.
+  const install = async (key: string, version: string, consent = false) => {
     setError(null);
     try {
       const client = makeClient(apiBase);
-      const { applied } = await registryInstallRoute.call(client, { body: { refs: [key], mode: "workspace" } });
-      setInstalled((m) => ({ ...m, [key]: applied.workspace ?? "workspace" }));
+      const res = await installHostedRoute.call(client, { body: { key, version, consent } });
+      setConsentFor(null);
+      setInstalled((m) => ({ ...m, [key]: res.workspace }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!consent && /consent/i.test(msg)) { setConsentFor(key); return; }
+      setError(msg);
     }
   };
 
@@ -101,8 +108,14 @@ export function GetGems({ apiBase }: { apiBase: string }) {
               <div className="ws-targets">
                 {installed[r.key] ? (
                   <span className="getgems-done">✓ installed → {installed[r.key]}</span>
+                ) : consentFor === r.key ? (
+                  <span className="getgems-consent">
+                    ⚠ This setup runs executable artifacts (MCP servers / hooks).
+                    <button type="button" className="ledger-sort" onClick={() => install(r.key, r.latest, true)}>Install anyway</button>
+                    <button type="button" className="ledger-sort" onClick={() => setConsentFor(null)}>Cancel</button>
+                  </span>
                 ) : (
-                  <button type="button" className="ledger-sort" onClick={() => install(r.key)}>Install to workspace</button>
+                  <button type="button" className="ledger-sort" onClick={() => install(r.key, r.latest)}>Install to workspace</button>
                 )}
               </div>
             </article>

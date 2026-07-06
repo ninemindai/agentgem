@@ -685,6 +685,12 @@ export const publishSetupRoute = defineRoute("POST", "/api/publish-setup", {
   body: z.object({ workspace: z.string(), scope: z.string(), name: z.string().optional(), version: z.string(), description: z.string().optional(), tags: z.array(z.string()).optional(), provenance: z.string() }),
   response: z.object({ exploreRef: z.string(), version: z.string(), shareUrl: z.string() }),
 });
+// Zero-config install of a hosted (shared) gem: the server downloads the archive from the hosted
+// aggregator and materializes it. consent=true is required when the gem has executable artifacts.
+export const installHostedRoute = defineRoute("POST", "/api/install-hosted", {
+  body: z.object({ key: z.string(), version: z.string(), consent: z.boolean().optional() }),
+  response: z.object({ workspace: z.string(), executables: z.object({ mcp: z.array(z.string()), hooks: z.array(z.string()) }) }),
+});
 
 // Network cross-model benchmark (aggregator, k-anonymised). Per-model outcome
 // counts across producers; success rate = mostly / (mostly + partially + notAchieved).

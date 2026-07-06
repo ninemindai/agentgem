@@ -4,7 +4,7 @@
 import { existsSync, writeFileSync, readFileSync } from "node:fs";
 import { basename, resolve, sep } from "node:path";
 import { z } from "zod";
-import { api, get, post } from "@agentback/openapi";
+import { api, get, post, AgentError } from "@agentback/openapi";
 import { scanSessionsCached, aggregateObserve, loadSessionTranscript, resolveClaudeSession, dehomeDistilled, scrubText, sessionToAtif } from "@agentgem/insight";
 import { scanArtifactUsageCached } from "@agentgem/insight";
 import { buildOptimizePayload, buildDiscover, rerankCandidates, installSkill, type OptimizeRange } from "@agentgem/insight";
@@ -12,6 +12,8 @@ import { createLogger } from "@agentgem/base";
 
 const log = createLogger("gem");
 
+const InstallHostedBody = z.object({ key: z.string(), version: z.string(), consent: z.boolean().optional() });
+const InstallHostedResult = z.object({ workspace: z.string(), executables: z.object({ mcp: z.array(z.string()), hooks: z.array(z.string()) }) });
 const ObserveQuerySchema = z.object({
   range: z.enum(["today", "7d", "30d", "all"]).optional(),
   agent: z.string().optional(),
@@ -238,6 +240,7 @@ import { publishPlaybookCore } from "./gem/playbookPublishCore.js";
 import { createShareCard } from "./share/shareStore.js";
 import { postCatalogShare, shareRejectedError } from "./gem/catalogShareClient.js";
 import { postGemPublish } from "./gem/gemPublishClient.js";
+import { fetchHostedArchive, executableArtifacts, hasExecutable } from "./gem/hostedInstall.js";
 import { sanitizeShareText } from "@agentgem/insight";
 import { claudeTranscriptsForCwd, scanWorkflow, allClaudeTranscripts, bucketTranscriptsByCwd } from "@agentgem/insight";
 import { distillWorkflow, distillSessionLessons, type DistilledSkill } from "@agentgem/insight";
@@ -494,6 +497,24 @@ export class GemController {
       },
       share: async () => createShareCard(this.db!, { kind: "gem", name: b.name ?? b.workspace, provenance: b.provenance, generatedAtMs: Date.now() }),
     });
+  }
+
+  // Zero-config install: download a shared gem's archive from the hosted aggregator (no registry
+  // config), verify it (importGem), and land it in a local workspace. Executable artifacts (MCP
+  // servers, hooks) run on install, so the install is refused unless the caller passes consent:true
+  // after the console shows what will run. 409 (consent_required) drives the console's confirm gate.
+  @post("/install-hosted", { body: InstallHostedBody, response: InstallHostedResult })
+  async installHosted(input: { body: z.infer<typeof InstallHostedBody> }): Promise<z.infer<typeof InstallHostedResult>> {
+    const { key, version, consent } = input.body;
+    const bytes = await fetchHostedArchive({ key, version });
+    const { gem } = importGem(bytes); // verifies gem.lock; throws on tamper
+    const executables = executableArtifacts(gem);
+    if (hasExecutable(gem) && consent !== true) {
+      throw new AgentError("this setup runs executable artifacts; install requires consent", { status: 409, code: "consent_required", retryable: false });
+    }
+    const name = (key.replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "")) || "installed-gem";
+    createWorkspace(name, gem, { version });
+    return { workspace: name, executables };
   }
 
   @get("/optimize", { query: OptimizeQuerySchema, response: OptimizePayloadSchema })
