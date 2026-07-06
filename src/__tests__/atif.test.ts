@@ -4,7 +4,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, writeFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseAtifDocument, flattenAtifContent, parseAtifMeta, atifSessionEvents, parseAtifTranscriptView, loadSessionTranscript, atifSource, BUILTIN_SOURCES, watchableSources } from "@agentgem/insight";
+import { parseAtifDocument, flattenAtifContent, parseAtifMeta, atifSessionEvents, parseAtifTranscriptView, loadSessionTranscript, atifSource, BUILTIN_SOURCES, watchableSources, sessionToAtif } from "@agentgem/insight";
 
 const MIN_DOC = JSON.stringify({
   schema_version: "ATIF-v1.7",
@@ -126,6 +126,22 @@ describe("loadSessionTranscript (atif)", () => {
       expect(view?.sessionId).toBe("sess-1");
       expect(await loadSessionTranscript("nope", "atif", { atifDir: dir })).toBeNull();
     } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+});
+
+describe("sessionToAtif", () => {
+  it("round-trips: view → ATIF → parseable trajectory with same session id and step count", () => {
+    const view = parseAtifTranscriptView(MIN_DOC, "/tmp/atif/sess-1.json")!;
+    const doc = sessionToAtif(view);
+    expect(doc.schema_version).toBe("ATIF-v1.7");
+    expect(doc.session_id).toBe("sess-1");
+    expect(doc.steps.map((s) => s.step_id)).toEqual([1, 2]);       // sequential from 1
+    expect(doc.steps[0].source).toBe("user");
+    expect(doc.steps[1].tool_calls![0].function_name).toBe("financial_search");
+    expect(doc.steps[1].observation!.results[0].content).toContain("185.35");
+    expect(doc.final_metrics!.total_completion_tokens).toBe(124);  // from view.meta (parseAtifMeta of MIN_DOC)
+    const rt = parseAtifTranscriptView(JSON.stringify(doc), "/tmp/rt.json");
+    expect(rt!.turns).toHaveLength(view.turns.length);
   });
 });
 

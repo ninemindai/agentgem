@@ -42,6 +42,7 @@ export * from "./sources/atif.js";
 export * from "./atif/atifTypes.js";
 export * from "./atif/atifImport.js";
 export * from "./atif/atifView.js";
+export * from "./atif/atifExport.js";
 export * from "./goldmineContext.js";
 export * from "./cachedCompute.js";
 export * from "./rubrics.js";
