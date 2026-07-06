@@ -1,6 +1,6 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   makeTestDb, listInstallations, appOrgRole, listOrgSkills, upsertInstallation, replaceOrgMembers, orgMembers,
 } from "@agentgem/aggregator";
@@ -112,6 +112,54 @@ describe("handleWebhookEvent", () => {
 });
 
 describe("reconcileAll", () => {
+  it("prunes ghost skills of repos GitHub no longer lists (delete/rename/transfer heal)", async () => {
+    const state = baseState();
+    const deps = await makeDeps(state);
+    await handleWebhookEvent(deps, "installation", installPayload);
+    expect((await listOrgSkills(deps.db, "acme")).length).toBe(1);
+    // The repo vanishes upstream with NO webhook (deleted/renamed/transferred).
+    state.repos = [];
+    state.files = {} as typeof state.files;
+    await reconcileAll(deps);
+    expect(await listOrgSkills(deps.db, "acme")).toEqual([]); // ghost pruned
+  });
+
+  it("repos deselected while suspended are pruned after unsuspend", async () => {
+    const state = baseState();
+    const deps = await makeDeps(state);
+    await handleWebhookEvent(deps, "installation", installPayload);
+    await handleWebhookEvent(deps, "installation", { action: "suspend", installation: installPayload.installation });
+    state.repos = []; // deselected during suspension — the removal event was skipped by design
+    state.files = {} as typeof state.files;
+    await handleWebhookEvent(deps, "installation", { action: "unsuspend", installation: installPayload.installation });
+    expect(await listOrgSkills(deps.db, "acme")).toEqual([]); // unsuspend sync pruned the stale rows
+  });
+
+  it("a truncated remote installation list skips stray-installation deletes", async () => {
+    const db = await makeTestDb();
+    // Fake GitHub with 10 full pages of suspended org installs (cap exhausted → truncated).
+    // Suspended keeps reconcile from fanning out member/repo syncs for 1000 orgs.
+    const bigFetch = (async (url: string | URL) => {
+      const u = String(url);
+      const j = (body: unknown) => ({ ok: true, status: 200, json: async () => body } as unknown as Response);
+      if (u.includes("/app/installations")) {
+        const page = Number(new URL(u).searchParams.get("page") ?? "1");
+        return j(Array.from({ length: 100 }, (_, i) => ({
+          id: page * 1000 + i, account: { login: `org${page}-${i}`, type: "Organization" },
+          repository_selection: "all", suspended_at: "2026-01-01T00:00:00Z",
+        })));
+      }
+      return { ok: false, status: 404, json: async () => ({}) } as unknown as Response;
+    }) as typeof fetch;
+    const deps: GithubAppDeps = { db, cfg, tokens: new InstallationTokens(cfg, bigFetch), http: async () => ({ status: 404, text: async () => "{}" }), fetchImpl: bigFetch };
+    // A local installation GitHub's (truncated) list doesn't include — must SURVIVE.
+    await upsertInstallation(db, { installationId: 42, orgScope: "keepme", repoSelection: "all", suspended: false });
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    await reconcileAll(deps);
+    errorSpy.mockRestore();
+    expect((await listInstallations(db)).some((i) => i.installationId === 42)).toBe(true);
+  });
+
   it("adopts remote installations, syncs them, and drops local ones GitHub no longer has", async () => {
     const deps = await makeDeps(baseState());
     // A second remote installation that's suspended: reconcile must adopt it (so it's gated

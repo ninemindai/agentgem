@@ -3,7 +3,7 @@
 import { describe, it, expect } from "vitest";
 import {
   makeTestDb, upsertCuratedSkills, popularSkills, popularSkillGroups, skillNamesByTargetId,
-  replaceOrgRepoSkills, deleteOrgRepoSkills, deleteOrgSkills, listOrgSkills, orgSkillExists,
+  replaceOrgRepoSkills, deleteOrgRepoSkills, deleteOrgSkills, listOrgSkills, orgSkillExists, pruneOrgSkills,
   type CuratedSkillRow, type OrgSkillRow,
 } from "@agentgem/aggregator";
 
@@ -46,5 +46,17 @@ describe("org-scoped curated skills", () => {
     expect((await popularSkillGroups(db)).map((g) => g.sourceId)).toEqual(["public-src"]);
     const names = await skillNamesByTargetId(db, ["public-src/eng/brainstorm/SKILL.md", "org:acme/skills/eng/deploy/SKILL.md"]);
     expect(Object.keys(names)).toEqual(["public-src/eng/brainstorm/SKILL.md"]);
+  });
+
+  it("pruneOrgSkills deletes rows for vanished repos only, scoped to this org", async () => {
+    const db = await makeTestDb();
+    await replaceOrgRepoSkills(db, "acme", "acme/skills", [priv("deploy")]);
+    await replaceOrgRepoSkills(db, "acme", "acme/gone", [priv("ghost", "acme/gone")]);
+    await replaceOrgRepoSkills(db, "globex", "globex/skills", [priv("other", "globex/skills")]);
+    await pruneOrgSkills(db, "ACME", ["acme/skills"]); // case-insensitive scope
+    expect((await listOrgSkills(db, "acme")).map((s) => s.name)).toEqual(["deploy"]); // ghost pruned
+    expect((await listOrgSkills(db, "globex")).map((s) => s.name)).toEqual(["other"]); // other org untouched
+    await pruneOrgSkills(db, "acme", []); // no visible repos → forget everything for the org
+    expect(await listOrgSkills(db, "acme")).toEqual([]);
   });
 });

@@ -7,7 +7,7 @@
 // overlap are harmless. Per-repo/per-installation failures log and continue (accountVerifier style).
 import {
   upsertInstallation, setInstallationSuspended, deleteInstallation, installationForScope, listInstallations,
-  replaceOrgMembers, upsertOrgMember, deleteOrgMember, deleteOrgRepoSkills,
+  replaceOrgMembers, upsertOrgMember, deleteOrgMember, deleteOrgRepoSkills, pruneOrgSkills,
   type AppDb, type AppInstallation,
 } from "@agentgem/aggregator";
 import type { Http } from "@agentgem/distribute";
@@ -27,20 +27,32 @@ function instFromPayload(p: unknown): AppInstallation | null {
 async function syncInstallation(deps: GithubAppDeps, inst: AppInstallation): Promise<void> {
   if (!deps.tokens) return;
   const token = await deps.tokens.tokenFor(inst.installationId);
-  await replaceOrgMembers(deps.db, inst.orgScope, await listOrgMembers(token, inst.orgScope, deps.fetchImpl));
+  const { members, truncated } = await listOrgMembers(token, inst.orgScope, deps.fetchImpl);
+  if (truncated) {
+    // A truncated replace would REVOKE real members under the App-authoritative gate. Keep the
+    // stored set; member_added/member_removed webhooks still apply single-row deltas.
+    console.error(`githubApp: ${inst.orgScope} member list truncated — keeping stored members`);
+  } else {
+    await replaceOrgMembers(deps.db, inst.orgScope, members);
+  }
   await indexInstallationRepos(deps, inst);
 }
 
 async function indexInstallationRepos(deps: GithubAppDeps, inst: AppInstallation): Promise<void> {
   if (!deps.tokens) return;
   const token = await deps.tokens.tokenFor(inst.installationId);
-  for (const r of await listInstallationRepos(token, deps.fetchImpl)) {
+  const { repos, truncated } = await listInstallationRepos(token, deps.fetchImpl);
+  for (const r of repos) {
     try {
       await indexOrgRepo(deps.db, deps.http, token, inst.orgScope, r.repo, r.defaultBranch);
     } catch (e) {
       console.error(`githubApp: index ${r.repo} failed: ${(e as Error).message}`);
     }
   }
+  // Ghost-skill prune: repos deleted/renamed/transferred upstream (or deselected while the
+  // installation was suspended) never send a removal event this handler processes — the
+  // authoritative current list closes the gap. Never prune from a partial (truncated) view.
+  if (!truncated) await pruneOrgSkills(deps.db, inst.orgScope, repos.map((r) => r.repo));
 }
 
 export async function handleWebhookEvent(deps: GithubAppDeps, event: string, payload: unknown): Promise<void> {
@@ -107,13 +119,19 @@ export async function handleWebhookEvent(deps: GithubAppDeps, event: string, pay
  *  forget local installations GitHub no longer reports. */
 export async function reconcileAll(deps: GithubAppDeps): Promise<{ installations: number }> {
   if (!deps.cfg) return { installations: 0 };
-  const remote = await listAppInstallations(deps.cfg, deps.fetchImpl);
-  for (const local of await listInstallations(deps.db)) {
-    if (remote.some((r) => r.installationId === local.installationId)) continue;
-    try {
-      await deleteInstallation(deps.db, local.installationId);
-    } catch (e) {
-      console.error(`githubApp: reconcile stray #${local.installationId} delete failed: ${(e as Error).message}`);
+  const { installations: remote, truncated } = await listAppInstallations(deps.cfg, deps.fetchImpl);
+  if (truncated) {
+    // A partial remote list must never drive deletes: a "stray" might just be on a page we
+    // couldn't fetch, and deleteInstallation cascades members + skills.
+    console.error("githubApp: reconcile skipping stray-installation deletes — remote list truncated");
+  } else {
+    for (const local of await listInstallations(deps.db)) {
+      if (remote.some((r) => r.installationId === local.installationId)) continue;
+      try {
+        await deleteInstallation(deps.db, local.installationId);
+      } catch (e) {
+        console.error(`githubApp: reconcile stray #${local.installationId} delete failed: ${(e as Error).message}`);
+      }
     }
   }
   for (const r of remote) {

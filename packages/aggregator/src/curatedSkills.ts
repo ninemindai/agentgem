@@ -193,3 +193,18 @@ export async function orgSkillExists(db: AppDb, orgScope: string, sourceId: stri
   `);
   return r.rows.length > 0;
 }
+
+/** Reconcile-time ghost-skill prune: delete this org's rows for repos NOT in keepRepos. Repos
+ *  deleted/renamed/transferred upstream — or deselected while the installation was suspended —
+ *  never produce a removal webhook this server processes; the authoritative current repo list
+ *  closes that gap. Empty keepRepos = the installation sees no repos → forget all the org's rows.
+ *  Callers must NOT invoke this from a truncated repo listing. */
+export async function pruneOrgSkills(db: AppDb, orgScope: string, keepRepos: string[]): Promise<void> {
+  const scope = orgScope.toLowerCase();
+  if (keepRepos.length === 0) {
+    await db.execute(sql`delete from curated_skills where org_scope = ${scope}`);
+    return;
+  }
+  const keep = sql.join(keepRepos.map((r) => sql`${r}`), sql`, `);
+  await db.execute(sql`delete from curated_skills where org_scope = ${scope} and repo not in (${keep})`);
+}
