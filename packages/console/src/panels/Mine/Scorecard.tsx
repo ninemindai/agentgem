@@ -5,6 +5,7 @@ import { renderCardSvg } from "./card.js";
 import { ShareLinks } from "./ShareLinks.js";
 import { RefreshButton } from "../../shell/RefreshButton.js";
 import { timeAgo } from "../../util/timeAgo.js";
+import { useShareMint } from "../_shared/useShareMint.js";
 
 // Asset-framed hero. Count stats are now plain text (filter chips moved to MineWorkflows).
 // The share button mints a hosted certificate URL and shows per-platform share intents.
@@ -16,26 +17,18 @@ export function ScorecardHero({ data, apiBase = "", createShare, onRescan, updat
   const counts = { breadth: data.breadth, battleTested: data.battleTested, portable: data.portable };
   const doCreate: CreateShare = createShare ?? ((body) => createShareRoute.call(makeClient(apiBase), { body }));
   const [shareUrl, setShareUrl] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [slow, setSlow] = useState(false);
+  const { busy, slow, err, run } = useShareMint();
   const svg = renderCardSvg(counts);
   const svgDataUri = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 
   // Mint the hosted certificate URL and reveal the share options inline. The card itself is already
   // rendered client-side; the only wait here is the network create (which can be a cold start on the
-  // hosted backend), so we show a spinner and, past ~3s, a "waking the server" hint instead of a
-  // silent "Sharing…". No native share sheet — desktop app; inline links are the path.
-  const onShare = async () => {
-    setBusy(true); setErr(null); setSlow(false);
-    const slowTimer = setTimeout(() => setSlow(true), 3000);
-    try {
-      const { url } = await doCreate({ kind: "certificate", counts, generatedAtMs: data.generatedAtMs });
-      setShareUrl(url);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Couldn't create a share link — try again.");
-    } finally { clearTimeout(slowTimer); setBusy(false); setSlow(false); }
-  };
+  // hosted backend), so useShareMint shows a spinner and, past ~3s, a "waking the server" hint
+  // instead of a silent "Sharing…". No native share sheet — desktop app; inline links are the path.
+  const onShare = () => run(async () => {
+    const { url } = await doCreate({ kind: "certificate", counts, generatedAtMs: data.generatedAtMs });
+    setShareUrl(url);
+  });
 
   const downloadPng = () => {
     const img = new Image();

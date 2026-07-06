@@ -60,36 +60,31 @@ export function Observe({ apiBase }: { apiBase: string }) {
 
   const onRefresh = () => { freshRef.current = true; setReloadKey((k) => k + 1); };
 
-  // Light "Share link" path: fetch inventory once on load to build provenance
-  // (counts by kind) and detect an empty setup, up front — unlike Publish below,
-  // this can't defer the fetch to click-time because the button itself needs to
-  // know whether to disable.
-  const [setupShare, setSetupShare] = useState<{ name: string; provenance: string; empty: boolean } | null>(null);
-  const inventoryRef = useRef<Awaited<ReturnType<typeof inventoryRoute.call>> | null>(null);
+  // "Share my setup" (light) and "Publish" (heavy) both need the inventory, but
+  // only when the user acts — Inspect doesn't otherwise scan it. Both fetch it
+  // lazily on click, so opening Inspect stays cheap and the data is always fresh.
 
-  useEffect(() => {
-    let alive = true;
-    inventoryRoute.call(makeClient(apiBase)).then((inv) => {
-      if (!alive) return;
-      inventoryRef.current = inv;
-      const parts = [
-        [inv.skills.length, "skill"], [inv.mcpServers.length, "MCP"],
-        [inv.instructions.length, "instruction"], [inv.hooks.length, "hook"],
-      ] as const;
-      const total = parts.reduce((n, [c]) => n + c, 0);
-      const provenance = parts.filter(([c]) => c > 0)
-        .map(([c, w]) => `${c} ${w}${c === 1 ? "" : "s"}`).join(" · ");
-      setSetupShare({ name: "my-setup", provenance, empty: total === 0 });
-    }).catch(() => setSetupShare({ name: "my-setup", provenance: "", empty: true }));
-    return () => { alive = false; };
-  }, [apiBase]);
+  // Light path: resolve name+provenance (counts by kind) at click time. An empty
+  // setup throws a user-facing message, surfaced inline instead of minting a
+  // hollow "0 skills" card; a fetch failure throws the real error, not a false
+  // "add skills first".
+  const resolveSetupShare = async () => {
+    const inv = await inventoryRoute.call(makeClient(apiBase));
+    const parts = [
+      [inv.skills.length, "skill"], [inv.mcpServers.length, "MCP"],
+      [inv.instructions.length, "instruction"], [inv.hooks.length, "hook"],
+    ] as const;
+    const total = parts.reduce((n, [c]) => n + c, 0);
+    if (total === 0) throw new Error("Nothing to share yet — add skills first");
+    const provenance = parts.filter(([c]) => c > 0)
+      .map(([c, w]) => `${c} ${w}${c === 1 ? "" : "s"}`).join(" · ");
+    return { name: "my-setup", provenance };
+  };
 
-  // "Publish": bundle the whole inventory into a Gem via Curate's Publish
-  // flow. Reuses the inventory fetched by the setupShare effect above; only
-  // refetches if the click races ahead of that effect resolving.
+  // "Publish": bundle the whole inventory into a Gem via Curate's Publish flow.
   const onPublishSetup = async () => {
     try {
-      const inv = inventoryRef.current ?? await inventoryRoute.call(makeClient(apiBase));
+      const inv = await inventoryRoute.call(makeClient(apiBase));
       const keys = [
         ...inv.skills.map((a) => `skills::${a.name}`),
         ...inv.mcpServers.map((a) => `mcpServers::${a.name}`),
@@ -127,7 +122,7 @@ export function Observe({ apiBase }: { apiBase: string }) {
       <Dashboard
         data={data} range={range} onRange={setRange} filter={filter} onFilter={setFilter}
         pending={pending} onRefresh={onRefresh}
-        apiBase={apiBase} setupShare={setupShare} onPublishSetup={onPublishSetup}
+        apiBase={apiBase} resolveSetupShare={resolveSetupShare} onPublishSetup={onPublishSetup}
       />
     </div>
   );

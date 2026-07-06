@@ -17,11 +17,11 @@ const SLICE_COLORS = ["var(--accent)", "var(--emerald, #34d399)", "#f59e0b", "#8
 
 type SortKey = "tokens" | "msgs" | "durationMs" | "endMs";
 
-export function Dashboard({ data, range, onRange, filter, onFilter, pending, onRefresh, apiBase, setupShare, onPublishSetup }: {
+export function Dashboard({ data, range, onRange, filter, onFilter, pending, onRefresh, apiBase, resolveSetupShare, onPublishSetup }: {
   data: ObservePayload; range: ObserveRange; onRange: (r: ObserveRange) => void;
   filter: ObserveFilter; onFilter: (f: ObserveFilter) => void; pending?: boolean;
   onRefresh?: () => void; apiBase: string;
-  setupShare?: { name: string; provenance: string; empty: boolean } | null;
+  resolveSetupShare?: () => Promise<{ name: string; provenance: string }>;
   onPublishSetup?: () => void;
 }) {
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "endMs", dir: "desc" });
@@ -66,16 +66,17 @@ export function Dashboard({ data, range, onRange, filter, onFilter, pending, onR
         {onRefresh && <RefreshButton onClick={onRefresh} busy={pending} />}
       </div>
 
-      {setupShare && (
+      {resolveSetupShare && (
         <div className="obs-share-strip">
+          {/* Light path: resolve builds provenance from a fresh inventory scan at
+              click time. The header "Publish ↗" is the persistent upgrade path, so
+              no post-mint nudge here. */}
           <QuickShareButton
             apiBase={apiBase}
-            name={setupShare.name}
-            provenance={setupShare.provenance}
+            name="my-setup"
+            provenance=""
             title="My agent setup"
-            disabled={setupShare.empty}
-            disabledReason={setupShare.empty ? "Nothing to share yet — add skills first" : undefined}
-            onUpgrade={onPublishSetup}
+            resolve={resolveSetupShare}
           />
         </div>
       )}

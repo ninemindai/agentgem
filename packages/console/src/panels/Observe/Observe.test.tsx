@@ -128,4 +128,19 @@ describe("Observe Dashboard", () => {
     const input = screen.getByLabelText(/minimum messages/i) as HTMLInputElement;
     expect(input.value).toBe("100");
   });
+
+  it("renders the Share-link and Publish buttons when a setup share is offered", () => {
+    const resolveSetupShare = async () => ({ name: "my-setup", provenance: "3 skills" });
+    render(
+      <Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}}
+        apiBase="" resolveSetupShare={resolveSetupShare} onPublishSetup={() => {}} />,
+    );
+    expect(screen.getByRole("button", { name: /share link/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Publish ↗" })).toBeTruthy();
+  });
+
+  it("omits the share row when no setup share is offered", () => {
+    render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} apiBase="" />);
+    expect(screen.queryByRole("button", { name: /share link/i })).toBeNull();
+  });
 });
