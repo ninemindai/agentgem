@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
 import {
-  makeTestDb, listInstallations, appOrgRole, listOrgSkills, upsertInstallation, replaceOrgMembers,
+  makeTestDb, listInstallations, appOrgRole, listOrgSkills, upsertInstallation, replaceOrgMembers, orgMembers,
 } from "@agentgem/aggregator";
 import type { Http } from "@agentgem/distribute";
 import { InstallationTokens } from "../client.js";
@@ -66,6 +66,18 @@ describe("handleWebhookEvent", () => {
     await handleWebhookEvent(deps, "installation", { action: "deleted", installation: installPayload.installation });
     expect(await listInstallations(deps.db)).toEqual([]);
     expect(await listOrgSkills(deps.db, "acme")).toEqual([]);
+    expect(await deps.db.select().from(orgMembers)).toEqual([]); // cascade pinned at row level
+  });
+
+  it("installation_repositories replay does not un-suspend a suspended installation", async () => {
+    const deps = await makeDeps(baseState());
+    await handleWebhookEvent(deps, "installation", installPayload);
+    await handleWebhookEvent(deps, "installation", { action: "suspend", installation: installPayload.installation });
+    await handleWebhookEvent(deps, "installation_repositories", {
+      action: "added_repositories", installation: installPayload.installation,
+      repositories_added: [{ full_name: "acme/skills" }], repositories_removed: [],
+    });
+    expect((await listInstallations(deps.db))[0].suspended).toBe(true); // replay must not re-activate
   });
 
   it("organization member events apply single-row deltas", async () => {
@@ -102,13 +114,32 @@ describe("handleWebhookEvent", () => {
 describe("reconcileAll", () => {
   it("adopts remote installations, syncs them, and drops local ones GitHub no longer has", async () => {
     const deps = await makeDeps(baseState());
+    // A second remote installation that's suspended: reconcile must adopt it (so it's gated
+    // everywhere else) but must NOT sync its members.
+    const baseFetch = deps.fetchImpl;
+    deps.fetchImpl = (async (url: string | URL, init?: RequestInit) => {
+      const u = String(url);
+      if (u.includes("/app/installations")) {
+        return {
+          ok: true, status: 200,
+          json: async () => [
+            { id: 7, account: { login: "acme", type: "Organization" }, repository_selection: "selected", suspended_at: null },
+            { id: 8, account: { login: "globex", type: "Organization" }, repository_selection: "all", suspended_at: "2026-01-01T00:00:00Z" },
+          ],
+        } as unknown as Response;
+      }
+      return baseFetch(url, init);
+    }) as typeof fetch;
     // Local drift: a stale installation GitHub doesn't know about + stale member state.
     await upsertInstallation(deps.db, { installationId: 99, orgScope: "gone", repoSelection: "all", suspended: false });
     await replaceOrgMembers(deps.db, "gone", [{ login: "zed", role: "member" }]);
     const out = await reconcileAll(deps);
-    expect(out.installations).toBe(1);
-    expect((await listInstallations(deps.db)).map((i) => i.installationId)).toEqual([7]);
+    expect(out.installations).toBe(2);
+    expect((await listInstallations(deps.db)).map((i) => i.installationId).sort()).toEqual([7, 8]);
+    expect((await listInstallations(deps.db)).find((i) => i.installationId === 8)?.suspended).toBe(true);
     expect(await appOrgRole(deps.db, "alice", "acme")).toBe("admin");
     expect(await appOrgRole(deps.db, "zed", "gone")).toBeNull();
+    // The fake's member routes aren't org-specific, so alice would leak into globex if sync ran.
+    expect(await appOrgRole(deps.db, "alice", "globex")).toBeNull();
   });
 });
