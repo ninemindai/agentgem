@@ -45,4 +45,15 @@ describe("computeDistill", () => {
     const d2 = await computeDistill("/proj", { dir: claudeDir2, ...badFakes });
     expect(d2.cached).toBe(false);   // degraded was not cached
   });
+
+  it("threads timeoutMs to both distill agents so the interactive path can cap the wait", async () => {
+    const claudeDir = seedTranscript();
+    let wfTimeout: number | undefined = -1;
+    let lsTimeout: number | undefined = -1;
+    const distillWf = async (_s: unknown, _i: unknown, o?: { timeoutMs?: number }) => { wfTimeout = o?.timeoutMs; return { distilled: [], degraded: false }; };
+    const distillLessons = async (_s: unknown, _i: unknown, o?: { timeoutMs?: number }) => { lsTimeout = o?.timeoutMs; return { lessons: [], degraded: false }; };
+    await computeDistill("/proj", { dir: claudeDir, timeoutMs: 15_000, distillWf: distillWf as never, distillLessons: distillLessons as never });
+    expect(wfTimeout).toBe(15_000);
+    expect(lsTimeout).toBe(15_000);
+  });
 });
