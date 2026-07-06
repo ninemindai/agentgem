@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { phaseGroups, footerPages, sortedPages, type ConsolePage, type Phase, type ArtifactCategory } from "../registry.js";
+import { phaseGroups, footerPages, sortedPages, normalizeHash, type ConsolePage, type Phase, type ArtifactCategory } from "../registry.js";
 import { ActiveGemSwitcher } from "./ActiveGemSwitcher.js";
 import { useActiveGem } from "../activeGem.js";
 import { WarmingPill } from "../components/WarmingPill.js";
@@ -53,10 +53,19 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
   // state of Build items tracks the active gem.
   const { keys } = useActiveGem();
   const hasGem = keys.size > 0;
-  const [hash, setHash] = useState(() => window.location.hash);
+  const [hash, setHash] = useState(() => normalizeHash(window.location.hash));
 
+  // Route normalization lives in ONE place: legacy routes (#/your-gems, #/get-gems?…)
+  // are rewritten to their new homes on the initial resolve AND on every hashchange.
+  // normalizeHash is idempotent, so rewriting the URL can't loop.
   useEffect(() => {
-    const onHash = () => setHash(window.location.hash);
+    const onHash = () => {
+      const norm = normalizeHash(window.location.hash);
+      if (norm !== window.location.hash) window.location.hash = norm; // rewrite → re-fires, then settles
+      else setHash(norm);
+    };
+    const initial = normalizeHash(window.location.hash);
+    if (initial !== window.location.hash) window.location.hash = initial; // legacy bookmark on cold start
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);

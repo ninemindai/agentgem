@@ -5,6 +5,23 @@ export type { ConsolePage, Phase, ArtifactCategory } from "./contract.js";
 /** Fixed order of the artifact sub-labels within a phase. */
 const CATEGORY_ORDER: ArtifactCategory[] = ["setup", "sessions", "projects", "usage"];
 
+/** Legacy hash routes → their new home after the Gems merge. Exact-path match only. */
+const LEGACY_ROUTES: Record<string, string> = {
+  "#/your-gems": "#/gems",
+  "#/received": "#/gems/received",
+  "#/get-gems": "#/gems/market",
+};
+
+/** Rewrite a legacy route to its current one, preserving any `?query` verbatim.
+ *  Idempotent (already-current hashes pass through), so it is safe to run on every
+ *  hashchange and on the initial resolve without looping. */
+export function normalizeHash(hash: string): string {
+  const qIdx = hash.indexOf("?");
+  const path = qIdx === -1 ? hash : hash.slice(0, qIdx);
+  const mapped = LEGACY_ROUTES[path];
+  return mapped ? mapped + (qIdx === -1 ? "" : hash.slice(qIdx)) : hash;
+}
+
 /** Sort pages for the sidebar; reject duplicate ids (a wiring mistake). */
 export function sortedPages(pages: ConsolePage[]): ConsolePage[] {
   const seen = new Set<string>();

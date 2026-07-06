@@ -119,6 +119,25 @@ body::before {
 .console-phase-btn:focus-visible { outline: none; box-shadow: var(--ring); }
 .console-group { display: contents; }
 
+/* Gems screen tab bar (Yours | Received | Get more) — sub-routed tabs. */
+.gems-tabs {
+  display: flex; gap: 4px; margin-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+}
+.gems-tab {
+  position: relative; padding: 10px 4px; margin-right: 20px;
+  border: 0; background: transparent; cursor: pointer;
+  color: var(--muted); font: 600 14px/1 var(--font-ui);
+  transition: color .15s ease;
+}
+.gems-tab:hover { color: var(--ink-soft); }
+.gems-tab.is-active { color: var(--accent); }
+.gems-tab.is-active::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
+  border-radius: 2px 2px 0 0; background: var(--accent);
+}
+.gems-tab:focus-visible { outline: none; box-shadow: var(--ring); border-radius: 4px; }
+
 .console-switcher { position: relative; margin-bottom: 4px; }
 .console-activegem {
   display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;

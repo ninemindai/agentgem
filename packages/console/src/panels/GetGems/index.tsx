@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { defineConsolePage } from "../../registry.js";
 import {
   registryReadyRoute,
   registrySearchRoute,
@@ -66,12 +65,19 @@ export function GetGems({ apiBase }: { apiBase: string }) {
   //    consent-gated). Works even when the local registry search isn't configured.
   //  - "?q=<term>" → pre-fill + run the registry search once.
   // Absent both, this is a no-op, so the default "does not auto-search on mount" behaviour holds.
+  // Hash-reactive, not mount-only: when this tab is already open and the hash gains a
+  // `?install=` (a mid-session "Open in AgentGem"), the deep-link must still fire.
   useEffect(() => {
-    const params = new URLSearchParams(window.location.hash.split("?")[1] ?? "");
-    const installKey = params.get("install");
-    if (installKey) { setDirectKey(installKey); setDirectVersion(params.get("v") ?? ""); void install(installKey, params.get("v") ?? ""); return; }
-    const q0 = params.get("q");
-    if (q0) { setQ(q0); void search(q0); }
+    const applyDeepLink = () => {
+      const params = new URLSearchParams(window.location.hash.split("?")[1] ?? "");
+      const installKey = params.get("install");
+      if (installKey) { setDirectKey(installKey); setDirectVersion(params.get("v") ?? ""); void install(installKey, params.get("v") ?? ""); return; }
+      const q0 = params.get("q");
+      if (q0) { setQ(q0); void search(q0); }
+    };
+    applyDeepLink();
+    window.addEventListener("hashchange", applyDeepLink);
+    return () => window.removeEventListener("hashchange", applyDeepLink);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -167,13 +173,3 @@ export function GetGems({ apiBase }: { apiBase: string }) {
     </div>
   );
 }
-
-export const getGemsPage = defineConsolePage({
-  id: "get-gems",
-  title: "Get Gems",
-  icon: "⬇",
-  order: 32,
-  phase: "build", category: "setup",
-  route: "#/get-gems",
-  component: ({ apiBase }) => <GetGems apiBase={apiBase} />,
-});

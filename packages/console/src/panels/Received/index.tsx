@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { defineConsolePage } from "../../registry.js";
 import {
   makeClient,
   transferReceiveRoute,
@@ -164,13 +163,3 @@ export function Received({ apiBase }: { apiBase: string }) {
     </div>
   );
 }
-
-export const receivedPage = defineConsolePage({
-  id: "received",
-  title: "Received",
-  icon: "↓",
-  order: 31,
-  phase: "build", category: "setup",
-  route: "#/received",
-  component: ({ apiBase }) => <Received apiBase={apiBase} />,
-});
