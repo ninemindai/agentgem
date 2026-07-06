@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 // src/gem/__tests__/contextHygiene.test.ts
 import { describe, it, expect } from "vitest";
-import { contextCap, contextTokens, clusterOf, runDetectors, SPRAWL_MIN, SWITCH_MIN, REREAD_MIN, PIN_LEVEL, PIN_FRACTION, CHURN_RATIO, hygieneScore } from "@agentgem/insight";
+import { contextCap, contextTokens, clusterOf, runDetectors, SPRAWL_MIN, SWITCH_MIN, REREAD_MIN, PIN_LEVEL, PIN_FRACTION, CHURN_RATIO, hygieneScore, assessesHygiene } from "@agentgem/insight";
 import type { TurnUsage, ProcedureStep, SessionSequence, WorkflowSignal, DetectorSummary } from "@agentgem/insight";
 
 describe("contextCap", () => {
@@ -40,6 +40,9 @@ describe("clusterOf", () => {
   it("buckets other paths to their first segment", () => {
     expect(clusterOf("src/gem/scorecard.ts")).toBe("dir:src");
     expect(clusterOf("docs/readme.md")).toBe("dir:docs");
+  });
+  it("does not match 'packages/' as a bare substring inside another segment", () => {
+    expect(clusterOf("src/mypackages/x.ts")).toBe("dir:src");
   });
   it("returns null for non-path args and empties", () => {
     expect(clusterOf("npm test")).toBeNull();
@@ -86,7 +89,9 @@ describe("task-pingpong detector", () => {
     // alternate between two clusters -> a switch on every step after the first
     const steps = Array.from({ length: SWITCH_MIN + 1 }, (_, i) =>
       step("Read", "Read", `packages/${i % 2 ? "a" : "b"}/f.ts`, i));
-    expect(fire(signalWith([sess(steps)]), "task-pingpong")).toHaveLength(1);
+    const f = fire(signalWith([sess(steps)]), "task-pingpong");
+    expect(f).toHaveLength(1);
+    expect(f[0].detail).not.toContain("packages/a"); // args never leak
   });
   it("stays quiet when work stays in one cluster", () => {
     const steps = Array.from({ length: SWITCH_MIN + 5 }, (_, i) =>
@@ -173,5 +178,14 @@ describe("hygieneScore", () => {
     const few = [row("task-sprawl", 1)];
     const many = [row("task-sprawl", 1), row("context-pinned", 1), row("cache-churn-late", 1)];
     expect(hygieneScore(many).score).toBeLessThanOrEqual(hygieneScore(few).score);
+  });
+});
+
+describe("assessesHygiene", () => {
+  it("is true when a hygiene factor is present", () => {
+    expect(assessesHygiene([row("context-pinned", 0)])).toBe(true);
+  });
+  it("is false when no hygiene factor is present", () => {
+    expect(assessesHygiene([row("retry-storm", 0)])).toBe(false);
   });
 });

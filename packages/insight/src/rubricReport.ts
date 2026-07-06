@@ -15,7 +15,7 @@ import { loadRuleDetectors } from "./detectorRules.js";
 import { type Rubric, type RubricScope, type RubricScopeKind, type LlmCriterion, rubricGranularity, scopeAllowed } from "./rubrics.js";
 import { judgeCriteria } from "./criterionJudge.js";
 import type { AcpConnectFn } from "./acpRecommender.js";
-import { hygieneScore, type HygieneVerdict } from "./contextHygiene.js";
+import { hygieneScore, assessesHygiene, type HygieneVerdict } from "./contextHygiene.js";
 
 const log = createLogger("insight");
 
@@ -134,7 +134,9 @@ export async function evaluateRubric(signal: WorkflowSignal, rubric: Rubric, opt
     target: rubric.target,
     scope: kind,
     factors,
-    hygiene: hygieneScore(factors),
+    // Only surface a hygiene verdict when a hygiene factor was actually assessed;
+    // an unrelated rubric must not report a misleading "bounded" default.
+    ...(assessesHygiene(factors) ? { hygiene: hygieneScore(factors) } : {}),
     sessionsScanned: signal.sessions?.scanned ?? (signal.sequences?.sessions?.length ?? 0),
     // Not "clean" when degraded: criteria weren't evaluated, so we can't claim all-clear.
     clean: allFindings.length === 0 && !degraded,

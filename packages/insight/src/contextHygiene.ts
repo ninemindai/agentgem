@@ -134,3 +134,9 @@ export function hygieneScore(summaries: DetectorSummary[]): HygieneVerdict {
   const verdict = score >= 72 ? "bounded" : score >= 48 ? "mixed" : "bloated";
   return { score, verdict };
 }
+
+// True when the rubric's factors include at least one context-hygiene factor —
+// used to avoid emitting a vacuous "bounded/100" verdict for unrelated rubrics.
+export function assessesHygiene(summaries: DetectorSummary[]): boolean {
+  return summaries.some((s) => s.id in WEIGHTS);
+}

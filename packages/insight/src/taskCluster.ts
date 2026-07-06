@@ -9,7 +9,7 @@
 
 export function clusterOf(arg: string | undefined): string | null {
   if (!arg) return null;
-  const pkg = /packages\/([\w.-]+)/.exec(arg);
+  const pkg = /(?:^|\/)packages\/([\w.-]+)/.exec(arg);
   if (pkg) return `pkg:${pkg[1]}`;
   const seg = /^\/?([\w.-]+)\//.exec(arg);
   if (seg) return `dir:${seg[1]}`;
