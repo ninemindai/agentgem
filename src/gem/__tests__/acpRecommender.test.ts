@@ -90,6 +90,37 @@ describe("validateAnalysis", () => {
   });
 });
 
+describe("subagent recommendations", () => {
+  const invSub: ProjectInventory = { ...inventory, subagents: [{ type: "subagent", name: "reviewer", source: "project", content: "x" }] };
+  const sigSub: WorkflowSignal = { ...signal, artifacts: [
+    ...signal.artifacts,
+    { type: "subagent", name: "reviewer", root: ROOT, invocations: 3, sessionsUsedIn: 2, lastUsedMs: 2, confidence: "high" },
+  ] };
+  const scanInvSub = { project: invSub };
+
+  it("deterministicAnalysis includes a used, high-confidence subagent", () => {
+    const a = deterministicAnalysis(sigSub);
+    expect(a.candidates[0].include.some((i) => i.type === "subagent" && i.name === "reviewer")).toBe(true);
+  });
+
+  it("recommendationToSelection maps a subagent into the project selection", () => {
+    const c = deterministicAnalysis(sigSub).candidates[0];
+    const sel = recommendationToSelection(c) as any;
+    expect(sel.projects[ROOT].subagents).toEqual(["reviewer"]);
+  });
+
+  it("validateAnalysis resolves a subagent include and drops a hallucinated one", () => {
+    const a = validateAnalysis({
+      candidates: [{ name: "Review", description: "r", include: [
+        { type: "subagent", name: "reviewer", reason: "used" },
+        { type: "subagent", name: "ghost", reason: "nope" },
+      ], confidence: "high" }],
+    }, scanInvSub, sigSub);
+    expect(a.candidates).toHaveLength(1);
+    expect(a.candidates[0].include.map((i) => i.name)).toEqual(["reviewer"]);
+  });
+});
+
 function fakeConnect(canned: string | (() => Promise<string>)): AcpConnectFn {
   return async () => ({
     ctx: {

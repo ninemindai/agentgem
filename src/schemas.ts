@@ -422,7 +422,7 @@ export const WorkflowAnalyzeRequestSchema = z.object({
 });
 const RecommendedItemSchema = z.object({
   // mirrors ArtifactType (incl. "channel") — RecommendedItem.type is ArtifactType, so this must stay in sync
-  type: z.enum(["skill", "mcp_server", "instructions", "hook", "channel"]),
+  type: z.enum(["skill", "subagent", "mcp_server", "instructions", "hook", "channel"]),
   name: z.string(),
   reason: z.string(),
   root: z.string().nullable(),   // project root, or null for a global/plugin artifact

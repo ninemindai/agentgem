@@ -45,7 +45,7 @@ export interface WorkflowAnalysis {
 }
 
 // Instructions are a boolean on ProjectSelection, not a named include.
-const SELECTABLE: ArtifactType[] = ["skill", "mcp_server", "hook"];
+const SELECTABLE: ArtifactType[] = ["skill", "subagent", "mcp_server", "hook"];
 
 // ── ACP façade ─────────────────────────────────────────────────────────────
 // Thin seam over the shared adapter plumbing so tests inject a plain object.
@@ -106,8 +106,9 @@ export function deterministicAnalysis(signal: WorkflowSignal): WorkflowAnalysis 
 export function recommendationToSelection(c: GemCandidate): GemSelection {
   const sel: Exclude<GemSelection, { all: true }> = {};
   const globalNames = (t: ArtifactType) => c.include.filter((i) => i.type === t && i.root === null).map((i) => i.name);
-  const gSkills = globalNames("skill"), gMcp = globalNames("mcp_server"), gHooks = globalNames("hook");
+  const gSkills = globalNames("skill"), gSub = globalNames("subagent"), gMcp = globalNames("mcp_server"), gHooks = globalNames("hook");
   if (gSkills.length) sel.skills = gSkills;
+  if (gSub.length) sel.subagents = gSub;
   if (gMcp.length) sel.mcpServers = gMcp;
   if (gHooks.length) sel.hooks = gHooks;
 
@@ -117,6 +118,7 @@ export function recommendationToSelection(c: GemCandidate): GemSelection {
     if (i.root === null) continue;
     const ps = ensure(i.root);
     if (i.type === "skill") (ps.skills ??= []).push(i.name);
+    else if (i.type === "subagent") (ps.subagents ??= []).push(i.name);
     else if (i.type === "mcp_server") (ps.mcpServers ??= []).push(i.name);
     else if (i.type === "hook") (ps.hooks ??= []).push(i.name);
   }
@@ -150,11 +152,13 @@ export function validateAnalysis(raw: unknown, inv: ScanInventory, signal: Workf
   // (null), else undefined (hallucinated). Project is preferred on collision.
   const proj: Record<string, Set<string>> = {
     skill: new Set(inv.project.skills.map((s) => s.name)),
+    subagent: new Set(inv.project.subagents.map((s) => s.name)),
     mcp_server: new Set(inv.project.mcpServers.map((m) => m.name)),
     hook: new Set(inv.project.hooks.map((h) => h.name)),
   };
   const glob: Record<string, Set<string>> = {
     skill: new Set(g.skills.map((s) => s.name)),
+    subagent: new Set((g.subagents ?? []).map((s) => s.name)),
     mcp_server: new Set(g.mcpServers.map((m) => m.name)),
     hook: new Set(g.hooks.map((h) => h.name)),
   };
@@ -197,7 +201,7 @@ const GROUNDING = (signalJson: string, inventoryJson: string) =>
   `USAGE SIGNAL (authoritative — invocation counts and shapes are facts):\n${signalJson}\n\n` +
   `INVENTORY (the only artifacts that exist — never invent names outside this):\n${inventoryJson}\n\n` +
   `Return ONLY a JSON object: {"candidates":[{"name","description","includeInstructions":bool,` +
-  `"include":[{"type":"skill"|"mcp_server"|"hook","name","reason"}],"confidence":"high"|"medium"|"low"}],"gaps":[string]}.\n` +
+  `"include":[{"type":"skill"|"subagent"|"mcp_server"|"hook","name","reason"}],"confidence":"high"|"medium"|"low"}],"gaps":[string]}.\n` +
   `Each candidate is one coherent flow. Prefer 1–4 candidates; don't split trivially or duplicate. Use exact inventory names.`;
 
 // Skill bodies are large; send descriptions only. Global section is limited to
@@ -209,12 +213,14 @@ function trimInventory(inv: ScanInventory, usedGlobal: Set<string>) {
     projectRoot: p.root, name: p.name,
     project: {
       skills: p.skills.map((s) => ({ name: s.name, description: s.description ?? "" })),
+      subagents: p.subagents.map((s) => ({ name: s.name, description: s.description ?? "" })),
       mcpServers: p.mcpServers.map((m) => ({ name: m.name, transport: m.transport })),
       instructions: p.instructions.map((i) => ({ name: i.name })),
       hooks: p.hooks.map((h) => ({ name: h.name, event: h.event, matcher: h.matcher ?? null })),
     },
     global: {
       skills: g.skills.filter((s) => usedGlobal.has(s.name)).map((s) => ({ name: s.name })),
+      subagents: (g.subagents ?? []).filter((s) => usedGlobal.has(s.name)).map((s) => ({ name: s.name })),
       mcpServers: g.mcpServers.filter((m) => usedGlobal.has(m.name)).map((m) => ({ name: m.name })),
       hooks: g.hooks.filter((h) => usedGlobal.has(h.name)).map((h) => ({ name: h.name, event: h.event })),
     },
