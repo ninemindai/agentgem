@@ -527,19 +527,21 @@ export function miniappsRoot(): string {
   return join(process.env.AGENTGEM_HOME ?? join(homedir(), ".agentgem"), "miniapps");
 }
 export function miniappDir(name: string): string {
-  const safe = safePathSegment(name); // throws on separators / . / ..
-  const dir = join(miniappsRoot(), safe);
+  // safePathSegment SANITIZES (never throws): "../escape" -> ".._escape", "." -> "unnamed". We want a
+  // clear rejection of a bad name, not a silently-mangled one — so require the name to already be clean.
+  if (safePathSegment(name) !== name) throw new Error(`invalid miniapp name '${name}' (use letters, digits, . _ -)`);
+  const dir = join(miniappsRoot(), name);
   if (!dir.startsWith(miniappsRoot() + sep)) throw new Error("miniapp dir escaped the registry root");
   return dir;
 }
 
 export async function saveMiniapp(input: SaveMiniappInput): Promise<{ name: string; commit: string | null }> {
+  const dir = miniappDir(input.name);             // validates the name (throws on bad) + jails the path
+  const safe = input.name;
   const gate = await gameGate(input.html);
   if (!gate.ok) throw new Error(`miniapp failed the gate: ${gate.failures.join("; ")}`);
-  const safe = safePathSegment(input.name);
   const root = miniappsRoot();
-  await ensureRepo(root);                         // the registry is a git repo
-  const dir = join(root, safe);
+  await ensureRepo(root);                          // the registry is a git repo
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, `${safe}.html`), input.html);
   writeFileSync(join(dir, "meta.json"), JSON.stringify(input.meta, null, 2));
