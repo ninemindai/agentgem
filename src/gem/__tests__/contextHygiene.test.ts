@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 // src/gem/__tests__/contextHygiene.test.ts
 import { describe, it, expect } from "vitest";
-import { contextCap, contextTokens, clusterOf, runDetectors, SPRAWL_MIN, SWITCH_MIN, REREAD_MIN, PIN_LEVEL, PIN_FRACTION, CHURN_RATIO } from "@agentgem/insight";
-import type { TurnUsage, ProcedureStep, SessionSequence, WorkflowSignal } from "@agentgem/insight";
+import { contextCap, contextTokens, clusterOf, runDetectors, SPRAWL_MIN, SWITCH_MIN, REREAD_MIN, PIN_LEVEL, PIN_FRACTION, CHURN_RATIO, hygieneScore } from "@agentgem/insight";
+import type { TurnUsage, ProcedureStep, SessionSequence, WorkflowSignal, DetectorSummary } from "@agentgem/insight";
 
 describe("contextCap", () => {
   it("returns 1M for a model id that signals a 1M window", () => {
@@ -150,5 +150,28 @@ describe("cache-churn-late detector", () => {
     const series = Array.from({ length: 20 }, (_, i) => turn(i, 500_000, 1_000));
     const sig = signalWith([sessM([step("Read", "Read", "packages/a/f.ts", 0)], series, "opus[1m]")]);
     expect(fire(sig, "cache-churn-late")).toHaveLength(0);
+  });
+});
+
+const row = (id: string, count: number): DetectorSummary =>
+  ({ id, title: id, advice: "", severity: "warn", count, sessions: count ? 1 : 0 });
+
+describe("hygieneScore", () => {
+  it("scores a clean session bounded (all hygiene factors zero)", () => {
+    const s = ["task-sprawl", "task-pingpong", "reread-churn", "context-pinned", "cache-churn-late"].map((id) => row(id, 0));
+    const v = hygieneScore(s);
+    expect(v.verdict).toBe("bounded");
+    expect(v.score).toBeGreaterThanOrEqual(72);
+  });
+  it("scores a heavily-flagged session bloated", () => {
+    const s = [row("task-sprawl", 1), row("task-pingpong", 1), row("reread-churn", 1), row("context-pinned", 1), row("cache-churn-late", 1)];
+    const v = hygieneScore(s);
+    expect(v.verdict).toBe("bloated");
+    expect(v.score).toBeLessThan(48);
+  });
+  it("is monotonic: more flags never scores higher", () => {
+    const few = [row("task-sprawl", 1)];
+    const many = [row("task-sprawl", 1), row("context-pinned", 1), row("cache-churn-late", 1)];
+    expect(hygieneScore(many).score).toBeLessThanOrEqual(hygieneScore(few).score);
   });
 });

@@ -6,7 +6,7 @@
 // into one ever-growing window (vs. a bounded-but-long session, which is fine).
 // Same house pattern as the shipped detectors — pure SessionSequence -> findings,
 // degrade to [] on missing data, detail from counts/verbs only (never arg).
-import type { DetectorSpec, DetectorFinding } from "./detectors.js";
+import type { DetectorSpec, DetectorFinding, DetectorSummary } from "./detectors.js";
 import type { SessionSequence } from "./workflowScan.js";
 import { clusterOf } from "./taskCluster.js";
 import { contextCap } from "./contextCap.js";
@@ -117,3 +117,20 @@ export const cacheChurnLate: DetectorSpec = {
       series.slice(half).slice(0, 20).map((t) => t.msgIndex))];
   },
 };
+
+export interface HygieneVerdict { score: number; verdict: "bounded" | "mixed" | "bloated" }
+
+// Weights: pinning and late churn are the strongest window-health signals;
+// sprawl next; pingpong/reread are softer. Any fire deducts its weight once
+// (this is a per-report roll-up over DetectorSummary, not per-occurrence).
+const WEIGHTS: Record<string, number> = {
+  "context-pinned": 22, "cache-churn-late": 18, "task-sprawl": 18, "task-pingpong": 12, "reread-churn": 8,
+};
+
+export function hygieneScore(summaries: DetectorSummary[]): HygieneVerdict {
+  let score = 100;
+  for (const s of summaries) if (s.count > 0 && WEIGHTS[s.id]) score -= WEIGHTS[s.id];
+  score = Math.max(0, score);
+  const verdict = score >= 72 ? "bounded" : score >= 48 ? "mixed" : "bloated";
+  return { score, verdict };
+}
