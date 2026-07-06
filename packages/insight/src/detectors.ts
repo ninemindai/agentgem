@@ -178,7 +178,24 @@ const regressionCycle: DetectorSpec = {
   },
 };
 
-export const DETECTORS: DetectorSpec[] = [retryStorm, thrashLoop, noVerifyFinish, regressionCycle];
+const unverifiedTail: DetectorSpec = {
+  id: "unverified-tail",
+  title: "Edits after the last verification",
+  cost: "cheap",
+  severity: "info",
+  advice: "Re-run the tests or build after your final round of edits — changes made after the last verification are shipped unchecked, which is how a passing session still lands a regression.",
+  detect(session) {
+    let lastVerifyIdx = -1;
+    session.steps.forEach((s, idx) => { if (isVerify(s)) lastVerifyIdx = idx; });
+    if (lastVerifyIdx < 0) return [];                    // zero-verify case belongs to no-verify-finish
+    const tail = session.steps.slice(lastVerifyIdx + 1).filter(isEdit);
+    if (!tail.length) return [];
+    return [mkFinding(unverifiedTail, session,
+      `${tail.length} edit step(s) after the last verification`, tail.map((s) => s.msgIndex))];
+  },
+};
+
+export const DETECTORS: DetectorSpec[] = [retryStorm, thrashLoop, noVerifyFinish, regressionCycle, unverifiedTail];
 
 /**
  * Run every registered detector (plus any extras — e.g. compiled declarative

@@ -60,3 +60,20 @@ describe("regression-cycle", () => {
     expect(byId(runDetectors(signalOf(once)), "regression-cycle")).toHaveLength(0);
   });
 });
+
+describe("unverified-tail", () => {
+  it("fires when edits continue after the last verification", () => {
+    const s = session([edit("a.ts"), test_(), edit("a.ts"), edit("b.ts")]);
+    const found = byId(runDetectors(signalOf(s)), "unverified-tail");
+    expect(found).toHaveLength(1);
+    expect(found[0].detail).toContain("2 edit");
+    expect(found[0].severity).toBe("info");
+  });
+
+  it("stays quiet when the session ends verified, or never verified at all", () => {
+    const clean = session([edit("a.ts"), test_()]);
+    expect(byId(runDetectors(signalOf(clean)), "unverified-tail")).toHaveLength(0);
+    const neverVerified = session([edit("a.ts"), edit("b.ts")]);   // no-verify-finish's territory
+    expect(byId(runDetectors(signalOf(neverVerified)), "unverified-tail")).toHaveLength(0);
+  });
+});
