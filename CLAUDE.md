@@ -51,3 +51,32 @@ exception.
   it lands.
 - **Before finishing, confirm** your branch is ahead of `origin/main` *only* (not
   built on a stale/divergent local `main`).
+
+## PR lifecycle: one PR = one settled scope
+
+When a PR is the integration path, the thing that bites is **appending commits to
+a PR across many turns while it may already be merged**. A merge takes only the
+commits the PR held *at merge time* and closes it; later pushes to that branch land
+on the branch with no open PR to carry them to `main` — they're silently dropped
+from the trunk. This has bitten multi-commit PRs here twice (only the first commit
+landed both times).
+
+- **Don't grow one PR incrementally across turns.** When a new scope appears
+  ("now also make it X"), open a **new** PR off freshly-fetched `origin/main`
+  rather than piling more commits onto a branch whose PR you've already handed over
+  for review/merge — the reviewer may merge it the moment it looks done.
+- **`gh pr edit` succeeding is NOT proof the PR is open** — you can edit a *merged*
+  PR's body. Check `gh pr view <n> --json state` (want `OPEN`) before pushing
+  follow-on commits to its branch.
+- **After any merge, verify each commit's content is actually on `origin/main`** —
+  `git fetch` then grep `origin/main:<file>` for a marker from *every* commit, not
+  just the first. Don't trust the "merged" notification. If commits were dropped,
+  they're safe on the local branch: `git rebase origin/main` (already-merged commits
+  auto-skip) → fresh branch → new PR.
+- **Merge gating:** `main` requires the CI checks `test (24)` + `test (26)`; no
+  required reviews. Repo auto-merge is disabled, so `gh pr merge --rebase` only
+  works once CI is green — `gh run watch <run-id> --exit-status` first. Do **not**
+  `--admin`-bypass branch protection without explicit human say-so.
+- **`gh pr merge --delete-branch` will error** on the local branch-delete step
+  because `main` is checked out in another worktree — but the **remote merge still
+  succeeds**. Verify the merge landed; don't trust the error.
