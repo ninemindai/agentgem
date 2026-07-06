@@ -1,9 +1,13 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.location.hash = ""; });
 import { Dashboard } from "./Dashboard.js";
+import { Observe } from "./index.js";
 import type { ObservePayload } from "../../api/routes.js";
+
+const res = (body: unknown) =>
+  ({ ok: true, status: 200, text: async () => JSON.stringify(body) }) as unknown as Response;
 
 const payload: ObservePayload = {
   pulse: { sessions: 2, msgs: 12, tokens: 1_200_000, activeMs: 2.1 * 3_600_000 },
@@ -142,5 +146,16 @@ describe("Observe Dashboard", () => {
   it("omits the share row when no setup share is offered", () => {
     render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} apiBase="" />);
     expect(screen.queryByRole("button", { name: /share link/i })).toBeNull();
+  });
+});
+
+describe("Observe first-run", () => {
+  it("shows an oriented signpost when the local session log is empty", async () => {
+    window.location.hash = "#/inspect"; // not a drill-down selection route
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) =>
+      String(url).includes("/api/observe/raw") ? res({ sessions: [] }) : res({}),
+    ));
+    render(<Observe apiBase="" />);
+    expect(await screen.findByText(/nothing to inspect yet/i)).toBeTruthy();
   });
 });

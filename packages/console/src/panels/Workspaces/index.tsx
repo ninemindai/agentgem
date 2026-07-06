@@ -41,11 +41,18 @@ export function Workspaces({ apiBase }: { apiBase: string }) {
   const handleNewGem = () => { resetGem(); window.location.hash = "#/curate"; };
 
   if (items.length === 0) return (
-    <div>
-      <div className="ledger-bar">
+    <div className="ledger-empty-state">
+      <h3 className="ledger-empty-title">No gems yet — mine your first one</h3>
+      <p className="ledger-empty-text">
+        A gem bundles the skills, subagents, and rules you actually use. Start one from a session
+        in Curate, or grab one from the marketplace.
+      </p>
+      <div className="ledger-empty-cta">
         <button type="button" className="ledger-build" onClick={handleNewGem}>＋ New Gem</button>
+        <button type="button" className="ledger-sort" onClick={() => { window.location.hash = "#/gems/market"; }}>
+          Browse marketplace →
+        </button>
       </div>
-      <p className="ledger-empty">No saved workspaces yet.</p>
     </div>
   );
 
