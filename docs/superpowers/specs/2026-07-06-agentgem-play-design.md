@@ -368,3 +368,63 @@ Rides the existing gem pipeline with zero new transport:
   (`src/goldmine/mcpServer.ts`), `packages/insight/src/{sources,skillsRegistry}.ts`.
 - Gem model: `packages/model/src/types.ts` (Gem/artifact union),
   `gemTypes.ts` (cuts); publish/share `packages/console/src/api/routes.ts:680-689`.
+
+---
+
+## Revision 2026-07-06 — Storage, Studio & decomposition (supersedes the persistence + generation UX above)
+
+Design evolved during Plan-2 planning. The **artifact model, cut, gate, and permission
+ladder (Plan 1, landed) are unchanged.** What changed is *where miniapps live* and *how
+they're built*. "Game" remains the only artifact type; "miniapp" is the umbrella term for
+these self-contained interactive HTML artifacts (a game is one kind). No artifact-type
+generalization — decided to keep `game` for now.
+
+### Storage — a git-backed miniapps registry, dual-written with the gem store
+
+Miniapps live in a **local git repository** at `~/.agentgem/miniapps/` (sibling of
+`~/.agentgem/workspaces/`, same `AGENTGEM_HOME` convention as `workspacesRoot()`):
+
+```
+~/.agentgem/miniapps/            ← a git repo (git remote → a shared registry)
+  <name>/<name>.html             ← the sealed, self-contained bundle
+  <name>/meta.json               ← { title, genre, createdFrom, needs?, engineVersion }
+```
+
+On **save**, the bundle is **dual-written**: (1) into the miniapps git repo (`git add` +
+`git commit`), and (2) as a one-artifact `game` gem via `createWorkspace(name, gem)` — kept
+in sync so a miniapp is simultaneously a shareable HTML file *and* a marketplace-capable gem.
+**Publish/share = `git push`** to a remote registry (the local repo's `origin`). Note: the
+existing "GitHub registry" (`packages/distribute`) is pure HTTP over GitHub's API with **no
+local-git plumbing** — so the miniapps registry gets a **new thin `child_process` git
+wrapper** (`spawn("git", …)`; no new dependency, git-on-PATH required). `gameGate` runs as the
+admission check **before** each commit; a bundle that fails the gate is never committed.
+
+### Studio — reuse the ACP Chat tab, seeded by source
+
+Building/updating a miniapp is an **interactive Chat session**, not a one-shot endpoint. Pick
+a source (session/skill/project) + genre → the miniapp dir is created and seeded (scaffold +
+`sourceContext` brief) → an **ACP Chat session opens rooted in that miniapp dir** → the agent
+writes/edits `<name>.html` while a **live sealed-iframe preview** (Plan-3 `Runner`, reusing
+`Watch/sandboxDoc.ts`) updates → you refine by chatting → gate → commit (dual-write).
+
+Reality from recon: `ChatManager.openChat({ cwd, brief, mcpServers })`
+(`packages/run/src/chatSession.ts:69`) already takes `cwd` + `brief` as first-class params,
+but the production wiring (`src/index.ts:304-319`) **forces a single shared `~/.agentgem/chat`
+cwd** and the console `Chat` + `POST /api/chat` accept only `{agentId}`. So the studio needs
+new wiring: a `studioId`/miniapp target on `POST /api/chat`, server-side resolved to a
+**validated** path under `~/.agentgem/miniapps/<name>/` (mirror `workspaceName`/
+`safePathSegment`), threaded as `cwd` into a new connectFn wrapper — preserving the current
+"never trust a raw path from the request" invariant. The one-shot self-repair `generateGame`
+loop is **dropped**: Chat drives generation interactively; the scaffold + brief only *seed*.
+
+### Decomposition of the remaining work (each its own plan, off fresh `origin/main`)
+
+- **Plan 2 — Miniapps registry + dual-write + gate** (bounded, temp-dir-testable): the
+  `child_process` git wrapper, the `~/.agentgem/miniapps/` store (`<name>/<name>.html` +
+  `meta.json`), dual-write to the workspace gem, gate-on-commit, and `save`/`list`/`publish`
+  (git-push) routes. Keeps the genres / sealed scaffolds / `sourceContext` foundation.
+- **Plan 2b — Chat studio wiring**: per-miniapp validated `cwd` + seed `brief` threaded
+  through `POST /api/chat` → `ChatManager.openChat` → connectFn; console "open Chat in studio
+  mode" targeting a miniapp; live preview.
+- **Plan 3 — Play console surface**: Composer (source→genre→open studio), Arcade (grid of
+  miniapps), permission chips + consent + brokers, publish/share UI.
