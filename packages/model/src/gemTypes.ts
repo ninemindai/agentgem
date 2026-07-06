@@ -30,6 +30,8 @@ export const BUILTIN_CUTS: GemTypeSpec[] = [
     matches: (g) => kindsOf(g).has("mcp_server") },
   { id: "guide", label: "Guide", gemstone: "Topaz", order: 40,
     matches: (g) => g.artifacts.length > 0 && g.artifacts.every((a) => a.type === "instructions") },
+  { id: "game", label: "Game", gemstone: "Ruby", order: 45,
+    matches: (g) => g.artifacts.length > 0 && g.artifacts.every((a) => a.type === "game") },
   { id: "skill", label: "Skill", gemstone: "Emerald", order: 50,
     matches: (g) => g.artifacts.length > 0 && g.artifacts.every((a) => a.type === "skill") },
   { id: "kit", label: "Kit", gemstone: "Amethyst", order: 99, matches: () => true },

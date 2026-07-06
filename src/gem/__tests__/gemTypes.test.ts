@@ -8,6 +8,11 @@ const skill = (name: string, source = "standalone"): GemArtifact => ({ type: "sk
 const mcp = (name: string): GemArtifact => ({ type: "mcp_server", name, transport: "stdio", config: {} });
 const instr = (name: string): GemArtifact => ({ type: "instructions", name, content: "x" });
 const hook = (name: string): GemArtifact => ({ type: "hook", name, event: "PreToolUse", config: {} });
+const game = (name: string): GemArtifact => ({
+  type: "game", name, title: name, genre: "replay",
+  html: "<!doctype html>", engineVersion: "1",
+  createdFrom: { kind: "session", agent: "claude", sessionId: "s", summary: "x" },
+});
 
 const d = (g: Gem) => deriveCut(BUILTIN_CUTS, g);
 
@@ -27,6 +32,12 @@ describe("deriveCut", () => {
   it("skill — only skills (non-distilled)", () => {
     expect(d(gem([skill("a"), skill("b")]))).toBe("skill");
   });
+  it("game — only game artifacts", () => {
+    expect(d(gem([game("a"), game("b")]))).toBe("game");
+  });
+  it("kit — a game mixed with a skill is not a game cut", () => {
+    expect(d(gem([game("a"), skill("b")]))).toBe("kit");
+  });
   it("kit — a mixed 2-kind bundle (the fallback)", () => {
     expect(d(gem([skill("a"), instr("b")]))).toBe("kit");
   });
@@ -36,9 +47,10 @@ describe("deriveCut", () => {
 });
 
 describe("BUILTIN_CUTS", () => {
-  it("has the 6 cuts with stable ids, gemstones, and ascending order", () => {
-    expect(BUILTIN_CUTS.map((c) => c.id)).toEqual(["playbook", "setup", "integration", "guide", "skill", "kit"]);
+  it("has the 7 cuts with stable ids, gemstones, and ascending order", () => {
+    expect(BUILTIN_CUTS.map((c) => c.id)).toEqual(["playbook", "setup", "integration", "guide", "game", "skill", "kit"]);
     expect(BUILTIN_CUTS.find((c) => c.id === "playbook")!.gemstone).toBe("Pearl");
+    expect(BUILTIN_CUTS.find((c) => c.id === "game")!.gemstone).toBe("Ruby");
     expect(BUILTIN_CUTS.find((c) => c.id === "kit")!.gemstone).toBe("Amethyst");
   });
 });
