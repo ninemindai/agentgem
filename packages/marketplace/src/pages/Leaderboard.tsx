@@ -9,6 +9,7 @@ import type { StarState } from "../stars";
 const KINDS = [
   { value: "all", label: "All" },
   { value: "skill", label: "Skill" },
+  { value: "subagent", label: "Subagent" },
   { value: "mcp", label: "MCP" },
 ];
 

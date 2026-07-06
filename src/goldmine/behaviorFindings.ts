@@ -58,7 +58,7 @@ export function collectBehaviorFindings(opts: BehaviorFindingsOptions = {}): Beh
     if (paths.length === 0) return empty(days);
 
     // All-projects inventory stub — same shape computeInsights uses for root "*".
-    const inv = { project: { root: "*", name: "All projects", skills: [], mcpServers: [], hooks: [], instructions: [] } };
+    const inv = { project: { root: "*", name: "All projects", skills: [], mcpServers: [], hooks: [], instructions: [], subagents: [] } };
     const signal = scanWorkflow(paths, inv, { retainSequences: true });
     const ruleSpecs = loadRuleDetectors(opts.rulesDir);
     const findings = runDetectors(signal, ruleSpecs);

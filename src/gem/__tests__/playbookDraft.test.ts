@@ -4,7 +4,7 @@ import { buildPlaybookGem } from "../../playbookDraft.js";
 import { deriveCut, BUILTIN_CUTS } from "@agentgem/model";
 import type { DistilledSkill, DistilledLesson } from "@agentgem/insight";
 
-const emptyInv = { skills: [], mcpServers: [], instructions: [], hooks: [] };
+const emptyInv = { skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [] };
 const skill = (name: string): DistilledSkill => ({
   name, description: "d", triggers: ["t"], tools: ["Bash"], mutating: false, body: "## Contract\n",
   evidence: { sessions: 2, exampleSequence: [], root: "/r", provenance: { occurrences: [] } },

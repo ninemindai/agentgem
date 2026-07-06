@@ -11,7 +11,7 @@ function short(path: string): string {
   return parts.length > 3 ? "…/" + parts.slice(-3).join("/") : path;
 }
 
-const TYPE_LABEL: Record<string, string> = { skill: "skill", mcp_server: "mcp", instructions: "instructions", hook: "hook", channel: "channel" };
+const TYPE_LABEL: Record<string, string> = { skill: "skill", subagent: "subagent", mcp_server: "mcp", instructions: "instructions", hook: "hook", channel: "channel" };
 const prettyType = (t: string): string => TYPE_LABEL[t] ?? t;
 
 /** "Suggest a gem from a project": discovered projects, each analyzed in one click;

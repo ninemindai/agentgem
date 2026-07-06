@@ -8,7 +8,7 @@ import { join } from "node:path";
 
 const inventory = { skills: [{ type: "skill" as const, name: "qa", source: "@acme/qa", content: "B" }],
   mcpServers: [{ type: "mcp_server" as const, name: "gh", transport: "stdio" as const, config: { command: "npx", args: ["@modelcontextprotocol/server-github"] } }],
-  instructions: [], hooks: [] };
+  instructions: [], hooks: [], subagents: [] };
 const signal = { root: "/p", flavor: "claude" as const, sessions: { scanned: 1, firstMs: 0, lastMs: 0, spanDays: 0 },
   artifacts: [{ type: "mcp_server" as const, name: "gh", root: null, invocations: 3, sessionsUsedIn: 1, lastUsedMs: 0, confidence: "high" as const }],
   unresolved: [], coOccurrence: [], shapes: [], notes: [], models: [{ id: "claude-opus-4-8", sessions: 1 }] };
@@ -127,8 +127,8 @@ describe("scan inventory resolution (regression: global ingredients must resolve
   it("scanInventoryFor wires global skills/mcps into the scan inventory", () => {
     const globalInv = { skills: [{ type: "skill" as const, name: "brainstorming", source: "x", content: "y" }],
       mcpServers: [{ type: "mcp_server" as const, name: "context7", transport: "stdio" as const, config: {} }],
-      instructions: [], hooks: [] };
-    const project = { root: "/p", name: "p", skills: [], mcpServers: [], instructions: [], hooks: [] };
+      instructions: [], hooks: [], subagents: [] };
+    const project = { root: "/p", name: "p", skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [] };
     const inv = scanInventoryFor(globalInv, project);
     expect(inv.global.skills.map((s) => s.name)).toContain("brainstorming");
     expect(inv.global.mcpServers.map((m) => m.name)).toContain("context7");
@@ -141,8 +141,8 @@ describe("scan inventory resolution (regression: global ingredients must resolve
     writeFileSync(file, JSON.stringify({ cwd: "/p",
       message: { role: "assistant", content: [{ type: "tool_use", name: "Skill", input: { skill: "superpowers:brainstorming" } }] } }) + "\n");
     const globalInv = { skills: [{ type: "skill" as const, name: "brainstorming", source: "x", content: "y" }],
-      mcpServers: [], instructions: [], hooks: [] };
-    const project = { root: "/p", name: "p", skills: [], mcpServers: [], instructions: [], hooks: [] };
+      mcpServers: [], instructions: [], hooks: [], subagents: [] };
+    const project = { root: "/p", name: "p", skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [] };
     const signal = scanWorkflow([file], scanInventoryFor(globalInv, project), {});
     const art = signal.artifacts.find((a) => a.name === "brainstorming");
     expect(art).toBeDefined();

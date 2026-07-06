@@ -23,9 +23,9 @@ export function scaffoldTestbed(root: string, name: string, flavor: TestbedFlavo
   return { root, created };
 }
 
-export interface ImportedRef { type: "skill" | "mcp_server" | "instructions" | "hook"; name: string; overwritten: boolean }
+export interface ImportedRef { type: "skill" | "subagent" | "mcp_server" | "instructions" | "hook"; name: string; overwritten: boolean }
 export interface ImportSkip { artifact: string; reason: string }
-export interface ImportSelection { skills?: string[]; mcpServers?: string[]; hooks?: string[]; includeInstructions?: boolean }
+export interface ImportSelection { skills?: string[]; subagents?: string[]; mcpServers?: string[]; hooks?: string[]; includeInstructions?: boolean }
 
 function marker(name: string): { open: string; close: string } {
   return { open: `<!-- agentgem:imported ${name} -->`, close: `<!-- /agentgem:end ${name} -->` };
@@ -63,6 +63,17 @@ export function importArtifacts(root: string, selection: ImportSelection, rawInv
     mkdirSync(dirname(join(root, rel)), { recursive: true });
     writeFileSync(join(root, rel), sk.content, "utf8");
     written.push({ type: "skill", name, overwritten });
+  }
+
+  for (const name of selection.subagents ?? []) {
+    const sa = rawInv.subagents.find((s) => s.name === name);
+    if (!sa) { skipped.push({ artifact: name, reason: "not found in global inventory" }); continue; }
+    if (!imp.agentRel) { skipped.push({ artifact: name, reason: `${label} has no subagents` }); continue; }
+    const rel = imp.agentRel(name);
+    const overwritten = existsSync(join(root, rel));
+    mkdirSync(dirname(join(root, rel)), { recursive: true });
+    writeFileSync(join(root, rel), sa.content, "utf8"); // full definition, verbatim
+    written.push({ type: "subagent", name, overwritten });
   }
 
   if (selection.includeInstructions) {

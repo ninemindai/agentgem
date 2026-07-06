@@ -35,7 +35,7 @@ describe("scaffoldTestbed", () => {
 });
 
 function inv(partial: Partial<ConfigInventory>): ConfigInventory {
-  return { skills: [], mcpServers: [], instructions: [], hooks: [], ...partial };
+  return { skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [], ...partial };
 }
 
 describe("importArtifacts — skills + instructions", () => {
@@ -91,7 +91,7 @@ describe("importArtifacts — mcp + hooks + containment", () => {
     importArtifacts(root, { mcpServers: ["gh"] }, rawMcp);
     // package the testbed: introspectProject redacts again
     const proj = introspectProject(root);
-    const gem = buildGem({ skills: [], mcpServers: [], instructions: [], hooks: [], projects: [proj] },
+    const gem = buildGem({ skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [], projects: [proj] },
       { projects: { [root]: { mcpServers: ["gh"] } } }, { name: "g" });
     expect(JSON.stringify(gem)).not.toContain("ghp_realsecretvalue"); // never leaks into the Gem
     expect(gem.requiredSecrets).toContainEqual({ name: "GH_TOKEN", artifact: "gh", location: "env.GH_TOKEN" });
@@ -161,10 +161,25 @@ describe("importArtifacts — flavors", () => {
     expect(JSON.parse(readFileSync(join(root, ".claude", "settings.json"), "utf8")).hooks.PreToolUse).toHaveLength(1);
   });
 
+  it("claude import writes a subagent to .claude/agents/<name>.md verbatim; codex skip-reports it", () => {
+    const withAgent = raw({ subagents: [{ type: "subagent", name: "reviewer", source: "user", content: "---\nname: reviewer\n---\nYou review.", tools: ["Read"], model: "sonnet" }] });
+    scaffoldTestbed(root, "x");
+    const r = importArtifacts(root, { subagents: ["reviewer"] }, withAgent);
+    expect(readFileSync(join(root, ".claude", "agents", "reviewer.md"), "utf8")).toBe("---\nname: reviewer\n---\nYou review.");
+    expect(r.written).toContainEqual({ type: "subagent", name: "reviewer", overwritten: false });
+
+    const cxRoot = mkdtempSync(join(tmpdir(), "tb-cx-"));
+    scaffoldTestbed(cxRoot, "x", "codex");
+    const cx = importArtifacts(cxRoot, { subagents: ["reviewer"] }, withAgent, "codex");
+    expect(existsSync(join(cxRoot, ".claude", "agents", "reviewer.md"))).toBe(false);
+    expect(cx.skipped).toContainEqual({ artifact: "reviewer", reason: "Codex has no subagents" });
+    rmSync(cxRoot, { recursive: true, force: true });
+  });
+
   it("CONTAINMENT (codex): raw secret in testbed, redacted in the packaged Gem", () => {
     scaffoldTestbed(root, "x", "codex");
     importArtifacts(root, { mcpServers: ["gh"] }, raw(), "codex");
-    const gem = buildGem({ skills: [], mcpServers: [], instructions: [], hooks: [], projects: [introspectProject(root)] },
+    const gem = buildGem({ skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [], projects: [introspectProject(root)] },
       { projects: { [root]: { mcpServers: ["gh"] } } }, { name: "g" });
     expect(JSON.stringify(gem)).not.toContain("ghp_realsecret");
     expect(gem.requiredSecrets).toContainEqual({ name: "GH_TOKEN", artifact: "gh", location: "env.GH_TOKEN" });

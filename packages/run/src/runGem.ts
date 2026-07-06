@@ -143,12 +143,13 @@ export async function resolveOrFetchAdapter(adapter: AgentAdapter, opts: Resolve
 // Partition a Gem's flat artifact list into the inventory shape importArtifacts wants.
 // A Gem is self-contained (each artifact carries its content), so no disk read needed.
 export function gemToInventory(gem: Gem): ConfigInventory {
-  const inv: ConfigInventory = { skills: [], mcpServers: [], instructions: [], hooks: [] };
+  const inv: ConfigInventory = { skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [] };
   for (const a of gem.artifacts) {
     if (a.type === "skill") inv.skills.push(a);
     else if (a.type === "mcp_server") inv.mcpServers.push(a);
     else if (a.type === "instructions") inv.instructions.push(a);
     else if (a.type === "hook") inv.hooks.push(a);
+    else if (a.type === "subagent") inv.subagents.push(a);
   }
   return inv;
 }
@@ -166,6 +167,7 @@ export function materializeGemToTestbed(
   const inv = gemToInventory(gem);
   const selection = {
     skills: inv.skills.map((s) => s.name),
+    subagents: inv.subagents.map((s) => s.name),
     mcpServers: inv.mcpServers.map((s) => s.name),
     hooks: inv.hooks.map((h) => h.name),
     includeInstructions: inv.instructions.length > 0,

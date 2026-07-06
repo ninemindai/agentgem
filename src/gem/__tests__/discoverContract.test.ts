@@ -6,7 +6,7 @@ describe("DiscoverPayload contract", () => {
   it("accepts a real buildDiscover payload", async () => {
     const search = (async () => ([{ id: "a/b/x", skillId: "x", name: "x", source: "a/b", installs: 5 }] as RegistrySkill[])) as never;
     const usage = new Map([["skill:t", { type: "skill" as const, name: "t", root: null, invocations: 3, sessionsUsedIn: 1, lastUsedMs: 1, confidence: "high" as const }]]);
-    const payload = await buildDiscover(usage, { skills: [], mcpServers: [], instructions: [], hooks: [] }, { search });
+    const payload = await buildDiscover(usage, { skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [] }, { search });
     expect(() => DiscoverPayloadSchema.parse(payload)).not.toThrow();
   });
 

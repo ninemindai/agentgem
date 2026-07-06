@@ -16,6 +16,7 @@ export const InventorySchema = z.object({
   mcpServers: z.array(ArtifactSchema),
   instructions: z.array(ArtifactSchema),
   hooks: z.array(ArtifactSchema),
+  subagents: z.array(ArtifactSchema),
   projects: z.array(z.unknown()).optional(),
 });
 const UsageItemSchema = z.object({
@@ -79,6 +80,7 @@ const GemSelectionSchema = z.union([
     includeInstructions: z.boolean().optional(),
     instructions: z.array(z.string()).optional(),
     hooks: z.array(z.string()).optional(),
+    subagents: z.array(z.string()).optional(),
   }),
 ]);
 
@@ -91,6 +93,7 @@ const WorkspaceSummarySchema = z.object({
     mcp_server: z.number(),
     instructions: z.number(),
     hook: z.number(),
+    subagent: z.number(),
   }),
   // (type, name) of each artifact — lets "Open" restore the gem's selection.
   artifacts: z.array(z.object({ type: z.string(), name: z.string() })),

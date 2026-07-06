@@ -18,9 +18,11 @@ describe("wire schemas", () => {
       mcpServers: [{ type: "mcp_server", name: "gh", transport: "stdio", config: { env: { T: "<redacted>" } } }],
       instructions: [{ type: "instructions", name: "CLAUDE.md", content: "y" }],
       hooks: [{ type: "hook", name: "PreToolUse · Bash", event: "PreToolUse", matcher: "Bash", config: { hooks: [] }, source: "user" }],
+      subagents: [{ type: "subagent", name: "reviewer", source: "user", content: "z", tools: ["Read"], model: "sonnet" }],
     });
     expect(parsed.skills[0].name).toBe("review");
     expect(parsed.hooks[0].event).toBe("PreToolUse");
+    expect(parsed.subagents[0]).toMatchObject({ name: "reviewer", tools: ["Read"], model: "sonnet" });
   });
 
   it("validates a gem-request with an all selection", () => {
@@ -133,7 +135,7 @@ describe("workspace schemas", () => {
   it("validates a workspace summary", () => {
     expect(WorkspaceSummarySchema.safeParse({
       name: "mp", gemName: "demo", version: "0.1.0",
-      artifactCounts: { skill: 1, mcp_server: 0, instructions: 1, hook: 0 },
+      artifactCounts: { skill: 1, mcp_server: 0, instructions: 1, hook: 0, subagent: 0 },
       artifacts: [{ type: "skill", name: "pdf" }, { type: "instructions", name: "rules" }],
       modifiedMs: 1_700_000_000_000,
       checks: 0, renderedTargets: ["eve"],

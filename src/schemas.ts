@@ -50,6 +50,16 @@ export const HookArtifactSchema = z.object({
   secretRefs: z.array(z.object({ name: z.string(), location: z.string() })).optional(),
 });
 
+export const SubagentArtifactSchema = z.object({
+  type: z.literal("subagent"),
+  name: z.string(),
+  description: z.string().optional(),
+  source: z.string(),
+  content: z.string(),
+  tools: z.array(z.string()).optional(),
+  model: z.string().optional(),
+});
+
 export const ChannelPlatformSchema = z.enum(["slack", "telegram", "discord", "teams", "twilio", "github"]);
 
 export const ChannelArtifactSchema = z.object({
@@ -74,7 +84,7 @@ export const ArtifactRefSchema = z.object({
 export const ReferenceArtifactSchema = z.object({
   type: z.literal("reference"),
   name: z.string(),
-  refKind: z.enum(["skill", "mcp_server", "instructions", "hook", "channel"]),
+  refKind: z.enum(["skill", "mcp_server", "instructions", "hook", "channel", "subagent"]),
   ref: ArtifactRefSchema,
 });
 
@@ -84,6 +94,7 @@ export const GemArtifactSchema = z.discriminatedUnion("type", [
   InstructionsArtifactSchema,
   HookArtifactSchema,
   ChannelArtifactSchema,
+  SubagentArtifactSchema,
   ReferenceArtifactSchema,
 ]);
 
@@ -131,6 +142,7 @@ export const ProjectInventorySchema = z.object({
   mcpServers: z.array(McpServerArtifactSchema),
   instructions: z.array(InstructionsArtifactSchema),
   hooks: z.array(HookArtifactSchema),
+  subagents: z.array(SubagentArtifactSchema),
 });
 
 export const InventorySchema = z.object({
@@ -138,6 +150,7 @@ export const InventorySchema = z.object({
   mcpServers: z.array(McpServerArtifactSchema),
   instructions: z.array(InstructionsArtifactSchema),
   hooks: z.array(HookArtifactSchema),
+  subagents: z.array(SubagentArtifactSchema),
   projects: z.array(ProjectInventorySchema).optional(),
 });
 
@@ -161,6 +174,7 @@ const ProjectSelectionSchema = z.record(
     includeInstructions: z.boolean().optional(),
     instructions: z.array(z.string()).optional(),
     hooks: z.array(z.string()).optional(),
+    subagents: z.array(z.string()).optional(),
   }),
 );
 
@@ -172,6 +186,7 @@ export const GemSelectionSchema = z.union([
     includeInstructions: z.boolean().optional(),
     instructions: z.array(z.string()).optional(),
     hooks: z.array(z.string()).optional(),
+    subagents: z.array(z.string()).optional(),
     projects: ProjectSelectionSchema.optional(),
   }),
 ]);
@@ -255,7 +270,7 @@ export const TargetIdSchema = z.enum(TARGET_IDS);
 
 export const SkippedArtifactSchema = z.object({
   artifact: z.string(),
-  type: z.enum(["skill", "mcp_server", "instructions", "hook", "channel", "reference"]),
+  type: z.enum(["skill", "mcp_server", "instructions", "hook", "channel", "subagent", "reference"]),
   reason: z.string(),
 });
 
@@ -275,11 +290,13 @@ export const GemLockSchema = z.object({
 });
 
 export const GemManifestArtifactSchema = z.object({
-  type: z.enum(["skill", "mcp_server", "instructions", "hook", "channel"]),
+  type: z.enum(["skill", "mcp_server", "instructions", "hook", "channel", "subagent"]),
   name: z.string(),
   path: z.string(),
   description: z.string().optional(),
   source: z.string().optional(),
+  tools: z.array(z.string()).optional(),
+  model: z.string().optional(),
 });
 
 export const GemManifestSchema = z.object({
@@ -501,7 +518,7 @@ export const WorkspaceSummarySchema = z.object({
   name: z.string(),
   gemName: z.string(),
   version: z.string(),
-  artifactCounts: z.object({ skill: z.number(), mcp_server: z.number(), instructions: z.number(), hook: z.number() }),
+  artifactCounts: z.object({ skill: z.number(), mcp_server: z.number(), instructions: z.number(), hook: z.number(), subagent: z.number() }),
   artifacts: z.array(z.object({ type: z.string(), name: z.string() })),
   modifiedMs: z.number(),
   checks: z.number(),
@@ -611,8 +628,8 @@ export const TestbedImportRequestSchema = z.object({
   flavor: TestbedFlavorIdSchema.optional(),
 });
 export const ImportedRefSchema = z.object({
-  // mirrors ArtifactType (incl. "channel") — ImportedRef.type is ArtifactType, so this must stay in sync
-  type: z.enum(["skill", "mcp_server", "instructions", "hook", "channel"]),
+  // mirrors testbed ImportedRef.type — keep in sync when the importer gains a new artifact kind
+  type: z.enum(["skill", "subagent", "mcp_server", "instructions", "hook", "channel"]),
   name: z.string(),
   overwritten: z.boolean(),
 });

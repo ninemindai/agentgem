@@ -77,7 +77,7 @@ const INV = {
   project: {
     root: "/r", name: "app",
     skills: [{ type: "skill" as const, name: "existing-skill", source: "project" as const, content: "x" }],
-    mcpServers: [], instructions: [], hooks: [],
+    mcpServers: [], instructions: [], hooks: [], subagents: [],
   },
 };
 const CANDIDATES: GatedCandidate[] = [{

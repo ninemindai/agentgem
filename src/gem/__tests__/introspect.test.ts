@@ -46,8 +46,12 @@ beforeEach(() => {
   skill(join(pPath, "skills"), "review", "---\nname: review\ndescription: PLUGIN review\n---\ndup");
   mkdirSync(join(pPath, "hooks"), { recursive: true });
   writeFileSync(join(pPath, "hooks", "hooks.json"), JSON.stringify({ hooks: { SessionStart: [{ matcher: "startup", hooks: [{ type: "command", command: "node x.mjs" }] }] } }));
+  mkdirSync(join(pPath, "agents"), { recursive: true });
+  writeFileSync(join(pPath, "agents", "pagent.md"), "---\nname: pagent\ndescription: Plugin agent\n---\nprompt");
   writeFileSync(join(qPath, ".mcp.json"), JSON.stringify({ qsrv: { command: "no" } }));
 
+  mkdirSync(join(dir, "agents"), { recursive: true });
+  writeFileSync(join(dir, "agents", "deployer.md"), "---\nname: deployer\ndescription: Ships releases\ntools: Bash\n---\nYou ship.");
   writeFileSync(join(dir, "CLAUDE.md"), "global instructions");
   skill(agentDir, "agentskill", "---\nname: agentskill\ndescription: From agent dir\n---\nz");
 
@@ -80,6 +84,16 @@ describe("introspectConfig (multi-source)", () => {
     expect(byName["agentskill"].source).toBe("agent");
   });
 
+  it("collects subagents from user (~/.claude/agents) + enabled plugin, tagged by source", () => {
+    const inv = introspectConfig({ claudeDir: dir, agentDir, codexDir, hermesDir });
+    const byName = Object.fromEntries(inv.subagents.map((s) => [s.name, s]));
+    expect(byName["deployer"].source).toBe("user");
+    expect(byName["deployer"].tools).toEqual(["Bash"]);
+    expect(byName["deployer"].description).toBe("Ships releases");
+    expect(byName["pagent"].source).toBe("plugin:p@mp");
+    expect(byName["pagent"].tools).toBeUndefined(); // no tools frontmatter → inherit all
+  });
+
   it("collects MCP servers from user + enabled plugin (.mcp.json bare map), redacted, sourced; skips disabled plugins", () => {
     const inv = introspectConfig({ claudeDir: dir, agentDir, codexDir, hermesDir });
     const byName = Object.fromEntries(inv.mcpServers.map((m) => [m.name, m]));
@@ -101,7 +115,7 @@ describe("introspectConfig (multi-source)", () => {
       codexDir: join(codexDir, "nope"),
       hermesDir: join(hermesDir, "nope"),
     });
-    expect(empty).toEqual({ skills: [], mcpServers: [], instructions: [], hooks: [] });
+    expect(empty).toEqual({ skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [] });
   });
 
   it("collects hooks from an enabled plugin's hooks/hooks.json, tagged by source", () => {

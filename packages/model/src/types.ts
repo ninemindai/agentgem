@@ -1,7 +1,7 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 // src/gem/types.ts
-export type ArtifactType = "skill" | "mcp_server" | "instructions" | "hook" | "channel";
+export type ArtifactType = "skill" | "mcp_server" | "instructions" | "hook" | "channel" | "subagent";
 
 export interface SecretRef {
   name: string;     // leaf key, e.g. "OPENAI_API_KEY"
@@ -23,6 +23,21 @@ export interface SkillArtifact {
   source: string;
   content: string;
   trigger?: TriggerContract;
+}
+
+// A Claude Code subagent — a `.claude/agents/<name>.md` definition (frontmatter +
+// system-prompt body). Structurally skill-like, but a distinct primitive: invoked via
+// the Task tool rather than auto-triggered, and it carries a tool allowlist / model
+// override. `content` is the full file (verbatim, for lossless re-materialization);
+// `tools`/`model`/`description` are parsed out for discovery. `tools` absent = inherit all.
+export interface SubagentArtifact {
+  type: "subagent";
+  name: string;
+  description?: string;
+  source: string;
+  content: string;
+  tools?: string[];
+  model?: string;
 }
 
 export interface McpServerArtifact {
@@ -79,7 +94,7 @@ export interface ReferenceArtifact {
   ref: ArtifactRef;
 }
 
-export type GemArtifact = SkillArtifact | McpServerArtifact | InstructionsArtifact | HookArtifact | ChannelArtifact | ReferenceArtifact;
+export type GemArtifact = SkillArtifact | McpServerArtifact | InstructionsArtifact | HookArtifact | ChannelArtifact | SubagentArtifact | ReferenceArtifact;
 
 export interface ProjectInventory {
   root: string;
@@ -88,6 +103,7 @@ export interface ProjectInventory {
   mcpServers: McpServerArtifact[];
   instructions: InstructionsArtifact[];
   hooks: HookArtifact[];
+  subagents: SubagentArtifact[];
 }
 
 export interface ConfigInventory {
@@ -95,6 +111,7 @@ export interface ConfigInventory {
   mcpServers: McpServerArtifact[];
   instructions: InstructionsArtifact[];
   hooks: HookArtifact[];
+  subagents: SubagentArtifact[];
   projects?: ProjectInventory[];
 }
 

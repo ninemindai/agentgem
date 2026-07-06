@@ -11,6 +11,7 @@ const inv: ConfigInventory = {
   mcpServers: [{ type: "mcp_server", name: "gh", transport: "stdio", config: { env: { GH_TOKEN: "<redacted>" } }, secretRefs: [{ name: "GH_TOKEN", location: "env.GH_TOKEN" }] }],
   instructions: [{ type: "instructions", name: "CLAUDE.md", content: "x" }],
   hooks: [{ type: "hook", name: "PreToolUse · Bash", event: "PreToolUse", matcher: "Bash", config: { hooks: [] }, source: "user" }],
+  subagents: [],
 };
 
 describe("buildGem", () => {
@@ -56,6 +57,19 @@ describe("buildGem", () => {
     expect(gem.artifacts[0].name).toBe("PreToolUse · Bash");
   });
 
+  it("selects a subagent by name, carrying tools/model; unknown name is a 400", () => {
+    const inv2: ConfigInventory = {
+      ...inv,
+      subagents: [{ type: "subagent", name: "reviewer", source: "user", content: "body", tools: ["Read"], model: "sonnet" }],
+    };
+    const gem = buildGem(inv2, { subagents: ["reviewer"] });
+    expect(gem.artifacts.map((a) => a.type)).toEqual(["subagent"]);
+    expect(gem.artifacts[0]).toMatchObject({ name: "reviewer", tools: ["Read"], model: "sonnet" });
+    // { all: true } sweeps subagents in alongside the rest.
+    expect(buildGem(inv2, { all: true }).artifacts.some((a) => a.type === "subagent")).toBe(true);
+    expect(() => buildGem(inv2, { subagents: ["nope"] })).toThrow(/subagent/i);
+  });
+
   it("throws listing available names on an unknown selection", () => {
     expect(() => buildGem(inv, { skills: ["nope"] })).toThrow(/Available: review, plan/);
   });
@@ -76,7 +90,7 @@ describe("buildGem", () => {
     expect400(() => buildGem(inv, { mcpServers: ["nope"] }));
     expect400(() => buildGem(inv, { hooks: ["nope"] }));
     // The reproduced agentback case: a project-scoped skill absent from the project's inventory.
-    const withProj: ConfigInventory = { ...inv, projects: [{ root: "/p/agentback", name: "agentback", skills: [], mcpServers: [], instructions: [], hooks: [] }] };
+    const withProj: ConfigInventory = { ...inv, projects: [{ root: "/p/agentback", name: "agentback", skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [] }] };
     const e = expect400(() => buildGem(withProj, { projects: { "/p/agentback": { skills: ["agentback"] } } }));
     expect(e.message).toMatch(/No skill 'agentback' in project 'agentback'/);
     // Unknown project root is also a bad request.
@@ -116,7 +130,7 @@ describe("buildGem", () => {
   // introspectConfig({redact:false}) produces) must still yield a redacted gem, even via {all:true}.
   it("re-redacts raw artifacts that arrive without secretRefs (e.g. all:true over a raw inventory)", () => {
     const rawInv: ConfigInventory = {
-      skills: [], instructions: [], hooks: [],
+      skills: [], instructions: [], hooks: [], subagents: [],
       mcpServers: [{ type: "mcp_server", name: "gh", transport: "stdio", config: { env: { GH_TOKEN: "ghp_realsecretvalue" } }, source: "user" }],
     };
     const gem = buildGem(rawInv, { all: true }, { name: "g" });
@@ -144,7 +158,7 @@ describe("buildGem", () => {
   });
 
   describe("declared channels", () => {
-    const emptyInv = { skills: [], mcpServers: [], instructions: [], hooks: [] };
+    const emptyInv = { skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [] };
 
     it("adds a channel artifact and aggregates its secrets into requiredSecrets", () => {
       const gem = buildGem(emptyInv, { all: false }, { channels: [{ platform: "slack" }] });

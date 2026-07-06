@@ -7,7 +7,7 @@ import type { ArtifactUsage } from "@agentgem/insight";
 const NOW = Date.parse("2026-06-29T00:00:00.000Z");
 
 function inv(over: Partial<ConfigInventory> = {}): ConfigInventory {
-  return { skills: [], mcpServers: [], instructions: [], hooks: [], ...over };
+  return { skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [], ...over };
 }
 
 describe("optimizeContract", () => {

@@ -12,6 +12,7 @@ export interface ProjectSelection {
   includeInstructions?: boolean;   // all instructions (back-compat, wins over `instructions`)
   instructions?: string[];         // a named subset (e.g. a single distilled lesson)
   hooks?: string[];
+  subagents?: string[];
 }
 
 export type GemSelection =
@@ -23,6 +24,7 @@ export type GemSelection =
       includeInstructions?: boolean;
       instructions?: string[];
       hooks?: string[];
+      subagents?: string[];
       projects?: Record<string, ProjectSelection>; // keyed by project root path
     };
 
@@ -62,8 +64,8 @@ export function buildGem(
   const projects = inventory.projects ?? [];
 
   if ("all" in selection && selection.all) {
-    artifacts.push(...inventory.skills, ...inventory.mcpServers, ...inventory.instructions, ...inventory.hooks);
-    for (const p of projects) artifacts.push(...p.skills, ...p.mcpServers, ...p.instructions, ...p.hooks);
+    artifacts.push(...inventory.skills, ...inventory.mcpServers, ...inventory.instructions, ...inventory.hooks, ...inventory.subagents);
+    for (const p of projects) artifacts.push(...p.skills, ...p.mcpServers, ...p.instructions, ...p.hooks, ...p.subagents);
   } else {
     const sel = selection as Exclude<GemSelection, { all: true }>;
     for (const n of sel.skills ?? []) {
@@ -80,6 +82,11 @@ export function buildGem(
     for (const n of sel.hooks ?? []) {
       const a = inventory.hooks.find((h) => h.name === n);
       if (!a) throw new InvalidInputError(`No hook '${n}'. Available: ${inventory.hooks.map((h) => h.name).join(", ") || "(none)"}`);
+      artifacts.push(a);
+    }
+    for (const n of sel.subagents ?? []) {
+      const a = inventory.subagents.find((s) => s.name === n);
+      if (!a) throw new InvalidInputError(`No subagent '${n}'. Available: ${inventory.subagents.map((s) => s.name).join(", ") || "(none)"}`);
       artifacts.push(a);
     }
     for (const [root, ps] of Object.entries(sel.projects ?? {})) {
@@ -99,6 +106,11 @@ export function buildGem(
       for (const n of ps.hooks ?? []) {
         const a = proj.hooks.find((h) => h.name === n);
         if (!a) throw new InvalidInputError(`No hook '${n}' in project '${proj.name}'. Available: ${proj.hooks.map((h) => h.name).join(", ") || "(none)"}`);
+        artifacts.push(a);
+      }
+      for (const n of ps.subagents ?? []) {
+        const a = proj.subagents.find((s) => s.name === n);
+        if (!a) throw new InvalidInputError(`No subagent '${n}' in project '${proj.name}'. Available: ${proj.subagents.map((s) => s.name).join(", ") || "(none)"}`);
         artifacts.push(a);
       }
     }

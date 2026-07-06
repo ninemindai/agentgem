@@ -19,6 +19,8 @@ beforeEach(() => {
   writeFileSync(join(root, "CLAUDE.md"), "project claude");
   writeFileSync(join(root, "AGENTS.md"), "project agents");
   writeFileSync(join(root, ".claude", "settings.json"), JSON.stringify({ hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "./guard.sh" }] }] } }));
+  mkdirSync(join(root, ".claude", "agents"), { recursive: true });
+  writeFileSync(join(root, ".claude", "agents", "reviewer.md"), "---\nname: reviewer\ndescription: Reviews PRs\ntools: Read, Grep, Bash\nmodel: sonnet\n---\nYou are a code reviewer.");
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 
@@ -40,9 +42,20 @@ describe("introspectProject", () => {
     expect(hook?.source).toBe("project");
   });
 
+  it("discovers project subagents from .claude/agents/*.md, parsing tools + model", () => {
+    const p = introspectProject(root);
+    const reviewer = p.subagents.find((s) => s.name === "reviewer");
+    expect(reviewer).toBeTruthy();
+    expect(reviewer?.source).toBe("project");
+    expect(reviewer?.description).toBe("Reviews PRs");
+    expect(reviewer?.tools).toEqual(["Read", "Grep", "Bash"]);
+    expect(reviewer?.model).toBe("sonnet");
+    expect(reviewer?.content).toContain("You are a code reviewer.");
+  });
+
   it("returns empty arrays for a root with no project artifacts", () => {
     const nope = join(root, "nope");
-    expect(introspectProject(nope)).toEqual({ root: nope, name: "nope", skills: [], mcpServers: [], instructions: [], hooks: [] });
+    expect(introspectProject(nope)).toEqual({ root: nope, name: "nope", skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [] });
   });
 });
 

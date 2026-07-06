@@ -155,6 +155,28 @@ describe("readGemArchive", () => {
   });
 });
 
+describe("subagent artifact round-trip", () => {
+  it("writes agents/<name>.md + manifest tools/model, and round-trips exactly", () => {
+    const p = gem([
+      { type: "subagent", name: "reviewer", description: "Reviews PRs", source: "user", content: "---\nname: reviewer\n---\nYou review.", tools: ["Read", "Grep"], model: "sonnet" },
+    ]);
+    const { files, skipped } = writeGemArchive(p);
+    expect(skipped).toEqual([]);
+    expect(files["agents/reviewer.md"]).toBe("---\nname: reviewer\n---\nYou review.");
+    const entry = JSON.parse(files["gem.json"]).artifacts.find((a: { name: string }) => a.name === "reviewer");
+    expect(entry).toMatchObject({ type: "subagent", path: "agents/reviewer.md", description: "Reviews PRs", source: "user", tools: ["Read", "Grep"], model: "sonnet" });
+    expect(readGemArchive(files)).toEqual(p);
+  });
+
+  it("round-trips a minimal subagent (no tools/model) without inventing fields", () => {
+    const p = gem([{ type: "subagent", name: "bare", source: "user", content: "body" }]);
+    const back = readGemArchive(writeGemArchive(p).files);
+    expect(back).toEqual(p);
+    expect(back.artifacts[0]).not.toHaveProperty("tools");
+    expect(back.artifacts[0]).not.toHaveProperty("model");
+  });
+});
+
 describe("channel artifact round-trip", () => {
   it("writes channels/<name>.json and reads it back as a ChannelArtifact", () => {
     const gem = {

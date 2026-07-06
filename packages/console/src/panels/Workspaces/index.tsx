@@ -13,6 +13,7 @@ export function countChips(ws: WorkspaceSummary): { label: string; n: number }[]
   const c = ws.artifactCounts;
   return [
     { label: "skills", n: c.skill },
+    { label: "subagents", n: c.subagent },
     { label: "MCP", n: c.mcp_server },
     { label: "instructions", n: c.instructions },
     { label: "hooks", n: c.hook },

@@ -14,7 +14,7 @@ function mockFetch() {
   return vi.fn(async (url: string | URL) => {
     const u = String(url);
     if (u.includes("/api/inventory"))
-      return res({ skills: [{ name: "pdf", content: "PDF-SKILL-BODY" }, { name: "csv" }, { name: "zip" }], mcpServers: [], instructions: [], hooks: [] });
+      return res({ skills: [{ name: "pdf", content: "PDF-SKILL-BODY" }, { name: "csv" }, { name: "zip" }], mcpServers: [], instructions: [], hooks: [], subagents: [] });
     if (u.includes("/api/usage"))
       return res({ artifacts: [
         { type: "skill", name: "pdf", invocations: 7, lastUsedMs: 100 },
@@ -145,7 +145,7 @@ describe("Curate", () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
       const u = String(url);
       if (u.includes("/api/inventory"))
-        return res({ skills: [{ name: "pdf" }], mcpServers: [], instructions: [], hooks: [] });
+        return res({ skills: [{ name: "pdf" }], mcpServers: [], instructions: [], hooks: [], subagents: [] });
       if (u.includes("/api/usage")) return res({ artifacts: [] });
       throw new Error(`unexpected url ${u}`);
     }));
@@ -163,7 +163,7 @@ describe("Curate", () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string | URL, init?: RequestInit) => {
       const u = String(url);
       if (u.includes("/api/inventory"))
-        return res({ skills: [{ name: "ship-loop" }], mcpServers: [], instructions: [{ name: "lesson-one", content: "be concise" }], hooks: [] });
+        return res({ skills: [{ name: "ship-loop" }], mcpServers: [], instructions: [{ name: "lesson-one", content: "be concise" }], hooks: [], subagents: [] });
       if (u.includes("/api/usage")) return res({ artifacts: [] });
       if (u.includes("/api/workspaces")) {
         workspaceBodies.push(JSON.parse((init?.body as string) ?? "{}"));
@@ -192,7 +192,7 @@ describe("Curate", () => {
     });
     vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
       const u = String(url);
-      if (u.includes("/api/inventory")) return res({ skills: [{ name: "pdf" }], mcpServers: [{ name: "db" }], instructions: [{ name: "house-rules" }], hooks: [{ name: "lint" }] });
+      if (u.includes("/api/inventory")) return res({ skills: [{ name: "pdf" }], mcpServers: [{ name: "db" }], instructions: [{ name: "house-rules" }], hooks: [{ name: "lint" }], subagents: [] });
       if (u.includes("/api/usage")) return res({ artifacts: [] });
       if (u.includes("/api/bind")) return res({ bound: false });
       throw new Error(`unexpected url ${u}`);
