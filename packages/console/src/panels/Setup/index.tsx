@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
 import { inventoryRoute, makeClient, type Inventory, type Artifact } from "../../api/routes.js";
 import { Loading } from "../../shell/Loading.js";
+import { ContentView } from "../Curate/ContentView.js";
 
 // Read-only browser of the local .claude setup — the artifacts your agents run with.
 // Everything (incl. each skill/subagent's SKILL.md `content`) comes from one /api/inventory
@@ -21,6 +22,7 @@ export function Setup({ apiBase }: { apiBase: string }) {
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState(initialQuery);
   const [selected, setSelected] = useState<{ artifact: Artifact; group: string } | null>(null);
+  const [open, setOpen] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     let alive = true;
@@ -39,8 +41,12 @@ export function Setup({ apiBase }: { apiBase: string }) {
     (a.source ?? "").toLowerCase().includes(needle) ||
     (a.description ?? "").toLowerCase().includes(needle);
 
+  const filtering = needle.length > 0;
   const groups = GROUPS.map((g) => ({ ...g, items: ((inv[g.key] as Artifact[]) ?? []).filter(match) }))
     .filter((g) => g.items.length > 0);
+  // Groups collapse by default (the Skills group alone is hundreds of items); a filter
+  // force-expands every group so matches are always visible.
+  const isOpen = (key: string) => filtering || !!open[key];
 
   return (
     <div className="setup">
@@ -56,18 +62,25 @@ export function Setup({ apiBase }: { apiBase: string }) {
         <p className="obs-muted setup-empty">No artifacts match “{q}”.</p>
       ) : groups.map((g) => (
         <section key={String(g.key)} className="setup-group">
-          <div className="console-group-label">{g.label} <span className="setup-count">{g.items.length}</span></div>
-          <ul className="setup-list">
-            {g.items.map((a) => (
-              <li key={a.name}>
-                <button type="button" className="setup-item" onClick={() => setSelected({ artifact: a, group: g.label })}>
-                  <span className="setup-item-name">{a.name}</span>
-                  {a.source ? <span className="setup-item-source">{a.source}</span> : null}
-                  {a.description ? <span className="setup-item-desc">{a.description}</span> : null}
-                </button>
-              </li>
-            ))}
-          </ul>
+          <button type="button" className="setup-group-head" aria-expanded={isOpen(String(g.key))}
+            onClick={() => setOpen((p) => ({ ...p, [String(g.key)]: !p[String(g.key)] }))}>
+            <span className="setup-caret">{isOpen(String(g.key)) ? "▾" : "▸"}</span>
+            <span className="console-group-label">{g.label}</span>
+            <span className="setup-count">{g.items.length}</span>
+          </button>
+          {isOpen(String(g.key)) && (
+            <ul className="setup-list">
+              {g.items.map((a) => (
+                <li key={a.name}>
+                  <button type="button" className="setup-item" onClick={() => setSelected({ artifact: a, group: g.label })}>
+                    <span className="setup-item-name">{a.name}</span>
+                    {a.source ? <span className="setup-item-source">{a.source}</span> : null}
+                    {a.description ? <span className="setup-item-desc">{a.description}</span> : null}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       ))}
 
@@ -78,8 +91,6 @@ export function Setup({ apiBase }: { apiBase: string }) {
 
 function ArtifactViewer({ sel, onClose }: { sel: { artifact: Artifact; group: string }; onClose: () => void }) {
   const a = sel.artifact;
-  // Skills/subagents/instructions ship their content; MCP/hooks show their config instead.
-  const body = a.content ?? (a.config ? JSON.stringify(a.config, null, 2) : "(no content — this artifact has no file body)");
   return (
     <div className="setup-modal" role="dialog" aria-modal="true" aria-label={a.name} onClick={onClose}>
       <div className="setup-modal-panel" onClick={(e) => e.stopPropagation()}>
@@ -92,7 +103,12 @@ function ArtifactViewer({ sel, onClose }: { sel: { artifact: Artifact; group: st
           <button type="button" className="setup-modal-close" onClick={onClose} aria-label="Close">✕</button>
         </div>
         {a.description ? <p className="setup-modal-desc">{a.description}</p> : null}
-        <pre className="setup-modal-body">{body}</pre>
+        <div className="setup-modal-body">
+          {/* Skills/subagents/instructions ship markdown content; MCP/hooks show their config. */}
+          {a.content
+            ? <ContentView text={a.content} />
+            : <pre className="setup-config">{a.config ? JSON.stringify(a.config, null, 2) : "(no file body for this artifact)"}</pre>}
+        </div>
       </div>
     </div>
   );
