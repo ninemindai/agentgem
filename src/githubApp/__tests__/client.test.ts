@@ -86,4 +86,27 @@ describe("list APIs", () => {
     });
     expect(await listInstallationRepos("t", f)).toEqual([{ repo: "acme/skills", defaultBranch: "trunk" }]);
   });
+
+  it("paginates past page 1 and warns when the page cap truncates", async () => {
+    const { vi } = await import("vitest");
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const customFetch = (async (url: string | URL, init?: RequestInit) => {
+      const u = String(url);
+      if (u.includes("role=admin")) {
+        return { ok: true, status: 200, json: async () => [] } as unknown as Response;
+      } else if (u.includes("role=member")) {
+        // Always return 100 items (simulates pages 1-20 all having data, triggering cap truncation warning)
+        const items = Array.from({ length: 100 }, (_, i) => ({ login: `u${i}` }));
+        return { ok: true, status: 200, json: async () => items } as unknown as Response;
+      }
+      return { ok: false, status: 404, json: async () => [] } as unknown as Response;
+    }) as typeof fetch;
+
+    const result = await listOrgMembers("t", "acme", customFetch);
+    expect(result).toHaveLength(100);
+    expect(result[0]).toEqual({ login: "u0", role: "member" });
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("truncated"));
+    errorSpy.mockRestore();
+  });
 });
