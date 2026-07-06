@@ -56,4 +56,25 @@ describe("computeDistill", () => {
     expect(wfTimeout).toBe(15_000);
     expect(lsTimeout).toBe(15_000);
   });
+
+  it("excludes the pipeline's own distilled drafts from the distill inventory (breaks the self-poison loop)", async () => {
+    const claudeDir = seedTranscript();
+    // A prior (degraded) run persisted a heuristic skeleton as a draft under
+    // ~/.agentgem/distilled — exactly what poisons the next distill's dedup.
+    const draftDir = join(home!, ".agentgem", "distilled", "prior-skeleton");
+    mkdirSync(draftDir, { recursive: true });
+    writeFileSync(join(draftDir, "SKILL.md"), "---\nname: prior-skeleton\ndescription: x\n---\nbody");
+
+    let seenGlobalSkills: string[] = [];
+    const distillWf = async (_s: unknown, inv: { global?: { skills: { name: string }[] } }) => {
+      seenGlobalSkills = (inv.global?.skills ?? []).map((s) => s.name);
+      return { distilled: [], degraded: false };
+    };
+    const distillLessons = async () => ({ lessons: [], degraded: false });
+    await computeDistill("/proj", { dir: claudeDir, distillWf: distillWf as never, distillLessons: distillLessons as never });
+
+    // The distill must NOT see its own prior draft as an "installed skill" — otherwise
+    // it dedups every candidate as "already covered", emits nothing, and degrades forever.
+    expect(seenGlobalSkills).not.toContain("prior-skeleton");
+  });
 });

@@ -37,7 +37,15 @@ export async function computeDistill(
   const dirs = resolveDirs(opts.dir);
   const project = introspectProject(resolveProject(root));
   const globalInv = introspectConfig(dirs);
-  const scanInv = { project, global: { skills: globalInv.skills, mcpServers: globalInv.mcpServers, hooks: globalInv.hooks } };
+  // Dedup the distill against genuinely-installed skills only — NOT the pipeline's
+  // own prior distilled DRAFTS. Including drafts here self-poisons: a degraded run
+  // persists heuristic skeletons as drafts, the next distill sees them as "installed"
+  // and concludes every candidate is already covered → emits nothing → degraded → loop.
+  const notDraft = <T extends { source: string }>(s: T): boolean => s.source !== "distilled-draft";
+  const scanInv = {
+    project: { ...project, skills: project.skills.filter(notDraft) },
+    global: { skills: globalInv.skills.filter(notDraft), mcpServers: globalInv.mcpServers, hooks: globalInv.hooks },
+  };
 
   const paths = claudeTranscriptsForCwd(dirs.claudeDir, root);
   const token = distillToken(paths);
