@@ -64,7 +64,12 @@ export async function handleWebhookEvent(deps: GithubAppDeps, event: string, pay
   if (event === "installation_repositories") {
     const inst = instFromPayload(p);
     if (!inst) return;
-    await upsertInstallation(deps.db, inst); // repo_selection may have changed with the event
+    // Preserve the stored suspended flag: a replayed/out-of-order repo event must never
+    // silently re-activate a suspended installation (upsertInstallation overwrites the column).
+    const current = await installationForScope(deps.db, inst.orgScope);
+    const suspended = current?.suspended ?? false;
+    await upsertInstallation(deps.db, { ...inst, suspended }); // repo_selection may have changed with the event
+    if (suspended) return;
     const removed = Array.isArray(p.repositories_removed) ? p.repositories_removed as { full_name?: unknown }[] : [];
     for (const r of removed) {
       if (typeof r.full_name === "string") await deleteOrgRepoSkills(deps.db, inst.orgScope, r.full_name);
@@ -104,7 +109,12 @@ export async function reconcileAll(deps: GithubAppDeps): Promise<{ installations
   if (!deps.cfg) return { installations: 0 };
   const remote = await listAppInstallations(deps.cfg, deps.fetchImpl);
   for (const local of await listInstallations(deps.db)) {
-    if (!remote.some((r) => r.installationId === local.installationId)) await deleteInstallation(deps.db, local.installationId);
+    if (remote.some((r) => r.installationId === local.installationId)) continue;
+    try {
+      await deleteInstallation(deps.db, local.installationId);
+    } catch (e) {
+      console.error(`githubApp: reconcile stray #${local.installationId} delete failed: ${(e as Error).message}`);
+    }
   }
   for (const r of remote) {
     await upsertInstallation(deps.db, r);
