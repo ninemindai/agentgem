@@ -205,38 +205,63 @@ export async function buildOrgUsage(
   const cutoff = rangeCutoff(range, nowMs);
   const scopeLc = scope.toLowerCase();
   const filtered = Boolean(opts.agent || opts.model);
-  // Case-insensitive like the scope filter: GitHub logins are case-insensitive, and a hand-typed
-  // ?member=Octocat must not render a false-empty view when the stored login is "octocat".
-  const memberOnly = opts.memberLogin ? sql`lower(${accounts.login}) = ${opts.memberLogin.toLowerCase()}` : undefined;
 
-  // Shared filter for the per-model slice table (facets, models list, and — when an agent/model
-  // filter is active — the members/daily aggregations too).
-  const modelBase = and(
+  // Member drill-down resolves the login to an account id up front (case-insensitive — GitHub
+  // logins are), so the aggregation queries filter on the indexed accountId instead of dragging
+  // an accounts join into every query. An unknown login short-circuits to an empty payload.
+  let memberId: string | undefined;
+  if (opts.memberLogin) {
+    const rows = await db
+      .select({ id: accounts.id })
+      .from(accounts)
+      .where(sql`lower(${accounts.login}) = ${opts.memberLogin.toLowerCase()}`)
+      .limit(1);
+    if (rows.length === 0) {
+      return {
+        scope, range, memberCount: 0,
+        totals: { sessions: 0, msgs: 0, tokensIn: 0, tokensOut: 0, tokensCache: 0, tokens: 0, activeMs: 0, activeDays: 0 },
+        members: [], daily: [], models: [], agents: [], facets: { agents: [], models: [] }, filtered,
+      };
+    }
+    memberId = rows[0].id;
+  }
+
+  // The ONE anti-leak boundary, parameterized by table: org membership (accountScopes join),
+  // scope attribution, range cutoff, and the optional member narrow. Both the day-rollup and
+  // slice tables carry identically-named columns, so a single builder keeps the two aggregation
+  // paths from ever drifting apart.
+  const boundary = (t: typeof usageDays | typeof usageDayModels) => and(
     eq(accountScopes.scope, scope),
-    opts.includeUnattributed ? sql`${usageDayModels.scope} in (${scopeLc}, '')` : eq(usageDayModels.scope, scopeLc),
-    cutoff === null ? undefined : gte(usageDayModels.date, cutoff),
-    memberOnly,
+    opts.includeUnattributed ? sql`${t.scope} in (${scopeLc}, '')` : eq(t.scope, scopeLc),
+    cutoff === null ? undefined : gte(t.date, cutoff),
+    memberId ? eq(t.accountId, memberId) : undefined,
   );
-  const facetCond = and(
-    modelBase,
+  const sliceCond = and(
+    boundary(usageDayModels),
     opts.agent ? eq(usageDayModels.agent, opts.agent) : undefined,
     opts.model ? eq(usageDayModels.model, opts.model) : undefined,
   );
-  const modelJoins = <T extends { innerJoin: any }>(q: T) => q
-    .innerJoin(accounts, eq(usageDayModels.accountId, accounts.id))
-    .innerJoin(accountScopes, eq(accountScopes.accountId, usageDayModels.accountId));
+
+  // Facet basis: every (agent, model) slice for the current scope/range/member view, WITHOUT the
+  // agent/model filters — feeds the selector options and (when unfiltered) the models list.
+  // Kicked off first so it overlaps the members/daily queries below (all three are independent).
+  const facetsPromise = db
+    .select({
+      agent: usageDayModels.agent,
+      model: usageDayModels.model,
+      sessions: sql<number>`sum(${usageDayModels.sessions})::int`,
+      tokens: sql<number>`sum(${usageDayModels.tokens})::bigint`,
+    })
+    .from(usageDayModels)
+    .innerJoin(accountScopes, eq(accountScopes.accountId, usageDayModels.accountId))
+    .where(boundary(usageDayModels))
+    .groupBy(usageDayModels.agent, usageDayModels.model);
 
   let members: OrgUsageMember[];
   let daily: OrgUsageDay[];
   if (!filtered) {
-    const dayFilter = and(
-      eq(accountScopes.scope, scope),
-      opts.includeUnattributed ? sql`${usageDays.scope} in (${scopeLc}, '')` : eq(usageDays.scope, scopeLc),
-      cutoff === null ? undefined : gte(usageDays.date, cutoff),
-      memberOnly,
-    );
-    const memberRows = await db
-      .select({
+    const [memberRows, dailyRows] = await Promise.all([
+      db.select({
         login: accounts.login,
         avatarUrl: accounts.avatarUrl,
         sessions: sql<number>`sum(${usageDays.sessions})::int`,
@@ -248,11 +273,22 @@ export async function buildOrgUsage(
         activeDays: sql<number>`count(distinct ${usageDays.date})::int`,
         lastActive: sql<string | null>`max(${usageDays.date})`,
       })
-      .from(usageDays)
-      .innerJoin(accounts, eq(usageDays.accountId, accounts.id))
-      .innerJoin(accountScopes, eq(accountScopes.accountId, accounts.id))
-      .where(dayFilter)
-      .groupBy(accounts.id, accounts.login, accounts.avatarUrl);
+        .from(usageDays)
+        .innerJoin(accounts, eq(usageDays.accountId, accounts.id))
+        .innerJoin(accountScopes, eq(accountScopes.accountId, accounts.id))
+        .where(boundary(usageDays))
+        .groupBy(accounts.id, accounts.login, accounts.avatarUrl),
+      db.select({
+        date: usageDays.date,
+        sessions: sql<number>`sum(${usageDays.sessions})::int`,
+        tokens: sql<number>`(sum(${usageDays.tokensIn}) + sum(${usageDays.tokensOut}) + sum(${usageDays.tokensCache}))::bigint`,
+      })
+        .from(usageDays)
+        .innerJoin(accountScopes, eq(accountScopes.accountId, usageDays.accountId))
+        .where(boundary(usageDays))
+        .groupBy(usageDays.date)
+        .orderBy(usageDays.date),
+    ]);
     // pglite/pg drivers return bigint sums as strings — coerce every aggregate to number.
     members = memberRows.map((r) => {
       const tokensIn = Number(r.tokensIn ?? 0), tokensOut = Number(r.tokensOut ?? 0), tokensCache = Number(r.tokensCache ?? 0);
@@ -264,24 +300,12 @@ export async function buildOrgUsage(
         lastActive: r.lastActive ?? null,
       };
     });
-    const dailyRows = await db
-      .select({
-        date: usageDays.date,
-        sessions: sql<number>`sum(${usageDays.sessions})::int`,
-        tokens: sql<number>`(sum(${usageDays.tokensIn}) + sum(${usageDays.tokensOut}) + sum(${usageDays.tokensCache}))::bigint`,
-      })
-      .from(usageDays)
-      .innerJoin(accounts, eq(usageDays.accountId, accounts.id))
-      .innerJoin(accountScopes, eq(accountScopes.accountId, usageDays.accountId))
-      .where(dayFilter)
-      .groupBy(usageDays.date)
-      .orderBy(usageDays.date);
     daily = dailyRows.map((r) => ({ date: r.date, sessions: Number(r.sessions ?? 0), tokens: Number(r.tokens ?? 0) }));
   } else {
     // Agent/model filter active: the day rollups have no model dimension, so members and daily
     // both re-aggregate from the slices. Only sessions + tokens exist here; the rest is zeroed.
-    const memberRows = await modelJoins(db
-      .select({
+    const [memberRows, dailyRows] = await Promise.all([
+      db.select({
         login: accounts.login,
         avatarUrl: accounts.avatarUrl,
         sessions: sql<number>`sum(${usageDayModels.sessions})::int`,
@@ -289,45 +313,36 @@ export async function buildOrgUsage(
         activeDays: sql<number>`count(distinct ${usageDayModels.date})::int`,
         lastActive: sql<string | null>`max(${usageDayModels.date})`,
       })
-      .from(usageDayModels))
-      .where(facetCond)
-      .groupBy(accounts.id, accounts.login, accounts.avatarUrl);
-    members = memberRows.map((r: Record<string, unknown>) => ({
-      login: String(r.login), avatarUrl: (r.avatarUrl as string | null) ?? null,
-      sessions: Number(r.sessions ?? 0), msgs: 0,
-      tokensIn: 0, tokensOut: 0, tokensCache: 0, tokens: Number(r.tokens ?? 0),
-      activeMs: 0, activeDays: Number(r.activeDays ?? 0),
-      lastActive: (r.lastActive as string | null) ?? null,
-    }));
-    const dailyRows = await modelJoins(db
-      .select({
+        .from(usageDayModels)
+        .innerJoin(accounts, eq(usageDayModels.accountId, accounts.id))
+        .innerJoin(accountScopes, eq(accountScopes.accountId, usageDayModels.accountId))
+        .where(sliceCond)
+        .groupBy(accounts.id, accounts.login, accounts.avatarUrl),
+      db.select({
         date: usageDayModels.date,
         sessions: sql<number>`sum(${usageDayModels.sessions})::int`,
         tokens: sql<number>`sum(${usageDayModels.tokens})::bigint`,
       })
-      .from(usageDayModels))
-      .where(facetCond)
-      .groupBy(usageDayModels.date)
-      .orderBy(usageDayModels.date);
-    daily = dailyRows.map((r: Record<string, unknown>) => ({ date: String(r.date), sessions: Number(r.sessions ?? 0), tokens: Number(r.tokens ?? 0) }));
+        .from(usageDayModels)
+        .innerJoin(accountScopes, eq(accountScopes.accountId, usageDayModels.accountId))
+        .where(sliceCond)
+        .groupBy(usageDayModels.date)
+        .orderBy(usageDayModels.date),
+    ]);
+    members = memberRows.map((r) => ({
+      login: r.login, avatarUrl: r.avatarUrl,
+      sessions: Number(r.sessions ?? 0), msgs: 0,
+      tokensIn: 0, tokensOut: 0, tokensCache: 0, tokens: Number(r.tokens ?? 0),
+      activeMs: 0, activeDays: Number(r.activeDays ?? 0),
+      lastActive: r.lastActive ?? null,
+    }));
+    daily = dailyRows.map((r) => ({ date: r.date, sessions: Number(r.sessions ?? 0), tokens: Number(r.tokens ?? 0) }));
   }
   members.sort((a, b) => b.tokens - a.tokens || a.login.localeCompare(b.login));
 
-  // Facet basis: every (agent, model) slice for the current scope/range/member view, WITHOUT the
-  // agent/model filters — this feeds the selector options and (when unfiltered) the models list.
-  const facetRows = await modelJoins(db
-    .select({
-      agent: usageDayModels.agent,
-      model: usageDayModels.model,
-      sessions: sql<number>`sum(${usageDayModels.sessions})::int`,
-      tokens: sql<number>`sum(${usageDayModels.tokens})::bigint`,
-    })
-    .from(usageDayModels))
-    .where(modelBase)
-    .groupBy(usageDayModels.agent, usageDayModels.model);
-  const allSlices: OrgUsageModel[] = facetRows
-    .map((r: Record<string, unknown>) => ({ agent: String(r.agent), model: String(r.model), sessions: Number(r.sessions ?? 0), tokens: Number(r.tokens ?? 0) }))
-    .sort((a: OrgUsageModel, b: OrgUsageModel) => b.tokens - a.tokens || a.model.localeCompare(b.model));
+  const allSlices: OrgUsageModel[] = (await facetsPromise)
+    .map((r) => ({ agent: r.agent, model: r.model, sessions: Number(r.sessions ?? 0), tokens: Number(r.tokens ?? 0) }))
+    .sort((a, b) => b.tokens - a.tokens || a.model.localeCompare(b.model));
   // Agent options never narrow (switching agents must always be possible); MODEL options cascade
   // under a selected agent — offering another agent's models would only build guaranteed-empty
   // agent+model combinations.

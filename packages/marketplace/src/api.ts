@@ -16,12 +16,18 @@ export type OrgSettingsResult =
 
 type Query = Record<string, string | number | undefined>;
 
-async function get<T>(base: string, path: string, query: Query = {}): Promise<T> {
+// The ONE querystring encoder: undefined params are dropped, everything else (incl. "" and 0)
+// serializes. Callers that treat empty-string as absent pass undefined instead.
+function buildQs(query: Query): string {
   const qs = Object.entries(query)
     .filter(([, v]) => v !== undefined)
     .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`)
     .join("&");
-  const res = await fetch(base + path + (qs ? `?${qs}` : ""));
+  return qs ? `?${qs}` : "";
+}
+
+async function get<T>(base: string, path: string, query: Query = {}): Promise<T> {
+  const res = await fetch(base + path + buildQs(query));
   if (!res.ok) throw new Error(`${path} -> ${res.status}`);
   return JSON.parse(await res.text()) as T;
 }
@@ -60,11 +66,10 @@ export function makeApi(base: string) {
     getOrgUsage: async (scope: string, range: OrgUsageRange, filters: { member?: string; agent?: string; model?: string } = {}): Promise<OrgUsageResult> => {
       // credentialed: the org dashboard is member-only, gated by the web session cookie.
       // Filters compose: member (drill-down), agent, model — all inside the org-scope boundary.
-      const qs = (Object.entries(filters) as [string, string | undefined][])
-        .filter(([, v]) => v)
-        .map(([k, v]) => `&${k}=${encodeURIComponent(v as string)}`)
-        .join("");
-      const url = base + "/api/usage/org?scope=" + encodeURIComponent(scope) + "&range=" + range + qs;
+      const url = base + "/api/usage/org" + buildQs({
+        scope, range,
+        member: filters.member || undefined, agent: filters.agent || undefined, model: filters.model || undefined,
+      });
       const res = await fetch(url, { credentials: "include" });
       if (res.status === 401) return { status: "unauthenticated" };
       if (res.status === 403) {
