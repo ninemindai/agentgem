@@ -1,22 +1,20 @@
 // packages/console/src/panels/Observe/Dashboard.tsx
-import React, { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
   ResponsiveContainer, BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, CartesianGrid,
 } from "recharts";
 import type { ObservePayload, ObserveRange, ObserveFilter } from "../../api/routes.js";
-import { fmtTokens, fmtDuration, tokenSeries, fmtTime, flameLevel, heatmapCells, heatmapMonths, utcDay } from "./data.js";
+import { fmtTokens, fmtDuration, tokenSeries, heatmapCells, heatmapMonths } from "./data.js";
+import { RangeTabs, ObserveFilters } from "./ObserveControls.js";
 import { RefreshButton } from "../../shell/RefreshButton.js";
 import { QuickShareButton } from "../_shared/QuickShareButton.js";
 
 const WEEKDAY_LABELS = ["", "Mon", "", "Wed", "", "Fri", ""];
-
-const RANGES: ObserveRange[] = ["today", "7d", "30d", "all"];
-const RANGE_LABEL: Record<ObserveRange, string> = { today: "Today", "7d": "7d", "30d": "30d", all: "All" };
 const SLICE_COLORS = ["var(--accent)", "var(--emerald, #34d399)", "#f59e0b", "#8b5cf6", "#ec4899", "#64748b"];
 
-type SortKey = "tokens" | "msgs" | "durationMs" | "endMs";
-
+// The per-session ledger table lives in the Sessions screen (panels/Sessions). Inspect is
+// the aggregate usage view: pulse, activity/token charts, by-model, and the heatmap.
 export function Dashboard({ data, range, onRange, filter, onFilter, pending, onRefresh, apiBase, resolveSetupShare, onPublishSetup }: {
   data: ObservePayload; range: ObserveRange; onRange: (r: ObserveRange) => void;
   filter: ObserveFilter; onFilter: (f: ObserveFilter) => void; pending?: boolean;
@@ -24,40 +22,19 @@ export function Dashboard({ data, range, onRange, filter, onFilter, pending, onR
   resolveSetupShare?: () => Promise<{ name: string; provenance: string }>;
   onPublishSetup?: () => void;
 }) {
-  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "endMs", dir: "desc" });
-  const [openId, setOpenId] = useState<string | null>(null);
   const [heatMetric, setHeatMetric] = useState<"tokens" | "sessions">("tokens");
 
   const empty = data.pulse.sessions === 0;
-
-  function toggleSort(key: SortKey) {
-    setSort(prev => prev.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "desc" });
-  }
-
-  const rows = [...data.sessions].sort((a, b) => {
-    const av = a[sort.key], bv = b[sort.key];
-    return sort.dir === "asc" ? av - bv : bv - av;
-  });
-
-  const maxTok = Math.max(0, ...rows.map(r => r.tokens));
   const heatCells = heatmapCells(data.daily, heatMetric);
   const colCount = heatCells.length > 0 ? Math.max(...heatCells.map(c => c.week)) + 1 : 0;
   const months = heatmapMonths(heatCells);
-  const COL_COUNT = 8; // caret + project, agent, model, dur, msgs, tokens, recency
 
   return (
     <div className="obs">
       <div className="obs-head">
         <h2 className="obs-title">Inspect</h2>
         {pending && <span className="obs-pending-pill">Updating…</span>}
-        <div className="obs-range" role="tablist" aria-label="time range">
-          {RANGES.map((r) => (
-            <button key={r} type="button" role="tab" aria-selected={r === range} tabIndex={r === range ? 0 : -1}
-              className={"obs-range-btn" + (r === range ? " is-active" : "")} onClick={() => onRange(r)}>
-              {RANGE_LABEL[r]}
-            </button>
-          ))}
-        </div>
+        <RangeTabs range={range} onRange={onRange} />
         {onPublishSetup && (
           <button type="button" className="obs-range-btn obs-share-setup" onClick={onPublishSetup}>
             Publish ↗
@@ -81,29 +58,7 @@ export function Dashboard({ data, range, onRange, filter, onFilter, pending, onR
         </div>
       )}
 
-      <div className="obs-filters">
-        <select aria-label="agent" value={filter.agent ?? ""}
-          onChange={e => onFilter({ ...filter, agent: e.target.value || undefined })}>
-          <option value="">All agents</option>
-          {data.facets.agents.map(a => <option key={a} value={a}>{a}</option>)}
-        </select>
-        <select aria-label="project" value={filter.project ?? ""}
-          onChange={e => onFilter({ ...filter, project: e.target.value || undefined })}>
-          <option value="">All projects</option>
-          {data.facets.projects.map(p => <option key={p} value={p}>{p}</option>)}
-        </select>
-        <select aria-label="model" value={filter.model ?? ""}
-          onChange={e => onFilter({ ...filter, model: e.target.value || undefined })}>
-          <option value="">All models</option>
-          {data.facets.models.map(m => <option key={m} value={m}>{m}</option>)}
-        </select>
-        <label className="obs-filter-num">
-          min msgs
-          <input type="number" min={0} aria-label="minimum messages per session" placeholder="any"
-            value={filter.minMsgs ?? ""}
-            onChange={e => onFilter({ ...filter, minMsgs: e.target.value === "" ? undefined : Number(e.target.value) })} />
-        </label>
-      </div>
+      <ObserveFilters data={data} filter={filter} onFilter={onFilter} />
 
       <div className={"obs-body" + (pending ? " is-updating" : "")}>
         <div className="obs-pulse">
@@ -226,90 +181,6 @@ export function Dashboard({ data, range, onRange, filter, onFilter, pending, onR
                 </div>
               </div>
             )}
-
-            <div className="obs-table-wrap">
-              {data.pulse.sessions > rows.length && (
-                <p className="obs-muted obs-table-hint">
-                  Showing {rows.length} of {data.pulse.sessions} sessions (most recent)
-                </p>
-              )}
-              <table className="obs-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: 24 }} />
-                    <th>project</th>
-                    <th>agent</th>
-                    <th>model</th>
-                    <SortTh label="dur" col="durationMs" sort={sort} onSort={toggleSort} />
-                    <SortTh label="msgs" col="msgs" sort={sort} onSort={toggleSort} />
-                    <SortTh label="tokens" col="tokens" sort={sort} onSort={toggleSort} />
-                    <SortTh label="recency" col="endMs" sort={sort} onSort={toggleSort} />
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((s) => {
-                    const rowId = s.agent + "|" + s.sessionId;
-                    const isOpen = openId === rowId;
-                    const flames = flameLevel(s.tokens, maxTok);
-                    return (
-                      <React.Fragment key={rowId}>
-                        <tr
-                          role="button"
-                          tabIndex={0}
-                          style={{ cursor: "pointer" }}
-                          onClick={() => setOpenId(isOpen ? null : rowId)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              setOpenId(isOpen ? null : rowId);
-                            }
-                          }}
-                        >
-                          <td><span className={"obs-caret" + (isOpen ? " open" : "")}>▸</span></td>
-                          <td>
-                            {s.project ?? "—"}
-                            {flames > 0 && <span className="obs-flame" aria-hidden="true">{"🔥".repeat(flames)}</span>}
-                          </td>
-                          <td><span className="obs-chip">{s.agent}</span></td>
-                          <td className="obs-muted">{s.model ?? "—"}</td>
-                          <td>{fmtDuration(s.durationMs)}</td>
-                          <td>{s.msgs}</td>
-                          <td>{fmtTokens(s.tokens)}</td>
-                          <td className="obs-muted">{s.endMs ? utcDay(s.endMs) : "—"}</td>
-                        </tr>
-                        {isOpen && (
-                          <tr key={rowId + ":detail"} className="obs-detail">
-                            <td colSpan={COL_COUNT}>
-                              <span>in {fmtTokens(s.tokensIn)} · out {fmtTokens(s.tokensOut)} · cache {fmtTokens(s.tokensCache)}</span>
-                              <span className="obs-detail-sep"> · </span>
-                              <span>{fmtTime(s.startMs)} → {fmtTime(s.endMs)} ({fmtDuration(s.durationMs)})</span>
-                              <span className="obs-detail-sep"> · </span>
-                              <span>branch <strong>{s.gitBranch ?? "—"}</strong></span>
-                              <span className="obs-detail-sep"> · </span>
-                              <span>model <strong>{s.model ?? "—"}</strong></span>
-                              <span className="obs-detail-sep"> · </span>
-                              <span>agent <strong>{s.agent}</strong></span>
-                              <span className="obs-detail-sep"> · </span>
-                              <span>session <code>{s.sessionId.slice(0, 8)}…</code></span>
-                              <button
-                                type="button"
-                                className="obs-open-transcript"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  window.location.hash = `#/inspect/${s.agent}/${encodeURIComponent(s.sessionId)}`;
-                                }}
-                              >
-                                Open transcript →
-                              </button>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
           </>
         )}
       </div>
@@ -317,24 +188,9 @@ export function Dashboard({ data, range, onRange, filter, onFilter, pending, onR
   );
 }
 
-function SortTh({ label, col, sort, onSort }: {
-  label: string; col: SortKey;
-  sort: { key: SortKey; dir: "asc" | "desc" };
-  onSort: (k: SortKey) => void;
-}) {
-  const active = sort.key === col;
-  return (
-    <th aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}>
-      <button type="button" className={"obs-sort-btn" + (active ? " is-active" : "")} onClick={() => onSort(col)}>
-        {label}{active ? (sort.dir === "asc" ? " ▲" : " ▼") : ""}
-      </button>
-    </th>
-  );
-}
-
 function Stat({ label, value }: { label: string; value: string }) {
   return <div className="obs-stat"><div className="obs-stat-value">{value}</div><div className="obs-stat-label">{label}</div></div>;
 }
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+function Card({ title, children }: { title: string; children: ReactNode }) {
   return <div className="obs-card"><div className="obs-card-title">{title}</div>{children}</div>;
 }

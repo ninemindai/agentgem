@@ -20,9 +20,17 @@ describe("normalizeHash", () => {
     expect(normalizeHash("#/gems/received")).toBe("#/gems/received");
   });
 
+  it("rewrites the legacy transcript drill-down to the Sessions screen (query preserved)", () => {
+    expect(normalizeHash("#/inspect/claude/abc")).toBe("#/sessions/claude/abc");
+    expect(normalizeHash("#/inspect/codex/s1?vs=claude:s2")).toBe("#/sessions/codex/s1?vs=claude:s2");
+    // bare #/inspect (the dashboard) is NOT a drill-down and stays put
+    expect(normalizeHash("#/inspect")).toBe("#/inspect");
+    expect(normalizeHash("#/sessions/claude/abc")).toBe("#/sessions/claude/abc"); // idempotent
+  });
+
   it("leaves unknown routes untouched", () => {
     expect(normalizeHash("#/inspect")).toBe("#/inspect");
-    expect(normalizeHash("#/inspect/claude/abc")).toBe("#/inspect/claude/abc");
+    expect(normalizeHash("#/mine")).toBe("#/mine");
     expect(normalizeHash("")).toBe("");
   });
 

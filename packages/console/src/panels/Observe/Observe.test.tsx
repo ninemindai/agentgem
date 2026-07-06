@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup } from "@testing-library/react";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.location.hash = ""; });
 import { Dashboard } from "./Dashboard.js";
@@ -23,53 +23,25 @@ const payload: ObservePayload = {
   range: "7d",
 };
 
+// Inspect is the aggregate usage dashboard (pulse + charts + heatmap). The per-session
+// ledger table now lives in the Sessions screen — see SessionsTable.test.tsx.
 describe("Observe Dashboard", () => {
-  it("renders the pulse and a session row", () => {
+  it("renders the pulse and the facet controls", () => {
     render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} apiBase="" />);
     expect(screen.getByText("1.2M")).toBeDefined();                    // pulse tokens
-    expect(screen.getAllByText("agentgem").length).toBeGreaterThan(0); // session row project (also in dropdown)
+    expect(screen.getAllByText("agentgem").length).toBeGreaterThan(0); // project facet option
   });
 
   it("renders filter controls with facet values", () => {
     render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} apiBase="" />);
-    expect(screen.getByLabelText(/agent/i)).toBeDefined();              // agent dropdown
-    expect(screen.getByLabelText(/model/i)).toBeDefined();             // model dropdown
-    expect(screen.getAllByText("claude-opus-4-8").length).toBeGreaterThan(0); // model option present
-  });
-
-  it("clicking a session row reveals detail; clicking again hides it", () => {
-    const { container } = render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} apiBase="" />);
-
-    // detail row not visible initially
-    expect(screen.queryByText(/branch/)).toBeNull();
-
-    // click the row (role=button)
-    const rowBtn = container.querySelector('tr[role="button"]') as HTMLElement;
-    expect(rowBtn).not.toBeNull();
-    fireEvent.click(rowBtn);
-
-    // detail row should appear with branch and model info
-    expect(screen.getByText(/branch/)).toBeDefined();
-    expect(screen.getByText(/main/)).toBeDefined();
-    expect(screen.getAllByText(/claude-opus-4-8/).length).toBeGreaterThan(0);
-
-    // click again to close
-    fireEvent.click(rowBtn);
-    expect(screen.queryByText(/branch/)).toBeNull();
-  });
-
-  it("renders a flame badge for the hottest session", () => {
-    const { container } = render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} apiBase="" />);
-    const flameBadge = container.querySelector(".obs-flame");
-    expect(flameBadge).not.toBeNull();
-    // only 1 session and it's the max → level 3 → three flames
-    expect(flameBadge!.textContent).toContain("🔥"); // 🔥
+    expect(screen.getByLabelText(/agent/i)).toBeDefined();
+    expect(screen.getByLabelText(/model/i)).toBeDefined();
+    expect(screen.getAllByText("claude-opus-4-8").length).toBeGreaterThan(0);
   });
 
   it("renders at least one heatmap cell", () => {
     const { container } = render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} apiBase="" />);
-    const cell = container.querySelector(".obs-heat-cell");
-    expect(cell).not.toBeNull();
+    expect(container.querySelector(".obs-heat-cell")).not.toBeNull();
   });
 
   it("shows 'Updating…' pill when pending=true, hides it when pending=false", () => {
@@ -77,35 +49,6 @@ describe("Observe Dashboard", () => {
     expect(screen.getByText("Updating…")).toBeDefined();
     rerender(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} apiBase="" pending={false} />);
     expect(screen.queryByText("Updating…")).toBeNull();
-  });
-
-  it("shows N-of-M hint when pulse.sessions > visible rows", () => {
-    const bigPayload = {
-      ...payload,
-      pulse: { ...payload.pulse, sessions: 500 },
-    };
-    render(<Dashboard data={bigPayload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} apiBase="" />);
-    // 1 session row, pulse.sessions=500
-    expect(screen.getByText(/Showing 1 of 500 sessions/)).toBeDefined();
-  });
-
-  it("does not show N-of-M hint when pulse.sessions equals visible rows", () => {
-    const exactPayload = {
-      ...payload,
-      pulse: { ...payload.pulse, sessions: 1 },
-    };
-    render(<Dashboard data={exactPayload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} apiBase="" />);
-    // pulse.sessions=1, rows.length=1 → no hint
-    expect(screen.queryByText(/Showing \d+ of \d+ sessions/)).toBeNull();
-  });
-
-  it("keyboard Enter on session row toggles detail", () => {
-    const { container } = render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} apiBase="" />);
-    const rowBtn = container.querySelector('tr[role="button"]') as HTMLElement;
-    fireEvent.keyDown(rowBtn, { key: "Enter" });
-    expect(screen.getByText(/branch/)).toBeDefined();
-    fireEvent.keyDown(rowBtn, { key: "Enter" });
-    expect(screen.queryByText(/branch/)).toBeNull();
   });
 
   it("renders weekday Y-axis label Mon", () => {
@@ -117,14 +60,6 @@ describe("Observe Dashboard", () => {
     render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} apiBase="" />);
     expect(screen.getByText("Less")).toBeDefined();
     expect(screen.getByText("More")).toBeDefined();
-  });
-
-  it("'Open transcript' in the expanded row navigates to the drill-down sub-route", () => {
-    window.location.hash = "";
-    const { container } = render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} apiBase="" />);
-    fireEvent.click(container.querySelector('tr[role="button"]') as HTMLElement); // expand detail
-    fireEvent.click(screen.getByText(/Open transcript/));
-    expect(window.location.hash).toBe("#/inspect/claude/s1");
   });
 
   it("min-msgs filter input shows value 100 when filter.minMsgs is 100", () => {
@@ -151,7 +86,7 @@ describe("Observe Dashboard", () => {
 
 describe("Observe first-run", () => {
   it("shows an oriented signpost when the local session log is empty", async () => {
-    window.location.hash = "#/inspect"; // not a drill-down selection route
+    window.location.hash = "#/inspect";
     vi.stubGlobal("fetch", vi.fn(async (url: string | URL) =>
       String(url).includes("/api/observe/raw") ? res({ sessions: [] }) : res({}),
     ));
