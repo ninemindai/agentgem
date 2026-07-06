@@ -32,7 +32,7 @@ describe("PublishToExplore", () => {
         calls.push("workspace");
         return res({ name: "my-playbook" });
       }
-      if (u.includes("/api/playbook/publish")) {
+      if (u.includes("/api/publish-setup")) {
         calls.push("publish");
         return res({ exploreRef: "@me/my-playbook", version: "1.0.0", shareUrl: "https://agentgem.ai/share/abc" });
       }
@@ -62,7 +62,7 @@ describe("PublishToExplore", () => {
       const u = String(url);
       if (u.includes("/api/bind/status")) return res({ bound: true, login: "octocat" });
       if (u.includes("/api/workspaces")) return res({ name: "p" });
-      if (u.includes("/api/playbook/publish")) {
+      if (u.includes("/api/publish-setup")) {
         return { ok: false, status: 500, text: async () => "registry down" } as unknown as Response;
       }
       throw new Error(`unexpected: ${u}`);
@@ -115,7 +115,7 @@ describe("PublishToExplore", () => {
       const u = String(url);
       if (u.includes("/api/bind/status")) return res({ bound: false });
       if (u.includes("/api/workspaces")) return res({ name: "p" });
-      if (u.includes("/api/playbook/publish")) {
+      if (u.includes("/api/publish-setup")) {
         return res({ exploreRef: "@me/p", version: "1.0.0", shareUrl: "https://agentgem.ai/share/xyz" });
       }
       throw new Error(`unexpected: ${u}`);

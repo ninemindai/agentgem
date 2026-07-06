@@ -679,6 +679,12 @@ export const playbookPublishRoute = defineRoute("POST", "/api/playbook/publish",
   body: z.object({ workspace: z.string(), scope: z.string(), name: z.string().optional(), version: z.string(), description: z.string().optional(), tags: z.array(z.string()).optional(), provenance: z.string() }),
   response: z.object({ exploreRef: z.string(), version: z.string(), shareUrl: z.string() }),
 });
+// Installable publish: same body as playbook/publish, but the server uploads the .gem archive so
+// the shared setup is installable by others (not a browse-only teaser).
+export const publishSetupRoute = defineRoute("POST", "/api/publish-setup", {
+  body: z.object({ workspace: z.string(), scope: z.string(), name: z.string().optional(), version: z.string(), description: z.string().optional(), tags: z.array(z.string()).optional(), provenance: z.string() }),
+  response: z.object({ exploreRef: z.string(), version: z.string(), shareUrl: z.string() }),
+});
 
 // Network cross-model benchmark (aggregator, k-anonymised). Per-model outcome
 // counts across producers; success rate = mostly / (mostly + partially + notAchieved).
