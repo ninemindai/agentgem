@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 // src/gem/__tests__/contextHygiene.test.ts
 import { describe, it, expect } from "vitest";
-import { contextCap, contextTokens, clusterOf, runDetectors, SPRAWL_MIN, SWITCH_MIN, REREAD_MIN } from "@agentgem/insight";
+import { contextCap, contextTokens, clusterOf, runDetectors, SPRAWL_MIN, SWITCH_MIN, REREAD_MIN, PIN_LEVEL, PIN_FRACTION, CHURN_RATIO } from "@agentgem/insight";
 import type { TurnUsage, ProcedureStep, SessionSequence, WorkflowSignal } from "@agentgem/insight";
 
 describe("contextCap", () => {
@@ -106,5 +106,49 @@ describe("reread-churn detector", () => {
   it("ignores files read fewer than REREAD_MIN times", () => {
     const steps = [step("Read", "Read", "packages/a/x.ts", 1), step("Read", "Read", "packages/a/x.ts", 2)];
     expect(fire(signalWith([sess(steps)]), "reread-churn")).toHaveLength(0);
+  });
+});
+
+function turn(i: number, ctx: number, cacheCreation = 0): TurnUsage {
+  return { turn: i, msgIndex: i, ctxTokens: ctx, cacheCreation, outTokens: 10 };
+}
+function sessM(steps: ProcedureStep[], series: TurnUsage[], model: string): SessionSequence {
+  return { steps, sessionId: "s1", transcript: "s1.jsonl", atMs: 100, model, contextSeries: series };
+}
+
+describe("context-pinned detector", () => {
+  it("fires when >=PIN_FRACTION of turns sit above PIN_LEVEL of the cap", () => {
+    const cap = 1_000_000; const hi = cap * 0.95;
+    const series = Array.from({ length: 20 }, (_, i) => turn(i, hi));
+    const sig = signalWith([sessM([step("Read", "Read", "packages/a/f.ts", 0)], series, "opus[1m]")]);
+    const f = fire(sig, "context-pinned");
+    expect(f).toHaveLength(1);
+    expect(f[0].severity).toBe("warn");
+    expect(f[0].detail).toContain("85%");
+  });
+  it("does NOT fire for a long but un-pinned session (the bounded control)", () => {
+    // 200k-cap model, window hovering ~120k — long, healthy, must stay quiet
+    const series = Array.from({ length: 40 }, (_, i) => turn(i, 120_000));
+    const sig = signalWith([sessM([step("Read", "Read", "packages/a/f.ts", 0)], series, "claude-sonnet-5")]);
+    expect(fire(sig, "context-pinned")).toHaveLength(0);
+  });
+  it("degrades to [] when there is no contextSeries", () => {
+    expect(fire(signalWith([sess([step("Read", "Read", "packages/a/f.ts", 0)])]), "context-pinned")).toHaveLength(0);
+  });
+});
+
+describe("cache-churn-late detector", () => {
+  it("fires when late-half cache creation is >= CHURN_RATIO x the early half", () => {
+    const early = Array.from({ length: 10 }, (_, i) => turn(i, 500_000, 1_000));
+    const late = Array.from({ length: 10 }, (_, i) => turn(10 + i, 900_000, 3_000)); // 3x
+    const sig = signalWith([sessM([step("Read", "Read", "packages/a/f.ts", 0)], [...early, ...late], "opus[1m]")]);
+    const f = fire(sig, "cache-churn-late");
+    expect(f).toHaveLength(1);
+    expect(f[0].severity).toBe("warn");
+  });
+  it("stays quiet when churn is even across halves", () => {
+    const series = Array.from({ length: 20 }, (_, i) => turn(i, 500_000, 1_000));
+    const sig = signalWith([sessM([step("Read", "Read", "packages/a/f.ts", 0)], series, "opus[1m]")]);
+    expect(fire(sig, "cache-churn-late")).toHaveLength(0);
   });
 });

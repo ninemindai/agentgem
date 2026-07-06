@@ -12,7 +12,7 @@
 import type { ProcedureStep, SessionSequence, WorkflowSignal } from "./workflowScan.js";
 import { createLogger } from "@agentgem/base";
 import { isEdit, isVerify } from "./stageLabels.js";
-import { taskSprawl, taskPingpong, rereadChurn } from "./contextHygiene.js";
+import { taskSprawl, taskPingpong, rereadChurn, contextPinned, cacheChurnLate } from "./contextHygiene.js";
 
 const log = createLogger("insight");
 
@@ -198,7 +198,7 @@ const unverifiedTail: DetectorSpec = {
 
 export const DETECTORS: DetectorSpec[] = [
   retryStorm, thrashLoop, noVerifyFinish, regressionCycle, unverifiedTail,
-  taskSprawl, taskPingpong, rereadChurn,
+  taskSprawl, taskPingpong, rereadChurn, contextPinned, cacheChurnLate,
 ];
 
 /**
