@@ -51,6 +51,7 @@ import { ShareController } from "./share.controller.js";
 import { requireShareOriginSecret } from "./originSecret.js";
 import { ShareProxyController } from "./share.proxy.controller.js";
 import { SourcesController } from "./sources.controller.js";
+import { PlayController } from "./play.controller.js";
 import { resolveAggregatorDb, type AppDb, GitHubVerifier, fetchOrgMemberships } from "@agentgem/aggregator";
 import { mountGating } from "./gating.js";
 import { installAuth, githubExchangeCode } from "./auth/install.js";
@@ -115,6 +116,7 @@ export async function createApp(port: number): Promise<RestApplication> {
   app.restController(DreamController);
   app.restController(ShareProxyController);
   app.restController(SourcesController);
+  app.restController(PlayController);
   app.service(GemTools);
   // Aggregator (B1) + gating: always registered now — Postgres when DATABASE_URL is set, else
   // embedded pglite for local runs (ephemeral). mountGating adds the api-key identity middleware

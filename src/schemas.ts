@@ -894,3 +894,20 @@ export const UndeployRequestSchema = z.object({ name: z.string(), target: z.enum
 export const UndeployResponseSchema = z.object({ removed: z.boolean(), logTail: z.array(z.string()).optional() });
 export const DeployRecordQuerySchema = z.object({ name: z.string(), backend: z.enum(["eve", "flue", "claude-managed", "agentcore"]) });
 export const DeployRecordResponseSchema = z.object({ record: z.record(z.string(), z.unknown()).nullable() });
+
+// ---- Play (miniapps registry) ----
+export const PlaySaveRequestSchema = z.object({
+  name: z.string(),
+  html: z.string(),
+  meta: z.object({
+    title: z.string(),
+    genre: z.enum(["replay", "skill-run", "project-fun"]),
+    createdFrom: GameArtifactSchema.shape.createdFrom,
+    engineVersion: z.string().default("1"),
+    needs: z.array(z.enum(["live-session-events", "local-project-access", "invoke-agent"])).optional(),
+  }),
+});
+export const PlaySaveResponseSchema = z.object({ name: z.string(), commit: z.string().nullable() });
+export const MiniappListSchema = z.object({ miniapps: z.array(z.object({ name: z.string(), title: z.string(), genre: z.string() })) });
+export const PlayPublishRequestSchema = z.object({ remote: z.string().url().optional() });
+export const PlayPublishResponseSchema = z.object({ ok: z.boolean() });
