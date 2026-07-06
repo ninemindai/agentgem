@@ -8,7 +8,8 @@ import { join, sep } from "node:path";
 import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { safePathSegment } from "@agentgem/model";
 import type { Gem, GameArtifact, GameGenre, GameSource, GameCapability } from "@agentgem/model";
-import { createWorkspace } from "@agentgem/base";
+import { workspaceDir } from "@agentgem/base";
+import { writeGemArchive, writeArchiveDir } from "@agentgem/archive";
 import { gameGate } from "./gameGate.js";
 import { ensureRepo, commitAll } from "./git.js";
 
@@ -43,14 +44,18 @@ export async function saveMiniapp(input: SaveMiniappInput): Promise<{ name: stri
   writeFileSync(join(dir, "meta.json"), JSON.stringify(input.meta, null, 2));
   const commit = await commitAll(root, `save miniapp ${safe}`);
 
-  // dual-write the matching game gem (marketplace-capable). If it already exists, leave the prior one.
+  // dual-write the matching game gem (marketplace-capable), UPSERTING so a re-save stays in sync with
+  // the registry file. Writing the archive in place (create or overwrite) avoids createWorkspace's
+  // throw-if-exists; errors propagate rather than being swallowed.
   const artifact: GameArtifact = {
     type: "game", name: safe, title: input.meta.title, genre: input.meta.genre,
     html: input.html, createdFrom: input.meta.createdFrom, engineVersion: input.meta.engineVersion,
     ...(input.meta.needs ? { needs: input.meta.needs } : {}),
   };
   const gem: Gem = { name: safe, createdFrom: "play", artifacts: [artifact], checks: [], requiredSecrets: [] };
-  try { createWorkspace(safe, gem); } catch { /* workspace exists → registry commit is source of truth */ }
+  const wdir = workspaceDir(safe);
+  mkdirSync(wdir, { recursive: true });
+  writeArchiveDir(wdir, writeGemArchive(gem).files);
 
   return { name: safe, commit };
 }

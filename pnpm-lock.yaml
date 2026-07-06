@@ -374,6 +374,9 @@ importers:
 
   packages/play:
     dependencies:
+      '@agentgem/archive':
+        specifier: workspace:*
+        version: link:../archive
       '@agentgem/base':
         specifier: workspace:*
         version: link:../base
