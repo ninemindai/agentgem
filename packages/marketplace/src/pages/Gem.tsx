@@ -15,15 +15,23 @@ import type { StarState } from "../stars";
 // Best-effort: it only reaches a console on this port (the packaged app uses a random port — that's
 // what the agentgem:// protocol handler is for), so the manual steps below stay as the fallback.
 const LOCAL_CONSOLE = "http://localhost:4317";
-function openInConsoleUrl(gemKey: string): string {
-  return `${LOCAL_CONSOLE}/#/get-gems?q=${encodeURIComponent(gemKey)}`;
+// Deep-link query into the console's Get Gems tab. An installable (hosted) gem gets `?install=<key>
+// &v=<version>` → the console runs a direct zero-config install (consent-gated); a browse-only gem
+// falls back to `?q=<key>` (registry search), since there's no hosted archive to install.
+function deepLinkQuery(gem: { key: string; version: string; installable?: boolean }): string {
+  return gem.installable
+    ? `install=${encodeURIComponent(gem.key)}&v=${encodeURIComponent(gem.version)}`
+    : `q=${encodeURIComponent(gem.key)}`;
+}
+function openInConsoleUrl(gem: { key: string; version: string; installable?: boolean }): string {
+  return `${LOCAL_CONSOLE}/#/get-gems?${deepLinkQuery(gem)}`;
 }
 
 // The packaged desktop app registers the agentgem:// scheme (see desktop/), so this deep-links into
-// its Get Gems tab pre-searched regardless of the app's (random) port. No-op until a desktop build
-// with the handler is installed — the localhost link + manual steps cover the CLI/interim case.
-function openInAppUrl(gemKey: string): string {
-  return `agentgem://get-gems?q=${encodeURIComponent(gemKey)}`;
+// its Get Gems tab regardless of the app's (random) port. No-op until a desktop build with the
+// handler is installed — the localhost link + manual steps cover the CLI/interim case.
+function openInAppUrl(gem: { key: string; version: string; installable?: boolean }): string {
+  return `agentgem://get-gems?${deepLinkQuery(gem)}`;
 }
 
 export function Gem({ api, keyName, stars }: { api: ReturnType<typeof makeApi>; keyName: string; stars: StarsCtx }) {
@@ -71,11 +79,11 @@ export function Gem({ api, keyName, stars }: { api: ReturnType<typeof makeApi>; 
       <section className="ex-card">
         <h3>Get this gem</h3>
         <p className="ex-getit">
-          <a className="ex-open-app" href={openInAppUrl(gem.key)}>Open in AgentGem →</a>
+          <a className="ex-open-app" href={openInAppUrl(gem)}>Open in AgentGem →</a>
           Gem key: <code className="ex-key">{gem.key}</code>
           <button type="button" className="ex-copy" onClick={copyKey}>Copy key</button>
         </p>
-        <p className="ex-getit-steps">Opens the AgentGem desktop app straight to <strong>Get Gems</strong>, pre-searched. Running the CLI console? <a className="ex-getit-link" href={openInConsoleUrl(gem.key)} target="_blank" rel="noreferrer">Open on localhost:4317</a>. Not running? Start AgentGem → <strong>Get Gems</strong> → search "{gem.key}" → <strong>Install</strong>.</p>
+        <p className="ex-getit-steps">Opens the AgentGem desktop app straight to <strong>Get Gems</strong>{gem.installable ? " and installs it" : ", pre-searched"}. Running the CLI console? <a className="ex-getit-link" href={openInConsoleUrl(gem)} target="_blank" rel="noreferrer">Open on localhost:4317</a>. Not running? Start AgentGem → <strong>Get Gems</strong> → search "{gem.key}" → <strong>Install</strong>.</p>
       </section>
 
       {gem.ingredients.length > 0 && (
