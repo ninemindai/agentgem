@@ -461,7 +461,7 @@ export class GemController {
         const manifest = {
           gemKey: `${b.scope}/${b.name ?? b.workspace}`, version: b.version,
           description: b.description, tags: b.tags, grade: gem.grade,
-          artifactKinds: gem.artifacts.map((a) => a.type),
+          artifactKinds: [...new Set(gem.artifacts.map((a) => a.type))],
         };
         const identity = loadOrCreateIdentity();
         const r = await postCatalogShare({ manifest, identity });

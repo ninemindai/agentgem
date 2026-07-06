@@ -110,7 +110,10 @@ import type { RegistryGem } from "../types";
 import type { makeApi } from "../api";
 
 function toGem(r: RegistryGem): Gem {
-  return { key: r.key, version: r.version, author: r.author, publishedBy: r.publishedBy, description: r.description ?? "", tags: r.tags ?? [], artifactKinds: r.artifactKinds ?? [], cut: r.type, grade: r.grade, installable: r.installable, artifacts: r.artifacts, ingredients: [] };
+  // Dedupe artifactKinds into a kind summary (["skill","mcp"]). The publish path historically
+  // stored one entry per artifact, so a 50-skill gem arrives as ["skill", ×50] — collapse it here
+  // so both the gem list and detail render one chip per kind, matching the registry's own dedupe.
+  return { key: r.key, version: r.version, author: r.author, publishedBy: r.publishedBy, description: r.description ?? "", tags: r.tags ?? [], artifactKinds: [...new Set(r.artifactKinds ?? [])], cut: r.type, grade: r.grade, installable: r.installable, artifacts: r.artifacts, ingredients: [] };
 }
 
 /** Live registry gems, or the curated STATIC_GEMS when the registry is empty/unconfigured/errors. */

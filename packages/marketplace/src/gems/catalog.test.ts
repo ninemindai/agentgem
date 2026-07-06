@@ -32,6 +32,16 @@ describe("loadGems", () => {
     const gems = await loadGems(apiWith(() => Promise.resolve([liveOne])));
     expect(gems).toEqual([{ key: "live-gem", version: "3.0.0", author: "acme", description: "live", tags: ["x"], artifactKinds: ["mcp"], ingredients: [] }]);
   });
+  it("dedupes artifactKinds into a kind summary (a 50-skill gem shows one 'skill' chip)", async () => {
+    const dupey: RegistryGem = { key: "big-setup", version: "1.0.0", description: "d", tags: [], artifactKinds: Array(50).fill("skill") };
+    const [g] = await loadGems(apiWith(() => Promise.resolve([dupey])));
+    expect(g.artifactKinds).toEqual(["skill"]);
+  });
+  it("preserves distinct kinds and their first-seen order when deduping", async () => {
+    const mixed: RegistryGem = { key: "mixed", version: "1.0.0", description: "d", tags: [], artifactKinds: ["skill", "mcp", "skill", "subagent", "mcp"] };
+    const [g] = await loadGems(apiWith(() => Promise.resolve([mixed])));
+    expect(g.artifactKinds).toEqual(["skill", "mcp", "subagent"]);
+  });
   it("falls back to STATIC_GEMS when the live list is empty", async () => {
     expect(await loadGems(apiWith(() => Promise.resolve([])))).toEqual(STATIC_GEMS);
   });
