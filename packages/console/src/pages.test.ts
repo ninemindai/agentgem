@@ -13,10 +13,10 @@ describe("pages registry", () => {
     const g = phaseGroups(pages, "observe");
     expect(g.map((x) => x.category)).toEqual(["setup", "sessions", "projects", "usage"]);
     expect(g.map((x) => x.pages.map((p) => p.id))).toEqual([
-      ["observe", "rubrics"],
+      ["rubrics"],
       ["watch", "chat", "dreaming"],
       ["mine", "optimize"],
-      ["insights", "benchmark"],
+      ["observe", "insights", "benchmark"],
     ]);
   });
 

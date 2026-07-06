@@ -146,6 +146,6 @@ export function Observe({ apiBase }: { apiBase: string }) {
 }
 
 export const observePage = defineConsolePage({
-  id: "observe", title: "Inspect", icon: "👁", order: 10, phase: "observe", category: "setup",
+  id: "observe", title: "Inspect", icon: "👁", order: 5, phase: "observe", category: "usage",
   route: "#/inspect", component: Observe,
 });
