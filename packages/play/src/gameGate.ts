@@ -1,14 +1,18 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
-// Server-side validation gate. Tier-1: static "self-contained" checks that keep a game bundle
-// sealed and shareable (no network, no external assets), independent of any agent self-report,
-// plus a jsdom load-smoke that catches uncaught throws on load.
+// Server-side validation gate for generated game bundles. This is a best-effort ADMISSION HEURISTIC
+// and the self-repair loop's error signal — NOT a security boundary. The real network seal is the
+// runtime CSP sandbox (`default-src 'none'`) applied when a game is played (Plan 3); the static checks
+// here only catch obvious external-reference/network *syntax*, and dynamic exfiltration (e.g.
+// `new Image().src = url`) can pass them. Likewise the jsdom load-smoke runs scripts with
+// `runScripts:"dangerously"`, which jsdom documents is NOT a sandbox — so gameGate() must only ever be
+// called on bundles produced under our own control (the Plan 2 generator runs inside the packages/run
+// sandbox). Never call it on untrusted/downloaded input in this process.
 import { JSDOM, VirtualConsole } from "jsdom";
 
 export interface GateResult { ok: boolean; failures: string[] }
 export interface GateOptions {
-  maxBytes?: number;                 // default 1.5 MB — archives/shares well
-  allowedNeeds?: readonly string[];  // recognized capability names (for the needs sanity check)
+  maxBytes?: number; // default 1.5 MB — archives/shares well
 }
 
 const DEFAULT_MAX_BYTES = 1_500_000;
