@@ -59,6 +59,27 @@ export async function gameGate(html: string, opts: GateOptions = {}): Promise<Ga
       runScripts: "dangerously", // execute inline <script>; jsdom does NOT fetch external resources
       virtualConsole: vc,
       pretendToBeVisual: true,   // provides requestAnimationFrame so canvas game loops don't throw
+      // jsdom has no canvas backend, so canvas.getContext() throws by default — which would reject every
+      // canvas game. Stub a no-op 2D context so canvas games load-smoke cleanly (drawing correctness is
+      // the human preview's job, Tier-2; this gate only catches genuine load-time throws).
+      beforeParse(window) {
+        const proto = (window.HTMLCanvasElement?.prototype as unknown as Record<string, unknown> | undefined);
+        if (!proto) return;
+        proto.getContext = function (this: unknown) {
+          return new Proxy({}, {
+            get: (_t, prop) => {
+              if (prop === "canvas") return this;
+              if (prop === "measureText") return () => ({ width: 0 });
+              if (prop === "getImageData") return () => ({ data: new Uint8ClampedArray(4), width: 1, height: 1 });
+              if (prop === "createLinearGradient" || prop === "createRadialGradient" || prop === "createPattern")
+                return () => ({ addColorStop() {} });
+              return () => {};
+            },
+            set: () => true,
+          });
+        };
+        proto.toDataURL = () => "data:,";
+      },
     });
     await new Promise((r) => setTimeout(r, 0)); // let the first tick run
     dom.window.close();
