@@ -5,7 +5,7 @@ import { existsSync, writeFileSync, readFileSync } from "node:fs";
 import { basename, resolve, sep } from "node:path";
 import { z } from "zod";
 import { api, get, post } from "@agentback/openapi";
-import { scanSessionsCached, aggregateObserve, loadSessionTranscript, resolveClaudeSession, dehomeDistilled, scrubText } from "@agentgem/insight";
+import { scanSessionsCached, aggregateObserve, loadSessionTranscript, resolveClaudeSession, dehomeDistilled, scrubText, sessionToAtif } from "@agentgem/insight";
 import { scanArtifactUsageCached } from "@agentgem/insight";
 import { buildOptimizePayload, buildDiscover, rerankCandidates, installSkill, type OptimizeRange } from "@agentgem/insight";
 import { createLogger } from "@agentgem/base";
@@ -62,6 +62,15 @@ const TranscriptTurnSchema = z.object({
 const TranscriptViewSchema = z.object({
   sessionId: z.string(), agent: z.string(),
   meta: SessionStatSchema, turns: z.array(TranscriptTurnSchema),
+});
+// ATIF export: response is deliberately loose (passthrough) — sessionToAtif emits
+// the full ATIF v1.7 document shape (per-step tool_calls/observation/metrics,
+// optional extra fields) and this schema only needs to validate the envelope.
+const AtifTrajectorySchema = z.looseObject({
+  schema_version: z.string(),
+  session_id: z.string().optional(),
+  agent: z.looseObject({ name: z.string(), version: z.string() }),
+  steps: z.array(z.record(z.string(), z.unknown())),
 });
 // "Distill this session" (proposal phase 3): runs the EXISTING workflow scan +
 // distill pipeline over a single session's transcript. Claude-only, like the
@@ -389,6 +398,13 @@ export class GemController {
     const view = await loadSessionTranscript(input.query.id, input.query.agent);
     if (!view) throw new InvalidInputError(`No ${input.query.agent} session '${input.query.id}' found.`);
     return view;
+  }
+
+  @get("/inspect/session/atif", { query: InspectSessionQuerySchema, response: AtifTrajectorySchema })
+  async inspectSessionAtif(input: { query: z.infer<typeof InspectSessionQuerySchema> }): Promise<z.infer<typeof AtifTrajectorySchema>> {
+    const view = await loadSessionTranscript(input.query.id, input.query.agent);
+    if (!view) throw new InvalidInputError(`No ${input.query.agent} session '${input.query.id}' found.`);
+    return sessionToAtif(view) as unknown as z.infer<typeof AtifTrajectorySchema>;
   }
 
   @post("/inspect/distill", { body: InspectDistillBodySchema, response: InspectDistillResponseSchema })
