@@ -237,6 +237,7 @@ import { preparePlaybook } from "./gem/playbookPrepareCore.js";
 import { publishPlaybookCore } from "./gem/playbookPublishCore.js";
 import { createShareCard } from "./share/shareStore.js";
 import { postCatalogShare, shareRejectedError } from "./gem/catalogShareClient.js";
+import { postGemPublish } from "./gem/gemPublishClient.js";
 import { sanitizeShareText } from "@agentgem/insight";
 import { claudeTranscriptsForCwd, scanWorkflow, allClaudeTranscripts, bucketTranscriptsByCwd } from "@agentgem/insight";
 import { distillWorkflow, distillSessionLessons, type DistilledSkill } from "@agentgem/insight";
@@ -461,6 +462,33 @@ export class GemController {
         };
         const identity = loadOrCreateIdentity();
         const r = await postCatalogShare({ manifest, identity });
+        if (!r.shared) throw shareRejectedError(r.rejected);
+        return { ref: manifest.gemKey, version: b.version };
+      },
+      share: async () => createShareCard(this.db!, { kind: "gem", name: b.name ?? b.workspace, provenance: b.provenance, generatedAtMs: Date.now() }),
+    });
+  }
+
+  // Installable publish: like playbook/publish, but uploads the .gem archive (exportGem) alongside
+  // the manifest so the shared setup is installable by others (not a browse-only teaser). The
+  // manifest carries the per-artifact list (preview) and the archive digest (binds the signature).
+  @post("/publish-setup", { body: PlaybookPublishBodySchema, response: PlaybookPublishResponseSchema })
+  async publishSetup(input: { body: z.infer<typeof PlaybookPublishBodySchema> }): Promise<z.infer<typeof PlaybookPublishResponseSchema>> {
+    const b = input.body;
+    return publishPlaybookCore({
+      publish: async () => {
+        const gem = readGemArchive(readWorkspace(b.workspace).files);
+        const { bytes } = exportGem(gem, { version: b.version });
+        const { meta } = importGem(bytes);
+        const manifest = {
+          gemKey: `${b.scope}/${b.name ?? b.workspace}`, version: b.version,
+          description: b.description, tags: b.tags, grade: gem.grade,
+          artifactKinds: [...new Set(gem.artifacts.map((a) => a.type))],
+          artifacts: gem.artifacts.map((a) => ({ name: a.name, type: a.type })),
+          gemDigest: meta.gemDigest,
+        };
+        const identity = loadOrCreateIdentity();
+        const r = await postGemPublish({ manifest, archiveBase64: bytes.toString("base64"), identity });
         if (!r.shared) throw shareRejectedError(r.rejected);
         return { ref: manifest.gemKey, version: b.version };
       },

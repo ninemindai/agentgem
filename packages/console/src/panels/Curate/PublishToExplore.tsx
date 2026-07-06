@@ -5,7 +5,7 @@
 // (2) publish that workspace to the registry + mint a share card via playbookPublishRoute.
 import { useEffect, useState } from "react";
 import {
-  createWorkspaceRoute, playbookPublishRoute, makeClient,
+  createWorkspaceRoute, publishSetupRoute, makeClient,
   bindStatusRoute, bindStartRoute, bindCompleteRoute,
 } from "../../api/routes.js";
 import { buildSelection } from "./selection.js";
@@ -99,7 +99,7 @@ export function PublishToExplore({ apiBase, selected, skillCount, lessonCount, d
       // Step 1: save the reviewed selection as a named workspace
       await createWorkspaceRoute.call(client, { body: { name: trimName, selection: buildSelection(selected) } });
       // Step 2: publish workspace to registry + mint share card
-      const pub = await playbookPublishRoute.call(client, {
+      const pub = await publishSetupRoute.call(client, {
         body: { workspace: trimName, scope: trimScope, name: trimName, version: version.trim() || "1.0.0", provenance },
       });
       setResult({ exploreRef: pub.exploreRef, shareUrl: pub.shareUrl });
