@@ -19,9 +19,11 @@ github.com → ninemindai org → Settings → Developer settings → GitHub App
 - **Subscribe to events**: check **Organization** and **Push**. (`Installation` and
   `Installation repositories` events are always delivered to GitHub Apps — no checkbox.)
 - **Where can this App be installed?** Any account.
-- **Setup URL** (post-install redirect): https://app.agentgem.ai/orgs/:org?installed=1 —
-  GitHub doesn't substitute :org; leave Setup URL as https://app.agentgem.ai and rely on the
-  marketplace org page. (Optional improvement later: a /api/github/setup redirect handler.)
+- **Setup URL** (post-install redirect): `https://api.agentgem.ai/api/github/setup` —
+  GitHub appends `?installation_id=N&setup_action=install`; the handler resolves the
+  installation to its org via the app JWT and 302s to
+  `https://app.agentgem.ai/orgs/<org>?installed=1` (any failure falls back to the app home).
+  Leave "Redirect on update" unchecked.
 - After creation: note the **App ID** (`GITHUB_APP_ID`) and generate a **private key** (.pem
   download — its full contents are `GITHUB_APP_PRIVATE_KEY`).
 

@@ -193,5 +193,7 @@ describe("originGuard — public aggregator reads (CORS + cross-site exemption)"
       expect(run({ "sec-fetch-site": "cross-site" }, "app.agentgem.ai", "GET", path).nexted).toBe(true);
     }
     expect(run({ "sec-fetch-site": "cross-site" }, "app.agentgem.ai", "POST", "/api/github/webhook").nexted).toBe(true);
+    // The post-install Setup URL is a top-level navigation arriving FROM github.com.
+    expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "GET", "/api/github/setup").nexted).toBe(true);
   });
 });

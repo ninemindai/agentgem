@@ -62,6 +62,7 @@ import { registryConfigFromEnv, githubRegistrySource, githubRegistryPublisher, d
 import { defaultGemTypeRegistry } from "./gem/gemTypeRegistry.js";
 import { appConfigFromEnv, InstallationTokens } from "./githubApp/client.js";
 import { installGithubWebhook } from "./githubApp/webhook.js";
+import { installGithubSetup } from "./githubApp/setupRedirect.js";
 import { installOrgsApi } from "./githubApp/orgsApi.js";
 import { reconcileAll, type GithubAppDeps } from "./githubApp/sync.js";
 
@@ -197,6 +198,8 @@ export async function createApp(port: number): Promise<RestApplication> {
   if (aggDb) {
     const ghAppDeps: GithubAppDeps = { db: aggDb, cfg: ghAppCfg, tokens: ghAppTokens, http: defaultHttp, fetchImpl: fetch };
     installGithubWebhook(server.expressApp as never, ghAppDeps);
+    // Post-install Setup URL target: resolves ?installation_id → the org's catalog page.
+    installGithubSetup(server.expressApp as never, { cfg: ghAppCfg });
     if (webOrigins.length > 0) installOrgsApi(server.expressApp as never, { db: aggDb, webOrigins, tokens: ghAppTokens, http: defaultHttp });
     if (ghAppCfg) {
       const runReconcile = () => void reconcileAll(ghAppDeps).catch((e) => console.error(`githubApp: reconcile failed: ${(e as Error).message}`));
