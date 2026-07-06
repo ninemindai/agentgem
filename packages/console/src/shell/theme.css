@@ -579,6 +579,8 @@ body::before {
 .obs-range-btn:hover { border-color: var(--accent); color: var(--accent); }
 .obs-range-btn.is-active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
 
+.obs-share-strip { padding: 6px 0 2px; }
+
 .obs-filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
 .obs-filters select, .obs-filters input[type="number"] {
   background: var(--paper-2); border: 1px solid var(--line); border-radius: 6px;
