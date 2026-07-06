@@ -15,7 +15,7 @@ import { readFile } from "node:fs/promises";
 import { join, basename } from "node:path";
 import { resolveDirs } from "@agentgem/model";
 import { jsonLines, listFiles, parseClaudeTranscript, parseCodexTranscript } from "./observeScan.js";
-import { scrubText } from "./scrub.js";
+import { scrubText, scrubTruncate } from "./scrub.js";
 import type { SessionStat, AgentId } from "./observeAggregate.js";
 import type { DistilledSkill } from "./distillTypes.js";
 import { parseAtifTranscriptView, atifDropDir } from "./atif/atifView.js";
@@ -59,18 +59,15 @@ export interface SessionEvent {
   span: SessionEventSpan;
 }
 
-// Verbatim-but-bounded: a single Read of a huge file would otherwise ship
-// megabytes per open (no cache, scrub-on-read). Cap each content string and mark
-// the cut so truncation is visible, not silent. Virtualization/lazy expansion is
-// a later phase (proposal open question); this is the v1 safety valve.
-const MAX_STR = 50_000;
-
 /** Scrub a content value to a secret-safe string. Objects are pretty-printed
- *  first so every nested string is covered by one scrubText pass. */
+ *  first so every nested string is covered by one scrubText pass. Verbatim-but-
+ *  bounded: a single Read of a huge file would otherwise ship megabytes per open
+ *  (no cache, scrub-on-read) — scrubTruncate caps each content string and marks
+ *  the cut so truncation is visible, not silent. Virtualization/lazy expansion is
+ *  a later phase (proposal open question); this is the v1 safety valve. */
 function scrubContent(value: unknown): string {
   const raw = typeof value === "string" ? value : safeJson(value);
-  const scrubbed = scrubText(raw);
-  return scrubbed.length > MAX_STR ? scrubbed.slice(0, MAX_STR) + "\n…(truncated)" : scrubbed;
+  return scrubTruncate(raw);
 }
 
 function safeJson(value: unknown): string {

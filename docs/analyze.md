@@ -105,8 +105,8 @@ A report also computes **`atRiskRate`** — the fraction of sessions scoring bel
 disciplined") — as a local proxy for process risk. This mirrors AgentLens's lucky-pass metric
 but does not claim anything about task success; AgentGem observes process, not pass/fail.
 
-The detectors already surface through the existing findings pipeline
-(`insightsCore` → `behaviorFindings` → `rubricReport`); you see them in the
+The detectors already surface through the existing findings consumers
+(`insightsCore`, `behaviorFindings`, `rubricReport`); you see them in the
 **Findings** section of the rubric report today. **Note:** displaying the `ProcessQuality`
 score itself in the console scorecard or goldmine UI is a follow-up proposal, not yet built.
 
