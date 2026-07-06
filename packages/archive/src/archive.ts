@@ -246,21 +246,30 @@ export function readGemArchive(files: FileTree): Gem {
       return a;
     }
     if (e.type === "game") {
-      const metadata = JSON.parse(e.metadata ?? "{}") as { title?: string; genre?: string; createdFrom?: unknown; engineVersion?: string; poster?: string; needs?: unknown[]; meta?: unknown };
-      const createdFrom = (metadata.createdFrom ?? { kind: "session", agent: "", sessionId: "", summary: "" }) as any;
-      const a: any = {
-        type: "game" as const,
-        name: e.name,
-        title: metadata.title ?? "",
-        genre: metadata.genre ?? "replay",
-        html: body(e.path),
-        createdFrom: createdFrom,
-        engineVersion: metadata.engineVersion ?? "1",
+      const m = JSON.parse(e.metadata ?? "{}") as {
+        title?: string; genre?: string; createdFrom?: unknown; engineVersion?: string;
+        poster?: string; needs?: GameArtifact["needs"]; meta?: GameArtifact["meta"];
       };
-      if (metadata.poster !== undefined) a.poster = metadata.poster;
-      if (metadata.needs !== undefined) a.needs = metadata.needs;
-      if (metadata.meta !== undefined) a.meta = metadata.meta;
-      return a as GemArtifact;
+      if (m.createdFrom === undefined || m.createdFrom === null) {
+        throw new Error(`game artifact '${e.name}' has no createdFrom in manifest`);
+      }
+      const genre = m.genre;
+      if (genre !== "replay" && genre !== "skill-run" && genre !== "project-fun") {
+        throw new Error(`game artifact '${e.name}' has invalid genre '${String(genre)}'`);
+      }
+      const a: GameArtifact = {
+        type: "game",
+        name: e.name,
+        title: m.title ?? "",
+        genre,
+        html: body(e.path),
+        createdFrom: m.createdFrom as GameArtifact["createdFrom"],
+        engineVersion: m.engineVersion ?? "1",
+      };
+      if (m.poster !== undefined) a.poster = m.poster;
+      if (m.needs !== undefined) a.needs = m.needs;
+      if (m.meta !== undefined) a.meta = m.meta;
+      return a;
     }
     if (e.type !== "hook") throw new Error(`unknown artifact type '${e.type}' in manifest`);
     const o = JSON.parse(body(e.path)) as { event: string; matcher?: string; config: Record<string, unknown>; source?: string; secretRefs?: HookArtifact["secretRefs"] };
