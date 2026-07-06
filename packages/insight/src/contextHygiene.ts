@@ -75,3 +75,45 @@ export const rereadChurn: DetectorSpec = {
       `${files} file(s) re-read ${REREAD_MIN}+ times (${redundant} redundant reads)`, idx.slice(0, 20))];
   },
 };
+
+// A turn is "pinned" above this fraction of the model's context cap.
+export const PIN_LEVEL = 0.85;
+// A session is flagged when at least this fraction of turns are pinned.
+export const PIN_FRACTION = 0.9;
+// Late-half cache re-creation this many times the early half = churn late.
+export const CHURN_RATIO = 1.8;
+
+export const contextPinned: DetectorSpec = {
+  id: "context-pinned", title: "Window pinned at the context cap", cost: "cheap", severity: "warn",
+  advice: "The window sat against its cap for most of the session, re-processing the whole history every turn. Cutting earlier keeps each turn cheap and sharp.",
+  detect(session) {
+    const series = session.contextSeries;
+    if (!series || series.length < 4) return [];
+    const cap = contextCap(session.model);
+    const level = cap * PIN_LEVEL;
+    const pinned = series.filter((t) => t.ctxTokens >= level);
+    if (pinned.length / series.length < PIN_FRACTION) return [];
+    return [finding("context-pinned", "warn", session,
+      `pinned ${pinned.length}/${series.length} turns at ≥${Math.round(PIN_LEVEL * 100)}% cap`,
+      pinned.slice(0, 20).map((t) => t.msgIndex))];
+  },
+};
+
+export const cacheChurnLate: DetectorSpec = {
+  id: "cache-churn-late", title: "Context churning hardest when fullest", cost: "cheap", severity: "warn",
+  advice: "The window was torn down and rebuilt far more in the back half than the front, a degradation signature. A cleaner cut resets it.",
+  detect(session) {
+    const series = session.contextSeries;
+    if (!series || series.length < 4) return [];
+    const half = Math.floor(series.length / 2);
+    const sum = (arr: typeof series) => arr.reduce((a, t) => a + t.cacheCreation, 0);
+    const early = sum(series.slice(0, half));
+    const late = sum(series.slice(half));
+    if (early <= 0) return [];
+    const ratio = late / early;
+    if (ratio < CHURN_RATIO) return [];
+    return [finding("cache-churn-late", "warn", session,
+      `late cache re-creation ${ratio.toFixed(1)}× early`,
+      series.slice(half).slice(0, 20).map((t) => t.msgIndex))];
+  },
+};
