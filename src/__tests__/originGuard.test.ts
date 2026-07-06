@@ -96,6 +96,11 @@ describe("originGuard — public aggregator reads (CORS + cross-site exemption)"
     expect(r.nexted).toBe(true);
     expect(r.set["access-control-allow-origin"]).toBe("*");
   });
+  it("allows a cross-site GET to the public gem-archive download and sets permissive CORS", () => {
+    const r = run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "GET", "/api/aggregator/gem-archive");
+    expect(r.nexted).toBe(true);
+    expect(r.set["access-control-allow-origin"]).toBe("*");
+  });
   it("allows a cross-site GET to adoption and sets permissive CORS", () => {
     const r = run({ "sec-fetch-site": "cross-site" }, "agg.example", "GET", "/api/aggregator/adoption");
     expect(r.nexted).toBe(true);

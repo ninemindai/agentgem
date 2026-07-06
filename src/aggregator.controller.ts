@@ -16,7 +16,8 @@ import { recordBinding } from "@agentgem/aggregator";
 import { GitHubVerifier } from "@agentgem/aggregator";
 import { sweepQuarantine, sweepAdoptionQuarantine } from "@agentgem/aggregator";
 import { issueKey, revokeKey, listKeys } from "@agentgem/aggregator";
-import { recordCatalogShare } from "@agentgem/aggregator";
+import { recordCatalogShare, upsertGemArchive, getGemArchive } from "@agentgem/aggregator";
+import { importGem } from "@agentgem/distribute";
 
 // Loose body schema — the real gate is the core's verifyAttestation (ed25519 + consistency).
 const IngestBody = z.object({ producer: z.object({ publicKey: z.string() }).loose(), signature: z.string(), gem: z.object({ digest: z.string() }).loose() }).loose();
@@ -129,9 +130,14 @@ const CatalogManifestSchema = z.object({
   gemKey: z.string(), version: z.string(), author: z.string().optional(), description: z.string().optional(),
   tags: z.array(z.string()).optional(), artifactKinds: z.array(z.string()).optional(),
   type: z.string().optional(), grade: z.number().optional(),
+  artifacts: z.array(z.object({ name: z.string(), type: z.string() })).optional(),
+  gemDigest: z.string().optional(),
 });
 const CatalogBody = z.object({ manifest: CatalogManifestSchema, pubkey: z.string(), signedAt: z.number(), signature: z.string() });
 const CatalogResult = z.object({ shared: z.boolean(), publishedBy: z.string().optional(), gemKey: z.string().optional(), version: z.string().optional(), rejected: z.string().optional() });
+const PublishGemBody = z.object({ manifest: CatalogManifestSchema, archiveBase64: z.string(), pubkey: z.string(), signedAt: z.number(), signature: z.string() });
+const GemArchiveQuery = z.object({ key: z.string(), version: z.string() });
+const GemArchiveResult = z.object({ archiveBase64: z.string() });
 
 // Constant-time token compare (length-guarded so timingSafeEqual never throws on mismatched lengths).
 function tokenEq(a: string, b: string): boolean {
@@ -253,6 +259,36 @@ export class AggregatorController {
     return r.shared
       ? { shared: true, publishedBy: r.publishedBy, gemKey: r.gemKey, version: r.version }
       : { shared: false, rejected: r.rejected };
+  }
+
+  // Installable publish: the signed catalog share PLUS the .gem archive bytes. Verifies the archive
+  // (importGem checks gem.lock), binds it to the signed manifest via gemDigest, then stores both so
+  // the gem becomes installable. publishedBy stays server-derived (recordCatalogShare).
+  @post("/publish-gem", { body: PublishGemBody, response: CatalogResult })
+  async publishGem(input: { body: z.infer<typeof PublishGemBody> }): Promise<z.infer<typeof CatalogResult>> {
+    const bytes = Buffer.from(input.body.archiveBase64, "base64");
+    let digest: string;
+    try {
+      digest = importGem(bytes).meta.gemDigest; // throws on tamper / bad lock
+    } catch {
+      throw new AgentError("invalid gem archive", { status: 400, code: "invalid_archive", retryable: false });
+    }
+    if (input.body.manifest.gemDigest && input.body.manifest.gemDigest !== digest) {
+      return { shared: false, rejected: "digest-mismatch" };
+    }
+    const r = await recordCatalogShare(this.db, { manifest: input.body.manifest, pubkey: input.body.pubkey, signedAt: input.body.signedAt, signature: input.body.signature });
+    if (!r.shared) return { shared: false, rejected: r.rejected };
+    await upsertGemArchive(this.db, { gemKey: r.gemKey, version: r.version, bytes: new Uint8Array(bytes), digest, createdAtMs: Date.now() });
+    return { shared: true, publishedBy: r.publishedBy, gemKey: r.gemKey, version: r.version };
+  }
+
+  // Public: stream a published gem's archive bytes (base64) for zero-config install. Serves only
+  // gems whose content was uploaded (gem_archives row present). originGuard PUBLIC_READ-exempt.
+  @get("/gem-archive", { query: GemArchiveQuery, response: GemArchiveResult })
+  async gemArchive(input: { query: z.infer<typeof GemArchiveQuery> }): Promise<z.infer<typeof GemArchiveResult>> {
+    const a = await getGemArchive(this.db, input.query.key, input.query.version);
+    if (!a) throw new AgentError("gem archive not found", { status: 404, code: "gem_archive_not_found", retryable: false });
+    return { archiveBase64: Buffer.from(a.bytes).toString("base64") };
   }
 
   // Admin-only: run the anti-sybil quarantine sweep. Dry-run by default; apply=true is
