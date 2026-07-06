@@ -19,6 +19,7 @@ import { scanClineSessions, readClineArtifacts, parseClineMeta, detectClineArtif
 import { scanGeminiSessions, readGeminiArtifacts, parseGeminiMeta, resolveGeminiHtmlPaths } from "./sources/gemini.js";
 import { scanContinueSessions, readContinueArtifacts, parseContinueMeta, resolveContinueHtmlPaths } from "./sources/continue.js";
 import { scanCursorSessions, readCursorArtifacts } from "./sources/cursor.js";
+import { atifSource } from "./sources/atif.js";
 
 // codexDir is a legacy independent override (scanSessions({ claudeDir, codexDir })); when absent it
 // derives from baseDir's parent via resolveDirs, same as every other agent root.
@@ -191,4 +192,4 @@ const cursorSource: SourceSpec = {
   },
 };
 
-export const BUILTIN_SOURCES: SourceSpec[] = [claudeSource, codexSource, clineSource, geminiSource, continueSource, cursorSource];
+export const BUILTIN_SOURCES: SourceSpec[] = [claudeSource, codexSource, clineSource, geminiSource, continueSource, cursorSource, atifSource];

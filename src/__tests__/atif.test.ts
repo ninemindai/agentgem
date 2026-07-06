@@ -1,10 +1,10 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseAtifDocument, flattenAtifContent, parseAtifMeta, atifSessionEvents, parseAtifTranscriptView, loadSessionTranscript } from "@agentgem/insight";
+import { parseAtifDocument, flattenAtifContent, parseAtifMeta, atifSessionEvents, parseAtifTranscriptView, loadSessionTranscript, atifSource, BUILTIN_SOURCES, watchableSources } from "@agentgem/insight";
 
 const MIN_DOC = JSON.stringify({
   schema_version: "ATIF-v1.7",
@@ -125,6 +125,28 @@ describe("loadSessionTranscript (atif)", () => {
       const view = await loadSessionTranscript("sess-1", "atif", { atifDir: dir });
       expect(view?.sessionId).toBe("sess-1");
       expect(await loadSessionTranscript("nope", "atif", { atifDir: dir })).toBeNull();
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+});
+
+describe("atifSource", () => {
+  it("is registered and watchable", () => {
+    expect(BUILTIN_SOURCES.some((s) => s.id === "atif")).toBe(true);
+    expect(watchableSources().some((s) => s.id === "atif")).toBe(true);
+  });
+
+  it("scans a drop dir and backfills mtime when the trajectory has no timestamps", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "agentgem-atif-src-"));
+    try {
+      const noTs = JSON.parse(MIN_DOC);
+      delete noTs.steps[0].timestamp; delete noTs.steps[1].timestamp;
+      writeFileSync(join(dir, "sess-1.json"), JSON.stringify(noTs));
+      writeFileSync(join(dir, "junk.json"), "not a trajectory");
+      const stats = await atifSource.scanSessions!(atifSource.roots({ baseDir: dir }));
+      expect(stats).toHaveLength(1);
+      const mtime = statSync(join(dir, "sess-1.json")).mtimeMs;
+      expect(stats[0].startMs).toBeCloseTo(mtime, -2);
+      expect(stats[0].endMs).toBeCloseTo(mtime, -2);
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });
