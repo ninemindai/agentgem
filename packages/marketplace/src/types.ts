@@ -9,6 +9,7 @@ export interface RegistryGem {
   publishedBy?: string;
   grade?: number;
   installable?: boolean;
+  artifacts?: { name: string; type: string }[];
 }
 
 export interface AggIngredient {

@@ -15,6 +15,8 @@ export interface Gem {
   artifactKinds: string[];      // e.g. ["skill","mcp"] — chip row
   cut?: string;                  // gem cut (type), e.g. "kit" | "skill" | "integration" | "setup"
   grade?: number;                // authoring quality floor (1–3); blended with community stars into the 1–5 rating
+  installable?: boolean;         // true for hosted-store gems whose archive was uploaded
+  artifacts?: { name: string; type: string }[]; // per-artifact preview list (absent for browse-only gems)
   ingredients: GemIngredient[]; // bundled ingredients; ids match aggregator ids for cross-linking
 }
 
@@ -108,7 +110,7 @@ import type { RegistryGem } from "../types";
 import type { makeApi } from "../api";
 
 function toGem(r: RegistryGem): Gem {
-  return { key: r.key, version: r.version, author: r.author, publishedBy: r.publishedBy, description: r.description ?? "", tags: r.tags ?? [], artifactKinds: r.artifactKinds ?? [], cut: r.type, grade: r.grade, ingredients: [] };
+  return { key: r.key, version: r.version, author: r.author, publishedBy: r.publishedBy, description: r.description ?? "", tags: r.tags ?? [], artifactKinds: r.artifactKinds ?? [], cut: r.type, grade: r.grade, installable: r.installable, artifacts: r.artifacts, ingredients: [] };
 }
 
 /** Live registry gems, or the curated STATIC_GEMS when the registry is empty/unconfigured/errors. */

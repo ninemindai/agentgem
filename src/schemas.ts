@@ -812,6 +812,7 @@ export const RegistryGemSchema = z.object({
   publishedBy: z.string().optional(),
   grade: z.number().int().min(1).max(3).optional(),
   installable: z.boolean(),
+  artifacts: z.array(z.object({ name: z.string(), type: z.string() })).optional(),
 });
 export const RegistryGemsResponseSchema = z.object({ gems: z.array(RegistryGemSchema) });
 
