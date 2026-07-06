@@ -40,8 +40,10 @@ the tab system — is reused.
 
 - **Team competition** genre (needs a social/hosted/multiplayer layer) — deferred
   to v2. The template system is designed to accept it without a breaking change.
-- **Live "Session watch"** genre — deferred. The runtime **capability broker**
-  and its consent UX land in v1 (dormant), so the live genre is additive later.
+- **Live "Session watch"** genre and the **`invoke-agent`** capability — deferred.
+  All three v1 genres are Offline. The permission model, brokers, and consent UX
+  land in Plan 3 (see Permissions Model); the `GameCapability` type + `needs` field
+  land in Plan 1 so no later addition is a breaking change.
 - Automated *visual* verification of generated games (human preview is the visual
   gate in v1).
 - A runtime LLM. Games are static bundles.
@@ -119,7 +121,10 @@ type ArtifactType = "skill" | "mcp_server" | "instructions"
                   | "hook" | "channel" | "subagent" | "game";   // + game
 
 type GameGenre = "replay" | "skill-run" | "project-fun";        // v2: "watch" | "team"
-type GameCapability = "live-session-events";                    // v1 has exactly one; dormant
+type GameCapability =                                           // declared permission ladder (see Permissions Model)
+  | "live-session-events"   // read-only: streamed live sessions (host-brokered)
+  | "local-project-access"  // read-only: local projects / setup / inventory (host-brokered)
+  | "invoke-agent";         // privileged: host runs a local ACP agent in the sandbox (local-authored only)
 
 interface GameArtifact {
   type: "game";
@@ -253,38 +258,68 @@ Controls around it: restart, mute, fullscreen-within-panel, share. Because the
 bundle is self-contained, it plays instantly and offline. `Arcade.tsx` is the grid
 of your game gems (filtered by the `game` cut), each showing its poster.
 
-### Capability broker (dormant in v1; used only when a game declares `needs`)
+### Permissions model (the capability ladder)
 
-A narrow, one-way, consent-gated bridge owned by the trusted host. **Games never
-get direct localhost / filesystem / network access — full stop.** If a genre needs
-live/local data, the trusted Play host (console code, which legitimately talks to
-core over localhost) fetches it and forwards a narrow, read-only, sanitized slice
-into the sealed game via `postMessage`.
+A game **declares** the capabilities it wants via `needs`; the trusted Play host —
+never the game — decides whether to grant them, consent-gated per gem. **Games
+never get direct localhost / filesystem / network access — full stop.** Each
+capability is a permission tier the user sees as a chip on the game card and
+approves at first play:
+
+| Tier | `needs` value | Chip | What the game may access | Access |
+|------|---------------|------|--------------------------|--------|
+| **Offline** (default) | *(absent)* | 🟢 offline | only its baked-in snapshot | none — pure sealed iframe |
+| **Live sessions** | `live-session-events` | 🔴 live | streamed live session events | read-only, host-brokered |
+| **Local project** | `local-project-access` | 🟡 local | your projects / setup / inventory | read-only, host-brokered |
+| **Invoke agent** | `invoke-agent` | ⚙️ agent | runs a local ACP agent, gets its transcript | privileged, host-run in the run-sandbox |
+
+All three non-offline tiers are strictly **read-only into the sealed game** — the
+host forwards data/results in; the game can never write, act, or reach the network
+(CSP blocks it). Consent is per-gem and remembered, **except `invoke-agent`, which
+re-prompts per run** and shows a visible "this game is running an agent" banner.
+
+**Read-only data feeds** (`live-session-events`, `local-project-access`) — the host
+(console code, which legitimately talks to core over localhost) fetches and forwards
+a narrow, sanitized slice via `postMessage`:
 
 ```
 game (sealed)                         Play host (Runner.tsx, trusted, localhost)
   │  postMessage {type:"agentgem:request",          │
   │               want:"live-session-events"} ──────►│ 1. is "want" in the gem's declared needs?
   │                                                  │ 2. consent gate (per-gem, remembered)
-  │  ◄─ postMessage {type:"agentgem:feed", ─────────│ 3. subscribe /api/watch/stream (existing SSE)
+  │  ◄─ postMessage {type:"agentgem:feed", ─────────│ 3. subscribe the source (e.g. /api/watch/stream)
   │      channel, event:<sanitized>}                 │ 4. forward a SANITIZED read-only slice
 ```
 
-Three guarantees:
+**Privileged execution** (`invoke-agent`) — the game requests a run; the **host**
+drives a local ACP agent through the *exact same* `packages/run` sandbox that
+gem-runs already use (jailed testbed, masked sensitive paths, capability-gated
+permission model), and streams back only a **sanitized transcript**. Because this is
+code execution, not data access, it is gated hardest: **disabled for
+shared/marketplace games by default — enabled only for games you authored locally**
+(a downloaded game asking to run agents on your machine is exactly the supply-chain
+risk this design guards against), plus per-run consent and a visible banner.
+
+Guarantees that hold for every tier:
 - **Declared-or-denied** — the host refuses any `want` not in the gem's `needs`.
-- **Sanitized** — the host forwards only the event kinds/timings/counts the genre
-  needs, stripping file paths and raw code/transcript text (same anti-leak
-  discipline as Team Pulse attribution).
-- **Local-only, one-way** — the feed carries *your* machine's data to *your*
-  running game, never the reverse; the game cannot exfiltrate because CSP blocks
-  all network. A downloaded game with `needs` prompts *your* consent on *your*
-  machine or gets nothing — it can never silently reach a publisher's data.
+- **Sanitized** — the host forwards only what the tier needs, stripping file paths
+  and raw code/transcript text (same anti-leak discipline as Team Pulse attribution).
+- **Local-only, one-way** — data/results flow to *your* running game on *your*
+  machine, never the reverse; the game cannot exfiltrate because CSP blocks all
+  network. A downloaded game prompts *your* consent or gets nothing — it can never
+  silently reach a publisher's data or (for `invoke-agent`) run at all.
 
 **Why not direct localhost access:** loosening CSP to `connect-src
 http://localhost:PORT` would let any downloaded game hit the recipient's local
 AgentGem API (inventory, sessions, settings, runs) — a supply-chain hole. The
-broker gives the same *capability* (a game that watches live sessions) with none
-of that exposure. Rejected as a design option.
+broker gives the same *capabilities* with none of that exposure. Rejected as a
+design option.
+
+**Build phasing:** v1's three genres are all Offline (`needs` absent). The
+permission model, chips, consent gates, and brokers land in **Plan 3** (the console
+surface); the `GameCapability` type and `needs` field land now (Plan 1) so the
+model is complete and no later change is breaking. `invoke-agent` and the live
+genres that use these tiers are built after the offline pipeline is proven.
 
 ### Sharing
 
