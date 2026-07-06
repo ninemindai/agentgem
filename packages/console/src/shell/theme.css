@@ -345,6 +345,10 @@ body::before {
 .ws-note, .getgems-done { color: var(--emerald); font-size: 12px; font-weight: 500; }
 .ws-name-input { flex: 0 1 190px; min-width: 150px; }
 .getgems-desc { color: var(--ink-soft); font-size: 13px; margin: 8px 0; line-height: 1.5; }
+/* Deep-link direct-install banner + the executable-artifact consent prompt: lay the gem key,
+   status/error text, and buttons out inline with spacing (they'd otherwise run together). */
+.getgems-direct { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.getgems-consent { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ws-deploy { margin-top: 14px; border-top: 1px solid var(--line-soft); padding-top: 14px; }
 .ws-deploy-url { color: var(--accent); font: 12px/1.4 var(--font-mono); word-break: break-all; }
 
