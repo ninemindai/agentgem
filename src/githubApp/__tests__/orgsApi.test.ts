@@ -5,6 +5,7 @@ import { generateKeyPairSync } from "node:crypto";
 import {
   makeTestDb, upsertAccount, createSession, generateSessionToken,
   upsertInstallation, upsertOrgMember, replaceOrgRepoSkills,
+  setInstallationSuspended, setAccountScopes,
 } from "@agentgem/aggregator";
 import type { Http } from "@agentgem/distribute";
 import { InstallationTokens } from "../client.js";
@@ -33,15 +34,17 @@ const bodyHttp: Http = async (url) => {
 };
 const tokenFetch = (async () => ({ ok: true, status: 200, json: async () => ({ token: "itok", expires_at: new Date(Date.now() + 3_600_000).toISOString() }) })) as unknown as typeof fetch;
 
-async function setup(): Promise<{ deps: OrgsApiDeps; memberToken: string; strangerToken: string }> {
+async function setup(): Promise<{ deps: OrgsApiDeps; memberToken: string; strangerToken: string; aliceAccountId: string }> {
   const db = await makeTestDb();
   await upsertInstallation(db, { installationId: 7, orgScope: "acme", repoSelection: "selected", suspended: false });
   await upsertOrgMember(db, "acme", "alice", "member");
   await replaceOrgRepoSkills(db, "acme", "acme/skills", [
     { sourceId: "org:acme/skills", path: "eng/deploy/SKILL.md", division: "eng", name: "deploy", repo: "acme/skills", description: "d" },
   ]);
+  let aliceAccountId = "";
   const mk = async (login: string) => {
     const a = await upsertAccount(db, { provider: "github", accountId: login, login });
+    if (login === "alice") aliceAccountId = a.id;
     const { token } = generateSessionToken();
     await createSession(db, a.id, token, 60_000);
     return token;
@@ -50,6 +53,7 @@ async function setup(): Promise<{ deps: OrgsApiDeps; memberToken: string; strang
     deps: { db, webOrigins, tokens: new InstallationTokens({ appId: "1", privateKey: pem }, tokenFetch), http: bodyHttp },
     memberToken: await mk("alice"),
     strangerToken: await mk("mallory"),
+    aliceAccountId,
   };
 }
 const authed = (token: string, query: any) => req({ query, headers: { authorization: `Bearer ${token}` } });
@@ -109,5 +113,28 @@ describe("GET /api/orgs/skill-body", () => {
     const res = mockRes();
     await orgSkillBodyHandler({ ...deps, tokens: null })(authed(memberToken, { scope: "acme", source: "org:acme/skills", path: "eng/deploy/SKILL.md" }) as any, res);
     expect(res._status).toBe(503);
+  });
+
+  it("502 on upstream failure, and the error body never contains the token", async () => {
+    const { deps, memberToken } = await setup();
+    const failingHttp: Http = async () => { throw new Error("boom upstream"); };
+    const res = mockRes();
+    await orgSkillBodyHandler({ ...deps, http: failingHttp })(authed(memberToken, { scope: "acme", source: "org:acme/skills", path: "eng/deploy/SKILL.md" }) as any, res);
+    expect(res._status).toBe(502);
+    expect(JSON.stringify(res._body)).not.toContain("itok"); // installation token never leaks
+  });
+
+  it("404 when the installation is suspended (no active installation)", async () => {
+    const { deps, memberToken, aliceAccountId } = await setup();
+    await setInstallationSuspended(deps.db, 7, true);
+    // A suspended installation revokes membership via the member gate. To reach the
+    // installationForScope-suspended 404 branch, capture acme scope for alice so
+    // resolveOrgAccess bypasses the install-status check and returns "ok", allowing
+    // the request to pass the member gate and reach line 96 where inst.suspended fires.
+    await setAccountScopes(deps.db, aliceAccountId, [{ scope: "acme", role: "member" }]);
+    const res = mockRes();
+    await orgSkillBodyHandler(deps)(authed(memberToken, { scope: "acme", source: "org:acme/skills", path: "eng/deploy/SKILL.md" }) as any, res);
+    expect(res._status).toBe(404);
+    expect(res._body).toEqual({ error: "no active installation" });
   });
 });
