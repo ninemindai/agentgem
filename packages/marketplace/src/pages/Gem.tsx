@@ -19,6 +19,13 @@ function openInConsoleUrl(gemKey: string): string {
   return `${LOCAL_CONSOLE}/#/get-gems?q=${encodeURIComponent(gemKey)}`;
 }
 
+// The packaged desktop app registers the agentgem:// scheme (see desktop/), so this deep-links into
+// its Get Gems tab pre-searched regardless of the app's (random) port. No-op until a desktop build
+// with the handler is installed — the localhost link + manual steps cover the CLI/interim case.
+function openInAppUrl(gemKey: string): string {
+  return `agentgem://get-gems?q=${encodeURIComponent(gemKey)}`;
+}
+
 export function Gem({ api, keyName, stars }: { api: ReturnType<typeof makeApi>; keyName: string; stars: StarsCtx }) {
   const [gems, setGems] = useState<GemT[] | null>(null);
   const [starState, setStarState] = useState<StarState>({ counts: {}, mine: [] });
@@ -64,11 +71,11 @@ export function Gem({ api, keyName, stars }: { api: ReturnType<typeof makeApi>; 
       <section className="ex-card">
         <h3>Get this gem</h3>
         <p className="ex-getit">
-          <a className="ex-open-app" href={openInConsoleUrl(gem.key)} target="_blank" rel="noreferrer">Open in AgentGem →</a>
+          <a className="ex-open-app" href={openInAppUrl(gem.key)}>Open in AgentGem →</a>
           Gem key: <code className="ex-key">{gem.key}</code>
           <button type="button" className="ex-copy" onClick={copyKey}>Copy key</button>
         </p>
-        <p className="ex-getit-steps">Opens your running local console straight to <strong>Get Gems</strong>, pre-searched. Not running? Start AgentGem, then <strong>Get Gems</strong> → search "{gem.key}" → <strong>Install</strong>.</p>
+        <p className="ex-getit-steps">Opens the AgentGem desktop app straight to <strong>Get Gems</strong>, pre-searched. Running the CLI console? <a className="ex-getit-link" href={openInConsoleUrl(gem.key)} target="_blank" rel="noreferrer">Open on localhost:4317</a>. Not running? Start AgentGem → <strong>Get Gems</strong> → search "{gem.key}" → <strong>Install</strong>.</p>
       </section>
 
       {gem.ingredients.length > 0 && (

@@ -1,6 +1,13 @@
 appId: ai.ninemind.agentgem
 productName: AgentGem
 copyright: © ninemind.ai
+# Register the agentgem:// URL scheme with the OS at install time (macOS CFBundleURLTypes, Windows
+# registry) so a web "Open in AgentGem" link launches/focuses the app. main.ts also calls
+# setAsDefaultProtocolClient at runtime and routes the URL to the console's Get Gems tab.
+protocols:
+  - name: AgentGem
+    schemes:
+      - agentgem
 directories:
   output: release
   buildResources: build

@@ -9,6 +9,7 @@ import { buildMenuTemplate } from "./menu.js";
 import { configureUpdater, updaterFeed, repoUrlFromPackageJson } from "./updater.js";
 import { createTray } from "./tray.js";
 import { DESKTOP_NAME } from "./version.js";
+import { deepLinkHash, argvDeepLink, DEEP_LINK_SCHEME } from "./deeplink.js";
 
 const isDev = process.env.AGENTGEM_DEV === "1";
 
@@ -36,6 +37,20 @@ function showWindow(): void {
     win.show();
     win.focus();
   }
+}
+
+// A web "Open in AgentGem" link (agentgem://get-gems?q=<key>) → focus the window and route the loaded
+// console to the matching hash. A cold start via the link reaches here before the window exists, so
+// stash it for boot() to flush once createWindow has run.
+let pendingDeepLink: string | null = null;
+function handleDeepLink(rawUrl: string): void {
+  const hash = deepLinkHash(rawUrl);
+  if (!hash) return;
+  if (!win) { pendingDeepLink = rawUrl; return; }
+  showWindow();
+  const nav = () => { void win?.webContents.executeJavaScript(`location.hash = ${JSON.stringify(hash)}`).catch(() => {}); };
+  if (win.webContents.isLoading()) win.webContents.once("did-finish-load", nav);
+  else nav();
 }
 
 async function createWindow(url: string): Promise<void> {
@@ -101,6 +116,12 @@ async function boot(): Promise<void> {
 
   await createWindow(server.url);
 
+  // Flush a deep link that arrived before the window existed: a macOS open-url stashed during launch,
+  // or (Windows/Linux) the agentgem:// URL passed as a cold-start argument.
+  const initialLink = pendingDeepLink ?? argvDeepLink(process.argv);
+  pendingDeepLink = null;
+  if (initialLink) handleDeepLink(initialLink);
+
   Menu.setApplicationMenu(
     Menu.buildFromTemplate(
       buildMenuTemplate({
@@ -122,7 +143,16 @@ async function boot(): Promise<void> {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on("second-instance", showWindow);
+  // Register agentgem:// so the OS routes "Open in AgentGem" links to this app. macOS delivers them
+  // via open-url (which can fire before the window is ready → handleDeepLink stashes it); Windows/
+  // Linux deliver them as a launch arg on the second instance (argv) or the cold-start argv above.
+  app.setAsDefaultProtocolClient(DEEP_LINK_SCHEME);
+  app.on("open-url", (event, url) => { event.preventDefault(); handleDeepLink(url); });
+  app.on("second-instance", (_event, argv) => {
+    showWindow();
+    const link = argvDeepLink(argv);
+    if (link) handleDeepLink(link);
+  });
   app.whenReady().then(boot).catch((err) => {
     dialog.showErrorBox("AgentGem failed to start", String((err as Error)?.message ?? err));
     app.exit(1);
