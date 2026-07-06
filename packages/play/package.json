@@ -1,0 +1,18 @@
+{
+  "name": "@agentgem/play",
+  "version": "0.1.0",
+  "description": "Play authoring engine — game generation, validation gate, and source extraction.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "files": ["dist"],
+  "scripts": { "build": "tsc -b" },
+  "dependencies": {
+    "@agentgem/model": "workspace:*",
+    "jsdom": "^24"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^21"
+  }
+}
