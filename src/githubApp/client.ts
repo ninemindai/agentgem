@@ -49,18 +49,19 @@ export class InstallationTokens {
   }
 }
 
-/** Org installations of this App (User installs are out of scope). Paginated; login lowercased. */
+/** Org installations of this App (User installs are out of scope). Paginated; login lowercased.
+ *  `truncated` = the page cap was exhausted with a full final page (more data likely remains) —
+ *  consumers must skip DESTRUCTIVE reconciliation (stray-installation deletes) on a partial view. */
 export async function listAppInstallations(
   cfg: { appId: string; privateKey: string }, fetchImpl: typeof fetch = fetch,
-): Promise<{ installationId: number; orgScope: string; repoSelection: "all" | "selected"; suspended: boolean }[]> {
+): Promise<{ installations: { installationId: number; orgScope: string; repoSelection: "all" | "selected"; suspended: boolean }[]; truncated: boolean }> {
   const out: { installationId: number; orgScope: string; repoSelection: "all" | "selected"; suspended: boolean }[] = [];
-  let lastBatchLength = 0;
+  let truncated = false;
   for (let page = 1; page <= 10; page++) {
     const res = await fetchImpl(`https://api.github.com/app/installations?per_page=100&page=${page}`, { headers: ghHeaders(appJwt(cfg)) });
     if (!res.ok) throw new Error(`app/installations: ${res.status}`);
     const batch = (await res.json()) as { id?: unknown; account?: { login?: unknown; type?: unknown }; repository_selection?: unknown; suspended_at?: unknown }[];
     if (!Array.isArray(batch) || batch.length === 0) break;
-    lastBatchLength = batch.length;
     for (const i of batch) {
       if (typeof i.id !== "number" || i.account?.type !== "Organization" || typeof i.account.login !== "string") continue;
       out.push({
@@ -70,46 +71,56 @@ export async function listAppInstallations(
       });
     }
     if (batch.length < 100) break;
+    if (page === 10) truncated = true; // cap exhausted with a full page — more likely remains
   }
-  if (lastBatchLength === 100) console.error("githubApp: app/installations truncated at page cap — installation sync incomplete");
-  return out;
+  if (truncated) console.error("githubApp: app/installations truncated at page cap — installation sync incomplete");
+  return { installations: out, truncated };
 }
 
 /** Full member list with roles: the admin page then the (non-admin) member page, both paginated.
- *  Includes PRIVATE members — that's the entire point of the App. Logins lowercased. */
-export async function listOrgMembers(token: string, org: string, fetchImpl: typeof fetch = fetch): Promise<{ login: string; role: "admin" | "member" }[]> {
+ *  Includes PRIVATE members — that's the entire point of the App. Logins lowercased. `truncated`
+ *  means a role page hit its cap while full — consumers must NOT replace the stored member set
+ *  from a partial list (a truncated replace would revoke real members under the App-authoritative gate). */
+export async function listOrgMembers(
+  token: string, org: string, fetchImpl: typeof fetch = fetch,
+): Promise<{ members: { login: string; role: "admin" | "member" }[]; truncated: boolean }> {
   const byLogin = new Map<string, "admin" | "member">();
+  let truncated = false;
   for (const role of ["admin", "member"] as const) {
-    let lastBatchLength = 0;
     for (let page = 1; page <= 20; page++) {
       const res = await fetchImpl(`https://api.github.com/orgs/${encodeURIComponent(org)}/members?role=${role}&per_page=100&page=${page}`, { headers: ghHeaders(token) });
       if (!res.ok) throw new Error(`orgs/${org}/members: ${res.status}`);
       const batch = (await res.json()) as { login?: unknown }[];
       if (!Array.isArray(batch) || batch.length === 0) break;
-      lastBatchLength = batch.length;
       for (const m of batch) if (typeof m.login === "string" && !byLogin.has(m.login.toLowerCase())) byLogin.set(m.login.toLowerCase(), role);
       if (batch.length < 100) break;
+      if (page === 20) {
+        truncated = true; // cap exhausted with a full page — more likely remains
+        console.error(`githubApp: orgs/${org}/members role=${role} truncated at page cap — membership sync incomplete`);
+      }
     }
-    if (lastBatchLength === 100) console.error(`githubApp: orgs/${org}/members role=${role} truncated at page cap — membership sync incomplete`);
   }
-  return [...byLogin].map(([login, role]) => ({ login, role }));
+  return { members: [...byLogin].map(([login, role]) => ({ login, role })), truncated };
 }
 
-/** Repos this installation can see, with default branches (the only ref we ever index). */
-export async function listInstallationRepos(token: string, fetchImpl: typeof fetch = fetch): Promise<{ repo: string; defaultBranch: string }[]> {
+/** Repos this installation can see, with default branches (the only ref we ever index).
+ *  `truncated` — consumers must NOT prune org skills from a partial repo view. */
+export async function listInstallationRepos(
+  token: string, fetchImpl: typeof fetch = fetch,
+): Promise<{ repos: { repo: string; defaultBranch: string }[]; truncated: boolean }> {
   const out: { repo: string; defaultBranch: string }[] = [];
-  let lastReposLength = 0;
+  let truncated = false;
   for (let page = 1; page <= 20; page++) {
     const res = await fetchImpl(`https://api.github.com/installation/repositories?per_page=100&page=${page}`, { headers: ghHeaders(token) });
     if (!res.ok) throw new Error(`installation/repositories: ${res.status}`);
     const j = (await res.json()) as { repositories?: { full_name?: unknown; default_branch?: unknown }[] };
     const repos = Array.isArray(j.repositories) ? j.repositories : [];
-    lastReposLength = repos.length;
     for (const r of repos) {
       if (typeof r.full_name === "string") out.push({ repo: r.full_name, defaultBranch: typeof r.default_branch === "string" ? r.default_branch : "main" });
     }
     if (repos.length < 100) break;
+    if (page === 20) truncated = true; // cap exhausted with a full page — more likely remains
   }
-  if (lastReposLength === 100) console.error("githubApp: installation/repositories truncated at page cap — repository sync incomplete");
-  return out;
+  if (truncated) console.error("githubApp: installation/repositories truncated at page cap — repository sync incomplete");
+  return { repos: out, truncated };
 }
