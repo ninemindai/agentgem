@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 // packages/console/src/panels/Observe/HygieneReport.test.tsx
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { HygieneReport } from "./HygieneReport.js";
 import * as routes from "../../api/routes.js";
 

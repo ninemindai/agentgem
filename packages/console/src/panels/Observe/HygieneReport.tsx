@@ -58,8 +58,9 @@ function BloatCurve({ curve, cap }: { curve: Report["curve"]; cap: number }) {
     const cv = ref.current; if (!cv) return;
     const ctx = cv.getContext("2d"); if (!ctx) return;
     const w = cv.width, h = cv.height, pad = 4;
-    const css = (k: string) => getComputedStyle(document.documentElement).getPropertyValue(k).trim() || "#f0883e";
-    const heat = css("--obs-accent");
+    const cssVar = (k: string, fallback: string) => getComputedStyle(document.documentElement).getPropertyValue(k).trim() || fallback;
+    const heat = cssVar("--accent", "#9a3324");
+    const grid = cssVar("--muted", "#8a7f69");
     ctx.clearRect(0, 0, w, h);
     const N = curve.length;
     const X = (i: number) => pad + (w - 2 * pad) * (N > 1 ? i / (N - 1) : 0);
@@ -70,7 +71,7 @@ function BloatCurve({ curve, cap }: { curve: Report["curve"]; cap: number }) {
     ctx.fillStyle = heat + "22"; ctx.fill();
     ctx.beginPath(); curve.forEach((p, i) => (i ? ctx.lineTo(X(i), Y(p.ctxTokens)) : ctx.moveTo(X(i), Y(p.ctxTokens))));
     ctx.strokeStyle = heat; ctx.lineWidth = 1.5; ctx.stroke();
-    ctx.strokeStyle = css("--obs-muted") || "#888"; ctx.setLineDash([3, 3]);
+    ctx.strokeStyle = grid; ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.moveTo(pad, Y(cap)); ctx.lineTo(w - pad, Y(cap)); ctx.stroke(); ctx.setLineDash([]);
   }, [curve, cap]);
   return <canvas ref={ref} width={320} height={90} className="hyg-canvas" role="img" aria-label="Context size per turn" />;
