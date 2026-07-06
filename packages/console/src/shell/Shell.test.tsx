@@ -2,166 +2,146 @@ import { describe, it, expect, afterEach } from "vitest";
 import { useState } from "react";
 import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
 import { Shell } from "./Shell.js";
-import { defineConsolePage, groupedPages } from "../registry.js";
+import { defineConsolePage, type ConsolePage } from "../registry.js";
 import { setKeys, setName, resetGem } from "../activeGem.js";
 
-describe("groupedPages", () => {
-  const p = (id: string, order: number, group?: "build" | "library" | "settings") =>
-    defineConsolePage({ id, title: id, order, group, route: `#/${id}`, component: () => null });
-
-  it("buckets by group (default build), each sorted by order", () => {
-    const g = groupedPages([p("b", 20), p("a", 10), p("lib", 5, "library"), p("set", 1, "settings")]);
-    expect(g.build.map((x) => x.id)).toEqual(["a", "b"]);
-    expect(g.library.map((x) => x.id)).toEqual(["lib"]);
-    expect(g.settings.map((x) => x.id)).toEqual(["set"]);
-  });
+afterEach(() => {
+  cleanup();
+  window.location.hash = "";
+  resetGem();
+  localStorage.clear();
 });
 
-afterEach(() => { cleanup(); window.location.hash = ""; resetGem(); });
+type P = Partial<ConsolePage> & Pick<ConsolePage, "id">;
+const p = (o: P): ConsolePage =>
+  defineConsolePage({
+    title: o.id,
+    order: 10,
+    route: `#/${o.id}`,
+    component: () => <p>{`panel-${o.id}`}</p>,
+    ...o,
+  } as ConsolePage);
 
+// A small two-phase registry used by most tests.
 const pages = [
-  defineConsolePage({ id: "a", title: "Alpha", order: 10, route: "#/a", component: () => <p>panel-a</p> }),
-  defineConsolePage({ id: "b", title: "Beta", order: 20, route: "#/b", component: () => <p>panel-b</p> }),
+  p({ id: "inspect", phase: "observe", category: "setup", order: 10 }),
+  p({ id: "watch", phase: "observe", category: "sessions", order: 10 }),
+  p({ id: "curate", phase: "build", category: "setup", order: 10 }),
+  p({ id: "deploy", phase: "build", category: "projects", order: 10, requiresGem: true }),
+  p({ id: "settings", footer: true }),
 ];
 
-describe("Shell", () => {
-  it("lists nav items in order and renders the first panel by default", () => {
-    render(<Shell pages={pages} apiBase="" />);
-    // getAllByRole("button") includes the active-gem switcher; filter it out
-    const navLabels = screen.getAllByRole("button")
-      .filter((b) => b.classList.contains("console-nav-item"))
-      .map((b) => b.textContent);
-    expect(navLabels).toEqual(["Alpha", "Beta"]);
-    expect(screen.getByText("panel-a")).toBeTruthy();
+const goHash = (h: string) =>
+  act(() => {
+    window.location.hash = h;
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
   });
 
-  it("switches panel on hashchange", () => {
+describe("Shell — phase-primary nav", () => {
+  it("defaults to the Observe phase and renders its first panel", () => {
     render(<Shell pages={pages} apiBase="" />);
-    act(() => { window.location.hash = "#/b"; window.dispatchEvent(new HashChangeEvent("hashchange")); });
-    expect(screen.getByText("panel-b")).toBeTruthy();
-  });
-
-  it("resolves a drill-down sub-route to its page via longest-prefix match", () => {
-    // #/inspect/<id> must render the Inspect page, not fall back to the first page.
-    const subPages = [
-      defineConsolePage({ id: "a", title: "Alpha", order: 10, route: "#/a", component: () => <p>panel-a</p> }),
-      defineConsolePage({ id: "inspect", title: "Inspect", order: 20, route: "#/inspect", component: () => <p>panel-inspect</p> }),
-    ];
-    window.location.hash = "#/inspect/claude/abc-123";
-    render(<Shell pages={subPages} apiBase="" />);
     expect(screen.getByText("panel-inspect")).toBeTruthy();
-    expect(screen.queryByText("panel-a")).toBeNull();
+    expect(screen.getByRole("radio", { name: "Observe" }).getAttribute("aria-checked")).toBe("true");
   });
 
-  it("switches between panels with different hook counts without crashing", () => {
-    // Each panel must get its own fiber: a panel that uses hooks (Hooky) and one that
-    // uses none (Plain). If Shell renders the panel by CALLING it instead of as an
-    // element, both panels' hooks collapse into Shell's fiber and the hook count changes
-    // across the transition → React throws "Rendered fewer/more hooks than expected".
-    const Hooky = () => { const [n] = useState("hooky-panel"); return <p>{n}</p>; };
-    const Plain = () => <p>plain-panel</p>;
-    const hookPages = [
-      defineConsolePage({ id: "h", title: "Hooky", order: 10, route: "#/h", component: Hooky }),
-      defineConsolePage({ id: "p", title: "Plain", order: 20, route: "#/p", component: Plain }),
+  it("renders artifact category labels for the active phase", () => {
+    render(<Shell pages={pages} apiBase="" />);
+    expect(screen.getByText("Setup")).toBeTruthy();
+    expect(screen.getByText("Sessions")).toBeTruthy();
+    // Build-only categories are not shown while in Observe
+    expect(screen.queryByText("Projects")).toBeNull();
+  });
+
+  it("only shows the active phase's pages", () => {
+    render(<Shell pages={pages} apiBase="" />);
+    expect(screen.getByRole("button", { name: "watch" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "curate" })).toBeNull();
+  });
+
+  it("switching to Build shows Build pages and navigates to the first one", () => {
+    render(<Shell pages={pages} apiBase="" />);
+    act(() => { fireEvent.click(screen.getByRole("radio", { name: "Build" })); });
+    expect(window.location.hash).toBe("#/curate");
+    goHash("#/curate");
+    expect(screen.getByRole("button", { name: "curate" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "watch" })).toBeNull();
+  });
+
+  it("derives the phase from the route: deep-linking a Build route opens in Build", () => {
+    window.location.hash = "#/deploy";
+    render(<Shell pages={pages} apiBase="" />);
+    expect(screen.getByRole("radio", { name: "Build" }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByText("panel-deploy")).toBeTruthy();
+  });
+
+  it("footer Settings keeps the current phase (does not snap to Observe)", () => {
+    window.location.hash = "#/deploy"; // Build
+    render(<Shell pages={pages} apiBase="" />);
+    goHash("#/settings");
+    // Sidebar stays in Build even though Settings has no phase
+    expect(screen.getByRole("radio", { name: "Build" }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByText("panel-settings")).toBeTruthy();
+  });
+
+  it("remembers the last screen per phase across a switch", () => {
+    const multi = [
+      p({ id: "inspect", phase: "observe", category: "setup", order: 10 }),
+      p({ id: "curate", phase: "build", category: "setup", order: 10 }),
+      p({ id: "deploy", phase: "build", category: "projects", order: 20 }),
     ];
-    window.location.hash = "#/h";
-    render(<Shell pages={hookPages} apiBase="" />);
-    expect(screen.getByText("hooky-panel")).toBeTruthy();
-    act(() => { window.location.hash = "#/p"; window.dispatchEvent(new HashChangeEvent("hashchange")); });
-    expect(screen.getByText("plain-panel")).toBeTruthy();
+    window.location.hash = "#/deploy"; // land in Build on deploy
+    render(<Shell pages={multi} apiBase="" />);
+    // switch to Observe, then back to Build → should restore #/deploy, not the first build page
+    act(() => { fireEvent.click(screen.getByRole("radio", { name: "Observe" })); });
+    goHash(window.location.hash);
+    act(() => { fireEvent.click(screen.getByRole("radio", { name: "Build" })); });
+    expect(window.location.hash).toBe("#/deploy");
   });
 
   it("navigates when a nav button is clicked", () => {
     render(<Shell pages={pages} apiBase="" />);
-    fireEvent.click(screen.getByText("Beta"));
-    expect(window.location.hash).toBe("#/b");
+    fireEvent.click(screen.getByRole("button", { name: "watch" }));
+    expect(window.location.hash).toBe("#/watch");
   });
 
-  // Regression: pages must render as ELEMENTS, not be called as functions. Calling
-  // `active.component({...})` inlines the page's hooks into Shell's hook list, so
-  // switching to a page with a different hook count throws React's "rendered fewer
-  // hooks than expected". Switching from a hook-using page to a hook-less one must not crash.
-  it("isolates page hooks (switching between different hook counts does not crash)", () => {
-    const Hooky = () => { useState(0); useState(0); useState(0); return <p>hooky-panel</p>; };
-    const Plain = () => <p>plain-panel</p>;
+  it("resolves a drill-down sub-route via longest-prefix match", () => {
+    window.location.hash = "#/inspect/claude/abc-123";
+    render(<Shell pages={pages} apiBase="" />);
+    expect(screen.getByText("panel-inspect")).toBeTruthy();
+  });
+
+  it("isolates page hooks across different hook counts", () => {
+    const Hooky = () => { useState(0); useState(0); return <p>hooky</p>; };
     const hookPages = [
-      defineConsolePage({ id: "hooky", title: "Hooky", order: 10, route: "#/hooky", component: Hooky }),
-      defineConsolePage({ id: "plain", title: "Plain", order: 20, route: "#/plain", component: Plain }),
+      p({ id: "a", phase: "observe", category: "setup", order: 10, component: Hooky }),
+      p({ id: "b", phase: "observe", category: "setup", order: 20 }),
     ];
     render(<Shell pages={hookPages} apiBase="" />);
-    expect(screen.getByText("hooky-panel")).toBeTruthy();
-    act(() => { window.location.hash = "#/plain"; window.dispatchEvent(new HashChangeEvent("hashchange")); });
-    expect(screen.getByText("plain-panel")).toBeTruthy();
-    act(() => { window.location.hash = "#/hooky"; window.dispatchEvent(new HashChangeEvent("hashchange")); });
-    expect(screen.getByText("hooky-panel")).toBeTruthy();
+    expect(screen.getByText("hooky")).toBeTruthy();
+    goHash("#/b");
+    expect(screen.getByText("panel-b")).toBeTruthy();
   });
 
-  it("shows the active gem name in the switcher when one is set", () => {
-    setName("My Gem"); setKeys(new Set(["a", "b"]));
-    render(<Shell pages={pages} apiBase="" />);
-    expect(screen.getByText("My Gem")).toBeTruthy();
+  it("dims a requiresGem stage until a gem is active", () => {
+    window.location.hash = "#/curate"; // Build phase so the gem-scoped stage shows
+    const { rerender } = render(<Shell pages={pages} apiBase="" />);
+    expect(screen.getByText("deploy").classList.contains("is-locked")).toBe(true);
+    act(() => { setKeys(new Set(["x"])); });
+    rerender(<Shell pages={pages} apiBase="" />);
+    expect(screen.getByText("deploy").classList.contains("is-locked")).toBe(false);
   });
 
-  it("shows 'New Gem' fallback in the switcher when no active gem is set", () => {
-    resetGem();
-    render(<Shell pages={pages} apiBase="" />);
+  it("shows the active-gem switcher only in the Build phase", () => {
+    render(<Shell pages={pages} apiBase="" />); // Observe
+    expect(screen.queryByText("New Gem")).toBeNull();
+    goHash("#/curate"); // Build
     expect(screen.getByText("New Gem")).toBeTruthy();
   });
 
-  it("clicking the active-gem switcher opens its dropdown menu", () => {
+  it("shows the active gem name in the switcher when set (Build phase)", () => {
+    setName("My Gem"); setKeys(new Set(["a"]));
+    window.location.hash = "#/curate";
     render(<Shell pages={pages} apiBase="" />);
-    expect(screen.queryByRole("menu")).toBeNull();
-    fireEvent.click(screen.getByText("New Gem"));
-    expect(screen.getByRole("menu")).toBeTruthy();
-    expect(screen.getByText("Browse all →")).toBeTruthy();
-  });
-
-  it("renders group labels and places items under them", () => {
-    const groupedTestPages = [
-      defineConsolePage({ id: "a", title: "Build A", order: 10, group: "build", route: "#/a", component: () => <p>pa</p> }),
-      defineConsolePage({ id: "l", title: "Lib L", order: 10, group: "library", route: "#/l", component: () => <p>pl</p> }),
-      defineConsolePage({ id: "s", title: "Settings", order: 10, group: "settings", route: "#/s", component: () => <p>ps</p> }),
-    ];
-    render(<Shell pages={groupedTestPages} apiBase="" />);
-    expect(screen.getByText("Build")).toBeTruthy();
-    expect(screen.getByText("Library")).toBeTruthy();
-    expect(screen.getByText("Build A")).toBeTruthy();
-    expect(screen.getByText("Settings")).toBeTruthy();
-  });
-
-  it("places the active-gem switcher under the Build label, not at the top of the rail", () => {
-    const gp = [
-      defineConsolePage({ id: "obs", title: "Observe", order: 10, group: "observe", route: "#/obs", component: () => <p>o</p> }),
-      defineConsolePage({ id: "cur", title: "Curate", order: 10, group: "build", route: "#/cur", component: () => <p>c</p> }),
-    ];
-    const { container } = render(<Shell pages={gp} apiBase="" />);
-    const switcher = container.querySelector(".console-switcher")!;
-    const buildLabel = screen.getByText("Build");
-    const observeItem = screen.getByRole("button", { name: "Observe" });
-    // The switcher now follows the Build label in DOM order (moved into the Build section)...
-    expect(buildLabel.compareDocumentPosition(switcher) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // ...and therefore also follows the Observe items — it is no longer pinned at the top.
-    expect(observeItem.compareDocumentPosition(switcher) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    const curateItem = screen.getByRole("button", { name: "Curate" });
-    // ...and precedes the Build stage items (directly under the label, above the stages).
-    expect(switcher.compareDocumentPosition(curateItem) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // The duplicate gem-name echo in the Build label is gone.
-    expect(container.querySelector(".console-group-gem")).toBeNull();
-  });
-
-  it("dims a gem-scoped (requiresGem) nav item until a gem is active, and un-dims it once artifacts exist", () => {
-    const gp = [
-      defineConsolePage({ id: "cur", title: "Curate", order: 10, group: "build", route: "#/cur", component: () => <p>c</p> }),
-      defineConsolePage({ id: "mat", title: "Materialize", order: 20, group: "build", requiresGem: true, route: "#/mat", component: () => <p>m</p> }),
-    ];
-    resetGem();
-    const { rerender } = render(<Shell pages={gp} apiBase="" />);
-    // No gem: the gem-scoped stage is locked; the entry (Curate) never is.
-    expect(screen.getByText("Materialize").classList.contains("is-locked")).toBe(true);
-    expect(screen.getByText("Curate").classList.contains("is-locked")).toBe(false);
-    // Curate something → the lock lifts.
-    act(() => { setKeys(new Set(["x"])); });
-    rerender(<Shell pages={gp} apiBase="" />);
-    expect(screen.getByText("Materialize").classList.contains("is-locked")).toBe(false);
+    expect(screen.getByText("My Gem")).toBeTruthy();
   });
 });

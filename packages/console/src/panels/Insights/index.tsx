@@ -247,6 +247,6 @@ export function InsightsReportCard({ report, scanned, onBuild, onContribute }: {
 }
 
 export const insightsPage = defineConsolePage({
-  id: "insights", title: "Insights", icon: "📊", order: 7, group: "observe",
+  id: "insights", title: "Insights", icon: "📊", order: 10, phase: "observe", category: "usage",
   route: "#/insights", component: Insights,
 });

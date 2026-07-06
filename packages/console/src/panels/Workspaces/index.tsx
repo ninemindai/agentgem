@@ -129,8 +129,8 @@ export const workspacesPage = defineConsolePage({
   id: "your-gems",
   title: "Your Gems",
   icon: "▦",
-  order: 20,
-  group: "library",
+  order: 30,
+  phase: "build", category: "setup",
   route: "#/your-gems",
   component: ({ apiBase }) => <Workspaces apiBase={apiBase} />,
 });

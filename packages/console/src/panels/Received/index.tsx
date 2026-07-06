@@ -169,8 +169,8 @@ export const receivedPage = defineConsolePage({
   id: "received",
   title: "Received",
   icon: "↓",
-  order: 46,
-  group: "library",
+  order: 31,
+  phase: "build", category: "setup",
   route: "#/received",
   component: ({ apiBase }) => <Received apiBase={apiBase} />,
 });

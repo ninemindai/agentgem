@@ -165,8 +165,8 @@ export const watchPage = defineConsolePage({
   id: "watch",
   title: "Watch",
   icon: "📺",
-  order: 9,
-  group: "observe",
+  order: 10,
+  phase: "observe", category: "sessions",
   route: "#/watch",
   component: Watch,
 });

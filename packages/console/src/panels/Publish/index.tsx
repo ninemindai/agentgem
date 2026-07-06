@@ -90,8 +90,8 @@ export const publishPage = defineConsolePage({
   id: "publish",
   title: "Publish",
   icon: "⇧",
-  order: 25,
-  group: "library",
+  order: 30,
+  phase: "build", category: "projects",
   route: "#/publish",
   component: ({ apiBase }) => <RegistryPublish apiBase={apiBase} />,
 });

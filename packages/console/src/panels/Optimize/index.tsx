@@ -39,6 +39,6 @@ export function Optimize({ apiBase }: { apiBase: string }) {
 }
 
 export const optimizePage = defineConsolePage({
-  id: "optimize", title: "Optimize", icon: "⚡", order: 6, group: "observe",
+  id: "optimize", title: "Optimize", icon: "⚡", order: 20, phase: "observe", category: "projects",
   route: "#/optimize", component: Optimize,
 });

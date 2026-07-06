@@ -167,6 +167,6 @@ export function RubricLibrary({ apiBase }: { apiBase: string }) {
 }
 
 export const rubricLibraryPage = defineConsolePage({
-  id: "rubric-library", title: "Rubrics", icon: "📋", order: 26, group: "library",
+  id: "rubric-library", title: "Rubrics", icon: "📋", order: 40, phase: "build", category: "setup",
   route: "#/rubric-library", component: RubricLibrary,
 });

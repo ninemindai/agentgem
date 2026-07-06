@@ -1,14 +1,56 @@
 import { useEffect, useState } from "react";
-import { groupedPages, sortedPages, type ConsolePage } from "../registry.js";
+import { phaseGroups, footerPages, sortedPages, type ConsolePage, type Phase, type ArtifactCategory } from "../registry.js";
 import { ActiveGemSwitcher } from "./ActiveGemSwitcher.js";
 import { useActiveGem } from "../activeGem.js";
 import { WarmingPill } from "../components/WarmingPill.js";
+import { useRovingTabIndex } from "./useRovingTabIndex.js";
+
+const PHASES: { id: Phase; label: string }[] = [
+  { id: "observe", label: "Observe" },
+  { id: "build", label: "Build" },
+];
+const CATEGORY_LABEL: Record<ArtifactCategory, string> = {
+  setup: "Setup",
+  sessions: "Sessions",
+  projects: "Projects",
+  usage: "Usage",
+};
+const LS_ACTIVE = "agentgem.console.lastActive";
+const LS_ROUTE = "agentgem.console.lastRoute";
+
+function readLastActive(routes: Set<string>): string | undefined {
+  try {
+    const v = localStorage.getItem(LS_ACTIVE);
+    return v && routes.has(v) ? v : undefined;
+  } catch {
+    return undefined;
+  }
+}
+function readLastRoute(routes: Set<string>): Partial<Record<Phase, string>> {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(LS_ROUTE) ?? "{}");
+    const map = (parsed && typeof parsed === "object" ? parsed : {}) as Record<string, unknown>;
+    const out: Partial<Record<Phase, string>> = {};
+    for (const ph of ["observe", "build"] as const) {
+      const r = map[ph];
+      if (typeof r === "string" && routes.has(r)) out[ph] = r;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
 
 export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: string }) {
-  const groups = groupedPages(pages);
   const ordered = sortedPages(pages);
-  // Drives the dimming of gem-scoped build stages — one subscription so the
-  // lock state of Build items tracks the active gem.
+  const routes = new Set(ordered.map((p) => p.route));
+  const phaseOf = (route: string | undefined): Phase | undefined =>
+    ordered.find((p) => p.route === route)?.phase;
+  const firstRouteOf = (ph: Phase): string | undefined =>
+    phaseGroups(pages, ph).flatMap((g) => g.pages)[0]?.route;
+
+  // Drives the dimming of gem-scoped build stages — one subscription so the lock
+  // state of Build items tracks the active gem.
   const { keys } = useActiveGem();
   const hasGem = keys.size > 0;
   const [hash, setHash] = useState(() => window.location.hash);
@@ -19,17 +61,56 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
-  // Exact match first; otherwise the longest route that is a prefix of the hash,
-  // so a drill-down sub-route (e.g. #/inspect/<id>) still resolves to its page.
-  const base = hash.split(/[?]/)[0];
-  const active = ordered.find((p) => p.route === base)
-    ?? [...ordered].filter((p) => base.startsWith(p.route + "/")).sort((a, b) => b.route.length - a.route.length)[0]
-    ?? ordered[0];
-  // Render the active page as a real element (not `active.component({...})`).
-  // Calling it as a function inlines the page's hooks into Shell's own hook
-  // list, so switching pages changes Shell's hook count and React throws
-  // "rendered fewer hooks than expected". An element gives each page its own fiber.
+  // Exact match first; otherwise the longest route that is a prefix of the hash, so a
+  // drill-down sub-route (e.g. #/inspect/<id>) still resolves to its page. Empty/unknown
+  // hash falls back to the Observe-first default (not "lowest global order").
+  const base = hash.split("?")[0];
+  const active =
+    ordered.find((p) => p.route === base) ??
+    [...ordered].filter((p) => base.startsWith(p.route + "/")).sort((a, b) => b.route.length - a.route.length)[0] ??
+    ordered.find((p) => p.route === firstRouteOf("observe")) ??
+    ordered[0];
+
+  // Phase is DERIVED, never stored: the active page's phase, else the phase of the last
+  // phased route we persisted (so footer pages like Settings keep the current phase and
+  // don't snap to Observe), else Observe.
+  const phase: Phase = active?.phase ?? phaseOf(readLastActive(routes)) ?? "observe";
+
+  // Persist the last phased route (for reload) and per-phase last route (for the switch).
+  // Footer visits (no phase) never overwrite it. Validation happens on read.
+  useEffect(() => {
+    if (!active?.phase) return;
+    try {
+      localStorage.setItem(LS_ACTIVE, active.route);
+      const parsed: unknown = JSON.parse(localStorage.getItem(LS_ROUTE) ?? "{}");
+      const map = (parsed && typeof parsed === "object" ? parsed : {}) as Record<string, string>;
+      map[active.phase] = active.route;
+      localStorage.setItem(LS_ROUTE, JSON.stringify(map));
+    } catch {
+      /* storage unavailable — nav still works, just no memory */
+    }
+  }, [active?.route, active?.phase]);
+
+  const goPhase = (target: Phase) => {
+    if (target === phase) return;
+    const dest = readLastRoute(routes)[target] ?? firstRouteOf(target);
+    if (dest) window.location.hash = dest;
+  };
+
+  // Render the active page as a real element (not `active.component({...})`). Calling it
+  // as a function inlines the page's hooks into Shell's own hook list, so switching pages
+  // changes Shell's hook count and React throws "rendered fewer hooks than expected". An
+  // element gives each page its own fiber.
   const ActivePage = active?.component;
+  const groups = phaseGroups(pages, phase);
+  const footer = footerPages(pages);
+
+  const selectedPhaseIdx = PHASES.findIndex((p) => p.id === phase);
+  const roving = useRovingTabIndex({
+    count: PHASES.length,
+    selectedIndex: selectedPhaseIdx,
+    onSelect: (i) => goPhase(PHASES[i].id),
+  });
 
   const item = (p: ConsolePage) => (
     <button
@@ -54,14 +135,29 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
           AgentGem
         </div>
         <WarmingPill apiBase={apiBase} />
-        {groups.observe.length > 0 && <div className="console-group-label">Observe</div>}
-        {groups.observe.map(item)}
-        <div className="console-group-label">Build</div>
-        <ActiveGemSwitcher apiBase={apiBase} />
-        {groups.build.map(item)}
-        {groups.library.length > 0 && <div className="console-group-label">Library</div>}
-        {groups.library.map(item)}
-        <div className="console-footer">{groups.settings.map(item)}</div>
+        <div className="console-phase-switch" role="radiogroup" aria-label="Phase" {...roving.containerProps}>
+          {PHASES.map((p, i) => (
+            <button
+              key={p.id}
+              type="button"
+              role="radio"
+              aria-checked={p.id === phase}
+              className={"console-phase-btn" + (p.id === phase ? " is-active" : "")}
+              {...roving.getTabProps(i)}
+              onClick={() => goPhase(p.id)}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+        {phase === "build" ? <ActiveGemSwitcher apiBase={apiBase} /> : null}
+        {groups.map((g) => (
+          <div key={g.category} className="console-group">
+            <div className="console-group-label">{CATEGORY_LABEL[g.category]}</div>
+            {g.pages.map(item)}
+          </div>
+        ))}
+        <div className="console-footer">{footer.map(item)}</div>
       </nav>
       <main className="console-main">{ActivePage ? <ActivePage apiBase={apiBase} /> : null}</main>
     </div>

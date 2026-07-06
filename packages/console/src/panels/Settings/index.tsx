@@ -239,7 +239,7 @@ export const settingsPage = defineConsolePage({
   title: "Settings",
   icon: "⚙",
   order: 10,
-  group: "settings",
+  footer: true,
   route: "#/settings",
   component: ({ apiBase }) => <Settings apiBase={apiBase} />,
 });

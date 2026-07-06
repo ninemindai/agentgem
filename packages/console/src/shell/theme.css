@@ -98,6 +98,27 @@ body::before {
 .console-nav-item.is-locked { opacity: .45; }
 .console-nav-item.is-locked:hover { opacity: .75; }
 .console-nav-icon { font-size: 14px; line-height: 1; opacity: .85; width: 16px; text-align: center; }
+
+/* Phase switch — segmented control (Observe | Build) at the top of the rail. Reuses
+   the paper/terracotta pill language of the active-gem switcher. */
+.console-phase-switch {
+  display: flex; gap: 3px; padding: 3px; margin-bottom: 10px;
+  background: var(--paper-2); border: 1px solid var(--line); border-radius: 8px;
+}
+.console-phase-btn {
+  flex: 1; min-height: 30px; padding: 7px 10px; border: 0; border-radius: 6px;
+  background: transparent; color: var(--muted); cursor: pointer;
+  font: 600 12px/1 var(--font-ui); letter-spacing: .01em;
+  transition: background .15s ease, color .15s ease;
+}
+.console-phase-btn:hover { color: var(--ink-soft); }
+.console-phase-btn.is-active {
+  background: var(--raised); color: var(--accent);
+  box-shadow: 0 1px 2px rgba(60, 44, 20, .12);
+}
+.console-phase-btn:focus-visible { outline: none; box-shadow: var(--ring); }
+.console-group { display: contents; }
+
 .console-switcher { position: relative; margin-bottom: 4px; }
 .console-activegem {
   display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;

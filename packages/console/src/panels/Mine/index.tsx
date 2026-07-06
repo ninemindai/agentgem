@@ -69,6 +69,6 @@ export function Mine({ apiBase, openStream = openScorecardStream }: { apiBase: s
 }
 
 export const minePage = defineConsolePage({
-  id: "mine", title: "Mine", icon: "💎", order: 6, group: "observe",
+  id: "mine", title: "Mine", icon: "💎", order: 10, phase: "observe", category: "projects",
   route: "#/mine", component: Mine,
 });
