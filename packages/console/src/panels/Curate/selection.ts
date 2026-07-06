@@ -5,6 +5,7 @@ export const selKey = (groupKey: string, name: string): string => `${groupKey}::
 
 export interface GemSelection {
   skills?: string[];
+  subagents?: string[];
   mcpServers?: string[];
   includeInstructions?: boolean;   // back-compat: all instructions
   instructions?: string[];         // the specific instructions selected
@@ -14,6 +15,7 @@ export interface GemSelection {
 /** Map a recommendation artifact `type` to the Ledger group key. */
 const GROUP_OF: Record<string, string> = {
   skill: "skills",
+  subagent: "subagents",
   mcp_server: "mcpServers",
   instructions: "instructions",
   hook: "hooks",
@@ -46,6 +48,7 @@ export function buildSelection(keys: Set<string>): GemSelection {
   }
   const sel: GemSelection = {};
   if (byGroup.skills?.length) sel.skills = byGroup.skills;
+  if (byGroup.subagents?.length) sel.subagents = byGroup.subagents;
   if (byGroup.mcpServers?.length) sel.mcpServers = byGroup.mcpServers;
   if (byGroup.hooks?.length) sel.hooks = byGroup.hooks;
   if (byGroup.instructions?.length) sel.instructions = byGroup.instructions;

@@ -43,8 +43,8 @@ import { join } from "node:path";
 
 function emptyInv(): ConfigInventory {
   return {
-    skills: [], mcpServers: [], instructions: [], hooks: [],
-    projects: [{ root: "/r", name: "app", skills: [], mcpServers: [], instructions: [], hooks: [] }],
+    skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [],
+    projects: [{ root: "/r", name: "app", skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [] }],
   };
 }
 const at = (root: string): DistilledLesson => ({ ...lesson, evidence: { ...lesson.evidence, root } });

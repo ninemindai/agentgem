@@ -12,7 +12,7 @@ const ws = {
   name: "my-ws",
   gemName: "starter",
   version: "1.2.0",
-  artifactCounts: { skill: 3, mcp_server: 1, instructions: 2, hook: 0 },
+  artifactCounts: { skill: 3, mcp_server: 1, instructions: 2, hook: 0, subagent: 0 },
   // (counts and this representative list are independent test concerns)
   artifacts: [{ type: "skill", name: "pdf" }, { type: "mcp_server", name: "context7" }],
   modifiedMs: 1_700_000_000_000,
@@ -24,6 +24,7 @@ describe("countChips", () => {
   it("maps artifact counts + checks to ordered chips", () => {
     expect(countChips(ws as any)).toEqual([
       { label: "skills", n: 3 },
+      { label: "subagents", n: 0 },
       { label: "MCP", n: 1 },
       { label: "instructions", n: 2 },
       { label: "hooks", n: 0 },

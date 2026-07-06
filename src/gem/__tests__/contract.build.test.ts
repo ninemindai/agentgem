@@ -8,6 +8,7 @@ const inv: ConfigInventory = {
   mcpServers: [],
   instructions: [{ type: "instructions", name: "CLAUDE.md", content: "notes" }],
   hooks: [],
+  subagents: [],
 };
 
 describe("buildGem contract derivation", () => {

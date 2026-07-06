@@ -10,7 +10,7 @@ export function prettifyId(id: string, _kind: string): PrettyId {
   if (colon <= 0) return { name: id };
   const prefix = id.slice(0, colon);
   const rest = id.slice(colon + 1);
-  if (prefix === "skill" || prefix === "mcp") {
+  if (prefix === "skill" || prefix === "mcp" || prefix === "subagent") {
     const slash = rest.indexOf("/");
     return slash > 0 ? { name: rest.slice(slash + 1), scope: rest.slice(0, slash) } : { name: rest };
   }
@@ -18,7 +18,7 @@ export function prettifyId(id: string, _kind: string): PrettyId {
   return { name: rest, scope: prefix };
 }
 
-const KIND_LABELS: Record<string, string> = { skill: "Skill", mcp: "MCP", model: "Model", harness: "Harness" };
+const KIND_LABELS: Record<string, string> = { skill: "Skill", subagent: "Subagent", mcp: "MCP", model: "Model", harness: "Harness" };
 export function kindLabel(kind: string): string { return KIND_LABELS[kind] ?? kind; }
 
 export function verifiedShare(producers: number, verified: number): number {

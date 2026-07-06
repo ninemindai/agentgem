@@ -135,7 +135,7 @@ function selectPaths(scope: RubricScope, claudeDir: string): string[] {
 function scanInventory(scope: RubricScope, dir?: string) {
   const dirs = resolveDirs(dir);
   if (scope.kind === "all") {
-    return { project: { root: "*", name: "All projects", skills: [], mcpServers: [], hooks: [], instructions: [] } };
+    return { project: { root: "*", name: "All projects", skills: [], mcpServers: [], hooks: [], instructions: [], subagents: [] } };
   }
   const project = introspectProject(resolveProject(scope.root));
   const globalInv = introspectConfig(dirs);

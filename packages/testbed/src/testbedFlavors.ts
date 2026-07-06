@@ -24,6 +24,9 @@ export interface RawProject {
 
 export interface FlavorImport {
   skillRel(name: string): string;
+  // Runnable location for a subagent's `<name>.md`, when the flavor's harness has a
+  // subagent primitive (only Claude Code does). Absent → subagents are skipped on import.
+  agentRel?: (name: string) => string;
   instructionsFile: string;
   writeMcp?: (root: string, name: string, rawConfig: Record<string, unknown>) => boolean;
   supportsHooks: boolean;
@@ -109,7 +112,7 @@ export const TESTBED_FLAVORS: Record<TestbedFlavorId, TestbedFlavor> = {
       writeIfAbsent(root, ".gitignore", ".mcp.json\n.claude/settings.json\n.env\n.targets/\n", created);
       return { created };
     },
-    import: { skillRel: (n) => `.claude/skills/${n}/SKILL.md`, instructionsFile: "CLAUDE.md", writeMcp: writeMcpJson, supportsHooks: true },
+    import: { skillRel: (n) => `.claude/skills/${n}/SKILL.md`, agentRel: (n) => `.claude/agents/${n}.md`, instructionsFile: "CLAUDE.md", writeMcp: writeMcpJson, supportsHooks: true },
   },
   codex: {
     id: "codex", label: "Codex", runCommand: "codex", importSupported: true,

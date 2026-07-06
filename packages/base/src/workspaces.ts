@@ -20,7 +20,7 @@ export interface WorkspaceSummary {
   name: string;
   gemName: string;
   version: string;
-  artifactCounts: { skill: number; mcp_server: number; instructions: number; hook: number };
+  artifactCounts: { skill: number; mcp_server: number; instructions: number; hook: number; subagent: number };
   artifacts: { type: string; name: string }[];
   modifiedMs: number; // dir mtime — for recency ordering (most-recent first)
   checks: number;
@@ -54,7 +54,7 @@ export function workspaceDir(name: string): string {
 }
 
 function countArtifacts(entries: { type: string }[]): WorkspaceSummary["artifactCounts"] {
-  const c = { skill: 0, mcp_server: 0, instructions: 0, hook: 0 };
+  const c = { skill: 0, mcp_server: 0, instructions: 0, hook: 0, subagent: 0 };
   for (const e of entries) if (e.type in c) (c as Record<string, number>)[e.type]++;
   return c;
 }

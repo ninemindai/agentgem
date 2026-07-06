@@ -4,7 +4,7 @@ import type { RegistrySkill, ArtifactUsage } from "@agentgem/insight";
 import type { ConfigInventory } from "@agentgem/model";
 
 function inv(over: Partial<ConfigInventory> = {}): ConfigInventory {
-  return { skills: [], mcpServers: [], instructions: [], hooks: [], ...over };
+  return { skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [], ...over };
 }
 function usage(rows: Array<[string, Partial<ArtifactUsage>]>): Map<string, ArtifactUsage> {
   const m = new Map<string, ArtifactUsage>();

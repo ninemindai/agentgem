@@ -7,7 +7,7 @@
 // runner rebinds real secrets from gem.requiredSecrets at install.
 import type {
   Gem, ArtifactType, SecretRequirement, SecretRef, ChannelArtifact,
-  SkillArtifact, McpServerArtifact, InstructionsArtifact, HookArtifact, ReferenceArtifact,
+  SkillArtifact, McpServerArtifact, InstructionsArtifact, HookArtifact, ReferenceArtifact, SubagentArtifact,
 } from "./types.js";
 import { resolveArtifactRef } from "./artifactRef.js";
 import { channelScaffold } from "./channels.js";
@@ -29,6 +29,7 @@ interface TargetSpec {
   id: TargetId;
   label: string;
   skill?: (a: SkillArtifact) => FileTree;
+  subagent?: (a: SubagentArtifact) => FileTree;
   mcp?: (servers: McpServerArtifact[]) => MaterializeResult;
   instructions?: (all: InstructionsArtifact[]) => FileTree;
   hook?: (hooks: HookArtifact[]) => FileTree;
@@ -75,6 +76,13 @@ const headerSecretEntries = (refs: SecretRef[]): (readonly [string, string])[] =
 // ── shared convention renderers ──
 const skillSkillMd = (a: SkillArtifact): FileTree => ({ [`skills/${safePathSegment(a.name)}/SKILL.md`]: a.content });
 const skillDescriptionMd = (a: SkillArtifact): FileTree => ({ [`skills/${safePathSegment(a.name)}/DESCRIPTION.md`]: a.content });
+// Claude Code subagents are flat agents/<name>.md files. `content` is the full definition
+// (frontmatter + body) written verbatim, mirroring the gem-archive layout. Only Claude has a
+// native subagent primitive, so no other target wires this renderer (they skip-with-reason).
+const subagentAgentMd = (a: SubagentArtifact): FileTree => {
+  const seg = safePathSegment(a.name);
+  return { [`agents/${seg.endsWith(".md") ? seg : `${seg}.md`}`]: a.content };
+};
 // Strip a leading YAML frontmatter block ("---\n … \n---\n") if present; return the body.
 // Exported so other sources (e.g. @agentgem/insight's Cursor .mdc import) share one CRLF-safe
 // implementation instead of re-deriving a (possibly LF-only) regex.
@@ -966,7 +974,7 @@ const continueCompose = (gem: Gem): MaterializeResult => {
 
 // ── targets compose the shared renderers (convergence is literal, not duplicated) ──
 export const TARGET_REGISTRY: Record<TargetId, TargetSpec> = {
-  claude: { id: "claude", label: "Claude", skill: skillSkillMd,       instructions: instructionsClaudeMd, mcp: mcpDotMcpJson, hook: hooksSettingsJson },
+  claude: { id: "claude", label: "Claude", skill: skillSkillMd,       subagent: subagentAgentMd, instructions: instructionsClaudeMd, mcp: mcpDotMcpJson, hook: hooksSettingsJson },
   codex:  { id: "codex",  label: "Codex",  skill: skillSkillMd,       instructions: instructionsAgentsMd, mcp: mcpCodexToml },
   agents: { id: "agents", label: "Agents", skill: skillSkillMd,       instructions: instructionsAgentsMd },
   hermes: { id: "hermes", label: "Hermes", skill: skillDescriptionMd, instructions: instructionsSoulMd },
@@ -1017,6 +1025,7 @@ export function materialize(gem: Gem, target: TargetId, opts: MaterializeOpts = 
     arr.forEach((a) => skipped.push({ artifact: a.name, type, reason: `${type} unsupported on ${target}` }));
 
   const skills = gem.artifacts.filter((a): a is SkillArtifact => a.type === "skill");
+  const subagents = gem.artifacts.filter((a): a is SubagentArtifact => a.type === "subagent");
   const mcp = gem.artifacts.filter((a): a is McpServerArtifact => a.type === "mcp_server");
   const instr = gem.artifacts.filter((a): a is InstructionsArtifact => a.type === "instructions");
   const hooks = gem.artifacts.filter((a): a is HookArtifact => a.type === "hook");
@@ -1025,6 +1034,9 @@ export function materialize(gem: Gem, target: TargetId, opts: MaterializeOpts = 
 
   if (spec.skill) for (const s of skills) merge(spec.skill(s), s.name, "skill");
   else skipAll(skills, "skill");
+
+  if (spec.subagent) for (const s of subagents) merge(spec.subagent(s), s.name, "subagent");
+  else skipAll(subagents, "subagent");
 
   if (instr.length) {
     if (spec.instructions) merge(spec.instructions(instr), instr.map((i) => i.name).join(", "), "instructions");

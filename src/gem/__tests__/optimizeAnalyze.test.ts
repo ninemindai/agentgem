@@ -7,7 +7,7 @@ const NOW = Date.parse("2026-06-29T00:00:00.000Z");
 const DAY = 86_400_000;
 
 function inv(over: Partial<ConfigInventory> = {}): ConfigInventory {
-  return { skills: [], mcpServers: [], instructions: [], hooks: [], ...over };
+  return { skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [], ...over };
 }
 function usage(rows: Array<[string, Partial<ArtifactUsage>]>): Map<string, ArtifactUsage> {
   const m = new Map<string, ArtifactUsage>();
@@ -152,7 +152,7 @@ describe("buildOptimizePayload — instructions health", () => {
         { type: "instructions", name: "AGENTS.md", content: "x".repeat(8000) },
         { type: "instructions", name: "CLAUDE.md", content: "short" },
       ],
-      projects: [{ root: "/p", name: "p", skills: [], mcpServers: [], hooks: [],
+      projects: [{ root: "/p", name: "p", skills: [], mcpServers: [], hooks: [], subagents: [],
         instructions: [{ type: "instructions", name: "p/CLAUDE.md", content: "x".repeat(12000) }] }],
     });
     const result = buildOptimizePayload(c, usage([]), "all", NOW).instructions;

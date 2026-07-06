@@ -297,7 +297,7 @@ export function Curate({ apiBase }: { apiBase: string }) {
                     )}
                   </div>
                   {i.detail && isExpanded && (
-                    g.key === "skills" || g.key === "instructions"
+                    g.key === "skills" || g.key === "subagents" || g.key === "instructions"
                       ? <ContentView text={i.detail} />
                       : <pre className="ledger-detail">{i.detail}</pre>
                   )}

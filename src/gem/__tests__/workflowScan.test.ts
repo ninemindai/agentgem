@@ -42,6 +42,7 @@ const inventory: ProjectInventory = {
   mcpServers: [{ type: "mcp_server", name: "context7", transport: "stdio", config: {} }],
   instructions: [{ type: "instructions", name: "CLAUDE.md", content: "x" }],
   hooks: [],
+  subagents: [],
 };
 
 function assistantToolUse(name: string, input: Record<string, unknown> = {}) {

@@ -17,7 +17,7 @@ export interface GlobalUsageResult {
 
 export function computeGlobalUsage(dirs: ReturnType<typeof resolveDirs>, paths: string[]): GlobalUsageResult {
   const globalInv = introspectConfig(dirs);
-  const emptyProject = { root: "", name: "", skills: [], mcpServers: [], instructions: [], hooks: [] };
+  const emptyProject = { root: "", name: "", skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [] };
   const scanInv = { project: emptyProject, global: { skills: globalInv.skills, mcpServers: globalInv.mcpServers, hooks: globalInv.hooks } };
   const signal = scanWorkflow(paths, scanInv);
   return {
@@ -81,7 +81,7 @@ export async function closeSharedIndex(): Promise<void> {
  */
 export async function getGlobalUsageIndexed(dirs: ReturnType<typeof resolveDirs>, paths: string[]): Promise<GlobalUsageResult> {
   const globalInv = introspectConfig(dirs);
-  const emptyProject = { root: "", name: "", skills: [], mcpServers: [], instructions: [], hooks: [] };
+  const emptyProject = { root: "", name: "", skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [] };
   const scanInv = { project: emptyProject, global: { skills: globalInv.skills, mcpServers: globalInv.mcpServers, hooks: globalInv.hooks } };
   const digest = inventoryDigest(scanInv.global);
   const parseFile = (path: string): UsageRow[] =>

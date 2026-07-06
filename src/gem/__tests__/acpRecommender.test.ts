@@ -20,6 +20,7 @@ const inventory: ProjectInventory = {
   ],
   instructions: [{ type: "instructions", name: "CLAUDE.md", content: "x" }],
   hooks: [{ type: "hook", name: "PreToolUse · Bash", event: "PreToolUse", config: { hooks: [] }, source: "project" }],
+  subagents: [],
 };
 const signal: WorkflowSignal = {
   root: ROOT, flavor: "claude",

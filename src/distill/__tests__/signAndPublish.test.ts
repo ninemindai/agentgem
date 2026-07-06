@@ -7,7 +7,7 @@ import { signAndPublishTool, buildAttestationTool } from "../mcpServer.js";
 
 const inventory = { skills: [], mcpServers: [
   { type: "mcp_server" as const, name: "secret", transport: "stdio" as const, config: { command: "node", args: ["/Users/me/private/srv.js"], env: { API_KEY: "sk-deadbeef" } } },
-], instructions: [], hooks: [] };
+], instructions: [], hooks: [], subagents: [] };
 const signal = { root: "/Users/me/work", flavor: "claude" as const, sessions: { scanned: 1, firstMs: 0, lastMs: 0, spanDays: 0 },
   artifacts: [{ type: "mcp_server" as const, name: "secret", root: null, invocations: 1, sessionsUsedIn: 1, lastUsedMs: 0, confidence: "high" as const }],
   unresolved: [], coOccurrence: [], shapes: [], notes: [], models: [] };

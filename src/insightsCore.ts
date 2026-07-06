@@ -43,7 +43,7 @@ export async function computeInsights(
   const dirs = resolveDirs(opts.dir);
   const allProjects = root === "*";
   const scanInv = allProjects
-    ? { project: { root: "*", name: "All projects", skills: [], mcpServers: [], hooks: [], instructions: [] } }
+    ? { project: { root: "*", name: "All projects", skills: [], mcpServers: [], hooks: [], instructions: [], subagents: [] } }
     : (() => {
         const project = introspectProject(resolveProject(root));
         const globalInv = introspectConfig(dirs);

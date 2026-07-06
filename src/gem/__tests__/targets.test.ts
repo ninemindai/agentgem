@@ -1,10 +1,11 @@
 // src/gem/__tests__/targets.test.ts
 import { describe, it, expect } from "vitest";
 import { materialize, compatibility, TARGET_REGISTRY, buildAgentcoreHarness, agentcoreComposeProject, a2aAgentCard } from "@agentgem/model";
-import type { Gem, GemArtifact, SkillArtifact, McpServerArtifact, InstructionsArtifact, HookArtifact } from "@agentgem/model";
+import type { Gem, GemArtifact, SkillArtifact, McpServerArtifact, InstructionsArtifact, HookArtifact, SubagentArtifact } from "@agentgem/model";
 
 const gem = (artifacts: GemArtifact[]): Gem => ({ name: "p", createdFrom: "/d", artifacts, checks: [], requiredSecrets: [] });
 const skill = (n: string, content = "# body"): SkillArtifact => ({ type: "skill", name: n, source: "standalone", content });
+const subagent = (n: string, content = "---\nname: x\n---\nbody"): SubagentArtifact => ({ type: "subagent", name: n, source: "user", content });
 const mcp = (n: string): McpServerArtifact => ({ type: "mcp_server", name: n, transport: "stdio", config: { command: "npx", env: { TOK: "<redacted>" } } });
 const httpMcp = (n: string, url = "https://mcp.x/sse"): McpServerArtifact => ({ type: "mcp_server", name: n, transport: "http", config: { url }, secretRefs: [{ name: "X_TOKEN", location: "headers.Authorization" }] });
 const instr = (n: string, content = "do this"): InstructionsArtifact => ({ type: "instructions", name: n, content });
@@ -18,6 +19,16 @@ describe("materialize", () => {
     expect(JSON.parse(r.files[".mcp.json"]).mcpServers.gh.env.TOK).toBe("<redacted>");
     expect(JSON.parse(r.files["settings.json"]).hooks.PreToolUse).toBeTruthy();
     expect(r.skipped).toEqual([]);
+  });
+
+  it("claude: renders a subagent to agents/<name>.md verbatim; other targets skip it with a reason", () => {
+    const r = materialize(gem([subagent("reviewer")]), "claude");
+    expect(r.files["agents/reviewer.md"]).toBe("---\nname: x\n---\nbody");
+    expect(r.skipped).toEqual([]);
+    // Codex has no subagent primitive → reported skipped, never silently dropped or fabricated.
+    const cx = materialize(gem([subagent("reviewer")]), "codex");
+    expect(cx.files["agents/reviewer.md"]).toBeUndefined();
+    expect(cx.skipped).toContainEqual({ artifact: "reviewer", type: "subagent", reason: "subagent unsupported on codex" });
   });
 
   it("codex: AGENTS.md + config.toml; hooks skipped", () => {

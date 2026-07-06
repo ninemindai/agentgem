@@ -18,7 +18,7 @@ let cache: { atMs: number; map: Map<string, ArtifactUsage> } | null = null;
 function syntheticProject(inv: ConfigInventory): ProjectInventory {
   // Carry the installed skills/mcp/hooks as a single synthetic "project" so scanWorkflow
   // emits all of them with usage counts. Instructions are handled separately (presence-only).
-  return { root: "", name: "", skills: inv.skills, mcpServers: inv.mcpServers, instructions: [], hooks: inv.hooks };
+  return { root: "", name: "", skills: inv.skills, mcpServers: inv.mcpServers, instructions: [], hooks: inv.hooks, subagents: inv.subagents };
 }
 
 export function scanArtifactUsage(inv: ConfigInventory, claudeDir: string): Map<string, ArtifactUsage> {

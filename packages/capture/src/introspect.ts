@@ -14,6 +14,7 @@ import type {
   McpServerArtifact,
   InstructionsArtifact,
   HookArtifact,
+  SubagentArtifact,
 } from "@agentgem/model";
 
 export interface IntrospectOptions {
@@ -45,6 +46,20 @@ function parseFrontmatter(content: string): { description?: string; internal: bo
   return { description, internal };
 }
 
+// Parse a Claude Code subagent's frontmatter: name/description, the `tools` allowlist
+// (comma-separated; absent = inherit all), and an optional `model` override.
+function parseAgentFrontmatter(content: string): { name?: string; description?: string; tools?: string[]; model?: string } {
+  const m = content.match(/^---\n([\s\S]*?)\n---/);
+  if (!m) return {};
+  const fm = m[1];
+  const name = fm.match(/^name:\s*(.+)$/m)?.[1]?.trim();
+  const description = fm.match(/^description:\s*(.+)$/m)?.[1]?.trim();
+  const model = fm.match(/^model:\s*(.+)$/m)?.[1]?.trim();
+  const toolsRaw = fm.match(/^tools:\s*(.+)$/m)?.[1]?.trim();
+  const tools = toolsRaw ? toolsRaw.split(",").map((t) => t.trim()).filter(Boolean) : undefined;
+  return { name, description, tools, model };
+}
+
 function inferTransport(config: Record<string, unknown>): "stdio" | "http" | "sse" {
   if (typeof config.url === "string") return config.type === "sse" ? "sse" : "http";
   return "stdio";
@@ -71,6 +86,35 @@ function readSkillsDir(skillsRoot: string, source: string, files: string[] = ["S
       out.push({ type: "skill", name, description, source, content });
     } catch {
       // skip unreadable skill
+    }
+  }
+  return out;
+}
+
+// Read <agentsRoot>/*.md as subagents. Unlike skills (nested <name>/SKILL.md), Claude Code
+// keeps subagents as flat `<name>.md` files under an `agents/` dir. The artifact name is the
+// frontmatter `name` when present, else the filename stem.
+function readAgentsDir(agentsRoot: string, source: string): SubagentArtifact[] {
+  const out: SubagentArtifact[] = [];
+  if (!existsSync(agentsRoot)) return out;
+  let files: string[];
+  try {
+    files = readdirSync(agentsRoot);
+  } catch {
+    return out;
+  }
+  for (const file of files) {
+    if (!file.endsWith(".md")) continue;
+    try {
+      const content = readFileSync(join(agentsRoot, file), "utf8");
+      const { name, description, tools, model } = parseAgentFrontmatter(content);
+      const a: SubagentArtifact = { type: "subagent", name: name || file.replace(/\.md$/, ""), source, content };
+      if (description !== undefined) a.description = description;
+      if (tools !== undefined) a.tools = tools;
+      if (model !== undefined) a.model = model;
+      out.push(a);
+    } catch {
+      // skip unreadable / directory entries
     }
   }
   return out;
@@ -165,8 +209,10 @@ export function introspectConfig(opts: IntrospectOptions = {}): ConfigInventory 
   const skillList: SkillArtifact[] = [];
   const mcpList: McpServerArtifact[] = [];
   const hookList: HookArtifact[] = [];
+  const subagentList: SubagentArtifact[] = [];
 
   skillList.push(...readSkillsDir(resolveSkillRoot("standalone", { claudeDir, agentDir, codexDir, hermesDir }), "standalone"));
+  subagentList.push(...readAgentsDir(join(claudeDir, "agents"), "user"));
 
   const settings = readJson(join(claudeDir, "settings.json"));
   if (isObj(settings) && isObj(settings.mcpServers)) {
@@ -185,6 +231,7 @@ export function introspectConfig(opts: IntrospectOptions = {}): ConfigInventory 
     const source = `plugin:${key}`;
     mcpList.push(...serversToArtifacts(serversFromMcpJson(readJson(join(installPath, ".mcp.json"))), source, redact));
     skillList.push(...readSkillsDir(join(installPath, "skills"), source));
+    subagentList.push(...readAgentsDir(join(installPath, "agents"), source));
     hookList.push(...hooksFromConfig(readJson(join(installPath, "hooks", "hooks.json")), source, redact));
   }
 
@@ -236,7 +283,7 @@ export function introspectConfig(opts: IntrospectOptions = {}): ConfigInventory 
     }
   }
 
-  return { skills: dedupByName(skillList), mcpServers: dedupByName(mcpList), instructions, hooks: uniqueHookNames(hookList) };
+  return { skills: dedupByName(skillList), mcpServers: dedupByName(mcpList), instructions, hooks: uniqueHookNames(hookList), subagents: dedupByName(subagentList) };
 }
 
 // Discover PROJECT-level artifacts under a chosen project root, tagged source "project".
@@ -247,9 +294,11 @@ export function introspectProject(root: string): ProjectInventory {
   const mcp: McpServerArtifact[] = [];
   const instructions: InstructionsArtifact[] = [];
   const hooks: HookArtifact[] = [];
+  const subagents: SubagentArtifact[] = [];
 
   skills.push(...readSkillsDir(join(root, ".claude", "skills"), "project"));
   skills.push(...readSkillsDir(join(root, ".agents", "skills"), "project"));
+  subagents.push(...readAgentsDir(join(root, ".claude", "agents"), "project"));
 
   const settings = readJson(join(root, ".claude", "settings.json"));
   if (isObj(settings) && isObj(settings.mcpServers)) mcp.push(...serversToArtifacts(settings.mcpServers, "project"));
@@ -277,5 +326,5 @@ export function introspectProject(root: string): ProjectInventory {
     }
   }
 
-  return { root, name: basename(root), skills: dedupByName(skills), mcpServers: dedupByName(mcp), instructions, hooks: uniqueHookNames(hooks) };
+  return { root, name: basename(root), skills: dedupByName(skills), mcpServers: dedupByName(mcp), instructions, hooks: uniqueHookNames(hooks), subagents: dedupByName(subagents) };
 }

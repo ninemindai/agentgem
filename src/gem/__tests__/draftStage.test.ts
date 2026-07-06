@@ -20,8 +20,8 @@ const draft: DistilledSkill = {
 
 function emptyInv(): ConfigInventory {
   return {
-    skills: [], mcpServers: [], instructions: [], hooks: [],
-    projects: [{ root: "/r", name: "app", skills: [], mcpServers: [], instructions: [], hooks: [] }],
+    skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [],
+    projects: [{ root: "/r", name: "app", skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [] }],
   };
 }
 
@@ -87,10 +87,10 @@ import { stageDraftsByEvidence } from "@agentgem/capture";
 describe("stageDraftsByEvidence", () => {
   it("stages each draft into the project named by its evidence.root", () => {
     const inv = {
-      skills: [], mcpServers: [], instructions: [], hooks: [],
+      skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [],
       projects: [
-        { root: "/a", name: "a", skills: [], mcpServers: [], instructions: [], hooks: [] },
-        { root: "/b", name: "b", skills: [], mcpServers: [], instructions: [], hooks: [] },
+        { root: "/a", name: "a", skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [] },
+        { root: "/b", name: "b", skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [] },
       ],
     };
     const dA = { ...draft, name: "draft-a", evidence: { ...draft.evidence, root: "/a" } };
@@ -100,7 +100,7 @@ describe("stageDraftsByEvidence", () => {
     expect(gem.artifacts.map(a => a.name).sort()).toEqual(["draft-a", "draft-b"]);
   });
   it("is a no-op for no drafts", () => {
-    const inv = { skills: [], mcpServers: [], instructions: [], hooks: [], projects: [] };
+    const inv = { skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [], projects: [] };
     expect(stageDraftsByEvidence(inv, [])).toBe(inv);
   });
 });

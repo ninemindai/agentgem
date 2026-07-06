@@ -12,7 +12,7 @@ export interface LedgerView { query: string; usedOnly: boolean }
 // Skills list manageable.
 export const DEFAULT_VIEW: LedgerView = { query: "", usedOnly: false };
 
-type InventoryCategory = "skills" | "mcpServers" | "instructions" | "hooks";
+type InventoryCategory = "skills" | "subagents" | "mcpServers" | "instructions" | "hooks";
 
 /** Friendly provenance label for a chip: "plugin:superpowers@repo" → "superpowers";
  * "standalone"/"user"/"project" pass through. */
@@ -25,6 +25,7 @@ export function formatSource(source?: string): string | undefined {
 /** Inventory category -> usage `type` + sidebar label, in display order. */
 const CATEGORIES: { key: InventoryCategory; type: string; label: string }[] = [
   { key: "skills", type: "skill", label: "Skills" },
+  { key: "subagents", type: "subagent", label: "Subagents" },
   { key: "mcpServers", type: "mcp_server", label: "MCP Servers" }, // /api/usage types MCP rows as "mcp_server"
   { key: "instructions", type: "instructions", label: "Instructions" },
   { key: "hooks", type: "hook", label: "Hooks" },

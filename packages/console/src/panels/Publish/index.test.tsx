@@ -4,7 +4,7 @@ import { RegistryPublish } from "./index";
 
 afterEach(cleanup);
 const res = (body: unknown) => ({ ok: true, status: 200, text: async () => JSON.stringify(body) }) as unknown as Response;
-const ws = [{ name: "my-gem", gemName: "my-gem", version: "1.0.0", artifactCounts: { skill: 1, mcp_server: 0, instructions: 0, hook: 0 }, artifacts: [], modifiedMs: 0, checks: 0, renderedTargets: [] }];
+const ws = [{ name: "my-gem", gemName: "my-gem", version: "1.0.0", artifactCounts: { skill: 1, mcp_server: 0, instructions: 0, hook: 0, subagent: 0 }, artifacts: [], modifiedMs: 0, checks: 0, renderedTargets: [] }];
 
 describe("RegistryPublish", () => {
   it("shows a 'not configured' message when the registry is not ready", async () => {

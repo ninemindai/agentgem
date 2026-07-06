@@ -16,6 +16,7 @@ function inv(): ConfigInventory {
     mcpServers: [{ type: "mcp_server", name: "context7", transport: "stdio", config: {}, source: "user" }],
     instructions: [],
     hooks: [],
+    subagents: [],
   };
 }
 
