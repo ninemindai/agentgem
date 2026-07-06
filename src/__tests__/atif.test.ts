@@ -1,7 +1,10 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
-import { parseAtifDocument, flattenAtifContent, parseAtifMeta, atifSessionEvents } from "@agentgem/insight";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { parseAtifDocument, flattenAtifContent, parseAtifMeta, atifSessionEvents, parseAtifTranscriptView, loadSessionTranscript } from "@agentgem/insight";
 
 const MIN_DOC = JSON.stringify({
   schema_version: "ATIF-v1.7",
@@ -95,5 +98,33 @@ describe("atifSessionEvents", () => {
     const events = atifSessionEvents(JSON.stringify(doc), "/tmp/x.json");
     expect(events.some((e) => e.span.kind === "message" && (e.span as { text: string }).text === "sys prompt")).toBe(false);
     expect(events.some((e) => e.span.kind === "message" && (e.span as { text: string }).text.includes("thinking about it"))).toBe(true);
+  });
+});
+
+describe("parseAtifTranscriptView", () => {
+  it("builds turns with tool outputs paired onto tool_call spans", () => {
+    const view = parseAtifTranscriptView(MIN_DOC, "/tmp/atif/sess-1.json");
+    expect(view).not.toBeNull();
+    expect(view!.agent).toBe("atif");
+    expect(view!.sessionId).toBe("sess-1");
+    expect(view!.turns).toHaveLength(2);
+    const agentTurn = view!.turns[1];
+    expect(agentTurn.role).toBe("assistant");
+    const call = agentTurn.spans.find((s) => s.kind === "tool_call") as { kind: "tool_call"; name: string; output?: string };
+    expect(call.name).toBe("financial_search");
+    expect(call.output).toContain("185.35");
+    expect(agentTurn.tokens).toEqual({ in: 600, out: 100, cache: 400 });
+  });
+});
+
+describe("loadSessionTranscript (atif)", () => {
+  it("resolves a dropped trajectory by sessionId", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "agentgem-atif-"));
+    try {
+      writeFileSync(join(dir, "sess-1.json"), MIN_DOC);
+      const view = await loadSessionTranscript("sess-1", "atif", { atifDir: dir });
+      expect(view?.sessionId).toBe("sess-1");
+      expect(await loadSessionTranscript("nope", "atif", { atifDir: dir })).toBeNull();
+    } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });

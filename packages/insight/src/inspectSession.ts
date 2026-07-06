@@ -18,6 +18,7 @@ import { jsonLines, listFiles, parseClaudeTranscript, parseCodexTranscript } fro
 import { scrubText } from "./scrub.js";
 import type { SessionStat, AgentId } from "./observeAggregate.js";
 import type { DistilledSkill } from "./distillTypes.js";
+import { parseAtifTranscriptView, atifDropDir } from "./atif/atifView.js";
 
 export interface TokenBreakdown { in: number; out: number; cache: number; }
 
@@ -296,9 +297,18 @@ export function codexSessionEvents(text: string, path: string): SessionEvent[] {
 export async function loadSessionTranscript(
   sessionId: string,
   agent: AgentId,
-  dirs?: { claudeDir?: string; codexDir?: string },
+  dirs?: { claudeDir?: string; codexDir?: string; atifDir?: string },
 ): Promise<TranscriptView | null> {
   const resolved = resolveDirs();
+  if (agent === "atif") {
+    // Dropped trajectories: match by parsed id (trajectory_id ?? session_id ?? filename).
+    for (const f of listFiles(dirs?.atifDir ?? atifDropDir(), ".json")) {
+      let raw: string; try { raw = await readFile(f, "utf8"); } catch { continue; }
+      const view = parseAtifTranscriptView(raw, f);
+      if (view && view.sessionId === sessionId) return view;
+    }
+    return null;
+  }
   if (agent === "claude") {
     // The transcript filename IS the sessionId (observeScan Fix 1).
     const claudeDir = dirs?.claudeDir ?? resolved.claudeDir;
