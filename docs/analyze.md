@@ -77,6 +77,39 @@ get a recommendation.
 Candidates are labelled by confidence: **high** when Claude proposed the grouping,
 **medium** for the deterministic fallback.
 
+## Process quality
+
+Alongside workflow detection, Analyze also tracks **process quality** — whether the agent
+made steady progress toward the goal or got caught in unproductive loops, unverified edits,
+and regress-and-retry patterns. The insight is from **AgentLens** (arXiv:2605.12925),
+which found that 10.7% of passing SWE-agent trajectories were "Lucky Passes" — correct
+outcome but poor process — a signal that outcome success alone doesn't capture agent competence.
+
+Analyze runs two deterministic detectors on each session's edit and verification history:
+
+- **`regression-cycle`** (severity: warn) — fires when a file is edited, then verified
+  ("work complete"), and then edited again 2+ more times after that. Each recurrence costs
+  20 points. This flags rework and thrashing over completed work.
+- **`unverified-tail`** (severity: info) — fires when the session includes at least one
+  verification step but also includes edits *after* the final verification. Those tail
+  edits shipped unchecked. Each instance costs 10 points. (Complements the pre-existing
+  `no-verify-finish` detector, which covers the never-verified case.)
+
+**ProcessQuality score**: Each session starts at 100 points. Warn findings deduct 20 each,
+info findings deduct 10 each, and the score floors at 0. The result is labeled:
+- **≥80: disciplined** — steady progress, verified work, few re-edits.
+- **≥50: loose** — mixed quality, some unverified edits or moderate rework.
+- **<50: chaotic** — frequent unverified tail, high regression-cycle rate, or pervasive blind retry.
+
+A report also computes **`atRiskRate`** — the fraction of sessions scoring below 80 ("not
+disciplined") — as a local proxy for process risk. This mirrors AgentLens's lucky-pass metric
+but does not claim anything about task success; AgentGem observes process, not pass/fail.
+
+The detectors already surface through the existing findings pipeline
+(`insightsCore` → `behaviorFindings` → `rubricReport`); you see them in the
+**Findings** section of the rubric report today. **Note:** displaying the `ProcessQuality`
+score itself in the console scorecard or goldmine UI is a follow-up proposal, not yet built.
+
 ## Distilled skills
 
 The recommendation above only ever names artifacts you already have. But the actual
