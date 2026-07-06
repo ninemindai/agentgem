@@ -45,9 +45,15 @@ export interface SubagentArtifact {
 // runtime). `createdFrom` is provenance only (a reference + one-line summary), never the raw source.
 export type GameGenre = "replay" | "skill-run" | "project-fun"; // v2: "watch" | "team"
 
-// A read-only live-data capability a game may DECLARE. The trusted Play host, not the game, decides
-// whether to forward it (consent-gated). Absent `needs` = a pure sealed snapshot. v1 defines one.
-export type GameCapability = "live-session-events";
+// A capability a game may DECLARE. The trusted Play host — never the game — decides whether to grant
+// it, consent-gated per gem. Absent `needs` = a pure sealed offline snapshot (the safe default). The
+// first two are read-only data feeds brokered into the sealed iframe; "invoke-agent" is privileged
+// code execution (the host runs an ACP agent in the run-sandbox and streams back a sanitized
+// transcript) and is restricted at runtime to locally-authored games, never shared/marketplace ones.
+export type GameCapability =
+  | "live-session-events"   // read-only: streamed live session events (host -> /api/watch/stream)
+  | "local-project-access"  // read-only: local projects / setup / inventory (host-brokered)
+  | "invoke-agent";         // privileged: host runs a local ACP agent in the sandbox; game gets the transcript
 
 export type GameSource =
   | { kind: "session"; agent: string; project?: string; sessionId: string; summary: string }

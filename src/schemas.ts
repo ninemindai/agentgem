@@ -101,7 +101,7 @@ export const GameArtifactSchema = z.object({
     z.object({ kind: z.literal("project"), path: z.string(), flavor: z.string() }),
   ]),
   engineVersion: z.string(),
-  needs: z.array(z.enum(["live-session-events"])).optional(),
+  needs: z.array(z.enum(["live-session-events", "local-project-access", "invoke-agent"])).optional(),
   meta: z.object({ controls: z.string().optional(), estPlaySeconds: z.number().optional() }).optional(),
 });
 
