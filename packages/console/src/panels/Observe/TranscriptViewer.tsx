@@ -12,6 +12,7 @@ import {
 import { fmtTokens, fmtDuration } from "./data.js";
 import { Loading } from "../../shell/Loading.js";
 import { setPendingContribution } from "../../pendingAnalyze.js";
+import { QuickShareButton } from "../_shared/QuickShareButton.js";
 
 export function TranscriptViewer({ apiBase, agent, sessionId, onBack }: {
   apiBase: string; agent: "claude" | "codex"; sessionId: string; onBack: () => void;
@@ -243,7 +244,7 @@ export function DraftCard({ apiBase, draft }: { apiBase: string; draft: Distille
   );
 }
 
-function LessonCard({ apiBase, lesson }: { apiBase: string; lesson: DistilledLesson }) {
+export function LessonCard({ apiBase, lesson, createGemShare }: { apiBase: string; lesson: DistilledLesson; createGemShare?: Parameters<typeof QuickShareButton>[0]["createGemShare"] }) {
   const [saved, setSaved] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -264,10 +265,18 @@ function LessonCard({ apiBase, lesson }: { apiBase: string; lesson: DistilledLes
       <div className="tv-draft-head">
         <span className="tv-draft-name">{lesson.name}</span>
         <span className="obs-chip">{lesson.importance}</span>
+        <QuickShareButton
+          apiBase={apiBase}
+          name={lesson.name}
+          provenance={`Distilled lesson · ${lesson.importance}`}
+          title={lesson.name}
+          createGemShare={createGemShare}
+          onUpgrade={saved ? share : undefined}
+        />
         {saved
           ? <>
               <span className="obs-muted tv-draft-saved">saved → {saved}</span>
-              <button type="button" className="obs-open-transcript" onClick={share}>Share</button>
+              <button type="button" className="obs-open-transcript" onClick={share}>Publish</button>
             </>
           : <button type="button" className="obs-open-transcript" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save lesson"}</button>}
       </div>
