@@ -575,6 +575,18 @@ a.ex-skillcard-rating:hover { text-decoration: underline; }
   border-radius: var(--r-xs);
   padding: 3px 8px;
 }
+.ex-open-app {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--brand);
+  border: 1px solid var(--brand);
+  border-radius: var(--r-sm);
+  padding: 5px 12px;
+  text-decoration: none;
+  transition: background var(--t), border-color var(--t);
+}
+.ex-open-app:hover { background: var(--brand-strong); border-color: var(--brand-strong); }
 .ex-getit-steps { color: var(--ink-2); font-size: 0.9rem; margin: 0; }
 .ex-getit-steps strong { color: var(--ink); font-weight: 600; }
 

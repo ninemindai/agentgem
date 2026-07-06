@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { GetGems } from "./index.js";
 
-afterEach(() => { cleanup(); });
+afterEach(() => { cleanup(); window.location.hash = ""; });
 
 const res = (body: unknown) =>
   ({ ok: true, status: 200, text: async () => JSON.stringify(body) }) as unknown as Response;
@@ -74,6 +74,20 @@ describe("GetGems", () => {
     // the no-publishedBy result shows the free-text author chip, unlinked
     const chip = screen.getByText("acme");
     expect(chip.closest("a")).toBeNull();
+  });
+
+  it("auto-searches and prefills the box from a ?q= deep-link param", async () => {
+    window.location.hash = "#/get-gems?q=%40raymondfeng%2Fmy-setup"; // "Open in AgentGem" link
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+      const u = String(url);
+      if (u.includes("/api/registry/ready")) return res({ ready: true });
+      if (u.includes("/api/registry/search"))
+        return res({ results: [{ key: "@raymondfeng/my-setup", latest: "1.0.0", score: 1, description: "my setup" }] });
+      throw new Error(`unexpected ${u}`);
+    }));
+    render(<GetGems apiBase="" />);
+    expect(await screen.findByText("@raymondfeng/my-setup")).toBeTruthy();
+    expect((screen.getByLabelText("search registry") as HTMLInputElement).value).toBe("@raymondfeng/my-setup");
   });
 
   it("does not auto-search on mount", async () => {
