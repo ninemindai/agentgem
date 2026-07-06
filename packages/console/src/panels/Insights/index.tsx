@@ -207,7 +207,7 @@ export function InsightsReportCard({ report, scanned, onBuild, onContribute }: {
           <div className="analyze-candidate-head">
             <h4 style={{ margin: 0 }}>Worth publishing</h4>
             {onBuild && <button type="button" className="ledger-build" style={{ marginLeft: "auto" }} onClick={onBuild}>Build a Gem from this project →</button>}
-            {onContribute && <button type="button" className="ledger-build" disabled={contributing} onClick={handleContribute}>{contributing ? "Preparing…" : "Contribute to explore →"}</button>}
+            {onContribute && <button type="button" className="ledger-build" disabled={contributing} onClick={handleContribute}>{contributing ? "Preparing…" : "Publish"}</button>}
           </div>
           {contributeError && <p className="ledger-error">{contributeError}</p>}
           <table className="obs-table insights-candidates">

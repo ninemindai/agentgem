@@ -101,7 +101,7 @@ export function listWorkspaces(): WorkspaceSummary[] {
 
 export function readWorkspace(name: string): WorkspaceDetail {
   const dir = workspaceDir(name);
-  if (!existsSync(join(dir, "gem.json"))) throw new Error(`no workspace '${name}'`);
+  if (!existsSync(join(dir, "gem.json"))) throw new InvalidInputError(`no workspace '${name}'`);
   const files = readArchiveDir(dir);               // skips .targets/ (Task 2)
   const gem = readGemArchive(files);             // verifies the lock
   return { ...summary(workspaceName(name), files["gem.json"], dir), files, compatibility: compatibility(gem) };
@@ -109,7 +109,7 @@ export function readWorkspace(name: string): WorkspaceDetail {
 
 export function renderTarget(name: string, target: TargetId, opts: MaterializeOpts = {}): RenderResult {
   const dir = workspaceDir(name);
-  if (!existsSync(join(dir, "gem.json"))) throw new Error(`no workspace '${name}'`);
+  if (!existsSync(join(dir, "gem.json"))) throw new InvalidInputError(`no workspace '${name}'`);
   const gem = readGemArchive(readArchiveDir(dir));
   const { files, skipped } = materialize(gem, target, opts);
   const out = join(dir, TARGETS_DIR, target);
@@ -121,6 +121,6 @@ export function renderTarget(name: string, target: TargetId, opts: MaterializeOp
 
 export function deleteWorkspace(name: string): void {
   const dir = workspaceDir(name);
-  if (!existsSync(dir)) throw new Error(`no workspace '${name}'`);
+  if (!existsSync(dir)) throw new InvalidInputError(`no workspace '${name}'`);
   rmSync(dir, { recursive: true, force: true });
 }
