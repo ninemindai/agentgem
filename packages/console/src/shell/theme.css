@@ -902,6 +902,24 @@ button.scorecard-intent { line-height: 1.4; }
 .tv-meta { font-size: 12px; }
 .tv-collapse { margin-left: auto; }
 
+/* context-hygiene report (auto-loaded above the distill CTA) */
+.hyg {
+  margin: 0 0 16px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--raised); box-shadow: var(--shadow-sm);
+  --obs-accent: var(--accent); --obs-muted: var(--muted);
+}
+.hyg-head { font: 600 11px/1 var(--font-ui); text-transform: uppercase; letter-spacing: .09em; color: var(--muted); margin-bottom: 8px; }
+.hyg-verdict { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+.hyg-score { font: 700 20px/1 var(--font-display); font-optical-sizing: auto; }
+.hyg-word { font: 600 11px/1 var(--font-ui); text-transform: uppercase; letter-spacing: .08em; }
+.hyg-verdict.is-bounded .hyg-score, .hyg-verdict.is-bounded .hyg-word { color: var(--emerald); }
+.hyg-verdict.is-mixed .hyg-score, .hyg-verdict.is-mixed .hyg-word { color: var(--gold); }
+.hyg-verdict.is-bloated .hyg-score, .hyg-verdict.is-bloated .hyg-word { color: var(--accent); }
+.hyg-canvas { display: block; width: 100%; max-width: 320px; height: 90px; margin: 0 0 8px; }
+.hyg-factors { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.hyg-factors li { font-size: 12.5px; color: var(--ink-soft); }
+.hyg-factors b { font-weight: 600; }
+
 /* distill-this-session CTA + draft cards */
 .tv-distill { margin: 0 0 16px; display: flex; flex-direction: column; gap: 8px; }
 .tv-distill-btn {
