@@ -67,6 +67,9 @@ export async function getGemArchive(db: AppDb, gemKey: string, version: string):
 export interface CatalogManifest {
   gemKey: string; version: string; author?: string; description?: string;
   tags?: string[]; artifactKinds?: string[]; type?: string; grade?: number;
+  // Set by the archive-publish path: the per-artifact preview list and the archive's content
+  // digest. Both are inside the signed manifest, so the signature binds the publish to this archive.
+  artifacts?: GemArtifactRef[]; gemDigest?: string;
 }
 export interface ShareRequest { manifest: CatalogManifest; pubkey: string; signedAt: number; signature: string }
 export type ShareResult =
@@ -107,7 +110,7 @@ export async function recordCatalogShare(db: AppDb, req: ShareRequest, now: numb
   await upsertCatalogGem(db, {
     gemKey: m.gemKey, version: m.version, publishedBy: login,
     author: m.author, description: m.description, tags: m.tags, artifactKinds: m.artifactKinds,
-    type: m.type, grade: clampGrade(m.grade), createdAtMs: now,
+    type: m.type, grade: clampGrade(m.grade), artifacts: m.artifacts, createdAtMs: now,
   });
   return { shared: true, publishedBy: login, gemKey: m.gemKey, version: m.version };
 }
