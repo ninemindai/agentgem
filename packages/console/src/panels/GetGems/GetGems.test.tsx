@@ -90,6 +90,31 @@ describe("GetGems", () => {
     expect((screen.getByLabelText("search registry") as HTMLInputElement).value).toBe("@raymondfeng/my-setup");
   });
 
+  it("directly installs from an ?install= deep link (no search)", async () => {
+    window.location.hash = "#/get-gems?install=%40o%2Fsetup&v=1.0.0"; // "Open in AgentGem" on an installable gem
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+      const u = String(url);
+      if (u.includes("/api/registry/ready")) return res({ ready: true });
+      if (u.includes("/api/registry/search")) throw new Error("should not search on ?install");
+      if (u.includes("/api/install-hosted")) return res({ workspace: "o-setup", executables: { mcp: [], hooks: [] } });
+      throw new Error(`unexpected ${u}`);
+    }));
+    render(<GetGems apiBase="" />);
+    await waitFor(() => expect(screen.getByText(/installed → o-setup/i)).toBeTruthy());
+  });
+
+  it("direct install works even when registry search is not configured", async () => {
+    window.location.hash = "#/get-gems?install=%40o%2Fsetup&v=1.0.0";
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+      const u = String(url);
+      if (u.includes("/api/registry/ready")) return res({ ready: false }); // not configured
+      if (u.includes("/api/install-hosted")) return res({ workspace: "o-setup", executables: { mcp: [], hooks: [] } });
+      throw new Error(`unexpected ${u}`);
+    }));
+    render(<GetGems apiBase="" />);
+    await waitFor(() => expect(screen.getByText(/installed → o-setup/i)).toBeTruthy());
+  });
+
   it("does not auto-search on mount", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
       const u = String(url);

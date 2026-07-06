@@ -17,6 +17,8 @@ export function GetGems({ apiBase }: { apiBase: string }) {
   const [error, setError] = useState<string | null>(null);
   const [installed, setInstalled] = useState<Record<string, string>>({});
   const [consentFor, setConsentFor] = useState<string | null>(null); // gem key awaiting executable-artifact consent
+  const [directKey, setDirectKey] = useState<string | null>(null); // deep-link "?install=<key>" direct install
+  const [directVersion, setDirectVersion] = useState("");
 
   useEffect(() => {
     let alive = true;
@@ -59,26 +61,57 @@ export function GetGems({ apiBase }: { apiBase: string }) {
     }
   };
 
-  // Deep-link entry: a "…/#/get-gems?q=<gemKey>" link (e.g. "Open in AgentGem" on the marketplace)
-  // pre-fills the box and runs the search once on mount, landing the reader on the gem to install.
-  // Absent the param this is a no-op, so the default "does not auto-search on mount" behaviour holds.
+  // Deep-link entry (the marketplace "Open in AgentGem" link) on mount:
+  //  - "?install=<key>&v=<version>" → directly install that shared gem (zero-config hosted install,
+  //    consent-gated). Works even when the local registry search isn't configured.
+  //  - "?q=<term>" → pre-fill + run the registry search once.
+  // Absent both, this is a no-op, so the default "does not auto-search on mount" behaviour holds.
   useEffect(() => {
-    const q0 = new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("q");
+    const params = new URLSearchParams(window.location.hash.split("?")[1] ?? "");
+    const installKey = params.get("install");
+    if (installKey) { setDirectKey(installKey); setDirectVersion(params.get("v") ?? ""); void install(installKey, params.get("v") ?? ""); return; }
+    const q0 = params.get("q");
     if (q0) { setQ(q0); void search(q0); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (ready === null) return <Loading />;
+  // The deep-link install banner is independent of registry-search readiness (hosted install is
+  // zero-config), so it renders before the not-configured gate.
+  const directBanner = directKey ? (
+    <div className="getgems-direct ws-card">
+      <span className="ws-name">{directKey}</span>
+      {installed[directKey] ? (
+        <span className="getgems-done">✓ installed → {installed[directKey]}</span>
+      ) : consentFor === directKey ? (
+        <span className="getgems-consent">
+          ⚠ This setup runs executable artifacts (MCP servers / hooks).
+          <button type="button" className="ledger-sort" onClick={() => install(directKey, directVersion, true)}>Install anyway</button>
+        </span>
+      ) : error ? (
+        <span className="ledger-error">{error}</span>
+      ) : (
+        <span>Installing…</span>
+      )}
+    </div>
+  ) : null;
+
+  if (ready === null && !directKey) return <Loading />;
   if (!ready) {
     return (
-      <p className="ledger-empty">
-        Registry not configured. Set the registry source (GitHub repo + token) to search and install shared gems.
-      </p>
+      <div className="getgems">
+        {directBanner}
+        {!directKey && (
+          <p className="ledger-empty">
+            Registry not configured. Set the registry source (GitHub repo + token) to search and install shared gems.
+          </p>
+        )}
+      </div>
     );
   }
 
   return (
     <div className="getgems">
+      {directBanner}
       <div className="ledger-bar">
         <input
           className="ledger-search"
