@@ -68,6 +68,18 @@ export function originGuard(req: GuardReq, res: GuardRes, next: GuardNext): void
     // POST is never legitimately "none" from our same-origin UI (its fetch() sends same-origin), so
     // requiring same-origin there closes the top-level-navigation/form-POST drive-by.
     if (site === "none" && SAFE_METHODS.has(req.method.toUpperCase())) { next(); return; }
+    // A user-clicked top-level navigation (e.g. an "Open in AgentGem" link on the marketplace) arrives
+    // cross-site, but only loads a page — benign for a safe method, and the loaded UI's own API calls
+    // are then same-origin. Restricted to real top-level document loads (Sec-Fetch-Mode: navigate +
+    // Dest: document) on NON-/api paths, so side-effectful loopback GETs — the /api/.../stream run and
+    // deploy handlers — stay cross-site-blocked. This does NOT open cross-site fetch/XHR (mode cors/
+    // no-cors) or form POSTs (excluded by the safe-method gate).
+    if (
+      SAFE_METHODS.has(req.method.toUpperCase()) &&
+      req.get("sec-fetch-mode") === "navigate" &&
+      req.get("sec-fetch-dest") === "document" &&
+      !req.path.startsWith("/api/")
+    ) { next(); return; }
     block(res);
     return;
   }

@@ -79,6 +79,26 @@ describe("originGuard (CSRF / drive-by guard)", () => {
   it("blocks a malformed Origin", () => {
     expect(run({ origin: "not a url" }).blocked).toBe(true);
   });
+
+  // "Open in AgentGem" (marketplace → local console): clicking the link is a cross-site top-level
+  // document navigation. Loading the SPA is side-effect-free and its own API calls are then
+  // same-origin, so allow the navigation — but ONLY a real document navigation on a non-/api path.
+  const NAV = { "sec-fetch-site": "cross-site", "sec-fetch-mode": "navigate", "sec-fetch-dest": "document" };
+  it("allows a cross-site top-level page navigation to the console UI", () => {
+    const r = run(NAV, "127.0.0.1:4317", "GET", "/");
+    expect(r.nexted).toBe(true);
+    expect(r.blocked).toBe(false);
+  });
+  it("still blocks a cross-site navigation to an /api path (side-effectful SSE run/deploy GETs)", () => {
+    expect(run(NAV, "127.0.0.1:4317", "GET", "/api/gem/run/stream").blocked).toBe(true);
+  });
+  it("still blocks a cross-site fetch/XHR to the UI (mode cors is not a top-level navigation)", () => {
+    const r = run({ "sec-fetch-site": "cross-site", "sec-fetch-mode": "cors", "sec-fetch-dest": "empty" }, "127.0.0.1:4317", "GET", "/");
+    expect(r.blocked).toBe(true);
+  });
+  it("still blocks a cross-site navigation with a state-changing POST (form drive-by)", () => {
+    expect(run(NAV, "127.0.0.1:4317", "POST", "/api/gem").blocked).toBe(true);
+  });
 });
 
 describe("originGuard — public aggregator reads (CORS + cross-site exemption)", () => {
