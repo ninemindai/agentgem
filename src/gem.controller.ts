@@ -48,7 +48,9 @@ const ObserveRawSchema = z.object({ sessions: z.array(SessionStatSchema) });
 // metadata-only/one-shot properties.
 const InspectSessionQuerySchema = z.object({
   id: z.string(),
-  agent: z.enum(["claude", "codex"]),
+  // AgentId is an open, registry-derived string (see observeAggregate.ts); runtime validity is
+  // loadSessionTranscript's concern — unknown agents already return null → InvalidInputError.
+  agent: z.string(),
 });
 const TokenBreakdownSchema = z.object({ in: z.number(), out: z.number(), cache: z.number() });
 const TranscriptSpanSchema = z.discriminatedUnion("kind", [
