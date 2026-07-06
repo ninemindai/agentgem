@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 // src/gem/__tests__/contextHygiene.test.ts
 import { describe, it, expect } from "vitest";
-import { contextCap, contextTokens } from "@agentgem/insight";
+import { contextCap, contextTokens, clusterOf } from "@agentgem/insight";
 import type { TurnUsage } from "@agentgem/insight";
 
 describe("contextCap", () => {
@@ -29,5 +29,21 @@ describe("contextTokens", () => {
   it("TurnUsage is constructible (type smoke)", () => {
     const t: TurnUsage = { turn: 0, msgIndex: 4, ctxTokens: 905_100, cacheCreation: 5000, outTokens: 42 };
     expect(t.ctxTokens).toBe(905_100);
+  });
+});
+
+describe("clusterOf", () => {
+  it("buckets a packages/<x> path to pkg:<x>", () => {
+    expect(clusterOf("packages/console/src/app.ts")).toBe("pkg:console");
+    expect(clusterOf("/repo/packages/insight/src/x.ts")).toBe("pkg:insight");
+  });
+  it("buckets other paths to their first segment", () => {
+    expect(clusterOf("src/gem/scorecard.ts")).toBe("dir:src");
+    expect(clusterOf("docs/readme.md")).toBe("dir:docs");
+  });
+  it("returns null for non-path args and empties", () => {
+    expect(clusterOf("npm test")).toBeNull();
+    expect(clusterOf("")).toBeNull();
+    expect(clusterOf(undefined)).toBeNull();
   });
 });
