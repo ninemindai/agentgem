@@ -168,6 +168,30 @@ const chunk = <T>(arr: T[], size: number): T[][] => {
   return out;
 };
 
+/** Chunk model rows WITHOUT splitting a (scope, date) group across POSTs: the server replaces
+ *  each group it receives wholesale (stale-slice purge), so a group straddling two requests
+ *  would have its first half deleted by the second. Groups are tiny (agents × models per
+ *  scope-day), so a soft cap works; a single oversized group still ships alone. */
+export function chunkModelRows(models: UsageModelRow[], size: number): UsageModelRow[][] {
+  const out: UsageModelRow[][] = [];
+  let current: UsageModelRow[] = [];
+  let i = 0;
+  while (i < models.length) {
+    // take the whole (scope, date) group
+    let j = i + 1;
+    while (j < models.length && models[j].scope === models[i].scope && models[j].date === models[i].date) j++;
+    const group = models.slice(i, j);
+    if (current.length > 0 && current.length + group.length > size) {
+      out.push(current);
+      current = [];
+    }
+    current.push(...group);
+    i = j;
+  }
+  if (current.length > 0) out.push(current);
+  return out;
+}
+
 /** One reporting pass: scan → bucket → POST (chunked to the server's per-request caps).
  *  Never throws; returns why it was skipped. `fullHistory` drops the 30-day window and
  *  re-sends every day found in the local transcripts (the --backfill path) — safe because
@@ -194,7 +218,7 @@ export async function reportUsageOnce(deps: ReportDeps = {}): Promise<ReportOutc
     // so any batch failure just leaves earlier (already-upserted) batches in place — the next
     // run re-sends and converges.
     const dayChunks = chunk(days, DAYS_PER_POST);
-    const modelChunks = chunk(models, MODELS_PER_POST);
+    const modelChunks = chunkModelRows(models, MODELS_PER_POST);
     let recorded = 0;
     for (let i = 0; i < Math.max(dayChunks.length, modelChunks.length); i++) {
       const res = await (deps.fetchImpl ?? fetch)(new URL("/api/usage/report", base), {

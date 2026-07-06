@@ -5,7 +5,7 @@ import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SessionStat } from "@agentgem/insight";
-import { usageDaysFromStats, usageModelsFromStats, reportUsageOnce, startUsageReporter, runUsageCommand, ownerFromRemoteUrl, scopeForCwd, REPORT_WINDOW_DAYS } from "../usage/reporter.js";
+import { usageDaysFromStats, usageModelsFromStats, chunkModelRows, reportUsageOnce, startUsageReporter, runUsageCommand, ownerFromRemoteUrl, scopeForCwd, REPORT_WINDOW_DAYS } from "../usage/reporter.js";
 
 const DAY = 86_400_000;
 const T0 = Date.parse("2026-07-04T10:00:00Z");
@@ -226,5 +226,32 @@ describe("--backfill (full history, chunked)", () => {
     } finally {
       console.log = orig;
     }
+  });
+});
+
+describe("chunkModelRows (group-aware chunking)", () => {
+  const row = (scope: string, date: string, model: string) => ({ scope, date, agent: "claude", model, sessions: 1, tokens: 1 });
+
+  it("never splits a (scope, date) group across chunks", () => {
+    // 3 groups of 3 rows each, cap 4: a naive slice would split group 2 across chunks.
+    const rows = [
+      row("a", "2026-07-01", "m1"), row("a", "2026-07-01", "m2"), row("a", "2026-07-01", "m3"),
+      row("a", "2026-07-02", "m1"), row("a", "2026-07-02", "m2"), row("a", "2026-07-02", "m3"),
+      row("b", "2026-07-02", "m1"), row("b", "2026-07-02", "m2"), row("b", "2026-07-02", "m3"),
+    ];
+    const chunks = chunkModelRows(rows, 4);
+    expect(chunks.map((c) => c.length)).toEqual([3, 3, 3]); // soft cap keeps groups whole
+    for (const c of chunks) {
+      const groups = new Set(c.map((r) => r.scope + "\n" + r.date));
+      expect(groups.size).toBe(1);
+    }
+    expect(chunks.flat()).toEqual(rows); // nothing lost or reordered
+  });
+
+  it("packs multiple whole groups into one chunk when they fit, and ships an oversized group alone", () => {
+    const small = [row("a", "2026-07-01", "m1"), row("a", "2026-07-02", "m1")]; // 2 groups of 1
+    expect(chunkModelRows(small, 4).map((c) => c.length)).toEqual([2]);
+    const big = Array.from({ length: 6 }, (_, i) => row("a", "2026-07-01", `m${i}`)); // one group > cap
+    expect(chunkModelRows(big, 4).map((c) => c.length)).toEqual([6]); // still one POST — group integrity wins
   });
 });

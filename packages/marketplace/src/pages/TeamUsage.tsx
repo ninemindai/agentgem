@@ -69,15 +69,39 @@ const filtersFromLocation = (): UsageFilters => {
   return { member: p.get("member") ?? "", agent: p.get("agent") ?? "", model: p.get("model") ?? "" };
 };
 
-/** Leaderboard rows as a CSV document (spreadsheet-ready export of the current view). Pure. */
+/** An in-app usage URL carrying exactly the given filters — the drill-down/backlink builder,
+ *  so navigation composes with (rather than silently drops) the active facets. */
+export function usageHref(scope: string, filters: Partial<UsageFilters>): string {
+  const p = new URLSearchParams();
+  for (const key of ["member", "agent", "model"] as const) {
+    const v = filters[key];
+    if (v) p.set(key, v);
+  }
+  const qs = p.toString();
+  return `/orgs/${encodeURIComponent(scope)}/usage` + (qs ? `?${qs}` : "");
+}
+
+/** Leaderboard rows as a CSV document (spreadsheet-ready export of the current view). Pure.
+ *  Filtered payloads (agent/model facet active) only carry sessions + total tokens, so the
+ *  columns that would export ambient zeros as real data are omitted. */
 export function membersCsv(usage: OrgUsage): string {
   const esc = (v: string | number | null) => {
     const s = String(v ?? "");
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const header = "rank,login,sessions,messages,active_hours,active_days,tokens_in,tokens_out,tokens_cache,tokens_total,last_active";
-  const rows = usage.members.map((m, i) =>
-    [i + 1, m.login, m.sessions, m.msgs, (m.activeMs / 3_600_000).toFixed(2), m.activeDays, m.tokensIn, m.tokensOut, m.tokensCache, m.tokens, m.lastActive ?? ""].map(esc).join(","));
+  const cols: [string, (m: OrgUsage["members"][number], i: number) => string | number | null][] = usage.filtered
+    ? [
+        ["rank", (_m, i) => i + 1], ["login", (m) => m.login], ["sessions", (m) => m.sessions],
+        ["tokens_total", (m) => m.tokens], ["active_days", (m) => m.activeDays], ["last_active", (m) => m.lastActive ?? ""],
+      ]
+    : [
+        ["rank", (_m, i) => i + 1], ["login", (m) => m.login], ["sessions", (m) => m.sessions],
+        ["messages", (m) => m.msgs], ["active_hours", (m) => (m.activeMs / 3_600_000).toFixed(2)], ["active_days", (m) => m.activeDays],
+        ["tokens_in", (m) => m.tokensIn], ["tokens_out", (m) => m.tokensOut], ["tokens_cache", (m) => m.tokensCache],
+        ["tokens_total", (m) => m.tokens], ["last_active", (m) => m.lastActive ?? ""],
+      ];
+  const header = cols.map(([name]) => name).join(",");
+  const rows = usage.members.map((m, i) => cols.map(([, get]) => esc(get(m, i))).join(","));
   return [header, ...rows].join("\n") + "\n";
 }
 
@@ -100,6 +124,9 @@ export function TeamUsage({ api, scope, stars }: { api: ReturnType<typeof makeAp
   const [filters, setFilters] = useState<UsageFilters>(() => filtersFromLocation());
   const { member, agent, model } = filters;
   const [view, setView] = useState<View>({ status: "loading" });
+  // Last-known facet options, kept OUTSIDE the view state so the selectors survive loading and
+  // error states — a failed refetch must never remove the only control that can clear a filter.
+  const [facets, setFacets] = useState<{ agents: string[]; models: string[] }>({ agents: [], models: [] });
 
   // Facets navigate by query params on the same path; the Router only re-renders on pathname
   // changes, so track ?member=&agent=&model= here (App's link interception dispatches popstate).
@@ -111,9 +138,11 @@ export function TeamUsage({ api, scope, stars }: { api: ReturnType<typeof makeAp
 
   // Facet select changes write the URL (shareable, back-button-friendly) through the same
   // pushState + synthetic-popstate mechanism App uses for link clicks.
-  const setFilter = (key: keyof UsageFilters, value: string) => {
+  const setFilter = (patch: Partial<UsageFilters>) => {
     const params = new URLSearchParams(window.location.search);
-    if (value) params.set(key, value); else params.delete(key);
+    for (const [key, value] of Object.entries(patch)) {
+      if (value) params.set(key, value); else params.delete(key);
+    }
     const qs = params.toString();
     window.history.pushState({}, "", window.location.pathname + (qs ? `?${qs}` : ""));
     window.dispatchEvent(new PopStateEvent("popstate"));
@@ -129,7 +158,7 @@ export function TeamUsage({ api, scope, stars }: { api: ReturnType<typeof makeAp
         else if (r.status === "forbidden") setView({ status: "forbidden" });
         else if (r.status === "stale") setView({ status: "stale" });
         else if (r.status === "disabled") setView({ status: "disabled" });
-        else setView({ status: "ok", usage: r.usage });
+        else { setView({ status: "ok", usage: r.usage }); setFacets(r.usage.facets); }
       })
       .catch((e) => { if (alive) setView({ status: "error", message: String((e as Error)?.message ?? e) }); });
     return () => { alive = false; };
@@ -144,7 +173,7 @@ export function TeamUsage({ api, scope, stars }: { api: ReturnType<typeof makeAp
           {member && <span className="ex-usage-member-crumb"> · @{member}</span>}
         </h1>
         <p className="ex-sub">Agent usage across the team — each member&apos;s local agentgem reports it on a schedule. Members only. Counts only work in <strong>{scope}</strong>-owned repos; personal and other-org sessions stay out.</p>
-        {member && <p className="ex-usage-backlink"><a href={`/orgs/${encodeURIComponent(scope)}/usage`}>← Full team</a></p>}
+        {member && <p className="ex-usage-backlink"><a href={usageHref(scope, { agent, model })}>← Full team</a></p>}
       </header>
       <div className="ex-usage-controls">
         <div className="ex-tabs" role="tablist" aria-label="time range">
@@ -154,19 +183,21 @@ export function TeamUsage({ api, scope, stars }: { api: ReturnType<typeof makeAp
               onClick={() => setRange(r.value)}>{r.label}</button>
           ))}
         </div>
-        {view.status === "ok" && (view.usage.facets.agents.length > 0 || agent || model) && (
+        {(facets.agents.length > 0 || facets.models.length > 0 || agent || model) && (
           <div className="ex-usage-facets">
+            {/* Switching agent clears the model — the model options cascade under the agent,
+                so a previous selection may not exist there (guaranteed-empty combo otherwise). */}
             <select className="ex-usage-facet" aria-label="filter by agent" value={agent}
-              onChange={(e) => setFilter("agent", e.target.value)}>
+              onChange={(e) => setFilter({ agent: e.target.value, model: "" })}>
               <option value="">All agents</option>
-              {view.usage.facets.agents.map((a) => <option key={a} value={a}>{a}</option>)}
-              {agent && !view.usage.facets.agents.includes(agent) && <option value={agent}>{agent}</option>}
+              {facets.agents.map((a) => <option key={a} value={a}>{a}</option>)}
+              {agent && !facets.agents.includes(agent) && <option value={agent}>{agent}</option>}
             </select>
             <select className="ex-usage-facet" aria-label="filter by model" value={model}
-              onChange={(e) => setFilter("model", e.target.value)}>
+              onChange={(e) => setFilter({ model: e.target.value })}>
               <option value="">All models</option>
-              {view.usage.facets.models.map((m) => <option key={m} value={m}>{m}</option>)}
-              {model && !view.usage.facets.models.includes(model) && <option value={model}>{model}</option>}
+              {facets.models.map((m) => <option key={m} value={m}>{m}</option>)}
+              {model && !facets.models.includes(model) && <option value={model}>{model}</option>}
             </select>
           </div>
         )}
@@ -201,7 +232,7 @@ export function TeamUsage({ api, scope, stars }: { api: ReturnType<typeof makeAp
         </div>
       )}
 
-      {view.status === "ok" && <TeamUsageBody usage={view.usage} member={member} scope={scope} />}
+      {view.status === "ok" && <TeamUsageBody usage={view.usage} filters={filters} scope={scope} />}
       {/* Settings stay reachable on the disabled state so an admin can flip the dashboard back on. */}
       {(view.status === "ok" || view.status === "disabled") && !member && <OrgSettingsPanel api={api} scope={scope} />}
     </div>
@@ -275,12 +306,16 @@ function OrgSettingsPanel({ api, scope }: { api: ReturnType<typeof makeApi>; sco
   );
 }
 
-function TeamUsageBody({ usage, member, scope }: { usage: OrgUsage; member: string; scope: string }) {
+function TeamUsageBody({ usage, filters, scope }: { usage: OrgUsage; filters: UsageFilters; scope: string }) {
+  const { member, agent, model } = filters;
   const { totals, members, daily } = usage;
   if (members.length === 0) {
     return (
       <div className="ex-usage-gate">
-        {member ? (
+        {usage.filtered ? (
+          // The selectors above stay mounted, so the user can always adjust or clear the filter.
+          <p>No usage matches the current filter{agent && model ? "s" : ""} — this {agent && model ? "agent/model combination" : agent ? "agent" : "model"} has no {scope}-attributed sessions in this range.</p>
+        ) : member ? (
           <p>No usage attributed to <strong>{scope}</strong> by @{member} in this range.</p>
         ) : (
           <>
@@ -379,7 +414,7 @@ function TeamUsageBody({ usage, member, scope }: { usage: OrgUsage; member: stri
                   <a href={"/@" + encodeURIComponent(m.login)}>{m.login}</a>
                   <span className="ex-usage-meta">
                     {m.activeDays} active day{m.activeDays === 1 ? "" : "s"}{m.lastActive ? ` · last ${m.lastActive}` : ""}
-                    {!member && <> · <a className="ex-usage-drill" href={`/orgs/${encodeURIComponent(scope)}/usage?member=${encodeURIComponent(m.login)}`}>usage →</a></>}
+                    {!member && <> · <a className="ex-usage-drill" href={usageHref(scope, { member: m.login, agent, model })}>usage →</a></>}
                   </span>
                 </span>
                 <span className="ex-usage-sessions">{fmtFull(m.sessions)}</span>
