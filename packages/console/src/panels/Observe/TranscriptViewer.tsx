@@ -7,7 +7,7 @@
 import { useEffect, useState } from "react";
 import {
   inspectSessionRoute, inspectDistillRoute, workflowDraftRoute, workflowLessonRoute, makeClient,
-  type TranscriptView, type TranscriptTurn, type TranscriptSpan, type DistilledSkill, type DistilledLesson,
+  type TranscriptView, type TranscriptTurn, type DistilledSkill, type DistilledLesson,
 } from "../../api/routes.js";
 import { fmtTokens, fmtDuration, fmtTime } from "./data.js";
 import { Loading } from "../../shell/Loading.js";
@@ -15,6 +15,7 @@ import { setPendingContribution } from "../../pendingAnalyze.js";
 import { QuickShareButton } from "../_shared/QuickShareButton.js";
 import { ContextTimeline } from "./ContextTimeline.js";
 import { ProcessQualityReport } from "./ProcessQualityReport.js";
+import { StructureView } from "./StructureView.js";
 
 export function TranscriptViewer({ apiBase, agent, sessionId, onBack }: {
   apiBase: string; agent: "claude" | "codex"; sessionId: string; onBack: () => void;
@@ -78,83 +79,10 @@ export function TranscriptViewer({ apiBase, agent, sessionId, onBack }: {
       ) : view.turns.length === 0 ? (
         <p className="obs-empty">This session has no readable turns.</p>
       ) : (
-        <ol className="tv-turns">
-          {view.turns.map((turn) => (
-            <Turn key={turn.id} turn={turn} startMs={view.meta.startMs}
-              open={!collapsed.has(turn.id)} onToggle={() => toggle(turn.id)} />
-          ))}
-        </ol>
+        <StructureView view={view} collapsed={collapsed} onToggle={toggle} />
       )}
     </div>
   );
-}
-
-function Turn({ turn, startMs, open, onToggle }: {
-  turn: TranscriptTurn; startMs: number; open: boolean; onToggle: () => void;
-}) {
-  const tok = turn.tokens.in + turn.tokens.out;
-  return (
-    <li className={"tv-turn role-" + turn.role}>
-      <button type="button" className="tv-turn-head" aria-expanded={open} onClick={onToggle}>
-        <span className={"obs-caret" + (open ? " open" : "")}>▸</span>
-        <span className="tv-role">{turn.role}</span>
-        <span className="tv-summary">{summarize(turn)}</span>
-        <span className="tv-when obs-muted">{relTime(turn.tsMs - startMs)}</span>
-        {tok > 0 && <span className="tv-tok obs-chip">{fmtTokens(tok)}</span>}
-      </button>
-      {open && (
-        <div className="tv-spans">
-          {turn.spans.map((span, i) => <Span key={i} span={span} />)}
-        </div>
-      )}
-    </li>
-  );
-}
-
-export function Span({ span }: { span: TranscriptSpan }) {
-  if (span.kind === "message") {
-    return <pre className={"tv-msg role-" + span.role}>{span.text}</pre>;
-  }
-  return <ToolCall span={span} />;
-}
-
-function ToolCall({ span }: { span: Extract<TranscriptSpan, { kind: "tool_call" }> }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className={"tv-tool" + (span.error ? " is-error" : "")}>
-      <button type="button" className="tv-tool-head" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        <span className={"obs-caret" + (open ? " open" : "")}>▸</span>
-        <span className="tv-tool-name">{span.name}</span>
-        {span.error && <span className="tv-tool-err">error</span>}
-      </button>
-      {open && (
-        <div className="tv-tool-body">
-          <div className="tv-tool-label obs-muted">input</div>
-          <pre className="tv-io">{span.input}</pre>
-          {span.output !== undefined && (
-            <>
-              <div className="tv-tool-label obs-muted">output</div>
-              <pre className="tv-io">{span.output}</pre>
-            </>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// One-line preview of a turn for the collapsed header.
-export function summarize(turn: TranscriptTurn): string {
-  const first = turn.spans[0];
-  if (!first) return "";
-  if (first.kind === "message") return firstLine(first.text);
-  const tools = turn.spans.filter((s) => s.kind === "tool_call").map((s) => (s as { name: string }).name);
-  return tools.length === 1 ? tools[0] : `${tools.length} tool calls: ${tools.slice(0, 3).join(", ")}`;
-}
-
-function firstLine(s: string): string {
-  const line = s.split("\n", 1)[0];
-  return line.length > 120 ? line.slice(0, 119) + "…" : line;
 }
 
 // "Distill this session" CTA (phase 3): runs the existing distill pipeline over
@@ -290,15 +218,4 @@ export function LessonCard({ apiBase, lesson, createGemShare }: { apiBase: strin
       {err && <span className="obs-error tv-distill-note">{err}</span>}
     </div>
   );
-}
-
-// Relative offset from session start, e.g. "+0s", "+1m12s", "+1h03m".
-function relTime(ms: number): string {
-  if (!Number.isFinite(ms) || ms < 0) ms = 0;
-  const s = Math.floor(ms / 1000);
-  if (s < 60) return `+${s}s`;
-  const m = Math.floor(s / 60), rs = s % 60;
-  if (m < 60) return `+${m}m${String(rs).padStart(2, "0")}s`;
-  const h = Math.floor(m / 60), rm = m % 60;
-  return `+${h}h${String(rm).padStart(2, "0")}m`;
 }

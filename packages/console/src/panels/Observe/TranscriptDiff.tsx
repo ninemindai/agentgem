@@ -6,7 +6,7 @@
 // viewer's Span renderer and the obs-* palette.
 import { useEffect, useState } from "react";
 import { inspectSessionRoute, makeClient, type TranscriptView } from "../../api/routes.js";
-import { Span, summarize } from "./TranscriptViewer.js";
+import { Span, summarize } from "./turnTree.js";
 import { alignTurns, diffCounts, type DiffRow } from "./diff.js";
 import { Loading } from "../../shell/Loading.js";
 

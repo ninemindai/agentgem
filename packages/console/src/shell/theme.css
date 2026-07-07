@@ -1195,6 +1195,33 @@ button.scorecard-intent { line-height: 1.4; }
   color: var(--ink-soft); max-height: 360px; overflow: auto;
 }
 
+/* Map <-> Transcript structure toggle (session drill-down) */
+.sv { margin: 0 0 16px; }
+.sv-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.sv-head .t { font: 700 11px/1 var(--font-ui); text-transform: uppercase; letter-spacing: .09em; color: var(--muted); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; background: var(--raised); padding: 2px; }
+.seg button {
+  background: none; border: 0; border-radius: 999px; padding: 4px 12px; cursor: pointer;
+  color: var(--muted); font: 600 12px/1 var(--font-ui);
+}
+.seg button.on { background: var(--accent); color: var(--raised); }
+.seg button:not(.on):hover { color: var(--ink); }
+.sv-body { display: flex; flex-direction: column; gap: 8px; }
+
+.phase { border: 1px solid var(--line); border-radius: var(--radius); background: var(--raised); padding: 8px 12px; }
+.ph { display: flex; align-items: baseline; gap: 9px; }
+.ph .idx {
+  flex: none; width: 20px; height: 20px; border-radius: 50%; background: var(--paper-2);
+  color: var(--muted); font: 700 10.5px/20px var(--font-mono); text-align: center;
+}
+.ph .lbl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--ink); font-size: 13px; }
+.ph .st { flex: none; font: 12px/1 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.strip { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 6px; }
+.cell {
+  font: 600 10.5px/1 var(--font-mono); color: #fff; padding: 3px 7px; border-radius: 4px;
+  white-space: nowrap; text-shadow: 0 1px 1px rgba(0,0,0,.25);
+}
+
 /* scorecard progress bar */
 .scorecard-bar { height: 7px; background: var(--paper-2); border: 1px solid var(--line); border-radius: 999px; overflow: hidden; margin: 4px 0 14px; }
 .scorecard-bar-fill { height: 100%; background: var(--accent); border-radius: 999px; transition: width .3s ease; }

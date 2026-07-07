@@ -30,6 +30,8 @@ describe("TranscriptViewer", () => {
     render(<TranscriptViewer apiBase="" agent="claude" sessionId="s1" onBack={() => {}} />);
 
     await waitFor(() => expect(screen.getAllByText("do the thing").length).toBeGreaterThan(0));
+    // Map is the default structure view; switch to Transcript for the verbatim turn tree.
+    fireEvent.click(screen.getByRole("button", { name: /transcript/i }));
     // tool name visible, but its output is collapsed until clicked
     expect(screen.getByText("Read")).toBeTruthy();
     expect(screen.queryByText("contents here")).toBeNull();
