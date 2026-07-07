@@ -15,6 +15,7 @@ import { Profile } from "./pages/Profile";
 import { OrgCatalog } from "./pages/OrgCatalog";
 import { TeamUsage } from "./pages/TeamUsage";
 import { Sources } from "./pages/Sources";
+import { Minigames } from "./pages/Minigames";
 
 export interface StarsCtx { signedIn: boolean; loginUrl: () => string; api: ReturnType<typeof makeStars> }
 export interface ReviewsCtx { signedIn: boolean; loginUrl: () => string; api: ReturnType<typeof makeReviews> }
@@ -31,6 +32,7 @@ export function Router({ api, stars, reviews, me }: { api: ReturnType<typeof mak
 
   if (path === "/publish") return <Publish api={api} me={me} base={defaultApiBase()} />;
   if (path === "/sources") return <Sources api={api} />;
+  if (path === "/minigames") return <Minigames api={api} />;
 
   const gemDetail = path.match(/^\/gems\/(.+)$/);
   if (gemDetail) return <Gem api={api} keyName={decodeURIComponent(gemDetail[1])} stars={stars} />;

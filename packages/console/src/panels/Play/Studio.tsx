@@ -21,7 +21,7 @@ export function Studio({ apiBase, name, onBack }: { apiBase: string; name: strin
   const [meta, setMeta] = useState<{ title: string; genre: string; needs?: string[] } | null>(null);
   const [status, setStatus] = useState("");
   const [gate, setGate] = useState<string[] | null>(null);       // seal failures → actionable banner
-  const [share, setShare] = useState<{ url: string } | null>(null);
+  const [share, setShare] = useState<{ gemUrl: string; cardUrl?: string } | null>(null);
   const closeRef = useRef<null | (() => void)>(null);
   const logRef = useRef<HTMLDivElement>(null);
 
@@ -110,7 +110,8 @@ export function Studio({ apiBase, name, onBack }: { apiBase: string; name: strin
         workspace: name, scope: bind.login, name, version: "0.1.0", provenance: "play",
         description: `${g.label} mini-game`, tags: ["game", meta?.genre ?? "project-fun"],
       } });
-      setShare({ url: pub.shareUrl }); setStatus("");
+      // Link the gem's marketplace page (installable / playable), not just the OG teaser card.
+      setShare({ gemUrl: `https://app.agentgem.ai/gems/${encodeURIComponent(pub.exploreRef)}`, cardUrl: pub.shareUrl }); setStatus("");
     } catch (e) {
       const body = (e as Record<string, unknown>).body;
       setStatus(`share failed: ${typeof body === "string" ? body : (e as Error).message}`);
@@ -136,10 +137,10 @@ export function Studio({ apiBase, name, onBack }: { apiBase: string; name: strin
           <span className="play-banner__ico">🌐</span>
           <div className="play-banner__body">
             <div className="play-banner__title">Published to app.agentgem.ai</div>
-            <div className="play-banner__detail">{share.url}</div>
+            <div className="play-banner__detail">{share.gemUrl}{share.cardUrl ? ` · share card: ${share.cardUrl}` : ""}</div>
           </div>
-          <button className="play-btn" onClick={() => navigator.clipboard?.writeText(share.url)}>Copy</button>
-          <button className="play-btn play-btn--ghost" onClick={() => window.open(share.url, "_blank", "noopener")}>Open</button>
+          <button className="play-btn" onClick={() => navigator.clipboard?.writeText(share.gemUrl)}>Copy</button>
+          <button className="play-btn play-btn--ghost" onClick={() => window.open(share.gemUrl, "_blank", "noopener")}>Open</button>
         </div>
       )}
       {gate && (

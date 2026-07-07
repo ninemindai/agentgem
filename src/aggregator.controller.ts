@@ -138,6 +138,7 @@ const CatalogResult = z.object({ shared: z.boolean(), publishedBy: z.string().op
 const PublishGemBody = z.object({ manifest: CatalogManifestSchema, archiveBase64: z.string(), pubkey: z.string(), signedAt: z.number(), signature: z.string() });
 const GemArchiveQuery = z.object({ key: z.string(), version: z.string() });
 const GemArchiveResult = z.object({ archiveBase64: z.string() });
+const GameHtmlResult = z.object({ html: z.string() });
 
 // Constant-time token compare (length-guarded so timingSafeEqual never throws on mismatched lengths).
 function tokenEq(a: string, b: string): boolean {
@@ -289,6 +290,19 @@ export class AggregatorController {
     const a = await getGemArchive(this.db, input.query.key, input.query.version);
     if (!a) throw new AgentError("gem archive not found", { status: 404, code: "gem_archive_not_found", retryable: false });
     return { archiveBase64: Buffer.from(a.bytes).toString("base64") };
+  }
+
+  // The sealed HTML of a gem's game artifact, so the marketplace can PLAY mini-games inline (in a
+  // sandboxed iframe). 404 if the gem has no game. The server owns the archive parser; the SPA gets a
+  // ready-to-seal string. (A broker-fed replay game has no baked data → it shows its waiting state.)
+  @get("/game-html", { query: GemArchiveQuery, response: GameHtmlResult })
+  async gameHtml(input: { query: z.infer<typeof GemArchiveQuery> }): Promise<z.infer<typeof GameHtmlResult>> {
+    const a = await getGemArchive(this.db, input.query.key, input.query.version);
+    if (!a) throw new AgentError("gem archive not found", { status: 404, code: "gem_archive_not_found", retryable: false });
+    const { gem } = importGem(Buffer.from(a.bytes));
+    const game = gem.artifacts.find((x) => x.type === "game") as { html?: unknown } | undefined;
+    if (!game || typeof game.html !== "string") throw new AgentError("this gem has no game to play", { status: 404, code: "not_a_game", retryable: false });
+    return { html: game.html };
   }
 
   // Admin-only: run the anti-sybil quarantine sweep. Dry-run by default; apply=true is
