@@ -39,6 +39,10 @@ describe("extractSource", () => {
     expect(input.genre).toBe("project-fun");
     expect(JSON.stringify(input.data)).toContain("package.json");
   });
+  it("rejects html and blank (created directly, never seeded through extractSource)", async () => {
+    await expect(extractSource({ kind: "html", title: "x" }, readers)).rejects.toThrow(/imported directly/);
+    await expect(extractSource({ kind: "blank", title: "x" }, readers)).rejects.toThrow(/created directly/);
+  });
   it("throws when the session is missing", async () => {
     await expect(extractSource({ kind: "session", agent: "claude", sessionId: "gone", summary: "x" }, { ...readers, loadSession: async () => null })).rejects.toThrow(/session/);
   });

@@ -41,6 +41,7 @@ export async function extractSource(source: GameSource, readers: SourceReaders):
     return { genre: "skill-run", createdFrom: source, data: k, brief: `Make a playable challenge that exercises the skill "${source.skillName}".` };
   }
   if (source.kind === "html") throw new Error("html sources are imported directly (importStudio), not seeded");
+  if (source.kind === "blank") throw new Error("blank sources are created directly (blankStudio), not seeded");
   const p = await readers.readProject(source.path);
   if (!p) throw new Error(`project '${source.path}' not found`);
   return { genre: "project-fun", createdFrom: source, data: p, brief: `Make a light themed mini-game seeded by the project at ${source.path} (${source.flavor}).` };

@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { Composer } from "../Composer.js";
-import { testbedProjectsRoute, playStudioRoute, playImportRoute, inventoryRoute } from "../../../api/routes.js";
+import { testbedProjectsRoute, playStudioRoute, playImportRoute, playBlankRoute, inventoryRoute } from "../../../api/routes.js";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
@@ -48,6 +48,31 @@ describe("Composer", () => {
     fireEvent.click(screen.getByText("Create miniapp"));
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith("my-game"));
     expect(imp.mock.calls[0][1]).toMatchObject({ body: { title: "My Game", html: "<h1>hi</h1>" } });
+  });
+
+  it("switches to the Blank tab and creates a from-scratch miniapp (title + optional prompt)", async () => {
+    vi.spyOn(testbedProjectsRoute, "call").mockResolvedValue({ projects: [] } as never);
+    const blank = vi.spyOn(playBlankRoute, "call").mockResolvedValue({ name: "space-dodger" });
+    const onCreated = vi.fn();
+    renderComposer(onCreated);
+    fireEvent.click(screen.getByText("Blank"));
+    fireEvent.change(screen.getByPlaceholderText("title"), { target: { value: "Space Dodger" } });
+    fireEvent.change(screen.getByPlaceholderText(/describe the mini-game/i), { target: { value: "dodge asteroids" } });
+    fireEvent.click(screen.getByText("Create miniapp"));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith("space-dodger"));
+    expect(blank.mock.calls[0][1]).toMatchObject({ body: { title: "Space Dodger", prompt: "dodge asteroids" } });
+  });
+
+  it("Blank tab omits the prompt when left empty", async () => {
+    vi.spyOn(testbedProjectsRoute, "call").mockResolvedValue({ projects: [] } as never);
+    const blank = vi.spyOn(playBlankRoute, "call").mockResolvedValue({ name: "untitled" });
+    const onCreated = vi.fn();
+    renderComposer(onCreated);
+    fireEvent.click(screen.getByText("Blank"));
+    fireEvent.change(screen.getByPlaceholderText("title"), { target: { value: "Untitled" } });
+    fireEvent.click(screen.getByText("Create miniapp"));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith("untitled"));
+    expect(blank.mock.calls[0][1]).toEqual({ body: { title: "Untitled" } });
   });
 
   it("switches to the Skill tab and seeds a skill source", async () => {

@@ -4,7 +4,7 @@
 // (no external src/href/fetch; data: assets only) so a scaffold passes gameGate before the agent
 // touches it. The agent replaces the block between the AGENTGEM:GAME-LOGIC markers. TS string
 // constants so they compile into dist (no fs paths).
-function sealedTemplate(title: string, subtitle: string): string {
+export function sealedTemplate(title: string, subtitle: string): string {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />

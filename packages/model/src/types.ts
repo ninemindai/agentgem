@@ -60,7 +60,8 @@ export type GameSource =
   | { kind: "session"; agent: string; project?: string; sessionId: string; summary: string }
   | { kind: "skill"; skillName: string; sourceId?: string }
   | { kind: "project"; path: string; flavor: string }
-  | { kind: "html"; title: string }; // imported from an existing self-contained HTML file (provenance = title)
+  | { kind: "html"; title: string } // imported from an existing self-contained HTML file (provenance = title)
+  | { kind: "blank"; title: string }; // created from scratch — no source context (provenance = title)
 
 export interface GameArtifact {
   type: "game";

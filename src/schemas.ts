@@ -100,6 +100,7 @@ export const GameArtifactSchema = z.object({
     z.object({ kind: z.literal("skill"), skillName: z.string(), sourceId: z.string().optional() }),
     z.object({ kind: z.literal("project"), path: z.string(), flavor: z.string() }),
     z.object({ kind: z.literal("html"), title: z.string() }),
+    z.object({ kind: z.literal("blank"), title: z.string() }),
   ]),
   engineVersion: z.string(),
   needs: z.array(z.enum(["session-data", "live-session-events", "local-project-access", "invoke-agent"])).optional(),
@@ -924,6 +925,9 @@ export const PlayStudioResponseSchema = z.object({ name: z.string() });
 // draft opened in the studio); the seal gate is enforced on Save, not import, so imperfect HTML can be
 // brought in and fixed by chatting with the agent.
 export const PlayImportRequestSchema = z.object({ title: z.string().min(1), html: z.string().min(1) });
+// Create a miniapp from scratch — no source context. Seeds a blank sealed canvas + opens the studio;
+// `prompt` is optional creative direction handed to the studio agent.
+export const PlayBlankRequestSchema = z.object({ title: z.string().min(1), prompt: z.string().optional() });
 
 // Host-brokered feed for a replay miniapp: its source-session transcript ({meta, timeline}), fetched on
 // demand so the sealed bundle stays tiny. Only session-sourced miniapps have it (else 404).

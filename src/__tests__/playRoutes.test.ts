@@ -46,6 +46,16 @@ describe("PlayController", () => {
     expect(res.name).toBe("git"); // leading dots stripped
   });
 
+  it("blank creates a from-scratch miniapp (sealed scaffold, kind:blank provenance)", async () => {
+    const ctrl = new PlayController();
+    const res = await ctrl.blank({ body: { title: "Space Dodger", prompt: "dodge asteroids" } });
+    expect(res.name).toBe("space-dodger");
+    const got = await ctrl.miniapp({ query: { name: res.name } });
+    expect(got.html).toContain("AGENTGEM:GAME-LOGIC");            // seeded from the blank sealed scaffold
+    expect(got.meta.createdFrom).toEqual({ kind: "blank", title: "Space Dodger" });
+    expect(got.meta.genre).toBe("project-fun");
+  });
+
   it("session-data 404s for a non-session miniapp (only session-sourced games have it)", async () => {
     const ctrl = new PlayController();
     await ctrl.import({ body: { title: "imported", html: "<body>x</body>" } }); // createdFrom kind=html
