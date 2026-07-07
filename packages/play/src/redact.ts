@@ -10,7 +10,7 @@ import { basename } from "node:path";
 // Common secret shapes: OpenAI (sk-…), GitHub (ghp_/gho_/ghu_/ghs_/ghr_…), AWS access key (AKIA…),
 // Slack (xoxb-/xoxp-…), and JWTs (three base64url segments).
 const TOKEN =
-  /\b(?:sk-[A-Za-z0-9]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,})\b/g;
+  /\b(?:sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,})\b/g;
 
 const MAX_TIMELINE = 500;
 
