@@ -124,21 +124,36 @@ export class ChatManager {
 
     yield { type: "phase", phase: "running" };
 
+    // Live streaming: bridge the prompt's push-callbacks to this generator so deltas/tools are yielded
+    // AS they arrive, not buffered until the turn ends. Without this, a long turn shows only
+    // "phase: running" until it completes — indistinguishable from a hang.
     const queue: ChatEvent[] = [];
-    try {
-      const result = await chat.handle.prompt(
+    let wake: (() => void) | null = null;
+    const bump = () => { if (wake) { wake(); wake = null; } };
+    let settled = false;
+    let result: Awaited<ReturnType<ChatSessionHandle["prompt"]>> | undefined;
+    let error: Error | undefined;
+
+    const running = chat.handle
+      .prompt(
         prompt,
-        (text) => queue.push({ type: "delta", text }),
-        (tool) => queue.push({ type: "tool", tool }),
-      );
-      // Per-turn buffered streaming: drain the queue then emit done.
-      // (For live SSE streaming, Task 8 wires onDelta/onToolCall directly to res.write.)
-      for (const e of queue) yield e;
-      chat.lastMs = this.now();
-      yield { type: "done", result };
-    } catch (err) {
-      yield { type: "failed", error: (err as Error).message };
+        (text) => { queue.push({ type: "delta", text }); bump(); },
+        (tool) => { queue.push({ type: "tool", tool }); bump(); },
+      )
+      .then((r) => { result = r; })
+      .catch((e) => { error = e as Error; })
+      .finally(() => { settled = true; bump(); });
+
+    while (true) {
+      while (queue.length) yield queue.shift()!;
+      if (settled) break;
+      await new Promise<void>((res) => { wake = res; });
     }
+    await running; // ensure the promise's finally has run
+
+    if (error) { yield { type: "failed", error: error.message }; return; }
+    chat.lastMs = this.now();
+    yield { type: "done", result: result! };
   }
 
   closeChat(chatId: string): void {
