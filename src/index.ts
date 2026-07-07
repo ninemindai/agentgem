@@ -31,6 +31,7 @@ import { streamRubric } from "./rubricStream.js";
 import { listRubricsWithMeta, validateRubricInput, saveRubric, deleteRubric } from "./rubricCore.js";
 import { streamWatch } from "./watchStream.js";
 import { streamWatchEvents } from "./watchEvents.js";
+import { streamWatchHygiene } from "./watchHygiene.js";
 import { streamWatchDashboard } from "./watchDashboard.js";
 import { listActiveSessions } from "./watchSessions.js";
 import { registerChatRoutes, chatConnectFn, goldmineMcpServers } from "./goldmine/chatRoutes.js";
@@ -296,6 +297,9 @@ export async function createApp(port: number): Promise<RestApplication> {
   // Flavor A live feed: SSE-stream the same session's ordered SessionEvents (messages,
   // tool_calls, tool_results) as it runs — the data layer for a CopilotKit-style feed.
   server.expressApp.get("/api/watch/events", originGuard, (req, res) => streamWatchEvents(req as never, res as never));
+  // Live context-hygiene nudge: SSE-stream a #161 hygiene snapshot + nudge for one
+  // watched Claude session as its transcript grows (Watch tab anti-doomscroll feed).
+  server.expressApp.get("/api/watch/hygiene", originGuard, (req, res) => streamWatchHygiene(req as never, res as never));
   // Flavor B: SSE-stream a living HTML dashboard the ACP agent evolves in place,
   // debounced to one render per work-burst.
   server.expressApp.get("/api/watch/dashboard", originGuard, (req, res) => streamWatchDashboard(req as never, res as never));
