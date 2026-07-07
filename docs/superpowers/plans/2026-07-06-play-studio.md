@@ -159,10 +159,13 @@ export function studioBrief(name: string): string {
 }
 ```
 
-Append `defaultReaders` to `packages/play/src/sourceContext.ts` (production wrappers — CONFIRM each export first: `grep -rn "export function loadSessionTranscript" packages/insight/src`, `grep -rn "export function introspectAll" packages/capture/src`, `grep -rn "export function suggestTestbed" packages/testbed/src`, and confirm `introspectAll`'s real signature + the inventory field holding skills; adjust the wrapper to the real names/shape — the `SourceReaders` interface stays fixed so Task 1's tests are unaffected):
+**PRE-FLIGHT CORRECTION:** `defaultReaders` goes in **root `src/play.readers.ts`**, NOT `packages/play` — root `src/` already depends on `@agentgem/insight`/`capture`/`testbed` (workspace:*), so `packages/play` stays lean with no new heavy deps and no cycle risk. `seedStudio`/`extractSource` take injected `SourceReaders`; the root controller/route provides `defaultReaders`. Do NOT add insight/capture/testbed to `packages/play/package.json` or `tsconfig.json`. Exports confirmed: `loadSessionTranscript` (@agentgem/insight barrel), `introspectAll(dir?, projects?)` → `.skills: SkillArtifact[]` (@agentgem/capture barrel), `suggestTestbed(root)` (@agentgem/testbed).
+
+Create `src/play.readers.ts`:
 
 ```ts
-// appended to packages/play/src/sourceContext.ts
+// src/play.readers.ts
+import type { SourceReaders } from "@agentgem/play";
 import { loadSessionTranscript } from "@agentgem/insight";
 import { introspectAll } from "@agentgem/capture";
 import { suggestTestbed } from "@agentgem/testbed";
@@ -192,9 +195,8 @@ export const defaultReaders: SourceReaders = {
 Add to `packages/play/src/index.ts`:
 ```ts
 export { studioCwd, studioBrief, seedStudio } from "./studio.js";
-export { defaultReaders } from "./sourceContext.js";
 ```
-Add `@agentgem/insight`, `@agentgem/capture`, `@agentgem/testbed` to `packages/play/package.json` deps and `packages/play/tsconfig.json` references (`{ "path": "../insight" }`, `{ "path": "../capture" }`, `{ "path": "../testbed" }`); run `pnpm install`.
+`defaultReaders` is exported from root `src/play.readers.ts` (imported by the controller + index.ts), NOT from `@agentgem/play`. No `packages/play` dep/tsconfig changes.
 
 - [ ] **Step 4: Run test to verify it passes** — `pnpm test -- play/__tests__/studio` → PASS (3). Then `pnpm test` (full — the new cross-package deps must not create a cycle or break the build).
 
