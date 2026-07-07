@@ -9,6 +9,8 @@ export interface RubricFactorView {
   count: number;
   sessions: number;
 }
+export interface HygieneVerdictView { score: number; verdict: "bounded" | "mixed" | "bloated" }
+
 export interface RubricReportView {
   rubricId: string;
   target: string;
@@ -18,7 +20,7 @@ export interface RubricReportView {
   clean: boolean;
   degraded: boolean;
   skippedFactors: { factor: string; reason: string }[];
-  perSession?: { sessionId: string; transcript: string; factors: RubricFactorView[] }[];
+  perSession?: { sessionId: string; transcript: string; factors: RubricFactorView[]; hygiene?: HygieneVerdictView }[];
   perSessionTruncated?: boolean;
 }
 
