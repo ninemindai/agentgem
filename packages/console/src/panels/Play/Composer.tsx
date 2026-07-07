@@ -1,10 +1,10 @@
 // packages/console/src/panels/Play/Composer.tsx
 import { useEffect, useState } from "react";
-import { makeClient, playStudioRoute, playImportRoute, testbedProjectsRoute, inventoryRoute } from "../../api/routes.js";
+import { makeClient, playStudioRoute, playImportRoute, playBlankRoute, testbedProjectsRoute, inventoryRoute } from "../../api/routes.js";
 import { fetchSessions, type WatchSession } from "../Watch/watchStream.js";
 import { AgentSelector, type PlayAgent } from "./AgentSelector.js";
 
-type Kind = "project" | "session" | "skill" | "html";
+type Kind = "project" | "session" | "skill" | "html" | "blank";
 type Proj = { path: string; flavor: string; exists: boolean };
 type Skill = { name: string; description?: string };
 // The source shapes accepted by POST /api/play/studio (mirrors the server's GameSource union).
@@ -18,6 +18,7 @@ const TABS: { kind: Kind; label: string }[] = [
   { kind: "session", label: "Session" },
   { kind: "skill", label: "Skill" },
   { kind: "html", label: "HTML" },
+  { kind: "blank", label: "Blank" },
 ];
 
 export function Composer({
@@ -42,6 +43,8 @@ export function Composer({
   const [importTitle, setImportTitle] = useState("");   // HTML-import tab
   const [importHtml, setImportHtml] = useState("");
   const [dragOver, setDragOver] = useState(false);
+  const [blankTitle, setBlankTitle] = useState("");     // Blank (from-scratch) tab
+  const [blankPrompt, setBlankPrompt] = useState("");
 
   // Lazy-load each list the first time its tab is shown.
   useEffect(() => {
@@ -80,9 +83,18 @@ export function Composer({
     } catch (e) { setError((e as Error).message); setBusy(false); }
   }
 
+  async function doBlank() {
+    if (busy || !blankTitle.trim()) return;
+    setBusy(true); setError("");
+    try {
+      const res = await playBlankRoute.call(makeClient(apiBase), { body: { title: blankTitle.trim(), ...(blankPrompt.trim() ? { prompt: blankPrompt.trim() } : {}) } });
+      onCreated(res.name);
+    } catch (e) { setError((e as Error).message); setBusy(false); }
+  }
+
   return (
     <section className="analyze">
-      <p className="play-intro">Create a miniapp from a source, then choose which coding agent will build/edit it in Studio.</p>
+      <p className="play-intro">Create a miniapp from a source — or start Blank and build your own — then choose which coding agent will build/edit it in Studio.</p>
       <AgentSelector
         agents={agents}
         agentId={agentId}
@@ -141,7 +153,19 @@ export function Composer({
         </div>
       )}
 
-      {busy && kind !== "html" && <p className="play-intro" style={{ marginTop: 10 }}>Seeding studio…</p>}
+      {kind === "blank" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <p className="play-intro" style={{ margin: 0 }}>Start from scratch — no source context. Name it, optionally describe what you want, then build it by chatting in the studio.</p>
+          <input className="play-input" placeholder="title" value={blankTitle} onChange={(e) => setBlankTitle(e.target.value)} />
+          <textarea className="play-input" style={{ minHeight: 120 }}
+            placeholder="(optional) describe the mini-game you want to build…" value={blankPrompt} onChange={(e) => setBlankPrompt(e.target.value)} />
+          <button className="play-btn play-btn--primary" style={{ alignSelf: "flex-start" }} disabled={busy || !blankTitle.trim()} onClick={doBlank}>
+            {busy ? "Creating…" : "Create miniapp"}
+          </button>
+        </div>
+      )}
+
+      {busy && kind !== "html" && kind !== "blank" && <p className="play-intro" style={{ marginTop: 10 }}>Seeding studio…</p>}
     </section>
   );
 }

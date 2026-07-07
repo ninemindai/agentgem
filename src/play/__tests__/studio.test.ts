@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { seedStudio, studioBrief, studioCwd, miniappsRoot, type SourceReaders } from "@agentgem/play";
+import { seedStudio, blankStudio, studioBrief, studioCwd, miniappsRoot, type SourceReaders } from "@agentgem/play";
 
 let home: string;
 beforeEach(() => { home = mkdtempSync(join(tmpdir(), "agh-")); process.env.AGENTGEM_HOME = home; });
@@ -44,6 +44,24 @@ describe("studio", () => {
     const meta = JSON.parse(readFileSync(join(dir, "meta.json"), "utf8"));
     expect(meta.needs).toEqual(["session-data"]);
   });
+  it("blankStudio creates a from-scratch miniapp: blank sealed scaffold, NO baked data, blank provenance", async () => {
+    const { name, brief } = await blankStudio("Space Dodger", "a dodge-the-asteroids game");
+    expect(name).toBe("space-dodger");
+    const dir = join(miniappsRoot(), name);
+    const html = readFileSync(join(dir, `${name}.html`), "utf8");
+    expect(html).toContain("AGENTGEM:GAME-LOGIC");                    // sealed scaffold present
+    expect(html).not.toContain('id="game-data" type="application/json"'); // no source data baked in
+    const meta = JSON.parse(readFileSync(join(dir, "meta.json"), "utf8"));
+    expect(meta.genre).toBe("project-fun");
+    expect(meta.createdFrom).toEqual({ kind: "blank", title: "Space Dodger" });
+    expect(brief).toContain("from scratch");
+    expect(brief).toContain("a dodge-the-asteroids game");            // prompt threaded into the brief
+  });
+  it("blankStudio without a prompt asks the agent what to build", async () => {
+    const { brief } = await blankStudio("Untitled");
+    expect(brief.toLowerCase()).toContain("ask the user");
+  });
+
   it("studioBrief reads meta and instructs editing the sealed html", async () => {
     const { name } = await seedStudio({ kind: "skill", skillName: "brainstorming" }, readers);
     const b = studioBrief(name);

@@ -8,7 +8,7 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import type { GameSource } from "@agentgem/model";
 import { extractSource, type SourceReaders } from "./sourceContext.js";
 import { genreFor } from "./genres.js";
-import { scaffoldFor } from "./scaffolds.js";
+import { scaffoldFor, sealedTemplate } from "./scaffolds.js";
 import { miniappDir, miniappsRoot, type MiniappMeta } from "./miniapps.js";
 import { ensureRepo, commitAll } from "./git.js";
 
@@ -29,7 +29,7 @@ function slugFor(source: GameSource): string {
   const raw =
     source.kind === "session" ? `session-${source.sessionId}` :
     source.kind === "skill" ? source.skillName :
-    source.kind === "html" ? source.title :
+    source.kind === "html" || source.kind === "blank" ? source.title :
     (source.path.split(/[\\/]/).filter(Boolean).pop() ?? "project");
   const slug = raw.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^[-.]+|-+$/g, "").slice(0, 40);
   return slug || "miniapp"; // strip leading dots too, so a title like ".git" can't target a dotfile dir
@@ -83,6 +83,25 @@ export async function importStudio(title: string, html: string): Promise<{ name:
   writeFileSync(join(dir, "meta.json"), JSON.stringify(meta, null, 2));
   await commitAll(miniappsRoot(), `import miniapp ${name}`);
   return { name, brief: `You are refining "${title}", a self-contained HTML mini-game the user imported.\n\n${studioInstructions(name)}` };
+}
+
+// Create a miniapp from scratch — no source context. Seeds a fresh blank sealed canvas titled with the
+// user's title; the user then builds it by chatting in the studio. `prompt` is optional creative
+// direction (NOT baked into the HTML — it just opens the studio brief).
+export async function blankStudio(title: string, prompt?: string): Promise<{ name: string; brief: string }> {
+  const source: GameSource = { kind: "blank", title };
+  const name = slugFor(source);
+  const dir = miniappDir(name); // validates the slug + jails the path
+  await ensureRepo(miniappsRoot());
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, `${name}.html`), sealedTemplate(title, "✦ new"));
+  const meta: MiniappMeta = { title, genre: "project-fun", createdFrom: source, engineVersion: "1" };
+  writeFileSync(join(dir, "meta.json"), JSON.stringify(meta, null, 2));
+  await commitAll(miniappsRoot(), `create miniapp ${name}`);
+  const want = prompt?.trim()
+    ? `The user wants to build: ${prompt.trim()}`
+    : `Ask the user what kind of mini-game they want, then build it. If they don't say, make a small, delightful arcade game.`;
+  return { name, brief: `You are building "${title}" from scratch — a self-contained HTML mini-game with no source data. ${want}\n\n${studioInstructions(name)}` };
 }
 
 export function studioBrief(name: string): string {
