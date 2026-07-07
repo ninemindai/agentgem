@@ -3,6 +3,36 @@
 // src/gem/__tests__/contextHygieneRubric.test.ts
 import { describe, it, expect } from "vitest";
 import { builtinRubrics, scopeAllowed, HYGIENE_FACTOR_IDS } from "@agentgem/insight";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { scanWorkflow, evaluateRubric } from "@agentgem/insight";
+
+const emptyInv = { project: { root: "/r", skills: [], mcpServers: [], hooks: [], instructions: [] }, global: { skills: [], mcpServers: [], hooks: [] } } as any;
+
+// A bloated session: pinned at the 1M cap across many turns + sprawl across clusters.
+function writeBloated(dir: string, name: string): string {
+  const lines: string[] = [JSON.stringify({ sessionId: name, type: "user", message: { role: "user", content: "go" } })];
+  for (let i = 0; i < 30; i++) lines.push(JSON.stringify({
+    type: "assistant",
+    message: {
+      role: "assistant", model: "claude-opus-4-8[1m]",
+      content: [{ type: "tool_use", name: "Read", input: { file_path: `packages/p${i % 8}/f.ts` } }],
+      usage: { input_tokens: 100, cache_read_input_tokens: 990_000, cache_creation_input_tokens: 5000, output_tokens: 10 },
+    },
+  }));
+  const p = join(dir, `${name}.jsonl`); writeFileSync(p, lines.join("\n")); return p;
+}
+// A clean session: short, tiny window, one cluster.
+function writeClean(dir: string, name: string): string {
+  const lines = [
+    JSON.stringify({ sessionId: name, type: "user", message: { role: "user", content: "go" } }),
+    JSON.stringify({ type: "assistant", message: { role: "assistant", model: "claude-opus-4-8[1m]",
+      content: [{ type: "tool_use", name: "Read", input: { file_path: "packages/a/f.ts" } }],
+      usage: { input_tokens: 100, cache_read_input_tokens: 8000, cache_creation_input_tokens: 500, output_tokens: 10 } } }),
+  ];
+  const p = join(dir, `${name}.jsonl`); writeFileSync(p, lines.join("\n")); return p;
+}
 
 describe("context-hygiene built-in rubric", () => {
   const rubric = () => builtinRubrics().find((r) => r.id === "context-hygiene")!;
@@ -26,5 +56,29 @@ describe("context-hygiene built-in rubric", () => {
     const legacy = builtinRubrics().find((r) => r.id === "hygiene")!;
     expect(legacy.factors.map((f) => f.factor)).toContain("retry-storm");
     expect(legacy.factors.map((f) => f.factor)).not.toContain("context-pinned");
+  });
+});
+
+describe("evaluateRubric — per-session hygiene verdict", () => {
+  const ctxRubric = () => builtinRubrics().find((r) => r.id === "context-hygiene")!;
+
+  it("attaches a hygiene verdict to each tripped perSession entry; clean session is absent", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "lb-"));
+    const signal = scanWorkflow([writeBloated(dir, "bad1"), writeClean(dir, "good1")], emptyInv, { retainSequences: true });
+    const report = await evaluateRubric(signal, ctxRubric(), { scope: { kind: "all" } } as any);
+    const ids = (report.perSession ?? []).map((s) => s.sessionId);
+    expect(ids).toContain("bad1");
+    expect(ids).not.toContain("good1");                    // clean → no findings → not enumerated
+    const bad = report.perSession!.find((s) => s.sessionId === "bad1")!;
+    expect(bad.hygiene).toBeDefined();
+    expect(bad.hygiene!.verdict).toBe("bloated");
+  });
+
+  it("leaves perSession hygiene undefined for a non-hygiene rubric", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "lb2-"));
+    const signal = scanWorkflow([writeBloated(dir, "bad2")], emptyInv, { retainSequences: true });
+    const legacy = builtinRubrics().find((r) => r.id === "hygiene")!;
+    const report = await evaluateRubric(signal, legacy, { scope: { kind: "all" } } as any);
+    for (const s of report.perSession ?? []) expect(s.hygiene).toBeUndefined();
   });
 });
