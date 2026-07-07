@@ -5,7 +5,7 @@ import { existsSync, writeFileSync, readFileSync } from "node:fs";
 import { basename, resolve, sep } from "node:path";
 import { z } from "zod";
 import { api, get, post, AgentError } from "@agentback/openapi";
-import { scanSessionsCached, aggregateObserve, loadSessionTranscript, resolveClaudeSession, dehomeDistilled, scrubText, sessionToAtif } from "@agentgem/insight";
+import { scanSessionsCached, aggregateObserve, loadSessionTranscript, resolveClaudeSession, dehomeDistilled, scrubText, sessionToAtif, summarizeSession } from "@agentgem/insight";
 import { scanArtifactUsageCached } from "@agentgem/insight";
 import { buildOptimizePayload, buildDiscover, rerankCandidates, installSkill, type OptimizeRange } from "@agentgem/insight";
 import { createLogger } from "@agentgem/base";
@@ -53,6 +53,26 @@ const InspectSessionQuerySchema = z.object({
   // AgentId is an open, registry-derived string (see observeAggregate.ts); runtime validity is
   // loadSessionTranscript's concern — unknown agents already return null → InvalidInputError.
   agent: z.string(),
+});
+const StageProfileSchema = z.object({
+  exploration: z.number(), implementation: z.number(), verification: z.number(),
+  orchestration: z.number(), other: z.number(),
+});
+const DetectorSummarySchema = z.object({
+  id: z.string(), title: z.string(), advice: z.string(),
+  severity: z.enum(["info", "warn"]), count: z.number(), sessions: z.number(),
+});
+const SessionSummarySchema = z.object({
+  sessionId: z.string(), agent: z.string(),
+  project: z.string().nullable(), model: z.string().nullable(), gitBranch: z.string().nullable(),
+  startMs: z.number(), endMs: z.number(), durationMs: z.number(),
+  msgs: z.number(), tokensIn: z.number(), tokensOut: z.number(), tokensCache: z.number(),
+  process: z.object({ score: z.number(), label: z.enum(["disciplined", "loose", "chaotic"]), stages: StageProfileSchema }).nullable(),
+  findings: z.array(DetectorSummarySchema),
+  events: z.object({
+    toolCalls: z.array(z.object({ name: z.string(), count: z.number() })),
+    filesTouched: z.number(), edits: z.number(), verifications: z.number(),
+  }).nullable(),
 });
 export const HygieneReportSchema = z.object({
   meta: z.object({
@@ -451,6 +471,14 @@ export class GemController {
       if (err instanceof HygieneInputError) throw new InvalidInputError(err.message);
       throw err; // unexpected internal fault → 500, no echoed message
     }
+  }
+
+  @get("/inspect/session/process", { query: InspectSessionQuerySchema, response: SessionSummarySchema })
+  async inspectSessionProcess(input: { query: z.infer<typeof InspectSessionQuerySchema> }): Promise<z.infer<typeof SessionSummarySchema>> {
+    if (input.query.agent !== "claude") throw new InvalidInputError("Process quality is available for Claude sessions only.");
+    const summary = await summarizeSession(input.query.id, input.query.agent);
+    if (!summary) throw new InvalidInputError(`No Claude session '${input.query.id}' found.`);
+    return summary;
   }
 
   @post("/inspect/distill", { body: InspectDistillBodySchema, response: InspectDistillResponseSchema })
