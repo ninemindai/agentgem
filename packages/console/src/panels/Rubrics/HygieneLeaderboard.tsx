@@ -22,7 +22,7 @@ export function HygieneLeaderboard({ perSession, sessionsScanned, truncated }: {
           const v = r.hygiene?.verdict ?? "bounded";
           return (
             <li key={r.sessionId} className="hyg-lb-row">
-              <a className="hyg-lb-name" href={`#/inspect/claude/${r.sessionId}`}>{r.transcript}</a>
+              <a className="hyg-lb-name" href={`#/sessions/claude/${encodeURIComponent(r.sessionId)}`}>{r.transcript}</a>
               <span className={"hyg-verdict is-" + v}><span className="hyg-word">{v}</span> <span className="hyg-score">{r.hygiene?.score ?? ""}</span></span>
               {top && <span className="hyg-lb-top ledger-muted">{top.title}</span>}
             </li>

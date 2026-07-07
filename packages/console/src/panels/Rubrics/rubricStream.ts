@@ -20,6 +20,7 @@ export interface RubricReportView {
   clean: boolean;
   degraded: boolean;
   skippedFactors: { factor: string; reason: string }[];
+  hygiene?: HygieneVerdictView;
   perSession?: { sessionId: string; transcript: string; factors: RubricFactorView[]; hygiene?: HygieneVerdictView }[];
   perSessionTruncated?: boolean;
 }

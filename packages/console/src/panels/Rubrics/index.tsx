@@ -35,7 +35,7 @@ function FactorRow({ f }: { f: RubricFactorView }) {
   );
 }
 
-function RubricReportCard({ report }: { report: RubricReportView }) {
+export function RubricReportCard({ report }: { report: RubricReportView }) {
   const total = report.factors.length;
   const actionable = report.factors.filter((f) => f.count > 0).length;
   const affected = report.perSession?.length ?? 0;
@@ -48,6 +48,11 @@ function RubricReportCard({ report }: { report: RubricReportView }) {
           ? <span className="rub-clean">clean — all {total} check{total === 1 ? "" : "s"} passed</span>
           : <span className="rub-needs">{actionable} of {total} check{total === 1 ? "" : "s"} need action</span>}
       </p>
+      {report.hygiene && (
+        <p className={"hyg-verdict is-" + report.hygiene.verdict}>
+          <span className="hyg-word">{report.hygiene.verdict}</span> <span className="hyg-score">{report.hygiene.score}</span>
+        </p>
+      )}
       {report.degraded && (
         <p className="insights-hint">Some LLM criteria were skipped — the local agent was unavailable. Cheap-factor results are shown.</p>
       )}
