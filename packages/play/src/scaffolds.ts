@@ -126,7 +126,16 @@ function replayScaffold(): string {
     // ==== AGENTGEM:GAME-LOGIC END ====
 
     boot();
-    if (!(DATA.timeline && DATA.timeline.length)) requestData(); // broker-fed: ask the host for the transcript
+    // Broker-fed: ask the host for the transcript, retrying a few times so a transient miss (or a
+    // listener-attach race) still resolves rather than sticking on the waiting state.
+    if (!(DATA.timeline && DATA.timeline.length)) {
+      requestData();
+      let tries = 0;
+      const retry = setInterval(() => {
+        if ((DATA.timeline && DATA.timeline.length) || ++tries > 5) { clearInterval(retry); return; }
+        requestData();
+      }, 800);
+    }
   })();
   </script>
 </body></html>`;
