@@ -9,7 +9,7 @@
 import {
   scanWorkflow, runDetectors, DETECTORS, hygieneScore, contextCap,
   HYGIENE_FACTOR_IDS, summariesForSpecs, resolveClaudeSession,
-  type WorkflowSignal, type TurnUsage, type DetectorSummary, type HygieneVerdict,
+  type WorkflowSignal, type TurnUsage, type DetectorSummary, type HygieneVerdict, type ScanInventory,
 } from "@agentgem/insight";
 import { introspectConfig, introspectProject } from "@agentgem/capture";
 import { resolveDirs, resolveProject, type ConfigInventory, type ProjectInventory } from "@agentgem/model";
@@ -52,6 +52,20 @@ export function buildHygieneReport(signal: WorkflowSignal): HygieneReport {
     factors,
     hygiene: hygieneScore(factors),
   };
+}
+
+// A watched live transcript is a bare file path, not a resolvable session id, and
+// the hygiene detectors need only contextSeries + the scrubbed step spine — never
+// resolved artifacts. So scan the one file with an empty inventory (the shape the
+// unit tests use) and reuse buildHygieneReport. Sibling of sessionHygiene, without
+// the resolveClaudeSession / project-inventory step.
+const MINIMAL_INV = {
+  project: { root: "", skills: [], mcpServers: [], hooks: [], instructions: [] },
+  global: { skills: [], mcpServers: [], hooks: [] },
+} as unknown as ScanInventory;
+
+export function hygieneReportForFile(path: string): HygieneReport {
+  return buildHygieneReport(scanWorkflow([path], MINIMAL_INV, { retainSequences: true }));
 }
 
 export async function sessionHygiene(id: string, agent: string): Promise<HygieneReport> {
