@@ -37,10 +37,15 @@ export function contextTokens(usage: Record<string, number> | undefined): number
   return (usage.input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0);
 }
 
+// One skill or subagent invocation, keyed to its JSONL line index — mirrors
+// contextSeries (uncapped) so the session-timeline UI can plot markers across
+// the whole run, unlike `steps` which skips Skill and is capped.
+export interface SkillAgentEvent { msgIndex: number; kind: "skill" | "agent"; name: string }
+
 export interface MissionHint { task: string; outcome: string }
 // `sessionId`/`transcript`/`atMs` are provenance coordinates: which transcript a
 // run came from and when. `transcript` is a basename, never an absolute path.
-export interface SessionSequence { steps: ProcedureStep[]; missionHint?: MissionHint; sessionId: string; transcript: string; atMs: number; model?: string; contextSeries?: TurnUsage[] }
+export interface SessionSequence { steps: ProcedureStep[]; missionHint?: MissionHint; sessionId: string; transcript: string; atMs: number; model?: string; contextSeries?: TurnUsage[]; eventSeries?: SkillAgentEvent[] }
 // A recurring procedure (verb spine), the sessions exercising it, a representative
 // sample index, and ALL exercising session indices (for provenance fan-out).
 export interface ProcedureGroup { key: string; verbs: string[]; sessions: number; sampleSessionIdx: number; sessionIdxs: number[] }
@@ -393,6 +398,7 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
     const currentSessionRecords: RawRecord[] = [];
     const steps: ProcedureStep[] = [];     // ordered scrubbed builtin calls (retainSequences)
     const contextSeries: TurnUsage[] = [];
+    const eventSeries: SkillAgentEvent[] = [];
     let firstUserText: string | null = null;
     let lastAssistantText = "";
     const basename = path.split("/").pop() ?? path;
@@ -438,6 +444,7 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
           const name: string = block.name;
           if (name === "Skill" && typeof block.input?.skill === "string") {
             const skill = block.input.skill as string;
+            if (opts.retainSequences && !rec?.isSidechain) eventSeries.push({ msgIndex: lineIdx, kind: "skill", name: skill });
             const p = matchSkill(project.skills, skill);
             const g = p ? undefined : matchSkill(global.skills, skill);
             if (p) { touch("p", p.name, "skill", ms, path, `Skill(${skill})`); sessionNames.add(p.name); }
@@ -452,6 +459,10 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
             else bumpUnresolved(unresolved, token, "mcp_server");
           } else {
             bumpUnresolved(unresolved, name, "builtin");
+            if (opts.retainSequences && !rec?.isSidechain && (name === "Task" || name === "Agent")) {
+              const sub = typeof block.input?.subagent_type === "string" ? block.input.subagent_type : name;
+              eventSeries.push({ msgIndex: lineIdx, kind: "agent", name: sub });
+            }
             // Capture the ordered scrubbed builtin step for distillation (§3a/§3c).
             if (opts.retainSequences && !rec?.isSidechain && steps.length < SEQ_CAP_PER_SESSION) {
               try { steps.push({ tool: name, msgIndex: lineIdx, ...scrub(name, block.input) }); }
@@ -484,7 +495,7 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
     if (opts.retainSequences && steps.length > 0) {
       const missionHint: MissionHint | undefined =
         firstUserText !== null ? { task: scrubProse(firstUserText), outcome: scrubProse(lastAssistantText) } : undefined;
-      const coords = { sessionId: sessionId || basename.replace(/\.jsonl$/, ""), transcript: basename, atMs: ms, model: sessionPrimaryModel(currentSessionRecords), ...(contextSeries.length ? { contextSeries } : {}) };
+      const coords = { sessionId: sessionId || basename.replace(/\.jsonl$/, ""), transcript: basename, atMs: ms, model: sessionPrimaryModel(currentSessionRecords), ...(contextSeries.length ? { contextSeries } : {}), ...(eventSeries.length ? { eventSeries } : {}) };
       seqSessions.push(missionHint ? { steps, missionHint, ...coords } : { steps, ...coords });
     }
   }
