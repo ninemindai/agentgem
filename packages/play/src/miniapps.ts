@@ -60,6 +60,13 @@ export async function saveMiniapp(input: SaveMiniappInput): Promise<{ name: stri
   return { name: safe, commit };
 }
 
+export function readMiniapp(name: string): { name: string; html: string; meta: MiniappMeta } {
+  const dir = miniappDir(name); // validates + jails
+  const html = readFileSync(join(dir, `${name}.html`), "utf8");
+  const meta = JSON.parse(readFileSync(join(dir, "meta.json"), "utf8")) as MiniappMeta;
+  return { name, html, meta };
+}
+
 export function listMiniapps(): { name: string; meta: MiniappMeta }[] {
   const root = miniappsRoot();
   if (!existsSync(root)) return [];

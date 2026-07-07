@@ -908,7 +908,13 @@ export const PlaySaveRequestSchema = z.object({
   }),
 });
 export const PlaySaveResponseSchema = z.object({ name: z.string(), commit: z.string().nullable() });
-export const MiniappListSchema = z.object({ miniapps: z.array(z.object({ name: z.string(), title: z.string(), genre: z.string() })) });
+const PlayNeedsSchema = z.array(z.enum(["live-session-events", "local-project-access", "invoke-agent"])).optional();
+export const MiniappListSchema = z.object({ miniapps: z.array(z.object({ name: z.string(), title: z.string(), genre: z.string(), needs: PlayNeedsSchema })) });
+export const PlayMiniappQuerySchema = z.object({ name: z.string() });
+export const PlayMiniappSchema = z.object({
+  name: z.string(), html: z.string(),
+  meta: z.object({ title: z.string(), genre: z.string(), needs: PlayNeedsSchema }),
+});
 export const PlayPublishRequestSchema = z.object({ remote: z.string().url().optional() });
 export const PlayPublishResponseSchema = z.object({ ok: z.boolean() });
 export const PlayStudioRequestSchema = z.object({ source: GameArtifactSchema.shape.createdFrom });
