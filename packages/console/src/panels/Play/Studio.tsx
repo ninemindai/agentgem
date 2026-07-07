@@ -45,7 +45,8 @@ export function Studio({ apiBase, name, onBack }: { apiBase: string; name: strin
       const message = input; setInput("");
       closeRef.current = openStudioStream(apiBase, id, message, {
         onDelta: (t) => setLog((l) => l + t),
-        onDone: async () => { setBusy(false); await refresh(); },  // live preview updates
+        onTool: (tool) => setLog((l) => l + `\n🔧 ${tool.title ?? tool.kind ?? "tool"}${tool.status === "failed" ? " (failed)" : ""}\n`),
+        onDone: async () => { setBusy(false); await refresh(); },  // live preview updates as the agent edits
         onFailed: (e) => { setBusy(false); setStatus(`error: ${e}`); },
       });
     } catch (e) { setBusy(false); setStatus(`error: ${(e as Error).message}`); }

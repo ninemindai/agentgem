@@ -34,7 +34,10 @@ export interface ChatCtx {
   open(cwd: string, opts?: { mcpServers?: unknown[] }): Promise<ChatSessionHandle>;
 }
 
-export type ChatConnectFn = (descriptor: AgentDescriptor) => Promise<{ ctx: ChatCtx; close: () => void }>;
+// Per-connection options. `permission` controls tool-confirmation policy: neutral goldmine chat uses
+// "deny" (read-only); the Play studio uses "allow" so the agent can edit the miniapp in its jailed cwd.
+export interface ChatConnectOpts { permission?: "allow" | "deny" }
+export type ChatConnectFn = (descriptor: AgentDescriptor, opts?: ChatConnectOpts) => Promise<{ ctx: ChatCtx; close: () => void }>;
 
 interface LiveChat {
   agentId: string;
@@ -73,6 +76,7 @@ export class ChatManager {
     /** Override for tests — skips AGENTS registry lookup */
     descriptor?: AgentDescriptor;
     cwd?: string;
+    permission?: "allow" | "deny";   // tool-confirmation policy for this session (default from the connectFn)
   }): Promise<string> {
     // Evict LRU sessions until we're under the cap
     while (this.live.size >= this.maxLive) this.evictLru();
@@ -85,7 +89,7 @@ export class ChatManager {
         return found;
       })();
 
-    const conn = await this.connectFn(descriptor);
+    const conn = await this.connectFn(descriptor, { permission: input.permission });
     let handle: ChatSessionHandle;
     try {
       handle = await conn.ctx.open(input.cwd ?? process.cwd(), { mcpServers: input.mcpServers });

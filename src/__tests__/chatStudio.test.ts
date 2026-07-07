@@ -28,6 +28,7 @@ describe("studioChatArgs", () => {
     expect(args.cwd).toBe(join(miniappsRoot(), name));
     expect(args.brief).toContain(`${name}.html`);
     expect(args.agentId).toBe("claude");
+    expect(args.permission).toBe("allow"); // studio agent may edit its (jailed) miniapp
   });
   it("without a miniapp → neutral brief, no cwd override", async () => {
     const args = await studioChatArgs({ agentId: "claude" }, neutralDeps);

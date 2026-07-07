@@ -61,14 +61,15 @@ export interface ChatRouteDeps {
 export async function studioChatArgs(
   body: { agentId?: unknown; miniapp?: unknown },
   deps: Pick<ChatRouteDeps, "buildBrief" | "goldmineMcp" | "resolveStudio">,
-): Promise<{ agentId: string; brief: string; mcpServers: McpServerStdio[]; cwd?: string }> {
+): Promise<{ agentId: string; brief: string; mcpServers: McpServerStdio[]; cwd?: string; permission?: "allow" | "deny" }> {
   const agentId = String(body?.agentId ?? "");
   if (!agentId) throw new Error("agentId required");
   const miniapp = body?.miniapp ? String(body.miniapp) : "";
   if (miniapp) {
     if (!deps.resolveStudio) throw new Error("studio not available");
     const s = deps.resolveStudio(miniapp); // resolver validates the name; throws on a bad one
-    return { agentId, brief: s.brief, mcpServers: deps.goldmineMcp(), cwd: s.cwd };
+    // "allow" so the studio agent can Edit/Write the miniapp; its cwd is jailed to the miniapp dir.
+    return { agentId, brief: s.brief, mcpServers: deps.goldmineMcp(), cwd: s.cwd, permission: "allow" };
   }
   return { agentId, brief: await deps.buildBrief(), mcpServers: deps.goldmineMcp() };
 }
@@ -152,8 +153,9 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middlew
 // SECURITY: this is the only place we call connectAcpAdapter for chat; the
 // session handle that comes back is handed to ChatManager.openChat(), which
 // opens it in a server-derived cwd. Request input never reaches connectAcpAdapter.
-export const chatConnectFn: ChatConnectFn = async (descriptor: AgentDescriptor) => {
-  const raw = await connectAcpAdapter(descriptor, { clientName: "agentgem-chat", permission: "deny" });
+export const chatConnectFn: ChatConnectFn = async (descriptor: AgentDescriptor, opts) => {
+  // Default "deny" (read-only goldmine chat); the studio passes "allow" so the agent can edit its miniapp.
+  const raw = await connectAcpAdapter(descriptor, { clientName: "agentgem-chat", permission: opts?.permission ?? "deny" });
   const ctx: ChatCtx = {
     async open(cwd: string, opts?: { mcpServers?: unknown[] }): Promise<ChatSessionHandle> {
       const session = await raw.open(cwd, { mcpServers: opts?.mcpServers as never });
