@@ -15,7 +15,10 @@ export function HygieneNudge({ apiBase, file }: { apiBase: string; file: string 
   useEffect(() => {
     setSnap(null); setNudge(null); dismissedAt.current = -1;
     return openHygieneStream(apiBase, file, (m: HygieneMsg) => {
-      if (m.type === "hygiene") setSnap({ verdict: m.verdict, score: m.score, cap: m.cap, curve: m.curveTail });
+      if (m.type === "hygiene") {
+        if (RANK[m.verdict] === 0) dismissedAt.current = -1;   // session cleared → re-arm, mirroring the server's prev reset
+        setSnap({ verdict: m.verdict, score: m.score, cap: m.cap, curve: m.curveTail });
+      }
       else if (m.type === "nudge") {
         // re-show only if this escalation is heavier than what was last dismissed
         if (RANK[m.verdict] > dismissedAt.current) setNudge({ verdict: m.verdict, advice: m.advice });
