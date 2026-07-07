@@ -17,9 +17,9 @@ afterEach(() => { cleanup(); FakeES.last = null; vi.restoreAllMocks(); vi.unstub
 describe("Studio", () => {
   it("opens a studio chat targeting the miniapp and refreshes the preview on done", async () => {
     // raw-fetch endpoints (agents + POST /api/chat); the client-route preview is spied separately
+    const post = vi.fn();
     vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
-      if (String(url).includes("/api/agents")) return { ok: true, json: async () => ({ agents: [{ id: "claude", available: true }] }) };
-      if (String(url).includes("/api/chat") && init?.method === "POST") return { ok: true, json: async () => ({ chatId: "c1" }) };
+      if (String(url).includes("/api/chat") && init?.method === "POST") { post(init); return { ok: true, json: async () => ({ chatId: "c1" }) }; }
       return { ok: true, json: async () => ({}) };
     }) as unknown as typeof fetch);
     vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
@@ -28,7 +28,14 @@ describe("Studio", () => {
       meta: { title: "G1", genre: "replay", createdFrom: { kind: "project", path: "/p", flavor: "node" }, engineVersion: "1" },
     });
 
-    render(<Studio apiBase="" name="g1" onBack={() => {}} />);
+    render(<Studio
+      apiBase=""
+      name="g1"
+      agents={[{ id: "claude", name: "Claude Code", available: true }, { id: "codex", name: "Codex", available: true }]}
+      agentId="codex"
+      onAgentIdChange={() => {}}
+      onBack={() => {}}
+    />);
 
     // mount refresh renders the fetched html into the sealed preview
     await waitFor(() => {
@@ -40,6 +47,7 @@ describe("Studio", () => {
     fireEvent.click(screen.getByText("Send"));
     await waitFor(() => expect(FakeES.last).toBeTruthy());
     expect(FakeES.last!.url).toContain("/api/chat/stream");
+    expect(JSON.parse(String(post.mock.calls[0][0].body))).toMatchObject({ agentId: "codex", miniapp: "g1" });
 
     const before = spy.mock.calls.length;
     FakeES.last!.emit("done", { result: { text: "done", toolCalls: [] } });
