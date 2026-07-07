@@ -1,0 +1,66 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
+// The Chat studio seam: seed a miniapp dir from a source (scaffold + injected DATA), build the agent's
+// studio brief from its meta, and guard which cwd a chat session may adopt. studioCwd is the security
+// gate: only a path under the miniapps registry (or the neutral fallback) is ever honored.
+import { join, sep } from "node:path";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import type { GameSource } from "@agentgem/model";
+import { extractSource, type SourceReaders } from "./sourceContext.js";
+import { genreFor } from "./genres.js";
+import { scaffoldFor } from "./scaffolds.js";
+import { miniappDir, miniappsRoot, type MiniappMeta } from "./miniapps.js";
+import { ensureRepo, commitAll } from "./git.js";
+
+// Only allow a chat session to adopt a cwd that is inside the miniapps registry; otherwise the neutral
+// fallback. The route resolves `miniapp` names via miniappDir (which rejects bad names) BEFORE this, so
+// this is defense-in-depth against any raw path ever reaching conn.ctx.open().
+export function studioCwd(requested: string | undefined, fallback: string): string {
+  if (!requested) return fallback;
+  return requested === fallback || requested.startsWith(miniappsRoot() + sep) ? requested : fallback;
+}
+
+// Derive a clean single-segment slug for a new miniapp from its source.
+function slugFor(source: GameSource): string {
+  const raw =
+    source.kind === "session" ? `session-${source.sessionId}` :
+    source.kind === "skill" ? source.skillName :
+    (source.path.split(/[\\/]/).filter(Boolean).pop() ?? "project");
+  const slug = raw.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+  return slug || "miniapp";
+}
+
+// Inject the source DATA as an inert JSON <script> the game reads (mirrors the runtime convention).
+function seedHtml(scaffold: string, data: unknown): string {
+  const tag = `<script id="game-data" type="application/json">${JSON.stringify(data).replace(/</g, "\\u003c")}</script>`;
+  return scaffold.replace("</body>", `${tag}</body>`);
+}
+
+function studioInstructions(name: string): string {
+  return (
+    `You are building the miniapp in ${name}.html (edit ONLY that file). It must stay a single ` +
+    `self-contained, SEALED HTML file: inline all JS/CSS, use only data: URIs, and make NO network calls ` +
+    `(no fetch/XHR/WebSocket/external src/href/import). Replace the block between the ` +
+    `"AGENTGEM:GAME-LOGIC" markers. Read the JSON in <script id="game-data"> for the source content. ` +
+    `The file must run without throwing on load.`
+  );
+}
+
+export async function seedStudio(source: GameSource, readers: SourceReaders): Promise<{ name: string; brief: string }> {
+  const input = await extractSource(source, readers);
+  const name = slugFor(source);
+  const dir = miniappDir(name);                       // validates the slug + jails the path
+  const g = genreFor(input.genre);
+  await ensureRepo(miniappsRoot());
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, `${name}.html`), seedHtml(scaffoldFor(g.scaffold), input.data));
+  const meta: MiniappMeta = { title: name, genre: input.genre, createdFrom: input.createdFrom, engineVersion: "1" };
+  writeFileSync(join(dir, "meta.json"), JSON.stringify(meta, null, 2));
+  await commitAll(miniappsRoot(), `seed miniapp ${name}`);
+  return { name, brief: `${input.brief}\n\n${studioInstructions(name)}` };
+}
+
+export function studioBrief(name: string): string {
+  const meta = JSON.parse(readFileSync(join(miniappDir(name), "meta.json"), "utf8")) as MiniappMeta;
+  return `Continue building the "${meta.title}" miniapp (a ${meta.genre}).\n\n${studioInstructions(name)}`;
+}
