@@ -34,10 +34,12 @@ function slugFor(source: GameSource): string {
   return slug || "miniapp";
 }
 
-// Inject the source DATA as an inert JSON <script> the game reads (mirrors the runtime convention).
+// Inject the source DATA as an inert JSON <script> the game reads. It goes in <head> so it's parsed
+// BEFORE the scaffold's body script runs (otherwise getElementById("game-data") is null during parse).
 function seedHtml(scaffold: string, data: unknown): string {
   const tag = `<script id="game-data" type="application/json">${JSON.stringify(data).replace(/</g, "\\u003c")}</script>`;
-  return scaffold.replace("</body>", `${tag}</body>`);
+  if (/<\/head>/i.test(scaffold)) return scaffold.replace(/<\/head>/i, `${tag}</head>`);
+  return scaffold.replace("</body>", `${tag}</body>`); // fallback for a head-less scaffold
 }
 
 function studioInstructions(name: string): string {
