@@ -53,4 +53,53 @@ describe("Studio", () => {
     FakeES.last!.emit("done", { result: { text: "done", toolCalls: [] } });
     await waitFor(() => expect(spy.mock.calls.length).toBeGreaterThan(before)); // refreshed on done
   });
+
+  // A blank miniapp created with a description auto-kicks the build: the description is sent as the
+  // studio's first chat message, with no typing.
+  const blankApp = {
+    name: "space-dodger", html: "<!doctype html><body></body>",
+    meta: { title: "Space Dodger", genre: "project-fun", createdFrom: { kind: "blank", title: "Space Dodger" }, engineVersion: "1" },
+  } as const;
+  const stubChat = (post = vi.fn()) => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).includes("/api/chat") && init?.method === "POST") { post(init); return { ok: true, json: async () => ({ chatId: "c1" }) }; }
+      return { ok: true, json: async () => ({}) };
+    }) as unknown as typeof fetch);
+    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
+    return post;
+  };
+  const codex = [{ id: "codex", name: "Codex", available: true }];
+
+  it("auto-sends the seed prompt as the studio's first build message (no typing)", async () => {
+    const post = stubChat();
+    vi.spyOn(playMiniappRoute, "call").mockResolvedValue(blankApp as never);
+
+    render(<Studio apiBase="" name="space-dodger" seedPrompt="dodge asteroids" agents={codex} agentId="codex" onAgentIdChange={() => {}} onBack={() => {}} />);
+
+    await waitFor(() => expect(FakeES.last).toBeTruthy());
+    expect(JSON.parse(String(post.mock.calls[0][0].body))).toMatchObject({ agentId: "codex", miniapp: "space-dodger" });
+    expect(FakeES.last!.url).toContain("message=dodge+asteroids");
+    expect(screen.getByText("dodge asteroids")).toBeTruthy(); // shown as the first user bubble
+  });
+
+  it("does not auto-send when there is no seed prompt", async () => {
+    stubChat();
+    const spy = vi.spyOn(playMiniappRoute, "call").mockResolvedValue(blankApp as never);
+    render(<Studio apiBase="" name="space-dodger" agents={codex} agentId="codex" onAgentIdChange={() => {}} onBack={() => {}} />);
+    await waitFor(() => expect(spy).toHaveBeenCalled());
+    expect(FakeES.last).toBeNull();
+  });
+
+  it("waits for an agent, then fires the seed prompt exactly once", async () => {
+    stubChat();
+    vi.spyOn(playMiniappRoute, "call").mockResolvedValue(blankApp as never);
+    const props = { apiBase: "", name: "space-dodger", seedPrompt: "dodge asteroids", onAgentIdChange: () => {}, onBack: () => {} };
+    const { rerender } = render(<Studio {...props} agents={null} agentId="" />);
+    await waitFor(() => expect(playMiniappRoute.call).toHaveBeenCalled());
+    expect(FakeES.last).toBeNull(); // no agent yet → held
+
+    rerender(<Studio {...props} agents={codex} agentId="codex" />);
+    await waitFor(() => expect(FakeES.last).toBeTruthy());
+    expect(FakeES.last!.url).toContain("message=dodge+asteroids");
+  });
 });
