@@ -409,6 +409,91 @@ body::before {
 @keyframes studio-bounce { 0%, 80%, 100% { transform: translateY(0); opacity: .45; } 40% { transform: translateY(-4px); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .studio-thinking .dots i { animation: none; opacity: .8; } }
 
+/* ═══ Play ═══ — the miniapp arcade + studio, in the console's parchment/terracotta language */
+.play-tabs { display: flex; gap: 6px; margin-bottom: 16px; }
+.play-tab { font: 600 13px var(--font-ui); letter-spacing: .01em; padding: 7px 15px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--raised); color: var(--ink-soft); cursor: pointer; transition: .14s; }
+.play-tab:hover { border-color: var(--muted); color: var(--ink); }
+.play-tab.is-active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.play-tab.play-tab--cta.is-active { background: var(--accent); border-color: var(--accent); }
+
+.play-intro { color: var(--ink-soft); font-size: 13.5px; margin: 0 0 14px; }
+
+/* Arcade */
+.play-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(248px, 1fr)); gap: 16px; list-style: none; padding: 0; margin: 0; }
+.play-card { position: relative; border: 1px solid var(--line); border-radius: var(--radius); background: var(--raised);
+  overflow: hidden; cursor: pointer; box-shadow: var(--shadow-sm); transition: transform .16s cubic-bezier(.2,.7,.2,1), box-shadow .16s, border-color .16s; }
+.play-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); border-color: var(--muted); }
+.play-card__thumb { position: relative; height: 132px; background: #0d1117; border-bottom: 1px solid var(--line); overflow: hidden; }
+.play-card__thumb .play-thumb-scrim { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 55%, rgba(13,17,23,.5)); pointer-events: none; }
+.play-card__play { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; opacity: 0; transition: .16s; }
+.play-card:hover .play-card__play { opacity: 1; }
+.play-card__play span { width: 42px; height: 42px; border-radius: 50%; background: rgba(154,51,36,.92); color: #fff;
+  display: grid; place-items: center; font-size: 16px; box-shadow: 0 6px 18px -6px rgba(0,0,0,.6); }
+.play-card__body { padding: 11px 13px 13px; }
+.play-card__title { font: 600 15px var(--font-display); color: var(--ink); line-height: 1.25; margin-bottom: 5px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.play-card__row { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+
+.play-pill { display: inline-flex; align-items: center; gap: 5px; font: 600 11px var(--font-ui); letter-spacing: .02em;
+  padding: 2px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--paper); color: var(--ink-soft); }
+.play-pill__dot { width: 7px; height: 7px; border-radius: 50%; }
+.play-pill--offline { color: var(--emerald); border-color: rgba(47,107,58,.3); background: #eef4ee; }
+
+.play-empty { border: 1px dashed var(--line); border-radius: var(--radius); background: var(--raised);
+  padding: 40px 24px; text-align: center; color: var(--ink-soft); }
+.play-empty b { display: block; font: 600 16px var(--font-display); color: var(--ink); margin-bottom: 6px; }
+
+/* Studio */
+.play-studio-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.play-studio-head .sp { flex: 1; }
+.play-studio-title { font: 600 16px var(--font-display); color: var(--ink); }
+.play-grid-2 { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); gap: 14px; align-items: start; }
+.play-chat { display: flex; flex-direction: column; gap: 9px; }
+.play-log { height: 388px; overflow: auto; margin: 0; padding: 4px 2px; display: flex; flex-direction: column; gap: 9px; }
+.play-log__hint { color: var(--muted); font-size: 13px; padding: 8px 2px; }
+.play-msg { font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.play-msg--user { align-self: flex-end; max-width: 88%; background: var(--ink); color: var(--paper);
+  padding: 7px 12px; border-radius: 13px 13px 3px 13px; font-weight: 500; }
+.play-msg--agent { color: var(--ink-soft); }
+.play-tool { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; font: 500 11.5px var(--font-mono);
+  color: var(--ink-soft); background: var(--paper-2); border: 1px solid var(--line); border-radius: 7px; padding: 3px 9px; max-width: 100%; }
+.play-tool b { font-weight: 600; color: var(--ink); } .play-tool.is-failed { color: var(--accent); border-color: rgba(154,51,36,.35); }
+.play-composer-in { display: flex; gap: 8px; }
+.play-input { flex: 1; font: 400 13.5px var(--font-ui); padding: 9px 12px; border-radius: var(--radius);
+  border: 1px solid var(--line); background: var(--raised); color: var(--ink); }
+.play-input:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
+
+.play-btn { font: 600 12.5px var(--font-ui); letter-spacing: .02em; padding: 8px 15px; border-radius: var(--radius);
+  border: 1px solid var(--line); background: var(--raised); color: var(--ink); cursor: pointer; transition: .14s; }
+.play-btn:hover:not(:disabled) { border-color: var(--muted); }
+.play-btn:disabled { opacity: .5; cursor: default; }
+.play-btn--primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.play-btn--primary:hover:not(:disabled) { background: var(--accent-2); border-color: var(--accent-2); }
+.play-btn--ghost { background: transparent; }
+
+/* Actionable seal-gate banner */
+.play-banner { display: flex; align-items: flex-start; gap: 11px; padding: 11px 13px; border-radius: var(--radius);
+  border: 1px solid rgba(154,51,36,.32); background: #fbeee9; margin-bottom: 10px; animation: fade .25s ease both; }
+.play-banner__ico { font-size: 15px; line-height: 1.5; }
+.play-banner__body { flex: 1; min-width: 0; }
+.play-banner__title { font: 600 13px var(--font-ui); color: var(--accent); margin-bottom: 3px; }
+.play-banner__detail { font: 500 11.5px var(--font-mono); color: var(--ink-soft); word-break: break-word; }
+.play-banner--ok { border-color: rgba(47,107,58,.3); background: #eef4ee; }
+.play-banner--ok .play-banner__title { color: var(--emerald); }
+
+/* Composer source rows + HTML drop zone */
+.play-src { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 7px; }
+.play-src-row { display: flex; align-items: center; gap: 10px; padding: 10px 13px; border: 1px solid var(--line);
+  border-radius: var(--radius); background: var(--raised); cursor: pointer; transition: .14s; }
+.play-src-row:hover { border-color: var(--accent); transform: translateX(2px); box-shadow: var(--shadow-sm); }
+.play-src-row__main { flex: 1; min-width: 0; font: 500 13.5px var(--font-ui); color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.play-src-row__meta { font: 500 11.5px var(--font-mono); color: var(--muted); flex-shrink: 0; }
+.play-drop { border: 1.5px dashed var(--line); border-radius: var(--radius); background: var(--raised); padding: 22px;
+  text-align: center; color: var(--ink-soft); transition: .14s; cursor: pointer; }
+.play-drop.is-over { border-color: var(--accent); background: #fbeee9; }
+.play-drop b { color: var(--ink); font-weight: 600; }
+
 /* ── Loading — the facet mark catching the light ── */
 /* Boot splash: full-viewport centering for the same loader, painted before React
    mounts (seeded into #root by build-client.mjs). A touch larger than the inline
