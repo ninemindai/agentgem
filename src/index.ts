@@ -307,8 +307,8 @@ export async function createApp(port: number): Promise<RestApplication> {
     const chatCwd = pathJoin(agentgemHome(), ".agentgem", "chat");
     try { mkdirSync(chatCwd, { recursive: true }); } catch { /* already exists */ }
     const chatManager = new ChatManager({
-      connectFn: async (descriptor) => {
-        const conn = await chatConnectFn(descriptor);
+      connectFn: async (descriptor, connectOpts) => {
+        const conn = await chatConnectFn(descriptor, connectOpts);  // pass through the per-session permission
         // Wrap open() to inject the server-derived neutral cwd regardless of what
         // ChatManager passes — ensures request input can never redirect the agent.
         return {
