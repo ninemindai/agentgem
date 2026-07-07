@@ -2,8 +2,13 @@
 // SPDX-License-Identifier: MIT
 // src/gem/__tests__/boundarySegments.test.ts
 import { describe, it, expect } from "vitest";
-import { boundarySegments, SMOOTH_W, MIN_EPISODE } from "@agentgem/insight";
+import { scanWorkflow, boundarySegments, SMOOTH_W, MIN_EPISODE } from "@agentgem/insight";
 import type { ProcedureStep, SessionSequence, TurnUsage } from "@agentgem/insight";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { buildHygieneReport } from "../../sessionHygieneCore.js";
+import { HygieneReportSchema } from "../../gem.controller.js";
 
 // Build a session where turn i has one Read step of `clusters[i]` (a path), and a
 // contextSeries with ctxTokens = ctx[i]. msgIndex = i for both step and turn, so
@@ -71,5 +76,44 @@ describe("boundarySegments", () => {
   it("exports the tunable constants", () => {
     expect(SMOOTH_W).toBe(2);
     expect(MIN_EPISODE).toBe(3);
+  });
+});
+
+const emptyInv = { project: { root: "/r", skills: [], mcpServers: [], hooks: [], instructions: [] }, global: { skills: [], mcpServers: [], hooks: [] } } as any;
+
+function writeTwoArea(dir: string): string {
+  const lines: string[] = [JSON.stringify({ sessionId: "b", type: "user", message: { role: "user", content: "go" } })];
+  const push = (pkg: string, ctx: number) => lines.push(JSON.stringify({
+    type: "assistant",
+    message: { role: "assistant", model: "claude-opus-4-8[1m]",
+      content: [{ type: "tool_use", name: "Read", input: { file_path: `packages/${pkg}/f.ts` } }],
+      usage: { input_tokens: 100, cache_read_input_tokens: ctx, cache_creation_input_tokens: 2000, output_tokens: 10 } },
+  }));
+  for (let i = 0; i < 6; i++) push("a", 200_000);
+  for (let i = 0; i < 6; i++) push("b", 950_000);
+  const p = join(dir, "b.jsonl"); writeFileSync(p, lines.join("\n")); return p;
+}
+function writeOneArea(dir: string): string {
+  const lines: string[] = [JSON.stringify({ sessionId: "o", type: "user", message: { role: "user", content: "go" } })];
+  for (let i = 0; i < 5; i++) lines.push(JSON.stringify({ type: "assistant", message: { role: "assistant", model: "claude-opus-4-8[1m]",
+    content: [{ type: "tool_use", name: "Read", input: { file_path: "packages/a/f.ts" } }],
+    usage: { input_tokens: 100, cache_read_input_tokens: 300_000, cache_creation_input_tokens: 2000, output_tokens: 10 } } }));
+  const p = join(dir, "o.jsonl"); writeFileSync(p, lines.join("\n")); return p;
+}
+
+describe("buildHygieneReport boundary", () => {
+  it("attaches boundary with ≥2 episodes + a cut turn for a two-area session", () => {
+    const dir = mkdtempSync(join(tmpdir(), "bnd-"));
+    const rep = buildHygieneReport(scanWorkflow([writeTwoArea(dir)], emptyInv, { retainSequences: true }));
+    expect(rep.boundary).toBeDefined();
+    expect(rep.boundary!.segments.length).toBeGreaterThanOrEqual(2);
+    expect(rep.boundary!.cutTurn).not.toBeNull();
+    expect(HygieneReportSchema.parse(rep)).toEqual(rep);   // schema mirrors the shape
+  });
+  it("omits boundary for a single-area session", () => {
+    const dir = mkdtempSync(join(tmpdir(), "bnd2-"));
+    const rep = buildHygieneReport(scanWorkflow([writeOneArea(dir)], emptyInv, { retainSequences: true }));
+    expect(rep.boundary).toBeUndefined();
+    expect(HygieneReportSchema.parse(rep)).toEqual(rep);
   });
 });

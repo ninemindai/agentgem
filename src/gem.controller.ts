@@ -89,6 +89,10 @@ export const HygieneReportSchema = z.object({
     severity: z.enum(["info", "warn"]), count: z.number(), sessions: z.number(),
   })),
   hygiene: z.object({ score: z.number(), verdict: z.enum(["bounded", "mixed", "bloated"]) }),
+  boundary: z.object({
+    segments: z.array(z.object({ fromTurn: z.number(), toTurn: z.number(), label: z.string() })),
+    cutTurn: z.number().nullable(),
+  }).optional(),
 });
 const TokenBreakdownSchema = z.object({ in: z.number(), out: z.number(), cache: z.number() });
 const TranscriptSpanSchema = z.discriminatedUnion("kind", [
