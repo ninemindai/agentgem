@@ -979,10 +979,6 @@ button.scorecard-intent { line-height: 1.4; }
 /* flame badge */
 .obs-flame { font-size: 0.75rem; margin-left: 4px; }
 
-/* detail row */
-.obs-detail td { padding: 8px 16px; font-size: 0.85rem; background: var(--panel-bg-alt, #f9f9f9); }
-.obs-detail-sep { color: var(--muted); }
-
 /* caret */
 .obs-caret { display: inline-block; transition: transform 0.15s; margin-right: 4px; color: var(--muted); font-size: 0.7rem; }
 .obs-caret.open { transform: rotate(90deg); }
