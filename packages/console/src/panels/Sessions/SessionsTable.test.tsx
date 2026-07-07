@@ -92,4 +92,13 @@ describe("SessionsTable", () => {
     render(<SessionsTable data={{ ...payload, pulse: { ...payload.pulse, sessions: 1 } }} activity={activity} />);
     expect(screen.queryByText(/Showing \d+ of \d+ sessions/)).toBeNull();
   });
+
+  it("Escape dismisses the popover", () => {
+    const { container } = render(<SessionsTable data={payload} activity={activity} />);
+    const row = rowOf(container);
+    fireEvent.focus(row);
+    expect(screen.getByRole("tooltip")).toBeDefined();
+    fireEvent.keyDown(row, { key: "Escape" });
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
 });

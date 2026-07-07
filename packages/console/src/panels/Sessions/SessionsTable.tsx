@@ -51,8 +51,9 @@ export function SessionsTable({ data, activity }: {
           </tr>
         </thead>
         <tbody>
-          {rows.map((s) => {
+          {rows.map((s, i) => {
             const rowId = s.agent + ":" + s.sessionId;
+            const up = i === rows.length - 1;
             const flames = flameLevel(s.tokens, maxTok);
             return (
               <tr
@@ -63,6 +64,7 @@ export function SessionsTable({ data, activity }: {
                 onClick={() => open(s.agent, s.sessionId)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(s.agent, s.sessionId); }
+                  else if (e.key === "Escape") { setHoverId(null); }
                 }}
                 onMouseEnter={() => setHoverId(rowId)}
                 onMouseLeave={() => setHoverId((h) => (h === rowId ? null : h))}
@@ -73,7 +75,7 @@ export function SessionsTable({ data, activity }: {
                   {s.project ?? "—"}
                   {flames > 0 && <span className="obs-flame" aria-hidden="true">{"🔥".repeat(flames)}</span>}
                   {hoverId === rowId && (
-                    <SessionSummaryPopover activity={activity.get(rowId) ?? EMPTY_ACTIVITY} />
+                    <SessionSummaryPopover activity={activity.get(rowId) ?? EMPTY_ACTIVITY} up={up} />
                   )}
                 </td>
                 <td><span className="obs-chip">{s.agent}</span></td>
