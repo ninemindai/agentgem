@@ -77,6 +77,39 @@ describe("boundarySegments", () => {
     expect(SMOOTH_W).toBe(2);
     expect(MIN_EPISODE).toBe(3);
   });
+
+  it("merges sub-MIN_EPISODE mid-episodes into the previous and coalesces the result (steps 3b+3c)", () => {
+    // Raw per-turn clusters: x(0-2) y(3-4) z(5-6) x(7-9). The 3-turn x/y/z blocks are wide
+    // enough that the ±2-window mode at each interior turn still favors x's neighbors, but a
+    // hand trace of step 2 (SMOOTH_W=2) gives:
+    //   smoothed = x x x x y y z x x x
+    // (e.g. at turn 3, window [1,5] = x,x,y,y,z -> x:2,y:2,z:1, tie broken toward x, the label
+    // already at that turn's neighbors seen first in the window). RLE (step 3) is then:
+    //   [x(0-3,len4), y(4-5,len2), z(6,len1), x(7-9,len3)]
+    // Step 3b: y (len2 < MIN_EPISODE) and z (len1 < MIN_EPISODE) both get merged into the
+    // preceding episode (extending its toTurn through turn 6) -> out = [x(0-6), x(7-9)].
+    // Step 3c: those two out entries share label pkg:x and are now adjacent -> coalesced into
+    // one final segment spanning the whole session, so there is no cut.
+    const clusters = [
+      ...Array(3).fill(path("x")),
+      ...Array(2).fill(path("y")),
+      ...Array(2).fill(path("z")),
+      ...Array(3).fill(path("x")),
+    ];
+    const { segments, cutTurn } = boundarySegments(sess(clusters, Array(10).fill(300_000)));
+    expect(segments).toEqual([{ fromTurn: 0, toTurn: 9, label: "pkg:x" }]);
+    expect(cutTurn).toBeNull();
+  });
+
+  it("labels a non-packages path as dir:<top-level-segment> (clusterOf's dir: branch)", () => {
+    const clusters = [...Array(6).fill("src/app/x.ts"), ...Array(6).fill("docs/y.md")];
+    const ctx = [...Array(6).fill(200_000), ...Array(6).fill(900_000)];
+    const { segments, cutTurn } = boundarySegments(sess(clusters, ctx));
+    expect(segments.map((s) => s.label)).toEqual(["dir:src", "dir:docs"]);
+    expect(segments[0]).toMatchObject({ fromTurn: 0, toTurn: 5 });
+    expect(segments[1]).toMatchObject({ fromTurn: 6, toTurn: 11 });
+    expect(cutTurn).toBe(6);
+  });
 });
 
 const emptyInv = { project: { root: "/r", skills: [], mcpServers: [], hooks: [], instructions: [] }, global: { skills: [], mcpServers: [], hooks: [] } } as any;

@@ -18,6 +18,9 @@ export const SMOOTH_W = 2;      // ±window (turns) for dominant-cluster smoothi
 export const MIN_EPISODE = 3;   // episodes shorter than this (turns) are merged into a neighbor
 
 export function boundarySegments(session: SessionSequence): SessionBoundary {
+  // Segment fromTurn/toTurn below are indices into `series` (contextSeries); by construction
+  // (scanWorkflow assigns turn: contextSeries.length while pushing) they are dense 0..N-1 and
+  // equal each entry's own `.turn` field -- the identity the client overlay aligns segments on.
   const series = session.contextSeries ?? [];
   const N = series.length;
   if (N === 0) return { segments: [], cutTurn: null };
