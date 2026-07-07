@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { PICK_FOLDER, UPDATE_EVENT, NOTIFY, pickFolderResult } from "../ipc.js";
+import { PICK_FOLDER, UPDATE_EVENT, NOTIFY, pickFolderResult, notifyPayload } from "../ipc.js";
 
 describe("ipc channels", () => {
   it("uses stable, namespaced channel names", () => {
@@ -36,5 +36,23 @@ describe("pickFolderResult", () => {
   });
   it("returns null path when no selection", () => {
     expect(pickFolderResult({ canceled: false, filePaths: [] })).toEqual({ path: null });
+  });
+});
+
+describe("notifyPayload", () => {
+  it("returns title and body for a valid payload", () => {
+    expect(notifyPayload({ title: "Hi", body: "There" })).toEqual({ title: "Hi", body: "There" });
+  });
+  it("returns null when title is not a string", () => {
+    expect(notifyPayload({ title: 1, body: "There" })).toBeNull();
+  });
+  it("returns null when body is not a string", () => {
+    expect(notifyPayload({ title: "Hi", body: 2 })).toBeNull();
+  });
+  it("returns null when arg is missing/undefined", () => {
+    expect(notifyPayload(undefined)).toBeNull();
+  });
+  it("returns null when arg is not an object", () => {
+    expect(notifyPayload("nope")).toBeNull();
   });
 });

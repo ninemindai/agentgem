@@ -10,3 +10,10 @@ export function pickFolderResult(r: { canceled: boolean; filePaths: string[] }):
   if (r.canceled || r.filePaths.length === 0) return { path: null };
   return { path: r.filePaths[0] };
 }
+
+export function notifyPayload(arg: unknown): { title: string; body: string } | null {
+  if (!arg || typeof arg !== "object") return null;
+  const { title, body } = arg as { title?: unknown; body?: unknown };
+  if (typeof title !== "string" || typeof body !== "string") return null;
+  return { title, body };
+}
