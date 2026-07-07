@@ -4,6 +4,9 @@ import { ActiveGemSwitcher } from "./ActiveGemSwitcher.js";
 import { useActiveGem } from "../activeGem.js";
 import { WarmingPill } from "../components/WarmingPill.js";
 import { useRovingTabIndex } from "./useRovingTabIndex.js";
+import { ToastProvider } from "./Toast.js";
+import { NotificationsProvider } from "../notify/NotificationsProvider.js";
+import { NotifyBell } from "../notify/NotifyBell.js";
 
 const PHASES: { id: Phase; label: string }[] = [
   { id: "observe", label: "Observe" },
@@ -133,42 +136,46 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
   );
 
   return (
-    <div className="console">
-      <nav className="console-nav">
-        <div className="console-brand">
-          <svg className="console-mark" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M6 3h12l4 6-10 12L2 9l4-6Z" fill="currentColor" fillOpacity=".14" />
-            <path d="M6 3h12l4 6-10 12L2 9l4-6Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-            <path d="M2 9h20M9 3 7 9l5 12M15 3l2 6-5 12" stroke="currentColor" strokeWidth="1" strokeLinejoin="round" opacity=".7" />
-          </svg>
-          AgentGem
-        </div>
-        <WarmingPill apiBase={apiBase} />
-        <div className="console-phase-switch" role="radiogroup" aria-label="Phase" {...roving.containerProps}>
-          {PHASES.map((p, i) => (
-            <button
-              key={p.id}
-              type="button"
-              role="radio"
-              aria-checked={p.id === phase}
-              className={"console-phase-btn" + (p.id === phase ? " is-active" : "")}
-              {...roving.getTabProps(i)}
-              onClick={() => goPhase(p.id)}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
-        {phase === "build" ? <ActiveGemSwitcher apiBase={apiBase} /> : null}
-        {groups.map((g) => (
-          <div key={g.category} className="console-group">
-            <div className="console-group-label">{CATEGORY_LABEL[g.category]}</div>
-            {g.pages.map(item)}
+    <ToastProvider>
+      <div className="console">
+        <nav className="console-nav">
+          <div className="console-brand">
+            <svg className="console-mark" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M6 3h12l4 6-10 12L2 9l4-6Z" fill="currentColor" fillOpacity=".14" />
+              <path d="M6 3h12l4 6-10 12L2 9l4-6Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+              <path d="M2 9h20M9 3 7 9l5 12M15 3l2 6-5 12" stroke="currentColor" strokeWidth="1" strokeLinejoin="round" opacity=".7" />
+            </svg>
+            AgentGem
           </div>
-        ))}
-        <div className="console-footer">{footer.map(item)}</div>
-      </nav>
-      <main className="console-main">{ActivePage ? <ActivePage apiBase={apiBase} /> : null}</main>
-    </div>
+          <WarmingPill apiBase={apiBase} />
+          <NotifyBell />
+          <div className="console-phase-switch" role="radiogroup" aria-label="Phase" {...roving.containerProps}>
+            {PHASES.map((p, i) => (
+              <button
+                key={p.id}
+                type="button"
+                role="radio"
+                aria-checked={p.id === phase}
+                className={"console-phase-btn" + (p.id === phase ? " is-active" : "")}
+                {...roving.getTabProps(i)}
+                onClick={() => goPhase(p.id)}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          {phase === "build" ? <ActiveGemSwitcher apiBase={apiBase} /> : null}
+          {groups.map((g) => (
+            <div key={g.category} className="console-group">
+              <div className="console-group-label">{CATEGORY_LABEL[g.category]}</div>
+              {g.pages.map(item)}
+            </div>
+          ))}
+          <div className="console-footer">{footer.map(item)}</div>
+        </nav>
+        <main className="console-main">{ActivePage ? <ActivePage apiBase={apiBase} /> : null}</main>
+        <NotificationsProvider apiBase={apiBase} />
+      </div>
+    </ToastProvider>
   );
 }
