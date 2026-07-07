@@ -3,12 +3,12 @@
 // Play JSON routes over the miniapps registry: save (gate + dual-write), list, publish (git push).
 import { api, get, post, AgentError } from "@agentback/openapi";
 import { z } from "zod";
-import { saveMiniapp, listMiniapps, readMiniapp, miniappsRoot, setRemote, push, seedStudio } from "@agentgem/play";
+import { saveMiniapp, listMiniapps, readMiniapp, miniappsRoot, setRemote, push, seedStudio, importStudio } from "@agentgem/play";
 import { defaultReaders } from "./play.readers.js";
 import {
   PlaySaveRequestSchema, PlaySaveResponseSchema, MiniappListSchema,
   PlayPublishRequestSchema, PlayPublishResponseSchema,
-  PlayStudioRequestSchema, PlayStudioResponseSchema,
+  PlayStudioRequestSchema, PlayStudioResponseSchema, PlayImportRequestSchema,
   PlayMiniappQuerySchema, PlayMiniappSchema,
 } from "./schemas.js";
 
@@ -25,6 +25,14 @@ export class PlayController {
   async studio(input: { body: z.infer<typeof PlayStudioRequestSchema> }): Promise<z.infer<typeof PlayStudioResponseSchema>> {
     try {
       const { name } = await seedStudio(input.body.source, defaultReaders);
+      return { name };
+    } catch (e) { throw new AgentError((e as Error).message, { status: 400 }); }
+  }
+
+  @post("/play/import", { body: PlayImportRequestSchema, response: PlayStudioResponseSchema })
+  async import(input: { body: z.infer<typeof PlayImportRequestSchema> }): Promise<z.infer<typeof PlayStudioResponseSchema>> {
+    try {
+      const { name } = await importStudio(input.body.title, input.body.html);
       return { name };
     } catch (e) { throw new AgentError((e as Error).message, { status: 400 }); }
   }
