@@ -34,6 +34,7 @@ export function App() {
   }, []);
 
   const onGems = path.startsWith("/gems");
+  const onMinigames = path.startsWith("/minigames");
   const onSources = path.startsWith("/sources");
   const onIngredients = path === "/" || path.startsWith("/ingredient");
   const signOut = async () => { await auth.logout(); setMe(null); };
@@ -51,6 +52,7 @@ export function App() {
         <nav className="ex-nav">
           <a href="/" className={"ex-navlink" + (onIngredients ? " is-active" : "")}>Ingredients</a>
           <a href="/gems" className={"ex-navlink" + (onGems ? " is-active" : "")}>Gems</a>
+          <a href="/minigames" className={"ex-navlink" + (onMinigames ? " is-active" : "")}>Minigames</a>
           <a href="/sources" className={"ex-navlink" + (onSources ? " is-active" : "")}>Sources</a>
           {me && <a href="/publish" className="ex-navlink">Publish</a>}
         </nav>

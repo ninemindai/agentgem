@@ -48,6 +48,9 @@ export function makeApi(base: string) {
       get<AdoptionPoint[]>(base, "/api/aggregator/adoption", q),
     getGems: () =>
       get<{ gems: RegistryGem[] }>(base, "/api/registry/gems").then((r) => r.gems),
+    // Sealed HTML of a gem's game artifact (for the playable Minigames arcade). 404s a non-game gem.
+    getGameHtml: (key: string, version: string) =>
+      get<{ html: string }>(base, "/api/aggregator/game-html", { key, version }).then((r) => r.html),
     gemAdoption: (keys: string[]): Promise<Record<string, { installs: number; verifiedInstalls: number }>> =>
       keys.length === 0 ? Promise.resolve({}) :
       get<{ items: { gemKey: string; installs: number; verifiedInstalls: number }[] }>(base, "/api/aggregator/gem-adoption", { keys: keys.join(",") })
