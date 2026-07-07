@@ -31,8 +31,8 @@ function slugFor(source: GameSource): string {
     source.kind === "skill" ? source.skillName :
     source.kind === "html" ? source.title :
     (source.path.split(/[\\/]/).filter(Boolean).pop() ?? "project");
-  const slug = raw.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
-  return slug || "miniapp";
+  const slug = raw.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^[-.]+|-+$/g, "").slice(0, 40);
+  return slug || "miniapp"; // strip leading dots too, so a title like ".git" can't target a dotfile dir
 }
 
 // Inject the source DATA as an inert JSON <script> the game reads. It goes in <head> so it's parsed
