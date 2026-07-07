@@ -52,6 +52,20 @@ describe("ChatManager", () => {
     expect(evs.at(-1)).toMatchObject({ type: "failed", error: "boom" });
   });
 
+  it("delivers partial deltas then failed when the agent dies mid-turn", async () => {
+    // Mirrors the ACP child crashing mid-prompt: some output streamed, then prompt() rejects.
+    const connect = async () => ({ ctx: { open: async () => ({
+      setMode: async () => {},
+      prompt: async (_t: string, onDelta?: (c: string) => void) => { onDelta?.("half done"); throw new Error("agent process exited (signal SIGKILL)"); },
+      dispose: () => {},
+    }) }, close: () => {} });
+    const mgr = new ChatManager({ connectFn: connect as any });
+    const id = await mgr.openChat({ agentId: "claude-code", brief: "B" });
+    const evs: any[] = []; for await (const e of mgr.sendMessage(id, "x")) evs.push(e);
+    expect(evs.find((e) => e.type === "delta")?.text).toBe("half done"); // streamed output preserved
+    expect(evs.at(-1)).toMatchObject({ type: "failed", error: expect.stringContaining("exited") });
+  });
+
   it("sweepIdle tears down sessions past idleMs", async () => {
     let t = 1000; const fake = fakeConnect(() => [{ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "ok" } }]);
     const mgr = new ChatManager({ connectFn: fake.fn as any, now: () => t, idleMs: 100 });
