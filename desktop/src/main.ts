@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { autoUpdater } from "electron-updater";
 import type { Tray } from "electron";
 import { startEmbeddedServer, type EmbeddedServer } from "./server.js";
-import { PICK_FOLDER, UPDATE_EVENT, NOTIFY, pickFolderResult } from "./ipc.js";
+import { PICK_FOLDER, UPDATE_EVENT, NOTIFY, pickFolderResult, notifyPayload } from "./ipc.js";
 import { buildMenuTemplate } from "./menu.js";
 import { configureUpdater, updaterFeed, repoUrlFromPackageJson } from "./updater.js";
 import { createTray } from "./tray.js";
@@ -108,9 +108,11 @@ async function boot(): Promise<void> {
 
   // Renderer-requested OS notification. Native Notification needs no permission
   // and no HTTPS in the main process. Clicking it surfaces the window.
-  ipcMain.on(NOTIFY, (_e, arg: { title: string; body: string }) => {
+  ipcMain.on(NOTIFY, (_e, arg: unknown) => {
     if (!Notification.isSupported()) return;
-    const n = new Notification({ title: arg.title, body: arg.body });
+    const p = notifyPayload(arg);
+    if (!p) return;
+    const n = new Notification({ title: p.title, body: p.body });
     n.on("click", () => showWindow());
     n.show();
   });
