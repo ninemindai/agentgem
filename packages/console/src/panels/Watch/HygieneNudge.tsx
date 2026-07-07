@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MIT
 // packages/console/src/panels/Watch/HygieneNudge.tsx
 import { useEffect, useRef, useState } from "react";
-import { flushSync } from "react-dom";
 import { openHygieneStream, type HygieneMsg, type Verdict } from "./hygieneStream.js";
 import { BloatCurve, type CurvePoint } from "../_shared/BloatCurve.js";
 
@@ -16,15 +15,11 @@ export function HygieneNudge({ apiBase, file }: { apiBase: string; file: string 
   useEffect(() => {
     setSnap(null); setNudge(null); dismissedAt.current = -1;
     return openHygieneStream(apiBase, file, (m: HygieneMsg) => {
-      // EventSource callbacks fire outside React's batching, so flush each update
-      // immediately — the nudge should appear the instant the server crosses a verdict.
-      flushSync(() => {
-        if (m.type === "hygiene") setSnap({ verdict: m.verdict, score: m.score, cap: m.cap, curve: m.curveTail });
-        else if (m.type === "nudge") {
-          // re-show only if this escalation is heavier than what was last dismissed
-          if (RANK[m.verdict] > dismissedAt.current) setNudge({ verdict: m.verdict, advice: m.advice });
-        }
-      });
+      if (m.type === "hygiene") setSnap({ verdict: m.verdict, score: m.score, cap: m.cap, curve: m.curveTail });
+      else if (m.type === "nudge") {
+        // re-show only if this escalation is heavier than what was last dismissed
+        if (RANK[m.verdict] > dismissedAt.current) setNudge({ verdict: m.verdict, advice: m.advice });
+      }
     });
   }, [apiBase, file]);
 
