@@ -49,6 +49,28 @@ export interface ChatRouteDeps {
   listAgents: () => AgentAvailability[];
   buildBrief: () => Promise<string>;
   goldmineMcp: () => McpServerStdio[];
+  // Studio mode: resolve a miniapp NAME to a validated cwd (its registry dir) + a studio brief. The
+  // resolver validates the name (rejects anything that isn't a clean segment); when absent, chat runs
+  // in the neutral cwd with the neutral brief.
+  resolveStudio?: (miniapp: string) => { cwd: string; brief: string };
+}
+
+// Pure mapping of a POST /api/chat body to ChatManager.openChat args — extracted so the studio-vs-neutral
+// branch is unit-testable without driving Express. A `miniapp` (name) routes the session into that
+// miniapp's validated dir with a studio brief; otherwise the neutral brief and no cwd override.
+export async function studioChatArgs(
+  body: { agentId?: unknown; miniapp?: unknown },
+  deps: Pick<ChatRouteDeps, "buildBrief" | "goldmineMcp" | "resolveStudio">,
+): Promise<{ agentId: string; brief: string; mcpServers: McpServerStdio[]; cwd?: string }> {
+  const agentId = String(body?.agentId ?? "");
+  if (!agentId) throw new Error("agentId required");
+  const miniapp = body?.miniapp ? String(body.miniapp) : "";
+  if (miniapp) {
+    if (!deps.resolveStudio) throw new Error("studio not available");
+    const s = deps.resolveStudio(miniapp); // resolver validates the name; throws on a bad one
+    return { agentId, brief: s.brief, mcpServers: deps.goldmineMcp(), cwd: s.cwd };
+  }
+  return { agentId, brief: await deps.buildBrief(), mcpServers: deps.goldmineMcp() };
 }
 
 // No-op guard used when originGuard is not provided (e.g. in tests that call
@@ -64,16 +86,15 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middlew
   // POST /api/chat — open a new chat session; request-derived value is only agentId
   app.post("/api/chat", guard, async (req, res) => {
     try {
-      const agentId = String(req.body?.agentId ?? "");
-      if (!agentId) { res.status(400).json({ error: "agentId required" }); return; }
-      const brief = await deps.buildBrief();
-      // SECURITY: mcpServers is server-derived (goldmineMcp()); cwd is server-derived
-      // (injected by the real connect wrapper in createApp). Neither value ever comes
-      // from the request body.
-      const chatId = await deps.manager.openChat({ agentId, brief, mcpServers: deps.goldmineMcp() });
+      // SECURITY: mcpServers is server-derived (goldmineMcp()); a `miniapp` name is resolved
+      // server-side to a VALIDATED cwd (deps.resolveStudio → miniappDir rejects bad names). No raw
+      // path from the request body is ever passed as cwd; without `miniapp` there is no cwd override.
+      const args = await studioChatArgs(req.body ?? {}, deps);
+      const chatId = await deps.manager.openChat(args);
       res.json({ chatId });
     } catch (e) {
-      res.status(500).json({ error: (e as Error).message });
+      const msg = (e as Error).message;
+      res.status(msg === "agentId required" ? 400 : 500).json({ error: msg });
     }
   });
 
