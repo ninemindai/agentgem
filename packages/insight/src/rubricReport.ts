@@ -35,7 +35,7 @@ export interface RubricReport {
   // sessions that tripped a factor — a row per clean session explodes the payload at
   // scope "all" (1900+ sessions); the aggregate `factors` already carries the clean
   // picture. Capped at PER_SESSION_CAP with `perSessionTruncated` when there are more.
-  perSession?: { sessionId: string; transcript: string; factors: DetectorSummary[] }[];
+  perSession?: { sessionId: string; transcript: string; factors: DetectorSummary[]; hygiene?: HygieneVerdict }[];
   perSessionTruncated?: boolean;
 }
 
@@ -153,11 +153,15 @@ export async function evaluateRubric(signal: WorkflowSignal, rubric: Rubric, opt
     }
     const withFindings = (signal.sequences?.sessions ?? []).filter((s) => bySession.has(s.sessionId));
     report.perSessionTruncated = withFindings.length > PER_SESSION_CAP;
-    report.perSession = withFindings.slice(0, PER_SESSION_CAP).map((s) => ({
-      sessionId: s.sessionId,
-      transcript: s.transcript,
-      factors: summariesForSpecs(allSpecs, bySession.get(s.sessionId)!),
-    }));
+    report.perSession = withFindings.slice(0, PER_SESSION_CAP).map((s) => {
+      const factors = summariesForSpecs(allSpecs, bySession.get(s.sessionId)!);
+      return {
+        sessionId: s.sessionId,
+        transcript: s.transcript,
+        factors,
+        ...(assessesHygiene(factors) ? { hygiene: hygieneScore(factors) } : {}),
+      };
+    });
   }
 
   return report;
