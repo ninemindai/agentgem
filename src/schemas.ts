@@ -537,7 +537,7 @@ export const WorkspaceSummarySchema = z.object({
   name: z.string(),
   gemName: z.string(),
   version: z.string(),
-  artifactCounts: z.object({ skill: z.number(), mcp_server: z.number(), instructions: z.number(), hook: z.number(), subagent: z.number() }),
+  artifactCounts: z.object({ skill: z.number(), mcp_server: z.number(), instructions: z.number(), hook: z.number(), subagent: z.number(), game: z.number() }),
   artifacts: z.array(z.object({ type: z.string(), name: z.string() })),
   modifiedMs: z.number(),
   checks: z.number(),
