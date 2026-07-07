@@ -9,7 +9,7 @@ import {
   inspectSessionRoute, inspectDistillRoute, workflowDraftRoute, workflowLessonRoute, makeClient,
   type TranscriptView, type TranscriptTurn, type TranscriptSpan, type DistilledSkill, type DistilledLesson,
 } from "../../api/routes.js";
-import { fmtTokens, fmtDuration } from "./data.js";
+import { fmtTokens, fmtDuration, fmtTime } from "./data.js";
 import { Loading } from "../../shell/Loading.js";
 import { setPendingContribution } from "../../pendingAnalyze.js";
 import { QuickShareButton } from "../_shared/QuickShareButton.js";
@@ -50,7 +50,9 @@ export function TranscriptViewer({ apiBase, agent, sessionId, onBack }: {
             <span className="obs-chip">{view.agent}</span>
             <span className="obs-muted tv-meta">
               {view.meta.model ?? "—"} · {fmtDuration(view.meta.endMs - view.meta.startMs)} · {view.meta.msgs} msgs ·{" "}
-              {fmtTokens(view.meta.tokensIn + view.meta.tokensOut)} tokens
+              {fmtTokens(view.meta.tokensIn + view.meta.tokensOut)} tokens{" "}
+              (in {fmtTokens(view.meta.tokensIn)} · out {fmtTokens(view.meta.tokensOut)} · cache {fmtTokens(view.meta.tokensCache)}) ·{" "}
+              {fmtTime(view.meta.startMs)} → {fmtTime(view.meta.endMs)} · branch {view.meta.gitBranch ?? "—"}
             </span>
             {view.turns.length > 0 && (
               <button type="button" className="obs-sort-btn tv-collapse" onClick={setAll}>
