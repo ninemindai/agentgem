@@ -24,7 +24,7 @@ describe("pages registry", () => {
     const g = phaseGroups(pages, "build");
     expect(g.map((x) => x.category)).toEqual(["setup", "projects"]);
     expect(flat("build")).toEqual([
-      "curate", "sources", "gems", "rubric-library",
+      "curate", "sources", "gems", "play", "rubric-library",
       "materialize", "deploy", "publish",
     ]);
   });
