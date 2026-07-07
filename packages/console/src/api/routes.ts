@@ -829,7 +829,7 @@ export const playMiniappsRoute = defineRoute("GET", "/api/play/miniapps", {
 });
 export const playMiniappRoute = defineRoute("GET", "/api/play/miniapp", {
   query: z.object({ name: z.string() }),
-  response: z.object({ name: z.string(), html: z.string(), meta: z.object({ title: z.string(), genre: z.string(), needs: PlayNeedsSchema }) }),
+  response: z.object({ name: z.string(), html: z.string(), meta: z.object({ title: z.string(), genre: z.string(), createdFrom: PlaySourceSchema, engineVersion: z.string(), needs: PlayNeedsSchema }) }),
 });
 export const playStudioRoute = defineRoute("POST", "/api/play/studio", {
   body: z.object({ source: PlaySourceSchema }), response: z.object({ name: z.string() }),

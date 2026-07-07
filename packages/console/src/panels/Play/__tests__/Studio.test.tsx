@@ -24,7 +24,8 @@ describe("Studio", () => {
     }) as unknown as typeof fetch);
     vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
     const spy = vi.spyOn(playMiniappRoute, "call").mockResolvedValue({
-      name: "g1", html: "<!doctype html><body><canvas data-v=\"2\"></canvas></body>", meta: { title: "G1", genre: "replay" },
+      name: "g1", html: "<!doctype html><body><canvas data-v=\"2\"></canvas></body>",
+      meta: { title: "G1", genre: "replay", createdFrom: { kind: "project", path: "/p", flavor: "node" }, engineVersion: "1" },
     });
 
     render(<Studio apiBase="" name="g1" onBack={() => {}} />);
