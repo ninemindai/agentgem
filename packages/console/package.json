@@ -6,7 +6,9 @@
   "scripts": {
     "build": "node build-client.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:build": "vitest run --config vitest.build.config.ts",
+    "test:all": "vitest run && vitest run --config vitest.build.config.ts"
   },
   "dependencies": {
     "@agentback/client": "^0.6.0",
