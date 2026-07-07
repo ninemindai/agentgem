@@ -71,6 +71,17 @@ export async function connectAcpAdapter(
     child.once("spawn", () => resolve());
     child.once("error", (e) => reject(new Error(`failed to spawn ${bin}: ${e.message}`)));
   });
+
+  // Detect the adapter dying mid-session. Without this, a crashed child (e.g. EPIPE) leaves prompt()'s
+  // `await session.nextUpdate()` waiting on a message that will never arrive — the turn hangs forever and
+  // the SSE stream stays stuck at "running". `dead` rejects on exit/error so the prompt loop can race it.
+  let died: Error | null = null;
+  let signalDead: (e: Error) => void = () => {};
+  const dead = new Promise<never>((_, reject) => { signalDead = reject; });
+  dead.catch(() => {}); // consumed via Promise.race; pre-attach so Node doesn't flag an unhandled rejection
+  const markDead = (e: Error) => { if (!died) { died = e; signalDead(e); } };
+  child.once("exit", (code, signal) => markDead(new Error(`agent process exited (code ${code ?? "null"}, signal ${signal ?? "null"})`)));
+  child.once("error", (e) => markDead(new Error(`agent process error: ${e.message}`)));
   const app: any = client({ name: opts.clientName });
   const reply = opts.permission === "allow"
     ? { outcome: { outcome: "selected", optionId: "allow" } }
@@ -98,9 +109,11 @@ export async function connectAcpAdapter(
           try { await agentCtx.request("session/set_mode", { sessionId, modeId: mode }); } catch { /* best-effort */ }
         },
         async prompt(text: string, onUpdate: (update: unknown) => void) {
+          if (died) throw died; // session already dead — fail fast instead of hanging
           void session.prompt(text);
           for (;;) {
-            const msg: any = await session.nextUpdate();
+            // Race the next update against child death so a crashed adapter rejects here, not hangs.
+            const msg: any = await Promise.race([session.nextUpdate(), dead]);
             if (msg.kind === "stop") break;
             if (msg.kind === "session_update") onUpdate(msg.update);
           }
