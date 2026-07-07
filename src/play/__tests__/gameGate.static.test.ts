@@ -22,6 +22,20 @@ describe("staticGate", () => {
     expect(r.failures.some((f) => f.includes("network"))).toBe(true);
   });
 
+  it("ignores network/URL words inside the inert game-data JSON (session content, not code)", () => {
+    // A replay bundle bakes the session transcript, which naturally contains "fetch"/"WebSocket"/https URLs.
+    const data = JSON.stringify({ timeline: [{ role: "user", text: "use fetch and WebSocket, see https://example.com" }] });
+    const html = `${sealed.replace("</body>", "")}<script id="game-data" type="application/json">${data}</script></body></html>`;
+    expect(staticGate(html)).toEqual({ ok: true, failures: [] });
+  });
+
+  it("still fails a real network call even when a data blob is present", () => {
+    const data = `<script id="game-data" type="application/json">{"ok":1}</script>`;
+    const r = staticGate(`${data}<script>new WebSocket("wss://x")</script>`);
+    expect(r.ok).toBe(false);
+    expect(r.failures.some((f) => f.includes("network"))).toBe(true);
+  });
+
   it("allows data: URIs (they are self-contained)", () => {
     expect(staticGate(`<img src="data:image/png;base64,AAAA">${sealed}`).ok).toBe(true);
   });
