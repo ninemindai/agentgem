@@ -1,10 +1,10 @@
-import { app, BrowserWindow, Menu, dialog, ipcMain, shell } from "electron";
+import { app, BrowserWindow, Menu, dialog, ipcMain, shell, Notification } from "electron";
 import { join } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 import { autoUpdater } from "electron-updater";
 import type { Tray } from "electron";
 import { startEmbeddedServer, type EmbeddedServer } from "./server.js";
-import { PICK_FOLDER, UPDATE_EVENT, pickFolderResult } from "./ipc.js";
+import { PICK_FOLDER, UPDATE_EVENT, NOTIFY, pickFolderResult } from "./ipc.js";
 import { buildMenuTemplate } from "./menu.js";
 import { configureUpdater, updaterFeed, repoUrlFromPackageJson } from "./updater.js";
 import { createTray } from "./tray.js";
@@ -104,6 +104,15 @@ async function boot(): Promise<void> {
   ipcMain.handle(PICK_FOLDER, async () => {
     const r = await dialog.showOpenDialog({ properties: ["openDirectory"] });
     return pickFolderResult(r);
+  });
+
+  // Renderer-requested OS notification. Native Notification needs no permission
+  // and no HTTPS in the main process. Clicking it surfaces the window.
+  ipcMain.on(NOTIFY, (_e, arg: { title: string; body: string }) => {
+    if (!Notification.isSupported()) return;
+    const n = new Notification({ title: arg.title, body: arg.body });
+    n.on("click", () => showWindow());
+    n.show();
   });
 
   try {
