@@ -11,6 +11,7 @@ import { genreFor } from "./genres.js";
 import { scaffoldFor, sealedTemplate } from "./scaffolds.js";
 import { miniappDir, miniappsRoot, type MiniappMeta } from "./miniapps.js";
 import { ensureRepo, commitAll } from "./git.js";
+import { redactForBake } from "./redact.js";
 
 // Only allow a chat session to adopt a cwd that is inside the miniapps registry; otherwise the neutral
 // fallback. The route resolves `miniapp` names via miniappDir (which rejects bad names) BEFORE this, so
@@ -60,10 +61,11 @@ export async function seedStudio(source: GameSource, readers: SourceReaders): Pr
   const g = genreFor(input.genre);
   await ensureRepo(miniappsRoot());
   mkdirSync(dir, { recursive: true });
-  // Broker-fed genres (e.g. replay → session-data) bake NO data — the host feeds it into the sealed
-  // iframe on demand, keeping the bundle tiny + always fresh. Others bake their snapshot at seed time.
-  const brokerFed = g.needs?.includes("session-data");
-  writeFileSync(join(dir, `${name}.html`), brokerFed ? scaffoldFor(g.scaffold) : seedHtml(scaffoldFor(g.scaffold), input.data));
+  // Bake a REDACTED, self-contained snapshot so the miniapp runs everywhere — offline and on
+  // app.agentgem.ai, which has no capability broker. Broker-fed genres additionally keep their `needs`
+  // (below) so a LOCAL host can later upgrade the baked snapshot to fresh/full data; the scaffold already
+  // renders from the baked <script id="game-data"> and re-renders on an agentgem:feed.
+  writeFileSync(join(dir, `${name}.html`), seedHtml(scaffoldFor(g.scaffold), redactForBake(input.data)));
   const meta: MiniappMeta = { title: name, genre: input.genre, createdFrom: input.createdFrom, engineVersion: "1", ...(g.needs ? { needs: g.needs } : {}) };
   writeFileSync(join(dir, "meta.json"), JSON.stringify(meta, null, 2));
   await commitAll(miniappsRoot(), `seed miniapp ${name}`);

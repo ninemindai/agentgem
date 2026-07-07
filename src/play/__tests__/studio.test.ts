@@ -35,14 +35,19 @@ describe("studio", () => {
     expect(existsSync(join(miniappsRoot(), ".git"))).toBe(true); // committed to the registry repo
     expect(brief).toContain(name);
   });
-  it("seedStudio for a session (replay) is broker-fed: NO baked data, declares session-data need", async () => {
-    const { name } = await seedStudio({ kind: "session", agent: "claude", sessionId: "s1", summary: "auth" }, readers);
+  it("seedStudio for a session (replay) bakes a redacted snapshot AND keeps the session-data need for local upgrade", async () => {
+    const secretReaders: SourceReaders = {
+      ...readers,
+      loadSession: async (id) => ({ sessionId: id, meta: { msgs: 1 }, turns: [{ role: "assistant", text: "used ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345 to push" }] }),
+    };
+    const { name } = await seedStudio({ kind: "session", agent: "claude", sessionId: "s1", summary: "auth" }, secretReaders);
     const dir = join(miniappsRoot(), name);
     const html = readFileSync(join(dir, `${name}.html`), "utf8");
-    expect(html).not.toContain('id="game-data" type="application/json"'); // no baked transcript
-    expect(html).toContain("agentgem:request");                           // asks the host for it instead
+    expect(html).toContain('id="game-data" type="application/json"'); // now baked → runs with no host
+    expect(html).toContain("‹redacted›");                             // the token was scrubbed
+    expect(html).not.toContain("ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345");
     const meta = JSON.parse(readFileSync(join(dir, "meta.json"), "utf8"));
-    expect(meta.needs).toEqual(["session-data"]);
+    expect(meta.needs).toEqual(["session-data"]);                    // still declared for the local upgrade path
   });
   it("blankStudio creates a from-scratch miniapp: blank sealed scaffold, NO baked data, blank provenance", async () => {
     const { name, brief } = await blankStudio("Space Dodger", "a dodge-the-asteroids game");
