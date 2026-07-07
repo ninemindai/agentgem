@@ -17,6 +17,11 @@ jobs:
       matrix:
         os: [macos-latest, windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
+    # Only tag builds (desktop-v*) enter the 'release' environment, which holds the
+    # signing + notarization secrets and is itself tag-restricted to desktop-v*. A
+    # workflow_dispatch run resolves to no environment → no secrets → unsigned test
+    # build, preserving the prior behavior.
+    environment: ${{ startsWith(github.ref, 'refs/tags/desktop-v') && 'release' || '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -27,17 +32,21 @@ jobs:
           node-version: 24
       - run: pnpm install
       - run: pnpm -C desktop install
-      # Build installers only (no publish). Unsigned: signing auto-discovery is
-      # off and the signing vars are intentionally NOT passed — passing an empty
-      # CSC_LINK makes electron-builder attempt (and fail) to load a cert on macOS.
-      #
-      # To enable signing later, add back an env block here with the real secrets:
-      #   CSC_LINK / CSC_KEY_PASSWORD          (cert; both platforms)
-      #   APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID  (macOS notarize)
-      # and set `mac.notarize: true` in electron-builder.yml.
+      # Build installers only (no publish). On desktop-v* tags the 'release'
+      # environment supplies these secrets, so the macOS app is signed with the
+      # Developer ID cert (CSC_LINK) and notarized (mac.notarize is on in
+      # electron-builder.yml). CSC_LINK is a macOS-only cert, so it is fed to the
+      # mac runner only; Windows/Linux (and every off-tag dispatch build) get empty
+      # values and stay unsigned. CSC_IDENTITY_AUTO_DISCOVERY must be off whenever
+      # no cert is supplied, or electron-builder tries (and fails) to find one.
       - run: pnpm -C desktop dist
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          CSC_LINK: ${{ matrix.os == 'macos-latest' && secrets.MAC_CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ matrix.os == 'macos-latest' && secrets.MAC_CSC_KEY_PASSWORD || '' }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ matrix.os == 'macos-latest' && secrets.MAC_CSC_LINK != '' && 'true' || 'false' }}
       - uses: actions/upload-artifact@v4
         with:
           name: installers-${{ matrix.os }}
@@ -67,20 +76,13 @@ jobs:
           set -e
           TAG="${GITHUB_REF_NAME}"
           NOTES=$(cat <<'EOF'
-          Unsigned desktop builds.
+          AgentGem desktop builds.
 
-          **macOS** — these builds are not signed/notarized, so Gatekeeper reports
-          *"AgentGem is damaged and can't be opened."* This is expected; the app is
-          fine. After dragging AgentGem into Applications, clear the quarantine flag:
+          **macOS** — signed with a Developer ID certificate and notarized by Apple,
+          so Gatekeeper opens them normally. Drag AgentGem into Applications and launch.
 
-          ```sh
-          xattr -dr com.apple.quarantine /Applications/AgentGem.app
-          ```
-
-          Then open it normally. (Right-click → Open does **not** clear the
-          "damaged" state — only the quarantine strip above does.)
-
-          **Windows** — SmartScreen: click *More info → Run anyway.*
+          **Windows** — not yet code-signed. SmartScreen may warn: click
+          *More info → Run anyway.*
           EOF
           )
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
