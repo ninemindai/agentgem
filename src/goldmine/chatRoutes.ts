@@ -56,6 +56,9 @@ export interface ChatRouteDeps {
   // Install a missing adapter on demand (CLI only). Throws an error carrying
   // code:"consent_required" when consent is absent; the route maps that to 409.
   installAgent?: (id: string, consent: boolean) => Promise<{ available: boolean; source: string; needsLogin: boolean }>;
+  // Studio auto-checkpoint: commit the miniapp's on-disk state after a successful turn (durability).
+  // Injected so the route stays testable without the real registry. Absent → checkpointing is a no-op.
+  checkpointMiniapp?: (name: string) => Promise<unknown>;
 }
 
 // Pure mapping of a POST /api/chat body to ChatManager.openChat args — extracted so the studio-vs-neutral
@@ -94,6 +97,10 @@ export function installAgentFn(ctx: AdapterCtx, install: AdapterInstaller) {
 const noopGuard: Middleware = (_req, _res, next) => next();
 
 export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middleware = noopGuard): void {
+  // chatId → miniapp name, for studio sessions only. Lets the turn-end handler know which miniapp to
+  // checkpoint. Populated on open, cleared on close. A leaked short string is harmless; we tidy anyway.
+  const chatMiniapps = new Map<string, string>();
+
   // GET /api/agents — list which agents are on PATH
   app.get("/api/agents", guard, (_req, res) => {
     res.json({ agents: deps.listAgents() });
@@ -123,6 +130,8 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middlew
       // path from the request body is ever passed as cwd; without `miniapp` there is no cwd override.
       const args = await studioChatArgs(req.body ?? {}, deps);
       const chatId = await deps.manager.openChat(args);
+      const miniapp = req.body?.miniapp ? String(req.body.miniapp) : "";
+      if (miniapp) chatMiniapps.set(chatId, miniapp);
       res.json({ chatId });
     } catch (e) {
       const msg = (e as Error).message;
@@ -145,13 +154,26 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middlew
     const send = (event: string, data: unknown) =>
       res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 
+    let failed = false;
     try {
       for await (const ev of deps.manager.sendMessage(chatId, message)) {
+        if (ev.type === "failed") failed = true;
         send(ev.type, ev);
       }
     } catch (e) {
+      failed = true;
       send("failed", { error: (e as Error).message });
     }
+
+    // Turn done. For a studio session that did NOT fail, checkpoint the miniapp (durability + opportunistic
+    // gem). The client already received `done`; this runs after and never affects the turn — a checkpoint
+    // failure is logged and swallowed.
+    const miniapp = chatMiniapps.get(chatId);
+    if (!failed && miniapp && deps.checkpointMiniapp) {
+      try { await deps.checkpointMiniapp(miniapp); }
+      catch (e) { console.error(`checkpoint failed for miniapp ${miniapp}:`, (e as Error).message); }
+    }
+
     res.end();
   });
 
@@ -171,6 +193,7 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middlew
   // DELETE /api/chat/:chatId — close + evict the session
   app.delete("/api/chat/:chatId", guard, (req, res) => {
     deps.manager.closeChat(req.params.chatId);
+    chatMiniapps.delete(req.params.chatId);
     res.json({ ok: true });
   });
 }
