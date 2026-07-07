@@ -31,6 +31,8 @@ describe("NotifyBell", () => {
     fireEvent.click(screen.getByRole("button", { name: /notification/i }));
     await waitFor(() => expect(req).toHaveBeenCalled());
     expect(readNotifyPref()).toBe(false);
+    const btn = screen.getByRole("button", { name: /blocked/i });
+    expect(btn.className).toContain("is-blocked");
   });
 
   it("toggles back off when already enabled", () => {

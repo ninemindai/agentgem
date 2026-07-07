@@ -22,7 +22,7 @@ export function NotificationsProvider({ apiBase }: { apiBase: string }): null {
       if (!event || !alive) return;
       dispatch(event, {
         enabled: readNotifyPref(),
-        hidden: document.visibilityState === "hidden",
+        hidden: document.visibilityState === "hidden" || !document.hasFocus(),
         toast: push,
         notify: osNotify,
       });
