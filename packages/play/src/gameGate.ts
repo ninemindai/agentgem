@@ -21,15 +21,39 @@ const DEFAULT_MAX_BYTES = 1_500_000;
 const EXTERNAL_ATTR = /\b(?:src|href)\s*=\s*["'](?!data:|#)(?:https?:)?\/\//i;
 const BARE_IMPORT = /\bimport\s+[^;]*?from\s+["'](?!data:)[^"']+["']/;
 const NETWORK_CALL = /\b(?:fetch|XMLHttpRequest|WebSocket|EventSource|importScripts|navigator\.sendBeacon)\b/;
-// Inert data payloads: <script type="application/json"> (the game-data blob) is NEVER executed by the
-// browser, so words like "fetch" or https:// URLs inside baked session transcripts are content, not code.
-// The syntax scans below run on the EXECUTABLE surface only (size is still measured on the full bundle).
-const INERT_JSON_SCRIPT = /<script\b[^>]*\btype\s*=\s*["']application\/json["'][^>]*>[\s\S]*?<\/script>/gi;
+const JSON_TYPE = /\btype\s*=\s*["']application\/json["']/i;
+
+// Return the html with the CONTENT of inert `<script type="application/json">` elements removed, so the
+// syntax scans below don't false-positive on session-transcript words (a baked game-data blob naturally
+// contains "fetch"/"WebSocket"/https URLs as data). We walk <script> elements the way the HTML tokenizer
+// does — content runs from the tag's ">" to the next literal "</script>" — rather than a raw-text regex.
+// That matters: a regex can start matching a fake `<script type="application/json">` that appears inside a
+// REAL executable script's string literal and delete the executable payload with it; the tokenizer walk
+// cannot, because an executable script's content only ends at a real </script>, so its code is preserved.
+function scannableCode(html: string): string {
+  const lower = html.toLowerCase();
+  let out = "";
+  let i = 0;
+  for (;;) {
+    const open = lower.indexOf("<script", i);
+    if (open === -1) { out += html.slice(i); break; }
+    const gt = html.indexOf(">", open);
+    if (gt === -1) { out += html.slice(i); break; } // malformed open tag → keep the rest, scan it
+    const close = lower.indexOf("</script>", gt);
+    const contentEnd = close === -1 ? html.length : close;
+    const elemEnd = close === -1 ? html.length : close + "</script>".length;
+    out += html.slice(i, gt + 1); // everything up to & including the <script …> open tag (keeps src= attrs)
+    if (!JSON_TYPE.test(html.slice(open, gt + 1))) out += html.slice(gt + 1, contentEnd); // keep executable body
+    out += html.slice(contentEnd, elemEnd); // the </script>
+    i = elemEnd;
+  }
+  return out;
+}
 
 export function staticGate(html: string, opts: GateOptions = {}): GateResult {
   const failures: string[] = [];
   const maxBytes = opts.maxBytes ?? DEFAULT_MAX_BYTES;
-  const code = html.replace(INERT_JSON_SCRIPT, ""); // strip inert data before scanning for code syntax
+  const code = scannableCode(html); // drop inert data content before scanning for code syntax
 
   if (Buffer.byteLength(html, "utf8") > maxBytes) {
     failures.push(`bundle exceeds size budget (${maxBytes} bytes)`);

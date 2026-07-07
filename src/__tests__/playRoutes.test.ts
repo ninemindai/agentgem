@@ -39,4 +39,10 @@ describe("PlayController", () => {
     const res = await ctrl.import({ body: { title: "wip", html: `<body><script>fetch("http://x/")</script></body>` } });
     expect(res.name).toBe("wip"); // import succeeds; Save would reject until the fetch is removed
   });
+
+  it("a '.git' title slugs to a safe name, not a dotfile dir", async () => {
+    const ctrl = new PlayController();
+    const res = await ctrl.import({ body: { title: ".git", html: "<body>x</body>" } });
+    expect(res.name).toBe("git"); // leading dots stripped
+  });
 });

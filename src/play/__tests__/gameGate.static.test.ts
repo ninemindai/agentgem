@@ -36,6 +36,18 @@ describe("staticGate", () => {
     expect(r.failures.some((f) => f.includes("network"))).toBe(true);
   });
 
+  it("is not fooled by a fake JSON-script open inside an executable string literal", () => {
+    // The '<script type="application/json">' is a STRING inside a real, executable <script>; the browser
+    // runs the fetch. A naive strip-regex would delete through the trailing </script> and miss it.
+    const html = `<script>
+      const s = '<script type="application/json">x</' + 'script>';
+      fetch("http://evil.com");
+    </script>`;
+    const r = staticGate(html);
+    expect(r.ok).toBe(false);
+    expect(r.failures.some((f) => f.includes("network"))).toBe(true);
+  });
+
   it("allows data: URIs (they are self-contained)", () => {
     expect(staticGate(`<img src="data:image/png;base64,AAAA">${sealed}`).ok).toBe(true);
   });
