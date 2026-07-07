@@ -2,7 +2,11 @@
 // SPDX-License-Identifier: MIT
 // src/gem/__tests__/watchHygieneNudge.test.ts
 import { describe, it, expect } from "vitest";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { nudgeTransition, buildTickEvents, CURVE_TAIL_MAX, type Verdict } from "../../watchHygieneNudge.js";
+import { hygieneReportForFile } from "../../sessionHygieneCore.js";
 import type { HygieneReport } from "../../sessionHygieneCore.js";
 
 describe("nudgeTransition", () => {
@@ -61,5 +65,40 @@ describe("buildTickEvents", () => {
   it("keeps the whole curve when shorter than the tail cap", () => {
     const t = buildTickEvents("bounded", report("bounded", 12));
     expect(t.hygiene.curveTail.length).toBe(12);
+  });
+});
+
+function writeClaudeTranscript(dir: string, turns: number): string {
+  const lines: string[] = [JSON.stringify({ sessionId: "live1", type: "user", message: { role: "user", content: "go" } })];
+  for (let i = 0; i < turns; i++) lines.push(JSON.stringify({
+    type: "assistant",
+    message: {
+      role: "assistant", model: "claude-opus-4-8[1m]",
+      content: [{ type: "tool_use", name: "Read", input: { file_path: `packages/p${i}/f.ts` } }],
+      usage: { input_tokens: 100, cache_read_input_tokens: 400_000 + i * 1000, cache_creation_input_tokens: 2000, output_tokens: 10 },
+    },
+  }));
+  const p = join(dir, "live1.jsonl");
+  writeFileSync(p, lines.join("\n"));
+  return p;
+}
+
+describe("hygieneReportForFile", () => {
+  it("produces a populated curve + verdict from a real transcript file", () => {
+    const dir = mkdtempSync(join(tmpdir(), "watchhyg-"));
+    const path = writeClaudeTranscript(dir, 3);
+    const rep = hygieneReportForFile(path);
+    expect(rep.curve).toHaveLength(3);
+    expect(rep.curve[0].ctxTokens).toBe(402_100);      // 100 + 400000 + 2000
+    expect(rep.meta.cap).toBe(1_000_000);
+    expect(["bounded", "mixed", "bloated"]).toContain(rep.hygiene.verdict);
+  });
+  it("returns an empty curve (no throw) for a file with no assistant turns", () => {
+    const dir = mkdtempSync(join(tmpdir(), "watchhyg2-"));
+    const p = join(dir, "empty.jsonl");
+    writeFileSync(p, JSON.stringify({ sessionId: "e", type: "user", message: { role: "user", content: "hi" } }));
+    const rep = hygieneReportForFile(p);
+    expect(rep.curve).toEqual([]);
+    expect(rep.hygiene.verdict).toBe("bounded");
   });
 });
