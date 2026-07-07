@@ -6,7 +6,7 @@ export interface AgentGemBridge {
 // present and needs no permission; in a plain browser we fall back to the
 // Notification API (only fires once the user has granted permission).
 export function osNotify(title: string, body: string): void {
-  const bridge = (window as unknown as { agentgem?: AgentGemBridge }).agentgem;
+  const bridge = window.agentgem;
   if (bridge?.notify) {
     bridge.notify(title, body);
     return;
