@@ -12,6 +12,7 @@ export function Studio({ apiBase, name, onBack }: { apiBase: string; name: strin
   const [log, setLog] = useState("");        // rolling agent output
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [working, setWorking] = useState(""); // live activity label while a turn is in flight
   const [html, setHtml] = useState("");      // live preview source
   const [meta, setMeta] = useState<{ title: string; genre: string } | null>(null);
   const [status, setStatus] = useState("");
@@ -30,9 +31,19 @@ export function Studio({ apiBase, name, onBack }: { apiBase: string; name: strin
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiBase, name]);
 
+  // Short human label for the current activity, so the indicator says what the agent is doing.
+  function activity(tool: { kind?: string; title?: string }): string {
+    switch (tool.kind) {
+      case "execute": return "running a command…";
+      case "read": return "reading files…";
+      case "edit": return "editing the miniapp…";
+      default: return "working…";
+    }
+  }
+
   async function send() {
     if (!input.trim() || busy || !agentId) return;
-    setBusy(true); setLog((l) => l + `\n\n> ${input}\n`);
+    setBusy(true); setWorking("thinking…"); setLog((l) => l + `\n\n> ${input}\n`);
     try {
       let id = chatId;
       if (!id) {
@@ -44,10 +55,10 @@ export function Studio({ apiBase, name, onBack }: { apiBase: string; name: strin
       }
       const message = input; setInput("");
       closeRef.current = openStudioStream(apiBase, id, message, {
-        onDelta: (t) => setLog((l) => l + t),
-        onTool: (tool) => setLog((l) => l + `\n🔧 ${tool.title ?? tool.kind ?? "tool"}${tool.status === "failed" ? " (failed)" : ""}\n`),
-        onDone: async () => { setBusy(false); await refresh(); },  // live preview updates as the agent edits
-        onFailed: (e) => { setBusy(false); setStatus(`error: ${e}`); },
+        onDelta: (t) => { setWorking("responding…"); setLog((l) => l + t); },
+        onTool: (tool) => { setWorking(activity(tool)); setLog((l) => l + `\n🔧 ${tool.title ?? tool.kind ?? "tool"}${tool.status === "failed" ? " (failed)" : ""}\n`); },
+        onDone: async () => { setBusy(false); setWorking(""); await refresh(); },  // live preview updates as the agent edits
+        onFailed: (e) => { setBusy(false); setWorking(""); setStatus(`error: ${e}`); },
       });
     } catch (e) { setBusy(false); setStatus(`error: ${(e as Error).message}`); }
   }
@@ -88,6 +99,12 @@ export function Studio({ apiBase, name, onBack }: { apiBase: string; name: strin
         <Runner html={html} height={420} />
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <pre className="ledger-view" style={{ height: 360, overflow: "auto", whiteSpace: "pre-wrap", margin: 0 }}>{log || "Ask the agent to build or change the miniapp…"}</pre>
+          {busy && (
+            <div className="studio-thinking">
+              <span className="dots"><i /><i /><i /></span>
+              <span>{working || "working…"}</span>
+            </div>
+          )}
           <div style={{ display: "flex", gap: 8 }}>
             <input className="ledger-search" style={{ flex: 1, marginBottom: 0 }} placeholder="ask the agent to build/edit…"
               value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") send(); }} />
