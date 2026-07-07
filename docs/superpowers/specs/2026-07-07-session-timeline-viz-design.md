@@ -131,6 +131,13 @@ markers and flamestrip cells never drift.
 - **Very long runs (800+ turns):** chart uses a `viewBox` with min-width and a
   horizontal-scroll container; markers are drawn only for skill/agent/prompt events
   (not every turn) to avoid clutter — same approach validated in the mockup.
+- **Right-rail height vs. chart:** the folded rail stacks verdict + hygiene factors
+  + ranked jumps, so on a heavily-bloated session it can grow taller than the chart,
+  and on a short/clean session it can look sparse next to it. Cap the jumps list
+  (top ~4) and the factors list to fired-only; if the rail still overflows the
+  chart height, let it scroll within its own column rather than stretching the card.
+  On narrow viewports the rail wraps below the chart (already the grid fallback), so
+  this only matters at the two-column breakpoint.
 
 ## Testing
 
