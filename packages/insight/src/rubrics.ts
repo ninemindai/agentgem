@@ -180,6 +180,19 @@ export function builtinRubrics(): Rubric[] {
         { factor: "no-verify-finish" },
       ],
     },
+    {
+      id: "context-hygiene",
+      title: "Context hygiene",
+      target: "overview",
+      naturalScope: "all",
+      factors: [
+        { factor: "task-sprawl" },
+        { factor: "task-pingpong" },
+        { factor: "reread-churn" },
+        { factor: "context-pinned" },
+        { factor: "cache-churn-late" },
+      ],
+    },
   ];
 }
 
