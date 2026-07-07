@@ -32,4 +32,19 @@ describe("Toast", () => {
     fireEvent.click(screen.getByLabelText("Dismiss"));
     expect(screen.queryByText("hello world")).toBeNull();
   });
+
+  it("cancels the pending auto-dismiss timer on manual dismiss", () => {
+    vi.useFakeTimers();
+    const clearSpy = vi.spyOn(globalThis, "clearTimeout");
+    render(<ToastProvider><Trigger /></ToastProvider>);
+    fireEvent.click(screen.getByText("go"));
+    fireEvent.click(screen.getByLabelText("Dismiss"));
+    expect(clearSpy).toHaveBeenCalled();
+    expect(screen.queryByText("hello world")).toBeNull();
+    // Advancing past the original TTL must not throw or warn about updating
+    // an already-removed toast (the timer was cancelled, not just outrun).
+    act(() => { vi.advanceTimersByTime(6000); });
+    expect(screen.queryByText("hello world")).toBeNull();
+    clearSpy.mockRestore();
+  });
 });
