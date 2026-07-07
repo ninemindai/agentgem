@@ -506,6 +506,23 @@ export const hygieneRoute = defineRoute("GET", "/api/inspect/session/hygiene", {
 });
 export type HygieneReport = z.infer<typeof HygieneReportSchema>;
 
+// Mirrors the server SessionSummarySchema (src/gem.controller.ts) exactly.
+export const SessionSummarySchema = z.object({
+  sessionId: z.string(), agent: z.string(),
+  project: z.string().nullable(), model: z.string().nullable(), gitBranch: z.string().nullable(),
+  startMs: z.number(), endMs: z.number(), durationMs: z.number(),
+  msgs: z.number(), tokensIn: z.number(), tokensOut: z.number(), tokensCache: z.number(),
+  process: z.object({ score: z.number(), label: z.enum(["disciplined", "loose", "chaotic"]),
+    stages: z.object({ exploration: z.number(), implementation: z.number(), verification: z.number(), orchestration: z.number(), other: z.number() }) }).nullable(),
+  findings: z.array(z.object({ id: z.string(), title: z.string(), advice: z.string(), severity: z.enum(["info", "warn"]), count: z.number(), sessions: z.number() })),
+  events: z.object({ toolCalls: z.array(z.object({ name: z.string(), count: z.number() })), filesTouched: z.number(), edits: z.number(), verifications: z.number() }).nullable(),
+});
+export const processRoute = defineRoute("GET", "/api/inspect/session/process", {
+  query: z.object({ id: z.string(), agent: z.enum(["claude", "codex"]) }),
+  response: SessionSummarySchema,
+});
+export type SessionSummary = z.infer<typeof SessionSummarySchema>;
+
 // "Distill this session" (phase 3): runs the workflow scan + distill pipeline over
 // one session, returning draft skills. Mirrors the server DistilledSkillSchema so a
 // draft round-trips back to /workflow/draft unchanged.

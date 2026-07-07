@@ -107,8 +107,9 @@ but does not claim anything about task success; AgentGem observes process, not p
 
 The detectors already surface through the existing findings consumers
 (`insightsCore`, `behaviorFindings`, `rubricReport`); you see them in the
-**Findings** section of the rubric report today. **Note:** displaying the `ProcessQuality`
-score itself in the console scorecard or goldmine UI is a follow-up proposal, not yet built.
+**Findings** section of the rubric report today. The `ProcessQuality` score itself is
+also shown as a **Process quality** card in the session drill-down (Inspect → Session),
+alongside the context-hygiene card.
 
 ## Distilled skills
 

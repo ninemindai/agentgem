@@ -14,6 +14,7 @@ import { Loading } from "../../shell/Loading.js";
 import { setPendingContribution } from "../../pendingAnalyze.js";
 import { QuickShareButton } from "../_shared/QuickShareButton.js";
 import { HygieneReport } from "./HygieneReport.js";
+import { ProcessQualityReport } from "./ProcessQualityReport.js";
 
 export function TranscriptViewer({ apiBase, agent, sessionId, onBack }: {
   apiBase: string; agent: "claude" | "codex"; sessionId: string; onBack: () => void;
@@ -65,6 +66,7 @@ export function TranscriptViewer({ apiBase, agent, sessionId, onBack }: {
       </div>
 
       {view && <HygieneReport apiBase={apiBase} agent={agent} sessionId={view.sessionId} />}
+      {view && <ProcessQualityReport apiBase={apiBase} agent={agent} sessionId={view.sessionId} />}
       {view && <DistillSection apiBase={apiBase} agent={agent} sessionId={view.sessionId} turns={view.turns} />}
 
       {error ? (

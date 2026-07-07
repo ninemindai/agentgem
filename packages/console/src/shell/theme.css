@@ -1029,6 +1029,24 @@ button.scorecard-intent { line-height: 1.4; }
   padding: 0 2px;
 }
 
+.pq { margin-top: 16px; }
+.pq-head { font: 600 11px/1 var(--font-ui); text-transform: uppercase; letter-spacing: .09em; color: var(--muted); margin-bottom: 8px; }
+.pq-verdict { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+.pq-score { font: 700 20px/1 var(--font-display); font-optical-sizing: auto; }
+.pq-word { font: 600 11px/1 var(--font-ui); text-transform: uppercase; letter-spacing: .08em; }
+.pq-verdict.is-disciplined .pq-score, .pq-verdict.is-disciplined .pq-word { color: var(--emerald); }
+.pq-verdict.is-loose .pq-score, .pq-verdict.is-loose .pq-word { color: var(--gold); }
+.pq-verdict.is-chaotic .pq-score, .pq-verdict.is-chaotic .pq-word { color: var(--accent); }
+.pq-stagebar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin: 0 0 8px; background: var(--line, #ddd); }
+.pq-stage { height: 100%; }
+.pq-stage.is-exploration { background: var(--gold); }
+.pq-stage.is-implementation { background: var(--accent); }
+.pq-stage.is-verification { background: var(--emerald); }
+.pq-stage.is-orchestration { background: var(--muted); }
+.pq-factors { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.pq-factors li { font-size: 12.5px; color: var(--ink-soft); }
+.pq-factors b { font-weight: 600; }
+
 /* distill-this-session CTA + draft cards */
 .tv-distill { margin: 0 0 16px; display: flex; flex-direction: column; gap: 8px; }
 .tv-distill-btn {
