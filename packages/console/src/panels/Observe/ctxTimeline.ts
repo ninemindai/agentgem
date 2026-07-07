@@ -1,5 +1,5 @@
 import type { HygieneReport } from "../../api/routes.js";
-import { catOf, type ToolCategory } from "./toolCategory.js";
+import { type ToolCategory } from "./toolCategory.js";
 
 export interface Marker { x: number; kind: "skill" | "agent"; name: string }
 export interface Jump { turn: number; delta: number; ctx: number; cause: string; category: ToolCategory }
