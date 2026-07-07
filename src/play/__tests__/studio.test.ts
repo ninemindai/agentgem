@@ -22,6 +22,8 @@ describe("studio", () => {
     expect(studioCwd(mini, fallback)).toBe(mini);
     expect(studioCwd("/etc", fallback)).toBe(fallback);
     expect(studioCwd(undefined, fallback)).toBe(fallback);
+    // a path that only textually starts with the root but escapes it must NOT be honored
+    expect(studioCwd(join(miniappsRoot(), "..", "..", "etc"), fallback)).toBe(fallback);
   });
   it("seedStudio creates + seeds a miniapp dir (scaffold + injected data + meta + commit)", async () => {
     const { name, brief } = await seedStudio({ kind: "project", path: "/p/my-proj", flavor: "node" }, readers);

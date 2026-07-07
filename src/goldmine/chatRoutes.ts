@@ -94,7 +94,9 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middlew
       res.json({ chatId });
     } catch (e) {
       const msg = (e as Error).message;
-      res.status(msg === "agentId required" ? 400 : 500).json({ error: msg });
+      // Client errors (missing agentId, a bad/unknown miniapp name) → 400; anything else → 500.
+      const clientErr = msg === "agentId required" || msg === "studio not available" || msg.startsWith("invalid miniapp name");
+      res.status(clientErr ? 400 : 500).json({ error: msg });
     }
   });
 
