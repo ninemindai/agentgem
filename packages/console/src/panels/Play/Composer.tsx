@@ -32,7 +32,8 @@ export function Composer({
   agents: PlayAgent[] | null;
   agentId: string;
   onAgentIdChange: (agentId: string) => void;
-  onCreated: (name: string) => void;
+  // seedPrompt (only from the Blank tab's description) is auto-sent as the studio's first build prompt.
+  onCreated: (name: string, seedPrompt?: string) => void;
 }) {
   const [kind, setKind] = useState<Kind>("project");
   const [projects, setProjects] = useState<Proj[] | null>(null);
@@ -87,8 +88,9 @@ export function Composer({
     if (busy || !blankTitle.trim()) return;
     setBusy(true); setError("");
     try {
-      const res = await playBlankRoute.call(makeClient(apiBase), { body: { title: blankTitle.trim(), ...(blankPrompt.trim() ? { prompt: blankPrompt.trim() } : {}) } });
-      onCreated(res.name);
+      const res = await playBlankRoute.call(makeClient(apiBase), { body: { title: blankTitle.trim() } });
+      // The description isn't baked server-side; it's auto-sent as the studio's first build prompt.
+      onCreated(res.name, blankPrompt.trim() || undefined);
     } catch (e) { setError((e as Error).message); setBusy(false); }
   }
 
@@ -155,10 +157,10 @@ export function Composer({
 
       {kind === "blank" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <p className="play-intro" style={{ margin: 0 }}>Start from scratch — no source context. Name it, optionally describe what you want, then build it by chatting in the studio.</p>
+          <p className="play-intro" style={{ margin: 0 }}>Start from scratch — no source context. Name it and describe what you want; the studio agent starts building from your description. Leave the description blank to build by chatting instead.</p>
           <input className="play-input" placeholder="title" value={blankTitle} onChange={(e) => setBlankTitle(e.target.value)} />
           <textarea className="play-input" style={{ minHeight: 120 }}
-            placeholder="(optional) describe the mini-game you want to build…" value={blankPrompt} onChange={(e) => setBlankPrompt(e.target.value)} />
+            placeholder="describe the mini-game you want — sent as the first build prompt…" value={blankPrompt} onChange={(e) => setBlankPrompt(e.target.value)} />
           <button className="play-btn play-btn--primary" style={{ alignSelf: "flex-start" }} disabled={busy || !blankTitle.trim()} onClick={doBlank}>
             {busy ? "Creating…" : "Create miniapp"}
           </button>

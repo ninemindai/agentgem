@@ -6,7 +6,7 @@ import { Arcade } from "./Arcade.js";
 import { Composer } from "./Composer.js";
 import { Studio } from "./Studio.js";
 
-type View = { kind: "arcade" } | { kind: "composer" } | { kind: "studio"; name: string };
+type View = { kind: "arcade" } | { kind: "composer" } | { kind: "studio"; name: string; seedPrompt?: string };
 const j = (r: Response) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); };
 
 export function Play({ apiBase }: { apiBase: string }) {
@@ -30,8 +30,8 @@ export function Play({ apiBase }: { apiBase: string }) {
         </div>
       )}
       {view.kind === "arcade" && <Arcade apiBase={apiBase} onOpen={(name) => setView({ kind: "studio", name })} />}
-      {view.kind === "composer" && <Composer apiBase={apiBase} agents={agents} agentId={agentId} onAgentIdChange={setAgentId} onCreated={(name) => setView({ kind: "studio", name })} />}
-      {view.kind === "studio" && <Studio apiBase={apiBase} name={view.name} agents={agents} agentId={agentId} onAgentIdChange={setAgentId} onBack={() => setView({ kind: "arcade" })} />}
+      {view.kind === "composer" && <Composer apiBase={apiBase} agents={agents} agentId={agentId} onAgentIdChange={setAgentId} onCreated={(name, seedPrompt) => setView({ kind: "studio", name, seedPrompt })} />}
+      {view.kind === "studio" && <Studio apiBase={apiBase} name={view.name} seedPrompt={view.seedPrompt} agents={agents} agentId={agentId} onAgentIdChange={setAgentId} onBack={() => setView({ kind: "arcade" })} />}
     </section>
   );
 }

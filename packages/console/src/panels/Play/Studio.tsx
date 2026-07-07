@@ -14,6 +14,7 @@ type Msg = { role: "user" | "agent"; text: string } | { role: "tool"; title: str
 export function Studio({
   apiBase,
   name,
+  seedPrompt,
   agents,
   agentId,
   onAgentIdChange,
@@ -21,6 +22,8 @@ export function Studio({
 }: {
   apiBase: string;
   name: string;
+  // When a blank miniapp was created with a description, it's auto-sent as the first build prompt.
+  seedPrompt?: string;
   agents: PlayAgent[] | null;
   agentId: string;
   onAgentIdChange: (agentId: string) => void;
@@ -38,6 +41,7 @@ export function Studio({
   const [share, setShare] = useState<{ gemUrl: string; cardUrl?: string } | null>(null);
   const closeRef = useRef<null | (() => void)>(null);
   const logRef = useRef<HTMLDivElement>(null);
+  const seededRef = useRef(false);   // guards the one-shot seed-prompt auto-send
 
   const refresh = () =>
     playMiniappRoute.call(makeClient(apiBase), { query: { name } })
@@ -48,6 +52,15 @@ export function Studio({
     return () => closeRef.current?.();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiBase, name]);
+
+  // Kick off the build from the blank-tab description: send it as the first chat message, once an agent
+  // is ready. One-shot (seededRef) so it never re-fires when the agent list resolves or agent changes.
+  useEffect(() => {
+    if (seededRef.current || !seedPrompt || !agentId) return;
+    seededRef.current = true;
+    send(seedPrompt);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seedPrompt, agentId]);
 
   useEffect(() => { logRef.current?.scrollTo?.({ top: logRef.current.scrollHeight }); }, [msgs, working]); // scrollTo absent in jsdom
 

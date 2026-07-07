@@ -50,7 +50,7 @@ describe("Composer", () => {
     expect(imp.mock.calls[0][1]).toMatchObject({ body: { title: "My Game", html: "<h1>hi</h1>" } });
   });
 
-  it("switches to the Blank tab and creates a from-scratch miniapp (title + optional prompt)", async () => {
+  it("switches to the Blank tab and threads the description to the studio as a seed prompt", async () => {
     vi.spyOn(testbedProjectsRoute, "call").mockResolvedValue({ projects: [] } as never);
     const blank = vi.spyOn(playBlankRoute, "call").mockResolvedValue({ name: "space-dodger" });
     const onCreated = vi.fn();
@@ -59,11 +59,12 @@ describe("Composer", () => {
     fireEvent.change(screen.getByPlaceholderText("title"), { target: { value: "Space Dodger" } });
     fireEvent.change(screen.getByPlaceholderText(/describe the mini-game/i), { target: { value: "dodge asteroids" } });
     fireEvent.click(screen.getByText("Create miniapp"));
-    await waitFor(() => expect(onCreated).toHaveBeenCalledWith("space-dodger"));
-    expect(blank.mock.calls[0][1]).toMatchObject({ body: { title: "Space Dodger", prompt: "dodge asteroids" } });
+    // The description is threaded to onCreated (auto-sent as the studio's first prompt), NOT baked server-side.
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith("space-dodger", "dodge asteroids"));
+    expect(blank.mock.calls[0][1]).toEqual({ body: { title: "Space Dodger" } });
   });
 
-  it("Blank tab omits the prompt when left empty", async () => {
+  it("Blank tab threads no seed prompt when the description is left empty", async () => {
     vi.spyOn(testbedProjectsRoute, "call").mockResolvedValue({ projects: [] } as never);
     const blank = vi.spyOn(playBlankRoute, "call").mockResolvedValue({ name: "untitled" });
     const onCreated = vi.fn();
@@ -71,7 +72,7 @@ describe("Composer", () => {
     fireEvent.click(screen.getByText("Blank"));
     fireEvent.change(screen.getByPlaceholderText("title"), { target: { value: "Untitled" } });
     fireEvent.click(screen.getByText("Create miniapp"));
-    await waitFor(() => expect(onCreated).toHaveBeenCalledWith("untitled"));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith("untitled", undefined));
     expect(blank.mock.calls[0][1]).toEqual({ body: { title: "Untitled" } });
   });
 
