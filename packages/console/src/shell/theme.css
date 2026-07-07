@@ -1403,3 +1403,11 @@ button.scorecard-intent { line-height: 1.4; }
 .notify-bell:hover { opacity: 1; background: rgba(154, 51, 36, .06); }
 .notify-bell.is-on { opacity: 1; }
 .notify-bell.is-blocked { opacity: .4; cursor: not-allowed; }
+
+/* Play capability-consent prompt (overlays the sealed game when it requests a gated capability) */
+.play-consent { position: absolute; inset: 0; z-index: 1002; display: grid; place-items: center; background: rgba(12,10,18,.72); }
+.play-consent__box { max-width: 340px; margin: 16px; padding: 18px 18px 16px; text-align: center; background: var(--raised); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-md); }
+.play-consent__ico { font-size: 24px; margin-bottom: 6px; }
+.play-consent__title { font: 600 14px var(--font-ui); color: var(--ink); line-height: 1.35; }
+.play-consent__sub { font-size: 12px; color: var(--ink-soft); margin: 8px 0 14px; line-height: 1.45; }
+.play-consent__btns { display: flex; gap: 8px; justify-content: center; }
