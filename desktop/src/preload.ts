@@ -7,11 +7,15 @@ import { contextBridge, ipcRenderer } from "electron";
 // source the main process imports).
 const PICK_FOLDER = "agentgem:pick-folder";
 const UPDATE_EVENT = "agentgem:update";
+const NOTIFY = "agentgem:notify";
 
 // contextIsolation is on; expose only a minimal, typed surface to the page.
 contextBridge.exposeInMainWorld("agentgem", {
   pickFolder: (): Promise<{ path: string | null }> => ipcRenderer.invoke(PICK_FOLDER),
   onUpdate: (cb: (info: { status: string }) => void): void => {
     ipcRenderer.on(UPDATE_EVENT, (_e, info) => cb(info));
+  },
+  notify: (title: string, body: string): void => {
+    ipcRenderer.send(NOTIFY, { title, body });
   },
 });

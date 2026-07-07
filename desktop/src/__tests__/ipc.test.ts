@@ -2,12 +2,16 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { PICK_FOLDER, UPDATE_EVENT, pickFolderResult } from "../ipc.js";
+import { PICK_FOLDER, UPDATE_EVENT, NOTIFY, pickFolderResult } from "../ipc.js";
 
 describe("ipc channels", () => {
   it("uses stable, namespaced channel names", () => {
     expect(PICK_FOLDER).toBe("agentgem:pick-folder");
     expect(UPDATE_EVENT).toBe("agentgem:update");
+  });
+
+  it("defines the notify channel", () => {
+    expect(NOTIFY).toBe("agentgem:notify");
   });
 
   // preload.ts must inline these (a sandboxed preload can't import ./ipc.js).
@@ -19,6 +23,7 @@ describe("ipc channels", () => {
     );
     expect(preload).toContain(`const PICK_FOLDER = "${PICK_FOLDER}"`);
     expect(preload).toContain(`const UPDATE_EVENT = "${UPDATE_EVENT}"`);
+    expect(preload).toContain(`const NOTIFY = "${NOTIFY}"`);
   });
 });
 

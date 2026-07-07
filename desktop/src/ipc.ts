@@ -2,6 +2,7 @@
 // imports so it is unit-testable in a plain node environment.
 export const PICK_FOLDER = "agentgem:pick-folder";
 export const UPDATE_EVENT = "agentgem:update";
+export const NOTIFY = "agentgem:notify";
 
 export function pickFolderResult(r: { canceled: boolean; filePaths: string[] }): {
   path: string | null;
