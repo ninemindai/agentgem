@@ -52,22 +52,31 @@ function replayScaffold(): string {
 <title>Session Replay</title>
 <style>
   :root { color-scheme: dark; }
-  html,body { height:100%; margin:0; background:#0d1117; color:#e8edf4; font:14px/1.5 system-ui, sans-serif; }
-  #wrap { max-width:900px; margin:0 auto; padding:20px; box-sizing:border-box; }
-  h1 { font-size:20px; margin:0 0 2px; } .sub { color:#8b98ac; font-size:12px; margin-bottom:16px; }
-  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:10px; margin-bottom:16px; }
-  .tile { background:#161d29; border:1px solid #232c3b; border-radius:10px; padding:10px 12px; }
-  .tile b { font-size:20px; display:block; font-variant-numeric:tabular-nums; } .tile span { color:#8b98ac; font-size:11px; text-transform:uppercase; letter-spacing:.08em; }
-  .tools { margin-bottom:16px; } .toolrow { display:flex; align-items:center; gap:8px; margin:3px 0; }
-  .toolrow .n { width:120px; font-size:12px; color:#cdd6e4; } .toolrow .bar { height:12px; background:#3b82f6; border-radius:3px; min-width:2px; }
-  .toolrow .c { font-size:11px; color:#8b98ac; }
-  #stage { background:#161d29; border:1px solid #232c3b; border-radius:10px; padding:16px; min-height:120px; }
-  #stage .role { font:600 12px system-ui; text-transform:uppercase; letter-spacing:.1em; }
-  #stage .role.user { color:#10b981; } #stage .role.assistant { color:#818cf8; }
-  #stage .text { margin-top:8px; white-space:pre-wrap; }
-  #controls { display:flex; align-items:center; gap:12px; margin-top:12px; }
-  #controls button { background:#3b82f6; color:#fff; border:0; border-radius:8px; padding:8px 14px; cursor:pointer; font:600 14px system-ui; }
-  #scrub { flex:1; } #count { color:#8b98ac; font-size:12px; font-variant-numeric:tabular-nums; }
+  html,body { height:100%; margin:0; overflow:hidden; color:#e8edf4; font:14px/1.5 system-ui, sans-serif;
+    background:radial-gradient(120% 90% at 50% 0%, #16121f, #0b0a12 72%); }
+  #wrap { max-width:760px; margin:0 auto; padding:18px; box-sizing:border-box; height:100%; display:flex; flex-direction:column; }
+  .wait { display:grid; place-items:center; height:100%; color:#8b98ac; font-size:15px; }
+  .title { font:700 18px Georgia, serif; letter-spacing:.5px; text-align:center; }
+  .title .sub { display:block; font:600 11px system-ui; letter-spacing:.14em; text-transform:uppercase; color:#8b7bb8; margin-top:3px; }
+  .arena { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:10px; margin:14px 0; }
+  .fighter { background:#161225; border:1px solid #2a2340; border-radius:12px; padding:12px; text-align:center; }
+  .fighter.hit { animation:shake .3s; }
+  .fighter.turn { border-color:#7c5cff; box-shadow:0 0 0 1px #7c5cff, 0 10px 26px -14px #7c5cff; }
+  .ava { font-size:40px; line-height:1; filter:drop-shadow(0 4px 10px rgba(0,0,0,.5)); }
+  .nm { font:600 14px system-ui; margin:6px 0 8px; } .nm span { display:block; font:600 10px system-ui; text-transform:uppercase; letter-spacing:.1em; color:#8b98ac; }
+  .hpbar { height:12px; background:#0c0a14; border:1px solid #2a2340; border-radius:99px; overflow:hidden; }
+  .hp { height:100%; width:100%; background:linear-gradient(90deg,#31d07a,#7ee787); transition:width .35s cubic-bezier(.2,.8,.2,1); }
+  .hp.low { background:linear-gradient(90deg,#e0533b,#ff8a5c); }
+  .hpn { font:600 11px system-ui; color:#cdd6e4; margin-top:5px; font-variant-numeric:tabular-nums; }
+  .vs { font:800 15px Georgia, serif; color:#e0533b; text-shadow:0 0 12px rgba(224,83,59,.6); }
+  .log { flex:1; overflow:auto; background:#100d1c; border:1px solid #241d38; border-radius:12px; padding:10px 12px; display:flex; flex-direction:column; gap:5px; min-height:70px; }
+  .line { font:500 12.5px system-ui; opacity:.92; } .line b { font-weight:700; }
+  .line.h { color:#7ee787; } .line.a { color:#a6b0ff; }
+  .win { text-align:center; font:800 16px Georgia, serif; min-height:20px; margin:6px 0; }
+  .ctl { display:flex; align-items:center; gap:10px; }
+  .ctl button { background:#7c5cff; color:#fff; border:0; border-radius:9px; padding:8px 16px; cursor:pointer; font:700 13px system-ui; }
+  #scrub { flex:1; accent-color:#7c5cff; } .cnt { font:600 11px system-ui; color:#8b98ac; font-variant-numeric:tabular-nums; }
+  @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-5px)} 75%{transform:translateX(5px)} }
 </style></head>
 <body>
   <div id="wrap"><div id="app"></div></div>
@@ -93,35 +102,64 @@ function replayScaffold(): string {
     function requestData() { try { if (window.parent && window.parent !== window) window.parent.postMessage({ type: "agentgem:request", want: "session-data" }, "*"); } catch (e) {} }
 
     // ==== AGENTGEM:GAME-LOGIC START ====
-    // A real, playable session replay from DATA ({meta, timeline}). The studio agent enhances this.
+    // The coding session, replayed as an RPG DUEL: You (the Human) vs the AI Agent, driven by DATA
+    // ({meta, timeline}). User turns are your attacks, assistant turns are the agent's. The studio agent
+    // can re-theme this block. (fmtDur/num above are unused by this genre — left for other themings.)
+    const HUMAN_ATK = ["Scope Creep","Rubber Duck","Coffee Refill","Stack Overflow","Git Blame","Rage Quit","Hotfix","Requirements Change","Code Review","Deadline Crunch"];
+    const AGENT_ATK = ["Refactor","Hallucination","Token Overflow","Context Window","Confident Guess","Infinite Loop","Verbose Reply","Edge Case","Unit Test","Semicolon Fix"];
+    let hitTimer = 0;
     function boot() {
       if (timer) { clearInterval(timer); timer = 0; }
       const meta = DATA.meta || {};
       const timeline = Array.isArray(DATA.timeline) ? DATA.timeline : [];
-      if (!timeline.length) { app.innerHTML = '<h1>Session Replay</h1><div class="sub">Waiting for session data…</div>'; return; }
-      const tools = meta.tools || {};
-      const toolEntries = Object.keys(tools).map((k) => [k, tools[k]]).sort((a,b) => b[1]-a[1]);
-      const maxTool = toolEntries.reduce((m,e) => Math.max(m, e[1]), 1);
-      const tile = (v, l) => '<div class="tile"><b>' + v + '</b><span>' + l + '</span></div>';
-      app.innerHTML =
-        '<h1>' + esc(meta.project || "Session Replay") + '</h1>' +
-        '<div class="sub">' + [meta.model, meta.gitBranch, fmtDur((meta.endMs||0)-(meta.startMs||0))].filter(Boolean).map(esc).join(" · ") + '</div>' +
-        '<div class="tiles">' + tile(num(meta.msgs || timeline.length), "messages") + tile(num(meta.tokensIn), "tokens in") + tile(num(meta.tokensOut), "tokens out") + tile(num(toolEntries.length), "tool kinds") + '</div>' +
-        (toolEntries.length ? '<div class="tools">' + toolEntries.map((e) => '<div class="toolrow"><span class="n">' + esc(e[0]) + '</span><span class="bar" style="width:' + Math.round(e[1]/maxTool*260) + 'px"></span><span class="c">' + e[1] + '</span></div>').join("") + '</div>' : '') +
-        '<div id="stage"></div>' +
-        '<div id="controls"><button id="play">▶ Play</button><input id="scrub" type="range" min="0" max="' + Math.max(0, timeline.length-1) + '" value="0" /><span id="count"></span></div>';
-      const stage = document.getElementById("stage"), scrub = document.getElementById("scrub"), count = document.getElementById("count"), playBtn = document.getElementById("play");
-      let i = 0, playing = false;
-      function render() {
-        const t = timeline[i] || {};
-        stage.innerHTML = '<div class="role ' + (t.role === "user" ? "user" : "assistant") + '">' + esc(t.role || "assistant") + '</div><div class="text">' + (t.text ? esc(t.text) : "…") + '</div>';
-        scrub.value = String(i); count.textContent = (i+1) + " / " + timeline.length;
+      if (!timeline.length) { app.innerHTML = '<div class="wait">⚔ Waiting for session data…</div>'; return; }
+      const model = String(meta.model || "the Agent"), project = String(meta.project || "this session"), maxHP = 120;
+      // Precompute the whole battle so play + scrub stay consistent.
+      let hHP = maxHP, aHP = maxHP, over = false, winner = "";
+      const rounds = [];
+      for (let i = 0; i < timeline.length; i++) {
+        const t = timeline[i] || {}, human = t.role === "user";
+        const atk = (human ? HUMAN_ATK : AGENT_ATK)[i % 10];
+        const dmg = 5 + (i % 4) * 3 + ((t.text ? t.text.length : 7) % 10);
+        if (!over) { if (human) aHP = Math.max(0, aHP - dmg); else hHP = Math.max(0, hHP - dmg); }
+        if (!over && aHP === 0) { over = true; winner = "human"; } else if (!over && hHP === 0) { over = true; winner = "agent"; }
+        rounds.push({ human: human, atk: atk, dmg: dmg, hHP: hHP, aHP: aHP, ko: over });
       }
-      function stop() { playing = false; playBtn.textContent = "▶ Play"; if (timer) clearInterval(timer); timer = 0; }
-      function play() { playing = true; playBtn.textContent = "❚❚ Pause"; timer = setInterval(() => { if (i < timeline.length - 1) { i++; render(); } else stop(); }, 700); }
+      if (!winner) winner = hHP >= aHP ? "human" : "agent";
+      const koIdx = rounds.findIndex((r) => r.ko);
+      const lastRound = koIdx >= 0 ? koIdx : rounds.length - 1;
+
+      app.innerHTML =
+        '<div class="title">⚔ ' + esc(project) + ' ⚔<span class="sub">session duel · ' + timeline.length + ' moves</span></div>' +
+        '<div class="arena">' +
+          '<div class="fighter" id="fh"><div class="ava">🧑‍💻</div><div class="nm">You<span>the Human</span></div><div class="hpbar"><div class="hp" id="hph"></div></div><div class="hpn" id="hphn"></div></div>' +
+          '<div class="vs">VS</div>' +
+          '<div class="fighter" id="fa"><div class="ava">🤖</div><div class="nm">' + esc(model) + '<span>the Agent</span></div><div class="hpbar"><div class="hp" id="hpa"></div></div><div class="hpn" id="hpan"></div></div>' +
+        '</div><div class="log" id="log"></div><div class="win" id="win"></div>' +
+        '<div class="ctl"><button id="play">▶ Battle</button><input id="scrub" type="range" min="0" max="' + (rounds.length-1) + '" value="0" /><span class="cnt" id="cnt"></span></div>';
+
+      const fh=document.getElementById("fh"), fa=document.getElementById("fa"), hph=document.getElementById("hph"), hpa=document.getElementById("hpa"),
+        hphn=document.getElementById("hphn"), hpan=document.getElementById("hpan"), logEl=document.getElementById("log"), winEl=document.getElementById("win"),
+        scrub=document.getElementById("scrub"), cnt=document.getElementById("cnt"), playBtn=document.getElementById("play");
+      let i = 0, playing = false;
+      function show(n) {
+        i = Math.max(0, Math.min(n, lastRound));
+        const r = rounds[i], pc = (v) => Math.round(v/maxHP*100);
+        hph.style.width = pc(r.hHP)+"%"; hpa.style.width = pc(r.aHP)+"%";
+        hph.className = "hp" + (r.hHP <= maxHP*0.3 ? " low" : ""); hpa.className = "hp" + (r.aHP <= maxHP*0.3 ? " low" : "");
+        hphn.textContent = r.hHP+" / "+maxHP; hpan.textContent = r.aHP+" / "+maxHP;
+        fh.className = "fighter" + (r.human ? " turn" : ""); fa.className = "fighter" + (r.human ? "" : " turn");
+        const def = r.human ? fa : fh; def.classList.add("hit"); if (hitTimer) clearTimeout(hitTimer); hitTimer = setTimeout(() => def.classList.remove("hit"), 300);
+        logEl.innerHTML = rounds.slice(0, i+1).map((x) => '<div class="line ' + (x.human?"h":"a") + '">' + (x.human ? "🧑‍💻 You" : "🤖 " + esc(model)) + ' cast <b>' + esc(x.atk) + '</b> — ' + x.dmg + ' dmg</div>').join("");
+        logEl.scrollTop = logEl.scrollHeight;
+        scrub.value = String(i); cnt.textContent = (i+1)+" / "+(lastRound+1);
+        winEl.textContent = i >= lastRound ? (winner === "human" ? "🏆 You win!" : "🤖 The Agent wins!") : "";
+      }
+      function stop() { playing = false; playBtn.textContent = "▶ Battle"; if (timer) clearInterval(timer); timer = 0; }
+      function play() { if (i >= lastRound) show(0); playing = true; playBtn.textContent = "❚❚ Pause"; timer = setInterval(() => { if (i < lastRound) show(i+1); else stop(); }, 650); }
       playBtn.addEventListener("click", () => (playing ? stop() : play()));
-      scrub.addEventListener("input", () => { i = Number(scrub.value) || 0; if (playing) stop(); render(); });
-      render();
+      scrub.addEventListener("input", () => { if (playing) stop(); show(Number(scrub.value)||0); });
+      show(0);
     }
     // ==== AGENTGEM:GAME-LOGIC END ====
 

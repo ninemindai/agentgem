@@ -13,6 +13,7 @@ describe("scaffolds", () => {
     expect(html).toContain("game-data");
     expect(html).toContain("DATA.meta");
     expect(html).toContain("DATA.timeline");
-    expect(html).toContain("tools");   // renders the tool-usage breakdown
+    expect(html).toContain("session duel");   // renders the human-vs-agent RPG battle
+    expect(html).toContain("agentgem:request"); // broker-fed: requests session-data from the host
   });
 });

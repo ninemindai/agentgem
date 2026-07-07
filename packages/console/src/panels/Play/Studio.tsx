@@ -103,8 +103,8 @@ export function Studio({ apiBase, name, onBack }: { apiBase: string; name: strin
     try {
       const client = makeClient(apiBase);
       const bind = await bindStatusRoute.call(client);
-      if (!bind.bound || !bind.login) { setStatus("Connect your GitHub (Curate → Publish to Explore) to share publicly."); return; }
-      setStatus("publishing to Explore…");
+      if (!bind.bound || !bind.login) { setStatus("Connect your GitHub in Curate to publish publicly."); return; }
+      setStatus("publishing to app.agentgem.ai…");
       const g = genreOf(meta?.genre ?? "project-fun");
       const pub = await publishSetupRoute.call(client, { body: {
         workspace: name, scope: bind.login, name, version: "0.1.0", provenance: "play",
@@ -128,14 +128,14 @@ export function Studio({ apiBase, name, onBack }: { apiBase: string; name: strin
         {status && <span className="play-intro" style={{ margin: 0 }}>{status}</span>}
         <button className="play-btn" onClick={save}>Save</button>
         <button className="play-btn play-btn--ghost" onClick={pushGit} title="git push the miniapps registry to your git remote">Push to git</button>
-        <button className="play-btn play-btn--primary" onClick={shareToExplore}>Share to Explore</button>
+        <button className="play-btn play-btn--primary" onClick={shareToExplore}>Share to app.agentgem.ai</button>
       </div>
 
       {share && (
         <div className="play-banner play-banner--ok">
           <span className="play-banner__ico">🌐</span>
           <div className="play-banner__body">
-            <div className="play-banner__title">Published to Explore</div>
+            <div className="play-banner__title">Published to app.agentgem.ai</div>
             <div className="play-banner__detail">{share.url}</div>
           </div>
           <button className="play-btn" onClick={() => navigator.clipboard?.writeText(share.url)}>Copy</button>
