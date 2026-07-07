@@ -56,3 +56,4 @@ export * from "./dashboardRender.js";
 export * from "./contextCap.js";
 export * from "./taskCluster.js";
 export * from "./contextHygiene.js";
+export * from "./boundarySegments.js";
