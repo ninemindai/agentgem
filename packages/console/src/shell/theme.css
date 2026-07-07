@@ -19,6 +19,19 @@
   --line: #ddd0b7;
   --line-soft: #e8ddc7;
 
+  /* Category palette (tool-category dots, ContextTimeline chart/markers). Kept
+     muted/desaturated to sit inside the warm-paper page — no neon. Where an
+     existing token already carries the right meaning (danger, success, warn)
+     we alias it instead of minting a second source of truth. */
+  --blue: #3f6b8a;       /* context-window chart line */
+  --green: var(--emerald);
+  --slate: #6b6558;      /* bash */
+  --purple: #6b4a7a;     /* skill */
+  --pink: #a85a72;       /* agent */
+  --amber: var(--gold);  /* ask / chart warn band */
+  --teal: #3f7a72;       /* task */
+  --red: var(--accent);  /* chart danger band, matches .obs-error */
+
   --shadow-sm: 0 1px 0 rgba(122, 96, 54, .06), 0 1px 2px rgba(60, 44, 20, .05);
   --shadow-md: 0 2px 4px rgba(60, 44, 20, .06), 0 8px 22px -10px rgba(60, 44, 20, .22);
   --ring: 0 0 0 3px rgba(154, 51, 36, .16);
@@ -1017,6 +1030,36 @@ button.scorecard-intent { line-height: 1.4; }
 .hyg-factors { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .hyg-factors li { font-size: 12.5px; color: var(--ink-soft); }
 .hyg-factors b { font-weight: 600; }
+
+/* context timeline (replaces the hyg-canvas sparkline above): SVG context-window
+   chart on the left + a rail with the verdict/factors/jumps on the right. */
+.ct {
+  margin: 0 0 16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--raised); box-shadow: var(--shadow-sm);
+  display: grid; grid-template-columns: 1fr 288px; gap: 16px; align-items: start;
+}
+@media (max-width: 880px) { .ct { grid-template-columns: 1fr; } }
+.ct-chart { min-width: 0; }
+.ct-scroll { overflow-x: auto; }
+.ct-rail {
+  min-width: 0; max-height: 420px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.rail-h {
+  font: 600 11px/1 var(--font-ui); text-transform: uppercase; letter-spacing: .09em;
+  color: var(--muted); margin: 10px 0 6px;
+}
+.rail-h:first-child { margin-top: 0; }
+.ct-facs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ct-facs li { font-size: 12.5px; color: var(--ink-soft); }
+.ct-facs b { font-weight: 600; }
+.jump { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--line-soft); }
+.jump:last-child { border-bottom: none; }
+.jbadge {
+  flex: none; font: 700 12px/1 var(--font-display); font-optical-sizing: auto; color: var(--accent);
+}
+.jbody { min-width: 0; font-size: 12.5px; color: var(--ink-soft); }
+.jbody .t { font-weight: 600; }
 
 /* worst-first cross-session hygiene leaderboard (Rubrics panel) */
 .hyg-lb-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0; }
