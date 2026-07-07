@@ -156,4 +156,9 @@ describe("Shell — phase-primary nav", () => {
     render(<Shell pages={pages} apiBase="" />);
     expect(screen.getByText("My Gem")).toBeTruthy();
   });
+
+  it("renders the notification bell in the header", () => {
+    render(<Shell pages={pages} apiBase="" />);
+    expect(screen.getByRole("button", { name: /notification/i })).toBeTruthy();
+  });
 });
