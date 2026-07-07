@@ -33,6 +33,21 @@ export function miniappDir(name: string): string {
   return dir;
 }
 
+// Write (create-or-overwrite) the marketplace game-gem for a miniapp. Shared by saveMiniapp (strict,
+// after a throwing gate) and checkpointMiniapp (opportunistic, only when sealed). UPSERT: overwrites in
+// place, never deletes — so a re-save/re-checkpoint stays in sync, and a skipped write keeps the prior gem.
+function writeGameGem(name: string, html: string, meta: MiniappMeta): void {
+  const artifact: GameArtifact = {
+    type: "game", name, title: meta.title, genre: meta.genre,
+    html, createdFrom: meta.createdFrom, engineVersion: meta.engineVersion,
+    ...(meta.needs ? { needs: meta.needs } : {}),
+  };
+  const gem: Gem = { name, createdFrom: "play", artifacts: [artifact], checks: [], requiredSecrets: [] };
+  const wdir = workspaceDir(name);
+  mkdirSync(wdir, { recursive: true });
+  writeArchiveDir(wdir, writeGemArchive(gem).files);
+}
+
 export async function saveMiniapp(input: SaveMiniappInput): Promise<{ name: string; commit: string | null }> {
   const dir = miniappDir(input.name);             // validates the name (throws on bad) + jails the path
   const safe = input.name;
@@ -46,21 +61,21 @@ export async function saveMiniapp(input: SaveMiniappInput): Promise<{ name: stri
   writeFileSync(join(dir, `${safe}.html`), input.html);
   writeFileSync(join(dir, "meta.json"), JSON.stringify(input.meta, null, 2));
   const commit = await commitWithLock(root, `save miniapp ${safe}`);
-
-  // dual-write the matching game gem (marketplace-capable), UPSERTING so a re-save stays in sync with
-  // the registry file. Writing the archive in place (create or overwrite) avoids createWorkspace's
-  // throw-if-exists; errors propagate rather than being swallowed.
-  const artifact: GameArtifact = {
-    type: "game", name: safe, title: input.meta.title, genre: input.meta.genre,
-    html: input.html, createdFrom: input.meta.createdFrom, engineVersion: input.meta.engineVersion,
-    ...(input.meta.needs ? { needs: input.meta.needs } : {}),
-  };
-  const gem: Gem = { name: safe, createdFrom: "play", artifacts: [artifact], checks: [], requiredSecrets: [] };
-  const wdir = workspaceDir(safe);
-  mkdirSync(wdir, { recursive: true });
-  writeArchiveDir(wdir, writeGemArchive(gem).files);
-
+  writeGameGem(safe, input.html, input.meta);      // strict path: gate already passed above
   return { name: safe, commit };
+}
+
+// Auto-checkpoint: persist the CURRENT on-disk miniapp WITHOUT gating (durability for in-progress agent
+// work), then opportunistically refresh the marketplace gem IFF the bundle is sealed. A gate failure never
+// blocks the commit and is never thrown — the gem simply isn't rewritten, preserving the last sealed build.
+export async function checkpointMiniapp(name: string): Promise<{ name: string; commit: string | null }> {
+  const { html, meta } = readMiniapp(name);        // validates the name + jails; meta.json exists post seed/import
+  const root = miniappsRoot();
+  await ensureRepo(root);
+  const commit = await commitWithLock(root, `checkpoint ${name}`);
+  try { if ((await gameGate(html)).ok) writeGameGem(name, html, meta); }
+  catch { /* gate/gem is best-effort — a checkpoint must never fail on it */ }
+  return { name, commit };
 }
 
 export function readMiniapp(name: string): { name: string; html: string; meta: MiniappMeta } {
