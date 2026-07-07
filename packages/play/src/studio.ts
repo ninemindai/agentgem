@@ -3,7 +3,7 @@
 // The Chat studio seam: seed a miniapp dir from a source (scaffold + injected DATA), build the agent's
 // studio brief from its meta, and guard which cwd a chat session may adopt. studioCwd is the security
 // gate: only a path under the miniapps registry (or the neutral fallback) is ever honored.
-import { join, sep } from "node:path";
+import { join, sep, resolve } from "node:path";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import type { GameSource } from "@agentgem/model";
 import { extractSource, type SourceReaders } from "./sourceContext.js";
@@ -17,7 +17,11 @@ import { ensureRepo, commitAll } from "./git.js";
 // this is defense-in-depth against any raw path ever reaching conn.ctx.open().
 export function studioCwd(requested: string | undefined, fallback: string): string {
   if (!requested) return fallback;
-  return requested === fallback || requested.startsWith(miniappsRoot() + sep) ? requested : fallback;
+  // Normalize before the prefix compare so a path like `<root>/../../etc` can't slip through by merely
+  // starting with the root string — this makes the "no raw path escapes" guarantee actually true.
+  const norm = resolve(requested);
+  const root = resolve(miniappsRoot());
+  return norm === resolve(fallback) || norm.startsWith(root + sep) ? norm : fallback;
 }
 
 // Derive a clean single-segment slug for a new miniapp from its source.
