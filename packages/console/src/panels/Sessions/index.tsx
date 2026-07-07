@@ -5,6 +5,7 @@ import { aggregateObserve } from "@agentgem/insight/observeAggregate";
 import { useObserveData } from "../Observe/useObserveData.js";
 import { RangeTabs, ObserveFilters } from "../Observe/ObserveControls.js";
 import { SessionsTable } from "./SessionsTable.js";
+import type { SessionActivity } from "./SessionSummaryPopover.js";
 import { TranscriptViewer } from "../Observe/TranscriptViewer.js";
 import { TranscriptDiff } from "../Observe/TranscriptDiff.js";
 import { RefreshButton } from "../../shell/RefreshButton.js";
@@ -44,6 +45,18 @@ export function Sessions({ apiBase }: { apiBase: string }) {
     [stats, range, filter.agent, filter.project, filter.model, filter.minMsgs],
   );
 
+  // Per-session activity counts for the row hover popover, keyed agent:sessionId.
+  // Sourced from the raw stats already fetched — no extra request.
+  const activity = useMemo(() => {
+    const m = new Map<string, SessionActivity>();
+    for (const s of stats ?? []) {
+      m.set(`${s.agent}:${s.sessionId}`, {
+        tools: s.tools ?? {}, skills: s.skills ?? {}, subagents: s.subagents ?? {},
+      });
+    }
+    return m;
+  }, [stats]);
+
   if (selection) {
     const back = () => { window.location.hash = "#/sessions"; };
     return (
@@ -77,7 +90,7 @@ export function Sessions({ apiBase }: { apiBase: string }) {
         <RefreshButton onClick={onRefresh} busy={pending} />
       </div>
       <ObserveFilters data={data} filter={filter} onFilter={setFilter} />
-      <SessionsTable data={data} />
+      <SessionsTable data={data} activity={activity} />
     </div>
   );
 }
