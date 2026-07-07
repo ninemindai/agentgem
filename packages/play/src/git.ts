@@ -6,14 +6,24 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 
-export function git(cwd: string, args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+// Kill a git subprocess that hasn't settled within this long, so a hung git (stale lock, wedged hook,
+// FS stall) can never hold an awaited caller — e.g. the SSE checkpoint — open forever or wedge the
+// serialized commit chain. The registry does tiny local commits, so this ceiling sits far above any real
+// git latency; it only trips on a pathological hang. SIGKILL (uncatchable) guarantees the process dies
+// even if it ignores SIGTERM. `timeoutMs` is overridable only so the timeout branch is testable.
+const GIT_TIMEOUT_MS = 30_000;
+
+export function git(cwd: string, args: string[], timeoutMs: number = GIT_TIMEOUT_MS): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    const p = spawn("git", args, { cwd });
+    const p = spawn("git", args, { cwd, timeout: timeoutMs, killSignal: "SIGKILL" });
     let stdout = "", stderr = "";
     p.stdout.on("data", (d) => { stdout += d; });
     p.stderr.on("data", (d) => { stderr += d; });
     p.on("error", (e) => reject(new Error(`git not available on PATH: ${(e as Error).message}`)));
-    p.on("close", (code) => resolve({ code: code ?? 0, stdout, stderr }));
+    p.on("close", (code, signal) => {
+      if (signal) { reject(new Error(`git ${args[0] ?? ""} killed after ${timeoutMs}ms (${signal})`)); return; }
+      resolve({ code: code ?? 0, stdout, stderr });
+    });
   });
 }
 
