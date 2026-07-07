@@ -10,8 +10,9 @@ export interface GenreSpec {
   title: string;
   scaffold: string;   // scaffold id (see scaffolds.ts)
   guidance: string;   // genre-specific prompt guidance used to seed the studio
-  // Capabilities the seeded game DECLARES. `session-data` means broker-fed: the host fetches the source
-  // transcript on demand rather than baking it into the bundle — so no baked data at seed time.
+  // Capabilities the seeded game DECLARES. `session-data` means broker-fed: a local host can push a
+  // fresh/full transcript via the capability broker — seed still bakes a redacted snapshot so the game
+  // runs standalone (offline, or on app.agentgem.ai) before any broker data ever arrives.
   needs?: GameCapability[];
 }
 

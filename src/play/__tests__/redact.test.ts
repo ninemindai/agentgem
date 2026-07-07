@@ -16,6 +16,11 @@ describe("redactForBake", () => {
     expect(out.meta.note).toBe("key ‹redacted› here");
   });
 
+  it("redacts a modern sk-proj- OpenAI key", () => {
+    const out = redactForBake({ meta: { note: "OPENAI_API_KEY=sk-proj-ABCdef0123456789ABCdef0123 done" } }) as { meta: { note: string } };
+    expect(out.meta.note).toBe("OPENAI_API_KEY=‹redacted› done");
+  });
+
   it("caps a long timeline to 500 entries", () => {
     const timeline = Array.from({ length: 620 }, (_, i) => ({ role: "user", text: `t${i}` }));
     const out = redactForBake({ timeline }) as { timeline: unknown[] };
