@@ -90,6 +90,25 @@ describe("validateAnalysis", () => {
   });
 });
 
+// Captures the prompt text the recommender sends to the agent, so we can assert
+// what the signal serialization does (and does not) include.
+function capturingConnect(canned: string): { fn: AcpConnectFn; prompts: string[] } {
+  const prompts: string[] = [];
+  const fn: AcpConnectFn = async () => ({
+    ctx: {
+      async open(_cwd: string) {
+        return {
+          async setMode() {},
+          async promptText(t: string) { prompts.push(t); return canned; },
+          dispose() {},
+        };
+      },
+    },
+    close() {},
+  });
+  return { fn, prompts };
+}
+
 function fakeConnect(canned: string | (() => Promise<string>)): AcpConnectFn {
   return async () => ({
     ctx: {
@@ -121,6 +140,31 @@ describe("recommendWorkflow", () => {
     const { analysis, degraded } = await recommendWorkflow(signal, scanInv, { connectFn: fakeConnect(canned) });
     expect(degraded).toBe(false);
     expect(analysis.candidates.map((c) => c.name)).toEqual(["QA Kit", "Diagram Kit"]);
+  });
+
+  it("omits the distiller-only sequences/procedures from the agent prompt", async () => {
+    // On a busy project `sequences` (per-session step traces + mission prose) is
+    // >99% of the signal and would blow the agent's context window, yet the
+    // recommender never reads it — it must be stripped before serialization.
+    const heavy: WorkflowSignal = {
+      ...signal,
+      sequences: { root: ROOT, sessions: [{
+        steps: [{ tool: "Bash", verb: "run", arg: "x", msgIndex: 0 } as never],
+        missionHint: { task: "SEQ_MARKER_TASK", outcome: "SEQ_MARKER_OUTCOME" },
+        sessionId: "s1", transcript: "s1.jsonl", atMs: 1,
+      }] },
+      procedures: [{ key: "PROC_MARKER", verbs: ["a", "b", "c"], sessions: 2, sampleSessionIdx: 0, sessionIdxs: [0] }],
+    };
+    const canned = JSON.stringify({
+      candidates: [{ name: "X", description: "d", include: [{ type: "skill", name: "qa", reason: "r" }], confidence: "high" }],
+      gaps: [],
+    });
+    const cap = capturingConnect(canned);
+    await recommendWorkflow(heavy, scanInv, { connectFn: cap.fn });
+    const prompt = cap.prompts[0];
+    expect(prompt).not.toContain("SEQ_MARKER_TASK");
+    expect(prompt).not.toContain("PROC_MARKER");
+    expect(prompt).toContain("qa");   // lean signal (artifacts/shapes) still reaches the agent
   });
 
   it("degrades to the deterministic analysis on agent error", async () => {

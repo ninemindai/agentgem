@@ -242,7 +242,14 @@ export async function recommendWorkflow(
   try {
     const usedGlobal = new Set(signal.artifacts.filter((a) => a.root === null && a.invocations > 0).map((a) => a.name));
     const trimmedInv = trimInventory(inv, usedGlobal);
-    const prompt = GROUNDING(JSON.stringify(signal), JSON.stringify(trimmedInv));
+    // `sequences`/`procedures` are the DISTILLER's signal — full per-session step
+    // traces, mission prose, and context series. On a busy project they are >99% of
+    // the serialized signal (enough to blow the agent's context window), yet the
+    // recommender reasons only over shapes/co-occurrence/usage. Strip them here, the
+    // same way trimInventory keeps the inventory small. The distiller still receives
+    // the full `signal` object — only this prompt copy is trimmed.
+    const { sequences: _seq, procedures: _proc, ...leanSignal } = signal;
+    const prompt = GROUNDING(JSON.stringify(leanSignal), JSON.stringify(trimmedInv));
     log.debug("workflow-recommender: requesting %s over %d artifact(s)", CLAUDE_AGENT.name, signal.artifacts.length);
     // Bound EVERY step against one shared deadline — connect + session open +
     // setMode + prompt. The ACP `initialize` handshake and session start are
