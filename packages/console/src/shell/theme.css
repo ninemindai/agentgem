@@ -1272,3 +1272,17 @@ button.scorecard-intent { line-height: 1.4; }
   opacity: .7;
 }
 .toast-close:hover { opacity: 1; }
+
+.notify-bell {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  padding: 4px 6px;
+  border-radius: 6px;
+  opacity: .7;
+}
+.notify-bell:hover { opacity: 1; background: rgba(154, 51, 36, .06); }
+.notify-bell.is-on { opacity: 1; }
+.notify-bell.is-blocked { opacity: .4; cursor: not-allowed; }
