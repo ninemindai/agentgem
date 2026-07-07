@@ -55,7 +55,7 @@ export function Observe({ apiBase }: { apiBase: string }) {
   );
 
   const error = fetchError ?? actionError;
-  if (error) return <div className="obs"><p className="obs-error">Couldn't load Inspect: {error}</p></div>;
+  if (error) return <div className="obs"><p className="obs-error">Couldn't load Overview: {error}</p></div>;
   if (!data) return <div className="obs"><Loading /></div>;
   // First run: the local session log is empty. Orient a brand-new user instead of a hollow
   // zeroed dashboard.
@@ -64,7 +64,7 @@ export function Observe({ apiBase }: { apiBase: string }) {
       <div className="obs-firstrun">
         <h2 className="obs-firstrun-title">Nothing to inspect yet</h2>
         <p className="obs-firstrun-text">
-          Run an agent (Claude Code and friends) in a project, then come back — Inspect reads your
+          Run an agent (Claude Code and friends) in a project, then come back — Overview reads your
           local session log and shows what your agents actually did, so you can mine the good parts
           into gems.
         </p>
@@ -85,6 +85,6 @@ export function Observe({ apiBase }: { apiBase: string }) {
 }
 
 export const observePage = defineConsolePage({
-  id: "observe", title: "Inspect", icon: "👁", order: 5, phase: "observe", category: "usage",
-  route: "#/inspect", component: Observe,
+  id: "overview", title: "Overview", icon: "👁", order: 5, phase: "observe", category: "usage",
+  route: "#/overview", component: Observe,
 });

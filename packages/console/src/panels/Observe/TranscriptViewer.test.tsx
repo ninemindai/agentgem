@@ -42,7 +42,7 @@ describe("TranscriptViewer", () => {
     const onBack = vi.fn();
     render(<TranscriptViewer apiBase="" agent="claude" sessionId="s1" onBack={onBack} />);
     await waitFor(() => expect(screen.getAllByText("do the thing").length).toBeGreaterThan(0));
-    fireEvent.click(screen.getByText("← Inspect"));
+    fireEvent.click(screen.getByText("← Overview"));
     expect(onBack).toHaveBeenCalled();
   });
 

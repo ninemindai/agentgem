@@ -43,7 +43,7 @@ export function TranscriptViewer({ apiBase, agent, sessionId, onBack }: {
   return (
     <div className="obs tv">
       <div className="tv-head">
-        <button type="button" className="tv-back" onClick={onBack}>← Inspect</button>
+        <button type="button" className="tv-back" onClick={onBack}>← Overview</button>
         {view && (
           <>
             <h2 className="obs-title tv-title">{view.meta.project ?? "session"}</h2>

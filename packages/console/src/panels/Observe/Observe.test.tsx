@@ -107,7 +107,7 @@ describe("Observe Dashboard", () => {
 
 describe("Observe first-run", () => {
   it("shows an oriented signpost when the local session log is empty", async () => {
-    window.location.hash = "#/inspect";
+    window.location.hash = "#/overview";
     vi.stubGlobal("fetch", vi.fn(async (url: string | URL) =>
       String(url).includes("/api/observe/raw") ? res({ sessions: [] }) : res({}),
     ));

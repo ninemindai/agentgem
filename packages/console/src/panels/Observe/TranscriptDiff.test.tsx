@@ -46,7 +46,7 @@ describe("TranscriptDiff", () => {
     const onBack = vi.fn();
     render(<TranscriptDiff apiBase="" a={{ agent: "claude", sessionId: "aaa" }} b={{ agent: "claude", sessionId: "bbb" }} onBack={onBack} />);
     await waitFor(() => expect(screen.getByText("Compare runs")).toBeTruthy());
-    fireEvent.click(screen.getByText("← Inspect"));
+    fireEvent.click(screen.getByText("← Overview"));
     expect(onBack).toHaveBeenCalled();
   });
 
