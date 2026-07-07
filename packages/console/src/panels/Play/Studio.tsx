@@ -95,8 +95,8 @@ export function Studio({ apiBase, name, onBack }: { apiBase: string; name: strin
         <button className="run-badge" onClick={publish}>Publish</button>
         {status && <span className="run-status" style={{ marginLeft: 8 }}>{status}</span>}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <Runner html={html} height={420} />
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.5fr) minmax(300px, 1fr)", gap: 12, alignItems: "start" }}>
+        <Runner html={html} />
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <pre className="ledger-view" style={{ height: 360, overflow: "auto", whiteSpace: "pre-wrap", margin: 0 }}>{log || "Ask the agent to build or change the miniapp…"}</pre>
           {busy && (
