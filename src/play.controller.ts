@@ -3,12 +3,13 @@
 // Play JSON routes over the miniapps registry: save (gate + dual-write), list, publish (git push).
 import { api, get, post, AgentError } from "@agentback/openapi";
 import { z } from "zod";
-import { saveMiniapp, listMiniapps, miniappsRoot, setRemote, push, seedStudio } from "@agentgem/play";
+import { saveMiniapp, listMiniapps, readMiniapp, miniappsRoot, setRemote, push, seedStudio } from "@agentgem/play";
 import { defaultReaders } from "./play.readers.js";
 import {
   PlaySaveRequestSchema, PlaySaveResponseSchema, MiniappListSchema,
   PlayPublishRequestSchema, PlayPublishResponseSchema,
   PlayStudioRequestSchema, PlayStudioResponseSchema,
+  PlayMiniappQuerySchema, PlayMiniappSchema,
 } from "./schemas.js";
 
 @api({ basePath: "/api" })
@@ -30,7 +31,15 @@ export class PlayController {
 
   @get("/play/miniapps", { response: MiniappListSchema })
   async miniapps(): Promise<z.infer<typeof MiniappListSchema>> {
-    return { miniapps: listMiniapps().map((m) => ({ name: m.name, title: m.meta.title, genre: m.meta.genre })) };
+    return { miniapps: listMiniapps().map((m) => ({ name: m.name, title: m.meta.title, genre: m.meta.genre, ...(m.meta.needs ? { needs: m.meta.needs } : {}) })) };
+  }
+
+  @get("/play/miniapp", { query: PlayMiniappQuerySchema, response: PlayMiniappSchema })
+  async miniapp(input: { query: z.infer<typeof PlayMiniappQuerySchema> }): Promise<z.infer<typeof PlayMiniappSchema>> {
+    try {
+      const r = readMiniapp(input.query.name);
+      return { name: r.name, html: r.html, meta: { title: r.meta.title, genre: r.meta.genre, ...(r.meta.needs ? { needs: r.meta.needs } : {}) } };
+    } catch (e) { throw new AgentError((e as Error).message, { status: 404 }); }
   }
 
   @post("/play/publish", { body: PlayPublishRequestSchema, response: PlayPublishResponseSchema })
