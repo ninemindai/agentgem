@@ -23,6 +23,21 @@ function writeBloated(dir: string, name: string): string {
   }));
   const p = join(dir, `${name}.jsonl`); writeFileSync(p, lines.join("\n")); return p;
 }
+// A session that trips retry-storm: the SAME Bash command run back-to-back.
+// retry-storm is a factor of the legacy "hygiene" rubric but NOT one of the
+// five context-hygiene factors (see HYGIENE_FACTOR_IDS), so it is exactly the
+// case that must leave perSession `hygiene` undefined while still producing
+// a non-empty perSession entry.
+function writeRetryStorm(dir: string, name: string): string {
+  const lines: string[] = [JSON.stringify({ sessionId: name, type: "user", message: { role: "user", content: "go" } })];
+  for (let i = 0; i < 4; i++) lines.push(JSON.stringify({
+    type: "assistant",
+    message: { role: "assistant", model: "claude-opus-4-8[1m]",
+      content: [{ type: "tool_use", name: "Bash", input: { command: "npm test" } }],
+      usage: { input_tokens: 100, cache_read_input_tokens: 8000, cache_creation_input_tokens: 500, output_tokens: 10 } },
+  }));
+  const p = join(dir, `${name}.jsonl`); writeFileSync(p, lines.join("\n")); return p;
+}
 // A clean session: short, tiny window, one cluster.
 function writeClean(dir: string, name: string): string {
   const lines = [
@@ -74,11 +89,12 @@ describe("evaluateRubric — per-session hygiene verdict", () => {
     expect(bad.hygiene!.verdict).toBe("bloated");
   });
 
-  it("leaves perSession hygiene undefined for a non-hygiene rubric", async () => {
+  it("leaves perSession hygiene undefined for a non-hygiene rubric (with real findings)", async () => {
     const dir = mkdtempSync(join(tmpdir(), "lb2-"));
-    const signal = scanWorkflow([writeBloated(dir, "bad2")], emptyInv, { retainSequences: true });
+    const signal = scanWorkflow([writeRetryStorm(dir, "retry1")], emptyInv, { retainSequences: true });
     const legacy = builtinRubrics().find((r) => r.id === "hygiene")!;
     const report = await evaluateRubric(signal, legacy, { scope: { kind: "all" } } as any);
-    for (const s of report.perSession ?? []) expect(s.hygiene).toBeUndefined();
+    expect(report.perSession && report.perSession.length).toBeGreaterThan(0);   // the fixture MUST trip a factor
+    for (const s of report.perSession!) expect(s.hygiene).toBeUndefined();
   });
 });
