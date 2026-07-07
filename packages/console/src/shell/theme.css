@@ -1209,3 +1209,38 @@ button.scorecard-intent { line-height: 1.4; }
 
 .publish-field { display: flex; flex-direction: column; gap: 3px; }
 .publish-label { font-size: 0.68rem; color: var(--muted); text-transform: lowercase; }
+
+.toast-stack {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 1000;
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 320px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--ink, #1a1a1a);
+  color: #fff;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .25);
+  font-size: 13px;
+}
+.toast-msg { flex: 1; }
+.toast-close {
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: .7;
+}
+.toast-close:hover { opacity: 1; }
