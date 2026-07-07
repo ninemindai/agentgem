@@ -61,8 +61,12 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
     return () => window.removeEventListener("message", onMsg);
   }, [name, apiBase, needs, interactive, feed]);
 
+  useEffect(() => { setPending(null); }, [name]); // a different game starts with no open prompt
+
   const decide = (allow: boolean) => {
-    if (pending == null || name == null) return;
+    // Re-validate the pending cap is still one this game declared — defends the grant against any
+    // future in-place name/needs swap while a prompt is open.
+    if (pending == null || name == null || !needs?.includes(pending)) { setPending(null); return; }
     setConsent(name, pending, allow ? "granted" : "denied");
     if (allow) void feed(pending);
     setPending(null);
