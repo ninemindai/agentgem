@@ -14,12 +14,13 @@ import type { ChatConnectFn } from "@agentgem/run";
 import { registerChatRoutes } from "../chatRoutes.js";
 
 // ── Fake connect fn ──────────────────────────────────────────────────────────
-function makeFakeConnectFn(): ChatConnectFn {
+function makeFakeConnectFn(opts: { fail?: boolean } = {}): ChatConnectFn {
   return async () => ({
     ctx: {
       open: async () => ({
         setMode: async () => {},
         prompt: async (_text: string, onDelta?: (c: string) => void) => {
+          if (opts.fail) throw new Error("boom");
           onDelta?.("hi there");
           return { text: "hi there", toolCalls: [] };
         },
@@ -36,19 +37,21 @@ function makeFakeConnectFn(): ChatConnectFn {
 // directly without binding a port so tests are fast and port-collision-free.
 const stoppable: RestApplication[] = [];
 
-async function buildTestApp() {
+async function buildTestApp(opts: { fail?: boolean; checkpoints?: string[] } = {}) {
   const restApp = new RestApplication({});
   restApp.configure("servers.RestServer").to({ port: 0, host: "127.0.0.1", bodyParser: { json: {} } });
   await restApp.start();
   stoppable.push(restApp);
 
   const server = await restApp.restServer;
-  const fakeManager = new ChatManager({ connectFn: makeFakeConnectFn() });
+  const fakeManager = new ChatManager({ connectFn: makeFakeConnectFn({ fail: opts.fail }) });
   registerChatRoutes(server.expressApp as never, {
     manager: fakeManager,
     buildBrief: async () => "BRIEF",
     goldmineMcp: () => [],
     listAgents: () => [{ id: "claude-code", name: "Claude Code", available: true, installable: false, source: "path" }],
+    resolveStudio: () => ({ cwd: "/tmp/miniapp", brief: "STUDIO" }),
+    checkpointMiniapp: async (name: string) => { opts.checkpoints?.push(name); },
   });
   return server.expressApp;
 }
@@ -107,5 +110,37 @@ describe("chat routes", () => {
     const res = await request(app).delete(`/api/chat/${chatId}`);
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ ok: true });
+  });
+
+  it("checkpoints after a successful studio (miniapp) turn", async () => {
+    const checkpoints: string[] = [];
+    const app = await buildTestApp({ checkpoints });
+    const created = await request(app).post("/api/chat")
+      .set("Content-Type", "application/json")
+      .send(JSON.stringify({ agentId: "claude-code", miniapp: "space-run" }));
+    const chatId = created.body.chatId;
+    await request(app).get(`/api/chat/stream?chatId=${chatId}&message=hi`);
+    expect(checkpoints).toEqual(["space-run"]);
+  });
+
+  it("does NOT checkpoint a neutral (non-miniapp) chat", async () => {
+    const checkpoints: string[] = [];
+    const app = await buildTestApp({ checkpoints });
+    const created = await request(app).post("/api/chat")
+      .set("Content-Type", "application/json")
+      .send(JSON.stringify({ agentId: "claude-code" }));
+    await request(app).get(`/api/chat/stream?chatId=${created.body.chatId}&message=hi`);
+    expect(checkpoints).toEqual([]);
+  });
+
+  it("does NOT checkpoint when the turn fails", async () => {
+    const checkpoints: string[] = [];
+    const app = await buildTestApp({ fail: true, checkpoints });
+    const created = await request(app).post("/api/chat")
+      .set("Content-Type", "application/json")
+      .send(JSON.stringify({ agentId: "claude-code", miniapp: "space-run" }));
+    const res = await request(app).get(`/api/chat/stream?chatId=${created.body.chatId}&message=hi`);
+    expect(res.text).toContain("event: failed");
+    expect(checkpoints).toEqual([]);
   });
 });

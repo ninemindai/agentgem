@@ -37,7 +37,7 @@ import { listActiveSessions } from "./watchSessions.js";
 import { registerChatRoutes, makeChatConnectFn, installAgentFn, goldmineMcpServers } from "./goldmine/chatRoutes.js";
 import { collectBehaviorFindings } from "./goldmine/behaviorFindings.js";
 import { ChatManager } from "@agentgem/run";
-import { studioCwd, miniappDir, studioBrief } from "@agentgem/play";
+import { studioCwd, miniappDir, studioBrief, checkpointMiniapp } from "@agentgem/play";
 import { availableAgents, adapterRuntimeCtx, resolveLaunch, npmAdapterInstaller, createLogger } from "@agentgem/base";
 import { collectScorecard, defaultScorecardDeps } from "./gem/scorecard.js";
 import { buildGoldmineBrief, type GoldmineBriefInput } from "@agentgem/insight";
@@ -334,6 +334,7 @@ export async function createApp(port: number): Promise<RestApplication> {
       resolveStudio: (miniapp: string) => ({ cwd: miniappDir(miniapp), brief: studioBrief(miniapp) }),
       listAgents: () => availableAgents(adapterCtx),
       installAgent: installAgentFn(adapterCtx, npmAdapterInstaller()),
+      checkpointMiniapp: (name: string) => checkpointMiniapp(name),
       buildBrief: async () => {
         // Best-effort: never throws. Falls back to minimal brief on any error.
         try {
