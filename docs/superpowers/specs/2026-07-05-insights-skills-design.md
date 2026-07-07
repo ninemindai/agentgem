@@ -74,7 +74,7 @@ The `/insights` analog. Procedure:
   `SessionOutcome` enum from `packages/insight/src/facets.ts`
   (`mostly_achieved | partially_achieved | not_achieved`) so results stay
   comparable with the console Insights panel and the Ring-2 benchmark.
-  Spot-read evidence with `get_session_transcript` before asserting friction.
+  Spot-read evidence with `ask_session` before asserting friction.
 - **Layer 3:** synthesize the report (at-a-glance counts, outcome rates by
   model, what works, friction themes, publish candidates).
 - **The AgentGem twist:** the report ends at *"publish your high-outcome,
@@ -92,7 +92,7 @@ Focused friction retro — a distinct trigger ("what keeps going wrong", "how
 can I improve my habits") that doesn't warrant the full report. Drives
 `get_behavior_findings` (retry storms, thrash loops, unverified finishes) and
 requires verifying each finding against a real transcript window via
-`get_session_transcript` before advising. Ends with the standing fixes:
+`ask_session` before advising. Ends with the standing fixes:
 detector rules (`~/.agentgem/detectors`), `agentgem learn`, and the console
 Observe/Insights panels.
 
