@@ -1,7 +1,8 @@
 // packages/console/src/panels/Play/Runner.tsx
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { sandboxDoc } from "../Watch/sandboxDoc.js";
-import { makeClient, playSessionDataRoute } from "../../api/routes.js";
+import { makeClient, playSessionDataRoute, inventoryRoute } from "../../api/routes.js";
+import { AUTO_CAPS, CAP_LABEL, getConsent, setConsent } from "./consent.js";
 
 // The sealed miniapp player: null-origin iframe (no allow-same-origin), strict CSP via sandboxDoc.
 // Miniapps are usually full-window apps (html,body{height:100%;overflow:hidden}), so a short fixed
@@ -19,24 +20,53 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [scale, setScale] = useState(0.5);
   const [fs, setFs] = useState(false);
+  const [pending, setPending] = useState<string | null>(null); // a gated capability awaiting consent
 
-  // Broker: feed host data into the sealed iframe on request.
+  // Fetch the host data for a capability. session-data = the game's own source; local-project-access =
+  // the local inventory (skills/mcp/projects). Extend here as capabilities are added.
+  const fetchCap = useCallback(async (cap: string): Promise<unknown> => {
+    if (name == null || apiBase == null) return null;
+    const client = makeClient(apiBase);
+    if (cap === "session-data") return playSessionDataRoute.call(client, { query: { name } });
+    if (cap === "local-project-access") return inventoryRoute.call(client);
+    return null;
+  }, [name, apiBase]);
+
+  const feed = useCallback(async (cap: string): Promise<void> => {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    try { const data = await fetchCap(cap); if (data) win.postMessage({ type: "agentgem:feed", channel: cap, data }, "*"); }
+    catch { /* no host data — the game shows its waiting state */ }
+  }, [fetchCap]);
+
+  // Capability broker + consent gate. The sealed game (no network) postMessages a request; we honor only
+  // requests from THIS iframe and only a `want` the gem declared in `needs`. AUTO caps feed immediately;
+  // gated caps require remembered per-gem consent (prompt on first ask). Thumbnails never prompt.
   useEffect(() => {
-    if (name == null || apiBase == null || !needs?.includes("session-data")) return; // apiBase="" (same-origin) is valid
+    if (name == null || apiBase == null || !needs?.length) return; // apiBase="" (same-origin) is valid
     const onMsg = (e: MessageEvent) => {
       const win = iframeRef.current?.contentWindow;
       if (!win || e.source !== win) return;                            // only our own sealed iframe
       const d = e.data as { type?: string; want?: string } | null;
       if (!d || d.type !== "agentgem:request" || !d.want || !needs.includes(d.want)) return; // only declared caps
-      if (d.want === "session-data") {
-        playSessionDataRoute.call(makeClient(apiBase), { query: { name } })
-          .then((data) => win.postMessage({ type: "agentgem:feed", channel: "session-data", data }, "*"))
-          .catch(() => { /* shared/offline miniapp: no host data — the game shows its waiting state */ });
-      }
+      const cap = d.want;
+      if (AUTO_CAPS.has(cap)) { void feed(cap); return; }
+      if (!interactive) return;                                        // thumbnails never prompt/feed sensitive caps
+      const decision = getConsent(name, cap);
+      if (decision === "granted") void feed(cap);
+      else if (decision === null) setPending(cap);                     // ask (once)
+      // "denied" → silently ignore
     };
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
-  }, [name, apiBase, needs]);
+  }, [name, apiBase, needs, interactive, feed]);
+
+  const decide = (allow: boolean) => {
+    if (pending == null || name == null) return;
+    setConsent(name, pending, allow ? "granted" : "denied");
+    if (allow) void feed(pending);
+    setPending(null);
+  };
 
   useEffect(() => {
     const box = boxRef.current;
@@ -77,6 +107,19 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
             width: 30, height: 30, borderRadius: 8, border: "1px solid rgba(255,255,255,.25)",
             background: "rgba(20,22,28,.7)", color: "#fff", cursor: "pointer", fontSize: 14, lineHeight: 1 }}
         >{fs ? "✕" : "⛶"}</button>
+      )}
+      {pending && (
+        <div className="play-consent">
+          <div className="play-consent__box">
+            <div className="play-consent__ico">🔒</div>
+            <div className="play-consent__title">“{name}” wants to {CAP_LABEL[pending] ?? pending}</div>
+            <div className="play-consent__sub">The game stays sealed (no network of its own) — the host feeds this in only if you allow. Remembered for this game.</div>
+            <div className="play-consent__btns">
+              <button className="play-btn play-btn--primary" onClick={() => decide(true)}>Allow</button>
+              <button className="play-btn" onClick={() => decide(false)}>Deny</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
