@@ -97,3 +97,18 @@ export function resolveAdapterSource(descriptor: AgentDescriptor, ctx: AdapterCt
   }
   return { source: "missing" };
 }
+
+// Build an absolute, spawnable descriptor from the resolved source, or null if missing.
+//  • path    → keep the bare command (already resolvable on PATH), no env overlay.
+//  • managed/bundled → [ctx.execPath, entry, ...extraArgs]; on desktop overlay
+//    ELECTRON_RUN_AS_NODE=1 so Electron's own binary runs the Node adapter.
+export function resolveLaunch(descriptor: AgentDescriptor, ctx: AdapterCtx): AgentDescriptor | null {
+  const r = resolveAdapterSource(descriptor, ctx);
+  if (r.source === "missing") return null;
+  if (r.source === "path") {
+    return { ...descriptor, command: [r.binOnPath ?? descriptor.command[0], ...descriptor.command.slice(1)] };
+  }
+  const command = [ctx.execPath, r.entry!, ...descriptor.command.slice(1)];
+  const env = ctx.runtime === "desktop" ? { ELECTRON_RUN_AS_NODE: "1" } : undefined;
+  return env ? { ...descriptor, command, env } : { ...descriptor, command };
+}
