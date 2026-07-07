@@ -65,6 +65,15 @@ describe("buildHygieneReport", () => {
     expect(rep.factors).toHaveLength(5);
     expect(rep.hygiene.verdict).toBe("bounded");
   });
+
+  it("includes skill/subagent events on the report", () => {
+    const signal = { sequences: { root: "", sessions: [{
+      sessionId: "s1", transcript: "s1.jsonl", atMs: 0, steps: [], contextSeries: [],
+      eventSeries: [{ msgIndex: 3, kind: "skill", name: "review" }],
+    }] } } as any;
+    const rep = buildHygieneReport(signal);
+    expect(rep.events).toEqual([{ msgIndex: 3, kind: "skill", name: "review" }]);
+  });
 });
 
 import { HygieneReportSchema } from "../../gem.controller.js";

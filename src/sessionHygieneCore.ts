@@ -10,6 +10,7 @@ import {
   scanWorkflow, runDetectors, DETECTORS, hygieneScore, contextCap,
   HYGIENE_FACTOR_IDS, summariesForSpecs, resolveClaudeSession,
   type WorkflowSignal, type TurnUsage, type DetectorSummary, type HygieneVerdict, type ScanInventory,
+  type SkillAgentEvent,
 } from "@agentgem/insight";
 import { introspectConfig, introspectProject } from "@agentgem/capture";
 import { resolveDirs, resolveProject, type ConfigInventory, type ProjectInventory } from "@agentgem/model";
@@ -32,6 +33,7 @@ function introspectAll(dir: string | undefined, projects: string[] | undefined):
 export interface HygieneReport {
   meta: { sessionId: string; transcript: string; model: string | null; cap: number };
   curve: TurnUsage[];
+  events: SkillAgentEvent[];
   factors: DetectorSummary[];
   hygiene: HygieneVerdict;
 }
@@ -49,6 +51,7 @@ export function buildHygieneReport(signal: WorkflowSignal): HygieneReport {
       cap: contextCap(model ?? undefined),
     },
     curve: session?.contextSeries ?? [],
+    events: session?.eventSeries ?? [],
     factors,
     hygiene: hygieneScore(factors),
   };

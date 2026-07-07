@@ -83,6 +83,7 @@ export const HygieneReportSchema = z.object({
     turn: z.number(), msgIndex: z.number(),
     ctxTokens: z.number(), cacheCreation: z.number(), outTokens: z.number(),
   })),
+  events: z.array(z.object({ msgIndex: z.number(), kind: z.enum(["skill", "agent"]), name: z.string() })),
   factors: z.array(z.object({
     id: z.string(), title: z.string(), advice: z.string(),
     severity: z.enum(["info", "warn"]), count: z.number(), sessions: z.number(),
