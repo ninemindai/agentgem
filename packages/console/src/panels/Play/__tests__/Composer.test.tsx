@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { Composer } from "../Composer.js";
-import { testbedProjectsRoute, playStudioRoute, inventoryRoute } from "../../../api/routes.js";
+import { testbedProjectsRoute, playStudioRoute, playImportRoute, inventoryRoute } from "../../../api/routes.js";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
@@ -30,6 +30,19 @@ describe("Composer", () => {
     fireEvent.click(screen.getByText("app"));
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith("s1"));
     expect(studio.mock.calls[0][1]).toMatchObject({ body: { source: { kind: "session", sessionId: "sess-1", agent: "claude" } } });
+  });
+
+  it("switches to the HTML tab and imports pasted HTML", async () => {
+    vi.spyOn(testbedProjectsRoute, "call").mockResolvedValue({ projects: [] } as never);
+    const imp = vi.spyOn(playImportRoute, "call").mockResolvedValue({ name: "my-game" });
+    const onCreated = vi.fn();
+    render(<Composer apiBase="" onCreated={onCreated} />);
+    fireEvent.click(screen.getByText("HTML"));
+    fireEvent.change(screen.getByPlaceholderText("title"), { target: { value: "My Game" } });
+    fireEvent.change(screen.getByPlaceholderText("…or paste HTML here"), { target: { value: "<h1>hi</h1>" } });
+    fireEvent.click(screen.getByText("Create miniapp"));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith("my-game"));
+    expect(imp.mock.calls[0][1]).toMatchObject({ body: { title: "My Game", html: "<h1>hi</h1>" } });
   });
 
   it("switches to the Skill tab and seeds a skill source", async () => {

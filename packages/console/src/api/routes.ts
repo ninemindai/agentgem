@@ -818,6 +818,7 @@ const PlaySourceSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("session"), agent: z.string(), project: z.string().optional(), sessionId: z.string(), summary: z.string() }),
   z.object({ kind: z.literal("skill"), skillName: z.string(), sourceId: z.string().optional() }),
   z.object({ kind: z.literal("project"), path: z.string(), flavor: z.string() }),
+  z.object({ kind: z.literal("html"), title: z.string() }),
 ]);
 const PlayMetaSchema = z.object({
   title: z.string(), genre: z.enum(["replay", "skill-run", "project-fun"]),
@@ -833,6 +834,9 @@ export const playMiniappRoute = defineRoute("GET", "/api/play/miniapp", {
 });
 export const playStudioRoute = defineRoute("POST", "/api/play/studio", {
   body: z.object({ source: PlaySourceSchema }), response: z.object({ name: z.string() }),
+});
+export const playImportRoute = defineRoute("POST", "/api/play/import", {
+  body: z.object({ title: z.string(), html: z.string() }), response: z.object({ name: z.string() }),
 });
 export const playSaveRoute = defineRoute("POST", "/api/play/save", {
   body: z.object({ name: z.string(), html: z.string(), meta: PlayMetaSchema }),

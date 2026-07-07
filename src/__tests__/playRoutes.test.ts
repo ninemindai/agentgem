@@ -23,4 +23,20 @@ describe("PlayController", () => {
     const ctrl = new PlayController();
     await expect(ctrl.save({ body: { name: "bad", html: `<script>fetch("http://x/")</script>`, meta } })).rejects.toThrow();
   });
+
+  it("import creates a miniapp from raw HTML (draft, kind:html provenance)", async () => {
+    const ctrl = new PlayController();
+    const html = "<!doctype html><body><h1>Herding Programmers</h1><script>const x=1;</script></body>";
+    const res = await ctrl.import({ body: { title: "Herding Programmers", html } });
+    expect(res.name).toBe("herding-programmers");
+    const got = await ctrl.miniapp({ query: { name: res.name } });
+    expect(got.html).toBe(html);                                  // imported verbatim
+    expect(got.meta.createdFrom).toEqual({ kind: "html", title: "Herding Programmers" });
+  });
+
+  it("import does NOT gate (a not-yet-sealed draft imports; the seal is enforced on Save)", async () => {
+    const ctrl = new PlayController();
+    const res = await ctrl.import({ body: { title: "wip", html: `<body><script>fetch("http://x/")</script></body>` } });
+    expect(res.name).toBe("wip"); // import succeeds; Save would reject until the fetch is removed
+  });
 });

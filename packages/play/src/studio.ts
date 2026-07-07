@@ -29,6 +29,7 @@ function slugFor(source: GameSource): string {
   const raw =
     source.kind === "session" ? `session-${source.sessionId}` :
     source.kind === "skill" ? source.skillName :
+    source.kind === "html" ? source.title :
     (source.path.split(/[\\/]/).filter(Boolean).pop() ?? "project");
   const slug = raw.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
   return slug || "miniapp";
@@ -64,6 +65,21 @@ export async function seedStudio(source: GameSource, readers: SourceReaders): Pr
   writeFileSync(join(dir, "meta.json"), JSON.stringify(meta, null, 2));
   await commitAll(miniappsRoot(), `seed miniapp ${name}`);
   return { name, brief: `${input.brief}\n\n${studioInstructions(name)}` };
+}
+
+// Import a miniapp from existing self-contained HTML. The HTML becomes the miniapp verbatim (a draft);
+// NOT gated here — Save enforces the seal, so imperfect HTML can be brought in and fixed in the studio.
+export async function importStudio(title: string, html: string): Promise<{ name: string; brief: string }> {
+  const source: GameSource = { kind: "html", title };
+  const name = slugFor(source);
+  const dir = miniappDir(name); // validates the slug + jails the path
+  await ensureRepo(miniappsRoot());
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, `${name}.html`), html);
+  const meta: MiniappMeta = { title, genre: "project-fun", createdFrom: source, engineVersion: "1" };
+  writeFileSync(join(dir, "meta.json"), JSON.stringify(meta, null, 2));
+  await commitAll(miniappsRoot(), `import miniapp ${name}`);
+  return { name, brief: `You are refining "${title}", a self-contained HTML mini-game the user imported.\n\n${studioInstructions(name)}` };
 }
 
 export function studioBrief(name: string): string {

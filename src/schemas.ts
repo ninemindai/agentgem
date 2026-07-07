@@ -99,6 +99,7 @@ export const GameArtifactSchema = z.object({
     z.object({ kind: z.literal("session"), agent: z.string(), project: z.string().optional(), sessionId: z.string(), summary: z.string() }),
     z.object({ kind: z.literal("skill"), skillName: z.string(), sourceId: z.string().optional() }),
     z.object({ kind: z.literal("project"), path: z.string(), flavor: z.string() }),
+    z.object({ kind: z.literal("html"), title: z.string() }),
   ]),
   engineVersion: z.string(),
   needs: z.array(z.enum(["live-session-events", "local-project-access", "invoke-agent"])).optional(),
@@ -919,3 +920,7 @@ export const PlayPublishRequestSchema = z.object({ remote: z.string().url().opti
 export const PlayPublishResponseSchema = z.object({ ok: z.boolean() });
 export const PlayStudioRequestSchema = z.object({ source: GameArtifactSchema.shape.createdFrom });
 export const PlayStudioResponseSchema = z.object({ name: z.string() });
+// Import a miniapp from an existing self-contained HTML file. The HTML becomes the miniapp as-is (a
+// draft opened in the studio); the seal gate is enforced on Save, not import, so imperfect HTML can be
+// brought in and fixed by chatting with the agent.
+export const PlayImportRequestSchema = z.object({ title: z.string().min(1), html: z.string().min(1) });
