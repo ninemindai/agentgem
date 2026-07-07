@@ -4,6 +4,8 @@ import { render, cleanup, waitFor, screen, fireEvent } from "@testing-library/re
 import { Runner } from "../Runner.js";
 import { playSessionDataRoute, inventoryRoute } from "../../../api/routes.js";
 import { getConsent } from "../consent.js";
+import * as watchStream from "../../Watch/watchStream.js";
+import * as studioStream from "../studioStream.js";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); try { localStorage.clear(); } catch { /* ignore */ } });
 
@@ -74,6 +76,57 @@ describe("Runner", () => {
     await new Promise((r) => setTimeout(r, 20));
     expect(inv).not.toHaveBeenCalled();
     expect(getConsent("g3", "local-project-access")).toBe("denied");
+  });
+
+  it("live-session-events: after consent, streams the latest session's events into the game", async () => {
+    vi.spyOn(watchStream, "fetchSessions").mockResolvedValue([
+      { id: "s", file: "/f.jsonl", agent: "claude", project: null, model: null, msgs: 1, startMs: 0, endMs: 0, ageMs: 0 },
+    ]);
+    let emit: (e: unknown) => void = () => {};
+    vi.spyOn(watchStream, "openWatchStream").mockImplementation((_a, _f, cb) => { emit = cb as (e: unknown) => void; return () => {}; });
+    const { container } = render(<Runner html="<p>x</p>" name="w1" apiBase="" needs={["live-session-events"]} />);
+    const win = (container.querySelector("iframe") as HTMLIFrameElement).contentWindow as Window;
+    const post = vi.spyOn(win, "postMessage").mockImplementation(() => {});
+    fromIframe(win, { type: "agentgem:request", want: "live-session-events" });
+    await waitFor(() => expect(screen.getByText("Allow")).toBeTruthy());
+    fireEvent.click(screen.getByText("Allow"));
+    await waitFor(() => expect(watchStream.openWatchStream).toHaveBeenCalledWith("", "/f.jsonl", expect.any(Function)));
+    emit({ type: "event", index: 0 }); // a live session event arrives
+    expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "agentgem:feed", channel: "live-session-events" }), "*");
+  });
+
+  it("live-session-events: a no-session request posts idle but does NOT wedge a later retry", async () => {
+    const fs = vi.spyOn(watchStream, "fetchSessions").mockResolvedValueOnce([]); // no sessions yet
+    vi.spyOn(watchStream, "openWatchStream").mockImplementation(() => () => {});
+    const { container } = render(<Runner html="<p>x</p>" name="w2" apiBase="" needs={["live-session-events"]} />);
+    const win = (container.querySelector("iframe") as HTMLIFrameElement).contentWindow as Window;
+    const post = vi.spyOn(win, "postMessage").mockImplementation(() => {});
+    fromIframe(win, { type: "agentgem:request", want: "live-session-events" });
+    await waitFor(() => expect(screen.getByText("Allow")).toBeTruthy());
+    fireEvent.click(screen.getByText("Allow"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({ channel: "live-session-events", data: { type: "idle" } }), "*"));
+    // a session now exists; the game re-requests (consent remembered) → the guard must have been released
+    fs.mockResolvedValue([{ id: "s", file: "/late.jsonl", agent: "claude", project: null, model: null, msgs: 1, startMs: 0, endMs: 0, ageMs: 0 }]);
+    fromIframe(win, { type: "agentgem:request", want: "live-session-events" });
+    await waitFor(() => expect(watchStream.openWatchStream).toHaveBeenCalledWith("", "/late.jsonl", expect.any(Function)));
+  });
+
+  it("invoke-agent: after consent, runs an agent turn and streams the transcript back", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) =>
+      String(url).includes("/api/agents") ? { ok: true, json: async () => ({ agents: [{ id: "claude", available: true }] }) }
+        : { ok: true, json: async () => ({ chatId: "c1" }) }) as unknown as typeof fetch);
+    let onDelta: ((t: string) => void) | null = null;
+    vi.spyOn(studioStream, "openStudioStream").mockImplementation((_a, _c, _m, h) => { onDelta = h.onDelta; return () => {}; });
+    const { container } = render(<Runner html="<p>x</p>" name="a1" apiBase="" needs={["invoke-agent"]} />);
+    const win = (container.querySelector("iframe") as HTMLIFrameElement).contentWindow as Window;
+    const post = vi.spyOn(win, "postMessage").mockImplementation(() => {});
+    fromIframe(win, { type: "agentgem:request", want: "invoke-agent", message: "hello agent" });
+    await waitFor(() => expect(screen.getByText("Allow")).toBeTruthy());
+    fireEvent.click(screen.getByText("Allow"));
+    await waitFor(() => expect(studioStream.openStudioStream).toHaveBeenCalledWith("", "c1", "hello agent", expect.anything()));
+    onDelta!("hi there");
+    expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "agentgem:feed", channel: "invoke-agent", data: { kind: "delta", text: "hi there" } }), "*");
+    vi.unstubAllGlobals();
   });
 
   it("a thumbnail (interactive=false) never prompts for a gated capability", async () => {
