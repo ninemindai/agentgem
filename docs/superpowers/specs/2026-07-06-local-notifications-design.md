@@ -71,7 +71,8 @@ New, under `packages/console/src/notify/`:
 - **`useStatusTriggers.ts`** — a hook that polls both status endpoints on an
   interval (default 5s, matching `WarmingPill`), holds the previous snapshot in
   a ref, and invokes a passed `onTrigger(event)` callback when:
-  - `prev.last?.running === true && next.last?.running === false` → warm-finished
+  - `prev.running === true && next.running === false` → warm-finished
+    (top-level `running`, the same flag `WarmingPill` reads)
   - `next.queued > prev.queued` → `next.queued - prev.queued` new queue items
 
   The **first successful poll only seeds the baseline** — it never fires on
