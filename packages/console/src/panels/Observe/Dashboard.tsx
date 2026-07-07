@@ -23,6 +23,7 @@ export function Dashboard({ data, range, onRange, filter, onFilter, pending, onR
   onPublishSetup?: () => void;
 }) {
   const [heatMetric, setHeatMetric] = useState<"tokens" | "sessions">("tokens");
+  const [usageDim, setUsageDim] = useState<"tools" | "skills" | "subagents">("skills");
 
   const empty = data.pulse.sessions === 0;
   const heatCells = heatmapCells(data.daily, heatMetric);
@@ -120,11 +121,14 @@ export function Dashboard({ data, range, onRange, filter, onFilter, pending, onR
             </div>
 
             {(data.byTool.length > 0 || data.bySubagent.length > 0 || data.bySkill.length > 0) && (
-              <div className="obs-charts obs-usage-charts">
-                <UsageBars title="By tool" rows={data.byTool} />
-                <UsageBars title="By subagent" rows={data.bySubagent} linkable />
-                <UsageBars title="By skill" rows={data.bySkill} linkable />
-              </div>
+              <>
+                <div className="obs-charts obs-usage-charts">
+                  <UsageBars title="By tool" rows={data.byTool} />
+                  <UsageBars title="By subagent" rows={data.bySubagent} linkable />
+                  <UsageBars title="By skill" rows={data.bySkill} linkable />
+                </div>
+                <UsageSeries data={data} dim={usageDim} onDim={setUsageDim} />
+              </>
             )}
 
             {heatCells.length > 0 && (
@@ -192,6 +196,57 @@ export function Dashboard({ data, range, onRange, filter, onFilter, pending, onR
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+const USAGE_DIM_LABEL = { tools: "Tools", skills: "Skills", subagents: "Subagents" } as const;
+type UsageDim = "tools" | "skills" | "subagents";
+
+// Stacked-area time-series of the top-6 artifacts of the chosen dimension over the range's
+// days, from the aggregated usageDaily series.
+function UsageSeries({ data, dim, onDim }: { data: ObservePayload; dim: UsageDim; onDim: (d: UsageDim) => void }) {
+  const breakdown = dim === "tools" ? data.byTool : dim === "skills" ? data.bySkill : data.bySubagent;
+  const names = breakdown.slice(0, 6).map((x) => x.name);
+  const series = data.usageDaily.map((d) => {
+    const row: Record<string, number | string> = { date: d.date };
+    for (const n of names) row[n] = d[dim][n] ?? 0;
+    return row;
+  });
+  return (
+    <div className="obs-card obs-usage-series-card">
+      <div className="obs-heatmap-head">
+        <div className="obs-card-title">Usage over time</div>
+        <div className="obs-heat-toggle" role="group" aria-label="usage dimension">
+          {(["tools", "skills", "subagents"] as const).map((d) => (
+            <button key={d} type="button" className={"obs-heat-toggle-btn" + (dim === d ? " is-active" : "")} onClick={() => onDim(d)}>
+              {USAGE_DIM_LABEL[d]}
+            </button>
+          ))}
+        </div>
+      </div>
+      {names.length === 0 ? (
+        <p className="obs-muted obs-usage-series-empty">No {USAGE_DIM_LABEL[dim].toLowerCase()} usage in this range.</p>
+      ) : (
+        <>
+          <ResponsiveContainer width="100%" height={200}>
+            <AreaChart data={series}>
+              <CartesianGrid strokeOpacity={0.1} vertical={false} />
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+              <YAxis tick={{ fontSize: 10 }} width={28} allowDecimals={false} />
+              <Tooltip />
+              {names.map((n, i) => (
+                <Area key={n} dataKey={n} stackId="u" stroke={SLICE_COLORS[i % SLICE_COLORS.length]} fill={SLICE_COLORS[i % SLICE_COLORS.length]} fillOpacity={0.5} />
+              ))}
+            </AreaChart>
+          </ResponsiveContainer>
+          <ul className="obs-legend obs-usage-series-legend">
+            {names.map((n, i) => (
+              <li key={n}><span className="obs-dot" style={{ background: SLICE_COLORS[i % SLICE_COLORS.length] }} />{n}</li>
+            ))}
+          </ul>
+        </>
+      )}
     </div>
   );
 }

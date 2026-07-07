@@ -22,6 +22,7 @@ const payload: ObservePayload = {
   byTool: [{ name: "Read", count: 12 }, { name: "Bash", count: 5 }],
   bySubagent: [{ name: "Explore", count: 2 }],
   bySkill: [],
+  usageDaily: [{ date: "2026-06-28", tools: { Read: 8, Bash: 4 }, skills: {}, subagents: { Explore: 2 } }],
   facets: { agents: ["claude"], projects: ["agentgem"], models: ["claude-opus-4-8"] },
   range: "7d",
 };
@@ -49,6 +50,14 @@ describe("Observe Dashboard", () => {
     expect(screen.getByText("By subagent")).toBeDefined();
     expect(screen.getByText("Explore")).toBeDefined();
     expect(screen.queryByText("By skill")).toBeNull(); // bySkill empty → card omitted
+  });
+
+  it("renders the usage-over-time series with a Tools/Skills/Subagents toggle", () => {
+    render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} apiBase="" />);
+    expect(screen.getByText("Usage over time")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Tools" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Skills" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Subagents" })).toBeTruthy();
   });
 
   it("renders at least one heatmap cell", () => {

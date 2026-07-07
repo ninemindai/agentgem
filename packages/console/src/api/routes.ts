@@ -413,6 +413,12 @@ const ObservePayloadSchema = z.object({
   byTool: z.array(z.object({ name: z.string(), count: z.number() })),
   bySkill: z.array(z.object({ name: z.string(), count: z.number() })),
   bySubagent: z.array(z.object({ name: z.string(), count: z.number() })),
+  usageDaily: z.array(z.object({
+    date: z.string(),
+    tools: z.record(z.string(), z.number()),
+    skills: z.record(z.string(), z.number()),
+    subagents: z.record(z.string(), z.number()),
+  })),
   facets: z.object({ agents: z.array(z.string()), projects: z.array(z.string()), models: z.array(z.string()) }),
   range: z.enum(["today", "7d", "30d", "all"]),
 });

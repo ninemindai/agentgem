@@ -693,6 +693,9 @@ body::before {
 .obs-usage-link { border: 0; background: none; padding: 0; cursor: pointer; color: var(--accent);
   font: inherit; text-align: left; }
 .obs-usage-link:hover { text-decoration: underline; }
+.obs-usage-series-card { margin-top: 14px; }
+.obs-usage-series-legend { flex-direction: row; flex-wrap: wrap; gap: 4px 16px; margin-top: 8px; }
+.obs-usage-series-empty { margin: 20px 0; }
 
 /* Setup — the local .claude inventory browser + artifact viewer. */
 .setup { animation: fade .4s ease both; }

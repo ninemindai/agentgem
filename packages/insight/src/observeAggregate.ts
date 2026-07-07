@@ -44,6 +44,9 @@ export interface ObservePayload {
   byTool: { name: string; count: number }[];
   bySkill: { name: string; count: number }[];
   bySubagent: { name: string; count: number }[];
+  // Per-day usage series for charting. Each day holds only the top-6 names of each
+  // dimension (bounded payload); same UTC-date axis as `daily`.
+  usageDaily: { date: string; tools: Record<string, number>; skills: Record<string, number>; subagents: Record<string, number> }[];
   facets: { agents: string[]; projects: string[]; models: string[] };
   range: ObserveRange;
 }
@@ -87,6 +90,8 @@ export function aggregateObserve(stats: SessionStat[], range: ObserveRange, nowM
   const byDay = new Map<string, ObservePayload["daily"][number]>();
   const byModel = new Map<string, ObservePayload["models"][number]>();
   const byTool = new Map<string, number>(), bySkill = new Map<string, number>(), bySubagent = new Map<string, number>();
+  // Full per-day per-artifact counts; trimmed to each dimension's top-6 after ranking.
+  const fullDay = new Map<string, { tools: Map<string, number>; skills: Map<string, number>; subagents: Map<string, number> }>();
   let pTokens = 0, pMsgs = 0, pActive = 0;
   for (const s of filtered) {
     addCounts(byTool, s.tools);
@@ -97,6 +102,10 @@ export function aggregateObserve(stats: SessionStat[], range: ObserveRange, nowM
     d.sessions++; d.msgs += s.msgs; d.tokensIn += s.tokensIn; d.tokensOut += s.tokensOut; d.tokensCache += s.tokensCache;
     byDay.set(date, d);
 
+    const fd = fullDay.get(date) ?? { tools: new Map(), skills: new Map(), subagents: new Map() };
+    addCounts(fd.tools, s.tools); addCounts(fd.skills, s.skills); addCounts(fd.subagents, s.subagents);
+    fullDay.set(date, fd);
+
     const modelKey = `${s.agent}:${s.model ?? "unknown"}`;
     const m = byModel.get(modelKey) ?? { model: s.model ?? "unknown", agent: s.agent, sessions: 0, tokens: 0 };
     m.sessions++; m.tokens += tokensOf(s);
@@ -104,6 +113,18 @@ export function aggregateObserve(stats: SessionStat[], range: ObserveRange, nowM
 
     pTokens += tokensOf(s); pMsgs += s.msgs; pActive += Math.max(0, s.endMs - s.startMs);
   }
+
+  const USAGE_TOP = 6;
+  const byToolR = rankCounts(byTool), bySkillR = rankCounts(bySkill), bySubagentR = rankCounts(bySubagent);
+  const top = (r: { name: string }[]) => r.slice(0, USAGE_TOP).map((x) => x.name);
+  const topT = top(byToolR), topS = top(bySkillR), topA = top(bySubagentR);
+  const pick = (m: Map<string, number>, names: string[]): Record<string, number> => {
+    const out: Record<string, number> = {};
+    for (const n of names) { const v = m.get(n); if (v !== undefined) out[n] = v; }
+    return out;
+  };
+  const usageDaily = [...fullDay.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([date, fd]) => ({ date, tools: pick(fd.tools, topT), skills: pick(fd.skills, topS), subagents: pick(fd.subagents, topA) }));
 
   return {
     pulse: { sessions: filtered.length, msgs: pMsgs, tokens: pTokens, activeMs: pActive },
@@ -113,9 +134,10 @@ export function aggregateObserve(stats: SessionStat[], range: ObserveRange, nowM
       .sort((a, b) => b.endMs - a.endMs)
       .slice(0, 200),
     models: [...byModel.values()].sort((a, b) => b.tokens - a.tokens),
-    byTool: rankCounts(byTool),
-    bySkill: rankCounts(bySkill),
-    bySubagent: rankCounts(bySubagent),
+    byTool: byToolR,
+    bySkill: bySkillR,
+    bySubagent: bySubagentR,
+    usageDaily,
     facets,
     range,
   };
