@@ -814,7 +814,7 @@ export const sourceImportRoute = defineRoute("POST", "/api/sources/import", {
 });
 
 // ---- Play (miniapps) — client mirrors of the server /api/play/* routes ----
-const PlayNeedsSchema = z.array(z.enum(["live-session-events", "local-project-access", "invoke-agent"])).optional();
+const PlayNeedsSchema = z.array(z.enum(["session-data", "live-session-events", "local-project-access", "invoke-agent"])).optional();
 const PlaySourceSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("session"), agent: z.string(), project: z.string().optional(), sessionId: z.string(), summary: z.string() }),
   z.object({ kind: z.literal("skill"), skillName: z.string(), sourceId: z.string().optional() }),
@@ -845,6 +845,12 @@ export const playSaveRoute = defineRoute("POST", "/api/play/save", {
 });
 export const playPublishRoute = defineRoute("POST", "/api/play/publish", {
   body: z.object({ remote: z.string().url().optional() }), response: z.object({ ok: z.boolean() }),
+});
+// Host-brokered feed: a replay miniapp's source-session transcript, fetched on demand and postMessaged
+// into the sealed iframe by the Runner.
+export const playSessionDataRoute = defineRoute("GET", "/api/play/session-data", {
+  query: z.object({ name: z.string() }),
+  response: z.object({ meta: z.record(z.string(), z.unknown()), timeline: z.array(z.object({ role: z.string(), tsMs: z.number(), text: z.string() })) }),
 });
 
 export const makeClient = (apiBase: string): Client => createClient({ baseURL: apiBase });

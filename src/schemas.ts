@@ -102,7 +102,7 @@ export const GameArtifactSchema = z.object({
     z.object({ kind: z.literal("html"), title: z.string() }),
   ]),
   engineVersion: z.string(),
-  needs: z.array(z.enum(["live-session-events", "local-project-access", "invoke-agent"])).optional(),
+  needs: z.array(z.enum(["session-data", "live-session-events", "local-project-access", "invoke-agent"])).optional(),
   meta: z.object({ controls: z.string().optional(), estPlaySeconds: z.number().optional() }).optional(),
 });
 
@@ -905,11 +905,11 @@ export const PlaySaveRequestSchema = z.object({
     genre: z.enum(["replay", "skill-run", "project-fun"]),
     createdFrom: GameArtifactSchema.shape.createdFrom,
     engineVersion: z.string().default("1"),
-    needs: z.array(z.enum(["live-session-events", "local-project-access", "invoke-agent"])).optional(),
+    needs: z.array(z.enum(["session-data", "live-session-events", "local-project-access", "invoke-agent"])).optional(),
   }),
 });
 export const PlaySaveResponseSchema = z.object({ name: z.string(), commit: z.string().nullable() });
-const PlayNeedsSchema = z.array(z.enum(["live-session-events", "local-project-access", "invoke-agent"])).optional();
+const PlayNeedsSchema = z.array(z.enum(["session-data", "live-session-events", "local-project-access", "invoke-agent"])).optional();
 export const MiniappListSchema = z.object({ miniapps: z.array(z.object({ name: z.string(), title: z.string(), genre: z.string(), needs: PlayNeedsSchema })) });
 export const PlayMiniappQuerySchema = z.object({ name: z.string() });
 export const PlayMiniappSchema = z.object({
@@ -924,3 +924,10 @@ export const PlayStudioResponseSchema = z.object({ name: z.string() });
 // draft opened in the studio); the seal gate is enforced on Save, not import, so imperfect HTML can be
 // brought in and fixed by chatting with the agent.
 export const PlayImportRequestSchema = z.object({ title: z.string().min(1), html: z.string().min(1) });
+
+// Host-brokered feed for a replay miniapp: its source-session transcript ({meta, timeline}), fetched on
+// demand so the sealed bundle stays tiny. Only session-sourced miniapps have it (else 404).
+export const PlaySessionDataSchema = z.object({
+  meta: z.record(z.string(), z.unknown()),
+  timeline: z.array(z.object({ role: z.string(), tsMs: z.number(), text: z.string() })),
+});

@@ -1,6 +1,7 @@
 // packages/console/src/panels/Play/Runner.tsx
 import { useEffect, useRef, useState } from "react";
 import { sandboxDoc } from "../Watch/sandboxDoc.js";
+import { makeClient, playSessionDataRoute } from "../../api/routes.js";
 
 // The sealed miniapp player: null-origin iframe (no allow-same-origin), strict CSP via sandboxDoc.
 // Miniapps are usually full-window apps (html,body{height:100%;overflow:hidden}), so a short fixed
@@ -8,10 +9,34 @@ import { sandboxDoc } from "../Watch/sandboxDoc.js";
 // fit — inline it fits the column width; fullscreen it fits the whole viewport so you can actually play it.
 // `interactive={false}` renders a live but click-through thumbnail (no fullscreen button; the card owns
 // framing + clicks), used by the Arcade grid.
-export function Runner({ html, vw = 1200, vh = 780, interactive = true }: { html: string; vw?: number; vh?: number; interactive?: boolean }) {
+//
+// Capability broker: a sealed game can DECLARE `needs` (e.g. ["session-data"]). It has no network, so it
+// postMessages the trusted Runner a request; the Runner fetches the host data and feeds it back into the
+// iframe. Only requests from THIS iframe, and only a `want` the gem declared in `needs`, are honored.
+export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, apiBase, needs }:
+  { html: string; vw?: number; vh?: number; interactive?: boolean; name?: string; apiBase?: string; needs?: string[] }) {
   const boxRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   const [scale, setScale] = useState(0.5);
   const [fs, setFs] = useState(false);
+
+  // Broker: feed host data into the sealed iframe on request.
+  useEffect(() => {
+    if (name == null || apiBase == null || !needs?.includes("session-data")) return; // apiBase="" (same-origin) is valid
+    const onMsg = (e: MessageEvent) => {
+      const win = iframeRef.current?.contentWindow;
+      if (!win || e.source !== win) return;                            // only our own sealed iframe
+      const d = e.data as { type?: string; want?: string } | null;
+      if (!d || d.type !== "agentgem:request" || !d.want || !needs.includes(d.want)) return; // only declared caps
+      if (d.want === "session-data") {
+        playSessionDataRoute.call(makeClient(apiBase), { query: { name } })
+          .then((data) => win.postMessage({ type: "agentgem:feed", channel: "session-data", data }, "*"))
+          .catch(() => { /* shared/offline miniapp: no host data — the game shows its waiting state */ });
+      }
+    };
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, [name, apiBase, needs]);
 
   useEffect(() => {
     const box = boxRef.current;
@@ -36,6 +61,7 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true }: { html
   return (
     <div ref={boxRef} style={boxStyle}>
       <iframe
+        ref={iframeRef}
         title="miniapp preview"
         sandbox="allow-scripts"
         srcDoc={sandboxDoc(html)}

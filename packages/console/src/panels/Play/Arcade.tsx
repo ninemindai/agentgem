@@ -6,8 +6,9 @@ import { genre as genreOf, CHIP } from "./playMeta.js";
 
 type Item = { name: string; title: string; genre: string; needs?: string[] };
 
-// A live but click-through preview of the game, lazily fetched per card.
-function Thumb({ apiBase, name }: { apiBase: string; name: string }) {
+// A live but click-through preview of the game, lazily fetched per card. Broker-fed games (needs) get
+// their host data postMessaged in by the Runner, so the thumbnail is a real replay, not a waiting state.
+function Thumb({ apiBase, name, needs }: { apiBase: string; name: string; needs?: string[] }) {
   const [html, setHtml] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
@@ -16,7 +17,7 @@ function Thumb({ apiBase, name }: { apiBase: string; name: string }) {
   }, [apiBase, name]);
   return (
     <div className="play-card__thumb">
-      {html && <Runner html={html} interactive={false} />}
+      {html && <Runner html={html} interactive={false} name={name} apiBase={apiBase} needs={needs} />}
       <div className="play-thumb-scrim" />
       <div className="play-card__play"><span>▶</span></div>
     </div>
@@ -42,7 +43,7 @@ export function Arcade({ apiBase, onOpen }: { apiBase: string; onOpen: (name: st
         const g = genreOf(m.genre);
         return (
           <li key={m.name} className="play-card" onClick={() => onOpen(m.name)} title={`Open ${m.title}`}>
-            <Thumb apiBase={apiBase} name={m.name} />
+            <Thumb apiBase={apiBase} name={m.name} needs={m.needs} />
             <div className="play-card__body">
               <div className="play-card__title">{m.title}</div>
               <div className="play-card__row">

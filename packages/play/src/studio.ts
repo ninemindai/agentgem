@@ -60,8 +60,11 @@ export async function seedStudio(source: GameSource, readers: SourceReaders): Pr
   const g = genreFor(input.genre);
   await ensureRepo(miniappsRoot());
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, `${name}.html`), seedHtml(scaffoldFor(g.scaffold), input.data));
-  const meta: MiniappMeta = { title: name, genre: input.genre, createdFrom: input.createdFrom, engineVersion: "1" };
+  // Broker-fed genres (e.g. replay → session-data) bake NO data — the host feeds it into the sealed
+  // iframe on demand, keeping the bundle tiny + always fresh. Others bake their snapshot at seed time.
+  const brokerFed = g.needs?.includes("session-data");
+  writeFileSync(join(dir, `${name}.html`), brokerFed ? scaffoldFor(g.scaffold) : seedHtml(scaffoldFor(g.scaffold), input.data));
+  const meta: MiniappMeta = { title: name, genre: input.genre, createdFrom: input.createdFrom, engineVersion: "1", ...(g.needs ? { needs: g.needs } : {}) };
   writeFileSync(join(dir, "meta.json"), JSON.stringify(meta, null, 2));
   await commitAll(miniappsRoot(), `seed miniapp ${name}`);
   return { name, brief: `${input.brief}\n\n${studioInstructions(name)}` };

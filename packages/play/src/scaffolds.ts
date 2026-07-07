@@ -74,60 +74,59 @@ function replayScaffold(): string {
   <script>
   (function () {
     "use strict";
-    const dataEl = document.getElementById("game-data");
-    const DATA = dataEl ? JSON.parse(dataEl.textContent || "{}") : {};
-    const meta = DATA.meta || {};
-    const timeline = Array.isArray(DATA.timeline) ? DATA.timeline : [];
     const app = document.getElementById("app");
     const fmtDur = (ms) => { const s = Math.max(0, Math.round((ms||0)/1000)); return s<60 ? s+"s" : Math.floor(s/60)+"m "+(s%60)+"s"; };
     const num = (n) => (n||0).toLocaleString();
+    const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;" }[c]));
+    let timer = 0;
+
+    // --- host data bridge (boilerplate — keep this) --- the session transcript is host-brokered, not
+    // baked into the bundle, so this stays tiny + always fresh. Ask the trusted parent for it; render
+    // on the feed. A shared/offline replay (no host) simply shows the waiting state.
+    const dataEl = document.getElementById("game-data");
+    let DATA = dataEl ? JSON.parse(dataEl.textContent || "{}") : {};
+    window.addEventListener("message", (e) => {
+      if (e.source !== window.parent) return;
+      const d = e.data;
+      if (d && d.type === "agentgem:feed" && d.channel === "session-data") { DATA = d.data || {}; boot(); }
+    });
+    function requestData() { try { if (window.parent && window.parent !== window) window.parent.postMessage({ type: "agentgem:request", want: "session-data" }, "*"); } catch (e) {} }
 
     // ==== AGENTGEM:GAME-LOGIC START ====
-    // Default: a real, playable session replay. The studio agent enhances/themes this block.
-    const tools = meta.tools || {};
-    const toolEntries = Object.keys(tools).map((k) => [k, tools[k]]).sort((a,b) => b[1]-a[1]);
-    const maxTool = toolEntries.reduce((m,e) => Math.max(m, e[1]), 1);
-
-    app.innerHTML =
-      '<h1>' + (meta.project || "Session Replay") + '</h1>' +
-      '<div class="sub">' + [meta.model, meta.gitBranch, fmtDur((meta.endMs||0)-(meta.startMs||0))].filter(Boolean).join(" · ") + '</div>' +
-      '<div class="tiles">' +
-        tile(num(meta.msgs || timeline.length), "messages") +
-        tile(num(meta.tokensIn), "tokens in") +
-        tile(num(meta.tokensOut), "tokens out") +
-        tile(num(toolEntries.length), "tool kinds") +
-      '</div>' +
-      (toolEntries.length ? '<div class="tools">' + toolEntries.map((e) =>
-        '<div class="toolrow"><span class="n">' + e[0] + '</span><span class="bar" style="width:' + Math.round(e[1]/maxTool*260) + 'px"></span><span class="c">' + e[1] + '</span></div>').join("") + '</div>' : '') +
-      '<div id="stage"></div>' +
-      '<div id="controls"><button id="play">' + (timeline.length ? "▶ Play" : "—") + '</button>' +
-        '<input id="scrub" type="range" min="0" max="' + Math.max(0, timeline.length-1) + '" value="0" />' +
-        '<span id="count"></span></div>';
-
-    function tile(v, l) { return '<div class="tile"><b>' + v + '</b><span>' + l + '</span></div>'; }
-
-    const stage = document.getElementById("stage");
-    const scrub = document.getElementById("scrub");
-    const count = document.getElementById("count");
-    const playBtn = document.getElementById("play");
-    let i = 0, playing = false, timer = 0;
-
-    function render() {
-      if (!timeline.length) { stage.innerHTML = '<div class="sub">Seed a session to replay its timeline here.</div>'; count.textContent = ""; return; }
-      const t = timeline[i] || {};
-      stage.innerHTML = '<div class="role ' + (t.role === "user" ? "user" : "assistant") + '">' + (t.role || "assistant") + '</div>' +
-        '<div class="text">' + (t.text ? esc(t.text) : "…") + '</div>';
-      scrub.value = String(i); count.textContent = (i+1) + " / " + timeline.length;
+    // A real, playable session replay from DATA ({meta, timeline}). The studio agent enhances this.
+    function boot() {
+      if (timer) { clearInterval(timer); timer = 0; }
+      const meta = DATA.meta || {};
+      const timeline = Array.isArray(DATA.timeline) ? DATA.timeline : [];
+      if (!timeline.length) { app.innerHTML = '<h1>Session Replay</h1><div class="sub">Waiting for session data…</div>'; return; }
+      const tools = meta.tools || {};
+      const toolEntries = Object.keys(tools).map((k) => [k, tools[k]]).sort((a,b) => b[1]-a[1]);
+      const maxTool = toolEntries.reduce((m,e) => Math.max(m, e[1]), 1);
+      const tile = (v, l) => '<div class="tile"><b>' + v + '</b><span>' + l + '</span></div>';
+      app.innerHTML =
+        '<h1>' + esc(meta.project || "Session Replay") + '</h1>' +
+        '<div class="sub">' + [meta.model, meta.gitBranch, fmtDur((meta.endMs||0)-(meta.startMs||0))].filter(Boolean).map(esc).join(" · ") + '</div>' +
+        '<div class="tiles">' + tile(num(meta.msgs || timeline.length), "messages") + tile(num(meta.tokensIn), "tokens in") + tile(num(meta.tokensOut), "tokens out") + tile(num(toolEntries.length), "tool kinds") + '</div>' +
+        (toolEntries.length ? '<div class="tools">' + toolEntries.map((e) => '<div class="toolrow"><span class="n">' + esc(e[0]) + '</span><span class="bar" style="width:' + Math.round(e[1]/maxTool*260) + 'px"></span><span class="c">' + e[1] + '</span></div>').join("") + '</div>' : '') +
+        '<div id="stage"></div>' +
+        '<div id="controls"><button id="play">▶ Play</button><input id="scrub" type="range" min="0" max="' + Math.max(0, timeline.length-1) + '" value="0" /><span id="count"></span></div>';
+      const stage = document.getElementById("stage"), scrub = document.getElementById("scrub"), count = document.getElementById("count"), playBtn = document.getElementById("play");
+      let i = 0, playing = false;
+      function render() {
+        const t = timeline[i] || {};
+        stage.innerHTML = '<div class="role ' + (t.role === "user" ? "user" : "assistant") + '">' + esc(t.role || "assistant") + '</div><div class="text">' + (t.text ? esc(t.text) : "…") + '</div>';
+        scrub.value = String(i); count.textContent = (i+1) + " / " + timeline.length;
+      }
+      function stop() { playing = false; playBtn.textContent = "▶ Play"; if (timer) clearInterval(timer); timer = 0; }
+      function play() { playing = true; playBtn.textContent = "❚❚ Pause"; timer = setInterval(() => { if (i < timeline.length - 1) { i++; render(); } else stop(); }, 700); }
+      playBtn.addEventListener("click", () => (playing ? stop() : play()));
+      scrub.addEventListener("input", () => { i = Number(scrub.value) || 0; if (playing) stop(); render(); });
+      render();
     }
-    function esc(s) { return String(s).replace(/[&<>]/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;" }[c])); }
-    function step() { if (i < timeline.length - 1) { i++; render(); } else { stop(); } }
-    function stop() { playing = false; playBtn.textContent = "▶ Play"; if (timer) clearInterval(timer); timer = 0; }
-    function play() { if (!timeline.length) return; playing = true; playBtn.textContent = "❚❚ Pause"; timer = setInterval(step, 700); }
-
-    playBtn.addEventListener("click", () => (playing ? stop() : play()));
-    scrub.addEventListener("input", () => { i = Number(scrub.value) || 0; if (playing) stop(); render(); });
-    render();
     // ==== AGENTGEM:GAME-LOGIC END ====
+
+    boot();
+    if (!(DATA.timeline && DATA.timeline.length)) requestData(); // broker-fed: ask the host for the transcript
   })();
   </script>
 </body></html>`;
