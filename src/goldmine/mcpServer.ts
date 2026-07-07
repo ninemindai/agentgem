@@ -5,9 +5,9 @@
 import { z } from "zod";
 import { MCPApplication, mcpServer, tool } from "@agentback/mcp";
 import { isMain } from "@agentback/core";
-import { scanSessionsCached, loadSessionTranscript } from "@agentgem/insight";
+import { scanSessionsCached, summarizeSession, askSession } from "@agentgem/insight";
 import { introspectConfig, introspectProject } from "@agentgem/capture";
-import { searchSessions, getArtifactDetail, windowTranscript } from "./tools.js";
+import { searchSessions, getArtifactDetail } from "./tools.js";
 import { collectBehaviorFindings } from "./behaviorFindings.js";
 
 const SearchInput = z.object({
@@ -15,11 +15,15 @@ const SearchInput = z.object({
   limit: z.number().int().min(1).max(50).default(10),
 });
 
-const TranscriptInput = z.object({
+const SummarizeInput = z.object({
   sessionId: z.string(),
-  agent: z.enum(["claude", "codex"]).default("claude"),
-  from: z.number().int().min(0).default(0),
-  limit: z.number().int().min(1).max(100).default(30),
+  agent: z.string().default("claude"),
+});
+
+const AskInput = z.object({
+  sessionId: z.string(),
+  agent: z.string().default("claude"),
+  question: z.string().min(1),
 });
 
 const DetailInput = z.object({
@@ -43,14 +47,20 @@ export class GoldmineTools {
     return { matches: searchSessions(sessions, query, limit) };
   }
 
-  @tool("get_session_transcript", {
-    input: TranscriptInput,
-    description: "Read a bounded window of turns from one past session (use sessionId + agent from search_sessions). Content is redacted; page forward with `from`. `meta` carries the session's token counts.",
+  @tool("summarize_session", {
+    input: SummarizeInput,
+    description: "Aggregate view of one past session — process-quality score, stage mix (exploration/implementation/verification/orchestration), detector findings, metrics, and tool/edit/verify counts. NO raw content. Call this FIRST for any 'how did session X go' question (use sessionId + agent from search_sessions).",
   })
-  async getSessionTranscriptTool({ sessionId, agent, from, limit }: z.infer<typeof TranscriptInput>) {
-    const view = await loadSessionTranscript(sessionId, agent);
-    if (!view) return { found: false, sessionId };
-    return { found: true, ...windowTranscript(view, from, limit) };
+  async summarizeSessionTool({ sessionId, agent }: z.infer<typeof SummarizeInput>) {
+    return { summary: await summarizeSession(sessionId, agent) };
+  }
+
+  @tool("ask_session", {
+    input: AskInput,
+    description: "Ask a specific question about what actually happened in one past session. The raw transcript is read by a separate agent (the session's own model) which returns only the answer — the transcript itself never enters this conversation. Use for 'find where X', 'why did it Y', or to quote a specific exchange, when summarize_session isn't enough.",
+  })
+  async askSessionTool({ sessionId, agent, question }: z.infer<typeof AskInput>) {
+    return { result: await askSession(sessionId, agent, question) };
   }
 
   @tool("get_artifact_detail", {
