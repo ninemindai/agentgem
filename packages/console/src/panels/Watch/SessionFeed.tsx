@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { openEventStream, type FeedEvent } from "./eventStream.js";
+import { HygieneNudge } from "./HygieneNudge.js";
 
 // One render row. A tool_call and its (later) tool_result collapse into a single
 // `tool` item — the live "running → done" card. Messages stay one item each.
@@ -97,6 +98,7 @@ export function SessionFeed({ apiBase, file }: { apiBase: string; file: string }
 
   return (
     <div>
+      <HygieneNudge apiBase={apiBase} file={file} />
       <div className="run-status" style={{ gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
         {phase && !error && <span className="run-badge run-running">{phase}</span>}
       </div>
