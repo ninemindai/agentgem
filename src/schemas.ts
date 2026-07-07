@@ -913,7 +913,7 @@ export const MiniappListSchema = z.object({ miniapps: z.array(z.object({ name: z
 export const PlayMiniappQuerySchema = z.object({ name: z.string() });
 export const PlayMiniappSchema = z.object({
   name: z.string(), html: z.string(),
-  meta: z.object({ title: z.string(), genre: z.string(), needs: PlayNeedsSchema }),
+  meta: z.object({ title: z.string(), genre: z.string(), createdFrom: GameArtifactSchema.shape.createdFrom, engineVersion: z.string(), needs: PlayNeedsSchema }),
 });
 export const PlayPublishRequestSchema = z.object({ remote: z.string().url().optional() });
 export const PlayPublishResponseSchema = z.object({ ok: z.boolean() });

@@ -55,9 +55,11 @@ export function Studio({ apiBase, name, onBack }: { apiBase: string; name: strin
     setStatus("saving…");
     try {
       const cur = await playMiniappRoute.call(makeClient(apiBase), { query: { name } });
+      // Echo the REAL provenance/version fetched from disk — save() persists meta.json, so a placeholder
+      // would silently corrupt createdFrom on every save.
       await playSaveRoute.call(makeClient(apiBase), { body: { name, html: cur.html, meta: {
         title: cur.meta.title, genre: cur.meta.genre as "replay" | "skill-run" | "project-fun",
-        createdFrom: { kind: "project", path: "", flavor: "" }, engineVersion: "1",
+        createdFrom: cur.meta.createdFrom, engineVersion: cur.meta.engineVersion,
         ...(cur.meta.needs ? { needs: cur.meta.needs } : {}),
       } } });
       setStatus("saved ✓");

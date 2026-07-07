@@ -38,7 +38,7 @@ export class PlayController {
   async miniapp(input: { query: z.infer<typeof PlayMiniappQuerySchema> }): Promise<z.infer<typeof PlayMiniappSchema>> {
     try {
       const r = readMiniapp(input.query.name);
-      return { name: r.name, html: r.html, meta: { title: r.meta.title, genre: r.meta.genre, ...(r.meta.needs ? { needs: r.meta.needs } : {}) } };
+      return { name: r.name, html: r.html, meta: { title: r.meta.title, genre: r.meta.genre, createdFrom: r.meta.createdFrom, engineVersion: r.meta.engineVersion, ...(r.meta.needs ? { needs: r.meta.needs } : {}) } };
     } catch (e) { throw new AgentError((e as Error).message, { status: 404 }); }
   }
 
