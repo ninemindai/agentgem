@@ -40,7 +40,7 @@ function report(verdict: Verdict, curveLen: number, firedAdvice?: string): Hygie
     { id: "context-pinned", title: "Window pinned at the context cap", advice: firedAdvice ?? "Cut earlier.", severity: "warn" as const, count: firedAdvice ? 1 : 0, sessions: firedAdvice ? 1 : 0 },
     { id: "task-sprawl", title: "Many tasks", advice: "Split them.", severity: "warn" as const, count: 0, sessions: 0 },
   ];
-  return { meta: { sessionId: "s", transcript: "s.jsonl", model: "claude-opus-4-8[1m]", cap: 1_000_000 }, curve, factors, hygiene: { score: 40, verdict } };
+  return { meta: { sessionId: "s", transcript: "s.jsonl", model: "claude-opus-4-8[1m]", cap: 1_000_000 }, curve, events: [], factors, hygiene: { score: 40, verdict } };
 }
 
 describe("buildTickEvents", () => {
