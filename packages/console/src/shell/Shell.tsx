@@ -148,7 +148,6 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
             AgentGem
           </div>
           <WarmingPill apiBase={apiBase} />
-          <NotifyBell />
           <div className="console-phase-switch" role="radiogroup" aria-label="Phase" {...roving.containerProps}>
             {PHASES.map((p, i) => (
               <button
@@ -171,7 +170,7 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
               {g.pages.map(item)}
             </div>
           ))}
-          <div className="console-footer">{footer.map(item)}</div>
+          <div className="console-footer"><NotifyBell />{footer.map(item)}</div>
         </nav>
         <main className="console-main">{ActivePage ? <ActivePage apiBase={apiBase} /> : null}</main>
         <NotificationsProvider apiBase={apiBase} />
