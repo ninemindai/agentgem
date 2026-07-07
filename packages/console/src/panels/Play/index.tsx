@@ -12,9 +12,9 @@ export function Play({ apiBase }: { apiBase: string }) {
   return (
     <section className="analyze">
       {view.kind !== "studio" && (
-        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-          <button className={`ledger-search${view.kind === "arcade" ? " is-active" : ""}`} style={{ width: "auto", marginBottom: 0 }} onClick={() => setView({ kind: "arcade" })}>Arcade</button>
-          <button className={`ledger-search${view.kind === "composer" ? " is-active" : ""}`} style={{ width: "auto", marginBottom: 0 }} onClick={() => setView({ kind: "composer" })}>+ New miniapp</button>
+        <div className="play-tabs">
+          <button className={`play-tab${view.kind === "arcade" ? " is-active" : ""}`} onClick={() => setView({ kind: "arcade" })}>Arcade</button>
+          <button className={`play-tab play-tab--cta${view.kind === "composer" ? " is-active" : ""}`} onClick={() => setView({ kind: "composer" })}>+ New miniapp</button>
         </div>
       )}
       {view.kind === "arcade" && <Arcade apiBase={apiBase} onOpen={(name) => setView({ kind: "studio", name })} />}
