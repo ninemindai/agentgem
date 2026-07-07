@@ -75,7 +75,7 @@ export async function summarizeSession(
     const resolved = await resolveClaudeSession(sessionId, { claudeDir: resolveDirs(dirs?.claudeDir).claudeDir });
     if (!resolved) return base;
 
-    const inv = { project: { root: "*", name: "All projects", skills: [], mcpServers: [], hooks: [], instructions: [] } };
+    const inv = { project: { root: "*", name: "All projects", skills: [], mcpServers: [], hooks: [], instructions: [], subagents: [] } };
     const signal = scanWorkflow([resolved.path], inv, { retainSequences: true });
     const seq: SessionSequence | undefined = signal.sequences?.sessions.find((s) => s.sessionId === sessionId)
       ?? signal.sequences?.sessions[0];
