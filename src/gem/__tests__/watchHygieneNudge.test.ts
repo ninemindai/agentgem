@@ -1,13 +1,14 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 // src/gem/__tests__/watchHygieneNudge.test.ts
-import { describe, it, expect } from "vitest";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { nudgeTransition, buildTickEvents, CURVE_TAIL_MAX, type Verdict } from "../../watchHygieneNudge.js";
 import { hygieneReportForFile } from "../../sessionHygieneCore.js";
 import type { HygieneReport } from "../../sessionHygieneCore.js";
+import { streamWatchHygiene } from "../../watchHygiene.js";
 
 describe("nudgeTransition", () => {
   const cases: Array<[Verdict | null, Verdict, "fire" | "silent"]> = [
@@ -100,5 +101,58 @@ describe("hygieneReportForFile", () => {
     const rep = hygieneReportForFile(p);
     expect(rep.curve).toEqual([]);
     expect(rep.hygiene.verdict).toBe("bounded");
+  });
+});
+
+// Minimal fake SSE res/req: capture (event, data) pairs; no real sockets/timers asserted.
+function fakeSse() {
+  const sent: Array<{ event: string; data: any }> = [];
+  let buf = "";
+  const res = {
+    writeHead() {}, end() {},
+    write(chunk: string) {
+      buf += chunk;
+      const m = /event: (\w+)\ndata: (.*)\n\n/s.exec(buf);
+      if (m) { sent.push({ event: m[1], data: JSON.parse(m[2]) }); buf = ""; }
+    },
+  };
+  const closers: Array<() => void> = [];
+  const req = { query: {} as Record<string, unknown>, on(ev: string, cb: () => void) { if (ev === "close") closers.push(cb); } };
+  return { req, res, sent, close: () => closers.forEach((c) => c()) };
+}
+
+describe("streamWatchHygiene", () => {
+  // resolveTranscriptFile pins ?file= to the real HOME's .claude/projects (no
+  // baseDir override on this endpoint, same as watchEvents.ts), so redirect HOME
+  // to a temp tree for the duration of this describe block, like watchEvents.test.ts.
+  let origHome: string | undefined, home: string, claudeProj: string;
+  beforeAll(() => {
+    origHome = process.env.HOME;
+    home = mkdtempSync(join(tmpdir(), "watchhyg3-"));
+    process.env.HOME = home;
+    claudeProj = join(home, ".claude", "projects", "p");
+    mkdirSync(claudeProj, { recursive: true });
+  });
+  afterAll(() => { process.env.HOME = origHome; rmSync(home, { recursive: true, force: true }); });
+
+  it("emits a watching phase then a hygiene snapshot for a Claude file", () => {
+    const path = writeClaudeTranscript(claudeProj, 2);
+    const f = fakeSse();
+    f.req.query.file = path;
+    streamWatchHygiene(f.req as any, f.res as any);
+    // the endpoint flushes an immediate tick synchronously (like watchEvents' tick())
+    const phases = f.sent.filter((s) => s.event === "phase");
+    const snaps = f.sent.filter((s) => s.event === "hygiene");
+    expect(phases[0].data.phase).toBe("watching");
+    expect(snaps.length).toBeGreaterThanOrEqual(1);
+    expect(snaps[0].data.curveTail.length).toBe(2);
+    f.close();
+  });
+  it("emits an unsupported phase and no hygiene for a non-registered/non-claude file", () => {
+    const f = fakeSse();
+    f.req.query.file = "/nope/not-a-watch-root.jsonl";
+    streamWatchHygiene(f.req as any, f.res as any);
+    expect(f.sent.some((s) => s.event === "hygiene")).toBe(false);
+    f.close();
   });
 });
