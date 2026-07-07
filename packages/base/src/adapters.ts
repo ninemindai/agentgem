@@ -1,0 +1,99 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
+//
+// Adapter provisioning: turn a bare AgentDescriptor into an absolute launch plan
+// by resolving one of three sources — on PATH, the app-managed dir, or (desktop)
+// the bundled dir — and install a missing one on demand (CLI only). All fs/PATH
+// access goes through injected probes so the logic is unit-testable without a real
+// filesystem, npm, or adapter binary.
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import type { AgentDescriptor } from "./acpSession.js";
+
+export type AdapterRuntime = "cli" | "desktop";
+
+export interface AdapterCtx {
+  runtime: AdapterRuntime;
+  execPath: string;          // node (cli) or electron (desktop)
+  home: string;              // os.homedir()
+  resourcesPath?: string;    // desktop: process.resourcesPath
+  onPath?: (bin: string) => boolean;
+  exists?: (p: string) => boolean;
+  readJson?: (p: string) => unknown;
+}
+
+export type AdapterSource = "path" | "managed" | "bundled" | "missing";
+export interface ResolvedSource { source: AdapterSource; binOnPath?: string; entry?: string }
+
+export function managedAdapterDir(home: string, id: string): string {
+  return join(home, ".agentgem", "adapters", id);
+}
+export function bundledAdapterDir(resourcesPath: string, id: string): string {
+  return join(resourcesPath, "adapters", id);
+}
+
+function onPathDefault(bin: string): boolean {
+  try {
+    execFileSync(process.platform === "win32" ? "where" : "which", [bin], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Detect the runtime context from `process` (overridable for tests). Electron's
+// main process (which hosts the desktop core in-process) sets process.versions.electron
+// and process.resourcesPath; a plain CLI has neither.
+export function adapterRuntimeCtx(proc: Partial<AdapterCtx> & { versionsElectron?: string } = {}): AdapterCtx {
+  const isDesktop = proc.runtime ? proc.runtime === "desktop" : Boolean(proc.versionsElectron ?? process.versions.electron);
+  return {
+    runtime: isDesktop ? "desktop" : "cli",
+    execPath: proc.execPath ?? process.execPath,
+    home: proc.home ?? homedir(),
+    resourcesPath: proc.resourcesPath ?? (process as { resourcesPath?: string }).resourcesPath,
+    onPath: proc.onPath ?? onPathDefault,
+    exists: proc.exists ?? existsSync,
+    readJson: proc.readJson ?? ((p: string) => JSON.parse(readFileSync(p, "utf8"))),
+  };
+}
+
+// Absolute JS entry for an adapter installed under `prefixDir` (an npm --prefix root:
+// package lives at prefixDir/node_modules/<pkg>). Reads the package's bin mapping.
+export function adapterEntry(
+  prefixDir: string, pkg: string, binName: string,
+  readJson: (p: string) => unknown, exists: (p: string) => boolean,
+): string | null {
+  const pkgDir = join(prefixDir, "node_modules", pkg);
+  const manifest = join(pkgDir, "package.json");
+  let rel: string | undefined;
+  try {
+    const bin = (readJson(manifest) as { bin?: unknown }).bin;
+    if (typeof bin === "string") rel = bin;
+    else if (bin && typeof bin === "object") rel = (bin as Record<string, string>)[binName];
+  } catch { return null; }
+  if (!rel) return null;
+  const entry = join(pkgDir, rel);
+  return exists(entry) ? entry : null;
+}
+
+export function resolveAdapterSource(descriptor: AgentDescriptor, ctx: AdapterCtx): ResolvedSource {
+  const bin = descriptor.command[0];
+  const exists = ctx.exists ?? existsSync;
+  const readJson = ctx.readJson ?? ((p: string) => JSON.parse(readFileSync(p, "utf8")));
+  const onPath = ctx.onPath ?? onPathDefault;
+  const pkg = descriptor.package;
+
+  if (onPath(bin)) return { source: "path", binOnPath: bin };
+
+  if (pkg) {
+    const managed = adapterEntry(managedAdapterDir(ctx.home, descriptor.id), pkg, bin, readJson, exists);
+    if (managed) return { source: "managed", entry: managed };
+    if (ctx.runtime === "desktop" && ctx.resourcesPath) {
+      const bundled = adapterEntry(bundledAdapterDir(ctx.resourcesPath, descriptor.id), pkg, bin, readJson, exists);
+      if (bundled) return { source: "bundled", entry: bundled };
+    }
+  }
+  return { source: "missing" };
+}
