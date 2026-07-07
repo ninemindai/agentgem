@@ -1,6 +1,7 @@
 // packages/console/src/panels/Play/Studio.tsx
 import { useEffect, useRef, useState } from "react";
 import { makeClient, playMiniappRoute, playSaveRoute, playPublishRoute, publishSetupRoute, bindStatusRoute } from "../../api/routes.js";
+import { AgentSelector, type PlayAgent } from "./AgentSelector.js";
 import { Runner } from "./Runner.js";
 import { openStudioStream } from "./studioStream.js";
 import { genre as genreOf, parseGateFailure, fixSealPrompt } from "./playMeta.js";
@@ -10,8 +11,21 @@ const j = (r: Response) => { if (!r.ok) throw new Error(String(r.status)); retur
 // Structured chat log entries so we can render bubbles + tool chips instead of one rolling string.
 type Msg = { role: "user" | "agent"; text: string } | { role: "tool"; title: string; failed?: boolean };
 
-export function Studio({ apiBase, name, onBack }: { apiBase: string; name: string; onBack: () => void }) {
-  const [agentId, setAgentId] = useState("");
+export function Studio({
+  apiBase,
+  name,
+  agents,
+  agentId,
+  onAgentIdChange,
+  onBack,
+}: {
+  apiBase: string;
+  name: string;
+  agents: PlayAgent[] | null;
+  agentId: string;
+  onAgentIdChange: (agentId: string) => void;
+  onBack: () => void;
+}) {
   const [chatId, setChatId] = useState<string | null>(null);
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
@@ -30,9 +44,6 @@ export function Studio({ apiBase, name, onBack }: { apiBase: string; name: strin
       .then((r) => { setHtml(r.html); setMeta(r.meta); }).catch(() => {});
 
   useEffect(() => {
-    fetch(`${apiBase}/api/agents`).then(j).then((d: { agents: { id: string; available: boolean }[] }) => {
-      setAgentId(d.agents.find((a) => a.available)?.id ?? d.agents[0]?.id ?? "");
-    }).catch(() => {});
     refresh();
     return () => closeRef.current?.();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -49,6 +60,19 @@ export function Studio({ apiBase, name, onBack }: { apiBase: string; name: strin
   }
   function activity(tool: { kind?: string; title?: string }): string {
     switch (tool.kind) { case "execute": return "running a command…"; case "read": return "reading files…"; case "edit": return "editing the miniapp…"; default: return "working…"; }
+  }
+
+  function changeAgent(nextAgentId: string) {
+    if (nextAgentId === agentId) return;
+    closeRef.current?.();
+    closeRef.current = null;
+    setChatId(null);
+    setMsgs([]);
+    setWorking("");
+    setGate(null);
+    setShare(null);
+    setStatus(chatId ? "switched coding agent; next message starts a new studio chat" : "");
+    onAgentIdChange(nextAgentId);
   }
 
   async function send(text: string) {
@@ -157,6 +181,13 @@ export function Studio({ apiBase, name, onBack }: { apiBase: string; name: strin
       <div className="play-grid-2">
         <Runner html={html} name={name} apiBase={apiBase} needs={meta?.needs} />
         <div className="play-chat">
+          <AgentSelector
+            agents={agents}
+            agentId={agentId}
+            disabled={busy}
+            onChange={changeAgent}
+            note={chatId ? "Changing agent starts a fresh studio chat." : "This agent will build/edit the miniapp."}
+          />
           <div className="play-log" ref={logRef}>
             {msgs.length === 0 && <div className="play-log__hint">Ask the agent to build or change the miniapp…</div>}
             {msgs.map((m, i) => m.role === "tool"
@@ -167,7 +198,7 @@ export function Studio({ apiBase, name, onBack }: { apiBase: string; name: strin
           <div className="play-composer-in">
             <input className="play-input" placeholder="ask the agent to build/edit…" value={input}
               onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { send(input); setInput(""); } }} />
-            <button className="play-btn play-btn--primary" disabled={busy} onClick={() => { send(input); setInput(""); }}>{busy ? "…" : "Send"}</button>
+            <button className="play-btn play-btn--primary" disabled={busy || !agentId} onClick={() => { send(input); setInput(""); }}>{busy ? "…" : "Send"}</button>
           </div>
         </div>
       </div>

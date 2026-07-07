@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { makeClient, playStudioRoute, playImportRoute, testbedProjectsRoute, inventoryRoute } from "../../api/routes.js";
 import { fetchSessions, type WatchSession } from "../Watch/watchStream.js";
+import { AgentSelector, type PlayAgent } from "./AgentSelector.js";
 
 type Kind = "project" | "session" | "skill" | "html";
 type Proj = { path: string; flavor: string; exists: boolean };
@@ -19,7 +20,19 @@ const TABS: { kind: Kind; label: string }[] = [
   { kind: "html", label: "HTML" },
 ];
 
-export function Composer({ apiBase, onCreated }: { apiBase: string; onCreated: (name: string) => void }) {
+export function Composer({
+  apiBase,
+  agents,
+  agentId,
+  onAgentIdChange,
+  onCreated,
+}: {
+  apiBase: string;
+  agents: PlayAgent[] | null;
+  agentId: string;
+  onAgentIdChange: (agentId: string) => void;
+  onCreated: (name: string) => void;
+}) {
   const [kind, setKind] = useState<Kind>("project");
   const [projects, setProjects] = useState<Proj[] | null>(null);
   const [sessions, setSessions] = useState<WatchSession[] | null>(null);
@@ -69,7 +82,13 @@ export function Composer({ apiBase, onCreated }: { apiBase: string; onCreated: (
 
   return (
     <section className="analyze">
-      <p className="play-intro">Create a miniapp from a source — the agent seeds it and opens the studio.</p>
+      <p className="play-intro">Create a miniapp from a source, then choose which coding agent will build/edit it in Studio.</p>
+      <AgentSelector
+        agents={agents}
+        agentId={agentId}
+        onChange={onAgentIdChange}
+        note="Used when you ask the studio to build or edit the game."
+      />
       <div className="play-tabs">
         {TABS.map((t) => (
           <button key={t.kind} className={`play-tab${kind === t.kind ? " is-active" : ""}`} onClick={() => setKind(t.kind)}>{t.label}</button>
