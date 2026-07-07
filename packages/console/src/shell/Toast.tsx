@@ -1,4 +1,4 @@
-import { createContext, useContext, useCallback, useRef, useState, type ReactElement, type ReactNode } from "react";
+import { createContext, useContext, useCallback, useEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
 
 interface ToastItem { id: number; message: string }
 interface ToastApi { push: (message: string) => void }
@@ -11,12 +11,25 @@ const TTL_MS = 6000;
 export function ToastProvider({ children }: { children: ReactNode }): ReactElement {
   const [items, setItems] = useState<ToastItem[]>([]);
   const nextId = useRef(0);
-  const remove = useCallback((id: number) => setItems((xs) => xs.filter((t) => t.id !== id)), []);
+  const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
+  const remove = useCallback((id: number) => {
+    const h = timers.current.get(id);
+    if (h) {
+      clearTimeout(h);
+      timers.current.delete(id);
+    }
+    setItems((xs) => xs.filter((t) => t.id !== id));
+  }, []);
   const push = useCallback((message: string) => {
     const id = nextId.current++;
     setItems((xs) => [...xs, { id, message }]);
-    setTimeout(() => remove(id), TTL_MS);
+    timers.current.set(id, setTimeout(() => remove(id), TTL_MS));
   }, [remove]);
+
+  useEffect(() => () => {
+    for (const h of timers.current.values()) clearTimeout(h);
+    timers.current.clear();
+  }, []);
 
   return (
     <ToastCtx.Provider value={{ push }}>
