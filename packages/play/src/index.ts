@@ -7,3 +7,4 @@ export { extractSource, compactTurns, type GenerationInput, type SourceReaders }
 export { git, ensureRepo, commitAll, setRemote, push } from "./git.js";
 export { miniappsRoot, miniappDir, saveMiniapp, readMiniapp, listMiniapps, type MiniappMeta, type SaveMiniappInput } from "./miniapps.js";
 export { studioCwd, studioBrief, seedStudio, importStudio, blankStudio } from "./studio.js";
+export { redactForBake } from "./redact.js";
