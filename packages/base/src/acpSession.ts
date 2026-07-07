@@ -24,7 +24,17 @@ export function stdioMcpServer(name: string, command: string, args: string[], en
 }
 
 // An ACP adapter to spawn: a display id/name plus the argv to launch it.
-export interface AgentDescriptor { id: string; name: string; command: string[] }
+// Registry entries also carry the npm package + pinned version that provide the
+// bin (used for on-demand install). `env` is an overlay applied at spawn time
+// (set by resolveLaunch, e.g. ELECTRON_RUN_AS_NODE on desktop).
+export interface AgentDescriptor {
+  id: string;
+  name: string;
+  command: string[];
+  package?: string;
+  version?: string;
+  env?: Record<string, string>;
+}
 
 // Provider credentials agentgem stores (in ~/.agentgem/.env) for publish/deploy.
 // They must NOT leak into a spawned local agent: every coding-agent CLI (Claude Code,

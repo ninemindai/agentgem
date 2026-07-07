@@ -8,8 +8,8 @@ import { execFileSync } from "node:child_process";
 import type { AgentDescriptor } from "./acpSession.js";
 
 export const AGENTS: AgentDescriptor[] = [
-  { id: "claude-code", name: "Claude Code", command: ["claude-agent-acp"] },
-  { id: "codex", name: "Codex", command: ["codex-acp"] },
+  { id: "claude-code", name: "Claude Code", command: ["claude-agent-acp"], package: "@agentclientprotocol/claude-agent-acp", version: "0.51.0" },
+  { id: "codex", name: "Codex", command: ["codex-acp"], package: "@agentclientprotocol/codex-acp", version: "1.1.0" },
 ];
 
 export interface AgentAvailability {
