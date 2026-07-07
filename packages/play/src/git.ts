@@ -40,6 +40,18 @@ export async function commitAll(dir: string, message: string): Promise<string | 
   return run(dir, ["rev-parse", "HEAD"]);
 }
 
+// Serialize commits per-repo: `git add -A` + `git commit` write .git/index.lock, so two concurrent
+// commitAll() calls on the SAME repo can collide (one fails on a locked index). Chain commits per dir
+// with an in-process promise queue. One server process owns the registry, so in-process is sufficient.
+const commitChains = new Map<string, Promise<unknown>>();
+export function commitWithLock(dir: string, message: string): Promise<string | null> {
+  const prev = commitChains.get(dir) ?? Promise.resolve();
+  const next = prev.catch(() => {}).then(() => commitAll(dir, message));
+  // Store a swallowed tail so one rejection never wedges the chain for later commits.
+  commitChains.set(dir, next.catch(() => {}));
+  return next;
+}
+
 export async function setRemote(dir: string, url: string): Promise<void> {
   const remotes = await run(dir, ["remote"]);
   if (remotes.split("\n").includes("origin")) await run(dir, ["remote", "set-url", "origin", url]);

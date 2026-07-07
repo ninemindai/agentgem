@@ -10,7 +10,7 @@ import { extractSource, type SourceReaders } from "./sourceContext.js";
 import { genreFor } from "./genres.js";
 import { scaffoldFor, sealedTemplate } from "./scaffolds.js";
 import { miniappDir, miniappsRoot, type MiniappMeta } from "./miniapps.js";
-import { ensureRepo, commitAll } from "./git.js";
+import { ensureRepo, commitWithLock } from "./git.js";
 import { redactForBake } from "./redact.js";
 
 // Only allow a chat session to adopt a cwd that is inside the miniapps registry; otherwise the neutral
@@ -69,7 +69,7 @@ export async function seedStudio(source: GameSource, readers: SourceReaders): Pr
   writeFileSync(join(dir, `${name}.html`), seedHtml(scaffoldFor(g.scaffold), redactForBake(input.data)));
   const meta: MiniappMeta = { title: name, genre: input.genre, createdFrom: input.createdFrom, engineVersion: "1", ...(g.needs ? { needs: g.needs } : {}) };
   writeFileSync(join(dir, "meta.json"), JSON.stringify(meta, null, 2));
-  await commitAll(miniappsRoot(), `seed miniapp ${name}`);
+  await commitWithLock(miniappsRoot(), `seed miniapp ${name}`);
   return { name, brief: `${input.brief}\n\n${studioInstructions(name)}` };
 }
 
@@ -84,7 +84,7 @@ export async function importStudio(title: string, html: string): Promise<{ name:
   writeFileSync(join(dir, `${name}.html`), html);
   const meta: MiniappMeta = { title, genre: "project-fun", createdFrom: source, engineVersion: "1" };
   writeFileSync(join(dir, "meta.json"), JSON.stringify(meta, null, 2));
-  await commitAll(miniappsRoot(), `import miniapp ${name}`);
+  await commitWithLock(miniappsRoot(), `import miniapp ${name}`);
   return { name, brief: `You are refining "${title}", a self-contained HTML mini-game the user imported.\n\n${studioInstructions(name)}` };
 }
 
@@ -100,7 +100,7 @@ export async function blankStudio(title: string, prompt?: string): Promise<{ nam
   writeFileSync(join(dir, `${name}.html`), sealedTemplate(title, "✦ new"));
   const meta: MiniappMeta = { title, genre: "project-fun", createdFrom: source, engineVersion: "1" };
   writeFileSync(join(dir, "meta.json"), JSON.stringify(meta, null, 2));
-  await commitAll(miniappsRoot(), `create miniapp ${name}`);
+  await commitWithLock(miniappsRoot(), `create miniapp ${name}`);
   const want = prompt?.trim()
     ? `The user wants to build: ${prompt.trim()}`
     : `Ask the user what kind of mini-game they want, then build it. If they don't say, make a small, delightful arcade game.`;

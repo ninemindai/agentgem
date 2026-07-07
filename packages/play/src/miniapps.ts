@@ -12,7 +12,7 @@ import { workspaceDir } from "@agentgem/base";
 import { writeGemArchive, writeArchiveDir } from "@agentgem/archive";
 import { gameGate } from "./gameGate.js";
 import { assertPortable } from "./portability.js";
-import { ensureRepo, commitAll } from "./git.js";
+import { ensureRepo, commitWithLock } from "./git.js";
 
 export interface MiniappMeta {
   title: string; genre: GameGenre; createdFrom: GameSource; engineVersion: string; needs?: GameCapability[];
@@ -45,7 +45,7 @@ export async function saveMiniapp(input: SaveMiniappInput): Promise<{ name: stri
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, `${safe}.html`), input.html);
   writeFileSync(join(dir, "meta.json"), JSON.stringify(input.meta, null, 2));
-  const commit = await commitAll(root, `save miniapp ${safe}`);
+  const commit = await commitWithLock(root, `save miniapp ${safe}`);
 
   // dual-write the matching game gem (marketplace-capable), UPSERTING so a re-save stays in sync with
   // the registry file. Writing the archive in place (create or overwrite) avoids createWorkspace's
