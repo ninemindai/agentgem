@@ -47,6 +47,17 @@ describe("HygieneNudge", () => {
     m.push({ type: "nudge", verdict: "bloated", advice: "Now bloated." });
     expect(await screen.findByText(/Now bloated/i)).toBeTruthy();
   });
+  it("re-arms after a session clears and re-bloats", async () => {
+    const m = mockStream();
+    render(<HygieneNudge apiBase="/" file="s.jsonl" />);
+    m.push({ type: "nudge", verdict: "bloated", advice: "First bloat." });
+    expect(await screen.findByText(/First bloat/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /dismiss/i }));
+    await waitFor(() => expect(screen.queryByText(/First bloat/i)).toBeNull());
+    m.push(snap("bounded"));
+    m.push({ type: "nudge", verdict: "bloated", advice: "Re-bloat." });
+    expect(await screen.findByText(/Re-bloat/i)).toBeTruthy();
+  });
   it("renders nothing for an unsupported (Codex) phase", () => {
     const m = mockStream();
     const { container } = render(<HygieneNudge apiBase="/" file="s.jsonl" />);
