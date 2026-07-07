@@ -252,7 +252,7 @@ import {
 import { collectScorecard, selectScorecardRoots, scorecardTranscriptPaths, defaultScorecardDeps, isPortable, type Scorecard } from "./gem/scorecard.js";
 import { preparePlaybook } from "./gem/playbookPrepareCore.js";
 import { publishPlaybookCore } from "./gem/playbookPublishCore.js";
-import { createShareCard } from "./share/shareStore.js";
+import { postShare } from "./gem/shareClient.js";
 import { postCatalogShare, shareRejectedError } from "./gem/catalogShareClient.js";
 import { postGemPublish } from "./gem/gemPublishClient.js";
 import { fetchHostedArchive, executableArtifacts, hasExecutable } from "./gem/hostedInstall.js";
@@ -516,7 +516,13 @@ export class GemController {
         if (!r.shared) throw shareRejectedError(r.rejected);
         return { ref: manifest.gemKey, version: b.version };
       },
-      share: async () => createShareCard(this.db!, { kind: "gem", name: b.name ?? b.workspace, provenance: b.provenance, generatedAtMs: Date.now() }),
+      // Mint the share teaser on the HOSTED aggregator (like the "Share link" button), NOT this.db —
+      // a local console's db is not what agentgem.ai/share/<id> reads, so a locally-minted card 404s.
+      share: async () => {
+        const r = await postShare({ body: { kind: "gem", name: b.name ?? b.workspace, provenance: b.provenance, generatedAtMs: Date.now() } });
+        if ("skipped" in r) throw new Error("sharing disabled (AGENTGEM_AGGREGATOR_URL empty)");
+        return r;
+      },
     });
   }
 
@@ -543,7 +549,13 @@ export class GemController {
         if (!r.shared) throw shareRejectedError(r.rejected);
         return { ref: manifest.gemKey, version: b.version };
       },
-      share: async () => createShareCard(this.db!, { kind: "gem", name: b.name ?? b.workspace, provenance: b.provenance, generatedAtMs: Date.now() }),
+      // Mint the share teaser on the HOSTED aggregator (like the "Share link" button), NOT this.db —
+      // a local console's db is not what agentgem.ai/share/<id> reads, so a locally-minted card 404s.
+      share: async () => {
+        const r = await postShare({ body: { kind: "gem", name: b.name ?? b.workspace, provenance: b.provenance, generatedAtMs: Date.now() } });
+        if ("skipped" in r) throw new Error("sharing disabled (AGENTGEM_AGGREGATOR_URL empty)");
+        return r;
+      },
     });
   }
 
