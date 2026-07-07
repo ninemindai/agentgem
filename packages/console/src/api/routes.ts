@@ -797,4 +797,34 @@ export const sourceImportRoute = defineRoute("POST", "/api/sources/import", {
   body: z.object({ source: z.string(), path: z.string() }), response: ImportedSkillSchema,
 });
 
+// ---- Play (miniapps) — client mirrors of the server /api/play/* routes ----
+const PlayNeedsSchema = z.array(z.enum(["live-session-events", "local-project-access", "invoke-agent"])).optional();
+const PlaySourceSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("session"), agent: z.string(), project: z.string().optional(), sessionId: z.string(), summary: z.string() }),
+  z.object({ kind: z.literal("skill"), skillName: z.string(), sourceId: z.string().optional() }),
+  z.object({ kind: z.literal("project"), path: z.string(), flavor: z.string() }),
+]);
+const PlayMetaSchema = z.object({
+  title: z.string(), genre: z.enum(["replay", "skill-run", "project-fun"]),
+  createdFrom: PlaySourceSchema, engineVersion: z.string().default("1"), needs: PlayNeedsSchema,
+});
+
+export const playMiniappsRoute = defineRoute("GET", "/api/play/miniapps", {
+  response: z.object({ miniapps: z.array(z.object({ name: z.string(), title: z.string(), genre: z.string(), needs: PlayNeedsSchema })) }),
+});
+export const playMiniappRoute = defineRoute("GET", "/api/play/miniapp", {
+  query: z.object({ name: z.string() }),
+  response: z.object({ name: z.string(), html: z.string(), meta: z.object({ title: z.string(), genre: z.string(), needs: PlayNeedsSchema }) }),
+});
+export const playStudioRoute = defineRoute("POST", "/api/play/studio", {
+  body: z.object({ source: PlaySourceSchema }), response: z.object({ name: z.string() }),
+});
+export const playSaveRoute = defineRoute("POST", "/api/play/save", {
+  body: z.object({ name: z.string(), html: z.string(), meta: PlayMetaSchema }),
+  response: z.object({ name: z.string(), commit: z.string().nullable() }),
+});
+export const playPublishRoute = defineRoute("POST", "/api/play/publish", {
+  body: z.object({ remote: z.string().url().optional() }), response: z.object({ ok: z.boolean() }),
+});
+
 export const makeClient = (apiBase: string): Client => createClient({ baseURL: apiBase });
