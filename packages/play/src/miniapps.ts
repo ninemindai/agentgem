@@ -11,6 +11,7 @@ import type { Gem, GameArtifact, GameGenre, GameSource, GameCapability } from "@
 import { workspaceDir } from "@agentgem/base";
 import { writeGemArchive, writeArchiveDir } from "@agentgem/archive";
 import { gameGate } from "./gameGate.js";
+import { assertPortable } from "./portability.js";
 import { ensureRepo, commitAll } from "./git.js";
 
 export interface MiniappMeta {
@@ -37,6 +38,8 @@ export async function saveMiniapp(input: SaveMiniappInput): Promise<{ name: stri
   const safe = input.name;
   const gate = await gameGate(input.html);
   if (!gate.ok) throw new Error(`miniapp failed the gate: ${gate.failures.join("; ")}`);
+  const port = assertPortable(input.html, input.meta.needs);
+  if (!port.ok) throw new Error(`miniapp is not portable: ${port.failures.join("; ")}`);
   const root = miniappsRoot();
   await ensureRepo(root);                          // the registry is a git repo
   mkdirSync(dir, { recursive: true });
