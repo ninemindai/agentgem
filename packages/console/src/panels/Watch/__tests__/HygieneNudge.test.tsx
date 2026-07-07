@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 // packages/console/src/panels/Watch/__tests__/HygieneNudge.test.tsx
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { HygieneNudge } from "../HygieneNudge.js";
 import * as stream from "../hygieneStream.js";
 
@@ -28,23 +28,24 @@ describe("HygieneNudge", () => {
     m.push(snap("bounded"));
     expect(container.querySelector(".hyg-nudge")).toBeNull();
   });
-  it("shows a dismissible banner with advice on a nudge event", () => {
+  it("shows a dismissible banner with advice on a nudge event", async () => {
     const m = mockStream();
     render(<HygieneNudge apiBase="/" file="s.jsonl" />);
     m.push(snap("bloated"));
     m.push({ type: "nudge", verdict: "bloated", advice: "Take a clean break." });
-    expect(screen.getByText(/Take a clean break/i)).toBeTruthy();
+    expect(await screen.findByText(/Take a clean break/i)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /dismiss/i }));
     expect(screen.queryByText(/Take a clean break/i)).toBeNull();
   });
-  it("re-shows after dismiss when a higher-verdict nudge arrives", () => {
+  it("re-shows after dismiss when a higher-verdict nudge arrives", async () => {
     const m = mockStream();
     render(<HygieneNudge apiBase="/" file="s.jsonl" />);
     m.push({ type: "nudge", verdict: "mixed", advice: "Getting heavy." });
+    expect(await screen.findByText(/Getting heavy/i)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /dismiss/i }));
-    expect(screen.queryByText(/Getting heavy/i)).toBeNull();
+    await waitFor(() => expect(screen.queryByText(/Getting heavy/i)).toBeNull());
     m.push({ type: "nudge", verdict: "bloated", advice: "Now bloated." });
-    expect(screen.getByText(/Now bloated/i)).toBeTruthy();
+    expect(await screen.findByText(/Now bloated/i)).toBeTruthy();
   });
   it("renders nothing for an unsupported (Codex) phase", () => {
     const m = mockStream();
