@@ -12,7 +12,7 @@ export interface GoldmineBriefInput {
 export function buildGoldmineBrief(input: GoldmineBriefInput): string {
   const { scorecard: s, topArtifacts, skillCount, behavior } = input;
   const lines = [
-    `You are grounded in the user's local "goldmine" of coding sessions and installed artifacts. Use it to answer questions and, when asked, help distill a reusable Gem. You have read tools (search_sessions, get_session_transcript, get_artifact_detail, get_behavior_findings) — call them for detail beyond this summary.`,
+    `You are grounded in the user's local "goldmine" of coding sessions and installed artifacts. Use it to answer questions and, when asked, help distill a reusable Gem. You have read tools: search_sessions (find sessions), summarize_session (aggregate view of one session — quality, stages, findings, metrics; call this first), ask_session (ask a specific question about what happened in a session — a separate agent reads the raw transcript and returns only the answer), get_artifact_detail, and get_behavior_findings. Prefer summarize_session over ask_session; reach for ask_session only when you need specifics the summary doesn't carry.`,
     ``,
     `GOLDMINE SUMMARY (facts):`,
     `- Scorecard: breadth ${s.breadth}, battle-tested ${s.battleTested}, portable ${s.portable}.`,

@@ -25,4 +25,10 @@ describe("buildGoldmineBrief", () => {
     expect(brief).toContain("Same command repeated back-to-back");
     expect(brief).toContain("get_behavior_findings");
   });
+  it("steers to summarize_session and ask_session, not the removed raw-dump tool", () => {
+    const brief = buildGoldmineBrief({ scorecard: { breadth: 0, battleTested: 0, portable: 0, gaps: [] }, topArtifacts: [], skillCount: 0 });
+    expect(brief).toContain("summarize_session");
+    expect(brief).toContain("ask_session");
+    expect(brief).not.toContain("get_session_transcript");
+  });
 });
