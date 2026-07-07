@@ -2,18 +2,46 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { Composer } from "../Composer.js";
-import { testbedProjectsRoute, playStudioRoute } from "../../../api/routes.js";
+import { testbedProjectsRoute, playStudioRoute, inventoryRoute } from "../../../api/routes.js";
 
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("Composer", () => {
   it("lists projects and creates a studio miniapp on pick", async () => {
     vi.spyOn(testbedProjectsRoute, "call").mockResolvedValue({ projects: [{ path: "/p/demo", flavor: "node", lastUsed: null, exists: true }] } as never);
-    vi.spyOn(playStudioRoute, "call").mockResolvedValue({ name: "demo" });
+    const studio = vi.spyOn(playStudioRoute, "call").mockResolvedValue({ name: "demo" });
     const onCreated = vi.fn();
     render(<Composer apiBase="" onCreated={onCreated} />);
     await waitFor(() => expect(screen.getByText("/p/demo")).toBeTruthy());
     fireEvent.click(screen.getByText("/p/demo"));
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith("demo"));
+    expect(studio.mock.calls[0][1]).toMatchObject({ body: { source: { kind: "project", path: "/p/demo" } } });
+  });
+
+  it("switches to the Session tab and seeds a session source", async () => {
+    vi.spyOn(testbedProjectsRoute, "call").mockResolvedValue({ projects: [] } as never);
+    const studio = vi.spyOn(playStudioRoute, "call").mockResolvedValue({ name: "s1" });
+    // fetchSessions uses raw fetch → stub the global
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ sessions: [{ id: "sess-1", file: "/f", agent: "claude", project: "app", model: "opus", msgs: 5, startMs: 0, endMs: 1, ageMs: 1 }] }) })) as unknown as typeof fetch);
+    const onCreated = vi.fn();
+    render(<Composer apiBase="" onCreated={onCreated} />);
+    fireEvent.click(screen.getByText("Session"));
+    await waitFor(() => expect(screen.getByText("app")).toBeTruthy());
+    fireEvent.click(screen.getByText("app"));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith("s1"));
+    expect(studio.mock.calls[0][1]).toMatchObject({ body: { source: { kind: "session", sessionId: "sess-1", agent: "claude" } } });
+  });
+
+  it("switches to the Skill tab and seeds a skill source", async () => {
+    vi.spyOn(testbedProjectsRoute, "call").mockResolvedValue({ projects: [] } as never);
+    vi.spyOn(inventoryRoute, "call").mockResolvedValue({ skills: [{ name: "brainstorming", description: "explore ideas" }], mcpServers: [], instructions: [], hooks: [], subagents: [] } as never);
+    const studio = vi.spyOn(playStudioRoute, "call").mockResolvedValue({ name: "brainstorming" });
+    const onCreated = vi.fn();
+    render(<Composer apiBase="" onCreated={onCreated} />);
+    fireEvent.click(screen.getByText("Skill"));
+    await waitFor(() => expect(screen.getByText("brainstorming")).toBeTruthy());
+    fireEvent.click(screen.getByText("brainstorming"));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith("brainstorming"));
+    expect(studio.mock.calls[0][1]).toMatchObject({ body: { source: { kind: "skill", skillName: "brainstorming" } } });
   });
 });
