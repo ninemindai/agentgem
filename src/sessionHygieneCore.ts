@@ -8,8 +8,8 @@
 // come from @agentgem/insight (no re-implementation here).
 import {
   scanWorkflow, runDetectors, DETECTORS, hygieneScore, contextCap,
-  HYGIENE_FACTOR_IDS, summariesForSpecs, resolveClaudeSession,
-  type WorkflowSignal, type TurnUsage, type DetectorSummary, type HygieneVerdict, type ScanInventory,
+  HYGIENE_FACTOR_IDS, summariesForSpecs, resolveClaudeSession, boundarySegments,
+  type WorkflowSignal, type TurnUsage, type DetectorSummary, type HygieneVerdict, type ScanInventory, type SessionBoundary,
   type SkillAgentEvent,
 } from "@agentgem/insight";
 import { introspectConfig, introspectProject } from "@agentgem/capture";
@@ -36,6 +36,7 @@ export interface HygieneReport {
   events: SkillAgentEvent[];
   factors: DetectorSummary[];
   hygiene: HygieneVerdict;
+  boundary?: SessionBoundary;
 }
 
 export function buildHygieneReport(signal: WorkflowSignal): HygieneReport {
@@ -43,6 +44,7 @@ export function buildHygieneReport(signal: WorkflowSignal): HygieneReport {
   const model = session?.model ?? null;
   const specs = DETECTORS.filter((d) => HYGIENE_FACTOR_IDS.has(d.id));
   const factors = summariesForSpecs(specs, runDetectors(signal));
+  const boundary = session ? boundarySegments(session) : undefined;
   return {
     meta: {
       sessionId: session?.sessionId ?? "",
@@ -54,6 +56,7 @@ export function buildHygieneReport(signal: WorkflowSignal): HygieneReport {
     events: session?.eventSeries ?? [],
     factors,
     hygiene: hygieneScore(factors),
+    ...(boundary && boundary.segments.length >= 2 ? { boundary } : {}),
   };
 }
 
