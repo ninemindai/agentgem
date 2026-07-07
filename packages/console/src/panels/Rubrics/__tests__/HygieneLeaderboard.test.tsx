@@ -4,6 +4,8 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup, within } from "@testing-library/react";
 import { HygieneLeaderboard } from "../HygieneLeaderboard.js";
+import { RubricReportCard } from "../index.js";
+import type { RubricReportView } from "../rubricStream.js";
 
 afterEach(cleanup);
 
@@ -20,12 +22,31 @@ describe("HygieneLeaderboard", () => {
     expect(within(list[0]).getByText(/bloated/i)).toBeTruthy();   // worst (score 20) first
     expect(within(list[1]).getByText(/mixed/i)).toBeTruthy();
     const link = within(list[0]).getByRole("link");
-    expect(link.getAttribute("href")).toBe("#/inspect/claude/aaa");
+    expect(link.getAttribute("href")).toBe("#/sessions/claude/aaa");
   });
 
   it("shows the scanned / needs-attention header", () => {
     render(<HygieneLeaderboard perSession={rows} sessionsScanned={142} truncated={false} />);
     expect(screen.getByText(/142 sessions scanned/i)).toBeTruthy();
     expect(screen.getByText(/2 need attention/i)).toBeTruthy();
+  });
+});
+
+describe("RubricReportCard", () => {
+  it("surfaces the aggregate hygiene verdict chip when the report carries one", () => {
+    const report: RubricReportView = {
+      rubricId: "context-hygiene",
+      target: "claude",
+      scope: "all",
+      factors: [],
+      sessionsScanned: 3,
+      clean: false,
+      degraded: false,
+      skippedFactors: [],
+      hygiene: { score: 20, verdict: "bloated" },
+    };
+    render(<RubricReportCard report={report} />);
+    expect(screen.getByText(/bloated/i)).toBeTruthy();
+    expect(screen.getByText("20")).toBeTruthy();
   });
 });
