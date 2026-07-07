@@ -135,7 +135,7 @@ describe("workspace schemas", () => {
   it("validates a workspace summary", () => {
     expect(WorkspaceSummarySchema.safeParse({
       name: "mp", gemName: "demo", version: "0.1.0",
-      artifactCounts: { skill: 1, mcp_server: 0, instructions: 1, hook: 0, subagent: 0 },
+      artifactCounts: { skill: 1, mcp_server: 0, instructions: 1, hook: 0, subagent: 0, game: 0 },
       artifacts: [{ type: "skill", name: "pdf" }, { type: "instructions", name: "rules" }],
       modifiedMs: 1_700_000_000_000,
       checks: 0, renderedTargets: ["eve"],
