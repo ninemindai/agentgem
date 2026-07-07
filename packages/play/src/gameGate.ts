@@ -21,21 +21,26 @@ const DEFAULT_MAX_BYTES = 1_500_000;
 const EXTERNAL_ATTR = /\b(?:src|href)\s*=\s*["'](?!data:|#)(?:https?:)?\/\//i;
 const BARE_IMPORT = /\bimport\s+[^;]*?from\s+["'](?!data:)[^"']+["']/;
 const NETWORK_CALL = /\b(?:fetch|XMLHttpRequest|WebSocket|EventSource|importScripts|navigator\.sendBeacon)\b/;
+// Inert data payloads: <script type="application/json"> (the game-data blob) is NEVER executed by the
+// browser, so words like "fetch" or https:// URLs inside baked session transcripts are content, not code.
+// The syntax scans below run on the EXECUTABLE surface only (size is still measured on the full bundle).
+const INERT_JSON_SCRIPT = /<script\b[^>]*\btype\s*=\s*["']application\/json["'][^>]*>[\s\S]*?<\/script>/gi;
 
 export function staticGate(html: string, opts: GateOptions = {}): GateResult {
   const failures: string[] = [];
   const maxBytes = opts.maxBytes ?? DEFAULT_MAX_BYTES;
+  const code = html.replace(INERT_JSON_SCRIPT, ""); // strip inert data before scanning for code syntax
 
   if (Buffer.byteLength(html, "utf8") > maxBytes) {
     failures.push(`bundle exceeds size budget (${maxBytes} bytes)`);
   }
-  if (EXTERNAL_ATTR.test(html)) {
+  if (EXTERNAL_ATTR.test(code)) {
     failures.push("references an external resource (src/href to a remote URL)");
   }
-  if (BARE_IMPORT.test(html)) {
+  if (BARE_IMPORT.test(code)) {
     failures.push("uses an external module import");
   }
-  if (NETWORK_CALL.test(html)) {
+  if (NETWORK_CALL.test(code)) {
     failures.push("attempts a network call (fetch/XHR/WebSocket/…) — games must be sealed");
   }
 
