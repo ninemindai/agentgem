@@ -23,7 +23,7 @@ describe("agentgem-insights skill", () => {
     const s = md();
     // Exact prohibition: outcomes are the judge's opinion, never "verified"
     expect(s).toContain('never call them "verified"');
-    expect(s).toContain("get_session_transcript");
+    expect(s).toContain("ask_session");
     expect(s.toLowerCase()).toContain("ground");
   });
 
@@ -45,7 +45,7 @@ describe("agentgem-retro skill", () => {
   it("drives get_behavior_findings and verifies against transcripts before advising", () => {
     const s = md();
     expect(s).toContain("get_behavior_findings");
-    expect(s).toContain("get_session_transcript");
+    expect(s).toContain("ask_session");
     expect(s).toContain("before advising");
   });
 });
