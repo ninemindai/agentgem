@@ -9,20 +9,33 @@ import { summarizeSession, clearScanCache } from "@agentgem/insight";
 // A Claude transcript is JSONL; filename (minus .jsonl) IS the sessionId. Minimal
 // session: user msg, an Edit tool_use, a Bash "pnpm test" tool_use (verification),
 // with tool_results. Written under <home>/.claude/projects/proj/.
-function writeClaudeSession(home: string, sessionId: string): void {
+//
+// `extraRetryStorm`: append three identical, benign "ls -la" Bash calls
+// back-to-back — enough to trip the retry-storm detector (RETRY_STORM_MIN = 3)
+// so tests that need a non-empty `findings` array have one without touching the
+// core edit/verify shape the other assertions depend on.
+function writeClaudeSession(home: string, sessionId: string, opts: { extraRetryStorm?: boolean } = {}): void {
   const projDir = join(home, ".claude", "projects", "proj");
   mkdirSync(projDir, { recursive: true });
-  const t = "2026-07-01T10:00:0";
-  const lines = [
-    { type: "user", cwd: "/repo", gitBranch: "main", timestamp: `${t}0Z`, message: { role: "user", content: "fix the bug" } },
-    { type: "assistant", cwd: "/repo", timestamp: `${t}1Z`, message: { role: "assistant", model: "claude-opus-4-8",
+  const ts = (sec: number) => `2026-07-01T10:00:${String(sec).padStart(2, "0")}Z`;
+  const lines: unknown[] = [
+    { type: "user", cwd: "/repo", gitBranch: "main", timestamp: ts(0), message: { role: "user", content: "fix the bug" } },
+    { type: "assistant", cwd: "/repo", timestamp: ts(1), message: { role: "assistant", model: "claude-opus-4-8",
       usage: { input_tokens: 100, output_tokens: 40, cache_read_input_tokens: 10 },
       content: [{ type: "tool_use", id: "u1", name: "Edit", input: { file_path: "/repo/src/a.ts", old_string: "x", new_string: "y" } }] } },
-    { type: "user", cwd: "/repo", timestamp: `${t}2Z`, message: { role: "user", content: [{ type: "tool_result", tool_use_id: "u1", content: "ok" }] } },
-    { type: "assistant", cwd: "/repo", timestamp: `${t}3Z`, message: { role: "assistant", model: "claude-opus-4-8",
+    { type: "user", cwd: "/repo", timestamp: ts(2), message: { role: "user", content: [{ type: "tool_result", tool_use_id: "u1", content: "ok" }] } },
+    { type: "assistant", cwd: "/repo", timestamp: ts(3), message: { role: "assistant", model: "claude-opus-4-8",
       content: [{ type: "tool_use", id: "u2", name: "Bash", input: { command: "pnpm test" } }] } },
-    { type: "user", cwd: "/repo", timestamp: `${t}4Z`, message: { role: "user", content: [{ type: "tool_result", tool_use_id: "u2", content: "1 passed" }] } },
+    { type: "user", cwd: "/repo", timestamp: ts(4), message: { role: "user", content: [{ type: "tool_result", tool_use_id: "u2", content: "1 passed" }] } },
   ];
+  if (opts.extraRetryStorm) {
+    for (let i = 0; i < 3; i++) {
+      const id = `r${i}`;
+      lines.push({ type: "assistant", cwd: "/repo", timestamp: ts(5 + i * 2), message: { role: "assistant", model: "claude-opus-4-8",
+        content: [{ type: "tool_use", id, name: "Bash", input: { command: "ls -la" } }] } });
+      lines.push({ type: "user", cwd: "/repo", timestamp: ts(6 + i * 2), message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, content: "total 0" }] } });
+    }
+  }
   writeFileSync(join(projDir, `${sessionId}.jsonl`), lines.map((l) => JSON.stringify(l)).join("\n"));
 }
 
@@ -80,13 +93,21 @@ describe("summarizeSession", () => {
   });
 
   it("SECRET-SAFE: the summary contains no message/tool content or file paths", async () => {
-    const home = newHome(); writeClaudeSession(home, "sess-2"); clearScanCache();
+    // extraRetryStorm fires the retry-storm detector (three identical "ls -la"
+    // calls), so `findings` is non-empty and this test actually exercises
+    // DetectorSummary content, not just the metrics/events fields.
+    const home = newHome(); writeClaudeSession(home, "sess-2", { extraRetryStorm: true }); clearScanCache();
     const s = await summarizeSession("sess-2", "claude");
     const blob = JSON.stringify(s);
     for (const secret of ["fix the bug", "old_string", "new_string", "/repo/src/a.ts", "1 passed", "pnpm test"]) {
       expect(blob).not.toContain(secret);
     }
     expect(blob).toContain("Edit");   // tool NAMES are allowed (low-cardinality); file paths are not
+    expect(s!.findings.length).toBeGreaterThan(0);
+    const findingsBlob = JSON.stringify(s!.findings);
+    for (const secret of ["fix the bug", "old_string", "new_string", "/repo/src/a.ts", "1 passed", "pnpm test"]) {
+      expect(findingsBlob).not.toContain(secret);
+    }
   });
 
   it("non-Claude (ATIF) session returns metrics-only: process/events null, findings empty", async () => {

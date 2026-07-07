@@ -19,9 +19,12 @@ come from tools; you contribute judgment and prose, never numbers.
 2. **Layer 1 — meta.** Call `search_sessions` (agentgem-goldmine MCP) for the recent
    sessions in scope. Cap the judged set at the ~20 most recent and say so in the
    report ("based on the N most-recent of M"); never silently truncate.
-3. **Layer 2 — facets.** For each session, judge one typed facet. Spot-read evidence
-   with `get_session_transcript` — ground every outcome and friction claim in turns
-   you actually read. Facet shape (matches `packages/insight` `SessionFacet`):
+3. **Layer 2 — facets.** For each session, judge one typed facet. Pull the structured
+   signal from `summarize_session` (quality score, stage mix, detector findings), then
+   ground every outcome and friction claim by asking `ask_session` a specific question
+   about that session's outcome or friction — a separate agent reads the raw scrubbed
+   transcript and returns only its answer, so raw turns never enter your context. Facet
+   shape (matches `packages/insight` `SessionFacet`):
    - `underlying_goal` — one prose sentence
    - `outcome` — exactly one of `mostly_achieved` | `partially_achieved` | `not_achieved`
      (if a session reads as fully achieved, that is `mostly_achieved`; if the

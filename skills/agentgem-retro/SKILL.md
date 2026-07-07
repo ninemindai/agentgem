@@ -15,10 +15,10 @@ into one concrete, standing fix.
 1. **Collect.** Call `get_behavior_findings` (agentgem-goldmine MCP; default 14 days).
    Patterns are detector-derived: retry storms, thrash loops, unverified finishes,
    plus the user's own rules from `~/.agentgem/detectors`.
-2. **Verify before advising.** For each finding, open one cited session with
-   `get_session_transcript` and read the window around the flagged behavior. Keep
-   the finding only if the transcript supports it; drop it and say so if not.
-   Detectors are heuristics — a retry storm can be a flaky test, not a habit.
+2. **Verify before advising.** For each finding, call `ask_session` on the cited
+   session and ask whether the flagged behavior actually occurred. Keep the finding
+   only if the answer supports it; drop it and say so if not. Detectors are
+   heuristics — a retry storm can be a flaky test, not a habit.
 3. **Advise.** For each verified finding give: what happened (with the session it
    happened in), why it costs time, and one fix the user can adopt permanently —
    a custom detector rule in `~/.agentgem/detectors`, a workflow change, or a skill

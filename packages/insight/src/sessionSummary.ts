@@ -12,7 +12,7 @@ import { scanSessionsCached } from "./observeScan.js";
 import { resolveClaudeSession } from "./inspectSession.js";
 import { scanWorkflow } from "./workflowScan.js";
 import type { SessionSequence, ProcedureStep } from "./workflowScan.js";
-import { runDetectors, summarizeFindings, DETECTORS } from "./detectors.js";
+import { runDetectors, summarizeFindings } from "./detectors.js";
 import type { DetectorSummary } from "./detectors.js";
 import { loadRuleDetectors } from "./detectorRules.js";
 import { sessionProcessQuality } from "./processQuality.js";
