@@ -36,6 +36,7 @@ import { listActiveSessions } from "./watchSessions.js";
 import { registerChatRoutes, chatConnectFn, goldmineMcpServers } from "./goldmine/chatRoutes.js";
 import { collectBehaviorFindings } from "./goldmine/behaviorFindings.js";
 import { ChatManager } from "@agentgem/run";
+import { studioCwd, miniappDir, studioBrief } from "@agentgem/play";
 import { availableAgents, createLogger } from "@agentgem/base";
 import { collectScorecard, defaultScorecardDeps } from "./gem/scorecard.js";
 import { buildGoldmineBrief, type GoldmineBriefInput } from "@agentgem/insight";
@@ -312,8 +313,10 @@ export async function createApp(port: number): Promise<RestApplication> {
         // ChatManager passes — ensures request input can never redirect the agent.
         return {
           ctx: {
-            open: (_cwd: string, opts?: { mcpServers?: unknown[] }) =>
-              conn.ctx.open(chatCwd, opts),
+            // Studio sessions may adopt their miniapp's registry dir; studioCwd allow-lists paths under
+            // the miniapps root (else the neutral chatCwd), so a raw request path can never redirect here.
+            open: (cwd: string, opts?: { mcpServers?: unknown[] }) =>
+              conn.ctx.open(studioCwd(cwd, chatCwd), opts),
           },
           close: conn.close,
         };
@@ -322,6 +325,7 @@ export async function createApp(port: number): Promise<RestApplication> {
     setInterval(() => chatManager.sweepIdle(), 60_000).unref();
     registerChatRoutes(server.expressApp as never, {
       manager: chatManager,
+      resolveStudio: (miniapp: string) => ({ cwd: miniappDir(miniapp), brief: studioBrief(miniapp) }),
       listAgents: availableAgents,
       buildBrief: async () => {
         // Best-effort: never throws. Falls back to minimal brief on any error.
