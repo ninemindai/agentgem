@@ -98,6 +98,19 @@ The conceptual pipeline `introspect → redact → buildGem → archive` therefo
 `capture → base → build → archive`; the optional **Analyze / workflow-aware** path
 (scan → distill drafts → recommend, see [Analyze](analyze.md)) lives in `@agentgem/insight`.
 
+## Goldmine chat (aggregates-only design)
+
+The **goldmine chat** (`src/goldmine/mcpServer.ts`) is a local ACP agent that inspects your
+past coding sessions to answer questions like _"Which tools did I use most in this session?"_
+or _"What patterns emerged?"_ Its tool surface is intentionally aggregates-only: the chat
+agent receives `summarize_session` (a deterministic summary: process quality, stage mix,
+detector findings, metrics) and `ask_session` (a separate ephemeral agent, running in a
+subprocess with the same model family as the session, answers specific questions about the
+session and returns only the answer). Raw transcript content never enters the chat context.
+This follows the **Insights Generator pattern** — the primary agent reads only processed
+results; a separate processing layer handles raw traces — ensuring the chat agent sees only
+synthesized, human-readable insights.
+
 ## Distribution
 
 The Gem is a neutral source. Three subsystems consume it, plus local testbeds and runs.
@@ -138,6 +151,7 @@ src/                  # the thin server layer — consumes @agentgem/* via works
   schemas.ts          # Zod schemas shared across surfaces
   *Stream.ts          # SSE handlers (workflow analyze, gem run, scorecard)
   distill/mcpServer.ts # `agentgem-distill` bin — stdio MCP (MCPApplication + @tool)
+  goldmine/mcpServer.ts # local goldmine chat — answers questions about past sessions (aggregates-only)
   bind/               # `agentgem bind` device-flow auth
 packages/             # the Gem core — 12 @agentgem/* workspace packages (see table above)
   console/ · marketplace/   # the React console + public marketplace SPAs
