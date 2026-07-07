@@ -3,13 +3,13 @@
 // Play JSON routes over the miniapps registry: save (gate + dual-write), list, publish (git push).
 import { api, get, post, AgentError } from "@agentback/openapi";
 import { z } from "zod";
-import { saveMiniapp, listMiniapps, readMiniapp, miniappsRoot, setRemote, push, seedStudio, importStudio } from "@agentgem/play";
+import { saveMiniapp, listMiniapps, readMiniapp, miniappsRoot, setRemote, push, seedStudio, importStudio, compactTurns } from "@agentgem/play";
 import { defaultReaders } from "./play.readers.js";
 import {
   PlaySaveRequestSchema, PlaySaveResponseSchema, MiniappListSchema,
   PlayPublishRequestSchema, PlayPublishResponseSchema,
   PlayStudioRequestSchema, PlayStudioResponseSchema, PlayImportRequestSchema,
-  PlayMiniappQuerySchema, PlayMiniappSchema,
+  PlayMiniappQuerySchema, PlayMiniappSchema, PlaySessionDataSchema,
 } from "./schemas.js";
 
 @api({ basePath: "/api" })
@@ -35,6 +35,19 @@ export class PlayController {
       const { name } = await importStudio(input.body.title, input.body.html);
       return { name };
     } catch (e) { throw new AgentError((e as Error).message, { status: 400 }); }
+  }
+
+  // Host-brokered feed: the miniapp's OWN source-session transcript, compacted. Only session-sourced
+  // miniapps have it. The Runner fetches this and postMessages it into the sealed iframe on demand.
+  @get("/play/session-data", { query: PlayMiniappQuerySchema, response: PlaySessionDataSchema })
+  async sessionData(input: { query: z.infer<typeof PlayMiniappQuerySchema> }): Promise<z.infer<typeof PlaySessionDataSchema>> {
+    try {
+      const src = readMiniapp(input.query.name).meta.createdFrom;
+      if (src.kind !== "session") throw new Error("this miniapp has no session data");
+      const s = await defaultReaders.loadSession(src.sessionId, src.agent);
+      if (!s) throw new Error("session not found");
+      return { meta: (s.meta ?? {}) as Record<string, unknown>, timeline: compactTurns(s.turns) };
+    } catch (e) { throw new AgentError((e as Error).message, { status: 404 }); }
   }
 
   @get("/play/miniapps", { response: MiniappListSchema })

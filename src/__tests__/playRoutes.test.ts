@@ -45,4 +45,10 @@ describe("PlayController", () => {
     const res = await ctrl.import({ body: { title: ".git", html: "<body>x</body>" } });
     expect(res.name).toBe("git"); // leading dots stripped
   });
+
+  it("session-data 404s for a non-session miniapp (only session-sourced games have it)", async () => {
+    const ctrl = new PlayController();
+    await ctrl.import({ body: { title: "imported", html: "<body>x</body>" } }); // createdFrom kind=html
+    await expect(ctrl.sessionData({ query: { name: "imported" } })).rejects.toThrow(/no session data/);
+  });
 });

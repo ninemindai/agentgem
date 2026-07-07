@@ -35,6 +35,15 @@ describe("studio", () => {
     expect(existsSync(join(miniappsRoot(), ".git"))).toBe(true); // committed to the registry repo
     expect(brief).toContain(name);
   });
+  it("seedStudio for a session (replay) is broker-fed: NO baked data, declares session-data need", async () => {
+    const { name } = await seedStudio({ kind: "session", agent: "claude", sessionId: "s1", summary: "auth" }, readers);
+    const dir = join(miniappsRoot(), name);
+    const html = readFileSync(join(dir, `${name}.html`), "utf8");
+    expect(html).not.toContain('id="game-data" type="application/json"'); // no baked transcript
+    expect(html).toContain("agentgem:request");                           // asks the host for it instead
+    const meta = JSON.parse(readFileSync(join(dir, "meta.json"), "utf8"));
+    expect(meta.needs).toEqual(["session-data"]);
+  });
   it("studioBrief reads meta and instructs editing the sealed html", async () => {
     const { name } = await seedStudio({ kind: "skill", skillName: "brainstorming" }, readers);
     const b = studioBrief(name);

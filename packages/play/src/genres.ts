@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 // The genre registry — the one place that knows what each genre is FOR. Adding a genre (or a future
 // kind like a non-game miniapp) is one entry here + one scaffold + one sourceContext branch.
-import type { GameGenre, GameSource } from "@agentgem/model";
+import type { GameGenre, GameSource, GameCapability } from "@agentgem/model";
 
 export interface GenreSpec {
   id: GameGenre;
@@ -10,11 +10,14 @@ export interface GenreSpec {
   title: string;
   scaffold: string;   // scaffold id (see scaffolds.ts)
   guidance: string;   // genre-specific prompt guidance used to seed the studio
+  // Capabilities the seeded game DECLARES. `session-data` means broker-fed: the host fetches the source
+  // transcript on demand rather than baking it into the bundle — so no baked data at seed time.
+  needs?: GameCapability[];
 }
 
 export const GENRES: Record<GameGenre, GenreSpec> = {
   replay: {
-    id: "replay", sourceKind: "session", title: "Session Replay", scaffold: "replay",
+    id: "replay", sourceKind: "session", title: "Session Replay", scaffold: "replay", needs: ["session-data"],
     guidance:
       "Build a short, animated, playable replay of the coding session in the DATA: a timeline the player " +
       "advances, surfacing the key moments (tool calls, edits, errors, the fix). Delightful, not a log dump.",

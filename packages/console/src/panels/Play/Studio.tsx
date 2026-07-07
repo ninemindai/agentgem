@@ -18,7 +18,7 @@ export function Studio({ apiBase, name, onBack }: { apiBase: string; name: strin
   const [busy, setBusy] = useState(false);
   const [working, setWorking] = useState("");
   const [html, setHtml] = useState("");
-  const [meta, setMeta] = useState<{ title: string; genre: string } | null>(null);
+  const [meta, setMeta] = useState<{ title: string; genre: string; needs?: string[] } | null>(null);
   const [status, setStatus] = useState("");
   const [gate, setGate] = useState<string[] | null>(null);       // seal failures → actionable banner
   const [share, setShare] = useState<{ url: string } | null>(null);
@@ -154,7 +154,7 @@ export function Studio({ apiBase, name, onBack }: { apiBase: string; name: strin
       )}
 
       <div className="play-grid-2">
-        <Runner html={html} />
+        <Runner html={html} name={name} apiBase={apiBase} needs={meta?.needs} />
         <div className="play-chat">
           <div className="play-log" ref={logRef}>
             {msgs.length === 0 && <div className="play-log__hint">Ask the agent to build or change the miniapp…</div>}

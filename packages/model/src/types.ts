@@ -51,6 +51,7 @@ export type GameGenre = "replay" | "skill-run" | "project-fun"; // v2: "watch" |
 // code execution (the host runs an ACP agent in the run-sandbox and streams back a sanitized
 // transcript) and is restricted at runtime to locally-authored games, never shared/marketplace ones.
 export type GameCapability =
+  | "session-data"          // read-only: the game's own source-session transcript ({meta,timeline}), host-brokered on demand
   | "live-session-events"   // read-only: streamed live session events (host -> /api/watch/stream)
   | "local-project-access"  // read-only: local projects / setup / inventory (host-brokered)
   | "invoke-agent";         // privileged: host runs a local ACP agent in the sandbox; game gets the transcript
