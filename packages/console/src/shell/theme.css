@@ -1411,3 +1411,8 @@ button.scorecard-intent { line-height: 1.4; }
 .play-consent__title { font: 600 14px var(--font-ui); color: var(--ink); line-height: 1.35; }
 .play-consent__sub { font-size: 12px; color: var(--ink-soft); margin: 8px 0 14px; line-height: 1.45; }
 .play-consent__btns { display: flex; gap: 8px; justify-content: center; }
+
+/* Observe → Arcade: play a game in a modal overlay */
+.arcade-overlay { position: fixed; inset: 0; z-index: 900; background: rgba(12,10,18,.66); display: grid; place-items: center; animation: fade .2s ease both; }
+.arcade-overlay__box { width: min(1040px, 92vw); background: var(--raised); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-md); }
+.arcade-overlay__bar { display: flex; align-items: center; justify-content: space-between; padding: 9px 13px; border-bottom: 1px solid var(--line); font: 600 14px var(--font-display); color: var(--ink); }
