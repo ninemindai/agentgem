@@ -23,19 +23,23 @@ export function formatActivity(a: SessionActivity): string[] {
 
 // Anchored under the row's project cell (which is position:relative). Themed via
 // existing CSS variables so it works in both light and dark without a theme.css edit.
-const POP_STYLE: CSSProperties = {
-  position: "absolute", top: "100%", left: 12, marginTop: 4, zIndex: 20,
+const POP_BASE: CSSProperties = {
+  position: "absolute", left: 12, zIndex: 20,
   maxWidth: 460, whiteSpace: "normal",
   background: "var(--raised)", border: "1px solid var(--line)",
   borderRadius: "var(--radius)", boxShadow: "var(--shadow-md)",
   padding: "6px 10px", font: "11.5px/1.5 var(--font-ui)", color: "var(--ink-soft)",
 };
+// Default anchors below the row; `up` anchors above it so the popover on the
+// last row isn't clipped by the table wrapper's overflow.
+const POP_DOWN: CSSProperties = { ...POP_BASE, top: "100%", marginTop: 4 };
+const POP_UP: CSSProperties = { ...POP_BASE, bottom: "100%", marginBottom: 4 };
 
 /** Hover/focus popover showing a session's activity skeleton. */
-export function SessionSummaryPopover({ activity }: { activity: SessionActivity }) {
+export function SessionSummaryPopover({ activity, up = false }: { activity: SessionActivity; up?: boolean }) {
   const parts = formatActivity(activity);
   return (
-    <div className="obs-summary-pop" role="tooltip" style={POP_STYLE}>
+    <div className="obs-summary-pop" role="tooltip" style={up ? POP_UP : POP_DOWN}>
       {parts.length === 0
         ? <span className="obs-muted">No recorded tool activity</span>
         : parts.join(" · ")}

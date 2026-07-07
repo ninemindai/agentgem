@@ -34,4 +34,14 @@ describe("SessionSummaryPopover", () => {
     render(<SessionSummaryPopover activity={{ tools: {}, skills: {}, subagents: {} }} />);
     expect(screen.getByText("No recorded tool activity")).toBeDefined();
   });
+
+  it("anchors below the row by default", () => {
+    render(<SessionSummaryPopover activity={{ tools: { Edit: 1 }, skills: {}, subagents: {} }} />);
+    expect((screen.getByRole("tooltip") as HTMLElement).style.top).toBe("100%");
+  });
+
+  it("anchors above the row when up", () => {
+    render(<SessionSummaryPopover activity={{ tools: { Edit: 1 }, skills: {}, subagents: {} }} up />);
+    expect((screen.getByRole("tooltip") as HTMLElement).style.bottom).toBe("100%");
+  });
 });
