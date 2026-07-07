@@ -6,8 +6,8 @@
 // session open and renders an SVG context-window chart alongside a rail with
 // the hygiene verdict, fired factors, and the biggest context jumps. Claude-only,
 // like DistillSection — the underlying scan reads Claude transcripts. Replaces
-// the older HygieneReport block in TranscriptViewer (HygieneReport itself stays
-// for the cross-session leaderboard).
+// the old HygieneReport component/block in TranscriptViewer, which has since
+// been removed (the cross-session leaderboard lives in panels/Rubrics/).
 import { useEffect, useState } from "react";
 import { hygieneRoute, makeClient, type HygieneReport as Report } from "../../api/routes.js";
 import { buildTimeline } from "./ctxTimeline.js";

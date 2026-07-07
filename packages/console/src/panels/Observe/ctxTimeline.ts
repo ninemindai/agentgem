@@ -30,8 +30,16 @@ export function buildTimeline(curve: HygieneReport["curve"], events: HygieneRepo
   const markers: Marker[] = events.map((e) => ({ x: xOf(nearest(e.msgIndex)), kind: e.kind, name: e.name }));
 
   // jumps: top 4 positive ctx deltas; cause from an event on that point, else cache-creation.
+  // A Skill/Task tool_use is issued on a turn whose own usage snapshot predates the
+  // load — its token cost only shows up at the next usage-bearing curve point, so
+  // jump attribution (unlike markers) maps each event to the first curve index
+  // strictly after the event's msgIndex, not the nearest one.
+  const afterEvent = (msgIndex: number) => {
+    const i = idxByMsg.findIndex((mi) => mi > msgIndex);
+    return i === -1 ? n - 1 : i;
+  };
   const evByPoint = new Map<number, HygieneReport["events"][number]>();
-  events.forEach((e) => evByPoint.set(nearest(e.msgIndex), e));
+  events.forEach((e) => evByPoint.set(afterEvent(e.msgIndex), e));
   const rows: Jump[] = [];
   for (let i = 1; i < n; i++) {
     const delta = curve[i].ctxTokens - curve[i - 1].ctxTokens;
