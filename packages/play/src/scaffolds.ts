@@ -41,8 +41,100 @@ function sealedTemplate(title: string, subtitle: string): string {
 </body></html>`;
 }
 
+// The replay scaffold RENDERS the session out of the box (stats + tool chart + a play/pause scrubbable
+// timeline) from the injected game-data, so a freshly-seeded replay is immediately meaningful — the
+// studio agent then themes/gamifies the block between the AGENTGEM:GAME-LOGIC markers. Defensive: with
+// no data (the bare scaffold the gate runs) it shows an empty state rather than throwing.
+function replayScaffold(): string {
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Session Replay</title>
+<style>
+  :root { color-scheme: dark; }
+  html,body { height:100%; margin:0; background:#0d1117; color:#e8edf4; font:14px/1.5 system-ui, sans-serif; }
+  #wrap { max-width:900px; margin:0 auto; padding:20px; box-sizing:border-box; }
+  h1 { font-size:20px; margin:0 0 2px; } .sub { color:#8b98ac; font-size:12px; margin-bottom:16px; }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:10px; margin-bottom:16px; }
+  .tile { background:#161d29; border:1px solid #232c3b; border-radius:10px; padding:10px 12px; }
+  .tile b { font-size:20px; display:block; font-variant-numeric:tabular-nums; } .tile span { color:#8b98ac; font-size:11px; text-transform:uppercase; letter-spacing:.08em; }
+  .tools { margin-bottom:16px; } .toolrow { display:flex; align-items:center; gap:8px; margin:3px 0; }
+  .toolrow .n { width:120px; font-size:12px; color:#cdd6e4; } .toolrow .bar { height:12px; background:#3b82f6; border-radius:3px; min-width:2px; }
+  .toolrow .c { font-size:11px; color:#8b98ac; }
+  #stage { background:#161d29; border:1px solid #232c3b; border-radius:10px; padding:16px; min-height:120px; }
+  #stage .role { font:600 12px system-ui; text-transform:uppercase; letter-spacing:.1em; }
+  #stage .role.user { color:#10b981; } #stage .role.assistant { color:#818cf8; }
+  #stage .text { margin-top:8px; white-space:pre-wrap; }
+  #controls { display:flex; align-items:center; gap:12px; margin-top:12px; }
+  #controls button { background:#3b82f6; color:#fff; border:0; border-radius:8px; padding:8px 14px; cursor:pointer; font:600 14px system-ui; }
+  #scrub { flex:1; } #count { color:#8b98ac; font-size:12px; font-variant-numeric:tabular-nums; }
+</style></head>
+<body>
+  <div id="wrap"><div id="app"></div></div>
+  <script>
+  (function () {
+    "use strict";
+    const dataEl = document.getElementById("game-data");
+    const DATA = dataEl ? JSON.parse(dataEl.textContent || "{}") : {};
+    const meta = DATA.meta || {};
+    const timeline = Array.isArray(DATA.timeline) ? DATA.timeline : [];
+    const app = document.getElementById("app");
+    const fmtDur = (ms) => { const s = Math.max(0, Math.round((ms||0)/1000)); return s<60 ? s+"s" : Math.floor(s/60)+"m "+(s%60)+"s"; };
+    const num = (n) => (n||0).toLocaleString();
+
+    // ==== AGENTGEM:GAME-LOGIC START ====
+    // Default: a real, playable session replay. The studio agent enhances/themes this block.
+    const tools = meta.tools || {};
+    const toolEntries = Object.keys(tools).map((k) => [k, tools[k]]).sort((a,b) => b[1]-a[1]);
+    const maxTool = toolEntries.reduce((m,e) => Math.max(m, e[1]), 1);
+
+    app.innerHTML =
+      '<h1>' + (meta.project || "Session Replay") + '</h1>' +
+      '<div class="sub">' + [meta.model, meta.gitBranch, fmtDur((meta.endMs||0)-(meta.startMs||0))].filter(Boolean).join(" · ") + '</div>' +
+      '<div class="tiles">' +
+        tile(num(meta.msgs || timeline.length), "messages") +
+        tile(num(meta.tokensIn), "tokens in") +
+        tile(num(meta.tokensOut), "tokens out") +
+        tile(num(toolEntries.length), "tool kinds") +
+      '</div>' +
+      (toolEntries.length ? '<div class="tools">' + toolEntries.map((e) =>
+        '<div class="toolrow"><span class="n">' + e[0] + '</span><span class="bar" style="width:' + Math.round(e[1]/maxTool*260) + 'px"></span><span class="c">' + e[1] + '</span></div>').join("") + '</div>' : '') +
+      '<div id="stage"></div>' +
+      '<div id="controls"><button id="play">' + (timeline.length ? "▶ Play" : "—") + '</button>' +
+        '<input id="scrub" type="range" min="0" max="' + Math.max(0, timeline.length-1) + '" value="0" />' +
+        '<span id="count"></span></div>';
+
+    function tile(v, l) { return '<div class="tile"><b>' + v + '</b><span>' + l + '</span></div>'; }
+
+    const stage = document.getElementById("stage");
+    const scrub = document.getElementById("scrub");
+    const count = document.getElementById("count");
+    const playBtn = document.getElementById("play");
+    let i = 0, playing = false, timer = 0;
+
+    function render() {
+      if (!timeline.length) { stage.innerHTML = '<div class="sub">Seed a session to replay its timeline here.</div>'; count.textContent = ""; return; }
+      const t = timeline[i] || {};
+      stage.innerHTML = '<div class="role ' + (t.role === "user" ? "user" : "assistant") + '">' + (t.role || "assistant") + '</div>' +
+        '<div class="text">' + (t.text ? esc(t.text) : "…") + '</div>';
+      scrub.value = String(i); count.textContent = (i+1) + " / " + timeline.length;
+    }
+    function esc(s) { return String(s).replace(/[&<>]/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;" }[c])); }
+    function step() { if (i < timeline.length - 1) { i++; render(); } else { stop(); } }
+    function stop() { playing = false; playBtn.textContent = "▶ Play"; if (timer) clearInterval(timer); timer = 0; }
+    function play() { if (!timeline.length) return; playing = true; playBtn.textContent = "❚❚ Pause"; timer = setInterval(step, 700); }
+
+    playBtn.addEventListener("click", () => (playing ? stop() : play()));
+    scrub.addEventListener("input", () => { i = Number(scrub.value) || 0; if (playing) stop(); render(); });
+    render();
+    // ==== AGENTGEM:GAME-LOGIC END ====
+  })();
+  </script>
+</body></html>`;
+}
+
 const SCAFFOLDS: Record<string, string> = {
-  replay: sealedTemplate("Session Replay", "▶ replay"),
+  replay: replayScaffold(),
   "skill-run": sealedTemplate("Skill Run", "⚙ practice"),
   "project-fun": sealedTemplate("Project Fun", "★ play"),
 };

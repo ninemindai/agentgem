@@ -1,6 +1,6 @@
 // src/play/__tests__/sourceContext.test.ts
 import { describe, it, expect } from "vitest";
-import { extractSource, type SourceReaders } from "@agentgem/play";
+import { extractSource, compactTurns, type SourceReaders } from "@agentgem/play";
 import type { GameSource } from "@agentgem/model";
 
 const readers: SourceReaders = {
@@ -10,12 +10,24 @@ const readers: SourceReaders = {
 };
 
 describe("extractSource", () => {
-  it("session → replay", async () => {
+  it("session → replay (compact {meta, timeline})", async () => {
     const src: GameSource = { kind: "session", agent: "claude", sessionId: "s1", summary: "auth" };
     const input = await extractSource(src, readers);
     expect(input.genre).toBe("replay");
     expect(input.createdFrom).toEqual(src);
-    expect(JSON.stringify(input.data)).toContain("patched login");
+    const data = input.data as { meta: unknown; timeline: { text: string }[] };
+    expect(data.timeline[0].text).toContain("patched login");
+  });
+
+  it("compactTurns trims spans/text to a short timeline entry", () => {
+    const out = compactTurns([
+      { role: "user", tsMs: 1, spans: [{ kind: "message", text: "  fix   auth  " }] },
+      { role: "assistant", tsMs: 2, text: "x".repeat(500) },
+      "junk",
+    ]);
+    expect(out[0]).toEqual({ role: "user", tsMs: 1, text: "fix auth" }); // whitespace-collapsed
+    expect(out[1].text.length).toBe(200);                                // capped
+    expect(out[2]).toEqual({ role: "assistant", tsMs: 0, text: "" });    // defensive on junk
   });
   it("skill → skill-run", async () => {
     const input = await extractSource({ kind: "skill", skillName: "brainstorming" }, readers);
