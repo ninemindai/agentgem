@@ -26,10 +26,11 @@ describe("commitWithLock", () => {
   });
 
   it("a failing commit does not wedge the chain for later commits on the same dir", async () => {
-    // Never ran ensureRepo on a fresh subdir → first call rejects (not a git repo);
-    // the lock must still let a subsequent, valid commit proceed.
-    const bad = join(dir, "nope");
-    await expect(commitWithLock(bad, "x")).rejects.toBeTruthy();
+    await ensureRepo(dir);
+    // Make the FIRST commit on `dir` reject: remove .git so commitAll's `git add -A` fails.
+    rmSync(join(dir, ".git"), { recursive: true, force: true });
+    await expect(commitWithLock(dir, "x")).rejects.toBeTruthy();
+    // Repair and commit again on the SAME dir key — the chain must not be wedged by the prior rejection.
     await ensureRepo(dir);
     writeFileSync(join(dir, "c.txt"), "c");
     await expect(commitWithLock(dir, "y")).resolves.toMatch(/^[0-9a-f]{7,40}$/);
