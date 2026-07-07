@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { testbedRecentsRoute, testbedProjectsRoute, rubricsRoute, makeClient, type RecentEntry, type ProjectCandidate, type RubricSummary } from "../../api/routes.js";
 import { defineConsolePage } from "../../registry.js";
 import { openRubricStream, type RubricReportView, type RubricFactorView } from "./rubricStream.js";
+import { HygieneLeaderboard } from "./HygieneLeaderboard.js";
 import { consumePendingRubric } from "../../pendingAnalyze.js";
 import { Loading } from "../../shell/Loading.js";
 import { timeAgo } from "../../util/timeAgo.js";
@@ -56,9 +57,11 @@ function RubricReportCard({ report }: { report: RubricReportView }) {
       </ul>
 
       {affected > 0 && (
-        <p className="insights-hint">
-          {affected} session{affected === 1 ? "" : "s"} tripped a factor{report.perSessionTruncated ? " (showing the first 200)" : ""}.
-        </p>
+        report.perSession!.some((s) => s.hygiene)
+          ? <HygieneLeaderboard perSession={report.perSession!} sessionsScanned={report.sessionsScanned} truncated={!!report.perSessionTruncated} />
+          : <p className="insights-hint">
+              {affected} session{affected === 1 ? "" : "s"} tripped a factor{report.perSessionTruncated ? " (showing the first 200)" : ""}.
+            </p>
       )}
       {report.skippedFactors.length > 0 && (
         <p className="ledger-muted">

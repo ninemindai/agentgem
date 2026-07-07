@@ -1022,6 +1022,17 @@ button.scorecard-intent { line-height: 1.4; }
 .hyg-factors li { font-size: 12.5px; color: var(--ink-soft); }
 .hyg-factors b { font-weight: 600; }
 
+/* worst-first cross-session hygiene leaderboard (Rubrics panel) */
+.hyg-lb-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0; }
+.hyg-lb-row {
+  display: flex; align-items: baseline; gap: 10px; padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+.hyg-lb-row:last-child { border-bottom: none; }
+.hyg-lb-name { color: var(--accent); text-decoration: none; font-size: 12.5px; }
+.hyg-lb-name:hover { text-decoration: underline; }
+.hyg-lb-top { margin-left: auto; font-size: 11.5px; }
+
 /* live context-hygiene nudge banner (Watch tab, above the feed) */
 .hyg-nudge {
   margin: 0 0 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius);
