@@ -2,7 +2,7 @@ import type { ConsolePage, Phase, ArtifactCategory } from "./contract.js";
 export { defineConsolePage } from "./contract.js";
 export type { ConsolePage, Phase, ArtifactCategory } from "./contract.js";
 
-/** Order of the artifact sub-labels, per phase. Observe leads with Usage (Inspect is the
+/** Order of the artifact sub-labels, per phase. Observe leads with Usage (Overview is the
  *  home dashboard) and drops Configuration to the bottom; Build leads with Setup (Curate is
  *  the entry point). */
 const CATEGORY_ORDER: Record<Phase, ArtifactCategory[]> = {
@@ -15,6 +15,7 @@ const LEGACY_ROUTES: Record<string, string> = {
   "#/your-gems": "#/gems",
   "#/received": "#/gems/received",
   "#/get-gems": "#/gems/market",
+  "#/inspect": "#/overview", // the Overview dashboard was renamed from Inspect
 };
 
 /** Rewrite a legacy route to its current one, preserving any `?query` verbatim.
@@ -26,8 +27,9 @@ export function normalizeHash(hash: string): string {
   const query = qIdx === -1 ? "" : hash.slice(qIdx);
   const mapped = LEGACY_ROUTES[path];
   if (mapped) return mapped + query;
-  // The transcript drill-down moved from Inspect to the Sessions screen. Bare #/inspect
-  // (the dashboard) stays; only the /<agent>/<sessionId> sub-paths rewrite.
+  // The transcript drill-down moved from Inspect to the Sessions screen; the bare
+  // #/inspect dashboard route was renamed to #/overview (handled by LEGACY_ROUTES above).
+  // Here, only the legacy /<agent>/<sessionId> drill-down sub-paths rewrite to Sessions.
   if (path.startsWith("#/inspect/")) return "#/sessions/" + path.slice("#/inspect/".length) + query;
   return hash;
 }

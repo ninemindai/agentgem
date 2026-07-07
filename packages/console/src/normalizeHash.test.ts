@@ -23,13 +23,13 @@ describe("normalizeHash", () => {
   it("rewrites the legacy transcript drill-down to the Sessions screen (query preserved)", () => {
     expect(normalizeHash("#/inspect/claude/abc")).toBe("#/sessions/claude/abc");
     expect(normalizeHash("#/inspect/codex/s1?vs=claude:s2")).toBe("#/sessions/codex/s1?vs=claude:s2");
-    // bare #/inspect (the dashboard) is NOT a drill-down and stays put
-    expect(normalizeHash("#/inspect")).toBe("#/inspect");
+    // bare #/inspect (the old dashboard route) is NOT a drill-down; it redirects to #/overview
+    expect(normalizeHash("#/inspect")).toBe("#/overview");
     expect(normalizeHash("#/sessions/claude/abc")).toBe("#/sessions/claude/abc"); // idempotent
   });
 
   it("leaves unknown routes untouched", () => {
-    expect(normalizeHash("#/inspect")).toBe("#/inspect");
+    expect(normalizeHash("#/overview")).toBe("#/overview"); // the new canonical route is not rewritten
     expect(normalizeHash("#/mine")).toBe("#/mine");
     expect(normalizeHash("")).toBe("");
   });

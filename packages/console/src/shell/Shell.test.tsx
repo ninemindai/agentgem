@@ -24,7 +24,7 @@ const p = (o: P): ConsolePage =>
 
 // A small two-phase registry used by most tests.
 const pages = [
-  p({ id: "inspect", phase: "observe", category: "usage", order: 10 }), // Usage leads Observe
+  p({ id: "overview", phase: "observe", category: "usage", order: 10 }), // Usage leads Observe
   p({ id: "watch", phase: "observe", category: "sessions", order: 10 }),
   p({ id: "rubrics", phase: "observe", category: "setup", order: 10 }), // Configuration, last
   p({ id: "curate", phase: "build", category: "setup", order: 10 }),
@@ -41,7 +41,7 @@ const goHash = (h: string) =>
 describe("Shell — phase-primary nav", () => {
   it("defaults to the Observe phase and renders its first panel", () => {
     render(<Shell pages={pages} apiBase="" />);
-    expect(screen.getByText("panel-inspect")).toBeTruthy();
+    expect(screen.getByText("panel-overview")).toBeTruthy();
     expect(screen.getByRole("radio", { name: "Observe" }).getAttribute("aria-checked")).toBe("true");
   });
 
@@ -86,7 +86,7 @@ describe("Shell — phase-primary nav", () => {
 
   it("remembers the last screen per phase across a switch", () => {
     const multi = [
-      p({ id: "inspect", phase: "observe", category: "setup", order: 10 }),
+      p({ id: "overview", phase: "observe", category: "setup", order: 10 }),
       p({ id: "curate", phase: "build", category: "setup", order: 10 }),
       p({ id: "deploy", phase: "build", category: "projects", order: 20 }),
     ];
@@ -101,7 +101,7 @@ describe("Shell — phase-primary nav", () => {
 
   it("normalizes a legacy route on cold start (#/your-gems → #/gems)", () => {
     const withGems = [
-      p({ id: "inspect", phase: "observe", category: "setup", order: 10 }),
+      p({ id: "overview", phase: "observe", category: "setup", order: 10 }),
       p({ id: "gems", phase: "build", category: "setup", order: 30 }),
     ];
     window.location.hash = "#/your-gems"; // no hashchange fires on first render
@@ -117,9 +117,9 @@ describe("Shell — phase-primary nav", () => {
   });
 
   it("resolves a drill-down sub-route via longest-prefix match", () => {
-    window.location.hash = "#/inspect/claude/abc-123";
+    window.location.hash = "#/overview/claude/abc-123";
     render(<Shell pages={pages} apiBase="" />);
-    expect(screen.getByText("panel-inspect")).toBeTruthy();
+    expect(screen.getByText("panel-overview")).toBeTruthy();
   });
 
   it("isolates page hooks across different hook counts", () => {

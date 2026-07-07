@@ -33,7 +33,7 @@ export function Dashboard({ data, range, onRange, filter, onFilter, pending, onR
   return (
     <div className="obs">
       <div className="obs-head">
-        <h2 className="obs-title">Inspect</h2>
+        <h2 className="obs-title">Overview</h2>
         {pending && <span className="obs-pending-pill">Updating…</span>}
         <RangeTabs range={range} onRange={onRange} />
         {onPublishSetup && (

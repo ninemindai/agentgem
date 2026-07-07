@@ -35,7 +35,7 @@ export function TranscriptDiff({ apiBase, a, b, onBack }: {
   return (
     <div className="obs tv tv-diff">
       <div className="tv-head">
-        <button type="button" className="tv-back" onClick={onBack}>← Inspect</button>
+        <button type="button" className="tv-back" onClick={onBack}>← Overview</button>
         <h2 className="obs-title tv-title">Compare runs</h2>
         {va && vb && (
           <span className="obs-muted tv-meta">
