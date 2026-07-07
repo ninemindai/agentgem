@@ -3,10 +3,12 @@
 // Play JSON routes over the miniapps registry: save (gate + dual-write), list, publish (git push).
 import { api, get, post, AgentError } from "@agentback/openapi";
 import { z } from "zod";
-import { saveMiniapp, listMiniapps, miniappsRoot, setRemote, push } from "@agentgem/play";
+import { saveMiniapp, listMiniapps, miniappsRoot, setRemote, push, seedStudio } from "@agentgem/play";
+import { defaultReaders } from "./play.readers.js";
 import {
   PlaySaveRequestSchema, PlaySaveResponseSchema, MiniappListSchema,
   PlayPublishRequestSchema, PlayPublishResponseSchema,
+  PlayStudioRequestSchema, PlayStudioResponseSchema,
 } from "./schemas.js";
 
 @api({ basePath: "/api" })
@@ -15,6 +17,14 @@ export class PlayController {
   async save(input: { body: z.infer<typeof PlaySaveRequestSchema> }): Promise<z.infer<typeof PlaySaveResponseSchema>> {
     try {
       return await saveMiniapp({ name: input.body.name, html: input.body.html, meta: input.body.meta });
+    } catch (e) { throw new AgentError((e as Error).message, { status: 400 }); }
+  }
+
+  @post("/play/studio", { body: PlayStudioRequestSchema, response: PlayStudioResponseSchema })
+  async studio(input: { body: z.infer<typeof PlayStudioRequestSchema> }): Promise<z.infer<typeof PlayStudioResponseSchema>> {
+    try {
+      const { name } = await seedStudio(input.body.source, defaultReaders);
+      return { name };
     } catch (e) { throw new AgentError((e as Error).message, { status: 400 }); }
   }
 

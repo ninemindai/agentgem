@@ -6,7 +6,7 @@ import type { SourceReaders } from "@agentgem/play";
 import { loadSessionTranscript, type AgentId } from "@agentgem/insight";
 import { introspectConfig } from "@agentgem/capture";
 import { suggestTestbed } from "@agentgem/testbed";
-import { readdirSync } from "node:fs";
+import { readdirSync, existsSync } from "node:fs";
 
 export const defaultReaders: SourceReaders = {
   loadSession: async (sessionId, agent) => {
@@ -18,10 +18,12 @@ export const defaultReaders: SourceReaders = {
     return s ? { name: s.name, content: s.content, trigger: s.trigger } : null;
   },
   readProject: async (path) => {
-    const sug = suggestTestbed(path);
-    if (!sug.looksLikeProject || !sug.flavor) return null;
-    let files: string[] = [];
-    try { files = readdirSync(path).slice(0, 40); } catch { files = []; }
-    return { path, flavor: sug.flavor, files };
+    if (!existsSync(path)) return null;
+    let files: string[];
+    try { files = readdirSync(path).slice(0, 40); } catch { return null; }
+    // suggestTestbed detects the agent/testbed flavor (claude/codex) when present; used only as a light
+    // theme hint here, not a gate — any existing dir is a valid project source for a themed miniapp.
+    const flavor = suggestTestbed(path).flavor ?? "project";
+    return { path, flavor, files };
   },
 };
