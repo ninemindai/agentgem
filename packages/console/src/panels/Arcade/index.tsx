@@ -30,7 +30,7 @@ export function ArcadePage({ apiBase }: { apiBase: string }) {
   const [playing, setPlaying] = useState<string | null>(null);
   return (
     <section className="analyze">
-      <p className="play-intro">Your mini-games — click to play. Create or edit them in <b>Build → Play</b>.</p>
+      <p className="play-intro">Your mini-games — click to play. Create or edit them in <a href="#/play"><b>Build → Play</b></a>.</p>
       <GameGrid apiBase={apiBase} onOpen={setPlaying} />
       {playing && <PlayOverlay apiBase={apiBase} name={playing} onClose={() => setPlaying(null)} />}
     </section>
