@@ -151,6 +151,32 @@ describe("Runner", () => {
     expect(screen.queryByText("Allow")).toBeNull(); // no prompt on a thumbnail
     expect(inv).not.toHaveBeenCalled();
   });
+
+  it("a second gated-cap request while a prompt is open replaces the prompt without orphaning the first promise", async () => {
+    const inv = vi.spyOn(inventoryRoute, "call").mockResolvedValue({ skills: [{ name: "test" }], mcpServers: [], instructions: [], hooks: [], subagents: [] } as never);
+    const { container } = render(<Runner html="<p>x</p>" name="g5" apiBase="" needs={["local-project-access"]} />);
+    const win = (container.querySelector("iframe") as HTMLIFrameElement).contentWindow as Window;
+    const post = vi.spyOn(win, "postMessage").mockImplementation(() => {});
+
+    // Fire the first gated request — consent prompt shown
+    const id1 = callTool(win, "agentgem_get_inventory");
+    await waitFor(() => expect(screen.getByText("Allow")).toBeTruthy());
+    expect(inv).not.toHaveBeenCalled();
+
+    // Fire a second gated request before resolving the first
+    const id2 = callTool(win, "agentgem_get_inventory");
+    await new Promise((r) => setTimeout(r, 10)); // let the component state settle
+
+    // The prompt should still be visible (not stacked)
+    expect(screen.queryAllByText("Allow").length).toBe(1);
+
+    // Allow should resolve the second (current) request; the first was superseded and resolved as false
+    fireEvent.click(screen.getByText("Allow"));
+    await waitFor(() => expect(inv).toHaveBeenCalled());
+
+    // The response to the second request should be posted
+    await waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({ id: id2, result: expect.objectContaining({ skills: [{ name: "test" }] }) }), "*"));
+  });
 });
 
 describe("Runner — Replay yours picker", () => {
