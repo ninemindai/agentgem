@@ -7,9 +7,18 @@
 import type { AgentDescriptor } from "./acpSession.js";
 import { resolveAdapterSource, adapterRuntimeCtx, type AdapterCtx, type AdapterSource } from "./adapters.js";
 
+// Single source of truth for adapter version pins, keyed by npm package. Both the
+// Chat registry (AGENTS, below) and the gem-runner registry
+// (packages/run/src/runGem.ts AGENT_ADAPTERS) reference this so the two never drift.
+// Vetted; bump deliberately.
+export const ADAPTER_VERSIONS: Record<string, string> = {
+  "@agentclientprotocol/claude-agent-acp": "0.51.0",
+  "@agentclientprotocol/codex-acp": "1.1.0",
+};
+
 export const AGENTS: AgentDescriptor[] = [
-  { id: "claude-code", name: "Claude Code", command: ["claude-agent-acp"], package: "@agentclientprotocol/claude-agent-acp", version: "0.51.0" },
-  { id: "codex", name: "Codex", command: ["codex-acp"], package: "@agentclientprotocol/codex-acp", version: "1.1.0" },
+  { id: "claude-code", name: "Claude Code", command: ["claude-agent-acp"], package: "@agentclientprotocol/claude-agent-acp", version: ADAPTER_VERSIONS["@agentclientprotocol/claude-agent-acp"] },
+  { id: "codex", name: "Codex", command: ["codex-acp"], package: "@agentclientprotocol/codex-acp", version: ADAPTER_VERSIONS["@agentclientprotocol/codex-acp"] },
 ];
 
 export interface AgentAvailability {

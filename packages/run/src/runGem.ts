@@ -20,6 +20,7 @@ import { binOnPath } from "@agentgem/model";
 import type { Gem, ConfigInventory, GemContract } from "@agentgem/model";
 import { scaffoldTestbed, importArtifacts, type ImportedRef, type ImportSkip } from "@agentgem/testbed";
 import type { TestbedFlavorId } from "@agentgem/testbed";
+import { ADAPTER_VERSIONS } from "@agentgem/base";
 import { runGemWithAgent, hasTestConnectFn, type RunConnectFn, type GemRunOutcome, type ToolInvocation } from "./acpRun.js";
 import { verifyGemRun, type GemExpectations, type VerificationReport } from "./gemVerify.js";
 
@@ -61,9 +62,12 @@ export interface AgentAdapter {
   flavor: TestbedFlavorId; validated: boolean;
 }
 
+// Version pins come from @agentgem/base ADAPTER_VERSIONS (single source of truth,
+// keyed by npm package) so this gem-runner registry and the Chat registry (AGENTS)
+// never drift on which adapter version to fetch.
 export const AGENT_ADAPTERS: Record<AgentId, AgentAdapter> = {
-  claude: { id: "claude", name: "Claude Code", pkg: "@agentclientprotocol/claude-agent-acp", bin: "claude-agent-acp", version: "0.51.0", flavor: "claude", validated: true },
-  codex: { id: "codex", name: "Codex", pkg: "@agentclientprotocol/codex-acp", bin: "codex-acp", version: "1.0.0", flavor: "codex", validated: true },
+  claude: { id: "claude", name: "Claude Code", pkg: "@agentclientprotocol/claude-agent-acp", bin: "claude-agent-acp", version: ADAPTER_VERSIONS["@agentclientprotocol/claude-agent-acp"], flavor: "claude", validated: true },
+  codex: { id: "codex", name: "Codex", pkg: "@agentclientprotocol/codex-acp", bin: "codex-acp", version: ADAPTER_VERSIONS["@agentclientprotocol/codex-acp"], flavor: "codex", validated: true },
 };
 
 const require = createRequire(import.meta.url);
