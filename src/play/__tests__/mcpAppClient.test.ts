@@ -115,43 +115,77 @@ describe("mcpAppClient shim", () => {
     expect(mcpAppClient()).toContain(MCP_CLIENT_MARKER);
   });
 
-  describe("callTool timeout", () => {
+  describe("callTool ready-gating", () => {
     afterEach(() => {
       vi.useRealTimers();
     });
 
-    it("rejects a callTool promise after the bounded timeout when the host never replies", async () => {
+    it("queues a callTool made before ui/initialize resolves, then posts it once ready and resolves on reply", async () => {
       vi.useFakeTimers();
       const child = makeWindow();
       const parent = makeWindow();
       child.parent = parent;
-      parent.postMessage = () => {}; // no host reply, ever — e.g. disposed host or sealed no-host case
-      runShim(child);
-
-      const promise = child.agentgemApp.callTool("agentgem_get_session_data");
-      const assertion = expect(promise).rejects.toThrow(/tool call timed out/);
-
-      await vi.advanceTimersByTimeAsync(10001);
-
-      await assertion;
-    });
-
-    it("resolves callTool on a reply and clears the timer so it never later rejects", async () => {
-      vi.useFakeTimers();
-      const child = makeWindow();
-      const parent = makeWindow();
-      child.parent = parent;
+      const toolCalls: Array<{ id?: number; params?: unknown }> = [];
+      let deliverInit: (() => void) | null = null;
       parent.postMessage = (msg) => {
-        if (msg.method === "tools/call") child.deliver({ jsonrpc: "2.0", id: msg.id, result: { ok: true } }, parent);
+        if (msg.method === "ui/initialize") { deliverInit = () => child.deliver({ jsonrpc: "2.0", id: msg.id, result: { protocolVersion: "x", tools: [] } }, parent); return; }
+        if (msg.method === "tools/call") { toolCalls.push(msg); child.deliver({ jsonrpc: "2.0", id: msg.id, result: { ok: true } }, parent); return; }
       };
       runShim(child);
 
+      // Called before the host has answered ui/initialize — must NOT post yet (would be lost pre-attach).
       const promise = child.agentgemApp.callTool("agentgem_get_session_data");
-      await expect(promise).resolves.toEqual({ ok: true });
+      expect(toolCalls.length).toBe(0);
+      expect(child.agentgemApp.ready).toBe(false);
 
-      // If the reply handler hadn't cleared the timeout, this would fire a stale reject against an
-      // already-settled promise (surfacing as an unhandled rejection in the test run).
-      await vi.advanceTimersByTimeAsync(10001);
+      deliverInit!(); // the (first) ui/initialize now resolves
+      expect(child.agentgemApp.ready).toBe(true);
+      expect(toolCalls.length).toBe(1); // flushed on ready
+
+      await expect(promise).resolves.toEqual({ ok: true });
+    });
+
+    it("rejects a queued callTool with 'no host' once the handshake retries are exhausted", async () => {
+      vi.useFakeTimers();
+      const child = makeWindow();
+      const parent = makeWindow();
+      child.parent = parent;
+      parent.postMessage = () => {}; // no host reply, ever — e.g. sealed no-host marketplace case
+      runShim(child);
+
+      const promise = child.agentgemApp.callTool("agentgem_get_session_data");
+      const assertion = expect(promise).rejects.toThrow(/no host/);
+
+      await vi.advanceTimersByTimeAsync(6 * 800 + 100); // past all 5 retries (~800ms apart) to the exhaustion tick
+
+      await assertion;
+      expect(child.agentgemApp.ready).toBe(false);
+    });
+
+    it("does not prematurely reject a posted (ready) callTool even long after a fixed 10s timeout would have fired", async () => {
+      vi.useFakeTimers();
+      const child = makeWindow();
+      const parent = makeWindow();
+      child.parent = parent;
+      let toolCallMsg: { id?: number } | null = null;
+      parent.postMessage = (msg) => {
+        if (msg.method === "ui/initialize") { child.deliver({ jsonrpc: "2.0", id: msg.id, result: { protocolVersion: "x", tools: [] } }, parent); return; }
+        if (msg.method === "tools/call") toolCallMsg = msg; // host holds the call — e.g. slow user consent
+      };
+      runShim(child);
+      expect(child.agentgemApp.ready).toBe(true);
+
+      const promise = child.agentgemApp.callTool("agentgem_get_inventory");
+      expect(toolCallMsg).toBeTruthy(); // posted immediately since already ready
+
+      let settled = false;
+      promise.then(() => { settled = true; }, () => { settled = true; });
+
+      await vi.advanceTimersByTimeAsync(60000); // well past the old fixed 10s timeout
+      expect(settled).toBe(false); // still pending — consent-safe, no fixed timeout to fire
+
+      child.deliver({ jsonrpc: "2.0", id: toolCallMsg!.id, result: { allowed: true } }, parent);
+      await expect(promise).resolves.toEqual({ allowed: true });
     });
   });
 });
