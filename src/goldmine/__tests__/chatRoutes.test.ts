@@ -94,8 +94,34 @@ describe("chat routes", () => {
 
     const res = await request(app)
       .get(`/api/chat/stream?chatId=${chatId}&message=hi`);
-    expect(res.text).toContain("hi there");   // delta frame
+    expect(res.text).toContain("event: delta");   // native frame shape unchanged
+    expect(res.text).toContain("hi there");        // delta frame
     expect(res.text).toContain("event: done");
+  });
+
+  it("GET .../stream?protocol=ag-ui emits AG-UI SSE frames instead of native ones", async () => {
+    const app = await buildTestApp();
+
+    const created = await request(app)
+      .post("/api/chat")
+      .set("Content-Type", "application/json")
+      .send(JSON.stringify({ agentId: "claude-code" }));
+    const chatId = created.body.chatId;
+
+    const res = await request(app)
+      .get(`/api/chat/stream?chatId=${chatId}&message=hi&protocol=ag-ui`);
+
+    // AG-UI SSE frames are `data: {json}\n\n` — no `event:` line, type is inside the JSON.
+    expect(res.text).not.toContain("event: delta");
+    expect(res.text).not.toContain("event: done");
+    const frames = res.text
+      .split("\n\n")
+      .filter((s) => s.startsWith("data: "))
+      .map((s) => JSON.parse(s.slice("data: ".length)));
+
+    expect(frames[0].type).toBe("RUN_STARTED");
+    expect(frames.some((f) => f.type === "TEXT_MESSAGE_CONTENT")).toBe(true);
+    expect(frames[frames.length - 1].type).toBe("RUN_FINISHED");
   });
 
   it("DELETE /api/chat/:chatId returns ok:true", async () => {
