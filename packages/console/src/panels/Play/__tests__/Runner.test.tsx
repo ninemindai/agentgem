@@ -55,6 +55,30 @@ describe("Runner", () => {
     await waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({ id, result: expect.objectContaining({ meta: { project: "p" } }) }), "*"));
   });
 
+  it("invalidates the host generation on a game switch so a late in-flight fetch doesn't cross-post into the new game", async () => {
+    // The iframe has no `key`, so React reuses the same contentWindow across a game switch. If teardown
+    // only disposed the old host (closing streams) without bumping its generation, a fetch already
+    // in-flight when the switch happens would still resolve and post its (now stale) data into the very
+    // same iframe the new game is running in.
+    let resolveFetch!: (v: { meta: Record<string, unknown>; timeline: unknown[] }) => void;
+    const pending = new Promise<{ meta: Record<string, unknown>; timeline: unknown[] }>((r) => { resolveFetch = r; });
+    const spy = vi.spyOn(playSessionDataRoute, "call").mockReturnValue(pending as never);
+    const { container, rerender } = render(<Runner html="<p>x</p>" name="a" apiBase="" needs={["session-data"]} />);
+    const win = (container.querySelector("iframe") as HTMLIFrameElement).contentWindow as Window;
+    const post = vi.spyOn(win, "postMessage").mockImplementation(() => {});
+    initialize(win);
+    const id = callTool(win, "agentgem_get_session_data"); // AUTO cap — fetch kicked off, left unresolved
+    await waitFor(() => expect(spy).toHaveBeenCalled());
+
+    rerender(<Runner html="<p>y</p>" name="b" apiBase="" needs={["session-data"]} />); // switch games mid-flight
+
+    resolveFetch({ meta: { project: "STALE-A" }, timeline: [] }); // the old game's fetch finally lands
+    await new Promise((r) => setTimeout(r, 20));
+
+    // The stale reply must never reach the (reused) iframe.
+    expect(post).not.toHaveBeenCalledWith(expect.objectContaining({ id, result: expect.objectContaining({ meta: { project: "STALE-A" } }) }), "*");
+  });
+
   it("ignores a tools/call for a capability the gem did NOT declare", async () => {
     const inv = vi.spyOn(inventoryRoute, "call").mockResolvedValue({ skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [] } as never);
     const { container } = render(<Runner html="<p>x</p>" name="g1" apiBase="" needs={["session-data"]} />);

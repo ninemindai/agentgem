@@ -50,7 +50,11 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
   }, [interactive, name]);
 
   // Wire the sealed iframe to the router: create the host once its contentWindow exists and the gem declares
-  // needs, delegate every `message` to host.handleMessage, and dispose (closing open streams) on teardown.
+  // needs, delegate every `message` to host.handleMessage, and invalidate it on teardown. The iframe has no
+  // `key`, so React reuses the same contentWindow across a game switch — bumpGeneration() (not dispose())
+  // is required here: it closes streams AND advances `generation`, so any in-flight continuation from the
+  // old game (e.g. a one-shot session-data fetch) sees `stale(gen)` and drops its reply instead of posting
+  // stale data into the new game's iframe.
   useEffect(() => {
     if (name == null || apiBase == null || !needs?.length) return;   // apiBase="" (same-origin) is valid
     const target = iframeRef.current?.contentWindow;
@@ -59,7 +63,7 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
     hostRef.current = host;
     const onMsg = (e: MessageEvent) => host.handleMessage(e);
     window.addEventListener("message", onMsg);
-    return () => { window.removeEventListener("message", onMsg); host.dispose(); hostRef.current = null; };
+    return () => { window.removeEventListener("message", onMsg); host.bumpGeneration(); hostRef.current = null; };
   }, [name, apiBase, needs, interactive, requestConsent]);
 
   // Close the picker and return focus to its trigger (a11y: focus must not fall to <body>).
