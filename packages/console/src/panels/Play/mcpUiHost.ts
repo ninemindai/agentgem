@@ -168,6 +168,7 @@ export function createUiHost(deps: UiHostDeps): UiHost {
     invoking = false;
     chatId = null;
     chatPromise = null;
+    feeding = false;
   }
 
   return { handleMessage, dispose, bumpGeneration, feedSessionData };
