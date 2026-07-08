@@ -139,3 +139,38 @@ describe("Runner", () => {
     expect(inv).not.toHaveBeenCalled();
   });
 });
+
+describe("Runner — Replay yours picker", () => {
+  const sessions = [
+    { id: "mine-1", file: "/f1", agent: "codex", project: "app", model: "gpt", msgs: 12, startMs: 0, endMs: 1, ageMs: 1 },
+    { id: "mine-2", file: "/f2", agent: "claude", project: "lib", model: "opus", msgs: 5, startMs: 0, endMs: 1, ageMs: 1 },
+  ];
+  const html = "<!doctype html><body><div id=\"app\"></div></body>";
+
+  it("offers the picker for an interactive session-data miniapp and feeds the chosen session", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (String(url).includes("/api/watch/sessions")) return { ok: true, json: async () => ({ sessions }) };
+      return { ok: true, json: async () => ({}) };
+    }) as unknown as typeof fetch);
+    const data = vi.spyOn(playSessionDataRoute, "call").mockResolvedValue({ meta: {}, timeline: [{ role: "user", tsMs: 0, text: "hi" }] } as never);
+
+    render(<Runner html={html} name="dup" apiBase="" needs={["session-data"]} />);
+    const open = await screen.findByRole("button", { name: /replay yours/i });
+    fireEvent.click(open);
+    // picker lists the viewer's local sessions
+    const row = await screen.findByText(/app/);
+    fireEvent.click(row);
+    await waitFor(() => expect(data).toHaveBeenCalled());
+    expect(data.mock.calls[0][1]).toMatchObject({ query: { name: "dup", sessionId: "mine-1", agent: "codex" } });
+  });
+
+  it("does not offer the picker without the session-data need", () => {
+    render(<Runner html={html} name="g" apiBase="" needs={["invoke-agent"]} />);
+    expect(screen.queryByRole("button", { name: /replay yours/i })).toBeNull();
+  });
+
+  it("does not offer the picker for a non-interactive thumbnail", () => {
+    render(<Runner html={html} name="g" apiBase="" needs={["session-data"]} interactive={false} />);
+    expect(screen.queryByRole("button", { name: /replay yours/i })).toBeNull();
+  });
+});
