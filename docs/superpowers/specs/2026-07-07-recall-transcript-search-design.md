@@ -69,6 +69,24 @@ phase; changing the existing Sessions or Chat panels beyond cross-links.
 | Package | **new `@agentgem/recall`** | Isolates the native dep + new surface; depends on `@agentgem/insight`. |
 | Index at rest | **on-disk cache** `~/.agentgem/recall-index.db` | Instant startup. Accepted tradeoff — see privacy note. |
 
+### Why SQLite here, not PGlite (which the repo also uses)
+
+The repo already runs an on-disk **PGlite** transcript index (`packages/capture/src/transcriptIndex.ts`,
+datadir `~/.agentgem/index`). Recall deliberately uses `node:sqlite` instead — the two serve
+**different masters**, so this is justified specialization, not accidental duplication:
+
+- **PGlite (aggregator/capture)** exists for **dialect parity with the hosted Postgres data-moat** —
+  shared Drizzle schema, the same queries running local and remote. That parity is the whole point.
+- **Recall's index** is **lightweight local session-content FTS**. It has no Postgres-parity requirement.
+  PGlite is a multi-MB WASM Postgres (real weight); `node:sqlite` is built into the Node ≥24 runtime
+  (zero marginal weight), FTS5 gives true `bm25()` (Postgres `ts_rank_cd` is weaker), and SQLite is the
+  ecosystem-native store for coding-agent sessions. Paying PGlite's weight just to collapse to one engine
+  is the wrong trade.
+
+No collision: the two live at distinct paths under the same home (`~/.agentgem/index` dir vs.
+`~/.agentgem/recall-index.db` file). **Do not "converge" Recall onto PGlite** — this was considered and
+rejected for the reasons above.
+
 ## Provenance — reused vs. new
 
 | Piece | Source | Status |
