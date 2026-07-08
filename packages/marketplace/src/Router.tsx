@@ -35,7 +35,7 @@ export function Router({ api, stars, reviews, me }: { api: ReturnType<typeof mak
   if (path === "/minigames") return <Minigames api={api} />;
 
   const gemDetail = path.match(/^\/gems\/(.+)$/);
-  if (gemDetail) return <Gem api={api} keyName={decodeURIComponent(gemDetail[1])} stars={stars} />;
+  if (gemDetail) return <Gem api={api} keyName={decodeURIComponent(gemDetail[1])} stars={stars} me={me} />;
   if (path === "/gems") return <Gems api={api} stars={stars} />;
 
   const ing = path.match(/^\/ingredient\/(.+)$/);

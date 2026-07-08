@@ -59,8 +59,9 @@ export function originGuard(req: GuardReq, res: GuardRes, next: GuardNext): void
   // App surfaces are covered too: /api/orgs/* is the SPA's member-gated reads (own credentialed CORS
   // + 401/403), and /api/github/* is the webhook (server-to-server HMAC-verified POST, no browser
   // context) plus the setup redirect (a cross-site top-level GET navigation arriving from github.com
-  // right after an App install — side-effect-free 302).
-  if (req.path.startsWith("/api/auth/") || req.path.startsWith("/api/stars") || req.path.startsWith("/api/reviews") || req.path.startsWith("/api/usage") || req.path.startsWith("/api/orgs/") || req.path.startsWith("/api/github/") || req.path.startsWith("/api/registry/upload-publish")) { next(); return; }
+  // right after an App install — side-effect-free 302). /api/catalog/* is the SPA's owner-only gem
+  // unpublish (credentialed DELETE, own CORS + a 401/403 owner gate — same rationale as stars/reviews).
+  if (req.path.startsWith("/api/auth/") || req.path.startsWith("/api/stars") || req.path.startsWith("/api/reviews") || req.path.startsWith("/api/usage") || req.path.startsWith("/api/orgs/") || req.path.startsWith("/api/github/") || req.path.startsWith("/api/registry/upload-publish") || req.path.startsWith("/api/catalog/")) { next(); return; }
   const site = req.get("sec-fetch-site");
   if (site !== undefined) {
     if (site === "same-origin") { next(); return; }

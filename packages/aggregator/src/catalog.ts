@@ -64,6 +64,22 @@ export async function getGemArchive(db: AppDb, gemKey: string, version: string):
   return r ? { bytes: r.bytes, digest: r.digest } : null;
 }
 
+export type DeleteGemResult = "deleted" | "not-found" | "forbidden";
+
+// Owner-only unpublish: remove a published gem's catalog row + archive bytes. Ownership is enforced
+// against `publishedBy`, which is the server-derived verified GitHub login (never client-supplied —
+// see recordCatalogShare), matched case-insensitively to the caller's session login. "not-found" =
+// no such (key, version); "forbidden" = a different publisher owns it; "deleted" = removed.
+export async function deleteCatalogGem(db: AppDb, gemKey: string, version: string, ownerLogin: string): Promise<DeleteGemResult> {
+  const row = (await db.select({ publishedBy: catalogGems.publishedBy }).from(catalogGems)
+    .where(and(eq(catalogGems.gemKey, gemKey), eq(catalogGems.version, version))).limit(1))[0];
+  if (!row) return "not-found";
+  if ((row.publishedBy ?? "").toLowerCase() !== ownerLogin.toLowerCase()) return "forbidden";
+  await db.delete(gemArchives).where(and(eq(gemArchives.gemKey, gemKey), eq(gemArchives.version, version)));
+  await db.delete(catalogGems).where(and(eq(catalogGems.gemKey, gemKey), eq(catalogGems.version, version)));
+  return "deleted";
+}
+
 export interface CatalogManifest {
   gemKey: string; version: string; author?: string; description?: string;
   tags?: string[]; artifactKinds?: string[]; type?: string; grade?: number;

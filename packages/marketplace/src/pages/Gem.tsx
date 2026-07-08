@@ -10,6 +10,8 @@ import { GemContents } from "./GemContents";
 import { GamePreview } from "../GamePreview";
 import type { StarsCtx } from "../Router";
 import type { StarState } from "../stars";
+import type { Me } from "../auth";
+import { navigate } from "../nav";
 
 // The locally-running console (CLI default http://127.0.0.1:4317, see src/cli.ts). A deep link into
 // its Get Gems tab, pre-searched, so publishing a gem key here lands the reader ready to install.
@@ -35,10 +37,12 @@ function openInAppUrl(gem: { key: string; version: string; installable?: boolean
   return `agentgem://get-gems?${deepLinkQuery(gem)}`;
 }
 
-export function Gem({ api, keyName, stars }: { api: ReturnType<typeof makeApi>; keyName: string; stars: StarsCtx }) {
+export function Gem({ api, keyName, stars, me }: { api: ReturnType<typeof makeApi>; keyName: string; stars: StarsCtx; me: Me | null }) {
   const [gems, setGems] = useState<GemT[] | null>(null);
   const [starState, setStarState] = useState<StarState>({ counts: {}, mine: [] });
   const [adoptions, setAdoptions] = useState<Record<string, { installs: number; verifiedInstalls: number }>>({});
+  const [removing, setRemoving] = useState(false);
+  const [removeErr, setRemoveErr] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -59,6 +63,24 @@ export function Gem({ api, keyName, stars }: { api: ReturnType<typeof makeApi>; 
   if (!gem) return <div className="ex-gem-detail"><p className="ex-empty">Gem not found: "{keyName}".</p></div>;
 
   const copyKey = () => { void navigator.clipboard?.writeText(gem.key); };
+
+  // Owner-only unpublish. Display-gating only — the server re-checks ownership (login === publishedBy).
+  const { key: gemKey, version: gemVersion, publishedBy } = gem;
+  const isGame = gem.artifactKinds.includes("game");
+  const isOwner = !!(me && publishedBy && me.login.toLowerCase() === publishedBy.toLowerCase());
+  const label = isGame ? "mini-game" : "gem";
+  const unpublish = async () => {
+    if (!window.confirm(`Unpublish "${gemKey}"? This permanently removes it from app.agentgem.ai for everyone. This can't be undone.`)) return;
+    setRemoving(true); setRemoveErr(null);
+    try {
+      await api.unpublishGem(gemKey, gemVersion);
+      navigate(isGame ? "/minigames" : "/gems");
+    } catch (e) {
+      const s = String(e);
+      setRemoveErr(/-> 401/.test(s) ? "Please sign in again to unpublish." : /-> 403/.test(s) ? "You can only unpublish your own gems." : "Unpublish failed — please try again.");
+      setRemoving(false);
+    }
+  };
 
   return (
     <div className="ex-gem-detail">
@@ -94,6 +116,17 @@ export function Gem({ api, keyName, stars }: { api: ReturnType<typeof makeApi>; 
         </p>
         <p className="ex-getit-steps">Opens the AgentGem desktop app straight to <strong>Get Gems</strong>{gem.installable ? " and installs it" : ", pre-searched"}. Running the CLI console? <a className="ex-getit-link" href={openInConsoleUrl(gem)} target="_blank" rel="noreferrer">Open on localhost:4317</a>. Not running? Start AgentGem → <strong>Get Gems</strong> → search "{gem.key}" → <strong>Install</strong>.</p>
       </section>
+
+      {isOwner && (
+        <section className="ex-card ex-danger">
+          <h3>Owner controls</h3>
+          <p className="ex-danger-note">Unpublishing removes this {label} from app.agentgem.ai for everyone. This can't be undone.</p>
+          {removeErr && <p className="ex-danger-err">{removeErr}</p>}
+          <button type="button" className="ex-unpublish" disabled={removing} onClick={unpublish}>
+            {removing ? "Unpublishing…" : `Unpublish this ${label}`}
+          </button>
+        </section>
+      )}
 
       {gem.ingredients.length > 0 && (
         <section className="ex-card">

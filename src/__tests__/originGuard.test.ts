@@ -67,6 +67,11 @@ describe("originGuard (CSRF / drive-by guard)", () => {
   it("still blocks a cross-site request to a NON-auth API path", () => {
     expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "POST", "/api/gem").blocked).toBe(true);
   });
+  it("allows the cross-site owner-unpublish DELETE (/api/catalog/*) — credentialed, owner-gated server-side", () => {
+    const r = run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "DELETE", "/api/catalog/gem");
+    expect(r.nexted).toBe(true);
+    expect(r.blocked).toBe(false);
+  });
   it("allows cross-site star requests (/api/stars + /api/stars/toggle) — public counts + the SPA's credentialed toggle", () => {
     expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "GET", "/api/stars").nexted).toBe(true);
     expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "POST", "/api/stars/toggle").nexted).toBe(true);
