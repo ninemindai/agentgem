@@ -935,6 +935,10 @@ a.ex-skillcard-rating:hover { text-decoration: underline; }
 .ex-install-cmd-row { display: flex; align-items: stretch; gap: 8px; }
 .ex-install-cmd-text { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-family: var(--mono, ui-monospace, monospace); font-size: 13px;
   background: var(--surface-2, rgba(0,0,0,.05)); border: 1px solid var(--line); border-radius: var(--r-md); padding: 9px 12px; color: var(--ink); }
+.ex-install-alt { margin-top: 8px; font-size: 13px; color: var(--muted); }
+.ex-download-gem { background: none; border: 0; padding: 0; color: var(--brand-strong); font-weight: 600; font-size: 13px; cursor: pointer; }
+.ex-download-gem:hover { text-decoration: underline; }
+.ex-install-alt-hint { color: var(--muted); }
 
 /* Owner-only danger zone (unpublish) — shown only to the gem's publisher. */
 .ex-danger { border-color: color-mix(in srgb, #b42318 30%, var(--line)); }

@@ -3,6 +3,7 @@ import {
   registryReadyRoute,
   registrySearchRoute,
   installHostedRoute,
+  gemApplyRoute,
   makeClient,
   type RegistryResult,
 } from "../../api/routes.js";
@@ -18,6 +19,8 @@ export function GetGems({ apiBase }: { apiBase: string }) {
   const [consentFor, setConsentFor] = useState<string | null>(null); // gem key awaiting executable-artifact consent
   const [directKey, setDirectKey] = useState<string | null>(null); // deep-link "?install=<key>" direct install
   const [directVersion, setDirectVersion] = useState("");
+  const [importDir, setImportDir] = useState(""); // target dir for "Import a .gem file"
+  const [importStatus, setImportStatus] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -81,6 +84,37 @@ export function GetGems({ apiBase }: { apiBase: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Import a .gem file downloaded from the marketplace: read the file → base64 → apply into the
+  // chosen dir (reuses the same /gem/apply path the Received panel uses for redeemed tickets).
+  async function importGemFile(file: File) {
+    if (!importDir.trim()) { setImportStatus("Choose a target directory first."); return; }
+    setImportStatus(`Importing ${file.name}…`);
+    try {
+      const buf = new Uint8Array(await file.arrayBuffer());
+      let bin = ""; for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+      const client = makeClient(apiBase);
+      const { dir, name, written, skipped } = await gemApplyRoute.call(client, { body: { bytesBase64: btoa(bin), dir: importDir.trim() } });
+      const skip = skipped.length ? ` (${skipped.length} skipped)` : "";
+      setImportStatus(`✓ Imported ${name} → ${dir} — ${written.length} file(s)${skip}`);
+    } catch (e) {
+      setImportStatus("Import failed: " + (e instanceof Error ? e.message : String(e)));
+    }
+  }
+
+  // "Import a .gem file" — independent of registry config (a downloaded file needs no registry), so
+  // it renders in both the configured and not-configured branches, like the deep-link banner.
+  const importCard = (
+    <div className="getgems-import ws-card">
+      <div className="ws-name">Import a .gem file</div>
+      <p className="getgems-import-hint">Downloaded a <code>.gem</code> from app.agentgem.ai? Apply it into a project directory.</p>
+      <input className="ledger-search" type="text" aria-label="target directory" placeholder="target directory (e.g. ~/my-project)"
+        value={importDir} onChange={(e) => setImportDir((e.target as HTMLInputElement).value)} />
+      <input type="file" accept=".gem" aria-label="choose a .gem file"
+        onChange={(e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) void importGemFile(f); (e.target as HTMLInputElement).value = ""; }} />
+      {importStatus && <div className="getgems-import-status">{importStatus}</div>}
+    </div>
+  );
+
   // The deep-link install banner is independent of registry-search readiness (hosted install is
   // zero-config), so it renders before the not-configured gate.
   const directBanner = directKey ? (
@@ -106,6 +140,7 @@ export function GetGems({ apiBase }: { apiBase: string }) {
     return (
       <div className="getgems">
         {directBanner}
+        {importCard}
         {!directKey && (
           <div className="getgems-empty">
             <h3 className="getgems-empty-title">Registry not configured</h3>
@@ -125,6 +160,7 @@ export function GetGems({ apiBase }: { apiBase: string }) {
   return (
     <div className="getgems">
       {directBanner}
+      {importCard}
       <div className="ledger-bar">
         <input
           className="ledger-search"

@@ -44,6 +44,7 @@ export function Gem({ api, keyName, stars, me }: { api: ReturnType<typeof makeAp
   const [removing, setRemoving] = useState(false);
   const [removeErr, setRemoveErr] = useState<string | null>(null);
   const [cmdCopied, setCmdCopied] = useState(false);
+  const [downloadErr, setDownloadErr] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -68,6 +69,20 @@ export function Gem({ api, keyName, stars, me }: { api: ReturnType<typeof makeAp
   // for installable gems (an uploaded archive `agentgem get` can download).
   const installCmd = `npx @ninemind/agentgem get ${gem.key}@${gem.version}`;
   const copyCmd = () => { void navigator.clipboard?.writeText(installCmd); setCmdCopied(true); window.setTimeout(() => setCmdCopied(false), 1500); };
+  // Download the .gem file so it can be imported into the local app (Get Gems → Import a .gem file).
+  const downloadGem = async () => {
+    setDownloadErr(null);
+    try {
+      const b64 = await api.getGemArchiveBase64(gem.key, gem.version);
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bytes], { type: "application/gzip" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${gem.key.replace(/^@/, "").replace(/[^a-zA-Z0-9_.-]+/g, "-")}-${gem.version}.gem`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch { setDownloadErr("Download failed — please try again."); }
+  };
 
   // Owner-only unpublish. Display-gating only — the server re-checks ownership (login === publishedBy).
   const { key: gemKey, version: gemVersion, publishedBy } = gem;
@@ -121,6 +136,11 @@ export function Gem({ api, keyName, stars, me }: { api: ReturnType<typeof makeAp
               <code className="ex-install-cmd-text">{installCmd}</code>
               <button type="button" className="ex-copy" onClick={copyCmd}>{cmdCopied ? "Copied ✓" : "Copy"}</button>
             </div>
+            <div className="ex-install-alt">
+              or <button type="button" className="ex-download-gem" onClick={downloadGem}>Download .gem</button>
+              <span className="ex-install-alt-hint"> and import it in AgentGem → <strong>Get Gems</strong> → <strong>Import a .gem file</strong>.</span>
+            </div>
+            {downloadErr && <div className="ex-danger-err">{downloadErr}</div>}
           </div>
         )}
         <p className="ex-getit">
