@@ -51,6 +51,11 @@ export function localAgentEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.Proc
   return out;
 }
 
+// Merge an adapter descriptor's env overlay (e.g. ELECTRON_RUN_AS_NODE) onto a base env.
+export function spawnEnv(descriptor: AgentDescriptor, base: NodeJS.ProcessEnv = localAgentEnv()): NodeJS.ProcessEnv {
+  return descriptor.env ? { ...base, ...descriptor.env } : { ...base };
+}
+
 // A live session over a connected adapter. `prompt` sends one turn and dispatches
 // each session_update's `.update` payload to `onUpdate` until the turn stops.
 export interface RawAcpSession {
@@ -76,7 +81,7 @@ export async function connectAcpAdapter(
 ): Promise<RawAcpConnection> {
   const { client, ndJsonStream, PROTOCOL_VERSION } = await import("@agentclientprotocol/sdk");
   const [bin, ...args] = descriptor.command;
-  const child = spawn(bin, args, { stdio: ["pipe", "pipe", "inherit"], env: localAgentEnv() });
+  const child = spawn(bin, args, { stdio: ["pipe", "pipe", "inherit"], env: spawnEnv(descriptor) });
   await new Promise<void>((resolve, reject) => {
     child.once("spawn", () => resolve());
     child.once("error", (e) => reject(new Error(`failed to spawn ${bin}: ${e.message}`)));
