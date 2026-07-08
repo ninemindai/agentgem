@@ -32,6 +32,7 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
   const chatPromise = useRef<Promise<string> | null>(null);    // in-flight chat-open (serialize concurrent invokes)
   const invoking = useRef(false);                              // one invoke-agent turn at a time
   const gameGen = useRef(0);                                   // bumped per game; async continuations pin to it
+  const feedingRef = useRef(false);                            // one feedSession request in flight at a time
 
   // Serve a capability into the sealed iframe. One-shot caps fetch+feed once; streaming caps
   // (live-session-events, invoke-agent) open a stream and forward each event, registering a teardown.
@@ -84,12 +85,14 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
   // Feed a viewer-picked session into the sealed iframe on the session-data channel (the scaffold
   // re-renders on it). Reuses the serve() staleness guard shape; the picked ref is host-owned.
   const feedSession = useCallback(async (sessionId: string, agent: string) => {
-    if (name == null || apiBase == null) return;
+    if (name == null || apiBase == null || feedingRef.current) return; // one in-flight feed at a time
+    feedingRef.current = true;
     const gen = gameGen.current;
     try {
       const data = await playSessionDataRoute.call(makeClient(apiBase), { query: { name, sessionId, agent } });
       if (gen === gameGen.current) iframeRef.current?.contentWindow?.postMessage({ type: "agentgem:feed", channel: "session-data", data }, "*");
     } catch { /* keep the current render */ }
+    finally { feedingRef.current = false; }
     setPickerOpen(false);
   }, [name, apiBase]);
 
@@ -114,7 +117,7 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
       if (!interactive) return;                                        // thumbnails never prompt/feed sensitive caps
       const decision = getConsent(name, cap);
       if (decision === "granted") void serve(cap, message);
-      else if (decision === null) { pendingMsg.current = message; setPending(cap); } // ask (once)
+      else if (decision === null) { pendingMsg.current = message; setPending(cap); setPickerOpen(false); } // ask (once) — takes precedence over an in-progress picker
       // "denied" → silently ignore
     };
     window.addEventListener("message", onMsg);
@@ -184,7 +187,7 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
           ↺ Replay yours
         </button>
       )}
-      {pickerOpen && (
+      {pickerOpen && !pending && (
         <div className="play-consent" role="dialog" aria-label="Pick a session to replay">
           <div className="play-consent__box">
             <div className="play-consent__title">Replay one of your sessions</div>

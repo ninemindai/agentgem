@@ -9,6 +9,13 @@ import * as studioStream from "../studioStream.js";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); try { localStorage.clear(); } catch { /* ignore */ } });
 
+// jsdom's MessageEvent constructor drops `source`, so set it explicitly to emulate a message from the iframe.
+const fromIframe = (win: Window, data: unknown) => {
+  const ev = new MessageEvent("message", { data });
+  Object.defineProperty(ev, "source", { value: win });
+  window.dispatchEvent(ev);
+};
+
 describe("Runner", () => {
   it("renders a sealed iframe (allow-scripts, no allow-same-origin) with the html in srcDoc", () => {
     const { container } = render(<Runner html="<h1>hi there</h1>" />);
@@ -25,13 +32,6 @@ describe("Runner", () => {
     expect(iframe.style.height).toBe("780px");
     expect(iframe.style.transform).toContain("scale(");
   });
-
-  // jsdom's MessageEvent constructor drops `source`, so set it explicitly to emulate a message from the iframe.
-  const fromIframe = (win: Window, data: unknown) => {
-    const ev = new MessageEvent("message", { data });
-    Object.defineProperty(ev, "source", { value: win });
-    window.dispatchEvent(ev);
-  };
 
   it("brokers session-data: on the iframe's request it fetches host data and feeds it back", async () => {
     const spy = vi.spyOn(playSessionDataRoute, "call").mockResolvedValue({ meta: { project: "p" }, timeline: [{ role: "user", tsMs: 1, text: "hi" }] });
@@ -172,5 +172,23 @@ describe("Runner — Replay yours picker", () => {
   it("does not offer the picker for a non-interactive thumbnail", () => {
     render(<Runner html={html} name="g" apiBase="" needs={["session-data"]} interactive={false} />);
     expect(screen.queryByRole("button", { name: /replay yours/i })).toBeNull();
+  });
+
+  it("a gated-cap consent prompt closes an open picker instead of stacking on top of it", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (String(url).includes("/api/watch/sessions")) return { ok: true, json: async () => ({ sessions }) };
+      return { ok: true, json: async () => ({}) };
+    }) as unknown as typeof fetch);
+
+    const { container } = render(<Runner html={html} name="dup2" apiBase="" needs={["session-data", "local-project-access"]} />);
+    const open = await screen.findByRole("button", { name: /replay yours/i });
+    fireEvent.click(open);
+    expect(await screen.findByRole("dialog", { name: "Pick a session to replay" })).toBeTruthy(); // picker open
+
+    const win = (container.querySelector("iframe") as HTMLIFrameElement).contentWindow as Window;
+    fromIframe(win, { type: "agentgem:request", want: "local-project-access" });
+
+    await waitFor(() => expect(screen.getByText("Allow")).toBeTruthy());                          // consent prompt now shown
+    expect(screen.queryByRole("dialog", { name: "Pick a session to replay" })).toBeNull();          // picker closed, not stacked
   });
 });
