@@ -6,6 +6,7 @@ import type {
   Gem, GemArtifact, ArtifactType,
   SkillArtifact, McpServerArtifact, HookArtifact, GemCheck,
   ChannelArtifact, SecretRef, ReferenceArtifact, SubagentArtifact, GemContract, GameArtifact,
+  LoopSpec, LoopGuardrails, LoopSchedule, LoopGoal,
 } from "@agentgem/model";
 import { safePathSegment } from "@agentgem/model";
 
@@ -79,6 +80,7 @@ interface GemManifest {
   dependencies?: string[];
   grade?: number;
   contract?: GemContract;
+  loop?: LoopSpec;
 }
 
 export interface ArchiveResult { files: FileTree; skipped: SkippedArtifact[] }
@@ -170,6 +172,7 @@ export function writeGemArchive(gem: Gem, opts: { version?: string; dependencies
     ...(opts.dependencies && opts.dependencies.length ? { dependencies: opts.dependencies } : {}),
     ...(gem.grade != null ? { grade: gem.grade } : {}),
     ...(gem.contract ? { contract: gem.contract } : {}),
+    ...(gem.loop ? { loop: gem.loop } : {}),
   };
   files[MANIFEST_PATH] = JSON.stringify(manifest, null, 2);
   files[LOCK_PATH] = JSON.stringify(computeLock(files), null, 2);
@@ -189,6 +192,52 @@ function sanitizeContract(raw: unknown): GemContract | undefined {
   if (typeof e.text === "string") expect.text = e.text;
   if (typeof e.forbidToolFailures === "boolean") expect.forbidToolFailures = e.forbidToolFailures;
   return { task: c.task, expect };
+}
+
+// Tolerant loop reader — same contract as sanitizeContract: a malformed or future-format `loop`
+// must never make an archive unreadable. A missing/invalid `mode` or `guardrails.approval`
+// invalidates the whole loop (nothing is runnable without them); individual optional sub-fields
+// are dropped when wrong-shaped.
+function sanitizeLoop(raw: unknown): LoopSpec | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const l = raw as Record<string, unknown>;
+  if (l.mode !== "loop" && l.mode !== "goal") return undefined;
+  const g = (typeof l.guardrails === "object" && l.guardrails !== null ? l.guardrails : {}) as Record<string, unknown>;
+  if (g.approval !== "auto" && g.approval !== "gate") return undefined;
+
+  const guardrails: LoopGuardrails = { approval: g.approval };
+  if (typeof g.maxRounds === "number") guardrails.maxRounds = g.maxRounds;
+  if (typeof g.maxSpendUsd === "number") guardrails.maxSpendUsd = g.maxSpendUsd;
+  if (typeof g.maxTokens === "number") guardrails.maxTokens = g.maxTokens;
+  if (Array.isArray(g.modelLadder) && g.modelLadder.every((m) => typeof m === "string")) {
+    guardrails.modelLadder = g.modelLadder as string[];
+  }
+
+  const out: LoopSpec = { mode: l.mode, guardrails };
+
+  const s = l.schedule as Record<string, unknown> | undefined;
+  if (s && (s.kind === "interval" || s.kind === "watch" || s.kind === "cron")) {
+    const sched: LoopSchedule = { kind: s.kind };
+    if (typeof s.everyMs === "number") sched.everyMs = s.everyMs;
+    if (Array.isArray(s.globs) && s.globs.every((x) => typeof x === "string")) sched.globs = s.globs as string[];
+    if (typeof s.cron === "string") sched.cron = s.cron;
+    out.schedule = sched;
+  }
+
+  const go = l.goal as Record<string, unknown> | undefined;
+  if (go && typeof go.until === "string" && (go.check === "llm" || go.check === "regex")) {
+    const goal: LoopGoal = { until: go.until, check: go.check };
+    if (typeof go.pattern === "string") goal.pattern = go.pattern;
+    out.goal = goal;
+  }
+
+  if (l.params && typeof l.params === "object" && !Array.isArray(l.params)) {
+    const p: Record<string, string> = {};
+    for (const [k, v] of Object.entries(l.params as Record<string, unknown>)) if (typeof v === "string") p[k] = v;
+    out.params = p;
+  }
+
+  return out;
 }
 
 export function readGemArchive(files: FileTree): Gem {
@@ -285,6 +334,8 @@ export function readGemArchive(files: FileTree): Gem {
   if (manifest.grade != null) gem.grade = manifest.grade;
   const contract = sanitizeContract(manifest.contract);
   if (contract) gem.contract = contract;
+  const loop = sanitizeLoop(manifest.loop);
+  if (loop) gem.loop = loop;
   return gem;
 }
 
