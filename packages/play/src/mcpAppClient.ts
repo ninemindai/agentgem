@@ -21,7 +21,7 @@ export function mcpAppClient(): string {
   var host = window.parent;               // the trusted host frame (the console Runner)
   var nextId = 1;
   var pending = {};                       // JSON-RPC id -> { resolve, reject } for in-flight tools/call
-  var subs = {};                          // tool name (or "*") -> [cb] for streamed notifications
+  var subs = {};                          // JSON-RPC method (or "*") -> [cb] for streamed notifications
   var initIds = {};                       // ids used for ui/initialize (each retry gets a fresh one)
   var iv = null;                          // handshake retry interval
 
@@ -59,7 +59,7 @@ export function mcpAppClient(): string {
       return;
     }
     if (d.method === "ui/notifications/tool-result" && d.params) {  // a streamed chunk
-      var list = (subs[d.params.toolName] || []).concat(subs["*"] || []);
+      var list = (subs[d.method] || []).concat(subs["*"] || []);
       for (var i = 0; i < list.length; i++) { try { list[i]({ toolName: d.params.toolName, chunk: d.params.chunk }); } catch (err) { /* subscriber threw */ } }
       return;
     }
