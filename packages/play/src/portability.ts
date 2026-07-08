@@ -7,16 +7,28 @@ import type { GameCapability } from "@agentgem/model";
 
 export interface PortabilityResult { ok: boolean; failures: string[] }
 
-// Caps whose data IS the game's primary content (so it must be baked to run offline). The privileged /
-// live caps (invoke-agent, live-session-events, local-project-access) are local-only by design and are
-// intentionally NOT in this list — a game may use them as an enhancement over a baked default.
-const CONTENT_CAPS: readonly GameCapability[] = ["session-data"];
+// Total classification of EVERY capability. "content" = its data IS the game's primary content, so it
+// must bake a self-contained fallback to run offline (app.agentgem.ai has no capability broker).
+// "enhancement" = a local-only upgrade over a baked default (invoke-agent, live-session-events,
+// local-project-access) — never blocks publish. Because this Record is keyed by GameCapability, adding a
+// new capability to the model union without classifying it here is a COMPILE error: CONTENT_CAPS can
+// never silently drift out of sync (a mis-missed content cap would let an empty game publish).
+const CAP_CLASS: Record<GameCapability, "content" | "enhancement"> = {
+  "session-data": "content",
+  "live-session-events": "enhancement",
+  "local-project-access": "enhancement",
+  "invoke-agent": "enhancement",
+};
+
+const CONTENT_CAPS: readonly GameCapability[] = (Object.entries(CAP_CLASS) as [GameCapability, "content" | "enhancement"][])
+  .filter(([, cls]) => cls === "content")
+  .map(([cap]) => cap);
 
 export function assertPortable(html: string, needs: GameCapability[] | undefined): PortabilityResult {
   const failures: string[] = [];
-  const declaresContentCap = (needs ?? []).some((c) => CONTENT_CAPS.includes(c));
-  if (declaresContentCap && !hasBakedTimeline(html)) {
-    failures.push("declares session-data but bakes no fallback data — it would not run without a host (e.g. on app.agentgem.ai)");
+  const contentCaps = (needs ?? []).filter((c) => CONTENT_CAPS.includes(c));
+  if (contentCaps.length && !hasBakedTimeline(html)) {
+    failures.push(`declares ${contentCaps.join(", ")} but bakes no fallback data — it would not run without a host (e.g. on app.agentgem.ai)`);
   }
   return { ok: failures.length === 0, failures };
 }

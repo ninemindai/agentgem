@@ -25,6 +25,16 @@ describe("assertPortable", () => {
     expect(r.ok).toBe(false);
   });
 
+  // Pins the capability classification the drift-guard derives CONTENT_CAPS from: session-data is the
+  // only content-critical cap (must bake a fallback), and the live/privileged caps are enhancements that
+  // never require a bake. If a new capability is ever mis-classified as content, this catches it.
+  it("treats only session-data as content-critical; enhancement caps need no baked fallback", () => {
+    for (const cap of ["live-session-events", "local-project-access", "invoke-agent"] as const) {
+      expect(assertPortable(sealed(""), [cap]).ok).toBe(true);
+    }
+    expect(assertPortable(sealed(""), ["session-data"]).ok).toBe(false);
+  });
+
   it("passes a game that declares no needs, even with no baked data", () => {
     expect(assertPortable(sealed(""), undefined).ok).toBe(true);
     expect(assertPortable(sealed(""), []).ok).toBe(true);
