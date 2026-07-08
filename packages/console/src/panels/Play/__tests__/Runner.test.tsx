@@ -159,7 +159,7 @@ describe("Runner", () => {
     const post = vi.spyOn(win, "postMessage").mockImplementation(() => {});
 
     // Fire the first gated request — consent prompt shown
-    const id1 = callTool(win, "agentgem_get_inventory");
+    callTool(win, "agentgem_get_inventory");
     await waitFor(() => expect(screen.getByText("Allow")).toBeTruthy());
     expect(inv).not.toHaveBeenCalled();
 

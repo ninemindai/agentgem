@@ -63,9 +63,9 @@ export async function seedStudio(source: GameSource, readers: SourceReaders): Pr
   mkdirSync(dir, { recursive: true });
   // Bake a REDACTED, self-contained snapshot so the miniapp runs everywhere — offline and on
   // app.agentgem.ai, which has no capability broker. Broker-fed genres additionally keep their `needs`
-  // (below) so a LOCAL host that pushes an unsolicited agentgem:feed can still upgrade the baked snapshot
+  // (below) so a LOCAL host that pushes a ui/notifications/tool-result refresh can still upgrade the baked snapshot
   // to fresh/full data; the scaffold already renders from the baked <script id="game-data"> and
-  // re-renders when that feed arrives.
+  // re-renders when that refresh arrives.
   writeFileSync(join(dir, `${name}.html`), seedHtml(scaffoldFor(g.scaffold), redactForBake(input.data)));
   const meta: MiniappMeta = { title: name, genre: input.genre, createdFrom: input.createdFrom, engineVersion: "1", ...(g.needs ? { needs: g.needs } : {}) };
   writeFileSync(join(dir, "meta.json"), JSON.stringify(meta, null, 2));

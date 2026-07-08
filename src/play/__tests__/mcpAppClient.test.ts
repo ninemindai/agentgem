@@ -21,7 +21,7 @@ function makeWindow(): Win {
     parent: null,
     agentgemApp: undefined as never,
     addEventListener(type, cb) { if (type === "message") listeners.push(cb); },
-    removeEventListener(type, cb) { const i = listeners.indexOf(cb); if (i >= 0) listeners.splice(i, 1); },
+    removeEventListener(_type, cb) { const i = listeners.indexOf(cb); if (i >= 0) listeners.splice(i, 1); },
     deliver(data, source) { for (const cb of listeners.slice()) cb({ data, source }); },
     postMessage: undefined as never,
   };

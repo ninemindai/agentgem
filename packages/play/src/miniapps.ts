@@ -123,7 +123,7 @@ export async function migrateAllMiniapps(): Promise<{ name: string; outcome: Mig
     if (outcome !== "migrated") { results.push({ name, outcome, commit: null }); continue; }
     const meta: MiniappMeta = {
       ...raw.meta,
-      engineVersion: raw.meta.engineVersion.includes("+mcp") ? raw.meta.engineVersion : `${raw.meta.engineVersion}+mcp`,
+      engineVersion: `${raw.meta.engineVersion}+mcp`,
     };
     const { commit } = await saveMiniapp({ name, html, meta });
     results.push({ name, outcome, commit });
