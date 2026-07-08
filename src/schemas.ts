@@ -319,6 +319,32 @@ export const GemManifestArtifactSchema = z.object({
   model: z.string().optional(),
 });
 
+// Mirrors LoopSpec (packages/model/src/loop.ts). Present so publish/install boundaries that
+// re-validate a manifest through Zod (which strips unknown keys by default) preserve the loop
+// facet instead of silently dropping it.
+export const LoopSpecSchema = z.object({
+  mode: z.enum(["loop", "goal"]),
+  schedule: z.object({
+    kind: z.enum(["interval", "watch", "cron"]),
+    everyMs: z.number().optional(),
+    globs: z.array(z.string()).optional(),
+    cron: z.string().optional(),
+  }).optional(),
+  goal: z.object({
+    until: z.string(),
+    check: z.enum(["llm", "regex"]),
+    pattern: z.string().optional(),
+  }).optional(),
+  guardrails: z.object({
+    approval: z.enum(["auto", "gate"]),
+    maxRounds: z.number().optional(),
+    maxSpendUsd: z.number().optional(),
+    maxTokens: z.number().optional(),
+    modelLadder: z.array(z.string()).optional(),
+  }),
+  params: z.record(z.string(), z.string()).optional(),
+});
+
 export const GemManifestSchema = z.object({
   formatVersion: z.number(),
   name: z.string(),
@@ -327,6 +353,7 @@ export const GemManifestSchema = z.object({
   artifacts: z.array(GemManifestArtifactSchema),
   requiredSecrets: z.array(SecretRequirementSchema),
   checks: z.array(z.object({ name: z.string(), path: z.string() })),
+  loop: LoopSpecSchema.optional(),
 });
 
 export const ArchiveRequestSchema = z.object({
@@ -491,6 +518,7 @@ export const GemSchema = z.object({
   checks: z.array(GemCheckSchema),
   requiredSecrets: z.array(SecretRequirementSchema),
   grade: z.number().int().min(1).max(3).optional(),
+  loop: LoopSpecSchema.optional(),
 });
 
 // --- Transfer (store-and-forward ticket sharing) ---
