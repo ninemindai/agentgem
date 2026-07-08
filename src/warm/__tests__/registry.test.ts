@@ -12,6 +12,7 @@ afterEach(() => { if (orig === undefined) delete process.env.AGENTGEM_HOME; else
 
 function usage() { return WARMABLES.find((w) => w.id === "usage")!; }
 function scorecard() { return WARMABLES.find((w) => w.id === "scorecard")!; }
+function recall() { return WARMABLES.find((w) => w.id === "recall")!; }
 
 describe("usage warmable", () => {
   it("warms on first call, then reports a hit on the second (same sessions)", async () => {
@@ -66,5 +67,13 @@ describe("distill warmable", () => {
       expect(d.cost).toBe("llm"); expect(d.scope).toBe("per-root");
       expect(await d.warm("/proj", { dir: claudeDir })).toBe("hit");
     } finally { if (prev === undefined) delete process.env.AGENTGEM_HOME; else process.env.AGENTGEM_HOME = prev; rmSync(home, { recursive: true, force: true }); }
+  });
+});
+
+describe("recall warmable", () => {
+  it("recall warmable exists with correct cost and scope", () => {
+    const r = recall();
+    expect(r.cost).toBe("cheap");
+    expect(r.scope).toBe("global");
   });
 });
