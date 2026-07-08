@@ -10,6 +10,15 @@ describe("deepLinkHash", () => {
   it("maps get-gems with no q to the bare tab route", () => {
     expect(deepLinkHash("agentgem://get-gems")).toBe("#/get-gems");
   });
+  it("forwards install + version so an installable gem auto-installs (previously dropped)", () => {
+    expect(deepLinkHash("agentgem://get-gems?install=raymondfeng/agentgem-biz&v=0.1.0"))
+      .toBe("#/get-gems?install=raymondfeng%2Fagentgem-biz&v=0.1.0");
+  });
+  it("forwards every param verbatim (nothing is dropped)", () => {
+    const h = deepLinkHash("agentgem://get-gems?install=@o/k&v=1.2.3");
+    expect(h).toContain("install=%40o%2Fk");
+    expect(h).toContain("v=1.2.3");
+  });
   it("returns null for a non-agentgem scheme", () => {
     expect(deepLinkHash("http://get-gems?q=x")).toBeNull();
     expect(deepLinkHash("https://app.agentgem.ai/gems/x")).toBeNull();
