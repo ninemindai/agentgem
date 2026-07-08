@@ -34,6 +34,7 @@ describe("ContextTimeline", () => {
   it("renders the task-areas episode list + cut reading when boundary is present", async () => {
     vi.spyOn(routes.hygieneRoute, "call").mockResolvedValue({
       ...sample,
+      curve: Array.from({ length: 12 }, (_, i) => ({ turn: i, msgIndex: i, ctxTokens: 100_000 + i * 70_000, cacheCreation: 2000, outTokens: 10 })),
       boundary: { segments: [{ fromTurn: 0, toTurn: 5, label: "pkg:a" }, { fromTurn: 6, toTurn: 11, label: "pkg:b" }], cutTurn: 6 },
     } as any);
     render(<ContextTimeline apiBase="/" agent="claude" sessionId="s1" />);
