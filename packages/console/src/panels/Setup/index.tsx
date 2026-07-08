@@ -1,28 +1,57 @@
 import { useEffect, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
 import { inventoryRoute, makeClient, type Inventory, type Artifact } from "../../api/routes.js";
+import { useRovingTabIndex } from "../../shell/useRovingTabIndex.js";
 import { Loading } from "../../shell/Loading.js";
 import { ContentView } from "../Curate/ContentView.js";
+import { SETUP_ROUTE, setupLink, type SetupType } from "./link.js";
 
 // Read-only browser of the local .claude setup — the artifacts your agents run with.
 // Everything (incl. each skill/subagent's SKILL.md `content`) comes from one /api/inventory
 // scan, so the viewer just shows what's already loaded; no per-artifact fetch.
-const GROUPS: { key: keyof Inventory; label: string }[] = [
-  { key: "skills", label: "Skills" },
-  { key: "subagents", label: "Subagents" },
-  { key: "mcpServers", label: "MCP servers" },
-  { key: "hooks", label: "Hooks" },
-  { key: "instructions", label: "Instructions" },
-];
+//
+// Tabs are deep-linkable sub-routes: the Shell resolves #/setup/<tab> by longest-prefix match
+// (same trick Gems uses), and an artifact is addressable as #/setup/<tab>?a=<name> so any other
+// panel can link straight into its viewer. Dashboard's legacy #/setup?q=<name> still lands on
+// the All tab, pre-filtered.
+type TypeKey = SetupType;
+type Tab = { id: string; label: string; route: string; key: TypeKey | null };
 
-const initialQuery = () => new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("q") ?? "";
+const TABS: Tab[] = [
+  { id: "all", label: "All", route: "#/setup", key: null },
+  { id: "skills", label: "Skills", route: SETUP_ROUTE.skills, key: "skills" },
+  { id: "subagents", label: "Subagents", route: SETUP_ROUTE.subagents, key: "subagents" },
+  { id: "mcp", label: "MCP servers", route: SETUP_ROUTE.mcpServers, key: "mcpServers" },
+  { id: "hooks", label: "Hooks", route: SETUP_ROUTE.hooks, key: "hooks" },
+  { id: "instructions", label: "Instructions", route: SETUP_ROUTE.instructions, key: "instructions" },
+];
+const TYPE_TABS = TABS.filter((t): t is Tab & { key: TypeKey } => t.key !== null);
+
+// Muted category accents drawn from the shared palette (theme.css) — one dot per artifact type.
+const DOT: Record<TypeKey, string> = {
+  skills: "var(--purple)",
+  subagents: "var(--pink)",
+  mcpServers: "var(--teal)",
+  hooks: "var(--gold)",
+  instructions: "var(--blue)",
+};
+const PREVIEW = 6; // artifacts shown on each overview card before "View all →"
+
+function parseHash() {
+  const [path, query = ""] = window.location.hash.split("?");
+  const params = new URLSearchParams(query);
+  return { path, a: params.get("a"), q: params.get("q") };
+}
+const tabIndexOf = (path: string) => {
+  const i = TABS.findIndex((t) => t.route === path);
+  return i === -1 ? 0 : i;
+};
 
 export function Setup({ apiBase }: { apiBase: string }) {
   const [inv, setInv] = useState<Inventory | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [q, setQ] = useState(initialQuery);
-  const [selected, setSelected] = useState<{ artifact: Artifact; group: string } | null>(null);
-  const [open, setOpen] = useState<Record<string, boolean>>({});
+  const [route, setRoute] = useState(parseHash); // { path, a, q } — the URL-driven tab + open artifact
+  const [q, setQ] = useState(() => parseHash().q ?? "");
 
   useEffect(() => {
     let alive = true;
@@ -32,6 +61,26 @@ export function Setup({ apiBase }: { apiBase: string }) {
     return () => { alive = false; };
   }, [apiBase]);
 
+  useEffect(() => {
+    const onHash = () => {
+      const parsed = parseHash();
+      setRoute(parsed);
+      // A q param (legacy/cross-panel deep-filter like #/setup?q=name) drives the input; routes
+      // without one — tab clicks, viewer open/close — leave the typed filter untouched.
+      if (parsed.q !== null) setQ(parsed.q);
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  const tabIdx = tabIndexOf(route.path);
+  const tab = TABS[tabIdx];
+  const go = (i: number) => { window.location.hash = TABS[i].route; };
+  const roving = useRovingTabIndex({ count: TABS.length, selectedIndex: tabIdx, onSelect: go });
+
+  const openArtifact = (key: TypeKey, name: string) => { window.location.hash = setupLink(key, name); };
+  const closeViewer = () => { window.location.hash = tab.route; };
+
   if (error) return <div className="obs"><p className="obs-error">Couldn't load setup: {error}</p></div>;
   if (!inv) return <div className="obs"><Loading /></div>;
 
@@ -40,57 +89,164 @@ export function Setup({ apiBase }: { apiBase: string }) {
     !needle || a.name.toLowerCase().includes(needle) ||
     (a.source ?? "").toLowerCase().includes(needle) ||
     (a.description ?? "").toLowerCase().includes(needle);
+  const items = (key: TypeKey): Artifact[] => (inv[key] as Artifact[]) ?? [];
 
-  const filtering = needle.length > 0;
-  const groups = GROUPS.map((g) => ({ ...g, items: ((inv[g.key] as Artifact[]) ?? []).filter(match) }))
-    .filter((g) => g.items.length > 0);
-  // Groups collapse by default (the Skills group alone is hundreds of items); a filter
-  // force-expands every group so matches are always visible.
-  const isOpen = (key: string) => filtering || !!open[key];
+  // Resolve the deep-linked artifact (?a=) within the active tab's type, or across all types on All.
+  const selected = route.a
+    ? (() => {
+        for (const key of tab.key ? [tab.key] : TYPE_TABS.map((t) => t.key)) {
+          const found = items(key).find((x) => x.name === route.a);
+          if (found) return { artifact: found, group: TYPE_TABS.find((x) => x.key === key)!.label };
+        }
+        return null;
+      })()
+    : null;
 
   return (
     <div className="setup">
       <div className="obs-head">
-        <h2 className="obs-title">Setup</h2>
+        <div className="setup-head-titles">
+          <h2 className="obs-title">Setup</h2>
+          <p className="setup-dek">The artifacts your agents run with.</p>
+        </div>
         <div className="setup-search">
           <span aria-hidden="true">🔎</span>
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter your setup" aria-label="Filter setup" />
         </div>
       </div>
 
-      {groups.length === 0 ? (
-        <p className="obs-muted setup-empty">No artifacts match “{q}”.</p>
-      ) : groups.map((g) => (
-        <section key={String(g.key)} className="setup-group">
-          <button type="button" className="setup-group-head" aria-expanded={isOpen(String(g.key))}
-            onClick={() => setOpen((p) => ({ ...p, [String(g.key)]: !p[String(g.key)] }))}>
-            <span className="setup-caret">{isOpen(String(g.key)) ? "▾" : "▸"}</span>
-            <span className="console-group-label">{g.label}</span>
-            <span className="setup-count">{g.items.length}</span>
+      <div className="setup-tabs" role="tablist" aria-label="Setup" {...roving.containerProps}>
+        {TABS.map((t, i) => (
+          <button key={t.id} type="button" role="tab" aria-selected={i === tabIdx}
+            className={"setup-tab" + (i === tabIdx ? " is-active" : "")}
+            {...roving.getTabProps(i)} onClick={() => go(i)}>
+            {t.label}
+            {t.key ? <span className="setup-tab-count">{items(t.key).length}</span> : null}
           </button>
-          {isOpen(String(g.key)) && (
-            <ul className="setup-list">
-              {g.items.map((a) => (
-                <li key={a.name}>
-                  <button type="button" className="setup-item" onClick={() => setSelected({ artifact: a, group: g.label })}>
-                    <span className="setup-item-name">{a.name}</span>
-                    {a.source ? <span className="setup-item-source">{a.source}</span> : null}
-                    {a.description ? <span className="setup-item-desc">{a.description}</span> : null}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+        ))}
+      </div>
+
+      <div role="tabpanel">
+        {tab.key ? (
+          <TypeList items={items(tab.key).filter(match)} typeKey={tab.key} q={q} onOpen={openArtifact} />
+        ) : needle ? (
+          <Results inv={inv} match={match} q={q} onOpen={openArtifact} />
+        ) : (
+          <Overview inv={inv} onOpen={openArtifact} onTab={(key) => go(TABS.findIndex((t) => t.key === key))} />
+        )}
+      </div>
+
+      {selected ? <ArtifactViewer sel={selected} onClose={closeViewer} /> : null}
+    </div>
+  );
+}
+
+// The All landing: an editorial index — one summary card per type, a handful of names each.
+function Overview({ inv, onOpen, onTab }:
+  { inv: Inventory; onOpen: (k: TypeKey, n: string) => void; onTab: (k: TypeKey) => void }) {
+  return (
+    <div className="setup-overview">
+      {TYPE_TABS.map((t) => {
+        const all = (inv[t.key] as Artifact[]) ?? [];
+        return (
+          <section key={t.id} className="setup-card">
+            <button type="button" className="setup-card-head" onClick={() => onTab(t.key)}>
+              <span className="setup-dot" style={{ background: DOT[t.key] }} aria-hidden="true" />
+              <span className="setup-card-label">{t.label}</span>
+              <span className="setup-card-count">{all.length}</span>
+            </button>
+            {all.length === 0 ? (
+              <p className="setup-card-empty">None found.</p>
+            ) : (
+              <ul className="setup-card-list">
+                {all.slice(0, PREVIEW).map((a) => (
+                  <li key={a.name}>
+                    <button type="button" className="setup-card-item" onClick={() => onOpen(t.key, a.name)}>
+                      <span className="setup-card-name">{a.name}</span>
+                      {a.source ? <span className="setup-item-source">{a.source}</span> : null}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {all.length > PREVIEW ? (
+              <button type="button" className="setup-card-more" onClick={() => onTab(t.key)}>
+                View all {all.length} →
+              </button>
+            ) : null}
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+// A focused type tab: the full list for one artifact type, filtered by the search box.
+function TypeList({ items, typeKey, q, onOpen }:
+  { items: Artifact[]; typeKey: TypeKey; q: string; onOpen: (k: TypeKey, n: string) => void }) {
+  if (items.length === 0)
+    return <p className="obs-muted setup-empty">{q.trim() ? `No artifacts match “${q}”.` : "None found."}</p>;
+  return (
+    <ul className="setup-list">
+      {items.map((a) => <Row key={a.name} a={a} typeKey={typeKey} onOpen={onOpen} />)}
+    </ul>
+  );
+}
+
+// The All tab while filtering: cross-type matches, grouped by type under a small label.
+function Results({ inv, match, q, onOpen }:
+  { inv: Inventory; match: (a: Artifact) => boolean; q: string; onOpen: (k: TypeKey, n: string) => void }) {
+  const groups = TYPE_TABS
+    .map((t) => ({ t, items: ((inv[t.key] as Artifact[]) ?? []).filter(match) }))
+    .filter((g) => g.items.length > 0);
+  if (groups.length === 0) return <p className="obs-muted setup-empty">No artifacts match “{q}”.</p>;
+  return (
+    <div className="setup-results">
+      {groups.map(({ t, items }) => (
+        <section key={t.id} className="setup-group">
+          <p className="setup-results-label">{t.label}<span className="setup-count">{items.length}</span></p>
+          <ul className="setup-list">
+            {items.map((a) => <Row key={a.name} a={a} typeKey={t.key} onOpen={onOpen} />)}
+          </ul>
         </section>
       ))}
-
-      {selected ? <ArtifactViewer sel={selected} onClose={() => setSelected(null)} /> : null}
     </div>
+  );
+}
+
+function Row({ a, typeKey, onOpen }: { a: Artifact; typeKey: TypeKey; onOpen: (k: TypeKey, n: string) => void }) {
+  return (
+    <li>
+      <button type="button" className="setup-item" onClick={() => onOpen(typeKey, a.name)}>
+        <span className="setup-dot" style={{ background: DOT[typeKey] }} aria-hidden="true" />
+        <span className="setup-item-body">
+          <span className="setup-item-head">
+            <span className="setup-item-name">{a.name}</span>
+            {a.source ? <span className="setup-item-source">{a.source}</span> : null}
+          </span>
+          {a.description ? <span className="setup-item-desc">{a.description}</span> : null}
+        </span>
+      </button>
+    </li>
   );
 }
 
 function ArtifactViewer({ sel, onClose }: { sel: { artifact: Artifact; group: string }; onClose: () => void }) {
   const a = sel.artifact;
+  const [copied, setCopied] = useState(false);
+  // The viewer is only ever open when the URL already reads #/setup/<tab>?a=<name>, so the
+  // current href IS the shareable deep link — no need to reconstruct it.
+  const copyLink = () => {
+    void navigator.clipboard?.writeText(window.location.href);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1600);
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   return (
     <div className="setup-modal" role="dialog" aria-modal="true" aria-label={a.name} onClick={onClose}>
       <div className="setup-modal-panel" onClick={(e) => e.stopPropagation()}>
@@ -100,6 +256,9 @@ function ArtifactViewer({ sel, onClose }: { sel: { artifact: Artifact; group: st
             {a.source ? <span className="setup-item-source">{a.source}</span> : null}
             <span className="obs-muted"> · {sel.group}</span>
           </div>
+          <button type="button" className="setup-modal-copy" onClick={copyLink}>
+            {copied ? "Copied ✓" : "Copy link"}
+          </button>
           <button type="button" className="setup-modal-close" onClick={onClose} aria-label="Close">✕</button>
         </div>
         {a.description ? <p className="setup-modal-desc">{a.description}</p> : null}

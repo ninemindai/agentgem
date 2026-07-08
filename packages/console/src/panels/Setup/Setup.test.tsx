@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
 import { Setup } from "./index.js";
 
 const res = (body: unknown) =>
@@ -13,57 +13,77 @@ const inv = {
   instructions: [{ type: "instruction", name: "CLAUDE.md", content: "be concise" }],
 };
 
+const setHash = (h: string) => act(() => {
+  window.location.hash = h;
+  window.dispatchEvent(new HashChangeEvent("hashchange"));
+});
+
 afterEach(() => { cleanup(); window.location.hash = ""; vi.unstubAllGlobals(); });
 
 describe("Setup", () => {
-  it("shows collapsed group headers for each inventory type", async () => {
+  it("renders a tab per artifact type, each carrying its count", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => res(inv)));
     render(<Setup apiBase="" />);
-    expect(await screen.findByText("Skills")).toBeTruthy();
-    expect(screen.getByText("Subagents")).toBeTruthy();
-    expect(screen.getByText("MCP servers")).toBeTruthy();
-    expect(screen.getByText("Hooks")).toBeTruthy();
-    expect(screen.getByText("Instructions")).toBeTruthy();
-    // collapsed by default — items are not rendered yet
-    expect(screen.queryByText("brainstorming")).toBeNull();
+    expect(await screen.findByRole("tab", { name: "All" })).toBeTruthy();
+    for (const label of ["Skills", "Subagents", "MCP servers", "Hooks", "Instructions"])
+      expect(screen.getByRole("tab", { name: new RegExp(label) })).toBeTruthy();
+    // Skills tab shows its count "1"
+    expect(screen.getByRole("tab", { name: /Skills/ }).textContent).toContain("1");
   });
 
-  it("expands a group on click to reveal its artifacts", async () => {
+  it("shows an overview index card per type with its top artifacts on the All tab", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => res(inv)));
     render(<Setup apiBase="" />);
-    fireEvent.click(await screen.findByText("Skills"));
-    expect(screen.getByText("brainstorming")).toBeTruthy();
+    // Top names surface directly on the cards — no expand needed.
+    expect(await screen.findByText("brainstorming")).toBeTruthy();
+    expect(screen.getByText("code-reviewer")).toBeTruthy();
+    expect(screen.getByText("github")).toBeTruthy();
   });
 
-  it("opens a viewer rendering the artifact's markdown content", async () => {
+  it("deep-links an artifact to a stable URL when clicked", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => res(inv)));
     render(<Setup apiBase="" />);
-    fireEvent.click(await screen.findByText("Skills"));
-    fireEvent.click(screen.getByText("brainstorming"));
-    expect(screen.getByRole("dialog")).toBeTruthy();
+    fireEvent.click(await screen.findByText("brainstorming"));
+    expect(window.location.hash).toBe("#/setup/skills?a=brainstorming");
+  });
+
+  it("opens the viewer for an artifact addressed by #/setup/<tab>?a=<name>", async () => {
+    window.location.hash = "#/setup/skills?a=brainstorming";
+    vi.stubGlobal("fetch", vi.fn(async () => res(inv)));
+    render(<Setup apiBase="" />);
+    expect(await screen.findByRole("dialog")).toBeTruthy();
     expect(screen.getByText(/full skill body/)).toBeTruthy(); // rendered via ContentView
+    expect(screen.getByRole("button", { name: /copy link/i })).toBeTruthy();
   });
 
   it("shows config for an artifact with no content (MCP server)", async () => {
+    window.location.hash = "#/setup/mcp?a=github";
     vi.stubGlobal("fetch", vi.fn(async () => res(inv)));
     render(<Setup apiBase="" />);
-    fireEvent.click(await screen.findByText("MCP servers"));
-    fireEvent.click(screen.getByText("github"));
-    expect(screen.getByText(/"url": "x"/)).toBeTruthy();
+    expect(await screen.findByText(/"url": "x"/)).toBeTruthy();
   });
 
-  it("auto-expands and filters by the ?q= hash param on mount", async () => {
+  it("switches to a type tab, scoping the list to that type", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => res(inv)));
+    render(<Setup apiBase="" />);
+    fireEvent.click(await screen.findByRole("tab", { name: /Skills/ }));
+    setHash("#/setup/skills"); // jsdom doesn't auto-fire hashchange on assignment
+    expect(screen.getByText("brainstorming")).toBeTruthy();
+    expect(screen.queryByText("code-reviewer")).toBeNull(); // subagent hidden on the Skills tab
+  });
+
+  it("auto-filters across types by the legacy ?q= hash param on mount", async () => {
     window.location.hash = "#/setup?q=code-reviewer";
     vi.stubGlobal("fetch", vi.fn(async () => res(inv)));
     render(<Setup apiBase="" />);
-    expect(await screen.findByText("code-reviewer")).toBeTruthy(); // shown without manual expand
+    expect(await screen.findByText("code-reviewer")).toBeTruthy();
     expect(screen.queryByText("brainstorming")).toBeNull();
   });
 
-  it("filters as you type", async () => {
+  it("filters as you type on the All tab", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => res(inv)));
     render(<Setup apiBase="" />);
-    await screen.findByText("Skills");
+    await screen.findByRole("tab", { name: "All" });
     fireEvent.change(screen.getByLabelText(/filter setup/i), { target: { value: "github" } });
     expect(screen.getByText("github")).toBeTruthy();
     expect(screen.queryByText("brainstorming")).toBeNull();

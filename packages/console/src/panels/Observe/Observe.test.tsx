@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.location.hash = ""; });
 import { Dashboard } from "./Dashboard.js";
@@ -50,6 +50,12 @@ describe("Observe Dashboard", () => {
     expect(screen.getByText("By subagent")).toBeDefined();
     expect(screen.getByText("Explore")).toBeDefined();
     expect(screen.queryByText("By skill")).toBeNull(); // bySkill empty → card omitted
+  });
+
+  it("deep-links a linkable artifact straight to its Setup viewer", () => {
+    render(<Dashboard data={payload} range="7d" onRange={() => {}} filter={{}} onFilter={() => {}} apiBase="" />);
+    fireEvent.click(screen.getByRole("button", { name: "Explore" }));
+    expect(window.location.hash).toBe("#/setup/subagents?a=Explore");
   });
 
   it("renders the usage-over-time series with a Tools/Skills/Subagents toggle", () => {

@@ -815,24 +815,68 @@ body::before {
 
 /* Setup — the local .claude inventory browser + artifact viewer. */
 .setup { animation: fade .4s ease both; }
+.setup-head-titles { display: flex; flex-direction: column; gap: 2px; }
+.setup-dek { margin: 0; color: var(--muted); font-size: 13px; font-style: italic; }
 .setup-search { display: inline-flex; align-items: center; gap: 6px; background: var(--paper); border: 1px solid var(--line);
   border-radius: 8px; padding: 6px 10px; margin-left: auto; color: var(--muted); font-size: 13px; }
 .setup-search input { border: 0; background: transparent; outline: none; font: inherit; color: var(--ink); width: 220px; }
-.setup-group { margin-bottom: 4px; }
-.setup-group-head { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; cursor: pointer;
-  background: none; border: 0; padding: 8px 4px; border-radius: 7px; }
-.setup-group-head:hover { background: color-mix(in srgb, var(--accent) 5%, transparent); }
-.setup-group-head .console-group-label { margin: 0; }
-.setup-caret { color: var(--muted); font-size: 10px; width: 12px; flex: none; }
+
+/* Tabs — one deep-linkable sub-route each; same visual language as the Gems tab bar. */
+.setup-tabs { display: flex; flex-wrap: wrap; gap: 0; margin-bottom: 22px; border-bottom: 1px solid var(--line); }
+.setup-tab { position: relative; display: inline-flex; align-items: center; gap: 7px; margin-right: 18px; padding: 10px 4px;
+  border: 0; background: transparent; cursor: pointer; color: var(--muted); font: 600 14px/1 var(--font-ui); transition: color .15s ease; }
+.setup-tab:hover { color: var(--ink-soft); }
+.setup-tab.is-active { color: var(--accent); }
+.setup-tab.is-active::after { content: ""; position: absolute; left: 0; right: 18px; bottom: -1px; height: 2px;
+  border-radius: 2px 2px 0 0; background: var(--accent); }
+.setup-tab:focus-visible { outline: none; box-shadow: var(--ring); border-radius: 4px; }
+.setup-tab-count { font: 600 10.5px/1 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--muted);
+  background: var(--paper-2); padding: 3px 6px; border-radius: 999px; }
+.setup-tab.is-active .setup-tab-count { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+
+/* Overview — the All landing: one editorial index card per artifact type. */
+.setup-overview { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+.setup-card { display: flex; flex-direction: column; padding: 6px; background: var(--raised);
+  border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-sm); }
+.setup-card-head { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; cursor: pointer;
+  background: none; border: 0; padding: 10px 10px 9px; border-radius: 8px; }
+.setup-card-head:hover { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.setup-card-head:hover .setup-card-label { color: var(--accent); }
+.setup-card-label { font: 600 15px/1 var(--font-display); letter-spacing: -.005em; color: var(--ink); }
+.setup-card-count { margin-left: auto; font: 600 12px/1 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--muted); }
+.setup-card-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.setup-card-item { display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left; cursor: pointer;
+  background: none; border: 0; border-radius: 7px; padding: 6px 10px; color: var(--ink-soft); font: 13px/1.3 var(--font-ui); }
+.setup-card-item:hover { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.setup-card-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--ink); }
+.setup-card-item:hover .setup-card-name { color: var(--accent); }
+.setup-card-empty { margin: 0; padding: 4px 10px 10px; color: var(--muted); font-size: 12.5px; font-style: italic; }
+.setup-card-more { align-self: flex-start; margin: 2px 0 4px; padding: 6px 10px; border: 0; background: none; cursor: pointer;
+  color: var(--gold); font: 600 12px/1 var(--font-ui); border-radius: 7px; transition: color .13s ease; }
+.setup-card-more:hover { color: var(--accent); }
+
+/* Category dot — the type's palette accent, shared by overview cards and list rows. */
+.setup-dot { width: 7px; height: 7px; border-radius: 999px; flex: none; }
+
+/* Results (filtering on the All tab) — cross-type matches under a small type label. */
+.setup-results-label { display: flex; align-items: center; gap: 8px; margin: 18px 4px 6px;
+  font: 700 10px/1 var(--font-ui); text-transform: uppercase; letter-spacing: .16em; color: var(--muted); }
+.setup-results > .setup-group:first-child .setup-results-label { margin-top: 2px; }
 .setup-count { color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; }
-.setup-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.setup-item { display: flex; align-items: baseline; gap: 10px; width: 100%; text-align: left; cursor: pointer;
-  background: none; border: 0; border-radius: 7px; padding: 8px 10px; color: var(--ink-soft); font: 13.5px/1.3 var(--font-ui); }
-.setup-item:hover { background: color-mix(in srgb, var(--accent) 7%, transparent); color: var(--ink); }
-.setup-item-name { font-weight: 600; color: var(--ink); flex: none; }
+
+.setup-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+.setup-item { display: flex; align-items: flex-start; gap: 10px; width: 100%; text-align: left; cursor: pointer;
+  background: none; border: 0; border-radius: 8px; padding: 9px 10px; color: var(--ink-soft); font: 13.5px/1.35 var(--font-ui); }
+.setup-item:hover { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.setup-item .setup-dot { margin-top: 6px; }
+.setup-item-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.setup-item-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.setup-item-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--ink); }
+.setup-item:hover .setup-item-name { color: var(--accent); }
 .setup-item-source { font: 700 9px/1 var(--font-ui); letter-spacing: .04em; text-transform: uppercase; color: var(--gold);
   background: color-mix(in srgb, var(--gold) 14%, transparent); padding: 3px 6px; border-radius: 5px; flex: none; }
-.setup-item-desc { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.setup-item-desc { color: var(--muted); overflow: hidden; text-overflow: ellipsis;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .setup-empty { margin: 24px 0; }
 
 .setup-modal { position: fixed; inset: 0; z-index: 60; background: rgba(32, 25, 15, .38); backdrop-filter: blur(3px);
@@ -840,9 +884,13 @@ body::before {
 .setup-modal-panel { background: var(--raised); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-md);
   width: min(820px, 100%); max-height: 92vh; display: flex; flex-direction: column; overflow: hidden; }
 .setup-modal-head { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line-soft); }
-.setup-modal-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; overflow: hidden; }
+.setup-modal-title { display: flex; align-items: baseline; gap: 8px; flex: 1; min-width: 0; overflow: hidden; }
 .setup-modal-title strong { font: 600 16px/1.2 var(--font-display); color: var(--ink); }
-.setup-modal-close { margin-left: auto; flex: none; border: 1px solid var(--line); background: var(--paper-2); color: var(--ink-soft);
+.setup-modal-copy { flex: none; border: 1px solid var(--line); background: var(--paper-2); color: var(--ink-soft);
+  border-radius: 7px; height: 28px; padding: 0 12px; cursor: pointer; font: 600 12px/1 var(--font-ui);
+  transition: color .13s ease, border-color .13s ease; }
+.setup-modal-copy:hover { border-color: var(--accent); color: var(--accent); }
+.setup-modal-close { flex: none; border: 1px solid var(--line); background: var(--paper-2); color: var(--ink-soft);
   border-radius: 7px; width: 28px; height: 28px; cursor: pointer; font-size: 13px; }
 .setup-modal-close:hover { border-color: var(--accent); color: var(--accent); }
 .setup-modal-desc { margin: 0; padding: 10px 16px 0; color: var(--muted); font-size: 13px; }
