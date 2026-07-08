@@ -915,3 +915,16 @@ a.ex-skillcard-rating:hover { text-decoration: underline; }
 .mg-open { background: none; border: 0; color: var(--brand-strong); font-weight: 600; font-size: 13px; cursor: pointer; padding: 0; }
 .mg-open:hover { text-decoration: underline; }
 .mg-empty { border: 1px dashed var(--line-2); border-radius: var(--r-lg); padding: 44px 24px; text-align: center; color: var(--muted); }
+
+/* Playable game preview — shared by arcade cards and the gem-detail Play section (GamePreview).
+   The button fills its positioned container (.mg-thumb / .ex-game-stage set the height + framing). */
+.gp-thumb { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border: 0; background: #0d1117; cursor: pointer; display: block; }
+.gp-thumb[disabled] { cursor: default; }
+.gp-ph { display: grid; place-items: center; height: 100%; color: var(--muted); font-size: 12px; }
+.gp-play-badge { position: absolute; inset: 0; margin: auto; width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center;
+  background: rgba(18,20,26,.62); color: #fff; font-size: 20px; padding-left: 3px; pointer-events: none; box-shadow: 0 2px 12px rgba(0,0,0,.35);
+  transition: transform .16s var(--ease), background .16s; }
+.gp-thumb:hover .gp-play-badge { transform: scale(1.09); background: rgba(18,20,26,.82); }
+/* Gem-detail play stage — a larger framed preview than the arcade thumbnail. */
+.ex-game-stage { position: relative; height: 260px; border-radius: var(--r-md); overflow: hidden; background: #0d1117; border: 1px solid var(--line); }
+.ex-game-hint { color: var(--muted); font-size: 12px; margin: 10px 0 0; }
