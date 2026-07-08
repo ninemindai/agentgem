@@ -528,6 +528,36 @@ export const processRoute = defineRoute("GET", "/api/inspect/session/process", {
 });
 export type SessionSummary = z.infer<typeof SessionSummarySchema>;
 
+// Recall tab: instant BM25 search over the goldmine index + the capped
+// ask_session funnel run. Mirrors src/goldmine/recallRoutes.ts exactly.
+export const MomentHitSchema = z.object({
+  sessionId: z.string(), agent: z.string(), turn: z.number(),
+  project: z.string().nullable(), branch: z.string().nullable(), startMs: z.number(),
+  snippet: z.string(), score: z.number(), turnsMatched: z.number(),
+});
+export type MomentHit = z.infer<typeof MomentHitSchema>;
+export const recallSearchRoute = defineRoute("GET", "/api/recall/search", {
+  query: z.object({
+    q: z.string(), project: z.string().optional(), agent: z.string().optional(),
+    since: z.number().optional(), limit: z.number().optional(),
+  }),
+  response: z.object({ moments: z.array(MomentHitSchema) }),
+});
+export const recallStatusRoute = defineRoute("GET", "/api/recall/status", {
+  response: z.object({ ready: z.boolean(), indexed: z.number(), total: z.number() }),
+});
+export const recallRunRoute = defineRoute("POST", "/api/recall/run", {
+  body: z.object({
+    sessionIds: z.array(z.object({ sessionId: z.string(), agent: z.string() })),
+    prompt: z.string(), mode: z.enum(["chat", "extract"]),
+  }),
+  response: z.object({ jobId: z.string() }),
+});
+export const recallCancelRoute = defineRoute("DELETE", "/api/recall/{jobId}", {
+  path: z.object({ jobId: z.string() }),
+  response: z.object({ ok: z.boolean() }),
+});
+
 // "Distill this session" (phase 3): runs the workflow scan + distill pipeline over
 // one session, returning draft skills. Mirrors the server DistilledSkillSchema so a
 // draft round-trips back to /workflow/draft unchanged.
