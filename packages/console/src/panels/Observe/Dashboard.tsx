@@ -9,6 +9,7 @@ import { fmtTokens, fmtDuration, tokenSeries, heatmapCells, heatmapMonths } from
 import { RangeTabs, ObserveFilters } from "./ObserveControls.js";
 import { RefreshButton } from "../../shell/RefreshButton.js";
 import { QuickShareButton } from "../_shared/QuickShareButton.js";
+import { setupLink, type SetupType } from "../Setup/link.js";
 
 const WEEKDAY_LABELS = ["", "Mon", "", "Wed", "", "Fri", ""];
 const SLICE_COLORS = ["var(--accent)", "var(--emerald, #34d399)", "#f59e0b", "#8b5cf6", "#ec4899", "#64748b"];
@@ -124,8 +125,8 @@ export function Dashboard({ data, range, onRange, filter, onFilter, pending, onR
               <>
                 <div className="obs-charts obs-usage-charts">
                   <UsageBars title="By tool" rows={data.byTool} />
-                  <UsageBars title="By subagent" rows={data.bySubagent} linkable />
-                  <UsageBars title="By skill" rows={data.bySkill} linkable />
+                  <UsageBars title="By subagent" rows={data.bySubagent} linkTo="subagents" />
+                  <UsageBars title="By skill" rows={data.bySkill} linkTo="skills" />
                 </div>
                 <UsageSeries data={data} dim={usageDim} onDim={setUsageDim} />
               </>
@@ -255,12 +256,12 @@ function Stat({ label, value }: { label: string; value: string }) {
   return <div className="obs-stat"><div className="obs-stat-value">{value}</div><div className="obs-stat-label">{label}</div></div>;
 }
 // A ranked usage breakdown (top 8) — used for By tool / By subagent / By skill. When
-// `linkable`, each name deep-links into the Setup browser filtered to that artifact (the
-// bare name after any `plugin:` prefix, which matches the inventory's artifact names).
-function UsageBars({ title, rows, linkable }: { title: string; rows: { name: string; count: number }[]; linkable?: boolean }) {
+// `linkTo` is set, each name deep-links straight to that artifact's viewer in the Setup
+// browser (using the bare name after any `plugin:` prefix, which matches inventory names).
+function UsageBars({ title, rows, linkTo }: { title: string; rows: { name: string; count: number }[]; linkTo?: SetupType }) {
   if (!rows.length) return null;
   const max = rows[0].count || 1;
-  const viewInSetup = (name: string) => { window.location.hash = "#/setup?q=" + encodeURIComponent(name.split(":").pop() ?? name); };
+  const viewInSetup = (name: string) => { window.location.hash = setupLink(linkTo!, name.split(":").pop() ?? name); };
   return (
     <div className="obs-card obs-usage-card">
       <div className="obs-card-title">{title}</div>
@@ -268,7 +269,7 @@ function UsageBars({ title, rows, linkable }: { title: string; rows: { name: str
         {rows.slice(0, 8).map((r) => (
           <li key={r.name} className="obs-usage-row">
             <div className="obs-usage-head">
-              {linkable
+              {linkTo
                 ? <button type="button" className="obs-usage-name obs-usage-link" title={`View ${r.name} in Setup`} onClick={() => viewInSetup(r.name)}>{r.name}</button>
                 : <span className="obs-usage-name" title={r.name}>{r.name}</span>}
               <span className="obs-usage-count">{r.count}</span>
