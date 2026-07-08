@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 // src/gem.controller.ts
 import { existsSync, writeFileSync, readFileSync } from "node:fs";
-import { basename, resolve, sep } from "node:path";
+import { basename, resolve, sep, join as pathJoin } from "node:path";
 import { z } from "zod";
 import { api, get, post, AgentError } from "@agentback/openapi";
 import { scanSessionsCached, aggregateObserve, loadSessionTranscript, resolveClaudeSession, dehomeDistilled, scrubText, sessionToAtif, summarizeSession } from "@agentgem/insight";
@@ -121,13 +121,17 @@ const AtifTrajectorySchema = z.looseObject({
 // project analyze flow (workflowScan reads Claude transcripts).
 const InspectDistillBodySchema = z.object({ id: z.string(), agent: z.enum(["claude", "codex"]) });
 const InspectDistillResponseSchema = z.object({ distilled: z.array(DistilledSkillSchema), lessons: z.array(DistilledLessonSchema), degraded: z.boolean() });
-const OptimizeQuerySchema = z.object({ range: z.enum(["today", "7d", "30d", "all"]).optional(), refresh: z.coerce.boolean().optional() });
+const OptimizeQuerySchema = z.object({
+  range: z.enum(["today", "7d", "30d", "all"]).optional(),
+  refresh: z.coerce.boolean().optional(),
+  root: z.string().optional(),        // present => project/effective scope
+});
 const DisableItemSchema = z.object({
   type: z.enum(["skill", "mcp", "plugin"]),
   name: z.string(),
   source: z.string(),
 });
-const DisableBodySchema = z.object({ artifacts: z.array(DisableItemSchema) });
+const DisableBodySchema = z.object({ artifacts: z.array(DisableItemSchema), root: z.string().optional() });
 const DisableResponseSchema = z.object({
   results: z.array(z.object({
     type: z.enum(["skill", "mcp", "plugin"]),
@@ -138,6 +142,7 @@ const DisableResponseSchema = z.object({
 });
 const OptimizeArtifactSchema = z.object({
   name: z.string(), type: z.enum(["skill", "mcp"]), source: z.string(),
+  layer: z.enum(["global", "project"]),
   contextTokens: z.number(), uses: z.number(), lastUsedMs: z.number().nullable(),
   prune: z.boolean(), change: z.object({ file: z.string(), key: z.string() }),
 });
@@ -615,6 +620,14 @@ export class GemController {
     const range: OptimizeRange = input.query.range ?? "30d";
     const now = Date.now();
     const refresh = input.query.refresh ?? false;
+    const root = input.query.root;
+    if (root) {
+      const canon = resolveProject(root);
+      const inv = mergedInventory(canon);
+      const usage = await scanArtifactUsageCached(inv, now, undefined, refresh, canon);   // project-cwd usage
+      const payload = buildOptimizePayload(inv, usage, range, now, canon);
+      return { ...payload, disabled: listDisabled(projectDisableOpts(canon)) };
+    }
     const inv = introspectConfig();
     const usage = await scanArtifactUsageCached(inv, now, undefined, refresh);
     const payload = buildOptimizePayload(inv, usage, range, now);
@@ -646,12 +659,23 @@ export class GemController {
   // Never throws: disableArtifacts/enableArtifacts map each item to { ok, message }.
   @post("/optimize/disable", { body: DisableBodySchema, response: DisableResponseSchema })
   async optimizeDisable(input: { body: z.infer<typeof DisableBodySchema> }): Promise<z.infer<typeof DisableResponseSchema>> {
-    return { results: disableArtifacts(input.body.artifacts) };
+    const root = input.body.root;
+    // Owned-layer guard: project scope disables only project rows; global scope only global rows.
+    const guard = (it: { source: string; type: string; name: string }) =>
+      (root ? it.source === "project" : it.source !== "project");
+    const [ok, bad] = [input.body.artifacts.filter(guard), input.body.artifacts.filter((it) => !guard(it))];
+    const results = [
+      ...disableArtifacts(ok, root ? projectDisableOpts(root) : {}),
+      ...bad.map((it) => ({ type: it.type, name: it.name, ok: false, message: root ? "global artifact — switch to Global scope to disable" : "project artifact — pick its project to disable" })),
+    ];
+    return { results };
   }
 
   @post("/optimize/enable", { body: EnableBodySchema, response: EnableResponseSchema })
   async optimizeEnable(input: { body: z.infer<typeof EnableBodySchema> }): Promise<z.infer<typeof EnableResponseSchema>> {
-    const results = enableArtifacts(input.body.artifacts);
+    const root = input.body.root;
+    const opts = root ? projectDisableOpts(root) : {};
+    const results = enableArtifacts(input.body.artifacts, opts);
     // Which requested items actually came back (results carry type+name; recover the
     // full source-aware key from the request so same-named artifacts don't collide).
     const okTypeNames = new Set(results.filter((r) => r.ok).map((r) => `${r.type}:${r.name}`));
@@ -660,9 +684,10 @@ export class GemController {
     );
     // Re-enabled artifacts are back in the inventory — build their fresh prune rows.
     const now = Date.now();
-    const inv = introspectConfig();
-    const usage = await scanArtifactUsageCached(inv, now);
-    const payload = buildOptimizePayload(inv, usage, input.body.range ?? "30d", now);
+    const range = input.body.range ?? "30d";
+    const inv = root ? mergedInventory(resolveProject(root)) : introspectConfig();
+    const usage = await scanArtifactUsageCached(inv, now, undefined, false, root ? resolveProject(root) : undefined);
+    const payload = buildOptimizePayload(inv, usage, range, now, root ? resolveProject(root) : undefined);
     const artifacts = payload.artifacts.filter((a) => okKeys.has(`${a.type}:${a.source}:${a.name}`));
     return { results, artifacts };
   }
@@ -1319,6 +1344,25 @@ export class GemController {
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(lesson.name)) throw new Error(`invalid lesson name '${lesson.name}'`);
     return { path: writeDistilledLesson(lesson) };
   }
+}
+
+// /optimize project scope: redirect the disable/enable capture ops at the project's
+// own config dirs instead of the user's home ~/.claude etc.
+function projectDisableOpts(root: string) {
+  const p = resolveProject(root);
+  return { claudeDir: pathJoin(p, ".claude"), agentDir: pathJoin(p, ".agents"), codexDir: pathJoin(p, ".codex"), hermesDir: pathJoin(p, ".hermes") };
+}
+// /optimize effective (global ⊕ project) inventory for one project root.
+function mergedInventory(root: string): ConfigInventory {
+  const project = introspectProject(resolveProject(root));
+  const g = introspectConfig();
+  return {
+    skills: [...g.skills, ...project.skills],
+    mcpServers: [...g.mcpServers, ...project.mcpServers],
+    instructions: [...g.instructions, ...project.instructions],
+    hooks: [...g.hooks, ...project.hooks],
+    subagents: [...g.subagents, ...project.subagents],
+  };
 }
 
 // Query params can't carry arrays cleanly, so `projects` arrives JSON-encoded.
