@@ -1,7 +1,7 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect, afterEach } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WARMABLES } from "../registry.js";
@@ -75,5 +75,20 @@ describe("recall warmable", () => {
     const r = recall();
     expect(r.cost).toBe("cheap");
     expect(r.scope).toBe("global");
+  });
+
+  it("warms end-to-end against an empty home: open → scan → sync → close", async () => {
+    const home = mkdtempSync(join(tmpdir(), "reg-recall-"));
+    process.env.AGENTGEM_HOME = home;
+    const dir = mkdtempSync(join(tmpdir(), "reg-recall-dir-"));
+
+    try {
+      // Empty session scan → nothing indexed → (0 indexed + 0 removed) > 0 is false → "hit".
+      await expect(recall().warm(null, { dir, force: true })).resolves.toBe("hit");
+      expect(existsSync(join(home, ".agentgem", "recall-index.db"))).toBe(true);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
