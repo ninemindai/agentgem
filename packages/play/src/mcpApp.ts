@@ -38,7 +38,7 @@ export interface McpUiResource {
 export interface McpUiTool {
   name: string;
   description: string;
-  inputSchema: { type: "object"; properties: Record<string, never> };
+  inputSchema: { type: "object"; properties: Record<string, unknown> };
   _meta: { ui: { resourceUri: string; visibility: ("model" | "app")[] } };
 }
 
