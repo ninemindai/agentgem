@@ -175,6 +175,30 @@ describe("originGuard — public aggregator reads (CORS + cross-site exemption)"
     expect(r.set["access-control-allow-origin"]).toBe("*");
   });
 
+  // Regression: these three public aggregator reads are fetched cross-origin by the marketplace SPA
+  // (app.agentgem.ai -> api.agentgem.ai) but were missing from PUBLIC_READ_PATHS, so the guard blocked
+  // them with no CORS header -> the browser reported "Failed to fetch". game-html is the one that broke
+  // the /minigames arcade ("preview unavailable" on every card); effectiveness + gem-adoption feed the
+  // gem detail/benchmark panels.
+  it("allows a cross-site GET to game-html and sets permissive CORS (the /minigames arcade)", () => {
+    const r = run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "GET", "/api/aggregator/game-html");
+    expect(r.nexted).toBe(true);
+    expect(r.blocked).toBe(false);
+    expect(r.set["access-control-allow-origin"]).toBe("*");
+  });
+
+  it("allows a cross-site GET to effectiveness and sets permissive CORS", () => {
+    const r = run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "GET", "/api/aggregator/effectiveness");
+    expect(r.nexted).toBe(true);
+    expect(r.set["access-control-allow-origin"]).toBe("*");
+  });
+
+  it("allows a cross-site GET to gem-adoption and sets permissive CORS", () => {
+    const r = run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "GET", "/api/aggregator/gem-adoption");
+    expect(r.nexted).toBe(true);
+    expect(r.set["access-control-allow-origin"]).toBe("*");
+  });
+
   it("allows a cross-site GET to /api/aggregator/org-catalog and sets permissive CORS", () => {
     const r = run({ "sec-fetch-site": "cross-site" }, "agg.example", "GET", "/api/aggregator/org-catalog");
     expect(r.nexted).toBe(true);
