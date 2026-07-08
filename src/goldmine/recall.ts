@@ -18,6 +18,15 @@ import type { FunnelDeps, SessionAnswer, FunnelMode } from "@agentgem/recall";
 
 const log = createLogger("goldmine");
 
+// Bounds the real ACP synth path (connect/open/setMode/prompt) so a stalled
+// adapter degrades instead of hanging the generator forever — mirrors
+// packages/insight/src/sessionAsk.ts's withTimeout/DEFAULT_TIMEOUT_MS.
+const DEFAULT_TIMEOUT_MS = 120_000;
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`timed out after ${ms}ms`)), ms))]);
+}
+
 /** ~/.agentgem/recall-index.db — the on-disk PGlite datadir for the local recall index. */
 export function defaultRecallDbPath(): string {
   return join(agentgemHome(), ".agentgem", "recall-index.db");
@@ -46,21 +55,33 @@ function synthesisDescriptor(): AgentDescriptor | null {
 // aggregate only agent_message_chunk text — mirrors sessionAsk.defaultAskConnectFn.
 const defaultSynthConnect: SynthConnect = async (question, onDelta, signal) => {
   const descriptor = synthesisDescriptor();
-  if (!descriptor) return "";
-  const raw = await connectAcpAdapter(descriptor, { clientName: "agentgem-recall-synth", permission: "deny" });
+  // No descriptor is a degrade case, not a silent empty result — route it
+  // through the same catch()-driven fallback as a connect/prompt failure
+  // (see synthesize's `streamed` guard below) so the caller still gets the
+  // deterministic join instead of nothing.
+  if (!descriptor) throw new Error("no synthesis descriptor available");
+  const deadline = Date.now() + DEFAULT_TIMEOUT_MS;
+  const left = () => Math.max(0, deadline - Date.now());
+  const raw = await withTimeout(
+    connectAcpAdapter(descriptor, { clientName: "agentgem-recall-synth", permission: "deny" }),
+    left(),
+  );
   try {
-    const session = await raw.open(analysisWorkspace());
+    const session = await withTimeout(raw.open(analysisWorkspace()), left());
     try {
-      await session.setMode("plan");
+      await withTimeout(session.setMode("plan"), left());
       let out = "";
-      await session.prompt(question, (u) => {
-        if (signal.aborted) return;
-        const update = u as { sessionUpdate?: string; content?: { type?: string; text?: string } };
-        if (update?.sessionUpdate === "agent_message_chunk" && update.content?.type === "text" && typeof update.content.text === "string") {
-          out += update.content.text;
-          onDelta(update.content.text);
-        }
-      });
+      await withTimeout(
+        session.prompt(question, (u) => {
+          if (signal.aborted) return;
+          const update = u as { sessionUpdate?: string; content?: { type?: string; text?: string } };
+          if (update?.sessionUpdate === "agent_message_chunk" && update.content?.type === "text" && typeof update.content.text === "string") {
+            out += update.content.text;
+            onDelta(update.content.text);
+          }
+        }),
+        left(),
+      );
       return out;
     } finally { try { session.dispose(); } catch { /* ignore */ } }
   } finally { try { raw.close(); } catch { /* ignore */ } }
@@ -89,10 +110,17 @@ export function serverFunnelDeps(opts: { synthConnect?: SynthConnect } = {}): Fu
         .catch((e) => { error = e as Error; })
         .finally(() => { settled = true; bump(); });
 
+      // Whether any real chunk was ever yielded to the caller. A mid-stream
+      // failure that already produced output must not also append the full
+      // deterministicJoin fallback — that would duplicate the (truncated)
+      // prose with a complete restatement. The join is reserved for the
+      // clean-failure case: nothing streamed before things went wrong.
+      let streamed = false;
       while (true) {
         if (signal.aborted) return;
         while (queue.length) {
           if (signal.aborted) return;
+          streamed = true;
           yield queue.shift()!;
         }
         if (settled) break;
@@ -102,7 +130,7 @@ export function serverFunnelDeps(opts: { synthConnect?: SynthConnect } = {}): Fu
 
       if (error) {
         log.warn("recall synth degraded: %s", error.message ?? error);
-        if (!signal.aborted) yield deterministicJoin(answered);
+        if (!signal.aborted && !streamed) yield deterministicJoin(answered);
       }
     },
   };
