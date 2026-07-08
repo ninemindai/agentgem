@@ -25,6 +25,7 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
   const [pending, setPending] = useState<string | null>(null); // a gated capability awaiting consent
   const [pickerOpen, setPickerOpen] = useState(false);
   const [sessions, setSessions] = useState<WatchSession[] | null>(null);
+  const [feedError, setFeedError] = useState<string | null>(null); // a failed rebind, surfaced in the picker
   const pendingMsg = useRef<string | undefined>(undefined);     // the invoke-agent message that triggered the prompt
   const teardown = useRef<(() => void)[]>([]);                  // live streams to close on unmount / game change
   const liveOpen = useRef(false);                               // one live-session-events stream per game
@@ -33,6 +34,8 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
   const invoking = useRef(false);                              // one invoke-agent turn at a time
   const gameGen = useRef(0);                                   // bumped per game; async continuations pin to it
   const feedingRef = useRef(false);                            // one feedSession request in flight at a time
+  const rebindBtnRef = useRef<HTMLButtonElement>(null);        // the "Replay yours" trigger — focus returns here on close
+  const pickerRef = useRef<HTMLDivElement>(null);             // the picker dialog — focused on open, hosts Escape
 
   // Serve a capability into the sealed iframe. One-shot caps fetch+feed once; streaming caps
   // (live-session-events, invoke-agent) open a stream and forward each event, registering a teardown.
@@ -84,23 +87,30 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
 
   // Feed a viewer-picked session into the sealed iframe on the session-data channel (the scaffold
   // re-renders on it). Reuses the serve() staleness guard shape; the picked ref is host-owned.
+  // Close the picker and return focus to its trigger (a11y: focus must not fall to <body>).
+  const closePicker = useCallback(() => { setPickerOpen(false); setFeedError(null); rebindBtnRef.current?.focus(); }, []);
+
   const feedSession = useCallback(async (sessionId: string, agent: string) => {
     if (name == null || apiBase == null || feedingRef.current) return; // one in-flight feed at a time
     feedingRef.current = true;
+    setFeedError(null);
     const gen = gameGen.current;
     try {
       const data = await playSessionDataRoute.call(makeClient(apiBase), { query: { name, sessionId, agent } });
       if (gen === gameGen.current) iframeRef.current?.contentWindow?.postMessage({ type: "agentgem:feed", channel: "session-data", data }, "*");
-    } catch { /* keep the current render */ }
+      closePicker();
+    } catch { setFeedError("Couldn't load that session — pick another."); } // keep the picker open so the failure is visible
     finally { feedingRef.current = false; }
-    setPickerOpen(false);
-  }, [name, apiBase]);
+  }, [name, apiBase, closePicker]);
 
   const canRebind = interactive && !!needs?.includes("session-data");
   function openPicker() {
+    setFeedError(null);
     setPickerOpen(true);
     if (sessions == null && apiBase != null) fetchSessions(apiBase).then(setSessions).catch(() => setSessions([]));
   }
+  // Move focus into the dialog when it opens so Escape works and assistive tech announces it.
+  useEffect(() => { if (pickerOpen) pickerRef.current?.focus(); }, [pickerOpen]);
 
   // Capability broker + consent gate. The sealed game (no network) postMessages a request; we honor only
   // requests from THIS iframe and only a `want` the gem declared in `needs`. AUTO caps serve immediately;
@@ -180,7 +190,7 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
         >{fs ? "✕" : "⛶"}</button>
       )}
       {canRebind && (
-        <button onClick={openPicker} title="Replay one of your own sessions" aria-label="Replay yours"
+        <button ref={rebindBtnRef} onClick={openPicker} title="Replay one of your own sessions" aria-label="Replay yours"
           style={{ position: fs ? "fixed" : "absolute", top: 8, left: 8, zIndex: 1001, height: 30, padding: "0 10px",
             borderRadius: 8, border: "1px solid rgba(255,255,255,.25)", background: "rgba(20,22,28,.7)", color: "#fff",
             cursor: "pointer", font: "600 12px system-ui" }}>
@@ -188,15 +198,19 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
         </button>
       )}
       {pickerOpen && !pending && (
-        <div className="play-consent" role="dialog" aria-label="Pick a session to replay">
+        <div ref={pickerRef} tabIndex={-1} className="play-consent" role="dialog" aria-modal="true" aria-label="Pick a session to replay"
+          onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); closePicker(); } }}>
           <div className="play-consent__box">
             <div className="play-consent__title">Replay one of your sessions</div>
+            {feedError && <div className="play-consent__sub" role="alert" style={{ color: "var(--danger, #e0533b)" }}>{feedError}</div>}
             {sessions == null ? <div className="play-consent__sub">Loading your sessions…</div>
               : sessions.length === 0 ? <div className="play-consent__sub">No local sessions yet.</div>
               : (
                 <ul className="play-src" style={{ maxHeight: 260, overflow: "auto" }}>
                   {sessions.map((s) => (
-                    <li key={`${s.agent}:${s.id}`} className="play-src-row" onClick={() => feedSession(s.id, s.agent)}>
+                    <li key={`${s.agent}:${s.id}`} className="play-src-row" role="button" tabIndex={0}
+                      onClick={() => feedSession(s.id, s.agent)}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); feedSession(s.id, s.agent); } }}>
                       <span className="play-src-row__main">{s.project ?? "session"}</span>
                       <span className="play-src-row__meta">{s.agent} · {s.msgs} msgs</span>
                     </li>
@@ -204,7 +218,7 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
                 </ul>
               )}
             <div className="play-consent__btns">
-              <button className="play-btn" onClick={() => setPickerOpen(false)}>Close</button>
+              <button className="play-btn" onClick={closePicker}>Close</button>
             </div>
           </div>
         </div>
