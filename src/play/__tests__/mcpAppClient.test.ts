@@ -66,10 +66,38 @@ describe("mcpAppClient shim", () => {
     const res = await child.agentgemApp.callTool("agentgem_get_session_data", { sessionId: "s1" });
     expect(res).toEqual({ echoed: { name: "agentgem_get_session_data", arguments: { sessionId: "s1" } } });
 
+    // Real callers (scaffolds.ts, migrate.ts) subscribe by the JSON-RPC METHOD, not the tool name, and
+    // filter on `p.toolName` inside the callback — the shim must dispatch on `d.method`, not
+    // `d.params.toolName`, or every real miniapp silently drops host-pushed notifications.
     const chunks: unknown[] = [];
-    child.agentgemApp.onNotification("agentgem_subscribe_sessions", (m) => chunks.push(m));
+    child.agentgemApp.onNotification("ui/notifications/tool-result", (m) => chunks.push(m));
     child.deliver({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { toolName: "agentgem_subscribe_sessions", chunk: { type: "event" } } }, parent);
     expect(chunks).toEqual([{ toolName: "agentgem_subscribe_sessions", chunk: { type: "event" } }]);
+  });
+
+  it("dispatches to a method-keyed subscriber the way the real scaffold/migrate callers do, filtering by toolName in the callback", async () => {
+    // Mirrors scaffolds.ts:100 and migrate.ts's NEW_FEED_LISTENER verbatim: subscribe once on the
+    // method, and let the callback itself decide which tool's chunk it cares about.
+    const child = makeWindow();
+    const parent = makeWindow();
+    child.parent = parent;
+    parent.postMessage = (msg) => {
+      if (msg.method === "ui/initialize") child.deliver({ jsonrpc: "2.0", id: msg.id, result: { protocolVersion: "x", tools: [] } }, parent);
+    };
+    runShim(child);
+
+    const received: Array<{ toolName: string; chunk: unknown }> = [];
+    child.agentgemApp.onNotification("ui/notifications/tool-result", (p) => {
+      const params = p as { toolName: string; chunk: unknown };
+      if (params.toolName === "agentgem_get_session_data") received.push(params);
+    });
+
+    child.deliver(
+      { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { toolName: "agentgem_get_session_data", chunk: { meta: {}, timeline: [] } } },
+      parent,
+    );
+
+    expect(received).toEqual([{ toolName: "agentgem_get_session_data", chunk: { meta: {}, timeline: [] } }]);
   });
 
   it("ignores messages whose source is not the host parent", () => {
