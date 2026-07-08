@@ -88,7 +88,7 @@ export function registerRecallRoutes(app: App, deps: RecallRouteDeps, guard: Mid
     const sinceNum = req.query.since !== undefined ? Number(req.query.since) : undefined;
     const since = Number.isFinite(sinceNum) ? sinceNum : undefined;
     const limitNum = req.query.limit !== undefined ? Number(req.query.limit) : 12;
-    const limit = Number.isFinite(limitNum) ? limitNum : 12;
+    const limit = Number.isFinite(limitNum) ? Math.min(50, Math.max(1, Math.floor(limitNum))) : 12;
     res.json({ moments: deps.readIndex.search(q, { project, agent, since }, limit) });
   });
 
