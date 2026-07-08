@@ -1,7 +1,8 @@
 // packages/console/src/panels/Play/index.tsx
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { defineConsolePage } from "../../contract.js";
-import { preferredAgentId, type PlayAgent } from "./AgentSelector.js";
+import { discoveredAgentsFromSessions, mergeRunnableAndDiscoveredAgents, preferredAgentId, type DiscoveredPlayAgent, type PlayAgent } from "./AgentSelector.js";
+import { fetchSessions } from "../Watch/watchStream.js";
 import { Arcade } from "./Arcade.js";
 import { Composer } from "./Composer.js";
 import { Studio } from "./Studio.js";
@@ -15,12 +16,12 @@ const j = (r: Response) => { if (!r.ok) throw new Error(String(r.status)); retur
 export function Play({ apiBase }: { apiBase: string }) {
   const [view, setView] = useState<View>({ kind: "arcade" });
   const [agents, setAgents] = useState<PlayAgent[] | null>(null);
+  const [discoveredAgents, setDiscoveredAgents] = useState<DiscoveredPlayAgent[]>([]);
   const [agentId, setAgentId] = useState("");
 
   useEffect(() => {
     fetch(`${apiBase}/api/agents`).then(j).then((data: { agents: PlayAgent[] }) => {
       setAgents(data.agents);
-      setAgentId((current) => current || preferredAgentId(data.agents));
     }).catch(() => setAgents([]));
   }, [apiBase]);
 
@@ -39,6 +40,27 @@ export function Play({ apiBase }: { apiBase: string }) {
     return () => window.removeEventListener("hashchange", applyDeepLink);
   }, []);
 
+  useEffect(() => {
+    fetchSessions(apiBase).then((sessions) => {
+      setDiscoveredAgents(discoveredAgentsFromSessions(sessions));
+    }).catch(() => setDiscoveredAgents([]));
+  }, [apiBase]);
+
+  const agentOptions = useMemo(
+    () => mergeRunnableAndDiscoveredAgents(agents ?? [], discoveredAgents),
+    [agents, discoveredAgents],
+  );
+  const selectorAgents = agents === null && discoveredAgents.length === 0 ? null : agentOptions;
+
+  // Selection lives here, not in the /api/agents fetch: a discovered agent can arrive later,
+  // and an agent that stops being runnable must not stay selected.
+  useEffect(() => {
+    if (selectorAgents === null) return;
+    if (agentId && selectorAgents.some((a) => a.id === agentId && a.available)) return;
+    const next = preferredAgentId(selectorAgents);
+    if (next !== agentId) setAgentId(next);
+  }, [agentId, selectorAgents]);
+
   return (
     <section className="analyze">
       {view.kind !== "studio" && (
@@ -49,8 +71,8 @@ export function Play({ apiBase }: { apiBase: string }) {
       )}
       {view.kind === "arcade" && <Arcade apiBase={apiBase} onOpen={(name) => setView({ kind: "studio", name })} />}
       {/* keyed on the seed so a fresh deep-link remounts the Composer — its prefill is useState-initial. */}
-      {view.kind === "composer" && <Composer key={`${view.title ?? ""}|${view.prompt ?? ""}`} apiBase={apiBase} agents={agents} agentId={agentId} onAgentIdChange={setAgentId} initialTitle={view.title} initialPrompt={view.prompt} onCreated={(name, seedPrompt) => setView({ kind: "studio", name, seedPrompt })} />}
-      {view.kind === "studio" && <Studio apiBase={apiBase} name={view.name} seedPrompt={view.seedPrompt} agents={agents} agentId={agentId} onAgentIdChange={setAgentId} onBack={() => setView({ kind: "arcade" })} />}
+      {view.kind === "composer" && <Composer key={`${view.title ?? ""}|${view.prompt ?? ""}`} apiBase={apiBase} agents={selectorAgents} agentId={agentId} onAgentIdChange={setAgentId} initialTitle={view.title} initialPrompt={view.prompt} onCreated={(name, seedPrompt) => setView({ kind: "studio", name, seedPrompt })} />}
+      {view.kind === "studio" && <Studio apiBase={apiBase} name={view.name} seedPrompt={view.seedPrompt} agents={selectorAgents} agentId={agentId} onAgentIdChange={setAgentId} onBack={() => setView({ kind: "arcade" })} />}
     </section>
   );
 }

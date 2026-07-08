@@ -7,7 +7,7 @@
 export interface WatchSession {
   id: string;
   file: string;
-  agent: "claude" | "codex";
+  agent: string;
   project: string | null;
   model: string | null;
   msgs: number;
