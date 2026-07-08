@@ -46,6 +46,11 @@ export function ContextTimeline({ apiBase, agent, sessionId }: { apiBase: string
       <div className="ct-chart">
         <div className="ct-scroll" style={{ overflowX: "auto" }}>
           <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img" aria-label="Context window over the session">
+            {rep.boundary && rep.boundary.segments.map((s, k) => (k % 2 === 1 ? (
+              <rect key={`seg-${s.fromTurn}`} x={X(s.fromTurn / (m.n - 1))} y={PT}
+                width={Math.max(1, X(s.toTurn / (m.n - 1)) - X(s.fromTurn / (m.n - 1)))} height={ih}
+                fill="color-mix(in srgb, var(--muted) 8%, transparent)" />
+            ) : null))}
             {[0.5, 0.8].map((f) => (
               <rect key={f} x={PL} y={Y(m.ymax)} width={iw} height={Y(f * m.ymax) - Y(m.ymax)}
                 fill={f >= 0.8 ? "color-mix(in srgb, var(--red) 11%, transparent)" : "color-mix(in srgb, var(--amber) 9%, transparent)"} />
@@ -62,6 +67,11 @@ export function ContextTimeline({ apiBase, agent, sessionId }: { apiBase: string
               <circle key={i} cx={X(mk.x)} cy={PT + 7} r={3} fill={mk.kind === "skill" ? CATEGORY_COLOR.skill : CATEGORY_COLOR.agent}
                 aria-label={`${mk.kind}: ${mk.name}`} />
             ))}
+            {rep.boundary?.cutTurn != null && (
+              <line x1={X(rep.boundary.cutTurn / (m.n - 1))} y1={PT}
+                x2={X(rep.boundary.cutTurn / (m.n - 1))} y2={PT + ih}
+                stroke="var(--accent)" strokeWidth={1.5} strokeDasharray="3 2" aria-label={`suggested cut at turn ${rep.boundary.cutTurn}`} />
+            )}
           </svg>
         </div>
       </div>
@@ -84,6 +94,20 @@ export function ContextTimeline({ apiBase, agent, sessionId }: { apiBase: string
               <div className="obs-muted">{j.cause}</div></div>
           </div>
         ))}
+        {rep.boundary && (
+          <>
+            <div className="rail-h">Task areas — where to cut</div>
+            <p className="obs-muted">
+              Looked like {rep.boundary.segments.length} task areas
+              {rep.boundary.cutTurn != null ? ` — a clean break around turn ${rep.boundary.cutTurn} keeps each window lean.` : "."}
+            </p>
+            <ul className="ct-episodes">
+              {rep.boundary.segments.map((s) => (
+                <li key={s.fromTurn}><span className="mono">{s.fromTurn}–{s.toTurn}</span> {s.label}</li>
+              ))}
+            </ul>
+          </>
+        )}
       </div>
     </div>
   );

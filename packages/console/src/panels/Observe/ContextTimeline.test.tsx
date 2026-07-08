@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 // packages/console/src/panels/Observe/ContextTimeline.test.tsx
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, cleanup } from "@testing-library/react";
 import { ContextTimeline } from "./ContextTimeline.js";
 import * as routes from "../../api/routes.js";
 
@@ -17,7 +17,7 @@ const sample = {
   hygiene: { score: 41, verdict: "bloated" },
 };
 
-beforeEach(() => vi.restoreAllMocks());
+beforeEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe("ContextTimeline", () => {
   it("renders the verdict, a fired factor, and a ranked jump", async () => {
@@ -30,5 +30,21 @@ describe("ContextTimeline", () => {
   it("renders nothing for codex", () => {
     const { container } = render(<ContextTimeline apiBase="/" agent="codex" sessionId="s1" />);
     expect(container.firstChild).toBeNull();
+  });
+  it("renders the task-areas episode list + cut reading when boundary is present", async () => {
+    vi.spyOn(routes.hygieneRoute, "call").mockResolvedValue({
+      ...sample,
+      boundary: { segments: [{ fromTurn: 0, toTurn: 5, label: "pkg:a" }, { fromTurn: 6, toTurn: 11, label: "pkg:b" }], cutTurn: 6 },
+    } as any);
+    render(<ContextTimeline apiBase="/" agent="claude" sessionId="s1" />);
+    expect(await screen.findByText(/pkg:a/)).toBeTruthy();
+    expect(await screen.findByText(/pkg:b/)).toBeTruthy();
+    expect(await screen.findByText(/turn 6/i)).toBeTruthy();
+  });
+  it("shows no task-areas section when boundary is absent", async () => {
+    vi.spyOn(routes.hygieneRoute, "call").mockResolvedValue(sample as any);   // sample has no boundary
+    render(<ContextTimeline apiBase="/" agent="claude" sessionId="s1" />);
+    await screen.findByText(/bloated/i);
+    expect(screen.queryByText(/task areas/i)).toBeNull();
   });
 });
