@@ -20,16 +20,16 @@ describe("mcpResourceFor", () => {
     expect(r.uri).toBe("ui://agentgem/auth-hunt");
     expect(r.mimeType).toBe(MCP_APP_MIME);
     expect(r.text).toBe("<!doctype html><body>hi</body>");
-    expect(r._meta["io.agentgem/game"]).toMatchObject({ genre: "project-fun", engineVersion: "3", offline: true });
-    expect(r._meta["io.agentgem/game"].needs).toBeUndefined();
+    expect(r._meta["ai.agentgem/game"]).toMatchObject({ genre: "project-fun", engineVersion: "3", offline: true });
+    expect(r._meta["ai.agentgem/game"].needs).toBeUndefined();
   });
 
   it("stays fully sealed (empty CSP) even when the miniapp declares a capability", () => {
     const r = mcpResourceFor({ name: "replay", html: "<body></body>", meta: dataMeta });
     expect(r._meta.ui.csp).toEqual({ connectDomains: [], resourceDomains: [], frameDomains: [], baseUriDomains: [] });
     expect(r._meta.ui.permissions).toEqual({});
-    expect(r._meta["io.agentgem/game"].offline).toBe(false);
-    expect(r._meta["io.agentgem/game"].needs).toEqual(["session-data"]);
+    expect(r._meta["ai.agentgem/game"].offline).toBe(false);
+    expect(r._meta["ai.agentgem/game"].needs).toEqual(["session-data"]);
   });
 });
 

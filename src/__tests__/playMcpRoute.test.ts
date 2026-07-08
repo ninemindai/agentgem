@@ -20,7 +20,7 @@ describe("GET /api/play/mcp-app", () => {
     expect(out.resource.uri).toBe("ui://agentgem/g1");
     expect(out.resource.mimeType).toBe("text/html;profile=mcp-app");
     expect(out.resource.text).toBe(html);
-    expect(out.resource._meta["io.agentgem/game"].offline).toBe(true);
+    expect(out.resource._meta["ai.agentgem/game"].offline).toBe(true);
     expect(out.tool.name).toBe("play_g1");
     expect(out.tool._meta.ui.visibility).toEqual(["app"]);
   });

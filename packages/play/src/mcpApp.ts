@@ -31,7 +31,7 @@ export interface McpUiResource {
   text: string;
   _meta: {
     ui: { csp: McpUiCsp; permissions: Record<string, never> };
-    "io.agentgem/game": AgentGemGameMeta;
+    "ai.agentgem/game": AgentGemGameMeta;
   };
 }
 
@@ -59,7 +59,7 @@ export function mcpResourceFor(app: { name: string; html: string; meta: MiniappM
     text: app.html,
     _meta: {
       ui: { csp: SEALED_CSP, permissions: {} },
-      "io.agentgem/game": {
+      "ai.agentgem/game": {
         genre: app.meta.genre,
         engineVersion: app.meta.engineVersion,
         createdFrom: app.meta.createdFrom,
