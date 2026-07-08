@@ -27,7 +27,7 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`timed out after ${ms}ms`)), ms))]);
 }
 
-/** ~/.agentgem/recall-index.db — the on-disk PGlite datadir for the local recall index. */
+/** ~/.agentgem/recall-index.db — the on-disk node:sqlite database file for the local recall index. */
 export function defaultRecallDbPath(): string {
   return join(agentgemHome(), ".agentgem", "recall-index.db");
 }
