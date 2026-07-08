@@ -927,7 +927,7 @@ export const PlayMcpAppSchema = z.object({
         }),
         permissions: EmptyObjectSchema,
       }),
-      "io.agentgem/game": z.object({
+      "ai.agentgem/game": z.object({
         genre: z.string(),
         engineVersion: z.string(),
         createdFrom: GameArtifactSchema.shape.createdFrom,
