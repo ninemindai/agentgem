@@ -21,6 +21,7 @@ export function mcpAppClient(): string {
   var host = window.parent;               // the trusted host frame (the console Runner)
   var nextId = 1;
   var pending = {};                       // JSON-RPC id -> { resolve, reject } for in-flight tools/call
+  var queue = [];                         // tools/call messages built before the handshake is ready
   var subs = {};                          // JSON-RPC method (or "*") -> [cb] for streamed notifications
   var initIds = {};                       // ids used for ui/initialize (each retry gets a fresh one)
   var iv = null;                          // handshake retry interval
@@ -33,13 +34,15 @@ export function mcpAppClient(): string {
     callTool: function (name, args) {
       return new Promise(function (resolve, reject) {
         var id = nextId++;
-        // Bounded timeout: if the host never replies (disposed mid-call, or the sealed no-host
-        // marketplace case), reject and drop the pending entry instead of leaking the promise forever.
-        var timer = setTimeout(function () {
-          if (pending[id]) { delete pending[id]; reject(new Error("tool call timed out")); }
-        }, 10000);
-        pending[id] = { resolve: resolve, reject: reject, timer: timer };
-        post({ jsonrpc: "2.0", id: id, method: "tools/call", params: { name: name, arguments: args || {} } });
+        var msg = { jsonrpc: "2.0", id: id, method: "tools/call", params: { name: name, arguments: args || {} } };
+        pending[id] = { resolve: resolve, reject: reject };
+        // Gate on the handshake: posting before the host has attached its listener would lose the
+        // call (only ui/initialize retries), and a fixed timeout would break slow user consent (a
+        // gated cap can wait on the user clicking Allow for well over 10s). So: not ready yet, queue
+        // it (flushed once ui/initialize resolves, below); ready, post now and just wait for the reply
+        // however long it takes — if the host is gone the frame is being torn down and the promise
+        // dies with it, and if the handshake never completes the retry-exhaustion below rejects it.
+        if (api.ready) post(msg); else queue.push(msg);
       });
     },
     onNotification: function (method, cb) { (subs[method] || (subs[method] = [])).push(cb); }
@@ -55,11 +58,12 @@ export function mcpAppClient(): string {
       api.hostTools = d.result.tools || [];
       if (iv) { clearInterval(iv); iv = null; }
       post({ jsonrpc: "2.0", method: "ui/notifications/initialized" });
+      for (var qi = 0; qi < queue.length; qi++) post(queue[qi]);  // flush anything queued before ready
+      queue = [];
       return;
     }
     if (d.id != null && pending[d.id]) {  // a tools/call reply, matched by id
       var p = pending[d.id]; delete pending[d.id];
-      clearTimeout(p.timer);  // reply landed — never let the timeout later fire a stale reject
       if (d.error) p.reject(new Error((d.error && d.error.message) || "tool error"));
       else p.resolve(d.result);
       return;
@@ -77,7 +81,15 @@ export function mcpAppClient(): string {
   function sendInit() { var id = nextId++; initIds[id] = 1; post({ jsonrpc: "2.0", id: id, method: "ui/initialize" }); }
   sendInit();
   iv = setInterval(function () {
-    if (api.ready || ++tries > 5) { clearInterval(iv); iv = null; return; }
+    if (api.ready || ++tries > 5) {
+      if (!api.ready) {  // handshake exhausted: no host present — reject rather than leak the pending calls
+        for (var pid in pending) { if (Object.prototype.hasOwnProperty.call(pending, pid)) pending[pid].reject(new Error("no host")); }
+        pending = {};
+        queue = [];
+      }
+      clearInterval(iv); iv = null;
+      return;
+    }
     sendInit();
   }, 800);
 })();
