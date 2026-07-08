@@ -944,6 +944,12 @@ export const PlayMcpAppSchema = z.object({
   }),
 });
 export const MiniappListSchema = z.object({ miniapps: z.array(z.object({ name: z.string(), title: z.string(), genre: z.string(), needs: PlayNeedsSchema })) });
+// The codemod pass over the whole registry (POST /play/migrate): rewrites old-bridge miniapps to the
+// MCP Apps client shim on disk. Optimization only — readMiniapp()'s on-read backstop already serves
+// migrated html regardless of whether this route has run.
+export const PlayMigrateResponseSchema = z.object({
+  results: z.array(z.object({ name: z.string(), outcome: z.enum(["migrated", "already", "unrecognized"]), commit: z.string().nullable() })),
+});
 export const PlayMiniappQuerySchema = z.object({ name: z.string() });
 export const PlaySessionDataQuerySchema = z.object({ name: z.string(), sessionId: z.string().optional(), agent: z.string().optional() });
 export const PlayMiniappSchema = z.object({

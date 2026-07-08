@@ -61,4 +61,11 @@ describe("PlayController", () => {
     await ctrl.import({ body: { title: "imported", html: "<body>x</body>" } }); // createdFrom kind=html
     await expect(ctrl.sessionData({ query: { name: "imported" } })).rejects.toThrow(/no session data/);
   });
+
+  it("POST /play/migrate reports the saved miniapp's migration outcome", async () => {
+    const ctrl = new PlayController();
+    await ctrl.save({ body: { name: "g1", html: "<!doctype html><body><canvas></canvas></body>", meta } });
+    const res = await ctrl.migrate();
+    expect(res.results.find((r) => r.name === "g1")?.outcome).toBe("unrecognized");
+  });
 });

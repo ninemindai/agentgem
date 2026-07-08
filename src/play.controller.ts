@@ -3,7 +3,7 @@
 // Play JSON routes over the miniapps registry: save (gate + dual-write), list, publish (git push).
 import { api, get, post, AgentError } from "@agentback/openapi";
 import { z } from "zod";
-import { saveMiniapp, listMiniapps, readMiniapp, miniappsRoot, setRemote, push, seedStudio, importStudio, blankStudio, compactTurns, resolveSessionRef, mcpAppFor } from "@agentgem/play";
+import { saveMiniapp, listMiniapps, readMiniapp, miniappsRoot, setRemote, push, seedStudio, importStudio, blankStudio, compactTurns, resolveSessionRef, mcpAppFor, migrateAllMiniapps } from "@agentgem/play";
 import { defaultReaders } from "./play.readers.js";
 import { listActiveSessions } from "./watchSessions.js";
 import {
@@ -11,6 +11,7 @@ import {
   PlayPublishRequestSchema, PlayPublishResponseSchema,
   PlayStudioRequestSchema, PlayStudioResponseSchema, PlayImportRequestSchema, PlayBlankRequestSchema,
   PlayMiniappQuerySchema, PlayMiniappSchema, PlaySessionDataSchema, PlaySessionDataQuerySchema, PlayMcpAppSchema,
+  PlayMigrateResponseSchema,
 } from "./schemas.js";
 
 @api({ basePath: "/api" })
@@ -81,6 +82,16 @@ export class PlayController {
     try {
       return mcpAppFor(readMiniapp(input.query.name));
     } catch (e) { throw new AgentError((e as Error).message, { status: 404 }); }
+  }
+
+  // Codemod pass over the whole registry: rewrites old-bridge miniapps' STORED files to the current MCP
+  // Apps client shim. Optimization only — readMiniapp()'s on-read backstop already serves migrated html
+  // regardless of whether this route has ever run.
+  @post("/play/migrate", { response: PlayMigrateResponseSchema })
+  async migrate(): Promise<z.infer<typeof PlayMigrateResponseSchema>> {
+    try {
+      return { results: await migrateAllMiniapps() };
+    } catch (e) { throw new AgentError((e as Error).message, { status: 400 }); }
   }
 
   @post("/play/publish", { body: PlayPublishRequestSchema, response: PlayPublishResponseSchema })

@@ -13,6 +13,7 @@ import { writeGemArchive, writeArchiveDir } from "@agentgem/archive";
 import { gameGate } from "./gameGate.js";
 import { assertPortable } from "./portability.js";
 import { ensureRepo, commitWithLock } from "./git.js";
+import { migrateMiniappHtml, type MigrateOutcome } from "./migrate.js";
 
 export interface MiniappMeta {
   title: string; genre: GameGenre; createdFrom: GameSource; engineVersion: string; needs?: GameCapability[];
@@ -78,11 +79,22 @@ export async function checkpointMiniapp(name: string): Promise<{ name: string; c
   return { name, commit };
 }
 
-export function readMiniapp(name: string): { name: string; html: string; meta: MiniappMeta } {
+// The RAW stored bytes, with NO migration backstop applied. `migrateAllMiniapps()` needs this — it must
+// see the true on-disk html to decide whether a rewrite is needed; reading through the backstopped
+// `readMiniapp()` would always look already-migrated and the stored file would never get rewritten.
+function readMiniappRaw(name: string): { name: string; html: string; meta: MiniappMeta } {
   const dir = miniappDir(name); // validates + jails
   const html = readFileSync(join(dir, `${name}.html`), "utf8");
   const meta = JSON.parse(readFileSync(join(dir, "meta.json"), "utf8")) as MiniappMeta;
   return { name, html, meta };
+}
+
+export function readMiniapp(name: string): { name: string; html: string; meta: MiniappMeta } {
+  const r = readMiniappRaw(name);
+  // On-read migration backstop: the player always gets migrated html, even if the stored file hasn't
+  // been rewritten yet by migrateAllMiniapps()/the /play/migrate route. Idempotent — a no-op on html
+  // that's already current. The stored file itself is unchanged here.
+  return { ...r, html: migrateMiniappHtml(r.html).html };
 }
 
 export function listMiniapps(): { name: string; meta: MiniappMeta }[] {
@@ -96,4 +108,25 @@ export function listMiniapps(): { name: string; meta: MiniappMeta }[] {
     try { out.push({ name, meta: JSON.parse(readFileSync(metaPath, "utf8")) as MiniappMeta }); } catch { /* skip malformed */ }
   }
   return out;
+}
+
+// Rewrites every stored miniapp's html to the current MCP Apps client shim, one codemod pass over the
+// whole registry. This is an OPTIMIZATION, not a correctness prerequisite — readMiniapp()'s on-read
+// backstop already serves migrated html regardless. Reads the RAW stored file (never readMiniapp) so
+// it sees the true on-disk bytes; otherwise the backstop would make a raw miniapp look already-migrated
+// and its file would never actually get rewritten.
+export async function migrateAllMiniapps(): Promise<{ name: string; outcome: MigrateOutcome; commit: string | null }[]> {
+  const results: { name: string; outcome: MigrateOutcome; commit: string | null }[] = [];
+  for (const { name } of listMiniapps()) {
+    const raw = readMiniappRaw(name);
+    const { html, outcome } = migrateMiniappHtml(raw.html);
+    if (outcome !== "migrated") { results.push({ name, outcome, commit: null }); continue; }
+    const meta: MiniappMeta = {
+      ...raw.meta,
+      engineVersion: raw.meta.engineVersion.includes("+mcp") ? raw.meta.engineVersion : `${raw.meta.engineVersion}+mcp`,
+    };
+    const { commit } = await saveMiniapp({ name, html, meta });
+    results.push({ name, outcome, commit });
+  }
+  return results;
 }
