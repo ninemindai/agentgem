@@ -42,7 +42,6 @@ interface App {
 
 export interface RecallRouteDeps {
   readIndex: RecallIndex;
-  listSessions: () => Promise<SessionRef[]>;
   funnelDeps: FunnelDeps;
   indexStatus: () => { ready: boolean; indexed: number; total: number };
 }
@@ -58,14 +57,22 @@ interface RecallJob {
 
 // Drain a FunnelEvent generator to the client as SSE frames, then end the
 // response once. Exported so the test can drive it against a hand-rolled
-// generator + a fake Res without an HTTP server.
+// generator + a fake Res without an HTTP server. Mirrors chatRoutes.ts's
+// /api/chat/stream pattern: a generator throw is caught and reported as a
+// `failed` SSE frame (never rethrown — the stream has already started), and
+// res.end() runs in a finally so it fires on every path.
 export async function streamFunnel(res: Res, gen: AsyncGenerator<FunnelEvent>): Promise<void> {
   const send = (event: string, data: unknown) =>
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-  for await (const ev of gen) {
-    send(ev.type, ev);
+  try {
+    for await (const ev of gen) {
+      send(ev.type, ev);
+    }
+  } catch (err) {
+    send("failed", { error: String((err as Error)?.message ?? err) });
+  } finally {
+    res.end();
   }
-  res.end();
 }
 
 export function registerRecallRoutes(app: App, deps: RecallRouteDeps, guard: Middleware = noopGuard): void {
@@ -78,8 +85,10 @@ export function registerRecallRoutes(app: App, deps: RecallRouteDeps, guard: Mid
     if (!q.trim()) { res.json({ moments: [] }); return; }
     const project = req.query.project !== undefined ? String(req.query.project) : undefined;
     const agent = req.query.agent !== undefined ? String(req.query.agent) : undefined;
-    const since = req.query.since !== undefined ? Number(req.query.since) : undefined;
-    const limit = req.query.limit !== undefined ? Number(req.query.limit) : 12;
+    const sinceNum = req.query.since !== undefined ? Number(req.query.since) : undefined;
+    const since = Number.isFinite(sinceNum) ? sinceNum : undefined;
+    const limitNum = req.query.limit !== undefined ? Number(req.query.limit) : 12;
+    const limit = Number.isFinite(limitNum) ? limitNum : 12;
     res.json({ moments: deps.readIndex.search(q, { project, agent, since }, limit) });
   });
 
