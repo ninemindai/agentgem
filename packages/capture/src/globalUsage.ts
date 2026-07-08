@@ -61,7 +61,7 @@ function sharedIndex(): Promise<TranscriptIndex> {
 
 /**
  * Close the shared transcript index if one was opened, flushing its persistent
- * on-disk PGlite. Register this on graceful shutdown (symmetric with the
+ * on-disk SQLite. Register this on graceful shutdown (symmetric with the
  * aggregator DB's onStop) so SIGTERM closes it cleanly instead of leaving the
  * WASM instance resident until process exit. Idempotent, safe when nothing was
  * opened, and resets the singleton so a later request transparently reopens.
