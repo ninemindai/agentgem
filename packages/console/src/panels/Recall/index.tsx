@@ -132,7 +132,7 @@ export function Recall({ apiBase }: { apiBase: string }) {
         <button
           type="button"
           className="rc-btn rc-btn--ghost"
-          disabled={selected.size === 0}
+          disabled={selected.size === 0 || exit !== null}
           onClick={() => setExit({ mode: "chat", sessions: selectedSessions })}
         >
           💬 Chat with these
@@ -140,7 +140,7 @@ export function Recall({ apiBase }: { apiBase: string }) {
         <button
           type="button"
           className="rc-btn rc-btn--primary"
-          disabled={selected.size === 0}
+          disabled={selected.size === 0 || exit !== null}
           onClick={() => setExit({ mode: "extract", sessions: selectedSessions })}
         >
           ⇩ Extract across these
@@ -148,7 +148,16 @@ export function Recall({ apiBase }: { apiBase: string }) {
       </div>
 
       {exit && (
-        <ExitDrawer mode={exit.mode} sessions={exit.sessions} apiBase={apiBase} onClose={() => setExit(null)} />
+        // Keyed by mode + the exact session selection so switching exit mode (or
+        // selection) forces a real remount, running the outgoing drawer's
+        // unmount-teardown instead of racing its in-flight request/stream.
+        <ExitDrawer
+          key={exit.mode + ":" + exit.sessions.map((s) => s.agent + ":" + s.sessionId).join(",")}
+          mode={exit.mode}
+          sessions={exit.sessions}
+          apiBase={apiBase}
+          onClose={() => setExit(null)}
+        />
       )}
     </div>
   );
