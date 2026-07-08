@@ -3,14 +3,14 @@
 // Play JSON routes over the miniapps registry: save (gate + dual-write), list, publish (git push).
 import { api, get, post, AgentError } from "@agentback/openapi";
 import { z } from "zod";
-import { saveMiniapp, listMiniapps, readMiniapp, miniappsRoot, setRemote, push, seedStudio, importStudio, blankStudio, compactTurns, resolveSessionRef } from "@agentgem/play";
+import { saveMiniapp, listMiniapps, readMiniapp, miniappsRoot, setRemote, push, seedStudio, importStudio, blankStudio, compactTurns, resolveSessionRef, mcpAppFor } from "@agentgem/play";
 import { defaultReaders } from "./play.readers.js";
 import { listActiveSessions } from "./watchSessions.js";
 import {
   PlaySaveRequestSchema, PlaySaveResponseSchema, MiniappListSchema,
   PlayPublishRequestSchema, PlayPublishResponseSchema,
   PlayStudioRequestSchema, PlayStudioResponseSchema, PlayImportRequestSchema, PlayBlankRequestSchema,
-  PlayMiniappQuerySchema, PlayMiniappSchema, PlaySessionDataSchema, PlaySessionDataQuerySchema,
+  PlayMiniappQuerySchema, PlayMiniappSchema, PlaySessionDataSchema, PlaySessionDataQuerySchema, PlayMcpAppSchema,
 } from "./schemas.js";
 
 @api({ basePath: "/api" })
@@ -71,6 +71,15 @@ export class PlayController {
     try {
       const r = readMiniapp(input.query.name);
       return { name: r.name, html: r.html, meta: { title: r.meta.title, genre: r.meta.genre, createdFrom: r.meta.createdFrom, engineVersion: r.meta.engineVersion, ...(r.meta.needs ? { needs: r.meta.needs } : {}) } };
+    } catch (e) { throw new AgentError((e as Error).message, { status: 404 }); }
+  }
+
+  // Serve-time MCP Apps adapter: the same stored miniapp, re-shaped as a ui:// resource + launcher tool.
+  // No behavior change to storage or the sealed runtime — this is a producer-side view over readMiniapp.
+  @get("/play/mcp-app", { query: PlayMiniappQuerySchema, response: PlayMcpAppSchema })
+  async mcpApp(input: { query: z.infer<typeof PlayMiniappQuerySchema> }): Promise<z.infer<typeof PlayMcpAppSchema>> {
+    try {
+      return mcpAppFor(readMiniapp(input.query.name));
     } catch (e) { throw new AgentError((e as Error).message, { status: 404 }); }
   }
 

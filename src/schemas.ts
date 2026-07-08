@@ -911,6 +911,38 @@ export const PlaySaveRequestSchema = z.object({
 });
 export const PlaySaveResponseSchema = z.object({ name: z.string(), commit: z.string().nullable() });
 const PlayNeedsSchema = z.array(z.enum(["session-data", "live-session-events", "local-project-access", "invoke-agent"])).optional();
+const EmptyObjectSchema = z.object({});
+export const PlayMcpAppSchema = z.object({
+  resource: z.object({
+    uri: z.string(),
+    mimeType: z.string(),
+    text: z.string(),
+    _meta: z.object({
+      ui: z.object({
+        csp: z.object({
+          connectDomains: z.array(z.string()),
+          resourceDomains: z.array(z.string()),
+          frameDomains: z.array(z.string()),
+          baseUriDomains: z.array(z.string()),
+        }),
+        permissions: EmptyObjectSchema,
+      }),
+      "io.agentgem/game": z.object({
+        genre: z.string(),
+        engineVersion: z.string(),
+        createdFrom: GameArtifactSchema.shape.createdFrom,
+        needs: PlayNeedsSchema,
+        offline: z.boolean(),
+      }),
+    }),
+  }),
+  tool: z.object({
+    name: z.string(),
+    description: z.string(),
+    inputSchema: z.object({ type: z.literal("object"), properties: EmptyObjectSchema }),
+    _meta: z.object({ ui: z.object({ resourceUri: z.string(), visibility: z.array(z.enum(["model", "app"])) }) }),
+  }),
+});
 export const MiniappListSchema = z.object({ miniapps: z.array(z.object({ name: z.string(), title: z.string(), genre: z.string(), needs: PlayNeedsSchema })) });
 export const PlayMiniappQuerySchema = z.object({ name: z.string() });
 export const PlaySessionDataQuerySchema = z.object({ name: z.string(), sessionId: z.string().optional(), agent: z.string().optional() });
