@@ -1,6 +1,8 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 // src/gem/types.ts
+import type { LoopSpec } from "./loop.js";
+
 export type ArtifactType = "skill" | "mcp_server" | "instructions" | "hook" | "channel" | "subagent" | "game";
 
 export interface SecretRef {
@@ -250,4 +252,5 @@ export interface Gem {
   grade?: number;                        // authoring-quality floor (1..3), baked at build; absent when unmeasured
   contract?: GemContract;                // portable completion contract; absent = not contract-bearing
   bindings?: AgentBinding[];  // in-memory overlay; absent = none. Not archived (see AgentBinding).
+  loop?: LoopSpec;                       // optional automation facet; absent = not a loop. Serialized like `contract`.
 }
