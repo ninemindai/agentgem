@@ -88,4 +88,17 @@ describe("Composer", () => {
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith("brainstorming"));
     expect(studio.mock.calls[0][1]).toMatchObject({ body: { source: { kind: "skill", skillName: "brainstorming" } } });
   });
+
+  // The marketplace "Make your own" deep link arrives with a title + prompt; the reader should land on
+  // Blank (not the default Project tab) with both fields filled and Create enabled.
+  it("opens on the Blank tab prefilled when seeded from a deep link", async () => {
+    const blank = vi.spyOn(playBlankRoute, "call").mockResolvedValue({ name: "duel-remix" });
+    const onCreated = vi.fn();
+    render(<Composer apiBase="" agents={agents} agentId="codex" onAgentIdChange={() => {}}
+      initialTitle="duel-remix" initialPrompt="Build my own version" onCreated={onCreated} />);
+    expect(screen.getByPlaceholderText("title")).toHaveProperty("value", "duel-remix");
+    fireEvent.click(screen.getByText("Create miniapp"));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith("duel-remix", "Build my own version"));
+    expect(blank.mock.calls[0][1]).toEqual({ body: { title: "duel-remix" } });
+  });
 });

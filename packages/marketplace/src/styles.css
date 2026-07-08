@@ -914,7 +914,14 @@ a.ex-skillcard-rating:hover { text-decoration: underline; }
 .mg-meta { font-size: 12px; color: var(--muted); }
 .mg-open { background: none; border: 0; color: var(--brand-strong); font-weight: 600; font-size: 13px; cursor: pointer; padding: 0; }
 .mg-open:hover { text-decoration: underline; }
+/* The star sits hard-right whether or not the card has an author to sit opposite it. */
+.mg-row .ex-star { margin-left: auto; }
+.mg-actions { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.mg-remix { color: var(--brand-strong); font-weight: 600; font-size: 13px; text-decoration: none; }
+.mg-remix:hover { text-decoration: underline; }
 .mg-empty { border: 1px dashed var(--line-2); border-radius: var(--r-lg); padding: 44px 24px; text-align: center; color: var(--muted); }
+.mg-foot { margin-top: 18px; color: var(--muted); font-size: 13px; text-align: center; }
+.mg-foot-link { color: var(--brand-strong); }
 
 /* Playable game preview — shared by arcade cards and the gem-detail Play section (GamePreview).
    The button fills its positioned container (.mg-thumb / .ex-game-stage set the height + framing). */

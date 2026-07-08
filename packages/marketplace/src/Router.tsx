@@ -32,7 +32,7 @@ export function Router({ api, stars, reviews, me }: { api: ReturnType<typeof mak
 
   if (path === "/publish") return <Publish api={api} me={me} base={defaultApiBase()} />;
   if (path === "/sources") return <Sources api={api} />;
-  if (path === "/minigames") return <Minigames api={api} />;
+  if (path === "/minigames") return <Minigames api={api} stars={stars} />;
 
   const gemDetail = path.match(/^\/gems\/(.+)$/);
   if (gemDetail) return <Gem api={api} keyName={decodeURIComponent(gemDetail[1])} stars={stars} me={me} />;

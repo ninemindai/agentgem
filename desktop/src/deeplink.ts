@@ -8,9 +8,12 @@
 
 export const DEEP_LINK_SCHEME = "agentgem";
 
-// agentgem://get-gems?<query>  →  "#/get-gems?<query>". Returns null for anything we don't route
-// (wrong scheme, unknown route, malformed URL) so the caller can ignore it safely. Only get-gems is
-// accepted today; add routes here as more deep links are introduced.
+// Routes we accept from the web. Kept as an explicit allowlist so a crafted agentgem:// URL can only
+// reach panels we've vetted, never an arbitrary console hash.
+const ROUTES = new Set(["get-gems", "play"]);
+
+// agentgem://<route>?<query>  →  "#/<route>?<query>". Returns null for anything we don't route
+// (wrong scheme, unknown route, malformed URL) so the caller can ignore it safely.
 export function deepLinkHash(rawUrl: string): string | null {
   let u: URL;
   try { u = new URL(rawUrl); } catch { return null; }
@@ -18,13 +21,13 @@ export function deepLinkHash(rawUrl: string): string | null {
   // The route is the URL authority (agentgem://get-gems → host "get-gems"); fall back to the first
   // path segment for platforms/parsers that place it there instead.
   const route = (u.hostname || u.pathname.replace(/^\/+/, "").split("/")[0] || "").toLowerCase();
-  if (route !== "get-gems") return null;
+  if (!ROUTES.has(route)) return null;
   // Forward the WHOLE query verbatim so every param the marketplace sends survives — q=<key> (pre-
   // searched browse) AND install=<key>&v=<version> (zero-config install, which the GetGems panel
   // consumes). Previously only q was forwarded, silently dropping the install key so an installable
   // gem never auto-installed from "Open in AgentGem".
   const qs = u.searchParams.toString();
-  return qs ? `#/get-gems?${qs}` : "#/get-gems";
+  return qs ? `#/${route}?${qs}` : `#/${route}`;
 }
 
 // Windows/Linux deliver the deep link as a launch argument rather than an event; pick it out of argv.
