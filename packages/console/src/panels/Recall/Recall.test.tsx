@@ -86,4 +86,27 @@ describe("Recall panel", () => {
     expect((screen.getByRole("button", { name: /chat with these/i }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole("button", { name: /extract across these/i }) as HTMLButtonElement).disabled).toBe(true);
   });
+
+  it("shows the indexing hint while the index is still building, not once it's ready", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.includes("/api/recall/status")) return new Response(JSON.stringify({ ready: false, indexed: 3, total: 10 }));
+      if (url.includes("/api/recall/search")) return new Response(JSON.stringify({ moments: MOMENTS }));
+      return new Response(JSON.stringify({ ok: true }));
+    }));
+    render(<Recall apiBase="" />);
+    fireEvent.change(screen.getByLabelText(/search transcripts/i), { target: { value: "prod db" } });
+    await waitFor(() => expect(screen.getByText(/indexing your sessions…/i)).toBeTruthy(), { timeout: 2000 });
+    expect(screen.getByText(/indexing your sessions…/i).textContent).toContain("3 of 10");
+
+    cleanup();
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.includes("/api/recall/status")) return new Response(JSON.stringify({ ready: true, indexed: 214, total: 214 }));
+      if (url.includes("/api/recall/search")) return new Response(JSON.stringify({ moments: MOMENTS }));
+      return new Response(JSON.stringify({ ok: true }));
+    }));
+    render(<Recall apiBase="" />);
+    fireEvent.change(screen.getByLabelText(/search transcripts/i), { target: { value: "prod db" } });
+    await waitFor(() => expect(screen.getAllByText("agentgem").length).toBeGreaterThan(0), { timeout: 2000 });
+    expect(screen.queryByText(/indexing your sessions…/i)).toBeNull();
+  });
 });
