@@ -1392,6 +1392,22 @@ button.scorecard-intent { line-height: 1.4; }
 .opt-prune td { background: color-mix(in srgb, var(--accent) 8%, transparent); }
 .opt-change { font-size: 11px; color: var(--accent); }
 .opt-flag { display: inline-block; padding: 1px 6px; margin-right: 4px; border-radius: 4px; font-size: 11px; background: var(--raised); border: 1px solid var(--line); }
+/* Shared Global/Project scope switch (Optimize + Setup). */
+.scope-picker { position: relative; display: flex; gap: 4px; }
+.scope-menu {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 10; min-width: 260px;
+  max-height: 320px; overflow-y: auto; padding: 8px; background: var(--raised);
+  border: 1px solid var(--line); border-radius: 7px; box-shadow: var(--shadow-sm);
+}
+.scope-menu input { width: 100%; padding: 6px 10px; border: 1px solid var(--line); border-radius: 7px;
+  background: var(--bg, var(--raised)); color: var(--ink); font: inherit; margin-bottom: 6px; }
+.scope-menu input:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
+.scope-menu ul { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow-y: auto; }
+.scope-menu li button {
+  display: block; width: 100%; text-align: left; background: none; border: none;
+  padding: 5px 6px; border-radius: 5px; font-size: 12.5px; color: var(--ink-soft); cursor: pointer;
+}
+.scope-menu li button:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); color: var(--accent); }
 /* Shared control strip for selectable lists (see ListControls / useSelectableList). */
 .list-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
 .list-filter { flex: 0 1 240px; min-width: 180px; padding: 6px 10px; border: 1px solid var(--line);

@@ -11,14 +11,17 @@ import { useSelectableList } from "../../shell/useSelectableList.js";
 import { useTableSort, type SortColumn } from "../../shell/useTableSort.js";
 import { SortTh } from "../../shell/SortTh.js";
 import { DiscoverSection } from "./Discover.js";
+import { ScopePicker, type Scope } from "../_shared/ScopePicker.js";
 
 const RANGES: OptimizeRange[] = ["today", "7d", "30d", "all"];
 
-// A prune row is disable-eligible unless it comes from a source we can't reversibly
-// deactivate (drafts / project-scoped). Everything else routes to a flag or archive move.
-const INELIGIBLE = new Set(["distilled-draft", "project"]);
-function eligible(a: OptimizeArtifact): boolean {
-  return a.prune && !INELIGIBLE.has(a.source);
+// A prune row is disable-eligible only on the layer the current scope owns:
+// project scope can disable project-layer rows, global scope can disable global-layer
+// rows. Drafts are never reversibly disable-able regardless of scope.
+const DRAFT = new Set(["distilled-draft"]);
+function eligible(a: OptimizeArtifact, scope: Scope): boolean {
+  if (!a.prune || DRAFT.has(a.source)) return false;
+  return scope.kind === "project" ? a.layer === "project" : a.layer === "global";
 }
 function key(a: { type: string; name: string; source: string }): string {
   return `${a.type}:${a.source}:${a.name}`;
@@ -40,7 +43,7 @@ const PRUNE_COLUMNS: SortColumn<OptimizeArtifact>[] = [
   { id: "lastused", value: (a) => a.lastUsedMs ?? 0 },
 ];
 
-export function Dashboard({ data, range, onRange, pending, onRefresh, onMutate, apiBase }: {
+export function Dashboard({ data, range, onRange, pending, onRefresh, onMutate, apiBase, scope, onScope }: {
   data: OptimizePayload;
   range: OptimizeRange;
   onRange: (r: OptimizeRange) => void;
@@ -50,9 +53,12 @@ export function Dashboard({ data, range, onRange, pending, onRefresh, onMutate, 
   // re-enable reflects instantly instead of forcing a full re-scan of the panel.
   onMutate?: (fn: (p: OptimizePayload) => OptimizePayload) => void;
   apiBase: string;
+  scope: Scope;
+  onScope: (s: Scope) => void;
 }) {
   const prunable = data.artifacts.filter((a) => a.prune);
   const savings = prunable.reduce((acc, a) => acc + a.contextTokens, 0);
+  const root = scope.kind === "project" ? scope.root : undefined;
 
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -61,7 +67,7 @@ export function Dashboard({ data, range, onRange, pending, onRefresh, onMutate, 
 
   const pruneList = useSelectableList(data.artifacts, {
     keyOf: key,
-    eligible,
+    eligible: (a) => eligible(a, scope),
     matches: (a, q) => a.name.toLowerCase().includes(q) || a.source.toLowerCase().includes(q) || a.type.toLowerCase().includes(q),
     extraFilter: (a) => !prunableOnly || a.prune,
   });
@@ -84,7 +90,7 @@ export function Dashboard({ data, range, onRange, pending, onRefresh, onMutate, 
     if (!chosen.length) return;
     const artifacts = chosen.map((a) => ({ type: a.type, name: a.name, source: a.source }));
     setBusy(true); setNote(null);
-    disableArtifactsRoute.call(makeClient(apiBase), { body: { artifacts } })
+    disableArtifactsRoute.call(makeClient(apiBase), { body: { artifacts, ...(root ? { root } : {}) } })
       .then((r) => {
         const failed = r.results.filter((x) => !x.ok);
         setNote(failed.length ? `${failed.length} failed: ${failed.map((f) => `${f.name} (${f.message})`).join("; ")}` : null);
@@ -108,7 +114,7 @@ export function Dashboard({ data, range, onRange, pending, onRefresh, onMutate, 
   const reEnable = (items: DisabledArtifact[]) => {
     if (!items.length) return;
     setBusy(true); setNote(null);
-    enableArtifactsRoute.call(makeClient(apiBase), { body: { artifacts: items.map((d) => ({ type: d.type, name: d.name, source: d.source })), range } })
+    enableArtifactsRoute.call(makeClient(apiBase), { body: { artifacts: items.map((d) => ({ type: d.type, name: d.name, source: d.source })), range, ...(root ? { root } : {}) } })
       .then((r) => {
         const failed = r.results.filter((x) => !x.ok);
         setNote(failed.length ? `${failed.length} failed: ${failed.map((f) => `${f.name} (${f.message})`).join("; ")}` : null);
@@ -139,6 +145,7 @@ export function Dashboard({ data, range, onRange, pending, onRefresh, onMutate, 
             <button key={r} className={"obs-range-btn" + (r === range ? " is-active" : "")} onClick={() => onRange(r)}>{r}</button>
           ))}
         </div>
+        <ScopePicker apiBase={apiBase} scope={scope} onScope={onScope} />
         {pending && <span className="obs-muted">refreshing…</span>}
         {onRefresh && <RefreshButton onClick={onRefresh} busy={pending} />}
       </div>
@@ -186,12 +193,17 @@ export function Dashboard({ data, range, onRange, pending, onRefresh, onMutate, 
             )}
             {sortedPrune.map((a) => (
               <tr key={key(a)} className={a.prune ? "opt-prune" : ""}>
-                <td>{eligible(a)
+                <td>{eligible(a, scope)
                   ? <input type="checkbox" aria-label={`select ${a.name}`} checked={pruneList.isSelected(a)} onChange={() => pruneList.toggle(a)} />
                   : null}</td>
                 <td>{a.name}</td>
                 <td><span className="obs-chip">{a.type}</span></td>
-                <td className="obs-muted">{a.source}</td>
+                <td className="obs-muted">
+                  {a.source}
+                  {a.layer === "global" && scope.kind === "project"
+                    ? <span className="opt-flag" title="global — manage in Global scope"> global</span>
+                    : null}
+                </td>
                 <td>{fmtTokens(a.contextTokens)}</td>
                 <td>{a.uses}</td>
                 <td className="obs-muted">{a.lastUsedMs ? utcDay(a.lastUsedMs) : "never"}</td>

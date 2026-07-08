@@ -9,7 +9,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 const res = (body: unknown) => ({ ok: true, status: 200, text: async () => JSON.stringify(body) }) as unknown as Response;
 
 const artifact = (over: Partial<any> = {}) => ({
-  name: "old-skill", type: "skill", source: "standalone", contextTokens: 400, uses: 0,
+  name: "old-skill", type: "skill", source: "standalone", layer: "global", contextTokens: 400, uses: 0,
   lastUsedMs: null, prune: true, change: { file: "~/.claude/skills/old-skill", key: "remove" }, ...over,
 });
 const payload = (over: Partial<any> = {}) => ({
@@ -24,7 +24,7 @@ describe("Prune disable actions", () => {
     vi.stubGlobal("fetch", fetchMock);
     const onRefresh = vi.fn();
     const onMutate = vi.fn();
-    render(<Dashboard data={payload()} range="30d" onRange={() => {}} pending={false} onRefresh={onRefresh} onMutate={onMutate} apiBase="" />);
+    render(<Dashboard data={payload()} range="30d" onRange={() => {}} pending={false} onRefresh={onRefresh} onMutate={onMutate} apiBase="" scope={{ kind: "global" }} onScope={() => {}} />);
     fireEvent.click(screen.getByRole("checkbox", { name: /select old-skill/i }));
     fireEvent.click(screen.getByRole("button", { name: /disable selected \(1\)/i }));
     await waitFor(() => expect(onMutate).toHaveBeenCalled());
@@ -38,17 +38,17 @@ describe("Prune disable actions", () => {
   });
 
   it("shows the estimated context freed for the current selection", () => {
-    render(<Dashboard data={payload()} range="30d" onRange={() => {}} pending={false} onRefresh={() => {}} onMutate={() => {}} apiBase="" />);
+    render(<Dashboard data={payload()} range="30d" onRange={() => {}} pending={false} onRefresh={() => {}} onMutate={() => {}} apiBase="" scope={{ kind: "global" }} onScope={() => {}} />);
     fireEvent.click(screen.getByRole("checkbox", { name: /select old-skill/i }));
     expect(screen.getByText(/est\. context freed/i)).toBeTruthy();
   });
 
   it("select-all checks every eligible row, then deselects", () => {
     const data = payload({ artifacts: [
-      { name: "a-skill", type: "skill", source: "standalone", contextTokens: 100, uses: 0, lastUsedMs: null, prune: true, change: { file: "f", key: "k" } },
-      { name: "b-skill", type: "skill", source: "standalone", contextTokens: 200, uses: 0, lastUsedMs: null, prune: true, change: { file: "f", key: "k" } },
+      { name: "a-skill", type: "skill", source: "standalone", layer: "global", contextTokens: 100, uses: 0, lastUsedMs: null, prune: true, change: { file: "f", key: "k" } },
+      { name: "b-skill", type: "skill", source: "standalone", layer: "global", contextTokens: 200, uses: 0, lastUsedMs: null, prune: true, change: { file: "f", key: "k" } },
     ] });
-    render(<Dashboard data={data} range="30d" onRange={() => {}} pending={false} onRefresh={() => {}} onMutate={() => {}} apiBase="" />);
+    render(<Dashboard data={data} range="30d" onRange={() => {}} pending={false} onRefresh={() => {}} onMutate={() => {}} apiBase="" scope={{ kind: "global" }} onScope={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: /select all \(2\)/i }));
     expect(screen.getByRole("button", { name: /disable selected \(2\)/i })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /deselect all/i }));
@@ -57,17 +57,17 @@ describe("Prune disable actions", () => {
 
   it("filters the prune table by name", () => {
     const data = payload({ artifacts: [
-      { name: "alpha", type: "skill", source: "standalone", contextTokens: 100, uses: 0, lastUsedMs: null, prune: true, change: { file: "f", key: "k" } },
-      { name: "beta", type: "skill", source: "standalone", contextTokens: 200, uses: 0, lastUsedMs: null, prune: true, change: { file: "f", key: "k" } },
+      { name: "alpha", type: "skill", source: "standalone", layer: "global", contextTokens: 100, uses: 0, lastUsedMs: null, prune: true, change: { file: "f", key: "k" } },
+      { name: "beta", type: "skill", source: "standalone", layer: "global", contextTokens: 200, uses: 0, lastUsedMs: null, prune: true, change: { file: "f", key: "k" } },
     ] });
-    render(<Dashboard data={data} range="30d" onRange={() => {}} pending={false} onRefresh={() => {}} onMutate={() => {}} apiBase="" />);
+    render(<Dashboard data={data} range="30d" onRange={() => {}} pending={false} onRefresh={() => {}} onMutate={() => {}} apiBase="" scope={{ kind: "global" }} onScope={() => {}} />);
     fireEvent.change(screen.getByRole("searchbox", { name: /filter artifacts/i }), { target: { value: "alph" } });
     expect(screen.getByText("alpha")).toBeTruthy();
     expect(screen.queryByText("beta")).toBeNull();
   });
 
   it("does not render a checkbox for ineligible (distilled-draft) rows", () => {
-    render(<Dashboard data={payload()} range="30d" onRange={() => {}} pending={false} onRefresh={() => {}} onMutate={() => {}} apiBase="" />);
+    render(<Dashboard data={payload()} range="30d" onRange={() => {}} pending={false} onRefresh={() => {}} onMutate={() => {}} apiBase="" scope={{ kind: "global" }} onScope={() => {}} />);
     expect(screen.queryByRole("checkbox", { name: /select kept/i })).toBeNull();
   });
 
@@ -76,7 +76,7 @@ describe("Prune disable actions", () => {
     vi.stubGlobal("fetch", fetchMock);
     const onMutate = vi.fn();
     const data = payload({ disabled: [{ type: "skill", name: "old-skill", source: "standalone" }] });
-    render(<Dashboard data={data} range="30d" onRange={() => {}} pending={false} onRefresh={() => {}} onMutate={onMutate} apiBase="" />);
+    render(<Dashboard data={data} range="30d" onRange={() => {}} pending={false} onRefresh={() => {}} onMutate={onMutate} apiBase="" scope={{ kind: "global" }} onScope={() => {}} />);
     expect(screen.getByRole("heading", { name: /Disabled/i })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /re-enable old-skill/i }));
     await waitFor(() => expect(onMutate).toHaveBeenCalled());
@@ -88,10 +88,10 @@ describe("Prune disable actions", () => {
 
   it("sorts the prune table by est. context (desc) when the header is clicked", () => {
     const data = payload({ artifacts: [
-      { name: "small", type: "skill", source: "standalone", contextTokens: 100, uses: 0, lastUsedMs: null, prune: true, change: { file: "f", key: "k" } },
-      { name: "big", type: "skill", source: "standalone", contextTokens: 900, uses: 0, lastUsedMs: null, prune: true, change: { file: "f", key: "k" } },
+      { name: "small", type: "skill", source: "standalone", layer: "global", contextTokens: 100, uses: 0, lastUsedMs: null, prune: true, change: { file: "f", key: "k" } },
+      { name: "big", type: "skill", source: "standalone", layer: "global", contextTokens: 900, uses: 0, lastUsedMs: null, prune: true, change: { file: "f", key: "k" } },
     ] });
-    render(<Dashboard data={data} range="30d" onRange={() => {}} pending={false} onRefresh={() => {}} onMutate={() => {}} apiBase="" />);
+    render(<Dashboard data={data} range="30d" onRange={() => {}} pending={false} onRefresh={() => {}} onMutate={() => {}} apiBase="" scope={{ kind: "global" }} onScope={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: /est\. ctx/i }));   // first click → desc (biggest first)
     const rows = screen.getAllByRole("row");
     expect(within(rows[1]).getByText("big")).toBeTruthy();   // rows[0] is the header
@@ -108,7 +108,7 @@ describe("Prune disable actions", () => {
       { type: "skill", name: "a", source: "standalone" },
       { type: "skill", name: "b", source: "standalone" },
     ] });
-    render(<Dashboard data={data} range="30d" onRange={() => {}} pending={false} onRefresh={() => {}} onMutate={onMutate} apiBase="" />);
+    render(<Dashboard data={data} range="30d" onRange={() => {}} pending={false} onRefresh={() => {}} onMutate={onMutate} apiBase="" scope={{ kind: "global" }} onScope={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: /select all \(2\)/i }));   // disabled list's select-all
     fireEvent.click(screen.getByRole("button", { name: /re-enable selected \(2\)/i }));
     await waitFor(() => expect(onMutate).toHaveBeenCalled());
@@ -125,7 +125,7 @@ describe("Prune disable actions", () => {
     vi.stubGlobal("fetch", fetchMock);
     function Harness() {
       const [d, setD] = useState<OptimizePayload>(payload({ artifacts: [], disabled: [{ type: "skill", name: "old-skill", source: "standalone" }] }));
-      return <Dashboard data={d} range="30d" onRange={() => {}} pending={false} onRefresh={() => {}} onMutate={(fn) => setD((p) => fn(p))} apiBase="" />;
+      return <Dashboard data={d} range="30d" onRange={() => {}} pending={false} onRefresh={() => {}} onMutate={(fn) => setD((p) => fn(p))} apiBase="" scope={{ kind: "global" }} onScope={() => {}} />;
     }
     render(<Harness />);
     expect(screen.getByRole("heading", { name: /Disabled/i })).toBeTruthy();
@@ -139,7 +139,7 @@ describe("Prune disable actions", () => {
       { name: "CLAUDE.md", source: "global", contextTokens: 100, lines: 10, flags: [] },
       { name: "AGENTS.md", source: "global", contextTokens: 50, lines: 5, flags: [] },
     ] });
-    render(<Dashboard data={data} range="30d" onRange={() => {}} pending={false} onRefresh={() => {}} onMutate={() => {}} apiBase="" />);
+    render(<Dashboard data={data} range="30d" onRange={() => {}} pending={false} onRefresh={() => {}} onMutate={() => {}} apiBase="" scope={{ kind: "global" }} onScope={() => {}} />);
     fireEvent.change(screen.getByRole("searchbox", { name: /filter instructions/i }), { target: { value: "CLAUDE" } });
     expect(screen.getByText("CLAUDE.md")).toBeTruthy();
     expect(screen.queryByText("AGENTS.md")).toBeNull();
