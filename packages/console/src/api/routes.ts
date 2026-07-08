@@ -544,7 +544,10 @@ export const recallSearchRoute = defineRoute("GET", "/api/recall/search", {
   response: z.object({ moments: z.array(MomentHitSchema) }),
 });
 export const recallStatusRoute = defineRoute("GET", "/api/recall/status", {
-  response: z.object({ ready: z.boolean(), indexed: z.number(), total: z.number() }),
+  response: z.object({
+    ready: z.boolean(), indexed: z.number(), total: z.number(),
+    facets: z.object({ projects: z.array(z.string()), agents: z.array(z.string()) }),
+  }),
 });
 export const recallRunRoute = defineRoute("POST", "/api/recall/run", {
   body: z.object({

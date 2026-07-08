@@ -379,7 +379,7 @@ export async function createApp(port: number): Promise<RestApplication> {
       funnelDeps: serverFunnelDeps(),
       indexStatus: () => {
         const n = recallIndex.indexedSessions().size;
-        return { ready: true, indexed: n, total: n };
+        return { ready: true, indexed: n, total: n, facets: recallIndex.facets() };
       },
     }, originGuard as never);
   }

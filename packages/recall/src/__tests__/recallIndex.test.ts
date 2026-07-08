@@ -69,4 +69,10 @@ describe("RecallIndex", () => {
     idx.clear();
     expect(idx.search("wipe", {}, 10)).toHaveLength(0);
   });
+
+  it("facets returns the sorted distinct projects and agents", () => {
+    idx.upsertSession(meta("s1", { agent: "claude", project: "goose" }), [{ turn: 0, text: "first" }], "a");
+    idx.upsertSession(meta("s2", { agent: "codex", project: "agentgem" }), [{ turn: 0, text: "second" }], "b");
+    expect(idx.facets()).toEqual({ projects: ["agentgem", "goose"], agents: ["claude", "codex"] });
+  });
 });

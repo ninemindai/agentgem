@@ -17,7 +17,9 @@ const OTHER_MOMENTS = [
 
 beforeEach(() => {
   vi.stubGlobal("fetch", vi.fn(async (url: string) => {
-    if (url.includes("/api/recall/status")) return new Response(JSON.stringify({ ready: true, indexed: 214, total: 214 }));
+    if (url.includes("/api/recall/status")) {
+      return new Response(JSON.stringify({ ready: true, indexed: 214, total: 214, facets: { projects: ["agentgem"], agents: ["claude", "codex"] } }));
+    }
     if (url.includes("/api/recall/search")) {
       const moments = url.includes("q=other") ? OTHER_MOMENTS : MOMENTS;
       return new Response(JSON.stringify({ moments }));
@@ -89,7 +91,9 @@ describe("Recall panel", () => {
 
   it("shows the indexing hint while the index is still building, not once it's ready", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
-      if (url.includes("/api/recall/status")) return new Response(JSON.stringify({ ready: false, indexed: 3, total: 10 }));
+      if (url.includes("/api/recall/status")) {
+        return new Response(JSON.stringify({ ready: false, indexed: 3, total: 10, facets: { projects: [], agents: [] } }));
+      }
       if (url.includes("/api/recall/search")) return new Response(JSON.stringify({ moments: MOMENTS }));
       return new Response(JSON.stringify({ ok: true }));
     }));
@@ -100,7 +104,9 @@ describe("Recall panel", () => {
 
     cleanup();
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
-      if (url.includes("/api/recall/status")) return new Response(JSON.stringify({ ready: true, indexed: 214, total: 214 }));
+      if (url.includes("/api/recall/status")) {
+        return new Response(JSON.stringify({ ready: true, indexed: 214, total: 214, facets: { projects: ["agentgem"], agents: ["claude", "codex"] } }));
+      }
       if (url.includes("/api/recall/search")) return new Response(JSON.stringify({ moments: MOMENTS }));
       return new Response(JSON.stringify({ ok: true }));
     }));
@@ -108,5 +114,23 @@ describe("Recall panel", () => {
     fireEvent.change(screen.getByLabelText(/search transcripts/i), { target: { value: "prod db" } });
     await waitFor(() => expect(screen.getAllByText("agentgem").length).toBeGreaterThan(0), { timeout: 2000 });
     expect(screen.queryByText(/indexing your sessions…/i)).toBeNull();
+  });
+
+  it("populates the project and agent filter selects from status.facets", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.includes("/api/recall/status")) {
+        return new Response(JSON.stringify({ ready: true, indexed: 2, total: 2, facets: { projects: ["a", "b"], agents: ["claude"] } }));
+      }
+      if (url.includes("/api/recall/search")) return new Response(JSON.stringify({ moments: [] }));
+      return new Response(JSON.stringify({ ok: true }));
+    }));
+    render(<Recall apiBase="" />);
+    const projectSelect = await screen.findByLabelText("project") as HTMLSelectElement;
+    await waitFor(() => {
+      const values = [...projectSelect.options].map((o) => o.value);
+      expect(values).toEqual(["", "a", "b"]);
+    });
+    const agentSelect = screen.getByLabelText("agent") as HTMLSelectElement;
+    expect([...agentSelect.options].map((o) => o.value)).toEqual(["", "claude"]);
   });
 });

@@ -4,7 +4,7 @@
 //
 // REST + SSE endpoints for the goldmine Recall tab. Five routes:
 //   GET    /api/recall/search   ?q&project&agent&since&limit → { moments }  (instant BM25, read handle)
-//   GET    /api/recall/status   → { ready, indexed, total }
+//   GET    /api/recall/status   → { ready, indexed, total, facets: { projects, agents } }
 //   POST   /api/recall/run      body: { sessionIds, prompt, mode } → { jobId }
 //   GET    /api/recall/stream   ?jobId → SSE FunnelEvent stream (the capped ask_session fan-out)
 //   DELETE /api/recall/:jobId   → { ok: true }
@@ -43,7 +43,7 @@ interface App {
 export interface RecallRouteDeps {
   readIndex: RecallIndex;
   funnelDeps: FunnelDeps;
-  indexStatus: () => { ready: boolean; indexed: number; total: number };
+  indexStatus: () => { ready: boolean; indexed: number; total: number; facets: { projects: string[]; agents: string[] } };
 }
 
 // No-op guard used when no CSRF/origin middleware is supplied (e.g. tests that
