@@ -14,6 +14,7 @@ export interface OptimizeArtifact {
   name: string;
   type: "skill" | "mcp";
   source: string;
+  layer: "global" | "project";    // which config surface it lives on
   contextTokens: number;          // estimate (chars/4)
   uses: number;                   // all-time invocations
   lastUsedMs: number | null;
@@ -68,24 +69,27 @@ function mcpContextTokens(m: McpServerArtifact): number {
   return estTokens(JSON.stringify(m.config));
 }
 
-function changeHint(type: "skill" | "mcp", name: string, source: string): { file: string; key: string } {
+function changeHint(type: "skill" | "mcp", name: string, source: string, root?: string): { file: string; key: string } {
   const plugin = pluginKey(source);
   if (plugin) return { file: "settings.json", key: `enabledPlugins["${plugin}"] = false` };
+  const base = source === "project" && root ? root : "~";
   if (type === "skill") {
     // No in-place disable flag exists for standalone skills; direct user to the folder.
-    const root =
-      source === "agent" ? "~/.agents/skills" :
-      source === "codex" ? "~/.codex/skills" :
-      source === "hermes" ? "~/.hermes/skills" :
-      "~/.claude/skills";
-    return { file: `${root}/${name}`, key: "remove or move this folder (no in-place disable flag exists)" };
+    const rel =
+      source === "agent" ? ".agents/skills" :
+      source === "codex" ? ".codex/skills" :
+      source === "hermes" ? ".hermes/skills" :
+      source === "project" ? ".claude/skills" :
+      ".claude/skills";
+    return { file: `${base}/${rel}/${name}`, key: "remove or move this folder (no in-place disable flag exists)" };
   }
   // mcp
-  if (source === "codex") return { file: "~/.codex/config.toml", key: `set enabled = false for ${name}` };
+  if (source === "codex") return { file: `${base}/.codex/config.toml`, key: `set enabled = false for ${name}` };
+  if (source === "project") return { file: `${base}/.claude/settings.json`, key: `remove mcpServers.${name}` };
   return { file: "settings.json / ~/.claude.json", key: `remove mcpServers.${name} (or add "${name}" to disabledMcpjsonServers if defined via .mcp.json)` };
 }
 
-function buildArtifacts(inv: ConfigInventory, usage: Map<string, ArtifactUsage>, range: OptimizeRange, nowMs: number): OptimizeArtifact[] {
+function buildArtifacts(inv: ConfigInventory, usage: Map<string, ArtifactUsage>, range: OptimizeRange, nowMs: number, root?: string): OptimizeArtifact[] {
   const cutoff = rangeStartMs(range, nowMs);
   const out: OptimizeArtifact[] = [];
 
@@ -94,7 +98,8 @@ function buildArtifacts(inv: ConfigInventory, usage: Map<string, ArtifactUsage>,
     const uses = u?.invocations ?? 0;
     const lastUsedMs = u?.lastUsedMs ?? null;
     const prune = lastUsedMs === null || lastUsedMs < cutoff;
-    out.push({ name, type, source, contextTokens, uses, lastUsedMs, prune, change: changeHint(type, name, source) });
+    const layer: "global" | "project" = source === "project" ? "project" : "global";
+    out.push({ name, type, source, layer, contextTokens, uses, lastUsedMs, prune, change: changeHint(type, name, source, root) });
   };
 
   for (const s of inv.skills) push("skill", s.name, s.source, skillContextTokens(s), `skill:${s.name}`);
@@ -144,10 +149,10 @@ function buildInstructions(inv: ConfigInventory): OptimizeInstruction[] {
   return out.sort((a, b) => b.contextTokens - a.contextTokens);
 }
 
-export function buildOptimizePayload(inv: ConfigInventory, usage: Map<string, ArtifactUsage>, range: OptimizeRange, nowMs: number): OptimizePayload {
+export function buildOptimizePayload(inv: ConfigInventory, usage: Map<string, ArtifactUsage>, range: OptimizeRange, nowMs: number, root?: string): OptimizePayload {
   return {
     range,
-    artifacts: buildArtifacts(inv, usage, range, nowMs),
+    artifacts: buildArtifacts(inv, usage, range, nowMs, root),
     instructions: buildInstructions(inv),
   };
 }
