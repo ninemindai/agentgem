@@ -47,6 +47,7 @@ export function startWarmWatch(opts: {
   clearTimer?: (h: unknown) => void;
   run?: (roots: string[]) => Promise<unknown>;
   toRoots?: (claudeDir: string, files: string[]) => string[];
+  nudge?: (files: string[]) => void;
 } = {}): WarmWatch {
   const claudeDir = opts.claudeDir ?? resolveDirs().claudeDir;
   const projectsDir = join(claudeDir, "projects");
@@ -66,6 +67,7 @@ export function startWarmWatch(opts: {
     if (!files.length) return;
     const roots = toRoots(claudeDir, files);
     if (roots.length) void run(roots);
+    opts.nudge?.(files);
   };
 
   let sub: { close(): void };

@@ -71,4 +71,24 @@ describe("startWarmWatch", () => {
     expect(mapFilesToRoots(claudeDir, [f])).toEqual(["/proj"]);
     expect(mapFilesToRoots(claudeDir, [join(projDir, "gone.jsonl")])).toEqual([]); // unknown → skipped
   });
+
+  it("calls the nudge hook with the debounced changed files on flush", () => {
+    let fire: (evt: string, file: string | null) => void = () => {};
+    const nudged: string[][] = [];
+    const timers: (() => void)[] = [];
+    const w = startWarmWatch({
+      claudeDir: "/c",
+      watch: (_dir, cb) => { fire = cb; return { close() {} }; },
+      setTimer: (fn) => { timers.push(fn); return 1; },
+      clearTimer: () => {},
+      run: async () => {},
+      toRoots: () => ["/root"],
+      nudge: (files) => nudged.push(files),
+    });
+    fire("change", "sess.jsonl");
+    timers[timers.length - 1]();   // fire the debounce flush
+    expect(nudged).toHaveLength(1);
+    expect(nudged[0][0]).toContain("sess.jsonl");
+    w.stop();
+  });
 });

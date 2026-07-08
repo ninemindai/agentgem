@@ -36,6 +36,7 @@ Sharing a Gem (store-and-forward over NATS; set $NATS_URL, default nats://127.0.
   agentgem receive <ticket> [out.gem]   Fetch, decrypt, verify; writes the .gem
   agentgem bind                         Bind this machine's key to your GitHub account
   agentgem warm --watch                 Background daemon: keep insights/scorecard caches warm on change
+  agentgem warm --watch --nudge         Also send an OS notification when a session's context gets heavy
   agentgem warm --install-service       Install an OS unit (launchd/systemd) to auto-start the daemon at login
   agentgem warm --uninstall-service     Remove the OS unit
   agentgem usage report [--backfill]    Push local daily usage rollups now (--backfill: full history, not just 30d)

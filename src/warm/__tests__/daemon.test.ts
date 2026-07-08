@@ -33,6 +33,17 @@ describe("startWarmDaemon", () => {
     expect(third).not.toBeNull();             // free again
     await third!.stop();
   });
+
+  it("wires a nudge hook into the watch when nudge is true, and not when false", async () => {
+    dir = mkdtempSync(join(tmpdir(), "dmn-"));
+    const seen: Array<((files: string[]) => void) | undefined> = [];
+    const fakeWatch = ((opts: any) => { seen.push(opts?.nudge); return { stop() {} }; }) as any;
+    const base = { home: dir, onLog: () => {}, initialPass: async () => {}, usageReporter: (() => ({ stop() {} })) as never, watch: fakeWatch };
+    await startWarmDaemon({ ...base, nudge: true })?.stop();
+    await startWarmDaemon({ ...base, nudge: false })?.stop();
+    expect(typeof seen[0]).toBe("function");   // nudge wired
+    expect(seen[1]).toBeUndefined();           // not wired
+  });
 });
 
 describe("runWarmCommand", () => {
