@@ -7,12 +7,22 @@ import { MCPApplication, mcpServer, tool } from "@agentback/mcp";
 import { isMain } from "@agentback/core";
 import { scanSessionsCached, summarizeSession, askSession } from "@agentgem/insight";
 import { introspectConfig, introspectProject } from "@agentgem/capture";
+import { RecallIndex } from "@agentgem/recall";
 import { searchSessions, getArtifactDetail } from "./tools.js";
 import { collectBehaviorFindings } from "./behaviorFindings.js";
+import { defaultRecallDbPath } from "./recall.js";
 
 const SearchInput = z.object({
   query: z.string().default(""),
   limit: z.number().int().min(1).max(50).default(10),
+});
+
+const SearchContentInput = z.object({
+  query: z.string(),
+  project: z.string().optional(),
+  agent: z.string().optional(),
+  since: z.number().optional(),
+  limit: z.number().int().min(1).max(50).default(12),
 });
 
 const SummarizeInput = z.object({
@@ -45,6 +55,17 @@ export class GoldmineTools {
   async searchSessionsTool({ query, limit }: z.infer<typeof SearchInput>) {
     const sessions = await scanSessionsCached(Date.now());
     return { matches: searchSessions(sessions, query, limit) };
+  }
+
+  @tool("search_session_content", {
+    input: SearchContentInput,
+    description: "Search past session transcript CONTENT (not just metadata) for moments matching a query; returns ranked moments across sessions with snippets.",
+  })
+  async searchSessionContentTool({ query, project, agent, since, limit }: z.infer<typeof SearchContentInput>) {
+    const index = new RecallIndex(defaultRecallDbPath());
+    try {
+      return { moments: index.search(query, { project, agent, since }, limit) };
+    } finally { index.close(); }
   }
 
   @tool("summarize_session", {
