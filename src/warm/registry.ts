@@ -9,7 +9,10 @@ import { resolveDirs } from "@agentgem/model";
 // usage scan + its cache live in @agentgem/capture:
 import { computeGlobalUsage, readGlobalUsageCache, writeGlobalUsageCache } from "@agentgem/capture";
 // transcript helpers + the analysis cache live in @agentgem/insight:
-import { allClaudeTranscripts, transcriptToken, readAnalysisCache, writeAnalysisCache } from "@agentgem/insight";
+import { allClaudeTranscripts, transcriptToken, readAnalysisCache, writeAnalysisCache, scanSessionsCached, loadSessionTranscript } from "@agentgem/insight";
+// recall index sync:
+import { RecallIndex, syncRecallIndex } from "@agentgem/recall";
+import { defaultRecallDbPath } from "../goldmine/recall.js";
 import { collectScorecard, selectScorecardRoots, scorecardTranscriptPaths, defaultScorecardDeps } from "../gem/scorecard.js";
 import { SCORECARD_CACHE_ROOT } from "../scorecardStream.js";
 import { computeInsights } from "../insightsCore.js";
@@ -19,7 +22,7 @@ import { dreamRoot } from "../dream/dreamPass.js";
 
 export type WarmStatusValue = "warmed" | "hit";
 export interface Warmable {
-  id: "usage" | "scorecard" | "insights" | "analyze" | "distill" | "dream";
+  id: "usage" | "scorecard" | "insights" | "analyze" | "distill" | "dream" | "recall";
   cost: "cheap" | "llm";
   scope: "global" | "per-root";
   warm(root: string | null, opts: { dir?: string; force?: boolean }): Promise<WarmStatusValue>;
@@ -47,6 +50,17 @@ export const WARMABLES: Warmable[] = [
       const sc = collectScorecard(dir, undefined, Date.now(), { bucket });
       if (!sc.degraded) { writeAnalysisCache(SCORECARD_CACHE_ROOT, token, sc, Date.now()); }
       return "warmed";
+    },
+  },
+  {
+    id: "recall", cost: "cheap", scope: "global",
+    async warm(_root, { dir, force }) {
+      const index = new RecallIndex(defaultRecallDbPath());
+      try {
+        const sessions = await scanSessionsCached(Date.now(), dir ? { claudeDir: dir } : undefined, force);
+        const r = await syncRecallIndex(index, sessions, { loadTranscript: (id, agent) => loadSessionTranscript(id, agent as never) });
+        return (r.indexed + r.removed) > 0 ? "warmed" : "hit";
+      } finally { index.close(); }
     },
   },
   {
