@@ -9,7 +9,7 @@
 // handler directly with a fake Req/Res — mirrors the module's own duck typing,
 // no supertest/RestApplication needed.
 import { describe, it, expect } from "vitest";
-import type { FunnelEvent, MomentHit, SessionRef } from "@agentgem/recall";
+import type { FunnelEvent, MomentHit } from "@agentgem/recall";
 import { streamFunnel, registerRecallRoutes, type RecallRouteDeps } from "../recallRoutes.js";
 
 // ── Fakes ──────────────────────────────────────────────────────────────────
@@ -40,6 +40,11 @@ async function* fakeGen(): AsyncGenerator<FunnelEvent> {
   yield { type: "done", answers: [], synthesis: "x" };
 }
 
+async function* throwingGen(): AsyncGenerator<FunnelEvent> {
+  yield { type: "session_started", sessionId: "s1" };
+  throw new Error("boom");
+}
+
 type Handler = (req: never, res: never) => unknown;
 function fakeApp() {
   const routes: Record<string, Handler> = {};
@@ -54,7 +59,6 @@ function fakeApp() {
 function fakeDeps(overrides: Partial<RecallRouteDeps> = {}): RecallRouteDeps {
   return {
     readIndex: { search: () => [] as MomentHit[] } as never,
-    listSessions: async () => [] as SessionRef[],
     funnelDeps: { askOne: async () => ({ answered: true, answer: "" }), synthesize: async function* () {} },
     indexStatus: () => ({ ready: true, indexed: 0, total: 0 }),
     ...overrides,
@@ -71,6 +75,14 @@ describe("streamFunnel", () => {
       `event: session_done\ndata: ${JSON.stringify({ type: "session_done", sessionId: "s1", answered: true })}\n\n`,
       `event: done\ndata: ${JSON.stringify({ type: "done", answers: [], synthesis: "x" })}\n\n`,
     ]);
+    expect(endedCount()).toBe(1);
+  });
+
+  it("sends a failed frame and still ends exactly once when the generator throws", async () => {
+    const { res, writes, endedCount } = fakeRes();
+    await streamFunnel(res as never, throwingGen());
+    expect(writes[0]).toBe(`event: session_started\ndata: ${JSON.stringify({ type: "session_started", sessionId: "s1" })}\n\n`);
+    expect(writes.some((w) => w.startsWith("event: failed\ndata: "))).toBe(true);
     expect(endedCount()).toBe(1);
   });
 });
