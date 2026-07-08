@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
 import { useRecallSearch } from "./useRecall.js";
 import { MomentCard, selectionKey } from "./MomentCard.js";
+import { ExitDrawer } from "./ExitDrawer.js";
 
 const SINCE_OPTIONS: { label: string; days: number | undefined }[] = [
   { label: "Any time", days: undefined },
@@ -147,10 +148,7 @@ export function Recall({ apiBase }: { apiBase: string }) {
       </div>
 
       {exit && (
-        // TODO(Task 3): replace with <ExitDrawer mode={exit.mode} sessions={exit.sessions}
-        // apiBase={apiBase} onClose={() => setExit(null)} /> — the chat/extract funnel UI
-        // driven by recallRunRoute + openRecallStream (recallStream.ts, already landed).
-        <div className="rc-work" />
+        <ExitDrawer mode={exit.mode} sessions={exit.sessions} apiBase={apiBase} onClose={() => setExit(null)} />
       )}
     </div>
   );

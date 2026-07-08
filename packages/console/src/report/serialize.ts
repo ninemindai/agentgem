@@ -94,6 +94,28 @@ export function insightsToBlocks(report: InsightsReportView, scanned?: number | 
   return blocks;
 }
 
+export function momentsReportToBlocks(
+  prompt: string,
+  answers: { sessionId: string; agent: string; answered: boolean; answer: string }[],
+  synthesis: string,
+): ReportBlock[] {
+  const blocks: ReportBlock[] = [];
+  blocks.push({ kind: "heading", text: prompt });
+  if (synthesis) blocks.push({ kind: "para", text: synthesis });
+
+  const answered = answers.filter((a) => a.answered && a.answer);
+  if (answered.length > 0) {
+    blocks.push({ kind: "heading", text: "Findings" });
+    blocks.push({
+      kind: "table",
+      head: ["session", "agent", "finding"],
+      rows: answered.map((a) => [a.sessionId, a.agent, a.answer]),
+    });
+  }
+
+  return blocks;
+}
+
 export function analyzeToBlocks(candidates: AnalyzeCandidate[]): ReportBlock[] {
   const blocks: ReportBlock[] = [];
   for (const c of candidates) {
