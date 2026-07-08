@@ -62,6 +62,14 @@ describe("mcpUiHost — per-call capability + consent gate", () => {
     expect(posted(target)).toHaveBeenCalledWith(expect.objectContaining({ id: 3, result: { meta: {}, timeline: [] } }), "*");
   });
 
+  it("ignores miniapp-supplied sessionId/agent on the session-data AUTO path (name-only, no session choice)", async () => {
+    const spy = vi.spyOn(playSessionDataRoute, "call").mockResolvedValue({ meta: {}, timeline: [] });
+    const { host, target } = mkHost({ needs: ["session-data"] });
+    host.handleMessage(msg(target, { method: "tools/call", id: 13, params: { name: "agentgem_get_session_data", arguments: { sessionId: "evil", agent: "x" } } }));
+    await tick();
+    expect(spy).toHaveBeenCalledWith(expect.anything(), { query: { name: "g1" } }); // no sessionId/agent forwarded
+  });
+
   it("a gated capability calls requestConsent and only executes on true", async () => {
     const spy = vi.spyOn(inventoryRoute, "call").mockResolvedValue({ skills: [] } as never);
     const { host, target, requestConsent } = mkHost({ needs: ["local-project-access"] });

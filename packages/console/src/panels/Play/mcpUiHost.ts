@@ -59,7 +59,10 @@ export function createUiHost(deps: UiHostDeps): UiHost {
     const tool = CAP_TOOL[cap];
     try {
       if (cap === "session-data") {
-        const data = await getSessionData(deps.apiBase, deps.name, args);
+        // AUTO cap, no consent prompt: never forward the miniapp-supplied sessionId/agent — the sealed
+        // miniapp must not be able to pick an arbitrary session. Name-only (its own source session); the
+        // explicit-session rebind is host-initiated only (Runner's "Replay yours" picker, PR D).
+        const data = await getSessionData(deps.apiBase, deps.name);
         if (!stale(gen)) reply(id, data);
         return;
       }
