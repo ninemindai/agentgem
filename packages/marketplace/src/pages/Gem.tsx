@@ -7,6 +7,7 @@ import { StarButton } from "../StarButton";
 import { CutBadge } from "../CutBadge";
 import { StoneRating } from "../StoneRating";
 import { GemContents } from "./GemContents";
+import { GamePreview } from "../GamePreview";
 import type { StarsCtx } from "../Router";
 import type { StarState } from "../stars";
 
@@ -73,6 +74,14 @@ export function Gem({ api, keyName, stars }: { api: ReturnType<typeof makeApi>; 
       </p>
       <p className="ex-gem-desc">{gem.description}</p>
       <p className="ex-gem-tags">{gem.tags.map((t) => <span key={t} className="ex-tag">#{t}</span>)}</p>
+
+      {gem.artifactKinds.includes("game") && (
+        <section className="ex-card ex-game-play">
+          <h3>Play</h3>
+          <div className="ex-game-stage"><GamePreview api={api} gemKey={gem.key} version={gem.version} /></div>
+          <p className="ex-game-hint">Sealed and runs entirely in your browser — click to play fullscreen.</p>
+        </section>
+      )}
 
       <GemContents artifacts={gem.artifacts ?? []} />
 

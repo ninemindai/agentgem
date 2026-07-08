@@ -22,10 +22,14 @@ function sealedDoc(html: string): string {
 // Sealed mini-game player: null-origin sandboxed iframe (no allow-same-origin → no network), rendered at
 // a virtual window and scaled to fit. interactive=false → a click-through thumbnail; a ⛶ toggle plays it
 // fullscreen. Full-window games (html,body{height:100%;overflow:hidden}) show whole, not clipped.
-export function GamePlayer({ html, interactive = true, vw = 1200, vh = 780 }: { html: string; interactive?: boolean; vw?: number; vh?: number }) {
+// startFullscreen mounts straight into the fullscreen overlay (for click-to-play); onExitFullscreen fires
+// when the viewer leaves fullscreen (✕ or Esc) so a parent can unmount the live player.
+export function GamePlayer({ html, interactive = true, startFullscreen = false, onExitFullscreen, vw = 1200, vh = 780 }:
+  { html: string; interactive?: boolean; startFullscreen?: boolean; onExitFullscreen?: () => void; vw?: number; vh?: number }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.4);
-  const [fs, setFs] = useState(false);
+  const [fs, setFs] = useState(startFullscreen);
+  const exitFs = () => { setFs(false); onExitFullscreen?.(); };
 
   useEffect(() => {
     const box = boxRef.current;
@@ -39,6 +43,14 @@ export function GamePlayer({ html, interactive = true, vw = 1200, vh = 780 }: { 
     ro.observe(box);
     return () => ro.disconnect();
   }, [vw, vh, fs]);
+
+  // Esc leaves fullscreen — the expected exit for an immersive click-to-play launch.
+  useEffect(() => {
+    if (!fs) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") exitFs(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fs]);
 
   const boxStyle: CSSProperties = fs
     ? { position: "fixed", inset: 0, zIndex: 1000, background: "rgba(12,14,18,.94)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }
@@ -56,7 +68,7 @@ export function GamePlayer({ html, interactive = true, vw = 1200, vh = 780 }: { 
           transform: `scale(${scale})`, transformOrigin: fs ? "center" : "top left" }}
       />
       {interactive && (
-        <button onClick={() => setFs((v) => !v)} title={fs ? "Exit fullscreen" : "Play fullscreen"} aria-label={fs ? "Exit fullscreen" : "Play fullscreen"}
+        <button onClick={() => (fs ? exitFs() : setFs(true))} title={fs ? "Exit fullscreen" : "Play fullscreen"} aria-label={fs ? "Exit fullscreen" : "Play fullscreen"}
           style={{ position: fs ? "fixed" : "absolute", top: 8, right: 8, zIndex: 1001, width: 30, height: 30, borderRadius: 8,
             border: "1px solid rgba(255,255,255,.25)", background: "rgba(20,22,28,.7)", color: "#fff", cursor: "pointer", fontSize: 14, lineHeight: 1 }}>
           {fs ? "✕" : "⛶"}
