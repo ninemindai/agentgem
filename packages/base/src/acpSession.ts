@@ -16,6 +16,9 @@ import { mkdirSync } from "node:fs";
 import { Readable, Writable } from "node:stream";
 import type { McpServer, McpServerStdio } from "@agentclientprotocol/sdk";
 export type { McpServer, McpServerStdio } from "@agentclientprotocol/sdk";
+import { createLogger } from "./log.js";
+
+const acpLog = createLogger("acp");
 
 // Build an McpServerStdio value (the stdio variant of the McpServer union).
 // Converts the env map into the {name, value}[] pairs the SDK expects.
@@ -86,7 +89,16 @@ export async function connectAcpAdapter(
 ): Promise<RawAcpConnection> {
   const { client, ndJsonStream, PROTOCOL_VERSION } = await import("@agentclientprotocol/sdk");
   const [bin, ...args] = descriptor.command;
-  const child = spawn(bin, args, { stdio: ["pipe", "pipe", "inherit"], env: spawnEnv(descriptor) });
+  const child = spawn(bin, args, { stdio: ["pipe", "pipe", "pipe"], env: spawnEnv(descriptor) });
+  // Capture the adapter's stderr rather than inheriting it. A dying adapter writes its
+  // own crash dump to stderr (e.g. an unhandled EPIPE when we close its stdio on
+  // teardown); inheriting it dumps that stack trace into agentgem's log as if the
+  // server itself had crashed. Forward at debug (silent by default) so it stays
+  // available for diagnosis without polluting normal logs.
+  child.stderr?.on("data", (chunk: Buffer) => {
+    const text = chunk.toString("utf8").trimEnd();
+    if (text) acpLog.debug(`[${bin}] ${text}`);
+  });
   await new Promise<void>((resolve, reject) => {
     child.once("spawn", () => resolve());
     child.once("error", (e) => reject(new Error(`failed to spawn ${bin}: ${e.message}`)));
