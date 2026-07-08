@@ -48,7 +48,7 @@ async function buildTestApp() {
     manager: fakeManager,
     buildBrief: async () => "BRIEF",
     goldmineMcp: () => [],
-    listAgents: () => [{ id: "claude-code", name: "Claude Code", available: true }],
+    listAgents: () => [{ id: "claude-code", name: "Claude Code", available: true, installable: false, source: "path" }],
   });
   return server.expressApp;
 }
