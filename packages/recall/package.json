@@ -12,10 +12,6 @@
   "scripts": { "build": "tsc -b", "test": "vitest run" },
   "dependencies": {
     "@agentgem/base": "workspace:*",
-    "@agentgem/insight": "workspace:*",
-    "better-sqlite3": "~12.10.0"
-  },
-  "devDependencies": {
-    "@types/better-sqlite3": "~7.6.13"
+    "@agentgem/insight": "workspace:*"
   }
 }

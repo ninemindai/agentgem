@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import Database from "better-sqlite3";
+import { DatabaseSync } from "node:sqlite";
 import { RecallIndex, HL_OPEN } from "../recallIndex.js";
 import type { SessionMeta } from "../recallIndex.js";
 
@@ -55,7 +55,7 @@ describe("RecallIndex", () => {
     idx.upsertSession(meta("s1"), [{ turn: 0, text: "surviving content" }], "a");
     idx.close();
     // Corrupt the stored version, reopen — index must self-wipe, not crash.
-    const raw = new Database(dbPath);
+    const raw = new DatabaseSync(dbPath);
     raw.prepare("UPDATE meta SET v = ? WHERE k = 'schema'").run("0");
     raw.close();
     const reopened = new RecallIndex(dbPath);

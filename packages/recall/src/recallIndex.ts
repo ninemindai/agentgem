@@ -6,7 +6,7 @@
 // stamp for incremental sync. Bump SCHEMA_VERSION whenever the schema OR the
 // upstream scrub pipeline changes — a version mismatch wipes and rebuilds so a
 // stale scrubber can never leave un-scrubbed rows behind.
-import Database from "better-sqlite3";
+import { DatabaseSync } from "node:sqlite";
 import { dirname } from "node:path";
 import { mkdirSync } from "node:fs";
 import type { Chunk } from "./chunkTranscript.js";
@@ -26,13 +26,20 @@ export interface SessionMeta { sessionId: string; agent: string; project: string
 interface ChunkRow { session_id: string; agent: string; turn: number; project: string | null; branch: string | null; start_ms: number; score: number; snip: string }
 
 export class RecallIndex {
-  private db: Database.Database;
+  private db: DatabaseSync;
+  private opened = true;
 
   constructor(dbPath: string) {
     mkdirSync(dirname(dbPath), { recursive: true });
-    this.db = new Database(dbPath);
-    this.db.pragma("journal_mode = WAL");
+    this.db = new DatabaseSync(dbPath);
+    this.db.exec("PRAGMA journal_mode = WAL");
     this.ensureSchema();
+  }
+
+  private tx(fn: () => void): void {
+    this.db.exec("BEGIN");
+    try { fn(); this.db.exec("COMMIT"); }
+    catch (e) { this.db.exec("ROLLBACK"); throw e; }
   }
 
   private ensureSchema(): void {
@@ -68,23 +75,21 @@ export class RecallIndex {
     const insFts = this.db.prepare(`INSERT INTO chunks_fts(text) VALUES (?)`);
     const insChunk = this.db.prepare(`INSERT INTO chunks (id, session_id, agent, turn, project, branch, start_ms) VALUES (?, ?, ?, ?, ?, ?, ?)`);
     const upSession = this.db.prepare(`INSERT OR REPLACE INTO sessions (agent, session_id, stamp) VALUES (?, ?, ?)`);
-    const tx = this.db.transaction(() => {
+    this.tx(() => {
       this.removeRows(meta.agent, meta.sessionId);
       for (const c of chunks) {
-        const id = insFts.run(c.text).lastInsertRowid as number;
+        const id = Number(insFts.run(c.text).lastInsertRowid);
         insChunk.run(id, meta.sessionId, meta.agent, c.turn, meta.project, meta.branch, meta.startMs);
       }
       upSession.run(meta.agent, meta.sessionId, stamp);
     });
-    tx();
   }
 
   deleteSession(agent: string, sessionId: string): void {
-    const tx = this.db.transaction(() => {
+    this.tx(() => {
       this.removeRows(agent, sessionId);
       this.db.prepare(`DELETE FROM sessions WHERE agent = ? AND session_id = ?`).run(agent, sessionId);
     });
-    tx();
   }
 
   indexedSessions(): Map<string, string> {
@@ -116,7 +121,7 @@ export class RecallIndex {
       `).all({
         expr, scan: limit * 20,
         project: filters.project ?? null, agent: filters.agent ?? null, since: filters.since ?? null,
-      }) as ChunkRow[];
+      }) as unknown as ChunkRow[];
     } catch { return []; } // malformed FTS expr → empty, never throw
     // Roll chunk hits up per session: best (lowest bm25) turn wins; count matched turns.
     const bySession = new Map<string, MomentHit>();
@@ -136,11 +141,10 @@ export class RecallIndex {
   }
 
   clear(): void {
-    const tx = this.db.transaction(() => {
+    this.tx(() => {
       this.db.exec(`DELETE FROM chunks_fts; DELETE FROM chunks; DELETE FROM sessions;`);
     });
-    tx();
   }
 
-  close(): void { this.db.close(); }
+  close(): void { if (this.opened) { this.db.close(); this.opened = false; } }
 }
