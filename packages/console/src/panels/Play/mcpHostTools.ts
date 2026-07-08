@@ -42,7 +42,7 @@ const ARG_PROPERTIES: Record<string, Record<string, unknown>> = {
 export const HOST_TOOLS: McpUiTool[] = Object.keys(CAP_TOOL).map((cap) => ({
   name: CAP_TOOL[cap],
   description: DESCRIPTIONS[cap],
-  inputSchema: { type: "object" as const, properties: (ARG_PROPERTIES[cap] ?? {}) as Record<string, never> },
+  inputSchema: { type: "object" as const, properties: ARG_PROPERTIES[cap] ?? {} },
   _meta: { ui: { resourceUri: "", visibility: ["app"] as ("model" | "app")[] } }, // host tools, not a ui resource
 }));
 

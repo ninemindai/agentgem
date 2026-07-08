@@ -129,5 +129,6 @@ describe("CAP_TOOL / TOOL_CAP / HOST_TOOLS", () => {
       "agentgem_subscribe_sessions",
     ]);
     for (const t of HOST_TOOLS) expect(t._meta.ui.visibility).toEqual(["app"]);
+    expect(HOST_TOOLS.every((t) => t._meta.ui.resourceUri === "")).toBe(true);
   });
 });

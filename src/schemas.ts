@@ -939,7 +939,7 @@ export const PlayMcpAppSchema = z.object({
   tool: z.object({
     name: z.string(),
     description: z.string(),
-    inputSchema: z.object({ type: z.literal("object"), properties: EmptyObjectSchema }),
+    inputSchema: z.object({ type: z.literal("object"), properties: z.record(z.string(), z.unknown()) }),
     _meta: z.object({ ui: z.object({ resourceUri: z.string(), visibility: z.array(z.enum(["model", "app"])) }) }),
   }),
 });
