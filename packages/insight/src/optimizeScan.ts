@@ -10,7 +10,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ConfigInventory, ProjectInventory } from "@agentgem/model";
-import { scanWorkflow, allClaudeTranscripts, type ArtifactUsage } from "./workflowScan.js";
+import { scanWorkflow, allClaudeTranscripts, claudeTranscriptsForCwd, type ArtifactUsage } from "./workflowScan.js";
 
 const SCAN_TTL_MS = 15_000;
 let cache: { atMs: number; map: Map<string, ArtifactUsage> } | null = null;
@@ -21,8 +21,8 @@ function syntheticProject(inv: ConfigInventory): ProjectInventory {
   return { root: "", name: "", skills: inv.skills, mcpServers: inv.mcpServers, instructions: [], hooks: inv.hooks, subagents: inv.subagents };
 }
 
-export function scanArtifactUsage(inv: ConfigInventory, claudeDir: string): Map<string, ArtifactUsage> {
-  const paths = allClaudeTranscripts(claudeDir);
+export function scanArtifactUsage(inv: ConfigInventory, claudeDir: string, cwd?: string): Map<string, ArtifactUsage> {
+  const paths = cwd ? claudeTranscriptsForCwd(claudeDir, cwd) : allClaudeTranscripts(claudeDir);
   const signal = scanWorkflow(paths, { project: syntheticProject(inv), global: { skills: [], mcpServers: [], hooks: [] } });
   const map = new Map<string, ArtifactUsage>();
   for (const a of signal.artifacts) {
@@ -31,7 +31,8 @@ export function scanArtifactUsage(inv: ConfigInventory, claudeDir: string): Map<
   return map;
 }
 
-export async function scanArtifactUsageCached(inv: ConfigInventory, nowMs: number, claudeDir?: string, refresh = false): Promise<Map<string, ArtifactUsage>> {
+export async function scanArtifactUsageCached(inv: ConfigInventory, nowMs: number, claudeDir?: string, refresh = false, cwd?: string): Promise<Map<string, ArtifactUsage>> {
+  if (cwd) return scanArtifactUsage(inv, claudeDir ?? join(homedir(), ".claude"), cwd);   // project scope bypasses cache
   if (claudeDir) return scanArtifactUsage(inv, claudeDir);   // custom dir bypasses cache
   const dir = join(homedir(), ".claude");
   if (!refresh && cache && nowMs - cache.atMs < SCAN_TTL_MS) return cache.map;
