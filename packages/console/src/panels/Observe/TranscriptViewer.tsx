@@ -88,7 +88,7 @@ export function TranscriptViewer({ apiBase, agent, sessionId, onBack, turn }: {
       ) : view.turns.length === 0 ? (
         <p className="obs-empty">This session has no readable turns.</p>
       ) : (
-        <StructureView view={view} collapsed={collapsed} onToggle={toggle} forceTx={targetId !== undefined} />
+        <StructureView key={targetId ?? "default"} view={view} collapsed={collapsed} onToggle={toggle} forceTx={targetId !== undefined} />
       )}
     </div>
   );
