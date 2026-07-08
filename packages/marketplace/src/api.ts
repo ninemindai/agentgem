@@ -48,6 +48,13 @@ export function makeApi(base: string) {
       get<AdoptionPoint[]>(base, "/api/aggregator/adoption", q),
     getGems: () =>
       get<{ gems: RegistryGem[] }>(base, "/api/registry/gems").then((r) => r.gems),
+    // Owner-only unpublish (hard delete) of a published gem. Credentialed so the parent-domain session
+    // cookie travels; the server enforces ownership (login === publishedBy). Throws with the status so
+    // the caller can distinguish 401 (signed out) / 403 (not owner) / other.
+    unpublishGem: async (key: string, version: string): Promise<void> => {
+      const res = await fetch(base + "/api/catalog/gem" + buildQs({ key, version }), { method: "DELETE", credentials: "include" });
+      if (!res.ok) throw new Error(`unpublish -> ${res.status}`);
+    },
     // Sealed HTML of a gem's game artifact (for the playable Minigames arcade). 404s a non-game gem.
     getGameHtml: (key: string, version: string) =>
       get<{ html: string }>(base, "/api/aggregator/game-html", { key, version }).then((r) => r.html),

@@ -928,3 +928,12 @@ a.ex-skillcard-rating:hover { text-decoration: underline; }
 /* Gem-detail play stage — a larger framed preview than the arcade thumbnail. */
 .ex-game-stage { position: relative; height: 260px; border-radius: var(--r-md); overflow: hidden; background: #0d1117; border: 1px solid var(--line); }
 .ex-game-hint { color: var(--muted); font-size: 12px; margin: 10px 0 0; }
+
+/* Owner-only danger zone (unpublish) — shown only to the gem's publisher. */
+.ex-danger { border-color: color-mix(in srgb, #b42318 30%, var(--line)); }
+.ex-danger-note { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
+.ex-danger-err { color: #b42318; font-size: 13px; margin: 0 0 10px; font-weight: 600; }
+.ex-unpublish { border: 1px solid color-mix(in srgb, #b42318 45%, var(--line)); background: color-mix(in srgb, #b42318 7%, var(--surface));
+  color: #b42318; font-weight: 600; font-size: 13px; padding: 8px 14px; border-radius: var(--r-md); cursor: pointer; transition: background .16s, border-color .16s; }
+.ex-unpublish:hover:not(:disabled) { background: color-mix(in srgb, #b42318 14%, var(--surface)); border-color: #b42318; }
+.ex-unpublish:disabled { opacity: .6; cursor: default; }
