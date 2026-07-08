@@ -2,6 +2,7 @@
 import type { ConsolePage } from "./registry.js";
 import { observePage } from "./panels/Observe/index.js";
 import { sessionsPage } from "./panels/Sessions/index.js";
+import { recallPage } from "./panels/Recall/index.js";
 import { setupPage } from "./panels/Setup/index.js";
 import { insightsPage } from "./panels/Insights/index.js";
 import { rubricsPage } from "./panels/Rubrics/index.js";
@@ -24,4 +25,4 @@ import { arcadePage } from "./panels/Arcade/index.js";
 
 // Yours / Received / Get-more are folded into the single tabbed `gemsPage` (Variant B);
 // their component bodies are reused inside packages/console/src/panels/Gems/Gems.tsx.
-export const pages: ConsolePage[] = [observePage, sessionsPage, setupPage, watchPage, insightsPage, rubricsPage, dreamingPage, benchmarkPage, optimizePage, minePage, curatePage, materializePage, gemsPage, publishPage, sourcesPage, rubricLibraryPage, settingsPage, deployPage, chatPage, playPage, arcadePage];
+export const pages: ConsolePage[] = [observePage, sessionsPage, recallPage, setupPage, watchPage, insightsPage, rubricsPage, dreamingPage, benchmarkPage, optimizePage, minePage, curatePage, materializePage, gemsPage, publishPage, sourcesPage, rubricLibraryPage, settingsPage, deployPage, chatPage, playPage, arcadePage];
