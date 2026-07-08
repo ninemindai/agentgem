@@ -33,7 +33,12 @@ export function mcpAppClient(): string {
     callTool: function (name, args) {
       return new Promise(function (resolve, reject) {
         var id = nextId++;
-        pending[id] = { resolve: resolve, reject: reject };
+        // Bounded timeout: if the host never replies (disposed mid-call, or the sealed no-host
+        // marketplace case), reject and drop the pending entry instead of leaking the promise forever.
+        var timer = setTimeout(function () {
+          if (pending[id]) { delete pending[id]; reject(new Error("tool call timed out")); }
+        }, 10000);
+        pending[id] = { resolve: resolve, reject: reject, timer: timer };
         post({ jsonrpc: "2.0", id: id, method: "tools/call", params: { name: name, arguments: args || {} } });
       });
     },
@@ -54,6 +59,7 @@ export function mcpAppClient(): string {
     }
     if (d.id != null && pending[d.id]) {  // a tools/call reply, matched by id
       var p = pending[d.id]; delete pending[d.id];
+      clearTimeout(p.timer);  // reply landed — never let the timeout later fire a stale reject
       if (d.error) p.reject(new Error((d.error && d.error.message) || "tool error"));
       else p.resolve(d.result);
       return;
