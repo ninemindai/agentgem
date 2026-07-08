@@ -1,5 +1,5 @@
 // src/play/__tests__/mcpAppClient.test.ts
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { mcpAppClient, MCP_CLIENT_MARKER } from "@agentgem/play";
 
 // A tiny two-window harness. The shim runs against `child` (its `window`); it posts to `child.parent`
@@ -113,5 +113,45 @@ describe("mcpAppClient shim", () => {
   it("carries the MCP_CLIENT_MARKER for migration idempotence", () => {
     expect(MCP_CLIENT_MARKER).toBe("agentgem:mcp-app-client");
     expect(mcpAppClient()).toContain(MCP_CLIENT_MARKER);
+  });
+
+  describe("callTool timeout", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("rejects a callTool promise after the bounded timeout when the host never replies", async () => {
+      vi.useFakeTimers();
+      const child = makeWindow();
+      const parent = makeWindow();
+      child.parent = parent;
+      parent.postMessage = () => {}; // no host reply, ever — e.g. disposed host or sealed no-host case
+      runShim(child);
+
+      const promise = child.agentgemApp.callTool("agentgem_get_session_data");
+      const assertion = expect(promise).rejects.toThrow(/tool call timed out/);
+
+      await vi.advanceTimersByTimeAsync(10001);
+
+      await assertion;
+    });
+
+    it("resolves callTool on a reply and clears the timer so it never later rejects", async () => {
+      vi.useFakeTimers();
+      const child = makeWindow();
+      const parent = makeWindow();
+      child.parent = parent;
+      parent.postMessage = (msg) => {
+        if (msg.method === "tools/call") child.deliver({ jsonrpc: "2.0", id: msg.id, result: { ok: true } }, parent);
+      };
+      runShim(child);
+
+      const promise = child.agentgemApp.callTool("agentgem_get_session_data");
+      await expect(promise).resolves.toEqual({ ok: true });
+
+      // If the reply handler hadn't cleared the timeout, this would fire a stale reject against an
+      // already-settled promise (surfacing as an unhandled rejection in the test run).
+      await vi.advanceTimersByTimeAsync(10001);
+    });
   });
 });
