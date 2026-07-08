@@ -19,30 +19,42 @@ function sealedDoc(html: string): string {
   return `<!doctype html><html><head>${head}</head><body>${html}</body></html>`;
 }
 
-// Sealed mini-game player: null-origin sandboxed iframe (no allow-same-origin → no network), rendered at
-// a virtual window and scaled to fit. interactive=false → a click-through thumbnail; a ⛶ toggle plays it
-// fullscreen. Full-window games (html,body{height:100%;overflow:hidden}) show whole, not clipped.
-// startFullscreen mounts straight into the fullscreen overlay (for click-to-play); onExitFullscreen fires
-// when the viewer leaves fullscreen (✕ or Esc) so a parent can unmount the live player.
+// Sealed mini-game player: null-origin sandboxed iframe (no allow-same-origin → no network).
+// Thumbnails render the game at a virtual vw×vh window scaled to fit, so every card frames a game the
+// same way. Fullscreen instead gives the iframe the overlay's real size: a game lays itself out against
+// its own viewport, so a fake 1200×780 window would only ever be upscaled, never played at screen size.
+// interactive=false → a click-through thumbnail; a ⛶ toggle plays it fullscreen. startFullscreen mounts
+// straight into the fullscreen overlay (for click-to-play); onExitFullscreen fires when the viewer leaves
+// fullscreen (✕ or Esc) so a parent can unmount the live player.
 export function GamePlayer({ html, interactive = true, startFullscreen = false, onExitFullscreen, vw = 1200, vh = 780 }:
   { html: string; interactive?: boolean; startFullscreen?: boolean; onExitFullscreen?: () => void; vw?: number; vh?: number }) {
   const boxRef = useRef<HTMLDivElement>(null);
+  const frameRef = useRef<HTMLIFrameElement>(null);
   const [scale, setScale] = useState(0.4);
   const [fs, setFs] = useState(startFullscreen);
   const exitFs = () => { setFs(false); onExitFullscreen?.(); };
 
+  // Load the game only once the frame is laid out. A srcdoc document parses the instant the attribute is
+  // set and takes its viewport from the frame's box right then; a freshly mounted frame has not been laid
+  // out yet, so the game would size itself against a 0×0 window. Since the frame's viewport never changes
+  // afterwards, no resize event ever arrives to correct it. Reading the frame's box forces the pending
+  // layout, so the document parses against the real size.
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame) return;
+    frame.getBoundingClientRect();
+    frame.srcdoc = sealedDoc(html);
+  }, [html]);
+
   useEffect(() => {
     const box = boxRef.current;
-    if (!box || typeof ResizeObserver === "undefined") return;
-    const measure = () => {
-      const cw = box.clientWidth || vw, ch = box.clientHeight || vh;
-      setScale(fs ? Math.min(cw / vw, ch / vh) : Math.min(1, cw / vw));
-    };
+    if (fs || !box || typeof ResizeObserver === "undefined") return;
+    const measure = () => setScale(Math.min(1, (box.clientWidth || vw) / vw));
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(box);
     return () => ro.disconnect();
-  }, [vw, vh, fs]);
+  }, [vw, fs]);
 
   // Esc leaves fullscreen — the expected exit for an immersive click-to-play launch.
   useEffect(() => {
@@ -61,11 +73,13 @@ export function GamePlayer({ html, interactive = true, startFullscreen = false, 
   return (
     <div ref={boxRef} style={boxStyle}>
       <iframe
+        ref={frameRef}
         title="mini-game"
         sandbox="allow-scripts"
-        srcDoc={sealedDoc(html)}
-        style={{ width: vw, height: vh, border: 0, display: "block", background: "#fff", pointerEvents: interactive ? "auto" : "none",
-          transform: `scale(${scale})`, transformOrigin: fs ? "center" : "top left" }}
+        style={fs
+          ? { width: "100%", height: "100%", border: 0, display: "block", background: "#0d1117" }
+          : { width: vw, height: vh, border: 0, display: "block", background: "#fff", pointerEvents: interactive ? "auto" : "none",
+              transform: `scale(${scale})`, transformOrigin: "top left" }}
       />
       {interactive && (
         <button onClick={() => (fs ? exitFs() : setFs(true))} title={fs ? "Exit fullscreen" : "Play fullscreen"} aria-label={fs ? "Exit fullscreen" : "Play fullscreen"}
