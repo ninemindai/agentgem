@@ -14,3 +14,9 @@ if (typeof globalThis.ResizeObserver === "undefined") {
     disconnect() {}
   };
 }
+
+// jsdom doesn't implement Element.scrollIntoView. Stub it so panels that
+// auto-scroll (e.g. Chat's message list) don't crash during render.
+if (typeof Element.prototype.scrollIntoView === "undefined") {
+  Element.prototype.scrollIntoView = () => {};
+}
