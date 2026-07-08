@@ -117,6 +117,9 @@ importers:
       '@agentgem/play':
         specifier: workspace:*
         version: link:packages/play
+      '@agentgem/recall':
+        specifier: workspace:*
+        version: link:packages/recall
       '@agentgem/run':
         specifier: workspace:*
         version: link:packages/run

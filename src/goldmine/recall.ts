@@ -1,0 +1,109 @@
+// Copyright (c) 2026 NineMind, Inc.
+// SPDX-License-Identifier: MIT
+// src/goldmine/recall.ts
+//
+// Server wiring for @agentgem/recall: the on-disk index path, and the
+// FunnelDeps that turn recallFunnel's abstract askOne/synthesize into real
+// work — ask_session per hit (via @agentgem/insight's askSession) and a
+// cross-session synthesis pass over an ephemeral ACP subprocess (same
+// deny-perms/neutral-cwd pattern as acpRecommender/sessionAsk). The default
+// synthesizer never throws: any connect/prompt failure degrades to the
+// deterministic join of the per-session answers.
+import { join } from "node:path";
+import { agentgemHome } from "@agentgem/model";
+import { connectAcpAdapter, AGENTS, createLogger, type AgentDescriptor } from "@agentgem/base";
+import { askSession } from "@agentgem/insight";
+import { analysisWorkspace } from "@agentgem/insight";
+import type { FunnelDeps, SessionAnswer, FunnelMode } from "@agentgem/recall";
+
+const log = createLogger("goldmine");
+
+/** ~/.agentgem/recall-index.db — the on-disk PGlite datadir for the local recall index. */
+export function defaultRecallDbPath(): string {
+  return join(agentgemHome(), ".agentgem", "recall-index.db");
+}
+
+/** Bridges a real (or fake, in tests) synthesis agent into the funnel's streaming contract. */
+export type SynthConnect = (question: string, onDelta: (t: string) => void, signal: AbortSignal) => Promise<string>;
+
+function buildSynthesisPrompt(answered: SessionAnswer[], prompt: string): string {
+  const findings = answered.map((a) => `### ${a.agent}:${a.sessionId}\n${a.answer}`).join("\n\n");
+  return `You are synthesizing findings from ${answered.length} past sessions to answer: ${prompt}. Per-session findings:\n\n${findings}`;
+}
+
+function deterministicJoin(answered: SessionAnswer[]): string {
+  return answered.map((a) => `### ${a.agent}:${a.sessionId}\n${a.answer}`).join("\n\n") || "No sessions produced an answer.";
+}
+
+// Neutral claude-code descriptor for the synthesis pass — same family as
+// acpRecommender/sessionAsk's default agent; synthesis reasons only over the
+// collected answers, so the descriptor is not tied to any one session's agent.
+function synthesisDescriptor(): AgentDescriptor | null {
+  return AGENTS.find((a) => a.id === "claude-code") ?? null;
+}
+
+// Real ACP connect: deny perms, neutral cwd, plan mode (never edits files),
+// aggregate only agent_message_chunk text — mirrors sessionAsk.defaultAskConnectFn.
+const defaultSynthConnect: SynthConnect = async (question, onDelta, signal) => {
+  const descriptor = synthesisDescriptor();
+  if (!descriptor) return "";
+  const raw = await connectAcpAdapter(descriptor, { clientName: "agentgem-recall-synth", permission: "deny" });
+  try {
+    const session = await raw.open(analysisWorkspace());
+    try {
+      await session.setMode("plan");
+      let out = "";
+      await session.prompt(question, (u) => {
+        if (signal.aborted) return;
+        const update = u as { sessionUpdate?: string; content?: { type?: string; text?: string } };
+        if (update?.sessionUpdate === "agent_message_chunk" && update.content?.type === "text" && typeof update.content.text === "string") {
+          out += update.content.text;
+          onDelta(update.content.text);
+        }
+      });
+      return out;
+    } finally { try { session.dispose(); } catch { /* ignore */ } }
+  } finally { try { raw.close(); } catch { /* ignore */ } }
+};
+
+export function serverFunnelDeps(opts: { synthConnect?: SynthConnect } = {}): FunnelDeps {
+  const synthConnect = opts.synthConnect ?? defaultSynthConnect;
+  return {
+    async askOne(ref, prompt) {
+      const r = await askSession(ref.sessionId, ref.agent, prompt);
+      return { answered: r.answered, answer: r.answer };
+    },
+    async *synthesize(answers: SessionAnswer[], prompt: string, _mode: FunnelMode, signal: AbortSignal) {
+      const answered = answers.filter((a) => a.answered);
+      const synthesisPrompt = buildSynthesisPrompt(answered, prompt);
+
+      // Bridge the connect fn's push-style onDelta callback into this
+      // generator's pull-style yields (queue+wake, mirrors chatSession.ts).
+      const queue: string[] = [];
+      let wake: (() => void) | null = null;
+      const bump = () => { if (wake) { wake(); wake = null; } };
+      let settled = false;
+      let error: Error | undefined;
+
+      const running = synthConnect(synthesisPrompt, (chunk) => { queue.push(chunk); bump(); }, signal)
+        .catch((e) => { error = e as Error; })
+        .finally(() => { settled = true; bump(); });
+
+      while (true) {
+        if (signal.aborted) return;
+        while (queue.length) {
+          if (signal.aborted) return;
+          yield queue.shift()!;
+        }
+        if (settled) break;
+        await new Promise<void>((res) => { wake = res; });
+      }
+      await running;
+
+      if (error) {
+        log.warn("recall synth degraded: %s", error.message ?? error);
+        if (!signal.aborted) yield deterministicJoin(answered);
+      }
+    },
+  };
+}
