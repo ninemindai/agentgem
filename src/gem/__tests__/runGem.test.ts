@@ -5,7 +5,20 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { materializeGemToTestbed, materializeAndRunGem, AGENT_ADAPTERS, registerRun, resolveRun, resolveAdapterCommand, resolveOrFetchAdapter, adapterCacheDir, type AgentAdapter, type AdapterInstaller } from "@agentgem/run";
 import type { RunConnectFn, RunResult } from "@agentgem/run";
+import { AGENTS, ADAPTER_VERSIONS } from "@agentgem/base";
 import type { Gem } from "@agentgem/model";
+
+// Guard against the two adapter registries (gem-runner AGENT_ADAPTERS here, Chat
+// AGENTS in @agentgem/base) drifting on which adapter version to fetch.
+describe("adapter version pins are single-sourced", () => {
+  it("AGENT_ADAPTERS versions come from ADAPTER_VERSIONS and match base AGENTS", () => {
+    const baseVersion = (pkg: string) => AGENTS.find((a) => a.package === pkg)?.version;
+    for (const a of Object.values(AGENT_ADAPTERS)) {
+      expect(a.version, `${a.pkg} vs ADAPTER_VERSIONS`).toBe(ADAPTER_VERSIONS[a.pkg]);
+      expect(a.version, `${a.pkg} vs base AGENTS`).toBe(baseVersion(a.pkg));
+    }
+  });
+});
 
 // A fake adapter whose package is neither on PATH nor a real dep, so resolution
 // always reaches the fetch tier (driven by an injected installer — never network).
