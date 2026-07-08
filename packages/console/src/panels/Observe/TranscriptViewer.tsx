@@ -17,8 +17,8 @@ import { ContextTimeline } from "./ContextTimeline.js";
 import { ProcessQualityReport } from "./ProcessQualityReport.js";
 import { StructureView } from "./StructureView.js";
 
-export function TranscriptViewer({ apiBase, agent, sessionId, onBack }: {
-  apiBase: string; agent: "claude" | "codex"; sessionId: string; onBack: () => void;
+export function TranscriptViewer({ apiBase, agent, sessionId, onBack, turn }: {
+  apiBase: string; agent: "claude" | "codex"; sessionId: string; onBack: () => void; turn?: number;
 }) {
   const [view, setView] = useState<TranscriptView | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -32,6 +32,15 @@ export function TranscriptViewer({ apiBase, agent, sessionId, onBack }: {
       .catch((e) => { if (alive) setError(String(e?.message ?? e)); });
     return () => { alive = false; };
   }, [apiBase, agent, sessionId]);
+
+  // Recall's "Open turn ↗" deep link: expand the targeted turn and scroll it into
+  // view once the transcript has loaded. Out-of-range `turn` is a silent no-op.
+  const targetId = turn !== undefined ? view?.turns[turn]?.id : undefined;
+  useEffect(() => {
+    if (targetId === undefined) return;
+    setCollapsed((prev) => { if (!prev.has(targetId)) return prev; const next = new Set(prev); next.delete(targetId); return next; });
+    document.getElementById("turn-" + targetId)?.scrollIntoView({ block: "center" });
+  }, [targetId]);
 
   const toggle = (id: string) =>
     setCollapsed((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
@@ -79,7 +88,7 @@ export function TranscriptViewer({ apiBase, agent, sessionId, onBack }: {
       ) : view.turns.length === 0 ? (
         <p className="obs-empty">This session has no readable turns.</p>
       ) : (
-        <StructureView view={view} collapsed={collapsed} onToggle={toggle} />
+        <StructureView view={view} collapsed={collapsed} onToggle={toggle} forceTx={targetId !== undefined} />
       )}
     </div>
   );

@@ -16,16 +16,22 @@ type Ref = { agent: "claude" | "codex"; sessionId: string };
 // Sub-route under #/sessions:
 //   #/sessions/<agent>/<sessionId>              → single-session transcript viewer
 //   #/sessions/<agent>/<sessionId>?vs=<a>:<id>  → side-by-side diff vs. another run
+//   #/sessions/<agent>/<sessionId>?turn=<n>     → transcript viewer, deep-linked to turn n
+//                                                  (emitted by Recall's MomentCard)
 // Anything else (incl. bare #/sessions) is the ledger table.
-function parseSelection(hash: string): { a: Ref; b: Ref | null } | null {
+function parseSelection(hash: string): { a: Ref; b: Ref | null; turn: number | null } | null {
   const [path, query] = hash.split("?");
   const m = /^#\/sessions\/(claude|codex)\/(.+)$/.exec(path);
   if (!m) return null;
   const a: Ref = { agent: m[1] as Ref["agent"], sessionId: decodeURIComponent(m[2]) };
-  const vs = new URLSearchParams(query ?? "").get("vs");
+  const params = new URLSearchParams(query ?? "");
+  const vs = params.get("vs");
   const vm = vs ? /^(claude|codex):(.+)$/.exec(vs) : null;
   const b: Ref | null = vm ? { agent: vm[1] as Ref["agent"], sessionId: decodeURIComponent(vm[2]) } : null;
-  return { a, b };
+  const turnRaw = params.get("turn");
+  const turnNum = turnRaw !== null ? Number(turnRaw) : NaN;
+  const turn = Number.isFinite(turnNum) ? turnNum : null;
+  return { a, b, turn };
 }
 
 export function Sessions({ apiBase }: { apiBase: string }) {
@@ -63,7 +69,7 @@ export function Sessions({ apiBase }: { apiBase: string }) {
       <div className="obs">
         {selection.b
           ? <TranscriptDiff apiBase={apiBase} a={selection.a} b={selection.b} onBack={back} />
-          : <TranscriptViewer apiBase={apiBase} agent={selection.a.agent} sessionId={selection.a.sessionId} onBack={back} />}
+          : <TranscriptViewer apiBase={apiBase} agent={selection.a.agent} sessionId={selection.a.sessionId} onBack={back} turn={selection.turn ?? undefined} />}
       </div>
     );
   }

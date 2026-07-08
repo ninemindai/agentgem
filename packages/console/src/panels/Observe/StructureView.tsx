@@ -10,10 +10,10 @@ import { phasesOf } from "./phases.js";
 import { PhaseFlamestrip } from "./PhaseFlamestrip.js";
 import { Turn } from "./turnTree.js";
 
-export function StructureView({ view, collapsed, onToggle }: {
-  view: TranscriptView; collapsed: Set<string>; onToggle: (id: string) => void;
+export function StructureView({ view, collapsed, onToggle, forceTx }: {
+  view: TranscriptView; collapsed: Set<string>; onToggle: (id: string) => void; forceTx?: boolean;
 }) {
-  const [mode, setMode] = useState<"map" | "tx">("map");
+  const [mode, setMode] = useState<"map" | "tx">(forceTx ? "tx" : "map");
   const phases = mode === "map" ? phasesOf(view) : [];
   return (
     <div className="obs sv">

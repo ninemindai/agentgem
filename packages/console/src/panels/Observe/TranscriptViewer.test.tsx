@@ -132,6 +132,35 @@ describe("TranscriptViewer", () => {
     await waitFor(() => expect(screen.getAllByText("do the thing").length).toBeGreaterThan(0));
     expect(screen.queryByText(/Distill this session/)).toBeNull();
   });
+
+  it("deep-links to a turn: forces transcript mode, expands it, and scrolls it into view", async () => {
+    vi.spyOn(routes.inspectSessionRoute, "call").mockResolvedValue(view);
+    const scrollSpy = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => {});
+    render(<TranscriptViewer apiBase="" agent="claude" sessionId="s1" onBack={() => {}} turn={1} />);
+
+    // Transcript (tx) mode is forced, not the default Map — the turn tree renders directly.
+    await waitFor(() => expect(screen.getByText("Read")).toBeTruthy());
+    // The targeted turn (index 1, "a1") is expanded: "on it" renders both in the
+    // collapsed-header preview and in the expanded span body — two matches proves
+    // the spans are showing, not just the header (a collapsed turn would be one).
+    expect(screen.getAllByText("on it").length).toBe(2);
+    // Scrolled the anchored turn element into view.
+    await waitFor(() => expect(scrollSpy).toHaveBeenCalledWith(expect.objectContaining({ block: "center" })));
+    const target = document.getElementById("turn-a1");
+    expect(target).toBeTruthy();
+    expect(scrollSpy.mock.instances).toContain(target);
+  });
+
+  it("ignores an out-of-range deep-linked turn (no crash, no scroll)", async () => {
+    vi.spyOn(routes.inspectSessionRoute, "call").mockResolvedValue(view);
+    const scrollSpy = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => {});
+    render(<TranscriptViewer apiBase="" agent="claude" sessionId="s1" onBack={() => {}} turn={99} />);
+
+    // Falls back to the default Map view since there's no valid turn to deep-link to.
+    await waitFor(() => expect(screen.getAllByText("do the thing").length).toBeGreaterThan(0));
+    expect(screen.getByRole("button", { name: /◆ Map/ }).className).toContain("on");
+    expect(scrollSpy).not.toHaveBeenCalled();
+  });
 });
 
 describe("LessonCard share link", () => {

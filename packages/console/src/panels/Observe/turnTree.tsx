@@ -12,7 +12,7 @@ export function Turn({ turn, startMs, open, onToggle }: {
 }) {
   const tok = turn.tokens.in + turn.tokens.out;
   return (
-    <li className={"tv-turn role-" + turn.role}>
+    <li id={"turn-" + turn.id} className={"tv-turn role-" + turn.role}>
       <button type="button" className="tv-turn-head" aria-expanded={open} onClick={onToggle}>
         <span className={"obs-caret" + (open ? " open" : "")}>▸</span>
         <span className="tv-role">{turn.role}</span>
