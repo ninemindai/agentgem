@@ -370,6 +370,8 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 ## Task 3: Client — `BloatCurve` overlays + report rendering
 
+> **Task 3 pivot (post-write):** the canvas `HygieneReport.tsx`/`BloatCurve` target was deleted on `origin/main` and replaced by the SVG `ContextTimeline`. Task 3 was re-scoped to render the boundary on `ContextTimeline` (bands + cut marker + "Task areas" rail) + the client `boundary?` schema mirror; the canvas commit was dropped in rebase. Tasks 1–2 are unchanged.
+
 **Files:**
 - Modify: `packages/console/src/api/routes.ts` (mirror `boundary?` on the client `HygieneReportSchema` ~line 497)
 - Modify: `packages/console/src/panels/_shared/BloatCurve.tsx` (optional `cutTurn` + `segments` props)

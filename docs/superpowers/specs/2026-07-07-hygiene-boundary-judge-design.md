@@ -113,3 +113,5 @@ Explicitly out of scope, to be its own spec if the deterministic version proves 
 - Batch boundary-judging across the leaderboard; streaming.
 
 The deterministic `boundary` field and the `BloatCurve` overlays are designed so this later layer slots in behind the same UI without reshaping either.
+
+> **UI pivot (post-write):** while this was in flight, a concurrent console refactor deleted `Observe/HygieneReport.tsx` and replaced it with the SVG `ContextTimeline` (which calls the same `hygieneRoute`). The boundary is therefore rendered on `ContextTimeline` — SVG episode bands + a dashed cut marker + a "Task areas" rail section — instead of the canvas `BloatCurve` overlays described below. The server design (this `boundary?` field) is unchanged.
