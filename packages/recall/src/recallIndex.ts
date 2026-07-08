@@ -33,6 +33,9 @@ export class RecallIndex {
     mkdirSync(dirname(dbPath), { recursive: true });
     this.db = new DatabaseSync(dbPath);
     this.db.exec("PRAGMA journal_mode = WAL");
+    // Wait up to 5s on a lock instead of throwing SQLITE_BUSY immediately — the
+    // warmable writer and route/MCP readers can overlap under WAL.
+    this.db.exec("PRAGMA busy_timeout = 5000");
     this.ensureSchema();
   }
 

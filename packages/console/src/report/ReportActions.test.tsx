@@ -33,4 +33,14 @@ describe("ReportActions", () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("MD-BODY"));
     await screen.findByText("✓ Copied");
   });
+
+  it("hides the .csv button when csv is not provided", () => {
+    render(<ReportActions {...props} />);
+    expect(screen.queryByText(".csv")).toBeNull();
+  });
+
+  it("shows the .csv button when csv is provided", () => {
+    render(<ReportActions {...props} csv="a,b\n1,2" />);
+    expect(screen.getByText(".csv")).toBeTruthy();
+  });
 });

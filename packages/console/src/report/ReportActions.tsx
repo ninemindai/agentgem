@@ -31,8 +31,8 @@ function printHtml(html: string): void {
   doc.close();
 }
 
-export function ReportActions({ title, filename, markdown, json, html }: {
-  title: string; filename: string; markdown: string; json: string; html: string;
+export function ReportActions({ title, filename, markdown, json, html, csv }: {
+  title: string; filename: string; markdown: string; json: string; html: string; csv?: string;
 }) {
   const [copied, setCopied] = useState(false);
   const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
@@ -56,6 +56,7 @@ export function ReportActions({ title, filename, markdown, json, html }: {
       <button type="button" className="ledger-view" onClick={copy}>{copied ? "✓ Copied" : "Copy"}</button>
       <button type="button" className="ledger-view" onClick={() => downloadBlob(`${filename}.md`, "text/markdown", markdown)}>.md</button>
       <button type="button" className="ledger-view" onClick={() => downloadBlob(`${filename}.json`, "application/json", json)}>.json</button>
+      {csv !== undefined && <button type="button" className="ledger-view" onClick={() => downloadBlob(`${filename}.csv`, "text/csv", csv)}>.csv</button>}
       <button type="button" className="ledger-view" onClick={() => printHtml(html)}>PDF</button>
       {canShare && <button type="button" className="ledger-view" onClick={share}>Share</button>}
     </div>

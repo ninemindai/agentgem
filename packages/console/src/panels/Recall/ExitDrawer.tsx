@@ -139,17 +139,29 @@ function ChatBody({ sessions, turns, onSend }: { sessions: SessionRef[]; turns: 
 
 /** Extract exit: one query → one funnel → one report, built from the funnel's
  *  final answers + synthesis via momentsReportToBlocks. */
+function csvField(value: string): string {
+  return /["\n,]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
+function answersToCsv(answers: RunState["answers"]): string {
+  const header = ["session", "agent", "answered", "answer"].join(",");
+  const rows = answers.map((a) =>
+    [a.sessionId, a.agent, String(a.answered), a.answer].map(csvField).join(","));
+  return [header, ...rows].join("\n");
+}
+
 function ExtractBody({ sessions, run, onExtract }: { sessions: SessionRef[]; run: RunState | null; onExtract: (prompt: string) => void }) {
   const [query, setQuery] = useState("");
   const running = run?.phase === "running";
   const extract = () => {
     const prompt = query.trim();
-    if (prompt) onExtract(prompt);
+    if (prompt) { onExtract(prompt); setQuery(""); }
   };
   const answered = (run?.answers ?? []).filter((a) => a.answered && a.answer);
   const md = run ? blocksToMarkdown(momentsReportToBlocks(run.prompt, run.answers, run.synthesis)) : "";
   const html = run ? blocksToHtml(momentsReportToBlocks(run.prompt, run.answers, run.synthesis), "Recall extract") : "";
   const json = run ? JSON.stringify({ prompt: run.prompt, answers: run.answers, synthesis: run.synthesis }) : "";
+  const csv = run ? answersToCsv(run.answers) : "";
 
   return (
     <>
@@ -181,7 +193,7 @@ function ExtractBody({ sessions, run, onExtract }: { sessions: SessionRef[]; run
         </div>
       )}
       {run?.phase === "done" && (
-        <ReportActions title="Recall extract" filename="recall-extract" markdown={md} json={json} html={html} />
+        <ReportActions title="Recall extract" filename="recall-extract" markdown={md} json={json} html={html} csv={csv} />
       )}
     </>
   );
