@@ -88,4 +88,38 @@ describe("Setup", () => {
     expect(screen.getByText("github")).toBeTruthy();
     expect(screen.queryByText("brainstorming")).toBeNull();
   });
+
+  it("reflects the active filter in each tab's count badge", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => res(inv)));
+    render(<Setup apiBase="" />);
+    await screen.findByRole("tab", { name: /Skills/ });
+    fireEvent.change(screen.getByLabelText(/filter setup/i), { target: { value: "brain" } });
+    // "brain" matches the one skill and no subagents — the badges must agree with the lists.
+    expect(screen.getByRole("tab", { name: /Skills/ }).textContent).toContain("1");
+    expect(screen.getByRole("tab", { name: /Subagents/ }).textContent).toContain("0");
+  });
+
+  it("shows a not-found note (and no viewer) for an unresolvable ?a= deep link", async () => {
+    window.location.hash = "#/setup/skills?a=ghost";
+    vi.stubGlobal("fetch", vi.fn(async () => res(inv)));
+    render(<Setup apiBase="" />);
+    expect(await screen.findByText(/No artifact named/)).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull(); // silent no-op is gone
+  });
+
+  it("resolves a ?a= link across types when the tab's own type lacks it", async () => {
+    window.location.hash = "#/setup/skills?a=github"; // github is an MCP server, not a skill
+    vi.stubGlobal("fetch", vi.fn(async () => res(inv)));
+    render(<Setup apiBase="" />);
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+    expect(screen.getByText(/"url": "x"/)).toBeTruthy(); // opened github's config anyway
+  });
+
+  it("keeps the list behind an open viewer unfiltered (no 'no matches' under the modal)", async () => {
+    window.location.hash = "#/setup/skills?a=brainstorming&q=zzz"; // filter that would exclude it
+    vi.stubGlobal("fetch", vi.fn(async () => res(inv)));
+    render(<Setup apiBase="" />);
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+    expect(screen.queryByText(/No artifacts match/)).toBeNull();
+  });
 });

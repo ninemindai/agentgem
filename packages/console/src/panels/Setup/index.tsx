@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
 import { inventoryRoute, makeClient, type Inventory, type Artifact } from "../../api/routes.js";
-import { useRovingTabIndex } from "../../shell/useRovingTabIndex.js";
+import { useSubRouteTabs } from "../../shell/useSubRouteTabs.js";
+import { useCopied } from "../../shell/useCopied.js";
 import { Loading } from "../../shell/Loading.js";
 import { ContentView } from "../Curate/ContentView.js";
 import { SETUP_ROUTE, setupLink, type SetupType } from "./link.js";
@@ -37,21 +38,25 @@ const DOT: Record<TypeKey, string> = {
 };
 const PREVIEW = 6; // artifacts shown on each overview card before "View all →"
 
-function parseHash() {
-  const [path, query = ""] = window.location.hash.split("?");
-  const params = new URLSearchParams(query);
-  return { path, a: params.get("a"), q: params.get("q") };
+const ROUTES = TABS.map((t) => t.route);
+// ?a= (open artifact) and ?q= (filter) live in the hash query, tracked separately from the
+// path-driven tab (which useSubRouteTabs owns). A name/source/description substring test.
+function parseQuery() {
+  const params = new URLSearchParams(window.location.hash.split("?")[1] ?? "");
+  return { a: params.get("a"), q: params.get("q") };
 }
-const tabIndexOf = (path: string) => {
-  const i = TABS.findIndex((t) => t.route === path);
-  return i === -1 ? 0 : i;
-};
+const matches = (a: Artifact, needle: string) =>
+  !needle || a.name.toLowerCase().includes(needle) ||
+  (a.source ?? "").toLowerCase().includes(needle) ||
+  (a.description ?? "").toLowerCase().includes(needle);
 
 export function Setup({ apiBase }: { apiBase: string }) {
   const [inv, setInv] = useState<Inventory | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [route, setRoute] = useState(parseHash); // { path, a, q } — the URL-driven tab + open artifact
-  const [q, setQ] = useState(() => parseHash().q ?? "");
+  const { idx: tabIdx, go, roving } = useSubRouteTabs(ROUTES);
+  const tab = TABS[tabIdx];
+  const [openName, setOpenName] = useState<string | null>(() => parseQuery().a);
+  const [q, setQ] = useState(() => parseQuery().q ?? "");
 
   useEffect(() => {
     let alive = true;
@@ -63,20 +68,15 @@ export function Setup({ apiBase }: { apiBase: string }) {
 
   useEffect(() => {
     const onHash = () => {
-      const parsed = parseHash();
-      setRoute(parsed);
+      const p = parseQuery();
+      setOpenName(p.a); // a tab click / viewer close drops ?a, closing the viewer
       // A q param (legacy/cross-panel deep-filter like #/setup?q=name) drives the input; routes
       // without one — tab clicks, viewer open/close — leave the typed filter untouched.
-      if (parsed.q !== null) setQ(parsed.q);
+      if (p.q !== null) setQ(p.q);
     };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
-
-  const tabIdx = tabIndexOf(route.path);
-  const tab = TABS[tabIdx];
-  const go = (i: number) => { window.location.hash = TABS[i].route; };
-  const roving = useRovingTabIndex({ count: TABS.length, selectedIndex: tabIdx, onSelect: go });
 
   const openArtifact = (key: TypeKey, name: string) => { window.location.hash = setupLink(key, name); };
   const closeViewer = () => { window.location.hash = tab.route; };
@@ -85,22 +85,27 @@ export function Setup({ apiBase }: { apiBase: string }) {
   if (!inv) return <div className="obs"><Loading /></div>;
 
   const needle = q.trim().toLowerCase();
-  const match = (a: Artifact) =>
-    !needle || a.name.toLowerCase().includes(needle) ||
-    (a.source ?? "").toLowerCase().includes(needle) ||
-    (a.description ?? "").toLowerCase().includes(needle);
   const items = (key: TypeKey): Artifact[] => (inv[key] as Artifact[]) ?? [];
 
-  // Resolve the deep-linked artifact (?a=) within the active tab's type, or across all types on All.
-  const selected = route.a
+  // Resolve the deep-linked artifact (?a=): active tab's type first, then every other type, so a
+  // wrong-type or cross-panel link still opens instead of silently doing nothing.
+  const selected = openName
     ? (() => {
-        for (const key of tab.key ? [tab.key] : TYPE_TABS.map((t) => t.key)) {
-          const found = items(key).find((x) => x.name === route.a);
-          if (found) return { artifact: found, group: TYPE_TABS.find((x) => x.key === key)!.label };
+        const order = tab.key
+          ? [tab.key, ...TYPE_TABS.map((t) => t.key).filter((k) => k !== tab.key)]
+          : TYPE_TABS.map((t) => t.key);
+        for (const key of order) {
+          const found = items(key).find((x) => x.name === openName);
+          if (found) return { artifact: found, group: TYPE_TABS.find((t) => t.key === key)!.label };
         }
         return null;
       })()
     : null;
+  const notFound = !!openName && !selected; // deep link to a name that isn't in the inventory
+  // The list behind an open viewer ignores the filter, so the viewer never floats over a
+  // "no matches" list; the filter reapplies (badge counts included) once it closes.
+  const listNeedle = selected ? "" : needle;
+  const count = (key: TypeKey) => listNeedle ? items(key).filter((a) => matches(a, listNeedle)).length : items(key).length;
 
   return (
     <div className="setup">
@@ -115,22 +120,26 @@ export function Setup({ apiBase }: { apiBase: string }) {
         </div>
       </div>
 
-      <div className="setup-tabs" role="tablist" aria-label="Setup" {...roving.containerProps}>
+      <div className="console-tabs setup-tabs" role="tablist" aria-label="Setup" {...roving.containerProps}>
         {TABS.map((t, i) => (
           <button key={t.id} type="button" role="tab" aria-selected={i === tabIdx}
-            className={"setup-tab" + (i === tabIdx ? " is-active" : "")}
+            className={"console-tab" + (i === tabIdx ? " is-active" : "")}
             {...roving.getTabProps(i)} onClick={() => go(i)}>
             {t.label}
-            {t.key ? <span className="setup-tab-count">{items(t.key).length}</span> : null}
+            {t.key ? <span className="setup-tab-count">{count(t.key)}</span> : null}
           </button>
         ))}
       </div>
 
+      {notFound ? (
+        <p className="obs-muted setup-notfound">No artifact named “{openName}” in your setup.</p>
+      ) : null}
+
       <div role="tabpanel">
         {tab.key ? (
-          <TypeList items={items(tab.key).filter(match)} typeKey={tab.key} q={q} onOpen={openArtifact} />
-        ) : needle ? (
-          <Results inv={inv} match={match} q={q} onOpen={openArtifact} />
+          <TypeList items={items(tab.key).filter((a) => matches(a, listNeedle))} typeKey={tab.key} q={q} onOpen={openArtifact} />
+        ) : listNeedle ? (
+          <Results inv={inv} needle={listNeedle} q={q} onOpen={openArtifact} />
         ) : (
           <Overview inv={inv} onOpen={openArtifact} onTab={(key) => go(TABS.findIndex((t) => t.key === key))} />
         )}
@@ -194,10 +203,10 @@ function TypeList({ items, typeKey, q, onOpen }:
 }
 
 // The All tab while filtering: cross-type matches, grouped by type under a small label.
-function Results({ inv, match, q, onOpen }:
-  { inv: Inventory; match: (a: Artifact) => boolean; q: string; onOpen: (k: TypeKey, n: string) => void }) {
+function Results({ inv, needle, q, onOpen }:
+  { inv: Inventory; needle: string; q: string; onOpen: (k: TypeKey, n: string) => void }) {
   const groups = TYPE_TABS
-    .map((t) => ({ t, items: ((inv[t.key] as Artifact[]) ?? []).filter(match) }))
+    .map((t) => ({ t, items: ((inv[t.key] as Artifact[]) ?? []).filter((a) => matches(a, needle)) }))
     .filter((g) => g.items.length > 0);
   if (groups.length === 0) return <p className="obs-muted setup-empty">No artifacts match “{q}”.</p>;
   return (
@@ -233,14 +242,10 @@ function Row({ a, typeKey, onOpen }: { a: Artifact; typeKey: TypeKey; onOpen: (k
 
 function ArtifactViewer({ sel, onClose }: { sel: { artifact: Artifact; group: string }; onClose: () => void }) {
   const a = sel.artifact;
-  const [copied, setCopied] = useState(false);
+  const { copied, copy } = useCopied();
   // The viewer is only ever open when the URL already reads #/setup/<tab>?a=<name>, so the
   // current href IS the shareable deep link — no need to reconstruct it.
-  const copyLink = () => {
-    void navigator.clipboard?.writeText(window.location.href);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1600);
-  };
+  const copyLink = () => copy(window.location.href);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
