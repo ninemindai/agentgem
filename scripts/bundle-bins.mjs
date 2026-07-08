@@ -24,6 +24,13 @@ const pkg = JSON.parse(readFileSync(join(repo, "package.json"), "utf8"));
 // Everything declared as a runtime dependency stays external (npm installs it for
 // the consumer). `@agentgem/*` are devDependencies now, so they are NOT in this
 // list and therefore get inlined.
+//
+// Because the `@agentgem/*` packages are inlined, THEIR runtime dependencies are
+// pulled into this graph too — but only the ROOT's `dependencies` are external
+// here. A workspace package's dep that the root does not also declare gets
+// inlined, which breaks any package that resolves its own files at runtime
+// (jsdom's `require.resolve("./xhr-sync-worker.js")` is why `jsdom` is a root
+// dependency despite only `@agentgem/play` importing it).
 const external = Object.keys(pkg.dependencies ?? {});
 
 // A createRequire/__dirname banner so any bundled module that performs a CJS
@@ -38,8 +45,19 @@ const banner = {
     "const __dirname = __d(__filename);",
 };
 
-// The published entrypoints: the two bins + the server bootstrap (`start` script).
-const entries = ["cli.js", "index.js", "distill/mcpServer.js"];
+// The published entrypoints: the three bins + the server bootstrap (`start` script).
+// Every `bin` in package.json must be listed here, or it ships with unresolvable
+// bare `@agentgem/*` imports and dies at startup on a consumer's install.
+const entries = ["cli.js", "index.js", "distill/mcpServer.js", "goldmine/mcpServer.js"];
+
+// `dist/index.js` self-runs the server behind `isMain(import.meta)` so that
+// `node dist/index.js` (the `start` script) boots it. That guard compares
+// `import.meta.url` to `process.argv[1]`. Inlining index.js into cli.js rewrites
+// its `import.meta.url` to cli.js's own URL — which IS argv[1] — so the guard
+// flips true and every `agentgem` invocation boots a server. Keep it external
+// from the cli bundle: it stays a sibling file on disk, the URLs differ again,
+// and cli.js imports `run` from it at runtime.
+const externalFor = (rel) => (rel === "cli.js" ? [...external, "./index.js"] : external);
 
 for (const rel of entries) {
   const infile = join(dist, rel);
@@ -52,7 +70,7 @@ for (const rel of entries) {
     platform: "node",
     format: "esm",
     target: "node24",
-    external,
+    external: externalFor(rel),
     keepNames: true, // AgentBack DI binds on class names
     banner,
     logLevel: "warning",
