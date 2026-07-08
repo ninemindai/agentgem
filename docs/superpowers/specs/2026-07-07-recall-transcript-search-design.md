@@ -65,7 +65,7 @@ phase; changing the existing Sessions or Chat panels beyond cross-links.
 | Search substrate | Vendored **BM25-only** (SQLite FTS5) | Local, boundary intact; reuse tested ranking + `snippet()` + elbow cutoff instead of hand-rolled grep. |
 | Index grain | **Per-chunk** (`agent:sessionId#turn`), results span sessions | Cross-session is the product; one query ranks the best moments corpus-wide. |
 | Engine / interaction | **A-engine + C-interaction** | Instant BM25 by default; the capped ACP funnel fires only on demand and powers both exits. |
-| Native dep | **better-sqlite3** | FTS5 needs it; well-maintained, standard, already used by the source module. |
+| SQLite backend | **Node built-in `node:sqlite`** | Node ≥24 (already the repo floor) ships SQLite with FTS5 + `snippet()` + `bm25`, flagless. **No native dependency, no postinstall build** — Plans 2/3 must not reintroduce `better-sqlite3`. (`node:sqlite` is marked experimental; acceptable for a local, derived, rebuildable index cache.) |
 | Package | **new `@agentgem/recall`** | Isolates the native dep + new surface; depends on `@agentgem/insight`. |
 | Index at rest | **on-disk cache** `~/.agentgem/recall-index.db` | Instant startup. Accepted tradeoff — see privacy note. |
 
