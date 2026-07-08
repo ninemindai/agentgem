@@ -26,16 +26,23 @@ export function Composer({
   agents,
   agentId,
   onAgentIdChange,
+  initialTitle,
+  initialPrompt,
   onCreated,
 }: {
   apiBase: string;
   agents: PlayAgent[] | null;
   agentId: string;
   onAgentIdChange: (agentId: string) => void;
+  // Prefill for the Blank tab, from the marketplace "Make your own" deep link. Either one present
+  // means the reader arrived wanting to build from a description, so open on Blank rather than Project.
+  initialTitle?: string;
+  initialPrompt?: string;
   // seedPrompt (only from the Blank tab's description) is auto-sent as the studio's first build prompt.
   onCreated: (name: string, seedPrompt?: string) => void;
 }) {
-  const [kind, setKind] = useState<Kind>("project");
+  const seeded = !!(initialTitle || initialPrompt);
+  const [kind, setKind] = useState<Kind>(seeded ? "blank" : "project");
   const [projects, setProjects] = useState<Proj[] | null>(null);
   const [sessions, setSessions] = useState<WatchSession[] | null>(null);
   const [skills, setSkills] = useState<Skill[] | null>(null);
@@ -44,8 +51,8 @@ export function Composer({
   const [importTitle, setImportTitle] = useState("");   // HTML-import tab
   const [importHtml, setImportHtml] = useState("");
   const [dragOver, setDragOver] = useState(false);
-  const [blankTitle, setBlankTitle] = useState("");     // Blank (from-scratch) tab
-  const [blankPrompt, setBlankPrompt] = useState("");
+  const [blankTitle, setBlankTitle] = useState(initialTitle ?? "");     // Blank (from-scratch) tab
+  const [blankPrompt, setBlankPrompt] = useState(initialPrompt ?? "");
 
   // Lazy-load each list the first time its tab is shown.
   useEffect(() => {

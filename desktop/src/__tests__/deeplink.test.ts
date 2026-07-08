@@ -19,6 +19,17 @@ describe("deepLinkHash", () => {
     expect(h).toContain("install=%40o%2Fk");
     expect(h).toContain("v=1.2.3");
   });
+  it("maps play with a seed to the Play route (the marketplace 'Make your own' link)", () => {
+    const h = deepLinkHash('agentgem://play?new=1&title=duel-remix&prompt=Build my own "@me/duel"');
+    expect(h?.startsWith("#/play?")).toBe(true);
+    const q = new URLSearchParams(h!.split("?")[1]);
+    expect(q.get("new")).toBe("1");
+    expect(q.get("title")).toBe("duel-remix");
+    expect(q.get("prompt")).toBe('Build my own "@me/duel"'); // survives round-trip unmangled
+  });
+  it("maps play with no query to the bare tab route", () => {
+    expect(deepLinkHash("agentgem://play")).toBe("#/play");
+  });
   it("returns null for a non-agentgem scheme", () => {
     expect(deepLinkHash("http://get-gems?q=x")).toBeNull();
     expect(deepLinkHash("https://app.agentgem.ai/gems/x")).toBeNull();

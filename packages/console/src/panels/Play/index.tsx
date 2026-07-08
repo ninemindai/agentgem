@@ -6,7 +6,10 @@ import { Arcade } from "./Arcade.js";
 import { Composer } from "./Composer.js";
 import { Studio } from "./Studio.js";
 
-type View = { kind: "arcade" } | { kind: "composer" } | { kind: "studio"; name: string; seedPrompt?: string };
+type View =
+  | { kind: "arcade" }
+  | { kind: "composer"; title?: string; prompt?: string }
+  | { kind: "studio"; name: string; seedPrompt?: string };
 const j = (r: Response) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); };
 
 export function Play({ apiBase }: { apiBase: string }) {
@@ -21,6 +24,21 @@ export function Play({ apiBase }: { apiBase: string }) {
     }).catch(() => setAgents([]));
   }, [apiBase]);
 
+  // Deep-link entry (the marketplace "Make your own" link on a published mini-game):
+  // "#/play?new=1&title=<t>&prompt=<p>" opens the Composer with the Blank tab prefilled, so the
+  // reader lands ready to hit Create. Hash-reactive, not mount-only — a second "Make your own"
+  // click while this tab is already open must still re-seed. Absent `new`, this is a no-op.
+  useEffect(() => {
+    const applyDeepLink = () => {
+      const params = new URLSearchParams(window.location.hash.split("?")[1] ?? "");
+      if (!params.get("new")) return;
+      setView({ kind: "composer", title: params.get("title") ?? undefined, prompt: params.get("prompt") ?? undefined });
+    };
+    applyDeepLink();
+    window.addEventListener("hashchange", applyDeepLink);
+    return () => window.removeEventListener("hashchange", applyDeepLink);
+  }, []);
+
   return (
     <section className="analyze">
       {view.kind !== "studio" && (
@@ -30,7 +48,8 @@ export function Play({ apiBase }: { apiBase: string }) {
         </div>
       )}
       {view.kind === "arcade" && <Arcade apiBase={apiBase} onOpen={(name) => setView({ kind: "studio", name })} />}
-      {view.kind === "composer" && <Composer apiBase={apiBase} agents={agents} agentId={agentId} onAgentIdChange={setAgentId} onCreated={(name, seedPrompt) => setView({ kind: "studio", name, seedPrompt })} />}
+      {/* keyed on the seed so a fresh deep-link remounts the Composer — its prefill is useState-initial. */}
+      {view.kind === "composer" && <Composer key={`${view.title ?? ""}|${view.prompt ?? ""}`} apiBase={apiBase} agents={agents} agentId={agentId} onAgentIdChange={setAgentId} initialTitle={view.title} initialPrompt={view.prompt} onCreated={(name, seedPrompt) => setView({ kind: "studio", name, seedPrompt })} />}
       {view.kind === "studio" && <Studio apiBase={apiBase} name={view.name} seedPrompt={view.seedPrompt} agents={agents} agentId={agentId} onAgentIdChange={setAgentId} onBack={() => setView({ kind: "arcade" })} />}
     </section>
   );
