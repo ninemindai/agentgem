@@ -16,11 +16,14 @@
 // by originGuard and the raw SSE handlers (gemRunStream, insightsStream).
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { connectAcpAdapter, stdioMcpServer, resolveLaunch, adapterRuntimeCtx, AGENTS, ensureAdapter } from "@agentgem/base";
 import type { AgentAvailability, AgentDescriptor, McpServerStdio, AdapterCtx, AdapterInstaller } from "@agentgem/base";
 import { createAccumulator, applyUpdate } from "@agentgem/run";
 import type { ChatManager, ChatConnectFn, ChatCtx, ChatSessionHandle, ToolInvocation } from "@agentgem/run";
 import { draftGemFromChat } from "./draftGem.js";
+import { createAguiMapper } from "./aguiStream.js";
+import type { AguiEvent } from "./aguiStream.js";
 
 // Duck-typed Express request/response so this file carries no @types/express dependency.
 interface Req {
@@ -151,6 +154,26 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middlew
 
     const chatId = String(req.query.chatId ?? "");
     const message = String(req.query.message ?? "");
+
+    // AG-UI protocol opt-in: same underlying ChatEvent stream, translated via the
+    // aguiStream mapper into standard AG-UI events. The event type lives inside the
+    // JSON payload (no `event:` line) per the AG-UI SSE convention. Additive — the
+    // native path below is untouched for any other (or absent) `protocol` value.
+    if (String(req.query.protocol ?? "") === "ag-ui") {
+      const mapper = createAguiMapper({ threadId: chatId, runId: randomUUID(), genId: () => randomUUID() });
+      const emit = (e: AguiEvent) => res.write(`data: ${JSON.stringify(e)}\n\n`);
+      for (const e of mapper.start()) emit(e);
+      try {
+        for await (const ev of deps.manager.sendMessage(chatId, message)) {
+          for (const e of mapper.onChat(ev)) emit(e);
+        }
+      } catch (e) {
+        for (const ev of mapper.error((e as Error).message)) emit(ev);
+      }
+      res.end();
+      return;
+    }
+
     const send = (event: string, data: unknown) =>
       res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 
