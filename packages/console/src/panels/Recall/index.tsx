@@ -1,6 +1,6 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
 import { useRecallSearch } from "./useRecall.js";
 import { MomentCard, selectionKey } from "./MomentCard.js";
@@ -32,6 +32,17 @@ export function Recall({ apiBase }: { apiBase: string }) {
       return next;
     });
   };
+
+  // Reconcile stale selection: when the moment list changes (new query), drop any
+  // selected keys no longer present so the "N selected" count, the exit buttons'
+  // disabled state, and selectedSessions all agree on the same set.
+  useEffect(() => {
+    const validKeys = new Set(moments.map(selectionKey));
+    setSelected((prev) => {
+      const next = new Set([...prev].filter((k) => validKeys.has(k)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [moments]);
 
   const selectedSessions = useMemo<SessionRef[]>(
     () => moments.filter((m) => selected.has(selectionKey(m))).map((m) => ({ sessionId: m.sessionId, agent: m.agent })),
@@ -81,12 +92,12 @@ export function Recall({ apiBase }: { apiBase: string }) {
             <option value="codex">codex</option>
           </select>
           <select
-            className={"rc-filter" + (filters.since ? " is-set" : "")}
+            className={"rc-filter" + (filters.sinceDays ? " is-set" : "")}
             aria-label="since"
-            value={filters.since ?? ""}
+            value={filters.sinceDays ?? ""}
             onChange={(e) => {
               const days = e.target.value ? Number(e.target.value) : undefined;
-              setFilters({ ...filters, since: days ? Date.now() - days * 86_400_000 : undefined });
+              setFilters({ ...filters, sinceDays: days });
             }}
           >
             {SINCE_OPTIONS.map((o) => <option key={o.label} value={o.days ?? ""}>{o.label}</option>)}

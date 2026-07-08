@@ -8,7 +8,10 @@ const DEBOUNCE_MS = 250;
 export interface RecallFilters {
   project?: string;
   agent?: string;
-  since?: number;
+  /** Relative day-count preset (matches the <select> option values); the epoch
+   *  cutoff sent to the server is derived from this at request-build time so the
+   *  controlled <select> always has a value that matches one of its options. */
+  sinceDays?: number;
 }
 
 export interface RecallStatus {
@@ -49,14 +52,15 @@ export function useRecallSearch(apiBase: string) {
     setPending(true);
     setError(null);
     const timer = setTimeout(() => {
-      recallSearchRoute.call(makeClient(apiBase), { query: { q, ...filters } })
+      const since = filters.sinceDays ? Date.now() - filters.sinceDays * 86_400_000 : undefined;
+      recallSearchRoute.call(makeClient(apiBase), { query: { q, project: filters.project, agent: filters.agent, since } })
         .then((p) => { if (alive) setMoments(p.moments); })
         .catch((e) => { if (alive) setError(String(e?.message ?? e)); })
         .finally(() => { if (alive) setPending(false); });
     }, DEBOUNCE_MS);
     return () => { alive = false; clearTimeout(timer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- filters is a small plain object; spread its fields to avoid re-running on every new-object identity
-  }, [apiBase, query, filters.project, filters.agent, filters.since]);
+  }, [apiBase, query, filters.project, filters.agent, filters.sinceDays]);
 
   return { query, setQuery, filters, setFilters, moments, pending, error, status };
 }
