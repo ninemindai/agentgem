@@ -189,4 +189,25 @@ describe("mcpUiHost — feedSessionData (host-initiated 'Replay yours' rebind)",
     expect(posted(target)).not.toHaveBeenCalledWith(
       expect.objectContaining({ method: "ui/notifications/tool-result", params: expect.objectContaining({ toolName: "agentgem_get_session_data" }) }), "*");
   });
+
+  it("bumpGeneration resets the feeding guard, allowing a new feedSessionData after pending", async () => {
+    let resolve1!: (v: unknown) => void;
+    const spy = vi.spyOn(playSessionDataRoute, "call")
+      .mockReturnValueOnce(new Promise((r) => { resolve1 = r; }) as never) // first call: pending
+      .mockResolvedValueOnce({ meta: { picked: true }, timeline: [] });   // second call: resolved
+    const { host, target } = mkHost({ needs: ["session-data"] });
+    host.feedSessionData("s1", "codex");
+    await tick();
+    expect(spy).toHaveBeenCalledTimes(1);
+    host.bumpGeneration();               // resets feeding guard
+    host.feedSessionData("s2", "claude"); // should now proceed (not dropped)
+    await tick();
+    expect(spy).toHaveBeenCalledTimes(2); // new call is invoked
+    expect(spy).toHaveBeenNthCalledWith(2, expect.anything(), { query: { name: "g1", sessionId: "s2", agent: "claude" } });
+    resolve1({ meta: {}, timeline: [] }); // resolve first (stale) call — should not post
+    await tick();
+    // Should have posted only the second (new) result
+    expect(posted(target)).toHaveBeenCalledWith(
+      expect.objectContaining({ method: "ui/notifications/tool-result", params: { toolName: "agentgem_get_session_data", chunk: { meta: { picked: true }, timeline: [] } } }), "*");
+  });
 });
