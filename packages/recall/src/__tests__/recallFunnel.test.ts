@@ -57,4 +57,10 @@ describe("recallFunnel", () => {
     await collect(recallFunnel({ sessions: refs(6), prompt: "q", mode: "extract" }, deps));
     expect(peak).toBeLessThanOrEqual(2);
   });
+
+  it("clamps concurrency <= 0 to a safe minimum instead of hanging", async () => {
+    const events = await collect(recallFunnel({ sessions: refs(3), prompt: "q", mode: "extract" }, fakeDeps({ concurrency: 0 })));
+    expect(events.filter((e) => e.type === "session_done")).toHaveLength(3);
+    expect(events.at(-1)!.type).toBe("done");
+  });
 });

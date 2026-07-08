@@ -47,7 +47,7 @@ function signalTimeout(_signal: AbortSignal): number { return 120_000; }
 
 export async function* recallFunnel(input: FunnelInput, deps: FunnelDeps): AsyncGenerator<FunnelEvent> {
   const cap = deps.cap ?? RECALL_CAP;
-  const concurrency = deps.concurrency ?? RECALL_CONCURRENCY;
+  const concurrency = Math.max(1, deps.concurrency ?? RECALL_CONCURRENCY);
   const signal = input.signal ?? new AbortController().signal;
 
   const scoped = input.sessions.slice(0, cap);
