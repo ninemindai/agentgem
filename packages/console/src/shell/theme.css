@@ -1656,6 +1656,7 @@ button.scorecard-intent { line-height: 1.4; }
   background: var(--paper-2); border: 1px solid var(--line); border-radius: 7px; padding: 4px 9px; }
 .rc-tool b { color: var(--ink); }
 .rc-tool.ok { color: var(--emerald); border-color: rgba(47,107,58,.3); background: #eef4ee; }
+.rc-tool.is-failed { color: var(--accent); border-color: rgba(154,51,36,.35); }
 .rc-composer { display: flex; gap: 8px; margin-top: 6px; }
 .rc-composer input { flex: 1; font: 400 13.5px var(--font-ui); padding: 10px 12px; border-radius: 9px;
   border: 1px solid var(--line); background: var(--paper); color: var(--ink); }
