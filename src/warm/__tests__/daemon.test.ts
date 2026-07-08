@@ -68,4 +68,14 @@ describe("runWarmCommand", () => {
     expect(d).toBeNull();
     expect(codes).toEqual([0]);
   });
+  it("parses --nudge into the daemon options", () => {
+    let seen: any;
+    const start = ((opts: any) => { seen = opts; return { async stop() {} }; }) as any;
+    runWarmCommand(["--watch", "--nudge"], { start, log: () => {}, on: () => {} });
+    expect(seen.nudge).toBe(true);
+    let seen2: any;
+    const start2 = ((opts: any) => { seen2 = opts; return { async stop() {} }; }) as any;
+    runWarmCommand(["--watch"], { start: start2, log: () => {}, on: () => {} });
+    expect(seen2.nudge).toBe(false);
+  });
 });
