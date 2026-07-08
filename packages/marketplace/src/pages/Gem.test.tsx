@@ -64,6 +64,13 @@ describe("Gem (detail)", () => {
     expect(screen.getByText("npx @ninemind/agentgem get raymondfeng/agentgem-biz@0.1.0")).toBeTruthy();
   });
 
+  it("offers a Download .gem button for an installable gem", async () => {
+    const apiInst = { getGems: () => Promise.resolve([{ key: "raymondfeng/agentgem-biz", version: "0.1.0", installable: true, description: "d", tags: [], artifactKinds: ["skill"] }]), gemAdoption: () => Promise.resolve({}) } as never;
+    render(<Gem api={apiInst} keyName="raymondfeng/agentgem-biz" stars={stars} me={null} />);
+    await screen.findByRole("heading", { name: /raymondfeng\/agentgem-biz/ });
+    expect(screen.getByRole("button", { name: /download \.gem/i })).toBeTruthy();
+  });
+
   it("omits the install command for a browse-only (non-installable) gem", async () => {
     render(<Gem api={apiLive} keyName="live-gem" stars={stars} me={null} />); // apiLive gem has no installable flag
     await screen.findByRole("heading", { name: /live-gem/ });

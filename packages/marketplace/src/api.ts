@@ -58,6 +58,10 @@ export function makeApi(base: string) {
     // Sealed HTML of a gem's game artifact (for the playable Minigames arcade). 404s a non-game gem.
     getGameHtml: (key: string, version: string) =>
       get<{ html: string }>(base, "/api/aggregator/game-html", { key, version }).then((r) => r.html),
+    // Base64 of a gem's .gem archive bytes — the marketplace turns this into a file download so a user
+    // can save the gem and import it into the local app (or double-click it once desktop associates .gem).
+    getGemArchiveBase64: (key: string, version: string) =>
+      get<{ archiveBase64: string }>(base, "/api/aggregator/gem-archive", { key, version }).then((r) => r.archiveBase64),
     gemAdoption: (keys: string[]): Promise<Record<string, { installs: number; verifiedInstalls: number }>> =>
       keys.length === 0 ? Promise.resolve({}) :
       get<{ items: { gemKey: string; installs: number; verifiedInstalls: number }[] }>(base, "/api/aggregator/gem-adoption", { keys: keys.join(",") })
