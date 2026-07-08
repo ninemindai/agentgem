@@ -22,6 +22,12 @@ extraResources:
     to: core
     filter:
       - "**/*"
+  # Ship the ACP adapters (built by scripts/bundle-adapters.mjs) so Chat works
+  # offline on desktop. resolveAdapterSource looks under resources/adapters/<id>.
+  - from: adapters-dist
+    to: adapters
+    filter:
+      - "**/*"
   # Copy the tray icon into resources/ so resolveIconPath finds it in packaged builds.
   - from: build/icon.png
     to: icon.png
