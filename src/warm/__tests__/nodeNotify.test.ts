@@ -42,4 +42,18 @@ describe("nodeNotify", () => {
     const bomb = () => { throw new Error("no binary"); };
     expect(() => nodeNotify("T", "B", bomb, "linux")).not.toThrow();
   });
+  it("doubles a literal backslash before escaping quotes (AppleScript escape order)", () => {
+    const r = rec();
+    // input title has: a \ " b   → asStr must double the backslash then escape the quote
+    nodeNotify('a\\"b', "x", r.exec, "darwin");
+    // expected AppleScript title literal: "a\\\"b"  (backslash→\\, quote→\")
+    expect(r.calls[0].args[1]).toContain('with title "a\\\\\\"b"');
+  });
+  it("never throws when passed a non-string arg (runtime boundary)", () => {
+    const r = rec();
+    // @ts-expect-error deliberately passing a non-string to prove the coercion guard
+    expect(() => nodeNotify(123, { x: 1 }, r.exec, "linux")).not.toThrow();
+    // still produced a notify-send call with coerced strings
+    expect(r.calls[0].cmd).toBe("notify-send");
+  });
 });

@@ -21,7 +21,7 @@ const defaultExec: NotifyExec = (cmd, args) => {
 
 // Strip control chars + newlines and cap length — the strings are agent-authored
 // advice + a scrubbed basename, but sanitize defensively.
-const clean = (s: string) => (s ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 200);
+const clean = (s: string) => String(s ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 200);
 // AppleScript double-quoted string literal.
 const asStr = (s: string) => `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 
