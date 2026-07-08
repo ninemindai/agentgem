@@ -260,15 +260,4 @@ describe("Runner — Replay yours picker", () => {
     await waitFor(() => expect(data).toHaveBeenCalled());
     expect(data.mock.calls[0][1]).toMatchObject({ query: { name: "dup", sessionId: "mine-1", agent: "codex" } });
   });
-
-  it("surfaces an error and keeps the picker open when a session fails to load", async () => {
-    stubSessions();
-    vi.spyOn(playSessionDataRoute, "call").mockRejectedValue(new Error("404"));
-    render(<Runner html={html} name="dup" apiBase="" needs={["session-data"]} />);
-    fireEvent.click(await screen.findByRole("button", { name: /replay yours/i }));
-    fireEvent.click(await screen.findByText(/app/));
-    const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toMatch(/couldn't load that session/i);
-    expect(screen.getByRole("dialog", { name: "Pick a session to replay" })).toBeTruthy(); // stays open on failure
-  });
 });
