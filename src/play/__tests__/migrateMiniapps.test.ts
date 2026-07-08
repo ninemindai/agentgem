@@ -3,13 +3,41 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { saveMiniapp, readMiniapp, migrateAllMiniapps, miniappDir, scaffoldFor, MCP_CLIENT_MARKER } from "@agentgem/play";
+import { saveMiniapp, readMiniapp, migrateAllMiniapps, miniappDir, MCP_CLIENT_MARKER } from "@agentgem/play";
 
 let home: string;
 beforeEach(() => { home = mkdtempSync(join(tmpdir(), "agh-")); process.env.AGENTGEM_HOME = home; });
 afterEach(() => { rmSync(home, { recursive: true, force: true }); delete process.env.AGENTGEM_HOME; });
 
-const oldBridgeHtml = scaffoldFor("replay"); // baked with the OLD private postMessage bridge
+// replayScaffold() now emits the new MCP Apps client bridge natively (it's born already-migrated), so
+// exercising a REAL migration needs its own OLD-bridge fixture rather than scaffoldFor("replay").
+const oldBridgeHtml = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><title>Session Replay</title></head>
+<body>
+  <div id="app"></div>
+  <script>
+  (function () {
+    "use strict";
+    const app = document.getElementById("app");
+    const dataEl = document.getElementById("game-data");
+    let DATA = dataEl ? JSON.parse(dataEl.textContent || "{}") : {};
+    window.addEventListener("message", (e) => {
+      if (e.source !== window.parent) return;
+      const d = e.data;
+      if (d && d.type === "agentgem:feed" && d.channel === "session-data") { DATA = d.data || {}; boot(); }
+    });
+    function requestData() { try { if (window.parent && window.parent !== window) window.parent.postMessage({ type: "agentgem:request", want: "session-data" }, "*"); } catch (e) {} }
+    // ==== AGENTGEM:GAME-LOGIC START ====
+    function boot() {
+      const timeline = Array.isArray(DATA.timeline) ? DATA.timeline : [];
+      app.textContent = timeline.length ? ("moves: " + timeline.length) : "waiting…";
+    }
+    // ==== AGENTGEM:GAME-LOGIC END ====
+    boot();
+    if (!(DATA.timeline && DATA.timeline.length)) requestData();
+  })();
+  </script>
+</body></html>`; // baked with the OLD private postMessage bridge
 const meta = {
   title: "Old Replay", genre: "replay" as const,
   createdFrom: { kind: "session" as const, agent: "claude", sessionId: "s1", summary: "a replay" },
