@@ -12,6 +12,9 @@ import { startWarmWatch, warmRootsIndividually } from "./watch.js";
 import { acquirePidfile, releasePidfile } from "./pidfile.js";
 import { withWarmLock } from "./lock.js";
 import { startUsageReporter, type UsageReporter } from "../usage/reporter.js";
+import { createHygieneNudger } from "./hygieneNudger.js";
+import { nodeNotify } from "./nodeNotify.js";
+import { hygieneReportForFile } from "../sessionHygieneCore.js";
 import { createLogger } from "@agentgem/base";
 
 const warmLog = createLogger("warm");
@@ -24,6 +27,7 @@ export function startWarmDaemon(opts: {
   watch?: typeof startWarmWatch;
   initialPass?: () => Promise<unknown>;
   usageReporter?: typeof startUsageReporter;
+  nudge?: boolean;
 } = {}): WarmDaemon | null {
   const home = opts.home ?? agentgemHome();
   const log = opts.onLog ?? ((m: string) => warmLog.info("%s", m));
@@ -36,7 +40,11 @@ export function startWarmDaemon(opts: {
   // The daemon is the schedule host for team-usage reporting: bound machines push their daily
   // rollups to the aggregator on an interval (throttled + signed-out-safe inside the reporter).
   const reporter: UsageReporter = (opts.usageReporter ?? startUsageReporter)({ home });
-  const w = startWatch({ run: (roots) => withWarmLock(home, () => warmRootsIndividually(roots), () => undefined) });
+  const nudger = opts.nudge ? createHygieneNudger({ notify: nodeNotify, reportForFile: hygieneReportForFile }) : null;
+  const w = startWatch({
+    run: (roots) => withWarmLock(home, () => warmRootsIndividually(roots), () => undefined),
+    ...(nudger ? { nudge: (files: string[]) => nudger.nudge(files) } : {}),
+  });
   return { async stop() { try { w.stop(); reporter.stop(); } finally { releasePidfile(pidPath); } } };
 }
 
@@ -57,7 +65,7 @@ export function runWarmCommand(argv: string[], deps: {
     errorLog("agentgem warm: use --watch to run the background warming daemon");
     exit(1); return null;
   }
-  const d = start();
+  const d = start({ nudge: argv.includes("--nudge") });
   if (!d) { exit(0); return null; }
   log("agentgem warm: watching ~/.claude/projects — Ctrl-C to stop");
   const shutdown = () => { void d.stop().then(() => exit(0)); };
