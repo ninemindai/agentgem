@@ -11,7 +11,10 @@
 ## Global Constraints
 
 - Node floor `>=24`.
-- Vitest runs against compiled `dist/` — run `pnpm build` (or `tsc -b`) before `vitest run`, and target `dist/**/*.test.js` paths.
+- Per-package test commands (each package has its own vitest config):
+  - **insight**: `pnpm -C packages/insight test` (globs `src/**/*.test.ts`, node env — no dist build needed; type-level RED via `pnpm -C packages/insight exec tsc -b`).
+  - **console**: `pnpm -C packages/console test` or `pnpm -C packages/console exec vitest run <src-path>` (jsdom, globs `src/**/*.test.{ts,tsx}`); typecheck via `pnpm -C packages/console run typecheck` (NOT `tsc -b`).
+  - **root/server**: `pnpm build` then `npx vitest run dist/__tests__/<file>.test.js` (root config globs `dist/**/__tests__/**/*.test.js`).
 - `workflowScan.ts` is binary-classified by git/grep — use `grep -a` if searching it.
 - Client (`packages/console/src/api/routes.ts`) and server (`src/gem.controller.ts`) Zod schemas are **separate mirrors** and MUST stay in sync — a client POST body field missing on the server 422s silently.
 - Console tests + typecheck are NOT in CI — run them locally.
@@ -225,8 +228,8 @@ describe("scanArtifactUsage cwd filter", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm -C packages/insight build && npx vitest run packages/insight/dist/__tests__/optimizeScan.test.js`
-Expected: FAIL — `scanArtifactUsage` ignores the 3rd arg (both counts equal).
+Run: `pnpm -C packages/insight test`
+Expected: FAIL — `scanArtifactUsage` ignores the 3rd arg (both counts equal, so `scoped` is 2 not 1).
 
 - [ ] **Step 3: Implement**
 
@@ -257,7 +260,7 @@ export async function scanArtifactUsageCached(inv: ConfigInventory, nowMs: numbe
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm -C packages/insight build && npx vitest run packages/insight/dist/__tests__/optimizeScan.test.js`
+Run: `pnpm -C packages/insight test`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -484,7 +487,7 @@ export const optimizeRoute = defineRoute("GET", "/api/optimize", {
 
 - [ ] **Step 2: Typecheck**
 
-Run: `pnpm -C packages/console exec tsc -b`
+Run: `pnpm -C packages/console run typecheck`
 Expected: PASS (Dashboard/Optimize still compile; `layer` is additive).
 
 - [ ] **Step 3: Commit**
@@ -706,7 +709,7 @@ Expected: PASS.
 
 - [ ] **Step 6: Typecheck + existing Optimize tests**
 
-Run: `pnpm -C packages/console exec tsc -b && pnpm -C packages/console exec vitest run src/panels/Optimize`
+Run: `pnpm -C packages/console run typecheck && pnpm -C packages/console exec vitest run src/panels/Optimize`
 Expected: PASS (adjust any existing Dashboard/DisableActions test that constructs Dashboard without the new `scope`/`onScope` props — pass `scope={{kind:"global"}} onScope={()=>{}}`).
 
 - [ ] **Step 7: Commit**
@@ -748,7 +751,7 @@ export const inventoryRoute = defineRoute("GET", "/api/inventory", {
 
 - [ ] **Step 2: Typecheck**
 
-Run: `pnpm -C packages/console exec tsc -b`
+Run: `pnpm -C packages/console run typecheck`
 Expected: PASS (Setup's existing `inventoryRoute.call(..., {})` still valid — query is optional).
 
 - [ ] **Step 3: Commit**
@@ -846,7 +849,7 @@ Expected: PASS.
 
 - [ ] **Step 5: Typecheck + Setup suite**
 
-Run: `pnpm -C packages/console exec tsc -b && pnpm -C packages/console exec vitest run src/panels/Setup`
+Run: `pnpm -C packages/console run typecheck && pnpm -C packages/console exec vitest run src/panels/Setup`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -862,7 +865,7 @@ git commit -m "feat(console): Setup global/project scope switch with layer badge
 
 - [ ] **Full build + typecheck:** `pnpm build` — expect `tsc -b` clean + console SPA written.
 - [ ] **Full suite:** `npx vitest run` (root) — expect green, no regressions.
-- [ ] **Console suite (local, not in CI):** `pnpm -C packages/console exec vitest run && pnpm -C packages/console exec tsc -b`.
+- [ ] **Console suite (local, not in CI):** `pnpm -C packages/console exec vitest run && pnpm -C packages/console run typecheck`.
 - [ ] **Drive it (per superpowers:verification):** `PORT=4321 node dist/index.js`, open `#/optimize`, switch Global→a project, confirm project skills show a checkbox + global rows show the advisory badge; disable a project skill and confirm it archives under `<root>/.agentgem/disabled`; open `#/setup`, switch scope, confirm project artifacts appear with a `project` badge.
 - [ ] **Integrate:** push branch, open PR, let CI (`test (24)`+`test (26)`) gate, merge once green.
 
