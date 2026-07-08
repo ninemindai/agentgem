@@ -191,4 +191,42 @@ describe("Runner — Replay yours picker", () => {
     await waitFor(() => expect(screen.getByText("Allow")).toBeTruthy());                          // consent prompt now shown
     expect(screen.queryByRole("dialog", { name: "Pick a session to replay" })).toBeNull();          // picker closed, not stacked
   });
+
+  const stubSessions = () => vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    if (String(url).includes("/api/watch/sessions")) return { ok: true, json: async () => ({ sessions }) };
+    return { ok: true, json: async () => ({}) };
+  }) as unknown as typeof fetch);
+
+  it("closes the picker on Escape and returns focus to the trigger", async () => {
+    stubSessions();
+    render(<Runner html={html} name="dup" apiBase="" needs={["session-data"]} />);
+    const open = await screen.findByRole("button", { name: /replay yours/i });
+    fireEvent.click(open);
+    const dialog = await screen.findByRole("dialog", { name: "Pick a session to replay" });
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Pick a session to replay" })).toBeNull());
+    expect(document.activeElement).toBe(open);
+  });
+
+  it("activates a session row via the keyboard (Enter)", async () => {
+    stubSessions();
+    const data = vi.spyOn(playSessionDataRoute, "call").mockResolvedValue({ meta: {}, timeline: [{ role: "user", tsMs: 0, text: "hi" }] } as never);
+    render(<Runner html={html} name="dup" apiBase="" needs={["session-data"]} />);
+    fireEvent.click(await screen.findByRole("button", { name: /replay yours/i }));
+    const row = (await screen.findByText(/app/)).closest('[role="button"]') as HTMLElement;
+    fireEvent.keyDown(row, { key: "Enter" });
+    await waitFor(() => expect(data).toHaveBeenCalled());
+    expect(data.mock.calls[0][1]).toMatchObject({ query: { name: "dup", sessionId: "mine-1", agent: "codex" } });
+  });
+
+  it("surfaces an error and keeps the picker open when a session fails to load", async () => {
+    stubSessions();
+    vi.spyOn(playSessionDataRoute, "call").mockRejectedValue(new Error("404"));
+    render(<Runner html={html} name="dup" apiBase="" needs={["session-data"]} />);
+    fireEvent.click(await screen.findByRole("button", { name: /replay yours/i }));
+    fireEvent.click(await screen.findByText(/app/));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/couldn't load that session/i);
+    expect(screen.getByRole("dialog", { name: "Pick a session to replay" })).toBeTruthy(); // stays open on failure
+  });
 });
