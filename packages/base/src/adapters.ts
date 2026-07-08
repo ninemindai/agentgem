@@ -7,7 +7,7 @@
 // access goes through injected probes so the logic is unit-testable without a real
 // filesystem, npm, or adapter binary.
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { AgentDescriptor } from "./acpSession.js";
@@ -111,4 +111,54 @@ export function resolveLaunch(descriptor: AgentDescriptor, ctx: AdapterCtx): Age
   const command = [ctx.execPath, r.entry!, ...descriptor.command.slice(1)];
   const env = ctx.runtime === "desktop" ? { ELECTRON_RUN_AS_NODE: "1" } : undefined;
   return env ? { ...descriptor, command, env } : { ...descriptor, command };
+}
+
+export class AdapterConsentError extends Error {
+  code = "consent_required" as const;
+  constructor(msg = "install requires consent") { super(msg); this.name = "AdapterConsentError"; }
+}
+
+export type AdapterInstaller = (pkg: string, version: string, destPrefix: string) => Promise<void>;
+export interface EnsureResult { available: boolean; source: AdapterSource }
+export interface EnsureOpts {
+  consent: boolean;
+  install: AdapterInstaller;
+  fs?: { rm(p: string): void; rename(a: string, b: string): void; mkdirp(p: string): void };
+}
+
+// One in-flight install per adapter id, so a second caller awaits the first.
+const installLocks = new Map<string, Promise<EnsureResult>>();
+
+export async function ensureAdapter(descriptor: AgentDescriptor, ctx: AdapterCtx, opts: EnsureOpts): Promise<EnsureResult> {
+  const existing = resolveAdapterSource(descriptor, ctx);
+  if (existing.source !== "missing") return { available: true, source: existing.source };
+
+  if (!descriptor.package || !descriptor.version) throw new Error(`no install source for ${descriptor.id}`);
+  if (ctx.runtime === "desktop") throw new Error(`${descriptor.name} adapter is missing from the app — reinstall the app`);
+  if (!opts.consent) throw new AdapterConsentError();
+
+  const inflight = installLocks.get(descriptor.id);
+  if (inflight) return inflight;
+
+  const run = (async (): Promise<EnsureResult> => {
+    const fs = opts.fs ?? {
+      rm: (p: string) => rmSync(p, { recursive: true, force: true }),
+      rename: (a: string, b: string) => renameSync(a, b),
+      mkdirp: (p: string) => mkdirSync(p, { recursive: true }),
+    };
+    const finalDir = managedAdapterDir(ctx.home, descriptor.id);
+    const tmpDir = `${finalDir}.installing`;
+    fs.rm(tmpDir);
+    fs.mkdirp(tmpDir);
+    await opts.install(descriptor.package!, descriptor.version!, tmpDir);
+    fs.rm(finalDir);
+    fs.rename(tmpDir, finalDir);
+    const after = resolveAdapterSource(descriptor, ctx);
+    if (after.source === "missing") throw new Error(`install of ${descriptor.name} did not produce a runnable adapter`);
+    return { available: true, source: after.source };
+  })();
+
+  installLocks.set(descriptor.id, run);
+  try { return await run; }
+  finally { installLocks.delete(descriptor.id); }
 }
