@@ -80,6 +80,15 @@ function enableOne(it: DisableItem, opts: DisableOptions): DisableResult {
 // ── skills: relocate the whole folder out of / back into the live skills root ──
 function disableSkill(it: DisableItem, opts: DisableOptions): DisableResult {
   const base = { type: it.type, name: it.name };
+  if (it.source === "project") {
+    const from = join(claudeConfigDir(opts), "skills", it.name);
+    if (!existsSync(from)) return { ...base, ok: false, message: `skill folder not found: ${from}` };
+    const to = join(archiveRoot(opts), "skills", "project", it.name);
+    if (existsSync(to)) return { ...base, ok: false, message: `already archived at ${to}` };
+    mkdirSync(dirname(to), { recursive: true });
+    renameSync(from, to);
+    return { ...base, ok: true, message: `disabled (archived to ${to})` };
+  }
   if (!SKILL_SOURCES.includes(it.source as SkillSource)) {
     return { ...base, ok: false, message: `source ${it.source} is not disable-eligible` };
   }
@@ -94,6 +103,15 @@ function disableSkill(it: DisableItem, opts: DisableOptions): DisableResult {
 }
 function enableSkill(it: DisableItem, opts: DisableOptions): DisableResult {
   const base = { type: it.type, name: it.name };
+  if (it.source === "project") {
+    const from = join(archiveRoot(opts), "skills", "project", it.name);
+    if (!existsSync(from)) return { ...base, ok: false, message: `not archived: ${from}` };
+    const to = join(claudeConfigDir(opts), "skills", it.name);
+    if (existsSync(to)) return { ...base, ok: false, message: `already present: ${to}` };
+    mkdirSync(dirname(to), { recursive: true });
+    renameSync(from, to);
+    return { ...base, ok: true, message: `re-enabled (restored to ${to})` };
+  }
   if (!SKILL_SOURCES.includes(it.source as SkillSource)) {
     return { ...base, ok: false, message: `source ${it.source} is not disable-eligible` };
   }
@@ -190,7 +208,7 @@ function enableMcp(it: DisableItem, opts: DisableOptions): DisableResult {
 export function listDisabled(opts: DisableOptions = {}): DisabledArtifact[] {
   const out: DisabledArtifact[] = [];
   const skillsRoot = join(archiveRoot(opts), "skills");
-  for (const source of SKILL_SOURCES) {
+  for (const source of [...SKILL_SOURCES, "project"] as const) {
     const dir = join(skillsRoot, source);
     if (!existsSync(dir)) continue;
     let names: string[] = [];
