@@ -871,7 +871,7 @@ export const playPublishRoute = defineRoute("POST", "/api/play/publish", {
 // Host-brokered feed: a replay miniapp's source-session transcript, fetched on demand and postMessaged
 // into the sealed iframe by the Runner.
 export const playSessionDataRoute = defineRoute("GET", "/api/play/session-data", {
-  query: z.object({ name: z.string() }),
+  query: z.object({ name: z.string(), sessionId: z.string().optional(), agent: z.string().optional() }),
   response: z.object({ meta: z.record(z.string(), z.unknown()), timeline: z.array(z.object({ role: z.string(), tsMs: z.number(), text: z.string() })) }),
 });
 

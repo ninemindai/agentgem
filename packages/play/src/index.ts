@@ -9,3 +9,4 @@ export { miniappsRoot, miniappDir, saveMiniapp, readMiniapp, listMiniapps, type 
 export { studioCwd, studioBrief, seedStudio, importStudio, blankStudio } from "./studio.js";
 export { redactForBake } from "./redact.js";
 export { assertPortable, type PortabilityResult } from "./portability.js";
+export { resolveSessionRef, type SessionRef } from "./sessionRef.js";
