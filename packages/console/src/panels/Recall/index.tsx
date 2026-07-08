@@ -118,6 +118,14 @@ export function Recall({ apiBase }: { apiBase: string }) {
             Moments across {status?.total ?? "…"} sessions · {moments.length} matched
             {pending && " · searching…"}
           </div>
+          {status && !status.ready && (
+            <p className="rc-sub">
+              Indexing your sessions… ({status.indexed} of {status.total})
+            </p>
+          )}
+          {status?.ready && !pending && moments.length === 0 && (
+            <p className="rc-emptywork">No moments match.</p>
+          )}
           <ul className="rc-moments">
             {moments.map((m) => (
               <MomentCard key={selectionKey(m)} hit={m} picked={selected.has(selectionKey(m))} onToggle={toggle} />
