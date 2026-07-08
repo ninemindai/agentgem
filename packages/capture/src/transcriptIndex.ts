@@ -3,7 +3,7 @@
 // packages/capture/src/transcriptIndex.ts
 //
 // A persistent, incremental index of session transcripts, backed by the on-disk
-// PGlite we already ship (see docs/superpowers/specs/2026-07-01-transcript-index-design.md).
+// node:sqlite we already ship (see docs/superpowers/specs/2026-07-01-transcript-index-design.md).
 //
 // Phase 1 stores each transcript's RESOLVED global-usage contribution. Because
 // scanWorkflow keys an artifact's `sessionsUsedIn` by the transcript PATH, a single
@@ -13,7 +13,7 @@
 //
 // The core is I/O-injected: `parseFile` and `invDigest` come from the caller, so the
 // store can be tested without touching real config/introspection.
-import { PGlite } from "@electric-sql/pglite";
+import { DatabaseSync } from "node:sqlite";
 import { statSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { agentgemHome } from "@agentgem/model";
@@ -44,9 +44,9 @@ export interface TranscriptIndex {
   close(): Promise<void>;
 }
 
-/** ~/.agentgem/index — the on-disk PGlite datadir for the local transcript index. */
+/** ~/.agentgem/transcript-index.db — the on-disk node:sqlite file for the local transcript index. */
 export function defaultIndexDir(): string {
-  return join(agentgemHome(), ".agentgem", "index");
+  return join(agentgemHome(), ".agentgem", "transcript-index.db");
 }
 
 /**
@@ -56,15 +56,16 @@ export function defaultIndexDir(): string {
  */
 export async function openTranscriptIndex(dataDir?: string): Promise<TranscriptIndex> {
   const dir = dataDir ?? defaultIndexDir();
-  // Filesystem datadirs need their parent to exist; scheme URLs (memory://, idb://) don't.
-  if (!dir.includes("://")) mkdirSync(dirname(dir), { recursive: true });
-  const db = new PGlite(dir);
-  await db.exec(`
+  // The in-memory sentinel translates to node:sqlite's own ":memory:" spelling.
+  const file = dir === "memory://" ? ":memory:" : dir;
+  if (file !== ":memory:") mkdirSync(dirname(file), { recursive: true });
+  const db = new DatabaseSync(file);
+  db.exec(`
     CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
     CREATE TABLE IF NOT EXISTS transcript_file (
       path      TEXT PRIMARY KEY,
-      mtime_ms  DOUBLE PRECISION NOT NULL,
-      size      DOUBLE PRECISION NOT NULL
+      mtime_ms  REAL NOT NULL,
+      size      REAL NOT NULL
     );
     CREATE TABLE IF NOT EXISTS global_usage (
       path             TEXT NOT NULL,
@@ -72,25 +73,25 @@ export async function openTranscriptIndex(dataDir?: string): Promise<TranscriptI
       name             TEXT NOT NULL,
       invocations      INTEGER NOT NULL,
       sessions_used_in INTEGER NOT NULL,
-      last_used_ms     DOUBLE PRECISION,
+      last_used_ms     REAL,
       PRIMARY KEY (path, type, name)
     );
     CREATE INDEX IF NOT EXISTS global_usage_agg ON global_usage (type, name);
   `);
   // Schema-version guard: a bump means the on-disk layout may be incompatible, so
   // drop the derived rows (they rebuild on next sync). meta itself is stable.
-  const ver = (await db.query<{ value: string }>("SELECT value FROM meta WHERE key = 'schema_version'")).rows[0]?.value;
+  const ver = (db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string } | undefined)?.value;
   if (ver !== SCHEMA_VERSION) {
-    await db.exec("DELETE FROM global_usage; DELETE FROM transcript_file;");
-    await db.query(
-      "INSERT INTO meta(key, value) VALUES('schema_version', $1) ON CONFLICT(key) DO UPDATE SET value = $1",
-      [SCHEMA_VERSION],
-    );
+    db.exec("DELETE FROM global_usage; DELETE FROM transcript_file;");
+    db.prepare(
+      "INSERT INTO meta(key, value) VALUES('schema_version', ?1) ON CONFLICT(key) DO UPDATE SET value = ?1",
+    ).run(SCHEMA_VERSION);
   }
 
   // Single-flight: the SWR caller can fire overlapping syncs; serialize them so two
   // passes never interleave writes to the same rows.
   let chain: Promise<unknown> = Promise.resolve();
+  let closed = false;
 
   return {
     syncGlobalUsage(paths, invDigest, parseFile) {
@@ -99,38 +100,35 @@ export async function openTranscriptIndex(dataDir?: string): Promise<TranscriptI
       return run;
     },
     async close() {
-      await db.close();
+      if (!closed) { db.close(); closed = true; }
     },
   };
 }
 
 async function doSync(
-  db: PGlite,
+  db: DatabaseSync,
   paths: string[],
   invDigest: string,
   parseFile: (path: string) => UsageRow[],
 ): Promise<GlobalUsageResult> {
   // 1. Inventory-digest guard. Stored rows are RESOLVED against the global inventory;
   //    if that changed, resolution changed, so wipe and rebuild.
-  const stored = (await db.query<{ value: string }>("SELECT value FROM meta WHERE key = 'inv_digest'")).rows[0]?.value;
+  const stored = (db.prepare("SELECT value FROM meta WHERE key = 'inv_digest'").get() as { value: string } | undefined)?.value;
   if (stored !== invDigest) {
-    await db.exec("DELETE FROM global_usage; DELETE FROM transcript_file;");
-    await db.query(
-      "INSERT INTO meta(key, value) VALUES('inv_digest', $1) ON CONFLICT(key) DO UPDATE SET value = $1",
-      [invDigest],
-    );
+    db.exec("DELETE FROM global_usage; DELETE FROM transcript_file;");
+    db.prepare(
+      "INSERT INTO meta(key, value) VALUES('inv_digest', ?1) ON CONFLICT(key) DO UPDATE SET value = ?1",
+    ).run(invDigest);
   }
 
   // 2. Load current file identities.
   const existing = new Map<string, { mtime: number; size: number }>();
-  for (const r of (await db.query<{ path: string; mtime_ms: number; size: number }>(
-    "SELECT path, mtime_ms, size FROM transcript_file",
-  )).rows) {
+  for (const r of db.prepare("SELECT path, mtime_ms, size FROM transcript_file").all() as { path: string; mtime_ms: number; size: number }[]) {
     existing.set(r.path, { mtime: Number(r.mtime_ms), size: Number(r.size) });
   }
 
   const seen = new Set<string>();
-  await db.query("BEGIN");
+  db.exec("BEGIN");
   try {
     // 3. Reparse only new/changed files.
     for (const path of paths) {
@@ -142,43 +140,41 @@ async function doSync(
 
       let contrib: UsageRow[];
       try { contrib = parseFile(path); } catch { contrib = []; } // a corrupt file contributes nothing
-      await db.query("DELETE FROM global_usage WHERE path = $1", [path]);
+      db.prepare("DELETE FROM global_usage WHERE path = ?1").run(path);
       for (const c of contrib) {
-        await db.query(
+        db.prepare(
           `INSERT INTO global_usage(path, type, name, invocations, sessions_used_in, last_used_ms)
-           VALUES($1, $2, $3, $4, $5, $6)
-           ON CONFLICT(path, type, name) DO UPDATE SET invocations = $4, sessions_used_in = $5, last_used_ms = $6`,
-          [path, c.type, c.name, c.invocations, c.sessionsUsedIn, c.lastUsedMs],
-        );
+           VALUES(?1, ?2, ?3, ?4, ?5, ?6)
+           ON CONFLICT(path, type, name) DO UPDATE SET invocations = ?4, sessions_used_in = ?5, last_used_ms = ?6`,
+        ).run(path, c.type, c.name, c.invocations, c.sessionsUsedIn, c.lastUsedMs);
       }
-      await db.query(
-        `INSERT INTO transcript_file(path, mtime_ms, size) VALUES($1, $2, $3)
-         ON CONFLICT(path) DO UPDATE SET mtime_ms = $2, size = $3`,
-        [path, st.mtimeMs, st.size],
-      );
+      db.prepare(
+        `INSERT INTO transcript_file(path, mtime_ms, size) VALUES(?1, ?2, ?3)
+         ON CONFLICT(path) DO UPDATE SET mtime_ms = ?2, size = ?3`,
+      ).run(path, st.mtimeMs, st.size);
     }
     // 4. Prune files that are gone from disk.
     for (const path of existing.keys()) {
       if (seen.has(path)) continue;
-      await db.query("DELETE FROM global_usage WHERE path = $1", [path]);
-      await db.query("DELETE FROM transcript_file WHERE path = $1", [path]);
+      db.prepare("DELETE FROM global_usage WHERE path = ?1").run(path);
+      db.prepare("DELETE FROM transcript_file WHERE path = ?1").run(path);
     }
-    await db.query("COMMIT");
+    db.exec("COMMIT");
   } catch (e) {
-    await db.query("ROLLBACK").catch(() => {});
+    try { db.exec("ROLLBACK"); } catch { /* keep the original error */ }
     throw e;
   }
 
   // 5. Fold per-file contributions into the global result.
-  const agg = (await db.query<{ type: string; name: string; invocations: number; sessions_used_in: number; last_used_ms: number | null }>(
+  const agg = db.prepare(
     `SELECT type, name,
-            SUM(invocations)::int      AS invocations,
-            SUM(sessions_used_in)::int AS sessions_used_in,
-            MAX(last_used_ms)          AS last_used_ms
+            SUM(invocations)      AS invocations,
+            SUM(sessions_used_in) AS sessions_used_in,
+            MAX(last_used_ms)     AS last_used_ms
      FROM global_usage
      GROUP BY type, name
      ORDER BY invocations DESC, name ASC`,
-  )).rows;
+  ).all() as { type: string; name: string; invocations: number; sessions_used_in: number; last_used_ms: number | null }[];
   return {
     artifacts: agg.map((r) => ({
       type: r.type,

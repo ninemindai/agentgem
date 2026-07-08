@@ -110,8 +110,9 @@ describe("transcript index — incremental global usage", () => {
     expect(res.artifacts[0].invocations).toBe(7);
   });
 
-  it("persists across reopen (on-disk datadir) and reparses nothing when unchanged", async () => {
-    const store = mkdtempSync(join(tmpdir(), "tidx-store-"));
+  it("persists across reopen (on-disk file) and reparses nothing when unchanged", async () => {
+    const storeDir = mkdtempSync(join(tmpdir(), "tidx-store-"));
+    const store = join(storeDir, "transcript-index.db");
     const a = join(dir, "a.jsonl");
     write(a, "a", 1_000);
     const { rows, parseCount, parseFile } = makeParser();
@@ -127,6 +128,6 @@ describe("transcript index — incremental global usage", () => {
     await second.close();
     expect(parseCount.get(a)).toBe(1); // unchanged → not reparsed after reopen
     expect(res.artifacts[0].invocations).toBe(4);
-    rmSync(store, { recursive: true, force: true });
+    rmSync(storeDir, { recursive: true, force: true });
   });
 });
