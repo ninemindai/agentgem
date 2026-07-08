@@ -133,23 +133,25 @@ body::before {
 .console-group { display: contents; }
 
 /* Gems screen tab bar (Yours | Received | Get more) — sub-routed tabs. */
-.gems-tabs {
-  display: flex; gap: 4px; margin-bottom: 20px;
+/* Shared deep-linkable tab bar (Gems, Setup) — see useSubRouteTabs. */
+.console-tabs {
+  display: flex; gap: 0; margin-bottom: 20px;
   border-bottom: 1px solid var(--line);
 }
-.gems-tab {
-  position: relative; padding: 10px 4px; margin-right: 20px;
+.console-tab {
+  position: relative; display: inline-flex; align-items: center; gap: 7px;
+  padding: 10px 4px; margin-right: 18px;
   border: 0; background: transparent; cursor: pointer;
   color: var(--muted); font: 600 14px/1 var(--font-ui);
   transition: color .15s ease;
 }
-.gems-tab:hover { color: var(--ink-soft); }
-.gems-tab.is-active { color: var(--accent); }
-.gems-tab.is-active::after {
+.console-tab:hover { color: var(--ink-soft); }
+.console-tab.is-active { color: var(--accent); }
+.console-tab.is-active::after {
   content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
   border-radius: 2px 2px 0 0; background: var(--accent);
 }
-.gems-tab:focus-visible { outline: none; box-shadow: var(--ring); border-radius: 4px; }
+.console-tab:focus-visible { outline: none; box-shadow: var(--ring); border-radius: 4px; }
 
 .console-switcher { position: relative; margin-bottom: 4px; }
 .console-activegem {
@@ -821,18 +823,12 @@ body::before {
   border-radius: 8px; padding: 6px 10px; margin-left: auto; color: var(--muted); font-size: 13px; }
 .setup-search input { border: 0; background: transparent; outline: none; font: inherit; color: var(--ink); width: 220px; }
 
-/* Tabs — one deep-linkable sub-route each; same visual language as the Gems tab bar. */
-.setup-tabs { display: flex; flex-wrap: wrap; gap: 0; margin-bottom: 22px; border-bottom: 1px solid var(--line); }
-.setup-tab { position: relative; display: inline-flex; align-items: center; gap: 7px; margin-right: 18px; padding: 10px 4px;
-  border: 0; background: transparent; cursor: pointer; color: var(--muted); font: 600 14px/1 var(--font-ui); transition: color .15s ease; }
-.setup-tab:hover { color: var(--ink-soft); }
-.setup-tab.is-active { color: var(--accent); }
-.setup-tab.is-active::after { content: ""; position: absolute; left: 0; right: 18px; bottom: -1px; height: 2px;
-  border-radius: 2px 2px 0 0; background: var(--accent); }
-.setup-tab:focus-visible { outline: none; box-shadow: var(--ring); border-radius: 4px; }
+/* Tabs — Setup adds wrapping + a per-type count pill on the shared .console-tab bar. */
+.setup-tabs { flex-wrap: wrap; }
 .setup-tab-count { font: 600 10.5px/1 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--muted);
   background: var(--paper-2); padding: 3px 6px; border-radius: 999px; }
-.setup-tab.is-active .setup-tab-count { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.console-tab.is-active .setup-tab-count { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.setup-notfound { margin: 0 0 16px; font-size: 13px; font-style: italic; }
 
 /* Overview — the All landing: one editorial index card per artifact type. */
 .setup-overview { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
