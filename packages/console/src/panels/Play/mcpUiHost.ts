@@ -31,6 +31,7 @@ export interface UiHost {
   handleMessage(e: MessageEvent): void;
   dispose(): void;
   bumpGeneration(): void;
+  feedSessionData(sessionId: string, agent: string): void; // host-initiated "Replay yours" rebind
 }
 
 interface RpcMessage { jsonrpc?: string; id?: number; method?: string; params?: { name?: string; arguments?: Record<string, unknown> } }
@@ -43,6 +44,7 @@ export function createUiHost(deps: UiHostDeps): UiHost {
   let invoking = false;                              // one invoke-agent turn at a time
   let chatId: string | null = null;                  // reused neutral chat session
   let chatPromise: Promise<string> | null = null;    // in-flight chat-open (serialize concurrent invokes)
+  let feeding = false;                                // one in-flight feedSessionData at a time (mirrors Runner's feedingRef)
 
   const post = (msg: unknown) => deps.target.postMessage(msg, "*");
   const stale = (gen: number) => gen !== generation;
@@ -138,6 +140,20 @@ export function createUiHost(deps: UiHostDeps): UiHost {
     if (d.method === "tools/call") { void handleCall(d); return; }
   }
 
+  // Host-initiated rebind for the "Replay yours" picker (Runner's feedSession, PR D): the sealed
+  // miniapp can't choose a session (see the AUTO session-data branch above), so the HOST calls this
+  // directly with a viewer-picked sessionId/agent and pushes the result over the same notification
+  // channel the shim's onNotification consumes, re-booting the game on that session.
+  function feedSessionData(sessionId: string, agent: string): void {
+    if (feeding) return;                               // one in-flight feed at a time
+    feeding = true;
+    const gen = generation;
+    getSessionData(deps.apiBase, deps.name, { sessionId, agent })
+      .then((data) => { if (!stale(gen)) notify(CAP_TOOL["session-data"], data); })
+      .catch(() => { /* keep the current render */ })
+      .finally(() => { feeding = false; });
+  }
+
   function dispose(): void {
     for (const h of handles) { try { h.close(); } catch { /* ignore */ } }
     handles.clear();
@@ -154,5 +170,5 @@ export function createUiHost(deps: UiHostDeps): UiHost {
     chatPromise = null;
   }
 
-  return { handleMessage, dispose, bumpGeneration };
+  return { handleMessage, dispose, bumpGeneration, feedSessionData };
 }

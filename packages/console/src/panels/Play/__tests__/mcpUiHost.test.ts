@@ -153,3 +153,40 @@ describe("mcpUiHost — streaming + generation + dispose", () => {
     expect(open).toHaveBeenCalledWith("", "/late.jsonl", expect.any(Function));
   });
 });
+
+describe("mcpUiHost — feedSessionData (host-initiated 'Replay yours' rebind)", () => {
+  it("fetches the picked session and pushes it as a session-data notification", async () => {
+    const spy = vi.spyOn(playSessionDataRoute, "call").mockResolvedValue({ meta: { picked: true }, timeline: [] });
+    const { host, target } = mkHost({ needs: ["session-data"] });
+    host.feedSessionData("s1", "codex");
+    await tick();
+    expect(spy).toHaveBeenCalledWith(expect.anything(), { query: { name: "g1", sessionId: "s1", agent: "codex" } });
+    expect(posted(target)).toHaveBeenCalledWith(
+      expect.objectContaining({ method: "ui/notifications/tool-result", params: { toolName: "agentgem_get_session_data", chunk: { meta: { picked: true }, timeline: [] } } }), "*");
+  });
+
+  it("suppresses a second concurrent feedSessionData call", async () => {
+    let resolve!: (v: unknown) => void;
+    const spy = vi.spyOn(playSessionDataRoute, "call").mockReturnValue(new Promise((r) => { resolve = r; }) as never);
+    const { host } = mkHost({ needs: ["session-data"] });
+    host.feedSessionData("s1", "codex");
+    host.feedSessionData("s2", "claude"); // in-flight — suppressed by the single-flight guard
+    await tick();
+    expect(spy).toHaveBeenCalledTimes(1);
+    resolve({ meta: {}, timeline: [] });
+    await tick();
+  });
+
+  it("bumpGeneration then a late feedSessionData result does NOT post a notification", async () => {
+    let resolve!: (v: unknown) => void;
+    vi.spyOn(playSessionDataRoute, "call").mockReturnValue(new Promise((r) => { resolve = r; }) as never);
+    const { host, target } = mkHost({ needs: ["session-data"] });
+    host.feedSessionData("s1", "codex");
+    await tick();
+    host.bumpGeneration();               // game changed while the fetch was in flight
+    resolve({ meta: {}, timeline: [] });
+    await tick();
+    expect(posted(target)).not.toHaveBeenCalledWith(
+      expect.objectContaining({ method: "ui/notifications/tool-result", params: expect.objectContaining({ toolName: "agentgem_get_session_data" }) }), "*");
+  });
+});
