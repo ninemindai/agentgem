@@ -4,6 +4,8 @@
 // (no external src/href/fetch; data: assets only) so a scaffold passes gameGate before the agent
 // touches it. The agent replaces the block between the AGENTGEM:GAME-LOGIC markers. TS string
 // constants so they compile into dist (no fs paths).
+import { mcpAppClient } from "./mcpAppClient.js";
+
 export function sealedTemplate(title: string, subtitle: string): string {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8" />
@@ -47,7 +49,7 @@ export function sealedTemplate(title: string, subtitle: string): string {
 // no data (the bare scaffold the gate runs) it shows an empty state rather than throwing.
 function replayScaffold(): string {
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8" />
+<html lang="en"><head>${mcpAppClient()}<meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Session Replay</title>
 <style>
@@ -90,16 +92,13 @@ function replayScaffold(): string {
     let timer = 0;
 
     // --- host data bridge (boilerplate — keep this) --- the session transcript is host-brokered, not
-    // baked into the bundle, so this stays tiny + always fresh. Ask the trusted parent for it; render
-    // on the feed. A shared/offline replay (no host) simply shows the waiting state.
+    // baked into the bundle, so this stays tiny + always fresh. Ask the trusted host (via the MCP Apps
+    // client shim injected in <head>) for it; render on the feed. A shared/offline replay (no host)
+    // simply shows the waiting state.
     const dataEl = document.getElementById("game-data");
     let DATA = dataEl ? JSON.parse(dataEl.textContent || "{}") : {};
-    window.addEventListener("message", (e) => {
-      if (e.source !== window.parent) return;
-      const d = e.data;
-      if (d && d.type === "agentgem:feed" && d.channel === "session-data") { DATA = d.data || {}; boot(); }
-    });
-    function requestData() { try { if (window.parent && window.parent !== window) window.parent.postMessage({ type: "agentgem:request", want: "session-data" }, "*"); } catch (e) {} }
+    if (window.agentgemApp) window.agentgemApp.onNotification("ui/notifications/tool-result", (p) => { if (p && p.toolName === "agentgem_get_session_data") { DATA = p.chunk || {}; boot(); } });
+    function requestData() { if (window.agentgemApp) window.agentgemApp.callTool("agentgem_get_session_data").then((d) => { if (d) { DATA = d; boot(); } }).catch(() => {}); }
 
     // ==== AGENTGEM:GAME-LOGIC START ====
     // The coding session, replayed as an RPG DUEL: You (the Human) vs the AI Agent, driven by DATA

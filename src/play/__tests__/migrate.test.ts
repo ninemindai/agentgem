@@ -2,8 +2,57 @@
 import { describe, it, expect } from "vitest";
 import { migrateMiniappHtml, scaffoldFor, gameGate, assertPortable, MCP_CLIENT_MARKER } from "@agentgem/play";
 
+// The old private postMessage bridge, verbatim as `replayScaffold()` used to bake it (pre-cutover to the
+// MCP Apps client shim). replayScaffold() now emits the new bridge natively (born with MCP_CLIENT_MARKER
+// already present), so the codemod's golden test needs its own fixture — this is that fixture — to still
+// exercise a REAL old→new migration rather than a no-op "already migrated".
+const OLD_BRIDGE_HTML = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Session Replay</title>
+</head>
+<body>
+  <div id="wrap"><div id="app"></div></div>
+  <script>
+  (function () {
+    "use strict";
+    const app = document.getElementById("app");
+
+    // --- host data bridge (boilerplate — keep this) --- the session transcript is host-brokered, not
+    // baked into the bundle, so this stays tiny + always fresh. Ask the trusted parent for it; render
+    // on the feed. A shared/offline replay (no host) simply shows the waiting state.
+    const dataEl = document.getElementById("game-data");
+    let DATA = dataEl ? JSON.parse(dataEl.textContent || "{}") : {};
+    window.addEventListener("message", (e) => {
+      if (e.source !== window.parent) return;
+      const d = e.data;
+      if (d && d.type === "agentgem:feed" && d.channel === "session-data") { DATA = d.data || {}; boot(); }
+    });
+    function requestData() { try { if (window.parent && window.parent !== window) window.parent.postMessage({ type: "agentgem:request", want: "session-data" }, "*"); } catch (e) {} }
+
+    // ==== AGENTGEM:GAME-LOGIC START ====
+    function boot() {
+      const meta = DATA.meta || {};
+      const timeline = Array.isArray(DATA.timeline) ? DATA.timeline : [];
+      app.textContent = timeline.length ? ("moves: " + timeline.length) : "waiting…";
+    }
+    // ==== AGENTGEM:GAME-LOGIC END ====
+
+    boot();
+    if (!(DATA.timeline && DATA.timeline.length)) {
+      requestData();
+      let tries = 0;
+      const retry = setInterval(() => {
+        if ((DATA.timeline && DATA.timeline.length) || ++tries > 5) { clearInterval(retry); return; }
+        requestData();
+      }, 800);
+    }
+  })();
+  </script>
+</body></html>`;
+
 // assertPortable(["session-data"]) requires a non-empty baked <script id="game-data"> timeline; the bare
-// scaffold bakes none, so inject one into <body> before asserting (per the task brief).
+// fixture bakes none, so inject one into <body> before asserting (per the task brief).
 function withBakedTimeline(html: string): string {
   const data = JSON.stringify({ meta: {}, timeline: [{ role: "user", text: "hi" }] });
   const bake = `<script id="game-data" type="application/json">${data}</script>`;
@@ -11,8 +60,8 @@ function withBakedTimeline(html: string): string {
 }
 
 describe("migrateMiniappHtml", () => {
-  it("golden: rewrites the replay scaffold's old bridge to the MCP Apps client shim", () => {
-    const { html, outcome } = migrateMiniappHtml(scaffoldFor("replay"));
+  it("golden: rewrites the old bridge to the MCP Apps client shim", () => {
+    const { html, outcome } = migrateMiniappHtml(OLD_BRIDGE_HTML);
     expect(outcome).toBe("migrated");
     expect(html).toContain(MCP_CLIENT_MARKER);
     expect(html).not.toContain("agentgem:request");
@@ -24,11 +73,17 @@ describe("migrateMiniappHtml", () => {
   });
 
   it("is idempotent: migrating already-migrated html is a no-op", () => {
-    const first = migrateMiniappHtml(scaffoldFor("replay"));
+    const first = migrateMiniappHtml(OLD_BRIDGE_HTML);
     expect(first.outcome).toBe("migrated");
     const second = migrateMiniappHtml(first.html);
     expect(second.outcome).toBe("already");
     expect(second.html).toBe(first.html);
+  });
+
+  it("the replay scaffold is now born already-migrated (native MCP Apps bridge)", () => {
+    const { html, outcome } = migrateMiniappHtml(scaffoldFor("replay"));
+    expect(outcome).toBe("already");
+    expect(html).toBe(scaffoldFor("replay"));
   });
 
   it("reports unrecognized for a bundle with no old bridge, and never throws", () => {
@@ -43,8 +98,8 @@ describe("migrateMiniappHtml", () => {
     expect(() => migrateMiniappHtml("<not-html")).not.toThrow();
   });
 
-  it("migrated replay html (with a baked timeline) still passes gameGate + assertPortable", async () => {
-    const baked = withBakedTimeline(scaffoldFor("replay"));
+  it("migrated html (with a baked timeline) passes gameGate + assertPortable", async () => {
+    const baked = withBakedTimeline(OLD_BRIDGE_HTML);
     const { html, outcome } = migrateMiniappHtml(baked);
     expect(outcome).toBe("migrated");
 
