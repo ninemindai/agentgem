@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { sandboxDoc } from "../Watch/sandboxDoc.js";
 import { makeClient, playSessionDataRoute, inventoryRoute } from "../../api/routes.js";
-import { fetchSessions, openWatchStream } from "../Watch/watchStream.js";
+import { fetchSessions, openWatchStream, type WatchSession } from "../Watch/watchStream.js";
 import { openStudioStream } from "./studioStream.js";
 import { AUTO_CAPS, CAP_LABEL, getConsent, setConsent } from "./consent.js";
 
@@ -23,6 +23,8 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
   const [scale, setScale] = useState(0.5);
   const [fs, setFs] = useState(false);
   const [pending, setPending] = useState<string | null>(null); // a gated capability awaiting consent
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [sessions, setSessions] = useState<WatchSession[] | null>(null);
   const pendingMsg = useRef<string | undefined>(undefined);     // the invoke-agent message that triggered the prompt
   const teardown = useRef<(() => void)[]>([]);                  // live streams to close on unmount / game change
   const liveOpen = useRef(false);                               // one live-session-events stream per game
@@ -78,6 +80,24 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
       }
     } catch { /* no host data — the game shows its waiting/failed state */ }
   }, [name, apiBase]);
+
+  // Feed a viewer-picked session into the sealed iframe on the session-data channel (the scaffold
+  // re-renders on it). Reuses the serve() staleness guard shape; the picked ref is host-owned.
+  const feedSession = useCallback(async (sessionId: string, agent: string) => {
+    if (name == null || apiBase == null) return;
+    const gen = gameGen.current;
+    try {
+      const data = await playSessionDataRoute.call(makeClient(apiBase), { query: { name, sessionId, agent } });
+      if (gen === gameGen.current) iframeRef.current?.contentWindow?.postMessage({ type: "agentgem:feed", channel: "session-data", data }, "*");
+    } catch { /* keep the current render */ }
+    setPickerOpen(false);
+  }, [name, apiBase]);
+
+  const canRebind = interactive && !!needs?.includes("session-data");
+  function openPicker() {
+    setPickerOpen(true);
+    if (sessions == null && apiBase != null) fetchSessions(apiBase).then(setSessions).catch(() => setSessions([]));
+  }
 
   // Capability broker + consent gate. The sealed game (no network) postMessages a request; we honor only
   // requests from THIS iframe and only a `want` the gem declared in `needs`. AUTO caps serve immediately;
@@ -155,6 +175,36 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
             width: 30, height: 30, borderRadius: 8, border: "1px solid rgba(255,255,255,.25)",
             background: "rgba(20,22,28,.7)", color: "#fff", cursor: "pointer", fontSize: 14, lineHeight: 1 }}
         >{fs ? "✕" : "⛶"}</button>
+      )}
+      {canRebind && (
+        <button onClick={openPicker} title="Replay one of your own sessions" aria-label="Replay yours"
+          style={{ position: fs ? "fixed" : "absolute", top: 8, left: 8, zIndex: 1001, height: 30, padding: "0 10px",
+            borderRadius: 8, border: "1px solid rgba(255,255,255,.25)", background: "rgba(20,22,28,.7)", color: "#fff",
+            cursor: "pointer", font: "600 12px system-ui" }}>
+          ↺ Replay yours
+        </button>
+      )}
+      {pickerOpen && (
+        <div className="play-consent" role="dialog" aria-label="Pick a session to replay">
+          <div className="play-consent__box">
+            <div className="play-consent__title">Replay one of your sessions</div>
+            {sessions == null ? <div className="play-consent__sub">Loading your sessions…</div>
+              : sessions.length === 0 ? <div className="play-consent__sub">No local sessions yet.</div>
+              : (
+                <ul className="play-src" style={{ maxHeight: 260, overflow: "auto" }}>
+                  {sessions.map((s) => (
+                    <li key={`${s.agent}:${s.id}`} className="play-src-row" onClick={() => feedSession(s.id, s.agent)}>
+                      <span className="play-src-row__main">{s.project ?? "session"}</span>
+                      <span className="play-src-row__meta">{s.agent} · {s.msgs} msgs</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            <div className="play-consent__btns">
+              <button className="play-btn" onClick={() => setPickerOpen(false)}>Close</button>
+            </div>
+          </div>
+        </div>
       )}
       {pending && (
         <div className="play-consent">
