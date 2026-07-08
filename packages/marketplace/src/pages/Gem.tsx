@@ -43,6 +43,7 @@ export function Gem({ api, keyName, stars, me }: { api: ReturnType<typeof makeAp
   const [adoptions, setAdoptions] = useState<Record<string, { installs: number; verifiedInstalls: number }>>({});
   const [removing, setRemoving] = useState(false);
   const [removeErr, setRemoveErr] = useState<string | null>(null);
+  const [cmdCopied, setCmdCopied] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -63,6 +64,10 @@ export function Gem({ api, keyName, stars, me }: { api: ReturnType<typeof makeAp
   if (!gem) return <div className="ex-gem-detail"><p className="ex-empty">Gem not found: "{keyName}".</p></div>;
 
   const copyKey = () => { void navigator.clipboard?.writeText(gem.key); };
+  // One-liner install — works anywhere Node is installed, no app/protocol/port needed. Only offered
+  // for installable gems (an uploaded archive `agentgem get` can download).
+  const installCmd = `npx @ninemind/agentgem get ${gem.key}@${gem.version}`;
+  const copyCmd = () => { void navigator.clipboard?.writeText(installCmd); setCmdCopied(true); window.setTimeout(() => setCmdCopied(false), 1500); };
 
   // Owner-only unpublish. Display-gating only — the server re-checks ownership (login === publishedBy).
   const { key: gemKey, version: gemVersion, publishedBy } = gem;
@@ -109,6 +114,15 @@ export function Gem({ api, keyName, stars, me }: { api: ReturnType<typeof makeAp
 
       <section className="ex-card">
         <h3>Get this gem</h3>
+        {gem.installable && (
+          <div className="ex-install-cmd">
+            <div className="ex-install-cmd-label">Install from your terminal — works anywhere Node is installed:</div>
+            <div className="ex-install-cmd-row">
+              <code className="ex-install-cmd-text">{installCmd}</code>
+              <button type="button" className="ex-copy" onClick={copyCmd}>{cmdCopied ? "Copied ✓" : "Copy"}</button>
+            </div>
+          </div>
+        )}
         <p className="ex-getit">
           <a className="ex-open-app" href={openInAppUrl(gem)}>Open in AgentGem →</a>
           Gem key: <code className="ex-key">{gem.key}</code>

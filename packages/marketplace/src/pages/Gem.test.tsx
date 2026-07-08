@@ -57,6 +57,19 @@ describe("Gem (detail)", () => {
     expect(screen.queryByText("@acme")).toBeNull(); // author is NOT linked
   });
 
+  it("shows the one-liner install command for an installable gem", async () => {
+    const apiInst = { getGems: () => Promise.resolve([{ key: "raymondfeng/agentgem-biz", version: "0.1.0", installable: true, description: "d", tags: [], artifactKinds: ["skill"] }]), gemAdoption: () => Promise.resolve({}) } as never;
+    render(<Gem api={apiInst} keyName="raymondfeng/agentgem-biz" stars={stars} me={null} />);
+    await screen.findByRole("heading", { name: /raymondfeng\/agentgem-biz/ });
+    expect(screen.getByText("npx @ninemind/agentgem get raymondfeng/agentgem-biz@0.1.0")).toBeTruthy();
+  });
+
+  it("omits the install command for a browse-only (non-installable) gem", async () => {
+    render(<Gem api={apiLive} keyName="live-gem" stars={stars} me={null} />); // apiLive gem has no installable flag
+    await screen.findByRole("heading", { name: /live-gem/ });
+    expect(screen.queryByText(/npx @ninemind\/agentgem get/)).toBeNull();
+  });
+
   const apiOwned = { getGems: () => Promise.resolve([{ key: "owned-gem", version: "1.0.0", publishedBy: "rfeng", description: "d", tags: [], artifactKinds: ["skill"] }]), gemAdoption: () => Promise.resolve({}) } as never;
 
   it("shows the owner-only Unpublish button when the signed-in login matches publishedBy (case-insensitive)", async () => {

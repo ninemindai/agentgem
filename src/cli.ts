@@ -32,6 +32,7 @@ Once running, open the printed URL (default http://127.0.0.1:4317/). Append
 ?dir=/path/to/.claude to introspect a config directory other than ~/.claude.
 
 Sharing a Gem (store-and-forward over NATS; set $NATS_URL, default nats://127.0.0.1:4222):
+  agentgem get <key>[@<version>]        Download a published gem and import it locally (zero-config)
   agentgem send <file.gem>              Encrypt + stash; prints a one-time agentgem:// ticket
   agentgem receive <ticket> [out.gem]   Fetch, decrypt, verify; writes the .gem
   agentgem bind                         Bind this machine's key to your GitHub account
@@ -63,6 +64,14 @@ async function main(argv: string[]): Promise<void> {
   if (argv[0] === "send" || argv[0] === "receive") {
     const { main: transferMain } = await import("@agentgem/transfer");
     return transferMain(argv);
+  }
+
+  // `agentgem get <key>[@<version>]` — download a published gem from the marketplace and import it
+  // into the local app as a workspace (zero-config; the CLI counterpart to "Open in AgentGem").
+  if (argv[0] === "get") {
+    const { runGetCommand } = await import("./getCli.js");
+    process.exitCode = await runGetCommand(argv.slice(1));
+    return;
   }
 
   // `agentgem bind` — bind this machine's signing key to a GitHub account (anti-sybil identity).
