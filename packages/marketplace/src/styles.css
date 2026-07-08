@@ -929,6 +929,13 @@ a.ex-skillcard-rating:hover { text-decoration: underline; }
 .ex-game-stage { position: relative; height: 260px; border-radius: var(--r-md); overflow: hidden; background: #0d1117; border: 1px solid var(--line); }
 .ex-game-hint { color: var(--muted); font-size: 12px; margin: 10px 0 0; }
 
+/* One-liner install command block on the gem-detail "Get this gem" card. */
+.ex-install-cmd { margin: 0 0 16px; }
+.ex-install-cmd-label { color: var(--muted); font-size: 13px; margin-bottom: 6px; }
+.ex-install-cmd-row { display: flex; align-items: stretch; gap: 8px; }
+.ex-install-cmd-text { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-family: var(--mono, ui-monospace, monospace); font-size: 13px;
+  background: var(--surface-2, rgba(0,0,0,.05)); border: 1px solid var(--line); border-radius: var(--r-md); padding: 9px 12px; color: var(--ink); }
+
 /* Owner-only danger zone (unpublish) — shown only to the gem's publisher. */
 .ex-danger { border-color: color-mix(in srgb, #b42318 30%, var(--line)); }
 .ex-danger-note { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
