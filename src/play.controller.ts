@@ -3,13 +3,14 @@
 // Play JSON routes over the miniapps registry: save (gate + dual-write), list, publish (git push).
 import { api, get, post, AgentError } from "@agentback/openapi";
 import { z } from "zod";
-import { saveMiniapp, listMiniapps, readMiniapp, miniappsRoot, setRemote, push, seedStudio, importStudio, blankStudio, compactTurns } from "@agentgem/play";
+import { saveMiniapp, listMiniapps, readMiniapp, miniappsRoot, setRemote, push, seedStudio, importStudio, blankStudio, compactTurns, resolveSessionRef } from "@agentgem/play";
 import { defaultReaders } from "./play.readers.js";
+import { listActiveSessions } from "./watchSessions.js";
 import {
   PlaySaveRequestSchema, PlaySaveResponseSchema, MiniappListSchema,
   PlayPublishRequestSchema, PlayPublishResponseSchema,
   PlayStudioRequestSchema, PlayStudioResponseSchema, PlayImportRequestSchema, PlayBlankRequestSchema,
-  PlayMiniappQuerySchema, PlayMiniappSchema, PlaySessionDataSchema,
+  PlayMiniappQuerySchema, PlayMiniappSchema, PlaySessionDataSchema, PlaySessionDataQuerySchema,
 } from "./schemas.js";
 
 @api({ basePath: "/api" })
@@ -45,14 +46,16 @@ export class PlayController {
     } catch (e) { throw new AgentError((e as Error).message, { status: 400 }); }
   }
 
-  // Host-brokered feed: the miniapp's OWN source-session transcript, compacted. Only session-sourced
-  // miniapps have it. The Runner fetches this and postMessages it into the sealed iframe on demand.
-  @get("/play/session-data", { query: PlayMiniappQuerySchema, response: PlaySessionDataSchema })
-  async sessionData(input: { query: z.infer<typeof PlayMiniappQuerySchema> }): Promise<z.infer<typeof PlaySessionDataSchema>> {
+  // Host-brokered feed: a replay's source-session transcript, compacted. Defaults to the miniapp's OWN
+  // (author) session; a viewer may override with one of THEIR local sessions (validated against
+  // listActiveSessions so a crafted client can't request an arbitrary transcript).
+  @get("/play/session-data", { query: PlaySessionDataQuerySchema, response: PlaySessionDataSchema })
+  async sessionData(input: { query: z.infer<typeof PlaySessionDataQuerySchema> }): Promise<z.infer<typeof PlaySessionDataSchema>> {
     try {
-      const src = readMiniapp(input.query.name).meta.createdFrom;
-      if (src.kind !== "session") throw new Error("this miniapp has no session data");
-      const s = await defaultReaders.loadSession(src.sessionId, src.agent);
+      const { name, sessionId, agent } = input.query;
+      const src = readMiniapp(name).meta.createdFrom;
+      const ref = resolveSessionRef(src, { sessionId, agent }, listActiveSessions().map((s) => ({ id: s.id, agent: s.agent })));
+      const s = await defaultReaders.loadSession(ref.sessionId, ref.agent);
       if (!s) throw new Error("session not found");
       return { meta: (s.meta ?? {}) as Record<string, unknown>, timeline: compactTurns(s.turns) };
     } catch (e) { throw new AgentError((e as Error).message, { status: 404 }); }

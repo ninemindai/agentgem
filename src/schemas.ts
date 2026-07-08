@@ -913,6 +913,7 @@ export const PlaySaveResponseSchema = z.object({ name: z.string(), commit: z.str
 const PlayNeedsSchema = z.array(z.enum(["session-data", "live-session-events", "local-project-access", "invoke-agent"])).optional();
 export const MiniappListSchema = z.object({ miniapps: z.array(z.object({ name: z.string(), title: z.string(), genre: z.string(), needs: PlayNeedsSchema })) });
 export const PlayMiniappQuerySchema = z.object({ name: z.string() });
+export const PlaySessionDataQuerySchema = z.object({ name: z.string(), sessionId: z.string().optional(), agent: z.string().optional() });
 export const PlayMiniappSchema = z.object({
   name: z.string(), html: z.string(),
   meta: z.object({ title: z.string(), genre: z.string(), createdFrom: GameArtifactSchema.shape.createdFrom, engineVersion: z.string(), needs: PlayNeedsSchema }),
