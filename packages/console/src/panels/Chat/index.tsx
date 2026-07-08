@@ -7,6 +7,8 @@ interface Agent {
   name: string;
   description?: string;
   available: boolean;
+  installable?: boolean;
+  source?: string;
 }
 
 interface Message {
@@ -28,10 +30,13 @@ export function Chat({ apiBase }: { apiBase: string }) {
   const [error, setError] = useState<string | null>(null);
   const [draftResult, setDraftResult] = useState<string | null>(null);
   const [drafting, setDrafting] = useState(false);
+  const [installing, setInstalling] = useState<string | null>(null);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [installNote, setInstallNote] = useState<string | null>(null);
   const closeRef = useRef<(() => void) | null>(null);
   const bottomRef = useRef<HTMLLIElement | null>(null);
 
-  useEffect(() => {
+  const loadAgents = () =>
     fetch(`${apiBase}/api/agents`)
       .then(j)
       .then((data: { agents: Agent[] }) => {
@@ -40,7 +45,8 @@ export function Chat({ apiBase }: { apiBase: string }) {
         if (first) setAgentId(first.id);
       })
       .catch(() => setAgents([]));
-  }, [apiBase]);
+
+  useEffect(() => { void loadAgents(); }, [apiBase]);
 
   useEffect(() => () => closeRef.current?.(), []);
 
@@ -143,6 +149,27 @@ export function Chat({ apiBase }: { apiBase: string }) {
     }
   };
 
+  const installAgent = async (id: string) => {
+    setInstalling(id);
+    setConfirmId(null);
+    setInstallNote(null);
+    setError(null);
+    try {
+      const res = await fetch(`${apiBase}/api/agents/${encodeURIComponent(id)}/install`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ consent: true }),
+      }).then(j);
+      await loadAgents();
+      setAgentId(id);
+      if (res.needsLogin) setInstallNote(`${id} installed — needs login on first use.`);
+    } catch (e) {
+      setError(e instanceof Error ? `Install failed: ${e.message}` : "Install failed");
+    } finally {
+      setInstalling(null);
+    }
+  };
+
   return (
     <section className="analyze">
       <p className="analyze-intro">Chat with a coding agent. Start a conversation, then distill it into a Gem.</p>
@@ -167,6 +194,24 @@ export function Chat({ apiBase }: { apiBase: string }) {
           {agents !== null && agents.length === 0 && <option value="">No agents configured</option>}
         </select>
       </div>
+
+      {/* Missing adapters: inline install with a consent confirm */}
+      {(agents ?? []).filter((a) => a.installable && !a.available).map((a) => (
+        <div key={a.id} style={{ marginBottom: 8, fontSize: 13 }}>
+          {confirmId === a.id ? (
+            <span className="getgems-consent">
+              Install <strong>{a.name}</strong> adapter? Downloads its npm package (~260&nbsp;MB) and runs it locally.
+              <button type="button" className="ledger-sort" disabled={installing !== null} onClick={() => installAgent(a.id)}>Install</button>
+              <button type="button" className="ledger-sort" onClick={() => setConfirmId(null)}>Cancel</button>
+            </span>
+          ) : (
+            <button type="button" className="ledger-sort" disabled={installing !== null} onClick={() => setConfirmId(a.id)}>
+              {installing === a.id ? `Installing ${a.name}…` : `Install ${a.name}`}
+            </button>
+          )}
+        </div>
+      ))}
+      {installNote && <p className="ws-note" style={{ marginBottom: 8 }}>{installNote}</p>}
 
       {/* Message list */}
       <ul className="analyze-list" style={{ minHeight: 120, maxHeight: 480, overflowY: "auto" }}>
