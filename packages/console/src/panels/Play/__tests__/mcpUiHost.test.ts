@@ -117,6 +117,32 @@ describe("mcpUiHost — streaming + generation + dispose", () => {
     vi.unstubAllGlobals();
   });
 
+  it("invoke-agent releases chatPromise on chat-open rejection so a later invoke retries", async () => {
+    let chatCalls = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (String(url).includes("/api/agents")) return { ok: true, json: async () => ({ agents: [{ id: "claude", available: true }] }) };
+      chatCalls++;
+      if (chatCalls === 1) throw new Error("chat-open failed"); // first invoke: chat-open rejects
+      return { ok: true, json: async () => ({ chatId: "c1" }) };  // second invoke: chat-open succeeds
+    }) as unknown as typeof fetch);
+    vi.spyOn(studioStream, "openStudioStream").mockImplementation(() => () => {});
+    const { host, target } = mkHost({ needs: ["invoke-agent"] });
+
+    // First invoke-agent: chat-open rejects -> the outer catch replies a JSON-RPC error.
+    host.handleMessage(msg(target, { method: "tools/call", id: 20, params: { name: "agentgem_invoke_agent", arguments: { message: "hi" } } }));
+    await tick();
+    expect(posted(target)).toHaveBeenCalledWith(expect.objectContaining({ id: 20, error: expect.anything() }), "*");
+    expect(chatCalls).toBe(1);
+
+    // Second invoke-agent: chatPromise must have been released (not left pointing at the rejected
+    // promise), so chat-open is attempted AGAIN rather than re-awaiting the same rejection forever.
+    host.handleMessage(msg(target, { method: "tools/call", id: 21, params: { name: "agentgem_invoke_agent", arguments: { message: "hi again" } } }));
+    await tick();
+    expect(chatCalls).toBe(2); // retried the chat-open — proves chatPromise was reset
+    expect(posted(target)).toHaveBeenCalledWith(expect.objectContaining({ id: 21, result: { status: "invoking" } }), "*");
+    vi.unstubAllGlobals();
+  });
+
   it("bumpGeneration then a late executor result does NOT post a reply", async () => {
     let resolve!: (v: unknown) => void;
     vi.spyOn(playSessionDataRoute, "call").mockReturnValue(new Promise((r) => { resolve = r; }) as never);

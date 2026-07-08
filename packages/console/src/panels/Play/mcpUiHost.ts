@@ -91,7 +91,8 @@ export function createUiHost(deps: UiHostDeps): UiHost {
         if (!chatId) {
           // Serialize chat-open so two fast invokes don't spawn two sessions (check-then-set race).
           if (!chatPromise) chatPromise = openNeutralChat(deps.apiBase);        // neutral (read-only) — no miniapp field
-          chatId = await chatPromise;
+          try { chatId = await chatPromise; }
+          catch (e) { chatPromise = null; throw e; }                           // release so a later invoke can re-open (mirrors liveOpen :85)
         }
         if (stale(gen)) return;
         invoking = true;
