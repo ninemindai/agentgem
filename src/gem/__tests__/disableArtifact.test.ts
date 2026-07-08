@@ -181,3 +181,32 @@ describe("mcp disable/enable", () => {
     expect(r.message).toMatch(/already present/i);
   });
 });
+
+describe("project-source skills", () => {
+  let root: string;
+  let projectOpts: { claudeDir: string };
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "capproj-"));
+    projectOpts = { claudeDir: join(root, ".claude") };
+    const d = join(root, ".claude", "skills", "demo");
+    mkdirSync(d, { recursive: true });
+    writeFileSync(join(d, "SKILL.md"), "---\nname: demo\ndescription: d\n---\n");
+  });
+  afterEach(() => { rmSync(root, { recursive: true, force: true }); });
+
+  it("disables a project skill: relocates under the project's .agentgem/disabled and lists it", () => {
+    const [r] = disableArtifacts([{ type: "skill", name: "demo", source: "project" }], projectOpts);
+    expect(r.ok).toBe(true);
+    expect(existsSync(join(root, ".claude", "skills", "demo"))).toBe(false);
+    expect(existsSync(join(root, ".agentgem", "disabled", "skills", "project", "demo"))).toBe(true);
+    expect(listDisabled(projectOpts)).toEqual([{ type: "skill", name: "demo", source: "project" }]);
+  });
+
+  it("re-enables a project skill: restores it to .claude/skills and clears the archive", () => {
+    disableArtifacts([{ type: "skill", name: "demo", source: "project" }], projectOpts);
+    const [r] = enableArtifacts([{ type: "skill", name: "demo", source: "project" }], projectOpts);
+    expect(r.ok).toBe(true);
+    expect(existsSync(join(root, ".claude", "skills", "demo"))).toBe(true);
+    expect(listDisabled(projectOpts)).toEqual([]);
+  });
+});
