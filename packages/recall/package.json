@@ -1,0 +1,21 @@
+{
+  "name": "@agentgem/recall",
+  "version": "0.1.0",
+  "description": "Local BM25 search over scrubbed session transcripts + bounded ask_session fan-out.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
+  },
+  "files": ["dist"],
+  "scripts": { "build": "tsc -b", "test": "vitest run" },
+  "dependencies": {
+    "@agentgem/base": "workspace:*",
+    "@agentgem/insight": "workspace:*",
+    "better-sqlite3": "~12.10.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "~7.6.13"
+  }
+}
