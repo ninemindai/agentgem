@@ -19,7 +19,9 @@ describe("git() subprocess timeout", () => {
 
   it("kills the subprocess and rejects when it exceeds the timeout", async () => {
     await ensureRepo(dir);
-    // 1ms is far below git's spawn+exec latency, so the process is killed before it can finish.
-    await expect(git(dir, ["rev-parse", "HEAD"], 1)).rejects.toThrow(/killed|SIGKILL|SIGTERM|timed out/i);
+    // `git hash-object --stdin` blocks reading stdin (the wrapper never writes/closes it), so it can
+    // NEVER finish on its own — the timeout is the only way this settles. Deterministic, unlike racing a
+    // short timeout against a fast-completing command (which finishes first on a quick machine).
+    await expect(git(dir, ["hash-object", "--stdin"], 100)).rejects.toThrow(/killed|SIGKILL|SIGTERM|timed out/i);
   });
 });
