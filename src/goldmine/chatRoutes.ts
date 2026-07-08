@@ -16,7 +16,7 @@
 // by originGuard and the raw SSE handlers (gemRunStream, insightsStream).
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { connectAcpAdapter, stdioMcpServer } from "@agentgem/base";
+import { connectAcpAdapter, stdioMcpServer, resolveLaunch, adapterRuntimeCtx } from "@agentgem/base";
 import type { AgentAvailability, AgentDescriptor, McpServerStdio } from "@agentgem/base";
 import { createAccumulator, applyUpdate } from "@agentgem/run";
 import type { ChatManager, ChatConnectFn, ChatCtx, ChatSessionHandle, ToolInvocation } from "@agentgem/run";
@@ -153,27 +153,41 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middlew
 // SECURITY: this is the only place we call connectAcpAdapter for chat; the
 // session handle that comes back is handed to ChatManager.openChat(), which
 // opens it in a server-derived cwd. Request input never reaches connectAcpAdapter.
-export const chatConnectFn: ChatConnectFn = async (descriptor: AgentDescriptor, opts) => {
-  // Default "deny" (read-only goldmine chat); the studio passes "allow" so the agent can edit its miniapp.
-  const raw = await connectAcpAdapter(descriptor, { clientName: "agentgem-chat", permission: opts?.permission ?? "deny" });
-  const ctx: ChatCtx = {
-    async open(cwd: string, opts?: { mcpServers?: unknown[] }): Promise<ChatSessionHandle> {
-      const session = await raw.open(cwd, { mcpServers: opts?.mcpServers as never });
-      return {
-        setMode: (m: string) => session.setMode(m),
-        async prompt(text: string, onDelta?: (c: string) => void, onToolCall?: (t: ToolInvocation) => void) {
-          const acc = createAccumulator();
-          await session.prompt(text, (u) =>
-            applyUpdate(acc, (u ?? {}) as Parameters<typeof applyUpdate>[1], { onDelta, onToolCall }),
-          );
-          return acc;
-        },
-        dispose: () => session.dispose(),
-      };
-    },
+// Build a chat connect fn that first resolves the descriptor's bare command into an
+// absolute launch plan (PATH → managed dir → bundled), then connects. The rewrite is
+// the same seam sandbox.ts uses. `resolve` is injected so tests can supply a fake and
+// desktop/cli share one default (adapterRuntimeCtx() auto-detects the runtime).
+export function makeChatConnectFn(resolve: (d: AgentDescriptor) => AgentDescriptor): ChatConnectFn {
+  return async (descriptor: AgentDescriptor, opts) => {
+    const launch = resolve(descriptor);
+    // Default "deny" (read-only goldmine chat); the studio passes "allow" so the agent can edit its miniapp.
+    const raw = await connectAcpAdapter(launch, { clientName: "agentgem-chat", permission: opts?.permission ?? "deny" });
+    const ctx: ChatCtx = {
+      async open(cwd: string, openOpts?: { mcpServers?: unknown[] }): Promise<ChatSessionHandle> {
+        const session = await raw.open(cwd, { mcpServers: openOpts?.mcpServers as never });
+        return {
+          setMode: (m: string) => session.setMode(m),
+          async prompt(text: string, onDelta?: (c: string) => void, onToolCall?: (t: ToolInvocation) => void) {
+            const acc = createAccumulator();
+            await session.prompt(text, (u) =>
+              applyUpdate(acc, (u ?? {}) as Parameters<typeof applyUpdate>[1], { onDelta, onToolCall }),
+            );
+            return acc;
+          },
+          dispose: () => session.dispose(),
+        };
+      },
+    };
+    return { ctx, close: raw.close };
   };
-  return { ctx, close: raw.close };
-};
+}
+
+// Default chat connect fn: resolve against the auto-detected runtime; if the adapter
+// can't be resolved (shouldn't happen — the picker only offers available agents), fall
+// back to the bare descriptor so connectAcpAdapter surfaces a clear spawn error.
+export const chatConnectFn: ChatConnectFn = makeChatConnectFn(
+  (d) => resolveLaunch(d, adapterRuntimeCtx()) ?? d,
+);
 
 // ── goldmine MCP server descriptor (server-derived, never from request) ───────
 // Absolute path to the compiled goldmine MCP stdio server, resolved relative to
