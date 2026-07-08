@@ -53,6 +53,9 @@ export interface ChatRouteDeps {
   // resolver validates the name (rejects anything that isn't a clean segment); when absent, chat runs
   // in the neutral cwd with the neutral brief.
   resolveStudio?: (miniapp: string) => { cwd: string; brief: string };
+  // Install a missing adapter on demand (CLI only). Throws an error carrying
+  // code:"consent_required" when consent is absent; the route maps that to 409.
+  installAgent?: (id: string, consent: boolean) => Promise<{ available: boolean; source: string; needsLogin: boolean }>;
 }
 
 // Pure mapping of a POST /api/chat body to ChatManager.openChat args — extracted so the studio-vs-neutral
@@ -82,6 +85,22 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middlew
   // GET /api/agents — list which agents are on PATH
   app.get("/api/agents", guard, (_req, res) => {
     res.json({ agents: deps.listAgents() });
+  });
+
+  // POST /api/agents/:id/install — install a missing adapter on demand (CLI).
+  app.post("/api/agents/:id/install", guard, async (req, res) => {
+    const id = req.params.id;
+    const consent = Boolean((req.body ?? {}).consent);
+    if (!deps.installAgent) { res.status(400).json({ error: "install not supported on this runtime" }); return; }
+    try {
+      const result = await deps.installAgent(id, consent);
+      res.json(result);
+    } catch (e) {
+      const err = e as Error & { code?: string };
+      if (err.code === "consent_required") { res.status(409).json({ error: err.message, code: "consent_required" }); return; }
+      if (/no install source|unknown agent/i.test(err.message)) { res.status(400).json({ error: err.message }); return; }
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // POST /api/chat — open a new chat session; request-derived value is only agentId
