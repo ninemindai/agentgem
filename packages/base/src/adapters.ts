@@ -6,7 +6,7 @@
 // the bundled dir — and install a missing one on demand (CLI only). All fs/PATH
 // access goes through injected probes so the logic is unit-testable without a real
 // filesystem, npm, or adapter binary.
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn as spawnChild } from "node:child_process";
 import { existsSync, readFileSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -116,6 +116,27 @@ export function resolveLaunch(descriptor: AgentDescriptor, ctx: AdapterCtx): Age
 export class AdapterConsentError extends Error {
   code = "consent_required" as const;
   constructor(msg = "install requires consent") { super(msg); this.name = "AdapterConsentError"; }
+}
+
+export type NpmSpawn = (cmd: string, args: string[]) => Promise<{ code: number; stderr: string }>;
+
+const defaultNpmSpawn: NpmSpawn = (cmd, args) => new Promise((resolve) => {
+  const child = spawnChild(cmd, args, { stdio: ["ignore", "ignore", "pipe"], shell: process.platform === "win32" });
+  let stderr = "";
+  child.stderr?.on("data", (d) => { stderr += String(d); });
+  child.once("error", (e) => resolve({ code: 1, stderr: e.message }));
+  child.once("close", (code) => resolve({ code: code ?? 1, stderr }));
+});
+
+// Production AdapterInstaller: `npm install <pkg>@<version> --prefix <destPrefix>`.
+// Only exercised by the opt-in smoke script; CI always injects a fake installer.
+export function npmAdapterInstaller(spawnFn: NpmSpawn = defaultNpmSpawn): AdapterInstaller {
+  return async (pkg, version, destPrefix) => {
+    const { code, stderr } = await spawnFn("npm", [
+      "install", `${pkg}@${version}`, "--prefix", destPrefix, "--no-audit", "--no-fund", "--loglevel=error",
+    ]);
+    if (code !== 0) throw new Error(`npm install ${pkg}@${version} failed: ${stderr.trim().slice(-500) || `exit ${code}`}`);
+  };
 }
 
 export type AdapterInstaller = (pkg: string, version: string, destPrefix: string) => Promise<void>;
