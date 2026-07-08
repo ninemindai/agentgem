@@ -39,7 +39,7 @@ export class RecallIndex {
   private tx(fn: () => void): void {
     this.db.exec("BEGIN");
     try { fn(); this.db.exec("COMMIT"); }
-    catch (e) { this.db.exec("ROLLBACK"); throw e; }
+    catch (e) { try { this.db.exec("ROLLBACK"); } catch { /* keep the original error */ } throw e; }
   }
 
   private ensureSchema(): void {
