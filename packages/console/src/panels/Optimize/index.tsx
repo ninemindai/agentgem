@@ -4,6 +4,7 @@ import { defineConsolePage } from "../../registry.js";
 import { optimizeRoute, makeClient, type OptimizePayload, type OptimizeRange } from "../../api/routes.js";
 import { Dashboard } from "./Dashboard.js";
 import { Loading } from "../../shell/Loading.js";
+import { type Scope } from "../_shared/ScopePicker.js";
 
 export function Optimize({ apiBase }: { apiBase: string }) {
   const [data, setData] = useState<OptimizePayload | null>(null);
@@ -11,6 +12,8 @@ export function Optimize({ apiBase }: { apiBase: string }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [scope, setScope] = useState<Scope>({ kind: "global" });
+  const root = scope.kind === "project" ? scope.root : undefined;
   // A manual refresh forces ?refresh=true for that one fetch; the ref keeps it out
   // of the dep array so range changes stay normal (cache-eligible) re-fetches.
   const freshRef = useRef(false);
@@ -20,12 +23,12 @@ export function Optimize({ apiBase }: { apiBase: string }) {
     setPending(true);
     setError(null);
     const fresh = freshRef.current; freshRef.current = false;
-    optimizeRoute.call(makeClient(apiBase), { query: { range, ...(fresh ? { refresh: true } : {}) } })
+    optimizeRoute.call(makeClient(apiBase), { query: { range, ...(root ? { root } : {}), ...(fresh ? { refresh: true } : {}) } })
       .then((p) => { if (alive) setData(p); })
       .catch((e) => { if (alive) setError(String(e?.message ?? e)); })
       .finally(() => { if (alive) setPending(false); });
     return () => { alive = false; };
-  }, [apiBase, range, reloadKey]);
+  }, [apiBase, range, reloadKey, root]);
 
   const onRefresh = () => { freshRef.current = true; setReloadKey((k) => k + 1); };
   // Apply a local, network-free transform after a disable/re-enable so the panel
@@ -35,7 +38,7 @@ export function Optimize({ apiBase }: { apiBase: string }) {
 
   if (error) return <div className="opt"><p className="obs-error">Couldn't load Optimize: {error}</p></div>;
   if (!data) return <div className="opt"><Loading /></div>;
-  return <Dashboard data={data} range={range} onRange={setRange} pending={pending} onRefresh={onRefresh} onMutate={onMutate} apiBase={apiBase} />;
+  return <Dashboard data={data} range={range} onRange={setRange} pending={pending} onRefresh={onRefresh} onMutate={onMutate} apiBase={apiBase} scope={scope} onScope={setScope} />;
 }
 
 export const optimizePage = defineConsolePage({
