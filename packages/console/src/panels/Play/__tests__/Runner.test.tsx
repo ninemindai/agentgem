@@ -16,6 +16,17 @@ const fromIframe = (win: Window, data: unknown) => {
   window.dispatchEvent(ev);
 };
 
+// The sealed miniapp now speaks MCP Apps `ui/*` JSON-RPC (via the mcpAppClient shim) instead of the old
+// private `agentgem:request`/`agentgem:feed` bridge: it `ui/initialize`s once, then drives `tools/call`s;
+// the host replies (one-shot caps) or pushes `ui/notifications/tool-result` chunks (streaming caps).
+let rpcId = 1;
+const initialize = (win: Window): number => { const id = rpcId++; fromIframe(win, { jsonrpc: "2.0", id, method: "ui/initialize" }); return id; };
+const callTool = (win: Window, name: string, args?: Record<string, unknown>): number => {
+  const id = rpcId++;
+  fromIframe(win, { jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args ?? {} } });
+  return id;
+};
+
 describe("Runner", () => {
   it("renders a sealed iframe (allow-scripts, no allow-same-origin) with the html in srcDoc", () => {
     const { container } = render(<Runner html="<h1>hi there</h1>" />);
@@ -33,23 +44,25 @@ describe("Runner", () => {
     expect(iframe.style.transform).toContain("scale(");
   });
 
-  it("brokers session-data: on the iframe's request it fetches host data and feeds it back", async () => {
+  it("brokers session-data: on the iframe's tools/call it fetches host data and replies over the wire", async () => {
     const spy = vi.spyOn(playSessionDataRoute, "call").mockResolvedValue({ meta: { project: "p" }, timeline: [{ role: "user", tsMs: 1, text: "hi" }] });
     const { container } = render(<Runner html="<p>x</p>" name="g1" apiBase="" needs={["session-data"]} />);
     const win = (container.querySelector("iframe") as HTMLIFrameElement).contentWindow as Window;
     const post = vi.spyOn(win, "postMessage").mockImplementation(() => {});
-    fromIframe(win, { type: "agentgem:request", want: "session-data" });
+    initialize(win); // handshake first, exactly as the embedded shim does
+    const id = callTool(win, "agentgem_get_session_data"); // AUTO cap — no consent prompt
     await waitFor(() => expect(spy).toHaveBeenCalledWith(expect.anything(), { query: { name: "g1" } }));
-    await waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "agentgem:feed", channel: "session-data" }), "*"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({ id, result: expect.objectContaining({ meta: { project: "p" } }) }), "*"));
   });
 
-  it("ignores a request for a capability the gem did NOT declare", async () => {
-    const spy = vi.spyOn(playSessionDataRoute, "call").mockResolvedValue({ meta: {}, timeline: [] });
+  it("ignores a tools/call for a capability the gem did NOT declare", async () => {
+    const inv = vi.spyOn(inventoryRoute, "call").mockResolvedValue({ skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [] } as never);
     const { container } = render(<Runner html="<p>x</p>" name="g1" apiBase="" needs={["session-data"]} />);
     const win = (container.querySelector("iframe") as HTMLIFrameElement).contentWindow as Window;
-    fromIframe(win, { type: "agentgem:request", want: "invoke-agent" });
+    callTool(win, "agentgem_get_inventory"); // local-project-access ∉ needs
     await new Promise((r) => setTimeout(r, 20));
-    expect(spy).not.toHaveBeenCalled(); // want ∉ needs
+    expect(inv).not.toHaveBeenCalled();       // cap not permitted → nothing brokered
+    expect(screen.queryByText("Allow")).toBeNull(); // and no consent prompt for an undeclared cap
   });
 
   it("a gated capability PROMPTS for consent and does NOT feed until allowed; Allow feeds + remembers", async () => {
@@ -57,12 +70,12 @@ describe("Runner", () => {
     const { container } = render(<Runner html="<p>x</p>" name="g2" apiBase="" needs={["local-project-access"]} />);
     const win = (container.querySelector("iframe") as HTMLIFrameElement).contentWindow as Window;
     const post = vi.spyOn(win, "postMessage").mockImplementation(() => {});
-    fromIframe(win, { type: "agentgem:request", want: "local-project-access" });
+    const id = callTool(win, "agentgem_get_inventory");
     await waitFor(() => expect(screen.getByText("Allow")).toBeTruthy()); // consent prompt shown
     expect(inv).not.toHaveBeenCalled();                                   // NOT fetched before consent
     fireEvent.click(screen.getByText("Allow"));
     await waitFor(() => expect(inv).toHaveBeenCalled());                  // now brokered
-    await waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "agentgem:feed", channel: "local-project-access" }), "*"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({ id, result: expect.objectContaining({ skills: [{ name: "brainstorming" }] }) }), "*")); // fed back over the wire
     expect(getConsent("g2", "local-project-access")).toBe("granted");     // remembered
   });
 
@@ -70,7 +83,7 @@ describe("Runner", () => {
     const inv = vi.spyOn(inventoryRoute, "call").mockResolvedValue({ skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [] } as never);
     const { container } = render(<Runner html="<p>x</p>" name="g3" apiBase="" needs={["local-project-access"]} />);
     const win = (container.querySelector("iframe") as HTMLIFrameElement).contentWindow as Window;
-    fromIframe(win, { type: "agentgem:request", want: "local-project-access" });
+    callTool(win, "agentgem_get_inventory");
     await waitFor(() => expect(screen.getByText("Deny")).toBeTruthy());
     fireEvent.click(screen.getByText("Deny"));
     await new Promise((r) => setTimeout(r, 20));
@@ -87,27 +100,27 @@ describe("Runner", () => {
     const { container } = render(<Runner html="<p>x</p>" name="w1" apiBase="" needs={["live-session-events"]} />);
     const win = (container.querySelector("iframe") as HTMLIFrameElement).contentWindow as Window;
     const post = vi.spyOn(win, "postMessage").mockImplementation(() => {});
-    fromIframe(win, { type: "agentgem:request", want: "live-session-events" });
+    callTool(win, "agentgem_subscribe_sessions");
     await waitFor(() => expect(screen.getByText("Allow")).toBeTruthy());
     fireEvent.click(screen.getByText("Allow"));
     await waitFor(() => expect(watchStream.openWatchStream).toHaveBeenCalledWith("", "/f.jsonl", expect.any(Function)));
     emit({ type: "event", index: 0 }); // a live session event arrives
-    expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "agentgem:feed", channel: "live-session-events" }), "*");
+    expect(post).toHaveBeenCalledWith(expect.objectContaining({ method: "ui/notifications/tool-result", params: { toolName: "agentgem_subscribe_sessions", chunk: { type: "event", index: 0 } } }), "*");
   });
 
-  it("live-session-events: a no-session request posts idle but does NOT wedge a later retry", async () => {
+  it("live-session-events: a no-session request replies idle but does NOT wedge a later retry", async () => {
     const fs = vi.spyOn(watchStream, "fetchSessions").mockResolvedValueOnce([]); // no sessions yet
     vi.spyOn(watchStream, "openWatchStream").mockImplementation(() => () => {});
     const { container } = render(<Runner html="<p>x</p>" name="w2" apiBase="" needs={["live-session-events"]} />);
     const win = (container.querySelector("iframe") as HTMLIFrameElement).contentWindow as Window;
     const post = vi.spyOn(win, "postMessage").mockImplementation(() => {});
-    fromIframe(win, { type: "agentgem:request", want: "live-session-events" });
+    const id = callTool(win, "agentgem_subscribe_sessions");
     await waitFor(() => expect(screen.getByText("Allow")).toBeTruthy());
     fireEvent.click(screen.getByText("Allow"));
-    await waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({ channel: "live-session-events", data: { type: "idle" } }), "*"));
+    await waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({ id, result: { status: "idle" } }), "*"));
     // a session now exists; the game re-requests (consent remembered) → the guard must have been released
     fs.mockResolvedValue([{ id: "s", file: "/late.jsonl", agent: "claude", project: null, model: null, msgs: 1, startMs: 0, endMs: 0, ageMs: 0 }]);
-    fromIframe(win, { type: "agentgem:request", want: "live-session-events" });
+    callTool(win, "agentgem_subscribe_sessions"); // consent granted → no second prompt
     await waitFor(() => expect(watchStream.openWatchStream).toHaveBeenCalledWith("", "/late.jsonl", expect.any(Function)));
   });
 
@@ -120,12 +133,12 @@ describe("Runner", () => {
     const { container } = render(<Runner html="<p>x</p>" name="a1" apiBase="" needs={["invoke-agent"]} />);
     const win = (container.querySelector("iframe") as HTMLIFrameElement).contentWindow as Window;
     const post = vi.spyOn(win, "postMessage").mockImplementation(() => {});
-    fromIframe(win, { type: "agentgem:request", want: "invoke-agent", message: "hello agent" });
+    callTool(win, "agentgem_invoke_agent", { message: "hello agent" });
     await waitFor(() => expect(screen.getByText("Allow")).toBeTruthy());
     fireEvent.click(screen.getByText("Allow"));
     await waitFor(() => expect(studioStream.openStudioStream).toHaveBeenCalledWith("", "c1", "hello agent", expect.anything()));
     onDelta!("hi there");
-    expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "agentgem:feed", channel: "invoke-agent", data: { kind: "delta", text: "hi there" } }), "*");
+    expect(post).toHaveBeenCalledWith(expect.objectContaining({ method: "ui/notifications/tool-result", params: { toolName: "agentgem_invoke_agent", chunk: { kind: "delta", text: "hi there" } } }), "*");
     vi.unstubAllGlobals();
   });
 
@@ -133,7 +146,7 @@ describe("Runner", () => {
     const inv = vi.spyOn(inventoryRoute, "call").mockResolvedValue({ skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [] } as never);
     const { container } = render(<Runner html="<p>x</p>" interactive={false} name="g4" apiBase="" needs={["local-project-access"]} />);
     const win = (container.querySelector("iframe") as HTMLIFrameElement).contentWindow as Window;
-    fromIframe(win, { type: "agentgem:request", want: "local-project-access" });
+    callTool(win, "agentgem_get_inventory");
     await new Promise((r) => setTimeout(r, 20));
     expect(screen.queryByText("Allow")).toBeNull(); // no prompt on a thumbnail
     expect(inv).not.toHaveBeenCalled();
@@ -161,7 +174,9 @@ describe("Runner — Replay yours picker", () => {
     const row = await screen.findByText(/app/);
     fireEvent.click(row);
     await waitFor(() => expect(data).toHaveBeenCalled());
+    // host-initiated rebind pins the fetch to the picked session (sessionId/agent forwarded, unlike the AUTO path)
     expect(data.mock.calls[0][1]).toMatchObject({ query: { name: "dup", sessionId: "mine-1", agent: "codex" } });
+    vi.unstubAllGlobals();
   });
 
   it("does not offer the picker without the session-data need", () => {
@@ -186,10 +201,11 @@ describe("Runner — Replay yours picker", () => {
     expect(await screen.findByRole("dialog", { name: "Pick a session to replay" })).toBeTruthy(); // picker open
 
     const win = (container.querySelector("iframe") as HTMLIFrameElement).contentWindow as Window;
-    fromIframe(win, { type: "agentgem:request", want: "local-project-access" });
+    callTool(win, "agentgem_get_inventory"); // gated cap request while the picker is open
 
     await waitFor(() => expect(screen.getByText("Allow")).toBeTruthy());                          // consent prompt now shown
     expect(screen.queryByRole("dialog", { name: "Pick a session to replay" })).toBeNull();          // picker closed, not stacked
+    vi.unstubAllGlobals();
   });
 
   const stubSessions = () => vi.stubGlobal("fetch", vi.fn(async (url: string) => {

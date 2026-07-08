@@ -1,10 +1,9 @@
 // packages/console/src/panels/Play/Runner.tsx
 import { useEffect, useRef, useState, useCallback } from "react";
 import { sandboxDoc } from "../Watch/sandboxDoc.js";
-import { makeClient, playSessionDataRoute, inventoryRoute } from "../../api/routes.js";
-import { fetchSessions, openWatchStream, type WatchSession } from "../Watch/watchStream.js";
-import { openStudioStream } from "./studioStream.js";
-import { AUTO_CAPS, CAP_LABEL, getConsent, setConsent } from "./consent.js";
+import { fetchSessions, type WatchSession } from "../Watch/watchStream.js";
+import { createUiHost, type UiHost } from "./mcpUiHost.js";
+import { CAP_LABEL, getConsent, setConsent } from "./consent.js";
 
 // The sealed miniapp player: null-origin iframe (no allow-same-origin), strict CSP via sandboxDoc.
 // Miniapps are usually full-window apps (html,body{height:100%;overflow:hidden}), so a short fixed
@@ -13,9 +12,12 @@ import { AUTO_CAPS, CAP_LABEL, getConsent, setConsent } from "./consent.js";
 // `interactive={false}` renders a live but click-through thumbnail (no fullscreen button; the card owns
 // framing + clicks), used by the Arcade grid.
 //
-// Capability broker: a sealed game can DECLARE `needs` (e.g. ["session-data"]). It has no network, so it
-// postMessages the trusted Runner a request; the Runner fetches the host data and feeds it back into the
-// iframe. Only requests from THIS iframe, and only a `want` the gem declared in `needs`, are honored.
+// Capability broker: a sealed game DECLAREs `needs` (e.g. ["session-data"]). It has no network, so it speaks
+// the MCP Apps `ui/*` JSON-RPC protocol (via the embedded `mcpAppClient` shim) to the trusted host. This
+// component is now a thin shell over `createUiHost` (mcpUiHost.ts) — the router owns all protocol/brokering,
+// single-flight guards, and staleness. The Runner keeps only the UI: the sealed iframe + scaling/fullscreen,
+// the per-gem consent modal (fed to the router as the `requestConsent` callback), and the "Replay yours"
+// session picker (host-initiated rebind via `host.feedSessionData`).
 export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, apiBase, needs }:
   { html: string; vw?: number; vh?: number; interactive?: boolean; name?: string; apiBase?: string; needs?: string[] }) {
   const boxRef = useRef<HTMLDivElement>(null);
@@ -25,127 +27,76 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
   const [pending, setPending] = useState<string | null>(null); // a gated capability awaiting consent
   const [pickerOpen, setPickerOpen] = useState(false);
   const [sessions, setSessions] = useState<WatchSession[] | null>(null);
-  const [feedError, setFeedError] = useState<string | null>(null); // a failed rebind, surfaced in the picker
-  const pendingMsg = useRef<string | undefined>(undefined);     // the invoke-agent message that triggered the prompt
-  const teardown = useRef<(() => void)[]>([]);                  // live streams to close on unmount / game change
-  const liveOpen = useRef(false);                               // one live-session-events stream per game
-  const chatId = useRef<string | null>(null);                  // reused invoke-agent chat session
-  const chatPromise = useRef<Promise<string> | null>(null);    // in-flight chat-open (serialize concurrent invokes)
-  const invoking = useRef(false);                              // one invoke-agent turn at a time
-  const gameGen = useRef(0);                                   // bumped per game; async continuations pin to it
-  const feedingRef = useRef(false);                            // one feedSession request in flight at a time
+  const hostRef = useRef<UiHost | null>(null);                 // the MCP Apps router — owns protocol + brokering
+  const pendingResolve = useRef<((allow: boolean) => void) | null>(null); // resolves the open requestConsent()
   const rebindBtnRef = useRef<HTMLButtonElement>(null);        // the "Replay yours" trigger — focus returns here on close
   const pickerRef = useRef<HTMLDivElement>(null);             // the picker dialog — focused on open, hosts Escape
 
-  // Serve a capability into the sealed iframe. One-shot caps fetch+feed once; streaming caps
-  // (live-session-events, invoke-agent) open a stream and forward each event, registering a teardown.
-  const serve = useCallback(async (cap: string, message?: string): Promise<void> => {
-    if (name == null || apiBase == null) return;
-    const gen = gameGen.current;                                 // pin this serve to the current game
-    const stale = () => gen !== gameGen.current;                 // game changed while we were awaiting
-    const client = makeClient(apiBase);
-    const post = (data: unknown) => { if (!stale()) iframeRef.current?.contentWindow?.postMessage({ type: "agentgem:feed", channel: cap, data }, "*"); };
-    const register = (close: () => void) => { if (stale()) { try { close(); } catch { /* ignore */ } } else teardown.current.push(close); };
-    try {
-      if (cap === "session-data") { post(await playSessionDataRoute.call(client, { query: { name } })); return; }
-      if (cap === "local-project-access") { post(await inventoryRoute.call(client)); return; }
-      if (cap === "live-session-events") {
-        if (liveOpen.current) return;                            // idempotent — one live stream per game
-        liveOpen.current = true;
-        try {
-          const sessions = await fetchSessions(apiBase);
-          const file = sessions[0]?.file;                        // the most-recent session = "live"
-          if (!file) { post({ type: "idle" }); liveOpen.current = false; return; } // allow a later retry once a session exists
-          register(openWatchStream(apiBase, file, (ev) => post(ev)));
-        } catch (e) { liveOpen.current = false; throw e; }       // release the guard so a retry can succeed
-        return;
-      }
-      if (cap === "invoke-agent") {
-        if (!message || invoking.current) return;                // each invoke carries a prompt; one turn at a time
-        if (!chatId.current) {
-          // Serialize chat-open so two fast invokes don't spawn two sessions (check-then-set race).
-          if (!chatPromise.current) chatPromise.current = (async () => {
-            const agents = await fetch(`${apiBase}/api/agents`).then((r) => r.json());
-            const agentId = agents.agents?.find((a: { available?: boolean }) => a.available)?.id ?? agents.agents?.[0]?.id;
-            const res = await fetch(`${apiBase}/api/chat`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ agentId }) }).then((r) => r.json());
-            return res.chatId as string;                         // neutral (read-only, permission:deny) — no miniapp
-          })();
-          chatId.current = await chatPromise.current;
-        }
-        if (stale()) return;
-        invoking.current = true;
-        register(openStudioStream(apiBase, chatId.current, message, {
-          onDelta: (text) => post({ kind: "delta", text }),
-          onTool: (tool) => post({ kind: "tool", tool }),
-          onDone: () => { invoking.current = false; post({ kind: "done" }); },
-          onFailed: (error) => { invoking.current = false; post({ kind: "failed", error }); },
-        }));
-        return;
-      }
-    } catch { /* no host data — the game shows its waiting/failed state */ }
-  }, [name, apiBase]);
+  // Consent gate handed to the router: the router calls this for GATED caps only (AUTO caps bypass it).
+  // Thumbnails never prompt/feed sensitive caps; remembered per-gem choices resolve immediately; a fresh
+  // ask opens the modal and parks its resolver until Allow/Deny (decide()).
+  const requestConsent = useCallback((cap: string): Promise<boolean> => {
+    if (!interactive) return Promise.resolve(false);                 // thumbnails never prompt/feed sensitive caps
+    if (name == null) return Promise.resolve(false);
+    const decision = getConsent(name, cap);
+    if (decision === "granted") return Promise.resolve(true);
+    if (decision === "denied") return Promise.resolve(false);
+    return new Promise<boolean>((resolve) => {                        // ask (once)
+      pendingResolve.current?.(false);                               // resolve any superseded consent prompt
+      pendingResolve.current = resolve;
+      setPending(cap);
+      setPickerOpen(false);                                          // the ask takes precedence over an open picker
+    });
+  }, [interactive, name]);
 
-  // Feed a viewer-picked session into the sealed iframe on the session-data channel (the scaffold
-  // re-renders on it). Reuses the serve() staleness guard shape; the picked ref is host-owned.
+  // Wire the sealed iframe to the router: create the host once its contentWindow exists and the gem declares
+  // needs, delegate every `message` to host.handleMessage, and dispose (closing open streams) on teardown.
+  useEffect(() => {
+    if (name == null || apiBase == null || !needs?.length) return;   // apiBase="" (same-origin) is valid
+    const target = iframeRef.current?.contentWindow;
+    if (!target) return;
+    const host = createUiHost({ apiBase, name, needs, interactive, target, requestConsent });
+    hostRef.current = host;
+    const onMsg = (e: MessageEvent) => host.handleMessage(e);
+    window.addEventListener("message", onMsg);
+    return () => { window.removeEventListener("message", onMsg); host.dispose(); hostRef.current = null; };
+  }, [name, apiBase, needs, interactive, requestConsent]);
+
   // Close the picker and return focus to its trigger (a11y: focus must not fall to <body>).
-  const closePicker = useCallback(() => { setPickerOpen(false); setFeedError(null); rebindBtnRef.current?.focus(); }, []);
+  const closePicker = useCallback(() => { setPickerOpen(false); rebindBtnRef.current?.focus(); }, []);
 
-  const feedSession = useCallback(async (sessionId: string, agent: string) => {
-    if (name == null || apiBase == null || feedingRef.current) return; // one in-flight feed at a time
-    feedingRef.current = true;
-    setFeedError(null);
-    const gen = gameGen.current;
-    try {
-      const data = await playSessionDataRoute.call(makeClient(apiBase), { query: { name, sessionId, agent } });
-      if (gen === gameGen.current) iframeRef.current?.contentWindow?.postMessage({ type: "agentgem:feed", channel: "session-data", data }, "*");
-      closePicker();
-    } catch { setFeedError("Couldn't load that session — pick another."); } // keep the picker open so the failure is visible
-    finally { feedingRef.current = false; }
-  }, [name, apiBase, closePicker]);
+  // Feed a viewer-picked session into the sealed iframe (host-initiated rebind — the sealed game can't pick
+  // an arbitrary session itself). The router fetches + pushes it over the session-data notification channel.
+  const feedSession = useCallback((sessionId: string, agent: string) => {
+    hostRef.current?.feedSessionData(sessionId, agent);
+    closePicker();
+  }, [closePicker]);
 
   const canRebind = interactive && !!needs?.includes("session-data");
   function openPicker() {
-    setFeedError(null);
     setPickerOpen(true);
     if (sessions == null && apiBase != null) fetchSessions(apiBase).then(setSessions).catch(() => setSessions([]));
   }
   // Move focus into the dialog when it opens so Escape works and assistive tech announces it.
   useEffect(() => { if (pickerOpen) pickerRef.current?.focus(); }, [pickerOpen]);
 
-  // Capability broker + consent gate. The sealed game (no network) postMessages a request; we honor only
-  // requests from THIS iframe and only a `want` the gem declared in `needs`. AUTO caps serve immediately;
-  // gated caps require remembered per-gem consent (prompt on first ask). Thumbnails never prompt.
-  useEffect(() => {
-    if (name == null || apiBase == null || !needs?.length) return; // apiBase="" (same-origin) is valid
-    const onMsg = (e: MessageEvent) => {
-      const win = iframeRef.current?.contentWindow;
-      if (!win || e.source !== win) return;                            // only our own sealed iframe
-      const d = e.data as { type?: string; want?: string; message?: string } | null;
-      if (!d || d.type !== "agentgem:request" || !d.want || !needs.includes(d.want)) return; // only declared caps
-      const cap = d.want, message = typeof d.message === "string" ? d.message : undefined;
-      if (AUTO_CAPS.has(cap)) { void serve(cap, message); return; }
-      if (!interactive) return;                                        // thumbnails never prompt/feed sensitive caps
-      const decision = getConsent(name, cap);
-      if (decision === "granted") void serve(cap, message);
-      else if (decision === null) { pendingMsg.current = message; setPending(cap); setPickerOpen(false); } // ask (once) — takes precedence over an in-progress picker
-      // "denied" → silently ignore
-    };
-    window.addEventListener("message", onMsg);
-    return () => window.removeEventListener("message", onMsg);
-  }, [name, apiBase, needs, interactive, serve]);
-
-  // Close any open streams + reset session refs when the game changes or the Runner unmounts.
+  // Reset the consent modal + release its parked resolver when the game changes (the host-creation effect
+  // above recreates the router for the new game; open streams close via its dispose()).
   useEffect(() => {
     setPending(null);
-    return () => { teardown.current.forEach((fn) => { try { fn(); } catch { /* ignore */ } }); teardown.current = []; liveOpen.current = false; chatId.current = null; };
+    pendingResolve.current?.(false);
+    pendingResolve.current = null;
   }, [name]);
 
   const decide = (allow: boolean) => {
     // Re-validate the pending cap is still one this game declared — defends the grant against any
     // future in-place name/needs swap while a prompt is open.
-    if (pending == null || name == null || !needs?.includes(pending)) { setPending(null); return; }
-    setConsent(name, pending, allow ? "granted" : "denied");
-    if (allow) void serve(pending, pendingMsg.current);
+    if (pending == null || name == null || !needs?.includes(pending)) {
+      pendingResolve.current?.(false); pendingResolve.current = null; setPending(null); return;
+    }
+    setConsent(name, pending, allow ? "granted" : "denied");         // remember the choice for this game
+    pendingResolve.current?.(allow);                                 // resume the router's gated call
+    pendingResolve.current = null;
     setPending(null);
   };
 
@@ -202,7 +153,6 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
           onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); closePicker(); } }}>
           <div className="play-consent__box">
             <div className="play-consent__title">Replay one of your sessions</div>
-            {feedError && <div className="play-consent__sub" role="alert" style={{ color: "var(--danger, #e0533b)" }}>{feedError}</div>}
             {sessions == null ? <div className="play-consent__sub">Loading your sessions…</div>
               : sessions.length === 0 ? <div className="play-consent__sub">No local sessions yet.</div>
               : (
