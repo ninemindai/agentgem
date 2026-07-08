@@ -36,6 +36,9 @@ import { streamWatchDashboard } from "./watchDashboard.js";
 import { listActiveSessions } from "./watchSessions.js";
 import { registerChatRoutes, makeChatConnectFn, installAgentFn, goldmineMcpServers } from "./goldmine/chatRoutes.js";
 import { collectBehaviorFindings } from "./goldmine/behaviorFindings.js";
+import { RecallIndex } from "@agentgem/recall";
+import { defaultRecallDbPath, serverFunnelDeps } from "./goldmine/recall.js";
+import { registerRecallRoutes } from "./goldmine/recallRoutes.js";
 import { ChatManager } from "@agentgem/run";
 import { studioCwd, miniappDir, studioBrief, checkpointMiniapp } from "@agentgem/play";
 import { availableAgents, adapterRuntimeCtx, resolveLaunch, npmAdapterInstaller, createLogger } from "@agentgem/base";
@@ -360,6 +363,22 @@ export async function createApp(port: number): Promise<RestApplication> {
         }
       },
       goldmineMcp: goldmineMcpServers,
+    }, originGuard as never);
+  }
+  // Goldmine Recall: /api/recall/* — instant BM25 search over the on-disk index plus the
+  // capped ask_session fan-out (search/run/stream/cancel/status). One read-handle RecallIndex
+  // per server process; the `recall` warmable (src/warm) is the sole writer, so this handle
+  // only ever reads. Closed on graceful shutdown, symmetric with closeSharedIndex above.
+  {
+    const recallIndex = new RecallIndex(defaultRecallDbPath());
+    app.onStop(() => { try { recallIndex.close(); } catch { /* ignore */ } });
+    registerRecallRoutes(server.expressApp as never, {
+      readIndex: recallIndex,
+      funnelDeps: serverFunnelDeps(),
+      indexStatus: () => {
+        const n = recallIndex.indexedSessions().size;
+        return { ready: true, indexed: n, total: n };
+      },
     }, originGuard as never);
   }
   return app;
