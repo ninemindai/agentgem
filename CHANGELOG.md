@@ -7,6 +7,123 @@ All notable changes to AgentGem are documented here. The format follows
 The npm core (`@ninemind/agentgem`) and the desktop app are versioned separately:
 core releases are tagged `v*`, desktop releases `desktop-v*`.
 
+## [0.4.0] — `@ninemind/agentgem` (npm core) — 2026-07-08
+
+### Added
+
+- **A rebuilt console.** The local UI is now a React single-page app with
+  phase-primary navigation — a top-level **Observe** vs **Build** switch, grouped
+  artifact panels, and hash routing — replacing the single static HTML page that
+  shipped through 0.3.1. Everything below lives in this new console.
+- **Cross-session transcript recall, and a Goldmine MCP server.** A **Recall**
+  screen searches across your past Claude sessions and surfaces "moment" cards you
+  can deep-link into, chat about, or extract. The same intelligence is exposed as a
+  new `agentgem-goldmine` MCP server (`search_sessions`, `search_session_content`,
+  `summarize_session`, `ask_session`, `get_artifact_detail`,
+  `get_behavior_findings`) so any coding agent can query your session history.
+- **Chat with a local coding agent in the console.** A **Chat** tab drives a local
+  ACP agent (Claude, Codex) from inside the app, with your session transcripts
+  available to it as tools.
+- **Session timeline and transcript viewer.** The **History → Session** view renders
+  an SVG context timeline — a context-hygiene rail plus skill and subagent markers —
+  alongside the raw transcript, with a Map⇄Transcript toggle.
+- **Context-hygiene detection.** AgentGem now detects context bloat in a session
+  using cheap, LLM-free detectors and a bloat curve, produces a report and a
+  deterministic "cut here at turn N" boundary, and ranks sessions on a leaderboard.
+  `agentgem warm --watch --nudge` raises an ambient OS notification when a live
+  session's context gets heavy.
+- **`agentgem warm` — a background precompute daemon.** `agentgem warm --watch`
+  keeps insight and scorecard caches warm as your `.claude` files change, and
+  `--install-service` / `--uninstall-service` manage a launchd or systemd unit so
+  the daemon starts at login.
+- **Play mini-games.** AI-generated mini-games are now first-class `game` Gems, with
+  an Arcade to browse and play them, a Composer and Studio to build one by chatting,
+  and a git-backed `~/.agentgem/miniapps/` registry that versions each one.
+- **Share and install a Gem without a registry.** `agentgem get <key>[@version]`
+  downloads a published Gem and imports it locally with zero config. `agentgem send
+  <file.gem>` encrypts and stashes a Gem over NATS store-and-forward and prints a
+  one-time ticket that `agentgem receive <ticket>` fetches, decrypts, and verifies.
+  The marketplace's "Open in AgentGem" button deep-links into the console over the
+  new `agentgem://` protocol.
+- **GitHub identity, from the CLI or the console.** `agentgem bind` binds this
+  machine's signing key to your GitHub account over device flow, establishing an
+  anti-sybil identity for publishing and sharing. The console carries the same
+  identity: a chip in the shell footer shows whether you are signed in and opens a
+  sign-in modal in place, and publishing a mini-game from **Studio** when you are
+  signed out connects you inline and then resumes the publish you started.
+- **Curated sources become local skills.** `agentgem sources install <source> <path>`
+  installs a curated persona as a local skill, and `agentgem index-sources` indexes
+  curated sources' skills and GitHub stars behind the "Popular Skills" board.
+- **Distill skills into a review queue.** `agentgem learn` distills your latest
+  session into a **Dreaming** review queue you can accept from in the console. The
+  new `agentgem-distill` MCP server exposes the same pipeline (`scan_workflow`,
+  `inspect_ingredients`, `build_attestation`, `sign_and_publish`).
+- **`agentgem verify` — cross-agent compatibility.** Run a Gem's contract across your
+  local agent roster (`--agents claude,codex`, `--fetch`) and print the resulting
+  compatibility matrix.
+- **Installable shared setups.** Preview a shared setup and install it into your
+  config with one consent-gated click, from the new **Setup** screen.
+- **Local usage rollups.** `agentgem usage report [--backfill]` pushes daily usage
+  rollups from your machine so team and org usage views can attribute activity per
+  repo owner. The warm daemon also does this on a schedule.
+
+### Changed
+
+- **The published package is now self-contained.** The private `@agentgem/*`
+  workspace packages are bundled into each entrypoint at publish time, so
+  `npx @ninemind/agentgem` and a global install resolve with no extra setup.
+- **Two new bundled executables.** Installing the package now also puts
+  `agentgem-distill` and `agentgem-goldmine` on your `PATH` alongside `agentgem`.
+
+## [desktop-v0.2.0] — desktop app — 2026-07-08
+
+### Added
+
+- **"Open in AgentGem" web links now reach the installed app.** The app registers an
+  `agentgem://` URL scheme with the OS, so the marketplace's "Open in AgentGem"
+  button launches or focuses the app and jumps to the Get Gems tab — regardless of
+  the random local port the packaged app binds. The link carries the pre-filled
+  search query and, for an installable gem, the install key and version, so the gem
+  installs with no extra steps.
+- **Native OS notifications from the embedded console.** A payload-validated IPC
+  bridge lets the console raise a real system notification through the main process,
+  with no permission prompt or HTTPS origin needed. Clicking the notification
+  surfaces the app window.
+- **ACP coding-agent adapters ship inside the app.** The Claude Code and Codex ACP
+  adapters are bundled into the app's resources, so Chat and Gem runs work on
+  desktop without a separate `npm install` or a global adapter on your `PATH`.
+- **The embedded console gained Recall, `.gem` import, and Play mini-games.** Search
+  across past Claude sessions and hand a moment off to Chat or Extract; download a
+  self-contained `.gem` from the marketplace and import it locally; browse, play,
+  and remix AI-generated mini-games.
+
+### Changed
+
+- **macOS builds are signed and notarized.** The release pipeline signs the app with
+  a Developer ID certificate and notarizes it with Apple, so Gatekeeper opens the
+  `.dmg` and `.zip` normally — the "AgentGem is damaged and can't be opened" message
+  from the unsigned 0.1.1 builds is gone. Windows and Linux builds remain unsigned,
+  so Windows SmartScreen may still warn.
+- **Upgraded to Electron 43 (Node 24).** The embedded server now runs on Node 24's
+  built-in `node:sqlite`, so the Cursor session scan runs inside the desktop app
+  instead of quietly returning nothing.
+
+### Fixed
+
+- **GitHub sign-in completes.** OAuth and device-flow verification pages now open in
+  your system default browser rather than an in-app window, where Google sign-in and
+  passkeys do not work. The device-flow screen also grew a Copy button for the user
+  code.
+- **Inspect no longer appears to re-scan `~/.claude` on every visit.** The
+  session-scan cache lifetime went from 15 seconds to 5 minutes. The manual Refresh
+  button still forces a fresh scan.
+
+### Upgrading
+
+- Because 0.1.1 shipped unsigned and this build is signed, macOS auto-update
+  (Squirrel.Mac) will not apply this update over an installed 0.1.1. Download this
+  release once by hand; auto-update works normally from here on.
+
 ## [0.3.1] — `@ninemind/agentgem` (npm core) — 2026-06-26
 
 ### Fixed
