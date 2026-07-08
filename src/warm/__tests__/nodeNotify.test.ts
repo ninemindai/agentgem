@@ -20,7 +20,7 @@ describe("nodeNotify", () => {
   it("uses notify-send with argv (no shell) on linux", () => {
     const r = rec();
     nodeNotify("T", "B", r.exec, "linux");
-    expect(r.calls[0]).toEqual({ cmd: "notify-send", args: ["T", "B"] });
+    expect(r.calls[0]).toEqual({ cmd: "notify-send", args: ["--", "T", "B"] });
   });
   it("is a no-op on other platforms", () => {
     const r = rec();
@@ -36,7 +36,7 @@ describe("nodeNotify", () => {
   it("passes shell metacharacters literally to notify-send argv (no injection)", () => {
     const r = rec();
     nodeNotify("T", "$(rm -rf ~); `whoami`", r.exec, "linux");
-    expect(r.calls[0].args[1]).toBe("$(rm -rf ~); `whoami`");      // literal, argv not a shell string
+    expect(r.calls[0].args[2]).toBe("$(rm -rf ~); `whoami`");      // literal, argv not a shell string
   });
   it("never throws when exec throws", () => {
     const bomb = () => { throw new Error("no binary"); };

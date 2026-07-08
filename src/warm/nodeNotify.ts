@@ -29,7 +29,7 @@ export function nodeNotify(title: string, body: string, exec: NotifyExec = defau
   const t = clean(title), b = clean(body);
   try {
     if (platform === "darwin") exec("osascript", ["-e", `display notification ${asStr(b)} with title ${asStr(t)}`]);
-    else if (platform === "linux") exec("notify-send", [t, b]);
+    else if (platform === "linux") exec("notify-send", ["--", t, b]);
     // other platforms: no-op
   } catch (err) {
     log.warn("nodeNotify failed: %s", (err as Error)?.message ?? err);
