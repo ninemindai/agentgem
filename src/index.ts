@@ -34,11 +34,11 @@ import { streamWatchEvents } from "./watchEvents.js";
 import { streamWatchHygiene } from "./watchHygiene.js";
 import { streamWatchDashboard } from "./watchDashboard.js";
 import { listActiveSessions } from "./watchSessions.js";
-import { registerChatRoutes, chatConnectFn, goldmineMcpServers } from "./goldmine/chatRoutes.js";
+import { registerChatRoutes, makeChatConnectFn, installAgentFn, goldmineMcpServers } from "./goldmine/chatRoutes.js";
 import { collectBehaviorFindings } from "./goldmine/behaviorFindings.js";
 import { ChatManager } from "@agentgem/run";
 import { studioCwd, miniappDir, studioBrief } from "@agentgem/play";
-import { availableAgents, createLogger } from "@agentgem/base";
+import { availableAgents, adapterRuntimeCtx, resolveLaunch, npmAdapterInstaller, createLogger } from "@agentgem/base";
 import { collectScorecard, defaultScorecardDeps } from "./gem/scorecard.js";
 import { buildGoldmineBrief, type GoldmineBriefInput } from "@agentgem/insight";
 import { agentgemHome } from "@agentgem/model";
@@ -310,9 +310,11 @@ export async function createApp(port: number): Promise<RestApplication> {
   {
     const chatCwd = pathJoin(agentgemHome(), ".agentgem", "chat");
     try { mkdirSync(chatCwd, { recursive: true }); } catch { /* already exists */ }
+    const adapterCtx = adapterRuntimeCtx();
+    const chatConnect = makeChatConnectFn((d) => resolveLaunch(d, adapterCtx) ?? d);
     const chatManager = new ChatManager({
       connectFn: async (descriptor, connectOpts) => {
-        const conn = await chatConnectFn(descriptor, connectOpts);  // pass through the per-session permission
+        const conn = await chatConnect(descriptor, connectOpts);  // pass through the per-session permission
         // Wrap open() to inject the server-derived neutral cwd regardless of what
         // ChatManager passes — ensures request input can never redirect the agent.
         return {
@@ -330,7 +332,8 @@ export async function createApp(port: number): Promise<RestApplication> {
     registerChatRoutes(server.expressApp as never, {
       manager: chatManager,
       resolveStudio: (miniapp: string) => ({ cwd: miniappDir(miniapp), brief: studioBrief(miniapp) }),
-      listAgents: availableAgents,
+      listAgents: () => availableAgents(adapterCtx),
+      installAgent: installAgentFn(adapterCtx, npmAdapterInstaller()),
       buildBrief: async () => {
         // Best-effort: never throws. Falls back to minimal brief on any error.
         try {

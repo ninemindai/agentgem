@@ -16,8 +16,8 @@
 // by originGuard and the raw SSE handlers (gemRunStream, insightsStream).
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { connectAcpAdapter, stdioMcpServer, resolveLaunch, adapterRuntimeCtx } from "@agentgem/base";
-import type { AgentAvailability, AgentDescriptor, McpServerStdio } from "@agentgem/base";
+import { connectAcpAdapter, stdioMcpServer, resolveLaunch, adapterRuntimeCtx, AGENTS, ensureAdapter } from "@agentgem/base";
+import type { AgentAvailability, AgentDescriptor, McpServerStdio, AdapterCtx, AdapterInstaller } from "@agentgem/base";
 import { createAccumulator, applyUpdate } from "@agentgem/run";
 import type { ChatManager, ChatConnectFn, ChatCtx, ChatSessionHandle, ToolInvocation } from "@agentgem/run";
 import { draftGemFromChat } from "./draftGem.js";
@@ -75,6 +75,18 @@ export async function studioChatArgs(
     return { agentId, brief: s.brief, mcpServers: deps.goldmineMcp(), cwd: s.cwd, permission: "allow" };
   }
   return { agentId, brief: await deps.buildBrief(), mcpServers: deps.goldmineMcp() };
+}
+
+// Build the installAgent dep for registerChatRoutes: look the id up in AGENTS, run
+// ensureAdapter, and attach a static "needs login on first use" hint (auth is the
+// adapter's job — see spec: availability-only scope).
+export function installAgentFn(ctx: AdapterCtx, install: AdapterInstaller) {
+  return async (id: string, consent: boolean) => {
+    const descriptor = AGENTS.find((a) => a.id === id);
+    if (!descriptor) throw new Error(`unknown agent: ${id}`);
+    const res = await ensureAdapter(descriptor, ctx, { consent, install });
+    return { available: res.available, source: res.source, needsLogin: true };
+  };
 }
 
 // No-op guard used when originGuard is not provided (e.g. in tests that call
