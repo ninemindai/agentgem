@@ -52,8 +52,13 @@ export function localAgentEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.Proc
 }
 
 // Merge an adapter descriptor's env overlay (e.g. ELECTRON_RUN_AS_NODE) onto a base env.
+// The overlay wins over base, so as defense-in-depth we re-strip the provider
+// credentials afterwards: a descriptor.env must never reintroduce a key localAgentEnv
+// deleted, no matter what a future descriptor producer sets.
 export function spawnEnv(descriptor: AgentDescriptor, base: NodeJS.ProcessEnv = localAgentEnv()): NodeJS.ProcessEnv {
-  return descriptor.env ? { ...base, ...descriptor.env } : { ...base };
+  const out = descriptor.env ? { ...base, ...descriptor.env } : { ...base };
+  for (const k of AGENT_CREDENTIAL_VARS) delete out[k];
+  return out;
 }
 
 // A live session over a connected adapter. `prompt` sends one turn and dispatches
