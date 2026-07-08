@@ -10,3 +10,4 @@ export * from "./secretPatterns.js";
 export * from "./leakCanary.js";
 export * from "./agents.js";
 export * from "./log.js";
+export * from "./adapters.js";
