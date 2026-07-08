@@ -101,6 +101,7 @@ function ToolRow({ sessions, chips }: { sessions: SessionRef[]; chips: Map<strin
 function ChatBody({ sessions, turns, onSend }: { sessions: SessionRef[]; turns: RunState[]; onSend: (prompt: string) => void }) {
   const [draft, setDraft] = useState("");
   const last = turns[turns.length - 1];
+  const running = last?.phase === "running";
   const send = () => {
     const prompt = draft.trim();
     if (!prompt) return;
@@ -129,7 +130,7 @@ function ChatBody({ sessions, turns, onSend }: { sessions: SessionRef[]; turns: 
             placeholder={`Ask a follow-up across these ${sessions.length} sessions…`}
             onKeyDown={(e) => { if (e.key === "Enter") send(); }}
           />
-          <button type="button" className="rc-btn rc-btn--primary" onClick={send}>Send</button>
+          <button type="button" className="rc-btn rc-btn--primary" onClick={send} disabled={running}>Send</button>
         </div>
       </div>
     </>
@@ -140,6 +141,7 @@ function ChatBody({ sessions, turns, onSend }: { sessions: SessionRef[]; turns: 
  *  final answers + synthesis via momentsReportToBlocks. */
 function ExtractBody({ sessions, run, onExtract }: { sessions: SessionRef[]; run: RunState | null; onExtract: (prompt: string) => void }) {
   const [query, setQuery] = useState("");
+  const running = run?.phase === "running";
   const extract = () => {
     const prompt = query.trim();
     if (prompt) onExtract(prompt);
@@ -158,7 +160,7 @@ function ExtractBody({ sessions, run, onExtract }: { sessions: SessionRef[]; run
           placeholder="What do you want extracted across these sessions?"
           onKeyDown={(e) => { if (e.key === "Enter") extract(); }}
         />
-        <button type="button" className="rc-btn rc-btn--primary" onClick={extract}>Extract</button>
+        <button type="button" className="rc-btn rc-btn--primary" onClick={extract} disabled={running}>Extract</button>
       </div>
       {run && <FunnelLine chips={run.chips} total={sessions.length} capped={run.capped} phase={run.phase} />}
       {run && <ToolRow sessions={sessions} chips={run.chips} />}
@@ -195,6 +197,10 @@ export function ExitDrawer({ mode, sessions, apiBase, onClose }: {
   const [extractRun, setExtractRun] = useState<RunState | null>(null);
   const closeStreamRef = useRef<(() => void) | null>(null);
   const jobIdRef = useRef<string | null>(null);
+  // `aliveRef` guards state writes after unmount; `genRef` tags each run() call
+  // so a stale (unmounted or superseded) POST/stream can't drive the wrong turn.
+  const aliveRef = useRef(true);
+  const genRef = useRef(0);
 
   const applyToCurrent = (fn: (r: RunState) => RunState) => {
     if (mode === "chat") {
@@ -219,10 +225,11 @@ export function ExitDrawer({ mode, sessions, apiBase, onClose }: {
     }
   };
 
-  useEffect(() => teardown, []); // eslint-disable-line react-hooks/exhaustive-deps -- teardown-only unmount cleanup
+  useEffect(() => () => { aliveRef.current = false; teardown(); }, []); // eslint-disable-line react-hooks/exhaustive-deps -- teardown-only unmount cleanup
 
   const run = (prompt: string) => {
     teardown();
+    const gen = ++genRef.current;
     const fresh = freshRun(prompt, sessions);
     if (mode === "chat") setTurns((prev) => [...prev, fresh]);
     else setExtractRun(fresh);
@@ -230,13 +237,22 @@ export function ExitDrawer({ mode, sessions, apiBase, onClose }: {
     recallRunRoute
       .call(makeClient(apiBase), { body: { sessionIds: sessions, prompt, mode } })
       .then(({ jobId }) => {
+        // Unmounted, or a newer run() has already started: this job is orphaned
+        // as far as this component is concerned — cancel it and don't open a
+        // stream, rather than racing a stale singleton ref into place.
+        if (!aliveRef.current || genRef.current !== gen) {
+          void recallCancelRoute.call(makeClient(apiBase), { path: { jobId } }).catch(() => { /* best-effort */ });
+          return;
+        }
         jobIdRef.current = jobId;
         closeStreamRef.current = openRecallStream(apiBase, jobId, (e) => {
+          if (!aliveRef.current || genRef.current !== gen) return;
           if (e.type === "done" || e.type === "cancelled" || e.type === "failed") jobIdRef.current = null;
           applyToCurrent((r) => applyEvent(r, e));
         });
       })
       .catch((err: unknown) => {
+        if (!aliveRef.current || genRef.current !== gen) return;
         const message = err instanceof Error ? err.message : String(err);
         applyToCurrent((r) => ({ ...r, phase: "failed", error: message }));
       });

@@ -107,4 +107,91 @@ describe("ExitDrawer", () => {
     expect(recallCancelRoute.call).toHaveBeenCalledWith(expect.anything(), { path: { jobId: "j1" } });
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it("unmount while the POST is still pending: no stream opens, the late-resolved job is cancelled, no setState-after-unmount warning", async () => {
+    let resolvePost!: (v: { jobId: string }) => void;
+    const pending = new Promise<{ jobId: string }>((resolve) => { resolvePost = resolve; });
+    vi.mocked(recallRunRoute.call).mockReturnValueOnce(pending);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { unmount } = render(<ExitDrawer mode="chat" sessions={SESSIONS} apiBase="" onClose={() => {}} />);
+    fireEvent.change(screen.getByPlaceholderText(/ask a (follow-up|question)/i), { target: { value: "q" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(recallRunRoute.call).toHaveBeenCalledTimes(1));
+
+    // Unmount BEFORE the POST resolves — teardown() runs while jobIdRef/closeStreamRef
+    // are still null, so at unmount time it's a no-op besides flipping aliveRef.
+    unmount();
+
+    resolvePost({ jobId: "j1" });
+    await pending;
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(scriptedEmit).toBeNull(); // openRecallStream never called for the unmounted run
+    expect(recallCancelRoute.call).toHaveBeenCalledWith(expect.anything(), { path: { jobId: "j1" } });
+    expect(errorSpy).not.toHaveBeenCalled();
+
+    errorSpy.mockRestore();
+  });
+
+  it("double-submit before the first POST resolves: only the latest run's stream drives state, the stale job is cancelled", async () => {
+    let resolveFirst!: (v: { jobId: string }) => void;
+    let resolveSecond!: (v: { jobId: string }) => void;
+    const firstPost = new Promise<{ jobId: string }>((resolve) => { resolveFirst = resolve; });
+    const secondPost = new Promise<{ jobId: string }>((resolve) => { resolveSecond = resolve; });
+    vi.mocked(recallRunRoute.call).mockReturnValueOnce(firstPost).mockReturnValueOnce(secondPost);
+
+    render(<ExitDrawer mode="chat" sessions={SESSIONS} apiBase="" onClose={() => {}} />);
+    const input = screen.getByPlaceholderText(/ask a (follow-up|question)/i);
+
+    fireEvent.change(input, { target: { value: "first" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(recallRunRoute.call).toHaveBeenCalledTimes(1));
+
+    // UX-layer guard: the Send button is disabled while a run is in flight.
+    expect((screen.getByRole("button", { name: "Send" }) as HTMLButtonElement).disabled).toBe(true);
+
+    // Second submit races in via Enter (the input itself stays enabled) before
+    // the first POST has resolved — this is the re-entrancy the generation
+    // guard in run() must catch even though the button is disabled.
+    fireEvent.change(input, { target: { value: "second" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(recallRunRoute.call).toHaveBeenCalledTimes(2));
+
+    // Resolve the stale first POST: superseded by gen, so its job is cancelled
+    // and no stream opens for it.
+    resolveFirst({ jobId: "j1" });
+    await firstPost;
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(recallCancelRoute.call).toHaveBeenCalledWith(expect.anything(), { path: { jobId: "j1" } });
+
+    // Resolve the current (second) POST: this one is allowed to open a stream.
+    resolveSecond({ jobId: "j2" });
+    await secondPost;
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(scriptedEmit).not.toBeNull();
+
+    scriptedEmit!({ type: "session_started", sessionId: "s1" });
+    scriptedEmit!({
+      type: "done",
+      answers: [
+        { sessionId: "s1", agent: "claude", answered: true, answer: "finding for second" },
+        { sessionId: "s2", agent: "codex", answered: false, answer: "" },
+      ],
+      synthesis: "second-turn synthesis",
+    });
+
+    await waitFor(() => expect(screen.getByText(/second-turn synthesis/)).toBeTruthy());
+    // Both turns are recorded ("first" and "second" were each submitted), but
+    // only "second" ever completed — the stale first stream never drove any
+    // state, so its turn has no agent reply at all.
+    const agentMsgs = document.querySelectorAll(".rc-msg--agent");
+    expect(agentMsgs.length).toBe(1);
+    expect(agentMsgs[0].textContent).toMatch(/second-turn synthesis/);
+    const userMsgs = document.querySelectorAll(".rc-msg--user");
+    expect(userMsgs.length).toBe(2);
+  });
 });
