@@ -100,6 +100,13 @@ export class RecallIndex {
     return new Map(rows.map((r) => [`${r.agent}:${r.session_id}`, r.stamp]));
   }
 
+  // Distinct projects/agents seen in the index, for populating the panel's filter <select>s.
+  facets(): { projects: string[]; agents: string[] } {
+    const projects = (this.db.prepare("SELECT DISTINCT project FROM chunks WHERE project IS NOT NULL ORDER BY project").all() as { project: string }[]).map((r) => r.project);
+    const agents = (this.db.prepare("SELECT DISTINCT agent FROM chunks ORDER BY agent").all() as { agent: string }[]).map((r) => r.agent);
+    return { projects, agents };
+  }
+
   // Build the FTS5 MATCH expr: drop quotes, keep words > 2 chars, prefix-OR them.
   private matchExpr(query: string): string {
     return query.replace(/['"]/g, "").split(/\s+/).filter((w) => w.length > 2).map((w) => `"${w}"*`).join(" OR ");

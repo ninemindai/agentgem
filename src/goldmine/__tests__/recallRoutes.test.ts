@@ -60,7 +60,7 @@ function fakeDeps(overrides: Partial<RecallRouteDeps> = {}): RecallRouteDeps {
   return {
     readIndex: { search: () => [] as MomentHit[] } as never,
     funnelDeps: { askOne: async () => ({ answered: true, answer: "" }), synthesize: async function* () {} },
-    indexStatus: () => ({ ready: true, indexed: 0, total: 0 }),
+    indexStatus: () => ({ ready: true, indexed: 0, total: 0, facets: { projects: [], agents: [] } }),
     ...overrides,
   };
 }
@@ -132,7 +132,7 @@ describe("GET /api/recall/search", () => {
 describe("GET /api/recall/status", () => {
   it("returns deps.indexStatus()", () => {
     const { app, routes } = fakeApp();
-    const status = { ready: true, indexed: 3, total: 5 };
+    const status = { ready: true, indexed: 3, total: 5, facets: { projects: ["p1"], agents: ["claude"] } };
     registerRecallRoutes(app as never, fakeDeps({ indexStatus: () => status }));
     const { res, jsonBodies } = fakeRes();
     routes["GET /api/recall/status"]({ query: {}, params: {} } as never, res as never);

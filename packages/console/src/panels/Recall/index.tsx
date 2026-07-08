@@ -80,7 +80,7 @@ export function Recall({ apiBase }: { apiBase: string }) {
             onChange={(e) => setFilters({ ...filters, project: e.target.value || undefined })}
           >
             <option value="">All projects</option>
-            {filters.project && <option value={filters.project}>{filters.project}</option>}
+            {(status?.facets?.projects ?? []).map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
           <select
             className={"rc-filter" + (filters.agent ? " is-set" : "")}
@@ -89,8 +89,7 @@ export function Recall({ apiBase }: { apiBase: string }) {
             onChange={(e) => setFilters({ ...filters, agent: e.target.value || undefined })}
           >
             <option value="">All agents</option>
-            <option value="claude">claude</option>
-            <option value="codex">codex</option>
+            {(status?.facets?.agents ?? []).map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
           <select
             className={"rc-filter" + (filters.sinceDays ? " is-set" : "")}

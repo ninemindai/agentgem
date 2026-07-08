@@ -18,6 +18,7 @@ export interface RecallStatus {
   ready: boolean;
   indexed: number;
   total: number;
+  facets: { projects: string[]; agents: string[] };
 }
 
 /** Recall's search state: debounced BM25 search over the local moment index, plus a
