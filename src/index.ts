@@ -61,7 +61,7 @@ import { requireShareOriginSecret } from "./originSecret.js";
 import { ShareProxyController } from "./share.proxy.controller.js";
 import { SourcesController } from "./sources.controller.js";
 import { PlayController } from "./play.controller.js";
-import { resolveAggregatorDb, type AppDb, GitHubVerifier, fetchOrgMemberships } from "@agentgem/aggregator";
+import { resolveAggregatorDb, type AppDb, GitHubVerifier, fetchOrgMemberships, migrateAccountsToBetterAuth } from "@agentgem/aggregator";
 import { mountGating } from "./gating.js";
 import { installAuth, githubExchangeCode } from "./auth/install.js";
 import { mountAuth } from "./auth/mount.js";
@@ -225,6 +225,12 @@ export async function createApp(port: number): Promise<RestApplication> {
       cookieDomain: process.env.AGENTGEM_SESSION_COOKIE_DOMAIN,
     });
     mountAuth(server.expressApp as never, auth, webOrigins, "/api/betterauth");
+    // One-time boot backfill (Plan 1a-Task 4): give every existing accounts row a same-id
+    // better-auth user/account anchor before any sign-in runs, so a pre-existing github user
+    // links to their existing identity instead of getting a new uuid user. Additive/idempotent.
+    const { migrated, conflicts } = await migrateAccountsToBetterAuth(aggDb);
+    if (conflicts.length > 0) console.error(`better-auth migration: ${conflicts.length} account link conflicts — cutover must resolve these:`, conflicts);
+    else console.log(`better-auth migration: backfilled ${migrated} account(s)`);
   }
   // Stars + reviews + team usage need the DB + an allowlisted web origin; they don't need the GitHub OAuth secret.
   if (aggDb && webOrigins.length > 0) {
