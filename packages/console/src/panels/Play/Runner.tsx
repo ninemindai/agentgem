@@ -7,8 +7,9 @@ import { CAP_LABEL, getConsent, setConsent } from "./consent.js";
 
 // The sealed miniapp player: null-origin iframe (no allow-same-origin), strict CSP via sandboxDoc.
 // Miniapps are usually full-window apps (html,body{height:100%;overflow:hidden}), so a short fixed
-// iframe would CLIP them. Instead render at a realistic virtual window (vw×vh) and scale that iframe to
-// fit — inline it fits the column width; fullscreen it fits the whole viewport so you can actually play it.
+// iframe would CLIP them. Inline, render at a realistic virtual window (vw×vh) and scale that iframe down
+// to fit the column. Fullscreen instead sizes the iframe to the overlay: a miniapp lays itself out against
+// its own viewport, so scaling a vw×vh frame up only magnifies it — it never plays at screen size.
 // `interactive={false}` renders a live but click-through thumbnail (no fullscreen button; the card owns
 // framing + clicks), used by the Arcade grid.
 //
@@ -104,19 +105,17 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
     setPending(null);
   };
 
+  // Inline only: fit the column width, never upscale. Fullscreen needs no scale — the iframe is sized to
+  // the overlay itself, so the miniapp lays out against the real screen instead of a magnified vw×vh.
   useEffect(() => {
     const box = boxRef.current;
-    if (!box || typeof ResizeObserver === "undefined") return; // jsdom / non-browser: keep the default
-    const measure = () => {
-      const cw = box.clientWidth || vw, ch = box.clientHeight || vh;
-      // inline: fit width, never upscale. fullscreen: fit both dims so the whole game fills the screen.
-      setScale(fs ? Math.min(cw / vw, ch / vh) : Math.min(1, cw / vw));
-    };
+    if (fs || !box || typeof ResizeObserver === "undefined") return; // jsdom / non-browser: keep the default
+    const measure = () => setScale(Math.min(1, (box.clientWidth || vw) / vw));
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(box);
     return () => ro.disconnect();
-  }, [vw, vh, fs]);
+  }, [vw, fs]);
 
   const boxStyle: React.CSSProperties = fs
     ? { position: "fixed", inset: 0, zIndex: 1000, background: "rgba(12,14,18,.94)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }
@@ -131,8 +130,10 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
         title="miniapp preview"
         sandbox="allow-scripts"
         srcDoc={sandboxDoc(html)}
-        style={{ width: vw, height: vh, border: 0, display: "block", background: "#fff", pointerEvents: interactive ? "auto" : "none",
-          transform: `scale(${scale})`, transformOrigin: fs ? "center" : "top left" }}
+        style={fs
+          ? { width: "100%", height: "100%", border: 0, display: "block", background: "#0d1117" }
+          : { width: vw, height: vh, border: 0, display: "block", background: "#fff", pointerEvents: interactive ? "auto" : "none",
+              transform: `scale(${scale})`, transformOrigin: "top left" }}
       />
       {interactive && (
         <button

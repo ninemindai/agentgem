@@ -44,6 +44,17 @@ describe("Runner", () => {
     expect(iframe.style.transform).toContain("scale(");
   });
 
+  // A miniapp lays itself out against its own viewport, so magnifying the vw×vh frame would never play it
+  // at screen size. Fullscreen hands the iframe the overlay's real box instead of a scaled virtual window.
+  it("plays fullscreen at the overlay's real size, not a scaled virtual window", () => {
+    const { container } = render(<Runner html="<p>x</p>" vw={1200} vh={780} />);
+    fireEvent.click(screen.getByRole("button", { name: "Play fullscreen" }));
+    const iframe = container.querySelector("iframe") as HTMLIFrameElement;
+    expect(iframe.style.width).toBe("100%");
+    expect(iframe.style.height).toBe("100%");
+    expect(iframe.style.transform).toBe("");
+  });
+
   it("brokers session-data: on the iframe's tools/call it fetches host data and replies over the wire", async () => {
     const spy = vi.spyOn(playSessionDataRoute, "call").mockResolvedValue({ meta: { project: "p" }, timeline: [{ role: "user", tsMs: 1, text: "hi" }] });
     const { container } = render(<Runner html="<p>x</p>" name="g1" apiBase="" needs={["session-data"]} />);
