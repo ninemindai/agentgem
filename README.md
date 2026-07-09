@@ -52,6 +52,17 @@ call exactly the same thing.
   suggests ready-to-build Gems grouped by recurring workflow. It also **distills brand-new
   draft skills** from the procedures you repeat by hand — review them and fold them
   straight into a Gem.
+- **Cross-session recall** — [Recall](docs/recall.md) searches across every past session
+  by what happened inside it (an instant, local, secret-scrubbed index), then lets you
+  chat with or extract across the ones that matter. The same intelligence is the
+  **`agentgem-goldmine`** MCP server, so any coding agent can query your history.
+- **Context-hygiene detection** — [context hygiene](docs/context-hygiene.md) grades each
+  session for context bloat with LLM-free detectors, marks a deterministic "cut here at
+  turn N", and — via `agentgem warm --watch --nudge` — raises a live OS notification when
+  a running session's context gets heavy.
+- **Chat, and Play** — [Chat](docs/chat.md) with a local coding agent from inside the
+  console and distill the conversation into a Gem; [Play](docs/play.md) builds
+  AI-generated mini-games, sealed to run anywhere and versioned as first-class `game` Gems.
 - **Deploy targets** — Eve and OpenAI Sandbox (code-gen), Flue (materialize, deployable to
   Cloudflare), and Bedrock AgentCore (managed backend); code-gen targets share a common
   `compose` step.
@@ -64,6 +75,10 @@ call exactly the same thing.
   curated skills at [app.agentgem.ai](https://app.agentgem.ai) — star, review, preview,
   and copy an install command. The hosted marketplace is an **early testbed**: treat it
   as a preview, and expect accounts, stars, and reviews to be reset occasionally.
+- **Registry-free sharing & identity** — [`agentgem get`](docs/sharing.md) installs a
+  published Gem with one command; `agentgem send` / `receive` pass one directly over an
+  encrypted, one-time hand-off; `agentgem bind` ties a GitHub identity to this machine's
+  signing key; `agentgem verify` checks a Gem runs across your local agents.
 - **An agent-native path** — every operation is also an MCP tool, so your local agent can
   build Gems over `/mcp` with no browser involved.
 
@@ -72,29 +87,29 @@ call exactly the same thing.
 <table>
   <tr>
     <td width="50%">
-      <img src="docs/screenshots/inspect.png" alt="Inspect — a usage dashboard over your local sessions: session/message/token totals, activity charts, a by-model breakdown, and an activity heatmap">
-      <p align="center"><b>Inspect</b> — a usage dashboard over your local sessions: totals, activity, and a by-model breakdown.</p>
+      <img src="docs/screenshots/recall.png" alt="Recall — a search box over every past session, with project, agent, and time-window filters and a selection bar with 'Chat with these' and 'Extract across these' exits">
+      <p align="center"><b>Recall</b> — search across every past session by what happened inside it, then chat with or extract across the ones that matter. <a href="docs/recall.md">↗</a></p>
     </td>
     <td width="50%">
-      <img src="docs/screenshots/mine.png" alt="Mine — AgentGem scores your session log as a goldmine: reusable workflows found, battle-tested ones, and ones worth sharing, with a shareable card">
-      <p align="center"><b>Mine</b> — your session log, scored: reusable workflows, battle-tested wins, and the ones worth sharing.</p>
+      <img src="docs/screenshots/session-timeline.png" alt="A session's context timeline — an SVG bloat curve with skill and subagent markers, a 'bounded' hygiene verdict, a biggest-context-jumps rail, a process-quality bar, and a Map/Transcript toggle">
+      <p align="center"><b>Context hygiene</b> — a per-session bloat timeline, the biggest context jumps, and a deterministic "cut here at turn N". <a href="docs/context-hygiene.md">↗</a></p>
     </td>
   </tr>
   <tr>
     <td width="50%">
-      <img src="docs/screenshots/watch.png" alt="Watch — a live feed of a running coding session, with every message and tool call streaming in and content redacted before it reaches the panel">
-      <p align="center"><b>Watch</b> — a live feed of a running session (Claude Code, Codex, Gemini, …), redacted before it reaches the panel.</p>
+      <img src="docs/screenshots/arcade.png" alt="The Play Arcade — a grid of AI-generated mini-games, each a live click-through thumbnail with a genre tag and an offline or live-capability pill">
+      <p align="center"><b>Play</b> — AI-generated mini-games, built by chatting and sealed to run anywhere, each a first-class <code>game</code> Gem. <a href="docs/play.md">↗</a></p>
     </td>
     <td width="50%">
-      <img src="docs/screenshots/curate.png" alt="Curate — compose a Gem from your machine's artifacts: skills ranked by real usage, with search, select, and materialize into a workspace">
-      <p align="center"><b>Curate</b> — compose a Gem from your artifacts, ranked by how often you actually use them.</p>
+      <img src="docs/screenshots/chat.png" alt="The Chat tab — an agent dropdown for Claude Code, a 'Start in' launcher toggling between Neutral and a project, and a message box">
+      <p align="center"><b>Chat</b> — drive a local coding agent grounded in your transcripts, then distill the conversation into a Gem. <a href="docs/chat.md">↗</a></p>
     </td>
   </tr>
 </table>
 
 ## Quickstart
 
-Needs Node.js ≥ 22. From the directory of the agent project you want to package,
+Needs Node.js ≥ 24. From the directory of the agent project you want to package,
 run it without installing:
 
 ```bash

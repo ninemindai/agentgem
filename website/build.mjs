@@ -42,6 +42,10 @@ const DOC_PAGES = [
   'docs/desktop.md',
   'docs/analyze.md',
   'docs/concepts.md',
+  'docs/recall.md',
+  'docs/chat.md',
+  'docs/context-hygiene.md',
+  'docs/play.md',
   'docs/architecture.md',
   'docs/pipeline.md',
   'docs/archive-format.md',
@@ -50,6 +54,7 @@ const DOC_PAGES = [
   'docs/targets.md',
   'docs/a2a.md',
   'docs/registry.md',
+  'docs/sharing.md',
   'docs/testbed-and-run.md',
   'docs/development.md',
 ];
@@ -64,6 +69,15 @@ const NAV_SECTIONS = [
       ['docs/desktop.md', 'Desktop app'],
       ['docs/analyze.md', 'Analyze'],
       ['docs/concepts.md', 'Concepts'],
+    ],
+  },
+  {
+    title: 'Working with your sessions',
+    items: [
+      ['docs/recall.md', 'Recall'],
+      ['docs/chat.md', 'Chat'],
+      ['docs/context-hygiene.md', 'Context hygiene'],
+      ['docs/play.md', 'Play'],
     ],
   },
   {
@@ -82,6 +96,7 @@ const NAV_SECTIONS = [
       ['docs/targets.md', 'Targets & deploy'],
       ['docs/a2a.md', 'A2A'],
       ['docs/registry.md', 'Registry'],
+      ['docs/sharing.md', 'Sharing & identity'],
       ['docs/testbed-and-run.md', 'Testbed & run'],
     ],
   },
@@ -270,6 +285,9 @@ copyDir(path.join(root, 'docs', 'diagrams'), path.join(out, 'docs', 'diagrams'))
 
 // Screenshot referenced by getting-started.md (./screenshot.png), served under /docs.
 fs.copyFileSync(path.join(root, 'docs', 'screenshot.png'), path.join(out, 'docs', 'screenshot.png'));
+
+// Console screenshots referenced by the feature docs (./screenshots/*.png).
+copyDir(path.join(root, 'docs', 'screenshots'), path.join(out, 'docs', 'screenshots'));
 
 // Render each doc page: HTML in the shell + the raw .md copied alongside.
 const docMeta = [];

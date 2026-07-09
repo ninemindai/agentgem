@@ -34,6 +34,11 @@ drafts; both feed `buildGem` (an accepted draft is staged into the inventory by 
 recommender only ranks what introspection already found; distillation is the deliberate exception
 — brand-new drafts behind a human-review gate. See [Analyze](analyze.md).
 
+A parallel **session-intelligence** surface reads the same transcripts for a different purpose:
+search (Recall), context-hygiene scoring, an aggregates-only chat/MCP, and Play mini-games. It's
+described in [Session intelligence](#session-intelligence-recall-hygiene-chat-play) below and is
+independent of the Gem-build spine.
+
 Server-side state lives under `~/.agentgem` (workspaces, recents, credentials, deploy
 records) — never inside a Gem.
 
@@ -71,7 +76,7 @@ Because every operation is decorator-defined, the build **must** compile with
 
 ## The Gem core (`@agentgem/*` packages)
 
-The kernel is decomposed into 12 acyclic `@agentgem/*` workspace packages (pnpm workspaces +
+The kernel is decomposed into 14 acyclic `@agentgem/*` workspace packages (pnpm workspaces +
 TypeScript project references); the server layer in `src/` stays thin and consumes them via
 `@agentgem/*`. They are framework-agnostic — no HTTP, no decorators, just functions over plain
 data — which is what lets the same code back a web request, an MCP tool call, and a test. The
@@ -86,7 +91,9 @@ dependency graph + rationale in [the decomposition proposal](proposals/backend-d
 | `@agentgem/base` | Cross-cutting helpers: redaction (`redact`, secret patterns, leak canary), workspaces, deploy records, ACP session |
 | `@agentgem/build` | `buildGem` — select artifacts by name → a `Gem` (+ checks, `requiredSecrets`); behavioral + external (`skillspector`) check scaffolding |
 | `@agentgem/archive` | Lay a Gem out as `gem.json` (manifest) + `gem.lock` and verify integrity; serialize to a directory or a deterministic `.tar.gz` |
-| `@agentgem/insight` | Analyze: transcript scan → `WorkflowSignal`, default-deny `scrub`, distill draft skills, ACP recommender, attestation + ingest |
+| `@agentgem/insight` | Analyze: transcript scan → `WorkflowSignal`, default-deny `scrub`, distill draft skills, ACP recommender, attestation + ingest; **context-hygiene** detectors + bloat curve + deterministic `boundarySegments` (cut-here), rubrics |
+| `@agentgem/recall` | Cross-session transcript search: a BM25/FTS5 index (`node:sqlite`) over scrubbed turns → ranked cross-session moments |
+| `@agentgem/play` | Mini-games as `game` Gems: the git-backed `~/.agentgem/miniapps/` registry, scaffolds, the save-time seal + portability gates |
 | `@agentgem/distribute` | Registry (GitHub-backed index + per-version archives), share/search, SSRF-guarded fetch |
 | `@agentgem/run` | Run/verify a Gem; local OS sandbox + ACP run; deploy a materialized project to Vercel/Cloudflare |
 | `@agentgem/testbed` | Install a Gem into a local `.claude`/`.codex`/`.hermes` testbed; flavor detection |
@@ -98,18 +105,38 @@ The conceptual pipeline `introspect → redact → buildGem → archive` therefo
 `capture → base → build → archive`; the optional **Analyze / workflow-aware** path
 (scan → distill drafts → recommend, see [Analyze](analyze.md)) lives in `@agentgem/insight`.
 
-## Goldmine chat (aggregates-only design)
+## Session intelligence (Recall, hygiene, chat, Play)
 
-The **goldmine chat** (`src/goldmine/mcpServer.ts`) is a local ACP agent that inspects your
-past coding sessions to answer questions like _"Which tools did I use most in this session?"_
-or _"What patterns emerged?"_ Its tool surface is intentionally aggregates-only: the chat
-agent receives `summarize_session` (a deterministic summary: process quality, stage mix,
-detector findings, metrics) and `ask_session` (a separate ephemeral agent, running in a
-subprocess with the same model family as the session, answers specific questions about the
-session and returns only the answer). Raw transcript content never enters the chat context.
-This follows the **Insights Generator pattern** — the primary agent reads only processed
-results; a separate processing layer handles raw traces — ensuring the chat agent sees only
-synthesized, human-readable insights.
+Alongside Gem-building, AgentGem reads, searches, and grades your **session history**. This
+half is served from `src/goldmine/*` and `src/warm/*`, backed by `@agentgem/recall`,
+`@agentgem/insight`, and `@agentgem/play`, and surfaced in the console under the *Observe* and
+*Build* phases. See [Recall](recall.md), [Context hygiene](context-hygiene.md),
+[Chat](chat.md), and [Play](play.md).
+
+- **Recall** (`@agentgem/recall`, `src/goldmine/recallRoutes.ts`) — a local BM25/FTS5 index
+  (`node:sqlite`) over **scrubbed** transcript turns. Search is instant and deterministic;
+  the deeper read (chat/extract "exits") runs a capped `ask_session` fan-out plus a synthesis
+  pass over an ephemeral, read-only ACP subprocess.
+- **The `agentgem-goldmine` MCP server** (`src/goldmine/mcpServer.ts`, `agentgem-goldmine`
+  bin) — the same intelligence as six MCP tools (`search_sessions`,
+  `search_session_content`, `summarize_session`, `ask_session`, `get_artifact_detail`,
+  `get_behavior_findings`). Its surface is intentionally **aggregates-only**: the caller sees
+  `summarize_session` (a deterministic roll-up: process quality, stage mix, detector findings)
+  and `ask_session` (a separate ephemeral agent reads one raw transcript and returns only the
+  answer). Raw transcript content never enters the caller's context — the **Insights
+  Generator pattern**.
+- **Chat** (`src/goldmine/chatRoutes.ts`) — drives a local ACP agent (Claude/Codex),
+  **read-only**, provisioned with the goldmine MCP so it's grounded in your history. A "Start
+  in" launcher can point the session at a project directory, validated server-side against a
+  discovered/recent allow-list (no raw path from the browser is trusted).
+- **Context hygiene** (`@agentgem/insight`: `contextHygiene.ts`, `boundarySegments.ts`,
+  `detectors.ts`) — LLM-free detectors, a per-session hygiene score/verdict, and a
+  deterministic "cut here at turn N" change-point. The `agentgem warm` daemon (`src/warm/*`)
+  precomputes these (and insight/scorecard/recall caches) on `.claude` changes and, with
+  `--nudge`, raises an OS notification when a live session's verdict worsens.
+- **Play** (`@agentgem/play`, `src/play.controller.ts`) — mini-games authored by an ACP agent
+  jailed to a single miniapp dir, saved through a **seal** (no-network admission gate) into a
+  git-backed registry and a one-artifact `game` Gem. See [Play](play.md).
 
 ## Distribution
 
@@ -151,9 +178,13 @@ src/                  # the thin server layer — consumes @agentgem/* via works
   schemas.ts          # Zod schemas shared across surfaces
   *Stream.ts          # SSE handlers (workflow analyze, gem run, scorecard)
   distill/mcpServer.ts # `agentgem-distill` bin — stdio MCP (MCPApplication + @tool)
-  goldmine/mcpServer.ts # local goldmine chat — answers questions about past sessions (aggregates-only)
+  goldmine/           # session intelligence — recall search, chat, and the
+    mcpServer.ts      #   `agentgem-goldmine` bin (aggregates-only MCP over past sessions)
+    recallRoutes.ts · chatRoutes.ts
+  warm/               # `agentgem warm` precompute daemon + launchd/systemd service + hygiene nudge
+  play.controller.ts  # Play miniapps REST surface — /api/play/*
   bind/               # `agentgem bind` device-flow auth
-packages/             # the Gem core — 12 @agentgem/* workspace packages (see table above)
+packages/             # the Gem core — 14 @agentgem/* workspace packages (see table above)
   console/ · marketplace/   # the React console + public marketplace SPAs
 desktop/              # Electron host — embeds the server (tray + auto-update)
 docs/

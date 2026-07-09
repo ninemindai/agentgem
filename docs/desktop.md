@@ -19,26 +19,18 @@ Grab the latest build from the
 | Platform | File |
 | --- | --- |
 | macOS (Apple Silicon / Intel) | `AgentGem-<version>-arm64.dmg` · `AgentGem-<version>.dmg` |
-| Windows | `AgentGem-Setup-<version>.exe` |
+| Windows | `AgentGem.Setup.<version>.exe` |
 | Linux | `AgentGem-<version>.AppImage` |
 
-> **The builds are currently unsigned.** Code-signing and notarization are
-> scaffolded but not yet wired, so your OS will warn on first launch:
+> **macOS builds are signed and notarized** (as of `desktop-v0.4.0`). Gatekeeper
+> opens the `.dmg` and the app normally — the *"AgentGem is damaged and can't be
+> opened"* message from the unsigned 0.1.1 builds is gone. **Windows and Linux
+> builds are still unsigned**, so on the SmartScreen prompt choose
+> **More info → Run anyway**.
 >
-> - **macOS** — Gatekeeper reports **"AgentGem is damaged and can't be opened."**
->   The app is fine; this is just the unsigned-build warning. Drag AgentGem into
->   **Applications**, then clear the quarantine flag in Terminal:
->
->   ```bash
->   xattr -dr com.apple.quarantine /Applications/AgentGem.app
->   ```
->
->   Then open it normally. (Right-clicking **Open** does *not* clear the
->   "damaged" state — only the command above does.)
-> - **Windows** — on the SmartScreen prompt, choose **More info → Run anyway**.
->
-> If you'd rather not run an unsigned build, [run it from source](#run-from-source)
-> instead.
+> **Upgrading from 0.1.1:** because 0.1.1 shipped unsigned and this build is
+> signed, macOS auto-update (Squirrel.Mac) won't apply over an installed 0.1.1.
+> Download this release once by hand; auto-update works normally from there on.
 
 ## What you get
 
@@ -48,8 +40,9 @@ Grab the latest build from the
   copy/paste.
 - **System tray** — closing the window hides the app to the tray and keeps the
   server running; reopen or quit from the tray icon.
-- **Auto-update** — scaffolded via GitHub Releases; it activates once signed
-  builds are published.
+- **Auto-update** — signed macOS builds update themselves over GitHub Releases
+  (see the 0.1.1 upgrade caveat under [Download](#download)); Windows and Linux
+  update once those platforms are signed.
 
 Everything else — building, publishing, merging, and deploying Gems — is identical
 to the web UI.
@@ -93,8 +86,9 @@ the desktop app is never a fork of the web UI: it's the same server, hosted.
 
 ## Troubleshooting
 
-- **"AgentGem is damaged and can't be opened" / SmartScreen** — expected for the
-  unsigned builds; see the quarantine-strip note under [Download](#download).
+- **Windows SmartScreen warning** — expected; the Windows build is still
+  unsigned. Choose **More info → Run anyway**. (macOS builds are signed and
+  notarized, so Gatekeeper no longer warns.)
 - **Window is blank or the app won't start** — the app shows the underlying error
   in a dialog. Rebuild from source (`pnpm -C desktop dev`) to see the full logs.
 - **A second launch focuses the existing window** — that's intentional; AgentGem

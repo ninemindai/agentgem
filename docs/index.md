@@ -23,6 +23,22 @@ OpenAPI 3.1 document — so the web page and your local agent call exactly the s
 - **[Concepts](concepts.md)** — what a Gem is, the archive format, the redaction trust
   boundary, and the AgentBack one-contract model.
 
+## Working with your sessions
+
+The console is more than a Gem builder — it reads, searches, and grades your session
+history, and turns it into things you can play and share.
+
+- **[Recall](recall.md)** — search across every past session by what happened inside
+  it, then chat with or extract across the ones that matter. Its intelligence is also
+  the **`agentgem-goldmine`** MCP server, so any coding agent can query your history.
+- **[Chat](chat.md)** — drive a local coding agent (Claude, Codex) from inside the
+  console, grounded in your transcripts, and distill the conversation into a Gem.
+- **[Context hygiene](context-hygiene.md)** — LLM-free detection of context bloat: a
+  per-session score, a "cut here at turn N" boundary, a session timeline, a
+  leaderboard, and live OS nudges from the `agentgem warm` daemon.
+- **[Play](play.md)** — AI-generated mini-games, built by chatting, sealed to run
+  anywhere, and versioned as first-class `game` Gems.
+
 ## Architecture & internals
 
 - **[Architecture](architecture.md)** — the system map: clients → contract surface → Gem
@@ -45,6 +61,10 @@ OpenAPI 3.1 document — so the web page and your local agent call exactly the s
   and install composable Gems. Its hosted face is the **public marketplace at
   [app.agentgem.ai](https://app.agentgem.ai)** — browse, star, review, and install
   (early testbed: hosted data may be reset).
+- **[Sharing & identity](sharing.md)** — install a published Gem with one command
+  (`agentgem get`), pass one directly over an encrypted one-time hand-off
+  (`agentgem send` / `receive`), bind a GitHub identity (`agentgem bind`), and verify a
+  Gem runs across agents (`agentgem verify`).
 - **[Testbed & run](testbed-and-run.md)** — install a Gem into a local testbed; run or
   deploy a materialized target locally, to Vercel, or to Cloudflare.
 
