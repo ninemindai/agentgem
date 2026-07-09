@@ -1,175 +1,71 @@
-# Task 9 report: Studio publish auto-resumes after an inline connect
+# Task 9 Report: Draft-a-Gem Handoff
 
-## Files touched
+## validateSelection behavior
 
-- `packages/console/src/panels/Play/Studio.tsx` — split `shareToExplore` into a gate + `publishWorkspace(login)`, added `pendingPublish` state, `useIdentity`/`useGitHubBind`/`ConnectGitHub` wiring, `dismissConnect()`, and the inline connect banner. Dropped the `bindStatusRoute` import.
-- `packages/console/src/panels/Play/__tests__/StudioShare.test.tsx` (new) — the 5 tests from the brief, verbatim.
-- `packages/console/src/panels/Play/__tests__/Studio.test.tsx` (deviation, see below) — wrapped the 3 existing `render()`/`rerender()` calls in `<IdentityProvider apiBase="">`, matching the established pattern in `PublishToExplore.test.tsx` / `Curate.test.tsx`.
+`validateSelection(raw, inv)` in `src/goldmine/draftGem.ts`:
+- Accepts `unknown` input; returns `{}` for null, non-object, or array inputs.
+- For valid objects, runs each of `skills`, `mcpServers`, `hooks` through a `keep()` filter that checks each proposed name against the corresponding `ConfigInventory` pool.
+- Non-array values for a key (e.g. a string instead of `[]`) are treated as empty.
+- Only keys with at least one valid name appear in the returned object (no empty arrays).
+- Returns plain `Exclude<GemSelection, { all: true }>` — the narrow selection shape `buildGem` accepts directly.
 
-`identity/`, `Runner.tsx`, `Shell.tsx`, and other panels were not touched.
+## How draftGemFromChat drives the live turn + parses
 
-## Deviation and why
+`draftGemFromChat(deps, chatId)` in `src/goldmine/draftGem.ts`:
+1. Sends a strict single-turn prompt via `deps.manager.sendMessage(chatId, DRAFT_PROMPT)`. The prompt instructs the agent to reply with ONLY `{"skills":[],"mcpServers":[],"hooks":[]}` naming installed artifacts, no prose.
+2. Iterates the `AsyncGenerator<ChatEvent>` from `sendMessage`:
+   - On a `"failed"` event: returns `{ error: ev.error }` immediately.
+   - On a `"done"` event: captures `result.text` and breaks.
+3. Extracts the first `{...}` block (first-brace / last-brace slice) from the accumulated text. Returns `{ error: "no JSON block found …" }` if none found.
+4. Calls `validateSelection(parsed, inv)` against `introspectConfig()` (from `@agentgem/capture`, lazily imported; overrideable via `deps.introspect` for tests).
+5. Computes `dropped` = names the agent proposed across all three arrays that are absent from `selection`.
+6. Calls `buildGem(inv, selection)` (from `@agentgem/build`).
+7. Returns `{ selection, gem, dropped }`. All errors are caught → `{ error: string }`.
 
-The brief's "modify only" list named `Studio.tsx` and `StudioShare.test.tsx`. Making `Studio` call `useIdentity()` (a required interface per the brief) means it now throws `"useIdentity must be used inside <IdentityProvider>"` when rendered without a provider — which is exactly how the pre-existing `Studio.test.tsx` rendered it. Per the brief's explicit fallback ("If an existing Play test breaks, that is a real regression — fix the cause, do not weaken the test"), I fixed the cause: wrapped the 3 render/rerender call sites in `<IdentityProvider apiBase="">`. No assertions were touched or weakened — only the render wrapper changed. Confirmed via `git stash` that these 4 failures did not exist before this change and that the 2 remaining vitest-run failures (`Observe/Observe.test.tsx`, `Sessions` — `Cannot find module '@agentgem/insight/observeAggregate'`) are pre-existing and unrelated (present identically on the unmodified tree).
+## buildGem call shape
 
-(Note: this file previously contained a stale report for an unrelated "Draft-a-Gem Handoff" task — apparently task numbering was reused across a different plan in this worktree's history. Replaced with this task's actual report.)
-
-## Commands run (verbatim, this worktree)
-
-```
-pnpm -C packages/console exec vitest run src/panels/Play/__tests__/StudioShare.test.tsx
-```
-
-### Step 2 — red (before implementing Studio.tsx)
-
-```
- ❯ waitForWrapper ../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/wait-for.js:163:27
- ❯ ../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:86:33
- ❯ src/panels/Play/__tests__/StudioShare.test.tsx:86:34
-
- Test Files  1 failed (1)
-      Tests  3 failed | 2 passed (5)
-```
-3 of 5 failed: the unbound/dismiss/resume tests found no `Connect GitHub to publish` banner (old code had no banner, no resume path, and the dead-end status string).
-
-### Step 4 — green (after implementing Studio.tsx)
-
-```
- RUN  v3.2.6 /Users/rfeng/Projects/ninemind/agentgem-identity-chip/packages/console
-
- ✓ src/panels/Play/__tests__/StudioShare.test.tsx (5 tests) 157ms
-
- Test Files  1 passed (1)
-      Tests  5 passed (5)
+```ts
+buildGem(inv: ConfigInventory, selection: GemSelection): Gem
 ```
 
-### Regression check — full Play suite
+Used with the narrow selection (no `opts`); the gem's name defaults to `"gem"` and `createdFrom` to `"unknown"`. The result is returned directly to the client — no draft store persisted.
 
-```
-pnpm -C packages/console exec vitest run src/panels/Play/
-```
-Before fixing `Studio.test.tsx`:
-```
- ❯ src/panels/Play/__tests__/Studio.test.tsx (4 tests | 4 failed) 16ms
-   × Studio > opens a studio chat targeting the miniapp and refreshes the preview on done
-     → useIdentity must be used inside <IdentityProvider>
-   (…3 more, same cause)
- Test Files  1 failed | 7 passed (8)
-      Tests  4 failed | 61 passed (65)
-```
-After wrapping the 3 render sites in `<IdentityProvider>`:
-```
- ✓ src/panels/Play/__tests__/Studio.test.tsx (4 tests) 84ms
- ✓ src/panels/Play/__tests__/StudioShare.test.tsx (5 tests) 159ms
- ✓ src/panels/Play/__tests__/Composer.test.tsx (7 tests) 284ms
- ✓ src/panels/Play/__tests__/mcpUiHost.test.ts (16 tests) 39ms
- ✓ src/panels/Play/__tests__/Runner.test.tsx (19 tests) 626ms
- ✓ src/panels/Play/__tests__/PlayDeepLink.test.tsx (3 tests) 35ms
- ✓ src/panels/Play/__tests__/mcpHostTools.test.ts (10 tests) 6ms
- ✓ src/panels/Play/__tests__/Arcade.test.tsx (1 test) 22ms
+## Deferred: Curate deep-link
 
- Test Files  8 passed (8)
-      Tests  65 passed (65)
-```
+There is no persistent "Curate draft store" in this repo. The route returns the built Gem JSON directly to the client. A future Curate deep-link integration can persist the result via a store once that store exists. This is noted in a code comment in both `draftGem.ts` and `chatRoutes.ts`.
 
-### Full console suite
+## Test approach + collection proof
 
-```
-pnpm -C packages/console exec vitest run
-```
-```
- FAIL  src/panels/Observe/Observe.test.tsx [ src/panels/Observe/Observe.test.tsx ]
- FAIL  src/panels/Sessions/... (same root cause)
-Error: Failed to resolve import "@agentgem/insight/observeAggregate" from "src/panels/Observe/index.tsx"
+File: `src/goldmine/__tests__/draftGem.test.ts`
 
- Test Files  2 failed | 97 passed (99)
-      Tests  562 passed (562)
-```
-Confirmed via `git stash` (which leaves the untracked `StudioShare.test.tsx` in place, so it fails 3/5 against the unmodified `Studio.tsx` — expected) that these same 2 file-level import-resolution failures occur identically on the pre-task tree; they are the `@agentgem/insight` dist-not-built issue tracked elsewhere in memory, not caused by this change. 0 test-level failures among the 562 executed tests in either state (only these 2 files fail to even collect, both unrelated to Play/identity).
+**validateSelection unit tests (8 tests):**
+- keeps known names, drops hallucinated
+- returns {} when nothing valid
+- ignores malformed input (string)
+- ignores null input
+- ignores non-object (number)
+- filters hooks correctly
+- handles empty arrays → {}
+- handles non-array skill values gracefully
 
-### Typecheck
+**draftGemFromChat integration tests (3 tests), using a fake ChatManager seam:**
+- Fake `sendMessage` that yields a `delta` then `done` with JSON text containing a hallucinated name ("ghost") → asserts `selection` is validated, `gem.artifacts` contains valid names only, `dropped` contains "ghost".
+- Fake `sendMessage` that yields `failed` event → asserts `{ error }` returned with the error message.
+- Fake `sendMessage` that yields `done` with no JSON → asserts `{ error }` matching `/no json/i`.
 
-```
-pnpm -C packages/console exec tsc --noEmit
-```
-```
-src/panels/Observe/index.tsx(6,34): error TS2307: Cannot find module '@agentgem/insight/observeAggregate' or its corresponding type declarations.
-src/panels/Observe/useObserveData.ts(3,34): error TS2307: Cannot find module '@agentgem/insight/observeAggregate' or its corresponding type declarations.
-src/panels/Play/mcpHostTools.ts(6,32): error TS2307: Cannot find module '@agentgem/play' or its corresponding type declarations.
-src/panels/Sessions/index.tsx(4,34): error TS2307: Cannot find module '@agentgem/insight/observeAggregate' or its corresponding type declarations.
-```
-Same 4 errors reproduced via `git stash` on the unmodified tree — pre-existing, unbuilt-workspace-dist issue, unrelated to `Studio.tsx`/`StudioShare.test.tsx` (neither file appears in the error list).
+**Run result:** 11 tests, 11 passed, 0 failed.
 
-## Self-review against the three pinned properties
+## Files changed
 
-1. `publishWorkspace(login)` takes `login` as a parameter, never reads `useIdentity().status` after a bind — confirmed by reading the diff: the `onBound` callback passes `login` straight from `useGitHubBind`'s `onBound` argument (itself sourced from `bindComplete`'s response), not from `identity`.
-2. `save()` is called exactly once per `shareToExplore()` invocation (inside the gate, before the bound/unbound branch) and `publishWorkspace` never calls `save()`. Test 3 (`authorizing resumes… without re-saving`) asserts `save` was called exactly once end-to-end and passes.
-3. `pendingPublish` resets to `false` in `dismissConnect()` (banner Dismiss button) and inside `onBound` right before firing the resume — so a stale flag can't fire on a later bind once cleared. It is not reset directly on a bind *rejection* (`useGitHubBind`'s `error` state, e.g. `stale`/`bad-signature`) — the banner stays up so the user can retry the same pending publish with a fresh code, which is the intended retry UX per `ConnectGitHub`/`useGitHubBind`'s own design (`error` is retryable, `flow` stays live). The banner is the only place `pendingPublish` is visible/actionable from, and dismissing it is the only way to leave without succeeding, so a stale flag firing on some later, unrelated bind is not possible: `pendingPublish` only lives while that banner instance is mounted and always clears on unmount-equivalent (dismiss or success). Flagging this reading as a deliberate interpretation rather than silently asserting literal compliance.
+- `src/goldmine/draftGem.ts` — NEW: `validateSelection` + `draftGemFromChat` + deps seam type
+- `src/goldmine/__tests__/draftGem.test.ts` — NEW: 11 tests
+- `src/goldmine/chatRoutes.ts` — MODIFIED: added `import { draftGemFromChat }` and `POST /api/chat/:chatId/draft-gem` route
 
-No other deviations. Command prefix `pnpm -C packages/console exec vitest run …` was used throughout, matching the binding instruction.
+## Self-review
 
----
-
-## Addendum: regression test pinning Studio's `onBound` against clobbering the refreshed identity
-
-Added one test to `packages/console/src/panels/Play/__tests__/StudioShare.test.tsx` (only file touched; `Studio.tsx` untouched). Added `mountWithChip()` (renders `<IdentityChip apiBase="" />` alongside `<Studio>` inside one `<IdentityProvider>`) and a new `it(...)` that drives Share → Connect GitHub → Copy code & open GitHub, then asserts on the `IdentityChip` (the real context consumer): the avatar `img` src is `https://a/bob.png` and the button's `title` attribute is `"Open app.agentgem.ai signed in"` — both only true if the post-bind `refresh()`'s full record (`avatarUrl`, `sessionActive`) survived Studio's `onBound`.
-
-### Proof: injected the bug, watched the test fail
-
-Temporarily edited `Studio.tsx`: destructured `setStatus: setIdentityStatus` from `useIdentity()` and added `setIdentityStatus({ bound: true, login })` as the first line of `onBound` (before the existing `pendingPublish`/`publishWorkspace` logic).
-
-`pnpm -C packages/console exec vitest run src/panels/Play/__tests__/StudioShare.test.tsx` — verbatim failure:
-
-```
- FAIL  src/panels/Play/__tests__/StudioShare.test.tsx > Studio → Share to app.agentgem.ai > resuming a publish does not clobber the freshly-refreshed identity record (avatarUrl/sessionActive survive Studio's onBound)
-TestingLibraryElementError: Unable to find role="img" and name `/bob/i`
-
-Ignored nodes: comments, script, style
-<body>
-  <div>
-    <button
-      class="identity-chip is-stale"
-      title="Session expired — reconnect GitHub"
-      type="button"
-    >
-      <span
-        aria-hidden="true"
-        class="identity-chip__avatar identity-chip__avatar--empty"
-      />
-      <span
-        class="identity-chip__label"
-      >
-        @bob
-      </span>
-    </button>
-    ...
-```
-
-(`class="identity-chip is-stale"`, `title="Session expired — reconnect GitHub"`, no avatar img — exactly the optimistic partial record `{ bound: true, login }` clobbering `avatarUrl`/`sessionActive`.)
-
-```
- Test Files  1 failed | 7 passed (8)
-      Tests  1 failed | 65 passed (66)
-```
-
-### Revert and re-run: green
-
-`git checkout -- packages/console/src/panels/Play/Studio.tsx` → `git diff --stat packages/console/src/panels/Play/Studio.tsx` empty (confirmed clean).
-
-`pnpm -C packages/console exec vitest run src/panels/Play/`:
-
-```
- ✓ src/panels/Play/__tests__/Studio.test.tsx (4 tests) 92ms
- ✓ src/panels/Play/__tests__/StudioShare.test.tsx (6 tests) 203ms
- ✓ src/panels/Play/__tests__/Composer.test.tsx (7 tests) 278ms
- ✓ src/panels/Play/__tests__/mcpUiHost.test.ts (16 tests) 37ms
- ✓ src/panels/Play/__tests__/Runner.test.tsx (19 tests) 616ms
- ✓ src/panels/Play/__tests__/PlayDeepLink.test.tsx (3 tests) 41ms
- ✓ src/panels/Play/__tests__/Arcade.test.tsx (1 test) 25ms
- ✓ src/panels/Play/__tests__/mcpHostTools.test.ts (10 tests) 5ms
-
- Test Files  8 passed (8)
-      Tests  66 passed (66)
-```
-
-66 = the 65 pre-existing Play tests + 1 new regression test. No existing assertion touched, reordered, or weakened.
+- `validateSelection` is pure and handles all edge cases.
+- `draftGemFromChat` never throws (try/catch → `{ error }`); all failure modes covered.
+- The route follows the identical duck-typed Express pattern as existing routes.
+- `buildGem` throws `InvalidInputError` for names not in inventory, but `validateSelection` pre-filters them so `buildGem` never sees hallucinated names — the catch wraps it anyway.
+- `deps.introspect` seam allows tests to inject a fake inventory without touching the real filesystem.
+- No new npm dependencies introduced.
