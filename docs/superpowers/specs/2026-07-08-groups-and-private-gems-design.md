@@ -90,6 +90,34 @@ individually listed, admin-created, and individually removable.
 `kind` and `source` are orthogonal. A federated group may hold invited guests. A
 native group holds only invited members.
 
+### How federated membership reaches `group_members`
+
+`org_members.gh_login` (`schema.ts:209`) holds GitHub logins scraped from an org's
+roster. Most of those people have never signed into AgentGem and have no `accounts`
+row, so the reconciler **cannot** mirror `org_members` into an `account_id`-keyed
+table directly — there is no id to write.
+
+Sync rows are therefore **materialized at sign-in**. Both the web callback
+(`src/auth/install.ts:88`) and the device bind (`packages/aggregator/src/binding.ts:70`)
+already fetch the user's GitHub org memberships and call `setAccountScopes`. That is
+the moment an account id and an org list exist together. Both call sites move behind
+a new seam, `captureOrgMemberships(db, accountId, grants)`, which calls
+`setAccountScopes` and then upserts a `source='sync'` row into every federated group
+whose scope the user belongs to.
+
+The three delete paths are unchanged in intent:
+
+- webhook `member_removed` → resolve login → account, delete that `source='sync'` row
+- `replaceOrgMembers` reconcile → replace `source='sync'` rows for the group
+- `deleteInstallation` → delete the group's `source='sync'` rows; the group, its
+  guests, and its `gem_shares` survive
+
+A member of the org who has never signed in has no row, which is harmless: they have
+no session and can read nothing. Their row appears the first time they sign in.
+
+Login lookup is case-insensitive (`lower(accounts.login)`, provider `github`),
+matching the lowercasing convention `org_members` already uses.
+
 ### Invites
 
 ```
