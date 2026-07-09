@@ -6,6 +6,7 @@ import { useCopied } from "../../shell/useCopied.js";
 import { useDialogA11y } from "../../shell/useDialogA11y.js";
 import { Loading } from "../../shell/Loading.js";
 import { ContentView } from "../Curate/ContentView.js";
+import { ScopePicker, type Scope } from "../_shared/ScopePicker.js";
 import { SETUP_ROUTE, setupLink, type SetupType } from "./link.js";
 
 // Read-only browser of the local .claude setup — the artifacts your agents run with.
@@ -51,6 +52,13 @@ const matches = (a: Artifact, needle: string) =>
   (a.source ?? "").toLowerCase().includes(needle) ||
   (a.description ?? "").toLowerCase().includes(needle);
 
+// Project-scope merge (see the inventory effect) tags each artifact with a `_layer`
+// marker; only project-layer rows carry the badge — global ones render as before.
+const LayerBadge = ({ a }: { a: Artifact }) =>
+  (a as { _layer?: string })._layer === "project"
+    ? <span className="opt-flag" title="project-local">project</span>
+    : null;
+
 export function Setup({ apiBase }: { apiBase: string }) {
   const [inv, setInv] = useState<Inventory | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -58,14 +66,31 @@ export function Setup({ apiBase }: { apiBase: string }) {
   const tab = TABS[tabIdx];
   const [openName, setOpenName] = useState<string | null>(() => parseQuery().a);
   const [q, setQ] = useState(() => parseQuery().q ?? "");
+  const [scope, setScope] = useState<Scope>({ kind: "global" });
+  const root = scope.kind === "project" ? scope.root : undefined;
 
   useEffect(() => {
     let alive = true;
-    inventoryRoute.call(makeClient(apiBase), { query: {} })
-      .then((i) => { if (alive) setInv(i); })
+    inventoryRoute.call(makeClient(apiBase), { query: root ? { projects: root } : {} })
+      .then((res) => {
+        if (!alive) return;
+        if (!root || !res.projects?.length) { setInv(res); return; }
+        // Merge the project's artifacts into the flat lists so the existing type-tab
+        // rendering shows both layers; tag each one so the badge can tell them apart.
+        const proj = res.projects[0];
+        const tag = (arr: Artifact[], layer: "global" | "project") => arr.map((a) => ({ ...a, _layer: layer }));
+        setInv({
+          ...res,
+          skills: [...tag(res.skills, "global"), ...tag(proj.skills, "project")],
+          mcpServers: [...tag(res.mcpServers, "global"), ...tag(proj.mcpServers, "project")],
+          instructions: [...tag(res.instructions, "global"), ...tag(proj.instructions, "project")],
+          hooks: [...tag(res.hooks, "global"), ...tag(proj.hooks, "project")],
+          subagents: [...tag(res.subagents, "global"), ...tag(proj.subagents, "project")],
+        } as Inventory);
+      })
       .catch((e) => { if (alive) setError(String(e?.message ?? e)); });
     return () => { alive = false; };
-  }, [apiBase]);
+  }, [apiBase, root]);
 
   useEffect(() => {
     const onHash = () => {
@@ -119,6 +144,7 @@ export function Setup({ apiBase }: { apiBase: string }) {
           <span aria-hidden="true">🔎</span>
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter your setup" aria-label="Filter setup" />
         </div>
+        <ScopePicker apiBase={apiBase} scope={scope} onScope={setScope} />
       </div>
 
       <div className="console-tabs setup-tabs" role="tablist" aria-label="Setup" {...roving.containerProps}>
@@ -174,6 +200,7 @@ function Overview({ inv, onOpen, onTab }:
                     <button type="button" className="setup-card-item" onClick={() => onOpen(t.key, a.name)}>
                       <span className="setup-card-name">{a.name}</span>
                       {a.source ? <span className="setup-item-source">{a.source}</span> : null}
+                      <LayerBadge a={a} />
                     </button>
                   </li>
                 ))}
@@ -233,6 +260,7 @@ function Row({ a, typeKey, onOpen }: { a: Artifact; typeKey: TypeKey; onOpen: (k
           <span className="setup-item-head">
             <span className="setup-item-name">{a.name}</span>
             {a.source ? <span className="setup-item-source">{a.source}</span> : null}
+            <LayerBadge a={a} />
           </span>
           {a.description ? <span className="setup-item-desc">{a.description}</span> : null}
         </span>

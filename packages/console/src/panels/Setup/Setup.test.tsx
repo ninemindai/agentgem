@@ -139,4 +139,29 @@ describe("Setup", () => {
     expect(await screen.findByRole("dialog")).toBeTruthy();
     expect(screen.queryByText(/No artifacts match/)).toBeNull();
   });
+
+  it("shows project artifacts with a layer badge when a project is picked", async () => {
+    const invWithProject = {
+      ...inv,
+      projects: [{
+        root: "/repo/a", name: "a",
+        skills: [{ type: "skill", name: "p-skill", source: "project", description: "" }],
+        mcpServers: [], instructions: [], hooks: [], subagents: [],
+      }],
+    };
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+      const u = String(url);
+      if (u.includes("/api/testbed/recents"))
+        return res({ recents: [{ path: "/repo/a", flavor: "x", name: "a", lastUsed: "2026-01-01", exists: true }] });
+      if (u.includes("/api/testbed/projects")) return res({ projects: [] });
+      if (u.includes("/api/inventory")) return res(u.includes("projects=") ? invWithProject : inv);
+      throw new Error("unexpected " + u);
+    }));
+    render(<Setup apiBase="" />);
+    await screen.findByText("brainstorming");
+    fireEvent.click(screen.getByRole("button", { name: /project/i }));
+    fireEvent.click(await screen.findByText("/repo/a"));
+    expect(await screen.findByText("p-skill")).toBeTruthy();
+    expect(screen.getAllByText(/^project$/i).length).toBeGreaterThan(0);
+  });
 });
