@@ -147,7 +147,10 @@ export async function removeMemberGuarded(
       select account_id, sync_role, invite_role from group_members
       where group_id = ${groupId} for update`)).rows as
       { account_id: string; sync_role: string | null; invite_role: string | null }[];
-    const target = rows.find((r) => r.account_id === accountId);
+    // Postgres normalizes uuid columns to lowercase on SELECT; the route accepts case-insensitive
+    // UUIDs, so normalize the needle before comparing or an uppercase id would never match.
+    const needle = accountId.toLowerCase();
+    const target = rows.find((r) => r.account_id === needle);
     if (!target) return "not-member";
     const isAdmin = (r: { sync_role: string | null; invite_role: string | null }) =>
       r.sync_role === "admin" || r.invite_role === "admin";
