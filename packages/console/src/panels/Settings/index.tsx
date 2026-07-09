@@ -3,35 +3,13 @@ import { defineConsolePage } from "../../registry.js";
 import { Loading } from "../../shell/Loading.js";
 import {
   deployTargetsRoute, setCredentialRoute, CREDENTIAL_KEYS, makeClient,
-  bindStatusRoute, bindStartRoute, bindCompleteRoute, bindDisconnectRoute, webHandoffRoute,
+  bindDisconnectRoute, webHandoffRoute,
 } from "../../api/routes.js";
+import { useIdentity } from "../../identity/IdentityProvider.js";
+import { useGitHubBind } from "../../identity/useGitHubBind.js";
+import { ConnectGitHub } from "../../identity/ConnectGitHub.js";
 
 type Backend = { id: string; label: string; ready: boolean };
-type BindStatus = { bound: boolean; login?: string; provider?: string; avatarUrl?: string; sessionActive?: boolean } | null;
-type BindFlow =
-  | { step: "code"; userCode: string; verificationUri: string; verificationUriComplete?: string; deviceCode: string; interval?: number }
-  | { step: "unconfigured" }
-  | null;
-
-// The aggregator returns machine-readable rejection slugs; turn them into guidance.
-// `unknown-producer` is the common one on a fresh key — the bind requires you to
-// have produced (shared/published) at least once before an identity can be linked.
-function rejectionMessage(slug: string): string {
-  switch (slug) {
-    case "unknown-producer":
-      return "Publish or share a Gem first — verification links your GitHub to an identity that has already produced something.";
-    case "bad-signature":
-      return "Verification failed a signature check. Please try Connect again.";
-    case "stale":
-      return "The verification request expired. Please try Connect again.";
-    case "provider-error":
-      return "Couldn't reach GitHub just now. Please try again in a moment.";
-    case "not-configured":
-      return "Identity verification isn't configured on this server.";
-    default:
-      return `Verification failed: ${slug}`;
-  }
-}
 
 export function Settings({ apiBase }: { apiBase: string }) {
   const [targets, setTargets] = useState<Backend[] | null>(null);
@@ -40,11 +18,12 @@ export function Settings({ apiBase }: { apiBase: string }) {
   const [credValue, setCredValue] = useState("");
   const [credNote, setCredNote] = useState<string | null>(null);
 
-  const [bindStatus, setBindStatus] = useState<BindStatus>(null);
-  const [bindFlow, setBindFlow] = useState<BindFlow>(null);
+  const { status: bindStatus, refresh, setStatus } = useIdentity();
+  // onBound: the device-flow result carries the login synchronously; refresh() alone
+  // races against this test/mock environment's static /api/bind/status response, so
+  // thread the login straight into context instead of waiting on the refetch.
+  const bind = useGitHubBind(apiBase, { onBound: (login) => setStatus({ bound: true, login }) });
   const [bindError, setBindError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [polling, setPolling] = useState(false);
 
   useEffect(() => {
     deployTargetsRoute.call(makeClient(apiBase))
@@ -52,77 +31,14 @@ export function Settings({ apiBase }: { apiBase: string }) {
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   }, [apiBase]);
 
-  useEffect(() => {
-    bindStatusRoute.call(makeClient(apiBase))
-      .then((r) => setBindStatus(r))
-      .catch((e) => setBindError(e instanceof Error ? e.message : String(e)));
-  }, [apiBase]);
-
-  // Step 1: mint the device code and show it. No polling and no browser launch yet —
-  // both happen when the user clicks "copy & open GitHub" (below), so the polled
-  // code and the code they authorize always match.
-  const connectGitHub = async () => {
-    setBindError(null);
-    setBindFlow(null);
-    try {
-      const r = await bindStartRoute.call(makeClient(apiBase), { body: {} });
-      if (!r.configured) {
-        setBindFlow({ step: "unconfigured" });
-        return;
-      }
-      setBindFlow({
-        step: "code",
-        userCode: r.userCode!,
-        verificationUri: r.verificationUri!,
-        verificationUriComplete: r.verificationUriComplete,
-        deviceCode: r.deviceCode!,
-        interval: r.interval,
-      });
-    } catch (e) {
-      setBindError(e instanceof Error ? e.message : String(e));
-      setBindFlow(null);
-    }
-  };
-
-  // Step 2: copy the code, open GitHub in the system browser, then poll for
-  // completion until the user authorizes.
-  const copyOpenAndWait = async () => {
-    if (bindFlow?.step !== "code" || polling) return;
-    const flow = bindFlow;
-    // Prefer the code-prefilled URL — the user lands on "just click Authorize".
-    const url = flow.verificationUriComplete ?? flow.verificationUri;
-    void navigator.clipboard?.writeText(flow.userCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-    window.open(url, "_blank", "noopener"); // desktop: main.ts routes this to the system browser
-    setBindError(null);
-    setPolling(true);
-    try {
-      const result = await bindCompleteRoute.call(makeClient(apiBase), {
-        body: { deviceCode: flow.deviceCode, interval: flow.interval },
-      });
-      if (result.bound) {
-        setBindStatus({ bound: true, login: result.login, avatarUrl: result.avatarUrl });
-        setBindFlow(null);
-      } else if (result.rejected) {
-        setBindError(rejectionMessage(result.rejected));
-        setBindFlow(null);
-      }
-    } catch (e) {
-      setBindError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setPolling(false);
-    }
-  };
-
-  // Open app.agentgem.ai already signed in: the local session mints a one-time handoff code
-  // (server-side, bearer-authenticated), and we open the redeem URL in the system browser.
+  // Open app.agentgem.ai already signed in: the local session mints a one-time handoff
+  // code (server-side, bearer-authenticated), and we open the redeem URL in the browser.
   const openOnWeb = async () => {
     setBindError(null);
     try {
       const r = await webHandoffRoute.call(makeClient(apiBase), { body: {} });
       if (r.authenticated && r.url) window.open(r.url, "_blank", "noopener");
-      else setBindError("Session expired — reconnect GitHub to open on the web.");
+      else { await refresh(); setBindError("Session expired — reconnect GitHub to open on the web."); }
     } catch (e) {
       setBindError(e instanceof Error ? e.message : String(e));
     }
@@ -130,10 +46,9 @@ export function Settings({ apiBase }: { apiBase: string }) {
 
   const disconnectGitHub = async () => {
     setBindError(null);
-    setBindFlow(null);
+    bind.reset();
     try {
-      const r = await bindDisconnectRoute.call(makeClient(apiBase), { body: {} });
-      setBindStatus(r);
+      setStatus(await bindDisconnectRoute.call(makeClient(apiBase), { body: {} }));
     } catch (e) {
       setBindError(e instanceof Error ? e.message : String(e));
     }
@@ -184,26 +99,10 @@ export function Settings({ apiBase }: { apiBase: string }) {
         ) : (
           <>
             <p className="deploy-hint">Not verified — your installs won't count toward verified ratings</p>
-            {bindFlow === null && (
-              <>
-                <div className="ledger-bar">
-                  <button type="button" className="ledger-build" onClick={connectGitHub}>Connect GitHub</button>
-                </div>
-                <p className="deploy-hint">Connect to unlock 💎 Diamond — verified installs count toward your rating</p>
-              </>
-            )}
-            {bindFlow?.step === "unconfigured" && (
-              <p className="deploy-hint">Verification unavailable (not configured)</p>
-            )}
-            {bindFlow?.step === "code" && (
-              <div>
-                <p className="ws-note">Your code: <strong>{bindFlow.userCode}</strong></p>
-                <button type="button" className="ledger-build" onClick={copyOpenAndWait} disabled={polling}>
-                  {polling ? "Waiting for authorization…" : copied ? "✓ Copied — opening GitHub…" : "⧉ Copy code & open GitHub"}
-                </button>
-                <p className="deploy-hint">Copies the code and opens GitHub in your browser — enter it there and authorize; this verifies automatically. Didn't open? <a href={bindFlow.verificationUriComplete ?? bindFlow.verificationUri} target="_blank" rel="noreferrer">Open GitHub</a>.</p>
-              </div>
-            )}
+            <ConnectGitHub
+              bind={bind}
+              idleHint={<p className="deploy-hint">Connect to unlock 💎 Diamond — verified installs count toward your rating</p>}
+            />
           </>
         )}
       </section>
