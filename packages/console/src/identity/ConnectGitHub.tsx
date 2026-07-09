@@ -19,7 +19,8 @@ export function ConnectGitHub({
 
   return (
     <div className="identity-connect">
-      {error && <p className="identity-connect__error">{error}</p>}
+      {/* role=alert so a rejection ("Publish or share a Gem first…") is announced, not just painted. */}
+      {error && <p className="identity-connect__error" role="alert">{error}</p>}
 
       {/* unconfigured wins precedence if both are set; useGitHubBind never produces both at once (connect() clears flow before setting unconfigured) */}
       {unconfigured ? (
@@ -27,7 +28,7 @@ export function ConnectGitHub({
       ) : flow ? (
         <>
           <p className="ws-note">Your code: <strong>{flow.userCode}</strong></p>
-          <button type="button" className="ledger-build" onClick={() => void copyOpenAndWait()} disabled={polling}>
+          <button type="button" className="ledger-build" data-autofocus onClick={() => void copyOpenAndWait()} disabled={polling}>
             {polling ? "Waiting for authorization…" : codeCopied ? "✓ Copied — opening GitHub…" : "⧉ Copy code & open GitHub"}
           </button>
           <p className="deploy-hint">
@@ -37,7 +38,8 @@ export function ConnectGitHub({
         </>
       ) : (
         <>
-          <button type="button" className="ledger-build" onClick={() => void connect()} disabled={connectBusy}>
+          {/* data-autofocus: inside a dialog this is the element focus lands on. Inert elsewhere. */}
+          <button type="button" className="ledger-build" data-autofocus onClick={() => void connect()} disabled={connectBusy}>
             {connectBusy ? "Generating code…" : idleLabel}
           </button>
           {idleHint}

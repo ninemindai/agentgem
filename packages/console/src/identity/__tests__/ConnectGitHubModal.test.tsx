@@ -53,4 +53,45 @@ describe("ConnectGitHubModal", () => {
     render(<ConnectGitHubModal bind={bind({ flow: { userCode: "AB-12", openUrl: "https://gh/d", deviceCode: "dc" } })} onClose={vi.fn()} />);
     expect(screen.getByText("AB-12")).toBeTruthy();
   });
+
+  it("focuses the primary action on open, not the close button", () => {
+    render(<ConnectGitHubModal bind={bind()} onClose={vi.fn()} />);
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: /sign in with github/i }));
+  });
+
+  it("focuses the copy-&-open button when it opens straight into the code state", () => {
+    render(<ConnectGitHubModal bind={bind({ flow: { userCode: "AB-12", openUrl: "https://gh/d", deviceCode: "dc" } })} onClose={vi.fn()} />);
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: /copy code & open github/i }));
+  });
+
+  // The real flow: click "Sign in with GitHub" → connect() resolves → the idle button is
+  // replaced by the device-code view. The browser drops focus to <body> when the focused
+  // node is removed, so the dialog must pull it back rather than strand the keyboard user.
+  it("re-focuses when the body swaps from idle to the code state", () => {
+    const { rerender } = render(<ConnectGitHubModal bind={bind()} onClose={vi.fn()} />);
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: /sign in with github/i }));
+    rerender(<ConnectGitHubModal bind={bind({ flow: { userCode: "AB-12", openUrl: "https://gh/d", deviceCode: "dc" } })} onClose={vi.fn()} />);
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: /copy code & open github/i }));
+  });
+
+  it("does not steal focus from a user who tabbed elsewhere in the dialog", () => {
+    const b = bind({ flow: { userCode: "AB-12", openUrl: "https://gh/d", deviceCode: "dc" } });
+    const { rerender } = render(<ConnectGitHubModal bind={b} onClose={vi.fn()} />);
+    const close = screen.getByRole("button", { name: /close/i });
+    close.focus();
+    // An unrelated re-render (e.g. codeCopied flipping) must leave focus where it is.
+    rerender(<ConnectGitHubModal bind={{ ...b, codeCopied: true }} onClose={vi.fn()} />);
+    expect(document.activeElement).toBe(close);
+  });
+
+  it("returns focus to whatever opened it", () => {
+    const trigger = document.createElement("button");
+    document.body.appendChild(trigger);
+    trigger.focus();
+    const { unmount } = render(<ConnectGitHubModal bind={bind()} onClose={vi.fn()} />);
+    expect(document.activeElement).not.toBe(trigger);
+    unmount();
+    expect(document.activeElement).toBe(trigger);
+    trigger.remove();
+  });
 });

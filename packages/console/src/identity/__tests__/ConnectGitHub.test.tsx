@@ -67,6 +67,11 @@ describe("ConnectGitHub", () => {
     expect(screen.getByText("expired_token")).toBeTruthy();
   });
 
+  it("announces the error to assistive tech (role=alert)", () => {
+    render(<ConnectGitHub bind={bind({ error: "expired_token" })} />);
+    expect(screen.getByRole("alert").textContent).toBe("expired_token");
+  });
+
   it("honours an overridden idle label", () => {
     render(<ConnectGitHub bind={bind()} idleLabel="Sign in with GitHub" />);
     expect(screen.getByRole("button", { name: /sign in with github/i })).toBeTruthy();
