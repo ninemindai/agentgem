@@ -34,6 +34,9 @@ describe("studio", () => {
     expect(existsSync(join(dir, "meta.json"))).toBe(true);
     expect(existsSync(join(miniappsRoot(), ".git"))).toBe(true); // committed to the registry repo
     expect(brief).toContain(name);
+    expect(brief).toContain(`${name}.html`);                       // the per-miniapp line survives
+    expect(brief).toContain("ui/notifications/tool-result");       // the full contract is inlined
+    expect(brief).toContain("agentgem_invoke_agent");
   });
   it("seedStudio for a session (replay) bakes a redacted snapshot AND keeps the session-data need for local upgrade", async () => {
     const secretReaders: SourceReaders = {

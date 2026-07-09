@@ -12,6 +12,7 @@ import { scaffoldFor, sealedTemplate } from "./scaffolds.js";
 import { miniappDir, miniappsRoot, type MiniappMeta } from "./miniapps.js";
 import { ensureRepo, commitWithLock } from "./git.js";
 import { redactForBake } from "./redact.js";
+import { MINIAPP_BUILDER_BRIEF } from "./builderBrief.js";
 
 // Only allow a chat session to adopt a cwd that is inside the miniapps registry; otherwise the neutral
 // fallback. The route resolves `miniapp` names via miniappDir (which rejects bad names) BEFORE this, so
@@ -44,14 +45,11 @@ function seedHtml(scaffold: string, data: unknown): string {
   return scaffold.replace("</body>", `${tag}</body>`); // fallback for a head-less scaffold
 }
 
+// The full authoring contract, injected on the agent's first turn only (chatSession.ts nulls the brief
+// afterwards). The leading line names THIS miniapp; everything below it is the shared contract, which
+// also ships as skills/agentgem-miniapp/SKILL.md.
 function studioInstructions(name: string): string {
-  return (
-    `You are building the miniapp in ${name}.html (edit ONLY that file). It must stay a single ` +
-    `self-contained, SEALED HTML file: inline all JS/CSS, use only data: URIs, and make NO network calls ` +
-    `(no fetch/XHR/WebSocket/external src/href/import). Replace the block between the ` +
-    `"AGENTGEM:GAME-LOGIC" markers. Read the JSON in <script id="game-data"> for the source content. ` +
-    `The file must run without throwing on load.`
-  );
+  return `You are building the miniapp in ${name}.html.\n\n${MINIAPP_BUILDER_BRIEF}`;
 }
 
 export async function seedStudio(source: GameSource, readers: SourceReaders): Promise<{ name: string; brief: string }> {
