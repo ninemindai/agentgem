@@ -15,11 +15,12 @@
 // Express types are duck-typed (no @types/express import) to match the pattern used
 // by originGuard and the raw SSE handlers (gemRunStream, insightsStream).
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { connectAcpAdapter, stdioMcpServer, resolveLaunch, adapterRuntimeCtx, AGENTS, ensureAdapter } from "@agentgem/base";
 import type { AgentAvailability, AgentDescriptor, McpServerStdio, AdapterCtx, AdapterInstaller } from "@agentgem/base";
 import { createAccumulator, applyUpdate } from "@agentgem/run";
+import { studioCwd } from "@agentgem/play";
 import type { ChatManager, ChatConnectFn, ChatCtx, ChatSessionHandle, ToolInvocation } from "@agentgem/run";
 import { draftGemFromChat } from "./draftGem.js";
 import { createAguiMapper } from "./aguiStream.js";
@@ -56,6 +57,9 @@ export interface ChatRouteDeps {
   // resolver validates the name (rejects anything that isn't a clean segment); when absent, chat runs
   // in the neutral cwd with the neutral brief.
   resolveStudio?: (miniapp: string) => { cwd: string; brief: string };
+  // Project launch: resolve a project ROOT (raw path from the body) to a VALIDATED canonical
+  // cwd, or null if it isn't in the server's discovered/recent allow-list. Absent → unavailable.
+  resolveProjectCwd?: (root: string) => string | null;
   // Install a missing adapter on demand (CLI only). Throws an error carrying
   // code:"consent_required" when consent is absent; the route maps that to 409.
   installAgent?: (id: string, consent: boolean) => Promise<{ available: boolean; source: string; needsLogin: boolean }>;
@@ -68,19 +72,37 @@ export interface ChatRouteDeps {
 // branch is unit-testable without driving Express. A `miniapp` (name) routes the session into that
 // miniapp's validated dir with a studio brief; otherwise the neutral brief and no cwd override.
 export async function studioChatArgs(
-  body: { agentId?: unknown; miniapp?: unknown },
-  deps: Pick<ChatRouteDeps, "buildBrief" | "goldmineMcp" | "resolveStudio">,
+  body: { agentId?: unknown; miniapp?: unknown; project?: unknown },
+  deps: Pick<ChatRouteDeps, "buildBrief" | "goldmineMcp" | "resolveStudio" | "resolveProjectCwd">,
 ): Promise<{ agentId: string; brief: string; mcpServers: McpServerStdio[]; cwd?: string; permission?: "allow" | "deny" }> {
   const agentId = String(body?.agentId ?? "");
   if (!agentId) throw new Error("agentId required");
   const miniapp = body?.miniapp ? String(body.miniapp) : "";
+  const project = body?.project ? String(body.project) : "";
+  if (miniapp && project) throw new Error("miniapp and project are mutually exclusive");
   if (miniapp) {
     if (!deps.resolveStudio) throw new Error("studio not available");
     const s = deps.resolveStudio(miniapp); // resolver validates the name; throws on a bad one
     // "allow" so the studio agent can Edit/Write the miniapp; its cwd is jailed to the miniapp dir.
     return { agentId, brief: s.brief, mcpServers: deps.goldmineMcp(), cwd: s.cwd, permission: "allow" };
   }
+  if (project) {
+    if (!deps.resolveProjectCwd) throw new Error("project launch not available");
+    const cwd = deps.resolveProjectCwd(project); // validates against the allow-list
+    if (!cwd) throw new Error("unknown project");
+    // Neutral brief + normal permission: a project chat is not a studio session and must not
+    // silently gain write access to the real repo.
+    return { agentId, brief: await deps.buildBrief(), mcpServers: deps.goldmineMcp(), cwd };
+  }
   return { agentId, brief: await deps.buildBrief(), mcpServers: deps.goldmineMcp() };
+}
+
+// The connectFn re-guard (defense-in-depth): honor `requested` if studioCwd accepts it
+// (miniapp path or the neutral cwd) OR if it's an allow-listed project; else neutral cwd.
+export function resolveChatCwd(requested: string, chatCwd: string, resolveProjectCwd?: (root: string) => string | null): string {
+  const viaStudio = studioCwd(requested, chatCwd);
+  if (resolve(viaStudio) !== resolve(chatCwd)) return viaStudio; // a valid miniapp path
+  return resolveProjectCwd?.(requested) ?? viaStudio; // validated project, else neutral
 }
 
 // Build the installAgent dep for registerChatRoutes: look the id up in AGENTS, run
@@ -138,8 +160,11 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middlew
       res.json({ chatId });
     } catch (e) {
       const msg = (e as Error).message;
-      // Client errors (missing agentId, a bad/unknown miniapp name) → 400; anything else → 500.
-      const clientErr = msg === "agentId required" || msg === "studio not available" || msg.startsWith("invalid miniapp name");
+      // Client errors (missing agentId, a bad/unknown miniapp or project) → 400; anything else → 500.
+      const clientErr = msg === "agentId required" || msg === "studio not available"
+        || msg.startsWith("invalid miniapp name")
+        || msg === "unknown project" || msg === "project launch not available"
+        || msg === "miniapp and project are mutually exclusive";
       res.status(clientErr ? 400 : 500).json({ error: msg });
     }
   });

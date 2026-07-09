@@ -11,7 +11,7 @@ import request from "supertest";
 import { RestApplication } from "@agentback/rest";
 import { ChatManager } from "@agentgem/run";
 import type { ChatConnectFn } from "@agentgem/run";
-import { registerChatRoutes } from "../chatRoutes.js";
+import { registerChatRoutes, studioChatArgs, resolveChatCwd } from "../chatRoutes.js";
 
 // ── Fake connect fn ──────────────────────────────────────────────────────────
 function makeFakeConnectFn(opts: { fail?: boolean } = {}): ChatConnectFn {
@@ -51,6 +51,7 @@ async function buildTestApp(opts: { fail?: boolean; checkpoints?: string[] } = {
     goldmineMcp: () => [],
     listAgents: () => [{ id: "claude-code", name: "Claude Code", available: true, installable: false, source: "path" }],
     resolveStudio: () => ({ cwd: "/tmp/miniapp", brief: "STUDIO" }),
+    resolveProjectCwd: (root: string) => (root === "/repo/ok" ? "/repo/ok" : null),
     checkpointMiniapp: async (name: string) => { opts.checkpoints?.push(name); },
   });
   return server.expressApp;
@@ -168,5 +169,45 @@ describe("chat routes", () => {
     const res = await request(app).get(`/api/chat/stream?chatId=${created.body.chatId}&message=hi`);
     expect(res.text).toContain("event: failed");
     expect(checkpoints).toEqual([]);
+  });
+});
+
+describe("studioChatArgs project launch", () => {
+  const base = { buildBrief: async () => "NEUTRAL", goldmineMcp: () => [], resolveStudio: () => ({ cwd: "/tmp/m", brief: "S" }) };
+  const withProj = { ...base, resolveProjectCwd: (r: string) => (r === "/repo/ok" ? "/repo/ok" : null) };
+
+  it("honors an allow-listed project as cwd with the neutral brief and no force-allow", async () => {
+    const a = await studioChatArgs({ agentId: "x", project: "/repo/ok" }, withProj);
+    expect(a.cwd).toBe("/repo/ok");
+    expect(a.brief).toBe("NEUTRAL");
+    expect(a.permission).toBeUndefined();
+  });
+  it("rejects a non-allow-listed project", async () => {
+    await expect(studioChatArgs({ agentId: "x", project: "/repo/nope" }, withProj)).rejects.toThrow(/unknown project/);
+  });
+  it("rejects project + miniapp together", async () => {
+    await expect(studioChatArgs({ agentId: "x", project: "/repo/ok", miniapp: "m" }, withProj)).rejects.toThrow(/mutually exclusive/);
+  });
+  it("throws when resolveProjectCwd is not provided", async () => {
+    await expect(studioChatArgs({ agentId: "x", project: "/repo/ok" }, base as never)).rejects.toThrow(/project launch not available/);
+  });
+  it("no project → neutral args unchanged", async () => {
+    const a = await studioChatArgs({ agentId: "x" }, withProj);
+    expect(a.cwd).toBeUndefined();
+    expect(a.brief).toBe("NEUTRAL");
+  });
+});
+
+describe("resolveChatCwd", () => {
+  const chatCwd = "/home/.agentgem/chat";
+  const rp = (r: string) => (r === "/repo/ok" ? "/repo/ok" : null);
+  it("honors an allow-listed project path", () => {
+    expect(resolveChatCwd("/repo/ok", chatCwd, rp)).toBe("/repo/ok");
+  });
+  it("falls back to neutral for an unlisted path", () => {
+    expect(resolveChatCwd("/repo/evil", chatCwd, rp)).toBe(chatCwd);
+  });
+  it("passes the neutral cwd through", () => {
+    expect(resolveChatCwd(chatCwd, chatCwd, rp)).toBe(chatCwd);
   });
 });
