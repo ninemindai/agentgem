@@ -2,10 +2,18 @@
 import { describe, it, expect } from "vitest";
 import { generateKeyPairSync, sign as edSign } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { makeTestDb } from "@agentgem/aggregator";
+import { makeTestDb, makeAuth, resolveSession } from "@agentgem/aggregator";
 import { producers, accountBindings, accounts } from "@agentgem/aggregator";
-import { recordBinding, bindSigningPayload, resolveLegacySession, accountOwnsScope, getAccountScopes, type BindRequest } from "@agentgem/aggregator";
+import { recordBinding, bindSigningPayload, accountOwnsScope, getAccountScopes, type BindRequest } from "@agentgem/aggregator";
 import type { AccountVerifier, VerifiedAccount } from "@agentgem/aggregator";
+
+const AUTH_OPTS = {
+  secret: "test-secret",
+  baseURL: "http://localhost:4000",
+  githubClientId: "gid",
+  githubClientSecret: "gsecret",
+  webOrigins: ["http://localhost:3000"],
+};
 
 function makeSigner() {
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
@@ -64,19 +72,34 @@ describe("recordBinding", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].accountId).toBe("42");
   });
-  it("returns a session token the web session store accepts (bearer ≡ cookie)", async () => {
+  it("returns a session token a real better-auth session resolves (bearer ≡ cookie)", async () => {
+    const db = await makeTestDb();
+    const auth = makeAuth({ db, ...AUTH_OPTS });
+    const s = makeSigner();
+    await db.insert(producers).values({ pubkey: s.pubkey });
+    const now = 1_000_000;
+    const res = await recordBinding(db, await req(s, "tok", now), fakeVerifier(OCTOCAT), now, NO_ORGS, auth);
+    expect(res.bound).toBe(true);
+    if (!res.bound) return;
+    expect(typeof res.sessionToken).toBe("string");
+    expect(res.expiresAt).toBeTruthy();
+    // The minted session bearer resolves to the same account through better-auth itself — the
+    // real path resolveSession/the bearer plugin honors, not just a row in a table. `res.accountId`
+    // is the GitHub provider id ("42"); the internal uuid is `accounts.id`, which is what the
+    // better-auth "user" row is anchored to and what resolveSession returns.
+    const rows = await db.select().from(accounts).where(sql`provider = 'github' and provider_account_id = '42'`);
+    const who = await resolveSession(auth, { authorization: `Bearer ${res.sessionToken}` });
+    expect(who).toEqual({ login: "octocat", avatarUrl: null, accountId: rows[0].id });
+  });
+  it("does not mint a session when no auth instance is supplied (session is additive)", async () => {
     const db = await makeTestDb();
     const s = makeSigner();
     await db.insert(producers).values({ pubkey: s.pubkey });
     const now = 1_000_000;
     const res = await recordBinding(db, await req(s, "tok", now), fakeVerifier(OCTOCAT), now, NO_ORGS);
-    expect(res.bound).toBe(true);
+    expect(res).toMatchObject({ bound: true, login: "octocat" });
     if (!res.bound) return;
-    expect(typeof res.sessionToken).toBe("string");
-    expect(res.expiresAt).toBeTruthy();
-    // The minted session bearer resolves to the same account — same token the web cookie carries.
-    const who = await resolveLegacySession(db, res.sessionToken!);
-    expect(who?.login).toBe("octocat");
+    expect(res.sessionToken).toBeUndefined();
   });
   it("does NOT register a producer when the token is invalid", async () => {
     const db = await makeTestDb();

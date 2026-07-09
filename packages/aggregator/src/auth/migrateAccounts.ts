@@ -3,8 +3,22 @@
 // One-time idempotent backfill (Plan 1a Task 5): give every EXISTING accounts row a same-id
 // better-auth "user" + "account", so the legacy uuid FKs (stars/reviews/usage/scopes/groups ->
 // accounts.id) stay valid after cutover. Additive; a pure data-migration, no behavior change.
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { AppDb } from "../schema.js";
+import type { Account } from "../webAuth.js";
+
+// Single-row counterpart to migrateAccountsToBetterAuth (Plan 1b device-flow bind): the same
+// insert-if-absent "user"/"account" anchor, scoped to one already-reconciled `accounts` row,
+// so a session can be minted for it immediately without waiting for the next boot backfill.
+// Raw SQL against the tables directly (not better-auth's adapter/API), so it never fires the
+// databaseHooks anchorAndScopes hook (betterAuth.ts) — idempotent via on-conflict-do-nothing.
+export async function ensureBetterAuthUser(db: AppDb, account: Account): Promise<void> {
+  await db.execute(sql`insert into "user" (id, name, email_verified, image, login, created_at, updated_at)
+    values (${account.id}, ${account.login}, false, ${account.avatarUrl}, ${account.login}, now(), now()) on conflict (id) do nothing`);
+  await db.execute(sql`insert into "account" (id, user_id, provider_id, account_id, created_at, updated_at)
+    values (${randomUUID()}, ${account.id}, ${account.provider}, ${account.providerAccountId}, now(), now()) on conflict (provider_id, account_id) do nothing`);
+}
 
 export async function migrateAccountsToBetterAuth(db: AppDb): Promise<{ migrated: number; conflicts: string[] }> {
   await db.execute(sql`insert into "user" (id, name, email_verified, image, login, created_at, updated_at)

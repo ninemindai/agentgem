@@ -6,13 +6,16 @@
 // account possession. Replays are idempotent; a signedAt freshness window blocks stale tokens.
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
+import type { Auth, BetterAuthOptions } from "better-auth";
 import { verify } from "@agentgem/model";
 import { canonicalJSON } from "@agentgem/insight";
 import type { AppDb } from "./schema.js";
 import { accountBindings } from "./schema.js";
 import type { AccountVerifier, OrgMembership } from "./accountVerifier.js";
 import { fetchOrgMemberships } from "./accountVerifier.js";
-import { upsertAccount, createSession, generateSessionToken, setAccountScopes } from "./webAuth.js";
+import { upsertAccount, setAccountScopes } from "./webAuth.js";
+import { ensureBetterAuthUser } from "./auth/migrateAccounts.js";
+import { mintSession } from "./auth/mintSession.js";
 
 export interface BindRequest { pubkey: string; token: string; signedAt: number; signature: string; }
 export type BindResult =
@@ -20,9 +23,6 @@ export type BindResult =
   | { bound: false; rejected: "bad-signature" | "stale" | "unknown-producer" | "provider-error" };
 
 const FRESHNESS_MS = 300_000;
-// First-party session lifetime, mirrors the web sign-in cookie TTL (30 days). The bind mints a
-// session so the local app has one credential the API (Bearer) and the web (SSO handoff) both honor.
-const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 /** The exact string the client signs and the server verifies. Signs over sha256(token) — never the
  *  raw token — so the secret stays out of the canonical (loggable) payload. */
@@ -31,9 +31,10 @@ export function bindSigningPayload(pubkey: string, token: string, signedAt: numb
   return canonicalJSON({ pubkey, signedAt, tokenHash });
 }
 
-export async function recordBinding(
+export async function recordBinding<O extends BetterAuthOptions>(
   db: AppDb, req: BindRequest, verifier: AccountVerifier, now: number = Date.now(),
   orgs: (token: string) => Promise<OrgMembership[]> = fetchOrgMemberships,
+  auth?: Auth<O>,
 ): Promise<BindResult> {
   // 1. key possession (cheap, no DB, no leak)
   if (!verify(req.pubkey, bindSigningPayload(req.pubkey, req.token, req.signedAt), req.signature)) {
@@ -79,13 +80,17 @@ export async function recordBinding(
       set: { provider: acct.provider, accountId: acct.accountId, accountLogin: acct.login, boundAt: sql`now()` },
     });
   // 6. mint a first-party session for the reconciled account (the bearer the API + web SSO honor).
+  // better-auth's `session` row FKs "user"(id), but recordBinding's account model is the legacy
+  // `accounts` table — ensure a same-id better-auth user (+github account) anchor exists first,
+  // mirroring migrateAccountsToBetterAuth's backfill insert but scoped to this one row (raw SQL,
+  // so it bypasses better-auth's adapter and the LOUD anchorAndScopes create-hook never fires here).
   // Additive: a session failure never fails the bind, which already succeeded above.
   let session: { sessionToken: string; expiresAt: string } | undefined;
-  if (account) {
+  if (account && auth) {
     try {
-      const { token: sessionToken } = generateSessionToken();
-      await createSession(db, account.id, sessionToken, SESSION_TTL_MS);
-      session = { sessionToken, expiresAt: new Date(now + SESSION_TTL_MS).toISOString() };
+      await ensureBetterAuthUser(db, account);
+      const { token, expiresAt } = await mintSession(auth, account.id);
+      session = { sessionToken: token, expiresAt };
     } catch { /* session is additive; bind already succeeded */ }
   }
   return { bound: true, provider: acct.provider, login: acct.login, accountId: acct.accountId, ...(acct.avatarUrl ? { avatarUrl: acct.avatarUrl } : {}), ...(session ?? {}) };
