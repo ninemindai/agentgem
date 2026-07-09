@@ -38,6 +38,7 @@ export function Studio({
   const [busy, setBusy] = useState(false);
   const [working, setWorking] = useState("");
   const [html, setHtml] = useState("");
+  const [loadErr, setLoadErr] = useState<string | null>(null);   // preview fetch failed → say so, don't fake it
   const [meta, setMeta] = useState<{ title: string; genre: string; needs?: string[] } | null>(null);
   const [status, setStatus] = useState("");
   const [gate, setGate] = useState<string[] | null>(null);       // seal failures → actionable banner
@@ -63,9 +64,13 @@ export function Studio({
     },
   });
 
+  // Never swallow this: html="" renders as a sealed-but-empty iframe, which reads as a working preview of
+  // an empty app rather than as a failure. Keep the last good html on a refresh error — a failed reload
+  // after a build shouldn't blank a preview that is still on screen and still correct.
   const refresh = () =>
     playMiniappRoute.call(makeClient(apiBase), { query: { name } })
-      .then((r) => { setHtml(r.html); setMeta(r.meta); }).catch(() => {});
+      .then((r) => { setHtml(r.html); setMeta(r.meta); setLoadErr(null); })
+      .catch((e: unknown) => setLoadErr(e instanceof Error ? e.message : String(e)));
 
   useEffect(() => {
     refresh();
@@ -272,7 +277,16 @@ export function Studio({
       <div className="play-grid-2">
         <div className="play-stage">
           <div className="play-cap-row"><span className="play-cap">Preview</span><span className="play-cap__rule" /></div>
-          <div className="play-plate" ref={plateRef}><Runner html={html} name={name} apiBase={apiBase} needs={meta?.needs} maxHeight={plateMax} /></div>
+          <div className="play-plate" ref={plateRef}>
+            {html ? <Runner html={html} name={name} apiBase={apiBase} needs={meta?.needs} maxHeight={plateMax} />
+              : loadErr ? (
+                <div className="play-plate__state">
+                  <b>Couldn't load the preview</b>
+                  <span>{loadErr}</span>
+                  <button className="play-btn" onClick={() => { setLoadErr(null); refresh(); }}>Retry</button>
+                </div>
+              ) : <div className="play-plate__state"><span>Loading the preview…</span></div>}
+          </div>
         </div>
         <div className="play-chat">
           <div className="play-cap-row"><span className="play-cap">Studio chat</span><span className="play-cap__rule" /></div>

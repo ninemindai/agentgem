@@ -111,6 +111,19 @@ describe("Studio", () => {
     expect(FakeES.last).toBeNull();
   });
 
+  // A failed preview fetch used to be swallowed (`.catch(() => {})`), leaving html="" — which the Runner
+  // renders as a sealed-but-empty iframe, i.e. a convincing blank white box with no error anywhere.
+  // The Arcade guards this case; the Studio must too: say what broke, and don't fake a preview.
+  it("surfaces a failed preview load instead of rendering a blank sealed iframe", async () => {
+    stubChat();
+    vi.spyOn(playMiniappRoute, "call").mockRejectedValue(new Error("miniapp not found"));
+    render(<IdentityProvider apiBase=""><Studio apiBase="" name="g1" agents={codex} agentId="codex" onAgentIdChange={() => {}} onBack={() => {}} /></IdentityProvider>);
+
+    await waitFor(() => expect(screen.getByText(/couldn't load the preview/i)).toBeTruthy());
+    expect(screen.getByText(/miniapp not found/i)).toBeTruthy();
+    expect(document.querySelector('iframe[title="miniapp preview"]')).toBeNull();
+  });
+
   it("waits for an agent, then fires the seed prompt exactly once", async () => {
     stubChat();
     vi.spyOn(playMiniappRoute, "call").mockResolvedValue(blankApp as never);
