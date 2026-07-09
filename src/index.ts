@@ -49,6 +49,7 @@ import { discoverProjects } from "@agentgem/testbed";
 import { join as pathJoin } from "node:path";
 import { mkdirSync } from "node:fs";
 import { originGuard } from "./originGuard.js";
+import { playNoCache } from "./playCache.js";
 import { getWarmStatus, beginForeground, endForeground } from "./warm/orchestrator.js";
 import { startWarmSchedule } from "./warm/schedule.js";
 import { registerDrizzle } from "@agentback/drizzle";
@@ -154,6 +155,9 @@ export async function createApp(port: number): Promise<RestApplication> {
   // (controller routes). Same-origin UI and non-browser clients (CLI/MCP/tests) pass. Mounted in
   // the framework middleware chain so it runs before controller dispatch.
   app.expressMiddleware("middleware.originGuard", originGuard);
+  // The Play registry reads serve mutable on-disk state; without Cache-Control the browser
+  // heuristically caches them off the bare ETag and the Studio renders a stale miniapp.
+  app.expressMiddleware("middleware.playNoCache", playNoCache);
   await installExplorer(app, { title: "agentgem API" });
   await installMcpHttp(app);
   const server = await app.restServer;
