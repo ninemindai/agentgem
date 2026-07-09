@@ -19,7 +19,10 @@ describe("MomentCard", () => {
     render(<MomentCard hit={hit} picked={false} onToggle={onToggle} />);
     expect(screen.getByText("prod").tagName).toBe("MARK");
     expect(screen.getByText(/2 matching turns/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /prod db|moment/i }));
+    // Query the card's toggle button by its stable trailing text rather than the
+    // snippet — jsdom 29's accessible-name algorithm concatenates inline nodes
+    // ("the <mark>prod</mark> db") without spaces, so /prod db/ no longer matches.
+    fireEvent.click(screen.getByRole("button", { name: /2 matching turns/i }));
     expect(onToggle).toHaveBeenCalledWith("claude:s1");
   });
 
