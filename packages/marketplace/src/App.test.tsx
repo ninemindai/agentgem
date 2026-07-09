@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { App } from "./App";
 
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   window.history.pushState({}, "", "/");
 });
 
@@ -93,20 +94,23 @@ describe("App link interceptor", () => {
     expect(screen.getByRole("link", { name: "Miniapps" }).className).toMatch(/is-active/);
   });
 
-  it("shows a Sign in link when unauthenticated", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (u: string) => {
-      if (u.includes("/api/auth/me")) return res({ authenticated: false });
+  it("shows a Sign in link when unauthenticated, which POSTs sign-in/social with the GitHub provider", async () => {
+    let signInBody: string | undefined;
+    vi.stubGlobal("fetch", vi.fn(async (u: string, o?: RequestInit) => {
+      if (u.includes("/api/auth/get-session")) return res(null);
+      if (u.includes("/api/auth/sign-in/social")) { signInBody = o?.body as string; return res({ url: "https://github.com/login/oauth/authorize?state=abc", redirect: true }); }
       if (u.includes("/popular-skills")) return res({ skills: [], groups: [] });
       return res([]); // leaderboard / other reads
     }));
     render(<App />);
     const link = await screen.findByRole("link", { name: /sign in/i });
-    expect(link.getAttribute("href")).toContain("/api/auth/github/login?return=");
+    fireEvent.click(link);
+    await waitFor(() => expect(signInBody && JSON.parse(signInBody)).toMatchObject({ provider: "github" }));
   });
 
   it("shows the login + Sign out when authenticated", async () => {
     vi.stubGlobal("fetch", vi.fn(async (u: string) => {
-      if (u.includes("/api/auth/me")) return res({ login: "octocat", avatarUrl: null });
+      if (u.includes("/api/auth/get-session")) return res({ session: { token: "t" }, user: { login: "octocat", image: null } });
       if (u.includes("/popular-skills")) return res({ skills: [], groups: [] });
       return res([]);
     }));

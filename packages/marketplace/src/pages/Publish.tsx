@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Me } from "../auth";
+import { makeAuth, type Me } from "../auth";
 import type { makeApi } from "../api";
 import { makeUpload, NotSignedIn } from "../upload";
 
@@ -14,10 +14,10 @@ export function Publish({ api: _api, me, base }: { api: ReturnType<typeof makeAp
   const [busy, setBusy] = useState(false);
 
   if (!me) {
-    const loginUrl = base + "/api/auth/github/login?return=" + encodeURIComponent(window.location.href);
+    const signIn = () => { void makeAuth(base).signIn(window.location.href); };
     return (
       <div className="ex-card">
-        <p>Sign in to publish your gems. <a href={loginUrl} className="ex-signin">Sign in with GitHub</a></p>
+        <p>Sign in to publish your gems. <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn(); }}>Sign in with GitHub</a></p>
       </div>
     );
   }

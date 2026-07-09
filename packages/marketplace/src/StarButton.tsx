@@ -4,7 +4,7 @@ import { NotSignedIn } from "./stars";
 
 export function StarButton({ kind, id, count, starred, signedIn, loginUrl, api }: {
   kind: string; id: string; count: number; starred: boolean; signedIn: boolean;
-  loginUrl: () => string; api: ReturnType<typeof makeStars>;
+  loginUrl: () => void; api: ReturnType<typeof makeStars>;
 }) {
   const [on, setOn] = useState(starred);
   const [n, setN] = useState(count);
@@ -15,7 +15,7 @@ export function StarButton({ kind, id, count, starred, signedIn, loginUrl, api }
 
   const click = async (e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation();
-    if (!signedIn) { window.location.assign(loginUrl()); return; }
+    if (!signedIn) { loginUrl(); return; }
     if (busy) return;
     const prevOn = on, prevN = n;
     setOn(!on); setN(n + (on ? -1 : 1)); setBusy(true);   // optimistic
@@ -24,7 +24,7 @@ export function StarButton({ kind, id, count, starred, signedIn, loginUrl, api }
       setOn(r.starred); setN(r.count);                    // reconcile
     } catch (err) {
       setOn(prevOn); setN(prevN);                          // revert
-      if (err instanceof NotSignedIn) window.location.assign(loginUrl());
+      if (err instanceof NotSignedIn) loginUrl();
     } finally { setBusy(false); }
   };
 

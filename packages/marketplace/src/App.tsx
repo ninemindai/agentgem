@@ -40,6 +40,7 @@ export function App() {
   const onSources = path.startsWith("/sources");
   const onIngredients = path.startsWith("/ingredient");
   const signOut = async () => { await auth.logout(); setMe(null); };
+  const signIn = () => { void auth.signIn(window.location.href); };
   const toggleTheme = () => {
     const next = theme === "dark" ? "light" : "dark";
     document.documentElement.dataset.theme = next;
@@ -71,11 +72,11 @@ export function App() {
               <button type="button" className="ex-signout" onClick={signOut}>Sign out</button>
             </>
           ) : (
-            <a className="ex-signin" href={auth.loginUrl(window.location.href)}>Sign in with GitHub</a>
+            <a className="ex-signin" href="#" onClick={(e) => { e.preventDefault(); signIn(); }}>Sign in with GitHub</a>
           )}
         </span>
       </header>
-      <main className="ex-main"><Router api={api} me={me} stars={{ signedIn: !!me, loginUrl: () => auth.loginUrl(window.location.href), api: starsApi }} reviews={{ signedIn: !!me, loginUrl: () => auth.loginUrl(window.location.href), api: reviewsApi }} /></main>
+      <main className="ex-main"><Router api={api} me={me} stars={{ signedIn: !!me, loginUrl: signIn, api: starsApi }} reviews={{ signedIn: !!me, loginUrl: signIn, api: reviewsApi }} /></main>
       <footer className="ex-footer">Early testbed — accounts, stars, and reviews may be reset. Trusted-adoption data, k-anonymized. <a href="https://agentgem.ai">agentgem.ai</a></footer>
     </div>
   );

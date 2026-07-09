@@ -17,8 +17,11 @@ import { TeamUsage } from "./pages/TeamUsage";
 import { Sources } from "./pages/Sources";
 import { Minigames } from "./pages/Minigames";
 
-export interface StarsCtx { signedIn: boolean; loginUrl: () => string; api: ReturnType<typeof makeStars> }
-export interface ReviewsCtx { signedIn: boolean; loginUrl: () => string; api: ReturnType<typeof makeReviews> }
+// `loginUrl` triggers sign-in (better-auth's social sign-in is POST-only, so there is no
+// synchronous URL to hand to an anchor's href anymore) — the name is kept for a minimal diff
+// across the many call sites/mocks that already carry it; only its shape changed, string → void.
+export interface StarsCtx { signedIn: boolean; loginUrl: () => void; api: ReturnType<typeof makeStars> }
+export interface ReviewsCtx { signedIn: boolean; loginUrl: () => void; api: ReturnType<typeof makeReviews> }
 
 // Navigation is intercepted globally in App (same-origin <a> clicks → pushState + popstate),
 // so pages just use plain <a href> and this Router reacts to popstate.
