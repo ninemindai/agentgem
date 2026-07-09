@@ -69,7 +69,7 @@
   </div>
   <script>
   (function () {
-    var DV = "0.1.1", DTAG = "desktop-v0.1.1";
+    var DV = "0.4.0", DTAG = "desktop-v0.4.0";
     var dl = "https://github.com/ninemindai/agentgem/releases/download/" + DTAG + "/";
     var rel = "https://github.com/ninemindai/agentgem/releases/tag/" + DTAG;
     var help = "docs/desktop.html";
@@ -88,9 +88,10 @@
       set(rel, "View the desktop app", "open on a computer to install · macOS · Windows · Linux");
     } else if (/Mac/i.test(plat)) {
       set(asset.macArm, "Download for macOS", 'Apple Silicon · <a href="' + asset.macX64 + '">Intel</a> · ' + all
-        + '<br><span class="dl-hint">ℹ Unsigned build — macOS says <b>“damaged”</b> on first open; that’s expected. <a href="docs/desktop.html#download">One-line fix →</a></span>');
+        + '<br><span class="dl-hint">✓ Signed &amp; notarized — opens normally.</span>');
     } else if (/Win/i.test(plat)) {
-      set(asset.win, "Download for Windows", all);
+      set(asset.win, "Download for Windows", all
+        + '<br><span class="dl-hint">ℹ Unsigned — on the SmartScreen prompt choose <b>More info → Run anyway</b>.</span>');
     } else if (/Linux/i.test(plat)) {
       set(asset.linux, "Download for Linux (AppImage)", all);
     } else {
@@ -205,6 +206,37 @@
       <h3>Deploy anywhere</h3>
       <p>The same neutral Gem feeds multiple code-gen targets and managed backends — pick a target, publish, and undeploy when you're done.</p>
       <div class="chips"><a class="chip" href="https://eve.dev">Eve</a><a class="chip" href="https://flueframework.com">Flue</a><a class="chip" href="https://github.com/openai/openai-agents-js">OpenAI</a><a class="chip" href="https://aws.amazon.com/bedrock/agentcore/">AgentCore</a><a class="chip" href="https://platform.claude.com/docs/en/managed-agents/overview">Claude Agents</a></div>
+    </div>
+  </div>
+</section>
+
+<section class="wrap" style="padding:8px 0 24px">
+  <p class="eyebrow">More than a builder</p>
+  <h2 class="sec-title">Your sessions, made useful.</h2>
+  <div class="cards">
+    <div class="card">
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></div>
+      <h3>Recall</h3>
+      <p>Search across every past session by what happened inside it — instant, local, secret-scrubbed — then chat with or extract across the ones that matter.</p>
+      <div class="chips"><a class="chip" href="docs/recall.html">Recall</a><span class="chip">goldmine MCP</span></div>
+    </div>
+    <div class="card">
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg></div>
+      <h3>Context hygiene</h3>
+      <p>LLM-free detection of context bloat: a per-session score, a deterministic "cut here at turn N", a timeline, and live OS nudges when a running session gets heavy.</p>
+      <div class="chips"><a class="chip" href="docs/context-hygiene.html">Context hygiene</a><span class="chip">warm --nudge</span></div>
+    </div>
+    <div class="card">
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M10 8.5 16 12l-6 3.5z" fill="currentColor" stroke="none"/></svg></div>
+      <h3>Play</h3>
+      <p>AI-generated mini-games, built by chatting and sealed to run anywhere — each one a first-class, versioned <code>game</code> Gem you can share to the marketplace.</p>
+      <div class="chips"><a class="chip" href="docs/play.html">Play</a><span class="chip">sealed iframe</span></div>
+    </div>
+    <div class="card">
+      <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2z"/></svg></div>
+      <h3>Chat</h3>
+      <p>Drive a local coding agent — Claude or Codex — from inside the console, grounded in your own transcripts, and distill the conversation straight into a Gem.</p>
+      <div class="chips"><a class="chip" href="docs/chat.html">Chat</a><span class="chip">ACP</span></div>
     </div>
   </div>
 </section>

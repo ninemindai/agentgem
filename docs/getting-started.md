@@ -6,7 +6,7 @@ operations from your machine — over both HTTP and MCP — while keeping secret
 
 ## Prerequisites
 
-- **Node.js ≥ 22.**
+- **Node.js ≥ 24.**
 - A supported coding agent — **Claude** (`~/.claude`), **Codex**, or **Hermes** — with
   skills, MCP servers, and instructions.
 
