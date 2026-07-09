@@ -107,3 +107,69 @@ Same 4 errors reproduced via `git stash` on the unmodified tree — pre-existing
 3. `pendingPublish` resets to `false` in `dismissConnect()` (banner Dismiss button) and inside `onBound` right before firing the resume — so a stale flag can't fire on a later bind once cleared. It is not reset directly on a bind *rejection* (`useGitHubBind`'s `error` state, e.g. `stale`/`bad-signature`) — the banner stays up so the user can retry the same pending publish with a fresh code, which is the intended retry UX per `ConnectGitHub`/`useGitHubBind`'s own design (`error` is retryable, `flow` stays live). The banner is the only place `pendingPublish` is visible/actionable from, and dismissing it is the only way to leave without succeeding, so a stale flag firing on some later, unrelated bind is not possible: `pendingPublish` only lives while that banner instance is mounted and always clears on unmount-equivalent (dismiss or success). Flagging this reading as a deliberate interpretation rather than silently asserting literal compliance.
 
 No other deviations. Command prefix `pnpm -C packages/console exec vitest run …` was used throughout, matching the binding instruction.
+
+---
+
+## Addendum: regression test pinning Studio's `onBound` against clobbering the refreshed identity
+
+Added one test to `packages/console/src/panels/Play/__tests__/StudioShare.test.tsx` (only file touched; `Studio.tsx` untouched). Added `mountWithChip()` (renders `<IdentityChip apiBase="" />` alongside `<Studio>` inside one `<IdentityProvider>`) and a new `it(...)` that drives Share → Connect GitHub → Copy code & open GitHub, then asserts on the `IdentityChip` (the real context consumer): the avatar `img` src is `https://a/bob.png` and the button's `title` attribute is `"Open app.agentgem.ai signed in"` — both only true if the post-bind `refresh()`'s full record (`avatarUrl`, `sessionActive`) survived Studio's `onBound`.
+
+### Proof: injected the bug, watched the test fail
+
+Temporarily edited `Studio.tsx`: destructured `setStatus: setIdentityStatus` from `useIdentity()` and added `setIdentityStatus({ bound: true, login })` as the first line of `onBound` (before the existing `pendingPublish`/`publishWorkspace` logic).
+
+`pnpm -C packages/console exec vitest run src/panels/Play/__tests__/StudioShare.test.tsx` — verbatim failure:
+
+```
+ FAIL  src/panels/Play/__tests__/StudioShare.test.tsx > Studio → Share to app.agentgem.ai > resuming a publish does not clobber the freshly-refreshed identity record (avatarUrl/sessionActive survive Studio's onBound)
+TestingLibraryElementError: Unable to find role="img" and name `/bob/i`
+
+Ignored nodes: comments, script, style
+<body>
+  <div>
+    <button
+      class="identity-chip is-stale"
+      title="Session expired — reconnect GitHub"
+      type="button"
+    >
+      <span
+        aria-hidden="true"
+        class="identity-chip__avatar identity-chip__avatar--empty"
+      />
+      <span
+        class="identity-chip__label"
+      >
+        @bob
+      </span>
+    </button>
+    ...
+```
+
+(`class="identity-chip is-stale"`, `title="Session expired — reconnect GitHub"`, no avatar img — exactly the optimistic partial record `{ bound: true, login }` clobbering `avatarUrl`/`sessionActive`.)
+
+```
+ Test Files  1 failed | 7 passed (8)
+      Tests  1 failed | 65 passed (66)
+```
+
+### Revert and re-run: green
+
+`git checkout -- packages/console/src/panels/Play/Studio.tsx` → `git diff --stat packages/console/src/panels/Play/Studio.tsx` empty (confirmed clean).
+
+`pnpm -C packages/console exec vitest run src/panels/Play/`:
+
+```
+ ✓ src/panels/Play/__tests__/Studio.test.tsx (4 tests) 92ms
+ ✓ src/panels/Play/__tests__/StudioShare.test.tsx (6 tests) 203ms
+ ✓ src/panels/Play/__tests__/Composer.test.tsx (7 tests) 278ms
+ ✓ src/panels/Play/__tests__/mcpUiHost.test.ts (16 tests) 37ms
+ ✓ src/panels/Play/__tests__/Runner.test.tsx (19 tests) 616ms
+ ✓ src/panels/Play/__tests__/PlayDeepLink.test.tsx (3 tests) 41ms
+ ✓ src/panels/Play/__tests__/Arcade.test.tsx (1 test) 25ms
+ ✓ src/panels/Play/__tests__/mcpHostTools.test.ts (10 tests) 5ms
+
+ Test Files  8 passed (8)
+      Tests  66 passed (66)
+```
+
+66 = the 65 pre-existing Play tests + 1 new regression test. No existing assertion touched, reordered, or weakened.
