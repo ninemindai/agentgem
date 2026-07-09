@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/auth/testCookie.d.ts",
+      "default": "./dist/auth/testCookie.js"
     }
   },
   "files": [

@@ -37,11 +37,21 @@ export function makeAuth(opts: {
     // scope, mapped to { scope, role }, sorted by scope. `user`/`session` are passed through
     // unchanged so resolveSession's `res?.user` shim keeps working.
     plugins: [bearer(), customSession(async ({ user, session }) => {
-      const orgs = (await getAccountScopes(opts.db, user.id))
-        .filter((s) => s.role !== "self")
-        .map((s) => ({ scope: s.scope, role: s.role }))
-        .sort((a, b) => a.scope.localeCompare(b.scope));
-      return { user, session, orgs };
+      // Final-review fix 1b-5 — better-auth wraps its OWN inner session lookup in `.catch(() =>
+      // null)`, but NOT this enrichment fn: an uncaught throw here (e.g. a transient DB error from
+      // getAccountScopes) would reject customSession's override of /get-session entirely, which
+      // resolveSession (called by all route consumers) awaits directly — so a scopes read failure
+      // would 500 an otherwise-unrelated authed request (stars, reviews, publish...) instead of just
+      // degrading. Scope enrichment must never fail auth resolution.
+      try {
+        const orgs = (await getAccountScopes(opts.db, user.id))
+          .filter((s) => s.role !== "self")
+          .map((s) => ({ scope: s.scope, role: s.role }))
+          .sort((a, b) => a.scope.localeCompare(b.scope));
+        return { user, session, orgs };
+      } catch {
+        return { user, session, orgs: [] };
+      }
     }),
     // 1b-Task 4 — the SSO handoff redeem's ONLY way to hand the browser a genuine better-auth
     // session cookie without hand-signing one: mintSessionCookie (mintCookie.ts) drives this
