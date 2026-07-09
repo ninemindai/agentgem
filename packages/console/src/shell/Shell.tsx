@@ -7,6 +7,8 @@ import { useRovingTabIndex } from "./useRovingTabIndex.js";
 import { ToastProvider } from "./Toast.js";
 import { NotificationsProvider } from "../notify/NotificationsProvider.js";
 import { NotifyBell } from "../notify/NotifyBell.js";
+import { IdentityProvider } from "../identity/IdentityProvider.js";
+import { IdentityChip } from "../identity/IdentityChip.js";
 
 const PHASES: { id: Phase; label: string }[] = [
   { id: "observe", label: "Observe" },
@@ -137,6 +139,7 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
 
   return (
     <ToastProvider>
+      <IdentityProvider apiBase={apiBase}>
       <div className="console">
         <nav className="console-nav">
           <div className="console-brand">
@@ -170,11 +173,12 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
               {g.pages.map(item)}
             </div>
           ))}
-          <div className="console-footer"><NotifyBell />{footer.map(item)}</div>
+          <div className="console-footer"><NotifyBell />{footer.map(item)}<IdentityChip apiBase={apiBase} /></div>
         </nav>
         <main className="console-main">{ActivePage ? <ActivePage apiBase={apiBase} /> : null}</main>
         <NotificationsProvider apiBase={apiBase} />
       </div>
+      </IdentityProvider>
     </ToastProvider>
   );
 }
