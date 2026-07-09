@@ -1,2 +1,27 @@
 packages:
   - "packages/*"
+
+# --- pnpm 11 supply-chain: release cooldown ---
+# pnpm 11 defaults a cooldown that rejects freshly-published packages. It's disabled
+# here (0) as a deliberate call: this repo upgrades deps frequently and to latest, and
+# consumes its own @agentback/* monorepo publishes in lockstep — a cooldown blocks the
+# very bumps we make (a 1440 window rejected 18 just-published third-party entries plus
+# our own @agentback). The lockfile pins exact versions and every bump is PR-reviewed,
+# so the cooldown adds CI friction for marginal value. Revisit if bumping cadence slows:
+# raise to e.g. 1440 and add `minimumReleaseAgeExclude: ["@agentback/*"]`.
+minimumReleaseAge: 0
+
+# --- pnpm 11 build-script gate (fatal in CI, where pnpm 10 only warned) ---
+# pnpm 11 requires an explicit decision on every dependency postinstall script or the
+# install fails (ERR_PNPM_IGNORED_BUILDS). Nothing we run needs these: esbuild ships a
+# prebuilt platform binary (via its optional deps, not the script), better-sqlite3 is
+# transitive and unused, @scarf/scarf is telemetry. false = don't run, but acknowledged.
+allowBuilds:
+  '@scarf/scarf': false
+  better-sqlite3: false
+  esbuild: false
+
+# pnpm 11 re-runs install before every `pnpm run <script>` (verifyDepsBeforeRun) and
+# treats the build-script gate as fatal there, which breaks `pnpm build`. CI runs an
+# explicit `pnpm install` first, so the pre-run check is redundant here.
+verifyDepsBeforeRun: false
