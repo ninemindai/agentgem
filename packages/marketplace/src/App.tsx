@@ -15,6 +15,7 @@ export function App() {
   const [path, setPath] = useState(() => window.location.pathname);
   const [me, setMe] = useState<Me | null>(null);
   const [theme, setTheme] = useState(() => (document.documentElement.dataset.theme === "dark" ? "dark" : "light"));
+  const [signInError, setSignInError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -40,7 +41,13 @@ export function App() {
   const onSources = path.startsWith("/sources");
   const onIngredients = path.startsWith("/ingredient");
   const signOut = async () => { await auth.logout(); setMe(null); };
-  const signIn = () => { void auth.signIn(window.location.href); };
+  // Surface a failed sign-in (misconfigured provider, rate-limit, 5xx, network error) instead of
+  // the click having zero visible effect — this is the primary login path, shared by the header
+  // link and every loginUrl-triggered prompt (StarButton, review prompts, Team Pulse sign-in).
+  const signIn = () => {
+    setSignInError(null);
+    auth.signIn(window.location.href).catch((err) => setSignInError(err instanceof Error ? err.message : String(err)));
+  };
   const toggleTheme = () => {
     const next = theme === "dark" ? "light" : "dark";
     document.documentElement.dataset.theme = next;
@@ -76,6 +83,7 @@ export function App() {
           )}
         </span>
       </header>
+      {signInError && <p className="ex-error" role="alert" style={{ margin: "0 24px 16px" }}>Sign-in failed: {signInError}</p>}
       <main className="ex-main"><Router api={api} me={me} stars={{ signedIn: !!me, loginUrl: signIn, api: starsApi }} reviews={{ signedIn: !!me, loginUrl: signIn, api: reviewsApi }} /></main>
       <footer className="ex-footer">Early testbed — accounts, stars, and reviews may be reset. Trusted-adoption data, k-anonymized. <a href="https://agentgem.ai">agentgem.ai</a></footer>
     </div>
