@@ -18,9 +18,9 @@ export function generateSessionToken(): { token: string; hash: string } {
 
 export async function upsertAccount(
   db: AppDb,
-  a: { provider: string; accountId: string; login: string; avatarUrl?: string | null },
+  a: { provider: string; accountId: string; login: string; avatarUrl?: string | null; id?: string },
 ): Promise<Account> {
-  const id = randomUUID();
+  const id = a.id ?? randomUUID();
   const rows = await db
     .insert(accounts)
     .values({ id, provider: a.provider, providerAccountId: a.accountId, login: a.login, avatarUrl: a.avatarUrl ?? null })
