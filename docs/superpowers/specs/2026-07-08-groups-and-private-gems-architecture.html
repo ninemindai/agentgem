@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AgentGem Groups &amp; Private Gems Architecture</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: white;
+    }
+
+    .container { max-width: 1280px; margin: 0 auto; }
+
+    .header { margin-bottom: 2rem; }
+
+    .header-row {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .pulse-dot {
+      width: 12px;
+      height: 12px;
+      background: #22d3ee;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; }
+
+    .subtitle { color: #94a3b8; font-size: 0.875rem; margin-left: 1.75rem; }
+
+    .diagram-container {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 1rem;
+      border: 1px solid #1e293b;
+      padding: 1.5rem;
+      overflow-x: auto;
+    }
+
+    svg { width: 100%; min-width: 1100px; display: block; }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+
+    .card {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 0.75rem;
+      border: 1px solid #1e293b;
+      padding: 1.25rem;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.violet { background: #a78bfa; }
+    .card-dot.amber { background: #fbbf24; }
+    .card-dot.rose { background: #fb7185; }
+
+    .card h3 { font-size: 0.875rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.75rem; line-height: 1.5; }
+    .card li { margin-bottom: 0.375rem; }
+    .card code { color: #cbd5e1; }
+
+    .footer { text-align: center; margin-top: 1.5rem; color: #475569; font-size: 0.75rem; }
+
+    .toolbar {
+      display: flex;
+      gap: 0.5rem;
+      margin-left: auto;
+      flex-shrink: 0;
+      align-items: center;
+    }
+    .toolbar-toggle {
+      background: transparent;
+      border: none;
+      color: #475569;
+      cursor: pointer;
+      font-size: 1.25rem;
+      line-height: 1;
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.375rem;
+      transition: color 0.2s, background 0.2s;
+    }
+    .toolbar-toggle:hover { color: #94a3b8; background: rgba(30, 41, 59, 0.5); }
+    .toolbar-actions { display: none; gap: 0.5rem; }
+    .toolbar.expanded .toolbar-actions { display: flex; }
+    .toolbar-actions button {
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid #334155;
+      color: #94a3b8;
+      padding: 0.375rem 0.75rem;
+      border-radius: 0.375rem;
+      font-family: inherit;
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .toolbar-actions button:hover {
+      background: rgba(51, 65, 85, 0.8);
+      color: white;
+      border-color: #475569;
+    }
+
+    @media print {
+      body { background: #020617; padding: 1rem; }
+      .toolbar { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container" id="report-container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>AgentGem · Groups &amp; Private Gems</h1>
+        <div class="toolbar">
+          <div class="toolbar-actions">
+            <button onclick="copyAsImage(this)">📋 Copy</button>
+            <button onclick="downloadPNG(this)">🖼️ PNG</button>
+            <button onclick="downloadPDF(this)">📄 PDF</button>
+          </div>
+          <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">⋯</button>
+        </div>
+      </div>
+      <p class="subtitle">Private gems are a separate credentialed surface — not a filtered view of the public one</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1200 880">
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+          </marker>
+          <marker id="arrowrose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fb7185" />
+          </marker>
+          <marker id="arrowamber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24" />
+          </marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+
+        <rect width="100%" height="100%" fill="url(#grid)" />
+
+        <!-- ============ BOUNDARIES (transparent, drawn under everything) ============ -->
+
+        <!-- Public surface -->
+        <rect x="175" y="80" width="320" height="170" rx="12" fill="rgba(52, 211, 153, 0.04)" stroke="#34d399" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="187" y="97" fill="#34d399" font-size="9" font-weight="600">PUBLIC SURFACE · ACAO:* · no credentials</text>
+
+        <!-- Private surface -->
+        <rect x="175" y="290" width="320" height="210" rx="12" fill="rgba(136, 19, 55, 0.10)" stroke="#fb7185" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="187" y="307" fill="#fb7185" font-size="9" font-weight="600">CREDENTIALED · /api/catalog/* · cookie or Bearer</text>
+
+        <!-- Postgres -->
+        <rect x="680" y="80" width="480" height="400" rx="12" fill="rgba(76, 29, 149, 0.06)" stroke="#a78bfa" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="692" y="97" fill="#a78bfa" font-size="9" font-weight="600">AGGREGATOR POSTGRES</text>
+        <text x="1148" y="97" fill="#a78bfa" font-size="8" text-anchor="end">new tables in bold</text>
+
+        <!-- Membership sources -->
+        <rect x="175" y="530" width="320" height="180" rx="12" fill="rgba(251, 146, 60, 0.05)" stroke="#fb923c" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="187" y="547" fill="#fb923c" font-size="9" font-weight="600">MEMBERSHIP SOURCES</text>
+
+        <!-- Guards -->
+        <rect x="175" y="740" width="985" height="100" rx="12" fill="rgba(136, 19, 55, 0.10)" stroke="#fb7185" stroke-width="1" stroke-dasharray="4,4"/>
+        <text x="191" y="759" fill="#fb7185" font-size="9" font-weight="600">WRITE-SIDE GUARDS — channels the read gate cannot see</text>
+
+        <!-- ============ ARROWS (drawn before boxes so they sit behind) ============ -->
+
+        <!-- SPA -> public routes -->
+        <line x1="144" y1="138" x2="189" y2="133" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+        <!-- SPA -> private surface (routes around the CLI box) -->
+        <path d="M 144 158 L 158 158 Q 168 158 168 168 L 168 328 Q 168 338 178 338 L 189 338" fill="none" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+        <!-- CLI -> private surface -->
+        <line x1="144" y1="358" x2="189" y2="346" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+        <!-- cache -> routes -->
+        <line x1="335" y1="176" x2="335" y2="166" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+        <!-- resolveSession -> canReadGem -->
+        <line x1="335" y1="362" x2="335" y2="374" stroke="#fb7185" stroke-width="1.5" marker-end="url(#arrowrose)"/>
+
+        <!-- public routes -> catalog_gems -->
+        <line x1="479" y1="133" x2="698" y2="150" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <text x="590" y="122" fill="#34d399" font-size="8" text-anchor="middle">WHERE visibility = 'public'</text>
+        <text x="590" y="133" fill="#64748b" font-size="7" text-anchor="middle">unconditional · caller-independent</text>
+
+        <!-- canReadGem -> gem_shares -->
+        <line x1="479" y1="410" x2="698" y2="295" stroke="#fb7185" stroke-width="1.5" marker-end="url(#arrowrose)"/>
+
+        <!-- private -> gem_archives -->
+        <line x1="479" y1="443" x2="698" y2="402" stroke="#fb7185" stroke-width="1.5" marker-end="url(#arrowrose)"/>
+        <text x="596" y="437" fill="#fb7185" font-size="7" text-anchor="middle">archive bytes</text>
+
+        <!-- catalog_gems -> gem_shares -->
+        <line x1="790" y1="208" x2="790" y2="246" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+        <!-- gem_shares |x| group_members -->
+        <line x1="902" y1="288" x2="936" y2="285" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <text x="919" y="274" fill="#a78bfa" font-size="8" text-anchor="middle" font-weight="700">JOIN</text>
+
+        <!-- group_members -> groups -->
+        <line x1="1040" y1="228" x2="1040" y2="200" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+        <!-- group_invites -> group_members -->
+        <line x1="1040" y1="368" x2="1040" y2="334" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <text x="1052" y="354" fill="#64748b" font-size="7">redeem</text>
+
+        <!-- membership sources -> group_members (routed around everything) -->
+        <path d="M 497 620 L 1168 620 Q 1178 620 1178 610 L 1178 300 Q 1178 290 1168 290 L 1146 290" fill="none" stroke="#fb923c" stroke-width="1.5" marker-end="url(#arrowamber)"/>
+        <text x="820" y="612" fill="#fb923c" font-size="8" text-anchor="middle">writes group_members.source = 'sync' | 'invite'</text>
+
+        <!-- ============ COMPONENTS (opaque mask + styled box) ============ -->
+
+        <!-- Marketplace SPA -->
+        <rect x="24" y="110" width="118" height="60" rx="6" fill="#0f172a"/>
+        <rect x="24" y="110" width="118" height="60" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="83" y="134" fill="white" font-size="10" font-weight="600" text-anchor="middle">Marketplace</text>
+        <text x="83" y="148" fill="#94a3b8" font-size="8" text-anchor="middle">app.agentgem.ai</text>
+        <text x="83" y="161" fill="#22d3ee" font-size="7" text-anchor="middle">SPA</text>
+
+        <!-- CLI / console -->
+        <rect x="24" y="330" width="118" height="60" rx="6" fill="#0f172a"/>
+        <rect x="24" y="330" width="118" height="60" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="83" y="354" fill="white" font-size="10" font-weight="600" text-anchor="middle">CLI · Console</text>
+        <text x="83" y="368" fill="#94a3b8" font-size="8" text-anchor="middle">agentgem get</text>
+        <text x="83" y="381" fill="#22d3ee" font-size="7" text-anchor="middle">Bearer session</text>
+
+        <!-- Public routes -->
+        <rect x="193" y="104" width="284" height="58" rx="6" fill="#0f172a"/>
+        <rect x="193" y="104" width="284" height="58" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="335" y="123" fill="white" font-size="10" font-weight="600" text-anchor="middle">Public gem reads · 12 routes</text>
+        <text x="335" y="138" fill="#94a3b8" font-size="8" text-anchor="middle">/api/registry/gems · /profile · /org-catalog</text>
+        <text x="335" y="152" fill="#94a3b8" font-size="8" text-anchor="middle">/effectiveness · /gem-adoption · /adoption</text>
+
+        <!-- publicGemCache -->
+        <rect x="193" y="176" width="284" height="56" rx="6" fill="#0f172a"/>
+        <rect x="193" y="176" width="284" height="56" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="335" y="195" fill="white" font-size="10" font-weight="600" text-anchor="middle">publicGemCache</text>
+        <text x="335" y="209" fill="#94a3b8" font-size="8" text-anchor="middle">global · 5-min TTL · identity-free</text>
+        <text x="335" y="223" fill="#64748b" font-size="7" text-anchor="middle">stays correct because it never sees a private row</text>
+
+        <!-- resolveSession -->
+        <rect x="193" y="314" width="284" height="48" rx="6" fill="#0f172a"/>
+        <rect x="193" y="314" width="284" height="48" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="335" y="333" fill="white" font-size="10" font-weight="600" text-anchor="middle">resolveSession → accountId</text>
+        <text x="335" y="349" fill="#94a3b8" font-size="8" text-anchor="middle">credentialed CORS already wired here</text>
+
+        <!-- canReadGem gate -->
+        <rect x="193" y="376" width="284" height="112" rx="6" fill="#0f172a"/>
+        <rect x="193" y="376" width="284" height="112" rx="6" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="335" y="396" fill="white" font-size="10" font-weight="700" text-anchor="middle">canReadGem(accountId, login, gemKey)</text>
+        <text x="335" y="412" fill="#fb7185" font-size="8" text-anchor="middle">THE single gate</text>
+        <text x="335" y="431" fill="#94a3b8" font-size="8" text-anchor="middle">visibility = 'public'</text>
+        <text x="335" y="445" fill="#94a3b8" font-size="8" text-anchor="middle">OR EXISTS (gem_shares JOIN group_members</text>
+        <text x="335" y="459" fill="#94a3b8" font-size="8" text-anchor="middle">WHERE account_id = ?)</text>
+        <text x="335" y="475" fill="#94a3b8" font-size="8" text-anchor="middle">OR published_by = login   ← owner fallback</text>
+
+        <!-- catalog_gems -->
+        <rect x="700" y="110" width="200" height="96" rx="6" fill="#0f172a"/>
+        <rect x="700" y="110" width="200" height="96" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="800" y="131" fill="white" font-size="10" font-weight="600" text-anchor="middle">catalog_gems</text>
+        <text x="800" y="149" fill="#94a3b8" font-size="8" text-anchor="middle">gem_key · version · published_by</text>
+        <text x="800" y="171" fill="#fbbf24" font-size="9" text-anchor="middle" font-weight="700">+ visibility</text>
+        <text x="800" y="185" fill="#94a3b8" font-size="8" text-anchor="middle">'public' | 'private'</text>
+        <text x="800" y="198" fill="#64748b" font-size="7" text-anchor="middle">default 'public' · existing rows unchanged</text>
+
+        <!-- gem_shares -->
+        <rect x="700" y="250" width="200" height="76" rx="6" fill="#0f172a"/>
+        <rect x="700" y="250" width="200" height="76" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="800" y="271" fill="white" font-size="10" font-weight="700" text-anchor="middle">gem_shares</text>
+        <text x="800" y="289" fill="#94a3b8" font-size="8" text-anchor="middle">gem_key · group_id</text>
+        <text x="800" y="303" fill="#64748b" font-size="7" text-anchor="middle">a private gem names 1..N groups</text>
+        <text x="800" y="317" fill="#64748b" font-size="7" text-anchor="middle">enterprise default: your federated group</text>
+
+        <!-- gem_archives -->
+        <rect x="700" y="370" width="200" height="80" rx="6" fill="#0f172a"/>
+        <rect x="700" y="370" width="200" height="80" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="800" y="390" fill="white" font-size="10" font-weight="600" text-anchor="middle">gem_archives</text>
+        <text x="800" y="405" fill="#94a3b8" font-size="8" text-anchor="middle">the actual bytes</text>
+        <text x="800" y="421" fill="#fb7185" font-size="7" text-anchor="middle">public route stays, joins 'public'</text>
+        <text x="800" y="434" fill="#fb7185" font-size="7" text-anchor="middle">private bytes → /api/catalog/*</text>
+
+        <!-- groups -->
+        <rect x="940" y="110" width="200" height="86" rx="6" fill="#0f172a"/>
+        <rect x="940" y="110" width="200" height="86" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="1040" y="131" fill="white" font-size="10" font-weight="700" text-anchor="middle">groups</text>
+        <text x="1040" y="149" fill="#94a3b8" font-size="8" text-anchor="middle">id · kind · scope · name</text>
+        <text x="1040" y="165" fill="#fbbf24" font-size="7" text-anchor="middle">kind = 'federated' | 'native'</text>
+        <text x="1040" y="180" fill="#64748b" font-size="7" text-anchor="middle">CHECK (kind='federated')</text>
+        <text x="1040" y="190" fill="#64748b" font-size="7" text-anchor="middle">= (scope IS NOT NULL)</text>
+
+        <!-- group_members -->
+        <rect x="940" y="230" width="200" height="100" rx="6" fill="#0f172a"/>
+        <rect x="940" y="230" width="200" height="100" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="1040" y="251" fill="white" font-size="10" font-weight="700" text-anchor="middle">group_members</text>
+        <text x="1040" y="269" fill="#94a3b8" font-size="8" text-anchor="middle">group_id · account_id · role</text>
+        <text x="1040" y="287" fill="#fb923c" font-size="9" text-anchor="middle" font-weight="700">source = 'sync' | 'invite'</text>
+        <text x="1040" y="304" fill="#64748b" font-size="7" text-anchor="middle">reconciler DELETEs only source='sync'</text>
+        <text x="1040" y="317" fill="#64748b" font-size="7" text-anchor="middle">→ GitHub offboarding stays authoritative</text>
+
+        <!-- group_invites -->
+        <rect x="940" y="370" width="200" height="76" rx="6" fill="#0f172a"/>
+        <rect x="940" y="370" width="200" height="76" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="1040" y="391" fill="white" font-size="10" font-weight="700" text-anchor="middle">group_invites</text>
+        <text x="1040" y="409" fill="#94a3b8" font-size="8" text-anchor="middle">token_hash · group_id · expires_at</text>
+        <text x="1040" y="425" fill="#64748b" font-size="7" text-anchor="middle">sha256 only — mirrors handoff_codes</text>
+        <text x="1040" y="438" fill="#64748b" font-size="7" text-anchor="middle">a DB leak cannot join a group</text>
+
+        <!-- GitHub App sync -->
+        <rect x="195" y="560" width="280" height="56" rx="6" fill="#0f172a"/>
+        <rect x="195" y="560" width="280" height="56" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="335" y="580" fill="white" font-size="10" font-weight="600" text-anchor="middle">GitHub App webhook sync</text>
+        <text x="335" y="595" fill="#94a3b8" font-size="8" text-anchor="middle">org_members → federated group</text>
+        <text x="335" y="608" fill="#fbbf24" font-size="7" text-anchor="middle">source = 'sync' · revoked in seconds</text>
+
+        <!-- Invite -->
+        <rect x="195" y="634" width="280" height="56" rx="6" fill="#0f172a"/>
+        <rect x="195" y="634" width="280" height="56" rx="6" fill="rgba(251, 146, 60, 0.3)" stroke="#fb923c" stroke-width="1.5"/>
+        <text x="335" y="654" fill="white" font-size="10" font-weight="600" text-anchor="middle">Invite link (group admin)</text>
+        <text x="335" y="669" fill="#94a3b8" font-size="8" text-anchor="middle">native group · or contractor in a federated one</text>
+        <text x="335" y="682" fill="#fb923c" font-size="7" text-anchor="middle">source = 'invite' · sync never touches it</text>
+
+        <!-- Legacy untouched -->
+        <rect x="850" y="500" width="290" height="100" rx="6" fill="#0f172a"/>
+        <rect x="850" y="500" width="290" height="100" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#64748b" stroke-width="1.5" stroke-dasharray="4,4"/>
+        <text x="995" y="521" fill="#94a3b8" font-size="10" font-weight="600" text-anchor="middle">UNTOUCHED · federated-only</text>
+        <text x="995" y="540" fill="#64748b" font-size="8" text-anchor="middle">resolveOrgAccess · usage_days</text>
+        <text x="995" y="554" fill="#64748b" font-size="8" text-anchor="middle">org_settings · /orgs/:scope/usage</text>
+        <text x="995" y="574" fill="#64748b" font-size="7" text-anchor="middle">usage is attributed by git-remote repo owner,</text>
+        <text x="995" y="586" fill="#64748b" font-size="7" text-anchor="middle">so a native group has no honest scope to bill to</text>
+
+        <!-- Guards content -->
+        <text x="195" y="781" fill="#fb7185" font-size="8" font-weight="600">1 ·</text>
+        <text x="216" y="781" fill="#94a3b8" font-size="8">registry publish + MCP registry_publish REJECT visibility='private' — the GitHub registry repo is a second channel the DB gate never sees</text>
+        <text x="195" y="803" fill="#fb7185" font-size="8" font-weight="600">2 ·</text>
+        <text x="216" y="803" fill="#94a3b8" font-size="8">aggregate endpoints EXCLUDE private gem_keys — k-anonymized rollups leak gem *names* today, which is disclosure without the bytes</text>
+        <text x="195" y="825" fill="#fb7185" font-size="8" font-weight="600">3 ·</text>
+        <text x="216" y="825" fill="#94a3b8" font-size="8">the public gem-archive endpoint STAYS public and joins visibility='public' — old `agentgem get` binaries keep working and can never fetch private bytes</text>
+
+        <!-- ============ LEGEND (outside every boundary) ============ -->
+        <text x="24" y="440" fill="white" font-size="10" font-weight="600">Legend</text>
+
+        <rect x="24" y="452" width="16" height="10" rx="2" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
+        <text x="46" y="460" fill="#94a3b8" font-size="8">Client</text>
+
+        <rect x="24" y="468" width="16" height="10" rx="2" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+        <text x="46" y="476" fill="#94a3b8" font-size="8">Route handler</text>
+
+        <rect x="24" y="484" width="16" height="10" rx="2" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
+        <text x="46" y="492" fill="#94a3b8" font-size="8">Postgres table</text>
+
+        <rect x="24" y="500" width="16" height="10" rx="2" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1"/>
+        <text x="46" y="508" fill="#94a3b8" font-size="8">Gate / guard</text>
+
+        <rect x="24" y="516" width="16" height="10" rx="2" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1"/>
+        <text x="46" y="524" fill="#94a3b8" font-size="8">Sync source</text>
+
+        <rect x="24" y="532" width="16" height="10" rx="2" fill="rgba(251, 146, 60, 0.3)" stroke="#fb923c" stroke-width="1"/>
+        <text x="46" y="540" fill="#94a3b8" font-size="8">Invite source</text>
+
+        <rect x="24" y="548" width="16" height="10" rx="2" fill="transparent" stroke="#64748b" stroke-width="1" stroke-dasharray="3,3"/>
+        <text x="46" y="556" fill="#94a3b8" font-size="8">Unchanged code</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot emerald"></div>
+          <h3>Two surfaces, not one filter</h3>
+        </div>
+        <ul>
+          <li>• Public routes carry <code>WHERE visibility = 'public'</code> — a predicate that never depends on the caller, so it cannot be got wrong per-user</li>
+          <li>• <code>publicGemCache</code> stays global and identity-free because no private row can enter it</li>
+          <li>• <code>PUBLIC_READ_PATHS</code> is not modified — the CORS config that broke <code>/minigames</code> once already stays put</li>
+          <li>• A leak now requires <em>adding a route</em>, not <em>forgetting a filter</em></li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot violet"></div>
+          <h3>Two group kinds, two member sources</h3>
+        </div>
+        <ul>
+          <li>• <code>federated</code> — mirrors an external network, has a verified <code>scope</code> (GitHub org today, Slack workspace later)</li>
+          <li>• <code>native</code> — created inside AgentGem, no scope, uuid-addressed, invite-only</li>
+          <li>• Orthogonal to <code>group_members.source</code>: a federated group may hold invited guests</li>
+          <li>• Sync reconciler deletes only <code>source='sync'</code> — offboarding keeps working; guests were never GitHub's to revoke</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot rose"></div>
+          <h3>What this spec does not do</h3>
+        </div>
+        <ul>
+          <li>• Does not split <code>account_identities</code> out of <code>accounts</code> — sequel</li>
+          <li>• Does not add Google OIDC or any new login provider — sequel</li>
+          <li>• Does not re-key <code>published_by</code> off the bare GitHub login — sequel</li>
+          <li>• Does not give native groups a usage dashboard — usage is attributed by repo owner and has no honest native equivalent</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="footer">
+      AgentGem • design draft • 2026-07-08 • sequels: account_identities split · Google OIDC · Slack federated source
+    </p>
+  </div>
+
+  <script>
+    async function copyAsImage(btn) {
+      const orig = btn.textContent;
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        btn.textContent = '✓ Copied!';
+      } catch (e) {
+        btn.textContent = '✗ Failed';
+      }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+
+    async function downloadPNG(btn) {
+      const orig = btn.textContent;
+      btn.textContent = '⏳ ...';
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const link = document.createElement('a');
+        link.download = 'agentgem-groups-architecture.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        btn.textContent = '✓ Done!';
+      } catch (e) {
+        btn.textContent = '✗ Failed';
+      }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+
+    async function downloadPDF(btn) {
+      const orig = btn.textContent;
+      btn.textContent = '⏳ ...';
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const imgData = canvas.toDataURL('image/png');
+        const { jsPDF } = window.jspdf;
+        const orientation = canvas.width > canvas.height ? 'landscape' : 'portrait';
+        const pdf = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height], hotfixes: ['px_scaling'] });
+        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+        pdf.save('agentgem-groups-architecture.pdf');
+        btn.textContent = '✓ Done!';
+      } catch (e) {
+        btn.textContent = '✗ Failed';
+      }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+  </script>
+</body>
+</html>
