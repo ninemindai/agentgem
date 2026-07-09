@@ -527,10 +527,16 @@ body::before {
 @keyframes studio-fade { from { opacity: 0; } to { opacity: 1; } }
 .play-studio-head, .play-chat, .play-composer-in {
   animation: studio-settle .44s cubic-bezier(.2, .7, .2, 1) both; }
-/* .play-stage fades but must NOT translate: it is an ancestor of the Runner's position:fixed fullscreen
-   overlay, and ANY transform — including the identity matrix that fill-mode:both retains once the
-   animation ends — makes this element the overlay's containing block, trapping fullscreen in the column. */
-.play-stage { animation: studio-fade .44s cubic-bezier(.2, .7, .2, 1) both; animation-delay: .05s; }
+/* .play-stage is an ancestor of the Runner's position:fixed fullscreen overlay, so it must end up with
+   neither a transform nor a stacking context. Hence two constraints, not one:
+   - No transform: even the identity matrix makes this element the overlay's containing block, so it
+     fades (opacity) rather than settles (translateY) like its siblings.
+   - fill-mode `backwards`, never `both`: a `both` fill keeps the opacity animation in effect forever,
+     and an in-effect opacity animation is a permanent stacking context — which pins the overlay's
+     z-index:1000 inside this column, letting the later siblings (.play-chat, .play-composer-in, each a
+     z-index:0 stacking context of its own) paint over fullscreen. `backwards` still covers the delay
+     with the from-value, and the to-value (opacity:1) is already the element's normal style. */
+.play-stage { animation: studio-fade .44s cubic-bezier(.2, .7, .2, 1) backwards; animation-delay: .05s; }
 .play-chat { animation-delay: .11s; }
 .play-composer-in { animation-delay: .17s; }
 @media (prefers-reduced-motion: reduce) {
