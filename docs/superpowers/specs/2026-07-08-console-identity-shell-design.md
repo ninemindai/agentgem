@@ -41,6 +41,30 @@ tangled together. They separate cleanly:
 
 So: a context for status, a hook for flow.
 
+### The context exposes no raw setter
+
+`useIdentity()` returns `{ status, refresh, disconnect }` — deliberately **not** a
+`setStatus`. During implementation the same bug was written three separate times:
+
+```ts
+useGitHubBind(apiBase, { onBound: (login) => setStatus({ bound: true, login }) })
+```
+
+`useGitHubBind` calls `await refresh()` *before* `onBound`, so that optimistic
+write lands last and overwrites the record `refresh()` just fetched, discarding
+`avatarUrl` and `sessionActive`. In the UI that reads as "Session expired" and a
+missing avatar immediately after a *successful* connect. It shipped once and was
+reverted.
+
+Because every field but `bound` is optional, the type accepted the partial write
+happily — the type invited the bug and only tests caught it. Removing the setter
+makes it unrepresentable: `onBound`'s only legitimate jobs are side effects
+(close a modal, resume a publish), and the one caller that genuinely needs to
+write status — Settings' disconnect, applying the authoritative record from
+`bindDisconnectRoute` — gets a purpose-built `disconnect()` on the context
+instead. Reintroducing the optimistic write is now a typecheck failure, not a
+test failure.
+
 ```
 packages/console/src/identity/
   IdentityProvider.tsx    context { status, refresh } — one bindStatusRoute fetch
