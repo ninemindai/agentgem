@@ -47,8 +47,23 @@ describe("ConnectGitHub", () => {
     expect(screen.queryByRole("button", { name: /connect github/i })).toBeNull();
   });
 
-  it("renders the error text", () => {
+  it("error + idle: renders the error text", () => {
     render(<ConnectGitHub bind={bind({ error: "expired_token" })} />);
+    expect(screen.getByText("expired_token")).toBeTruthy();
+  });
+
+  it("error + code: renders error alongside the code for retryable rejection", () => {
+    const b = bind({
+      flow: { userCode: "AB-12", openUrl: "https://gh/d", deviceCode: "dc" },
+      error: "expired_token"
+    });
+    render(<ConnectGitHub bind={b} />);
+    expect(screen.getByText("expired_token")).toBeTruthy();
+    expect(screen.getByText("AB-12")).toBeTruthy();
+  });
+
+  it("error + unconfigured: renders error in unconfigured state", () => {
+    render(<ConnectGitHub bind={bind({ unconfigured: true, error: "expired_token" })} />);
     expect(screen.getByText("expired_token")).toBeTruthy();
   });
 
