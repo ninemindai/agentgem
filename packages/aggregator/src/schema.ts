@@ -430,4 +430,24 @@ export async function ensureSchema(db: AppDb): Promise<void> {
   await db.execute(sql`create index if not exists group_invites_group_idx on group_invites (group_id)`);
   // Login → account lookup for the Plan 1b federated member sync. accounts.login keeps GitHub's casing.
   await db.execute(sql`create index if not exists accounts_login_lower_idx on accounts (lower(login))`);
+
+  // better-auth core tables (Plan 1a): additive only, no existing behavior reads/writes these yet.
+  // Reserved words ("user", "account", "session") are double-quoted.
+  await db.execute(sql`create table if not exists "user" (
+    id text primary key, name text, email text unique, email_verified boolean not null default false,
+    image text, login text, created_at timestamptz not null default now(), updated_at timestamptz not null default now())`);
+  await db.execute(sql`create table if not exists "session" (
+    id text primary key, user_id text not null references "user"(id) on delete cascade,
+    token text not null unique, expires_at timestamptz not null, ip_address text, user_agent text,
+    created_at timestamptz not null default now(), updated_at timestamptz not null default now())`);
+  await db.execute(sql`create index if not exists session_user_idx on "session"(user_id)`);
+  await db.execute(sql`create table if not exists "account" (
+    id text primary key, user_id text not null references "user"(id) on delete cascade,
+    account_id text not null, provider_id text not null, access_token text, refresh_token text, id_token text,
+    access_token_expires_at timestamptz, refresh_token_expires_at timestamptz, scope text, password text,
+    created_at timestamptz not null default now(), updated_at timestamptz not null default now())`);
+  await db.execute(sql`create unique index if not exists account_provider_idx on "account"(provider_id, account_id)`);
+  await db.execute(sql`create table if not exists "verification" (
+    id text primary key, identifier text not null, value text not null, expires_at timestamptz not null,
+    created_at timestamptz not null default now(), updated_at timestamptz not null default now())`);
 }
