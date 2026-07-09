@@ -6,11 +6,10 @@
 // publishedBy (403 otherwise). CSRF on the write is stopped by the SameSite=Lax session cookie + the 401,
 // NOT by CORS. Unpublish is a hard delete of the catalog row + archive bytes (visibility scope is a
 // separate, later feature).
-import type { AppDb } from "@agentgem/aggregator";
+import type { AppDb, makeAuth } from "@agentgem/aggregator";
 import { resolveSession, deleteCatalogGem } from "@agentgem/aggregator";
-import { SESSION_COOKIE, parseCookies } from "../auth/cookie.js";
 
-export interface CatalogDeps { db: AppDb; webOrigins: string[] }
+export interface CatalogDeps { db: AppDb; auth: ReturnType<typeof makeAuth>; webOrigins: string[] }
 
 interface Req { method: string; path: string; query: Record<string, unknown>; headers: Record<string, string | undefined> }
 interface Res { status(c: number): Res; set(k: string, v: string): Res; json(b: unknown): Res; send(b: unknown): Res }
@@ -30,8 +29,7 @@ function preflight(res: Res): void {
 // The caller's verified GitHub login (not just accountId) — publishedBy is a login, so ownership is a
 // login match.
 async function sessionLogin(deps: CatalogDeps, req: Req): Promise<string | null> {
-  const token = parseCookies(req.headers["cookie"])[SESSION_COOKIE];
-  const who = token ? await resolveSession(deps.db, token) : null;
+  const who = await resolveSession(deps.auth, req.headers);
   return who?.login ?? null;
 }
 

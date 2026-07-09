@@ -4,7 +4,7 @@ import { generateKeyPairSync, sign as edSign } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { makeTestDb } from "@agentgem/aggregator";
 import { producers, accountBindings, accounts } from "@agentgem/aggregator";
-import { recordBinding, bindSigningPayload, resolveSession, accountOwnsScope, getAccountScopes, type BindRequest } from "@agentgem/aggregator";
+import { recordBinding, bindSigningPayload, resolveLegacySession, accountOwnsScope, getAccountScopes, type BindRequest } from "@agentgem/aggregator";
 import type { AccountVerifier, VerifiedAccount } from "@agentgem/aggregator";
 
 function makeSigner() {
@@ -75,7 +75,7 @@ describe("recordBinding", () => {
     expect(typeof res.sessionToken).toBe("string");
     expect(res.expiresAt).toBeTruthy();
     // The minted session bearer resolves to the same account — same token the web cookie carries.
-    const who = await resolveSession(db, res.sessionToken!);
+    const who = await resolveLegacySession(db, res.sessionToken!);
     expect(who?.login).toBe("octocat");
   });
   it("does NOT register a producer when the token is invalid", async () => {

@@ -4,6 +4,7 @@
 // sha256 hash is persisted, so a DB leak cannot mint sessions.
 import { randomUUID, randomBytes, createHash } from "node:crypto";
 import { and, eq, gt, lt } from "drizzle-orm";
+import type { Auth, BetterAuthOptions } from "better-auth";
 import type { AppDb } from "./schema.js";
 import { accounts, webSessions, accountScopes, handoffCodes } from "./schema.js";
 
@@ -41,7 +42,41 @@ export async function createSession(db: AppDb, accountId: string, token: string,
   });
 }
 
-export async function resolveSession(db: AppDb, token: string): Promise<{ login: string; avatarUrl: string | null; accountId: string } | null> {
+// Plan 1b cutover (review fix 3A): better-auth is now authoritative for session resolution. It reads
+// its OWN cookie (name/signing are its concern, not ours) or an `Authorization: Bearer` header off
+// the headers we forward — callers must NOT pre-extract a token by cookie NAME (that was the bug:
+// better-auth's cookie isn't named `ag_session`, so guessing the name 401s every web request).
+// Generic over the options type so any makeAuth(...)-produced Auth<O> is accepted here — Auth<O> is
+// invariant in O, so a non-generic `Auth<BetterAuthOptions>` parameter would reject it (mirrors mintSession).
+// `auth.api`'s type is derived from O's plugin list, which TS cannot fully resolve for a generic O
+// (the core `getSession` endpoint drops out of `InferAPI<...>` when O isn't a concrete object type).
+// This structural view is exactly what every concrete makeAuth(...) instance's `auth.api.getSession`
+// already satisfies (proven by betterAuthIntegration.test.ts) — the cast below only works around the
+// generic-inference gap, it does not change what's actually called at runtime.
+type SessionApi = {
+  getSession(opts: { headers: Headers }): Promise<{ user?: { id: string; login?: string; image?: string | null } } | null>;
+};
+
+export async function resolveSession<O extends BetterAuthOptions>(
+  auth: Auth<O>,
+  headers: Record<string, string | undefined> | Headers,
+): Promise<{ login: string; avatarUrl: string | null; accountId: string } | null> {
+  const h = headers instanceof Headers
+    ? headers
+    : Object.entries(headers).reduce((acc, [k, v]) => { if (typeof v === "string") acc.set(k, v); return acc; }, new Headers());
+  const res = await (auth.api as unknown as SessionApi).getSession({ headers: h });
+  const u = res?.user;
+  return u ? { login: u.login ?? "", avatarUrl: u.image ?? null, accountId: u.id } : null;
+}
+
+export async function deleteSession(db: AppDb, token: string): Promise<void> {
+  await db.delete(webSessions).where(eq(webSessions.tokenHash, sha256hex(token)));
+}
+
+// The pre-cutover, `web_sessions`-table-backed lookup — kept ONLY for src/auth/install.ts, the
+// legacy OAuth handler Plan 1b-Task 5 deletes outright. Every other consumer has moved to the
+// better-auth-backed `resolveSession` above; do not add new callers of this one.
+export async function resolveLegacySession(db: AppDb, token: string): Promise<{ login: string; avatarUrl: string | null; accountId: string } | null> {
   const rows = await db
     .select({ login: accounts.login, avatarUrl: accounts.avatarUrl, accountId: accounts.id })
     .from(webSessions)
@@ -49,10 +84,6 @@ export async function resolveSession(db: AppDb, token: string): Promise<{ login:
     .where(and(eq(webSessions.tokenHash, sha256hex(token)), gt(webSessions.expiresAt, new Date())))
     .limit(1);
   return rows[0] ?? null;
-}
-
-export async function deleteSession(db: AppDb, token: string): Promise<void> {
-  await db.delete(webSessions).where(eq(webSessions.tokenHash, sha256hex(token)));
 }
 
 /** Mint a single-use SSO handoff code bound to an account. Only sha256(code) is stored. */

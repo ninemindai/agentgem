@@ -8,17 +8,16 @@
 // credentialed CORS + originGuard-exempt, mirroring auth/stars. account_scopes is
 // populated at login, so a pre-#4b session with no rows is fail-closed (403 on its own
 // login) until the user signs in again. importGem rejects tampering.
-import type { AppDb } from "@agentgem/aggregator";
+import type { AppDb, makeAuth } from "@agentgem/aggregator";
 import { resolveSession, accountOwnsScope, appOrgRole, installationForScope } from "@agentgem/aggregator";
 import { importGem, publishGem, type RegistrySource, type RegistryPublisher } from "@agentgem/distribute";
-import { parseCookies, SESSION_COOKIE } from "../auth/cookie.js";
 import { resolvePublishType, type GemTypeRegistry } from "../gem/gemTypeRegistry.js";
 import { InvalidInputError } from "@agentgem/model";
 import { createLogger } from "@agentgem/base";
 
 const log = createLogger("registry");
 
-export interface UploadPublishDeps { db: AppDb; webOrigins: string[]; source: RegistrySource; publisher: RegistryPublisher; gemTypes: GemTypeRegistry }
+export interface UploadPublishDeps { db: AppDb; auth: ReturnType<typeof makeAuth>; webOrigins: string[]; source: RegistrySource; publisher: RegistryPublisher; gemTypes: GemTypeRegistry }
 type Req = { method?: string; headers: Record<string, string | undefined>; body?: Record<string, unknown> };
 type Res = { status(c: number): Res; set(k: string, v: string): Res; json(b: unknown): Res; send(b: unknown): Res };
 
@@ -38,8 +37,7 @@ export function uploadPublishHandler(deps: UploadPublishDeps) {
       res.set("Access-Control-Allow-Methods", "POST, OPTIONS").set("Access-Control-Allow-Headers", "content-type").status(204).send("");
       return;
     }
-    const token = parseCookies(req.headers["cookie"])[SESSION_COOKIE];
-    const who = token ? await resolveSession(deps.db, token) : null;
+    const who = await resolveSession(deps.auth, req.headers);
     if (!who) { res.status(401).json({ error: "sign in required" }); return; }
 
     const body = (req.body ?? {}) as { scope?: unknown; version?: unknown; name?: unknown; tags?: unknown; description?: unknown; type?: unknown; bytesBase64?: unknown };

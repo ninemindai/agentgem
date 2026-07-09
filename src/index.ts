@@ -64,7 +64,7 @@ import { PlayController } from "./play.controller.js";
 import { resolveAggregatorDb, type AppDb, GitHubVerifier, fetchOrgMemberships, migrateAccountsToBetterAuth } from "@agentgem/aggregator";
 import { mountGating } from "./gating.js";
 import { installAuth, githubExchangeCode } from "./auth/install.js";
-import { mountAuth } from "./auth/mount.js";
+import { mountAuth, AUTH_BINDING } from "./auth/mount.js";
 import { makeAuth } from "@agentgem/aggregator";
 import { installStars } from "./stars/install.js";
 import { installReviews } from "./reviews/install.js";
@@ -198,6 +198,10 @@ export async function createApp(port: number): Promise<RestApplication> {
   const ghClientId = process.env.AGENTGEM_GITHUB_CLIENT_ID;
   const ghSecret = process.env.AGENTGEM_GITHUB_CLIENT_SECRET;
   const webOrigins = (process.env.AGENTGEM_WEB_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  // Hoisted so the route installers below (stars/reviews/catalog/groups/usage/orgsApi/registry) can
+  // reuse the SAME instance resolveSession(auth, headers) resolves sessions through (Plan 1b) —
+  // also bound into the DI container so GemController can inject it (see AUTH_BINDING).
+  let auth: ReturnType<typeof makeAuth> | undefined;
   if (ghClientId && ghSecret && webOrigins.length > 0 && aggDb) {
     installAuth(server.expressApp as never, {
       db: aggDb,
@@ -215,7 +219,7 @@ export async function createApp(port: number): Promise<RestApplication> {
     // better-auth (Plan 1a, additive): mounted at the TEMPORARY /api/betterauth prefix so it does
     // not collide with the still-live installAuth above — installAuth stays authoritative for
     // existing sessions until Plan 1b deletes it and better-auth flips to /api/auth.
-    const auth = makeAuth({
+    auth = makeAuth({
       db: aggDb,
       secret: process.env.AGENTGEM_SESSION_SECRET ?? ghSecret,
       baseURL: `${process.env.AGENTGEM_PUBLIC_BASE ?? "https://api.agentgem.ai"}/api/betterauth`,
@@ -224,6 +228,7 @@ export async function createApp(port: number): Promise<RestApplication> {
       webOrigins,
       cookieDomain: process.env.AGENTGEM_SESSION_COOKIE_DOMAIN,
     });
+    app.bind(AUTH_BINDING).to(auth);
     mountAuth(server.expressApp as never, auth, webOrigins, "/api/betterauth");
     // One-time boot backfill (Plan 1a-Task 4): give every existing accounts row a same-id
     // better-auth user/account anchor before any sign-in runs, so a pre-existing github user
@@ -232,13 +237,16 @@ export async function createApp(port: number): Promise<RestApplication> {
     if (conflicts.length > 0) console.error(`better-auth migration: ${conflicts.length} account link conflicts — cutover must resolve these:`, conflicts);
     else console.log(`better-auth migration: backfilled ${migrated} account(s)`);
   }
-  // Stars + reviews + team usage need the DB + an allowlisted web origin; they don't need the GitHub OAuth secret.
-  if (aggDb && webOrigins.length > 0) {
-    installStars(server.expressApp as never, { db: aggDb, webOrigins });
-    installReviews(server.expressApp as never, { db: aggDb, webOrigins });
-    installCatalog(server.expressApp as never, { db: aggDb, webOrigins });
-    installGroups(server.expressApp as never, { db: aggDb, webOrigins });
-    installUsage(server.expressApp as never, { db: aggDb, webOrigins });
+  // Stars + reviews + team usage need the DB + an allowlisted web origin + a live better-auth
+  // instance to resolve sessions through (Plan 1b) — the last of which needs the GitHub OAuth
+  // secret to construct (see `auth` above), so these implicitly need it too now: without it, no
+  // session could ever have been minted anyway, so there is nothing for these routes to serve.
+  if (aggDb && webOrigins.length > 0 && auth) {
+    installStars(server.expressApp as never, { db: aggDb, auth, webOrigins });
+    installReviews(server.expressApp as never, { db: aggDb, auth, webOrigins });
+    installCatalog(server.expressApp as never, { db: aggDb, auth, webOrigins });
+    installGroups(server.expressApp as never, { db: aggDb, auth, webOrigins });
+    installUsage(server.expressApp as never, { db: aggDb, auth, webOrigins });
   }
   // GitHub App (enterprise orgs): webhook always mounts when the DB exists (503s until the three
   // GITHUB_APP_* secrets are set — the dormant contract); the /api/orgs reads mount with the same
@@ -251,7 +259,7 @@ export async function createApp(port: number): Promise<RestApplication> {
     installGithubWebhook(server.expressApp as never, ghAppDeps);
     // Post-install Setup URL target: resolves ?installation_id → the org's catalog page.
     installGithubSetup(server.expressApp as never, { cfg: ghAppCfg });
-    if (webOrigins.length > 0) installOrgsApi(server.expressApp as never, { db: aggDb, webOrigins, tokens: ghAppTokens, http: defaultHttp });
+    if (webOrigins.length > 0 && auth) installOrgsApi(server.expressApp as never, { db: aggDb, auth, webOrigins, tokens: ghAppTokens, http: defaultHttp });
     if (ghAppCfg) {
       const runReconcile = () => void reconcileAll(ghAppDeps).catch((e) => console.error(`githubApp: reconcile failed: ${(e as Error).message}`));
       ghAppTimers.kick = setTimeout(runReconcile, 30_000);
@@ -272,9 +280,9 @@ export async function createApp(port: number): Promise<RestApplication> {
   // publishing runs out-of-band) would otherwise crash createApp() at boot. Token-less servers
   // simply don't mount the route, since it can't publish anyway.
   const regCfg = registryConfigFromEnv();
-  if (aggDb && webOrigins.length > 0 && regCfg?.token) {
+  if (aggDb && webOrigins.length > 0 && regCfg?.token && auth) {
     installRegistryUploadPublish(server.expressApp as never, {
-      db: aggDb, webOrigins,
+      db: aggDb, auth, webOrigins,
       source: githubRegistrySource(regCfg), publisher: githubRegistryPublisher(regCfg),
       gemTypes: defaultGemTypeRegistry,
     });

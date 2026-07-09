@@ -3,14 +3,18 @@
 import { describe, it, expect } from "vitest";
 import { sql } from "drizzle-orm";
 import {
-  makeTestDb, upsertAccount, createSession, generateSessionToken, setAccountScopes,
+  makeTestDb, makeAuth, mintSession, setAccountScopes,
   normalizeUsageReport, normalizeUsageModels, recordUsageDays, recordUsageModels, buildOrgUsage, rangeCutoff,
   upsertInstallation, upsertOrgMember, setInstallationSuspended,
 } from "@agentgem/aggregator";
 import { reportHandler, orgUsageHandler, orgSettingsHandler } from "../usage/install.js";
-import { SESSION_COOKIE } from "../auth/cookie.js";
 
 const webOrigins = ["https://app.agentgem.ai"];
+const authOpts = {
+  secret: "test-secret", baseURL: "http://localhost:4000",
+  githubClientId: "gid", githubClientSecret: "gsecret",
+  webOrigins,
+};
 function mockRes() {
   const r: any = { _status: 200, _headers: {} as Record<string, string>, _body: undefined };
   r.status = (c: number) => { r._status = c; return r; };
@@ -21,22 +25,29 @@ function mockRes() {
   return r;
 }
 const req = (over: any = {}) => ({ method: "GET", path: "/", query: {}, body: {}, headers: {}, get(n: string) { return (this.headers as any)[n.toLowerCase()]; }, ...over });
-const deps = (db: any) => ({ db, webOrigins });
+const deps = (db: any, auth: any) => ({ db, auth, webOrigins });
+
+// Better-auth user + accounts anchor (via the account.create hook) + a minted bearer session,
+// replacing the old createSession/generateSessionToken pair (Plan 1b cutover).
+async function mintUser(db: any, auth: any, login: string) {
+  const ctx = await auth.$context;
+  const user = await ctx.internalAdapter.createUser({ name: login, email: `${login}@example.com`, emailVerified: true, login } as never);
+  await ctx.internalAdapter.createAccount({ userId: user.id, providerId: "github", accountId: login } as never);
+  return { id: user.id };
+}
 
 /** A member whose grant carries an explicit GitHub role (self scope + org scope with role). */
-async function roleMember(db: any, login: string, scope: string, role: "admin" | "member") {
-  const a = await upsertAccount(db, { provider: "github", accountId: login, login });
+async function roleMember(db: any, auth: any, login: string, scope: string, role: "admin" | "member") {
+  const a = await mintUser(db, auth, login);
   await setAccountScopes(db, a.id, [{ scope: login, role: "self" }, { scope, role }]);
-  const { token } = generateSessionToken();
-  await createSession(db, a.id, token, 60_000);
+  const { token } = await mintSession(auth, a.id);
   return { a, token };
 }
 
-async function member(db: any, login: string, scopes: string[]) {
-  const a = await upsertAccount(db, { provider: "github", accountId: login, login });
+async function member(db: any, auth: any, login: string, scopes: string[]) {
+  const a = await mintUser(db, auth, login);
   await setAccountScopes(db, a.id, [login, ...scopes]);
-  const { token } = generateSessionToken();
-  await createSession(db, a.id, token, 60_000);
+  const { token } = await mintSession(auth, a.id);
   return { a, token };
 }
 
@@ -71,7 +82,8 @@ describe("normalizeUsageReport", () => {
 describe("recordUsageDays + buildOrgUsage", () => {
   it("upserts per (account,machine,date) — a re-report overwrites, machines add up", async () => {
     const db = await makeTestDb();
-    const { a } = await member(db, "alice", ["acme"]);
+    const auth = makeAuth({ db, ...authOpts });
+    const { a } = await member(db, auth, "alice", ["acme"]);
     await recordUsageDays(db, a.id, "laptop", [day("2026-07-01", { tokensIn: 100 })]);
     await recordUsageDays(db, a.id, "laptop", [day("2026-07-01", { tokensIn: 120 })]); // re-report wins
     await recordUsageDays(db, a.id, "desktop", [day("2026-07-01", { tokensIn: 30 })]); // second machine adds
@@ -82,9 +94,10 @@ describe("recordUsageDays + buildOrgUsage", () => {
 
   it("aggregates members, sorts by tokens, and rolls a daily series", async () => {
     const db = await makeTestDb();
-    const { a: alice } = await member(db, "alice", ["acme"]);
-    const { a: bob } = await member(db, "bob", ["acme"]);
-    await member(db, "mallory", ["other-org"]); // not in acme — must not appear
+    const auth = makeAuth({ db, ...authOpts });
+    const { a: alice } = await member(db, auth, "alice", ["acme"]);
+    const { a: bob } = await member(db, auth, "bob", ["acme"]);
+    await member(db, auth, "mallory", ["other-org"]); // not in acme — must not appear
     await recordUsageDays(db, alice.id, "m", [day("2026-07-01", { tokensIn: 10 }), day("2026-07-02", { tokensIn: 10 })]);
     await recordUsageDays(db, bob.id, "m", [day("2026-07-01", { tokensIn: 9_000_000 })]);
     const u = await buildOrgUsage(db, "acme", "all");
@@ -98,7 +111,8 @@ describe("recordUsageDays + buildOrgUsage", () => {
 
   it("range cutoff excludes old days", async () => {
     const db = await makeTestDb();
-    const { a } = await member(db, "alice", ["acme"]);
+    const auth = makeAuth({ db, ...authOpts });
+    const { a } = await member(db, auth, "alice", ["acme"]);
     const now = Date.parse("2026-07-05T12:00:00Z");
     await recordUsageDays(db, a.id, "m", [day("2026-07-04"), day("2026-05-01")]);
     const u = await buildOrgUsage(db, "acme", "7d", now);
@@ -110,7 +124,8 @@ describe("recordUsageDays + buildOrgUsage", () => {
 
   it("anti-leak: only rows attributed to the org count; personal view folds in unattributed", async () => {
     const db = await makeTestDb();
-    const { a } = await member(db, "alice", ["acme"]);
+    const auth = makeAuth({ db, ...authOpts });
+    const { a } = await member(db, auth, "alice", ["acme"]);
     await recordUsageDays(db, a.id, "m", [
       day("2026-07-01", { tokensIn: 100 }),                          // acme work
       day("2026-07-01", { scope: "alice", tokensIn: 40 }),           // personal repo
@@ -126,7 +141,8 @@ describe("recordUsageDays + buildOrgUsage", () => {
 
   it("matches scope case-insensitively (reporter lowercases, query lowercases)", async () => {
     const db = await makeTestDb();
-    const { a } = await member(db, "alice", ["AcmeOrg"]);
+    const auth = makeAuth({ db, ...authOpts });
+    const { a } = await member(db, auth, "alice", ["AcmeOrg"]);
     await recordUsageDays(db, a.id, "m", [day("2026-07-01", { scope: "acmeorg" })]);
     const u = await buildOrgUsage(db, "AcmeOrg", "all");              // scope param as GitHub cases it
     expect(u.members).toHaveLength(1);
@@ -134,7 +150,8 @@ describe("recordUsageDays + buildOrgUsage", () => {
 
   it("survives bigint-scale token sums", async () => {
     const db = await makeTestDb();
-    const { a } = await member(db, "alice", ["acme"]);
+    const auth = makeAuth({ db, ...authOpts });
+    const { a } = await member(db, auth, "alice", ["acme"]);
     await recordUsageDays(db, a.id, "m", [day("2026-07-01", { tokensCache: 7_000_000_000 }), day("2026-07-02", { tokensCache: 7_000_000_000 })]);
     const u = await buildOrgUsage(db, "acme", "all");
     expect(u.members[0].tokensCache).toBe(14_000_000_000);
@@ -144,40 +161,43 @@ describe("recordUsageDays + buildOrgUsage", () => {
 describe("usage endpoints", () => {
   it("POST /api/usage/report 401s without a session, records with a Bearer", async () => {
     const db = await makeTestDb();
+    const auth = makeAuth({ db, ...authOpts });
     const anon = mockRes();
-    await reportHandler(deps(db))(req({ method: "POST", body: { days: [day("2026-07-01")] } }) as any, anon as any);
+    await reportHandler(deps(db, auth))(req({ method: "POST", body: { days: [day("2026-07-01")] } }) as any, anon as any);
     expect(anon._status).toBe(401);
 
-    const { token } = await member(db, "alice", ["acme"]);
+    const { token } = await member(db, auth, "alice", ["acme"]);
     const res = mockRes();
-    await reportHandler(deps(db))(req({ method: "POST", headers: { authorization: `Bearer ${token}` }, body: { machine: "laptop", days: [day("2026-07-01")] } }) as any, res as any);
+    await reportHandler(deps(db, auth))(req({ method: "POST", headers: { authorization: `Bearer ${token}` }, body: { machine: "laptop", days: [day("2026-07-01")] } }) as any, res as any);
     expect(res._body).toEqual({ recorded: 1 });
   });
 
   it("POST /api/usage/report 400s on an invalid body", async () => {
     const db = await makeTestDb();
-    const { token } = await member(db, "alice", []);
+    const auth = makeAuth({ db, ...authOpts });
+    const { token } = await member(db, auth, "alice", []);
     const res = mockRes();
-    await reportHandler(deps(db))(req({ method: "POST", headers: { authorization: `Bearer ${token}` }, body: { days: "nope" } }) as any, res as any);
+    await reportHandler(deps(db, auth))(req({ method: "POST", headers: { authorization: `Bearer ${token}` }, body: { days: "nope" } }) as any, res as any);
     expect(res._status).toBe(400);
   });
 
   it("GET /api/usage/org enforces sign-in and org membership, then returns the rollup", async () => {
     const db = await makeTestDb();
-    const { a, token } = await member(db, "alice", ["acme"]);
+    const auth = makeAuth({ db, ...authOpts });
+    const { a, token } = await member(db, auth, "alice", ["acme"]);
     await recordUsageDays(db, a.id, "m", [day("2026-07-01")]);
 
     const anon = mockRes();
-    await orgUsageHandler(deps(db))(req({ query: { scope: "acme" } }) as any, anon as any);
+    await orgUsageHandler(deps(db, auth))(req({ query: { scope: "acme" } }) as any, anon as any);
     expect(anon._status).toBe(401);
 
-    const outsider = await member(db, "mallory", []);
+    const outsider = await member(db, auth, "mallory", []);
     const forbidden = mockRes();
-    await orgUsageHandler(deps(db))(req({ headers: { cookie: `${SESSION_COOKIE}=${outsider.token}` }, query: { scope: "acme" } }) as any, forbidden as any);
+    await orgUsageHandler(deps(db, auth))(req({ headers: { authorization: `Bearer ${outsider.token}` }, query: { scope: "acme" } }) as any, forbidden as any);
     expect(forbidden._status).toBe(403);
 
     const ok = mockRes();
-    await orgUsageHandler(deps(db))(req({ headers: { cookie: `${SESSION_COOKIE}=${token}`, origin: webOrigins[0] }, query: { scope: "acme", range: "all" } }) as any, ok as any);
+    await orgUsageHandler(deps(db, auth))(req({ headers: { authorization: `Bearer ${token}`, origin: webOrigins[0] }, query: { scope: "acme", range: "all" } }) as any, ok as any);
     expect((ok._body as any).scope).toBe("acme");
     expect((ok._body as any).members[0].login).toBe("alice");
     expect(ok._headers["access-control-allow-origin"]).toBe(webOrigins[0]);
@@ -186,12 +206,13 @@ describe("usage endpoints", () => {
 
   it("GET /api/usage/org 400s on a bad range or missing scope", async () => {
     const db = await makeTestDb();
-    const { token } = await member(db, "alice", []);
+    const auth = makeAuth({ db, ...authOpts });
+    const { token } = await member(db, auth, "alice", []);
     const bad = mockRes();
-    await orgUsageHandler(deps(db))(req({ headers: { cookie: `${SESSION_COOKIE}=${token}` }, query: { scope: "acme", range: "90d" } }) as any, bad as any);
+    await orgUsageHandler(deps(db, auth))(req({ headers: { authorization: `Bearer ${token}` }, query: { scope: "acme", range: "90d" } }) as any, bad as any);
     expect(bad._status).toBe(400);
     const missing = mockRes();
-    await orgUsageHandler(deps(db))(req({ headers: { cookie: `${SESSION_COOKIE}=${token}` }, query: {} }) as any, missing as any);
+    await orgUsageHandler(deps(db, auth))(req({ headers: { authorization: `Bearer ${token}` }, query: {} }) as any, missing as any);
     expect(missing._status).toBe(400);
   });
 });
@@ -199,30 +220,32 @@ describe("usage endpoints", () => {
 describe("membership freshness on GET /api/usage/org", () => {
   it("403s with reason=stale when the org grant aged out, but the OWN-login scope never goes stale", async () => {
     const db = await makeTestDb();
-    const { a, token } = await member(db, "alice", ["acme"]);
+    const auth = makeAuth({ db, ...authOpts });
+    const { a, token } = await member(db, auth, "alice", ["acme"]);
     await recordUsageDays(db, a.id, "m", [day("2026-07-01"), day("2026-07-02", { scope: "" })]);
     await db.execute(sql`update account_scopes set captured_at = now() - interval '30 days' where account_id = ${a.id}::uuid`);
 
     const stale = mockRes();
-    await orgUsageHandler(deps(db))(req({ headers: { cookie: `${SESSION_COOKIE}=${token}` }, query: { scope: "acme" } }) as any, stale as any);
+    await orgUsageHandler(deps(db, auth))(req({ headers: { authorization: `Bearer ${token}` }, query: { scope: "acme" } }) as any, stale as any);
     expect(stale._status).toBe(403);
     expect((stale._body as any).reason).toBe("stale");
 
     // scope = the caller's own login: personal view stays available regardless of capture age
     const own = mockRes();
-    await orgUsageHandler(deps(db))(req({ headers: { cookie: `${SESSION_COOKIE}=${token}` }, query: { scope: "alice", range: "all" } }) as any, own as any);
+    await orgUsageHandler(deps(db, auth))(req({ headers: { authorization: `Bearer ${token}` }, query: { scope: "alice", range: "all" } }) as any, own as any);
     expect(own._status).toBe(200);
     expect((own._body as any).members[0].login).toBe("alice");
   });
 
   it("a fresh re-capture clears the stale gate", async () => {
     const db = await makeTestDb();
-    const { a, token } = await member(db, "alice", ["acme"]);
+    const auth = makeAuth({ db, ...authOpts });
+    const { a, token } = await member(db, auth, "alice", ["acme"]);
     await recordUsageDays(db, a.id, "m", [day("2026-07-01")]);
     await db.execute(sql`update account_scopes set captured_at = now() - interval '30 days' where account_id = ${a.id}::uuid`);
     await setAccountScopes(db, a.id, ["alice", "acme"]); // simulates re-sign-in / re-bind
     const ok = mockRes();
-    await orgUsageHandler(deps(db))(req({ headers: { cookie: `${SESSION_COOKIE}=${token}` }, query: { scope: "acme", range: "all" } }) as any, ok as any);
+    await orgUsageHandler(deps(db, auth))(req({ headers: { authorization: `Bearer ${token}` }, query: { scope: "acme", range: "all" } }) as any, ok as any);
     expect(ok._status).toBe(200);
   });
 });
@@ -240,7 +263,8 @@ describe("model breakdowns", () => {
 
   it("records + aggregates per model/agent under the same scope boundary", async () => {
     const db = await makeTestDb();
-    const { a } = await member(db, "alice", ["acme"]);
+    const auth = makeAuth({ db, ...authOpts });
+    const { a } = await member(db, auth, "alice", ["acme"]);
     await recordUsageDays(db, a.id, "m", [day("2026-07-01")]);
     await recordUsageModels(db, a.id, "m", [
       modelRow({ tokens: 900 }),
@@ -261,9 +285,10 @@ describe("model breakdowns", () => {
 
   it("POST /api/usage/report accepts the models array", async () => {
     const db = await makeTestDb();
-    const { token } = await member(db, "alice", ["acme"]);
+    const auth = makeAuth({ db, ...authOpts });
+    const { token } = await member(db, auth, "alice", ["acme"]);
     const res = mockRes();
-    await reportHandler(deps(db))(req({ method: "POST", headers: { authorization: `Bearer ${token}` }, body: { days: [day("2026-07-01")], models: [modelRow()] } }) as any, res as any);
+    await reportHandler(deps(db, auth))(req({ method: "POST", headers: { authorization: `Bearer ${token}` }, body: { days: [day("2026-07-01")], models: [modelRow()] } }) as any, res as any);
     expect(res._body).toEqual({ recorded: 1 });
     const u = await buildOrgUsage(db, "acme", "all");
     expect(u.models).toHaveLength(1);
@@ -273,33 +298,35 @@ describe("model breakdowns", () => {
 describe("org settings (admin-gated) + retention", () => {
   it("GET returns defaults + viewerRole; PUT is admin-only", async () => {
     const db = await makeTestDb();
-    const admin = await roleMember(db, "alice", "acme", "admin");
-    const plain = await roleMember(db, "bob", "acme", "member");
+    const auth = makeAuth({ db, ...authOpts });
+    const admin = await roleMember(db, auth, "alice", "acme", "admin");
+    const plain = await roleMember(db, auth, "bob", "acme", "member");
 
     const g = mockRes();
-    await orgSettingsHandler(deps(db))(req({ headers: { authorization: `Bearer ${plain.token}` }, query: { scope: "acme" } }) as any, g as any);
+    await orgSettingsHandler(deps(db, auth))(req({ headers: { authorization: `Bearer ${plain.token}` }, query: { scope: "acme" } }) as any, g as any);
     expect(g._body).toMatchObject({ retentionDays: null, viewerRole: "member" });
 
     const deniedPut = mockRes();
-    await orgSettingsHandler(deps(db))(req({ method: "PUT", headers: { authorization: `Bearer ${plain.token}` }, query: { scope: "acme" }, body: { retentionDays: 30, dashboardEnabled: true } }) as any, deniedPut as any);
+    await orgSettingsHandler(deps(db, auth))(req({ method: "PUT", headers: { authorization: `Bearer ${plain.token}` }, query: { scope: "acme" }, body: { retentionDays: 30, dashboardEnabled: true } }) as any, deniedPut as any);
     expect(deniedPut._status).toBe(403);
 
     const okPut = mockRes();
-    await orgSettingsHandler(deps(db))(req({ method: "PUT", headers: { authorization: `Bearer ${admin.token}` }, query: { scope: "acme" }, body: { retentionDays: 30, dashboardEnabled: true } }) as any, okPut as any);
+    await orgSettingsHandler(deps(db, auth))(req({ method: "PUT", headers: { authorization: `Bearer ${admin.token}` }, query: { scope: "acme" }, body: { retentionDays: 30, dashboardEnabled: true } }) as any, okPut as any);
     expect(okPut._body).toMatchObject({ retentionDays: 30, updatedBy: "alice", viewerRole: "admin" });
 
     const badPut = mockRes();
-    await orgSettingsHandler(deps(db))(req({ method: "PUT", headers: { authorization: `Bearer ${admin.token}` }, query: { scope: "acme" }, body: { retentionDays: 3, dashboardEnabled: true } }) as any, badPut as any);
+    await orgSettingsHandler(deps(db, auth))(req({ method: "PUT", headers: { authorization: `Bearer ${admin.token}` }, query: { scope: "acme" }, body: { retentionDays: 3, dashboardEnabled: true } }) as any, badPut as any);
     expect(badPut._status).toBe(400); // below the 7-day floor
 
     const anon = mockRes();
-    await orgSettingsHandler(deps(db))(req({ query: { scope: "acme" } }) as any, anon as any);
+    await orgSettingsHandler(deps(db, auth))(req({ query: { scope: "acme" } }) as any, anon as any);
     expect(anon._status).toBe(401);
   });
 
   it("retention prunes ONLY this org's old rows (scope-bounded), and runs post-ingest", async () => {
     const db = await makeTestDb();
-    const admin = await roleMember(db, "alice", "acme", "admin");
+    const auth = makeAuth({ db, ...authOpts });
+    const admin = await roleMember(db, auth, "alice", "acme", "admin");
     const old = "2020-01-01";
     await recordUsageDays(db, admin.a.id, "m", [
       day(old), day("2026-07-01"),
@@ -308,7 +335,7 @@ describe("org settings (admin-gated) + retention", () => {
     await recordUsageModels(db, admin.a.id, "m", [{ scope: "acme", date: old, agent: "claude", model: "x", sessions: 1, tokens: 5 }]);
 
     const put = mockRes();
-    await orgSettingsHandler(deps(db))(req({ method: "PUT", headers: { authorization: `Bearer ${admin.token}` }, query: { scope: "acme" }, body: { retentionDays: 30, dashboardEnabled: true } }) as any, put as any);
+    await orgSettingsHandler(deps(db, auth))(req({ method: "PUT", headers: { authorization: `Bearer ${admin.token}` }, query: { scope: "acme" }, body: { retentionDays: 30, dashboardEnabled: true } }) as any, put as any);
 
     const org = await buildOrgUsage(db, "acme", "all");
     expect(org.daily.map((d) => d.date)).toEqual(["2026-07-01"]); // old acme day pruned
@@ -318,7 +345,7 @@ describe("org settings (admin-gated) + retention", () => {
 
     // post-ingest: a new report containing an out-of-window acme day gets pruned immediately
     const rep = mockRes();
-    await reportHandler(deps(db))(req({ method: "POST", headers: { authorization: `Bearer ${admin.token}` }, body: { days: [day("2020-02-02")] } }) as any, rep as any);
+    await reportHandler(deps(db, auth))(req({ method: "POST", headers: { authorization: `Bearer ${admin.token}` }, body: { days: [day("2020-02-02")] } }) as any, rep as any);
     const after = await buildOrgUsage(db, "acme", "all");
     expect(after.daily.map((d) => d.date)).toEqual(["2026-07-01"]);
   });
@@ -327,8 +354,9 @@ describe("org settings (admin-gated) + retention", () => {
 describe("v3: member drill-down + visibility toggle", () => {
   it("?member= narrows members, daily, and models to that member (still org-scope-bounded)", async () => {
     const db = await makeTestDb();
-    const alice = await roleMember(db, "alice", "acme", "member");
-    const bob = await roleMember(db, "bob", "acme", "member");
+    const auth = makeAuth({ db, ...authOpts });
+    const alice = await roleMember(db, auth, "alice", "acme", "member");
+    const bob = await roleMember(db, auth, "bob", "acme", "member");
     await recordUsageDays(db, alice.a.id, "m", [day("2026-07-01", { tokensIn: 10 })]);
     await recordUsageDays(db, bob.a.id, "m", [day("2026-07-02", { tokensIn: 999 })]);
     await recordUsageModels(db, alice.a.id, "m", [{ scope: "acme", date: "2026-07-01", agent: "claude", model: "m1", sessions: 1, tokens: 5 }]);
@@ -336,7 +364,7 @@ describe("v3: member drill-down + visibility toggle", () => {
 
     const res = mockRes();
     // member match is case-insensitive, like scope (a shared ?member=BOB URL must not go empty)
-    await orgUsageHandler(deps(db))(req({ headers: { cookie: `${SESSION_COOKIE}=${alice.token}` }, query: { scope: "acme", range: "all", member: "BOB" } }) as any, res as any);
+    await orgUsageHandler(deps(db, auth))(req({ headers: { authorization: `Bearer ${alice.token}` }, query: { scope: "acme", range: "all", member: "BOB" } }) as any, res as any);
     const u = res._body as any;
     expect(u.members.map((m: any) => m.login)).toEqual(["bob"]);
     expect(u.daily.map((d: any) => d.date)).toEqual(["2026-07-02"]);
@@ -345,56 +373,60 @@ describe("v3: member drill-down + visibility toggle", () => {
 
   it("disabling the dashboard 403s members with reason=disabled, but admins still see it", async () => {
     const db = await makeTestDb();
-    const admin = await roleMember(db, "alice", "acme", "admin");
-    const plain = await roleMember(db, "bob", "acme", "member");
+    const auth = makeAuth({ db, ...authOpts });
+    const admin = await roleMember(db, auth, "alice", "acme", "admin");
+    const plain = await roleMember(db, auth, "bob", "acme", "member");
     await recordUsageDays(db, admin.a.id, "m", [day("2026-07-01")]);
 
     const put = mockRes();
-    await orgSettingsHandler(deps(db))(req({ method: "PUT", headers: { authorization: `Bearer ${admin.token}` }, query: { scope: "acme" }, body: { retentionDays: null, dashboardEnabled: false } }) as any, put as any);
+    await orgSettingsHandler(deps(db, auth))(req({ method: "PUT", headers: { authorization: `Bearer ${admin.token}` }, query: { scope: "acme" }, body: { retentionDays: null, dashboardEnabled: false } }) as any, put as any);
     expect((put._body as any).dashboardEnabled).toBe(false);
 
     const blocked = mockRes();
-    await orgUsageHandler(deps(db))(req({ headers: { cookie: `${SESSION_COOKIE}=${plain.token}` }, query: { scope: "acme", range: "all" } }) as any, blocked as any);
+    await orgUsageHandler(deps(db, auth))(req({ headers: { authorization: `Bearer ${plain.token}` }, query: { scope: "acme", range: "all" } }) as any, blocked as any);
     expect(blocked._status).toBe(403);
     expect((blocked._body as any).reason).toBe("disabled");
 
     const adminView = mockRes();
-    await orgUsageHandler(deps(db))(req({ headers: { cookie: `${SESSION_COOKIE}=${admin.token}` }, query: { scope: "acme", range: "all" } }) as any, adminView as any);
+    await orgUsageHandler(deps(db, auth))(req({ headers: { authorization: `Bearer ${admin.token}` }, query: { scope: "acme", range: "all" } }) as any, adminView as any);
     expect(adminView._status).toBe(200);
 
     // personal view is never affected by org policy
     const own = mockRes();
-    await orgUsageHandler(deps(db))(req({ headers: { cookie: `${SESSION_COOKIE}=${plain.token}` }, query: { scope: "bob", range: "all" } }) as any, own as any);
+    await orgUsageHandler(deps(db, auth))(req({ headers: { authorization: `Bearer ${plain.token}` }, query: { scope: "bob", range: "all" } }) as any, own as any);
     expect(own._status).toBe(200);
   });
 
   it("the self role may PUT settings for their own-login scope", async () => {
     const db = await makeTestDb();
-    const { token } = await roleMember(db, "alice", "acme", "member");
+    const auth = makeAuth({ db, ...authOpts });
+    const { token } = await roleMember(db, auth, "alice", "acme", "member");
     const put = mockRes();
-    await orgSettingsHandler(deps(db))(req({ method: "PUT", headers: { authorization: `Bearer ${token}` }, query: { scope: "alice" }, body: { retentionDays: 30, dashboardEnabled: true } }) as any, put as any);
+    await orgSettingsHandler(deps(db, auth))(req({ method: "PUT", headers: { authorization: `Bearer ${token}` }, query: { scope: "alice" }, body: { retentionDays: 30, dashboardEnabled: true } }) as any, put as any);
     expect((put._body as any)).toMatchObject({ retentionDays: 30, viewerRole: "self" });
   });
 
   it("PUT is a PARTIAL update: absent fields keep their stored value (old retention-only bodies work)", async () => {
     const db = await makeTestDb();
-    const admin = await roleMember(db, "alice", "acme", "admin");
+    const auth = makeAuth({ db, ...authOpts });
+    const admin = await roleMember(db, auth, "alice", "acme", "admin");
     // Disable the dashboard, then send a retention-only body (the pre-toggle client shape):
     // the visibility flag must survive — the concurrent-admin / stale-bundle guarantee.
-    await orgSettingsHandler(deps(db))(req({ method: "PUT", headers: { authorization: `Bearer ${admin.token}` }, query: { scope: "acme" }, body: { dashboardEnabled: false } }) as any, mockRes() as any);
+    await orgSettingsHandler(deps(db, auth))(req({ method: "PUT", headers: { authorization: `Bearer ${admin.token}` }, query: { scope: "acme" }, body: { dashboardEnabled: false } }) as any, mockRes() as any);
     const put = mockRes();
-    await orgSettingsHandler(deps(db))(req({ method: "PUT", headers: { authorization: `Bearer ${admin.token}` }, query: { scope: "acme" }, body: { retentionDays: 30 } }) as any, put as any);
+    await orgSettingsHandler(deps(db, auth))(req({ method: "PUT", headers: { authorization: `Bearer ${admin.token}` }, query: { scope: "acme" }, body: { retentionDays: 30 } }) as any, put as any);
     expect(put._body).toMatchObject({ retentionDays: 30, dashboardEnabled: false });
   });
 
   it("PUT 400s on a present-but-mistyped field", async () => {
     const db = await makeTestDb();
-    const admin = await roleMember(db, "alice", "acme", "admin");
+    const auth = makeAuth({ db, ...authOpts });
+    const admin = await roleMember(db, auth, "alice", "acme", "admin");
     const badBool = mockRes();
-    await orgSettingsHandler(deps(db))(req({ method: "PUT", headers: { authorization: `Bearer ${admin.token}` }, query: { scope: "acme" }, body: { dashboardEnabled: "yes" } }) as any, badBool as any);
+    await orgSettingsHandler(deps(db, auth))(req({ method: "PUT", headers: { authorization: `Bearer ${admin.token}` }, query: { scope: "acme" }, body: { dashboardEnabled: "yes" } }) as any, badBool as any);
     expect(badBool._status).toBe(400);
     const badDays = mockRes();
-    await orgSettingsHandler(deps(db))(req({ method: "PUT", headers: { authorization: `Bearer ${admin.token}` }, query: { scope: "acme" }, body: { retentionDays: "30" } }) as any, badDays as any);
+    await orgSettingsHandler(deps(db, auth))(req({ method: "PUT", headers: { authorization: `Bearer ${admin.token}` }, query: { scope: "acme" }, body: { retentionDays: "30" } }) as any, badDays as any);
     expect(badDays._status).toBe(400);
   });
 });
@@ -405,13 +437,14 @@ describe("agent/model facets", () => {
 
   async function seeded() {
     const db = await makeTestDb();
-    const alice = await member(db, "alice", ["acme"]);
-    const bob = await member(db, "bob", ["acme"]);
+    const auth = makeAuth({ db, ...authOpts });
+    const alice = await member(db, auth, "alice", ["acme"]);
+    const bob = await member(db, auth, "bob", ["acme"]);
     await recordUsageDays(db, alice.a.id, "m", [day("2026-07-01", { tokensIn: 10 })]);
     await recordUsageDays(db, bob.a.id, "m", [day("2026-07-02", { tokensIn: 20 })]);
     await recordUsageModels(db, alice.a.id, "m", [slice(), slice({ agent: "codex", model: "gpt-5.2-codex", tokens: 100 })]);
     await recordUsageModels(db, bob.a.id, "m", [slice({ date: "2026-07-02", tokens: 500 })]);
-    return { db, alice, bob };
+    return { db, auth, alice, bob };
   }
 
   it("unfiltered payload carries facets and filtered:false, day-rollup metrics intact", async () => {
@@ -445,23 +478,22 @@ describe("agent/model facets", () => {
   });
 
   it("GET /api/usage/org passes agent/model through and 400s oversized values", async () => {
-    const { db } = await seeded();
-    const { token } = await member(db, "carol", ["acme"]);
+    const { db, auth } = await seeded();
+    const { token } = await member(db, auth, "carol", ["acme"]);
     const ok = mockRes();
-    await orgUsageHandler(deps(db))(req({ headers: { cookie: `${SESSION_COOKIE}=${token}` }, query: { scope: "acme", range: "all", agent: "codex" } }) as any, ok as any);
+    await orgUsageHandler(deps(db, auth))(req({ headers: { authorization: `Bearer ${token}` }, query: { scope: "acme", range: "all", agent: "codex" } }) as any, ok as any);
     expect((ok._body as any).filtered).toBe(true);
     expect((ok._body as any).totals.tokens).toBe(100);
     const bad = mockRes();
-    await orgUsageHandler(deps(db))(req({ headers: { cookie: `${SESSION_COOKIE}=${token}` }, query: { scope: "acme", model: "x".repeat(101) } }) as any, bad as any);
+    await orgUsageHandler(deps(db, auth))(req({ headers: { authorization: `Bearer ${token}` }, query: { scope: "acme", model: "x".repeat(101) } }) as any, bad as any);
     expect(bad._status).toBe(400);
   });
 });
 
-async function appMember(db: any, login: string, org: string, role: "admin" | "member") {
-  const a = await upsertAccount(db, { provider: "github", accountId: login, login });
+async function appMember(db: any, auth: any, login: string, org: string, role: "admin" | "member") {
+  const a = await mintUser(db, auth, login);
   // NO setAccountScopes — this member exists only via the App sync.
-  const { token } = generateSessionToken();
-  await createSession(db, a.id, token, 60_000);
+  const { token } = await mintSession(auth, a.id);
   await upsertInstallation(db, { installationId: 7, orgScope: org, repoSelection: "selected", suspended: false });
   await upsertOrgMember(db, org, login, role);
   return { a, token };
@@ -470,17 +502,19 @@ async function appMember(db: any, login: string, org: string, role: "admin" | "m
 describe("orgUsageHandler with GitHub App membership", () => {
   it("App-synced member passes with no captured scopes", async () => {
     const db = await makeTestDb();
-    const { token } = await appMember(db, "carol", "acme", "member");
+    const auth = makeAuth({ db, ...authOpts });
+    const { token } = await appMember(db, auth, "carol", "acme", "member");
     const res = mockRes();
-    await orgUsageHandler(deps(db))(req({ query: { scope: "acme" }, headers: { authorization: `Bearer ${token}` } }) as any, res);
+    await orgUsageHandler(deps(db, auth))(req({ query: { scope: "acme" }, headers: { authorization: `Bearer ${token}` } }) as any, res);
     expect(res._status).toBe(200);
   });
   it("suspended installation does NOT grant access", async () => {
     const db = await makeTestDb();
-    const { token } = await appMember(db, "carol", "acme", "member");
+    const auth = makeAuth({ db, ...authOpts });
+    const { token } = await appMember(db, auth, "carol", "acme", "member");
     await setInstallationSuspended(db, 7, true);
     const res = mockRes();
-    await orgUsageHandler(deps(db))(req({ query: { scope: "acme" }, headers: { authorization: `Bearer ${token}` } }) as any, res);
+    await orgUsageHandler(deps(db, auth))(req({ query: { scope: "acme" }, headers: { authorization: `Bearer ${token}` } }) as any, res);
     expect(res._status).toBe(403);
   });
 });
@@ -488,13 +522,14 @@ describe("orgUsageHandler with GitHub App membership", () => {
 describe("orgSettingsHandler with GitHub App membership", () => {
   it("App-synced admin can PUT settings; App-synced member cannot", async () => {
     const db = await makeTestDb();
-    const admin = await appMember(db, "dana", "acme", "admin");
+    const auth = makeAuth({ db, ...authOpts });
+    const admin = await appMember(db, auth, "dana", "acme", "admin");
     let res = mockRes();
-    await orgSettingsHandler(deps(db))(req({ method: "PUT", query: { scope: "acme" }, body: { retentionDays: 30 }, headers: { authorization: `Bearer ${admin.token}` } }) as any, res);
+    await orgSettingsHandler(deps(db, auth))(req({ method: "PUT", query: { scope: "acme" }, body: { retentionDays: 30 }, headers: { authorization: `Bearer ${admin.token}` } }) as any, res);
     expect(res._status).toBe(200);
-    const m = await appMember(db, "erin", "acme", "member");
+    const m = await appMember(db, auth, "erin", "acme", "member");
     res = mockRes();
-    await orgSettingsHandler(deps(db))(req({ method: "PUT", query: { scope: "acme" }, body: { retentionDays: 30 }, headers: { authorization: `Bearer ${m.token}` } }) as any, res);
+    await orgSettingsHandler(deps(db, auth))(req({ method: "PUT", query: { scope: "acme" }, body: { retentionDays: 30 }, headers: { authorization: `Bearer ${m.token}` } }) as any, res);
     expect(res._status).toBe(403);
   });
 });
@@ -502,7 +537,8 @@ describe("orgSettingsHandler with GitHub App membership", () => {
 describe("stale-slice purge (replace-by-group)", () => {
   it("a re-report of the same (scope, day) deletes slices whose (agent, model) key vanished", async () => {
     const db = await makeTestDb();
-    const { a } = await member(db, "alice", ["acme"]);
+    const auth = makeAuth({ db, ...authOpts });
+    const { a } = await member(db, auth, "alice", ["acme"]);
     // Report 1: ongoing session's last-seen model is sonnet.
     await recordUsageModels(db, a.id, "m", [{ scope: "acme", date: "2026-07-01", agent: "claude", model: "claude-sonnet-5", sessions: 1, tokens: 100 }]);
     // Report 2 (same day re-sent): the session switched — only fable appears now.
@@ -515,7 +551,8 @@ describe("stale-slice purge (replace-by-group)", () => {
 
   it("the purge is group-bounded: other days, scopes, and machines survive", async () => {
     const db = await makeTestDb();
-    const { a } = await member(db, "alice", ["acme"]);
+    const auth = makeAuth({ db, ...authOpts });
+    const { a } = await member(db, auth, "alice", ["acme"]);
     await recordUsageModels(db, a.id, "laptop", [
       { scope: "acme", date: "2026-07-01", agent: "claude", model: "m1", sessions: 1, tokens: 10 },
       { scope: "acme", date: "2026-06-30", agent: "claude", model: "m2", sessions: 1, tokens: 20 },
@@ -535,7 +572,8 @@ describe("stale-slice purge (replace-by-group)", () => {
 describe("model-facet cascade", () => {
   it("model options narrow under a selected agent; agent options never narrow", async () => {
     const db = await makeTestDb();
-    const { a } = await member(db, "alice", ["acme"]);
+    const auth = makeAuth({ db, ...authOpts });
+    const { a } = await member(db, auth, "alice", ["acme"]);
     await recordUsageModels(db, a.id, "m", [
       { scope: "acme", date: "2026-07-01", agent: "claude", model: "claude-fable-5", sessions: 1, tokens: 10 },
       { scope: "acme", date: "2026-07-01", agent: "codex", model: "gpt-5.2-codex", sessions: 1, tokens: 20 },
@@ -549,7 +587,8 @@ describe("model-facet cascade", () => {
 describe("member early-return", () => {
   it("an unknown ?member= login yields an empty payload (same shape, no crash)", async () => {
     const db = await makeTestDb();
-    const { a } = await member(db, "alice", ["acme"]);
+    const auth = makeAuth({ db, ...authOpts });
+    const { a } = await member(db, auth, "alice", ["acme"]);
     await recordUsageDays(db, a.id, "m", [day("2026-07-01")]);
     const u = await buildOrgUsage(db, "acme", "all", Date.now(), { memberLogin: "ghost" });
     expect(u.members).toEqual([]);

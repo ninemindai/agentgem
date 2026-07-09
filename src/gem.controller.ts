@@ -325,9 +325,10 @@ import { createGemCache, safeDbGems, mergeGems } from "./gem/publicCatalog.js";
 import { service, inject } from "@agentback/core";
 import { RestBindings } from "@agentback/rest";
 import { DrizzleBindings } from "@agentback/drizzle";
-import type { AppDb } from "@agentgem/aggregator";
+import type { AppDb, makeAuth } from "@agentgem/aggregator";
 import { listCatalogGems } from "@agentgem/aggregator";
 import { resolvePublishedBy } from "./registry/publishedBy.js";
+import { AUTH_BINDING } from "./auth/mount.js";
 import { GemTypeRegistry, defaultGemTypeRegistry, resolvePublishType } from "./gem/gemTypeRegistry.js";
 import { resolveDirs, resolveProject, agentgemHome, workspaceArtifactPath, parseWorkspaceArtifactPath } from "@agentgem/model";
 import { pickFolder } from "./pickFolder.js";
@@ -398,8 +399,9 @@ function decorateInventory(inv: ConfigInventory, defer: boolean): ConfigInventor
 export class GemController {
   constructor(
     @service(GemTypeRegistry, { optional: true }) private gemTypes: GemTypeRegistry = defaultGemTypeRegistry,
-    @inject(RestBindings.HTTP_REQUEST, { optional: true }) private req?: { headers: { cookie?: string } },
+    @inject(RestBindings.HTTP_REQUEST, { optional: true }) private req?: { headers: Record<string, string | undefined> },
     @inject(DrizzleBindings.CLIENT, { optional: true }) private db?: AppDb,
+    @inject(AUTH_BINDING, { optional: true }) private auth?: ReturnType<typeof makeAuth>,
   ) {}
 
   @get("/inventory", { query: DirQuerySchema, response: InventorySchema })
@@ -1281,7 +1283,7 @@ export class GemController {
     const gem = readGemArchive(readWorkspace(input.body.workspace).files); // WorkspaceDetail exposes .files, not .gem
     const type = resolvePublishType(this.gemTypes, input.body.type, gem);
     const index = await source.getIndex();
-    const publishedBy = await resolvePublishedBy(this.req, this.db);
+    const publishedBy = await resolvePublishedBy(this.req, this.auth);
     return publishGem({
       gem, scope: input.body.scope, name: input.body.name, version: input.body.version,
       dependencies: input.body.dependencies, index, publisher: githubRegistryPublisher(cfg),

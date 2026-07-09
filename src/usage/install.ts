@@ -9,15 +9,14 @@
 //                              the GitHub org role captured into account_scopes.
 //   Gates consult resolveOrgAccess (App-authoritative): an active GitHub App installation decides
 //   membership alone; otherwise the captured account_scopes (TTL'd) apply.
-import type { AppDb } from "@agentgem/aggregator";
+import type { AppDb, makeAuth } from "@agentgem/aggregator";
 import {
   resolveSession, resolveOrgAccess, normalizeUsageReport, normalizeUsageModels, recordUsageDays, recordUsageModels,
   buildOrgUsage, getOrgSettings, putOrgSettings, normalizeRetentionDays, applyRetentionForScopes,
   RANGE_DAYS, type OrgUsageRange,
 } from "@agentgem/aggregator";
-import { SESSION_COOKIE, parseCookies } from "../auth/cookie.js";
 
-export interface UsageDeps { db: AppDb; webOrigins: string[]; scopeTtlMs?: number }
+export interface UsageDeps { db: AppDb; auth: ReturnType<typeof makeAuth>; webOrigins: string[]; scopeTtlMs?: number }
 
 // Membership grants are only re-captured from GitHub at sign-in/bind, so bound revocation lag by
 // refusing grants older than this: the member still matched, but must refresh (one-click re-auth
@@ -43,12 +42,10 @@ function preflight(res: Res): void {
   res.set("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS").set("Access-Control-Allow-Headers", "content-type, authorization").status(204).send("");
 }
 
-/** Session from `Authorization: Bearer <token>` (local process) OR the web session cookie. */
+/** Session from `Authorization: Bearer <token>` (local process) OR the web session cookie —
+ *  better-auth reads whichever is present off the forwarded headers. */
 async function whoami(deps: UsageDeps, req: Req): Promise<{ accountId: string; login: string } | null> {
-  const auth = req.headers["authorization"];
-  const bearer = auth && /^Bearer\s+/i.test(auth) ? auth.replace(/^Bearer\s+/i, "").trim() : "";
-  const token = bearer || parseCookies(req.headers["cookie"])[SESSION_COOKIE];
-  const who = token ? await resolveSession(deps.db, token) : null;
+  const who = await resolveSession(deps.auth, req.headers);
   return who ? { accountId: who.accountId, login: who.login } : null;
 }
 

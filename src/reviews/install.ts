@@ -5,11 +5,10 @@
 // stopped by the SameSite=Lax session cookie + the 401, NOT by CORS. GET is a public read (+ the
 // caller's own review when a session cookie is present). Reviews key on the concrete catalog skill
 // (kind "skill", id "<sourceId>/<path>") — content must not cross-attribute same-named skills.
-import type { AppDb } from "@agentgem/aggregator";
+import type { AppDb, makeAuth } from "@agentgem/aggregator";
 import { resolveSession, upsertReview, deleteReview, reviewSummary, reviewSummaries, listReviews, myReview } from "@agentgem/aggregator";
-import { SESSION_COOKIE, parseCookies } from "../auth/cookie.js";
 
-export interface ReviewsDeps { db: AppDb; webOrigins: string[] }
+export interface ReviewsDeps { db: AppDb; auth: ReturnType<typeof makeAuth>; webOrigins: string[] }
 
 interface Req { method: string; path: string; query: Record<string, unknown>; body: Record<string, unknown>; headers: Record<string, string | undefined>; get(n: string): string | undefined }
 interface Res { status(c: number): Res; set(k: string, v: string): Res; setHeader(k: string, v: string): Res; json(b: unknown): Res; send(b: unknown): Res }
@@ -44,8 +43,7 @@ function preflight(res: Res): void {
   res.set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS").set("Access-Control-Allow-Headers", "content-type").status(204).send("");
 }
 async function account(deps: ReviewsDeps, req: Req): Promise<string | null> {
-  const token = parseCookies(req.headers["cookie"])[SESSION_COOKIE];
-  const who = token ? await resolveSession(deps.db, token) : null;
+  const who = await resolveSession(deps.auth, req.headers);
   return who?.accountId ?? null;
 }
 function validTarget(kind: string, id: string): boolean {

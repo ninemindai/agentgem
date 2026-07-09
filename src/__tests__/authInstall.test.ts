@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
 import { makeTestDb } from "@agentgem/aggregator";
-import { resolveSession, accountOwnsScope } from "@agentgem/aggregator";
+import { resolveLegacySession, accountOwnsScope } from "@agentgem/aggregator";
 import { loginHandler, callbackHandler, meHandler, logoutHandler, handoffStartHandler, handoffRedeemHandler } from "../auth/install.js";
 import { SESSION_COOKIE } from "../auth/cookie.js";
 
@@ -62,7 +62,7 @@ describe("auth handlers", () => {
       expect(setCookie).toContain("HttpOnly");
       // the session is resolvable
       const token = setCookie.split(";")[0].split("=")[1];
-      expect((await resolveSession(db, token))?.login).toBe("octocat");
+      expect((await resolveLegacySession(db, token))?.login).toBe("octocat");
     }
   });
 
@@ -140,7 +140,7 @@ describe("auth handlers", () => {
       const out = mockRes();
       await logoutHandler(deps(db))(mockReq({ method: "POST", headers: { cookie: `${SESSION_COOKIE}=${token}`, origin: "https://app.agentgem.ai" } }) as any, out as any);
       expect(out._body).toEqual({ ok: true });
-      expect(await resolveSession(db, token)).toBeNull();
+      expect(await resolveLegacySession(db, token)).toBeNull();
       expect(out._headers["set-cookie"]).toContain("Max-Age=0");
     }
   });
@@ -154,7 +154,7 @@ describe("auth handlers", () => {
       const cb = mockRes();
       await callbackHandler(d)(mockReq({ query: { code: "abc", state } }) as any, cb as any);
       const token = (cb._headers["set-cookie"] as string).split(";")[0].split("=")[1];
-      const who = await resolveSession(db, token);
+      const who = await resolveLegacySession(db, token);
       expect(who).not.toBeNull();
       expect(await accountOwnsScope(db, who!.accountId, "octocat")).toBe(true);
       expect(await accountOwnsScope(db, who!.accountId, "ninemind")).toBe(true);
@@ -198,7 +198,7 @@ describe("auth handlers", () => {
       await handoffRedeemHandler(deps(db))(mockReq({ query: { code, return: "https://app.agentgem.ai/gems" } }) as any, redeem as any);
       expect(redeem._redirect).toBe("https://app.agentgem.ai/gems");
       const newToken = (redeem._headers["set-cookie"] as string).split(";")[0].split("=")[1];
-      expect((await resolveSession(db, newToken))?.login).toBe("octocat");  // fresh web session works
+      expect((await resolveLegacySession(db, newToken))?.login).toBe("octocat");  // fresh web session works
 
       const again = mockRes();  // single-use: second redeem fails
       await handoffRedeemHandler(deps(db))(mockReq({ query: { code, return: "https://app.agentgem.ai" } }) as any, again as any);
@@ -231,7 +231,7 @@ describe("auth handlers", () => {
       const setCookie = cb._headers["set-cookie"] as string;
       expect(setCookie).toContain(`${SESSION_COOKIE}=`);       // login did NOT fail
       const token = setCookie.split(";")[0].split("=")[1];
-      const who = await resolveSession(db, token);
+      const who = await resolveLegacySession(db, token);
       expect(await accountOwnsScope(db, who!.accountId, "octocat")).toBe(true);
       expect(await accountOwnsScope(db, who!.accountId, "ninemind")).toBe(false);
     }

@@ -3,11 +3,10 @@
 // Stars endpoints (raw express, like auth/install.ts): reachable cross-site, own credentialed CORS,
 // originGuard-exempt. POST /api/stars/toggle is authed (session → 401); GET /api/stars is a public
 // count read + the caller's `mine` when a session cookie is present.
-import type { AppDb } from "@agentgem/aggregator";
+import type { AppDb, makeAuth } from "@agentgem/aggregator";
 import { resolveSession, toggleStar, starCounts, starredIds } from "@agentgem/aggregator";
-import { SESSION_COOKIE, parseCookies } from "../auth/cookie.js";
 
-export interface StarsDeps { db: AppDb; webOrigins: string[] }
+export interface StarsDeps { db: AppDb; auth: ReturnType<typeof makeAuth>; webOrigins: string[] }
 
 interface Req { method: string; path: string; query: Record<string, unknown>; body: Record<string, unknown>; headers: Record<string, string | undefined>; get(n: string): string | undefined }
 interface Res { status(c: number): Res; set(k: string, v: string): Res; setHeader(k: string, v: string): Res; json(b: unknown): Res; send(b: unknown): Res }
@@ -27,8 +26,7 @@ function preflight(res: Res): void {
   res.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS").set("Access-Control-Allow-Headers", "content-type").status(204).send("");
 }
 async function account(deps: StarsDeps, req: Req): Promise<string | null> {
-  const token = parseCookies(req.headers["cookie"])[SESSION_COOKIE];
-  const who = token ? await resolveSession(deps.db, token) : null;
+  const who = await resolveSession(deps.auth, req.headers);
   return who?.accountId ?? null;
 }
 
