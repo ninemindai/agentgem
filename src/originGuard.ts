@@ -82,7 +82,10 @@ export function originGuard(req: GuardReq, res: GuardRes, next: GuardNext): void
   // context) plus the setup redirect (a cross-site top-level GET navigation arriving from github.com
   // right after an App install — side-effect-free 302). /api/catalog/* is the SPA's owner-only gem
   // unpublish (credentialed DELETE, own CORS + a 401/403 owner gate — same rationale as stars/reviews).
-  if (req.path.startsWith("/api/auth/") || req.path.startsWith("/api/stars") || req.path.startsWith("/api/reviews") || req.path.startsWith("/api/usage") || req.path.startsWith("/api/orgs/") || req.path.startsWith("/api/github/") || req.path.startsWith("/api/registry/upload-publish") || req.path.startsWith("/api/catalog/")) { next(); return; }
+  // /api/betterauth/* is the Plan 1a TEMPORARY better-auth mount (mount.ts) — same cross-site sign-in
+  // shape as /api/auth/*, with better-auth's own CSRF defenses (trustedOrigins) plus mountAuth's
+  // credentialed CORS for the allowlist.
+  if (req.path.startsWith("/api/auth/") || req.path.startsWith("/api/betterauth/") || req.path.startsWith("/api/stars") || req.path.startsWith("/api/reviews") || req.path.startsWith("/api/usage") || req.path.startsWith("/api/orgs/") || req.path.startsWith("/api/github/") || req.path.startsWith("/api/registry/upload-publish") || req.path.startsWith("/api/catalog/")) { next(); return; }
   const site = req.get("sec-fetch-site");
   if (site !== undefined) {
     if (site === "same-origin") { next(); return; }
