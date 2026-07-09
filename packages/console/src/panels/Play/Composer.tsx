@@ -58,7 +58,7 @@ export function Composer({
   useEffect(() => {
     if (kind === "project" && !projects) testbedProjectsRoute.call(makeClient(apiBase)).then((r) => setProjects(r.projects)).catch(() => setProjects([]));
     if (kind === "session" && !sessions) fetchSessions(apiBase).then(setSessions).catch(() => setSessions([]));
-    if (kind === "skill" && !skills) inventoryRoute.call(makeClient(apiBase)).then((r) => setSkills(r.skills)).catch(() => setSkills([]));
+    if (kind === "skill" && !skills) inventoryRoute.call(makeClient(apiBase), { query: {} }).then((r) => setSkills(r.skills)).catch(() => setSkills([]));
   }, [kind, apiBase, projects, sessions, skills]);
 
   async function seed(source: Source) {

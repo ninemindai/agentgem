@@ -11,13 +11,19 @@ const ArtifactSchema = z.looseObject({
   config: z.record(z.string(), z.unknown()).optional(),
   source: z.string().optional(), // "standalone", a plugin name, "user"/"project", …
 });
+export const ProjectInventorySchema = z.object({
+  root: z.string(), name: z.string(),
+  skills: z.array(ArtifactSchema), mcpServers: z.array(ArtifactSchema),
+  instructions: z.array(ArtifactSchema), hooks: z.array(ArtifactSchema), subagents: z.array(ArtifactSchema),
+});
+export type ProjectInventory = z.infer<typeof ProjectInventorySchema>;
 export const InventorySchema = z.object({
   skills: z.array(ArtifactSchema),
   mcpServers: z.array(ArtifactSchema),
   instructions: z.array(ArtifactSchema),
   hooks: z.array(ArtifactSchema),
   subagents: z.array(ArtifactSchema),
-  projects: z.array(z.unknown()).optional(),
+  projects: z.array(ProjectInventorySchema).optional(),
 });
 const UsageItemSchema = z.object({
   type: z.string(),
@@ -32,7 +38,10 @@ export type Inventory = z.infer<typeof InventorySchema>;
 export type UsageItem = z.infer<typeof UsageItemSchema>;
 export type Usage = z.infer<typeof UsageSchema>;
 
-export const inventoryRoute = defineRoute("GET", "/api/inventory", { response: InventorySchema });
+export const inventoryRoute = defineRoute("GET", "/api/inventory", {
+  query: z.object({ dir: z.string().optional(), projects: z.string().optional() }),
+  response: InventorySchema,
+});
 
 // Rubrics catalog (built-in + user rubrics) for the picker + library panels.
 export const RubricSummarySchema = z.object({
