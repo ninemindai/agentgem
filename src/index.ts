@@ -64,6 +64,8 @@ import { PlayController } from "./play.controller.js";
 import { resolveAggregatorDb, type AppDb, GitHubVerifier, fetchOrgMemberships } from "@agentgem/aggregator";
 import { mountGating } from "./gating.js";
 import { installAuth, githubExchangeCode } from "./auth/install.js";
+import { mountAuth } from "./auth/mount.js";
+import { makeAuth } from "@agentgem/aggregator";
 import { installStars } from "./stars/install.js";
 import { installReviews } from "./reviews/install.js";
 import { installCatalog } from "./catalog/install.js";
@@ -210,6 +212,19 @@ export async function createApp(port: number): Promise<RestApplication> {
         sessionTtlMs: 30 * 24 * 60 * 60 * 1000, // 30 days
       },
     });
+    // better-auth (Plan 1a, additive): mounted at the TEMPORARY /api/betterauth prefix so it does
+    // not collide with the still-live installAuth above — installAuth stays authoritative for
+    // existing sessions until Plan 1b deletes it and better-auth flips to /api/auth.
+    const auth = makeAuth({
+      db: aggDb,
+      secret: process.env.AGENTGEM_SESSION_SECRET ?? ghSecret,
+      baseURL: `${process.env.AGENTGEM_PUBLIC_BASE ?? "https://api.agentgem.ai"}/api/betterauth`,
+      githubClientId: ghClientId,
+      githubClientSecret: ghSecret,
+      webOrigins,
+      cookieDomain: process.env.AGENTGEM_SESSION_COOKIE_DOMAIN,
+    });
+    mountAuth(server.expressApp as never, auth, webOrigins, "/api/betterauth");
   }
   // Stars + reviews + team usage need the DB + an allowlisted web origin; they don't need the GitHub OAuth secret.
   if (aggDb && webOrigins.length > 0) {

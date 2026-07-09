@@ -64,6 +64,10 @@ describe("originGuard (CSRF / drive-by guard)", () => {
     expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "GET", "/api/auth/me").nexted).toBe(true);
     expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "POST", "/api/auth/logout").nexted).toBe(true);
   });
+  it("allows cross-site requests to the Plan 1a temporary better-auth mount (/api/betterauth/*)", () => {
+    expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "GET", "/api/betterauth/get-session").nexted).toBe(true);
+    expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "POST", "/api/betterauth/sign-in/social").nexted).toBe(true);
+  });
   it("still blocks a cross-site request to a NON-auth API path", () => {
     expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "POST", "/api/gem").blocked).toBe(true);
   });
