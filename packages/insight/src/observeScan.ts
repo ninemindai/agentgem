@@ -10,6 +10,7 @@
 import { readdirSync } from "node:fs";
 import { join, basename } from "node:path";
 import { BUILTIN_SOURCES, type SourceSpec } from "./sources.js";
+import { transcriptToken } from "./analysisCache.js";
 // The pure aggregation half (SessionStat + aggregateObserve + payload types) lives
 // in observeAggregate.ts so the browser can share it; re-export so existing
 // `@agentgem/insight` consumers of these names keep resolving.
@@ -125,24 +126,40 @@ export function parseCodexTranscript(text: string, path: string): SessionStat | 
   return { agent: "codex", sessionId, project: cwd ? basename(cwd) : null, cwd, model, gitBranch: null, startMs, endMs, msgs, tokensIn, tokensOut, tokensCache: cached, ...usageFields(tools, {}, {}) };
 }
 
-let _cache: { atMs: number; stats: SessionStat[] } | null = null;
-// 5 minutes. The disk scan of ~/.claude is the heavy cost, so serve a cached
-// result across repeated panel opens; Inspect's manual Refresh (?refresh=true)
-// forces a fresh scan when the user wants current data. A short TTL made every
-// re-entry re-scan, which read as "scans every time".
-const SCAN_TTL_MS = 300_000;
-/** Cached scan for the request path: re-scans at most every SCAN_TTL_MS. nowMs injected for testability.
- *  Fix 4: when custom dirs are provided the result is never cached — only the default path is cacheable.
- *  refresh (the ?fresh=1 bypass) forces a re-scan even within the TTL and repopulates the cache. */
-export async function scanSessionsCached(nowMs: number, dirs?: { claudeDir?: string; codexDir?: string }, refresh = false): Promise<SessionStat[]> {
+// Files the default-path scan reads, across every enumerable source. This is the
+// basis for the cache-validity token: a new or updated session anywhere (count or
+// newest mtime changes) yields a new token, so the cache stays valid until the
+// transcripts actually change — and never expires on an idle machine. Enumeration
+// (readdir + stat, no reads) is cheap relative to the full parse it gates.
+function sessionScanToken(): string {
+  const files = BUILTIN_SOURCES
+    .filter((s) => s.scanSessions && s.watchFiles)
+    .flatMap((s) => s.watchFiles!(s.roots({})));
+  return transcriptToken(files);
+}
+
+let _cache: { token: string; stats: SessionStat[] } | null = null;
+/** Cached scan for the request path, keyed by a transcript token (not a timer): a
+ *  fresh cache serves instantly and unchanged transcripts never trigger a re-scan,
+ *  so the default screen stays warm across idle gaps. `refresh` (?refresh=true) forces
+ *  a re-scan. Custom dirs are never cached — only the default path is. The leading
+ *  arg is a vestigial timestamp kept for call-site compatibility; the token supersedes it. */
+export async function scanSessionsCached(_nowMs?: number, dirs?: { claudeDir?: string; codexDir?: string }, refresh = false): Promise<SessionStat[]> {
   if (dirs) return scanSessions(dirs);                       // custom dirs are never cached
-  if (!refresh && _cache && nowMs - _cache.atMs < SCAN_TTL_MS) return _cache.stats;
+  const token = sessionScanToken();
+  if (!refresh && _cache && _cache.token === token) return _cache.stats;
   const stats = await scanSessions();
-  _cache = { atMs: nowMs, stats };
+  _cache = { token, stats };
   return stats;
 }
 /** Test seam: drop the cache. */
 export function clearScanCache(): void { _cache = null; }
+
+/** True when the default-path scan cache matches the current transcripts. Lets the
+ *  background warmer report hit-vs-warmed without re-scanning. */
+export function isSessionScanFresh(): boolean {
+  return _cache !== null && _cache.token === sessionScanToken();
+}
 
 export async function scanSessions(dirs?: { claudeDir?: string; codexDir?: string }, specs: SourceSpec[] = BUILTIN_SOURCES): Promise<SessionStat[]> {
   // Preserve the legacy per-agent override: dirs.claudeDir feeds baseDir; dirs.codexDir

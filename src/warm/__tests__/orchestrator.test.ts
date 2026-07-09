@@ -23,6 +23,15 @@ describe("runWarmPass", () => {
     expect(res.outcomes.filter((o) => o.status === "warmed")).toHaveLength(3);
   });
 
+  it("cheapOnly restricts the pass to cheap global warmables (the boot pass)", async () => {
+    const calls: string[] = [];
+    const res = await runWarmPass({
+      registry: fakeRegistry(calls), roots: ["/a", "/b"], topN: 5, now: () => 1, isBusy: () => false, cheapOnly: true,
+    });
+    expect(calls).toEqual(["usage:-"]);                                 // the LLM per-root warmable is excluded
+    expect(res.outcomes.map((o) => o.id)).toEqual(["usage"]);
+  });
+
   it("skips LLM warmables when foreground is busy, still runs cheap ones", async () => {
     const calls: string[] = [];
     const res = await runWarmPass({

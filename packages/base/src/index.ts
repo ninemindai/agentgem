@@ -11,3 +11,4 @@ export * from "./leakCanary.js";
 export * from "./agents.js";
 export * from "./log.js";
 export * from "./adapters.js";
+export * from "./concurrency.js";

@@ -21,6 +21,21 @@ describe("startWarmSchedule", () => {
     sched.stop();
     expect(cleared).toBe(true);
   });
+
+  it("boot pass warms cheap globals only (cheapOnly=true); idle ticks run the full pass", () => {
+    const calls: boolean[] = [];
+    let tick: (() => void) | null = null;
+    startWarmSchedule({
+      intervalMs: 1000,
+      run: async (cheapOnly: boolean) => { calls.push(cheapOnly); },
+      runNow: (fn) => fn(),
+      setInterval: (fn) => { tick = fn; return {}; },
+      clearInterval: () => {},
+    });
+    expect(calls).toEqual([true]);          // boot = cheap globals only
+    tick!();
+    expect(calls).toEqual([true, false]);   // idle tick = full pass
+  });
 });
 
 describe("startWarmSchedule – AGENTGEM_WARM_INTERVAL_MS env override", () => {

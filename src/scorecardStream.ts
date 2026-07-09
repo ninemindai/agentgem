@@ -12,10 +12,11 @@ import {
   aggregateScorecard,
   scorecardTranscriptPaths,
   defaultScorecardDeps,
+  loadProjectCached,
   type ProjectLoad,
   type ScorecardDeps,
 } from "./gem/scorecard.js";
-import { transcriptToken, readAnalysisCache, writeAnalysisCache, readAnalysisCacheEntry } from "@agentgem/insight";
+import { transcriptToken, writeAnalysisCache, readAnalysisCacheEntry } from "@agentgem/insight";
 import { createLogger } from "@agentgem/base";
 
 const log = createLogger("scorecard");
@@ -86,9 +87,11 @@ export async function streamScorecard(req: SseReq, res: SseRes, deps: ScorecardS
     let degraded = false;
     for (let i = 0; i < roots.length; i++) {
       await yieldToLoop();   // yield so each progress frame actually flushes
-      const loaded = deps.loadProject(roots[i], dir, bucket.get(roots[i]) ?? []);
-      if (!loaded) degraded = true;
-      else loads.push({ root: roots[i], label: basename(roots[i]), ...loaded });
+      // Per-project cache-first (via defaultScorecardDeps): only the changed project(s)
+      // re-scan, so a warm re-stream flushes near-instantly instead of re-scanning all.
+      const load = loadProjectCached(deps, roots[i], dir, bucket.get(roots[i]) ?? [], Date.now());
+      if (!load) degraded = true;
+      else loads.push(load);
       const partial = aggregateScorecard(loads, Date.now(), degraded);
       send("progress", {
         done: i + 1,
