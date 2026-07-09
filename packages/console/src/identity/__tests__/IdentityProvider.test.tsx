@@ -45,23 +45,18 @@ describe("IdentityProvider", () => {
     expect(() => render(<Probe />)).toThrow(/must be used inside/);
   });
 
-  it("does not poll even 60s after the initial fetch settles", async () => {
+  it("never registers a setInterval poll", async () => {
     const call = vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: false } as never);
+    const intervalSpy = vi.spyOn(globalThis, "setInterval");
     render(<IdentityProvider apiBase=""><Probe /></IdentityProvider>);
-    // Settle the initial fetch with real timers first — @testing-library's async
-    // helpers (findByText/waitFor) don't play well with fake timers.
+    // React flushes the mount effect synchronously inside render()'s act(), so
+    // any setInterval a poll would register is already visible here. Check
+    // *before* settling with findByText: @testing-library's own waitFor
+    // machinery registers its own real-timer fallback setInterval internally,
+    // which would otherwise show up as a false positive.
+    expect(intervalSpy).not.toHaveBeenCalled();
+
     await screen.findByText("unbound");
-
-    // Now switch to fake timers and advance well past any plausible poll interval
-    // (e.g. the 5s interval NotificationsProvider uses) to prove no setInterval
-    // poll is running.
-    vi.useFakeTimers();
-    try {
-      await vi.advanceTimersByTimeAsync(60_000);
-    } finally {
-      vi.useRealTimers();
-    }
-
     expect(call).toHaveBeenCalledTimes(1);
   });
 });
