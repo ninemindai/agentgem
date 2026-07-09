@@ -161,4 +161,9 @@ describe("Shell — phase-primary nav", () => {
     render(<Shell pages={pages} apiBase="" />);
     expect(screen.getByRole("button", { name: /notification/i })).toBeTruthy();
   });
+
+  it("renders the identity chip in the footer, unbound when the daemon is unreachable", async () => {
+    render(<Shell pages={pages} apiBase="" />);
+    expect(await screen.findByRole("button", { name: /sign in/i })).toBeTruthy();
+  });
 });
