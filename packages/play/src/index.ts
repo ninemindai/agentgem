@@ -10,6 +10,7 @@ export { MCP_APP_MIME, uiUri, mcpResourceFor, mcpToolFor, mcpAppFor, type McpUiC
 export { mcpAppClient, MCP_CLIENT_MARKER } from "./mcpAppClient.js";
 export { migrateMiniappHtml, type MigrateOutcome } from "./migrate.js";
 export { studioCwd, studioBrief, seedStudio, importStudio, blankStudio } from "./studio.js";
+export { MINIAPP_BUILDER_BRIEF } from "./builderBrief.js";
 export { redactForBake } from "./redact.js";
 export { assertPortable, type PortabilityResult } from "./portability.js";
 export { resolveSessionRef, type SessionRef } from "./sessionRef.js";
