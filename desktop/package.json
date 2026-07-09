@@ -20,13 +20,14 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "@types/node": "^24.13.3",
-    "cross-env": "^7.0.3",
+    "@types/node": "^26.1.1",
+    "cross-env": "^10.1.0",
     "esbuild": "^0.28.1",
     "electron": "^43.1.0",
     "electron-builder": "^26.15.6",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
-    "vitest": "^2.1.9"
+    "vite": "^8.0.0",
+    "vitest": "^4.1.10"
   },
   "dependencies": {
     "electron-updater": "^6.8.9"

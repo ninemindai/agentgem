@@ -12,9 +12,9 @@
     "@agentgem/archive": "workspace:*",
     "@agentgem/base": "workspace:*",
     "@agentgem/model": "workspace:*",
-    "jsdom": "^24"
+    "jsdom": "^29"
   },
   "devDependencies": {
-    "@types/jsdom": "^21"
+    "@types/jsdom": "^28"
   }
 }
