@@ -37,7 +37,7 @@ function makeFakeConnectFn(opts: { fail?: boolean } = {}): ChatConnectFn {
 // directly without binding a port so tests are fast and port-collision-free.
 const stoppable: RestApplication[] = [];
 
-async function buildTestApp(opts: { fail?: boolean; checkpoints?: string[] } = {}) {
+async function buildTestApp(opts: { fail?: boolean; checkpoints?: string[]; openChatCalls?: unknown[] } = {}) {
   const restApp = new RestApplication({});
   restApp.configure("servers.RestServer").to({ port: 0, host: "127.0.0.1", bodyParser: { json: {} } });
   await restApp.start();
@@ -45,6 +45,15 @@ async function buildTestApp(opts: { fail?: boolean; checkpoints?: string[] } = {
 
   const server = await restApp.restServer;
   const fakeManager = new ChatManager({ connectFn: makeFakeConnectFn({ fail: opts.fail }) });
+  if (opts.openChatCalls) {
+    // Record the args ChatManager.openChat is called with (mirrors the checkpoints spy above),
+    // then delegate to the real implementation — instance-property shadowing of the prototype method.
+    const original = fakeManager.openChat.bind(fakeManager);
+    fakeManager.openChat = (async (args: unknown) => {
+      opts.openChatCalls!.push(args);
+      return original(args as never);
+    }) as typeof fakeManager.openChat;
+  }
   registerChatRoutes(server.expressApp as never, {
     manager: fakeManager,
     buildBrief: async () => "BRIEF",
@@ -169,6 +178,28 @@ describe("chat routes", () => {
     const res = await request(app).get(`/api/chat/stream?chatId=${created.body.chatId}&message=hi`);
     expect(res.text).toContain("event: failed");
     expect(checkpoints).toEqual([]);
+  });
+});
+
+describe("POST /api/chat project launch (HTTP)", () => {
+  it("200s and passes the allow-listed project through as openChat cwd", async () => {
+    const openChatCalls: Array<{ cwd?: string }> = [];
+    const app = await buildTestApp({ openChatCalls });
+    const res = await request(app)
+      .post("/api/chat")
+      .set("Content-Type", "application/json")
+      .send(JSON.stringify({ agentId: "claude-code", project: "/repo/ok" }));
+    expect(res.status).toBe(200);
+    expect(openChatCalls[0]).toMatchObject({ cwd: "/repo/ok" });
+  });
+
+  it("400s a non-allow-listed project", async () => {
+    const app = await buildTestApp();
+    const res = await request(app)
+      .post("/api/chat")
+      .set("Content-Type", "application/json")
+      .send(JSON.stringify({ agentId: "claude-code", project: "/repo/nope" }));
+    expect(res.status).toBe(400);
   });
 });
 
