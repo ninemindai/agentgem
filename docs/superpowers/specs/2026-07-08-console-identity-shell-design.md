@@ -43,11 +43,16 @@ So: a context for status, a hook for flow.
 
 ```
 packages/console/src/identity/
-  IdentityProvider.tsx   context { status, refresh } — one bindStatusRoute fetch
-  useGitHubBind.ts       flow { connect, copyOpenAndWait, polling, error }
-  ConnectGitHub.tsx      presentational banner (user code + copy/open button)
-  IdentityChip.tsx       footer chip → webHandoffRoute → system browser
+  IdentityProvider.tsx    context { status, refresh } — one bindStatusRoute fetch
+  useGitHubBind.ts        flow { connect, copyOpenAndWait, polling, error }
+  ConnectGitHub.tsx       presentational: user code + copy/open button + error
+  ConnectGitHubModal.tsx  centered modal chrome wrapping ConnectGitHub
+  IdentityChip.tsx        footer chip → webHandoffRoute | opens the modal
 ```
+
+`ConnectGitHub` is presentational and chrome-free, so it composes two ways with
+no duplicated logic: Studio renders it as an **inline banner**, the chip renders
+it **inside `ConnectGitHubModal`**. One flow hook, two chromes.
 
 `useGitHubBind({ onBound })` owns local flow state and calls the context's
 `refresh()` on success, so every consumer converges on one status.
@@ -78,9 +83,34 @@ on the code display, not the opened URL.
 - **bound + `sessionActive`** — avatar + `@login`. Click mints the one-time
   handoff code and opens `app.agentgem.ai` signed in (desktop: `main.ts` routes
   `window.open` to the system browser).
-- **bound, session expired** — avatar + `@login`, dimmed. Click routes to
-  `#/settings`; a handoff code cannot be minted without a live session.
-- **unbound** — "Sign in" chip. Click routes to `#/settings`.
+- **bound, session expired** — avatar + `@login`, dimmed. Click opens
+  `ConnectGitHubModal` to re-establish the session; a handoff code cannot be
+  minted without a live one.
+- **unbound** — "Sign in" chip. Click opens `ConnectGitHubModal`.
+
+Signing in is therefore possible from the chip itself; the chip is the primary
+identity affordance, not a shortcut into Settings. Settings keeps its own connect
+row (it also owns Disconnect, which the chip does not offer).
+
+### The modal
+
+`Setup/index.tsx` already has a modal, but it is panel-local: its `setup-modal`
+classes live in `theme.css` and are Setup's to rename. Reusing those class names
+from an identity component would couple the chip to Setup's stylesheet.
+
+So `ConnectGitHubModal` owns its own `identity-modal` classes and repeats the
+overlay/panel/Escape pattern. No shared `<Modal>` primitive is extracted: that
+would be an abstraction with one real consumer, and retrofitting Setup and
+`Play/Runner` is scope this change did not ask for. A third dialog is the moment
+to extract.
+
+Behavior, matching Setup's modal so the console stays coherent:
+
+- `role="dialog"`, `aria-modal="true"`, labelled "Connect GitHub".
+- Escape closes; overlay click closes; panel click does not (`stopPropagation`).
+- Focus moves to the copy/open button on open, and returns to the chip on close.
+- Closing mid-flow abandons the device code. The next open calls `bindStart`
+  again rather than resuming a code that may have expired.
 
 ### Studio publish flow
 
@@ -121,9 +151,9 @@ fires on some later unrelated bind is worse than no resume at all.
   reason inline; `pendingPublish` cleared. The game is still saved, so the user
   can click Share again.
 - `webHandoffRoute` returns `{authenticated: false}` (session expired between
-  chip render and click) → the chip routes to `#/settings` rather than opening a
-  signed-out tab. The server already clears the dead session on its 401, so
-  Settings correctly shows "Disconnect then Connect".
+  chip render and click) → the chip opens `ConnectGitHubModal` rather than
+  opening a signed-out tab. The server already cleared the dead session on its
+  401, so this is the correct recovery: reconnect, then click again.
 - Publish fails after a successful bind → the existing `share failed: …` status,
   unchanged.
 
@@ -136,8 +166,12 @@ Console tests are not in CI (see `ci-skips-console-tests`), so
   `PublishToExplore.test.tsx` pass *unmodified*. If they need edits, the hook's
   shape is wrong. These two files are the safety net that makes this an
   extraction rather than a rewrite.
-- **Chip:** bound + active renders `@login` and click opens the handoff URL;
-  unbound renders "Sign in" and click sets `#/settings`.
+- **Chip:** bound + active renders `@login` and click opens the handoff URL.
+  Unbound renders "Sign in"; click opens the modal and calls `bindStart`.
+  Resolving `bindComplete` closes the modal and the chip becomes `@login` —
+  proving `refresh()` propagates through the context.
+- **Modal:** Escape closes it; overlay click closes it; a click inside the panel
+  does not. Closing mid-flow and reopening calls `bindStart` a second time.
 - **Resume:** stub `bindStatus` unbound → click Share → assert `publishSetupRoute`
   was *not* called and the connect banner is present → resolve `bindComplete`
   with `{bound: true, login: "rfeng"}` → assert `publishSetupRoute` called exactly
@@ -149,6 +183,7 @@ path.
 ## Out of scope
 
 - Any server-side change. The bind and handoff routes are sufficient.
-- Signing in from the chip itself. Unbound routes to Settings, where the connect
-  UI already lives.
+- Disconnecting from the chip. Settings keeps sole ownership of Disconnect.
+- Extracting a shared `<Modal>` primitive, or retrofitting the existing modals in
+  `Setup/index.tsx` and `Play/Runner.tsx` onto one.
 - Surfacing identity in the marketplace SPA, or in the desktop title bar.
