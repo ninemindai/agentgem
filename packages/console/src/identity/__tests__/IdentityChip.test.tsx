@@ -39,10 +39,10 @@ describe("IdentityChip", () => {
     expect(await screen.findByText("AB-12")).toBeTruthy();
   });
 
-  it("completing the bind closes the modal and the chip becomes @login", async () => {
+  it("completing the bind closes the modal and the chip becomes @login, keeping avatarUrl + sessionActive from the refreshed status", async () => {
     vi.spyOn(routes.bindStatusRoute, "call")
       .mockResolvedValueOnce({ bound: false } as never)
-      .mockResolvedValueOnce({ bound: true, login: "alice", sessionActive: true } as never);
+      .mockResolvedValueOnce({ bound: true, login: "alice", avatarUrl: "https://a/alice.png", sessionActive: true } as never);
     vi.spyOn(routes.bindStartRoute, "call").mockResolvedValue({ configured: true, userCode: "AB-12", verificationUri: "https://gh/d", deviceCode: "dc" } as never);
     vi.spyOn(routes.bindCompleteRoute, "call").mockResolvedValue({ bound: true, login: "alice" } as never);
     vi.stubGlobal("open", vi.fn());
@@ -50,8 +50,14 @@ describe("IdentityChip", () => {
     fireEvent.click(await screen.findByRole("button", { name: /sign in/i }));
     fireEvent.click(await screen.findByRole("button", { name: /sign in with github/i }));
     fireEvent.click(await screen.findByRole("button", { name: /copy code & open github/i }));
-    expect(await screen.findByRole("button", { name: /@alice/ })).toBeTruthy();
+    const chip = await screen.findByRole("button", { name: /@alice/ });
+    expect(chip).toBeTruthy();
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    // The freshly-refreshed record must win over the optimistic onBound update: avatar
+    // present, and sessionActive reflected in the button's title (not dimmed/stale).
+    const img = await screen.findByRole("img", { name: /alice/i });
+    expect(img.getAttribute("src")).toBe("https://a/alice.png");
+    expect(chip.getAttribute("title")).toBe("Open app.agentgem.ai signed in");
   });
 
   it("session expired: clicking opens the modal instead of a signed-out tab", async () => {
@@ -68,6 +74,16 @@ describe("IdentityChip", () => {
   it("handoff says unauthenticated: opens the modal, does not open a tab", async () => {
     vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob", sessionActive: true } as never);
     vi.spyOn(routes.webHandoffRoute, "call").mockResolvedValue({ authenticated: false } as never);
+    const openSpy = vi.fn(); vi.stubGlobal("open", openSpy);
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: /@bob/ }));
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+    expect(openSpy).not.toHaveBeenCalled();
+  });
+
+  it("handoff throws (network error / non-2xx): opens the modal, does not open a tab", async () => {
+    vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob", sessionActive: true } as never);
+    vi.spyOn(routes.webHandoffRoute, "call").mockRejectedValue(new Error("network down"));
     const openSpy = vi.fn(); vi.stubGlobal("open", openSpy);
     mount();
     fireEvent.click(await screen.findByRole("button", { name: /@bob/ }));
