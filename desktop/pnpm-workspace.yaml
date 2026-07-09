@@ -6,10 +6,15 @@
 # at the first pnpm-workspace.yaml it finds, so this keeps the install self-contained.
 packages: []
 
-# pnpm 11 fails CI installs on un-acknowledged build scripts (see the root
-# pnpm-workspace.yaml for the full rationale). desktop only pulls esbuild's, whose
-# prebuilt binary makes the script unneeded — acknowledge it so the tag-triggered
-# desktop-release install stays green under pnpm 11.
+# --- pnpm 11 config (matches the root pnpm-workspace.yaml; desktop is a separate
+# pnpm root so it needs its own copy). desktop-release CI pins pnpm 11.10.0. ---
+# Cooldown disabled: a 24h window rejected the just-bumped vite@8.1.4 and broke the
+# desktop-release build. Same call as root — see root pnpm-workspace.yaml.
+minimumReleaseAge: 0
+# Build scripts: esbuild ships a prebuilt binary, so its postinstall is unneeded.
+# (electron 43 has no install script — electron-builder fetches the runtime itself
+# via @electron/get — so the old `pnpm.onlyBuiltDependencies: ["electron"]`, which
+# pnpm 11 no longer reads, was already vestigial and is dropped.)
 allowBuilds:
   esbuild: false
 verifyDepsBeforeRun: false
