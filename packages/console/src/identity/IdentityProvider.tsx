@@ -3,7 +3,7 @@
 // One source of truth for "who is signed in" across the console. Mounted once in
 // Shell. Fetched on mount and on explicit refresh() — never polled: the bind only
 // changes as a result of a user action in this app.
-import { createContext, useCallback, useContext, useEffect, useState, type ReactElement, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactElement, type ReactNode } from "react";
 import { bindStatusRoute, makeClient } from "../api/routes.js";
 
 export type IdentityStatus = {
@@ -43,8 +43,14 @@ export function IdentityProvider({ apiBase, children }: { apiBase: string; child
 
   useEffect(() => { void refresh(); }, [refresh]);
 
+  // Memoized: without this, every render of IdentityProvider (e.g. Shell re-rendering
+  // for unrelated reasons) creates a new object identity, forcing every useIdentity()
+  // consumer to re-render even when status/refresh haven't changed. setStatus is
+  // React's stable setter and doesn't need to be a dependency.
+  const value = useMemo(() => ({ status, refresh, setStatus }), [status, refresh]);
+
   return (
-    <IdentityContext.Provider value={{ status, refresh, setStatus }}>
+    <IdentityContext.Provider value={value}>
       {children}
     </IdentityContext.Provider>
   );

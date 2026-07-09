@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { IdentityProvider, useIdentity } from "../IdentityProvider.js";
 import * as routes from "../../api/routes.js";
 
@@ -45,11 +45,23 @@ describe("IdentityProvider", () => {
     expect(() => render(<Probe />)).toThrow(/must be used inside/);
   });
 
-  it("does not poll", async () => {
+  it("does not poll even 60s after the initial fetch settles", async () => {
     const call = vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: false } as never);
     render(<IdentityProvider apiBase=""><Probe /></IdentityProvider>);
+    // Settle the initial fetch with real timers first — @testing-library's async
+    // helpers (findByText/waitFor) don't play well with fake timers.
     await screen.findByText("unbound");
-    await new Promise((r) => setTimeout(r, 50));
-    await waitFor(() => expect(call).toHaveBeenCalledTimes(1));
+
+    // Now switch to fake timers and advance well past any plausible poll interval
+    // (e.g. the 5s interval NotificationsProvider uses) to prove no setInterval
+    // poll is running.
+    vi.useFakeTimers();
+    try {
+      await vi.advanceTimersByTimeAsync(60_000);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(call).toHaveBeenCalledTimes(1);
   });
 });
