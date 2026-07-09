@@ -64,6 +64,7 @@ import { installAuth, githubExchangeCode } from "./auth/install.js";
 import { installStars } from "./stars/install.js";
 import { installReviews } from "./reviews/install.js";
 import { installCatalog } from "./catalog/install.js";
+import { installGroups } from "./groups/install.js";
 import { installUsage } from "./usage/install.js";
 import { installRegistryUploadPublish } from "./registry/uploadPublish.js";
 import { registryConfigFromEnv, githubRegistrySource, githubRegistryPublisher, defaultHttp } from "@agentgem/distribute";
@@ -197,6 +198,7 @@ export async function createApp(port: number): Promise<RestApplication> {
     installStars(server.expressApp as never, { db: aggDb, webOrigins });
     installReviews(server.expressApp as never, { db: aggDb, webOrigins });
     installCatalog(server.expressApp as never, { db: aggDb, webOrigins });
+    installGroups(server.expressApp as never, { db: aggDb, webOrigins });
     installUsage(server.expressApp as never, { db: aggDb, webOrigins });
   }
   // GitHub App (enterprise orgs): webhook always mounts when the DB exists (503s until the three
