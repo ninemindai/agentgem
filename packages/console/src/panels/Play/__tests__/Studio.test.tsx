@@ -3,6 +3,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { Studio } from "../Studio.js";
 import { playMiniappRoute } from "../../../api/routes.js";
+import { IdentityProvider } from "../../../identity/IdentityProvider.js";
 
 class FakeES {
   static last: FakeES | null = null;
@@ -28,14 +29,14 @@ describe("Studio", () => {
       meta: { title: "G1", genre: "replay", createdFrom: { kind: "project", path: "/p", flavor: "node" }, engineVersion: "1" },
     });
 
-    render(<Studio
+    render(<IdentityProvider apiBase=""><Studio
       apiBase=""
       name="g1"
       agents={[{ id: "claude", name: "Claude Code", available: true }, { id: "codex", name: "Codex", available: true }]}
       agentId="codex"
       onAgentIdChange={() => {}}
       onBack={() => {}}
-    />);
+    /></IdentityProvider>);
 
     // mount refresh renders the fetched html into the sealed preview
     await waitFor(() => {
@@ -74,7 +75,7 @@ describe("Studio", () => {
     const post = stubChat();
     vi.spyOn(playMiniappRoute, "call").mockResolvedValue(blankApp as never);
 
-    render(<Studio apiBase="" name="space-dodger" seedPrompt="dodge asteroids" agents={codex} agentId="codex" onAgentIdChange={() => {}} onBack={() => {}} />);
+    render(<IdentityProvider apiBase=""><Studio apiBase="" name="space-dodger" seedPrompt="dodge asteroids" agents={codex} agentId="codex" onAgentIdChange={() => {}} onBack={() => {}} /></IdentityProvider>);
 
     await waitFor(() => expect(FakeES.last).toBeTruthy());
     expect(JSON.parse(String(post.mock.calls[0][0].body))).toMatchObject({ agentId: "codex", miniapp: "space-dodger" });
@@ -105,7 +106,7 @@ describe("Studio", () => {
   it("does not auto-send when there is no seed prompt", async () => {
     stubChat();
     const spy = vi.spyOn(playMiniappRoute, "call").mockResolvedValue(blankApp as never);
-    render(<Studio apiBase="" name="space-dodger" agents={codex} agentId="codex" onAgentIdChange={() => {}} onBack={() => {}} />);
+    render(<IdentityProvider apiBase=""><Studio apiBase="" name="space-dodger" agents={codex} agentId="codex" onAgentIdChange={() => {}} onBack={() => {}} /></IdentityProvider>);
     await waitFor(() => expect(spy).toHaveBeenCalled());
     expect(FakeES.last).toBeNull();
   });
@@ -114,11 +115,11 @@ describe("Studio", () => {
     stubChat();
     vi.spyOn(playMiniappRoute, "call").mockResolvedValue(blankApp as never);
     const props = { apiBase: "", name: "space-dodger", seedPrompt: "dodge asteroids", onAgentIdChange: () => {}, onBack: () => {} };
-    const { rerender } = render(<Studio {...props} agents={null} agentId="" />);
+    const { rerender } = render(<IdentityProvider apiBase=""><Studio {...props} agents={null} agentId="" /></IdentityProvider>);
     await waitFor(() => expect(playMiniappRoute.call).toHaveBeenCalled());
     expect(FakeES.last).toBeNull(); // no agent yet → held
 
-    rerender(<Studio {...props} agents={codex} agentId="codex" />);
+    rerender(<IdentityProvider apiBase=""><Studio {...props} agents={codex} agentId="codex" /></IdentityProvider>);
     await waitFor(() => expect(FakeES.last).toBeTruthy());
     expect(FakeES.last!.url).toContain("message=dodge+asteroids");
   });

@@ -1,10 +1,13 @@
 // packages/console/src/panels/Play/Studio.tsx
 import { useEffect, useRef, useState } from "react";
-import { makeClient, playMiniappRoute, playSaveRoute, playPublishRoute, publishSetupRoute, bindStatusRoute } from "../../api/routes.js";
+import { makeClient, playMiniappRoute, playSaveRoute, playPublishRoute, publishSetupRoute } from "../../api/routes.js";
 import { AgentSelector, type PlayAgent } from "./AgentSelector.js";
 import { Runner } from "./Runner.js";
 import { openStudioStream } from "./studioStream.js";
 import { genre as genreOf, parseGateFailure, fixSealPrompt } from "./playMeta.js";
+import { useIdentity } from "../../identity/IdentityProvider.js";
+import { useGitHubBind } from "../../identity/useGitHubBind.js";
+import { ConnectGitHub } from "../../identity/ConnectGitHub.js";
 
 const j = (r: Response) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); };
 
@@ -39,6 +42,8 @@ export function Studio({
   const [status, setStatus] = useState("");
   const [gate, setGate] = useState<string[] | null>(null);       // seal failures → actionable banner
   const [share, setShare] = useState<{ gemUrl: string; cardUrl?: string } | null>(null);
+  const [pendingPublish, setPendingPublish] = useState(false);   // Share clicked while unbound
+  const { status: identity } = useIdentity();
   const closeRef = useRef<null | (() => void)>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -46,6 +51,17 @@ export function Studio({
   const composerRef = useRef<HTMLDivElement>(null);
   const [plateMax, setPlateMax] = useState<number | undefined>(undefined);
   const seededRef = useRef(false);   // guards the one-shot seed-prompt auto-send
+
+  // Resume the publish the user already asked for. `login` comes straight from
+  // bindComplete — reading it off the refreshed identity context would race the
+  // React render that applies the refresh, and resume could see a stale null.
+  const bind = useGitHubBind(apiBase, {
+    onBound: (login) => {
+      if (!pendingPublish) return;
+      setPendingPublish(false);
+      void publishWorkspace(login);
+    },
+  });
 
   const refresh = () =>
     playMiniappRoute.call(makeClient(apiBase), { query: { name } })
@@ -164,19 +180,14 @@ export function Studio({
     catch (e) { setStatus(`push failed: ${(e as Error).message}`); }
   }
 
-  // Share to Explore (app.agentgem.ai): Save (creates the game-gem workspace + enforces the seal), then
-  // publish that workspace via the same funnel other gems use. Gated on a GitHub bind.
-  async function shareToExplore() {
-    setStatus("preparing…"); setShare(null);
-    if (!(await save())) return; // gate failure already surfaced as the banner
+  // The actual publish. Takes `login` explicitly (see the onBound comment above) and
+  // deliberately does NOT save: the caller already did, and the workspace + seal exist.
+  async function publishWorkspace(login: string) {
+    setStatus("publishing to app.agentgem.ai…");
     try {
-      const client = makeClient(apiBase);
-      const bind = await bindStatusRoute.call(client);
-      if (!bind.bound || !bind.login) { setStatus("Connect your GitHub in Curate to publish publicly."); return; }
-      setStatus("publishing to app.agentgem.ai…");
       const g = genreOf(meta?.genre ?? "project-fun");
-      const pub = await publishSetupRoute.call(client, { body: {
-        workspace: name, scope: bind.login, name, version: "0.1.0", provenance: "play",
+      const pub = await publishSetupRoute.call(makeClient(apiBase), { body: {
+        workspace: name, scope: login, name, version: "0.1.0", provenance: "play",
         description: `${g.label} mini-game`, tags: ["game", meta?.genre ?? "project-fun"],
       } });
       // Link the gem's marketplace page (installable / playable), not just the OG teaser card.
@@ -185,6 +196,23 @@ export function Studio({
       const body = (e as Record<string, unknown>).body;
       setStatus(`share failed: ${typeof body === "string" ? body : (e as Error).message}`);
     }
+  }
+
+  // Share to Explore (app.agentgem.ai): Save (creates the game-gem workspace + enforces
+  // the seal), then publish. Unbound → offer the inline connect and resume afterwards.
+  async function shareToExplore() {
+    setStatus("preparing…"); setShare(null);
+    if (!(await save())) return; // gate failure already surfaced as the banner
+    if (identity?.bound && identity.login) { await publishWorkspace(identity.login); return; }
+    setStatus("");
+    setPendingPublish(true);
+  }
+
+  // A latent resume flag that fires on some later, unrelated bind is worse than no
+  // resume at all — dropping the banner drops the pending publish with it.
+  function dismissConnect() {
+    setPendingPublish(false);
+    bind.reset();
   }
 
   const g = genreOf(meta?.genre ?? "");
@@ -220,6 +248,16 @@ export function Studio({
             <div className="play-banner__detail">{gate.join("; ")}</div>
           </div>
           <button className="play-btn play-btn--primary" disabled={busy} onClick={() => { const f = gate; setGate(null); send(fixSealPrompt(f)); }}>Fix with agent</button>
+        </div>
+      )}
+      {pendingPublish && (
+        <div className="play-banner">
+          <span className="play-banner__ico">🔑</span>
+          <div className="play-banner__body">
+            <div className="play-banner__title">Connect GitHub to publish</div>
+            <ConnectGitHub bind={bind} idleHint={<p className="play-banner__detail">Publishing continues automatically once you authorize.</p>} />
+          </div>
+          <button className="play-btn play-btn--ghost" onClick={dismissConnect}>Dismiss</button>
         </div>
       )}
 
