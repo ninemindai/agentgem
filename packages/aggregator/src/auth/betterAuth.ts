@@ -55,18 +55,21 @@ async function anchorAndScopes(db: AppDb, account: { userId: string; providerId:
   const login = row?.login;
   // 1) legacy accounts ANCHOR. accounts.id = user.id (uuid). No existing row for a new user, so the
   //    insert with id=user.id succeeds; a migrated user re-logging in already has id=user.id, so the
-  //    (provider,provider_account_id) conflict updates login/avatar in place (id unchanged). Mismatched
-  //    ids are caught by the migration conflict check (1a-Task 5), so they cannot reach here.
+  //    (provider,provider_account_id) conflict updates login/avatar in place (id unchanged). This is
+  //    guaranteed for a fresh user; for a pre-existing legacy account it relies on the boot backfill
+  //    (migrateAccountsToBetterAuth, run at startup) having already created the matching better-auth
+  //    user with the same id — otherwise the (provider, provider_account_id) conflict keeps the legacy
+  //    id and this anchor write is a no-op.
   //    On CREATE, the write is LOAD-BEARING — let a failure THROW to fail the sign-in, since a user
   //    with no anchor is broken and must not get a session.
   //    On UPDATE (re-login), the anchor already exists — the write is just refreshing login/avatar,
   //    so it's best-effort: a transient failure here must not block an otherwise-legitimate sign-in.
   if (login) {
     if (isCreate) {
-      await upsertAccount(db, { provider: "github", accountId: account.accountId, login, avatarUrl: row?.image ?? null, id: account.userId } as never);
+      await upsertAccount(db, { provider: "github", accountId: account.accountId, login, avatarUrl: row?.image ?? null, id: account.userId });
     } else {
       try {
-        await upsertAccount(db, { provider: "github", accountId: account.accountId, login, avatarUrl: row?.image ?? null, id: account.userId } as never);
+        await upsertAccount(db, { provider: "github", accountId: account.accountId, login, avatarUrl: row?.image ?? null, id: account.userId });
       } catch { /* re-login refresh is best-effort; the anchor already exists */ }
     }
   } else if (isCreate) {
