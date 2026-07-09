@@ -1,6 +1,8 @@
 appId: ai.ninemind.agentgem
 productName: AgentGem
 copyright: © ninemind.ai
+# Copies core-dist/node_modules into the packaged app (extraResources drops it — see below).
+afterPack: scripts/after-pack.mjs
 # Register the agentgem:// URL scheme with the OS at install time (macOS CFBundleURLTypes, Windows
 # registry) so a web "Open in AgentGem" link launches/focuses the app. main.ts also calls
 # setAsDefaultProtocolClient at runtime and routes the URL to the console's Get Gems tab.
@@ -20,6 +22,9 @@ extraResources:
   # resolveCoreEntry loads resources/core/index.mjs at runtime.
   - from: core-dist
     to: core
+    # NOTE: extraResources silently drops node_modules regardless of filter patterns,
+    # so core-dist/node_modules (jsdom + the express/cors REST peers) is copied in by
+    # the afterPack hook below instead — without it the packaged app can't start.
     filter:
       - "**/*"
   # Ship the ACP adapters (built by scripts/bundle-adapters.mjs) so Chat works
