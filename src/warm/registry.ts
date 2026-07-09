@@ -9,7 +9,7 @@ import { resolveDirs } from "@agentgem/model";
 // usage scan + its cache live in @agentgem/capture:
 import { computeGlobalUsage, readGlobalUsageCache, writeGlobalUsageCache } from "@agentgem/capture";
 // transcript helpers + the analysis cache live in @agentgem/insight:
-import { allClaudeTranscripts, transcriptToken, readAnalysisCache, writeAnalysisCache, scanSessionsCached, loadSessionTranscript } from "@agentgem/insight";
+import { allClaudeTranscripts, transcriptToken, readAnalysisCache, writeAnalysisCache, scanSessionsCached, isSessionScanFresh, loadSessionTranscript } from "@agentgem/insight";
 // recall index sync:
 import { RecallIndex, syncRecallIndex } from "@agentgem/recall";
 import { defaultRecallDbPath } from "../goldmine/recall.js";
@@ -22,13 +22,24 @@ import { dreamRoot } from "../dream/dreamPass.js";
 
 export type WarmStatusValue = "warmed" | "hit";
 export interface Warmable {
-  id: "usage" | "scorecard" | "insights" | "analyze" | "distill" | "dream" | "recall";
+  id: "observe" | "usage" | "scorecard" | "insights" | "analyze" | "distill" | "dream" | "recall";
   cost: "cheap" | "llm";
   scope: "global" | "per-root";
   warm(root: string | null, opts: { dir?: string; force?: boolean }): Promise<WarmStatusValue>;
 }
 
 export const WARMABLES: Warmable[] = [
+  {
+    // First in the pass: the Overview (default landing screen) blocks on the session
+    // scan behind /api/observe/raw, so warm it before anything else. scanSessionsCached
+    // populates its in-memory cache; a fresh (within-TTL) cache short-circuits.
+    id: "observe", cost: "cheap", scope: "global",
+    async warm(_root, { dir, force }) {
+      if (!force && !dir && isSessionScanFresh()) return "hit";
+      await scanSessionsCached(undefined, dir ? { claudeDir: dir } : undefined, force);
+      return "warmed";
+    },
+  },
   {
     id: "usage", cost: "cheap", scope: "global",
     async warm(_root, { dir, force }) {

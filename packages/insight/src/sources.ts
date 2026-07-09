@@ -10,6 +10,7 @@ import { join, basename } from "node:path";
 import { homedir } from "node:os";
 import { resolveDirs } from "@agentgem/model";
 import type { AgentBinding, GemArtifact } from "@agentgem/model";
+import { mapPool } from "@agentgem/base";
 import type { AgentId, SessionStat } from "./observeAggregate.js";
 import { listFiles, jsonLines, parseClaudeTranscript, parseCodexTranscript } from "./observeScan.js";
 import { detectHtmlArtifacts, type HtmlArtifactVersion } from "./artifactScan.js";
@@ -59,13 +60,18 @@ export function watchableSources(specs: SourceSpec[] = BUILTIN_SOURCES): SourceS
   return specs.filter((s) => s.watchFiles && s.parseMeta && (s.detectArtifacts || s.resolveArtifactPaths));
 }
 
+// The disk scan of ~/.claude is the heaviest cost on the request path (~10s cold on
+// a large store), and it's I/O-bound: the old sequential `await readFile` loop paid
+// one disk round-trip at a time. Overlap the reads with a bounded pool so the OS can
+// service them in parallel; mapPool keeps the output in file order (parse is CPU-only,
+// so it still runs on the one thread — the win is the read overlap, not the parse).
+const READ_CONCURRENCY = 16;
 async function scanJsonl(files: string[], parse: (t: string, p: string) => SessionStat | null): Promise<SessionStat[]> {
-  const out: SessionStat[] = [];
-  for (const f of files) {
-    let text: string; try { text = await readFile(f, "utf8"); } catch { continue; }
-    const s = parse(text, f); if (s) out.push(s);
-  }
-  return out;
+  const parsed = await mapPool(files, READ_CONCURRENCY, async (f) => {
+    let text: string; try { text = await readFile(f, "utf8"); } catch { return null; }
+    return parse(text, f);
+  });
+  return parsed.filter((s): s is SessionStat => s !== null);
 }
 
 const claudeSource: SourceSpec = {

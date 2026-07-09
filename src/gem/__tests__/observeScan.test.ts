@@ -305,44 +305,43 @@ describe("scanSessionsCached", () => {
   afterAll(() => restoreHome());
   beforeEach(() => clearScanCache());
 
-  it("returns the same array reference on second call within TTL (no custom dirs)", async () => {
-    // Use no-dirs path so the cache is populated and hit
-    const nowMs = Date.now();
-    const first = await scanSessionsCached(nowMs);
-    const second = await scanSessionsCached(nowMs + 1_000); // +1s < 5min TTL
+  it("serves the same array reference while transcripts are unchanged (no custom dirs)", async () => {
+    // No-dirs path is cached, keyed by the transcript token — unchanged transcripts hit.
+    const first = await scanSessionsCached();
+    const second = await scanSessionsCached();
     expect(second).toBe(first);
   });
 
-  it("re-scans when nowMs exceeds TTL (no custom dirs)", async () => {
-    const nowMs = Date.now();
-    const first = await scanSessionsCached(nowMs);
-    const second = await scanSessionsCached(nowMs + 6 * 60_000); // +6min > 5min TTL
+  it("re-scans only when the transcripts change (token changes)", async () => {
+    const first = await scanSessionsCached();
+    // Land a new session in the hermetic HOME's Claude store → the token changes.
+    const proj = join(process.env.HOME!, ".claude", "projects", "p-new");
+    mkdirSync(proj, { recursive: true });
+    writeFileSync(join(proj, "s.jsonl"), JSON.stringify({ type: "assistant", timestamp: "2026-07-01T00:00:00Z", cwd: "/x", message: { model: "claude-opus-4-8", content: "hi" } }) + "\n");
+    const second = await scanSessionsCached();
     expect(second).not.toBe(first);
   });
 
   it("re-scans after clearScanCache() (no custom dirs)", async () => {
-    const nowMs = Date.now();
-    const first = await scanSessionsCached(nowMs);
+    const first = await scanSessionsCached();
     clearScanCache();
-    const second = await scanSessionsCached(nowMs + 100); // same ts, but cache cleared
+    const second = await scanSessionsCached(); // token unchanged, but cache cleared
     expect(second).not.toBe(first);
   });
 
   it("bypasses the cache when custom dirs are passed (Fix 4)", async () => {
-    const nowMs = Date.now();
-    // Two calls with dirs within TTL must NOT share reference
-    const first = await scanSessionsCached(nowMs, { claudeDir, codexDir });
-    const second = await scanSessionsCached(nowMs + 1_000, { claudeDir, codexDir }); // +1s < 5min TTL
+    // Two calls with custom dirs must NOT share a reference — custom dirs are never cached.
+    const first = await scanSessionsCached(undefined, { claudeDir, codexDir });
+    const second = await scanSessionsCached(undefined, { claudeDir, codexDir });
     expect(second).not.toBe(first);
   });
 
-  it("refresh forces a re-scan within TTL (the ?fresh=1 bypass)", async () => {
-    const nowMs = Date.now();
-    const first = await scanSessionsCached(nowMs);
-    const forced = await scanSessionsCached(nowMs + 1_000, undefined, true); // within TTL but refresh
+  it("refresh forces a re-scan even when the token is unchanged (the ?fresh=1 bypass)", async () => {
+    const first = await scanSessionsCached();
+    const forced = await scanSessionsCached(undefined, undefined, true);
     expect(forced).not.toBe(first);
     // the forced scan repopulates the cache, so a subsequent plain call hits it
-    const third = await scanSessionsCached(nowMs + 2_000);
+    const third = await scanSessionsCached();
     expect(third).toBe(forced);
   });
 });

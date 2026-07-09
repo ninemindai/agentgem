@@ -38,13 +38,18 @@ export function getWarmStatus(): WarmStatus { return status; }
 export async function runWarmPass(opts: {
   dir?: string; roots?: string[]; force?: boolean; topN?: number;
   now?: () => number; registry?: Warmable[]; isBusy?: () => boolean; home?: string;
+  cheapOnly?: boolean;
 } = {}): Promise<WarmPassResult> {
   const now = opts.now ?? Date.now;
   // Re-entrancy guard: a pass already in flight (e.g. an idle tick firing while
   // the previous pass is still warming) must not overlap — overlapping passes
   // corrupt `status` and double the LLM work. Bail with the last known result.
   if (status.running) return status.last ?? { startedAt: now(), finishedAt: now(), outcomes: [] };
-  const registry = opts.registry ?? WARMABLES;
+  // cheapOnly (used by the boot pass) restricts to the cheap global caches — the ones
+  // the first screens block on — so a fresh server serves first paint fast instead of
+  // stalling behind the per-root LLM warmables, whose synchronous scans block the event
+  // loop for minutes. Those still run on the idle ticks (full pass), gated by isBusy.
+  const registry = (opts.registry ?? WARMABLES).filter((w) => !opts.cheapOnly || (w.cost === "cheap" && w.scope === "global"));
   const isBusy = opts.isBusy ?? isForegroundBusy;
   const topN = opts.topN ?? topNFromEnv() ?? DEFAULT_TOP_N;
   const roots = opts.roots

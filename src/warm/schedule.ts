@@ -30,7 +30,7 @@ export interface WarmSchedule { stop(): void }
 export function startWarmSchedule(opts: {
   home?: string;
   intervalMs?: number;
-  run?: () => Promise<unknown>;
+  run?: (cheapOnly: boolean) => Promise<unknown>;
   setInterval?: (fn: () => void, ms: number) => { unref?: () => void };
   clearInterval?: (h: unknown) => void;
   runNow?: (fn: () => void) => void;
@@ -38,15 +38,16 @@ export function startWarmSchedule(opts: {
   if (warmDisabled()) return { stop() {} };
   const home = opts.home ?? agentgemHome();
   const intervalMs = opts.intervalMs ?? intervalFromEnv() ?? DEFAULT_INTERVAL_MS;
-  const run = opts.run ?? (() => withWarmLock(home, () => runWarmPass(), () => undefined));
+  const run = opts.run ?? ((cheapOnly: boolean) => withWarmLock(home, () => runWarmPass({ cheapOnly }), () => undefined));
   const setI = opts.setInterval ?? ((fn, ms) => globalThis.setInterval(fn, ms));
   const clearI = opts.clearInterval ?? ((h) => globalThis.clearInterval(h as ReturnType<typeof globalThis.setInterval>));
   // Default boot run is deferred a tick so it never blocks the caller (server boot).
   const runNow = opts.runNow ?? ((fn) => { setTimeout(fn, 0); });
 
-  const fire = () => { void run(); };
-  runNow(fire);
-  const handle = setI(fire, intervalMs);
+  // Boot warms only the cheap global caches so first paint isn't stuck behind the
+  // per-root LLM warmables; the idle ticks then run the full pass.
+  runNow(() => { void run(true); });
+  const handle = setI(() => { void run(false); }, intervalMs);
   handle?.unref?.();   // don't keep the process alive just for warming
 
   return { stop() { clearI(handle); } };

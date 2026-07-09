@@ -13,7 +13,7 @@ import { discoverProjects } from "@agentgem/testbed";
 import { resolveDirs, resolveProject } from "@agentgem/model";
 import { introspectProject, introspectConfig } from "@agentgem/capture";
 import { claudeTranscriptsForCwd, scanWorkflow, bucketTranscriptsByCwd } from "@agentgem/insight";
-import { extractCandidates } from "@agentgem/insight";
+import { extractCandidates, transcriptToken, readAnalysisCache, writeAnalysisCache } from "@agentgem/insight";
 import type { WorkflowSignal } from "@agentgem/insight";
 import type { ProcedureCandidate, Reflection } from "@agentgem/insight";
 import { createLogger } from "@agentgem/base";
@@ -40,7 +40,9 @@ export type WorkflowItem = { key: string; name: string; confidence: "high" | "me
 export type ProjectLoad = {
   root: string;
   label: string;
-  signal: WorkflowSignal;
+  // The raw signal is only produced, never consumed by scoreProject/aggregateScorecard,
+  // so a cache hit (which doesn't store the heavy signal) can legitimately omit it.
+  signal?: WorkflowSignal;
   candidates: ProcedureCandidate[];
   reflections: Reflection[];
 };
@@ -116,6 +118,37 @@ export interface ScorecardDeps {
   loadProject(root: string, dir?: string, paths?: string[]): { signal: WorkflowSignal; candidates: ProcedureCandidate[]; reflections: Reflection[] } | null;
   transcriptsFor(root: string, dir?: string): string[];
   bucketTranscripts(dir?: string): Map<string, string[]>;
+  // Per-project analysis cache. Optional: when a deps object omits these (e.g. unit
+  // tests), every project is re-scanned — the caching is opt-in via the default deps.
+  readProjectCache?(key: string, token: string): unknown | null;
+  writeProjectCache?(key: string, token: string, value: unknown, nowMs: number): void;
+}
+
+// Per-project cache namespace. Each project is keyed by ITS OWN transcript token, so
+// adding a session to one project invalidates only that project — where the aggregate
+// token (route/stream/warm layers) would force a re-scan of all ~12 on any change.
+// Namespaced so it can't collide with the analyze pipeline, which caches a DIFFERENT
+// (LLM-derived) payload under the bare <root> key.
+export const SCORECARD_PROJECT_PREFIX = "scorecard:";
+type CachedProjectLoad = { label: string; candidates: ProcedureCandidate[]; reflections: Reflection[] };
+
+/** Load one project's deterministic candidates, cache-first when deps expose a cache.
+ *  The heavy `signal` is deliberately not cached (unused downstream) to keep entries small. */
+export function loadProjectCached(deps: ScorecardDeps, root: string, dir: string | undefined, paths: string[], nowMs: number): ProjectLoad | null {
+  const label = basename(root);
+  if (deps.readProjectCache && deps.writeProjectCache) {
+    const key = SCORECARD_PROJECT_PREFIX + root;
+    const token = transcriptToken(paths);
+    const hit = deps.readProjectCache(key, token) as CachedProjectLoad | null;
+    if (hit) return { root, label: hit.label, candidates: hit.candidates, reflections: hit.reflections };
+    const loaded = deps.loadProject(root, dir, paths);
+    if (!loaded) return null;
+    const entry: CachedProjectLoad = { label, candidates: loaded.candidates, reflections: loaded.reflections };
+    deps.writeProjectCache(key, token, entry, nowMs);
+    return { root, ...entry, signal: loaded.signal };
+  }
+  const loaded = deps.loadProject(root, dir, paths);
+  return loaded ? { root, label, ...loaded } : null;
 }
 
 // Default deps run the real, shipped analyze pipeline — the same wiring as
@@ -138,6 +171,8 @@ export const defaultScorecardDeps: ScorecardDeps = {
   },
   transcriptsFor: (root, dir) => claudeTranscriptsForCwd(resolveDirs(dir).claudeDir, root),
   bucketTranscripts: (dir) => bucketTranscriptsByCwd(resolveDirs(dir).claudeDir),
+  readProjectCache: (key, token) => readAnalysisCache(key, token),
+  writeProjectCache: (key, token, value, nowMs) => writeAnalysisCache(key, token, value, nowMs),
 };
 
 export function selectScorecardRoots(dir: string | undefined, projects: string[] | undefined, deps: ScorecardDeps = defaultScorecardDeps): string[] {
@@ -166,9 +201,9 @@ export function collectScorecard(
   let degraded = false;
   for (let i = 0; i < roots.length; i++) {
     const root = roots[i];
-    const loaded = deps.loadProject(root, dir, bucket.get(root) ?? []);
-    if (!loaded) { degraded = true; }
-    else loads.push({ root, label: basename(root), ...loaded });
+    const load = loadProjectCached(deps, root, dir, bucket.get(root) ?? [], nowMs);
+    if (!load) { degraded = true; }
+    else loads.push(load);
     if (opts.onProgress) {
       const partial = aggregateScorecard(loads, nowMs, degraded);
       opts.onProgress({ done: i + 1, total: roots.length, label: basename(root), partial: { breadth: partial.breadth, battleTested: partial.battleTested, portable: partial.portable } });

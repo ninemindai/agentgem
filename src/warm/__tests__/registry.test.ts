@@ -10,9 +10,32 @@ import { distillToken, writeDistillCache, claudeTranscriptsForCwd } from "@agent
 const orig = process.env.AGENTGEM_HOME;
 afterEach(() => { if (orig === undefined) delete process.env.AGENTGEM_HOME; else process.env.AGENTGEM_HOME = orig; });
 
+function observe() { return WARMABLES.find((w) => w.id === "observe")!; }
 function usage() { return WARMABLES.find((w) => w.id === "usage")!; }
 function scorecard() { return WARMABLES.find((w) => w.id === "scorecard")!; }
 function recall() { return WARMABLES.find((w) => w.id === "recall")!; }
+
+describe("observe warmable", () => {
+  it("runs first in the pass so the Overview's scan warms before anything else", () => {
+    expect(WARMABLES[0]?.id).toBe("observe");
+    expect(observe().cost).toBe("cheap");
+    expect(observe().scope).toBe("global");
+  });
+
+  it("warms the session scan for the given dir", async () => {
+    const home = mkdtempSync(join(tmpdir(), "reg-obs-"));
+    process.env.AGENTGEM_HOME = home;
+    const claudeDir = join(home, ".claude", "projects", "-proj");
+    mkdirSync(claudeDir, { recursive: true });
+    writeFileSync(join(claudeDir, "s.jsonl"), JSON.stringify({ type: "assistant", timestamp: "2026-07-01T00:00:00Z", cwd: "/proj", message: { model: "claude-opus-4-8", content: "hi" } }) + "\n");
+    try {
+      // A custom dir is never cached, so the warmable re-scans (reports "warmed") each call.
+      expect(await observe().warm(null, { dir: join(home, ".claude") })).toBe("warmed");
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+});
 
 describe("usage warmable", () => {
   it("warms on first call, then reports a hit on the second (same sessions)", async () => {

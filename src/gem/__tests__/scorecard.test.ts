@@ -189,4 +189,44 @@ describe("collectScorecard", () => {
     expect(spy.mock.calls[1][0].partial.breadth).toBeGreaterThanOrEqual(2);
     expect(spy.mock.calls[2][0].partial.breadth).toBeGreaterThanOrEqual(3);
   });
+
+  // Per-project cache: an in-memory (key -> {token, value}) store standing in for the
+  // real analysis cache. transcriptToken(paths) folds in path COUNT, so a project's
+  // token changes when its session list grows — the lever the cache turns on.
+  const makeCachingDeps = (buckets: () => Map<string, string[]>, loadProject = vi.fn((root: string) => ({ signal: sig(root), reflections: [], candidates: [cand({ key: `${root}-k`, priorConfidence: "high", skeleton: { name: "k", tools: ["Skill"] } as any })] }))): ScorecardDeps => {
+    const store = new Map<string, { token: string; value: unknown }>();
+    return {
+      discover: () => [{ path: "/r/a" }, { path: "/r/b" }],
+      loadProject,
+      transcriptsFor: () => [],
+      bucketTranscripts: buckets,
+      readProjectCache: (key, token) => { const e = store.get(key); return e && e.token === token ? e.value : null; },
+      writeProjectCache: (key, token, value) => { store.set(key, { token, value }); },
+    };
+  };
+
+  it("caches each project's load and serves both from cache on the second pass", () => {
+    const loadProject = vi.fn((root: string) => ({ signal: sig(root), reflections: [], candidates: [cand({ key: `${root}-k`, priorConfidence: "high", skeleton: { name: "k", tools: ["Skill"] } as any })] }));
+    const deps = makeCachingDeps(() => new Map([["/r/a", ["a1"]], ["/r/b", ["b1"]]]), loadProject);
+    const sc1 = collectScorecard(undefined, undefined, 1, { deps });
+    expect(loadProject).toHaveBeenCalledTimes(2);      // cold: both scanned
+    loadProject.mockClear();
+    const sc2 = collectScorecard(undefined, undefined, 2, { deps });
+    expect(loadProject).not.toHaveBeenCalled();         // warm: both from cache
+    expect(sc2).toEqual(expect.objectContaining({ breadth: sc1.breadth, battleTested: sc1.battleTested, portable: sc1.portable }));
+    expect(sc2.projects.map((p) => p.root)).toEqual(["/r/a", "/r/b"]);
+  });
+
+  it("re-scans only the project whose transcripts changed", () => {
+    let aPaths = ["a1"];
+    const loadProject = vi.fn((root: string) => ({ signal: sig(root), reflections: [], candidates: [] }));
+    const deps = makeCachingDeps(() => new Map([["/r/a", aPaths], ["/r/b", ["b1"]]]), loadProject);
+    collectScorecard(undefined, undefined, 1, { deps });
+    expect(loadProject).toHaveBeenCalledTimes(2);
+    loadProject.mockClear();
+    aPaths = ["a1", "a2"];   // a new session lands in /r/a → its token changes; /r/b unchanged
+    collectScorecard(undefined, undefined, 2, { deps });
+    expect(loadProject).toHaveBeenCalledTimes(1);
+    expect(loadProject).toHaveBeenCalledWith("/r/a", undefined, ["a1", "a2"]);
+  });
 });
