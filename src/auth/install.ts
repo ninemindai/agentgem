@@ -5,7 +5,7 @@
 // credentialed CORS for the AGENTGEM_WEB_ORIGINS allowlist. SameSite=Lax + the OAuth `state` are the
 // CSRF defenses (a cross-site POST carries no session cookie under Lax).
 import type { AppDb, AccountVerifier, OrgMembership } from "@agentgem/aggregator";
-import { upsertAccount, createSession, deleteSession, resolveSession, generateSessionToken, setAccountScopes, getAccountScopes, createHandoffCode, redeemHandoffCode } from "@agentgem/aggregator";
+import { upsertAccount, createSession, deleteSession, resolveLegacySession, generateSessionToken, setAccountScopes, getAccountScopes, createHandoffCode, redeemHandoffCode } from "@agentgem/aggregator";
 import { signState, verifyState } from "./state.js";
 import { SESSION_COOKIE, parseCookies, serializeSessionCookie, clearSessionCookie } from "./cookie.js";
 import { createLogger } from "@agentgem/base";
@@ -103,7 +103,7 @@ export function meHandler(deps: AuthDeps) {
     authCors(req, res, deps.config.webOrigins);
     if (req.method === "OPTIONS") { res.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS").set("Access-Control-Allow-Headers", "content-type, authorization").status(204).send(""); return; }
     const token = sessionTokenFromReq(req);
-    const who = token ? await resolveSession(deps.db, token) : null;
+    const who = token ? await resolveLegacySession(deps.db, token) : null;
     if (!who) { res.json({ authenticated: false }); return; }
     // Include the caller's captured org scopes (with role) — the "my orgs" nav on the profile
     // page. Authed-only and self-only, so private org memberships are never exposed publicly.
@@ -133,7 +133,7 @@ const HANDOFF_TTL_MS = 60 * 1000;
 export function handoffStartHandler(deps: AuthDeps) {
   return async (req: Req, res: Res): Promise<void> => {
     const token = sessionTokenFromReq(req);
-    const who = token ? await resolveSession(deps.db, token) : null;
+    const who = token ? await resolveLegacySession(deps.db, token) : null;
     if (!who) { res.status(401).json({ error: "unauthenticated" }); return; }
     const { code, expiresAt } = await createHandoffCode(deps.db, who.accountId, HANDOFF_TTL_MS);
     res.json({ code, expiresAt });

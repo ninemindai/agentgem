@@ -16,16 +16,15 @@
 //
 // Membership is checked against group_members, never against a GitHub login. That is the point of
 // the table.
-import type { AppDb } from "@agentgem/aggregator";
+import type { AppDb, makeAuth } from "@agentgem/aggregator";
 import {
   resolveSession, createNativeGroup, deleteNativeGroup, listGroupsForAccount, listGroupMembers,
   groupMemberRole, removeMemberGuarded,
   createGroupInvite, redeemGroupInvite, revokeGroupInvite, listGroupInvites,
   type GroupRole,
 } from "@agentgem/aggregator";
-import { SESSION_COOKIE, parseCookies } from "../auth/cookie.js";
 
-export interface GroupsDeps { db: AppDb; webOrigins: string[] }
+export interface GroupsDeps { db: AppDb; auth: ReturnType<typeof makeAuth>; webOrigins: string[] }
 
 interface Req { method: string; path: string; query: Record<string, unknown>; body: Record<string, unknown>; headers: Record<string, string | undefined> }
 interface Res { status(c: number): Res; set(k: string, v: string): Res; json(b: unknown): Res; send(b: unknown): Res }
@@ -58,10 +57,7 @@ function preflight(res: Res): void {
 }
 
 async function whoami(deps: GroupsDeps, req: Req): Promise<{ accountId: string; login: string } | null> {
-  const auth = req.headers["authorization"];
-  const bearer = auth && /^Bearer\s+/i.test(auth) ? auth.replace(/^Bearer\s+/i, "").trim() : "";
-  const token = bearer || parseCookies(req.headers["cookie"])[SESSION_COOKIE];
-  const who = token ? await resolveSession(deps.db, token) : null;
+  const who = await resolveSession(deps.auth, req.headers);
   return who ? { accountId: who.accountId, login: who.login } : null;
 }
 

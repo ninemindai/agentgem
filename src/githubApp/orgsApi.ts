@@ -8,14 +8,13 @@
 //   GET /api/orgs/skill-body — on-demand body proxy via installation token. Bodies are never
 //                              stored server-side (metadata-only custody); orgSkillExists pins
 //                              (source,path) to THIS org before anything is fetched.
-import type { AppDb } from "@agentgem/aggregator";
+import type { AppDb, makeAuth } from "@agentgem/aggregator";
 import { resolveSession, resolveOrgAccess, installationForScope, listOrgSkills, orgSkillExists } from "@agentgem/aggregator";
 import { ghContents, decodeFile, assertSkillsPath, type Http, type GithubCfg } from "@agentgem/distribute";
-import { SESSION_COOKIE, parseCookies } from "../auth/cookie.js";
 import { defaultScopeTtlMs } from "../usage/install.js";
 import type { InstallationTokens } from "./client.js";
 
-export interface OrgsApiDeps { db: AppDb; webOrigins: string[]; tokens: InstallationTokens | null; http: Http; scopeTtlMs?: number }
+export interface OrgsApiDeps { db: AppDb; auth: ReturnType<typeof makeAuth>; webOrigins: string[]; tokens: InstallationTokens | null; http: Http; scopeTtlMs?: number }
 
 interface Req { method: string; path: string; query: Record<string, unknown>; body: Record<string, unknown>; headers: Record<string, string | undefined>; get(n: string): string | undefined }
 interface Res { status(c: number): Res; set(k: string, v: string): Res; setHeader(k: string, v: string): Res; type(t: string): Res; json(b: unknown): Res; send(b: unknown): Res }
@@ -33,10 +32,7 @@ function preflight(res: Res): void {
   res.set("Access-Control-Allow-Methods", "GET, OPTIONS").set("Access-Control-Allow-Headers", "content-type, authorization").status(204).send("");
 }
 async function whoami(deps: OrgsApiDeps, req: Req): Promise<{ accountId: string; login: string } | null> {
-  const auth = req.headers["authorization"];
-  const bearer = auth && /^Bearer\s+/i.test(auth) ? auth.replace(/^Bearer\s+/i, "").trim() : "";
-  const token = bearer || parseCookies(req.headers["cookie"])[SESSION_COOKIE];
-  const who = token ? await resolveSession(deps.db, token) : null;
+  const who = await resolveSession(deps.auth, req.headers);
   return who ? { accountId: who.accountId, login: who.login } : null;
 }
 function scopeParam(req: Req): string | null {

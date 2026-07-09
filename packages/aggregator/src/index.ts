@@ -31,3 +31,4 @@ export * from "./groupInvites.js";
 export * from "./auth/betterAuth.js";
 export * from "./auth/mintSession.js";
 export * from "./auth/migrateAccounts.js";
+export * from "./auth/testCookie.js";

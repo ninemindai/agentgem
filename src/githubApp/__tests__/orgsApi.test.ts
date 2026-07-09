@@ -3,10 +3,11 @@
 import { describe, it, expect } from "vitest";
 import { generateKeyPairSync } from "node:crypto";
 import {
-  makeTestDb, upsertAccount, createSession, generateSessionToken,
+  makeTestDb, makeAuth, mintSession,
   upsertInstallation, upsertOrgMember, replaceOrgRepoSkills,
   setInstallationSuspended, setAccountScopes,
 } from "@agentgem/aggregator";
+import type { AppDb } from "@agentgem/aggregator";
 import type { Http } from "@agentgem/distribute";
 import { InstallationTokens } from "../client.js";
 import { orgAppHandler, orgSkillsHandler, orgSkillBodyHandler, type OrgsApiDeps } from "../orgsApi.js";
@@ -34,8 +35,15 @@ const bodyHttp: Http = async (url) => {
 };
 const tokenFetch = (async () => ({ ok: true, status: 200, json: async () => ({ token: "itok", expires_at: new Date(Date.now() + 3_600_000).toISOString() }) })) as unknown as typeof fetch;
 
+const authOpts = {
+  secret: "test-secret", baseURL: "http://localhost:4000",
+  githubClientId: "gid", githubClientSecret: "gsecret",
+  webOrigins,
+};
+
 async function setup(): Promise<{ deps: OrgsApiDeps; memberToken: string; strangerToken: string; aliceAccountId: string }> {
-  const db = await makeTestDb();
+  const db: AppDb = await makeTestDb();
+  const auth = makeAuth({ db, ...authOpts });
   await upsertInstallation(db, { installationId: 7, orgScope: "acme", repoSelection: "selected", suspended: false });
   await upsertOrgMember(db, "acme", "alice", "member");
   await replaceOrgRepoSkills(db, "acme", "acme/skills", [
@@ -43,14 +51,15 @@ async function setup(): Promise<{ deps: OrgsApiDeps; memberToken: string; strang
   ]);
   let aliceAccountId = "";
   const mk = async (login: string) => {
-    const a = await upsertAccount(db, { provider: "github", accountId: login, login });
-    if (login === "alice") aliceAccountId = a.id;
-    const { token } = generateSessionToken();
-    await createSession(db, a.id, token, 60_000);
+    const ctx = await auth.$context;
+    const user = await ctx.internalAdapter.createUser({ name: login, email: `${login}@example.com`, emailVerified: true, login } as never);
+    await ctx.internalAdapter.createAccount({ userId: user.id, providerId: "github", accountId: login } as never);
+    if (login === "alice") aliceAccountId = user.id;
+    const { token } = await mintSession(auth, user.id);
     return token;
   };
   return {
-    deps: { db, webOrigins, tokens: new InstallationTokens({ appId: "1", privateKey: pem }, tokenFetch), http: bodyHttp },
+    deps: { db, auth, webOrigins, tokens: new InstallationTokens({ appId: "1", privateKey: pem }, tokenFetch), http: bodyHttp },
     memberToken: await mk("alice"),
     strangerToken: await mk("mallory"),
     aliceAccountId,

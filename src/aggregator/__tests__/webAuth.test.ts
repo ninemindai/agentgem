@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
 import { makeTestDb } from "@agentgem/aggregator";
-import { generateSessionToken, upsertAccount, createSession, resolveSession, deleteSession } from "@agentgem/aggregator";
+import { generateSessionToken, upsertAccount, createSession, resolveLegacySession, deleteSession } from "@agentgem/aggregator";
 
 describe("webAuth store", () => {
   it("generateSessionToken returns a token + its sha256 hash (hash != token)", () => {
@@ -21,22 +21,22 @@ describe("webAuth store", () => {
     expect(b.login).toBe("octocat-renamed"); // login refreshed
   });
 
-  it("createSession + resolveSession round-trips and stores only the hash", async () => {
+  it("createSession + resolveLegacySession round-trips and stores only the hash", async () => {
     const db = await makeTestDb();
     const acct = await upsertAccount(db, { provider: "github", accountId: "7", login: "neo" });
     const { token } = generateSessionToken();
     await createSession(db, acct.id, token, 60_000);
-    const r = await resolveSession(db, token);
+    const r = await resolveLegacySession(db, token);
     expect(r).toEqual({ login: "neo", avatarUrl: null, accountId: acct.id });
   });
 
-  it("resolveSession returns null for an unknown token and for an expired session", async () => {
+  it("resolveLegacySession returns null for an unknown token and for an expired session", async () => {
     const db = await makeTestDb();
-    expect(await resolveSession(db, "nope")).toBeNull();
+    expect(await resolveLegacySession(db, "nope")).toBeNull();
     const acct = await upsertAccount(db, { provider: "github", accountId: "9", login: "trin" });
     const { token } = generateSessionToken();
     await createSession(db, acct.id, token, -1000); // already expired
-    expect(await resolveSession(db, token)).toBeNull();
+    expect(await resolveLegacySession(db, token)).toBeNull();
   });
 
   it("deleteSession removes it", async () => {
@@ -45,6 +45,6 @@ describe("webAuth store", () => {
     const { token } = generateSessionToken();
     await createSession(db, acct.id, token, 60_000);
     await deleteSession(db, token);
-    expect(await resolveSession(db, token)).toBeNull();
+    expect(await resolveLegacySession(db, token)).toBeNull();
   });
 });
