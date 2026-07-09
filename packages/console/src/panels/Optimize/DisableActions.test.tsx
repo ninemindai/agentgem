@@ -120,7 +120,7 @@ describe("Prune disable actions", () => {
   it("repaints the server-returned row into the prune table on re-enable (prior-session, no Refresh)", async () => {
     // old-skill was disabled in a PRIOR session: present in `disabled`, absent from `artifacts`
     // and not in any client stash — the row can only come from the server's enable response.
-    const restoredRow = { name: "old-skill", type: "skill", source: "standalone", contextTokens: 400, uses: 0, lastUsedMs: null, prune: true, change: { file: "~/.claude/skills/old-skill", key: "remove" } };
+    const restoredRow = { name: "old-skill", type: "skill", source: "standalone", layer: "global", contextTokens: 400, uses: 0, lastUsedMs: null, prune: true, change: { file: "~/.claude/skills/old-skill", key: "remove" } };
     const fetchMock = vi.fn().mockResolvedValueOnce(res({ results: [{ type: "skill", name: "old-skill", ok: true, message: "restored" }], artifacts: [restoredRow] }));
     vi.stubGlobal("fetch", fetchMock);
     function Harness() {
