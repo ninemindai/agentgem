@@ -53,19 +53,29 @@ async function anchorAndScopes(db: AppDb, account: { userId: string; providerId:
   if (account.providerId !== "github") return;
   const row = (await db.execute(sql`select login, image from "user" where id = ${account.userId}`)).rows?.[0] as { login?: string; image?: string } | undefined;
   const login = row?.login;
-  // 1) legacy accounts ANCHOR — LOAD-BEARING, NOT best-effort (Codex re-review #4). Every better-auth
-  //    user MUST have a same-id accounts row or their first uuid-FK write (stars/reviews/usage) throws.
-  //    accounts.id = user.id (uuid). No existing row for a new user, so the insert with id=user.id
-  //    succeeds; a migrated user re-logging in already has id=user.id, so the (provider,provider_account_id)
-  //    conflict updates login/avatar in place (id unchanged). Mismatched ids are caught by the migration
-  //    conflict check (1a-Task 5), so they cannot reach here. On CREATE, let a failure THROW to fail the
-  //    sign-in — a user with no anchor is broken and must not get a session.
-  if (login) await upsertAccount(db, { provider: "github", accountId: account.accountId, login, avatarUrl: row?.image ?? null, id: account.userId } as never);
-  else if (isCreate) throw new Error("anchor: user has no login; cannot create accounts anchor");
+  // 1) legacy accounts ANCHOR. accounts.id = user.id (uuid). No existing row for a new user, so the
+  //    insert with id=user.id succeeds; a migrated user re-logging in already has id=user.id, so the
+  //    (provider,provider_account_id) conflict updates login/avatar in place (id unchanged). Mismatched
+  //    ids are caught by the migration conflict check (1a-Task 5), so they cannot reach here.
+  //    On CREATE, the write is LOAD-BEARING — let a failure THROW to fail the sign-in, since a user
+  //    with no anchor is broken and must not get a session.
+  //    On UPDATE (re-login), the anchor already exists — the write is just refreshing login/avatar,
+  //    so it's best-effort: a transient failure here must not block an otherwise-legitimate sign-in.
+  if (login) {
+    if (isCreate) {
+      await upsertAccount(db, { provider: "github", accountId: account.accountId, login, avatarUrl: row?.image ?? null, id: account.userId } as never);
+    } else {
+      try {
+        await upsertAccount(db, { provider: "github", accountId: account.accountId, login, avatarUrl: row?.image ?? null, id: account.userId } as never);
+      } catch { /* re-login refresh is best-effort; the anchor already exists */ }
+    }
+  } else if (isCreate) {
+    throw new Error("anchor: user has no login; cannot create accounts anchor");
+  }
   // 2) org scopes — best-effort, never throw (mirrors today's tolerance).
   try {
     if (account.accessToken && login) {
-      const memberships = await fetchOrgMemberships(account.accessToken).catch(() => []);
+      const memberships = await fetchOrgMemberships(account.accessToken);
       await setAccountScopes(db, account.userId, [{ scope: login, role: "self" as const }, ...memberships.map((m) => ({ scope: m.login, role: m.role }))]);
     }
   } catch { /* scopes are additive; never fail sign-in over them */ }
