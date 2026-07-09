@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { IdentityProvider, useIdentity } from "../IdentityProvider.js";
@@ -11,6 +12,25 @@ function Probe() {
     <div>
       <span data-testid="login">{status === null ? "loading" : status.bound ? `@${status.login}` : "unbound"}</span>
       <button onClick={() => void refresh()}>refresh</button>
+    </div>
+  );
+}
+
+// Exercises disconnect() and surfaces both outcomes (applied status, or a rejection
+// the caller can catch) as text, the same way Settings' disconnectGitHub does.
+function DisconnectProbe() {
+  const { status, disconnect } = useIdentity();
+  const [outcome, setOutcome] = useState("idle");
+  const run = () => {
+    disconnect()
+      .then(() => setOutcome("resolved"))
+      .catch((e: unknown) => setOutcome(`rejected: ${e instanceof Error ? e.message : String(e)}`));
+  };
+  return (
+    <div>
+      <span data-testid="login">{status === null ? "loading" : status.bound ? `@${status.login}` : "unbound"}</span>
+      <span data-testid="outcome">{outcome}</span>
+      <button onClick={run}>disconnect</button>
     </div>
   );
 }
@@ -58,5 +78,26 @@ describe("IdentityProvider", () => {
 
     await screen.findByText("unbound");
     expect(call).toHaveBeenCalledTimes(1);
+  });
+
+  it("disconnect() applies the route's returned record to the context", async () => {
+    vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob" } as never);
+    vi.spyOn(routes.bindDisconnectRoute, "call").mockResolvedValue({ bound: false } as never);
+    render(<IdentityProvider apiBase=""><DisconnectProbe /></IdentityProvider>);
+    expect(await screen.findByText("@bob")).toBeTruthy();
+    fireEvent.click(screen.getByText("disconnect"));
+    expect(await screen.findByText("unbound")).toBeTruthy();
+    expect(await screen.findByText("resolved")).toBeTruthy();
+  });
+
+  it("disconnect() rejects when the route throws, so the caller can catch it", async () => {
+    vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob" } as never);
+    vi.spyOn(routes.bindDisconnectRoute, "call").mockRejectedValue(new Error("network down"));
+    render(<IdentityProvider apiBase=""><DisconnectProbe /></IdentityProvider>);
+    expect(await screen.findByText("@bob")).toBeTruthy();
+    fireEvent.click(screen.getByText("disconnect"));
+    expect(await screen.findByText("rejected: network down")).toBeTruthy();
+    // The failed disconnect must not clobber the still-bound status.
+    expect(screen.getByText("@bob")).toBeTruthy();
   });
 });

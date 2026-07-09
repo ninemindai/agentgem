@@ -4,7 +4,7 @@
 // Shell. Fetched on mount and on explicit refresh() — never polled: the bind only
 // changes as a result of a user action in this app.
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactElement, type ReactNode } from "react";
-import { bindStatusRoute, makeClient } from "../api/routes.js";
+import { bindDisconnectRoute, bindStatusRoute, makeClient } from "../api/routes.js";
 
 export type IdentityStatus = {
   bound: boolean;
@@ -17,7 +17,13 @@ export type IdentityStatus = {
 type IdentityContextValue = {
   status: IdentityStatus | null; // null until the first fetch settles
   refresh: () => Promise<void>;
-  setStatus: (s: IdentityStatus) => void;
+  // No raw setter is exposed here on purpose: every field but `bound` is optional,
+  // so a wide setter accepts partial writes like `{ bound: true, login }` that
+  // clobber the full record refresh() just fetched, silently dropping avatarUrl /
+  // sessionActive. Three implementers wrote exactly that optimistic write on this
+  // branch before it was caught and reverted. disconnect() is the only mutation
+  // this context needs, and it always applies a complete, server-returned record.
+  disconnect: () => Promise<void>;
 };
 
 const IdentityContext = createContext<IdentityContextValue | null>(null);
@@ -43,11 +49,17 @@ export function IdentityProvider({ apiBase, children }: { apiBase: string; child
 
   useEffect(() => { void refresh(); }, [refresh]);
 
+  // Clear the local binding. The route returns the fresh (unbound) record, which we
+  // apply directly — no optimistic partial write. Rethrow on failure so the caller
+  // (Settings) can surface an error message; the context itself doesn't track it.
+  const disconnect = useCallback(async () => {
+    setStatus(await bindDisconnectRoute.call(makeClient(apiBase), { body: {} }));
+  }, [apiBase]);
+
   // Memoized: without this, every render of IdentityProvider (e.g. Shell re-rendering
   // for unrelated reasons) creates a new object identity, forcing every useIdentity()
-  // consumer to re-render even when status/refresh haven't changed. setStatus is
-  // React's stable setter and doesn't need to be a dependency.
-  const value = useMemo(() => ({ status, refresh, setStatus }), [status, refresh]);
+  // consumer to re-render even when status/refresh/disconnect haven't changed.
+  const value = useMemo(() => ({ status, refresh, disconnect }), [status, refresh, disconnect]);
 
   return (
     <IdentityContext.Provider value={value}>
