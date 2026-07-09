@@ -64,6 +64,7 @@ import { PlayController } from "./play.controller.js";
 import { resolveAggregatorDb, type AppDb, GitHubVerifier, fetchOrgMemberships, migrateAccountsToBetterAuth } from "@agentgem/aggregator";
 import { mountGating } from "./gating.js";
 import { installAuth, githubExchangeCode } from "./auth/install.js";
+import { installHandoff } from "./auth/handoff.js";
 import { mountAuth, AUTH_BINDING } from "./auth/mount.js";
 import { makeAuth } from "@agentgem/aggregator";
 import { installStars } from "./stars/install.js";
@@ -229,6 +230,13 @@ export async function createApp(port: number): Promise<RestApplication> {
       cookieDomain: process.env.AGENTGEM_SESSION_COOKIE_DOMAIN,
     });
     app.bind(AUTH_BINDING).to(auth);
+    // Desktop→web SSO handoff (1b-Task 4): registered BEFORE mountAuth's catch-all below. Once
+    // mountAuth's prefix flips from "/api/betterauth" to "/api/auth" (Plan 1b-Task 5), these two
+    // paths ("/api/auth/handoff/start", "/api/auth/handoff/redeem") would sit under better-auth's
+    // own catch-all namespace — Express dispatches to the FIRST matching route registered, so
+    // installHandoff must run first or the catch-all would swallow them. Neither path collides
+    // with a better-auth-served route (sign-in/*, sign-out, get-session, callback/*, ...).
+    installHandoff(server.expressApp as never, { db: aggDb, auth, config: { webOrigins } });
     mountAuth(server.expressApp as never, auth, webOrigins, "/api/betterauth");
     // One-time boot backfill (Plan 1a-Task 4): give every existing accounts row a same-id
     // better-auth user/account anchor before any sign-in runs, so a pre-existing github user

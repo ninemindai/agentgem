@@ -5,7 +5,7 @@
 // credentialed CORS for the AGENTGEM_WEB_ORIGINS allowlist. SameSite=Lax + the OAuth `state` are the
 // CSRF defenses (a cross-site POST carries no session cookie under Lax).
 import type { AppDb, AccountVerifier, OrgMembership } from "@agentgem/aggregator";
-import { upsertAccount, createSession, deleteSession, resolveLegacySession, generateSessionToken, setAccountScopes, getAccountScopes, createHandoffCode, redeemHandoffCode } from "@agentgem/aggregator";
+import { upsertAccount, createSession, deleteSession, resolveLegacySession, generateSessionToken, setAccountScopes, getAccountScopes } from "@agentgem/aggregator";
 import { signState, verifyState } from "./state.js";
 import { SESSION_COOKIE, parseCookies, serializeSessionCookie, clearSessionCookie } from "./cookie.js";
 import { createLogger } from "@agentgem/base";
@@ -43,13 +43,6 @@ function sessionTokenFromReq(req: Req): string | undefined {
   const auth = req.headers["authorization"];
   if (auth && /^Bearer\s+/i.test(auth)) return auth.replace(/^Bearer\s+/i, "").trim() || undefined;
   return parseCookies(req.headers["cookie"])[SESSION_COOKIE];
-}
-
-/** Return the allowlisted return URL, or the first web origin if `ret` is missing/invalid. Reused by
- *  the SSO handoff redeem to prevent an open redirect (never 302 to an off-allowlist target). */
-function safeReturn(cfg: AuthConfig, ret: string | undefined): string {
-  if (ret && cfg.webOrigins.some((o) => ret === o || ret.startsWith(o + "/"))) return ret;
-  return firstWebOrigin(cfg);
 }
 
 export function loginHandler(deps: AuthDeps) {
@@ -126,36 +119,6 @@ export function logoutHandler(deps: AuthDeps) {
   };
 }
 
-const HANDOFF_TTL_MS = 60 * 1000;
-
-/** Desktop→web SSO, step 1: the local app (bearer-authenticated) mints a single-use handoff code.
- *  Server-to-server call (no browser), so no CORS. 401 when no valid session is presented. */
-export function handoffStartHandler(deps: AuthDeps) {
-  return async (req: Req, res: Res): Promise<void> => {
-    const token = sessionTokenFromReq(req);
-    const who = token ? await resolveLegacySession(deps.db, token) : null;
-    if (!who) { res.status(401).json({ error: "unauthenticated" }); return; }
-    const { code, expiresAt } = await createHandoffCode(deps.db, who.accountId, HANDOFF_TTL_MS);
-    res.json({ code, expiresAt });
-  };
-}
-
-/** Desktop→web SSO, step 2: the browser opens this with ?code=&return=. Redeem the code (single-use),
- *  mint a FRESH web session for the bound account, Set-Cookie it, and 302 to an allowlisted return
- *  (safeReturn blocks open redirects). Invalid/expired/used code → 302 with ?auth_error=handoff. */
-export function handoffRedeemHandler(deps: AuthDeps) {
-  return async (req: Req, res: Res): Promise<void> => {
-    const code = String((req.query.code as string | undefined) ?? "");
-    const dest = safeReturn(deps.config, req.query.return as string | undefined);
-    const accountId = code ? await redeemHandoffCode(deps.db, code) : null;
-    if (!accountId) { res.redirect(302, `${dest}?auth_error=handoff`); return; }
-    const { token: sessionToken } = generateSessionToken();
-    await createSession(deps.db, accountId, sessionToken, deps.config.sessionTtlMs);
-    res.setHeader("Set-Cookie", serializeSessionCookie(sessionToken, { domain: deps.config.cookieDomain, maxAgeSec: Math.floor(deps.config.sessionTtlMs / 1000) }));
-    res.redirect(302, dest);
-  };
-}
-
 /** The real GitHub authorization-code exchange. */
 export function githubExchangeCode(clientId: string, clientSecret: string): (code: string) => Promise<string> {
   return async (code: string): Promise<string> => {
@@ -176,9 +139,7 @@ export function installAuth(expressApp: ExpressApp, deps: AuthDeps): void {
   expressApp.get("/api/auth/github/callback", callbackHandler(deps));
   expressApp.get("/api/auth/me", meHandler(deps));
   expressApp.post("/api/auth/logout", logoutHandler(deps));
-  // Desktop→web SSO handoff: local app mints a code (bearer), browser redeems it for a cookie.
-  expressApp.post("/api/auth/handoff/start", handoffStartHandler(deps));
-  expressApp.get("/api/auth/github/handoff", handoffRedeemHandler(deps));
+  // The desktop→web SSO handoff relocated to auth/handoff.ts's installHandoff (1b-Task 4).
   // CORS preflight: browsers send OPTIONS for credentialed cross-origin XHR; Express won't route it
   // to the GET/POST handlers, so register it explicitly. The handlers' OPTIONS branch answers 204+CORS.
   expressApp.options("/api/auth/me", meHandler(deps));

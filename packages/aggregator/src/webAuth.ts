@@ -33,6 +33,18 @@ export async function upsertAccount(
   return rows[0];
 }
 
+/** Look up the legacy `accounts` anchor row by id — the SSO handoff redeem's only handle on the
+ *  bound account is the uuid `redeemHandoffCode` returns, so it needs this to rebuild the `Account`
+ *  shape `ensureBetterAuthUser` requires. */
+export async function getAccountById(db: AppDb, id: string): Promise<Account | null> {
+  const rows = await db
+    .select({ id: accounts.id, provider: accounts.provider, providerAccountId: accounts.providerAccountId, login: accounts.login, avatarUrl: accounts.avatarUrl })
+    .from(accounts)
+    .where(eq(accounts.id, id))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
 export async function createSession(db: AppDb, accountId: string, token: string, ttlMs: number): Promise<void> {
   await db.insert(webSessions).values({
     id: randomUUID(),

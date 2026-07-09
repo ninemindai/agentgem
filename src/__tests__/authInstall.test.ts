@@ -3,7 +3,7 @@
 import { describe, it, expect } from "vitest";
 import { makeTestDb } from "@agentgem/aggregator";
 import { resolveLegacySession, accountOwnsScope } from "@agentgem/aggregator";
-import { loginHandler, callbackHandler, meHandler, logoutHandler, handoffStartHandler, handoffRedeemHandler } from "../auth/install.js";
+import { loginHandler, callbackHandler, meHandler, logoutHandler } from "../auth/install.js";
 import { SESSION_COOKIE } from "../auth/cookie.js";
 
 const cfg = {
@@ -179,44 +179,6 @@ describe("auth handlers", () => {
       const me = mockRes();
       await meHandler(deps(db))(mockReq({ headers: { authorization: `Bearer ${token}` } }) as any, me as any);
       expect(me._body).toEqual({ login: "octocat", avatarUrl: null, orgs: [] });
-    }
-  });
-
-  it("handoff: no session → 401; with a bearer mints a single-use code the redeem swaps for a cookie", async () => {
-    { const db = await makeTestDb();
-      const noauth = mockRes();
-      await handoffStartHandler(deps(db))(mockReq({ method: "POST" }) as any, noauth as any);
-      expect(noauth._status).toBe(401);
-
-      const bearer = await bearerFor(db);
-      const start = mockRes();
-      await handoffStartHandler(deps(db))(mockReq({ method: "POST", headers: { authorization: `Bearer ${bearer}` } }) as any, start as any);
-      const code = (start._body as any).code as string;
-      expect(typeof code).toBe("string");
-
-      const redeem = mockRes();
-      await handoffRedeemHandler(deps(db))(mockReq({ query: { code, return: "https://app.agentgem.ai/gems" } }) as any, redeem as any);
-      expect(redeem._redirect).toBe("https://app.agentgem.ai/gems");
-      const newToken = (redeem._headers["set-cookie"] as string).split(";")[0].split("=")[1];
-      expect((await resolveLegacySession(db, newToken))?.login).toBe("octocat");  // fresh web session works
-
-      const again = mockRes();  // single-use: second redeem fails
-      await handoffRedeemHandler(deps(db))(mockReq({ query: { code, return: "https://app.agentgem.ai" } }) as any, again as any);
-      expect(again._redirect).toContain("auth_error=handoff");
-      expect(again._headers["set-cookie"]).toBeUndefined();
-    }
-  });
-
-  it("handoff redeem refuses an off-allowlist return (open-redirect guard)", async () => {
-    { const db = await makeTestDb();
-      const bearer = await bearerFor(db);
-      const start = mockRes();
-      await handoffStartHandler(deps(db))(mockReq({ method: "POST", headers: { authorization: `Bearer ${bearer}` } }) as any, start as any);
-      const code = (start._body as any).code as string;
-      const redeem = mockRes();
-      await handoffRedeemHandler(deps(db))(mockReq({ query: { code, return: "https://evil.example/x" } }) as any, redeem as any);
-      expect(redeem._redirect!.startsWith("https://app.agentgem.ai")).toBe(true);
-      expect(redeem._redirect).not.toContain("evil.example");
     }
   });
 
