@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
 import { useHermeticHome } from "../../__tests__/support/hermeticHome.js";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { scanSessions, parseClaudeTranscript, parseCodexTranscript, scanSessionsCached, clearScanCache, type SessionStat } from "@agentgem/insight";
@@ -343,5 +343,43 @@ describe("scanSessionsCached", () => {
     // the forced scan repopulates the cache, so a subsequent plain call hits it
     const third = await scanSessionsCached();
     expect(third).toBe(forced);
+  });
+});
+
+describe("incremental per-file parse cache", () => {
+  // Own temp store (not the shared fixtures) since one test mutates a transcript.
+  let dir: string, cdir: string, xdir: string, file: string;
+  const line = (ts: string) => JSON.stringify({ type: "assistant", sessionId: "sx", cwd: "/w", timestamp: ts, message: { role: "assistant", model: "claude-opus-4-8", usage: { input_tokens: 10, output_tokens: 5 } } }) + "\n";
+  beforeEach(() => {
+    clearScanCache();   // also clears the per-file parse cache
+    dir = mkdtempSync(join(tmpdir(), "incr-"));
+    cdir = join(dir, ".claude"); xdir = join(dir, ".codex");
+    const proj = join(cdir, "projects", "p");
+    mkdirSync(proj, { recursive: true });
+    mkdirSync(join(xdir, "sessions"), { recursive: true });
+    file = join(proj, "sx.jsonl");
+    writeFileSync(file, line("2026-06-28T10:00:00.000Z"));
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("serves the same parsed SessionStat object for an unchanged file", async () => {
+    const a = await scanSessions({ claudeDir: cdir, codexDir: xdir });
+    const b = await scanSessions({ claudeDir: cdir, codexDir: xdir });
+    expect(a[0]).toBeDefined();
+    expect(b[0]).toBe(a[0]);   // reused from cache → read + JSON.parse skipped
+  });
+
+  it("re-parses a file whose bytes changed, but keeps others cached", async () => {
+    const other = join(cdir, "projects", "p", "sy.jsonl");
+    writeFileSync(other, line("2026-06-28T09:00:00.000Z"));
+    const a = await scanSessions({ claudeDir: cdir, codexDir: xdir });
+    const ax = a.find((s) => s.cwd === "/w" && s.sessionId === "sx")!;
+    const ay = a.find((s) => s.sessionId === "sy")!;
+    appendFileSync(file, line("2026-06-28T10:01:00.000Z"));   // sx grows → new (mtime,size)
+    const b = await scanSessions({ claudeDir: cdir, codexDir: xdir });
+    const bx = b.find((s) => s.sessionId === "sx")!;
+    const by = b.find((s) => s.sessionId === "sy")!;
+    expect(bx).not.toBe(ax);   // changed file re-parsed
+    expect(by).toBe(ay);       // untouched file still served from cache
   });
 });
