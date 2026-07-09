@@ -60,6 +60,10 @@ export interface ChatRouteDeps {
   // Project launch: resolve a project ROOT (raw path from the body) to a VALIDATED canonical
   // cwd, or null if it isn't in the server's discovered/recent allow-list. Absent → unavailable.
   resolveProjectCwd?: (root: string) => string | null;
+  // The neutral cwd (agentgemHome()/.agentgem/chat) — where a chat with no `project` and no
+  // `miniapp` must always run. Passed explicitly so a neutral session never depends on
+  // process.cwd() (which may itself be an allow-listed project and get mistaken for one).
+  neutralCwd: string;
   // Install a missing adapter on demand (CLI only). Throws an error carrying
   // code:"consent_required" when consent is absent; the route maps that to 409.
   installAgent?: (id: string, consent: boolean) => Promise<{ available: boolean; source: string; needsLogin: boolean }>;
@@ -73,7 +77,7 @@ export interface ChatRouteDeps {
 // miniapp's validated dir with a studio brief; otherwise the neutral brief and no cwd override.
 export async function studioChatArgs(
   body: { agentId?: unknown; miniapp?: unknown; project?: unknown },
-  deps: Pick<ChatRouteDeps, "buildBrief" | "goldmineMcp" | "resolveStudio" | "resolveProjectCwd">,
+  deps: Pick<ChatRouteDeps, "buildBrief" | "goldmineMcp" | "resolveStudio" | "resolveProjectCwd" | "neutralCwd">,
 ): Promise<{ agentId: string; brief: string; mcpServers: McpServerStdio[]; cwd?: string; permission?: "allow" | "deny" }> {
   const agentId = String(body?.agentId ?? "");
   if (!agentId) throw new Error("agentId required");
@@ -94,15 +98,16 @@ export async function studioChatArgs(
     // silently gain write access to the real repo.
     return { agentId, brief: await deps.buildBrief(), mcpServers: deps.goldmineMcp(), cwd };
   }
-  return { agentId, brief: await deps.buildBrief(), mcpServers: deps.goldmineMcp() };
+  return { agentId, brief: await deps.buildBrief(), mcpServers: deps.goldmineMcp(), cwd: deps.neutralCwd };
 }
 
 // The connectFn re-guard (defense-in-depth): honor `requested` if studioCwd accepts it
 // (miniapp path or the neutral cwd) OR if it's an allow-listed project; else neutral cwd.
 export function resolveChatCwd(requested: string, chatCwd: string, resolveProjectCwd?: (root: string) => string | null): string {
+  if (resolve(requested) === resolve(chatCwd)) return chatCwd; // neutral — no scan, always neutral
   const viaStudio = studioCwd(requested, chatCwd);
   if (resolve(viaStudio) !== resolve(chatCwd)) return viaStudio; // a valid miniapp path
-  return resolveProjectCwd?.(requested) ?? viaStudio; // validated project, else neutral
+  return resolveProjectCwd?.(requested) ?? chatCwd; // validated project, else neutral
 }
 
 // Build the installAgent dep for registerChatRoutes: look the id up in AGENTS, run

@@ -61,6 +61,7 @@ async function buildTestApp(opts: { fail?: boolean; checkpoints?: string[]; open
     listAgents: () => [{ id: "claude-code", name: "Claude Code", available: true, installable: false, source: "path" }],
     resolveStudio: () => ({ cwd: "/tmp/miniapp", brief: "STUDIO" }),
     resolveProjectCwd: (root: string) => (root === "/repo/ok" ? "/repo/ok" : null),
+    neutralCwd: "/neutral",
     checkpointMiniapp: async (name: string) => { opts.checkpoints?.push(name); },
   });
   return server.expressApp;
@@ -204,7 +205,7 @@ describe("POST /api/chat project launch (HTTP)", () => {
 });
 
 describe("studioChatArgs project launch", () => {
-  const base = { buildBrief: async () => "NEUTRAL", goldmineMcp: () => [], resolveStudio: () => ({ cwd: "/tmp/m", brief: "S" }) };
+  const base = { buildBrief: async () => "NEUTRAL", goldmineMcp: () => [], resolveStudio: () => ({ cwd: "/tmp/m", brief: "S" }), neutralCwd: "/neutral" };
   const withProj = { ...base, resolveProjectCwd: (r: string) => (r === "/repo/ok" ? "/repo/ok" : null) };
 
   it("honors an allow-listed project as cwd with the neutral brief and no force-allow", async () => {
@@ -222,9 +223,9 @@ describe("studioChatArgs project launch", () => {
   it("throws when resolveProjectCwd is not provided", async () => {
     await expect(studioChatArgs({ agentId: "x", project: "/repo/ok" }, base as never)).rejects.toThrow(/project launch not available/);
   });
-  it("no project → neutral args unchanged", async () => {
+  it("no project → neutral args carry the explicit neutralCwd", async () => {
     const a = await studioChatArgs({ agentId: "x" }, withProj);
-    expect(a.cwd).toBeUndefined();
+    expect(a.cwd).toBe("/neutral");
     expect(a.brief).toBe("NEUTRAL");
   });
 });
@@ -240,5 +241,9 @@ describe("resolveChatCwd", () => {
   });
   it("passes the neutral cwd through", () => {
     expect(resolveChatCwd(chatCwd, chatCwd, rp)).toBe(chatCwd);
+  });
+  it("neutral short-circuits before ever consulting resolveProjectCwd", () => {
+    const spy = (): string | null => { throw new Error("resolveProjectCwd must not be called for the neutral path"); };
+    expect(resolveChatCwd(chatCwd, chatCwd, spy)).toBe(chatCwd);
   });
 });

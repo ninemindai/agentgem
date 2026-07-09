@@ -19,6 +19,7 @@ const neutralDeps = {
   buildBrief: async () => "neutral brief",
   goldmineMcp: () => [],
   resolveStudio: (miniapp: string) => ({ cwd: miniappDir(miniapp), brief: studioBrief(miniapp) }),
+  neutralCwd: "/neutral",
 };
 
 describe("studioChatArgs", () => {
@@ -30,9 +31,9 @@ describe("studioChatArgs", () => {
     expect(args.agentId).toBe("claude");
     expect(args.permission).toBe("allow"); // studio agent may edit its (jailed) miniapp
   });
-  it("without a miniapp → neutral brief, no cwd override", async () => {
+  it("without a miniapp → neutral brief, explicit neutral cwd", async () => {
     const args = await studioChatArgs({ agentId: "claude" }, neutralDeps);
-    expect(args.cwd).toBeUndefined();
+    expect(args.cwd).toBe("/neutral");
     expect(args.brief).toBe("neutral brief");
   });
   it("rejects a missing agentId and an unknown miniapp name", async () => {
