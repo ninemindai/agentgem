@@ -2,6 +2,12 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { Curate } from "./index.js";
 import { setPendingPlaybook, setPendingContribution } from "../../pendingAnalyze.js";
+import { IdentityProvider } from "../../identity/IdentityProvider.js";
+
+// Curate mounts PublishToExplore (which reads useIdentity()) once a hand-off shows
+// the publish form, so every render needs the provider in the tree.
+const renderCurate = (props: React.ComponentProps<typeof Curate>) =>
+  render(<IdentityProvider apiBase=""><Curate {...props} /></IdentityProvider>);
 
 afterEach(cleanup);
 
@@ -40,7 +46,7 @@ const names = (c: HTMLElement) =>
 describe("Curate", () => {
   it("shows all items by default, sorted by uses desc (including zero-use)", async () => {
     vi.stubGlobal("fetch", mockFetch());
-    const { container } = render(<Curate apiBase="" />);
+    const { container } = renderCurate({ apiBase: "" });
     expect(await screen.findByText("pdf")).toBeTruthy();
     expect(await screen.findByText("7")).toBeTruthy();
     expect(names(container)).toEqual(["pdf", "zip", "csv"]);
@@ -48,7 +54,7 @@ describe("Curate", () => {
 
   it("defaults to the Compose tab and switches to the Suggest tab", async () => {
     vi.stubGlobal("fetch", mockFetch());
-    render(<Curate apiBase="" />);
+    renderCurate({ apiBase: "" });
     await screen.findByText("pdf"); // compose inventory visible by default
     expect((screen.getByRole("tab", { name: "Compose from artifacts" }) as HTMLElement).getAttribute("aria-selected")).toBe("true");
     fireEvent.click(screen.getByRole("tab", { name: "Suggest from a project" }));
@@ -58,7 +64,7 @@ describe("Curate", () => {
 
   it("hides zero-use items when 'Used only' is checked", async () => {
     vi.stubGlobal("fetch", mockFetch());
-    const { container } = render(<Curate apiBase="" />);
+    const { container } = renderCurate({ apiBase: "" });
     await screen.findByText("pdf");
     fireEvent.click(usedOnly());
     await waitFor(() => expect(names(container)).toEqual(["pdf", "zip"]));
@@ -66,7 +72,7 @@ describe("Curate", () => {
 
   it("filters by search query", async () => {
     vi.stubGlobal("fetch", mockFetch());
-    const { container } = render(<Curate apiBase="" />);
+    const { container } = renderCurate({ apiBase: "" });
     await screen.findByText("pdf");
     fireEvent.change(screen.getByLabelText("search"), { target: { value: "zip" } });
     await waitFor(() => expect(names(container)).toEqual(["zip"]));
@@ -74,7 +80,7 @@ describe("Curate", () => {
 
   it("sorts by last used desc when the section 'Last used' header is clicked", async () => {
     vi.stubGlobal("fetch", mockFetch());
-    const { container } = render(<Curate apiBase="" />);
+    const { container } = renderCurate({ apiBase: "" });
     await screen.findByText("pdf");
     fireEvent.click(screen.getByText("Last used"));
     await waitFor(() => expect(names(container)).toEqual(["zip", "pdf", "csv"]));
@@ -82,7 +88,7 @@ describe("Curate", () => {
 
   it("sorts a section by Name when the 'Name' column header is clicked", async () => {
     vi.stubGlobal("fetch", mockFetch());
-    const { container } = render(<Curate apiBase="" />);
+    const { container } = renderCurate({ apiBase: "" });
     await screen.findByText("pdf");
     fireEvent.click(screen.getByText("Name"));
     // desc (Z→A): zip, pdf, csv
@@ -94,7 +100,7 @@ describe("Curate", () => {
 
   it("clears the search query with the × button", async () => {
     vi.stubGlobal("fetch", mockFetch());
-    const { container } = render(<Curate apiBase="" />);
+    const { container } = renderCurate({ apiBase: "" });
     await screen.findByText("pdf");
     fireEvent.change(screen.getByLabelText("search"), { target: { value: "zip" } });
     await waitFor(() => expect(names(container)).toEqual(["zip"]));
@@ -104,7 +110,7 @@ describe("Curate", () => {
 
   it("views an artifact's content inline via the eye button", async () => {
     vi.stubGlobal("fetch", mockFetch());
-    render(<Curate apiBase="" />);
+    renderCurate({ apiBase: "" });
     await screen.findByText("pdf");
     expect(screen.queryByText("PDF-SKILL-BODY")).toBeNull();
     fireEvent.click(screen.getByLabelText("view"));
@@ -113,7 +119,7 @@ describe("Curate", () => {
 
   it("suggests checks for the selection", async () => {
     vi.stubGlobal("fetch", mockFetch());
-    render(<Curate apiBase="" />);
+    renderCurate({ apiBase: "" });
     await screen.findByText("pdf");
     fireEvent.click(screen.getByLabelText("pdf"));
     fireEvent.click(screen.getByText("Suggest checks"));
@@ -123,7 +129,7 @@ describe("Curate", () => {
 
   it("saves the current selection as a workspace", async () => {
     vi.stubGlobal("fetch", mockFetch());
-    render(<Curate apiBase="" />);
+    renderCurate({ apiBase: "" });
     await screen.findByText("pdf");
     fireEvent.click(screen.getByLabelText("pdf"));
     fireEvent.change(screen.getByLabelText("workspace name"), { target: { value: "my-selection" } });
@@ -133,7 +139,7 @@ describe("Curate", () => {
 
   it("clears the selection", async () => {
     vi.stubGlobal("fetch", mockFetch());
-    render(<Curate apiBase="" />);
+    renderCurate({ apiBase: "" });
     await screen.findByText("pdf");
     fireEvent.click(screen.getByLabelText("pdf"));
     expect(screen.getByText("1 selected")).toBeTruthy();
@@ -149,7 +155,7 @@ describe("Curate", () => {
       if (u.includes("/api/usage")) return res({ artifacts: [] });
       throw new Error(`unexpected url ${u}`);
     }));
-    render(<Curate apiBase="" />);
+    renderCurate({ apiBase: "" });
     await screen.findByText("pdf");
     fireEvent.click(usedOnly()); // turn the focus filter ON; pdf has no usage → category empties
     expect(await screen.findByText(/uncheck .Used only. to browse all 1/i)).toBeTruthy();
@@ -172,7 +178,7 @@ describe("Curate", () => {
       throw new Error(`unexpected url ${u}`);
     }));
 
-    render(<Curate apiBase="" />);
+    renderCurate({ apiBase: "" });
     // The mount effect fires on render: 1 skill + 1 instruction = 2 selected.
     await waitFor(() => expect(screen.getByText("2 selected")).toBeTruthy());
 
@@ -198,7 +204,7 @@ describe("Curate", () => {
       throw new Error(`unexpected url ${u}`);
     }));
 
-    render(<Curate apiBase="" />);
+    renderCurate({ apiBase: "" });
     // All four handed-off keys are pre-selected…
     await waitFor(() => expect(screen.getByText("4 selected")).toBeTruthy());
     // …and the Publish-to-Explore form is open so the user can share it out.
@@ -221,7 +227,7 @@ describe("Curate", () => {
       throw new Error(`unexpected url ${u}`);
     }));
 
-    render(<Curate apiBase="" />);
+    renderCurate({ apiBase: "" });
     // The publish form appears after the distill, prefilled with the project basename.
     expect(await screen.findByRole("heading", { name: "Publish to Explore" })).toBeTruthy();
     expect((screen.getByLabelText("name") as HTMLInputElement).value).toBe("myproj");
@@ -239,7 +245,7 @@ describe("Curate", () => {
       throw new Error(`unexpected url ${u}`);
     }));
 
-    render(<Curate apiBase="" />);
+    renderCurate({ apiBase: "" });
     expect(await screen.findByText(/nothing distilled worth publishing/i)).toBeTruthy();
     // No hollow gem: the Publish form must not render for an empty distill.
     expect(screen.queryByRole("heading", { name: "Publish to Explore" })).toBeNull();
@@ -256,7 +262,7 @@ describe("Curate", () => {
       throw new Error(`unexpected url ${u}`);
     }));
 
-    render(<Curate apiBase="" />);
+    renderCurate({ apiBase: "" });
     // While the background distill runs, show progress + set expectations — not the form, not an empty state.
     expect(await screen.findByText(/first run can take a few minutes/i)).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Publish to Explore" })).toBeNull();
