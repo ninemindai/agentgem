@@ -157,7 +157,13 @@ if (!app.requestSingleInstanceLock()) {
   // Register agentgem:// so the OS routes "Open in AgentGem" links to this app. macOS delivers them
   // via open-url (which can fire before the window is ready → handleDeepLink stashes it); Windows/
   // Linux deliver them as a launch arg on the second instance (argv) or the cold-start argv above.
-  app.setAsDefaultProtocolClient(DEEP_LINK_SCHEME);
+  //
+  // Packaged only. Unpackaged, process.execPath is node_modules/electron/dist/Electron.app, so this
+  // hands the whole scheme to a bare Electron.app: every agentgem:// link then opens a blank Electron
+  // (or whichever dev checkout registered last), not AgentGem — and it keeps winning after the dev run
+  // exits, because the LaunchServices claim outlives the process. The packaged app declares the scheme
+  // via CFBundleURLTypes (electron-builder `protocols`), so this call only promotes it to default.
+  if (app.isPackaged) app.setAsDefaultProtocolClient(DEEP_LINK_SCHEME);
   app.on("open-url", (event, url) => { event.preventDefault(); handleDeepLink(url); });
   app.on("second-instance", (_event, argv) => {
     showWindow();
