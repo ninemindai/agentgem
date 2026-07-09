@@ -19,7 +19,7 @@
 import type { AppDb } from "@agentgem/aggregator";
 import {
   resolveSession, createNativeGroup, deleteNativeGroup, listGroupsForAccount, listGroupMembers,
-  groupMemberRole, countGroupAdmins, revokeInviteGrant,
+  groupMemberRole, removeMemberGuarded,
   createGroupInvite, redeemGroupInvite, revokeGroupInvite, listGroupInvites,
   type GroupRole,
 } from "@agentgem/aggregator";
@@ -39,6 +39,11 @@ type ExpressApp = {
 const DEFAULT_INVITE_TTL_DAYS = 7;
 const MAX_INVITE_TTL_DAYS = 30;
 const MAX_GROUP_NAME = 80;
+
+// groups/group_members/group_invites id and account columns are all `uuid`. A malformed value
+// makes Postgres reject the query and the promise reject, which Express 5 forwards to the default
+// error handler → 500 with a stack trace. Reject the shape before it ever reaches a query.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function cors(req: Req, res: Res, origins: string[]): void {
   const origin = req.headers["origin"];
@@ -75,6 +80,7 @@ async function requireGroupRole(
   if (!who) return null;
   const groupId = String((req.query.id as string | undefined) ?? "");
   if (!groupId) { res.status(400).json({ error: "id required" }); return null; }
+  if (!UUID_RE.test(groupId)) { res.status(400).json({ error: "id must be a UUID" }); return null; }
   const role = await groupMemberRole(deps.db, groupId, who.accountId);
   if (!role) { res.status(404).json({ error: "group not found" }); return null; }
   if (needAdmin && role !== "admin") { res.status(403).json({ error: "group admin required" }); return null; }
@@ -121,15 +127,12 @@ export function groupMembersHandler(deps: GroupsDeps) {
     if (req.method === "DELETE") {
       const target = String((req.query.account as string | undefined) ?? "");
       if (!target) { res.status(400).json({ error: "account required" }); return; }
+      if (!UUID_RE.test(target)) { res.status(400).json({ error: "account must be a UUID" }); return; }
       const isSelf = target === ok.accountId;
       if (!isSelf && ok.role !== "admin") { res.status(403).json({ error: "group admin required" }); return; }
-      const targetRole = await groupMemberRole(deps.db, ok.groupId, target);
-      if (!targetRole) { res.status(404).json({ error: "not a member" }); return; }
-      if (targetRole === "admin" && (await countGroupAdmins(deps.db, ok.groupId)) === 1) {
-        res.status(409).json({ error: "a group must keep at least one admin" });
-        return;
-      }
-      await revokeInviteGrant(deps.db, ok.groupId, target);
+      const result = await removeMemberGuarded(deps.db, ok.groupId, target);
+      if (result === "not-member") { res.status(404).json({ error: "not a member" }); return; }
+      if (result === "last-admin") { res.status(409).json({ error: "a group must keep at least one admin" }); return; }
       res.json({ removed: true });
       return;
     }
@@ -148,6 +151,7 @@ export function groupInvitesHandler(deps: GroupsDeps) {
     if (req.method === "DELETE") {
       const inviteId = String((req.query.invite as string | undefined) ?? "");
       if (!inviteId) { res.status(400).json({ error: "invite required" }); return; }
+      if (!UUID_RE.test(inviteId)) { res.status(400).json({ error: "invite must be a UUID" }); return; }
       if (!(await revokeGroupInvite(deps.db, ok.groupId, inviteId))) { res.status(404).json({ error: "invite not found" }); return; }
       res.json({ revoked: true });
       return;
