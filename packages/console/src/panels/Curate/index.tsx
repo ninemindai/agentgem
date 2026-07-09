@@ -131,7 +131,7 @@ export function Curate({ apiBase }: { apiBase: string }) {
     const client = makeClient(apiBase);
     (async () => {
       try {
-        const inv = await inventoryRoute.call(client);
+        const inv = await inventoryRoute.call(client, { query: {} });
         let usage: Usage = { artifacts: [] };
         // scope:global aggregates usage across all projects; without it the count
         // is scoped to the server's cwd (usually empty for global artifacts).

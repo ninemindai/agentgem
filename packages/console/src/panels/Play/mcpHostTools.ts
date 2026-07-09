@@ -61,7 +61,7 @@ export async function getSessionData(
 
 // getInventory: Runner.serve()'s "local-project-access" cap.
 export async function getInventory(apiBase: string): Promise<unknown> {
-  return inventoryRoute.call(makeClient(apiBase));
+  return inventoryRoute.call(makeClient(apiBase), { query: {} });
 }
 
 // subscribeSessions: Runner.serve()'s "live-session-events" cap — the most-recent session is "live";

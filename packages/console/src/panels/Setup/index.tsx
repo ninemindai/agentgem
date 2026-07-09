@@ -61,7 +61,7 @@ export function Setup({ apiBase }: { apiBase: string }) {
 
   useEffect(() => {
     let alive = true;
-    inventoryRoute.call(makeClient(apiBase))
+    inventoryRoute.call(makeClient(apiBase), { query: {} })
       .then((i) => { if (alive) setInv(i); })
       .catch((e) => { if (alive) setError(String(e?.message ?? e)); });
     return () => { alive = false; };

@@ -20,7 +20,7 @@ export function Observe({ apiBase }: { apiBase: string }) {
   // "Share my setup" (light) and "Publish" (heavy) both need the inventory, but only when
   // the user acts — Inspect doesn't otherwise scan it, so opening Inspect stays cheap.
   const resolveSetupShare = async () => {
-    const inv = await inventoryRoute.call(makeClient(apiBase));
+    const inv = await inventoryRoute.call(makeClient(apiBase), { query: {} });
     const parts = [
       [inv.skills.length, "skill"], [inv.mcpServers.length, "MCP"],
       [inv.instructions.length, "instruction"], [inv.hooks.length, "hook"],
@@ -34,7 +34,7 @@ export function Observe({ apiBase }: { apiBase: string }) {
 
   const onPublishSetup = async () => {
     try {
-      const inv = await inventoryRoute.call(makeClient(apiBase));
+      const inv = await inventoryRoute.call(makeClient(apiBase), { query: {} });
       const keys = [
         ...inv.skills.map((a) => `skills::${a.name}`),
         ...inv.mcpServers.map((a) => `mcpServers::${a.name}`),
