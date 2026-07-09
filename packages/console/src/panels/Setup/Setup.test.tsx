@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, act, waitFor } from "@testing-library/react";
 import { Setup } from "./index.js";
 
 const res = (body: unknown) =>
@@ -45,6 +45,23 @@ describe("Setup", () => {
     render(<Setup apiBase="" />);
     fireEvent.click(await screen.findByText("brainstorming"));
     expect(window.location.hash).toBe("#/setup/skills?a=brainstorming");
+  });
+
+  it("moves focus into the viewer on open and back to the artifact on close", async () => {
+    // Open from the skills tab, not the overview: clicking an overview card navigates to
+    // the tab, unmounting the trigger — focus can't return to an element that's gone.
+    window.location.hash = "#/setup/skills";
+    vi.stubGlobal("fetch", vi.fn(async () => res(inv)));
+    render(<Setup apiBase="" />);
+    const item = (await screen.findByText("brainstorming")).closest("button")!;
+    item.focus();
+    fireEvent.click(item);
+    await screen.findByRole("dialog");
+    // Focus lands inside the panel rather than being stranded on the trigger.
+    expect(screen.getByRole("dialog").contains(document.activeElement)).toBe(true);
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(document.activeElement).toBe(item);
   });
 
   it("opens the viewer for an artifact addressed by #/setup/<tab>?a=<name>", async () => {

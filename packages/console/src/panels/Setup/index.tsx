@@ -3,6 +3,7 @@ import { defineConsolePage } from "../../registry.js";
 import { inventoryRoute, makeClient, type Inventory, type Artifact } from "../../api/routes.js";
 import { useSubRouteTabs } from "../../shell/useSubRouteTabs.js";
 import { useCopied } from "../../shell/useCopied.js";
+import { useDialogA11y } from "../../shell/useDialogA11y.js";
 import { Loading } from "../../shell/Loading.js";
 import { ContentView } from "../Curate/ContentView.js";
 import { SETUP_ROUTE, setupLink, type SetupType } from "./link.js";
@@ -246,15 +247,11 @@ function ArtifactViewer({ sel, onClose }: { sel: { artifact: Artifact; group: st
   // The viewer is only ever open when the URL already reads #/setup/<tab>?a=<name>, so the
   // current href IS the shareable deep link — no need to reconstruct it.
   const copyLink = () => copy(window.location.href);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  const panelRef = useDialogA11y(onClose);
 
   return (
     <div className="setup-modal" role="dialog" aria-modal="true" aria-label={a.name} onClick={onClose}>
-      <div className="setup-modal-panel" onClick={(e) => e.stopPropagation()}>
+      <div className="setup-modal-panel" ref={panelRef} onClick={(e) => e.stopPropagation()}>
         <div className="setup-modal-head">
           <div className="setup-modal-title">
             <strong>{a.name}</strong>
