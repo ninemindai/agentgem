@@ -3,7 +3,7 @@ import { defineConsolePage } from "../../registry.js";
 import { Loading } from "../../shell/Loading.js";
 import {
   deployTargetsRoute, setCredentialRoute, CREDENTIAL_KEYS, makeClient,
-  bindDisconnectRoute, webHandoffRoute,
+  webHandoffRoute,
 } from "../../api/routes.js";
 import { useIdentity } from "../../identity/IdentityProvider.js";
 import { useGitHubBind } from "../../identity/useGitHubBind.js";
@@ -18,7 +18,7 @@ export function Settings({ apiBase }: { apiBase: string }) {
   const [credValue, setCredValue] = useState("");
   const [credNote, setCredNote] = useState<string | null>(null);
 
-  const { status: bindStatus, refresh, setStatus } = useIdentity();
+  const { status: bindStatus, refresh, disconnect } = useIdentity();
   const bind = useGitHubBind(apiBase);
   const [bindError, setBindError] = useState<string | null>(null);
 
@@ -45,7 +45,7 @@ export function Settings({ apiBase }: { apiBase: string }) {
     setBindError(null);
     bind.reset();
     try {
-      setStatus(await bindDisconnectRoute.call(makeClient(apiBase), { body: {} }));
+      await disconnect();
     } catch (e) {
       setBindError(e instanceof Error ? e.message : String(e));
     }
