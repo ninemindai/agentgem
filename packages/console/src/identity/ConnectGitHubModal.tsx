@@ -32,7 +32,7 @@ export function ConnectGitHubModal({
         <div className="identity-modal__body">
           <ConnectGitHub
             bind={bind}
-            idleLabel="Connect GitHub"
+            idleLabel="Sign in with GitHub"
             idleHint={<p className="deploy-hint">Signs you in here and on app.agentgem.ai.</p>}
           />
         </div>

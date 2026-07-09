@@ -16,7 +16,14 @@ describe("ConnectGitHubModal", () => {
     const dialog = screen.getByRole("dialog");
     expect(dialog.getAttribute("aria-modal")).toBe("true");
     expect(dialog.getAttribute("aria-label")).toBe("Connect GitHub");
-    expect(screen.getByRole("button", { name: /connect github/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /sign in with github/i })).toBeTruthy();
+  });
+
+  it("dialog title and idle button read differently: dialog is 'Connect GitHub', button is 'Sign in with GitHub'", () => {
+    render(<ConnectGitHubModal bind={bind()} onClose={vi.fn()} />);
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.getAttribute("aria-label")).toBe("Connect GitHub");
+    expect(screen.getByRole("button", { name: "Sign in with GitHub" })).toBeTruthy();
   });
 
   it("Escape closes", () => {
