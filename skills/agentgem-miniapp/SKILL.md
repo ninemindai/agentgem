@@ -37,21 +37,26 @@ inside `<script type="application/json">` is exempt, so baked source data is saf
 also stay under 1.5 MB and must not throw while loading.
 
 **Portability.** If you declare the `session-data` capability, the file must also bake a non-empty
-`timeline` into `<script id="game-data">`. app.agentgem.ai plays games with no host at all —
-without baked data your published game would sit empty forever.
+`timeline` into `<script id="game-data" type="application/json">`. app.agentgem.ai plays games with
+no host at all — without baked data your published game would sit empty forever.
 
 ## Your source data
 
 The miniapp is seeded from a session, a skill, or a project. That source is injected as an inert JSON
-blob in `<head>`, so it has already parsed by the time your script runs:
+blob in `<script id="game-data" type="application/json">` in `<head>`, so it has already parsed by
+the time your script runs:
 
     const data = JSON.parse(document.getElementById("game-data").textContent);
+
+If you bake or re-bake this data yourself, keep the `type="application/json"` attribute — it is what
+exempts the block from the seal's network-word scan, so dropping it fails Save on ordinary words inside
+your data.
 
 | seeded from | genre | shape of `game-data` |
 | --- | --- | --- |
 | a coding session | `replay` | `{ meta, timeline: [{ role, tsMs, text }] }` — at most 500 turns, each `text` cut to 200 characters |
-| a skill | `skill-run` | the skill's name, description and content |
-| a project | `project-fun` | the project's name and inventory counts |
+| a skill | `skill-run` | the skill's name, content and trigger |
+| a project | `project-fun` | the project's path, flavor and notable file names |
 | an import, or blank | `project-fun` | no `game-data` at all |
 
 **Always boot from the baked data, then re-render if fresher data arrives.** Never block your first

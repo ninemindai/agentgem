@@ -33,7 +33,10 @@ describe("agentgem-miniapp skill", () => {
 
   it("states the seal, the capability declaration, and the redaction boundary", () => {
     expect(MINIAPP_BUILDER_BRIEF).toContain("default-src 'none'");
-    expect(MINIAPP_BUILDER_BRIEF).toContain("needs");
+    // Bare "needs" also occurs in ordinary prose (e.g. "needs live data"), so it would still pass even
+    // if the actual capability-declaration instruction were deleted. Assert the literal JSON key the
+    // brief tells the agent to write instead.
+    expect(MINIAPP_BUILDER_BRIEF).toContain('"needs": [');
     expect(MINIAPP_BUILDER_BRIEF).toContain("redactForBake");
   });
 
