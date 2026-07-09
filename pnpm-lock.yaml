@@ -9,29 +9,29 @@ importers:
   .:
     dependencies:
       '@agentback/core':
-        specifier: ^0.5.2
-        version: 0.5.2
+        specifier: ^0.7.1
+        version: 0.7.1
       '@agentback/drizzle':
-        specifier: ~0.5.2
-        version: 0.5.2(drizzle-orm@0.45.2(@electric-sql/pglite@0.5.3)(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@12.10.1)(pg@8.22.0))(drizzle-zod@0.8.3(drizzle-orm@0.45.2(@electric-sql/pglite@0.5.3)(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@12.10.1)(pg@8.22.0))(zod@4.4.3))
+        specifier: ~0.7.1
+        version: 0.7.1(drizzle-orm@0.45.2(@electric-sql/pglite@0.5.3)(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@12.10.1)(pg@8.22.0))(drizzle-zod@0.8.3(drizzle-orm@0.45.2(@electric-sql/pglite@0.5.3)(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@12.10.1)(pg@8.22.0))(zod@4.4.3))
       '@agentback/extension-rate-limit':
-        specifier: ^0.5.2
-        version: 0.5.2(cors@2.8.6)(express@5.2.1)(hono@4.12.25)
+        specifier: ^0.7.1
+        version: 0.7.1(cors@2.8.6)(express@5.2.1)(hono@4.12.25)
       '@agentback/mcp':
-        specifier: ^0.5.2
-        version: 0.5.2
+        specifier: ^0.7.1
+        version: 0.7.1
       '@agentback/mcp-http':
-        specifier: ^0.5.2
-        version: 0.5.2(cors@2.8.6)(hono@4.12.25)(zod@4.4.3)
+        specifier: ^0.7.1
+        version: 0.7.1(cors@2.8.6)(hono@4.12.25)(zod@4.4.3)
       '@agentback/openapi':
-        specifier: ^0.5.2
-        version: 0.5.2
+        specifier: ^0.7.1
+        version: 0.7.1
       '@agentback/rest':
-        specifier: ^0.5.2
-        version: 0.5.2(cors@2.8.6)(express@5.2.1)(hono@4.12.25)
+        specifier: ^0.7.1
+        version: 0.7.1(cors@2.8.6)(express@5.2.1)(hono@4.12.25)
       '@agentback/rest-explorer':
-        specifier: ^0.5.2
-        version: 0.5.2(cors@2.8.6)(hono@4.12.25)
+        specifier: ^0.7.1
+        version: 0.7.1(cors@2.8.6)(hono@4.12.25)
       '@agentclientprotocol/sdk':
         specifier: ^0.28.1
         version: 0.28.1(zod@4.4.3)
@@ -147,6 +147,9 @@ importers:
       '@types/supertest':
         specifier: ^6
         version: 6.0.3
+      '@typescript/native':
+        specifier: npm:typescript@~7.0.2
+        version: typescript@7.0.2
       esbuild:
         specifier: ^0.25.0
         version: 0.25.12
@@ -166,8 +169,8 @@ importers:
         specifier: ^7
         version: 7.2.2
       typescript:
-        specifier: ^6
-        version: 6.0.3
+        specifier: npm:@typescript/typescript6@^6.0.2
+        version: '@typescript/typescript6@6.0.2'
       vitest:
         specifier: ^3
         version: 3.2.6(@edge-runtime/vm@3.2.0)(@types/debug@4.1.13)(@types/node@24.13.2)(jsdom@24.1.3)(tsx@4.21.0)(yaml@2.9.0)
@@ -278,8 +281,8 @@ importers:
         specifier: ^25.0.0
         version: 25.0.1
       typescript:
-        specifier: ^6
-        version: 6.0.3
+        specifier: npm:@typescript/typescript6@^6.0.2
+        version: '@typescript/typescript6@6.0.2'
       vitest:
         specifier: ^3
         version: 3.2.6(@edge-runtime/vm@3.2.0)(@types/debug@4.1.13)(@types/node@24.13.2)(jsdom@25.0.1)(tsx@4.21.0)(yaml@2.9.0)
@@ -363,8 +366,8 @@ importers:
         specifier: ^25.0.0
         version: 25.0.1
       typescript:
-        specifier: ^6
-        version: 6.0.3
+        specifier: npm:@typescript/typescript6@^6.0.2
+        version: '@typescript/typescript6@6.0.2'
       vite:
         specifier: ^6
         version: 6.4.3(@types/node@24.13.2)(tsx@4.21.0)(yaml@2.9.0)
@@ -450,12 +453,12 @@ importers:
 
 packages:
 
-  '@agentback/authentication@0.5.2':
-    resolution: {integrity: sha512-+kWBOK/4gt0md6LLYNrqO0Bt/A9w2z0nlkY84wCFzeP9ndf/+sFwTVZMJEskmo1j9T1pt0JlA6blpUwMRPDtXA==}
+  '@agentback/authentication@0.7.1':
+    resolution: {integrity: sha512-CsUbwxS33qIZYw5jQpfgVKFTRSIHJinYkZg043F5/G8UW9H91/QwvzHA/7NFmBZ+URn66AzPvnhC4n9rpWiS/A==}
     engines: {node: '>=22.13'}
 
-  '@agentback/authorization@0.5.2':
-    resolution: {integrity: sha512-HnBI5LUXTbpJw2DM23Nv7HxDxSpOu84qtjhZ+ocCCjvk4VEc7RR/xGKkRsciqYSFcwPSs3WSiavAn91RxQJ7Ng==}
+  '@agentback/authorization@0.7.1':
+    resolution: {integrity: sha512-Pjt6Jo+cxkRvSHuFGihyb1eYg53tYX03aCYMmRmEuQXqu4XHZgCTkm7MrGB2wKNnGq7JW+9ANgNAHeqYN60Ubw==}
     engines: {node: '>=22.13'}
 
   '@agentback/client@0.6.0':
@@ -468,16 +471,20 @@ packages:
     resolution: {integrity: sha512-XwJuFuOxw7RJ4z6baqoXVkMfdHAxLlkZhh8zt/kSzDtLOVOiS4k9RdC5VaHO5Wun7o/POEEMlzCf/vO1tMQQNw==}
     engines: {node: '>=22.13'}
 
-  '@agentback/context@0.5.2':
-    resolution: {integrity: sha512-ODWrFpCGo1RtAZGTYh6SnC1+v2H8gks8m2Glm2bHVzTTkaZZLyknBziLSYn/+0drVmwWMFmum5Jr94CyEVF3hw==}
+  '@agentback/common@0.7.1':
+    resolution: {integrity: sha512-82oF9tQltJANwBAyebzmzTsODdymVIHhdJOMUcWOf7WXgGZTYbJ3AKRy5Bk5Dw5WTZvwRdMG8sVJdPcdfSGe4g==}
     engines: {node: '>=22.13'}
 
-  '@agentback/core@0.5.2':
-    resolution: {integrity: sha512-Icw/OfnOP70SgshbHU+68/CXNsLCR/xfPpqnW8v1PzKMwNG4y6X11jlVnagoBiMC8xqN7vUUqu+zAvj48V0MNQ==}
+  '@agentback/context@0.7.1':
+    resolution: {integrity: sha512-Mnk3WFjFRcTQSGx/mDtHz34coXTfmyCYK3ADuUHOKTQou1nmz/16t09HDSblOSyoDijAvNXgzMkNYgMiSFzr9w==}
     engines: {node: '>=22.13'}
 
-  '@agentback/drizzle@0.5.2':
-    resolution: {integrity: sha512-hKhZtmoDv5SQbIltq/ekbenfksQRdlMIlzXiPoafaTswNNvrz1nqBXGKwrTbueubph+IjVPA3t6VX+FuHDky6w==}
+  '@agentback/core@0.7.1':
+    resolution: {integrity: sha512-CF32yigK9kktIF4waO4SPCoaqHfdptrJR5c9AzYyWFR8DYtZr62RddxHT5QRucIr/hnfBk9Zxn789qXlRk7V8w==}
+    engines: {node: '>=22.13'}
+
+  '@agentback/drizzle@0.7.1':
+    resolution: {integrity: sha512-VVzdhfhW13yXtIplI6c++dmwTmz5j11nxGakw9M9mR7jRP1xQQDLC1zRoky5qYyUcvIEMM+KQ9siX2rVU/rudg==}
     engines: {node: '>=22.13'}
     peerDependencies:
       drizzle-orm: '>=0.45.2 <1'
@@ -486,44 +493,44 @@ packages:
       drizzle-zod:
         optional: true
 
-  '@agentback/extension-rate-limit@0.5.2':
-    resolution: {integrity: sha512-8vSFvlwiJXoI2RiJDN6sQwgMLMabOrSbTBz6vovR/tEzy5jxWja44vaMB0ThFWYSeZB535viPHsYrbo3kHRpuw==}
+  '@agentback/extension-rate-limit@0.7.1':
+    resolution: {integrity: sha512-J77hGadBdB7P7/1dlIY8ZsdvmFPaNDUoJHO+qJn6peQ04dVThYR3tninDOsYng0sLvp4VI99ZZcslb/r/GtbEg==}
     engines: {node: '>=22.13'}
 
-  '@agentback/files@0.5.2':
-    resolution: {integrity: sha512-5dj/K99YgDWexg2OVMYwuni4ntQ5ScubKYYW2YzeFvsk7Go5Q/Dt+kc+gL30/C4S1l7LT/HaY3SmpAzvUg0w3Q==}
+  '@agentback/files@0.7.1':
+    resolution: {integrity: sha512-36ihKwthxD8hNfngXPVniPpiCnszLrfk7mFtIBYISFNkHcSDvWm/cGvUkrtNWTMyvOYU6ZfUU4pCw35HDhQfAQ==}
     engines: {node: '>=22.13'}
 
-  '@agentback/http-server@0.5.2':
-    resolution: {integrity: sha512-ME5eMqOoF2ivw4nzH0adrsjWeLAhiePX8iE+uitfDwd49Gy7UKYqa/+1b8EJt7V86mGXDv2BHYy+9H74DVzygw==}
+  '@agentback/http-server@0.7.1':
+    resolution: {integrity: sha512-ZJQuHPsj4OM38IWmi8Iu1Z1+MafiTTsGFXN1TLMzgQlh2TMz7gGnjwsDHn4vtEsMU/SwoSIm8RKAwXNSlGZmKg==}
     engines: {node: '>=22.13'}
 
-  '@agentback/mcp-http@0.5.2':
-    resolution: {integrity: sha512-PEc1wtYgj2s291jtuIfZzBzGcK2b6dJXYytkOT3AKAJKwVwGvcS/O8E11JLbNhlReXF5n4e3l5D4bPuRsZ9JJg==}
+  '@agentback/mcp-http@0.7.1':
+    resolution: {integrity: sha512-mmoOEIznFUjLBW3AWYlzLNAVCn/fk3994qV6ilNe6c7u26jloLGYDN+1YZJczxZv6P9pK+jZtYbL5UxAn1KtCQ==}
     engines: {node: '>=22.13'}
 
-  '@agentback/mcp@0.5.2':
-    resolution: {integrity: sha512-kc/dMOuJsMc0nJLJcLzJ92CZDk4miwiAVA6BDkZHyUOfURJGyBJgHnyic2sUSkyR4eYRtNatmEgJVbkCv0QbAA==}
+  '@agentback/mcp@0.7.1':
+    resolution: {integrity: sha512-tS5bQILlaC6XMPR5yE5wCGpFtB44rXfoWa9lI5a3/ErQ4ZJsMmhLgWGQk8dD6hj6ilp2Qy9okfTMU0SA/Dv8vA==}
     engines: {node: '>=22.13'}
 
-  '@agentback/metadata@0.5.2':
-    resolution: {integrity: sha512-fhjBTqNCdKaZEUejdRI1zFAHlj2fLAH1oILgvxg8xM+L65s4X08nlgk2Joual7vAa/ZS/McPPiuyr8aMwCwRPg==}
+  '@agentback/metadata@0.7.1':
+    resolution: {integrity: sha512-6EZ/zqhXQzkYD57OGSZ4pz41hQodesDWfMJpLUkQIt7ArfuDIn3lCViM6/jLwHS+C8yteJsZZJD0oCFrikuIoQ==}
     engines: {node: '>=22.13'}
 
-  '@agentback/middleware@0.5.2':
-    resolution: {integrity: sha512-sUfYoFi4iTBcJ6fQjkvRJl+uNZLXt15kyPN1+Rv45vCZ+xtrurdr/nRMhfbrnbYASRinAx2DQggne3eb2+PgEw==}
+  '@agentback/middleware@0.7.1':
+    resolution: {integrity: sha512-TpQmTBgQSmS07haCS4iyDxA3EBDWvk3QJiuvRiOEHVvtemMH0kGh4g7Iv1ykFu/J02bK/kVCFY/C47iujWDAtw==}
     engines: {node: '>=22.13'}
 
-  '@agentback/openapi@0.5.2':
-    resolution: {integrity: sha512-ccQisicEbbGmfrYc16XBSNlYoBcYRN4HaL84Vx4sc1i5RcGeyx3CWCAsaKOiUoybAA+bl0aiMqZocfLGochxEg==}
+  '@agentback/openapi@0.7.1':
+    resolution: {integrity: sha512-absPZVHG8ks2TlIPJYUWec5cVUWq6ZQaFELlvq2JfCdq1vRbfIeXRreSZbtxKfp7Y6WM/VKh+4sZ0t41q/KJhQ==}
     engines: {node: '>=22.13'}
 
-  '@agentback/rest-explorer@0.5.2':
-    resolution: {integrity: sha512-YE4wTb2cdawhkEOxLSjW5DDbUy8iDIpKgLTeo0G86BgTyMG/kno+WGiFWPXa02AqjxP7jLcg5ICP51gcfMtd6A==}
+  '@agentback/rest-explorer@0.7.1':
+    resolution: {integrity: sha512-274mLzBhVUt75uxQsCsave87gEk1S1mwySfSmG7W/zToSpNcg8JnnqFHqlRPIMDCCxMLv4p+xoOioYte0p5c7Q==}
     engines: {node: '>=22.13'}
 
-  '@agentback/rest@0.5.2':
-    resolution: {integrity: sha512-lxLzur2CdrdwAdlOUgQ5bO1ZBk6ONwY8+ScWsV0AixIeXkzwlbuC6pdz1x71ao1SOn0gPjJqB7yO24dK98fj9g==}
+  '@agentback/rest@0.7.1':
+    resolution: {integrity: sha512-xvw4lWxCk9TD/4ZP79s4DkWcE/zc/Pc6xVTcTV51TJCrI1NTQVw2E2jyqm90hpUncDbTfbsWrKUdC9+0cGJyug==}
     engines: {node: '>=22.13'}
     peerDependencies:
       cors: ~2.8.6
@@ -537,8 +544,8 @@ packages:
       multer:
         optional: true
 
-  '@agentback/security@0.5.2':
-    resolution: {integrity: sha512-2c14ROaVhUuEfUfslQHHfAnsY8BpeD5OHeUKHRVisi38uM8Hu9mC2aIIrZyldtJOq6xSpPcIi9SAIaLVoYct2g==}
+  '@agentback/security@0.7.1':
+    resolution: {integrity: sha512-q4HyplMMSyvZfHgFNqRmzkNqj6DLwITBi65tVOd/RmV3bh0k3O2cwnFsAU/taj1dUzTgrsXFki+wNRY3Rh3hKA==}
     engines: {node: '>=22.13'}
 
   '@agentclientprotocol/sdk@0.28.1':
@@ -1287,8 +1294,8 @@ packages:
     peerDependencies:
       hono: ^4
 
-  '@hono/node-server@2.0.5':
-    resolution: {integrity: sha512-yQFvDmyDo3y6rEOJZDUYPJ49DIKTPpIk4kGvm40xx4Ejne0Pu9a1+exxPN+C1UppWK/WGZX9F++/Xs231tE86g==}
+  '@hono/node-server@2.0.8':
+    resolution: {integrity: sha512-GuCWzLxwg218fy1JaHculFsdcuY12hxit83V+algozTPnwhNjLrRL/Alg9OYjLZLoUZ1rw/S4CdTMsnkSKCmFA==}
     engines: {node: '>=20'}
     peerDependencies:
       hono: ^4
@@ -2180,6 +2187,130 @@ packages:
 
   '@types/trusted-types@2.0.7':
     resolution: {integrity: sha512-ScaPdn1dQczgbl0QFTeTOmVHFULt394XJgOQNoyVhZ6r2vLnMLJfBPd53SB52T/3G36VI1/g2MZaX0cwDuXsfw==}
+
+  '@typescript/typescript-aix-ppc64@7.0.2':
+    resolution: {integrity: sha512-MTKKkWB7p/0E9xi1d1tHtZ5PiLkGEMIq88pK2CubZjOsLtYTLqhgIgi6zepFa+9GHZ6h05NMCkQxGKiPXMxXtQ==}
+    engines: {node: '>=16.20.0'}
+    cpu: [ppc64]
+    os: [aix]
+
+  '@typescript/typescript-darwin-arm64@7.0.2':
+    resolution: {integrity: sha512-gowzar9MwS/aRWp6f3a4KUqzRjAZjOsmGNCM6LcTgXum+dBfgsBVMN+AgvOCCbguXyick6LJhpBszxMebJ8syA==}
+    engines: {node: '>=16.20.0'}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@typescript/typescript-darwin-x64@7.0.2':
+    resolution: {integrity: sha512-SZ9xZInqApNlNGc9s0W1VSsktYSOe9cFqNOIqmN1Gs8SmkjKZYFt017G4VwPxASInODuAdbTW7sXiFUf893RgA==}
+    engines: {node: '>=16.20.0'}
+    cpu: [x64]
+    os: [darwin]
+
+  '@typescript/typescript-freebsd-arm64@7.0.2':
+    resolution: {integrity: sha512-W5NH4y/J0plIIS5b2xvTEkU7JFxyqdMAOgf+Ilhl0vHQXKO5dZoxd+C/jEtq56c4F3wk71RB4BMRQ2XdI+bwYQ==}
+    engines: {node: '>=16.20.0'}
+    cpu: [arm64]
+    os: [freebsd]
+
+  '@typescript/typescript-freebsd-x64@7.0.2':
+    resolution: {integrity: sha512-UMGDx5sTpzNw3WiPebH7l90IWfJggEd+egHt/q6p7/Cm3zqoV7VxkGXt+3DxPIw8CcmvAB0j3sVVfbhX+M4Tpw==}
+    engines: {node: '>=16.20.0'}
+    cpu: [x64]
+    os: [freebsd]
+
+  '@typescript/typescript-linux-arm64@7.0.2':
+    resolution: {integrity: sha512-Qh4eU4/y3yDjnfjjyPYihMj5/ODIlmt+Bzu17OI+fiSRDW57QmU5SiN63exPRNJPKUzcc1INa1NXdrJ+MqHjUQ==}
+    engines: {node: '>=16.20.0'}
+    cpu: [arm64]
+    os: [linux]
+
+  '@typescript/typescript-linux-arm@7.0.2':
+    resolution: {integrity: sha512-gffT3xPz9sR7j/YJExkyPntrI0P2EP9XbOyWzth2/Gs0RstK+90RBcO0ncXoXy/beYll1SXw846Nf2zdnEz0QQ==}
+    engines: {node: '>=16.20.0'}
+    cpu: [arm]
+    os: [linux]
+
+  '@typescript/typescript-linux-loong64@7.0.2':
+    resolution: {integrity: sha512-uEHck9i8hoAzXPiYRib1O7miOnz23SxIeVl6F4LXox+qov1K35jHcEW6VHKvZI+pyvl7fZEP4MCU5LYvIq1GuQ==}
+    engines: {node: '>=16.20.0'}
+    cpu: [loong64]
+    os: [linux]
+
+  '@typescript/typescript-linux-mips64el@7.0.2':
+    resolution: {integrity: sha512-R4KvAMnE43W5Qeqb0Ly56O3mWMWIAgsMyz36DCaycd5nbg/9kzm0liw3JocfRqyJY0KPmzFjbswozXyW0DnIYA==}
+    engines: {node: '>=16.20.0'}
+    cpu: [mips64el]
+    os: [linux]
+
+  '@typescript/typescript-linux-ppc64@7.0.2':
+    resolution: {integrity: sha512-DORx5b3sd/4S7eayxm4FQv+A7CrkUIGRaHiwI8oiHTAI1fAPWhF4J0vAlkC8biAlHSVVwxMQ3tjZ2/DVbnQiiA==}
+    engines: {node: '>=16.20.0'}
+    cpu: [ppc64]
+    os: [linux]
+
+  '@typescript/typescript-linux-riscv64@7.0.2':
+    resolution: {integrity: sha512-wf0jqEDOjrPRnKwYRyyJDRo11KMbvMFrU+q4zqKyChODBzvlkbhNQfKvLxQCcwTpdDaXSHZTVuh0JoCrKCUMHQ==}
+    engines: {node: '>=16.20.0'}
+    cpu: [riscv64]
+    os: [linux]
+
+  '@typescript/typescript-linux-s390x@7.0.2':
+    resolution: {integrity: sha512-IkwJc3L7yhytWd/ewjyxNDfOmswCm9GWMJT/ue/dU4aZNbwZeYAetq42VyLmsmSjvoX7z74X6ZaYCtzAr0EuGw==}
+    engines: {node: '>=16.20.0'}
+    cpu: [s390x]
+    os: [linux]
+
+  '@typescript/typescript-linux-x64@7.0.2':
+    resolution: {integrity: sha512-EYdf2cNg7rgCWJnxCdJ+F3V39O8ihb37eHAu1LK8oAFizgTQbPOK7zHHXbPt8rX24COqODXeI3sIf0fCXG7H/A==}
+    engines: {node: '>=16.20.0'}
+    cpu: [x64]
+    os: [linux]
+
+  '@typescript/typescript-netbsd-arm64@7.0.2':
+    resolution: {integrity: sha512-+polYF4MF04aPpO5FTkHran9yUQDSXqy5GiSDKpsll5jy3l3+g9QLhpf39T+ePtefhXLOGrLl0QIjkQP6VnelA==}
+    engines: {node: '>=16.20.0'}
+    cpu: [arm64]
+    os: [netbsd]
+
+  '@typescript/typescript-netbsd-x64@7.0.2':
+    resolution: {integrity: sha512-8YIT0EHM/3dq10ZOVF/A7pc/YSMtbcecct4rWtexrnSCHOPcpC2KTLXfTCR6vDpnSiY12heNb1GiN/wu+T/FyA==}
+    engines: {node: '>=16.20.0'}
+    cpu: [x64]
+    os: [netbsd]
+
+  '@typescript/typescript-openbsd-arm64@7.0.2':
+    resolution: {integrity: sha512-APT8+ClYnuYm1u9+kgGXoMj2VzWzcymwh2gNSQVySHfkRDGOTVkoWLjCmOQSaO+PoqQ57B0flRp9SA+7GnnkzQ==}
+    engines: {node: '>=16.20.0'}
+    cpu: [arm64]
+    os: [openbsd]
+
+  '@typescript/typescript-openbsd-x64@7.0.2':
+    resolution: {integrity: sha512-yX7s+Q0Dln0Dt9tEzZsAjXXR/+ytBM7AlglaqyeMPxQszJ1JhlJdZ6jLA+IzldHtflX81em7lDao1xXu+aRRkg==}
+    engines: {node: '>=16.20.0'}
+    cpu: [x64]
+    os: [openbsd]
+
+  '@typescript/typescript-sunos-x64@7.0.2':
+    resolution: {integrity: sha512-dLJDGaLZ1D4HPQn62u1n8mBDkJREwMsAkCdkwd4Ieqw+x3TUyTsqY0YiBCtE6H6OzzgGk3iuZ3vFWRS+E8/d1g==}
+    engines: {node: '>=16.20.0'}
+    cpu: [x64]
+    os: [sunos]
+
+  '@typescript/typescript-win32-arm64@7.0.2':
+    resolution: {integrity: sha512-Gyl1Vy6OsWesLzmq+EP0Fb7b4Nid5232AvcA2SFcdYreldpNtYFFofPjnt62y9hQy7VTaZp65ICJjuAQRaVcIQ==}
+    engines: {node: '>=16.20.0'}
+    cpu: [arm64]
+    os: [win32]
+
+  '@typescript/typescript-win32-x64@7.0.2':
+    resolution: {integrity: sha512-0BQ3HkAHHlKLSp1qRvf3SUhGpGsDuhB/jgFw75guyqbxJqEaS0Cw/VFO8i2nHglJUzQCRtMMR/IBAKE3ETMC4g==}
+    engines: {node: '>=16.20.0'}
+    cpu: [x64]
+    os: [win32]
+
+  '@typescript/typescript6@6.0.2':
+    resolution: {integrity: sha512-mbCddXd+jm7hfx7w2YU64/Av4/NqqeG3GoRZgxPcgoTxYjhrcfJRw9ULch71SS4G+Q3bOXFhRvPqjguN0Hyp5w==}
+    hasBin: true
 
   '@vercel/backends@0.8.14':
     resolution: {integrity: sha512-jgepdZh7E4ameCUSt/b28ImFd9Bz1VX71lKwD/ThtZ7nGIwi5SJ9hwyURvH60c4rNW6nKxMD/iSOlcgQOfrK3A==}
@@ -3610,6 +3741,11 @@ packages:
     engines: {node: ^18 || >=20}
     hasBin: true
 
+  nanoid@5.1.16:
+    resolution: {integrity: sha512-kVrnsrJqMR8+oLJnGEmSWw9BivK5mt7H3FZatVRjrc5wGqFYuBxX1yG7+A7Gi5AefkX6t/oCkizcQgpu0cY1dQ==}
+    engines: {node: ^18 || >=20}
+    hasBin: true
+
   napi-build-utils@2.0.0:
     resolution: {integrity: sha512-GEbrYkbfF7MoNaoh2iGG84Mnf/WZfB0GdGEsM8wz7Expx/LlWf5U8t9nvJKXSp3qr5IsEbK04cBGhol/KwOsWA==}
 
@@ -3753,6 +3889,10 @@ packages:
 
   p-map@7.0.4:
     resolution: {integrity: sha512-tkAQEw8ysMzmkhgw8k+1U/iPhWNhykKnSk4Rd5zLoPJCuJaGRPo6YposrZgaxHKzDHdDWWZvE/Sk7hsL2X/CpQ==}
+    engines: {node: '>=18'}
+
+  p-map@7.0.5:
+    resolution: {integrity: sha512-e8vJF4XdVkzqqSHguEMz41mQO1wKwxKm5ENrUJQUu9kLDCtn83cxbyHZcszr4QC5zEA7WffRRC4gsTecC7J9oA==}
     engines: {node: '>=18'}
 
   p-timeout@7.0.1:
@@ -4256,8 +4396,8 @@ packages:
     resolution: {integrity: sha512-oK8WG9diS3DlhdUkcFn4tkNIiIbBx9lI2ClF8K+b2/m8Eyv47LSawxUzZQSNKUrVb2KsqeTDCcjAAVPYaSLVTA==}
     engines: {node: '>=14.18.0'}
 
-  swagger-ui-dist@5.32.6:
-    resolution: {integrity: sha512-75ttZNaYCLoFPnozPZcTUU6mS3wKT8l7WLjU5zJSHFeJa23i5vtnze6IiCl4jDMPeQTXVXIgovq4M11NNfQvSA==}
+  swagger-ui-dist@5.32.8:
+    resolution: {integrity: sha512-dgMdWXIgnI4zX4OPhKEdWnlDODbgm8W3AX0Ivn/BBqcUh6xZsBxhZMnvk6DJyRz1BTrj8dPxtarmEGgkz30oyA==}
 
   symbol-tree@3.2.4:
     resolution: {integrity: sha512-9QNk5KwDF+Bvz+PyObkmSYjI5ksVUYtjW7AU22r2NKcfLJcXp96hkDWU3+XndOsUb+AQ9QhfzfCT2O+CNWT5Tw==}
@@ -4393,6 +4533,11 @@ packages:
   typescript@6.0.3:
     resolution: {integrity: sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==}
     engines: {node: '>=14.17'}
+    hasBin: true
+
+  typescript@7.0.2:
+    resolution: {integrity: sha512-8FYau96o3NKOhbjKi/qNvG/W5jhzxkbdm5sj9AbZ/5T5sWqn3hJgLfGx27sRKZWTvyzCP8dLRBTf5tBTSRVUNA==}
+    engines: {node: '>=16.20.0'}
     hasBin: true
 
   uid-promise@1.0.0:
@@ -4772,23 +4917,23 @@ packages:
 
 snapshots:
 
-  '@agentback/authentication@0.5.2':
+  '@agentback/authentication@0.7.1':
     dependencies:
-      '@agentback/context': 0.5.2
-      '@agentback/core': 0.5.2
-      '@agentback/metadata': 0.5.2
-      '@agentback/security': 0.5.2
+      '@agentback/context': 0.7.1
+      '@agentback/core': 0.7.1
+      '@agentback/metadata': 0.7.1
+      '@agentback/security': 0.7.1
       '@types/express': 5.0.6
       tslib: 2.8.1
     transitivePeerDependencies:
       - supports-color
 
-  '@agentback/authorization@0.5.2':
+  '@agentback/authorization@0.7.1':
     dependencies:
-      '@agentback/context': 0.5.2
-      '@agentback/core': 0.5.2
-      '@agentback/metadata': 0.5.2
-      '@agentback/security': 0.5.2
+      '@agentback/context': 0.7.1
+      '@agentback/core': 0.7.1
+      '@agentback/metadata': 0.7.1
+      '@agentback/security': 0.7.1
       tslib: 2.8.1
     transitivePeerDependencies:
       - supports-color
@@ -4809,10 +4954,21 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@agentback/context@0.5.2':
+  '@agentback/common@0.7.1':
     dependencies:
-      '@agentback/common': 0.5.2
-      '@agentback/metadata': 0.5.2
+      debug: 4.4.3
+      dotenv: 17.4.2
+      nanoid: 5.1.16
+      p-map: 7.0.5
+      toposort: 2.0.2
+      tslib: 2.8.1
+    transitivePeerDependencies:
+      - supports-color
+
+  '@agentback/context@0.7.1':
+    dependencies:
+      '@agentback/common': 0.7.1
+      '@agentback/metadata': 0.7.1
       '@types/debug': 4.1.13
       debug: 4.4.3
       p-event: 7.1.0
@@ -4820,21 +4976,21 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@agentback/core@0.5.2':
+  '@agentback/core@0.7.1':
     dependencies:
-      '@agentback/common': 0.5.2
-      '@agentback/context': 0.5.2
+      '@agentback/common': 0.7.1
+      '@agentback/context': 0.7.1
       '@types/debug': 4.1.13
       debug: 4.4.3
       tslib: 2.8.1
     transitivePeerDependencies:
       - supports-color
 
-  '@agentback/drizzle@0.5.2(drizzle-orm@0.45.2(@electric-sql/pglite@0.5.3)(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@12.10.1)(pg@8.22.0))(drizzle-zod@0.8.3(drizzle-orm@0.45.2(@electric-sql/pglite@0.5.3)(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@12.10.1)(pg@8.22.0))(zod@4.4.3))':
+  '@agentback/drizzle@0.7.1(drizzle-orm@0.45.2(@electric-sql/pglite@0.5.3)(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@12.10.1)(pg@8.22.0))(drizzle-zod@0.8.3(drizzle-orm@0.45.2(@electric-sql/pglite@0.5.3)(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@12.10.1)(pg@8.22.0))(zod@4.4.3))':
     dependencies:
-      '@agentback/context': 0.5.2
-      '@agentback/core': 0.5.2
-      '@agentback/openapi': 0.5.2
+      '@agentback/context': 0.7.1
+      '@agentback/core': 0.7.1
+      '@agentback/openapi': 0.7.1
       drizzle-orm: 0.45.2(@electric-sql/pglite@0.5.3)(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@12.10.1)(pg@8.22.0)
       tslib: 2.8.1
     optionalDependencies:
@@ -4842,9 +4998,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@agentback/extension-rate-limit@0.5.2(cors@2.8.6)(express@5.2.1)(hono@4.12.25)':
+  '@agentback/extension-rate-limit@0.7.1(cors@2.8.6)(express@5.2.1)(hono@4.12.25)':
     dependencies:
-      '@agentback/rest': 0.5.2(cors@2.8.6)(express@5.2.1)(hono@4.12.25)
+      '@agentback/rest': 0.7.1(cors@2.8.6)(express@5.2.1)(hono@4.12.25)
       '@types/express': 5.0.6
       rate-limiter-flexible: 11.2.0
       tslib: 2.8.1
@@ -4855,16 +5011,16 @@ snapshots:
       - multer
       - supports-color
 
-  '@agentback/files@0.5.2':
+  '@agentback/files@0.7.1':
     dependencies:
-      '@agentback/core': 0.5.2
+      '@agentback/core': 0.7.1
       tslib: 2.8.1
     transitivePeerDependencies:
       - supports-color
 
-  '@agentback/http-server@0.5.2':
+  '@agentback/http-server@0.7.1':
     dependencies:
-      '@agentback/common': 0.5.2
+      '@agentback/common': 0.7.1
       '@types/debug': 4.1.13
       debug: 4.4.3
       stoppable: 1.1.0
@@ -4872,14 +5028,14 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@agentback/mcp-http@0.5.2(cors@2.8.6)(hono@4.12.25)(zod@4.4.3)':
+  '@agentback/mcp-http@0.7.1(cors@2.8.6)(hono@4.12.25)(zod@4.4.3)':
     dependencies:
-      '@agentback/authentication': 0.5.2
-      '@agentback/common': 0.5.2
-      '@agentback/core': 0.5.2
-      '@agentback/mcp': 0.5.2
-      '@agentback/rest': 0.5.2(cors@2.8.6)(express@5.2.1)(hono@4.12.25)
-      '@agentback/security': 0.5.2
+      '@agentback/authentication': 0.7.1
+      '@agentback/common': 0.7.1
+      '@agentback/core': 0.7.1
+      '@agentback/mcp': 0.7.1
+      '@agentback/rest': 0.7.1(cors@2.8.6)(express@5.2.1)(hono@4.12.25)
+      '@agentback/security': 0.7.1
       '@modelcontextprotocol/sdk': 1.29.0(zod@4.4.3)
       '@types/express': 5.0.6
       express: 5.2.1
@@ -4893,15 +5049,15 @@ snapshots:
       - supports-color
       - zod
 
-  '@agentback/mcp@0.5.2':
+  '@agentback/mcp@0.7.1':
     dependencies:
-      '@agentback/authorization': 0.5.2
-      '@agentback/common': 0.5.2
-      '@agentback/context': 0.5.2
-      '@agentback/core': 0.5.2
-      '@agentback/metadata': 0.5.2
-      '@agentback/openapi': 0.5.2
-      '@agentback/security': 0.5.2
+      '@agentback/authorization': 0.7.1
+      '@agentback/common': 0.7.1
+      '@agentback/context': 0.7.1
+      '@agentback/core': 0.7.1
+      '@agentback/metadata': 0.7.1
+      '@agentback/openapi': 0.7.1
+      '@agentback/security': 0.7.1
       '@modelcontextprotocol/sdk': 1.29.0(zod@4.4.3)
       '@types/debug': 4.1.13
       debug: 4.4.3
@@ -4911,9 +5067,9 @@ snapshots:
       - '@cfworker/json-schema'
       - supports-color
 
-  '@agentback/metadata@0.5.2':
+  '@agentback/metadata@0.7.1':
     dependencies:
-      '@agentback/common': 0.5.2
+      '@agentback/common': 0.7.1
       debug: 4.4.3
       lodash-es: 4.18.1
       reflect-metadata: 0.2.2
@@ -4921,11 +5077,11 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@agentback/middleware@0.5.2':
+  '@agentback/middleware@0.7.1':
     dependencies:
-      '@agentback/common': 0.5.2
-      '@agentback/context': 0.5.2
-      '@agentback/core': 0.5.2
+      '@agentback/common': 0.7.1
+      '@agentback/context': 0.7.1
+      '@agentback/core': 0.7.1
       '@types/cors': 2.8.19
       '@types/express': 5.0.6
       '@types/on-finished': 2.3.5
@@ -4935,12 +5091,12 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@agentback/openapi@0.5.2':
+  '@agentback/openapi@0.7.1':
     dependencies:
-      '@agentback/common': 0.5.2
-      '@agentback/context': 0.5.2
-      '@agentback/core': 0.5.2
-      '@agentback/metadata': 0.5.2
+      '@agentback/common': 0.7.1
+      '@agentback/context': 0.7.1
+      '@agentback/core': 0.7.1
+      '@agentback/metadata': 0.7.1
       '@types/debug': 4.1.13
       '@types/json-merge-patch': 1.0.0
       '@types/lodash-es': 4.17.12
@@ -4953,13 +5109,13 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@agentback/rest-explorer@0.5.2(cors@2.8.6)(hono@4.12.25)':
+  '@agentback/rest-explorer@0.7.1(cors@2.8.6)(hono@4.12.25)':
     dependencies:
-      '@agentback/rest': 0.5.2(cors@2.8.6)(express@5.2.1)(hono@4.12.25)
+      '@agentback/rest': 0.7.1(cors@2.8.6)(express@5.2.1)(hono@4.12.25)
       '@types/express': 5.0.6
       '@types/swagger-ui-dist': 3.30.6
       express: 5.2.1
-      swagger-ui-dist: 5.32.6
+      swagger-ui-dist: 5.32.8
       tslib: 2.8.1
     transitivePeerDependencies:
       - cors
@@ -4967,20 +5123,20 @@ snapshots:
       - multer
       - supports-color
 
-  '@agentback/rest@0.5.2(cors@2.8.6)(express@5.2.1)(hono@4.12.25)':
+  '@agentback/rest@0.7.1(cors@2.8.6)(express@5.2.1)(hono@4.12.25)':
     dependencies:
-      '@agentback/authentication': 0.5.2
-      '@agentback/authorization': 0.5.2
-      '@agentback/common': 0.5.2
-      '@agentback/context': 0.5.2
-      '@agentback/core': 0.5.2
-      '@agentback/files': 0.5.2
-      '@agentback/http-server': 0.5.2
-      '@agentback/metadata': 0.5.2
-      '@agentback/middleware': 0.5.2
-      '@agentback/openapi': 0.5.2
-      '@agentback/security': 0.5.2
-      '@hono/node-server': 2.0.5(hono@4.12.25)
+      '@agentback/authentication': 0.7.1
+      '@agentback/authorization': 0.7.1
+      '@agentback/common': 0.7.1
+      '@agentback/context': 0.7.1
+      '@agentback/core': 0.7.1
+      '@agentback/files': 0.7.1
+      '@agentback/http-server': 0.7.1
+      '@agentback/metadata': 0.7.1
+      '@agentback/middleware': 0.7.1
+      '@agentback/openapi': 0.7.1
+      '@agentback/security': 0.7.1
+      '@hono/node-server': 2.0.8(hono@4.12.25)
       '@types/cors': 2.8.19
       '@types/debug': 4.1.13
       '@types/express': 5.0.6
@@ -4995,9 +5151,9 @@ snapshots:
       - hono
       - supports-color
 
-  '@agentback/security@0.5.2':
+  '@agentback/security@0.7.1':
     dependencies:
-      '@agentback/core': 0.5.2
+      '@agentback/core': 0.7.1
       tslib: 2.8.1
     transitivePeerDependencies:
       - supports-color
@@ -5632,7 +5788,7 @@ snapshots:
     dependencies:
       hono: 4.12.25
 
-  '@hono/node-server@2.0.5(hono@4.12.25)':
+  '@hono/node-server@2.0.8(hono@4.12.25)':
     dependencies:
       hono: 4.12.25
 
@@ -6345,6 +6501,70 @@ snapshots:
 
   '@types/trusted-types@2.0.7':
     optional: true
+
+  '@typescript/typescript-aix-ppc64@7.0.2':
+    optional: true
+
+  '@typescript/typescript-darwin-arm64@7.0.2':
+    optional: true
+
+  '@typescript/typescript-darwin-x64@7.0.2':
+    optional: true
+
+  '@typescript/typescript-freebsd-arm64@7.0.2':
+    optional: true
+
+  '@typescript/typescript-freebsd-x64@7.0.2':
+    optional: true
+
+  '@typescript/typescript-linux-arm64@7.0.2':
+    optional: true
+
+  '@typescript/typescript-linux-arm@7.0.2':
+    optional: true
+
+  '@typescript/typescript-linux-loong64@7.0.2':
+    optional: true
+
+  '@typescript/typescript-linux-mips64el@7.0.2':
+    optional: true
+
+  '@typescript/typescript-linux-ppc64@7.0.2':
+    optional: true
+
+  '@typescript/typescript-linux-riscv64@7.0.2':
+    optional: true
+
+  '@typescript/typescript-linux-s390x@7.0.2':
+    optional: true
+
+  '@typescript/typescript-linux-x64@7.0.2':
+    optional: true
+
+  '@typescript/typescript-netbsd-arm64@7.0.2':
+    optional: true
+
+  '@typescript/typescript-netbsd-x64@7.0.2':
+    optional: true
+
+  '@typescript/typescript-openbsd-arm64@7.0.2':
+    optional: true
+
+  '@typescript/typescript-openbsd-x64@7.0.2':
+    optional: true
+
+  '@typescript/typescript-sunos-x64@7.0.2':
+    optional: true
+
+  '@typescript/typescript-win32-arm64@7.0.2':
+    optional: true
+
+  '@typescript/typescript-win32-x64@7.0.2':
+    optional: true
+
+  '@typescript/typescript6@6.0.2':
+    dependencies:
+      '@typescript/old': typescript@6.0.3
 
   '@vercel/backends@0.8.14(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)(rollup@4.62.0)':
     dependencies:
@@ -7890,6 +8110,8 @@ snapshots:
 
   nanoid@5.1.11: {}
 
+  nanoid@5.1.16: {}
+
   napi-build-utils@2.0.0:
     optional: true
 
@@ -8051,6 +8273,8 @@ snapshots:
   p-finally@2.0.1: {}
 
   p-map@7.0.4: {}
+
+  p-map@7.0.5: {}
 
   p-timeout@7.0.1: {}
 
@@ -8650,7 +8874,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  swagger-ui-dist@5.32.6:
+  swagger-ui-dist@5.32.8:
     dependencies:
       '@scarf/scarf': 1.4.0
 
@@ -8796,6 +9020,29 @@ snapshots:
   typescript@5.9.3: {}
 
   typescript@6.0.3: {}
+
+  typescript@7.0.2:
+    optionalDependencies:
+      '@typescript/typescript-aix-ppc64': 7.0.2
+      '@typescript/typescript-darwin-arm64': 7.0.2
+      '@typescript/typescript-darwin-x64': 7.0.2
+      '@typescript/typescript-freebsd-arm64': 7.0.2
+      '@typescript/typescript-freebsd-x64': 7.0.2
+      '@typescript/typescript-linux-arm': 7.0.2
+      '@typescript/typescript-linux-arm64': 7.0.2
+      '@typescript/typescript-linux-loong64': 7.0.2
+      '@typescript/typescript-linux-mips64el': 7.0.2
+      '@typescript/typescript-linux-ppc64': 7.0.2
+      '@typescript/typescript-linux-riscv64': 7.0.2
+      '@typescript/typescript-linux-s390x': 7.0.2
+      '@typescript/typescript-linux-x64': 7.0.2
+      '@typescript/typescript-netbsd-arm64': 7.0.2
+      '@typescript/typescript-netbsd-x64': 7.0.2
+      '@typescript/typescript-openbsd-arm64': 7.0.2
+      '@typescript/typescript-openbsd-x64': 7.0.2
+      '@typescript/typescript-sunos-x64': 7.0.2
+      '@typescript/typescript-win32-arm64': 7.0.2
+      '@typescript/typescript-win32-x64': 7.0.2
 
   uid-promise@1.0.0: {}
 
