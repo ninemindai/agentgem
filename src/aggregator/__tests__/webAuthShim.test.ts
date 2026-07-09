@@ -7,8 +7,11 @@
 // differently, so a naive port would 401 every web (cookie-based) request. That regression is
 // covered explicitly below with a REAL better-auth cookie, not a hand-rolled one.
 import { describe, it, expect } from "vitest";
-import { makeTestDb, makeAuth, mintSession, resolveSession, mintBetterAuthCookieForTest } from "@agentgem/aggregator";
+import { makeTestDb, makeAuth, mintSession, resolveSession } from "@agentgem/aggregator";
 import type { AppDb } from "@agentgem/aggregator";
+// Test-only helper — not re-exported from the main barrel (see index.ts), imported via the
+// package's "testing" subpath instead.
+import { mintBetterAuthCookieForTest } from "@agentgem/aggregator/testing";
 
 const authOpts = {
   secret: "test-secret",

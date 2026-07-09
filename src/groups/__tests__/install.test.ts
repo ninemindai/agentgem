@@ -2,8 +2,11 @@
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
 import { sql } from "drizzle-orm";
-import { makeTestDb, makeAuth, mintSession, mintBetterAuthCookieForTest, createNativeGroup, grantInvite, groupMemberRole } from "@agentgem/aggregator";
+import { makeTestDb, makeAuth, mintSession, createNativeGroup, grantInvite, groupMemberRole } from "@agentgem/aggregator";
 import type { AppDb } from "@agentgem/aggregator";
+// Test-only helper — not re-exported from the main barrel (see index.ts), imported via the
+// package's "testing" subpath instead.
+import { mintBetterAuthCookieForTest } from "@agentgem/aggregator/testing";
 import { groupsHandler, groupMembersHandler, groupInvitesHandler, groupInviteRedeemHandler } from "../install.js";
 
 const ORIGINS = ["https://app.agentgem.ai"];

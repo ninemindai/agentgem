@@ -10,9 +10,9 @@ export const AUTH_BINDING = BindingKey.create<ReturnType<typeof makeAuth> | unde
 
 type ExpressApp = { all(p: string, h: (req: any, res: any) => unknown): unknown };
 
-// prefix is "/api/betterauth" in Plan 1a (coexists with the still-live old /api/auth/* handlers —
-// Codex re-review #1: a single /api/auth/* catch-all would swallow the old routes), then flips to
-// "/api/auth" in Plan 1b once the old OAuth is deleted. better-auth's baseURL must match the prefix.
+// Plan 1b cutover: the hand-rolled OAuth handlers are DELETED — better-auth now owns `/api/auth/*`
+// outright via this single catch-all (prefix = "/api/auth"). `installHandoff` must stay registered
+// BEFORE this mount so its more specific routes aren't swallowed by the `/*splat` wildcard below.
 // `auth` is typed off makeAuth's return (not a direct `better-auth` import) — this package doesn't
 // depend on better-auth directly, only @agentgem/aggregator does.
 export function mountAuth(expressApp: ExpressApp, auth: ReturnType<typeof makeAuth>, webOrigins: string[], prefix = "/api/auth"): void {
