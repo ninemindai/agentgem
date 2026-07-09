@@ -40,7 +40,11 @@ await build({
   format: "esm",
   target: "node22",
   keepNames: true,
-  external: ["electron"],
+  // jsdom (via @agentgem/play's gameGate load-smoke) loads a sibling `xhr-sync-worker.js`
+  // through a path computed at runtime, which esbuild can't inline — so bundling it produces
+  // a "Cannot find module './xhr-sync-worker.js'" crash at load. Keep it external and install
+  // it on disk next to the bundle (same treatment as express/cors below) so its files survive.
+  external: ["electron", "jsdom"],
   banner: { js: banner },
   outfile: join(out, "index.mjs"),
 });
@@ -53,7 +57,7 @@ cpSync(join(repo, "dist", "public"), join(out, "public"), { recursive: true });
 writeFileSync(
   join(out, "package.json"),
   JSON.stringify(
-    { name: "agentgem-core", private: true, type: "module", dependencies: { express: "^4", cors: "^2" } },
+    { name: "agentgem-core", private: true, type: "module", dependencies: { express: "^4", cors: "^2", jsdom: "^24" } },
     null,
     2,
   ),
