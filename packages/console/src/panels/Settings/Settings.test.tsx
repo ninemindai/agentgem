@@ -12,6 +12,10 @@ const res = (body: unknown) =>
   ({ ok: true, status: 200, text: async () => JSON.stringify(body) }) as unknown as Response;
 
 function mockFetch(overrides: Record<string, unknown> = {}) {
+  // Stateful: a completed bind must be reflected by the NEXT /api/bind/status call,
+  // the same way the real aggregator behaves — otherwise this stub can't tell the
+  // difference between a correct refresh()-driven update and a clobbered one.
+  let bound = false;
   return vi.fn(async (url: string | URL) => {
     const u = String(url);
     if (u.includes("/api/deploy-targets"))
@@ -21,7 +25,7 @@ function mockFetch(overrides: Record<string, unknown> = {}) {
       ] });
     if (u.includes("/api/credential")) return res({ ok: true });
     if (u.includes("/api/bind/status"))
-      return res(overrides["/api/bind/status"] ?? { bound: false });
+      return res(overrides["/api/bind/status"] ?? (bound ? { bound: true, login: "alice", sessionActive: true } : { bound: false }));
     if (u.includes("/api/bind/start"))
       return res(overrides["/api/bind/start"] ?? {
         configured: true,
@@ -30,8 +34,11 @@ function mockFetch(overrides: Record<string, unknown> = {}) {
         deviceCode: "dc",
         interval: 5,
       });
-    if (u.includes("/api/bind/complete"))
-      return res(overrides["/api/bind/complete"] ?? { bound: true, login: "alice" });
+    if (u.includes("/api/bind/complete")) {
+      const body = overrides["/api/bind/complete"] ?? { bound: true, login: "alice" };
+      if ((body as { bound?: boolean }).bound) bound = true;
+      return res(body);
+    }
     throw new Error(`unexpected ${u}`);
   });
 }
@@ -65,13 +72,14 @@ describe("Settings", () => {
     let resolveComplete!: (v: unknown) => void;
     const completePending = new Promise<unknown>((resolve) => { resolveComplete = resolve; });
     let completeCalls = 0;
+    let bound = false;
     vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
       const u = String(url);
       if (u.includes("/api/deploy-targets")) return res({ targets: [] });
-      if (u.includes("/api/bind/status")) return res({ bound: false });
+      if (u.includes("/api/bind/status")) return res(bound ? { bound: true, login: "alice", sessionActive: true } : { bound: false });
       if (u.includes("/api/bind/start"))
         return res({ configured: true, userCode: "WXYZ-1234", verificationUri: "https://github.com/login/device", deviceCode: "dc", interval: 5 });
-      if (u.includes("/api/bind/complete")) { completeCalls++; return completePending.then(() => res({ bound: true, login: "alice" })); }
+      if (u.includes("/api/bind/complete")) { completeCalls++; return completePending.then(() => { bound = true; return res({ bound: true, login: "alice" }); }); }
       throw new Error(`unexpected ${u}`);
     }));
     renderSettings();
@@ -84,6 +92,31 @@ describe("Settings", () => {
     resolveComplete(undefined);
     expect(await screen.findByText(/Verified as @alice/)).toBeTruthy();
     expect(completeCalls).toBe(1);
+  });
+
+  it("does not clobber the refreshed identity after a bind lands — the web handoff button and avatar survive", async () => {
+    vi.stubGlobal("open", vi.fn());
+    let bound = false;
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+      const u = String(url);
+      if (u.includes("/api/deploy-targets")) return res({ targets: [] });
+      if (u.includes("/api/bind/status"))
+        return res(bound
+          ? { bound: true, login: "alice", avatarUrl: "https://a/alice.png", sessionActive: true }
+          : { bound: false });
+      if (u.includes("/api/bind/start"))
+        return res({ configured: true, userCode: "WXYZ-1234", verificationUri: "https://github.com/login/device", deviceCode: "dc", interval: 5 });
+      if (u.includes("/api/bind/complete")) { bound = true; return res({ bound: true, login: "alice" }); }
+      throw new Error(`unexpected ${u}`);
+    }));
+    renderSettings();
+    await screen.findByText(/Not verified/);
+    fireEvent.click(screen.getByText("Connect GitHub"));
+    await screen.findByText("WXYZ-1234");
+    fireEvent.click(screen.getByRole("button", { name: /copy code & open github/i }));
+    expect(await screen.findByRole("button", { name: /Open on the web ↗/ })).toBeTruthy();
+    const img = await screen.findByRole("img", { name: /alice/i });
+    expect(img.getAttribute("src")).toBe("https://a/alice.png");
   });
 
   it("shows Verification unavailable when not configured", async () => {

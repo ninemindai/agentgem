@@ -19,10 +19,7 @@ export function Settings({ apiBase }: { apiBase: string }) {
   const [credNote, setCredNote] = useState<string | null>(null);
 
   const { status: bindStatus, refresh, setStatus } = useIdentity();
-  // onBound: the device-flow result carries the login synchronously; refresh() alone
-  // races against this test/mock environment's static /api/bind/status response, so
-  // thread the login straight into context instead of waiting on the refetch.
-  const bind = useGitHubBind(apiBase, { onBound: (login) => setStatus({ bound: true, login }) });
+  const bind = useGitHubBind(apiBase);
   const [bindError, setBindError] = useState<string | null>(null);
 
   useEffect(() => {
