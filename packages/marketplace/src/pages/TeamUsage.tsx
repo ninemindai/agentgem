@@ -202,7 +202,7 @@ export function TeamUsage({ api, scope, stars }: { api: ReturnType<typeof makeAp
       {view.status === "signedout" && (
         <div className="ex-usage-gate">
           <p>This dashboard is private to <strong>{scope}</strong> members.</p>
-          <a className="ex-usage-signin" href={stars.loginUrl()}>Sign in with GitHub</a>
+          <a className="ex-usage-signin" href="#" onClick={(e) => { e.preventDefault(); stars.loginUrl(); }}>Sign in with GitHub</a>
         </div>
       )}
       {view.status === "forbidden" && (
@@ -215,7 +215,7 @@ export function TeamUsage({ api, scope, stars }: { api: ReturnType<typeof makeAp
         <div className="ex-usage-gate">
           <p>Your <strong>{scope}</strong> membership check has expired.</p>
           <p className="ex-sub">Memberships are re-checked against GitHub periodically — refresh to continue.</p>
-          <a className="ex-usage-signin" href={stars.loginUrl()}>Refresh membership</a>
+          <a className="ex-usage-signin" href="#" onClick={(e) => { e.preventDefault(); stars.loginUrl(); }}>Refresh membership</a>
         </div>
       )}
 

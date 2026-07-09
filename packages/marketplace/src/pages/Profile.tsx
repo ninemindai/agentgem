@@ -32,8 +32,11 @@ export function Profile({ api, login, me }: { api: ReturnType<typeof makeApi>; l
         <span className="ex-profile-stars">★ {p.totalStars}</span>
       </header>
 
-      {/* Own-profile only: org memberships come from the authed /api/auth/me (never the public
-          profile payload), so private org memberships are visible to their owner alone. */}
+      {/* Own-profile only: org memberships are never in the public profile payload, so private
+          org memberships are visible to their owner alone. NOTE: `me.orgs` is currently always
+          empty — the old /api/auth/me sourced it from getAccountScopes; better-auth's get-session
+          has no equivalent yet (see auth.ts, task-1b-2-report.md). This section is dormant until
+          a follow-up wires a real source. */}
       {me && me.login === p.login && me.orgs.length > 0 && (
         <section className="ex-profile-orgs" aria-label="your orgs">
           <h3 className="ex-profile-subhead">Your orgs <span className="ex-profile-orgs-note">(only you see this)</span></h3>

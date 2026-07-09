@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, within, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { TeamUsage, membersCsv, fmtCompact, fmtFull, fmtDuration, heatCells } from "./TeamUsage";
 import type { OrgUsage, OrgSettingsView } from "../types";
@@ -6,7 +6,8 @@ import type { OrgUsageResult, OrgSettingsResult } from "../api";
 
 afterEach(() => cleanup());
 
-const stars = { signedIn: false, loginUrl: () => "https://api.example/login", api: {} as never };
+const loginUrl = () => {};
+const stars = { signedIn: false, loginUrl, api: {} as never };
 
 const member = (login: string, tokens: number, over: Partial<OrgUsage["members"][number]> = {}) => ({
   login, avatarUrl: null, sessions: 10, msgs: 40,
@@ -81,10 +82,12 @@ describe("TeamUsage page", () => {
     expect((screen.getByText("zheng") as HTMLAnchorElement).getAttribute("href")).toBe("/@zheng");
   });
 
-  it("prompts sign-in when unauthenticated", async () => {
-    render(<TeamUsage api={apiWith({ status: "unauthenticated" })} scope="acme" stars={stars} />);
+  it("prompts sign-in when unauthenticated, triggering loginUrl on click", async () => {
+    const login = vi.fn();
+    render(<TeamUsage api={apiWith({ status: "unauthenticated" })} scope="acme" stars={{ ...stars, loginUrl: login }} />);
     const link = await screen.findByText("Sign in with GitHub");
-    expect((link as HTMLAnchorElement).getAttribute("href")).toBe("https://api.example/login");
+    fireEvent.click(link);
+    expect(login).toHaveBeenCalledTimes(1);
   });
 
   it("explains a 403 for non-members", async () => {
@@ -119,11 +122,13 @@ describe("TeamUsage page", () => {
 });
 
 describe("TeamUsage stale membership", () => {
-  it("offers a one-click membership refresh on a stale 403", async () => {
-    render(<TeamUsage api={apiWith({ status: "stale" })} scope="acme" stars={stars} />);
+  it("offers a one-click membership refresh on a stale 403, triggering loginUrl on click", async () => {
+    const login = vi.fn();
+    render(<TeamUsage api={apiWith({ status: "stale" })} scope="acme" stars={{ ...stars, loginUrl: login }} />);
     expect(await screen.findByText(/membership check has expired/)).toBeTruthy();
     const link = screen.getByText("Refresh membership");
-    expect((link as HTMLAnchorElement).getAttribute("href")).toBe("https://api.example/login");
+    fireEvent.click(link);
+    expect(login).toHaveBeenCalledTimes(1);
   });
 });
 

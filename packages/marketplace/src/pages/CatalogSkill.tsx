@@ -43,11 +43,11 @@ export function CatalogSkill({ api, reviews, sourceId, path }: {
 
   const submit = async () => {
     if (rating < 1) { setFormErr("Pick a rating first."); return; }
-    if (!reviews.signedIn) { window.location.assign(reviews.loginUrl()); return; }
+    if (!reviews.signedIn) { reviews.loginUrl(); return; }
     setBusy(true); setFormErr(null);
     try { await reviews.api.submit("skill", targetId, rating, body.trim() || null); await refresh(); }
     catch (e) {
-      if (e instanceof NotSignedIn) { window.location.assign(reviews.loginUrl()); return; }
+      if (e instanceof NotSignedIn) { reviews.loginUrl(); return; }
       setFormErr(String((e as Error)?.message ?? e));
     } finally { setBusy(false); }
   };
@@ -89,7 +89,7 @@ export function CatalogSkill({ api, reviews, sourceId, path }: {
             </div>
           </div>
         ) : (
-          <p className="ex-empty"><a href={reviews.loginUrl()}>Sign in to review</a></p>
+          <p className="ex-empty"><a href="#" onClick={(e) => { e.preventDefault(); reviews.loginUrl(); }}>Sign in to review</a></p>
         )}
 
         {rErr && <p className="ex-error">Couldn&apos;t load reviews: {rErr}</p>}

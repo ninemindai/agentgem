@@ -29,13 +29,12 @@ describe("StarButton", () => {
     await waitFor(() => expect(toggle).toHaveBeenCalledWith("gem", "x"));
     await waitFor(() => expect(screen.getByRole("button").textContent).toContain("4"));
   });
-  it("signed-out click navigates to loginUrl (no toggle)", () => {
+  it("signed-out click triggers loginUrl (no toggle)", () => {
     const toggle = vi.fn();
-    const assign = vi.fn();
-    vi.stubGlobal("location", { assign } as unknown as Location);
-    render(<StarButton kind="gem" id="x" count={3} starred={false} signedIn={false} loginUrl={() => "/login?return=here"} api={apiWith(toggle as never)} />);
+    const loginUrl = vi.fn();
+    render(<StarButton kind="gem" id="x" count={3} starred={false} signedIn={false} loginUrl={loginUrl} api={apiWith(toggle as never)} />);
     fireEvent.click(screen.getByRole("button", { name: /star/i }));
     expect(toggle).not.toHaveBeenCalled();
-    expect(assign).toHaveBeenCalledWith("/login?return=here");
+    expect(loginUrl).toHaveBeenCalledTimes(1);
   });
 });
