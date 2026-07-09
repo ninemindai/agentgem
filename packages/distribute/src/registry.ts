@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 import type { Gem, GemArtifact, SecretRequirement, GemCheck } from "@agentgem/model";
 import { readGemArchive, computeLock, verifyLock, writeGemArchive, readGemMeta } from "@agentgem/archive";
-import { materialize } from "@agentgem/model";
+import { materialize, assertGemSafe } from "@agentgem/model";
 import type { FileTree, TargetId } from "@agentgem/model";
 
 export const REGISTRY_FORMAT_VERSION = 1;
@@ -253,6 +253,9 @@ export async function publishGem(args: {
   const key = `@${args.scope}/${name}`;
   const path = `items/${args.scope}/${name}/${args.version}`;
 
+  // Registry publish builds its archive directly rather than via exportGem, so it needs its own
+  // fail-closed gate. Runs before any digest/commit work: nothing leaves on a leaked Gem.
+  assertGemSafe(args.gem);
   const { files } = writeGemArchive(args.gem, { version: args.version, dependencies: args.dependencies });
   const { gemDigest, dependencies } = readGemMeta(files);
 

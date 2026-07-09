@@ -37,7 +37,7 @@ import {
 import { appendFile, mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { redactStrongCredentials } from "./secretPatterns.js";
+import { redactStrongCredentials } from "@agentgem/model";
 
 /** The five level loggers for a namespace: `{ error, warn, info, debug, trace }`. */
 export type Logger = ReturnType<typeof loggers>;

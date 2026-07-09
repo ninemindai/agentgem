@@ -30,6 +30,23 @@ export function deepLinkHash(rawUrl: string): string | null {
   return qs ? `#/${route}?${qs}` : `#/${route}`;
 }
 
+// The subset of deep links that DO something irreversible on arrival: `install=<key>` makes the
+// GetGems panel fetch and install a gem with no further interaction. Any web page can host that
+// anchor, so main.ts must get the user's consent before navigating. Returns the install target, or
+// null when the link merely browses (q=, bare route, play) and needs no prompt.
+//
+// Note this deliberately re-uses deepLinkHash's validation: a link it refuses can never install.
+export function deepLinkInstall(rawUrl: string): { key: string; version?: string } | null {
+  if (!deepLinkHash(rawUrl)) return null;
+  let u: URL;
+  try { u = new URL(rawUrl); } catch { return null; }
+  const route = (u.hostname || u.pathname.replace(/^\/+/, "").split("/")[0] || "").toLowerCase();
+  if (route !== "get-gems") return null; // `play` renders a sealed iframe; it installs nothing.
+  const key = u.searchParams.get("install");
+  if (!key) return null;
+  return { key, version: u.searchParams.get("v") ?? undefined };
+}
+
 // Windows/Linux deliver the deep link as a launch argument rather than an event; pick it out of argv.
 export function argvDeepLink(argv: readonly string[]): string | null {
   return argv.find((a) => a.startsWith(`${DEEP_LINK_SCHEME}://`)) ?? null;

@@ -216,7 +216,7 @@ import { InvalidInputError, scorecardFloor, loadOrCreateIdentity } from "@agentg
 import { scaffoldChecks } from "@agentgem/build";
 import { materialize, compatibility } from "@agentgem/model";
 import type { TargetId } from "@agentgem/model";
-import { DEPLOY_REGISTRY, deployTargetList } from "@agentgem/deploy";
+import { DEPLOY_REGISTRY, deployGem, deployTargetList } from "@agentgem/deploy";
 import type { DeployTargetId } from "@agentgem/deploy";
 import { createWorkspace, listWorkspaces, readWorkspace, renderTarget, deleteWorkspace } from "@agentgem/base";
 import { writeGemArchive, readGemArchive, readGemMeta } from "@agentgem/archive";
@@ -934,7 +934,7 @@ export class GemController {
     const inventory = introspectAll(input.body.dir, input.body.projects);
     const gem = buildGem(inventory, input.body.selection, { name: input.body.name ?? "gem", createdFrom: dirs.claudeDir, channels: input.body.channels });
     const target = (input.body.target ?? "claude-managed") as DeployTargetId;
-    const result = await DEPLOY_REGISTRY[target].deploy(gem, input.body.requestId);
+    const result = await deployGem(target, gem, input.body.requestId);
     if (input.body.wsName) {
       const at = new Date().toISOString();
       if (result.kind === "managed-agent") {
