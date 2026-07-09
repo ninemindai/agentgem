@@ -2,6 +2,9 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { Settings } from "./index.js";
 import * as routes from "../../api/routes.js";
+import { IdentityProvider } from "../../identity/IdentityProvider.js";
+
+const renderSettings = () => render(<IdentityProvider apiBase=""><Settings apiBase="" /></IdentityProvider>);
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
@@ -36,7 +39,7 @@ function mockFetch(overrides: Record<string, unknown> = {}) {
 describe("Settings", () => {
   it("lists deploy backends with readiness", async () => {
     vi.stubGlobal("fetch", mockFetch());
-    render(<Settings apiBase="" />);
+    renderSettings();
     expect(await screen.findByText("Claude Managed Agents")).toBeTruthy();
     expect(screen.getByText("ready")).toBeTruthy();
     expect(screen.getByText("needs credentials")).toBeTruthy();
@@ -44,7 +47,7 @@ describe("Settings", () => {
 
   it("saves a credential", async () => {
     vi.stubGlobal("fetch", mockFetch());
-    render(<Settings apiBase="" />);
+    renderSettings();
     await screen.findByText("Claude Managed Agents");
     fireEvent.change(screen.getByLabelText("credential value"), { target: { value: "sk-test" } });
     fireEvent.click(screen.getByText("Save"));
@@ -53,7 +56,7 @@ describe("Settings", () => {
 
   it("shows Not verified when unbound", async () => {
     vi.stubGlobal("fetch", mockFetch());
-    render(<Settings apiBase="" />);
+    renderSettings();
     expect(await screen.findByText(/Not verified/)).toBeTruthy();
   });
 
@@ -71,7 +74,7 @@ describe("Settings", () => {
       if (u.includes("/api/bind/complete")) { completeCalls++; return completePending.then(() => res({ bound: true, login: "alice" })); }
       throw new Error(`unexpected ${u}`);
     }));
-    render(<Settings apiBase="" />);
+    renderSettings();
     await screen.findByText(/Not verified/);
     fireEvent.click(screen.getByText("Connect GitHub"));
     // Code shows; poll has NOT started yet (no /complete call until copy-&-open).
@@ -85,7 +88,7 @@ describe("Settings", () => {
 
   it("shows Verification unavailable when not configured", async () => {
     vi.stubGlobal("fetch", mockFetch({ "/api/bind/start": { configured: false } }));
-    render(<Settings apiBase="" />);
+    renderSettings();
     await screen.findByText(/Not verified/);
     fireEvent.click(screen.getByText("Connect GitHub"));
     expect(await screen.findByText(/Verification unavailable/)).toBeTruthy();
@@ -94,7 +97,7 @@ describe("Settings", () => {
   it("renders the GitHub avatar when the binding has one", async () => {
     vi.spyOn(routes.deployTargetsRoute, "call").mockResolvedValue({ targets: [] });
     vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob", avatarUrl: "https://a/bob.png" } as any);
-    render(<Settings apiBase="" />);
+    renderSettings();
     const img = await screen.findByRole("img", { name: /bob/i });
     expect(img.getAttribute("src")).toBe("https://a/bob.png");
     expect(screen.getByText(/Verified as @bob/)).toBeTruthy();
@@ -106,7 +109,7 @@ describe("Settings", () => {
     vi.spyOn(routes.bindStartRoute, "call").mockResolvedValue({ configured: true, userCode: "AB-12", verificationUri: "https://github.com/login/device", deviceCode: "dc", interval: 5 } as any);
     vi.spyOn(routes.bindCompleteRoute, "call").mockResolvedValue({ bound: false, rejected: "unknown-producer" } as any);
     vi.stubGlobal("open", vi.fn());
-    render(<Settings apiBase="" />);
+    renderSettings();
     await screen.findByText(/Not verified/);
     fireEvent.click(screen.getByText("Connect GitHub"));
     expect(await screen.findByText("AB-12")).toBeTruthy();
@@ -119,7 +122,7 @@ describe("Settings", () => {
     vi.spyOn(routes.deployTargetsRoute, "call").mockResolvedValue({ targets: [] });
     vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob" } as any);
     const disconnect = vi.spyOn(routes.bindDisconnectRoute, "call").mockResolvedValue({ bound: false } as any);
-    render(<Settings apiBase="" />);
+    renderSettings();
     await screen.findByText(/Verified as @bob/);
     fireEvent.click(screen.getByText("Disconnect"));
     expect(await screen.findByText("Connect GitHub")).toBeTruthy();
@@ -130,7 +133,7 @@ describe("Settings", () => {
   it("falls back to text-only when the binding has no avatar", async () => {
     vi.spyOn(routes.deployTargetsRoute, "call").mockResolvedValue({ targets: [] });
     vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob" } as any);
-    render(<Settings apiBase="" />);
+    renderSettings();
     await screen.findByText(/Verified as @bob/);
     expect(screen.queryByRole("img", { name: /bob/i })).toBeNull();
   });
