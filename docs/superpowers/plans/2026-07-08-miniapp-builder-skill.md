@@ -14,7 +14,7 @@ Spec: `docs/superpowers/specs/2026-07-08-miniapp-builder-skill-design.md`.
 
 - Branch `feat/miniapp-builder-skill`, worktree `../agentgem-miniapp-skill`, based on `origin/main` @ `bf9f5d1c`. Never commit to `main`.
 - Play tests live in root `src/play/__tests__/` and import from the **built package** `@agentgem/play` (they run against `dist`). Do **not** add a package-local `vitest.config`.
-- Because tests run against `dist`, every focused test run must be preceded by `npx tsc -b`.
+- Because tests run against `dist`, every focused test run must be preceded by `npx tsc -b`. **vitest's `include` is `dist/**/__tests__/**/*.test.js`** — a focused run must name the compiled `dist/…/*.test.js` path, never the `src/…/*.test.ts` source. Write the test in `src/`; run it from `dist/`.
 - Frontmatter must start on **line 1** of `SKILL.md` — a leading comment hides the skill from the skills.sh CLI (see `src/distill/__tests__/shareSkill.test.ts`).
 - `MINIAPP_BUILDER_BRIEF` is written as a TypeScript template literal. It contains many markdown backticks; **every backtick inside the literal must be escaped as `` \` ``**. It contains no `${` sequences, so no `$` escaping is needed.
 - Do not modify the runtime: `mcpUiHost.ts`, `mcpHostTools.ts`, `Runner.tsx`, `gameGate.ts`, `portability.ts` are all out of scope.
@@ -336,7 +336,7 @@ Expected: `---` on line 1, `name: agentgem-miniapp` on line 2.
 - [ ] **Step 6: Run the test to verify it passes**
 
 ```bash
-cd ../agentgem-miniapp-skill && npx tsc -b && npx vitest run src/play/__tests__/builderBrief.test.ts
+cd ../agentgem-miniapp-skill && npx tsc -b && npx vitest run dist/play/__tests__/builderBrief.test.js
 ```
 
 Expected: PASS, 6 tests.
@@ -385,7 +385,7 @@ In `src/play/__tests__/studio.test.ts`, find the `seedStudio` test whose body en
 - [ ] **Step 2: Run the test to verify it fails**
 
 ```bash
-cd ../agentgem-miniapp-skill && npx tsc -b && npx vitest run src/play/__tests__/studio.test.ts
+cd ../agentgem-miniapp-skill && npx tsc -b && npx vitest run dist/play/__tests__/studio.test.js
 ```
 
 Expected: FAIL — `expected '…' to contain 'ui/notifications/tool-result'`. The first assertion
@@ -427,7 +427,7 @@ function studioInstructions(name: string): string {
 - [ ] **Step 4: Run the test to verify it passes**
 
 ```bash
-cd ../agentgem-miniapp-skill && npx tsc -b && npx vitest run src/play/__tests__/studio.test.ts
+cd ../agentgem-miniapp-skill && npx tsc -b && npx vitest run dist/play/__tests__/studio.test.js
 ```
 
 Expected: PASS.
@@ -438,12 +438,12 @@ These three tests pin behaviour the change must preserve — the brief still nam
 blank-studio prompt is still threaded through, and the seeded HTML still carries the edit markers.
 
 ```bash
-cd ../agentgem-miniapp-skill && npx vitest run \
-  src/play/__tests__/studio.test.ts \
-  src/play/__tests__/builderBrief.test.ts \
-  src/__tests__/chatStudio.test.ts \
-  src/__tests__/playRoutes.test.ts \
-  src/goldmine/__tests__/chatRoutes.test.ts
+cd ../agentgem-miniapp-skill && npx tsc -b && npx vitest run \
+  dist/play/__tests__/studio.test.js \
+  dist/play/__tests__/builderBrief.test.js \
+  dist/__tests__/chatStudio.test.js \
+  dist/__tests__/playRoutes.test.js \
+  dist/goldmine/__tests__/chatRoutes.test.js
 ```
 
 Expected: PASS, all files.
