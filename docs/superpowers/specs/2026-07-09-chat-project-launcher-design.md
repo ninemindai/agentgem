@@ -67,6 +67,24 @@ project-tailored brief (the neutral goldmine brief is used); no change to `@agen
 - `project` chats are NOT studio sessions: do **not** add them to the `chatId → miniapp`
   checkpoint map.
 
+### `src/index.ts` — the `connectFn` cwd guard (correctness-critical)
+
+There is a **second** cwd gate the spec must handle: `ChatManager`'s `connectFn` wraps
+`open()` with `conn.ctx.open(studioCwd(cwd, chatCwd), opts)` (`src/index.ts:329`).
+`studioCwd` allow-lists only paths under the miniapps root or the neutral `chatCwd`, so a
+project cwd returned by `studioChatArgs` would be **silently reverted to `chatCwd` (neutral)**
+— the launcher would appear to do nothing. This wrapper is defense-in-depth ("request input
+can never redirect the agent"), so it must be extended to also honor a project cwd **that is
+in the same allow-list** `resolveProjectCwd` uses:
+
+- Build the allow-list once as a shared helper (canonicalized `discoverProjects ∪ readRecents`),
+  used by BOTH `resolveProjectCwd` (the dep) and the wrapper — one source of truth.
+- Wrapper logic: honor `cwd` if `studioCwd` accepts it (miniapp/neutral) **or** if
+  `resolveProject(cwd)` is in the project allow-list; otherwise fall back to `chatCwd`. A raw,
+  non-allow-listed path still falls back to neutral — the invariant holds.
+- (The allow-list does a disk scan; `open()` runs once per session start, so recomputing per
+  open is acceptable for the MVP — note it as possible future caching.)
+
 ### `src/index.ts` (dependency injection)
 - Inject `resolveProjectCwd` parallel to `resolveStudio`:
   ```ts
@@ -92,10 +110,14 @@ project-tailored brief (the neutral goldmine brief is used); no change to `@agen
   optional `globalLabel` prop to `ScopePicker` (so `"Global"` becomes `"Neutral"`) or a thin
   dedicated picker; the lighter option is chosen in the plan.
 - Disabled once the chat has started (same lifecycle as the existing agent `<select>`).
-- On `POST /api/chat`, include `project: <root>` **only** when a project is selected; omit it
-  for a neutral chat (backward-compatible).
-- Client route `createChat` body schema (mirror in `packages/console/src/api/routes.ts`) gains
-  an optional `project?: string` (server body schema gains it too — keep the mirrors in sync).
+- The launcher reuses `_shared/ScopePicker` with two new **optional** props (`globalLabel="Neutral"`
+  to relabel the non-project button, `disabled` to lock it after the chat starts) — both default
+  to today's behavior so Optimize/Setup are unaffected. The `Scope`'s `"global"` kind reads as
+  "neutral" here.
+- `POST /api/chat` is a **raw `fetch`** (`Chat/index.tsx:71`), NOT an agentback route client — so
+  there is **no client route schema to mirror** and the server reads `req.body` directly (no
+  server zod body schema either). The only client change is adding `...(project ? { project } : {})`
+  to the fetch body when a project is selected (omitted for a neutral chat → backward-compatible).
 
 ## Testing
 
