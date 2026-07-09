@@ -21,6 +21,7 @@ export function ConnectGitHub({
     <div className="identity-connect">
       {error && <p className="identity-connect__error">{error}</p>}
 
+      {/* unconfigured wins precedence if both are set; useGitHubBind never produces both at once (connect() clears flow before setting unconfigured) */}
       {unconfigured ? (
         <p className="deploy-hint">Verification unavailable (not configured)</p>
       ) : flow ? (
