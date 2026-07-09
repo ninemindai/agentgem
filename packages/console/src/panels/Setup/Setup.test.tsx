@@ -154,7 +154,15 @@ describe("Setup", () => {
       if (u.includes("/api/testbed/recents"))
         return res({ recents: [{ path: "/repo/a", flavor: "x", name: "a", lastUsed: "2026-01-01", exists: true }] });
       if (u.includes("/api/testbed/projects")) return res({ projects: [] });
-      if (u.includes("/api/inventory")) return res(u.includes("projects=") ? invWithProject : inv);
+      if (u.includes("/api/inventory")) {
+        // Guard the wire format: the server's parseProjectsQuery expects a JSON-encoded
+        // array of roots. A raw-path regression (projects=/repo/a) must NOT match here.
+        const raw = new URL(u, "http://x").searchParams.get("projects");
+        let roots: unknown = null;
+        try { roots = raw ? JSON.parse(raw) : null; } catch { roots = null; }
+        const ok = Array.isArray(roots) && roots.includes("/repo/a");
+        return res(ok ? invWithProject : inv);
+      }
       throw new Error("unexpected " + u);
     }));
     render(<Setup apiBase="" />);
