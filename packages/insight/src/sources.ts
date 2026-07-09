@@ -4,7 +4,7 @@
 // The inbound SourceSpec registry: one entry per coding agent AgentGem can ingest. Mirrors the
 // outbound TargetSpec. FS-touching + returns SessionStat, so it lives here (Node), not in the
 // pure @agentgem/model. The DI extension point (SourceRegistry) is app-layer (see src/gem/sourceRegistry.ts).
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { readdirSync, existsSync } from "node:fs";
 import { join, basename } from "node:path";
 import { homedir } from "node:os";
@@ -66,10 +66,30 @@ export function watchableSources(specs: SourceSpec[] = BUILTIN_SOURCES): SourceS
 // service them in parallel; mapPool keeps the output in file order (parse is CPU-only,
 // so it still runs on the one thread — the win is the read overlap, not the parse).
 const READ_CONCURRENCY = 16;
+
+// Incremental parse cache: read+parse (the CPU cost) is skipped for any file whose
+// (mtime, size) are unchanged since we last parsed it. Transcripts are append-only, so
+// a whole re-scan (triggered when ANY file changes — e.g. the active session appends one
+// line) re-parses only the changed file(s) and reuses the rest. Keyed by absolute path;
+// the cached SessionStat object is returned as-is (callers treat it as read-only). Bounded
+// by a size cap so it can't grow without limit as old transcripts come and go.
+const _parseCache = new Map<string, { mtimeMs: number; size: number; stat: SessionStat | null }>();
+const PARSE_CACHE_CAP = 20_000;
+/** Test seam: drop the incremental parse cache. */
+export function clearParseCache(): void { _parseCache.clear(); }
+
 async function scanJsonl(files: string[], parse: (t: string, p: string) => SessionStat | null): Promise<SessionStat[]> {
   const parsed = await mapPool(files, READ_CONCURRENCY, async (f) => {
+    // stat first (cheap): unchanged bytes → serve the cached parse, skipping read + JSON.parse.
+    let meta: { mtimeMs: number; size: number };
+    try { const s = await stat(f); meta = { mtimeMs: s.mtimeMs, size: s.size }; } catch { return null; }
+    const hit = _parseCache.get(f);
+    if (hit && hit.mtimeMs === meta.mtimeMs && hit.size === meta.size) return hit.stat;
     let text: string; try { text = await readFile(f, "utf8"); } catch { return null; }
-    return parse(text, f);
+    const s = parse(text, f);
+    if (_parseCache.size >= PARSE_CACHE_CAP) _parseCache.clear();   // safety valve
+    _parseCache.set(f, { ...meta, stat: s });
+    return s;
   });
   return parsed.filter((s): s is SessionStat => s !== null);
 }

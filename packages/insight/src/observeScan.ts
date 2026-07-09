@@ -9,7 +9,7 @@
 // lines degrade to empty/skip, never throw.
 import { readdirSync } from "node:fs";
 import { join, basename } from "node:path";
-import { BUILTIN_SOURCES, type SourceSpec } from "./sources.js";
+import { BUILTIN_SOURCES, type SourceSpec, clearParseCache } from "./sources.js";
 import { transcriptToken } from "./analysisCache.js";
 // The pure aggregation half (SessionStat + aggregateObserve + payload types) lives
 // in observeAggregate.ts so the browser can share it; re-export so existing
@@ -152,8 +152,8 @@ export async function scanSessionsCached(_nowMs?: number, dirs?: { claudeDir?: s
   _cache = { token, stats };
   return stats;
 }
-/** Test seam: drop the cache. */
-export function clearScanCache(): void { _cache = null; }
+/** Test seam: drop the whole-scan cache (and the underlying per-file parse cache). */
+export function clearScanCache(): void { _cache = null; clearParseCache(); }
 
 /** True when the default-path scan cache matches the current transcripts. Lets the
  *  background warmer report hit-vs-warmed without re-scanning. */
