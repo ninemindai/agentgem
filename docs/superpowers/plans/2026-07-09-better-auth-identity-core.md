@@ -61,7 +61,34 @@ better-auth uses **text** ids; AgentGem's `accounts.id` is **uuid** with 7+ FKs.
 
 ---
 
+## SPIKE RESULTS (2026-07-09) — both gates PASS, design holds
+
+Verified against better-auth **1.6.23** using the **memory adapter** (isolates the core
+API from drizzle/DDL wiring — those remain to verify in Tasks 3–4, but they are standard
+adapter usage, low risk). All three uncertainties resolved green:
+
+- **Session creation:** `ctx.internalAdapter.createSession(userId, undefined)` returns
+  `{ token, expiresAt, ... }`; the `bearer()` plugin accepts that token via
+  `auth.api.getSession({ headers: { authorization: 'Bearer <token>' } })`. → `mintSession` is viable.
+- **Supplied id + login field:** `ctx.internalAdapter.createUser({ id, login, image, ... })`
+  accepts an externally-supplied uuid `id` and persists the `login` additionalField;
+  `getSession` returns `user.login` and `user.image`. → migration id-preservation and the
+  `resolveSession` shim both work.
+- **Link-on-relogin:** a pre-inserted `createAccount({ userId, providerId: 'github', accountId })`
+  is resolved by **`findAccountByProviderId(accountId, providerId)`** (arg order: accountId
+  first) to the correct user, no duplicate. → the migration's pre-made account links on re-login.
+- **Access token for org-capture:** the account row carries `accessToken`, readable off the
+  `createAccount` result and `findAccountByProviderId` — the Task 4 hook can use it.
+
+**API corrections for the tasks below:** `findAccountByProviderId` takes `(accountId,
+providerId)`, not `(providerId, accountId)`. `createUser` takes the `login` field inline in
+its object. `createSession(userId, undefined)` is the working call.
+
+---
+
 ## Task 1 (SPIKE): programmatic session creation — GATES the plan
+*(VERIFIED — see SPIKE RESULTS above. When executing, reproduce this as the dist-based
+test in the task body, then extract `mintSession`.)*
 
 **Files:** Create `src/aggregator/__tests__/spike-session.test.ts`; Create `packages/aggregator/src/auth/mintSession.ts`.
 
