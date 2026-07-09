@@ -479,6 +479,12 @@ body::before {
 /* Paper mat around the miniapp, so the black canvas reads as a print mounted on the page. */
 .play-plate { padding: 7px; border-radius: 12px; border: 1px solid var(--line); background: var(--paper-2);
   box-shadow: var(--shadow-sm), inset 0 1px 2px rgba(60, 44, 20, .07); }
+/* Stands in for the Runner when there is no html to seal: an empty iframe would read as a working
+   preview of an empty app. min-height keeps the plate from collapsing to a sliver while loading. */
+.play-plate__state { min-height: 240px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 7px; padding: 16px; text-align: center; }
+.play-plate__state b { font: 600 15px var(--font-display); color: var(--ink); }
+.play-plate__state span { font: 500 11.5px var(--font-mono); color: var(--ink-soft); word-break: break-word; max-width: 44ch; }
 .play-agent-select { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 12px; }
 .play-agent-select__label { font: 700 11px var(--font-ui); letter-spacing: .11em; text-transform: uppercase; color: var(--muted); }
 .play-agent-select__control { font: 600 12.5px var(--font-ui); padding: 7px 32px 7px 11px; border-radius: 999px;
