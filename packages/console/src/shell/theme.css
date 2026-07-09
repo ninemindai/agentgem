@@ -462,9 +462,23 @@ body::before {
 /* Studio */
 .play-studio-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
 .play-studio-head .sp { flex: 1; }
-.play-studio-title { font: 600 16px var(--font-display); color: var(--ink); }
-.play-grid-2 { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); gap: 14px; align-items: start; }
-.play-chat { display: flex; flex-direction: column; gap: 9px; }
+.play-studio-title { font: 600 19px var(--font-display); letter-spacing: -.01em; color: var(--ink); }
+/* stretch (not start): the transcript column takes its height from the plate column, so the log
+   tracks whatever size Runner computes for the preview instead of guessing at a fixed height. */
+.play-grid-2 { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); gap: 18px; align-items: stretch; }
+/* height:0 + min-height:100% — contribute no height to the grid row (so a long transcript can't
+   stretch it), then fill whatever height the plate column establishes. */
+.play-chat { display: flex; flex-direction: column; gap: 9px; min-width: 0; height: 0; min-height: 100%; }
+
+/* The two columns are a mounted plate and its transcript. Each is announced by a tracked micro-caption
+   trailing into a hairline rule — the same letterpress device as .play-agent-select__label. */
+.play-stage { display: flex; flex-direction: column; gap: 9px; min-width: 0; }
+.play-cap-row { display: flex; align-items: center; gap: 10px; }
+.play-cap { font: 700 11px var(--font-ui); letter-spacing: .11em; text-transform: uppercase; color: var(--muted); }
+.play-cap__rule { flex: 1; height: 1px; background: var(--line-soft); }
+/* Paper mat around the miniapp, so the black canvas reads as a print mounted on the page. */
+.play-plate { padding: 7px; border-radius: 12px; border: 1px solid var(--line); background: var(--paper-2);
+  box-shadow: var(--shadow-sm), inset 0 1px 2px rgba(60, 44, 20, .07); }
 .play-agent-select { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 12px; }
 .play-agent-select__label { font: 700 11px var(--font-ui); letter-spacing: .11em; text-transform: uppercase; color: var(--muted); }
 .play-agent-select__control { font: 600 12.5px var(--font-ui); padding: 7px 32px 7px 11px; border-radius: 999px;
@@ -472,19 +486,56 @@ body::before {
 .play-agent-select__control:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
 .play-agent-select__control:disabled { opacity: .58; cursor: default; }
 .play-agent-select__note { color: var(--muted); font-size: 12px; }
-.play-log { height: 388px; overflow: auto; margin: 0; padding: 4px 2px; display: flex; flex-direction: column; gap: 9px; }
-.play-log__hint { color: var(--muted); font-size: 13px; padding: 8px 2px; }
+/* flex:1 + min-height:0 — fill the stretched column, and actually scroll rather than growing the row
+   (a flex item's default min-height:auto refuses to shrink below its content). */
+.play-log { flex: 1; min-height: 0; overflow: auto; margin: 0; padding: 13px 14px; display: flex; flex-direction: column; gap: 11px;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--raised); box-shadow: var(--shadow-sm); }
+.play-log__empty { margin: auto 0; text-align: center; padding: 8px 12px; }
+.play-log__empty b { display: block; font: 600 15px var(--font-display); color: var(--ink); margin-bottom: 5px; }
+.play-log__empty span { font-size: 12.5px; line-height: 1.5; color: var(--muted); }
 .play-msg { font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
 .play-msg--user { align-self: flex-end; max-width: 88%; background: var(--ink); color: var(--paper);
   padding: 7px 12px; border-radius: 13px 13px 3px 13px; font-weight: 500; }
-.play-msg--agent { color: var(--ink-soft); }
+/* The agent answers in the margin: a hairline rule instead of a bubble, so the two voices never collide. */
+.play-msg--agent { color: var(--ink-soft); padding-left: 11px; border-left: 2px solid var(--line); }
 .play-tool { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; font: 500 11.5px var(--font-mono);
   color: var(--ink-soft); background: var(--paper-2); border: 1px solid var(--line); border-radius: 7px; padding: 3px 9px; max-width: 100%; }
 .play-tool b { font-weight: 600; color: var(--ink); } .play-tool.is-failed { color: var(--accent); border-color: rgba(154,51,36,.35); }
-.play-composer-in { display: flex; gap: 8px; }
 .play-input { flex: 1; font: 400 13.5px var(--font-ui); padding: 9px 12px; border-radius: var(--radius);
   border: 1px solid var(--line); background: var(--raised); color: var(--ink); }
 .play-input:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
+
+/* The studio composer: a full-width card under both columns. The card carries the border and the
+   focus ring; the textarea inside is seamless and grows with its content, then scrolls. */
+.play-composer-in { margin-top: 12px; display: flex; flex-direction: column; gap: 6px;
+  padding: 9px 11px; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--raised); box-shadow: var(--shadow-sm); transition: border-color .14s, box-shadow .14s; }
+.play-composer-in:focus-within { border-color: var(--accent); box-shadow: var(--ring); }
+/* flex:none — .play-input's `flex:1` would make flex-basis own the height in this column
+   container and silently override the auto-grow height set on the element. */
+.play-input--chat { flex: none; min-height: 68px; max-height: 260px; overflow-y: auto; resize: none; line-height: 1.55;
+  border: none; background: transparent; padding: 3px 2px; border-radius: 0; }
+.play-input--chat:focus { border: none; box-shadow: none; }
+.play-composer-foot { display: flex; align-items: center; gap: 10px; }
+.play-composer-hint { font-size: 11.5px; color: var(--muted); }
+.play-composer-hint kbd { font: 600 10.5px var(--font-mono); color: var(--ink-soft); background: var(--paper-2);
+  border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+.play-composer-foot .play-btn { margin-left: auto; padding: 8px 24px; }
+
+/* One orchestrated entrance for the studio: head, plate, transcript, composer settle in sequence. */
+@keyframes studio-settle { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }
+@keyframes studio-fade { from { opacity: 0; } to { opacity: 1; } }
+.play-studio-head, .play-chat, .play-composer-in {
+  animation: studio-settle .44s cubic-bezier(.2, .7, .2, 1) both; }
+/* .play-stage fades but must NOT translate: it is an ancestor of the Runner's position:fixed fullscreen
+   overlay, and ANY transform — including the identity matrix that fill-mode:both retains once the
+   animation ends — makes this element the overlay's containing block, trapping fullscreen in the column. */
+.play-stage { animation: studio-fade .44s cubic-bezier(.2, .7, .2, 1) both; animation-delay: .05s; }
+.play-chat { animation-delay: .11s; }
+.play-composer-in { animation-delay: .17s; }
+@media (prefers-reduced-motion: reduce) {
+  .play-studio-head, .play-stage, .play-chat, .play-composer-in { animation: none; }
+}
 
 .play-btn { font: 600 12.5px var(--font-ui); letter-spacing: .02em; padding: 8px 15px; border-radius: var(--radius);
   border: 1px solid var(--line); background: var(--raised); color: var(--ink); cursor: pointer; transition: .14s; }

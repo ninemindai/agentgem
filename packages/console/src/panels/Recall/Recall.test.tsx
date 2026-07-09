@@ -84,7 +84,9 @@ describe("Recall panel", () => {
     fireEvent.change(screen.getByLabelText(/search transcripts/i), { target: { value: "other stuff" } });
     await waitFor(() => expect(screen.getAllByText("different").length).toBeGreaterThan(0), { timeout: 2000 });
 
-    expect(document.querySelector(".rc-selcount")?.textContent).toBe("0 selected");
+    // the reconcile runs in an effect on [moments], i.e. a commit *after* the render above — so wait for
+    // it rather than asserting in the same tick (that races, and loses under full-suite concurrency).
+    await waitFor(() => expect(document.querySelector(".rc-selcount")?.textContent).toBe("0 selected"));
     expect((screen.getByRole("button", { name: /chat with these/i }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole("button", { name: /extract across these/i }) as HTMLButtonElement).disabled).toBe(true);
   });
