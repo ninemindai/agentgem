@@ -1,27 +1,47 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { betterAuth } from "better-auth";
+import type { Auth, BetterAuthOptions } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { bearer } from "better-auth/plugins";
+import { customSession } from "better-auth/plugins/custom-session";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { AppDb } from "../schema.js";
 import { fetchOrgMemberships } from "../accountVerifier.js";
-import { setAccountScopes, upsertAccount } from "../webAuth.js";
+import { setAccountScopes, upsertAccount, getAccountScopes } from "../webAuth.js";
 
 const SESSION_TTL_S = 30 * 24 * 60 * 60; // 30 days — matches web_sessions/binding today (review fix 2A)
 
 export function makeAuth(opts: {
   db: AppDb; secret: string; baseURL: string; githubClientId: string; githubClientSecret: string;
   webOrigins: string[]; cookieDomain?: string;
-}) {
-  return betterAuth({
+}): Auth<BetterAuthOptions> {
+  // Widened to `BetterAuthOptions` (rather than letting TS infer the literal options-object type)
+  // so the exported `makeAuth`'s return type doesn't need to structurally encode the
+  // `customSession` plugin's Zod query-schema type in its declaration (.d.ts) — that inferred type
+  // references a Zod internal (`$strip`) that isn't independently nameable across this monorepo's
+  // pnpm layout, which trips `tsc -b`'s TS2883 ("inferred type ... cannot be named"). `Auth<O>` is
+  // invariant in O (see resolveSession's comment in ../webAuth.ts), so this widening has to happen
+  // on the OPTIONS passed to `betterAuth(...)`, not via a return-type annotation/cast on its result.
+  const config: BetterAuthOptions = {
     database: drizzleAdapter(opts.db as never, { provider: "pg" }),
     secret: opts.secret,
     baseURL: opts.baseURL,
     trustedOrigins: opts.webOrigins,                    // review fix #6 — redirect/CSRF boundary
     emailAndPassword: { enabled: false },
-    plugins: [bearer()],
+    // review fix (1b-2) — restore `orgs` on the session payload via better-auth's own enrichment
+    // seam instead of hand-rolling a parallel endpoint. Mirrors the OLD /api/auth/me contract
+    // exactly (src/auth/install.ts meHandler): getAccountScopes minus the caller's own "self"
+    // scope, mapped to { scope, role }, sorted by scope. `user`/`session` are passed through
+    // unchanged so resolveSession's `res?.user` shim keeps working.
+    plugins: [bearer(), customSession(async ({ user, session }) => {
+      const orgs = (await getAccountScopes(opts.db, user.id))
+        .filter((s) => s.role !== "self")
+        .map((s) => ({ scope: s.scope, role: s.role }))
+        .sort((a, b) => a.scope.localeCompare(b.scope));
+      return { user, session, orgs };
+    })],
     // review fix #1/#14 — force uuid ids so downstream uuid FKs (accounts.id, stars.account_id, ...) work
     advanced: {
       database: { generateId: () => randomUUID() },
@@ -46,7 +66,8 @@ export function makeAuth(opts: {
         update: { after: async (a) => anchorAndScopes(opts.db, a, false) },
       },
     },
-  });
+  };
+  return betterAuth(config);
 }
 
 async function anchorAndScopes(db: AppDb, account: { userId: string; providerId: string; accountId: string; accessToken?: string | null }, isCreate: boolean) {

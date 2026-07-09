@@ -14,10 +14,14 @@ export function Publish({ api: _api, me, base }: { api: ReturnType<typeof makeAp
   const [busy, setBusy] = useState(false);
 
   if (!me) {
-    const signIn = () => { void makeAuth(base).signIn(window.location.href); };
+    const signIn = () => {
+      setResult(null);
+      makeAuth(base).signIn(window.location.href).catch((err) => setResult({ ok: false, msg: err instanceof Error ? err.message : String(err) }));
+    };
     return (
       <div className="ex-card">
         <p>Sign in to publish your gems. <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn(); }}>Sign in with GitHub</a></p>
+        {result && !result.ok && <p className="ex-error">{result.msg}</p>}
       </div>
     );
   }
