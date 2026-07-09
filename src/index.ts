@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 // src/index.ts
 import { config as loadEnv } from "dotenv";
-import { credentialsEnvPath, closeSharedIndex } from "@agentgem/capture";
+import { credentialsEnvPath, closeSharedIndex, readRecents } from "@agentgem/capture";
 // Load env before anything reads it: cwd .env (a dev override) layered over the
 // persisted server credentials in ~/.agentgem/.env. `override` defaults to false,
 // so a value already set in the cwd .env wins. `quiet` silences dotenv's banner/
@@ -34,17 +34,18 @@ import { streamWatchEvents } from "./watchEvents.js";
 import { streamWatchHygiene } from "./watchHygiene.js";
 import { streamWatchDashboard } from "./watchDashboard.js";
 import { listActiveSessions } from "./watchSessions.js";
-import { registerChatRoutes, makeChatConnectFn, installAgentFn, goldmineMcpServers } from "./goldmine/chatRoutes.js";
+import { registerChatRoutes, makeChatConnectFn, installAgentFn, goldmineMcpServers, resolveChatCwd } from "./goldmine/chatRoutes.js";
 import { collectBehaviorFindings } from "./goldmine/behaviorFindings.js";
 import { RecallIndex } from "@agentgem/recall";
 import { defaultRecallDbPath, serverFunnelDeps } from "./goldmine/recall.js";
 import { registerRecallRoutes } from "./goldmine/recallRoutes.js";
 import { ChatManager } from "@agentgem/run";
-import { studioCwd, miniappDir, studioBrief, checkpointMiniapp } from "@agentgem/play";
+import { miniappDir, studioBrief, checkpointMiniapp } from "@agentgem/play";
 import { availableAgents, adapterRuntimeCtx, resolveLaunch, npmAdapterInstaller, createLogger } from "@agentgem/base";
 import { collectScorecard, defaultScorecardDeps } from "./gem/scorecard.js";
 import { buildGoldmineBrief, type GoldmineBriefInput } from "@agentgem/insight";
-import { agentgemHome } from "@agentgem/model";
+import { agentgemHome, resolveProject, resolveDirs } from "@agentgem/model";
+import { discoverProjects } from "@agentgem/testbed";
 import { join as pathJoin } from "node:path";
 import { mkdirSync } from "node:fs";
 import { originGuard } from "./originGuard.js";
@@ -315,6 +316,16 @@ export async function createApp(port: number): Promise<RestApplication> {
   {
     const chatCwd = pathJoin(agentgemHome(), ".agentgem", "chat");
     try { mkdirSync(chatCwd, { recursive: true }); } catch { /* already exists */ }
+    // Allow-list of honorable project roots = discovered ∪ recent, canonicalized. Recomputed
+    // per open()/launch (a disk scan, but each runs once per session start).
+    const resolveProjectCwd = (root: string): string | null => {
+      const allow = new Set(
+        [...discoverProjects(resolveDirs(undefined)).map((p) => p.path),
+         ...readRecents(agentgemHome()).map((r) => r.path)].map(resolveProject),
+      );
+      const canon = resolveProject(root);
+      return allow.has(canon) ? canon : null;
+    };
     const adapterCtx = adapterRuntimeCtx();
     const chatConnect = makeChatConnectFn((d) => resolveLaunch(d, adapterCtx) ?? d);
     const chatManager = new ChatManager({
@@ -324,10 +335,11 @@ export async function createApp(port: number): Promise<RestApplication> {
         // ChatManager passes — ensures request input can never redirect the agent.
         return {
           ctx: {
-            // Studio sessions may adopt their miniapp's registry dir; studioCwd allow-lists paths under
-            // the miniapps root (else the neutral chatCwd), so a raw request path can never redirect here.
+            // Studio sessions may adopt their miniapp's registry dir; a project session may adopt an
+            // allow-listed project root; resolveChatCwd re-validates both server-side, so a raw request
+            // path can never redirect here.
             open: (cwd: string, opts?: { mcpServers?: unknown[] }) =>
-              conn.ctx.open(studioCwd(cwd, chatCwd), opts),
+              conn.ctx.open(resolveChatCwd(cwd, chatCwd, resolveProjectCwd), opts),
           },
           close: conn.close,
         };
@@ -337,6 +349,7 @@ export async function createApp(port: number): Promise<RestApplication> {
     registerChatRoutes(server.expressApp as never, {
       manager: chatManager,
       resolveStudio: (miniapp: string) => ({ cwd: miniappDir(miniapp), brief: studioBrief(miniapp) }),
+      resolveProjectCwd,
       listAgents: () => availableAgents(adapterCtx),
       installAgent: installAgentFn(adapterCtx, npmAdapterInstaller()),
       checkpointMiniapp: (name: string) => checkpointMiniapp(name),

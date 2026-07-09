@@ -150,9 +150,10 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middlew
   // POST /api/chat — open a new chat session; request-derived value is only agentId
   app.post("/api/chat", guard, async (req, res) => {
     try {
-      // SECURITY: mcpServers is server-derived (goldmineMcp()); a `miniapp` name is resolved
-      // server-side to a VALIDATED cwd (deps.resolveStudio → miniappDir rejects bad names). No raw
-      // path from the request body is ever passed as cwd; without `miniapp` there is no cwd override.
+      // SECURITY: mcpServers is server-derived (goldmineMcp()). The only two cwd overrides are
+      // `miniapp` (a NAME resolved server-side via deps.resolveStudio → miniappDir, which rejects
+      // bad names) and `project` (a PATH validated against deps.resolveProjectCwd's discovered/recent
+      // allow-list). No raw path from the request body is ever trusted as cwd directly.
       const args = await studioChatArgs(req.body ?? {}, deps);
       const chatId = await deps.manager.openChat(args);
       const miniapp = req.body?.miniapp ? String(req.body.miniapp) : "";
