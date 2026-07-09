@@ -24,29 +24,16 @@ afterEach(() => { rmSync(root, { recursive: true, force: true }); });
 describe("project-scoped disable", () => {
   it("archives under the project root and lists it back", () => {
     const opts = { claudeDir: join(root, ".claude"), agentDir: join(root, ".agents"), codexDir: join(root, ".codex"), hermesDir: join(root, ".hermes") };
-    // NOTE: capture's SKILL_SOURCES allowlist (packages/capture/src/skillRoots.ts) is
-    // ["standalone", "agent", "codex", "hermes"] — it does NOT include "project". A
-    // skill item with source:"project" (the label introspectProject tags every project
-    // skill with) is rejected by disableSkill with "source project is not
-    // disable-eligible", regardless of a claudeDir override. Verified by running this
-    // test with source:"project" first (pnpm build && npx vitest run
-    // dist/__tests__/optimizeScope.test.js): it fails on `r.ok` (false, not the
-    // archive-path assertions), confirming the source-eligibility gate is the actual
-    // gap, not a path mismatch.
-    //
-    // The mechanism the /optimize project scope DOES rely on and that IS characterized
-    // here is the claudeDir/agentDir/codexDir/hermesDir redirection: with those pointed
-    // at the project root, a source that IS disable-eligible ("standalone", matching
-    // where a project's own .claude/skills lives once claudeDir is redirected) archives
-    // under <root>/.agentgem/disabled exactly like the home-relative case. Per the task
-    // brief, capture itself is not modified here — this is a pre-existing capture
-    // limitation for skill-type project artifacts (source:"project"), flagged as a
-    // follow-up concern in the task report rather than worked around in capture.
-    const [r] = disableArtifacts([{ type: "skill", name: "demo", source: "standalone" }], opts);
+    // The /optimize project scope disables a project-local skill with source:"project"
+    // (the label introspectProject tags every project skill with) and the claudeDir
+    // redirection that points capture at <root>/.claude. capture's project branch
+    // relocates <root>/.claude/skills/<name> to <root>/.agentgem/disabled/skills/project/,
+    // and listDisabled(opts) round-trips it back as source:"project".
+    const [r] = disableArtifacts([{ type: "skill", name: "demo", source: "project" }], opts);
     expect(r.ok).toBe(true);
     expect(existsSync(join(root, ".claude", "skills", "demo"))).toBe(false);
-    expect(existsSync(join(root, ".agentgem", "disabled"))).toBe(true);
-    expect(listDisabled(opts).some((d) => d.name === "demo")).toBe(true);
+    expect(existsSync(join(root, ".agentgem", "disabled", "skills", "project", "demo"))).toBe(true);
+    expect(listDisabled(opts).some((d) => d.name === "demo" && d.source === "project")).toBe(true);
   });
 });
 

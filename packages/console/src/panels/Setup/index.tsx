@@ -71,7 +71,8 @@ export function Setup({ apiBase }: { apiBase: string }) {
 
   useEffect(() => {
     let alive = true;
-    inventoryRoute.call(makeClient(apiBase), { query: root ? { projects: root } : {} })
+    // The server's parseProjectsQuery expects a JSON-encoded array of roots, not a raw path.
+    inventoryRoute.call(makeClient(apiBase), { query: root ? { projects: JSON.stringify([root]) } : {} })
       .then((res) => {
         if (!alive) return;
         if (!root || !res.projects?.length) { setInv(res); return; }
