@@ -1,7 +1,7 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
-import { deepLinkHash, argvDeepLink } from "../deeplink.js";
+import { deepLinkHash, argvDeepLink, deepLinkInstall } from "../deeplink.js";
 
 describe("deepLinkHash", () => {
   it("maps get-gems with a q param to the pre-searched console route (q re-encoded)", () => {
@@ -40,6 +40,34 @@ describe("deepLinkHash", () => {
   it("returns null for a malformed url", () => {
     expect(deepLinkHash("not a url")).toBeNull();
     expect(deepLinkHash("")).toBeNull();
+  });
+});
+
+// A deep link that AUTO-INSTALLS is a drive-by vector: any web page can host the anchor, and one
+// click would otherwise install an attacker-chosen gem. main.ts must confirm before navigating, so
+// this function tells it exactly which links carry that power.
+describe("deepLinkInstall (consent gate)", () => {
+  it("reports the gem an install link would install", () => {
+    expect(deepLinkInstall("agentgem://get-gems?install=raymondfeng/agentgem-biz&v=0.1.0"))
+      .toEqual({ key: "raymondfeng/agentgem-biz", version: "0.1.0" });
+  });
+  it("omits version when the link doesn't pin one", () => {
+    expect(deepLinkInstall("agentgem://get-gems?install=@o/k")).toEqual({ key: "@o/k", version: undefined });
+  });
+  it("returns null for a browse-only link (nothing is installed, no prompt needed)", () => {
+    expect(deepLinkInstall("agentgem://get-gems?q=@o/k")).toBeNull();
+    expect(deepLinkInstall("agentgem://get-gems")).toBeNull();
+  });
+  it("returns null for the play route — a sealed iframe installs nothing", () => {
+    expect(deepLinkInstall("agentgem://play?new=1&title=x")).toBeNull();
+  });
+  it("returns null for links deepLinkHash already rejects (unknown route, bad scheme, malformed)", () => {
+    expect(deepLinkInstall("agentgem://deploy?install=@o/k")).toBeNull();
+    expect(deepLinkInstall("https://evil.example/?install=@o/k")).toBeNull();
+    expect(deepLinkInstall("not a url")).toBeNull();
+  });
+  it("ignores an empty install param rather than prompting for nothing", () => {
+    expect(deepLinkInstall("agentgem://get-gems?install=")).toBeNull();
   });
 });
 

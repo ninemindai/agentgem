@@ -9,7 +9,7 @@ import { buildMenuTemplate } from "./menu.js";
 import { configureUpdater, updaterFeed, repoUrlFromPackageJson } from "./updater.js";
 import { createTray } from "./tray.js";
 import { DESKTOP_NAME } from "./version.js";
-import { deepLinkHash, argvDeepLink, DEEP_LINK_SCHEME } from "./deeplink.js";
+import { deepLinkHash, deepLinkInstall, argvDeepLink, DEEP_LINK_SCHEME } from "./deeplink.js";
 
 const isDev = process.env.AGENTGEM_DEV === "1";
 
@@ -43,14 +43,37 @@ function showWindow(): void {
 // console to the matching hash. A cold start via the link reaches here before the window exists, so
 // stash it for boot() to flush once createWindow has run.
 let pendingDeepLink: string | null = null;
+
+// An install link runs no code by itself — the archive is still lock-verified on import and the gem's
+// agent still runs under the OS sandbox — but it does put an attacker-chosen gem on the machine with
+// one click from any web page. Ask first, and default to Cancel so a stray Enter is safe.
+async function confirmInstall(target: { key: string; version?: string }): Promise<boolean> {
+  const version = target.version ? `@${target.version}` : "";
+  const { response } = await dialog.showMessageBox({
+    type: "question",
+    buttons: ["Cancel", "Install"],
+    defaultId: 0,
+    cancelId: 0,
+    title: "Install a Gem?",
+    message: `Install ${target.key}${version}?`,
+    detail:
+      "A website asked AgentGem to install this Gem. Only continue if you trust the source — " +
+      "a Gem can add skills, MCP servers and hooks to your agent setup.",
+  });
+  return response === 1;
+}
+
 function handleDeepLink(rawUrl: string): void {
   const hash = deepLinkHash(rawUrl);
   if (!hash) return;
   if (!win) { pendingDeepLink = rawUrl; return; }
   showWindow();
   const nav = () => { void win?.webContents.executeJavaScript(`location.hash = ${JSON.stringify(hash)}`).catch(() => {}); };
-  if (win.webContents.isLoading()) win.webContents.once("did-finish-load", nav);
-  else nav();
+  const go = () => { if (win?.webContents.isLoading()) win.webContents.once("did-finish-load", nav); else nav(); };
+
+  const install = deepLinkInstall(rawUrl);
+  if (!install) { go(); return; }               // browse-only link: nothing is installed, no prompt.
+  void confirmInstall(install).then((ok) => { if (ok) go(); });
 }
 
 async function createWindow(url: string): Promise<void> {

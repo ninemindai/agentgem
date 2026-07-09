@@ -5,6 +5,7 @@
 // a Gem offline (preview), reports whether the server is configured for it (ready), and performs the
 // gated network deploy (deploy). Reuses the existing pure render + network orchestration unchanged.
 import type { Gem, SecretRequirement } from "@agentgem/model";
+import { assertGemSafe } from "@agentgem/model";
 import { renderManagedAgent } from "@agentgem/distribute";
 import type { ManagedAgentRender, ManagedAgentPayload, SkippedArtifact } from "@agentgem/distribute";
 import { publishManagedAgent, publishManagedAgentOnce, anthropicPublishClient } from "./publish.js";
@@ -62,4 +63,14 @@ export const deployTargetIds = Object.keys(DEPLOY_REGISTRY) as [DeployTargetId, 
 
 export function deployTargetList(): { id: DeployTargetId; label: string; ready: boolean }[] {
   return deployTargetIds.map((id) => ({ id, label: DEPLOY_REGISTRY[id].label, ready: DEPLOY_REGISTRY[id].ready() }));
+}
+
+// The one way to deploy. Gates on the leak canary BEFORE the target's `ready()` check or any network
+// call, so a Gem carrying a surviving credential can never reach a managed runtime — and so a target
+// added to DEPLOY_REGISTRY later inherits the gate instead of having to remember it.
+// `async` is load-bearing: assertGemSafe throws synchronously, and a function typed Promise<_> that
+// throws before returning one would blow up in `deployGem(...).catch(...)` instead of rejecting.
+export async function deployGem(target: DeployTargetId, gem: Gem, requestId: string): Promise<DeployResult> {
+  assertGemSafe(gem);
+  return DEPLOY_REGISTRY[target].deploy(gem, requestId);
 }

@@ -1,6 +1,10 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
-// src/gem/leakCanary.ts
+// packages/model/src/leakCanary.ts
+//
+// Lives in @agentgem/model (not @agentgem/base) so the egress packages that must call it —
+// distribute (export/publish) and deploy — can depend on it without pulling in base's fs/ACP
+// surface. `@agentgem/base` re-exports it, so existing importers are unaffected.
 //
 // Final, independent safety net before a Gem leaves the machine. `buildGem` already redacts at
 // capture (redact.ts), so the canary is defense in depth: it scans the FULLY BUILT Gem for strong
@@ -10,7 +14,7 @@
 // It reuses the high-precision strong-credential patterns (secretPatterns.ts), NOT generic entropy,
 // so scanning the whole Gem (which legitimately contains content hashes / digests) doesn't
 // false-positive. A redacted secret is already the `<redacted>` placeholder, so it never trips the net.
-import type { Gem } from "@agentgem/model";
+import type { Gem } from "./types.js";
 import { findStrongCredentials } from "./secretPatterns.js";
 
 export interface LeakFinding {

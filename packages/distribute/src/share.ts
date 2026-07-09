@@ -7,14 +7,18 @@
 // which verifies gem.lock and throws on any mismatch, so a tampered .gem never installs.
 import { writeGemArchive, readGemArchive, readGemMeta } from "@agentgem/archive";
 import { packTar, unpackTar } from "@agentgem/archive";
-import { safePathSegment } from "@agentgem/model";
+import { safePathSegment, assertGemSafe } from "@agentgem/model";
 import type { Gem } from "@agentgem/model";
 
 export interface ExportedGem { filename: string; bytes: Buffer; skipped: ReturnType<typeof writeGemArchive>["skipped"] }
 export interface ImportedGem { gem: Gem; meta: ReturnType<typeof readGemMeta> }
 
 // Gem -> a single self-verifying .gem (gzipped tar of the archive file tree).
+// Fail-closed: every transport that sends a Gem off this machine (file share, peer transfer,
+// marketplace download, hosted publish) funnels through here, so the leak canary gates here.
+// Throws GemLeakError if a strong credential survived capture-time redaction.
 export function exportGem(gem: Gem, opts: { version?: string; dependencies?: string[] } = {}): ExportedGem {
+  assertGemSafe(gem);
   const { files, skipped } = writeGemArchive(gem, opts);
   const version = opts.version ?? "0.1.0";
   return { filename: `${safePathSegment(gem.name)}-${version}.gem`, bytes: packTar(files), skipped };

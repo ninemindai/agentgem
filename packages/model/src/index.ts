@@ -17,3 +17,5 @@ export * from "./gemTypes.js";
 export * from "./gemGrade.js";
 export * from "./atomicWrite.js";
 export * from "./publicPackage.js";
+export * from "./secretPatterns.js";
+export * from "./leakCanary.js";

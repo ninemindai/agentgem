@@ -6,8 +6,17 @@ export * from "./workspaces.js";
 export * from "./deployRecord.js";
 export * from "./acpSession.js";
 export * from "./redact.js";
-export * from "./secretPatterns.js";
-export * from "./leakCanary.js";
+// Moved to @agentgem/model so the egress packages (distribute, deploy) can gate on the canary
+// without depending on base. Re-exported here so existing `@agentgem/base` importers still work.
+export {
+  REDACTED,
+  redactStrongCredentials,
+  findStrongCredentials,
+  scanGemForLeaks,
+  assertGemSafe,
+  GemLeakError,
+} from "@agentgem/model";
+export type { StrongCredentialHit, LeakFinding, LeakReport } from "@agentgem/model";
 export * from "./agents.js";
 export * from "./log.js";
 export * from "./adapters.js";
