@@ -6,7 +6,8 @@ import { timingSafeEqual } from "node:crypto";
 import { api, get, post, AgentError } from "@agentback/openapi";
 import { inject } from "@agentback/core";
 import { DrizzleBindings } from "@agentback/drizzle";
-import type { AppDb } from "@agentgem/aggregator";
+import type { AppDb, makeAuth } from "@agentgem/aggregator";
+import { AUTH_BINDING } from "./auth/mount.js";
 import { ingestAttestation, ingestGemAdoption } from "@agentgem/aggregator";
 import { popularity, coOccurrence, adoption, overview, coOccurrenceMatrix, modelBenchmark, effectiveness, gemAdoption } from "@agentgem/aggregator";
 import { popularSkills, popularSkillGroups } from "@agentgem/aggregator";
@@ -154,7 +155,10 @@ function tokenEq(a: string, b: string): boolean {
 
 @api({ basePath: "/api/aggregator" })
 export class AggregatorController {
-  constructor(@inject(DrizzleBindings.CLIENT) private db: AppDb) {}
+  constructor(
+    @inject(DrizzleBindings.CLIENT) private db: AppDb,
+    @inject(AUTH_BINDING, { optional: true }) private auth?: ReturnType<typeof makeAuth>,
+  ) {}
 
   @post("/ingest", { body: IngestBody, response: IngestResult })
   async ingest(input: { body: z.infer<typeof IngestBody> }): Promise<z.infer<typeof IngestResult>> {
@@ -250,7 +254,7 @@ export class AggregatorController {
   @post("/bind", { body: BindBody, response: BindResultSchema })
   async bind(input: { body: z.infer<typeof BindBody> }): Promise<z.infer<typeof BindResultSchema>> {
     // GitHubVerifier is the live provider; recordBinding does signature + freshness + producer checks.
-    return recordBinding(this.db, input.body as z.infer<typeof BindBody>, new GitHubVerifier());
+    return recordBinding(this.db, input.body as z.infer<typeof BindBody>, new GitHubVerifier(), undefined, undefined, this.auth);
   }
 
   // Not-connected is NOT an HTTP error — stays 200 with { shared: false, rejected: "not-connected" },
