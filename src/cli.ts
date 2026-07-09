@@ -7,7 +7,10 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { run } from "./index.js";
+// `run` is imported lazily on the default (start-the-server) path below, like every subcommand here.
+// A static import pulls the whole server graph — routes, DI container, aggregator — into `agentgem
+// --help`, which never starts a server. The publish bundler keeps `./index.js` external to cli.js, so
+// this stays a real deferred import in the shipped tarball rather than an eagerly-evaluated inline.
 
 function version(): string {
   try {
@@ -138,6 +141,7 @@ async function main(argv: string[]): Promise<void> {
     process.exit(1);
   }
 
+  const { run } = await import("./index.js");
   await run(port);
 }
 

@@ -8,7 +8,11 @@
 // `runScripts:"dangerously"`, which jsdom documents is NOT a sandbox — so gameGate() must only ever be
 // called on bundles produced under our own control (the Plan 2 generator runs inside the packages/run
 // sandbox). Never call it on untrusted/downloaded input in this process.
-import { JSDOM, VirtualConsole } from "jsdom";
+// jsdom is loaded lazily inside gameGate() (see below): it costs ~185ms to evaluate, and this module
+// sits on `dist/index.js`'s import graph, which every `agentgem` CLI invocation loads. Only the Tier-1
+// load-smoke needs it. It stays a hard `dependencies` entry — the publish bundler keeps every root
+// dependency external, and jsdom resolves its own `./xhr-sync-worker.js` at runtime, so inlining it
+// breaks the published tarball.
 
 export interface GateResult { ok: boolean; failures: string[] }
 export interface GateOptions {
@@ -78,6 +82,8 @@ export function staticGate(html: string, opts: GateOptions = {}): GateResult {
 export async function gameGate(html: string, opts: GateOptions = {}): Promise<GateResult> {
   const staticResult = staticGate(html, opts);
   if (!staticResult.ok) return staticResult; // short-circuit; don't execute a non-sealed bundle
+
+  const { JSDOM, VirtualConsole } = await import("jsdom");
 
   const failures: string[] = [];
   const vc = new VirtualConsole();
