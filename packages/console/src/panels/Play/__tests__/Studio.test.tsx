@@ -82,6 +82,26 @@ describe("Studio", () => {
     expect(screen.getByText("dodge asteroids")).toBeTruthy(); // shown as the first user bubble
   });
 
+  // The composer is a multi-line textarea: Enter sends, Shift+Enter must stay a plain newline.
+  it("sends on Enter but not on Shift+Enter", async () => {
+    const post = stubChat();
+    vi.spyOn(playMiniappRoute, "call").mockResolvedValue(blankApp as never);
+    render(<Studio apiBase="" name="space-dodger" agents={codex} agentId="codex" onAgentIdChange={() => {}} onBack={() => {}} />);
+    const box = await screen.findByPlaceholderText(/build\/edit/i);
+    fireEvent.change(box, { target: { value: "make it blue" } });
+
+    // Shift+Enter is a newline. send() awaits POST /api/chat before it opens the stream, so this has
+    // to flush pending async work — asserting on FakeES straight after the keydown would pass vacuously.
+    fireEvent.keyDown(box, { key: "Enter", shiftKey: true });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(post).not.toHaveBeenCalled();
+    expect(FakeES.last).toBeNull();
+
+    fireEvent.keyDown(box, { key: "Enter" });
+    await waitFor(() => expect(FakeES.last).toBeTruthy());
+    expect(FakeES.last!.url).toContain("message=make+it+blue");
+  });
+
   it("does not auto-send when there is no seed prompt", async () => {
     stubChat();
     const spy = vi.spyOn(playMiniappRoute, "call").mockResolvedValue(blankApp as never);

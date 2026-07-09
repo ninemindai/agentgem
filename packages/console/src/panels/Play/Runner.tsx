@@ -19,8 +19,10 @@ import { CAP_LABEL, getConsent, setConsent } from "./consent.js";
 // single-flight guards, and staleness. The Runner keeps only the UI: the sealed iframe + scaling/fullscreen,
 // the per-gem consent modal (fed to the router as the `requestConsent` callback), and the "Replay yours"
 // session picker (host-initiated rebind via `host.feedSessionData`).
-export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, apiBase, needs }:
-  { html: string; vw?: number; vh?: number; interactive?: boolean; name?: string; apiBase?: string; needs?: string[] }) {
+// maxHeight: an inline height budget (px). Without it the inline game is sized by width alone, so on a
+// wide, short screen it grows tall enough to push the studio composer below the fold.
+export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, apiBase, needs, maxHeight }:
+  { html: string; vw?: number; vh?: number; interactive?: boolean; name?: string; apiBase?: string; needs?: string[]; maxHeight?: number }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [scale, setScale] = useState(0.5);
@@ -105,22 +107,28 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
     setPending(null);
   };
 
-  // Inline only: fit the column width, never upscale. Fullscreen needs no scale — the iframe is sized to
-  // the overlay itself, so the miniapp lays out against the real screen instead of a magnified vw×vh.
+  // Inline only: fit the column width and any height budget, never upscale. Fullscreen needs no scale — the
+  // iframe is sized to the overlay itself, so the miniapp lays out against the real screen instead of a
+  // magnified vw×vh.
   useEffect(() => {
     const box = boxRef.current;
     if (fs || !box || typeof ResizeObserver === "undefined") return; // jsdom / non-browser: keep the default
-    const measure = () => setScale(Math.min(1, (box.clientWidth || vw) / vw));
+    const measure = () =>
+      setScale(Math.min(1, (box.clientWidth || vw) / vw, ...(maxHeight ? [maxHeight / vh] : [])));
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(box);
     return () => ro.disconnect();
-  }, [vw, fs]);
+  }, [vw, vh, fs, maxHeight]);
 
   const boxStyle: React.CSSProperties = fs
     ? { position: "fixed", inset: 0, zIndex: 1000, background: "rgba(12,14,18,.94)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }
     : interactive
-      ? { position: "relative", width: "100%", height: Math.round(vh * scale), overflow: "hidden", border: "1px solid var(--border, #ccc)", borderRadius: 8, background: "#fff" }
+      // Once maxHeight can make the scale height-bound, the game is narrower than the box — so centre it.
+      // background is the paper mat, not #fff: when the scale is height-bound the game is pillarboxed,
+      // and the gap should read as part of the mount rather than as a white seam.
+      ? { position: "relative", width: "100%", height: Math.round(vh * scale), overflow: "hidden", border: "1px solid var(--line)", borderRadius: 8, background: "var(--paper-2)",
+          display: "flex", justifyContent: "center" }
       : { position: "absolute", inset: 0, overflow: "hidden", background: "#0d1117" }; // thumbnail: fill the card slot
 
   return (
@@ -130,10 +138,12 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
         title="miniapp preview"
         sandbox="allow-scripts"
         srcDoc={sandboxDoc(html)}
+        // flexShrink:0 — the inline iframe's layout box must stay vw wide, or the flex row would shrink it
+        // and the scale factor would no longer describe the rendered size.
         style={fs
           ? { width: "100%", height: "100%", border: 0, display: "block", background: "#0d1117" }
-          : { width: vw, height: vh, border: 0, display: "block", background: "#fff", pointerEvents: interactive ? "auto" : "none",
-              transform: `scale(${scale})`, transformOrigin: "top left" }}
+          : { width: vw, height: vh, border: 0, display: "block", background: "#fff", pointerEvents: interactive ? "auto" : "none", flexShrink: 0,
+              transform: `scale(${scale})`, transformOrigin: interactive ? "top center" : "top left" }}
       />
       {interactive && (
         <button

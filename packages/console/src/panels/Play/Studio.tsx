@@ -41,6 +41,10 @@ export function Studio({
   const [share, setShare] = useState<{ gemUrl: string; cardUrl?: string } | null>(null);
   const closeRef = useRef<null | (() => void)>(null);
   const logRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const plateRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLDivElement>(null);
+  const [plateMax, setPlateMax] = useState<number | undefined>(undefined);
   const seededRef = useRef(false);   // guards the one-shot seed-prompt auto-send
 
   const refresh = () =>
@@ -63,6 +67,32 @@ export function Studio({
   }, [seedPrompt, agentId]);
 
   useEffect(() => { logRef.current?.scrollTo?.({ top: logRef.current.scrollHeight }); }, [msgs, working]); // scrollTo absent in jsdom
+
+  // Grow the composer with its content, up to the max-height at which CSS makes it scroll. Reset to
+  // auto first, else scrollHeight only ever reports the taller of (content, current height).
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el || !el.scrollHeight) return;   // jsdom reports 0
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [input]);
+
+  // Budget the preview's height so the composer always stays on the first screen: whatever is left
+  // between the top of the plate and the composer (which grows as you type). Re-measured on resize,
+  // on composer growth, and whenever a banner shifts the plate down.
+  useEffect(() => {
+    const calc = () => {
+      const top = plateRef.current?.getBoundingClientRect().top;
+      if (top == null) return;
+      const reserve = (composerRef.current?.offsetHeight ?? 120) + 40;  // composer + its margin + breathing room
+      setPlateMax(Math.max(240, Math.round(window.innerHeight - top - reserve - 16))); // 16 = plate padding + border
+    };
+    calc();
+    window.addEventListener("resize", calc);
+    const ro = typeof ResizeObserver !== "undefined" && composerRef.current ? new ResizeObserver(calc) : null;
+    if (composerRef.current) ro?.observe(composerRef.current);
+    return () => { window.removeEventListener("resize", calc); ro?.disconnect(); };
+  }, [gate, share]);
 
   function pushDelta(t: string) {
     setMsgs((m) => {
@@ -107,6 +137,8 @@ export function Studio({
       });
     } catch (e) { setBusy(false); setWorking(""); setStatus(`error: ${(e as Error).message}`); }
   }
+
+  function submit() { send(input); setInput(""); }
 
   // Save gates the seal; a gate failure becomes an actionable banner (offer to have the agent fix it).
   async function save(): Promise<boolean> {
@@ -191,28 +223,44 @@ export function Studio({
         </div>
       )}
 
+      <AgentSelector
+        agents={agents}
+        agentId={agentId}
+        disabled={busy}
+        onChange={changeAgent}
+        note={chatId ? "Changing agent starts a fresh studio chat." : "This agent will build/edit the miniapp."}
+      />
+
       <div className="play-grid-2">
-        <Runner html={html} name={name} apiBase={apiBase} needs={meta?.needs} />
+        <div className="play-stage">
+          <div className="play-cap-row"><span className="play-cap">Preview</span><span className="play-cap__rule" /></div>
+          <div className="play-plate" ref={plateRef}><Runner html={html} name={name} apiBase={apiBase} needs={meta?.needs} maxHeight={plateMax} /></div>
+        </div>
         <div className="play-chat">
-          <AgentSelector
-            agents={agents}
-            agentId={agentId}
-            disabled={busy}
-            onChange={changeAgent}
-            note={chatId ? "Changing agent starts a fresh studio chat." : "This agent will build/edit the miniapp."}
-          />
+          <div className="play-cap-row"><span className="play-cap">Studio chat</span><span className="play-cap__rule" /></div>
           <div className="play-log" ref={logRef}>
-            {msgs.length === 0 && <div className="play-log__hint">Ask the agent to build or change the miniapp…</div>}
+            {msgs.length === 0 && (
+              <div className="play-log__empty">
+                <b>Nothing built yet</b>
+                <span>Describe a change below and the agent will edit the miniapp in place.</span>
+              </div>
+            )}
             {msgs.map((m, i) => m.role === "tool"
               ? <div key={i} className={`play-tool${m.failed ? " is-failed" : ""}`}>🔧 <b>{m.title}</b></div>
               : <div key={i} className={`play-msg play-msg--${m.role}`}>{m.text}</div>)}
             {busy && <div className="studio-thinking"><span className="dots"><i /><i /><i /></span><span>{working || "working…"}</span></div>}
           </div>
-          <div className="play-composer-in">
-            <input className="play-input" placeholder="ask the agent to build/edit…" value={input}
-              onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { send(input); setInput(""); } }} />
-            <button className="play-btn play-btn--primary" disabled={busy || !agentId} onClick={() => { send(input); setInput(""); }}>{busy ? "…" : "Send"}</button>
-          </div>
+        </div>
+      </div>
+
+      <div className="play-composer-in" ref={composerRef}>
+        <textarea ref={inputRef} className="play-input play-input--chat" rows={3}
+          placeholder="ask the agent to build/edit the miniapp…" value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }} />
+        <div className="play-composer-foot">
+          <span className="play-composer-hint"><kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> for a new line</span>
+          <button className="play-btn play-btn--primary" disabled={busy || !input.trim() || !agentId} onClick={submit}>{busy ? "…" : "Send"}</button>
         </div>
       </div>
     </section>
