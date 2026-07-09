@@ -87,7 +87,7 @@ describe("Studio", () => {
   it("sends on Enter but not on Shift+Enter", async () => {
     const post = stubChat();
     vi.spyOn(playMiniappRoute, "call").mockResolvedValue(blankApp as never);
-    render(<Studio apiBase="" name="space-dodger" agents={codex} agentId="codex" onAgentIdChange={() => {}} onBack={() => {}} />);
+    render(<IdentityProvider apiBase=""><Studio apiBase="" name="space-dodger" agents={codex} agentId="codex" onAgentIdChange={() => {}} onBack={() => {}} /></IdentityProvider>);
     const box = await screen.findByPlaceholderText(/build\/edit/i);
     fireEvent.change(box, { target: { value: "make it blue" } });
 
