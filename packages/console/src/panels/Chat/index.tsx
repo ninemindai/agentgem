@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
 import { openChatStream, type ChatToolChip } from "./chatStream.js";
+import { ScopePicker, type Scope } from "../_shared/ScopePicker.js";
 
 interface Agent {
   id: string;
@@ -24,6 +25,7 @@ export function Chat({ apiBase }: { apiBase: string }) {
   const [agents, setAgents] = useState<Agent[] | null>(null);
   const [agentId, setAgentId] = useState<string>("");
   const [chatId, setChatId] = useState<string | null>(null);
+  const [launch, setLaunch] = useState<Scope>({ kind: "global" });
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -71,7 +73,7 @@ export function Chat({ apiBase }: { apiBase: string }) {
         const res = await fetch(`${apiBase}/api/chat`, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ agentId }),
+          body: JSON.stringify({ agentId, ...(launch.kind === "project" ? { project: launch.root } : {}) }),
         }).then(j);
         activeChatId = res.chatId as string;
         setChatId(activeChatId);
@@ -193,6 +195,8 @@ export function Chat({ apiBase }: { apiBase: string }) {
           ))}
           {agents !== null && agents.length === 0 && <option value="">No agents configured</option>}
         </select>
+        <span style={{ marginLeft: 12, marginRight: 8, fontWeight: 600 }}>Start in</span>
+        <ScopePicker apiBase={apiBase} scope={launch} onScope={setLaunch} globalLabel="Neutral" disabled={chatId !== null} />
       </div>
 
       {/* Missing adapters: inline install with a consent confirm */}

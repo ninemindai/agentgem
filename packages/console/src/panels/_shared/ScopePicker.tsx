@@ -8,7 +8,9 @@ function basename(p: string): string { return p.replace(/\/+$/, "").split("/").p
 // Shared Global/Project scope switch for Optimize + Setup. Lists the same
 // recents+candidates that Insights/Rubrics use (testbedRecentsRoute /
 // testbedProjectsRoute), deduped by path and capped to 40 rows.
-export function ScopePicker({ apiBase, scope, onScope }: { apiBase: string; scope: Scope; onScope: (s: Scope) => void }) {
+export function ScopePicker({ apiBase, scope, onScope, globalLabel = "Global", disabled = false }: {
+  apiBase: string; scope: Scope; onScope: (s: Scope) => void; globalLabel?: string; disabled?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [rows, setRows] = useState<{ root: string; label: string }[]>([]);
@@ -33,8 +35,8 @@ export function ScopePicker({ apiBase, scope, onScope }: { apiBase: string; scop
 
   return (
     <div className="scope-picker">
-      <button className={"obs-range-btn" + (scope.kind === "global" ? " is-active" : "")} onClick={() => onScope({ kind: "global" })}>Global</button>
-      <button className={"obs-range-btn" + (scope.kind === "project" ? " is-active" : "")} onClick={() => setOpen((o) => !o)}>
+      <button className={"obs-range-btn" + (scope.kind === "global" ? " is-active" : "")} disabled={disabled} onClick={() => onScope({ kind: "global" })}>{globalLabel}</button>
+      <button className={"obs-range-btn" + (scope.kind === "project" ? " is-active" : "")} disabled={disabled} onClick={() => setOpen((o) => !o)}>
         {scope.kind === "project" ? `Project: ${scope.label}` : "Project"} ▾
       </button>
       {open && (

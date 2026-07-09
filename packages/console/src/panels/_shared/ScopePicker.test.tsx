@@ -28,4 +28,10 @@ describe("ScopePicker", () => {
     fireEvent.click(opt);
     expect(onScope).toHaveBeenCalledWith({ kind: "project", root: "/repo/a", label: "a" });
   });
+
+  it("uses a custom globalLabel and disables its buttons", () => {
+    render(<ScopePicker apiBase="" scope={{ kind: "global" }} onScope={() => {}} globalLabel="Neutral" disabled />);
+    expect((screen.getByRole("button", { name: "Neutral" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: /project/i }) as HTMLButtonElement).disabled).toBe(true);
+  });
 });
