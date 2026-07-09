@@ -36,5 +36,17 @@ describe("schema/testDb", () => {
     await expect(db.execute(sql`${m} (${gid}, ${acct.id}, false, false, null, 'member')`)).rejects.toThrow();
     // role outside the closed set
     await expect(db.execute(sql`${m} (${gid}, ${acct.id}, false, true, null, 'owner')`)).rejects.toThrow();
+    // via_sync set but no sync_role
+    await expect(db.execute(sql`${m} (${gid}, ${acct.id}, true, false, null, null)`)).rejects.toThrow();
+    // sync role outside the closed set
+    await expect(db.execute(sql`${m} (${gid}, ${acct.id}, true, false, 'owner', null)`)).rejects.toThrow();
+  });
+
+  it("group_invites: role is a closed set", async () => {
+    const db = await makeTestDb();
+    const acct = await upsertAccount(db, { provider: "github", accountId: "1", login: "neo" });
+    const rows = await db.execute(sql`insert into groups (id, kind, name) values (gen_random_uuid(), 'native', 'g') returning id`);
+    const gid = (rows.rows as { id: string }[])[0].id;
+    await expect(db.execute(sql`insert into group_invites (id, token_hash, group_id, role, expires_at, created_by) values (gen_random_uuid(), 'hash1', ${gid}, 'owner', now() + interval '1 day', ${acct.id})`)).rejects.toThrow();
   });
 });
