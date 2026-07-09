@@ -24,8 +24,6 @@ import { accounts, groups, groupMembers } from "./schema.js";
 export type GroupKind = "federated" | "native";
 export type GroupRole = "admin" | "member";
 
-export const RANK: Record<GroupRole, number> = { member: 0, admin: 1 };
-
 export interface Group { id: string; kind: GroupKind; installationId: number | null; scope: string | null; name: string }
 export interface GroupMember { accountId: string; login: string; avatarUrl: string | null; role: GroupRole; viaSync: boolean; viaInvite: boolean }
 
@@ -123,18 +121,6 @@ export async function grantInvite(db: AppDb, groupId: string, accountId: string,
       end`);
 }
 
-/** Clear the invite grant. The row survives iff the App still grants via_sync — revoking an invite
- *  must not evict someone who is also in the GitHub org. */
-export async function revokeInviteGrant(db: AppDb, groupId: string, accountId: string): Promise<void> {
-  await db
-    .update(groupMembers)
-    .set({ viaInvite: false, inviteRole: null })
-    .where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.accountId, accountId), eq(groupMembers.viaSync, true)));
-  await db
-    .delete(groupMembers)
-    .where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.accountId, accountId), eq(groupMembers.viaSync, false)));
-}
-
 /** Remove a member's invite grant, refusing to drop the group's LAST admin — atomically, so two
  *  concurrent removals cannot both pass the check and leave zero admins. The member's row survives
  *  iff a via_sync grant remains (revoking an invite must not evict an org member). */
@@ -155,7 +141,8 @@ export async function removeMemberGuarded(
     const isAdmin = (r: { sync_role: string | null; invite_role: string | null }) =>
       r.sync_role === "admin" || r.invite_role === "admin";
     if (isAdmin(target) && rows.filter(isAdmin).length === 1) return "last-admin";
-    // Same semantics as revokeInviteGrant: clear the invite grant; keep the row iff via_sync remains.
+    // Clear the invite grant; keep the row iff via_sync remains (revoking an invite must not evict
+    // someone who is also in the GitHub org).
     await tx.execute(sql`
       update group_members set via_invite = false, invite_role = null
       where group_id = ${groupId} and account_id = ${accountId} and via_sync`);

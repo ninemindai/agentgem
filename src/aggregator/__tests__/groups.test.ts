@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import {
   makeTestDb, upsertAccount,
   createNativeGroup, getGroup, deleteNativeGroup, listGroupsForAccount, listGroupMembers,
-  groupMemberRole, countGroupAdmins, grantInvite, revokeInviteGrant, removeMemberGuarded,
+  groupMemberRole, countGroupAdmins, grantInvite, removeMemberGuarded,
 } from "@agentgem/aggregator";
 
 const acct = (db: any, n: string) => upsertAccount(db, { provider: "github", accountId: n, login: n });
@@ -54,26 +54,16 @@ describe("groups store", () => {
     expect(await countGroupAdmins(db, g.id)).toBe(1);
   });
 
-  it("revokeInviteGrant deletes the row when no sync grant remains", async () => {
-    const db = await makeTestDb();
-    const owner = await acct(db, "owner");
-    const guest = await acct(db, "guest");
-    const g = await createNativeGroup(db, owner.id, "G");
-    await grantInvite(db, g.id, guest.id, "member");
-    await revokeInviteGrant(db, g.id, guest.id);
-    expect(await groupMemberRole(db, g.id, guest.id)).toBeNull();
-    expect((await listGroupMembers(db, g.id)).map((m) => m.login)).toEqual(["owner"]);
-  });
-
-  it("revokeInviteGrant KEEPS the row when a sync grant remains", async () => {
+  it("removeMemberGuarded KEEPS the row when a sync grant remains, clearing only the invite grant", async () => {
     const db = await makeTestDb();
     const owner = await acct(db, "owner");
     const hire = await acct(db, "hire");
     const g = await createNativeGroup(db, owner.id, "G");
     await grantInvite(db, g.id, hire.id, "admin");
-    // simulate Plan 1b having also granted via_sync
+    // simulate Plan 1b having also granted via_sync — owner remains the group's other admin, so
+    // the last-admin guard does not fire and mask the row-survival check below.
     await db.execute(sql`update group_members set via_sync = true, sync_role = 'member' where account_id = ${hire.id}`);
-    await revokeInviteGrant(db, g.id, hire.id);
+    expect(await removeMemberGuarded(db, g.id, hire.id)).toBe("removed");
     expect(await groupMemberRole(db, g.id, hire.id)).toBe("member");   // demoted to the sync grant, not removed
     expect((await listGroupMembers(db, g.id)).find((m) => m.login === "hire")).toMatchObject({ viaSync: true, viaInvite: false });
   });
