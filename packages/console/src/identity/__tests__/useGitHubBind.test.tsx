@@ -6,7 +6,6 @@ import * as routes from "../../api/routes.js";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
-const bound: string[] = [];
 function Probe({ onBound }: { onBound?: (l: string) => void }) {
   const b = useGitHubBind("", { onBound });
   return (
@@ -60,10 +59,14 @@ describe("useGitHubBind", () => {
     expect(openSpy).toHaveBeenCalledWith("https://gh/device", "_blank", "noopener");
   });
 
-  it("on success refreshes identity status and calls onBound(login)", async () => {
+  it("on success refreshes identity status and calls onBound with the login from the response, not the refreshed context", async () => {
+    // The two sources deliberately disagree: bindCompleteRoute -> "bob",
+    // the refreshed bindStatusRoute -> "someone-else". An implementation that
+    // (wrongly) read login off the refreshed context instead of the response
+    // would report "someone-else" and this assertion would catch it.
     const status = vi.spyOn(routes.bindStatusRoute, "call")
       .mockResolvedValueOnce({ bound: false } as never)
-      .mockResolvedValueOnce({ bound: true, login: "bob" } as never);
+      .mockResolvedValueOnce({ bound: true, login: "someone-else" } as never);
     vi.spyOn(routes.bindStartRoute, "call").mockResolvedValue({ configured: true, userCode: "AB-12", verificationUri: "https://gh/device", deviceCode: "dc" } as never);
     vi.spyOn(routes.bindCompleteRoute, "call").mockResolvedValue({ bound: true, login: "bob" } as never);
     vi.stubGlobal("open", vi.fn());
@@ -73,8 +76,30 @@ describe("useGitHubBind", () => {
     await screen.findByText("AB-12");
     fireEvent.click(screen.getByText("copyopen"));
     await waitFor(() => expect(onBound).toHaveBeenCalledWith("bob"));
+    expect(onBound).toHaveBeenCalledTimes(1);
     expect(status).toHaveBeenCalledTimes(2); // mount + refresh
     expect(screen.getByTestId("code").textContent).toBe("");
+  });
+
+  it("calls the latest onBound closure, not one captured when copyOpenAndWait was memoized", async () => {
+    vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: false } as never);
+    vi.spyOn(routes.bindStartRoute, "call").mockResolvedValue({ configured: true, userCode: "AB-12", verificationUri: "https://gh/device", deviceCode: "dc" } as never);
+    vi.spyOn(routes.bindCompleteRoute, "call").mockResolvedValue({ bound: true, login: "bob" } as never);
+    vi.stubGlobal("open", vi.fn());
+    const oldOnBound = vi.fn();
+    const newOnBound = vi.fn();
+    const { rerender } = render(
+      <IdentityProvider apiBase=""><Probe onBound={oldOnBound} /></IdentityProvider>,
+    );
+    fireEvent.click(screen.getByText("connect"));
+    await screen.findByText("AB-12");
+    // Re-render with a NEW inline onBound closure before the bind resolves — this is
+    // the exact scenario the stale-closure bug would break: a host re-render between
+    // connect() and the copy-&-open click swaps in a fresh consumer closure.
+    rerender(<IdentityProvider apiBase=""><Probe onBound={newOnBound} /></IdentityProvider>);
+    fireEvent.click(screen.getByText("copyopen"));
+    await waitFor(() => expect(newOnBound).toHaveBeenCalledWith("bob"));
+    expect(oldOnBound).not.toHaveBeenCalled();
   });
 
   it("maps a rejection slug to guidance copy and keeps the flow up for retry", async () => {

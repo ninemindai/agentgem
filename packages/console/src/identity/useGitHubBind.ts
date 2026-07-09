@@ -3,7 +3,7 @@
 // The GitHub device-flow, once. Flow state is per-consumer (a Studio banner and a
 // Settings row must not share a spinner), so this is a hook — not context. Status
 // lives in IdentityProvider; on success we refresh it so every consumer converges.
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { bindStartRoute, bindCompleteRoute, makeClient } from "../api/routes.js";
 import { useIdentity } from "./IdentityProvider.js";
 
@@ -50,6 +50,14 @@ export function useGitHubBind(apiBase: string, opts: { onBound?: (login: string)
   const [codeCopied, setCodeCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Keep the latest onBound without re-memoizing copyOpenAndWait: consumers pass an
+  // inline closure, and it must observe their CURRENT state when the bind lands.
+  const onBoundRef = useRef(opts.onBound);
+  useEffect(() => { onBoundRef.current = opts.onBound; });
+
+  const copiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current); }, []);
+
   const reset = useCallback(() => { setFlow(null); setError(null); setUnconfigured(false); }, []);
 
   // Step 1: mint the device code and show it. Deliberately does NOT poll and does NOT
@@ -80,7 +88,8 @@ export function useGitHubBind(apiBase: string, opts: { onBound?: (login: string)
     if (!flow || polling) return;
     void navigator.clipboard?.writeText(flow.userCode);
     setCodeCopied(true);
-    setTimeout(() => setCodeCopied(false), 1500);
+    if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current);
+    copiedTimeoutRef.current = setTimeout(() => setCodeCopied(false), 1500);
     window.open(flow.openUrl, "_blank", "noopener"); // desktop: main.ts routes to the system browser
     setError(null);
     setPolling(true);
@@ -91,7 +100,7 @@ export function useGitHubBind(apiBase: string, opts: { onBound?: (login: string)
         await refresh();
         // Pass login straight through: reading it back off the refreshed context would
         // race the render that applies it, so a resuming caller could see a stale null.
-        opts.onBound?.(res.login!);
+        onBoundRef.current?.(res.login!);
       } else {
         // Leave the flow up: a rejection is retryable with the same code.
         setError(rejectionMessage(res.rejected!));
@@ -102,7 +111,6 @@ export function useGitHubBind(apiBase: string, opts: { onBound?: (login: string)
     } finally {
       setPolling(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiBase, flow, polling, refresh]);
 
   return { flow, unconfigured, connectBusy, polling, codeCopied, error, connect, copyOpenAndWait, reset };
