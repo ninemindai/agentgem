@@ -60,14 +60,24 @@ it **inside `ConnectGitHubModal`**. One flow hook, two chromes.
 `IdentityProvider` fetches `bindStatusRoute` once on mount and thereafter only
 when `refresh()` is called (after a bind completes, or a disconnect). No polling.
 
-The two existing copies diverge in one place that must be preserved, not
-averaged: Settings opens `verificationUriComplete ?? verificationUri` (the
-code-prefilled URL — the user lands on "just click Authorize") while
-`PublishToExplore` opens the bare `verificationUri`. The hook takes the Settings
-behavior, since the prefilled URL is strictly better when the server supplies it.
-This is the one intentional behavior change in the extraction; it improves
-Curate's flow and `PublishToExplore.test.tsx` must still pass because it asserts
-on the code display, not the opened URL.
+The two existing copies diverge in three places. Each is resolved toward the
+Settings behavior, which is the better of the two in every case:
+
+1. **Opened URL.** Settings opens `verificationUriComplete ?? verificationUri`
+   (the code-prefilled URL — the user lands on "just click Authorize");
+   `PublishToExplore` opens the bare `verificationUri`. The hook takes the
+   `?? ` form. `PublishToExplore.test.tsx:108` *does* assert the opened URL
+   (`expect(openSpy).toHaveBeenCalledWith("https://github.com/login/device", …)`),
+   but its stub never sets `verificationUriComplete`, so the coalesce yields the
+   bare URL and the assertion still passes.
+2. **Rejection copy.** Settings maps slugs through `rejectionMessage()`
+   ("Publish or share a Gem first…"); Curate has a one-off string for
+   `unknown-producer`. `rejectionMessage` moves into the hook's module and both
+   consumers get it. Only `Settings.test.tsx:114` asserts on this copy.
+3. **Unconfigured server.** Settings renders "Verification unavailable (not
+   configured)"; Curate sets a free-text error. The hook exposes
+   `unconfigured: boolean` and each consumer renders its own text, so
+   `Settings.test.tsx:91` keeps passing.
 
 ### Consumers
 
@@ -162,10 +172,12 @@ fires on some later unrelated bind is worse than no resume at all.
 Console tests are not in CI (see `ci-skips-console-tests`), so
 `pnpm -C packages/console test` runs locally and the result is reported.
 
-- **Regression (the extraction):** `Settings.test.tsx` and
-  `PublishToExplore.test.tsx` pass *unmodified*. If they need edits, the hook's
-  shape is wrong. These two files are the safety net that makes this an
-  extraction rather than a rewrite.
+- **Regression (the extraction):** every existing assertion in
+  `Settings.test.tsx` and `PublishToExplore.test.tsx` survives **byte-for-byte**.
+  The only permitted edit is wrapping `render(...)` in `<IdentityProvider>`,
+  since `useIdentity()` throws without one. If an *assertion* has to change, the
+  hook's shape is wrong and the task should stop. These two files are the safety
+  net that makes this an extraction rather than a rewrite.
 - **Chip:** bound + active renders `@login` and click opens the handoff URL.
   Unbound renders "Sign in"; click opens the modal and calls `bindStart`.
   Resolving `bindComplete` closes the modal and the chip becomes `@login` —
