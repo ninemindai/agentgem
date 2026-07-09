@@ -1,241 +1,47 @@
 # better-auth Identity Core (Phase 1) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans. Steps use checkbox (`- [ ]`) syntax.
 
-**Goal:** Make better-auth AgentGem's identity core — it owns `user`/`account`/`session`, GitHub web login becomes its `github` social provider — with zero user-visible feature change.
+**Goal:** Make better-auth AgentGem's identity core — it owns `user`/`account`/`session`, GitHub web login becomes its `github` social provider — with **zero user-visible feature change** and a working compatibility layer for existing clients.
 
-**Architecture:** better-auth runs over the existing Postgres via the Drizzle adapter in existing-tables mode; its tables live in the hand-rolled `ensureSchema`. The legacy `accounts` table is **retained as the FK anchor** and better-auth's `user` shares its id, so no existing foreign key changes in Phase 1. `resolveSession` is re-implemented as a thin shim over better-auth so every downstream route is untouched. The ed25519 device-flow and the SSO handoff stay custom but mint better-auth sessions. The hand-rolled web OAuth and `web_sessions` are deleted; cutover forces one re-auth.
-
-**Tech Stack:** TypeScript (ESM, `.js` specifiers), better-auth + `@better-auth/*`, Drizzle over Postgres, PGlite for tests, vitest, `@hono/node-server` (already a dep), the in-house `@agentback/rest` server.
+**Split into two plans** (locked in `/plan-eng-review`, blast-radius reduction):
+- **Plan 1a — additive foundation.** better-auth stood up ALONGSIDE the existing auth; the hand-rolled OAuth + `web_sessions` stay authoritative. Ships to prod, zero risk to live login, proves better-auth works before anything is deleted.
+- **Plan 1b — cutover.** The `resolveSession` shim across all consumers, the compatibility layer, device-flow/handoff re-point, DELETE the old OAuth, force re-auth. The only PR where live auth can regress.
 
 **Spec:** `docs/superpowers/specs/2026-07-09-better-auth-identity-core-design.md`
 **Sequels:** Phase 2 (Google/Slack/X + passkey + linking); Phase 3 (the `login`-string ownership re-key + retiring `accounts`).
 
+## Verified facts (spikes + review probes, better-auth 1.6.23)
+
+- ✅ `internalAdapter.createSession(userId, undefined)` returns a token the `bearer()` plugin accepts via `auth.api.getSession`.
+- ✅ `createUser({ id, login, ... })` accepts a supplied uuid `id` and the `login` additionalField; `findAccountByProviderId(accountId, providerId)` links a pre-inserted github account with no duplicate.
+- ⚠️ **better-auth's DEFAULT `user.id` is a 32-char nanoid, NOT a uuid** (probe: `HngDZiEyGuWUfO8YROmjOf6eC1ja1klq`). Must force uuid generation — see Plan 1a Task 3.
+- ⚠️ **better-auth stores the RAW session token** in its `session` table (probe confirmed), where `web_sessions` stored only `sha256`. Security-posture change — see 1b Task 6.
+- ⚠️ `resolveSession` has **9 non-test consumers**, not 4: `catalog`, `groups`, `usage`, `githubApp/orgsApi`, `stars`, `reviews`, `registry/uploadPublish`, `registry/publishedBy`, `play.controller` (plus `auth/install.ts`, which is deleted).
+- ⚠️ The marketplace SPA (`packages/marketplace/src/auth.ts`) calls the OLD paths `/api/auth/github/login` and `/api/auth/me` — better-auth does not serve them.
+
 ## Global Constraints
 
-- **Node `>= 24`. ESM with explicit `.js` import specifiers**, even from `.ts` sources.
-- **Tests run against compiled `dist/`.** `pnpm test` = `tsc -b && vitest run`; vitest includes only `dist/**/__tests__/**/*.test.js`. Run one file with `tsc -b && pnpm exec vitest run dist/<path>.test.js`. A `src/**/*.test.ts` path matches nothing. After a rename, `pnpm clean` first.
-- **No drizzle-kit.** `ensureSchema` in `packages/aggregator/src/schema.ts` is the sole idempotent DDL authority; PGlite `makeTestDb()` runs it. A new table needs: the `pgTable` object (or a raw-DDL block), an entry in the `schema` const, `create table if not exists` in `ensureSchema`, and an alphabetized entry in `src/aggregator/__tests__/schema.test.ts`'s table-list array.
-- **Aggregator store lives in `packages/aggregator/src/`; its tests live at repo-root `src/aggregator/__tests__/`**, importing `@agentgem/aggregator`. The barrel is `export * from "./<module>.js"`.
-- **`packages/console` tests + typecheck are not in CI.** This plan does not touch console.
-- **Adding a dependency is justified here:** better-auth is the identity core the spec adopts; hand-rolling multi-provider + linking is the thing it replaces. This is the one place in the repo a framework dependency is clearly warranted.
-- **`resolveSession(db, token) → { login, avatarUrl, accountId } | null`** is imported by `src/catalog/install.ts`, `src/groups/install.ts`, `src/usage/install.ts`, and `src/githubApp/orgsApi.ts`. Its return shape is a hard contract — the shim MUST preserve it exactly.
-
-## Design refinement locked here (refines the spec's "migration" section)
-
-better-auth uses **text** ids; AgentGem's `accounts.id` is **uuid** with 7+ FKs. Phase 1 does **not** re-type those FKs. Instead:
-
-- `accounts` (uuid pk) is **retained** as the FK anchor for `stars`/`reviews`/`usage_days`/`account_scopes`/`handoff_codes`/`groups`/`group_members`/`group_invites` — unchanged.
-- better-auth's `user.id` is **text**, and the migration sets it to the `accounts.id` uuid **as a string**. `user` and `accounts` share ids.
-- `resolveSession` returns `accountId = session.userId` (the shared id string). Downstream queries compare it against uuid columns; Postgres coerces text→uuid in a value comparison, so no caller changes.
-- Retiring `accounts` and re-typing FKs onto `user.id` is **Phase 3**, not now.
-
-```
-  accounts (uuid pk)  ◄── stars/reviews/usage/scopes/groups...  (FK anchor, unchanged)
-     │  same id (as text)
-     ▼
-  better-auth: user (text pk = uuid string) ── account ── session
-                    ▲                                        │
-                    └──────── resolveSession shim ───────────┘
-                    returns { login, avatarUrl, accountId=user.id }
-```
+- **Node `>= 24`. ESM `.js` specifiers.** Tests run against compiled `dist/` (`pnpm test` = `tsc -b && vitest run`; include `dist/**/__tests__/**/*.test.js`; `pnpm clean` after a rename).
+- **No drizzle-kit.** `ensureSchema` (`packages/aggregator/src/schema.ts`) is the sole idempotent DDL authority; PGlite `makeTestDb()` runs it. A new table needs the DDL, a `schema` const entry, and an alphabetized entry in `src/aggregator/__tests__/schema.test.ts`'s table array.
+- **Aggregator store in `packages/aggregator/src/`; tests at repo-root `src/aggregator/__tests__/`** importing `@agentgem/aggregator`. Barrel is `export * from "./<module>.js"`.
+- **`resolveSession` return shape `{ login, avatarUrl, accountId } | null` is a hard contract** across all 9 consumers.
+- **Reserved SQL words** — quote `"user"`, `"account"`, `"session"` in DDL and queries.
+- **`packages/console` tests + typecheck are not in CI.**
 
 ---
 
-## File structure
+# PLAN 1a — Additive Foundation (better-auth alongside the old auth)
 
-**Create:**
-- `packages/aggregator/src/auth/betterAuth.ts` — the `betterAuth(...)` instance factory (adapter, github provider, bearer plugin, `login` additionalField, org-capture hook). One responsibility: configure the auth core.
-- `packages/aggregator/src/auth/mintSession.ts` — the verified server-side session-creation helper (from Spike 1), used by the device-flow and handoff.
-- `packages/aggregator/src/auth/migrateAccounts.ts` — the one-time idempotent `accounts → user + account` backfill.
-- `src/auth/mount.ts` — mounts `auth.handler` at `/api/auth/*` with the body rebuild.
-- Spike scratch: `src/aggregator/__tests__/spike-session.test.ts`, `spike-link.test.ts`.
+Everything here is additive. The hand-rolled OAuth, `web_sessions`, and `resolveSession` are UNTOUCHED and authoritative. At the end of 1a, better-auth is live at `/api/auth/*`, a new github sign-in through it produces a correct same-id `accounts` anchor, and every existing route still authenticates exactly as today. No user sees a change.
 
-**Modify:**
-- `packages/aggregator/src/schema.ts` — better-auth tables in DDL + `schema` const.
-- `packages/aggregator/src/webAuth.ts` — `resolveSession` re-implemented; mint helpers removed.
-- `packages/aggregator/src/binding.ts` — `recordBinding` mints via `mintSession`.
-- `packages/aggregator/src/index.ts` (barrel), `src/aggregator/__tests__/schema.test.ts` (table list).
-- `src/index.ts` — wire `betterAuth` + `mount`; delete the `installAuth` block; body-parser note.
-- **Delete:** `src/auth/install.ts` (web OAuth), `src/auth/state.ts`.
+## 1a-Task 1: better-auth tables in `ensureSchema`
 
----
+**Files:** `packages/aggregator/src/schema.ts`, `src/aggregator/__tests__/schema.test.ts`.
 
-## SPIKE RESULTS (2026-07-09) — both gates PASS, design holds
-
-Verified against better-auth **1.6.23** using the **memory adapter** (isolates the core
-API from drizzle/DDL wiring — those remain to verify in Tasks 3–4, but they are standard
-adapter usage, low risk). All three uncertainties resolved green:
-
-- **Session creation:** `ctx.internalAdapter.createSession(userId, undefined)` returns
-  `{ token, expiresAt, ... }`; the `bearer()` plugin accepts that token via
-  `auth.api.getSession({ headers: { authorization: 'Bearer <token>' } })`. → `mintSession` is viable.
-- **Supplied id + login field:** `ctx.internalAdapter.createUser({ id, login, image, ... })`
-  accepts an externally-supplied uuid `id` and persists the `login` additionalField;
-  `getSession` returns `user.login` and `user.image`. → migration id-preservation and the
-  `resolveSession` shim both work.
-- **Link-on-relogin:** a pre-inserted `createAccount({ userId, providerId: 'github', accountId })`
-  is resolved by **`findAccountByProviderId(accountId, providerId)`** (arg order: accountId
-  first) to the correct user, no duplicate. → the migration's pre-made account links on re-login.
-- **Access token for org-capture:** the account row carries `accessToken`, readable off the
-  `createAccount` result and `findAccountByProviderId` — the Task 4 hook can use it.
-
-**API corrections for the tasks below:** `findAccountByProviderId` takes `(accountId,
-providerId)`, not `(providerId, accountId)`. `createUser` takes the `login` field inline in
-its object. `createSession(userId, undefined)` is the working call.
-
----
-
-## Task 1 (SPIKE): programmatic session creation — GATES the plan
-*(VERIFIED — see SPIKE RESULTS above. When executing, reproduce this as the dist-based
-test in the task body, then extract `mintSession`.)*
-
-**Files:** Create `src/aggregator/__tests__/spike-session.test.ts`; Create `packages/aggregator/src/auth/mintSession.ts`.
-
-**Interfaces:**
-- Produces: `mintSession(auth, userId: string): Promise<{ token: string; expiresAt: string }>` — the device-flow and handoff (Tasks 8, 9) depend on this exact signature.
-
-**Why this is a spike:** better-auth's documented server API creates *users* (`admin.createUser`) but not obviously a *session for an existing user with no browser redirect*. Session CRUD lives on the internal adapter. This task finds the working call or STOPS.
-
-- [ ] **Step 1: Stand up a minimal better-auth over PGlite in a test**
+- [ ] Run `npx @better-auth/cli@latest generate` against the 1a-Task 2 config to emit the canonical schema; transcribe as `create table if not exists` DDL. The stable 1.6 core (verify against the generator, quote reserved names):
 
 ```ts
-// src/aggregator/__tests__/spike-session.test.ts
-import { describe, it, expect } from "vitest";
-import { PGlite } from "@electric-sql/pglite";
-import { drizzle } from "drizzle-orm/pglite";
-import { betterAuth } from "better-auth";
-import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { bearer } from "better-auth/plugins";
-import { ensureSchema, schema } from "@agentgem/aggregator";
-
-async function makeAuth() {
-  const pg = new PGlite();
-  const db = drizzle(pg, { schema }) as any;
-  await ensureSchema(db);                       // must already create better-auth tables (Task 3)
-  const auth = betterAuth({
-    database: drizzleAdapter(db, { provider: "pg" }),
-    secret: "test-secret-at-least-32-chars-long-xxxxx",
-    baseURL: "http://localhost",
-    emailAndPassword: { enabled: false },
-    plugins: [bearer()],
-    user: { additionalFields: { login: { type: "string", required: false } } },
-  });
-  return { auth, db };
-}
-```
-
-> This test cannot pass until Task 3's `ensureSchema` creates better-auth's tables. Order of work: sketch Task 3's DDL first (via `npx @better-auth/cli generate`), land it, then this spike. If you run the spike before Task 3, expect a "relation \"user\" does not exist" failure — that is the signal to do Task 3's DDL, not a spike failure.
-
-- [ ] **Step 2: Try, in order, to mint a session for a known user with no redirect**
-
-Create a user via the adapter, then attempt each candidate until one yields a token that `getSession` accepts as a bearer. Document which worked in `mintSession.ts`.
-
-```ts
-it("SPIKE: mints a session for a known userId, bearer-acceptable", async () => {
-  const { auth, db } = await makeAuth();
-  const ctx = await auth.$context;                          // internal context
-  // create a user directly through better-auth's internal adapter
-  const user = await ctx.internalAdapter.createUser({ id: crypto.randomUUID(), name: "neo", email: "neo@example.invalid", emailVerified: true });
-
-  // Candidate A: internalAdapter.createSession
-  const session = await ctx.internalAdapter.createSession(user.id, undefined);
-  expect(session?.token).toBeTruthy();
-
-  // Verify the bearer plugin accepts it
-  const got = await auth.api.getSession({ headers: new Headers({ authorization: `Bearer ${session.token}` }) });
-  expect(got?.user?.id).toBe(user.id);
-});
-```
-
-If Candidate A's signature differs or the token isn't bearer-acceptable, try **Candidate B** (`auth.api.createSession` if exported), then **Candidate C** (a custom endpoint via a tiny plugin that calls `ctx.internalAdapter.createSession`). Record the exact working call.
-
-- [ ] **Step 3: GATE**
-
-Run: `tsc -b && pnpm exec vitest run dist/aggregator/__tests__/spike-session.test.js`
-- **PASS** → extract the working call into `mintSession(auth, userId)` returning `{ token, expiresAt }` (expiresAt from the session row). Proceed.
-- **FAIL (no candidate works)** → **STOP. Escalate.** The device-flow + handoff cannot mint sessions server-side; the design (delete web_sessions, keep device-flow) is not viable as written and must be reconsidered (e.g. a custom session table better-auth reads). Do not continue.
-
-- [ ] **Step 4: Write `mintSession.ts` and commit**
-
-```ts
-// packages/aggregator/src/auth/mintSession.ts — body = the verified candidate from Step 2
-import type { betterAuth } from "better-auth";
-export async function mintSession(auth: ReturnType<typeof betterAuth>, userId: string): Promise<{ token: string; expiresAt: string }> {
-  const ctx = await auth.$context;
-  const session = await ctx.internalAdapter.createSession(userId, undefined);
-  if (!session?.token) throw new Error("better-auth returned no session token");
-  return { token: session.token, expiresAt: new Date(session.expiresAt).toISOString() };
-}
-```
-
-```bash
-git add packages/aggregator/src/auth/mintSession.ts src/aggregator/__tests__/spike-session.test.ts
-git commit -m "spike(auth): verify server-side better-auth session creation for a known user"
-```
-
----
-
-## Task 2 (SPIKE): externally-supplied user.id + upsert-on-relogin — GATES the plan
-
-**Files:** Create `src/aggregator/__tests__/spike-link.test.ts`.
-
-**Why this is a spike:** the migration inserts `user` rows with our chosen uuid and a pre-made `account` row (providerId `github`, accountId = GitHub numeric id). A subsequent GitHub sign-in must **link to that existing user**, not create a duplicate. Verify better-auth's sign-in resolves an existing account by `(providerId, accountId)`.
-
-- [ ] **Step 1: Pre-insert a user + github account, then resolve by account**
-
-Driving a full GitHub OAuth round-trip in a unit test needs a mocked provider. Verify the linking invariant at the layer better-auth's social sign-in uses: the account lookup.
-
-```ts
-// src/aggregator/__tests__/spike-link.test.ts
-it("SPIKE: a pre-existing github account row links to its user, no duplicate", async () => {
-  const { auth, db } = await makeAuth();                    // same helper as Task 1
-  const ctx = await auth.$context;
-  const uuid = crypto.randomUUID();
-  await ctx.internalAdapter.createUser({ id: uuid, name: "neo", email: "neo@example.invalid", emailVerified: true, login: "neo" } as any);
-  await ctx.internalAdapter.createAccount({ userId: uuid, providerId: "github", accountId: "12345", accessToken: "x" } as any);
-
-  // The lookup better-auth's social callback performs to decide link-vs-create:
-  const found = await ctx.internalAdapter.findAccount?.("github", "12345")
-              ?? await ctx.internalAdapter.findAccountByProviderId?.("12345", "github");
-  expect(found?.userId).toBe(uuid);
-
-  // And no second user was created for the same github id (count stays 1)
-  const users = await db.execute(sql`select count(*)::int n from "user"`);
-  expect((users.rows as any[])[0].n).toBe(1);
-});
-```
-
-> The exact internal-adapter method name (`findAccount` vs `findAccountByProviderId`) is what this spike pins down — try both, keep the one that exists.
-
-- [ ] **Step 2: GATE**
-
-Run: `tsc -b && pnpm exec vitest run dist/aggregator/__tests__/spike-link.test.js`
-- **PASS** → the migration's pre-inserted rows will be linked on re-login. Record the confirmed lookup method for Task 6's migration test. Proceed.
-- **FAIL (a duplicate user is created, or no account lookup resolves ours)** → **STOP. Escalate.** The `accounts.id = user.id` migration would orphan data on re-login. Reconsider (e.g. drive a mocked full sign-in, or a custom link step in the org-capture hook).
-
-- [ ] **Step 3: Commit the spike**
-
-```bash
-git add src/aggregator/__tests__/spike-link.test.ts
-git commit -m "spike(auth): verify pre-migrated github account links on re-login (no duplicate user)"
-```
-
----
-
-## Task 3: better-auth tables in `ensureSchema`
-
-**Files:** Modify `packages/aggregator/src/schema.ts`; Modify `src/aggregator/__tests__/schema.test.ts`.
-
-**Interfaces:**
-- Produces: tables `user`, `account`, `session`, `verification` exist after `ensureSchema`, matching better-auth's expected schema, with `user.login text`.
-
-- [ ] **Step 1: Generate better-auth's canonical schema once, to author from**
-
-Run `npx @better-auth/cli@latest generate` against a scratch config (the `betterAuth({...})` from Task 4) to emit the exact current column set. Transcribe it into `ensureSchema` as `create table if not exists` DDL. Do NOT invent columns — use the generator's output. The stable core (verify against the generator):
-
-```ts
-// in ensureSchema, after the last existing create-table:
 await db.execute(sql`create table if not exists "user" (
   id text primary key, name text, email text unique, email_verified boolean not null default false,
   image text, login text, created_at timestamptz not null default now(), updated_at timestamptz not null default now())`);
@@ -254,375 +60,286 @@ await db.execute(sql`create table if not exists "verification" (
   id text primary key, identifier text not null, value text not null, expires_at timestamptz not null,
   created_at timestamptz not null default now(), updated_at timestamptz not null default now())`);
 ```
+- [ ] Add `account`, `session`, `user`, `verification` (alphabetized) to `schema.test.ts`'s table array; run `tsc -b && pnpm exec vitest run dist/aggregator/__tests__/schema.test.js`; take the DB's actual `order by 1` if position differs.
+- [ ] Commit: `feat(auth): better-auth core tables in ensureSchema`.
 
-> `user`/`account`/`session` are reserved-ish words — quote them (`"user"`) everywhere, including the drizzle table definitions if you add them to the `schema` const. If the generator emits additional columns on a better-auth version bump, add them here; that is the documented upgrade cost.
+## 1a-Task 2: the `betterAuth` factory — uuid ids, 30d TTL, github, org-capture + accounts anchor
 
-- [ ] **Step 2: Add the four names to `schema.test.ts`'s table array (alphabetized)**
+**Files:** Create `packages/aggregator/src/auth/betterAuth.ts`; barrel.
 
-`account`, `session`, `user`, `verification` sort in among the existing names. Add them, then run the test and take the DB's actual `order by 1` output as authoritative if the position differs.
+**The two review-critical pieces live here:** forcing uuid `user.id` (else new users break uuid FKs), and a create+update hook that captures org scopes AND writes the same-id legacy `accounts` anchor (else new users have no FK target and org offboarding breaks).
 
-- [ ] **Step 3: Run the schema test**
-
-```bash
-tsc -b && pnpm exec vitest run dist/aggregator/__tests__/schema.test.js
-```
-Expected: PASS (the table set now includes the four).
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add packages/aggregator/src/schema.ts src/aggregator/__tests__/schema.test.ts
-git commit -m "feat(auth): better-auth user/account/session/verification tables in ensureSchema"
-```
-
----
-
-## Task 4: the `betterAuth` factory
-
-**Files:** Create `packages/aggregator/src/auth/betterAuth.ts`; Modify `packages/aggregator/src/index.ts` (barrel).
-
-**Interfaces:**
-- Consumes: `fetchOrgMemberships`, `setAccountScopes` (`accountVerifier.ts`, `webAuth.ts`); the tables (Task 3).
-- Produces: `makeAuth(opts: { db: AppDb; secret: string; baseURL: string; githubClientId: string; githubClientSecret: string }): ReturnType<typeof betterAuth>`.
-
-- [ ] **Step 1: Write the factory (github provider + bearer + login field + org-capture hook)**
+- [ ] Write the factory:
 
 ```ts
-// packages/aggregator/src/auth/betterAuth.ts
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { bearer } from "better-auth/plugins";
+import { randomUUID, createHash } from "node:crypto";
+import { sql } from "drizzle-orm";
 import type { AppDb } from "../schema.js";
-import { schema } from "../schema.js";
 import { fetchOrgMemberships } from "../accountVerifier.js";
-import { setAccountScopes } from "../webAuth.js";
+import { setAccountScopes, upsertAccount } from "../webAuth.js";
 
-export function makeAuth(opts: { db: AppDb; secret: string; baseURL: string; githubClientId: string; githubClientSecret: string }) {
+const SESSION_TTL_S = 30 * 24 * 60 * 60; // 30 days — matches web_sessions/binding today (review fix 2A)
+
+export function makeAuth(opts: {
+  db: AppDb; secret: string; baseURL: string; githubClientId: string; githubClientSecret: string;
+  webOrigins: string[]; cookieDomain?: string;
+}) {
   return betterAuth({
     database: drizzleAdapter(opts.db as never, { provider: "pg" }),
     secret: opts.secret,
     baseURL: opts.baseURL,
+    trustedOrigins: opts.webOrigins,                    // review fix #6 — redirect/CSRF boundary
     emailAndPassword: { enabled: false },
     plugins: [bearer()],
+    // review fix #1/#14 — force uuid ids so downstream uuid FKs (accounts.id, stars.account_id, ...) work
+    advanced: {
+      database: { generateId: () => randomUUID() },
+      // review fix #4 — cross-subdomain cookie so app.agentgem.ai sends it to api.agentgem.ai
+      ...(opts.cookieDomain ? { crossSubDomainCookies: { enabled: true, domain: opts.cookieDomain } } : {}),
+    },
+    session: { expiresIn: SESSION_TTL_S, updateAge: 60 * 60 * 24 },   // review fix 2A
     user: { additionalFields: { login: { type: "string", required: false } } },
     socialProviders: {
-      github: { clientId: opts.githubClientId, clientSecret: opts.githubClientSecret, scope: ["read:user", "read:org"] },
+      github: {
+        clientId: opts.githubClientId, clientSecret: opts.githubClientSecret,
+        scope: ["read:user", "read:org"],
+        mapProfileToUser: (p: any) => ({ login: p.login, name: p.name ?? p.login, image: p.avatar_url }),
+      },
     },
     databaseHooks: {
       account: {
-        create: {
-          // After a github account row exists, capture org memberships into account_scopes — the
-          // same capture the old callback did. Best-effort: NEVER throw (mirrors today's tolerance).
-          after: async (account) => {
-            if (account.providerId !== "github" || !account.accessToken) return;
-            try {
-              const login = (await opts.db.execute(
-                // read the login we set on the user for the self scope
-                // (schema-qualified select; user is quoted)
-                (await import("drizzle-orm")).sql`select login from "user" where id = ${account.userId}`,
-              )).rows?.[0] as { login?: string } | undefined;
-              const memberships = await fetchOrgMemberships(account.accessToken).catch(() => []);
-              const scopes = [
-                ...(login?.login ? [{ scope: login.login, role: "self" as const }] : []),
-                ...memberships.map((m) => ({ scope: m.login, role: m.role })),
-              ];
-              if (scopes.length) await setAccountScopes(opts.db, account.userId, scopes);
-            } catch { /* org capture is additive; never fail sign-in */ }
-          },
-        },
+        // review fix 1A — capture org scopes on FIRST login (create) AND every re-login (update),
+        // so account_scopes stays fresh and org offboarding works. Also writes the legacy accounts
+        // anchor so EVERY better-auth user has a same-id accounts row (review fix #1 new-user anchor).
+        create: { after: async (a) => anchorAndScopes(opts.db, a) },
+        update: { after: async (a) => anchorAndScopes(opts.db, a) },
       },
     },
   });
 }
-```
 
-> The org-capture hook's access to `account.accessToken` is the item the spec flagged to confirm alongside the spikes. If the `account.create.after` hook does not receive `accessToken`, fall back to reading it from the stored `account` row inside the hook (`select access_token from "account" where id = ...`). Confirm during Task 1/2's spike session and adjust here; do not leave it assumed.
-
-- [ ] **Step 2: Populate `user.login` on sign-in**
-
-The github provider maps the profile to a user; ensure `login` is set from the GitHub profile. Add `mapProfileToUser` on the github provider: `mapProfileToUser: (p) => ({ login: p.login, name: p.name ?? p.login, image: p.avatar_url })`. Verify the field name against the generator's github profile shape.
-
-- [ ] **Step 3: Export from the barrel; write a construction test**
-
-`export * from "./auth/betterAuth.js";` in `packages/aggregator/src/index.ts`. Test that `makeAuth(...)` builds and `auth.api.getSession` returns null for a bogus bearer (proves the instance is wired without needing a real OAuth round-trip):
-
-```ts
-it("makeAuth builds and rejects an unknown bearer token", async () => {
-  const db = await makeTestDb();
-  const auth = makeAuth({ db, secret: "x".repeat(40), baseURL: "http://localhost", githubClientId: "id", githubClientSecret: "sec" });
-  const got = await auth.api.getSession({ headers: new Headers({ authorization: "Bearer nope" }) });
-  expect(got).toBeNull();
-});
-```
-
-- [ ] **Step 4: Run + commit**
-
-```bash
-tsc -b && pnpm exec vitest run dist/aggregator/__tests__/betterAuth.test.js
-git add packages/aggregator/src/auth/betterAuth.ts packages/aggregator/src/index.ts src/aggregator/__tests__/betterAuth.test.ts
-git commit -m "feat(auth): betterAuth factory — github provider, bearer, login field, org-capture hook"
-```
-
----
-
-## Task 5: `resolveSession` shim over better-auth
-
-**Files:** Modify `packages/aggregator/src/webAuth.ts`.
-
-**Interfaces:**
-- Consumes: an `auth` instance (Task 4).
-- Produces: `resolveSession` with the UNCHANGED return type `{ login, avatarUrl, accountId } | null`, but now sourced from better-auth. Because callers pass `(db, token)` today, the shim is re-shaped to `resolveSession(auth, token)` and the four call sites (`catalog`, `groups`, `usage`, `orgsApi` installs) get the `auth` instance threaded through their deps.
-
-- [ ] **Step 1: Write the failing test**
-
-```ts
-it("resolveSession returns {login, avatarUrl, accountId} from a better-auth session", async () => {
-  const db = await makeTestDb();
-  const auth = makeAuth({ db, secret: "x".repeat(40), baseURL: "http://localhost", githubClientId: "i", githubClientSecret: "s" });
-  const ctx = await auth.$context;
-  const id = crypto.randomUUID();
-  await ctx.internalAdapter.createUser({ id, name: "neo", email: "n@x.invalid", emailVerified: true, login: "neo", image: "http://a/x.png" } as any);
-  const { token } = await mintSession(auth, id);
-  expect(await resolveSession(auth, token)).toEqual({ login: "neo", avatarUrl: "http://a/x.png", accountId: id });
-  expect(await resolveSession(auth, "bogus")).toBeNull();
-});
-```
-
-- [ ] **Step 2: Re-implement `resolveSession`; delete the mint helpers**
-
-Replace `resolveSession` (and remove `generateSessionToken`/`createSession`/`deleteSession`, which the web OAuth and old bind used):
-
-```ts
-import type { betterAuth } from "better-auth";
-export async function resolveSession(
-  auth: ReturnType<typeof betterAuth>, token: string,
-): Promise<{ login: string; avatarUrl: string | null; accountId: string } | null> {
-  const res = await auth.api.getSession({ headers: new Headers({ authorization: `Bearer ${token}` }) });
-  const u = res?.user as { id: string; login?: string; image?: string | null } | undefined;
-  if (!u) return null;
-  return { login: u.login ?? "", avatarUrl: u.image ?? null, accountId: u.id };
+async function anchorAndScopes(db: AppDb, account: { userId: string; providerId: string; accountId: string; accessToken?: string | null }) {
+  if (account.providerId !== "github") return;
+  try {
+    // read login/image off the user row we just created/updated
+    const row = (await db.execute(sql`select login, image from "user" where id = ${account.userId}`)).rows?.[0] as { login?: string; image?: string } | undefined;
+    const login = row?.login;
+    // 1) legacy accounts anchor: accounts.id = user.id (uuid), so every FK target exists.
+    if (login) await upsertAccount(db, { provider: "github", accountId: account.accountId, login, avatarUrl: row?.image ?? null, id: account.userId } as never);
+    // 2) org scopes, best-effort, never throw (mirrors today's tolerance)
+    if (account.accessToken && login) {
+      const memberships = await fetchOrgMemberships(account.accessToken).catch(() => []);
+      await setAccountScopes(db, account.userId, [{ scope: login, role: "self" as const }, ...memberships.map((m) => ({ scope: m.login, role: m.role }))]);
+    }
+  } catch { /* anchor+scopes are best-effort; never fail sign-in */ }
 }
 ```
 
-> `upsertAccount` and `setAccountScopes` STAY in `webAuth.ts` — they still write the legacy `accounts` table and `account_scopes`, which the FK anchor and org-gating depend on.
+> **`upsertAccount` gains an optional `id`** (Plan 1a Task 4) so the anchor uses `user.id`. Confirm in the same spike harness that `account.update.after` fires on re-login with a refreshed `accessToken`; if not, capture scopes from a `session.create.after` hook that reads the token off the account row (review fix 1A fallback).
 
-- [ ] **Step 3: Thread `auth` to the four call sites**
+- [ ] Test (review-mandated): construction rejects an unknown bearer; a `createUser` with NO supplied id yields a **uuid** (`advanced.database.generateId`); a minted session's `expiresAt ≈ now + 30d`.
+- [ ] Commit: `feat(auth): betterAuth factory — uuid ids, 30d TTL, github, org-capture+anchor hook`.
 
-Each install module builds a `whoami`/`sessionLogin` that calls `resolveSession(deps.db, token)`. Change each `Deps` to carry `auth` and call `resolveSession(deps.auth, token)`:
-`src/catalog/install.ts`, `src/groups/install.ts`, `src/usage/install.ts`, `src/githubApp/orgsApi.ts`. Update their `install*` signatures and the `src/index.ts` call sites to pass `auth`.
+## 1a-Task 3: `mintSession` + `upsertAccount` id option
 
-- [ ] **Step 4: Run the shim test + the four modules' tests + commit**
+**Files:** `packages/aggregator/src/auth/mintSession.ts`; `packages/aggregator/src/webAuth.ts`.
 
-```bash
-tsc -b && pnpm exec vitest run dist/aggregator/__tests__/webAuth.test.js dist/groups/__tests__/install.test.js dist/catalog/__tests__/install.test.js
-git add packages/aggregator/src/webAuth.ts src/catalog/install.ts src/groups/install.ts src/usage/install.ts src/githubApp/orgsApi.ts
-git commit -m "refactor(auth): resolveSession shim over better-auth; thread auth to route modules"
-```
+- [ ] `mintSession(auth, userId) → { token, expiresAt }` (verified spike): `const s = (await auth.$context).internalAdapter.createSession(userId, undefined)`.
+- [ ] Extend `upsertAccount` to accept an optional `id` (used only by the anchor hook); when absent it keeps `randomUUID()`. On conflict `(provider, provider_account_id)` it already updates in place, so re-anchoring is idempotent.
+- [ ] Tests: `mintSession` returns a bearer-acceptable token (reproduce the spike as a dist test); `upsertAccount({..., id})` preserves the supplied id.
+- [ ] Commit: `feat(auth): mintSession + upsertAccount id option for the anchor`.
 
-> The four modules' existing tests construct sessions via the old `createSession`. They must switch to `mintSession(auth, id)`. Update those test helpers as part of this task — the route behavior (401/403/404) is unchanged; only how a test mints a session changes.
+## 1a-Task 4: mount `auth.handler` at `/api/auth/*` with direct Web Request + credentialed CORS
 
----
+**Files:** Create `src/auth/mount.ts`; `src/index.ts`.
 
-## Task 6: the `accounts → user + account` migration
-
-**Files:** Create `packages/aggregator/src/auth/migrateAccounts.ts`; Modify barrel.
-
-**Interfaces:**
-- Produces: `migrateAccountsToBetterAuth(db: AppDb): Promise<{ migrated: number }>` — idempotent.
-
-- [ ] **Step 1: Write the failing test**
+- [ ] Write `mountAuth(expressApp, auth, webOrigins)` — build the Web `Request` DIRECTLY (review fix 4A, no stream re-emit) and apply the same credentialed CORS the old handlers did (review fix #5):
 
 ```ts
-it("migrates accounts to user+account, preserving id, idempotently", async () => {
-  const db = await makeTestDb();
-  const a = await upsertAccount(db, { provider: "github", accountId: "12345", login: "neo", avatarUrl: "http://a/x.png" });
-  // a related FK row that must stay valid
-  await db.insert(stars).values({ id: crypto.randomUUID(), accountId: a.id, targetKind: "gem", targetId: "g" } as any);
-
-  await migrateAccountsToBetterAuth(db);
-  await migrateAccountsToBetterAuth(db); // idempotent
-
-  const u = (await db.execute(sql`select id, login, image from "user" where id = ${a.id}`)).rows as any[];
-  expect(u).toHaveLength(1);
-  expect(u[0]).toMatchObject({ id: a.id, login: "neo", image: "http://a/x.png" });
-  const acc = (await db.execute(sql`select user_id, provider_id, account_id from "account" where provider_id='github' and account_id='12345'`)).rows as any[];
-  expect(acc[0].user_id).toBe(a.id);
-  // the star still resolves through the shared id
-  const s = (await db.execute(sql`select count(*)::int n from stars where account_id = ${a.id}`)).rows as any[];
-  expect(s[0].n).toBe(1);
-});
-```
-
-- [ ] **Step 2: Implement the idempotent backfill**
-
-```ts
-// packages/aggregator/src/auth/migrateAccounts.ts
-import { sql } from "drizzle-orm";
-import type { AppDb } from "../schema.js";
-export async function migrateAccountsToBetterAuth(db: AppDb): Promise<{ migrated: number }> {
-  // user: id = accounts.id (uuid as text); login/image carried over. Insert-if-absent.
-  await db.execute(sql`
-    insert into "user" (id, name, email_verified, image, login, created_at, updated_at)
-    select a.id::text, a.login, false, a.avatar_url, a.login, now(), now()
-    from accounts a
-    on conflict (id) do nothing`);
-  // account: one github row per account, keyed (provider_id, account_id). Insert-if-absent.
-  const res = await db.execute(sql`
-    insert into "account" (id, user_id, provider_id, account_id, created_at, updated_at)
-    select gen_random_uuid()::text, a.id::text, a.provider, a.provider_account_id, now(), now()
-    from accounts a
-    on conflict (provider_id, account_id) do nothing`);
-  return { migrated: (res as any).rowCount ?? 0 };
-}
-```
-
-- [ ] **Step 3: Run + commit**
-
-```bash
-tsc -b && pnpm exec vitest run dist/aggregator/__tests__/migrateAccounts.test.js
-git add packages/aggregator/src/auth/migrateAccounts.ts packages/aggregator/src/index.ts src/aggregator/__tests__/migrateAccounts.test.ts
-git commit -m "feat(auth): idempotent accounts->user+account backfill, id preserved"
-```
-
----
-
-## Task 7: mount `auth.handler` at `/api/auth/*` with the body rebuild
-
-**Files:** Create `src/auth/mount.ts`; Modify `src/index.ts`.
-
-**Interfaces:**
-- Consumes: an `auth` instance (Task 4).
-- Produces: `mountAuth(expressApp, auth)` — all methods/subpaths under `/api/auth/`.
-
-- [ ] **Step 1: Write `mount.ts` (hono shim + body rebuild)**
-
-```ts
-// src/auth/mount.ts
-import { getRequestListener } from "@hono/node-server";
 import type { betterAuth } from "better-auth";
 type ExpressApp = { all(p: string, h: (req: any, res: any) => unknown): unknown };
 
-export function mountAuth(expressApp: ExpressApp, auth: ReturnType<typeof betterAuth>): void {
-  const listener = getRequestListener(async (request: Request) => auth.handler(request));
-  expressApp.all("/api/auth/*", (req, res) => {
-    // Global express.json() (src/index.ts) already drained the stream; rebuild the body so
-    // better-auth's request.json() sees it. GET/HEAD carry no body.
-    if (req.body !== undefined && req.body !== null && !["GET", "HEAD"].includes(req.method)) {
-      const raw = Buffer.from(JSON.stringify(req.body));
-      req.headers["content-length"] = String(raw.length);
-      req.removeAllListeners?.("data"); req.removeAllListeners?.("end");
-      // re-feed the parsed body as the stream getRequestListener reads
-      process.nextTick(() => { req.emit("data", raw); req.emit("end"); });
+export function mountAuth(expressApp: ExpressApp, auth: ReturnType<typeof betterAuth>, webOrigins: string[]): void {
+  expressApp.all("/api/auth/*", async (req, res) => {
+    const origin = req.headers["origin"];
+    if (origin && webOrigins.includes(origin)) {
+      res.set("Access-Control-Allow-Origin", origin);
+      res.set("Access-Control-Allow-Credentials", "true");
+      res.set("Vary", "Origin");
     }
-    return listener(req, res);
+    if (req.method === "OPTIONS") { res.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS").set("Access-Control-Allow-Headers", "content-type, authorization").status(204).send(""); return; }
+    const proto = req.headers["x-forwarded-proto"] ?? req.protocol ?? "https";
+    const host = req.headers["host"];
+    const url = new URL(req.originalUrl, `${proto}://${host}`);
+    const headers = new Headers();
+    for (const [k, v] of Object.entries(req.headers)) if (typeof v === "string") headers.set(k, v);
+    const hasBody = !["GET", "HEAD"].includes(req.method) && req.body != null && Object.keys(req.body).length > 0;
+    const request = new Request(url, { method: req.method, headers, body: hasBody ? JSON.stringify(req.body) : undefined });
+    const resp = await auth.handler(request);
+    res.status(resp.status);
+    resp.headers.forEach((val, key) => res.append(key, val));   // append: preserves multiple Set-Cookie
+    res.send(Buffer.from(await resp.arrayBuffer()));
   });
 }
 ```
+- [ ] Wire into `src/index.ts` (additively — do NOT remove `installAuth` yet): build `makeAuth(...)`, `mountAuth(...)`, run `migrateAccountsToBetterAuth` (1a-Task 5). Both auth systems now serve; the old one is still authoritative for existing sessions.
+- [ ] Test (review-mandated): a stub-auth `mount` whose handler echoes `await request.json()` receives a NON-EMPTY body on a real `POST` with a JSON body; OPTIONS from an allowlisted origin returns 204 with credentialed CORS; a foreign origin gets no ACAO.
+- [ ] Commit: `feat(auth): mount better-auth at /api/auth/* (direct Web Request + credentialed CORS)`.
 
-> This is the spec's documented gotcha. If re-emitting the stream proves flaky under `@hono/node-server`, use the repo's `webRequestForWebDispatch()` pattern (`packages/rest/src/rest.server.ts:1599`) to build a `Request` directly from `req.body`+headers and call `auth.handler(request)` without the listener. Prefer whichever the mount test (Step 2) shows delivers a non-empty JSON body.
+## 1a-Task 5: migration backfill with conflict detection
 
-- [ ] **Step 2: Write a mount test that proves a JSON body survives**
+**Files:** Create `packages/aggregator/src/auth/migrateAccounts.ts`.
 
-Stand up a tiny express app with the same global `express.json()`, `mountAuth` a stub `auth` whose `handler` echoes `await request.json()`, POST a JSON body, assert the echo is non-empty. (This isolates the body-rebuild from better-auth.)
-
-- [ ] **Step 3: Run + commit**
-
-```bash
-tsc -b && pnpm exec vitest run dist/auth/__tests__/mount.test.js
-git add src/auth/mount.ts src/auth/__tests__/mount.test.ts
-git commit -m "feat(auth): mount better-auth handler at /api/auth/* with body rebuild"
-```
-
----
-
-## Task 8: re-point the device-flow to mint a better-auth session
-
-**Files:** Modify `packages/aggregator/src/binding.ts`.
-
-**Interfaces:**
-- Consumes: `mintSession` (Task 1), `migrateAccountsToBetterAuth`-shaped user rows; still uses `upsertAccount`/`setAccountScopes`.
-
-- [ ] **Step 1: Update the failing binding test**
-
-The existing `recordBinding` test asserts a `sessionToken` is returned. Change the test to pass an `auth` instance and assert the returned token is accepted by `resolveSession(auth, token)`.
-
-- [ ] **Step 2: Re-point `recordBinding`**
-
-`recordBinding` currently calls `generateSessionToken()` + `createSession(db, account.id, ...)`. Replace step 6 with: ensure a better-auth `user` (+ github `account`) exists for this account id (reuse the migration's insert-if-absent SQL for the single row), then `mintSession(auth, account.id)`. Thread `auth` into `recordBinding`'s signature (it already takes `verifier`/`orgs` as params — add `auth`). Keep every proof and the best-effort tolerance unchanged.
-
-- [ ] **Step 3: Run + commit**
-
-```bash
-tsc -b && pnpm exec vitest run dist/aggregator/__tests__/binding.test.js
-git add packages/aggregator/src/binding.ts src/aggregator/__tests__/binding.test.ts
-git commit -m "feat(auth): device-flow bind mints a better-auth session"
-```
-
----
-
-## Task 9: SSO handoff mints a better-auth session; wire it all in `src/index.ts`; delete the old OAuth
-
-**Files:** Modify `src/index.ts`; Delete `src/auth/install.ts`, `src/auth/state.ts`; adjust `packages/aggregator/src/webAuth.ts` (handoff redeem).
-
-**Interfaces:**
-- Consumes: `makeAuth`, `mountAuth`, `migrateAccountsToBetterAuth`, `mintSession`.
-
-- [ ] **Step 1: Build the auth instance and mount it in `src/index.ts`**
-
-Replace the `installAuth(...)` block (`src/index.ts:180-194`) with:
+- [ ] `migrateAccountsToBetterAuth(db) → { migrated, conflicts }` — insert-if-absent `user` (id = accounts.id) and `account`, and **FAIL LOUD on a mismatched link** (review fix #11): if an `"account"` row for `(github, account_id)` already exists with a different `user_id`, collect it as a conflict rather than silently accepting the wrong link.
 
 ```ts
-if (ghClientId && ghSecret && aggDb) {
-  const auth = makeAuth({
-    db: aggDb,
-    secret: process.env.AGENTGEM_SESSION_SECRET ?? ghSecret,
-    baseURL: process.env.AGENTGEM_PUBLIC_BASE ?? "https://api.agentgem.ai",
-    githubClientId: ghClientId, githubClientSecret: ghSecret,
-  });
-  await migrateAccountsToBetterAuth(aggDb);          // one-time, idempotent, safe every boot
-  mountAuth(server.expressApp as never, auth);
-  // pass `auth` to the route installers (Task 5) and the bind controller (Task 8)
+export async function migrateAccountsToBetterAuth(db: AppDb): Promise<{ migrated: number; conflicts: string[] }> {
+  await db.execute(sql`insert into "user" (id, name, email_verified, image, login, created_at, updated_at)
+    select a.id::text, a.login, false, a.avatar_url, a.login, now(), now() from accounts a on conflict (id) do nothing`);
+  // conflict check BEFORE inserting accounts
+  const bad = (await db.execute(sql`select ac.account_id from "account" ac join accounts a
+    on ac.provider_id = a.provider and ac.account_id = a.provider_account_id where ac.user_id <> a.id::text`)).rows as { account_id: string }[];
+  const res = await db.execute(sql`insert into "account" (id, user_id, provider_id, account_id, created_at, updated_at)
+    select gen_random_uuid()::text, a.id::text, a.provider, a.provider_account_id, now(), now() from accounts a on conflict (provider_id, account_id) do nothing`);
+  return { migrated: (res as any).rowCount ?? 0, conflicts: bad.map((b) => b.account_id) };
 }
 ```
+- [ ] Test (review-mandated): idempotent backfill, id preserved, a `stars` FK row still resolves; a pre-seeded mismatched `account` row is reported in `conflicts`, not silently kept.
+- [ ] Commit: `feat(auth): accounts->user+account backfill with conflict detection`.
 
-Thread the single `auth` into `installCatalog`/`installGroups`/`installUsage`/`installOrgsApi` (Task 5) and the `/api/aggregator/bind` controller (Task 8).
+## 1a-Task 6: drizzle + social-callback integration test (closes the memory-adapter gap)
 
-- [ ] **Step 2: Handoff redeem mints a better-auth session**
+**Files:** `src/aggregator/__tests__/betterAuthIntegration.test.ts`.
 
-The handoff redeem path (in `webAuth.ts`/its controller) currently mints via `createSession`. Point it at `mintSession(auth, accountId)`. Keep `handoff_codes` and its single-use/60s semantics unchanged.
+The spikes used the memory adapter; this proves the **drizzle-over-PGlite** path and the social sign-in linking that production actually runs (review finding #10).
 
-- [ ] **Step 3: Delete the hand-rolled web OAuth**
+- [ ] Build `makeAuth` over a real `makeTestDb()` (drizzle+PGlite). Drive a github sign-in with a **mocked GitHub provider** — configure the github provider's token/userinfo endpoints at an in-process mock (better-auth's `socialProviders.github` accepts custom endpoints, or use the `genericOAuth` plugin pointed at the mock). Assert: a new sign-in creates a uuid-id user + a same-id `accounts` anchor + `account_scopes`; a second sign-in for the same github id LINKS (no duplicate) and RE-captures scopes (review fix 1A, drizzle path); the minted session resolves via `auth.api.getSession`.
+- [ ] Commit: `test(auth): drizzle+PGlite social-callback integration (link, anchor, re-capture)`.
 
-`git rm src/auth/install.ts src/auth/state.ts`. Remove their imports from `src/index.ts` (`installAuth`, `GitHubVerifier` if now unused there, `githubExchangeCode`). Keep `src/auth/cookie.ts` only if the handoff still reads a cookie; otherwise remove. `web_sessions` DDL stays in `ensureSchema` for now (dropping a table is a separate migration; it is simply unused) — note it as dead in a comment.
-
-- [ ] **Step 4: Full suite + typecheck**
-
-```bash
-pnpm clean && pnpm test
-```
-Expected: PASS. Investigate any failure in the four route modules, binding, or handoff — those are the seams this plan moved.
-
-- [ ] **Step 5: Drive it (staging-shaped)**
-
-With `AGENTGEM_GITHUB_CLIENT_ID/SECRET` set and an aggregator DB, boot and confirm `GET /api/auth/ok` (or better-auth's session endpoint) responds, and that `GET /api/auth/sign-in/social` for github issues a redirect. A full GitHub round-trip needs real credentials — do it in staging, verifying: web login → session cookie → `/api/registry/gems` authed calls still work, and `agentgem bind` mints a working Bearer.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add -A
-git commit -m "feat(auth): cut over to better-auth — mount, migrate, handoff; delete hand-rolled OAuth"
-```
+**End of 1a:** better-auth is live at `/api/auth/*`, produces correct uuid+anchored users, captures/refreshes org scopes, and is proven over the real adapter — with the old auth still authoritative. Ship it, verify in staging, THEN do 1b.
 
 ---
 
-## Self-Review
+# PLAN 1b — Cutover (delete the old auth; better-auth becomes authoritative)
 
-**Spec coverage.** Every spec element maps to a task: schema authority → Task 3; full-replace github provider + org-capture hook → Task 4; resolveSession shim → Task 5; migration (accounts.id=user.id) → Task 6; mount + body gotcha → Task 7; device-flow + handoff minting better-auth sessions → Tasks 8–9; delete hand-rolled OAuth + force-re-auth cutover → Task 9; both spikes → Tasks 1–2 (first, gating).
+The only PR where live auth can regress. Depends on 1a shipped.
 
-**Design refinement made explicit:** `accounts` is retained as the FK anchor and `user.id` shares its id as text — this refines the spec's "migration" wording (accounts is not superseded in Phase 1) and avoids a uuid→text FK re-type. Flagged at the top and in Task 6.
+## 1b-Task 1: `resolveSession(auth, headers)` shim across all 9 consumers
 
-**Honest uncertainty, gated not hidden:** the two most uncertain facts — server-side session creation and pre-migrated-account linking — are Tasks 1–2 with explicit STOP/escalate gates, because a failure reshapes the design. The org-capture hook's access-token availability is flagged in Task 4 with a concrete fallback.
+**Files:** `packages/aggregator/src/webAuth.ts`; the 9 consumers.
 
-**Out of scope (sequels):** Google/Slack/X, passkey, `linkSocial`, email verification (Phase 2); the `login`-string ownership re-key and retiring `accounts`/`web_sessions` (Phase 3).
+- [ ] Re-implement (review fix 3A — takes headers, better-auth reads its OWN cookie/bearer):
 
-**Type consistency:** `mintSession(auth, userId) → { token, expiresAt }`, `resolveSession(auth, token) → { login, avatarUrl, accountId } | null`, `makeAuth(opts) → auth`, `migrateAccountsToBetterAuth(db) → { migrated }` are used consistently across Tasks 1, 4, 5, 6, 8, 9.
+```ts
+export async function resolveSession(auth: ReturnType<typeof betterAuth>, headers: Record<string, string | undefined> | Headers): Promise<{ login: string; avatarUrl: string | null; accountId: string } | null> {
+  const h = headers instanceof Headers ? headers : Object.entries(headers).reduce((acc, [k, v]) => { if (typeof v === "string") acc.set(k, v); return acc; }, new Headers());
+  const res = await auth.api.getSession({ headers: h });
+  const u = res?.user as { id: string; login?: string; image?: string | null } | undefined;
+  return u ? { login: u.login ?? "", avatarUrl: u.image ?? null, accountId: u.id } : null;
+}
+```
+- [ ] Thread `auth` + forward `req.headers` (drop all `parseCookies`/`SESSION_COOKIE` extraction) in ALL NINE: `src/catalog/install.ts`, `src/groups/install.ts`, `src/usage/install.ts`, `src/githubApp/orgsApi.ts`, `src/stars/install.ts`, `src/reviews/install.ts`, `src/registry/uploadPublish.ts`, `src/registry/publishedBy.ts`, `src/play.controller.ts`. Update each `install*`/controller signature and the `src/index.ts` call sites to pass `auth`.
+- [ ] Tests (review-mandated, incl the **cookie-path regression guard**): `resolveSession` resolves a session presented as a better-auth **cookie** AND as a Bearer; a route module (pick `groups`) authenticates a request carrying the better-auth cookie (not Bearer) — the exact 3A regression. Update the 9 modules' existing session-minting test helpers from `createSession` to `mintSession`.
+- [ ] Commit: `refactor(auth): resolveSession shim over better-auth across all 9 consumers`.
+
+## 1b-Task 2: client + route compatibility
+
+**Files:** `packages/marketplace/src/auth.ts` (+ test); optionally `src/auth/mount.ts` compat shims.
+
+Existing clients call `/api/auth/github/login`, `/api/auth/me`. Choose ONE and sequence the deploy (review findings #2/#3):
+- [ ] **Update the marketplace client** — `loginUrl` → better-auth's social sign-in (`${base}/api/auth/sign-in/social` POST `{ provider: "github", callbackURL }`, or the GET redirect form); `getMe` → `${base}/api/auth/get-session`. Update `auth.test.ts`. AND
+- [ ] **Update the GitHub OAuth app callback URL** to better-auth's `/api/auth/callback/github` — a HARD, explicit cutover step (login hard-fails at callback otherwise). Document it in the cutover runbook (1b-Task 5).
+- [ ] Optional belt-and-suspenders: add thin compat handlers in `mount.ts` that 302 `/api/auth/github/login?return=` → better-auth's social sign-in, and proxy `/api/auth/me` → `get-session`, so an un-updated client / bookmarked URL keeps working during the deploy window.
+- [ ] Test: `auth.test.ts` asserts the new URLs; a compat-shim test asserts the old login path still redirects.
+- [ ] Commit: `feat(auth): marketplace client + OAuth-app callback compatibility`.
+
+## 1b-Task 3: device-flow → better-auth session
+
+**Files:** `packages/aggregator/src/binding.ts`.
+
+- [ ] `recordBinding` step 6: ensure a better-auth `user`(+github `account`) exists for this id (reuse the anchor insert), then `mintSession(auth, account.id)` instead of `generateSessionToken`+`createSession`. Thread `auth` into the signature; keep every proof + best-effort tolerance.
+- [ ] Test: the returned token is accepted by `resolveSession(auth, { authorization: 'Bearer <token>' })`.
+- [ ] Commit: `feat(auth): device-flow bind mints a better-auth session`.
+
+## 1b-Task 4: SSO handoff + logout via better-auth Set-Cookie
+
+**Files:** handoff redeem controller; logout.
+
+Minting a token is not enough — the browser needs a Set-Cookie better-auth will read (review finding #13).
+- [ ] Handoff redeem: after `mintSession(auth, accountId)`, set the response cookie via better-auth's cookie mechanics (call better-auth's session-cookie serializer / a small endpoint that emits the Set-Cookie), NOT a manual `ag_session`. Keep `handoff_codes` single-use/60s.
+- [ ] Logout: route `/api/auth/logout` (or the marketplace client) to better-auth's `sign-out` so it clears better-auth's cookie, not `web_sessions`.
+- [ ] Test (review-mandated): handoff redeem yields a cookie that `resolveSession` accepts; sign-out invalidates it.
+- [ ] Commit: `feat(auth): handoff + logout via better-auth session cookie`.
+
+## 1b-Task 5: delete the old OAuth; document token-storage; cutover runbook
+
+**Files:** delete `src/auth/install.ts`, `src/auth/state.ts`; `src/index.ts`; `webAuth.ts`.
+
+- [ ] Remove the `installAuth(...)` block and its imports; `git rm src/auth/install.ts src/auth/state.ts`. Remove `generateSessionToken`/`createSession`/`deleteSession` (now unused). `src/auth/cookie.ts` — remove `SESSION_COOKIE`/`parseCookies` if no remaining consumer (the 9 modules dropped it in 1b-Task 1); keep only what handoff still needs.
+- [ ] **Document the token-storage decision** (review finding #12): better-auth stores the raw session token (vs the old hash-only). Either accept + document it in the spec's security section, OR configure/extend better-auth to hash at rest if that's a hard requirement. Default: accept + document (30d tokens, same as before, and a DB compromise is already game-over for the aggregator) — but make it an explicit, recorded decision, not a silent regression.
+- [ ] `web_sessions` DDL stays (unused) — dropping a table is a separate migration; comment it dead.
+- [ ] **Cutover runbook** (force re-auth): (1) deploy 1a, verify better-auth live; (2) update the GitHub OAuth app callback URL; (3) deploy 1b (client + server together); (4) old sessions are abandoned — web users re-login (1 click), CLI users re-`bind`. Staging-drive the whole sequence first.
+- [ ] `pnpm clean && pnpm test` green; staging drive: web login → authed call (cookie path) → CLI bind → Bearer authed call → handoff.
+- [ ] Commit: `feat(auth): cut over to better-auth — delete hand-rolled OAuth; force re-auth`.
+
+---
+
+## NOT in scope (sequels)
+
+Google/Slack/X + passkey + `linkSocial`, email verification — **Phase 2**. The `login`-string ownership re-key + retiring `accounts`/`web_sessions` — **Phase 3**. Email policy beyond "null allowed" (verify better-auth's social-path requirement in 1a-Task 6; add `user:email` scope in Phase 2 where linking needs a verified email).
+
+## What already exists (reused, not rebuilt)
+
+`fetchOrgMemberships`/`accountVerifier` (reused verbatim by the hook + bind); `upsertAccount`/`setAccountScopes` (kept — still write the legacy `accounts`/`account_scopes` the anchor + org-gating depend on); `makeTestDb` PGlite harness; the credentialed-CORS pattern (`catalog/install.ts:19`) mirrored in `mount.ts`; `@hono/node-server` (already a dep, though 4A builds the Request directly instead).
+
+## Failure modes
+
+| Codepath | Failure | Test? | Handling |
+|---|---|---|---|
+| new github sign-in | non-uuid id → uuid FK write throws | ✅ 1a-Task 2/6 (uuid gen + anchor) | uuid `generateId` + anchor hook |
+| org member re-login | scopes not refreshed → offboarding hole | ✅ 1a-Task 6 (re-capture) | create+update hook |
+| web SPA authed call | wrong cookie name → 401 | ✅ 1b-Task 1 (cookie-path guard) | headers-based shim |
+| cross-subdomain cookie | app.→api. doesn't send cookie | ⚠️ staging | crossSubDomainCookies domain |
+| GitHub OAuth callback | old callback URL → login hard-fails | ⚠️ runbook step | update OAuth app URL |
+| DB leak | raw token → session theft | n/a | documented decision (1b-Task 5) |
+| migration | mismatched account link | ✅ 1a-Task 5 (conflict fail) | fail loud |
+
+## Worktree parallelization
+
+Plan 1a tasks are mostly sequential within `packages/aggregator` (Task 2 needs Task 1's tables; 4-6 need the factory). Plan 1b depends on 1a shipped. **Sequential; no parallel lanes** — this is one load-bearing seam being rebuilt, not independent workstreams.
+
+## Implementation Tasks (synthesized from the review)
+
+- [ ] **T1 (P1)** — force uuid `user.id` + create/update hook writing the same-id `accounts` anchor (1a-Task 2). *Source: Codex #1/#14 (verified: nanoid default).* New users break uuid FKs without it.
+- [ ] **T2 (P1)** — org capture on create AND update, not create-only (1a-Task 2). *Source: Arch review 1A.* Offboarding freshness.
+- [ ] **T3 (P1)** — `resolveSession(auth, headers)` across all **9** consumers (1b-Task 1). *Source: Code review 3A + Codex #7.* Web auth 401s otherwise.
+- [ ] **T4 (P1)** — client + OAuth-app callback compatibility (1b-Task 2). *Source: Codex #2/#3.* Login button + callback break.
+- [ ] **T5 (P2)** — pin 30d session TTL (1a-Task 2). *Source: Arch review 2A (verified 7d default).*
+- [ ] **T6 (P2)** — mount builds the Web Request directly + credentialed CORS (1a-Task 4). *Source: Code review 4A + Codex #5.*
+- [ ] **T7 (P2)** — cross-subdomain cookie domain + `trustedOrigins` (1a-Task 2). *Source: Codex #4/#6.*
+- [ ] **T8 (P2)** — handoff/logout via better-auth Set-Cookie (1b-Task 4). *Source: Codex #13.*
+- [ ] **T9 (P2)** — migration conflict detection (1a-Task 5). *Source: Codex #11.*
+- [ ] **T10 (P2)** — drizzle+PGlite social-callback integration test (1a-Task 6). *Source: Codex #10.*
+- [ ] **T11 (P2)** — document the raw-token-storage decision (1b-Task 5). *Source: Codex #12 (verified).*
+- [ ] **T12 (P3)** — the 5 review-mandated tests incl the 2 regression guards. *Source: Test review 5A.*
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
+| Codex Review | outside voice | Independent 2nd opinion | 1 | issues_found | 14 raised, 11 verified real, folded into 1a/1b |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | issues_open→revised | 6 findings + Codex; plan rewritten as 1a/1b |
+| Design Review | `/plan-design-review` | UI/UX | 0 | — | — |
+| DX Review | `/plan-devex-review` | Developer experience | 0 | — | — |
+
+**CODEX:** The outside voice found the category my review under-weighted — a missing compatibility layer (old routes, GitHub callback URL, marketplace client, cross-subdomain cookie, credentialed CORS) and a critical new-user-anchor bug. I verified the load-bearing ones by probe: better-auth's default id is a nanoid not a uuid (breaks uuid FKs for new users), it stores the raw session token (was hash-only), `resolveSession` has 9 consumers not 4, and the marketplace SPA uses the old `/api/auth/github/login` + `/api/auth/me`. All folded into the revised plan.
+
+**CROSS-MODEL:** My review said "design holds, ready after 5 fixes"; Codex said "not a drop-in — the compatibility layer is the dangerous missing work." Codex was more right. The plan was NOT ready as written; it is now revised (1a/1b + compatibility layer + new-user anchor) and re-scoped.
+
+**VERDICT:** ENG review found blockers; plan REVISED, not yet clear. The revised 1a/1b plan needs a fresh pass (or careful execution with the 12 synthesized tasks) — the design is sound and the spikes hold, but the compatibility layer roughly doubled 1b and must be built, not assumed. Split confirmed. Recommend: build 1a (additive, zero-risk), verify in staging, then execute 1b behind the runbook.
+
+NO UNRESOLVED DECISIONS
