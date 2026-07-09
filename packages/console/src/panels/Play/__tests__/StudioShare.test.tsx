@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { IdentityProvider } from "../../../identity/IdentityProvider.js";
+import { IdentityChip } from "../../../identity/IdentityChip.js";
 import { Studio } from "../Studio.js";
 import * as routes from "../../../api/routes.js";
 
@@ -11,6 +12,19 @@ const miniapp = { html: "<html></html>", meta: { title: "Snake", genre: "project
 function mount() {
   return render(
     <IdentityProvider apiBase="">
+      <Studio apiBase="" name="snake" agents={[{ id: "claude", label: "Claude" }] as never} agentId="claude"
+              onAgentIdChange={() => {}} onBack={() => {}} />
+    </IdentityProvider>
+  );
+}
+
+// Mounts IdentityChip alongside Studio, sharing one IdentityProvider. The chip is the
+// real consumer of the identity context, so it's what a "did onBound clobber the
+// refreshed record" regression test needs to observe.
+function mountWithChip() {
+  return render(
+    <IdentityProvider apiBase="">
+      <IdentityChip apiBase="" />
       <Studio apiBase="" name="snake" agents={[{ id: "claude", label: "Claude" }] as never} agentId="claude"
               onAgentIdChange={() => {}} onBack={() => {}} />
     </IdentityProvider>
@@ -86,5 +100,36 @@ describe("Studio → Share to app.agentgem.ai", () => {
     fireEvent.click(await screen.findByRole("button", { name: /dismiss/i }));
     await waitFor(() => expect(screen.queryByText(/Connect GitHub to publish/i)).toBeNull());
     expect(publish).not.toHaveBeenCalled();
+  });
+
+  it("resuming a publish does not clobber the freshly-refreshed identity record (avatarUrl/sessionActive survive Studio's onBound)", async () => {
+    vi.spyOn(routes.bindStatusRoute, "call")
+      .mockResolvedValueOnce({ bound: false } as never)
+      .mockResolvedValueOnce({ bound: true, login: "bob", avatarUrl: "https://a/bob.png", sessionActive: true } as never);
+    vi.spyOn(routes.playMiniappRoute, "call").mockResolvedValue(miniapp as never);
+    const save = vi.spyOn(routes.playSaveRoute, "call").mockResolvedValue({ ok: true } as never);
+    vi.spyOn(routes.bindStartRoute, "call").mockResolvedValue({ configured: true, userCode: "AB-12", verificationUri: "https://gh/d", deviceCode: "dc" } as never);
+    vi.spyOn(routes.bindCompleteRoute, "call").mockResolvedValue({ bound: true, login: "bob" } as never);
+    const publish = vi.spyOn(routes.publishSetupRoute, "call").mockResolvedValue({ exploreRef: "@bob/snake", version: "0.1.0", shareUrl: "https://agentgem.ai/share/s" } as never);
+    vi.stubGlobal("open", vi.fn());
+
+    mountWithChip();
+    fireEvent.click(await screen.findByRole("button", { name: /share to app\.agentgem\.ai/i }));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(await screen.findByRole("button", { name: /connect github/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /copy code & open github/i }));
+
+    await waitFor(() => expect(publish).toHaveBeenCalledTimes(1));
+    expect(save).toHaveBeenCalledTimes(1); // NOT re-saved on resume
+    expect(await screen.findByText(/Published to app\.agentgem\.ai/)).toBeTruthy();
+
+    // The chip is the real consumer of identity context. If Studio's onBound wrote an
+    // optimistic { bound: true, login } over the freshly-refreshed record, avatarUrl and
+    // sessionActive would be gone and the chip's title would read "Session expired…".
+    const chip = await screen.findByRole("button", { name: /@bob/ });
+    const img = await screen.findByRole("img", { name: /bob/i });
+    expect(img.getAttribute("src")).toBe("https://a/bob.png");
+    expect(chip.getAttribute("title")).toBe("Open app.agentgem.ai signed in");
   });
 });
