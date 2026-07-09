@@ -11,22 +11,22 @@
     "test:all": "vitest run && vitest run --config vitest.build.config.ts"
   },
   "dependencies": {
-    "@agentback/client": "^0.6.0",
+    "@agentback/client": "^0.7.1",
     "@agentgem/insight": "workspace:*",
     "@agentgem/play": "workspace:*",
     "dompurify": "^3.4.11",
-    "marked": "^18.0.5",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
+    "marked": "^18.0.6",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "recharts": "^2.15.4",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@testing-library/react": "^16.1.0",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "esbuild": "^0.25.0",
-    "jsdom": "^25.0.0",
+    "@testing-library/react": "^16.3.2",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "esbuild": "^0.28.1",
+    "jsdom": "^25.0.1",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "vitest": "^3"
   }

@@ -20,16 +20,16 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
+    "@types/node": "^24.13.3",
     "cross-env": "^7.0.3",
-    "esbuild": "^0.24.0",
-    "electron": "^43.0.0",
-    "electron-builder": "^26.0.0",
+    "esbuild": "^0.28.1",
+    "electron": "^43.1.0",
+    "electron-builder": "^26.15.6",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
-    "vitest": "^2.1.0"
+    "vitest": "^2.1.9"
   },
   "dependencies": {
-    "electron-updater": "^6.3.9"
+    "electron-updater": "^6.8.9"
   },
   "pnpm": {
     "onlyBuiltDependencies": ["electron"]
