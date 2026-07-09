@@ -38,3 +38,12 @@ export interface LoopSpec {
   guardrails: LoopGuardrails;         // always present
   params?: Record<string, string>;   // parameterizes the automation, e.g. { label: "priority" }
 }
+
+// Runtime preconditions the future executor MUST enforce before running a LoopSpec (issue #243
+// finding C). All of these are representable and pass both validators (LoopSpecSchema and
+// sanitizeLoop) — they describe a well-formed-but-unrunnable loop, so they are NOT rejected at the
+// authoring/read layer; a runner that skips these checks would loop unbounded or no-op silently:
+//   - mode:"goal"  with no `goal`                 → nothing tells it when to stop
+//   - mode:"loop"  with no `schedule`             → nothing tells it when to run
+//   - goal.check:"regex" with no `pattern`        → no expression to match the round's output
+//   - maxRounds / maxSpendUsd / maxTokens <= 0    → must fail fast, not run zero or negative rounds

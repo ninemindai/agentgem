@@ -334,27 +334,36 @@ export const GemContractSchema = z.object({
 // Mirrors LoopSpec (packages/model/src/loop.ts). Present so publish/install boundaries that
 // re-validate a manifest through Zod (which strips unknown keys by default) preserve the loop
 // facet instead of silently dropping it.
+//
+// Tolerant read gate — same contract as sanitizeLoop (packages/archive/src/archive.ts) and the
+// deliberate resolution of issue #243 finding B: a wrong-shaped optional sub-field is dropped
+// (`.catch(undefined)`) and the valid core kept, rather than hard-rejecting the enclosing gem.
+// The required core (`mode`, `guardrails.approval`) stays strict; when it is malformed the whole
+// loop is dropped at the usage site (`.optional().catch(undefined)`), matching sanitizeLoop's
+// "return undefined" — never rejecting the gem. Runtime-only invariants (mode↔goal/schedule,
+// non-negative budgets — issue #243 finding C) are NOT enforced here; the future executor owns
+// those. See LoopSpec's comment in packages/model/src/loop.ts.
 export const LoopSpecSchema = z.object({
   mode: z.enum(["loop", "goal"]),
   schedule: z.object({
     kind: z.enum(["interval", "watch", "cron"]),
-    everyMs: z.number().optional(),
-    globs: z.array(z.string()).optional(),
-    cron: z.string().optional(),
-  }).optional(),
+    everyMs: z.number().optional().catch(undefined),
+    globs: z.array(z.string()).optional().catch(undefined),
+    cron: z.string().optional().catch(undefined),
+  }).optional().catch(undefined),
   goal: z.object({
     until: z.string(),
     check: z.enum(["llm", "regex"]),
-    pattern: z.string().optional(),
-  }).optional(),
+    pattern: z.string().optional().catch(undefined),
+  }).optional().catch(undefined),
   guardrails: z.object({
     approval: z.enum(["auto", "gate"]),
-    maxRounds: z.number().optional(),
-    maxSpendUsd: z.number().optional(),
-    maxTokens: z.number().optional(),
-    modelLadder: z.array(z.string()).optional(),
+    maxRounds: z.number().optional().catch(undefined),
+    maxSpendUsd: z.number().optional().catch(undefined),
+    maxTokens: z.number().optional().catch(undefined),
+    modelLadder: z.array(z.string()).optional().catch(undefined),
   }),
-  params: z.record(z.string(), z.string()).optional(),
+  params: z.record(z.string(), z.string()).optional().catch(undefined),
 });
 
 export const GemManifestSchema = z.object({
@@ -366,7 +375,9 @@ export const GemManifestSchema = z.object({
   requiredSecrets: z.array(SecretRequirementSchema),
   checks: z.array(z.object({ name: z.string(), path: z.string() })),
   contract: GemContractSchema.optional(),
-  loop: LoopSpecSchema.optional(),
+  // .catch(undefined): an unreparable loop (malformed required core) is treated as no loop, so it
+  // never rejects the gem — mirrors sanitizeLoop's read gate (issue #243 finding B).
+  loop: LoopSpecSchema.optional().catch(undefined),
 });
 
 export const ArchiveRequestSchema = z.object({
@@ -532,7 +543,9 @@ export const GemSchema = z.object({
   requiredSecrets: z.array(SecretRequirementSchema),
   grade: z.number().int().min(1).max(3).optional(),
   contract: GemContractSchema.optional(),
-  loop: LoopSpecSchema.optional(),
+  // .catch(undefined): an unreparable loop (malformed required core) is treated as no loop, so it
+  // never rejects the gem — mirrors sanitizeLoop's read gate (issue #243 finding B).
+  loop: LoopSpecSchema.optional().catch(undefined),
 });
 
 // --- Transfer (store-and-forward ticket sharing) ---
