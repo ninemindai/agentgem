@@ -121,24 +121,32 @@ export function makeAuth(opts: {
   });
 }
 
-async function anchorAndScopes(db: AppDb, account: { userId: string; providerId: string; accountId: string; accessToken?: string | null }) {
+async function anchorAndScopes(db: AppDb, account: { userId: string; providerId: string; accountId: string; accessToken?: string | null }, isCreate: boolean) {
   if (account.providerId !== "github") return;
+  const row = (await db.execute(sql`select login, image from "user" where id = ${account.userId}`)).rows?.[0] as { login?: string; image?: string } | undefined;
+  const login = row?.login;
+  // 1) legacy accounts ANCHOR — LOAD-BEARING, NOT best-effort (Codex re-review #4). Every better-auth
+  //    user MUST have a same-id accounts row or their first uuid-FK write (stars/reviews/usage) throws.
+  //    accounts.id = user.id (uuid). No existing row for a new user, so the insert with id=user.id
+  //    succeeds; a migrated user re-logging in already has id=user.id, so the (provider,provider_account_id)
+  //    conflict updates login/avatar in place (id unchanged). Mismatched ids are caught by the migration
+  //    conflict check (1a-Task 5), so they cannot reach here. On CREATE, let a failure THROW to fail the
+  //    sign-in — a user with no anchor is broken and must not get a session.
+  if (login) await upsertAccount(db, { provider: "github", accountId: account.accountId, login, avatarUrl: row?.image ?? null, id: account.userId } as never);
+  else if (isCreate) throw new Error("anchor: user has no login; cannot create accounts anchor");
+  // 2) org scopes — best-effort, never throw (mirrors today's tolerance).
   try {
-    // read login/image off the user row we just created/updated
-    const row = (await db.execute(sql`select login, image from "user" where id = ${account.userId}`)).rows?.[0] as { login?: string; image?: string } | undefined;
-    const login = row?.login;
-    // 1) legacy accounts anchor: accounts.id = user.id (uuid), so every FK target exists.
-    if (login) await upsertAccount(db, { provider: "github", accountId: account.accountId, login, avatarUrl: row?.image ?? null, id: account.userId } as never);
-    // 2) org scopes, best-effort, never throw (mirrors today's tolerance)
     if (account.accessToken && login) {
       const memberships = await fetchOrgMemberships(account.accessToken).catch(() => []);
       await setAccountScopes(db, account.userId, [{ scope: login, role: "self" as const }, ...memberships.map((m) => ({ scope: m.login, role: m.role }))]);
     }
-  } catch { /* anchor+scopes are best-effort; never fail sign-in */ }
+  } catch { /* scopes are additive; never fail sign-in over them */ }
 }
 ```
 
-> **`upsertAccount` gains an optional `id`** (Plan 1a Task 4) so the anchor uses `user.id`. Confirm in the same spike harness that `account.update.after` fires on re-login with a refreshed `accessToken`; if not, capture scopes from a `session.create.after` hook that reads the token off the account row (review fix 1A fallback).
+Hooks pass `isCreate`: `create.after → anchorAndScopes(db, a, true)` (anchor failure fails the sign-in), `update.after → anchorAndScopes(db, a, false)`.
+
+> **`upsertAccount` gains an optional `id`** (1a-Task 3) so the anchor uses `user.id`; on a `(provider, provider_account_id)` conflict it keeps the existing id (which the invariants above guarantee already equals `user.id`). **`account.update.after` firing with a fresh `accessToken` is a REQUIRED verification** in 1a-Task 6's integration test (not just a note); if it doesn't, the fallback is a `session.create.after` hook reading the token off the account row.
 
 - [ ] Test (review-mandated): construction rejects an unknown bearer; a `createUser` with NO supplied id yields a **uuid** (`advanced.database.generateId`); a minted session's `expiresAt ≈ now + 30d`.
 - [ ] Commit: `feat(auth): betterAuth factory — uuid ids, 30d TTL, github, org-capture+anchor hook`.
@@ -162,8 +170,11 @@ async function anchorAndScopes(db: AppDb, account: { userId: string; providerId:
 import type { betterAuth } from "better-auth";
 type ExpressApp = { all(p: string, h: (req: any, res: any) => unknown): unknown };
 
-export function mountAuth(expressApp: ExpressApp, auth: ReturnType<typeof betterAuth>, webOrigins: string[]): void {
-  expressApp.all("/api/auth/*", async (req, res) => {
+// prefix is "/api/betterauth" in Plan 1a (coexists with the still-live old /api/auth/* handlers —
+// Codex re-review #1: a single /api/auth/* catch-all would swallow the old routes), then flips to
+// "/api/auth" in Plan 1b once the old OAuth is deleted. better-auth's baseURL must match the prefix.
+export function mountAuth(expressApp: ExpressApp, auth: ReturnType<typeof betterAuth>, webOrigins: string[], prefix = "/api/auth"): void {
+  expressApp.all(`${prefix}/*`, async (req, res) => {
     const origin = req.headers["origin"];
     if (origin && webOrigins.includes(origin)) {
       res.set("Access-Control-Allow-Origin", origin);
@@ -180,12 +191,18 @@ export function mountAuth(expressApp: ExpressApp, auth: ReturnType<typeof better
     const request = new Request(url, { method: req.method, headers, body: hasBody ? JSON.stringify(req.body) : undefined });
     const resp = await auth.handler(request);
     res.status(resp.status);
-    resp.headers.forEach((val, key) => res.append(key, val));   // append: preserves multiple Set-Cookie
+    // Set-Cookie must be emitted individually — Fetch Headers COALESCES multiple Set-Cookie into one
+    // comma-joined (invalid) string (Codex re-review #5). getSetCookie() returns them as an array.
+    const cookies = resp.headers.getSetCookie?.() ?? [];
+    for (const c of cookies) res.append("set-cookie", c);
+    resp.headers.forEach((val, key) => { if (key.toLowerCase() !== "set-cookie") res.set(key, val); });
     res.send(Buffer.from(await resp.arrayBuffer()));
   });
 }
 ```
-- [ ] Wire into `src/index.ts` (additively — do NOT remove `installAuth` yet): build `makeAuth(...)`, `mountAuth(...)`, run `migrateAccountsToBetterAuth` (1a-Task 5). Both auth systems now serve; the old one is still authoritative for existing sessions.
+
+> **Body coverage (Codex re-review #8):** this rebuilds only parsed-JSON bodies. better-auth's social sign-in/sign-out may use form or query semantics — 1a-Task 4's test must drive a REAL better-auth sign-in/sign-out through the mount, not only a JSON echo, to prove form/redirect/Set-Cookie survive.
+- [ ] Wire into `src/index.ts` (additively — do NOT remove `installAuth` yet): build `makeAuth({..., baseURL: "<public>/api/betterauth"})`, `mountAuth(app, auth, webOrigins, "/api/betterauth")` — the **temporary 1a prefix** so it does not collide with the still-live old `/api/auth/*` (Codex re-review #1) — run `migrateAccountsToBetterAuth` (1a-Task 5). Both auth systems serve on non-overlapping prefixes; the old one stays authoritative for existing sessions.
 - [ ] Test (review-mandated): a stub-auth `mount` whose handler echoes `await request.json()` receives a NON-EMPTY body on a real `POST` with a JSON body; OPTIONS from an allowlisted origin returns 204 with credentialed CORS; a foreign origin gets no ACAO.
 - [ ] Commit: `feat(auth): mount better-auth at /api/auth/* (direct Web Request + credentialed CORS)`.
 
@@ -281,7 +298,9 @@ Minting a token is not enough — the browser needs a Set-Cookie better-auth wil
 - [ ] Remove the `installAuth(...)` block and its imports; `git rm src/auth/install.ts src/auth/state.ts`. Remove `generateSessionToken`/`createSession`/`deleteSession` (now unused). `src/auth/cookie.ts` — remove `SESSION_COOKIE`/`parseCookies` if no remaining consumer (the 9 modules dropped it in 1b-Task 1); keep only what handoff still needs.
 - [ ] **Document the token-storage decision** (review finding #12): better-auth stores the raw session token (vs the old hash-only). Either accept + document it in the spec's security section, OR configure/extend better-auth to hash at rest if that's a hard requirement. Default: accept + document (30d tokens, same as before, and a DB compromise is already game-over for the aggregator) — but make it an explicit, recorded decision, not a silent regression.
 - [ ] `web_sessions` DDL stays (unused) — dropping a table is a separate migration; comment it dead.
-- [ ] **Cutover runbook** (force re-auth): (1) deploy 1a, verify better-auth live; (2) update the GitHub OAuth app callback URL; (3) deploy 1b (client + server together); (4) old sessions are abandoned — web users re-login (1 click), CLI users re-`bind`. Staging-drive the whole sequence first.
+- [ ] **Flip the mount prefix** `/api/betterauth` → `/api/auth` (baseURL + `mountAuth(...)`), now that the old `/api/auth/*` handlers are deleted so there is no collision. Update the GitHub OAuth app callback to `/api/auth/callback/github` accordingly.
+- [ ] **Re-run the migration at cutover** (Codex re-review #2): the boot backfill in 1a only catches accounts that existed at boot, but the still-live old OAuth kept creating `accounts` rows through 1a. Run `migrateAccountsToBetterAuth` immediately before flipping authority, and FAIL the cutover if it reports conflicts — every legacy account must have its same-id `user`/`account` before better-auth becomes authoritative.
+- [ ] **Cutover runbook** (force re-auth): (1) deploy 1a, verify better-auth live at `/api/betterauth`; (2) re-run migration (conflict-clean); (3) flip prefix to `/api/auth` + update the GitHub OAuth app callback URL; (4) deploy 1b (client + server together); (5) old sessions abandoned — web users re-login (1 click), CLI users re-`bind`. Staging-drive the whole sequence first.
 - [ ] `pnpm clean && pnpm test` green; staging drive: web login → authed call (cookie path) → CLI bind → Bearer authed call → handoff.
 - [ ] Commit: `feat(auth): cut over to better-auth — delete hand-rolled OAuth; force re-auth`.
 
@@ -331,7 +350,7 @@ Plan 1a tasks are mostly sequential within `packages/aggregator` (Task 2 needs T
 | Review | Trigger | Why | Runs | Status | Findings |
 |--------|---------|-----|------|--------|----------|
 | CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
-| Codex Review | outside voice | Independent 2nd opinion | 1 | issues_found | 14 raised, 11 verified real, folded into 1a/1b |
+| Codex Review | outside voice | Independent 2nd opinion | 2 | issues_found | Pass 1: 14 raised, 11 verified, folded. Pass 2 (re-review): 8/14 CLOSED, 6 PARTIAL, 10 new — 4 folded (1a path-collision blocker, loud anchor, getSetCookie, re-run-migration-at-cutover) |
 | Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | issues_open→revised | 6 findings + Codex; plan rewritten as 1a/1b |
 | Design Review | `/plan-design-review` | UI/UX | 0 | — | — |
 | DX Review | `/plan-devex-review` | Developer experience | 0 | — | — |
@@ -340,6 +359,6 @@ Plan 1a tasks are mostly sequential within `packages/aggregator` (Task 2 needs T
 
 **CROSS-MODEL:** My review said "design holds, ready after 5 fixes"; Codex said "not a drop-in — the compatibility layer is the dangerous missing work." Codex was more right. The plan was NOT ready as written; it is now revised (1a/1b + compatibility layer + new-user anchor) and re-scoped.
 
-**VERDICT:** ENG review found blockers; plan REVISED, not yet clear. The revised 1a/1b plan needs a fresh pass (or careful execution with the 12 synthesized tasks) — the design is sound and the spikes hold, but the compatibility layer roughly doubled 1b and must be built, not assumed. Split confirmed. Recommend: build 1a (additive, zero-risk), verify in staging, then execute 1b behind the runbook.
+**VERDICT:** ENG review + two Codex passes. Pass 1 found the missing compatibility layer + new-user-anchor bug (folded). Pass 2 confirmed 8/14 CLOSED and caught a real 1a blocker — the `/api/auth/*` route collision between better-auth's catch-all and the still-live old handlers — now fixed with a temporary `/api/betterauth` prefix in 1a that flips to `/api/auth` in 1b, plus a loud (non-best-effort) accounts anchor, `getSetCookie()` handling, and a re-run of the migration at cutover. Remaining Pass-2 PARTIALs are verify-before-merge items baked into 1a-Task 6's integration test (account.update fires with a fresh token; exact `crossSubDomainCookies` 1.6.23 config; form/redirect body coverage) and the compat-redirect return-url allowlist (1b-Task 2). The design and both spikes hold; 1a is additive and zero-risk to live login. Recommend: build 1a, staging-verify (esp. the cookie-domain + real sign-in through the mount), then execute 1b behind the runbook.
 
 NO UNRESOLVED DECISIONS
