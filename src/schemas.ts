@@ -319,6 +319,18 @@ export const GemManifestArtifactSchema = z.object({
   model: z.string().optional(),
 });
 
+// Mirrors GemContract (packages/model/src/types.ts). Like the loop facet, a contract is an
+// archived, shareable facet — it must survive the Zod schemas below (which strip unknown keys)
+// so it isn't lost when a gem is transferred or returned from /scorecard/build.
+export const GemContractSchema = z.object({
+  task: z.string(),
+  expect: z.object({
+    tools: z.array(z.string()).optional(),
+    text: z.string().optional(),
+    forbidToolFailures: z.boolean().optional(),
+  }),
+});
+
 // Mirrors LoopSpec (packages/model/src/loop.ts). Present so publish/install boundaries that
 // re-validate a manifest through Zod (which strips unknown keys by default) preserve the loop
 // facet instead of silently dropping it.
@@ -353,6 +365,7 @@ export const GemManifestSchema = z.object({
   artifacts: z.array(GemManifestArtifactSchema),
   requiredSecrets: z.array(SecretRequirementSchema),
   checks: z.array(z.object({ name: z.string(), path: z.string() })),
+  contract: GemContractSchema.optional(),
   loop: LoopSpecSchema.optional(),
 });
 
@@ -518,6 +531,7 @@ export const GemSchema = z.object({
   checks: z.array(GemCheckSchema),
   requiredSecrets: z.array(SecretRequirementSchema),
   grade: z.number().int().min(1).max(3).optional(),
+  contract: GemContractSchema.optional(),
   loop: LoopSpecSchema.optional(),
 });
 
