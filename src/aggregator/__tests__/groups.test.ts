@@ -126,6 +126,24 @@ describe("groups store", () => {
     expect((await listGroupMembers(db, g.id)).map((m) => m.login)).toEqual(["owner"]);
   });
 
+  it("removeMemberGuarded: matches an UPPERCASE account id (Postgres returns uuids lowercase)", async () => {
+    const db = await makeTestDb();
+    const owner = await acct(db, "owner");
+    const member = await acct(db, "member");
+    const g = await createNativeGroup(db, owner.id, "G");
+    await grantInvite(db, g.id, member.id, "member");
+    expect(await removeMemberGuarded(db, g.id, member.id.toUpperCase())).toBe("removed");
+    expect(await groupMemberRole(db, g.id, member.id)).toBeNull();
+  });
+
+  it("removeMemberGuarded: 'last-admin' still holds when the admin's id is passed UPPERCASE", async () => {
+    const db = await makeTestDb();
+    const owner = await acct(db, "owner");
+    const g = await createNativeGroup(db, owner.id, "G");
+    expect(await removeMemberGuarded(db, g.id, owner.id.toUpperCase())).toBe("last-admin");
+    expect(await groupMemberRole(db, g.id, owner.id)).toBe("admin");   // untouched
+  });
+
   it("deleteNativeGroup cascades members and invites; refuses federated; 'not-found' otherwise", async () => {
     const db = await makeTestDb();
     const owner = await acct(db, "owner");
