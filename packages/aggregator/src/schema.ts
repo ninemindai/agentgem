@@ -406,7 +406,7 @@ export async function ensureSchema(db: AppDb): Promise<void> {
     id uuid primary key,
     token_hash text not null unique,
     group_id uuid not null references groups(id) on delete cascade,
-    role text not null check (role in ('admin','member')),
+    role text not null default 'member' check (role in ('admin','member')),
     expires_at timestamptz not null,
     created_by uuid not null references accounts(id),
     revoked_at timestamptz
