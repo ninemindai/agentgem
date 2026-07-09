@@ -20,15 +20,21 @@ export async function ensureBetterAuthUser(db: AppDb, account: Account): Promise
     values (${randomUUID()}, ${account.id}, ${account.provider}, ${account.providerAccountId}, now(), now()) on conflict (provider_id, account_id) do nothing`);
 }
 
+// Re-run at cutover (Plan 1b-Task 5), so the whole check-then-insert runs in ONE transaction: without
+// it, a concurrent legacy-OAuth signup between the conflict SELECT and the "account" INSERT below
+// could slip in a mismatched (provider_id, account_id) link that the conflict check never saw
+// (a TOCTOU window) — the transaction closes that by serializing the check and the writes together.
 export async function migrateAccountsToBetterAuth(db: AppDb): Promise<{ migrated: number; conflicts: string[] }> {
-  await db.execute(sql`insert into "user" (id, name, email_verified, image, login, created_at, updated_at)
-    select a.id::text, a.login, false, a.avatar_url, a.login, now(), now() from accounts a on conflict (id) do nothing`);
-  // conflict check BEFORE inserting accounts
-  const bad = (await db.execute(sql`select ac.account_id from "account" ac join accounts a
-    on ac.provider_id = a.provider and ac.account_id = a.provider_account_id where ac.user_id <> a.id::text`)).rows as { account_id: string }[];
-  const res = await db.execute(sql`insert into "account" (id, user_id, provider_id, account_id, created_at, updated_at)
-    select gen_random_uuid()::text, a.id::text, a.provider, a.provider_account_id, now(), now() from accounts a on conflict (provider_id, account_id) do nothing`);
-  // node-postgres (production) reports rowCount; pglite (dev/test) reports affectedRows.
-  const migrated = (res as any).rowCount ?? (res as any).affectedRows ?? 0;
-  return { migrated, conflicts: bad.map((b) => b.account_id) };
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`insert into "user" (id, name, email_verified, image, login, created_at, updated_at)
+      select a.id::text, a.login, false, a.avatar_url, a.login, now(), now() from accounts a on conflict (id) do nothing`);
+    // conflict check BEFORE inserting accounts
+    const bad = (await tx.execute(sql`select ac.account_id from "account" ac join accounts a
+      on ac.provider_id = a.provider and ac.account_id = a.provider_account_id where ac.user_id <> a.id::text`)).rows as { account_id: string }[];
+    const res = await tx.execute(sql`insert into "account" (id, user_id, provider_id, account_id, created_at, updated_at)
+      select gen_random_uuid()::text, a.id::text, a.provider, a.provider_account_id, now(), now() from accounts a on conflict (provider_id, account_id) do nothing`);
+    // node-postgres (production) reports rowCount; pglite (dev/test) reports affectedRows.
+    const migrated = (res as any).rowCount ?? (res as any).affectedRows ?? 0;
+    return { migrated, conflicts: bad.map((b) => b.account_id) };
+  });
 }

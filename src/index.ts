@@ -61,9 +61,8 @@ import { requireShareOriginSecret } from "./originSecret.js";
 import { ShareProxyController } from "./share.proxy.controller.js";
 import { SourcesController } from "./sources.controller.js";
 import { PlayController } from "./play.controller.js";
-import { resolveAggregatorDb, type AppDb, GitHubVerifier, fetchOrgMemberships, migrateAccountsToBetterAuth } from "@agentgem/aggregator";
+import { resolveAggregatorDb, type AppDb, migrateAccountsToBetterAuth } from "@agentgem/aggregator";
 import { mountGating } from "./gating.js";
-import { installAuth, githubExchangeCode } from "./auth/install.js";
 import { installHandoff } from "./auth/handoff.js";
 import { mountAuth, AUTH_BINDING } from "./auth/mount.js";
 import { makeAuth } from "@agentgem/aggregator";
@@ -102,6 +101,20 @@ function consoleHtml(): string {
 // traffic, where originGuard + the public-read allowlist are the real boundary.
 export function serverHost(): string {
   return process.env.HOST ?? "127.0.0.1";
+}
+
+// Boot-time accounts→better-auth backfill, re-run at cutover (Plan 1b-Task 5): a conflict means a
+// (provider, providerAccountId) pair already resolves to a DIFFERENT better-auth user than its
+// legacy `accounts` row — proceeding would let better-auth authorize the WRONG identity for that
+// account, so this fails startup loudly rather than degrading silently (the pre-cutover behavior,
+// which only logged and let boot continue). Exported for direct testing without spinning up createApp.
+export async function migrateAccountsOrFail(db: AppDb): Promise<{ migrated: number }> {
+  const { migrated, conflicts } = await migrateAccountsToBetterAuth(db);
+  if (conflicts.length > 0) {
+    console.error(`better-auth migration: ${conflicts.length} account link conflict(s) — refusing to boot:`, conflicts);
+    throw new Error(`better-auth migration: ${conflicts.length} account link conflict(s) must be resolved before cutover: ${conflicts.join(", ")}`);
+  }
+  return { migrated };
 }
 
 export async function createApp(port: number): Promise<RestApplication> {
@@ -194,8 +207,9 @@ export async function createApp(port: number): Promise<RestApplication> {
   // Liveness probe for deploy orchestrators (Cloud Run / ECS / Fly / k8s). Unauthenticated
   // and origin-less by design — registered as a raw route, so it's outside originGuard.
   server.expressApp.get("/healthz", (_req, res) => res.json({ status: "ok" }));
-  // Web sign-in (marketplace). Raw express routes (302 + Set-Cookie), outside originGuard; they set
-  // their own credentialed CORS for AGENTGEM_WEB_ORIGINS. Enabled only when the OAuth secret is set.
+  // Web sign-in (marketplace), served by better-auth at /api/auth. Raw express routes (302 +
+  // Set-Cookie), outside originGuard; mountAuth sets its own credentialed CORS for
+  // AGENTGEM_WEB_ORIGINS. Enabled only when the OAuth secret is set.
   const ghClientId = process.env.AGENTGEM_GITHUB_CLIENT_ID;
   const ghSecret = process.env.AGENTGEM_GITHUB_CLIENT_SECRET;
   const webOrigins = (process.env.AGENTGEM_WEB_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -204,46 +218,33 @@ export async function createApp(port: number): Promise<RestApplication> {
   // also bound into the DI container so GemController can inject it (see AUTH_BINDING).
   let auth: ReturnType<typeof makeAuth> | undefined;
   if (ghClientId && ghSecret && webOrigins.length > 0 && aggDb) {
-    installAuth(server.expressApp as never, {
-      db: aggDb,
-      verifier: new GitHubVerifier(),
-      exchangeCode: githubExchangeCode(ghClientId, ghSecret),
-      fetchOrgs: fetchOrgMemberships,
-      config: {
-        clientId: ghClientId, clientSecret: ghSecret, webOrigins,
-        cookieDomain: process.env.AGENTGEM_SESSION_COOKIE_DOMAIN,
-        callbackUrl: `${process.env.AGENTGEM_PUBLIC_BASE ?? "https://api.agentgem.ai"}/api/auth/github/callback`,
-        stateSecret: process.env.AGENTGEM_SESSION_SECRET ?? ghSecret,
-        sessionTtlMs: 30 * 24 * 60 * 60 * 1000, // 30 days
-      },
-    });
-    // better-auth (Plan 1a, additive): mounted at the TEMPORARY /api/betterauth prefix so it does
-    // not collide with the still-live installAuth above — installAuth stays authoritative for
-    // existing sessions until Plan 1b deletes it and better-auth flips to /api/auth.
+    // better-auth is now authoritative (Plan 1b-Task 5: the hand-rolled OAuth it coexisted with
+    // under the temporary /api/betterauth prefix is deleted) — mounted at the real /api/auth prefix.
     auth = makeAuth({
       db: aggDb,
       secret: process.env.AGENTGEM_SESSION_SECRET ?? ghSecret,
-      baseURL: `${process.env.AGENTGEM_PUBLIC_BASE ?? "https://api.agentgem.ai"}/api/betterauth`,
+      baseURL: `${process.env.AGENTGEM_PUBLIC_BASE ?? "https://api.agentgem.ai"}/api/auth`,
       githubClientId: ghClientId,
       githubClientSecret: ghSecret,
       webOrigins,
       cookieDomain: process.env.AGENTGEM_SESSION_COOKIE_DOMAIN,
     });
     app.bind(AUTH_BINDING).to(auth);
-    // Desktop→web SSO handoff (1b-Task 4): registered BEFORE mountAuth's catch-all below. Once
-    // mountAuth's prefix flips from "/api/betterauth" to "/api/auth" (Plan 1b-Task 5), these two
-    // paths ("/api/auth/handoff/start", "/api/auth/handoff/redeem") would sit under better-auth's
-    // own catch-all namespace — Express dispatches to the FIRST matching route registered, so
-    // installHandoff must run first or the catch-all would swallow them. Neither path collides
-    // with a better-auth-served route (sign-in/*, sign-out, get-session, callback/*, ...).
+    // Desktop→web SSO handoff (1b-Task 4): registered BEFORE mountAuth's catch-all below. better-auth
+    // now owns the real "/api/auth" prefix, so these two paths ("/api/auth/handoff/start",
+    // "/api/auth/handoff/redeem") sit UNDER better-auth's own catch-all namespace — Express dispatches
+    // to the FIRST matching route registered, so installHandoff must run first or the catch-all would
+    // swallow them. Neither path collides with a better-auth-served route (sign-in/*, sign-out,
+    // get-session, callback/*, ...).
     installHandoff(server.expressApp as never, { db: aggDb, auth, config: { webOrigins } });
-    mountAuth(server.expressApp as never, auth, webOrigins, "/api/betterauth");
-    // One-time boot backfill (Plan 1a-Task 4): give every existing accounts row a same-id
-    // better-auth user/account anchor before any sign-in runs, so a pre-existing github user
-    // links to their existing identity instead of getting a new uuid user. Additive/idempotent.
-    const { migrated, conflicts } = await migrateAccountsToBetterAuth(aggDb);
-    if (conflicts.length > 0) console.error(`better-auth migration: ${conflicts.length} account link conflicts — cutover must resolve these:`, conflicts);
-    else console.log(`better-auth migration: backfilled ${migrated} account(s)`);
+    mountAuth(server.expressApp as never, auth, webOrigins, "/api/auth");
+    // Re-run the boot backfill at cutover (Plan 1b-Task 5): the 1a boot backfill only caught accounts
+    // that existed at boot, but the old OAuth (now deleted) kept creating `accounts` rows through
+    // 1a's additive window. Every legacy account must have its same-id better-auth user/account
+    // anchor before better-auth becomes authoritative, so this fails startup loudly on a conflict —
+    // see migrateAccountsOrFail below.
+    const { migrated } = await migrateAccountsOrFail(aggDb);
+    console.log(`better-auth migration: backfilled ${migrated} account(s)`);
   }
   // Stars + reviews + team usage need the DB + an allowlisted web origin + a live better-auth
   // instance to resolve sessions through (Plan 1b) — the last of which needs the GitHub OAuth

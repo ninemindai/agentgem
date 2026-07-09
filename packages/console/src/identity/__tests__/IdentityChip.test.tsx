@@ -13,11 +13,11 @@ const mount = () => render(<IdentityProvider apiBase=""><IdentityChip apiBase=""
 describe("IdentityChip", () => {
   it("signed in: shows @login and opens the handoff URL", async () => {
     vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob", avatarUrl: "https://a/bob.png", sessionActive: true } as never);
-    vi.spyOn(routes.webHandoffRoute, "call").mockResolvedValue({ authenticated: true, url: "https://api.agentgem.ai/api/auth/github/handoff?code=xyz" } as never);
+    vi.spyOn(routes.webHandoffRoute, "call").mockResolvedValue({ authenticated: true, url: "https://api.agentgem.ai/api/auth/handoff/redeem?code=xyz" } as never);
     const openSpy = vi.fn(); vi.stubGlobal("open", openSpy);
     mount();
     fireEvent.click(await screen.findByRole("button", { name: /@bob/ }));
-    await waitFor(() => expect(openSpy).toHaveBeenCalledWith("https://api.agentgem.ai/api/auth/github/handoff?code=xyz", "_blank", "noopener"));
+    await waitFor(() => expect(openSpy).toHaveBeenCalledWith("https://api.agentgem.ai/api/auth/handoff/redeem?code=xyz", "_blank", "noopener"));
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 

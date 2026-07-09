@@ -55,18 +55,16 @@ describe("originGuard (CSRF / drive-by guard)", () => {
     expect(r.blocked).toBe(true);
     expect(r.status).toBe(403);
   });
-  it("allows cross-site web sign-in requests (/api/auth/*) — OAuth nav + the SPA's credentialed XHR", () => {
+  it("allows cross-site web sign-in requests (/api/auth/*) — better-auth's own OAuth nav + the SPA's credentialed XHR", () => {
     // The real sign-in flow is cross-site: clicking "Sign in" on app.agentgem.ai navigates to
-    // api.agentgem.ai/api/auth/github/login (Sec-Fetch-Site: cross-site), GitHub redirects to the
-    // callback (cross-site), and /me + /logout are credentialed XHR. originGuard must not block these.
-    expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "GET", "/api/auth/github/login").nexted).toBe(true);
-    expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "GET", "/api/auth/github/callback").nexted).toBe(true);
-    expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "GET", "/api/auth/me").nexted).toBe(true);
-    expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "POST", "/api/auth/logout").nexted).toBe(true);
-  });
-  it("allows cross-site requests to the Plan 1a temporary better-auth mount (/api/betterauth/*)", () => {
-    expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "GET", "/api/betterauth/get-session").nexted).toBe(true);
-    expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "POST", "/api/betterauth/sign-in/social").nexted).toBe(true);
+    // api.agentgem.ai/api/auth/sign-in/social (Sec-Fetch-Site: cross-site), GitHub redirects to
+    // the callback (cross-site), and get-session/sign-out are credentialed XHR. originGuard must
+    // not block these. (Plan 1b-Task 5: better-auth is mounted at this real /api/auth prefix, not
+    // the Plan 1a temporary /api/betterauth one.)
+    expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "GET", "/api/auth/sign-in/social").nexted).toBe(true);
+    expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "GET", "/api/auth/callback/github").nexted).toBe(true);
+    expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "GET", "/api/auth/get-session").nexted).toBe(true);
+    expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "POST", "/api/auth/sign-out").nexted).toBe(true);
   });
   it("still blocks a cross-site request to a NON-auth API path", () => {
     expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "POST", "/api/gem").blocked).toBe(true);

@@ -239,6 +239,28 @@ PGlite builds better-auth's tables via `ensureSchema` (harness unchanged). Cover
 Rollout: a staging cutover (drop `web_sessions`, force re-auth, re-bind a CLI) before
 production, since the forced re-auth is a one-time user-visible event.
 
+## Security note: session token storage
+
+better-auth's `session` table stores the **raw** session token (verified by probe against 1.6.23),
+whereas the retired `web_sessions` table stored only `sha256(token)` — a DB leak of `web_sessions`
+alone could not mint a session, but a leak of better-auth's `session` table can.
+
+This is an **accepted, deliberate trade at Plan 1b cutover**, not a silent regression:
+
+- Session TTL is unchanged (30 days, same as `web_sessions` before it).
+- The aggregator's Postgres instance is a single trust boundary that already holds every other
+  credential this system has (GitHub OAuth client secret, API keys' hashes, org-scope grants) — a
+  DB compromise serious enough to exfiltrate the `session` table is already game-over for the
+  aggregator, hashed-or-not.
+- better-auth does not offer a first-class "hash sessions at rest" option the way it does for the
+  one-time-token plugin (`storeToken: "hashed"`, applied in `betterAuth.ts` for the SSO handoff
+  exchange token — see below); hand-rolling one would mean re-deriving the library's own session
+  lookup, which reintroduces the maintenance burden this migration exists to remove.
+
+Where better-auth *does* expose a hash-at-rest knob, it is used: the SSO handoff's one-time-token
+plugin is configured with `storeToken: "hashed"` so its short-lived (1-minute) exchange token is not
+persisted in plaintext either.
+
 ## Explicitly out of scope (Phase 1)
 
 - Google / Slack / X providers, passkey, and `linkSocial` — **Phase 2**. Slack/X PKCE

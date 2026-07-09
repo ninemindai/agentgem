@@ -84,6 +84,9 @@ export const accounts = pgTable("accounts", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// DEAD/UNUSED as of the Plan 1b cutover: better-auth's own `session` table (below) is now
+// authoritative — no code writes or reads this table anymore (webAuth.ts dropped its mint/lookup
+// functions). The DDL stays because dropping a table is a separate migration, not a code change.
 export const webSessions = pgTable("web_sessions", {
   id: uuid("id").primaryKey(),
   tokenHash: text("token_hash").notNull().unique(),
@@ -411,6 +414,8 @@ export async function ensureSchema(db: AppDb): Promise<void> {
   await db.execute(sql`alter table share_cards alter column counts drop not null`);
   await db.execute(sql`create table if not exists api_keys (id uuid primary key, key_hash text not null unique, label text not null, created_at timestamptz not null default now(), revoked_at timestamptz)`);
   await db.execute(sql`create table if not exists accounts (id uuid primary key, provider text not null, provider_account_id text not null, login text not null, avatar_url text, created_at timestamptz not null default now(), unique (provider, provider_account_id))`);
+  // DEAD as of the Plan 1b cutover (see the `webSessions` table comment above) — kept, not dropped,
+  // since dropping a table is a separate migration.
   await db.execute(sql`create table if not exists web_sessions (id uuid primary key, token_hash text not null unique, account_id uuid not null references accounts(id), created_at timestamptz not null default now(), expires_at timestamptz not null)`);
   await db.execute(sql`create table if not exists handoff_codes (code_hash text primary key, account_id uuid not null references accounts(id), expires_at timestamptz not null)`);
   await db.execute(sql`create table if not exists stars (id uuid primary key, account_id uuid not null references accounts(id), target_kind text not null, target_id text not null, created_at timestamptz not null default now(), unique (account_id, target_kind, target_id))`);

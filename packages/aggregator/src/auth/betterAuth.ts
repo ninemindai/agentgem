@@ -48,8 +48,9 @@ export function makeAuth(opts: {
     // plugin's generate+verify pair in-process to exchange a just-minted session's raw token for
     // the real Set-Cookie better-auth's own setSessionCookie() produces. expiresIn is minutes;
     // 1 is already generous since verify consumes (deletes) the exchange token on first read and
-    // mintSessionCookie redeems it within the same request.
-    oneTimeToken({ expiresIn: 1 })],
+    // mintSessionCookie redeems it within the same request. storeToken: "hashed" (defense-in-depth,
+    // 1b-Task 5) — the exchange token would otherwise be persisted in plaintext for that one minute.
+    oneTimeToken({ expiresIn: 1, storeToken: "hashed" })],
     // review fix #1/#14 — force uuid ids so downstream uuid FKs (accounts.id, stars.account_id, ...) work
     advanced: {
       database: { generateId: () => randomUUID() },
