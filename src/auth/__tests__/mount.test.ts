@@ -32,21 +32,21 @@ function stubAuth() {
 async function buildApp() {
   const app = await createApp(0);
   const server = await app.restServer;
-  mountAuth(server.expressApp as never, stubAuth(), ORIGINS, "/api/betterauth");
+  mountAuth(server.expressApp as never, stubAuth(), ORIGINS, "/api/auth");
   return server.expressApp;
 }
 
 describe("mountAuth", () => {
   it("a real POST with a JSON body reaches the stub non-empty (body survives express.json())", async () => {
     const app = await buildApp();
-    const res = await request(app).post("/api/betterauth/sign-in").send({ email: "a@b.com" });
+    const res = await request(app).post("/api/auth/sign-in").send({ email: "a@b.com" });
     expect(res.status).toBe(200);
     expect(res.body.echoed).toEqual({ email: "a@b.com" });
   });
 
   it("both Set-Cookie headers arrive separately, not coalesced", async () => {
     const app = await buildApp();
-    const res = await request(app).post("/api/betterauth/sign-in").send({});
+    const res = await request(app).post("/api/auth/sign-in").send({});
     const cookies = res.headers["set-cookie"] as unknown as string[];
     expect(Array.isArray(cookies)).toBe(true);
     expect(cookies).toHaveLength(2);
@@ -56,7 +56,7 @@ describe("mountAuth", () => {
 
   it("OPTIONS from an allowlisted origin -> 204 with credentialed CORS", async () => {
     const app = await buildApp();
-    const res = await request(app).options("/api/betterauth/sign-in").set("Origin", "https://app.agentgem.ai");
+    const res = await request(app).options("/api/auth/sign-in").set("Origin", "https://app.agentgem.ai");
     expect(res.status).toBe(204);
     expect(res.headers["access-control-allow-origin"]).toBe("https://app.agentgem.ai");
     expect(res.headers["access-control-allow-credentials"]).toBe("true");
@@ -64,7 +64,7 @@ describe("mountAuth", () => {
 
   it("a foreign origin gets no ACAO header", async () => {
     const app = await buildApp();
-    const res = await request(app).post("/api/betterauth/sign-in").set("Origin", "https://evil.example").send({});
+    const res = await request(app).post("/api/auth/sign-in").set("Origin", "https://evil.example").send({});
     expect(res.headers["access-control-allow-origin"]).toBeUndefined();
   });
 });

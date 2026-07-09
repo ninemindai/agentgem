@@ -1,21 +1,18 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
-// Web account + session store. The session cookie carries an opaque random token; only its
-// sha256 hash is persisted, so a DB leak cannot mint sessions.
+// Web account store. `webSessions` (the legacy sha256-hashed session table) is dead — better-auth's
+// own `session` table is authoritative post-cutover (Plan 1b-Task 5) — but `accounts` and the scope/
+// handoff helpers below stay live: every legacy FK (stars/reviews/usage/scopes/groups) still points
+// at `accounts.id`, which better-auth's migration preserves as `user.id`.
 import { randomUUID, randomBytes, createHash } from "node:crypto";
-import { and, eq, gt, lt } from "drizzle-orm";
+import { and, eq, lt } from "drizzle-orm";
 import type { Auth, BetterAuthOptions } from "better-auth";
 import type { AppDb } from "./schema.js";
-import { accounts, webSessions, accountScopes, handoffCodes } from "./schema.js";
+import { accounts, accountScopes, handoffCodes } from "./schema.js";
 
 const sha256hex = (s: string): string => createHash("sha256").update(s).digest("hex");
 
 export interface Account { id: string; provider: string; providerAccountId: string; login: string; avatarUrl: string | null }
-
-export function generateSessionToken(): { token: string; hash: string } {
-  const token = randomBytes(32).toString("base64url");
-  return { token, hash: sha256hex(token) };
-}
 
 export async function upsertAccount(
   db: AppDb,
@@ -45,15 +42,6 @@ export async function getAccountById(db: AppDb, id: string): Promise<Account | n
   return rows[0] ?? null;
 }
 
-export async function createSession(db: AppDb, accountId: string, token: string, ttlMs: number): Promise<void> {
-  await db.insert(webSessions).values({
-    id: randomUUID(),
-    tokenHash: sha256hex(token),
-    accountId,
-    expiresAt: new Date(Date.now() + ttlMs),
-  });
-}
-
 // Plan 1b cutover (review fix 3A): better-auth is now authoritative for session resolution. It reads
 // its OWN cookie (name/signing are its concern, not ours) or an `Authorization: Bearer` header off
 // the headers we forward — callers must NOT pre-extract a token by cookie NAME (that was the bug:
@@ -79,23 +67,6 @@ export async function resolveSession<O extends BetterAuthOptions>(
   const res = await (auth.api as unknown as SessionApi).getSession({ headers: h });
   const u = res?.user;
   return u ? { login: u.login ?? "", avatarUrl: u.image ?? null, accountId: u.id } : null;
-}
-
-export async function deleteSession(db: AppDb, token: string): Promise<void> {
-  await db.delete(webSessions).where(eq(webSessions.tokenHash, sha256hex(token)));
-}
-
-// The pre-cutover, `web_sessions`-table-backed lookup — kept ONLY for src/auth/install.ts, the
-// legacy OAuth handler Plan 1b-Task 5 deletes outright. Every other consumer has moved to the
-// better-auth-backed `resolveSession` above; do not add new callers of this one.
-export async function resolveLegacySession(db: AppDb, token: string): Promise<{ login: string; avatarUrl: string | null; accountId: string } | null> {
-  const rows = await db
-    .select({ login: accounts.login, avatarUrl: accounts.avatarUrl, accountId: accounts.id })
-    .from(webSessions)
-    .innerJoin(accounts, eq(webSessions.accountId, accounts.id))
-    .where(and(eq(webSessions.tokenHash, sha256hex(token)), gt(webSessions.expiresAt, new Date())))
-    .limit(1);
-  return rows[0] ?? null;
 }
 
 /** Mint a single-use SSO handoff code bound to an account. Only sha256(code) is stored. */

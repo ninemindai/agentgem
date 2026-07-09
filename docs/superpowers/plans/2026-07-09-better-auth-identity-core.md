@@ -304,6 +304,39 @@ Minting a token is not enough — the browser needs a Set-Cookie better-auth wil
 - [ ] `pnpm clean && pnpm test` green; staging drive: web login → authed call (cookie path) → CLI bind → Bearer authed call → handoff.
 - [ ] Commit: `feat(auth): cut over to better-auth — delete hand-rolled OAuth; force re-auth`.
 
+### Cutover runbook (Plan 1b, expanded)
+
+1. **Deploy 1a first** and verify better-auth is live and healthy at the temporary
+   `/api/betterauth` prefix (the 1a `mountAuth.test.ts`/`handoff.test.ts` coverage, plus a manual
+   `GET /api/betterauth/get-session` against staging).
+2. **Re-run the migration** — `migrateAccountsToBetterAuth` (now transactional, see 1b-Task 5) —
+   and confirm it is **conflict-clean** (`conflicts: []`). A non-empty `conflicts` list is a hard
+   stop: every legacy account must have a resolved same-id `user`/`account` link before proceeding,
+   since a mismatched link means better-auth would authorize the wrong identity once authoritative.
+3. **Update the GitHub OAuth app's callback URL to `/api/auth/callback/github`.** This is a MANUAL,
+   hard prerequisite done in the GitHub App/OAuth App settings UI — not something code changes fix.
+   Login **hard-fails at the callback step** if this is skipped or done late (the old callback URL
+   points at a route that no longer exists once 1b ships), so this step must land before or in the
+   same maintenance window as step 4, never after.
+4. **Deploy 1b** — client (marketplace SPA) and server together, atomically, since 1b's client and
+   server changes are not independently compatible with each other's pre-cutover counterpart (the 9
+   `resolveSession` consumers already only accept better-auth sessions; the old server routes are
+   deleted). This is the one deploy in the whole plan where a partial rollout — old client against
+   new server, or vice versa — breaks login outright.
+5. **All old sessions are abandoned.** `web_sessions` is dead (DDL kept, unused) the moment 1b
+   ships, so every previously-signed-in user's session stops resolving:
+   - **Web users**: re-login is a single click (GitHub OAuth, now via better-auth's own
+     `sign-in/social` flow) — no account data is lost, since the migration preserved `accounts.id`
+     as `user.id`.
+   - **CLI users**: re-run `agentgem bind` — the device-flow grant re-establishes a better-auth
+     session the same way a first-time bind does.
+
+   Communicate this ahead of the deploy window (a one-time, expected disruption) rather than
+   treating re-auth failures as a post-deploy incident.
+
+Staging-drive the whole sequence (steps 1-5) before production, since the forced re-auth is a
+one-time, user-visible event that is expensive to redo if step 3 is missed.
+
 ---
 
 ## NOT in scope (sequels)
