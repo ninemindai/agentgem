@@ -350,6 +350,7 @@ export async function createApp(port: number): Promise<RestApplication> {
       manager: chatManager,
       resolveStudio: (miniapp: string) => ({ cwd: miniappDir(miniapp), brief: studioBrief(miniapp) }),
       resolveProjectCwd,
+      neutralCwd: chatCwd,
       listAgents: () => availableAgents(adapterCtx),
       installAgent: installAgentFn(adapterCtx, npmAdapterInstaller()),
       checkpointMiniapp: (name: string) => checkpointMiniapp(name),
