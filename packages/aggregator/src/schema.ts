@@ -213,6 +213,59 @@ export const orgMembers = pgTable("org_members", {
   syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.orgScope, t.ghLogin] })]);
 
+// A group is a set of accounts that can be granted access together.
+//
+//   kind 'federated' — mirrors an external network. Identity is `installation_id` (survives GitHub
+//                      org renames); `scope` is MUTABLE display/lookup metadata, not the key.
+//   kind 'native'    — created inside AgentGem. No installation, no scope, uuid-addressed.
+//
+// The check constraint IS the definition: a federated group is exactly one with an installation.
+export const groups = pgTable("groups", {
+  id: uuid("id").primaryKey(),
+  kind: text("kind").notNull(),
+  installationId: bigint("installation_id", { mode: "number" }).unique(),
+  scope: text("scope").unique(),
+  name: text("name").notNull(),
+  createdBy: uuid("created_by").references(() => accounts.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Membership is a LATTICE of two independent grants, not one `source` enum.
+//
+//   via_sync   — owned exclusively by the GitHub App reconciler (Plan 1b)
+//   via_invite — owned exclusively by a group admin
+//
+// Neither authority may clear the other's bit. The row exists while either bit is set, and is
+// deleted when both clear. This is what lets an invited contractor who was later hired into the
+// org keep their guest access after they leave the company: leaving clears via_sync, and via_invite
+// still stands. A single `source` column would have destroyed that grant on the first sync.
+//
+// Effective role = max(sync_role, invite_role), admin > member.
+export const groupMembers = pgTable("group_members", {
+  groupId: uuid("group_id").notNull().references(() => groups.id, { onDelete: "cascade" }),
+  accountId: uuid("account_id").notNull().references(() => accounts.id),
+  viaSync: boolean("via_sync").notNull().default(false),
+  viaInvite: boolean("via_invite").notNull().default(false),
+  syncRole: text("sync_role"),
+  inviteRole: text("invite_role"),
+  addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.groupId, t.accountId] })]);
+
+// Multi-use until expiry or revocation — a link pasted into a chat, not a one-shot machine code.
+// `id` is the public handle: it is what an admin sees, and what revoke takes. Only sha256(token)
+// is stored, so a DB leak cannot join a group, and revocation never needs the raw token back.
+// (Contrast handoff_codes, which is delete-on-read; the storage discipline is shared, not the
+// lifecycle.)
+export const groupInvites = pgTable("group_invites", {
+  id: uuid("id").primaryKey(),
+  tokenHash: text("token_hash").notNull().unique(),
+  groupId: uuid("group_id").notNull().references(() => groups.id, { onDelete: "cascade" }),
+  role: text("role").notNull().default("member"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdBy: uuid("created_by").notNull().references(() => accounts.id),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+});
+
 export const catalogGems = pgTable("catalog_gems", {
   gemKey: text("gem_key").notNull(),
   version: text("version").notNull(),
@@ -266,7 +319,7 @@ export const curatedSkills = pgTable("curated_skills", {
   indexedAt: timestamp("indexed_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.sourceId, t.path] })]);
 
-export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, webSessions, handoffCodes, stars, reviews, gemAdoptions, accountScopes, usageDays, usageDayModels, orgSettings, catalogGems, gemArchives, curatedSkills, appInstallations, orgMembers };
+export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, webSessions, handoffCodes, stars, reviews, gemAdoptions, accountScopes, usageDays, usageDayModels, orgSettings, catalogGems, gemArchives, curatedSkills, appInstallations, orgMembers, groups, groupMembers, groupInvites };
 export type AppDb = PgDatabase<any, typeof schema>;
 
 // Idempotent DDL. (Schema-as-tables above is the query source of truth; this DDL
@@ -325,4 +378,40 @@ export async function ensureSchema(db: AppDb): Promise<void> {
   await db.execute(sql`create table if not exists app_installations (installation_id bigint primary key, org_scope text not null, repo_selection text not null default 'selected', suspended boolean not null default false, created_at timestamptz not null default now(), updated_at timestamptz not null default now())`);
   await db.execute(sql`create index if not exists app_installations_scope_idx on app_installations (org_scope)`);
   await db.execute(sql`create table if not exists org_members (org_scope text not null, gh_login text not null, role text not null default 'member', synced_at timestamptz not null default now(), primary key (org_scope, gh_login))`);
+  await db.execute(sql`create table if not exists groups (
+    id uuid primary key,
+    kind text not null check (kind in ('federated','native')),
+    installation_id bigint unique,
+    scope text unique,
+    name text not null,
+    created_by uuid references accounts(id),
+    created_at timestamptz not null default now(),
+    constraint groups_kind_installation check ((kind = 'federated') = (installation_id is not null))
+  )`);
+  await db.execute(sql`create table if not exists group_members (
+    group_id uuid not null references groups(id) on delete cascade,
+    account_id uuid not null references accounts(id),
+    via_sync boolean not null default false,
+    via_invite boolean not null default false,
+    sync_role text check (sync_role in ('admin','member')),
+    invite_role text check (invite_role in ('admin','member')),
+    added_at timestamptz not null default now(),
+    primary key (group_id, account_id),
+    constraint group_members_some_grant check (via_sync or via_invite),
+    constraint group_members_sync_role check (via_sync = (sync_role is not null)),
+    constraint group_members_invite_role check (via_invite = (invite_role is not null))
+  )`);
+  await db.execute(sql`create index if not exists group_members_account_idx on group_members (account_id)`);
+  await db.execute(sql`create table if not exists group_invites (
+    id uuid primary key,
+    token_hash text not null unique,
+    group_id uuid not null references groups(id) on delete cascade,
+    role text not null check (role in ('admin','member')),
+    expires_at timestamptz not null,
+    created_by uuid not null references accounts(id),
+    revoked_at timestamptz
+  )`);
+  await db.execute(sql`create index if not exists group_invites_group_idx on group_invites (group_id)`);
+  // Login → account lookup for the Plan 1b federated member sync. accounts.login keeps GitHub's casing.
+  await db.execute(sql`create index if not exists accounts_login_lower_idx on accounts (lower(login))`);
 }
