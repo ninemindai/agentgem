@@ -4,10 +4,10 @@ All notable changes to AgentGem are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/).
 
-The npm core (`@ninemind/agentgem`) and the desktop app are versioned separately:
-core releases are tagged `v*`, desktop releases `desktop-v*`.
+The npm core (`@ninemind/agentgem`) and the desktop app share a version number but
+are tagged separately: core releases are tagged `v*`, desktop releases `desktop-v*`.
 
-## [0.4.0] — `@ninemind/agentgem` (npm core) — 2026-07-08
+## [0.4.0] — `@ninemind/agentgem` (npm core) — 2026-07-09
 
 ### Added
 
@@ -66,6 +66,21 @@ core releases are tagged `v*`, desktop releases `desktop-v*`.
 - **Local usage rollups.** `agentgem usage report [--backfill]` pushes daily usage
   rollups from your machine so team and org usage views can attribute activity per
   repo owner. The warm daemon also does this on a schedule.
+- **Global vs project scope on Optimize and Setup.** A Global/Project switch lets
+  you disable and re-enable skills in a specific project's own `.claude/` as well as
+  your global config. The inventory merges both layers with a badge showing where
+  each artifact lives, usage is scoped to the project's own transcripts, and a
+  guard lets a request only touch the layer it owns.
+- **Gems can carry a loop (automation) facet.** A Gem may now hold an optional
+  top-level `loop` facet describing a recurring task; publish, install, and the
+  `.gem` archive all round-trip it so the facet survives sharing intact.
+- **The Play agent picker surfaces agents from your transcripts.** Alongside the
+  runnable roster, the picker now lists the coding agents it discovers in your
+  session history and labels them, so you can pick the one you actually use.
+- **Chat can start in a specific project.** A "Start in" launcher (sharing the same
+  Global/Project picker) points a Chat session at a project directory, and the
+  server validates the requested working directory against an allow-list before the
+  agent connects there.
 
 ### Changed
 
@@ -75,7 +90,7 @@ core releases are tagged `v*`, desktop releases `desktop-v*`.
 - **Two new bundled executables.** Installing the package now also puts
   `agentgem-distill` and `agentgem-goldmine` on your `PATH` alongside `agentgem`.
 
-## [desktop-v0.2.0] — desktop app — 2026-07-08
+## [desktop-v0.4.0] — desktop app — 2026-07-09
 
 ### Added
 
