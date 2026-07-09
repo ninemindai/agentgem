@@ -1,108 +1,118 @@
-# Task 6 report: `ContextTimeline` component + swap into `TranscriptViewer`
+# Task 6: ConnectGitHubModal — Report
 
-## TDD
+## Files touched
+- `packages/console/src/identity/ConnectGitHubModal.tsx` — created
+- `packages/console/src/identity/__tests__/ConnectGitHubModal.test.tsx` — created
+- `packages/console/src/shell/theme.css` — appended `.identity-modal` block after `.setup-config` rule
 
-**RED** — wrote `packages/console/src/panels/Observe/ContextTimeline.test.tsx` verbatim from
-the brief (Step 1), ran `pnpm --filter @agentgem/console test -- ContextTimeline`:
+## TDD Flow
 
+### Step 1: RED — Write test (from brief, lines 19–70)
+Created `ConnectGitHubModal.test.tsx` with 5 test cases.
+
+### Step 2: RED — Run to verify failure
 ```
-FAIL  src/panels/Observe/ContextTimeline.test.tsx
-Error: Failed to resolve import "./ContextTimeline.js" from
-"src/panels/Observe/ContextTimeline.test.tsx". Does the file exist?
-```
-(85 other suites / 455 tests still passed — confirms the harness itself was healthy.)
-
-**GREEN (first pass, still red)** — implemented `ContextTimeline.tsx` per the brief's Step 3
-code verbatim. Re-ran the test: 1 of 2 tests failed —
-
-```
-× ContextTimeline > renders the verdict, a fired factor, and a ranked jump
-Found multiple elements with the text: /review/i
-  <title>skill: review</title>            (inside the SVG marker <circle>)
-  <div class="obs-muted">loaded skill review</div>   (the rail's jump-cause line)
+pnpm -C packages/console exec vitest run src/identity/__tests__/ConnectGitHubModal.test.tsx
 ```
 
-Root cause: the sample fixture's event name (`review`) and its jump-cause string
-(`loaded skill review`) both contain "review", and the brief's marker code renders a
-nested `<title>{mk.kind}: {mk.name}</title>` inside the `<circle>` — a real text node
-that Testing Library's `findByText` also matches. With both nodes present, the
-*singular* `findByText(/review/i)` throws on ambiguity, not on absence.
-
-**Fix (deviation from the brief's literal code):** replaced the nested `<title>` element
-with an `aria-label` attribute on the `<circle>` — `aria-label={`${mk.kind}: ${mk.name}`}`.
-This keeps an accessible name for the marker (screen readers / some AT can still read
-`aria-label` on an SVG shape) without adding a second visible text node that collides with
-the rail. No other change to the component's behavior, markup structure, or CSS classes.
-
-**GREEN** — re-ran: `2 passed (2)`; full suite: `86 passed | 457 tests passed`.
-
-This is the one place I diverged from the brief's copy-pasted code, and it was a genuine
-test/component mismatch in the brief itself rather than an escalation-worthy field/shape
-mismatch (no `HygieneReport` field or `buildTimeline` return-shape issue — those matched
-exactly), so I fixed it in place rather than stopping.
-
-## CSS tokens added (single `:root` block, `packages/console/src/shell/theme.css`)
-
-The app is single-theme (warm paper, no dark mode / no `prefers-color-scheme` block) — I
-did not add a dark variant, per the brief. Added the 8 tokens `toolCategory.ts` and
-`ContextTimeline.tsx` already reference, inserted right after the existing `--gold` /
-`--line` block:
-
-```css
---blue: #3f6b8a;       /* context-window chart line */
---green: var(--emerald);   /* alias — matches the existing "certified" green */
---slate: #6b6558;      /* bash */
---purple: #6b4a7a;     /* skill */
---pink: #a85a72;       /* agent */
---amber: var(--gold);  /* alias — matches the existing warn/gold */
---teal: #3f7a72;       /* task */
---red: var(--accent);  /* alias — matches the existing terracotta/.obs-error */
+Output:
+```
+FAIL  src/identity/__tests__/ConnectGitHubModal.test.tsx
+Error: Failed to resolve import "../ConnectGitHubModal.js" from "src/identity/__tests__/ConnectGitHubModal.test.tsx". Does the file exist?
+  Plugin: vite:import-analysis
 ```
 
-`--green`/`--amber`/`--red` alias existing tokens (`--emerald`/`--gold`/`--accent`) rather
-than minting parallel hex values with the same meaning, since this app already uses those
-three for exactly "success / warn / danger". `--blue`, `--slate`, `--purple`, `--pink`,
-`--teal` are new muted, desaturated hues picked to sit next to `--paper`/`--raised`
-(#f1eadb / #fbf7ee) and `--ink-soft` (#463d2c) without reading as neon — verified all 8
-resolve (`grep -c -- "--<token>:" theme.css` → 1 each, only definition site is `:root`).
+Expected failure: component does not yet exist.
 
-## Layout CSS added
+### Step 3: Implement (from brief, lines 82–124)
+Created `ConnectGitHubModal.tsx` and appended `.identity-modal` CSS block to `theme.css`.
 
-Added after the existing `.hyg-factors` rules: `.ct` (grid `1fr 288px`, wraps to a single
-column under 880px via `@media (max-width: 880px)`), `.ct-chart`, `.ct-scroll`
-(`overflow-x: auto` so the wide SVG scrolls instead of blowing out the card), `.ct-rail`
-(`overflow-y: auto`, `max-height: 420px` — so a tall rail never stretches the card),
-`.rail-h` (section labels, reuses the `.hyg-head`-style uppercase/muted look), `.ct-facs`
-(same shape as `.hyg-factors`, new name per the brief), `.jump`/`.jbadge`/`.jbody` (the
-jump rows). Reused the existing `.hyg-verdict`/`.hyg-score`/`.hyg-word`/`.is-bounded`/
-`.is-mixed`/`.is-bloated` classes for the verdict badge — no new verdict-color CSS needed.
+### Step 4: First GREEN attempt — Partial failure
+```
+pnpm -C packages/console exec vitest run src/identity/__tests__/ConnectGitHubModal.test.tsx
+```
 
-## The swap
+Output:
+```
+ ❯ src/identity/__tests__/ConnectGitHubModal.test.tsx (5 tests | 1 failed) 60ms
+   × ConnectGitHubModal > renders a labelled modal dialog wrapping ConnectGitHub 46ms
+     → Unable to find an accessible element with the role "button" and name `/connect github/i`
+```
 
-`packages/console/src/panels/Observe/TranscriptViewer.tsx`:
-- import changed from `HygieneReport` to `ContextTimeline` (`./ContextTimeline.js`)
-- the render line (was ~76) now reads:
-  `{view && <ContextTimeline apiBase={apiBase} agent={agent} sessionId={view.sessionId} />}`
-- `ProcessQualityReport`, `DistillSection`, and the turn tree below are untouched.
+Tests passed: 4/5. Failure root cause: Test expected button with "Connect GitHub" but implementation had `idleLabel="Sign in with GitHub"` (contradiction in brief's code vs. test).
 
-`HygieneReport.tsx` / `HygieneReport.test.tsx` / `_shared/BloatCurve.tsx` were left in the
-tree exactly as instructed (HygieneReport still backs the cross-session leaderboard
-elsewhere) — nothing in them was modified or deleted.
+### Step 5: Fix and GREEN
+Changed line 117 of `ConnectGitHubModal.tsx` from `idleLabel="Sign in with GitHub"` to `idleLabel="Connect GitHub"` to match test expectation (TDD: test is spec).
 
-## Verification
+```
+pnpm -C packages/console exec vitest run src/identity/__tests__/ConnectGitHubModal.test.tsx
+```
 
-- `pnpm --filter @agentgem/console test -- ContextTimeline` → 2/2 pass.
-- `pnpm --filter @agentgem/console test` (full suite) → **86 files / 457 tests, all pass**
-  (includes the pre-existing `HygieneReport.test.tsx`, `TranscriptViewer.test.tsx`,
-  `toolCategory.test.ts`, `ctxTimeline.test.ts` — none broke).
-- `pnpm --filter @agentgem/console exec tsc --noEmit` → clean, no output.
+Output:
+```
+ ✓ src/identity/__tests__/ConnectGitHubModal.test.tsx (5 tests) 47ms
 
-## Files changed
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+ Start at  20:46:22
+ Duration  408ms
+```
 
-- `packages/console/src/panels/Observe/ContextTimeline.tsx` (new)
-- `packages/console/src/panels/Observe/ContextTimeline.test.tsx` (new)
-- `packages/console/src/panels/Observe/TranscriptViewer.tsx` (import + render swap, 4-line diff)
-- `packages/console/src/shell/theme.css` (8 category tokens + `.ct*`/`.rail-h`/`.jump*` layout rules)
+All 5 tests pass.
 
-Note: `.superpowers/sdd/task-5-report.md` showed as modified in `git status` before this
-task started (not something I touched) — excluded from this task's commit.
+## Deviation from Brief
+
+**Found contradiction in brief itself** (not a design flaw — genuine inconsistency):
+- Test (line 40): expects button name `/connect github/i`
+- Implementation code (line 117): `idleLabel="Sign in with GitHub"`
+
+These strings do not match. Per TDD principle (test is spec), changed implementation's `idleLabel` to `"Connect GitHub"` to pass the test. This is the only deviation from the brief's verbatim code.
+
+## Commit
+
+```bash
+git add packages/console/src/identity/ConnectGitHubModal.tsx \
+  packages/console/src/identity/__tests__/ConnectGitHubModal.test.tsx \
+  packages/console/src/shell/theme.css
+git commit -m "feat(console): ConnectGitHubModal for signing in from the shell"
+```
+
+**Commit SHA:** `c31e100b`
+
+## Self-review
+
+✓ All 5 tests pass (dialog role/aria, Escape close, overlay vs. panel click distinction, close button, device code display)
+✓ Modal owns `.identity-modal` classes (no coupling to Setup's `.setup-modal`)
+✓ CSS appended after `.setup-config` as specified
+✓ Only existing CSS variables used
+✓ Single warm-paper theme (no dark-mode variant added)
+✓ Only touched the three target files (no refactoring of existing modals)
+✓ Proper React hooks (useEffect), .js imports, copyright header
+✓ Caller owns `bind` object and responsible for `bind.reset()` on close per spec
+
+## Correction (post-hoc)
+
+The original resolution above was wrong: it treated the brief's *test* as the
+spec and changed the component to match, deleting the intended
+`idleLabel="Sign in with GitHub"`. But the modal is the sign-in surface for
+Task 7's `IdentityChip`, whose tests click a button named
+`/sign in with github/i` inside this modal. The brief's test was the actual
+error, not the component code.
+
+Fix applied:
+- `ConnectGitHubModal.tsx`: restored `idleLabel="Sign in with GitHub"` on the
+  `<ConnectGitHub>` it renders.
+- `ConnectGitHubModal.test.tsx`: updated the one button-role assertion to
+  expect `/sign in with github/i`; left the `aria-label` "Connect GitHub"
+  dialog-title assertion untouched; added a new test pinning that the two
+  labels are intentionally distinct (dialog title "Connect GitHub" vs. idle
+  button "Sign in with GitHub").
+
+Verified `pnpm -C packages/console exec vitest run src/identity/`: 30 tests
+pass (5 IdentityProvider + 10 useGitHubBind + 9 ConnectGitHub + 6
+ConnectGitHubModal, the last including the new distinctness assertion).
+Confirmed `ConnectGitHub.tsx`'s default `idleLabel` remains `"Connect
+GitHub"` and that `ConnectGitHub.tsx`, `useGitHubBind.ts`, and
+`IdentityProvider.tsx` were not modified.
+
+**Commit SHA:** `14fffda0618b4bdd466549f8317882f5e4ea0bcf`
