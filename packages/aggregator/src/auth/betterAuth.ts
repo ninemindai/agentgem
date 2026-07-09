@@ -5,6 +5,7 @@ import type { Auth, BetterAuthOptions } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { bearer } from "better-auth/plugins";
 import { customSession } from "better-auth/plugins/custom-session";
+import { oneTimeToken } from "better-auth/plugins/one-time-token";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { AppDb } from "../schema.js";
@@ -41,7 +42,14 @@ export function makeAuth(opts: {
         .map((s) => ({ scope: s.scope, role: s.role }))
         .sort((a, b) => a.scope.localeCompare(b.scope));
       return { user, session, orgs };
-    })],
+    }),
+    // 1b-Task 4 — the SSO handoff redeem's ONLY way to hand the browser a genuine better-auth
+    // session cookie without hand-signing one: mintSessionCookie (mintCookie.ts) drives this
+    // plugin's generate+verify pair in-process to exchange a just-minted session's raw token for
+    // the real Set-Cookie better-auth's own setSessionCookie() produces. expiresIn is minutes;
+    // 1 is already generous since verify consumes (deletes) the exchange token on first read and
+    // mintSessionCookie redeems it within the same request.
+    oneTimeToken({ expiresIn: 1 })],
     // review fix #1/#14 — force uuid ids so downstream uuid FKs (accounts.id, stars.account_id, ...) work
     advanced: {
       database: { generateId: () => randomUUID() },

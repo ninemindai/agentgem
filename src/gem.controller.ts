@@ -1346,7 +1346,7 @@ export class GemController {
     const { code } = (await res.json()) as { code?: string };
     if (!code) return { authenticated: false };
     const webOrigin = process.env.AGENTGEM_WEB_ORIGIN ?? "https://app.agentgem.ai";
-    const url = `${cfg.base}/api/auth/github/handoff?code=${encodeURIComponent(code)}&return=${encodeURIComponent(webOrigin)}`;
+    const url = `${cfg.base}/api/auth/handoff/redeem?code=${encodeURIComponent(code)}&return=${encodeURIComponent(webOrigin)}`;
     return { authenticated: true, url };
   }
 
