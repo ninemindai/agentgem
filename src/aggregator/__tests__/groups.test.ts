@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import {
   makeTestDb, upsertAccount,
   createNativeGroup, getGroup, deleteNativeGroup, listGroupsForAccount, listGroupMembers,
-  groupMemberRole, countGroupAdmins, grantInvite, revokeInviteGrant,
+  groupMemberRole, countGroupAdmins, grantInvite, revokeInviteGrant, removeMemberGuarded,
 } from "@agentgem/aggregator";
 
 const acct = (db: any, n: string) => upsertAccount(db, { provider: "github", accountId: n, login: n });
@@ -97,6 +97,33 @@ describe("groups store", () => {
     expect(await countGroupAdmins(db, g.id)).toBe(1);
     await grantInvite(db, g.id, m.id, "admin");
     expect(await countGroupAdmins(db, g.id)).toBe(2);
+  });
+
+  it("removeMemberGuarded: 'not-member' when the account is not in the group", async () => {
+    const db = await makeTestDb();
+    const owner = await acct(db, "owner");
+    const stranger = await acct(db, "stranger");
+    const g = await createNativeGroup(db, owner.id, "G");
+    expect(await removeMemberGuarded(db, g.id, stranger.id)).toBe("not-member");
+  });
+
+  it("removeMemberGuarded: 'last-admin' refuses to drop the sole admin", async () => {
+    const db = await makeTestDb();
+    const owner = await acct(db, "owner");
+    const g = await createNativeGroup(db, owner.id, "G");
+    expect(await removeMemberGuarded(db, g.id, owner.id)).toBe("last-admin");
+    expect(await groupMemberRole(db, g.id, owner.id)).toBe("admin");   // untouched
+  });
+
+  it("removeMemberGuarded: 'removed' for a non-last-admin member, and the row is gone", async () => {
+    const db = await makeTestDb();
+    const owner = await acct(db, "owner");
+    const member = await acct(db, "member");
+    const g = await createNativeGroup(db, owner.id, "G");
+    await grantInvite(db, g.id, member.id, "member");
+    expect(await removeMemberGuarded(db, g.id, member.id)).toBe("removed");
+    expect(await groupMemberRole(db, g.id, member.id)).toBeNull();
+    expect((await listGroupMembers(db, g.id)).map((m) => m.login)).toEqual(["owner"]);
   });
 
   it("deleteNativeGroup cascades members and invites; refuses federated; 'not-found' otherwise", async () => {

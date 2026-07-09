@@ -184,6 +184,34 @@ describe("groups routes", () => {
     expect(await groupMemberRole(db, g.id, member.acct.id)).toBeNull();
   });
 
+  it("a malformed (non-UUID) ?id= returns 400, not 500", async () => {
+    const db = await makeTestDb();
+    const me = await signedIn(db, "neo");
+    for (const handler of [groupMembersHandler, groupInvitesHandler] as const) {
+      const r = res();
+      await handler(deps(db))(req({ headers: me.headers, query: { id: "not-a-uuid" } }), r);
+      expect(r.code).toBe(400);
+    }
+  });
+
+  it("a malformed (non-UUID) ?account= returns 400, not 500", async () => {
+    const db = await makeTestDb();
+    const owner = await signedIn(db, "owner");
+    const g = await createNativeGroup(db, owner.acct.id, "Club");
+    const r = res();
+    await groupMembersHandler(deps(db))(req({ method: "DELETE", headers: owner.headers, query: { id: g.id, account: "not-a-uuid" } }), r);
+    expect(r.code).toBe(400);
+  });
+
+  it("a malformed (non-UUID) ?invite= returns 400, not 500", async () => {
+    const db = await makeTestDb();
+    const owner = await signedIn(db, "owner");
+    const g = await createNativeGroup(db, owner.acct.id, "Club");
+    const r = res();
+    await groupInvitesHandler(deps(db))(req({ method: "DELETE", headers: owner.headers, query: { id: g.id, invite: "not-a-uuid" } }), r);
+    expect(r.code).toBe(400);
+  });
+
   it("a plain member cannot remove somebody else → 403", async () => {
     const db = await makeTestDb();
     const owner = await signedIn(db, "owner");

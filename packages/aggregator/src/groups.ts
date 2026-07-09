@@ -134,3 +134,31 @@ export async function revokeInviteGrant(db: AppDb, groupId: string, accountId: s
     .delete(groupMembers)
     .where(and(eq(groupMembers.groupId, groupId), eq(groupMembers.accountId, accountId), eq(groupMembers.viaSync, false)));
 }
+
+/** Remove a member's invite grant, refusing to drop the group's LAST admin — atomically, so two
+ *  concurrent removals cannot both pass the check and leave zero admins. The member's row survives
+ *  iff a via_sync grant remains (revoking an invite must not evict an org member). */
+export async function removeMemberGuarded(
+  db: AppDb, groupId: string, accountId: string,
+): Promise<"removed" | "not-member" | "last-admin"> {
+  return db.transaction(async (tx) => {
+    // Lock this group's member rows so concurrent removals serialize on the admin count.
+    const rows = (await tx.execute(sql`
+      select account_id, sync_role, invite_role from group_members
+      where group_id = ${groupId} for update`)).rows as
+      { account_id: string; sync_role: string | null; invite_role: string | null }[];
+    const target = rows.find((r) => r.account_id === accountId);
+    if (!target) return "not-member";
+    const isAdmin = (r: { sync_role: string | null; invite_role: string | null }) =>
+      r.sync_role === "admin" || r.invite_role === "admin";
+    if (isAdmin(target) && rows.filter(isAdmin).length === 1) return "last-admin";
+    // Same semantics as revokeInviteGrant: clear the invite grant; keep the row iff via_sync remains.
+    await tx.execute(sql`
+      update group_members set via_invite = false, invite_role = null
+      where group_id = ${groupId} and account_id = ${accountId} and via_sync`);
+    await tx.execute(sql`
+      delete from group_members
+      where group_id = ${groupId} and account_id = ${accountId} and not via_sync`);
+    return "removed";
+  });
+}
