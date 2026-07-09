@@ -11,7 +11,7 @@
   "main": "dist/main.js",
   "scripts": {
     "build:core": "pnpm -C .. build",
-    "build": "tsc -p .",
+    "build": "tsc6 -p .",
     "bundle:core": "node scripts/bundle-core.mjs",
     "bundle-adapters": "node scripts/bundle-adapters.mjs",
     "dev": "pnpm build:core && pnpm build && cross-env AGENTGEM_DEV=1 electron dist/main.js",
