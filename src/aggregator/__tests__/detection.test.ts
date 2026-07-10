@@ -77,6 +77,23 @@ describe("sweepQuarantine (detection -> quarantine)", () => {
     expect((await popularity(warmed, { kind: "skill", k: 3 })).map((r) => r.id)).toContain("skill:a");
   });
 
+  it("empty-string / zero DETECT_* env vars fall back to safe defaults, never 0 (no mass quarantine)", async () => {
+    const KEYS = ["DETECT_MIN_PRODUCERS", "DETECT_MIN_SHAPE", "DETECT_FRESH_MAX", "DETECT_FRESH_FRACTION", "DETECT_CORE_MIN_PRODUCERS"];
+    const saved = KEYS.map((k) => [k, process.env[k]] as const);
+    try {
+      for (const k of KEYS) process.env[k] = ""; // the misconfig: blank env vars (k8s ConfigMap, `export VAR=`)
+      const db = await makeTestDb();
+      // Two organic attestations, distinct shapes, one producer each — nowhere near a coordinated
+      // cluster under real defaults (minProducers=10). With thresholds collapsed to 0 they'd all flag.
+      await projectAttestation(db, att("ed25519:z1", "za", ["skill:a", "skill:b"]));
+      await projectAttestation(db, att("ed25519:z2", "zb", ["skill:c"]));
+      const rep = await sweepQuarantine(db, { dryRun: true }); // no opts → env path → num()
+      expect(rep.attestationsQuarantined).toBe(0);
+    } finally {
+      for (const [k, v] of saved) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    }
+  });
+
   it("is idempotent", async () => {
     const db = await makeTestDb();
     const shape = ["skill:a", "skill:b", "skill:c"];
