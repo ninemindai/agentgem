@@ -40,6 +40,9 @@ describe("mcpAppFor", () => {
     expect(tool.description).toContain("Replay Duel");
     expect(tool._meta.ui.resourceUri).toBe(resource.uri);
     expect(tool._meta.ui.visibility).toEqual(["app"]);
-    expect(tool.inputSchema).toEqual({ type: "object", properties: {} });
+    expect(tool.inputSchema).toEqual({
+      type: "object",
+      properties: { view: { type: "string", description: "optional initial view/state hint" } },
+    });
   });
 });
