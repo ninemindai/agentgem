@@ -3,7 +3,7 @@
 // Play JSON routes over the miniapps registry: save (gate + dual-write), list, publish (git push).
 import { api, get, post, AgentError } from "@agentback/openapi";
 import { z } from "zod";
-import { saveMiniapp, deleteMiniapp, listMiniapps, readMiniapp, miniappsRoot, setRemote, push, seedStudio, importStudio, blankStudio, compactTurns, resolveSessionRef, mcpAppFor, migrateAllMiniapps } from "@agentgem/play";
+import { saveMiniapp, deleteMiniapp, listMiniapps, readMiniapp, miniappsRoot, setRemote, push, seedStudio, importStudio, blankStudio, compactTurns, resolveSessionRef, mcpAppFor, migrateAllMiniapps, INSPECTOR_HTML, INSPECTOR_META, type MiniappMeta } from "@agentgem/play";
 import { defaultReaders } from "./play.readers.js";
 import { listActiveSessions } from "./watchSessions.js";
 import {
@@ -11,7 +11,7 @@ import {
   PlayPublishRequestSchema, PlayPublishResponseSchema,
   PlayStudioRequestSchema, PlayStudioResponseSchema, PlayImportRequestSchema, PlayBlankRequestSchema,
   PlayMiniappQuerySchema, PlayMiniappSchema, PlaySessionDataSchema, PlaySessionDataQuerySchema, PlayMcpAppSchema,
-  PlayMigrateResponseSchema,
+  PlayMigrateResponseSchema, PlayInspectorSchema,
 } from "./schemas.js";
 
 @api({ basePath: "/api" })
@@ -100,11 +100,31 @@ export class PlayController {
 
   // Serve-time MCP Apps adapter: the same stored miniapp, re-shaped as a ui:// resource + launcher tool.
   // No behavior change to storage or the sealed runtime — this is a producer-side view over readMiniapp.
+  //
+  // "__inspector" is special-cased BEFORE readMiniapp: it is a constant (packages/play/src/inspector.ts),
+  // never written to the registry, so readMiniapp(name) would 404 on it.
   @get("/play/mcp-app", { query: PlayMiniappQuerySchema, response: PlayMcpAppSchema })
   async mcpApp(input: { query: z.infer<typeof PlayMiniappQuerySchema> }): Promise<z.infer<typeof PlayMcpAppSchema>> {
+    if (input.query.name === INSPECTOR_META.name) {
+      return mcpAppFor({ name: INSPECTOR_META.name, html: INSPECTOR_HTML, meta: INSPECTOR_META as MiniappMeta });
+    }
     try {
       return mcpAppFor(readMiniapp(input.query.name));
     } catch (e) { throw new AgentError((e as Error).message, { status: 404 }); }
+  }
+
+  // The built-in Protocol Inspector: a conformance harness that exercises every capability, served as a
+  // CONSTANT — never written to (or read from) the miniapps registry. Mirrors the /play/miniapp response
+  // shape so the console can reuse its existing miniapp-viewer plumbing unchanged.
+  @get("/play/inspector", { response: PlayInspectorSchema })
+  async inspector(): Promise<z.infer<typeof PlayInspectorSchema>> {
+    return {
+      name: INSPECTOR_META.name, html: INSPECTOR_HTML,
+      meta: {
+        title: INSPECTOR_META.title, genre: INSPECTOR_META.genre, createdFrom: INSPECTOR_META.createdFrom,
+        engineVersion: INSPECTOR_META.engineVersion, needs: [...INSPECTOR_META.needs],
+      },
+    };
   }
 
   // Codemod pass over the whole registry: rewrites old-bridge miniapps' STORED files to the current MCP
