@@ -80,7 +80,7 @@ const ProfileReviewSchema = z.object({
 });
 const ProfileResult = z.object({
   login: z.string(), avatarUrl: z.string().nullable(), verified: z.boolean(),
-  githubUrl: z.string(), totalStars: z.number(), gems: z.array(ProfileGemSchema),
+  githubUrl: z.string().nullable(), totalStars: z.number(), gems: z.array(ProfileGemSchema),
   reviews: z.array(ProfileReviewSchema),
 });
 

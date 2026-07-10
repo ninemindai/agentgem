@@ -21,6 +21,20 @@ describe("Profile page", () => {
     expect(card?.getAttribute("href")).toBe("/gems/" + encodeURIComponent("@octocat/g"));
   });
 
+  it("renders the handle as a GitHub link only when githubUrl is set", async () => {
+    render(<Profile api={apiWith(full)} login="octocat" />);
+    const link = await screen.findByRole("link", { name: "@octocat" });
+    expect(link.getAttribute("href")).toBe("https://github.com/octocat");
+  });
+
+  it("a login-less (Google) profile shows the handle as plain text — NO GitHub link", async () => {
+    render(<Profile api={apiWith({ ...full, login: "raymondg", githubUrl: null, verified: false })} login="raymondg" />);
+    expect(await screen.findByRole("heading", { name: /raymondg/ })).toBeTruthy();
+    // the handle must NOT be a link (no misleading github.com/<handle>)
+    expect(screen.queryByRole("link", { name: "@raymondg" })).toBeNull();
+    expect(screen.queryByText(/verified/i)).toBeNull();
+  });
+
   it("omits the verified badge and avatar when absent", async () => {
     render(<Profile api={apiWith({ ...full, verified: false, avatarUrl: null })} login="octocat" />);
     await screen.findByRole("heading", { name: /octocat/ });

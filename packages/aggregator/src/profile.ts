@@ -37,7 +37,7 @@ export interface Profile {
   login: string;
   avatarUrl: string | null;
   verified: boolean;
-  githubUrl: string;
+  githubUrl: string | null;
   totalStars: number;
   gems: ProfileGem[];
   reviews: ProfileReview[];
@@ -128,6 +128,11 @@ export async function buildProfile(db: AppDb, rawHandle: string): Promise<Profil
     const nameMap = await skillNamesByTargetId(db, authored.map((r) => r.targetId));
     reviews = authored.map((r) => parseSkillReview(r, nameMap[r.targetId]));
   }
-  const canonical = acct?.login ?? handle;
-  return { login: canonicalHandle, avatarUrl: acct?.avatarUrl ?? null, verified, githubUrl: `https://github.com/${canonical}`, totalStars, gems, reviews };
+  // A GitHub URL is only meaningful when the account actually has a GitHub login — `accounts.login`
+  // is set ONLY for github accounts (anchorAndScopes writes NULL for every other provider). A
+  // login-less account (Google, etc.) has a handle that is a chosen name, NOT a GitHub username, so
+  // `github.com/<handle>` would assert an identity the user never proved. null ⇒ the profile renders
+  // the handle as plain text with no GitHub link.
+  const githubUrl = acct?.login ? `https://github.com/${acct.login}` : null;
+  return { login: canonicalHandle, avatarUrl: acct?.avatarUrl ?? null, verified, githubUrl, totalStars, gems, reviews };
 }

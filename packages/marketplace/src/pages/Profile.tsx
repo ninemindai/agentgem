@@ -26,7 +26,9 @@ export function Profile({ api, login, me }: { api: ReturnType<typeof makeApi>; l
       <header className="ex-profile-head">
         {p.avatarUrl && <img className="ex-avatar-lg" src={p.avatarUrl} alt="" width={64} height={64} />}
         <h2 className="ex-profile-login">
-          <a href={p.githubUrl} target="_blank" rel="noreferrer">@{p.login}</a>
+          {p.githubUrl
+            ? <a href={p.githubUrl} target="_blank" rel="noreferrer">@{p.login}</a>
+            : <span>@{p.login}</span>}
           {p.verified && <span className="ex-verified" title="Verified GitHub identity"> ✓ Verified</span>}
         </h2>
         <span className="ex-profile-stars">★ {p.totalStars}</span>
