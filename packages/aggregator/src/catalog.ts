@@ -110,7 +110,7 @@ export async function deleteGemArchiveOwned(db: AppDb, gemKey: string, ownerAcco
     .where(eq(gemArchives.gemKey, gemKey)).limit(1))[0];
   if (!row) return "not-found";
   if (row.ownerAccountId === null || row.ownerAccountId !== ownerAccountId) return "forbidden";
-  await db.delete(gemArchives).where(eq(gemArchives.gemKey, gemKey));
+  await db.delete(gemArchives).where(and(eq(gemArchives.gemKey, gemKey), eq(gemArchives.ownerAccountId, ownerAccountId)));
   return "deleted";
 }
 

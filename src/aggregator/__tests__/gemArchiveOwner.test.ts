@@ -45,4 +45,14 @@ describe("gem_archives ownership", () => {
     await upsertGemArchive(db, { gemKey: "xK3f9a2Bq1", version: "1", bytes: new Uint8Array([1]), digest: "d", createdAtMs: 1, ownerAccountId: await acct(db) });
     expect(await archiveOnlyVersion(db, "xK3f9a2Bq1")).toBe("1");
   });
+
+  it("deletes only the caller's own row, never a co-key row owned by someone else", async () => {
+    const db = await makeTestDb();
+    const a = await acct(db), b = await acct(db);
+    await upsertGemArchive(db, { gemKey: "shared", version: "1", bytes: new Uint8Array([1]), digest: "d", createdAtMs: 1, ownerAccountId: a });
+    await upsertGemArchive(db, { gemKey: "shared", version: "2", bytes: new Uint8Array([2]), digest: "d", createdAtMs: 2, ownerAccountId: b });
+    expect(await deleteGemArchiveOwned(db, "shared", a)).toBe("deleted");
+    expect(await getGemArchive(db, "shared", "1")).toBeNull();          // a's row gone
+    expect(await getGemArchive(db, "shared", "2")).not.toBeNull();      // b's row SURVIVES
+  });
 });
