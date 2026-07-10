@@ -28,9 +28,22 @@ function invalid(name: string, source: string): boolean {
 function readJson(path: string): any {
   try { return JSON.parse(readFileSync(path, "utf8")); } catch { return undefined; }
 }
+// For settings.json WRITE paths: an ABSENT file is fine to create fresh, but a file that is present
+// yet unparseable must NOT be overwritten — the old `readJson(...) ?? {}` collapsed both to {} and then
+// wrote only the one change, silently wiping the user's whole config (a transiently malformed or
+// mid-write settings.json nuked permissions, MCP servers, hooks, keybindings). Returns null to refuse.
+const REFUSE_MALFORMED = "settings.json is present but malformed — refusing to overwrite it";
+function loadSettingsForWrite(path: string): Record<string, any> | null {
+  if (!existsSync(path)) return {};
+  const v = readJson(path);
+  return v && typeof v === "object" && !Array.isArray(v) ? v : null;
+}
 function writeJson(path: string, value: unknown): void {
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, JSON.stringify(value, null, 2) + "\n");
+  // Write-then-rename so a concurrent reader never observes a half-written (parse-failing) file.
+  const tmp = `${path}.tmp`;
+  writeFileSync(tmp, JSON.stringify(value, null, 2) + "\n");
+  renameSync(tmp, path);
 }
 // Base for the archive mirrors introspect.ts's distilled-base rule so a claudeDir
 // override (tests) keeps everything self-contained under one temp home.
@@ -130,8 +143,8 @@ function disablePlugin(it: DisableItem, opts: DisableOptions): DisableResult {
   const base = { type: it.type, name: it.name };
   const key = it.source.slice("plugin:".length);
   const p = settingsPath(opts);
-  const settings = readJson(p);
-  const obj = settings && typeof settings === "object" ? settings : {};
+  const obj = loadSettingsForWrite(p);
+  if (!obj) return { ...base, ok: false, message: REFUSE_MALFORMED };
   obj.enabledPlugins = { ...(obj.enabledPlugins ?? {}), [key]: false };
   writeJson(p, obj);
   return { ...base, ok: true, message: `plugin ${key} disabled` };
@@ -141,8 +154,8 @@ function enablePlugin(it: DisableItem, opts: DisableOptions): DisableResult {
   // name carries the plugin key for a "plugin"-typed row; source carries it otherwise.
   const key = it.source.startsWith("plugin:") ? it.source.slice("plugin:".length) : it.name;
   const p = settingsPath(opts);
-  const settings = readJson(p);
-  const obj = settings && typeof settings === "object" ? settings : {};
+  const obj = loadSettingsForWrite(p);
+  if (!obj) return { ...base, ok: false, message: REFUSE_MALFORMED };
   obj.enabledPlugins = { ...(obj.enabledPlugins ?? {}), [key]: true };
   writeJson(p, obj);
   return { ...base, ok: true, message: `plugin ${key} re-enabled` };
@@ -158,8 +171,8 @@ function mcpJsonServers(opts: DisableOptions): Record<string, unknown> {
 function disableMcp(it: DisableItem, opts: DisableOptions): DisableResult {
   const base = { type: it.type, name: it.name };
   const p = settingsPath(opts);
-  const settings = readJson(p);
-  const obj = settings && typeof settings === "object" ? settings : {};
+  const obj = loadSettingsForWrite(p);
+  if (!obj) return { ...base, ok: false, message: REFUSE_MALFORMED };
   const servers = obj.mcpServers && typeof obj.mcpServers === "object" ? obj.mcpServers : undefined;
   if (servers && it.name in servers) {
     const stash = join(archiveRoot(opts), "mcp", `${it.name}.json`);
@@ -182,8 +195,8 @@ function disableMcp(it: DisableItem, opts: DisableOptions): DisableResult {
 function enableMcp(it: DisableItem, opts: DisableOptions): DisableResult {
   const base = { type: it.type, name: it.name };
   const p = settingsPath(opts);
-  const settings = readJson(p);
-  const obj = settings && typeof settings === "object" ? settings : {};
+  const obj = loadSettingsForWrite(p);
+  if (!obj) return { ...base, ok: false, message: REFUSE_MALFORMED };
   const stash = join(archiveRoot(opts), "mcp", `${it.name}.json`);
   if (existsSync(stash)) {
     const saved = readJson(stash);
