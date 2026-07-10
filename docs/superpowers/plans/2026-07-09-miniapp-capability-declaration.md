@@ -533,9 +533,9 @@ git commit -m "test(play): migration prunes over-declared needs; checkpoint leav
 
 **Files:**
 - Modify: `src/schemas.ts:967`
-- Modify: `src/play.controller.ts:19-24`
 - Modify: `packages/console/src/api/routes.ts:919-922`
 - Test: `src/play/__tests__/saveRoute.test.ts` (create)
+- Unchanged, but verify it still typechecks: `src/play.controller.ts:19-24` — `save()` returns `saveMiniapp(...)` directly, so the new field flows through with no edit.
 
 **Interfaces:**
 - Consumes: `SaveMiniappResult` (Task 3).
@@ -610,7 +610,7 @@ Expected: no errors.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/schemas.ts src/play.controller.ts packages/console/src/api/routes.ts src/play/__tests__/saveRoute.test.ts
+git add src/schemas.ts packages/console/src/api/routes.ts src/play/__tests__/saveRoute.test.ts
 git commit -m "feat(api): POST /api/play/save reports prunedNeeds"
 ```
 
@@ -879,30 +879,22 @@ Expected: FAIL — `getByLabelText` finds no checkbox.
 
 - [ ] **Step 3: Write minimal implementation**
 
-In `packages/console/src/panels/Play/Composer.tsx`, add the import:
+In `packages/console/src/panels/Play/Composer.tsx`, add the imports. `CAP_TOOL` comes from `@agentgem/play`, which re-exports it from `@agentgem/model` (Task 1) — the console must **not** import `@agentgem/model` directly, and must **not** re-type the tool names here. One map, no drift:
 
 ```tsx
+import { CAP_TOOL } from "@agentgem/play";
 import { CAP_LABEL, CONSENT_CAPS } from "./consent.js";
 ```
 
-Add the tool map and preamble builder above the component:
+Add the preamble builder above the component:
 
 ```tsx
-// The capability -> tool names the preamble instructs the agent to call. Intentionally a local literal
-// rather than an import from @agentgem/play: this string is PROMPT TEXT, not a contract the host
-// enforces. The contract is enforced at save, by reconciling the html against meta.json.
-const CAP_TOOL_HINT: Record<string, string> = {
-  "local-project-access": "agentgem_get_inventory",
-  "live-session-events": "agentgem_subscribe_sessions",
-  "invoke-agent": "agentgem_invoke_agent",
-};
-
 // Checkboxes are INTENT: they only steer the agent's first prompt. They never write meta.json — the
 // code is the single authority over `needs`, reconciled at save. An unchecked box that the agent uses
 // anyway fails the save; a checked box the agent ignores is pruned back out and reported.
 function capPreamble(caps: string[]): string {
   if (!caps.length) return "";
-  const lines = caps.map((c) => `- ${c} — call \`${CAP_TOOL_HINT[c]}\` via window.agentgemApp`);
+  const lines = caps.map((c) => `- ${c} — call \`${CAP_TOOL[c]}\` via window.agentgemApp`);
   return [
     "This miniapp should use these host capabilities. For each one, call the listed MCP tool and add the",
     'capability to `"needs"` in meta.json:',
