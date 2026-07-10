@@ -157,7 +157,7 @@ export function createUiHost(deps: UiHostDeps): UiHost {
     const cap = "open-link";
     if (!deps.needs.includes(cap)) { replyError(d.id, -32601, `capability not permitted: ${cap}`); return; }
     const url = d.params?.url;
-    if (typeof url !== "string" || !/^https?:\/\//.test(url)) { replyError(d.id, -32602, "invalid params: url must be an http(s) string"); return; }
+    if (typeof url !== "string" || !/^https?:\/\//i.test(url)) { replyError(d.id, -32602, "invalid params: url must be an http(s) string"); return; }
     const gen = generation;
     const ok = await deps.requestConsent(cap, url);
     if (stale(gen)) return;                            // game changed while the prompt was open
