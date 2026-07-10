@@ -8,7 +8,7 @@
 import { sql, desc, eq } from "drizzle-orm";
 import type { AppDb } from "./schema.js";
 import { accounts, catalogGems } from "./schema.js";
-import { accountIdForHandle } from "./handles.js";
+import { accountIdForHandle, handleForAccountId } from "./handles.js";
 import { starCounts } from "./stars.js";
 import { reviewsByAccount } from "./reviews.js";
 import { skillNamesByTargetId } from "./curatedSkills.js";
@@ -71,6 +71,12 @@ export async function buildProfile(db: AppDb, rawHandle: string): Promise<Profil
   const accountId = await accountIdForHandle(db, handle);
   if (!accountId) return null;                // no handle, no profile — there is no other name
 
+  // The canonical STORED casing, not the caller's input casing — accountIdForHandle resolves
+  // case-insensitively (lower(handle) = lower($1)), so a `/@RayMond` URL must render the profile
+  // under the handle as the user actually claimed it ("raymond"), not the visitor's spelling.
+  const canonicalHandle = await handleForAccountId(db, accountId);
+  if (!canonicalHandle) return null;          // handle vanished between resolve and read — no profile
+
   const acct = (await db
     .select({ id: accounts.id, login: accounts.login, avatarUrl: accounts.avatarUrl })
     .from(accounts).where(eq(accounts.id, accountId)).limit(1))[0];
@@ -123,5 +129,5 @@ export async function buildProfile(db: AppDb, rawHandle: string): Promise<Profil
     reviews = authored.map((r) => parseSkillReview(r, nameMap[r.targetId]));
   }
   const canonical = acct?.login ?? handle;
-  return { login: handle, avatarUrl: acct?.avatarUrl ?? null, verified, githubUrl: `https://github.com/${canonical}`, totalStars, gems, reviews };
+  return { login: canonicalHandle, avatarUrl: acct?.avatarUrl ?? null, verified, githubUrl: `https://github.com/${canonical}`, totalStars, gems, reviews };
 }

@@ -71,12 +71,32 @@ describe("resolveOrgAccess", () => {
     // be granted self — claiming/having that login string is not the grant, holding the row is.
     const bare = await upsertAccount(db, { provider: "github", accountId: "2", login: "alice" });
     expect(await resolveOrgAccess(db, { accountId: bare.id, login: "alice" }, "alice", 1000)).toEqual({ status: "none", role: null, via: null });
+
+    // Task 8 security property still holds in any casing: a login string that matches the scope
+    // but holds NO role='self' row still gets "none" — never revived as a login compare.
+    const bareUpper = await upsertAccount(db, { provider: "github", accountId: "3", login: "ALICE" });
+    expect(await resolveOrgAccess(db, { accountId: bareUpper.id, login: "ALICE" }, "ALICE", 1000)).toEqual({ status: "none", role: null, via: null });
+  });
+
+  // Fix pass (Task 7/8 review — case sensitivity), Finding 1: GitHub treats logins
+  // case-insensitively in URLs, so a scope param with different casing than the stored handle
+  // must still match the role='self' row the caller holds.
+  it("grants self case-insensitively: a role='self' row for 'raymond' matches scope 'RayMond'", async () => {
+    const db = await makeTestDb();
+    const a = await upsertAccount(db, { provider: "github", accountId: "1", login: "raymond" });
+    await setAccountScopes(db, a.id, [{ scope: "raymond", role: "self" }]);
+    expect(await resolveOrgAccess(db, { accountId: a.id, login: "raymond" }, "RayMond", 1000)).toEqual({ status: "ok", role: "self", via: "self" });
   });
 
   it("two login-less accounts do not collide on the empty scope", async () => {
     const db = await makeTestDb();
     const a = await upsertAccount(db, { provider: "github", accountId: "1", login: null });
     expect(await resolveOrgAccess(db, { accountId: a.id, login: "" }, "", 1000)).toEqual({ status: "none", role: null, via: null });
+
+    // Same property, uppercased scope: still no collision (lower("") === lower("") would still be
+    // vacuously true here, but there is no role='self' row for either account to match against).
+    const b = await upsertAccount(db, { provider: "github", accountId: "2", login: null });
+    expect(await resolveOrgAccess(db, { accountId: b.id, login: "" }, "", 1000)).toEqual({ status: "none", role: null, via: null });
   });
 
   it("app membership passes without any captured scope (and beats stale scopes)", async () => {
