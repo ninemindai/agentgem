@@ -11,6 +11,7 @@ import { sql } from "drizzle-orm";
 import type { AppDb } from "../schema.js";
 import { fetchOrgMemberships } from "../accountVerifier.js";
 import { setAccountScopes, upsertAccount, getAccountScopes } from "../webAuth.js";
+import { claimHandleIfUnset, handleForAccountId } from "../handles.js";
 
 const SESSION_TTL_S = 30 * 24 * 60 * 60; // 30 days — matches web_sessions/binding today (review fix 2A)
 
@@ -118,11 +119,27 @@ async function anchorAndScopes(
   // supplying a `login`, it is the only thing stopping us from calling GitHub's org API with that
   // provider's access token. Do not "simplify" it away to `if (!login) return`.
   if (account.providerId !== "github" || !login) return;
+
+  // Identity re-key (Task 5b): a GitHub sign-in with no handle yet claims one for free, so an
+  // existing user (backfilled by backfillUserHandles) or a brand-new signup both end up claimed
+  // without ever seeing the claim flow. Guarded by claimHandleIfUnset itself — reserved/taken names
+  // simply don't claim — and gated on `handle IS NULL`, which is what makes a RENAME SURVIVE
+  // RE-LOGIN: once a user has claimed a different handle, this is a no-op, and the self-scope
+  // below is written from that handle, not unconditionally from `login`.
+  try { await claimHandleIfUnset(db, account.userId, login); } catch { /* best-effort */ }
+
   try {
     if (account.accessToken) {
+      // The self-scope names the account by its HANDLE, never unconditionally by `login` — a user
+      // who renamed away from their GitHub login must keep authorizing under the new name after
+      // this re-login, not get reset back to `login` on every sign-in. `?? login` is a fallback
+      // between two non-empty identity strings (not a `?? ""`): claimHandleIfUnset can no-op on a
+      // reserved/taken name, in which case the account has no handle yet and `login` is the only
+      // name available for its own self-scope row.
+      const handle = (await handleForAccountId(db, account.userId)) ?? login;
       const memberships = await fetchOrgMemberships(account.accessToken);
       await setAccountScopes(db, account.userId, [
-        { scope: login, role: "self" as const },
+        { scope: handle, role: "self" as const },
         ...memberships.map((m) => ({ scope: m.login, role: m.role })),
       ]);
     }

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
 import { sql } from "drizzle-orm";
-import { backfillGemOwners, backfillBindingAnchors, ensureSchema, makeTestDb } from "@agentgem/aggregator";
+import { backfillGemOwners, backfillBindingAnchors, backfillUserHandles, ensureSchema, makeTestDb } from "@agentgem/aggregator";
 
 const acct = (login: string | null, pid: string) =>
   sql`insert into accounts (id, provider, provider_account_id, login)
@@ -122,5 +122,64 @@ describe("backfillBindingAnchors", () => {
     const a = await anchorFor(db, "42");
     expect(a).toBeTruthy();
     expect(await ownerOf(db, "@octocat/kit")).toBe(a.id);
+  });
+});
+
+const mkGhUser = async (
+  db: Awaited<ReturnType<typeof makeTestDb>>, login: string, email: string, id: string = crypto.randomUUID(),
+): Promise<string> => {
+  await db.execute(sql`insert into "user" (id, email, email_verified, login) values (${id}, ${email}, false, ${login})`);
+  return id;
+};
+const handleOf = async (db: Awaited<ReturnType<typeof makeTestDb>>, id: string) =>
+  ((await db.execute(sql`select handle from "user" where id = ${id}`)).rows as { handle: string | null }[])[0].handle;
+
+describe("backfillUserHandles", () => {
+  it("claims handle = login for an unambiguous login and reports it in `claimed`", async () => {
+    const db = await makeTestDb();
+    const id = await mkGhUser(db, "octocat", "octo@e.com");
+    expect(await backfillUserHandles(db)).toEqual({ claimed: 1, skipped: 0 });
+    expect(await handleOf(db, id)).toBe("octocat");
+  });
+
+  it("skips BOTH rows when two \"user\" rows share a login case-insensitively", async () => {
+    const db = await makeTestDb();
+    const a = await mkGhUser(db, "dup", "a@e.com");
+    const b = await mkGhUser(db, "DUP", "b@e.com");
+    expect(await backfillUserHandles(db)).toEqual({ claimed: 0, skipped: 2 });
+    expect(await handleOf(db, a)).toBeNull();
+    expect(await handleOf(db, b)).toBeNull();
+  });
+
+  it("skips a user who already has a handle, and never overwrites it", async () => {
+    const db = await makeTestDb();
+    const id = await mkGhUser(db, "renamed-login", "c@e.com");
+    await db.execute(sql`update "user" set handle = 'kept' where id = ${id}`);
+    expect(await backfillUserHandles(db)).toEqual({ claimed: 0, skipped: 0 });
+    expect(await handleOf(db, id)).toBe("kept");
+  });
+
+  it("skips a login already taken as another user's handle", async () => {
+    const db = await makeTestDb();
+    const holder = await mkGhUser(db, "someone-else", "d@e.com");
+    await db.execute(sql`update "user" set handle = 'claimee' where id = ${holder}`);
+    const id = await mkGhUser(db, "claimee", "e@e.com"); // login collides with an existing handle
+    expect(await backfillUserHandles(db)).toEqual({ claimed: 0, skipped: 1 });
+    expect(await handleOf(db, id)).toBeNull();
+  });
+
+  it("skips a reserved name (a known GitHub org), defensively", async () => {
+    const db = await makeTestDb();
+    const id = await mkGhUser(db, "ninemindai", "g@e.com");
+    await db.execute(sql`insert into org_members (org_scope, gh_login, role) values ('ninemindai', 'someone', 'member')`);
+    expect(await backfillUserHandles(db)).toEqual({ claimed: 0, skipped: 1 });
+    expect(await handleOf(db, id)).toBeNull();
+  });
+
+  it("is idempotent: a second run claims 0", async () => {
+    const db = await makeTestDb();
+    await mkGhUser(db, "once", "f@e.com");
+    expect(await backfillUserHandles(db)).toEqual({ claimed: 1, skipped: 0 });
+    expect(await backfillUserHandles(db)).toEqual({ claimed: 0, skipped: 0 });
   });
 });
