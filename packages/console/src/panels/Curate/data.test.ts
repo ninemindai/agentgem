@@ -35,6 +35,22 @@ describe("groupInventory", () => {
   });
 });
 
+describe("groupInventory: deferred bodies", () => {
+  it("carries the artifact id and does not fabricate a detail from a missing body", () => {
+    const groups = groupInventory({
+      skills: [{ name: "review", id: "workspace/skills/standalone/review", source: "standalone" }],
+      mcpServers: [{ name: "gh", config: { cmd: "gh" } }],
+      instructions: [], hooks: [], subagents: [],
+    } as never);
+    const skill = groups.find((g) => g.key === "skills")!.items[0];
+    expect(skill.id).toBe("workspace/skills/standalone/review");
+    expect(skill.detail).toBeUndefined();              // deferred — nothing inline yet
+    const mcp = groups.find((g) => g.key === "mcpServers")!.items[0];
+    expect(mcp.detail).toContain("gh");                // config still renders inline
+    expect(mcp.id).toBeUndefined();
+  });
+});
+
 describe("mergeUsage", () => {
   it("attaches invocations + lastUsedMs by name within the category type, default 0/null", () => {
     const groups = mergeUsage(groupInventory(inv as any), usage as any);
