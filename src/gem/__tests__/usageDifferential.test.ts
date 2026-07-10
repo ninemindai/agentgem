@@ -113,13 +113,32 @@ describe("installing a skill reparses nothing", () => {
 // Opt-in: runs the differential over the REAL ~/.claude/projects corpus. Skipped by default (no
 // env var) so CI never depends on the local machine's transcript history. Run manually once
 // before merge: AGENTGEM_DIFFERENTIAL_REAL=1 pnpm exec vitest run dist/gem/__tests__/usageDifferential.test.js
+//
+// lastUsedMs is EXCLUDED from this comparison (unlike the fixture differential above, which
+// asserts full equality including lastUsedMs). computeGlobalUsage takes ~20s to scan a real
+// multi-GB corpus, so the two paths run ~20s apart; if an agentgem session is live during that
+// window, its own transcript file's mtime advances between the two reads. lastUsedMs is derived
+// from that mtime (old path: safeMtime(path); new path: transcript_file.mtime_ms re-stat'd at
+// sync time), so every artifact whose MAX(lastUsedMs) comes from the live file shifts by ~the
+// scan duration between runs -- a live-corpus race, not a logic bug. type/name/invocations/
+// sessionsUsedIn are unaffected and still compared exactly. Timestamp resolution itself is not
+// left uncovered: the fixture differential's static files don't move, so it still asserts full
+// lastUsedMs equality.
+const strip = (a: { type: string; name: string; root: string | null; invocations: number; sessionsUsedIn: number }) => ({
+  type: a.type,
+  name: a.name,
+  root: a.root,
+  invocations: a.invocations,
+  sessionsUsedIn: a.sessionsUsedIn,
+});
+
 describe.skipIf(!process.env.AGENTGEM_DIFFERENTIAL_REAL)("differential: real corpus (opt-in)", () => {
-  it("produces identical artifacts over ~/.claude/projects", async () => {
+  it("produces identical artifacts over ~/.claude/projects (excluding lastUsedMs)", async () => {
     const dirs = resolveDirs(undefined);
     const paths = allClaudeTranscripts(dirs.claudeDir);
     const want = computeGlobalUsage(dirs, paths).artifacts;
     const got = (await getGlobalUsageIndexed(dirs, paths)).artifacts;
-    expect(sorted(got)).toEqual(sorted(want));
+    expect(sorted(got).map(strip)).toEqual(sorted(want).map(strip));
     expect(want.length).toBeGreaterThan(0); // guard: an empty corpus would make this vacuous
   }, 120_000); // a real ~/.claude/projects corpus can run to thousands of transcripts
 });
