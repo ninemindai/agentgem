@@ -19,6 +19,9 @@ import { sweepQuarantine, sweepAdoptionQuarantine } from "@agentgem/aggregator";
 import { issueKey, revokeKey, listKeys } from "@agentgem/aggregator";
 import { recordCatalogShare, upsertGemArchive, getGemArchive, catalogGemExists, latestGemVersion } from "@agentgem/aggregator";
 import { recordGamePlay, gamePlayCounts } from "@agentgem/aggregator";
+import { resolveSignedAccount, catalogSigningPayload } from "@agentgem/aggregator";
+import { staticGate } from "@agentgem/play";
+import { genShareId } from "./share/shareStore.js";
 import { importGem } from "@agentgem/distribute";
 
 // Loose body schema — the real gate is the core's verifyAttestation (ed25519 + consistency).
@@ -138,6 +141,8 @@ const CatalogManifestSchema = z.object({
 const CatalogBody = z.object({ manifest: CatalogManifestSchema, pubkey: z.string(), signedAt: z.number(), signature: z.string() });
 const CatalogResult = z.object({ shared: z.boolean(), publishedBy: z.string().optional(), gemKey: z.string().optional(), version: z.string().optional(), rejected: z.string().optional() });
 const PublishGemBody = z.object({ manifest: CatalogManifestSchema, archiveBase64: z.string(), pubkey: z.string(), signedAt: z.number(), signature: z.string() });
+const ShareArchiveBody = z.object({ manifest: CatalogManifestSchema, archiveBase64: z.string(), pubkey: z.string(), signedAt: z.number(), signature: z.string() });
+const ShareArchiveResult = z.object({ key: z.string(), url: z.string() });
 const GemArchiveQuery = z.object({ key: z.string(), version: z.string() });
 const GemArchiveResult = z.object({ archiveBase64: z.string() });
 const GameHtmlResult = z.object({ html: z.string() });
@@ -297,6 +302,35 @@ export class AggregatorController {
     if (!r.shared) return { shared: false, rejected: r.rejected };
     await upsertGemArchive(this.db, { gemKey: r.gemKey, version: r.version, bytes: new Uint8Array(bytes), digest, createdAtMs: Date.now() });
     return { shared: true, publishedBy: r.publishedBy, gemKey: r.gemKey, version: r.version };
+  }
+
+  // Unlisted share: upload a miniapp's archive and get a copyable /games/<shareId> URL, owned by the
+  // uploader's accounts.id so only they can revoke it. Distinct from publish-gem: no catalog_gems row
+  // (never lists), a scope-less genShareId key, and the game HTML is re-gated server-side because we
+  // serve it from our own origin. The sealed null-origin iframe is the real boundary; this gate is
+  // defense-in-depth. Console-originated (origin-less), so originGuard's fall-through allows it.
+  @post("/share-archive", { body: ShareArchiveBody, response: ShareArchiveResult })
+  async shareArchive(input: { body: z.infer<typeof ShareArchiveBody> }): Promise<z.infer<typeof ShareArchiveResult>> {
+    const b = input.body;
+    const who = await resolveSignedAccount(this.db, {
+      pubkey: b.pubkey, payload: catalogSigningPayload(b.manifest, b.pubkey, b.signedAt), signedAt: b.signedAt, signature: b.signature,
+    });
+    if (!who.ok) throw new AgentError("not connected", { status: who.rejected === "not-connected" ? 401 : 400, code: who.rejected, retryable: false });
+
+    const bytes = Buffer.from(b.archiveBase64, "base64");
+    let digest: string, gem;
+    try { const imp = importGem(bytes); digest = imp.meta.gemDigest; gem = imp.gem; }
+    catch { throw new AgentError("invalid gem archive", { status: 400, code: "invalid_archive", retryable: false }); }
+    if (b.manifest.gemDigest && b.manifest.gemDigest !== digest) throw new AgentError("digest mismatch", { status: 400, code: "digest_mismatch", retryable: false });
+
+    const game = gem.artifacts.find((x) => x.type === "game") as { html?: unknown } | undefined;
+    if (!game || typeof game.html !== "string") throw new AgentError("this gem has no game to share", { status: 400, code: "not_a_game", retryable: false });
+    const gate = staticGate(game.html);
+    if (!gate.ok) throw new AgentError(`static gate: ${gate.failures.join("; ")}`, { status: 400, code: "gate_failed", retryable: false });
+
+    const key = genShareId();                                  // slash-less => can never be a published key
+    await upsertGemArchive(this.db, { gemKey: key, version: "1", bytes: new Uint8Array(bytes), digest, createdAtMs: Date.now(), ownerAccountId: who.accountId });
+    return { key, url: `https://app.agentgem.ai/games/${key}` };
   }
 
   // Public: stream a published gem's archive bytes (base64) for zero-config install. Serves only

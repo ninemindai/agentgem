@@ -40,3 +40,14 @@ export function signedPublishBody(gem: Gem, s: ReturnType<typeof signer>, opts: 
   const signature = s.sign(catalogSigningPayload(manifest, s.pubkey, opts.signedAt));
   return { manifest, archiveBase64: bytes.toString("base64"), pubkey: s.pubkey, signedAt: opts.signedAt, signature, bytes, gemDigest: meta.gemDigest };
 }
+
+// A one-artifact game gem, for the share-archive (miniapp) path.
+export function gameGem(): import("@agentgem/model").Gem {
+  return {
+    name: "tetris", createdFrom: "/tmp/.claude", checks: [], requiredSecrets: [],
+    artifacts: [{
+      type: "game", name: "tetris", title: "Tetris", genre: "project-fun",
+      html: "<!doctype html><title>t</title><canvas></canvas>", createdFrom: { kind: "blank", title: "Tetris" }, engineVersion: "1",
+    }],
+  } as import("@agentgem/model").Gem;
+}
