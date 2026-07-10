@@ -8,6 +8,11 @@ describe("Publish", () => {
     render(<Publish api={{} as never} me={null} base="" />);
     expect(screen.getByText(/sign in to publish/i)).toBeTruthy();
   });
+  it("offers both GitHub and Google sign-in when signed out", () => {
+    render(<Publish api={{} as never} me={null} base="" />);
+    expect(screen.getByText(/sign in with github/i)).toBeTruthy();
+    expect(screen.getByText(/sign in with google/i)).toBeTruthy();
+  });
   it("shows the publish form (scope defaults to the handle) when signed in", () => {
     render(<Publish api={{} as never} me={{ id: "1", name: "Alice", handle: "alice", avatarUrl: null, orgs: [] }} base="" />);
     expect((screen.getByLabelText(/scope/i) as HTMLInputElement).value).toBe("alice");

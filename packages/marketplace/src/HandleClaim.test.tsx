@@ -19,6 +19,16 @@ describe("HandleClaim", () => {
     expect(JSON.parse(body!)).toEqual({ handle: "ray" });
   });
 
+  it("trims a trailing space before posting", async () => {
+    let body: string | undefined;
+    vi.stubGlobal("fetch", vi.fn(async (_u: string, o?: RequestInit) => { body = o?.body as string; return res({ handle: "ray" }); }));
+    render(<HandleClaim base="https://api.x" onClaimed={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("handle"), { target: { value: "ray " } });
+    fireEvent.click(screen.getByRole("button", { name: /claim/i }));
+    await waitFor(() => expect(body).toBeDefined());
+    expect(JSON.parse(body!)).toEqual({ handle: "ray" });
+  });
+
   it("shows a charset message on 400 and does not call onClaimed", async () => {
     const onClaimed = vi.fn();
     vi.stubGlobal("fetch", vi.fn(async () => res({ error: "bad" }, false, 400)));
