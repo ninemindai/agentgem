@@ -45,10 +45,14 @@ const banner = {
     "const __dirname = __d(__filename);",
 };
 
-// The published entrypoints: the three bins + the server bootstrap (`start` script).
-// Every `bin` in package.json must be listed here, or it ships with unresolvable
-// bare `@agentgem/*` imports and dies at startup on a consumer's install.
-const entries = ["cli.js", "index.js", "distill/mcpServer.js", "goldmine/mcpServer.js"];
+// The published entrypoints: the three bins + the server bootstrap (`start` script)
+// + the scorecard warm worker. Every `bin` in package.json must be listed here, or it
+// ships with unresolvable bare `@agentgem/*` imports and dies at startup on a
+// consumer's install. `warm/scorecardWorker.js` is spawned by `new Worker(path)`, so
+// it is an entrypoint the bundler cannot see from any import graph — it needs the same
+// treatment or the worker thread dies on a consumer's install (the parent then logs and
+// falls back to warming inline, i.e. silently slow).
+const entries = ["cli.js", "index.js", "distill/mcpServer.js", "goldmine/mcpServer.js", "warm/scorecardWorker.js"];
 
 // `dist/index.js` self-runs the server behind `isMain(import.meta)` so that
 // `node dist/index.js` (the `start` script) boots it. That guard compares
