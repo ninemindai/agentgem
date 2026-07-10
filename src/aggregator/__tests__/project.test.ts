@@ -41,4 +41,16 @@ describe("projectAttestation (drizzle)", () => {
     const p = (await db.select().from(producers))[0];
     expect(p.attestCount).toBe(1);
   });
+
+  it("rolls back every table write when the attestation insert fails (no partial write)", async () => {
+    const db = await makeTestDb();
+    await projectAttestation(db, att("ed25519:p1", "sha256:dup"));
+    // Re-projecting the SAME gem digest violates attestations.gem_digest UNIQUE, mid-body — AFTER the
+    // producers upsert has bumped attest_count. Without a transaction that bump commits, leaving the
+    // producer count inconsistent with a non-existent attestation.
+    await expect(projectAttestation(db, att("ed25519:p1", "sha256:dup"))).rejects.toThrow();
+    const p = (await db.select().from(producers))[0];
+    expect(p.attestCount).toBe(1);                              // not bumped to 2 by the failed call
+    expect(await db.select().from(attestations)).toHaveLength(1); // still exactly one attestation
+  });
 });

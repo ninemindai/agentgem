@@ -24,23 +24,29 @@ function publicNodes(att: UsageAttestation): { nodes: Node[]; privateCount: numb
 export async function projectAttestation(db: AppDb, att: UsageAttestation): Promise<{ id: string; publicIngredients: number; privateCount: number }> {
   const { nodes, privateCount } = publicNodes(att);
   const id = randomUUID();
-  await db.insert(producers).values({ pubkey: att.producer.publicKey, attestCount: 1 })
-    .onConflictDoUpdate({ target: producers.pubkey, set: { attestCount: sql`${producers.attestCount} + 1` } });
-  await db.insert(attestations).values({
-    id, gemName: att.gem.name, gemDigest: att.gem.digest, producerPubkey: att.producer.publicKey,
-    harnessId: att.source.harness.id, models: att.source.models, scanSessions: att.source.scan.sessions,
-    scanSpanDays: att.source.scan.spanDays, signalDigest: att.evidence.signalDigest, privateCount,
+  // All five table mutations run in one transaction so the caller gets either a fully-committed record
+  // or a clean error. Without it, a failure after the attestations row (e.g. mid usage_edges) left an
+  // orphaned attestation — and a bumped producer attest_count — that downstream aggregates counted, and
+  // that could not be retried because attestations.gem_digest is UNIQUE.
+  await db.transaction(async (tx) => {
+    await tx.insert(producers).values({ pubkey: att.producer.publicKey, attestCount: 1 })
+      .onConflictDoUpdate({ target: producers.pubkey, set: { attestCount: sql`${producers.attestCount} + 1` } });
+    await tx.insert(attestations).values({
+      id, gemName: att.gem.name, gemDigest: att.gem.digest, producerPubkey: att.producer.publicKey,
+      harnessId: att.source.harness.id, models: att.source.models, scanSessions: att.source.scan.sessions,
+      scanSpanDays: att.source.scan.spanDays, signalDigest: att.evidence.signalDigest, privateCount,
+    });
+    for (const n of nodes) {
+      await tx.insert(ingredients).values({ id: n.id, kind: n.kind, idKind: n.idKind })
+        .onConflictDoUpdate({ target: ingredients.id, set: { lastSeen: sql`now()` } });
+      await tx.insert(usageEdges).values({ attestationId: id, ingredientId: n.id, invocations: n.invocations, sessions: n.sessions })
+        .onConflictDoNothing();
+    }
+    // v2 attestations carry per-model outcome counts → the cross-model benchmark.
+    for (const h of att.source.outcomeHistogram ?? []) {
+      await tx.insert(modelOutcomes).values({ attestationId: id, model: h.model, mostly: h.mostly, partially: h.partially, notAchieved: h.not })
+        .onConflictDoNothing();
+    }
   });
-  for (const n of nodes) {
-    await db.insert(ingredients).values({ id: n.id, kind: n.kind, idKind: n.idKind })
-      .onConflictDoUpdate({ target: ingredients.id, set: { lastSeen: sql`now()` } });
-    await db.insert(usageEdges).values({ attestationId: id, ingredientId: n.id, invocations: n.invocations, sessions: n.sessions })
-      .onConflictDoNothing();
-  }
-  // v2 attestations carry per-model outcome counts → the cross-model benchmark.
-  for (const h of att.source.outcomeHistogram ?? []) {
-    await db.insert(modelOutcomes).values({ attestationId: id, model: h.model, mostly: h.mostly, partially: h.partially, notAchieved: h.not })
-      .onConflictDoNothing();
-  }
   return { id, publicIngredients: nodes.length, privateCount };
 }
