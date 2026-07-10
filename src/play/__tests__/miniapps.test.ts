@@ -1,9 +1,9 @@
 // src/play/__tests__/miniapps.test.ts
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { saveMiniapp, listMiniapps, miniappDir } from "@agentgem/play";
+import { saveMiniapp, deleteMiniapp, listMiniapps, miniappDir } from "@agentgem/play";
 import { workspaceDir } from "@agentgem/base";
 import { readGemArchive, readArchiveDir } from "@agentgem/archive";
 
@@ -39,5 +39,34 @@ describe("miniapps store", () => {
   it("refuses to save a bundle that fails the gate", async () => {
     await expect(saveMiniapp({ name: "bad", html: `<script>fetch("http://x/")</script>`, meta })).rejects.toThrow(/gate|sealed|network/i);
     expect(existsSync(miniappDir("bad"))).toBe(false);
+  });
+
+  it("deleteMiniapp removes the registry dir, commits, and drops the play-authored gem", async () => {
+    await saveMiniapp({ name: "doomed", html: sealed, meta });
+    expect(existsSync(workspaceDir("doomed"))).toBe(true);
+
+    const res = await deleteMiniapp("doomed");
+    expect(res.commit).toMatch(/^[0-9a-f]{7,40}$/);   // the removal is a real commit, so git can restore it
+    expect(existsSync(miniappDir("doomed"))).toBe(false);
+    expect(existsSync(workspaceDir("doomed"))).toBe(false);
+    expect(listMiniapps().map((m) => m.name)).not.toContain("doomed");
+  });
+
+  // workspaceDir is a shared name-keyed namespace: a gem authored elsewhere can occupy the same path.
+  // Deleting a miniapp must never take that unrelated, un-versioned gem with it.
+  it("deleteMiniapp leaves a same-named gem that play did NOT author alone", async () => {
+    await saveMiniapp({ name: "shared", html: sealed, meta });
+    const manifestPath = join(workspaceDir("shared"), "gem.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as { createdFrom: string };
+    writeFileSync(manifestPath, JSON.stringify({ ...manifest, createdFrom: "observe" }, null, 2));
+
+    await deleteMiniapp("shared");
+    expect(existsSync(miniappDir("shared"))).toBe(false);  // the miniapp is gone
+    expect(existsSync(manifestPath)).toBe(true);           // the foreign gem survives
+  });
+
+  it("deleteMiniapp rejects an unknown name and a traversal attempt", async () => {
+    await expect(deleteMiniapp("nope")).rejects.toThrow(/not found/i);
+    await expect(deleteMiniapp("../escape")).rejects.toThrow();
   });
 });
