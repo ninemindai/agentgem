@@ -29,8 +29,20 @@ describe("mcpUiHost — handshake + advertisement", () => {
     host.handleMessage(msg(target, { method: "ui/initialize", id: 7 }));
     const reply = posted(target).mock.calls[0][0];
     expect(reply.id).toBe(7);
-    expect(reply.result.tools.map((t: { name: string }) => t.name).sort()).toEqual(["agentgem_get_session_data", "agentgem_invoke_agent"]);
+    expect(reply.result._meta["ai.agentgem/host"].tools.map((t: { name: string }) => t.name).sort()).toEqual(["agentgem_get_session_data", "agentgem_invoke_agent"]);
     expect(reply.result).toHaveProperty("protocolVersion");
+  });
+
+  it("ui/initialize reply is spec-shaped (no top-level tools, tools under _meta)", () => {
+    const posted: any[] = [];
+    const target = { postMessage: (m: any) => posted.push(m) } as any;
+    const host = createUiHost({ apiBase: "", name: "g", needs: ["session-data"], interactive: true, target, requestConsent: async () => true });
+    host.handleMessage({ source: target, data: { jsonrpc: "2.0", id: 1, method: "ui/initialize" } } as any);
+    const r = posted[0].result;
+    expect(r).toHaveProperty("hostInfo");
+    expect(r).toHaveProperty("hostCapabilities");
+    expect(r).not.toHaveProperty("tools");
+    expect(r._meta["ai.agentgem/host"].tools.length).toBeGreaterThan(0);
   });
 
   it("ignores a message whose source is not the target", async () => {
@@ -94,7 +106,10 @@ describe("mcpUiHost — streaming + generation + dispose", () => {
     await tick();
     emit({ type: "event", index: 0 });
     expect(posted(target)).toHaveBeenCalledWith(
-      expect.objectContaining({ method: "ui/notifications/tool-result", params: { toolName: "agentgem_subscribe_sessions", chunk: { type: "event", index: 0 } } }), "*");
+      expect.objectContaining({
+        method: "ui/notifications/tool-result",
+        params: { content: [], structuredContent: { type: "event", index: 0 }, _meta: { "ai.agentgem/stream": { toolName: "agentgem_subscribe_sessions" } } },
+      }), "*");
   });
 
   it("invoke-agent opens a neutral chat (no miniapp field) and streams deltas back", async () => {
@@ -113,7 +128,10 @@ describe("mcpUiHost — streaming + generation + dispose", () => {
     expect(studioStream.openStudioStream).toHaveBeenCalledWith("", "c1", "hello agent", expect.anything());
     onDelta!("hi there");
     expect(posted(target)).toHaveBeenCalledWith(
-      expect.objectContaining({ method: "ui/notifications/tool-result", params: { toolName: "agentgem_invoke_agent", chunk: { kind: "delta", text: "hi there" } } }), "*");
+      expect.objectContaining({
+        method: "ui/notifications/tool-result",
+        params: { content: [], structuredContent: { kind: "delta", text: "hi there" }, _meta: { "ai.agentgem/stream": { toolName: "agentgem_invoke_agent" } } },
+      }), "*");
     vi.unstubAllGlobals();
   });
 
@@ -188,7 +206,10 @@ describe("mcpUiHost — feedSessionData (host-initiated 'Replay yours' rebind)",
     await tick();
     expect(spy).toHaveBeenCalledWith(expect.anything(), { query: { name: "g1", sessionId: "s1", agent: "codex" } });
     expect(posted(target)).toHaveBeenCalledWith(
-      expect.objectContaining({ method: "ui/notifications/tool-result", params: { toolName: "agentgem_get_session_data", chunk: { meta: { picked: true }, timeline: [] } } }), "*");
+      expect.objectContaining({
+        method: "ui/notifications/tool-result",
+        params: { content: [], structuredContent: { meta: { picked: true }, timeline: [] }, _meta: { "ai.agentgem/stream": { toolName: "agentgem_get_session_data" } } },
+      }), "*");
   });
 
   it("suppresses a second concurrent feedSessionData call", async () => {
@@ -213,7 +234,10 @@ describe("mcpUiHost — feedSessionData (host-initiated 'Replay yours' rebind)",
     resolve({ meta: {}, timeline: [] });
     await tick();
     expect(posted(target)).not.toHaveBeenCalledWith(
-      expect.objectContaining({ method: "ui/notifications/tool-result", params: expect.objectContaining({ toolName: "agentgem_get_session_data" }) }), "*");
+      expect.objectContaining({
+        method: "ui/notifications/tool-result",
+        params: expect.objectContaining({ _meta: { "ai.agentgem/stream": { toolName: "agentgem_get_session_data" } } }),
+      }), "*");
   });
 
   it("bumpGeneration resets the feeding guard, allowing a new feedSessionData after pending", async () => {
@@ -234,6 +258,9 @@ describe("mcpUiHost — feedSessionData (host-initiated 'Replay yours' rebind)",
     await tick();
     // Should have posted only the second (new) result
     expect(posted(target)).toHaveBeenCalledWith(
-      expect.objectContaining({ method: "ui/notifications/tool-result", params: { toolName: "agentgem_get_session_data", chunk: { meta: { picked: true }, timeline: [] } } }), "*");
+      expect.objectContaining({
+        method: "ui/notifications/tool-result",
+        params: { content: [], structuredContent: { meta: { picked: true }, timeline: [] }, _meta: { "ai.agentgem/stream": { toolName: "agentgem_get_session_data" } } },
+      }), "*");
   });
 });

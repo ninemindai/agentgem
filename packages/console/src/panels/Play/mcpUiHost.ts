@@ -25,6 +25,7 @@ export interface UiHostDeps {
   interactive: boolean;
   target: Window;                                    // the iframe.contentWindow: post target + e.source boundary
   requestConsent: (cap: string) => Promise<boolean>; // gated caps only; AUTO caps bypass. Runner owns the modal.
+  hostContext?: () => Record<string, unknown>;       // PR 3 wires the Runner's live theme/size; PR 2: absent -> {}
 }
 
 export interface UiHost {
@@ -50,7 +51,17 @@ export function createUiHost(deps: UiHostDeps): UiHost {
   const stale = (gen: number) => gen !== generation;
   const reply = (id: number | undefined, result: unknown) => { if (id != null) post({ jsonrpc: "2.0", id, result }); };
   const replyError = (id: number | undefined, code: number, message: string) => { if (id != null) post({ jsonrpc: "2.0", id, error: { code, message } }); };
-  const notify = (toolName: string, chunk: unknown) => post({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { toolName, chunk } });
+  // Spec: a tool-result notification's params IS a CallToolResult. Stream identity + sequencing ride the
+  // spec's sanctioned _meta passthrough, so a conformant external host relays it and a conformant client
+  // ignores it. Our shim (mcpAppClient.ts) unwraps it back to {toolName, chunk}.
+  const notify = (toolName: string, chunk: unknown) => post({
+    jsonrpc: "2.0", method: "ui/notifications/tool-result",
+    params: {
+      content: [],
+      structuredContent: chunk,
+      _meta: { "ai.agentgem/stream": { toolName } },
+    },
+  });
   const register = (gen: number, handle: StreamHandle) => {
     if (stale(gen)) { try { handle.close(); } catch { /* ignore */ } } else handles.add(handle);
   };
@@ -134,7 +145,13 @@ export function createUiHost(deps: UiHostDeps): UiHost {
     if (!d || d.jsonrpc !== "2.0") return;
     if (d.method === "ui/initialize") {
       const tools = HOST_TOOLS.filter((t) => deps.needs.includes(TOOL_CAP[t.name])); // advertise only declared caps
-      reply(d.id, { protocolVersion: PROTOCOL_VERSION, tools, hostContext: {} });
+      reply(d.id, {
+        protocolVersion: PROTOCOL_VERSION,
+        hostInfo: { name: "agentgem-console", version: "2" },
+        hostCapabilities: { serverTools: {}, openLinks: {}, sandbox: { csp: { connectDomains: [], resourceDomains: [], frameDomains: [], baseUriDomains: [] } } },
+        hostContext: deps.hostContext ? deps.hostContext() : {}, // PR 3 supplies hostContext(); PR 2 leaves {} via optional dep
+        _meta: { "ai.agentgem/host": { tools } },
+      });
       return;
     }
     if (d.method === "ui/notifications/initialized") return; // handshake ack — nothing to do
