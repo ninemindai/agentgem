@@ -333,6 +333,26 @@ risky migration.
 
 **Re-keying orgs away from GitHub.** `org_members.gh_login` stays the GitHub App's roster.
 
+**Handle/org-namespace squatting.** Handles and GitHub org names share one namespace
+(`isReserved` in `handles.ts` blocks a claim matching a row already in `org_members` or
+`org_settings`), so a user can still claim the handle of a GitHub org that has not yet
+onboarded — `isReserved` has nothing to check until the org's first installation or settings
+write exists. Post-onboarding, this grants **no authorization** over the org: `resolveOrgAccess`
+resolves an active installation first, so the App-synced roster decides membership alone and
+the squatted `role='self'` row is never consulted (final-review Finding 1); publishing is
+already gated by `appOrgRole`, not by `self`, whenever an installation is active. What remains
+is ordinary username-registry squatting: `/@<org>` resolves to the squatter's profile, not the
+org, and any gems the squatter published under that scope before the org onboarded still render
+on the org's catalog page. Closing that means seizing or re-assigning a name already in active
+use — a product decision with support consequences (who gets notified, what happens to the
+squatter's gems), not a code fix. Out of scope here.
+
+This gap is newly reachable, not newly present: before the re-key, `self` was `who.login ===
+scope`, and GitHub's user and org namespaces are already shared upstream, so a login could never
+equal an org name — the collision was structurally impossible. Severing self-scope from the
+login (see "Self-scope checks look up the row, they do not compare strings" above) dropped that
+inherited guarantee; it was never a guarantee this design chose to provide.
+
 ## Rollout
 
 1. Merge and deploy #255, then #256. This spec presumes better-auth is authoritative and

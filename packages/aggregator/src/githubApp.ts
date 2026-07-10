@@ -4,9 +4,9 @@
 //
 // Store + gate for the GitHub App integration: installations (one row per installed org), the
 // member lists the webhook/reconcile path syncs from GitHub, and resolveOrgAccess — the combined
-// org-access check (self → App-authoritative membership when an active installation exists,
-// else captured account_scopes). org_scope/gh_login are lowercased at write time so the gate is
-// case-insensitive without lower() on every read.
+// org-access check (App-authoritative membership when an active installation exists, decides
+// alone → else self → else captured account_scopes). org_scope/gh_login are lowercased at write
+// time so the gate is case-insensitive without lower() on every read.
 import { and, eq, sql } from "drizzle-orm";
 import { appInstallations, orgMembers, type AppDb } from "./schema.js";
 import { accountScopeStatus } from "./webAuth.js";
@@ -89,23 +89,40 @@ export type OrgAccess = { status: "ok" | "stale" | "none"; role: "self" | "admin
 
 /**
  * Combined org-access check, in precedence order:
- *   1. self — the caller HOLDS the role='self' account_scopes row for scope (their claimed
- *      handle; never stale), matched case-insensitively (GitHub logins/handles are
- *      case-insensitive). Never a login-string match: claiming a name is not the grant.
- *   2. App-authoritative — when the scope has an ACTIVE (non-suspended) installation,
+ *   1. App-authoritative — when the scope has an ACTIVE (non-suspended) installation,
  *      webhook-synced App membership decides ALONE: in org_members → "ok", otherwise "none".
- *      Captured account_scopes are NOT consulted in this case. Rationale: on GitHub, removing a
- *      member from an org revokes them within seconds via the webhook sync; a captured sign-in
- *      scope must not keep granting access for up to its TTL afterward — that would defeat
- *      enterprise offboarding for anyone who happened to sign in recently.
+ *      Neither captured account_scopes NOR a role='self' row are consulted in this case (see
+ *      path 2). Rationale: on GitHub, removing a member from an org revokes them within seconds
+ *      via the webhook sync; a captured sign-in scope — or a handle someone claimed — must not
+ *      keep granting access afterward — that would defeat enterprise offboarding for anyone who
+ *      happened to sign in recently, or who squatted the org's name before it ever installed the
+ *      App.
+ *   2. self — the caller HOLDS the role='self' account_scopes row for scope (their claimed
+ *      handle; never stale), matched case-insensitively (GitHub logins/handles are
+ *      case-insensitive). Never a login-string match: claiming a name is not the grant. Reached
+ *      only when there is no active installation for scope: handles and GitHub org names share
+ *      one namespace, and `handles.ts`'s `isReserved` only blocks names an org has ALREADY
+ *      written a row for — an org that has not yet onboarded is a freely claimable handle. A
+ *      `self` row claimed before onboarding must not survive the org's later installation; once
+ *      path 1 has a roster to consult, it decides alone.
  *   3. Captured account_scopes — today's sign-in capture, with the freshness TTL. Reached only
  *      when there is no active installation (App not installed, or installation suspended — a
- *      suspended installation behaves as uninstalled for gating purposes).
- * Orgs without the App get exactly today's behavior (path 3).
+ *      suspended installation behaves as uninstalled for gating purposes) and no self row.
+ * Orgs without the App get exactly today's behavior (path 2 for a self-claimed handle, else 3).
  */
 export async function resolveOrgAccess(
   db: AppDb, who: { accountId: string; login: string }, scope: string, scopeTtlMs: number, now: number = Date.now(),
 ): Promise<OrgAccess> {
+  // App-authoritative check runs FIRST: an active installation's roster must decide alone, even
+  // over a role='self' row the caller holds for this exact scope. Without this ordering, a handle
+  // claimed for an org's name before it installed the App (see isReserved's gap in handles.ts)
+  // would keep granting `self` forever, surviving the org's onboarding — see the doc comment above.
+  const scopeLower = scope.toLowerCase();
+  const inst = await installationForScope(db, scopeLower);
+  if (inst && !inst.suspended) {
+    const role = await memberRole(db, who.login, scopeLower);
+    return role ? { status: "ok", role, via: "app" } : { status: "none", role: null, via: "app" };
+  }
   // Self is HOLDING the role='self' scope row (written by claimHandle, which runs the reserved-org
   // guard), never a login-string match. A string compare would grant `self` on "" === "" for two
   // login-less accounts, and would let a freely-claimed name become a grant. Case-insensitive
@@ -114,12 +131,6 @@ export async function resolveOrgAccess(
   // must still match the row the caller holds.
   if (await accountSelfScope(db, who.accountId, scope)) {
     return { status: "ok", role: "self", via: "self" };
-  }
-  const scopeLower = scope.toLowerCase();
-  const inst = await installationForScope(db, scopeLower);
-  if (inst && !inst.suspended) {
-    const role = await memberRole(db, who.login, scopeLower);
-    return role ? { status: "ok", role, via: "app" } : { status: "none", role: null, via: "app" };
   }
   const status = await accountScopeStatus(db, who.accountId, scope, scopeTtlMs, now);
   if (status === "none") return { status: "none", role: null, via: null };

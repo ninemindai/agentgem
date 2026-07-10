@@ -133,4 +133,44 @@ describe("resolveOrgAccess", () => {
     await setInstallationSuspended(db, 101, true); // suspended = no active installation
     expect(await resolveOrgAccess(db, { accountId: a.id, login: "alice" }, "acme", 60_000)).toEqual({ status: "ok", role: "member", via: "scopes" });
   });
+
+  // Final-review Finding 1: a role='self' row for an org's name (claimed before the org ever
+  // installed the App — isReserved in handles.ts only blocks names an org has ALREADY written a
+  // row for) must not preempt the App roster once an active installation exists. Before the
+  // re-key this was structurally impossible: self was `who.login === scope`, and GitHub's shared
+  // user/org namespace means a login can never equal an org name.
+  it("App-authoritative membership preempts a squatted self row: role='self' on 'acme' does not survive the org's later installation", async () => {
+    const db = await makeTestDb();
+    const a = await upsertAccount(db, { provider: "github", accountId: "1", login: "mallory" });
+    await setAccountScopes(db, a.id, [{ scope: "acme", role: "self" }]); // squatted the org's name before it onboarded
+    await upsertInstallation(db, inst()); // acme installs the App
+    // mallory is NOT in org_members — the App roster decides alone; the self row must not grant.
+    expect(await resolveOrgAccess(db, { accountId: a.id, login: "mallory" }, "acme", 60_000)).toEqual({ status: "none", role: null, via: "app" });
+  });
+
+  it("the same squatted self row still grants self when the org has no active installation", async () => {
+    const db = await makeTestDb();
+    const a = await upsertAccount(db, { provider: "github", accountId: "1", login: "mallory" });
+    await setAccountScopes(db, a.id, [{ scope: "acme", role: "self" }]);
+    expect(await resolveOrgAccess(db, { accountId: a.id, login: "mallory" }, "acme", 60_000)).toEqual({ status: "ok", role: "self", via: "self" });
+  });
+
+  it("a suspended installation behaves as uninstalled: the squatted self row is granted again", async () => {
+    const db = await makeTestDb();
+    const a = await upsertAccount(db, { provider: "github", accountId: "1", login: "mallory" });
+    await setAccountScopes(db, a.id, [{ scope: "acme", role: "self" }]);
+    await upsertInstallation(db, inst());
+    await setInstallationSuspended(db, 101, true);
+    expect(await resolveOrgAccess(db, { accountId: a.id, login: "mallory" }, "acme", 60_000)).toEqual({ status: "ok", role: "self", via: "self" });
+  });
+
+  it("a genuine org member with an active installation still gets their App role, unaffected by a squatter's self row", async () => {
+    const db = await makeTestDb();
+    const alice = await upsertAccount(db, { provider: "github", accountId: "1", login: "alice" });
+    const mallory = await upsertAccount(db, { provider: "github", accountId: "2", login: "mallory" });
+    await setAccountScopes(db, mallory.id, [{ scope: "acme", role: "self" }]);
+    await upsertInstallation(db, inst());
+    await replaceOrgMembers(db, "acme", [{ login: "alice", role: "admin" }]);
+    expect(await resolveOrgAccess(db, { accountId: alice.id, login: "alice" }, "acme", 60_000)).toEqual({ status: "ok", role: "admin", via: "app" });
+  });
 });
