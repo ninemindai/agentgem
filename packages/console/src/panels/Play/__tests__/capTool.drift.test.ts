@@ -3,8 +3,7 @@
 // barrel pulls node:os/node:path. So consent.ts keeps a browser-safe mirror of the canonical map. This
 // test runs in Node, where the import is free, and fails the moment the two drift apart.
 import { describe, it, expect } from "vitest";
-import { CAP_TOOL as CANONICAL } from "@agentgem/play";
-import { CAP_METHOD } from "@agentgem/model";
+import { CAP_TOOL as CANONICAL, CAP_METHOD } from "@agentgem/play";
 import { CAP_TOOL, TOOL_CAP, CONSENT_CAPS } from "../consent.js";
 
 describe("console CAP_TOOL mirrors @agentgem/model's canonical map", () => {
