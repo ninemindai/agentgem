@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { makeClient, playMiniappRoute, playSaveRoute, playPublishRoute, publishSetupRoute } from "../../api/routes.js";
 import { AgentSelector, type PlayAgent } from "./AgentSelector.js";
+import { CapabilityStrip } from "./CapabilityStrip.js";
 import { Runner } from "./Runner.js";
 import { openStudioStream } from "./studioStream.js";
 import { genre as genreOf, parseGateFailure, fixSealPrompt } from "./playMeta.js";
@@ -40,6 +41,7 @@ export function Studio({
   const [html, setHtml] = useState("");
   const [loadErr, setLoadErr] = useState<string | null>(null);   // preview fetch failed → say so, don't fake it
   const [meta, setMeta] = useState<{ title: string; genre: string; needs?: string[] } | null>(null);
+  const [pruned, setPruned] = useState<string[]>([]);
   const [status, setStatus] = useState("");
   const [gate, setGate] = useState<string[] | null>(null);       // seal failures → actionable banner
   const [share, setShare] = useState<{ gemUrl: string; cardUrl?: string } | null>(null);
@@ -166,11 +168,17 @@ export function Studio({
     setStatus("saving…"); setGate(null);
     try {
       const cur = await playMiniappRoute.call(makeClient(apiBase), { query: { name } });
-      await playSaveRoute.call(makeClient(apiBase), { body: { name, html: cur.html, meta: {
+      const res = await playSaveRoute.call(makeClient(apiBase), { body: { name, html: cur.html, meta: {
         title: cur.meta.title, genre: cur.meta.genre as "replay" | "skill-run" | "project-fun",
         createdFrom: cur.meta.createdFrom, engineVersion: cur.meta.engineVersion,
         ...(cur.meta.needs ? { needs: cur.meta.needs } : {}),
       } } });
+      // The save is the reconciliation. Drop what it pruned so the strip tells the truth and <Runner needs>
+      // renegotiates with the host on the correct set.
+      setPruned(res.prunedNeeds);
+      if (res.prunedNeeds.length) {
+        setMeta((m) => (m ? { ...m, needs: (m.needs ?? []).filter((n) => !(res.prunedNeeds as string[]).includes(n)) } : m));
+      }
       setStatus("saved ✓"); return true;
     } catch (e) {
       const failures = parseGateFailure((e as Error).message);
@@ -233,6 +241,8 @@ export function Studio({
         <button className="play-btn play-btn--ghost" onClick={pushGit} title="git push the miniapps registry to your git remote">Push to git</button>
         <button className="play-btn play-btn--primary" onClick={shareToExplore}>Share to app.agentgem.ai</button>
       </div>
+
+      <CapabilityStrip needs={meta?.needs} pruned={pruned} />
 
       {share && (
         <div className="play-banner play-banner--ok">

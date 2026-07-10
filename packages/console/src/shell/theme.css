@@ -484,6 +484,11 @@ body::before {
 .play-studio-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
 .play-studio-head .sp { flex: 1; }
 .play-studio-title { font: 600 19px var(--font-display); letter-spacing: -.01em; color: var(--ink); }
+.play-caps { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 10px; }
+.play-caps__row { display: flex; gap: 8px; align-items: baseline; font-size: 12px; }
+.play-caps__cap { font-family: var(--font-mono); opacity: 0.75; }
+.play-caps__cost { opacity: 0.65; }
+.play-caps__row--pruned { font-size: 12px; opacity: 0.7; font-style: italic; }
 /* stretch (not start): the transcript column takes its height from the plate column, so the log
    tracks whatever size Runner computes for the preview instead of guessing at a fixed height. */
 .play-grid-2 { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); gap: 18px; align-items: stretch; }
