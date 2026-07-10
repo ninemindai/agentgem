@@ -303,7 +303,8 @@ export function readGemArchive(files: FileTree): Gem {
         throw new Error(`game artifact '${e.name}' has no createdFrom in manifest`);
       }
       const genre = m.genre;
-      if (genre !== "replay" && genre !== "skill-run" && genre !== "project-fun") {
+      // keep in sync with GameGenre (packages/model)
+      if (genre !== "replay" && genre !== "skill-run" && genre !== "project-fun" && genre !== "session-heatmap") {
         throw new Error(`game artifact '${e.name}' has invalid genre '${String(genre)}'`);
       }
       const a: GameArtifact = {

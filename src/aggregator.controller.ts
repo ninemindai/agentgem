@@ -20,6 +20,7 @@ import { issueKey, revokeKey, listKeys } from "@agentgem/aggregator";
 import { recordCatalogShare, upsertGemArchive, getGemArchive, catalogGemExists, latestGemVersion } from "@agentgem/aggregator";
 import { recordGamePlay, gamePlayCounts } from "@agentgem/aggregator";
 import { importGem } from "@agentgem/distribute";
+import { GameGenreEnum } from "./schemas.js";
 
 // Loose body schema — the real gate is the core's verifyAttestation (ed25519 + consistency).
 const IngestBody = z.object({ producer: z.object({ publicKey: z.string() }).loose(), signature: z.string(), gem: z.object({ digest: z.string() }).loose() }).loose();
@@ -144,7 +145,7 @@ const GameHtmlResult = z.object({ html: z.string() });
 const GameMetaQuery = z.object({ key: z.string(), version: z.string().optional() });
 const GameMetaResult = z.object({
   title: z.string(),
-  genre: z.enum(["replay", "skill-run", "project-fun"]),
+  genre: GameGenreEnum,
   version: z.string(),
 });
 // visitorId is an opaque client-minted dedupe key, never an identity — capped, never validated.
