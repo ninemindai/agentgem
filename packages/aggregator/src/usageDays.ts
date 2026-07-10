@@ -1,11 +1,12 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 // Team usage: self-reported daily rollups (recordUsageDays) and the org-internal dashboard
-// aggregation (buildOrgUsage). Membership boundary = account_scopes, the same GitHub-org capture
-// the org catalog uses; the caller (src/usage/install.ts) enforces accountOwnsScope before reading.
+// aggregation (buildOrgUsage). Membership boundary = a captured `account_scopes` org row OR the
+// account whose `"user".handle` IS the scope (a personal dashboard) — see `inScope` below. The
+// caller (src/usage/install.ts memberGate → resolveOrgAccess) authorizes the read before this runs.
 import { and, eq, gte, sql } from "drizzle-orm";
 import type { AppDb } from "./schema.js";
-import { usageDays, usageDayModels, accounts, accountScopes, user } from "./schema.js";
+import { usageDays, usageDayModels, accounts, user } from "./schema.js";
 
 /** One UTC day of local agent usage in one repo-owner scope, as scanned from the machine's
  *  transcripts. `scope` = lowercased owner of the repo the sessions ran in ("" = unattributed) —
@@ -226,12 +227,34 @@ export async function buildOrgUsage(
     memberId = rows[0].id;
   }
 
-  // The ONE anti-leak boundary, parameterized by table: org membership (accountScopes join),
-  // scope attribution, range cutoff, and the optional member narrow. Both the day-rollup and
-  // slice tables carry identically-named columns, so a single builder keeps the two aggregation
-  // paths from ever drifting apart.
+  // "Does this account belong to `scope`?" — the membership half of the anti-leak boundary.
+  //
+  // TWO sources, because a scope names either an org or a person. An org membership is a captured
+  // `account_scopes` row; a PERSONAL scope is the account whose `"user".handle` is that name. This
+  // used to be a single `innerJoin(accountScopes)` that worked for the personal view only because a
+  // mirror `role='self'` row happened to exist — the same duplicated state that let a CLI `bind`
+  // hand a renamed user a grant on someone else's namespace. The handle is now read directly.
+  //
+  // EXISTS rather than a join: membership is a predicate, not a row to aggregate over, and a join
+  // would fan out the SUM()s once an account matched more than one way. Case-insensitive on both
+  // sides, matching accountOwnsScope. `role in ('admin','member')` ignores any legacy self row.
+  //
+  // NOTE: this decides which accounts' rows are *aggregated into* a scope's dashboard. It is NOT
+  // the authorization gate for reading that dashboard — that is resolveOrgAccess, called by
+  // src/usage/install.ts's memberGate before this function ever runs.
+  const inScope = (accountIdCol: typeof usageDays.accountId | typeof usageDayModels.accountId) => sql`(
+       exists (select 1 from account_scopes s
+                where s.account_id = ${accountIdCol} and lower(s.scope) = ${scopeLc}
+                  and s.role in ('admin','member'))
+    or exists (select 1 from "user" u
+                where u.id = ${accountIdCol}::text and u.handle is not null and lower(u.handle) = ${scopeLc}))`;
+
+  // The ONE anti-leak boundary, parameterized by table: scope membership (above), scope
+  // attribution, range cutoff, and the optional member narrow. Both the day-rollup and slice tables
+  // carry identically-named columns, so a single builder keeps the two aggregation paths from ever
+  // drifting apart.
   const boundary = (t: typeof usageDays | typeof usageDayModels) => and(
-    eq(accountScopes.scope, scope),
+    inScope(t.accountId),
     opts.includeUnattributed ? sql`${t.scope} in (${scopeLc}, '')` : eq(t.scope, scopeLc),
     cutoff === null ? undefined : gte(t.date, cutoff),
     memberId ? eq(t.accountId, memberId) : undefined,
@@ -253,7 +276,6 @@ export async function buildOrgUsage(
       tokens: sql<number>`sum(${usageDayModels.tokens})::bigint`,
     })
     .from(usageDayModels)
-    .innerJoin(accountScopes, eq(accountScopes.accountId, usageDayModels.accountId))
     .where(boundary(usageDayModels))
     .groupBy(usageDayModels.agent, usageDayModels.model);
 
@@ -279,7 +301,6 @@ export async function buildOrgUsage(
       })
         .from(usageDays)
         .innerJoin(accounts, eq(usageDays.accountId, accounts.id))
-        .innerJoin(accountScopes, eq(accountScopes.accountId, accounts.id))
         .leftJoin(user, sql`${user.id} = ${accounts.id}::text`)
         .where(boundary(usageDays))
         .groupBy(accounts.id, accounts.login, accounts.avatarUrl, user.id, user.handle, user.name),
@@ -289,7 +310,6 @@ export async function buildOrgUsage(
         tokens: sql<number>`(sum(${usageDays.tokensIn}) + sum(${usageDays.tokensOut}) + sum(${usageDays.tokensCache}))::bigint`,
       })
         .from(usageDays)
-        .innerJoin(accountScopes, eq(accountScopes.accountId, usageDays.accountId))
         .where(boundary(usageDays))
         .groupBy(usageDays.date)
         .orderBy(usageDays.date),
@@ -321,7 +341,6 @@ export async function buildOrgUsage(
       })
         .from(usageDayModels)
         .innerJoin(accounts, eq(usageDayModels.accountId, accounts.id))
-        .innerJoin(accountScopes, eq(accountScopes.accountId, usageDayModels.accountId))
         .leftJoin(user, sql`${user.id} = ${accounts.id}::text`)
         .where(sliceCond)
         .groupBy(accounts.id, accounts.login, accounts.avatarUrl, user.id, user.handle, user.name),
@@ -331,7 +350,6 @@ export async function buildOrgUsage(
         tokens: sql<number>`sum(${usageDayModels.tokens})::bigint`,
       })
         .from(usageDayModels)
-        .innerJoin(accountScopes, eq(accountScopes.accountId, usageDayModels.accountId))
         .where(sliceCond)
         .groupBy(usageDayModels.date)
         .orderBy(usageDayModels.date),

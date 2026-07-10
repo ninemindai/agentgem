@@ -4,17 +4,20 @@
 // ownership and access check keys on accounts.id (a uuid) — so it may be NULL until claimed.
 import { sql } from "drizzle-orm";
 import type { AppDb } from "./schema.js";
-import { setAccountScopes, getAccountScopes } from "./webAuth.js";
 
 const HANDLE_RE = /^[A-Za-z0-9-]{1,39}$/;
 
 export type ClaimResult = { ok: true; handle: string } | { ok: false; reason: "charset" | "unavailable" };
 
-/** Handles and GitHub org scopes share ONE namespace, and accountOwnsScope ignores the scope's
- *  role — so claiming an org's name would grant a role='self' row and with it the right to publish
- *  under that org. This is the only place that guard lives. org_members.org_scope and
- *  org_settings.scope are two different column names for the same namespace. */
-async function isReserved(db: AppDb, handleLc: string): Promise<boolean> {
+/** Handles and GitHub org scopes share ONE namespace, so claiming an org's name would let the
+ *  claimant publish under that org for as long as the org has no active App installation. This is
+ *  the only place that guard lives. org_members.org_scope and org_settings.scope are two different
+ *  column names for the same namespace.
+ *
+ *  It is NOT the authorization boundary: `resolveOrgAccess` path 1 lets an active installation's
+ *  roster decide alone, so a name claimed before an org onboards stops granting anything the moment
+ *  it does. See the doc comment on `resolveOrgAccess` (githubApp.ts). */
+export async function isReserved(db: AppDb, handleLc: string): Promise<boolean> {
   const r = await db.execute(sql`
     select 1 from org_members  where lower(org_scope) = ${handleLc}
     union all
@@ -44,6 +47,27 @@ export async function accountIdForHandle(db: AppDb, handle: string): Promise<str
 export async function handleForAccountId(db: AppDb, accountId: string): Promise<string | null> {
   const r = await db.execute(sql`select handle from "user" where id = ${accountId} limit 1`);
   return (r.rows as { handle: string | null }[])[0]?.handle ?? null;
+}
+
+/** True iff `scope` IS this account's handle — i.e. the caller's own namespace.
+ *
+ *  DERIVED, never stored. `"user".handle` is the single source of truth for what an account is
+ *  named; there is deliberately no `account_scopes` row mirroring it. An earlier design cached the
+ *  handle as a `role='self'` scope row, which three different writers (`anchorAndScopes`,
+ *  `claimHandle`, `recordBinding`) each wrote differently — `recordBinding` wrote the raw GitHub
+ *  login, so a CLI `bind` silently reverted a renamed handle and could hand the renamer a `self`
+ *  grant on whoever had since claimed their old name. Reading the source of truth makes that class
+ *  of drift unrepresentable rather than merely guarded.
+ *
+ *  Case-insensitive: `user_handle_uniq` is on `lower(handle)`, so a scope param whose casing
+ *  differs from the stored handle must still match. `handle IS NULL` matches nothing — NULL is not
+ *  an identity, which is the whole point of the re-key. */
+export async function accountSelfScope(db: AppDb, accountId: string, scope: string): Promise<boolean> {
+  const r = await db.execute(sql`
+    select 1 from "user"
+     where id = ${accountId} and handle is not null and lower(handle) = lower(${scope})
+     limit 1`);
+  return (r.rows?.length ?? 0) > 0;
 }
 
 /** The auto-claim half of the identity re-key (Task 5b): give a login-less account's handle for
@@ -77,13 +101,17 @@ export async function claimHandleIfUnset(db: AppDb, accountId: string, raw: stri
 
 /** Claim or rename. "taken" and "reserved" collapse into one `unavailable` result on purpose:
  *  distinguishing them would let a prober enumerate the GitHub orgs the App has seen.
- *  The UNIQUE index — not a prior SELECT — arbitrates a race between two concurrent claims. */
+ *  The UNIQUE index — not a prior SELECT — arbitrates a race between two concurrent claims.
+ *
+ *  Writes `"user".handle` and NOTHING ELSE. The self grant is derived from this column by
+ *  `accountSelfScope`/`accountOwnsScope`, so a rename moves ownership atomically with the update:
+ *  there is no second row to keep in step, and no window where the two disagree. Org memberships
+ *  live in `account_scopes` and are untouched — a rename must not revoke them. */
 export async function claimHandle(db: AppDb, accountId: string, raw: string): Promise<ClaimResult> {
   const handle = raw.trim();
   if (!HANDLE_RE.test(handle)) return { ok: false, reason: "charset" };
   if (await isReserved(db, handle.toLowerCase())) return { ok: false, reason: "unavailable" };
 
-  const prior = await handleForAccountId(db, accountId);
   try {
     const r = await db.execute(sql`
       update "user" set handle = ${handle}
@@ -98,15 +126,5 @@ export async function claimHandle(db: AppDb, accountId: string, raw: string): Pr
     if (isUniqueViolation(err)) return { ok: false, reason: "unavailable" };
     throw err;
   }
-
-  // Replace the role='self' scope with the new handle, dropping the stale one. Org memberships
-  // (role 'admin'/'member') are preserved: a rename must not revoke them. `prior` is nullable
-  // (first-ever claim has no prior handle) — checked explicitly rather than via a `?? ""`
-  // fallback, since the whole point of this migration is that an empty string is not an identity.
-  const isStalePriorHandleScope = (s: { scope: string }) => prior != null && s.scope.toLowerCase() === prior.toLowerCase();
-  const kept = (await getAccountScopes(db, accountId))
-    .filter((s) => s.role !== "self" && !isStalePriorHandleScope(s))
-    .map((s) => ({ scope: s.scope, role: s.role as "admin" | "member" }));
-  await setAccountScopes(db, accountId, [{ scope: handle, role: "self" as const }, ...kept]);
   return { ok: true, handle };
 }

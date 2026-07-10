@@ -91,11 +91,18 @@ export async function redeemHandoffCode(db: AppDb, code: string, now: number = D
 }
 
 /** A scope grant: bare string = role "member" (an org the account belongs to); pass an object to
- *  carry GitHub's org role ("admin") or "self" for the account's own login scope. */
-export type ScopeGrant = string | { scope: string; role: "self" | "admin" | "member" };
+ *  carry GitHub's org role ("admin").
+ *
+ *  There is deliberately NO "self" role. The account's own namespace is its `"user".handle`, read
+ *  directly by `accountSelfScope`/`accountOwnsScope` — never mirrored into a row here. Widening
+ *  this union back to include "self" would re-admit the three-writer drift the re-key removed
+ *  (see the doc comment on `accountSelfScope` in handles.ts), so the type is the guard: a `self`
+ *  write is a compile error, not a code-review catch. */
+export type ScopeGrant = string | { scope: string; role: "admin" | "member" };
 
-/** REPLACE the account's owned scope set (login + org logins). Deduped (first grant wins);
- *  empty clears it. Rows get a fresh captured_at, which freshness-gated reads rely on. */
+/** REPLACE the account's captured ORG memberships. Deduped (first grant wins); empty clears them.
+ *  Rows get a fresh captured_at, which freshness-gated reads rely on. Never carries the account's
+ *  own handle — see ScopeGrant. */
 export async function setAccountScopes(db: AppDb, accountId: string, scopes: ScopeGrant[]): Promise<void> {
   const byScope = new Map<string, { scope: string; role: string }>();
   for (const g of scopes) {
@@ -116,35 +123,53 @@ export async function getAccountScopes(db: AppDb, accountId: string): Promise<{ 
     .where(eq(accountScopes.accountId, accountId));
 }
 
-/** True iff the account owns `scope` (its login or a captured org membership), matched
- *  case-insensitively — GitHub logins/handles are case-insensitive (the `user_handle_uniq` index
- *  is on `lower(handle)`, and `claimHandle`/`accountIdForHandle`/`accountSelfScope` already compare
- *  case-insensitively), so a role='self' row captured as e.g. `Raymond` must still match the
- *  lowercase publish scope `raymond`. Still never a login-string match: this only changes which
- *  row matches, not who counts as the account — `account_id` stays an exact equality. */
+/** True iff the account owns `scope`: it is either the account's own handle, or an org membership
+ *  captured at sign-in/bind. Two sources because they are two different facts — the handle IS the
+ *  account (source of truth, `"user".handle`), while an org grant is a captured claim about GitHub.
+ *
+ *  The org half excludes any legacy `role='self'` row. Such rows are stale mirrors of the handle
+ *  written by the pre-re-key code; honoring one would let a renamed-away name keep granting publish
+ *  (see `accountSelfScope` in handles.ts). `ensureSchema` deletes them, and this filter is what
+ *  makes that cleanup non-load-bearing.
+ *
+ *  Case-insensitive on the name (GitHub logins/handles are), exact on `account_id` — this only
+ *  changes which row matches, never who counts as the account. */
 export async function accountOwnsScope(db: AppDb, accountId: string, scope: string): Promise<boolean> {
-  const scopeLc = scope.toLowerCase();
-  const rows = await db
-    .select({ scope: accountScopes.scope })
-    .from(accountScopes)
-    .where(and(eq(accountScopes.accountId, accountId), sql`lower(${accountScopes.scope}) = ${scopeLc}`))
-    .limit(1);
-  return rows.length > 0;
+  const r = await db.execute(sql`
+    select 1 where
+         exists (select 1 from "user"
+                  where id = ${accountId} and handle is not null and lower(handle) = lower(${scope}))
+      or exists (select 1 from account_scopes
+                  where account_id = ${accountId} and lower(scope) = lower(${scope})
+                    and role in ('admin','member'))`);
+  return (r.rows?.length ?? 0) > 0;
 }
 
 export type ScopeStatus = "ok" | "stale" | "none";
 
-/** Ownership + freshness + role in ONE lookup — the membership-gate primitive. Scopes are only
- *  re-captured from GitHub at sign-in/bind, so a grant older than `maxAgeMs` is "stale": the
- *  caller still matched, but should be asked to refresh (re-auth) rather than served. `role` is
- *  the grant's captured GitHub role ("self" | "admin" | "member"), null when no grant exists. */
+/** Ownership + freshness + role in ONE lookup — the captured-ORG-membership gate primitive. Scopes
+ *  are only re-captured from GitHub at sign-in/bind, so a grant older than `maxAgeMs` is "stale":
+ *  the caller still matched, but should be asked to refresh (re-auth) rather than served. `role` is
+ *  the grant's captured GitHub role ("admin" | "member"), null when no grant exists.
+ *
+ *  Case-insensitive on the scope name, matching `accountScopeRole` byte-for-byte so the two always
+ *  agree on which row they are reading. (They were both exact-match before, which silently 403'd a
+ *  legitimate member of an App-less org whose URL casing differed from GitHub's canonical casing —
+ *  e.g. `/orgs/ninemindai` against a stored `NineMindAI`.)
+ *
+ *  Excludes legacy `role='self'` rows: the self grant is derived from `"user".handle`, never stored.
+ *  Honoring a stale mirror here would let it survive an org's later App installation. */
 export async function accountScopeInfo(
   db: AppDb, accountId: string, scope: string, maxAgeMs: number, now: number = Date.now(),
 ): Promise<{ status: ScopeStatus; role: string | null }> {
   const rows = await db
     .select({ capturedAt: accountScopes.capturedAt, role: accountScopes.role })
     .from(accountScopes)
-    .where(and(eq(accountScopes.accountId, accountId), eq(accountScopes.scope, scope)))
+    .where(and(
+      eq(accountScopes.accountId, accountId),
+      sql`lower(${accountScopes.scope}) = lower(${scope})`,
+      sql`${accountScopes.role} in ('admin','member')`,
+    ))
     .limit(1);
   if (rows.length === 0) return { status: "none", role: null };
   const fresh = now - new Date(rows[0].capturedAt).getTime() <= maxAgeMs;

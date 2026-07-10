@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { sql } from "drizzle-orm";
 import { makeTestDb, makeAuth, mintSession, resolveSession, claimHandle, setAccountScopes, upsertInstallation, upsertOrgMember } from "@agentgem/aggregator";
 import type { AppDb } from "@agentgem/aggregator";
 import { exportGem, type RegistryPublisher, type RegistrySource, type RegistryIndex } from "@agentgem/distribute";
@@ -53,10 +54,23 @@ describe("upload-publish", () => {
     await uploadPublishHandler(deps(db, auth, publisher))(mkReq({ headers:{ ...bearer(token), origin:"https://app.agentgem.ai" }, body:{ scope:"bob", version:"1.0.0", bytesBase64: gemBase64() } }) as any, res as any);
     expect(res._s).toBe(403);
   });
-  it("403s a session with no account_scopes rows — even on its own login (fail-closed)", async () => {
+  // Fail-closed: the account's own namespace is its HANDLE, so an account with no handle and no
+  // captured org scope owns nothing — not even the scope that happens to equal its GitHub login.
+  // The login string is never the grant. (Before the re-key the grant lived in a `role='self'`
+  // account_scopes row; the property under test is unchanged, only where the name is read from.)
+  it("403s a session with no handle and no account_scopes rows — even on its own login (fail-closed)", async () => {
     const db = await makeTestDb(); const auth = testAuth(db); const token = await session(db, auth, "alice", []); const { publisher } = capturing(); const res = mkRes();
+    await db.execute(sql`update "user" set handle = null`);   // undo the sign-in auto-claim
     await uploadPublishHandler(deps(db, auth, publisher))(mkReq({ headers:{ ...bearer(token), origin:"https://app.agentgem.ai" }, body:{ scope:"alice", version:"1.0.0", bytesBase64: gemBase64() } }) as any, res as any);
     expect(res._s).toBe(403);
+  });
+
+  // The other half of the same rule: WITH the handle, the same request succeeds. Together these two
+  // pin the grant to the handle rather than to the presence of a session or a matching login.
+  it("publishes under its own handle with no account_scopes rows at all", async () => {
+    const db = await makeTestDb(); const auth = testAuth(db); const token = await session(db, auth, "alice", []); const { publisher } = capturing(); const res = mkRes();
+    await uploadPublishHandler(deps(db, auth, publisher))(mkReq({ headers:{ ...bearer(token), origin:"https://app.agentgem.ai" }, body:{ scope:"alice", version:"1.0.0", bytesBase64: gemBase64() } }) as any, res as any);
+    expect(res._s).toBe(200);
   });
   it("publishes + stamps publishedBy when scope === login", async () => {
     const db = await makeTestDb(); const auth = testAuth(db); const token = await session(db, auth, "alice"); const { publisher, commits } = capturing(); const res = mkRes();

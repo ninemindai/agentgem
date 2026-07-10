@@ -667,6 +667,18 @@ export async function ensureSchema(db: AppDb): Promise<void> {
   // rows (see the warning below) — stays adjacent to its own anchor dependency.
   await backfillUserHandles(db);
 
+  // Drop the pre-re-key `role='self'` mirror rows. The account's own namespace is `"user".handle`
+  // (just backfilled above), read directly by accountSelfScope/accountOwnsScope — a scope row
+  // duplicating it is stale state with three disagreeing writers, which is exactly what let a CLI
+  // `bind` revert a renamed handle. Ordered AFTER backfillUserHandles so every account that had a
+  // self row has already been given the handle it names; deleting first would briefly leave a
+  // GitHub user unable to publish under their own name.
+  //
+  // Idempotent (a no-op once drained) and non-load-bearing: accountOwnsScope / accountScopeInfo /
+  // accountScopeRole all filter to `role in ('admin','member')` regardless, so a row that outlives
+  // this delete still grants nothing. Org memberships (admin/member) are untouched.
+  await db.execute(sql`delete from account_scopes where role = 'self'`);
+
   const owners = await backfillGemOwners(db);
   if (owners.unresolved > 0) {
     console.warn(`[schema] ${owners.unresolved} catalog_gems row(s) have no resolvable owner; they cannot be unpublished by anyone until reassigned`);

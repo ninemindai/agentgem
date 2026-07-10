@@ -11,7 +11,7 @@
 //   membership alone; otherwise the captured account_scopes (TTL'd) apply.
 import type { AppDb, makeAuth } from "@agentgem/aggregator";
 import {
-  resolveSession, resolveOrgAccess, accountSelfScope, normalizeUsageReport, normalizeUsageModels, recordUsageDays, recordUsageModels,
+  resolveSession, resolveOrgAccess, normalizeUsageReport, normalizeUsageModels, recordUsageDays, recordUsageModels,
   buildOrgUsage, getOrgSettings, putOrgSettings, normalizeRetentionDays, applyRetentionForScopes,
   RANGE_DAYS, type OrgUsageRange,
 } from "@agentgem/aggregator";
@@ -49,14 +49,6 @@ async function whoami(deps: UsageDeps, req: Req): Promise<{ accountId: string; l
   return who ? { accountId: who.accountId, login: who.login } : null;
 }
 
-// The caller's own dashboard = they hold the role='self' scope row for `scope`. Never a login
-// string compare: a login-less user's "" would equal no valid scope, silently routing every
-// personal request through the org gate. Case-insensitive (accountSelfScope): the `scope` query
-// param can carry different casing than the stored handle (GitHub logins are case-insensitive in
-// URLs), and must still match the row the caller holds.
-const isSelfScope = async (deps: UsageDeps, accountId: string, scope: string): Promise<boolean> =>
-  accountSelfScope(deps.db, accountId, scope);
-
 export function reportHandler(deps: UsageDeps) {
   return async (req: Req, res: Res): Promise<void> => {
     cors(req, res, deps.webOrigins);
@@ -80,11 +72,17 @@ export function reportHandler(deps: UsageDeps) {
  *  in seconds); otherwise the captured account_scopes answer ownership, freshness (bounding
  *  revocation lag), and role. Writes the 403 (with the reason the UI branches on) itself and
  *  returns null; a handler that skips this gate cannot exist. */
-async function memberGate(deps: UsageDeps, res: Res, who: { accountId: string; login: string }, scope: string): Promise<{ role: string } | null> {
+async function memberGate(deps: UsageDeps, res: Res, who: { accountId: string; login: string }, scope: string): Promise<{ role: string; isSelf: boolean } | null> {
   const access = await resolveOrgAccess(deps.db, who, scope, deps.scopeTtlMs ?? defaultScopeTtlMs());
   if (access.status === "none") { res.status(403).json({ error: "not a member of this org" }); return null; }
   if (access.status === "stale") { res.status(403).json({ error: "membership check expired — sign in again to refresh", reason: "stale" }); return null; }
-  return { role: access.role ?? "member" };
+  // `via` is the gate's own verdict on WHY access was granted, so "is this the caller's personal
+  // dashboard?" is answered downstream of the App-roster check rather than ahead of it. Callers must
+  // never re-derive this from the handle: resolveOrgAccess path 1 lets an active installation's
+  // roster decide alone, precisely so a name claimed before an org onboarded stops granting access
+  // once it does. resolveOrgAccess already exempts the self grant from the freshness TTL, which was
+  // the only reason a pre-gate fast-path existed here.
+  return { role: access.role ?? "member", isSelf: access.via === "self" };
 }
 
 /** GET (member) / PUT (admin) of the org's dashboard settings. Uses the GitHub org role captured
@@ -139,23 +137,25 @@ export function orgUsageHandler(deps: UsageDeps) {
     if (scope.length === 0 || scope.length > 100 || !(range in RANGE_DAYS)) { res.status(400).json({ error: "invalid scope or range" }); return; }
     // Internal dashboard: the caller must be a member of the org (captured at sign-in/bind), and
     // the capture must be fresh — a stale grant 403s with reason "stale" so the UI can offer a
-    // one-click membership refresh instead of a dead end. The caller's own claimed scope is exempt
-    // from freshness (it IS their identity), so /api/usage/org?scope=<their-handle> stays personal.
-    const isSelf = await isSelfScope(deps, who.accountId, scope);
-    if (!isSelf) {
-      // The settings read is independent of the gate — overlap them instead of stacking.
-      const [gate, settings] = await Promise.all([
-        memberGate(deps, res, who, scope),
-        getOrgSettings(deps.db, scope),
-      ]);
-      if (!gate) return;
-      // Visibility toggle: an org admin can switch the dashboard off for members. Admins still
-      // see it (they control the toggle and need the settings footer to flip it back). The
-      // personal view (scope = own login) is never affected by org policy.
-      if (!settings.dashboardEnabled && gate.role !== "admin") {
-        res.status(403).json({ error: "dashboard disabled by an org admin", reason: "disabled" });
-        return;
-      }
+    // one-click membership refresh instead of a dead end. The caller's own handle is exempt from
+    // freshness (it IS their identity), so /api/usage/org?scope=<their-handle> stays personal —
+    // but that exemption is decided INSIDE resolveOrgAccess, after the App-roster check, never by
+    // a fast-path ahead of the gate. A handle claimed before an org installed the App must stop
+    // granting access the moment it does; the gate is the only thing that knows that.
+    //
+    // The settings read is independent of the gate — overlap them instead of stacking.
+    const [gate, settings] = await Promise.all([
+      memberGate(deps, res, who, scope),
+      getOrgSettings(deps.db, scope),
+    ]);
+    if (!gate) return;
+    const isSelf = gate.isSelf;
+    // Visibility toggle: an org admin can switch the dashboard off for members. Admins still
+    // see it (they control the toggle and need the settings footer to flip it back). The
+    // personal view (scope = own handle) is never affected by org policy.
+    if (!isSelf && !settings.dashboardEnabled && gate.role !== "admin") {
+      res.status(403).json({ error: "dashboard disabled by an org admin", reason: "disabled" });
+      return;
     }
     // Optional facets: narrow to one member (drill-down) and/or one agent/model. All compose,
     // and all stay inside the org-scope attribution boundary.

@@ -1,6 +1,7 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
+import { sql } from "drizzle-orm";
 import {
   makeTestDb, upsertAccount, setAccountScopes,
   upsertInstallation, setInstallationSuspended, deleteInstallation, installationForScope, listInstallations,
@@ -10,6 +11,14 @@ import {
 
 const inst = (over: Partial<{ installationId: number; orgScope: string; repoSelection: "all" | "selected"; suspended: boolean }> = {}) =>
   ({ installationId: 101, orgScope: "acme", repoSelection: "selected" as const, suspended: false, ...over });
+
+/** The self grant derives from `"user".handle` — upsertAccount only writes the `accounts` anchor,
+ *  so a test that means "this account is named X" has to say so on the source of truth. */
+async function withHandle(db: Awaited<ReturnType<typeof makeTestDb>>, id: string, handle: string): Promise<void> {
+  await db.execute(sql`
+    insert into "user" (id, name, email, handle) values (${id}, ${handle}, ${`${id}@example.com`}, ${handle})
+    on conflict (id) do update set handle = ${handle}`);
+}
 
 describe("app installations store", () => {
   it("upserts, lists, suspends, and re-upserts idempotently", async () => {
@@ -60,32 +69,42 @@ describe("org members store", () => {
 });
 
 describe("resolveOrgAccess", () => {
-  it("grants self from the role='self' scope row, not from a login string match", async () => {
+  it("grants self from the account's handle, not from a login string match", async () => {
     const db = await makeTestDb();
     const a = await upsertAccount(db, { provider: "github", accountId: "1", login: "alice" });
-    await setAccountScopes(db, a.id, [{ scope: "alice", role: "self" }]);
-    // holds the row → self
+    await withHandle(db, a.id, "alice");
+    // holds the handle → self
     expect(await resolveOrgAccess(db, { accountId: a.id, login: "alice" }, "alice", 1000)).toEqual({ status: "ok", role: "self", via: "self" });
 
-    // a DIFFERENT account whose login string is also "alice" but holds NO role='self' row must not
-    // be granted self — claiming/having that login string is not the grant, holding the row is.
+    // a DIFFERENT account whose login string is also "alice" but holds NO handle must not be granted
+    // self — having that login string is not the grant, being NAMED it is.
     const bare = await upsertAccount(db, { provider: "github", accountId: "2", login: "alice" });
     expect(await resolveOrgAccess(db, { accountId: bare.id, login: "alice" }, "alice", 1000)).toEqual({ status: "none", role: null, via: null });
 
     // Task 8 security property still holds in any casing: a login string that matches the scope
-    // but holds NO role='self' row still gets "none" — never revived as a login compare.
+    // but holds no handle still gets "none" — never revived as a login compare.
     const bareUpper = await upsertAccount(db, { provider: "github", accountId: "3", login: "ALICE" });
     expect(await resolveOrgAccess(db, { accountId: bareUpper.id, login: "ALICE" }, "ALICE", 1000)).toEqual({ status: "none", role: null, via: null });
   });
 
-  // Fix pass (Task 7/8 review — case sensitivity), Finding 1: GitHub treats logins
-  // case-insensitively in URLs, so a scope param with different casing than the stored handle
-  // must still match the role='self' row the caller holds.
-  it("grants self case-insensitively: a role='self' row for 'raymond' matches scope 'RayMond'", async () => {
+  // GitHub treats logins case-insensitively in URLs, so a scope param with different casing than the
+  // stored handle must still match. `user_handle_uniq` is on lower(handle), so the read agrees.
+  it("grants self case-insensitively: a handle 'raymond' matches scope 'RayMond'", async () => {
     const db = await makeTestDb();
     const a = await upsertAccount(db, { provider: "github", accountId: "1", login: "raymond" });
-    await setAccountScopes(db, a.id, [{ scope: "raymond", role: "self" }]);
+    await withHandle(db, a.id, "raymond");
     expect(await resolveOrgAccess(db, { accountId: a.id, login: "raymond" }, "RayMond", 1000)).toEqual({ status: "ok", role: "self", via: "self" });
+  });
+
+  // Regression, P1(a): a rename moves the self grant ATOMICALLY, because there is only one row to
+  // move. The abandoned name grants the renamer nothing, even though `accounts.login` still says it.
+  it("a renamed handle moves the self grant; the abandoned name grants the renamer nothing", async () => {
+    const db = await makeTestDb();
+    const a = await upsertAccount(db, { provider: "github", accountId: "1", login: "alice" });
+    await withHandle(db, a.id, "alice");
+    await withHandle(db, a.id, "carol");   // rename
+    expect(await resolveOrgAccess(db, { accountId: a.id, login: "alice" }, "carol", 1000)).toEqual({ status: "ok", role: "self", via: "self" });
+    expect(await resolveOrgAccess(db, { accountId: a.id, login: "alice" }, "alice", 1000)).toEqual({ status: "none", role: null, via: null });
   });
 
   it("two login-less accounts do not collide on the empty scope", async () => {
@@ -139,36 +158,36 @@ describe("resolveOrgAccess", () => {
   // row for) must not preempt the App roster once an active installation exists. Before the
   // re-key this was structurally impossible: self was `who.login === scope`, and GitHub's shared
   // user/org namespace means a login can never equal an org name.
-  it("App-authoritative membership preempts a squatted self row: role='self' on 'acme' does not survive the org's later installation", async () => {
+  it("App-authoritative membership preempts a squatted handle: a handle of 'acme' does not survive the org's later installation", async () => {
     const db = await makeTestDb();
     const a = await upsertAccount(db, { provider: "github", accountId: "1", login: "mallory" });
-    await setAccountScopes(db, a.id, [{ scope: "acme", role: "self" }]); // squatted the org's name before it onboarded
+    await withHandle(db, a.id, "acme"); // squatted the org's name before it onboarded
     await upsertInstallation(db, inst()); // acme installs the App
     // mallory is NOT in org_members — the App roster decides alone; the self row must not grant.
     expect(await resolveOrgAccess(db, { accountId: a.id, login: "mallory" }, "acme", 60_000)).toEqual({ status: "none", role: null, via: "app" });
   });
 
-  it("the same squatted self row still grants self when the org has no active installation", async () => {
+  it("the same squatted handle still grants self when the org has no active installation", async () => {
     const db = await makeTestDb();
     const a = await upsertAccount(db, { provider: "github", accountId: "1", login: "mallory" });
-    await setAccountScopes(db, a.id, [{ scope: "acme", role: "self" }]);
+    await withHandle(db, a.id, "acme");
     expect(await resolveOrgAccess(db, { accountId: a.id, login: "mallory" }, "acme", 60_000)).toEqual({ status: "ok", role: "self", via: "self" });
   });
 
-  it("a suspended installation behaves as uninstalled: the squatted self row is granted again", async () => {
+  it("a suspended installation behaves as uninstalled: the squatted handle is granted again", async () => {
     const db = await makeTestDb();
     const a = await upsertAccount(db, { provider: "github", accountId: "1", login: "mallory" });
-    await setAccountScopes(db, a.id, [{ scope: "acme", role: "self" }]);
+    await withHandle(db, a.id, "acme");
     await upsertInstallation(db, inst());
     await setInstallationSuspended(db, 101, true);
     expect(await resolveOrgAccess(db, { accountId: a.id, login: "mallory" }, "acme", 60_000)).toEqual({ status: "ok", role: "self", via: "self" });
   });
 
-  it("a genuine org member with an active installation still gets their App role, unaffected by a squatter's self row", async () => {
+  it("a genuine org member with an active installation still gets their App role, unaffected by a squatter's handle", async () => {
     const db = await makeTestDb();
     const alice = await upsertAccount(db, { provider: "github", accountId: "1", login: "alice" });
     const mallory = await upsertAccount(db, { provider: "github", accountId: "2", login: "mallory" });
-    await setAccountScopes(db, mallory.id, [{ scope: "acme", role: "self" }]);
+    await withHandle(db, mallory.id, "acme");
     await upsertInstallation(db, inst());
     await replaceOrgMembers(db, "acme", [{ login: "alice", role: "admin" }]);
     expect(await resolveOrgAccess(db, { accountId: alice.id, login: "alice" }, "acme", 60_000)).toEqual({ status: "ok", role: "admin", via: "app" });

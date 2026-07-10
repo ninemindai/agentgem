@@ -42,8 +42,10 @@ describe("betterAuth factory", () => {
   });
 
   // review fix (1b-2) — restore `orgs` on get-session via the customSession plugin, matching the
-  // OLD /api/auth/me contract exactly: getAccountScopes minus the caller's own "self" scope.
-  it("enriches get-session with orgs from account_scopes, excluding the caller's own self scope", async () => {
+  // OLD /api/auth/me contract. account_scopes now holds ORG memberships only (the caller's own name
+  // is "user".handle), so `orgs` is the whole table for this account, and the defensive
+  // `role !== "self"` filter guards only legacy rows that ensureSchema has yet to drain.
+  it("enriches get-session with orgs from account_scopes, excluding any legacy self scope", async () => {
     const db = await makeTestDb();
     const auth = makeAuth({ db, ...opts });
     const ctx = await auth.$context;
@@ -53,10 +55,11 @@ describe("betterAuth factory", () => {
     // here we drive the user through internalAdapter directly, so anchor it by hand.
     await upsertAccount(db, { provider: "github", accountId: "gh-trinity", login: "trinity", avatarUrl: null, id: user.id });
     await setAccountScopes(db, user.id, [
-      { scope: "trinity", role: "self" },
       { scope: "zion", role: "admin" },
       { scope: "matrix", role: "member" },
     ]);
+    // A legacy mirror row, insertable only via raw SQL now — customSession must still hide it.
+    await db.execute(sql`insert into account_scopes (account_id, scope, role) values (${user.id}, 'trinity', 'self')`);
     const { token } = await mintSession(auth, user.id);
 
     const session = await auth.api.getSession({ headers: new Headers({ authorization: `Bearer ${token}` }) });
@@ -82,7 +85,7 @@ describe("betterAuth factory", () => {
     const ctx = await auth.$context;
     const user = await ctx.internalAdapter.createUser({ email: "morpheus@example.com", name: "Morpheus", emailVerified: false, login: "morpheus" } as never);
     await upsertAccount(db, { provider: "github", accountId: "gh-morpheus", login: "morpheus", avatarUrl: null, id: user.id });
-    await setAccountScopes(db, user.id, [{ scope: "morpheus", role: "self" }, { scope: "zion", role: "admin" }]);
+    await setAccountScopes(db, user.id, [{ scope: "zion", role: "admin" }]);
     const { token } = await mintSession(auth, user.id);
 
     await db.execute(sql`drop table account_scopes`);
@@ -93,13 +96,13 @@ describe("betterAuth factory", () => {
     expect((session as { orgs?: unknown })?.orgs).toEqual([]);
   });
 
-  it("returns an empty orgs array when the account owns no scopes beyond its own self scope", async () => {
+  it("returns an empty orgs array when the account belongs to no orgs", async () => {
     const db = await makeTestDb();
     const auth = makeAuth({ db, ...opts });
     const ctx = await auth.$context;
     const user = await ctx.internalAdapter.createUser({ email: "neo@example.com", name: "Neo", emailVerified: false, login: "neo" } as never);
     await upsertAccount(db, { provider: "github", accountId: "gh-neo", login: "neo", avatarUrl: null, id: user.id });
-    await setAccountScopes(db, user.id, [{ scope: "neo", role: "self" }]);
+    await setAccountScopes(db, user.id, []);
     const { token } = await mintSession(auth, user.id);
 
     const session = await auth.api.getSession({ headers: new Headers({ authorization: `Bearer ${token}` }) });

@@ -3,7 +3,7 @@
 import { describe, it, expect } from "vitest";
 import { sql } from "drizzle-orm";
 import {
-  makeTestDb, makeAuth, mintSession, setAccountScopes,
+  makeTestDb, makeAuth, mintSession, setAccountScopes, claimHandle, claimHandleIfUnset,
   normalizeUsageReport, normalizeUsageModels, recordUsageDays, recordUsageModels, buildOrgUsage, rangeCutoff,
   upsertInstallation, upsertOrgMember, setInstallationSuspended,
 } from "@agentgem/aggregator";
@@ -33,23 +33,26 @@ async function mintUser(db: any, auth: any, login: string) {
   const ctx = await auth.$context;
   const user = await ctx.internalAdapter.createUser({ name: login, email: `${login}@example.com`, emailVerified: true, login } as never);
   await ctx.internalAdapter.createAccount({ userId: user.id, providerId: "github", accountId: login } as never);
+  // The account.create hook (anchorAndScopes) auto-claims the handle on a real GitHub sign-in.
+  // Assert it rather than assume it: the self grant is DERIVED from "user".handle, so a test whose
+  // user has no handle would silently exercise the "no personal scope" path instead of the one it
+  // means to. Idempotent — a no-op when the hook already claimed it.
+  await claimHandleIfUnset(db, user.id, login);
   return { id: user.id };
 }
 
-/** A member whose grant carries an explicit GitHub role (self scope + org scope with role). */
+/** A member whose grant carries an explicit GitHub org role. The account's OWN scope is its
+ *  handle (claimed in mintUser), never a scope row — see accountSelfScope. */
 async function roleMember(db: any, auth: any, login: string, scope: string, role: "admin" | "member") {
   const a = await mintUser(db, auth, login);
-  await setAccountScopes(db, a.id, [{ scope: login, role: "self" }, { scope, role }]);
+  await setAccountScopes(db, a.id, [{ scope, role }]);
   const { token } = await mintSession(auth, a.id);
   return { a, token };
 }
 
-// The bare `login` entry now needs an explicit role='self' grant — resolveOrgAccess no longer
-// treats "scope === login" as the self grant, so a test account must hold the row like a real
-// account does (written in production by claimHandle/anchorAndScopes on every sign-in).
 async function member(db: any, auth: any, login: string, scopes: string[]) {
   const a = await mintUser(db, auth, login);
-  await setAccountScopes(db, a.id, [{ scope: login, role: "self" as const }, ...scopes]);
+  await setAccountScopes(db, a.id, scopes);
   const { token } = await mintSession(auth, a.id);
   return { a, token };
 }
@@ -258,9 +261,9 @@ describe("personal-view gate uses the claimed self scope, not the login string",
     const db = await makeTestDb();
     const auth = makeAuth({ db, ...authOpts });
     const a = await mintUser(db, auth, "alice"); // GitHub login "alice"
-    // Renamed away from "alice" to "carol": the self scope row now lives at "carol", and the stale
-    // "alice" login string grants nothing (mirrors claimHandle, which drops the old self row).
-    await setAccountScopes(db, a.id, [{ scope: "carol", role: "self" as const }]);
+    // Renamed away from "alice" to "carol": "user".handle moves, and the stale "alice" login string
+    // grants nothing. The rename is a single UPDATE — there is no scope row to keep in step.
+    expect(await claimHandle(db, a.id, "carol")).toMatchObject({ ok: true });
     const { token } = await mintSession(auth, a.id);
 
     // The stale login string must NOT be treated as the personal scope (no org gate bypass).
@@ -280,13 +283,44 @@ describe("personal-view gate uses the claimed self scope, not the login string",
   it("treats a differently-cased scope param as self for a claimed handle ('RayMond' vs stored 'raymond')", async () => {
     const db = await makeTestDb();
     const auth = makeAuth({ db, ...authOpts });
-    const a = await mintUser(db, auth, "raymond");
-    await setAccountScopes(db, a.id, [{ scope: "raymond", role: "self" as const }]);
+    const a = await mintUser(db, auth, "raymond");   // handle "raymond" auto-claimed
     const { token } = await mintSession(auth, a.id);
 
     const own = mockRes();
     await orgUsageHandler(deps(db, auth))(req({ headers: { authorization: `Bearer ${token}` }, query: { scope: "RayMond", range: "all" } }) as any, own as any);
     expect(own._status).toBe(200);
+  });
+
+  // REGRESSION, P1(b) — the org-usage leak. This handler used to ask "is `scope` my own name?"
+  // BEFORE consulting the App roster, and skip the member gate entirely when the answer was yes.
+  // Handles and GitHub org names share one namespace, and `isReserved` only blocks orgs that have
+  // ALREADY written a row — so an org's name is freely claimable until it onboards. The squatter's
+  // handle then matched forever, surviving the org's installation, and GET /api/usage/org handed
+  // over the org's per-member token usage. resolveOrgAccess is now the single gate: an active
+  // installation's roster decides alone (path 1), ahead of any self grant (path 2).
+  it("security: a handle squatting an org's name does NOT read the org dashboard once the App is installed", async () => {
+    const db = await makeTestDb();
+    const auth = makeAuth({ db, ...authOpts });
+
+    // Mallory claims "acme" before acme onboards — nothing reserves it yet.
+    const mallory = await mintUser(db, auth, "mallory");
+    expect(await claimHandle(db, mallory.id, "acme")).toMatchObject({ ok: true });
+    const { token } = await mintSession(auth, mallory.id);
+
+    // Before onboarding it IS her personal scope (documented non-goal: she owns the name).
+    const before = mockRes();
+    await orgUsageHandler(deps(db, auth))(req({ headers: { authorization: `Bearer ${token}` }, query: { scope: "acme", range: "all" } }) as any, before as any);
+    expect(before._status).toBe(200);
+
+    // acme installs the GitHub App. Mallory is not on the roster.
+    await upsertInstallation(db, { installationId: 9, orgScope: "acme", repoSelection: "all", suspended: false });
+    await upsertOrgMember(db, "acme", "realadmin", "admin");
+
+    // The roster now decides alone. The squatted handle grants nothing.
+    const after = mockRes();
+    await orgUsageHandler(deps(db, auth))(req({ headers: { authorization: `Bearer ${token}` }, query: { scope: "acme", range: "all" } }) as any, after as any);
+    expect(after._status).toBe(403);
+    expect((after._body as any).error).toBe("not a member of this org");
   });
 });
 
