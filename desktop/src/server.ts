@@ -31,6 +31,22 @@ export interface StartOptions {
   drainTimeoutMs?: number;
 }
 
+/**
+ * The environment the core is forked with.
+ *
+ * PORT=0 lets the OS assign a free port and the child report it back, which closes the
+ * bind/close/re-bind race the old getFreePort() had to tolerate.
+ *
+ * Warm stays off unless asked for. The old host called createApp() directly and so never
+ * warmed; reaching the core through run() would otherwise switch warming on as a side
+ * effect of changing process. Measured 30s after boot, warm costs a median 602MB in the
+ * core process and never settles (99MB..1326MB across eight runs), against 68MB for the
+ * process split itself. Enabling it is a real decision at a real price.
+ */
+export function coreEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  return { ...env, PORT: "0", AGENTGEM_IPC: "1", AGENTGEM_WARM: env.AGENTGEM_WARM ?? "off" };
+}
+
 /** run() in src/index.ts emits this as one json line on stdout when AGENTGEM_IPC=1. */
 export function parseReadyUrl(line: string): string | null {
   if (!line.startsWith("{")) return null; // the core's human log lines are the common case
@@ -76,9 +92,7 @@ export async function startEmbeddedServer(
   } = opts;
 
   const entry = resolveCoreEntry(coreEntryCandidates(mainDir, resourcesPath));
-  // PORT=0 lets the OS assign a free port and the child report it back, which closes
-  // the bind/close/re-bind race the old getFreePort() had to tolerate.
-  const child = fork(entry, { ...process.env, PORT: "0", AGENTGEM_IPC: "1" });
+  const child = fork(entry, coreEnv(process.env));
 
   let ready = false;
   let stopping = false;
