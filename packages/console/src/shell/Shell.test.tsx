@@ -187,3 +187,14 @@ describe("Shell — collapsible sidebar", () => {
     expect(sep.getAttribute("aria-valuemax")).toBe("420");
   });
 });
+
+describe("Shell — full-width pages + Studio rename", () => {
+  const wide = p({ id: "studio", title: "Studio", phase: "build", category: "setup", order: 5, fullWidth: true });
+  it("adds console-main--wide only for fullWidth pages", () => {
+    const { container } = render(<Shell pages={[...pages, wide]} apiBase="" />);
+    goHash("#/curate");
+    expect(container.querySelector(".console-main--wide")).toBeNull();
+    goHash("#/studio");
+    expect(container.querySelector(".console-main--wide")).toBeTruthy();
+  });
+});

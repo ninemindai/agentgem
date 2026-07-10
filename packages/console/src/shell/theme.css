@@ -250,6 +250,7 @@ body::before {
 .console-footer { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--line-soft); }
 
 .console-main { padding: 30px 36px 56px; max-width: 1100px; animation: fade .5s ease both; }
+.console-main--wide { max-width: none; }
 
 /* ── Bars / inputs / buttons ── */
 .ledger-bar, .targets-bar, .checks-bar, .run-bar, .ws-actions, .ledger-selbar {
