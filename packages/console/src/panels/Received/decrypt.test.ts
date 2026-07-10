@@ -17,4 +17,15 @@ describe("decryptGem (parity with server seal)", () => {
       expect(Buffer.from(out)).toEqual(pt);
     }
   });
+
+  it("rejects a too-short (but auth-valid) ciphertext with a clean error, not a RangeError", async () => {
+    const key = new Uint8Array(randomBytes(32));
+    const iv = new Uint8Array(randomBytes(12));
+    const ck = await crypto.subtle.importKey("raw", key, { name: "AES-GCM" }, false, ["encrypt"]);
+    const tag = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv, tagLength: 128 }, ck, new Uint8Array(0)));
+    const wire = new Uint8Array(28); // iv || tag, zero encrypted bytes → 0-byte plaintext
+    wire.set(iv, 0);
+    wire.set(tag, 12);
+    await expect(decryptGem(wire, key)).rejects.toThrow(/too short/);
+  });
 });

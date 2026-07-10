@@ -3,7 +3,9 @@
 const IV_LEN = 12, TAG_LEN = 16, HEADER_LEN = 4;
 
 export async function decryptGem(ciphertext: Uint8Array, key: Uint8Array): Promise<Uint8Array> {
-  if (ciphertext.length < IV_LEN + TAG_LEN) throw new Error("decryptGem: ciphertext too short");
+  // Include HEADER_LEN: below this the plaintext can't hold the u32 length header, and getUint32(0)
+  // on the resulting empty/short buffer would throw a raw RangeError instead of this clean error.
+  if (ciphertext.length < IV_LEN + TAG_LEN + HEADER_LEN) throw new Error("decryptGem: ciphertext too short");
   const iv = ciphertext.subarray(0, IV_LEN);
   const tag = ciphertext.subarray(IV_LEN, IV_LEN + TAG_LEN);
   const enc = ciphertext.subarray(IV_LEN + TAG_LEN);
