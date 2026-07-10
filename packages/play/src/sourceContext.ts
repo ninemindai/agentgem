@@ -27,12 +27,18 @@ export function compactTurns(turns: unknown): { role: string; tsMs: number; text
   });
 }
 
-export async function extractSource(source: GameSource, readers: SourceReaders): Promise<GenerationInput> {
+// `genre` lets a caller that already knows which genre it wants (e.g. a source kind that now maps to
+// more than one genre) pick it explicitly; omitted, the default per-kind genre is byte-identical to
+// before this param existed.
+export async function extractSource(source: GameSource, readers: SourceReaders, genre?: GameGenre): Promise<GenerationInput> {
   if (source.kind === "session") {
     const s = await readers.loadSession(source.sessionId, source.agent);
     if (!s) throw new Error(`session '${source.sessionId}' not found`);
     // Compact: the rich `meta` (stats/tool counts) as-is + a trimmed turn timeline the scaffold replays.
     const data = { meta: s.meta, timeline: compactTurns(s.turns) };
+    if (genre === "session-heatmap") {
+      return { genre: "session-heatmap", createdFrom: source, data, brief: `Build a session-activity heatmap from this coding session (${source.summary}).` };
+    }
     return { genre: "replay", createdFrom: source, data, brief: `Make a playable replay of this coding session (${source.summary}).` };
   }
   if (source.kind === "skill") {

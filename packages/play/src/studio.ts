@@ -8,7 +8,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import type { GameSource } from "@agentgem/model";
 import { extractSource, type SourceReaders } from "./sourceContext.js";
 import { genreFor } from "./genres.js";
-import { scaffoldFor, sealedTemplate } from "./scaffolds.js";
+import { scaffoldFor, minimalTemplate } from "./scaffolds.js";
 import { miniappDir, miniappsRoot, claimMiniappDir, miniappHtmlPath, MINIAPP_HTML, type MiniappMeta } from "./miniapps.js";
 import { ensureRepo, commitWithLock } from "./git.js";
 import { redactForBake } from "./redact.js";
@@ -107,7 +107,7 @@ export async function blankStudio(title: string, prompt?: string, name?: string)
   const source: GameSource = { kind: "blank", title };
   await ensureRepo(miniappsRoot());
   const { name: id, dir } = claimFor(source, name);
-  writeFileSync(join(dir, MINIAPP_HTML), sealedTemplate(title, "✦ new"));
+  writeFileSync(join(dir, MINIAPP_HTML), minimalTemplate(title, "✦ new"));
   const meta: MiniappMeta = { title, genre: "project-fun", createdFrom: source, engineVersion: "1" };
   writeFileSync(join(dir, "meta.json"), JSON.stringify(meta, null, 2));
   await commitWithLock(miniappsRoot(), `create miniapp ${id}`);

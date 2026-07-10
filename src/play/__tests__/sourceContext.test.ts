@@ -29,6 +29,14 @@ describe("extractSource", () => {
     expect(out[1].text.length).toBe(200);                                // capped
     expect(out[2]).toEqual({ role: "assistant", tsMs: 0, text: "" });    // defensive on junk
   });
+  it("session + genre 'session-heatmap' forks to the heatmap genre (same data shape)", async () => {
+    const src: GameSource = { kind: "session", agent: "claude", sessionId: "s1", summary: "auth" };
+    const input = await extractSource(src, readers, "session-heatmap");
+    expect(input.genre).toBe("session-heatmap");
+    expect(input.createdFrom).toEqual(src);
+    const data = input.data as { meta: unknown; timeline: { text: string }[] };
+    expect(data.timeline[0].text).toContain("patched login");
+  });
   it("skill → skill-run", async () => {
     const input = await extractSource({ kind: "skill", skillName: "brainstorming" }, readers);
     expect(input.genre).toBe("skill-run");
