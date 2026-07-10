@@ -115,6 +115,31 @@ export type ShareResult =
   | { shared: false; rejected: "bad-signature" | "stale" | "not-connected" | "conflict" };
 
 const FRESHNESS_MS = 300_000;
+
+export type SignedAccount =
+  | { ok: true; accountId: string; login: string }
+  | { ok: false; rejected: "bad-signature" | "stale" | "not-connected" };
+
+// The account-resolution chain shared by every signed WRITE: prove key possession over `payload`,
+// check freshness, then resolve the producer key to its authorizing accounts.id (== "user".id) via
+// the binding. Callers pass whatever canonical payload their route signs (a manifest hash for
+// publish/mint, the shareId for revoke). Fail-closed: an unbound or unresolvable key owns nothing.
+export async function resolveSignedAccount(
+  db: AppDb,
+  args: { pubkey: string; payload: string; signedAt: number; signature: string },
+  now: number = Date.now(),
+): Promise<SignedAccount> {
+  if (!verify(args.pubkey, args.payload, args.signature)) return { ok: false, rejected: "bad-signature" };
+  if (!Number.isFinite(args.signedAt) || Math.abs(now - args.signedAt) > FRESHNESS_MS) return { ok: false, rejected: "stale" };
+  await db.insert(producers).values({ pubkey: args.pubkey }).onConflictDoNothing();
+  const bind = (await db.select().from(accountBindings).where(sql`pubkey = ${args.pubkey}`))[0];
+  if (!bind) return { ok: false, rejected: "not-connected" };
+  const acct = (await db.select({ id: accounts.id }).from(accounts)
+    .where(and(eq(accounts.provider, bind.provider), eq(accounts.providerAccountId, bind.accountId))).limit(1))[0];
+  if (!acct) return { ok: false, rejected: "not-connected" };
+  return { ok: true, accountId: acct.id, login: bind.accountLogin };
+}
+
 // Grade is a 1..3 floor. Exported so the read path (mapDbToGems) can re-clamp defensively —
 // an out-of-band DB write with an out-of-range grade must not 500 the public catalog via the
 // response schema's min(1).max(3). NaN-safe: a non-numeric grade collapses to undefined.
@@ -132,25 +157,11 @@ export function catalogSigningPayload(m: CatalogManifest, pubkey: string, signed
 // producer-key possession; the binding is what proves that key maps to a verified GitHub
 // login, so it is the sole source of truth for attribution. Mirrors recordBinding (binding.ts).
 export async function recordCatalogShare(db: AppDb, req: ShareRequest, now: number = Date.now()): Promise<ShareResult> {
-  if (!verify(req.pubkey, catalogSigningPayload(req.manifest, req.pubkey, req.signedAt), req.signature)) {
-    return { shared: false, rejected: "bad-signature" };
-  }
-  if (!Number.isFinite(req.signedAt) || Math.abs(now - req.signedAt) > FRESHNESS_MS) {
-    return { shared: false, rejected: "stale" };
-  }
-  // Bootstrap: register the producer so a first-time desktop can share (mirrors ingest's implicit
-  // producer creation). No-op if it already exists.
-  await db.insert(producers).values({ pubkey: req.pubkey }).onConflictDoNothing();
-  const bind = (await db.select().from(accountBindings).where(sql`pubkey = ${req.pubkey}`))[0];
-  if (!bind) return { shared: false, rejected: "not-connected" };
-  // account_bindings.account_id is the PROVIDER's id (text), not accounts.id — pair it with
-  // `provider` to reach the anchor row whose uuid owns the gem.
-  const acct = (await db.select({ id: accounts.id }).from(accounts)
-    .where(and(eq(accounts.provider, bind.provider), eq(accounts.providerAccountId, bind.accountId))).limit(1))[0];
-  // No anchor row → the server cannot identify the publisher, so it must not record ownership.
-  // recordBinding writes the anchor best-effort, so this is reachable; failing closed is correct.
-  if (!acct) return { shared: false, rejected: "not-connected" };
-  const login = bind.accountLogin;
+  const who = await resolveSignedAccount(db, {
+    pubkey: req.pubkey, payload: catalogSigningPayload(req.manifest, req.pubkey, req.signedAt),
+    signedAt: req.signedAt, signature: req.signature,
+  }, now);
+  if (!who.ok) return { shared: false, rejected: who.rejected };
   const m = req.manifest;
   // Ownership guard: (re)publishing a (gemKey, version) is allowed only when it is unclaimed or
   // already owned by THIS account. A row owned by a different account — or by nobody (null owner,
@@ -162,9 +173,9 @@ export async function recordCatalogShare(db: AppDb, req: ShareRequest, now: numb
     .where(and(eq(catalogGems.gemKey, m.gemKey), eq(catalogGems.version, m.version))).limit(1))[0];
   if (existing && existing.ownerAccountId !== acct.id) return { shared: false, rejected: "conflict" };
   await upsertCatalogGem(db, {
-    gemKey: m.gemKey, version: m.version, publishedBy: login, ownerAccountId: acct.id,
+    gemKey: m.gemKey, version: m.version, publishedBy: who.login, ownerAccountId: who.accountId,
     author: m.author, description: m.description, tags: m.tags, artifactKinds: m.artifactKinds,
     type: m.type, grade: clampGrade(m.grade), artifacts: m.artifacts, createdAtMs: now,
   });
-  return { shared: true, publishedBy: login, gemKey: m.gemKey, version: m.version };
+  return { shared: true, publishedBy: who.login, gemKey: m.gemKey, version: m.version };
 }
