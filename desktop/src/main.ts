@@ -134,11 +134,25 @@ function setupUpdates(): void {
 const forkCore: ForkCore = (entry, env) =>
   utilityProcess.fork(entry, [], { stdio: "pipe", env, serviceName: "agentgem-core" });
 
+// Every teardown path runs through here, and it sets `quitting` before the core can
+// die. Electron reaps the utility process on the way out, and a SIGINT/SIGTERM aimed
+// at the process group (dev ctrl-c, logout) reaches the core directly — either way the
+// core exits 0, and without this flag onCrash would report that orderly exit as a crash.
+function shutdown(code: number): void {
+  if (quitting) return;                // already draining; the second pass just exits
+  quitting = true;
+  tray?.destroy();
+  const finish = (): void => app.exit(code);
+  if (server) void server.stop().then(finish, finish);
+  else finish();
+}
+
 // The window is still up but everything behind it is gone: the renderer's next fetch
 // would fail with no explanation. Say so, then exit rather than pretend.
 function onCrash(code: number | null): void {
+  if (quitting) return;                // we asked for this exit — it is not a crash
   dialog.showErrorBox("AgentGem stopped", `The AgentGem background service exited unexpectedly (code ${code}).`);
-  app.exit(1);
+  shutdown(1);
 }
 
 async function boot(): Promise<void> {
@@ -226,10 +240,9 @@ if (!app.requestSingleInstanceLock()) {
   app.on("before-quit", (e) => {
     if (quitting) return;              // second pass after cleanup — let it exit
     e.preventDefault();
-    quitting = true;
-    tray?.destroy();
-    const finish = () => app.exit(0);
-    if (server) server.stop().then(finish, finish);
-    else finish();
+    shutdown(0);
   });
+  // ctrl-c in dev, and logout/restart, signal the whole process group: the core drains
+  // itself and exits 0. Claim the quit here so that orderly exit isn't read as a crash.
+  for (const sig of ["SIGINT", "SIGTERM"] as const) process.once(sig, () => shutdown(0));
 }
