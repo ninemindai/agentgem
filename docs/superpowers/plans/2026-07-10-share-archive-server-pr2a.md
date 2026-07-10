@@ -27,7 +27,7 @@ Extract the verify + freshness + binding→account chain that lives inline in `r
 
 **Files:**
 - Modify: `packages/aggregator/src/catalog.ts` (add helper ~after line 117; refactor `recordCatalogShare` at 134-161)
-- Test: `packages/aggregator/src/__tests__/resolveSignedAccount.test.ts` (create — note the aggregator package's tests live under `packages/aggregator/src/__tests__/`, compiled to `packages/aggregator/dist/__tests__/`)
+- Test: `src/aggregator/__tests__/resolveSignedAccount.test.ts` (create — this top-level app test dir compiles to `dist/aggregator/__tests__/`, which the root `vitest.config.ts` `include: dist/**` covers. Do NOT put it under `packages/aggregator/src/__tests__/` — that compiles to `packages/aggregator/dist/**`, which the root config does NOT match, so it silently never runs.)
 
 **Interfaces:**
 - Consumes: `verify` (`@agentgem/model`), `canonicalJSON` (`@agentgem/insight`), `producers`, `accountBindings`, `accounts` (already imported in catalog.ts).
@@ -37,7 +37,7 @@ Extract the verify + freshness + binding→account chain that lives inline in `r
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/aggregator/src/__tests__/resolveSignedAccount.test.ts`:
+Create `src/aggregator/__tests__/resolveSignedAccount.test.ts`:
 
 ```ts
 // Copyright (c) 2026 NineMind, Inc.
@@ -96,7 +96,7 @@ describe("resolveSignedAccount", () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-pnpm build && pnpm exec vitest run packages/aggregator/dist/__tests__/resolveSignedAccount.test.js
+pnpm build && pnpm exec vitest run dist/aggregator/__tests__/resolveSignedAccount.test.js
 ```
 
 Expected: FAIL at build — `resolveSignedAccount is not exported`.
@@ -155,7 +155,7 @@ Note: `catalogSigningPayload` is defined below `recordCatalogShare` in the file;
 - [ ] **Step 4: Verify both the new test and the existing publish tests pass**
 
 ```bash
-pnpm build && pnpm exec vitest run packages/aggregator/dist/__tests__/resolveSignedAccount.test.js dist/aggregator/__tests__/publishGem.controller.test.js dist/aggregator/__tests__/catalogShare.test.js
+pnpm build && pnpm exec vitest run dist/aggregator/__tests__/resolveSignedAccount.test.js dist/aggregator/__tests__/publishGem.controller.test.js dist/aggregator/__tests__/catalogShare.test.js
 ```
 
 Expected: all PASS. The refactor must not change `recordCatalogShare`'s behavior — the publish tests are the regression guard.
@@ -163,7 +163,7 @@ Expected: all PASS. The refactor must not change `recordCatalogShare`'s behavior
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/aggregator/src/catalog.ts packages/aggregator/src/__tests__/resolveSignedAccount.test.ts
+git add packages/aggregator/src/catalog.ts src/aggregator/__tests__/resolveSignedAccount.test.ts
 git commit -m "feat(aggregator): resolveSignedAccount — shared pubkey->accounts.id resolver"
 ```
 
@@ -176,7 +176,7 @@ Add the owner column and the two helpers mint/revoke need: writing an archive wi
 **Files:**
 - Modify: `packages/aggregator/src/schema.ts` (drizzle def ~line 286; ensureSchema DDL ~after line 632)
 - Modify: `packages/aggregator/src/catalog.ts` (`upsertGemArchive` at 58; add `deleteGemArchiveOwned` + `archiveOnlyVersion`)
-- Test: `packages/aggregator/src/__tests__/gemArchiveOwner.test.ts` (create)
+- Test: `src/aggregator/__tests__/gemArchiveOwner.test.ts` (create)
 
 **Interfaces:**
 - Consumes: `gemArchives`, `AppDb`, `and`, `eq` (imported in catalog.ts).
@@ -187,7 +187,7 @@ Add the owner column and the two helpers mint/revoke need: writing an archive wi
 
 - [ ] **Step 1: Write the failing test**
 
-Create `packages/aggregator/src/__tests__/gemArchiveOwner.test.ts`:
+Create `src/aggregator/__tests__/gemArchiveOwner.test.ts`:
 
 ```ts
 // Copyright (c) 2026 NineMind, Inc.
@@ -243,7 +243,7 @@ describe("gem_archives ownership", () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-pnpm build && pnpm exec vitest run packages/aggregator/dist/__tests__/gemArchiveOwner.test.js
+pnpm build && pnpm exec vitest run dist/aggregator/__tests__/gemArchiveOwner.test.js
 ```
 
 Expected: FAIL at build — `deleteGemArchiveOwned`/`archiveOnlyVersion` not exported.
@@ -315,7 +315,7 @@ async function catalogGemExists2(db: AppDb, gemKey: string): Promise<boolean> {
 - [ ] **Step 4: Verify**
 
 ```bash
-pnpm build && pnpm exec vitest run packages/aggregator/dist/__tests__/gemArchiveOwner.test.js
+pnpm build && pnpm exec vitest run dist/aggregator/__tests__/gemArchiveOwner.test.js
 ```
 
 Expected: PASS, 5 tests.
@@ -323,7 +323,7 @@ Expected: PASS, 5 tests.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/aggregator/src/schema.ts packages/aggregator/src/catalog.ts packages/aggregator/src/__tests__/gemArchiveOwner.test.ts
+git add packages/aggregator/src/schema.ts packages/aggregator/src/catalog.ts src/aggregator/__tests__/gemArchiveOwner.test.ts
 git commit -m "feat(aggregator): owner_account_id on gem_archives + owned-delete + archiveOnlyVersion"
 ```
 
