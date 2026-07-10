@@ -364,7 +364,10 @@ const mcpCursorJson = (servers: McpServerArtifact[]): MaterializeResult => {
 // Reconstruct settings.json's `.hooks` event map. HookArtifact.config IS the group object
 // ({ matcher?, hooks: [...] }) captured by introspect, so we group those back under their event.
 function hooksToEventMap(hooks: HookArtifact[]): Record<string, unknown[]> {
-  const out: Record<string, unknown[]> = {};
+  // Object.create(null): h.event is an unconstrained string, so an event named "__proto__"/"constructor"
+  // would resolve to an inherited property on a plain {} — `??=` sees a truthy value, skips the assign,
+  // and `.push` throws on a non-array, crashing materialize. A null-proto map has no inherited keys.
+  const out: Record<string, unknown[]> = Object.create(null);
   for (const h of hooks) (out[h.event] ??= []).push(h.config);
   return out;
 }

@@ -21,6 +21,12 @@ describe("materialize", () => {
     expect(r.skipped).toEqual([]);
   });
 
+  it("claude: a hook whose event is an inherited property name (__proto__) doesn't crash materialize", () => {
+    const evil: HookArtifact = { type: "hook", name: "x", event: "__proto__", matcher: "", config: { hooks: [{ type: "command", command: "c" }] }, source: "user" };
+    expect(() => materialize(gem([evil]), "claude")).not.toThrow();
+    expect(materialize(gem([evil]), "claude").files["settings.json"]).toContain('"__proto__"'); // grouped under its event, not lost
+  });
+
   it("claude: renders a subagent to agents/<name>.md verbatim; other targets skip it with a reason", () => {
     const r = materialize(gem([subagent("reviewer")]), "claude");
     expect(r.files["agents/reviewer.md"]).toBe("---\nname: x\n---\nbody");
