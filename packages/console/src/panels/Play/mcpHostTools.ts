@@ -7,21 +7,14 @@ import type { McpUiTool } from "@agentgem/play";
 import { makeClient, playSessionDataRoute, inventoryRoute } from "../../api/routes.js";
 import { fetchSessions, openWatchStream } from "../Watch/watchStream.js";
 import { openStudioStream } from "./studioStream.js";
+import { CAP_TOOL, TOOL_CAP } from "./consent.js";
 
 export interface StreamHandle { close(): void }
 
-// GameCapability -> MCP tool name, and the inverse. One entry per capability declared in
-// @agentgem/model's GameCapability (session-data / live-session-events / local-project-access /
-// invoke-agent) — kept as plain string maps here since the router only ever sees tool/capability names.
-export const CAP_TOOL: Record<string, string> = {
-  "session-data": "agentgem_get_session_data",
-  "local-project-access": "agentgem_get_inventory",
-  "live-session-events": "agentgem_subscribe_sessions",
-  "invoke-agent": "agentgem_invoke_agent",
-};
-export const TOOL_CAP: Record<string, string> = Object.fromEntries(
-  Object.entries(CAP_TOOL).map(([cap, tool]) => [tool, cap]),
-);
+// GameCapability -> MCP tool name, and the inverse. Defined in consent.ts (the console's browser-safe
+// mirror of @agentgem/model's canonical map); re-exported here since callers already import these from
+// this module.
+export { CAP_TOOL, TOOL_CAP };
 
 const DESCRIPTIONS: Record<string, string> = {
   "session-data": "Get the miniapp's source-session transcript (meta + timeline).",
