@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: MIT
 // Catalog owner endpoints (raw express, like stars/reviews install.ts): reachable cross-site, own
 // credentialed CORS, originGuard-exempt (its prefix is allowlisted in originGuard.ts). DELETE is authed
-// (session cookie → 401) and owner-gated: the session's GitHub login must equal the gem's server-derived
-// publishedBy (403 otherwise). CSRF on the write is stopped by the SameSite=Lax session cookie + the 401,
-// NOT by CORS. Unpublish is a hard delete of the catalog row + archive bytes (visibility scope is a
-// separate, later feature).
+// (session cookie → 401) and owner-gated: the session's accounts.id uuid must equal the gem's
+// owner_account_id (403 otherwise; see deleteCatalogGem). CSRF on the write is stopped by the
+// SameSite=Lax session cookie + the 401, NOT by CORS. Unpublish is a hard delete of the catalog row +
+// archive bytes (visibility scope is a separate, later feature).
 import type { AppDb, makeAuth } from "@agentgem/aggregator";
 import { resolveSession, deleteCatalogGem } from "@agentgem/aggregator";
 
@@ -26,23 +26,22 @@ function cors(req: Req, res: Res, origins: string[]): void {
 function preflight(res: Res): void {
   res.set("Access-Control-Allow-Methods", "DELETE, OPTIONS").set("Access-Control-Allow-Headers", "content-type").status(204).send("");
 }
-// The caller's verified GitHub login (not just accountId) — publishedBy is a login, so ownership is a
-// login match.
-async function sessionLogin(deps: CatalogDeps, req: Req): Promise<string | null> {
+// Ownership is the accounts.id uuid, never the login string (see deleteCatalogGem).
+async function sessionAccountId(deps: CatalogDeps, req: Req): Promise<string | null> {
   const who = await resolveSession(deps.auth, req.headers);
-  return who?.login ?? null;
+  return who?.accountId ?? null;
 }
 
 export function unpublishHandler(deps: CatalogDeps) {
   return async (req: Req, res: Res): Promise<void> => {
     cors(req, res, deps.webOrigins);
     if (req.method === "OPTIONS") { preflight(res); return; }
-    const login = await sessionLogin(deps, req);
-    if (!login) { res.status(401).json({ error: "sign in required" }); return; }
+    const accountId = await sessionAccountId(deps, req);
+    if (!accountId) { res.status(401).json({ error: "sign in required" }); return; }
     const key = String((req.query.key as string | undefined) ?? "");
     const version = String((req.query.version as string | undefined) ?? "");
     if (!key || !version) { res.status(400).json({ error: "key and version required" }); return; }
-    const result = await deleteCatalogGem(deps.db, key, version, login);
+    const result = await deleteCatalogGem(deps.db, key, version, accountId);
     if (result === "not-found") { res.status(404).json({ error: "gem not found" }); return; }
     if (result === "forbidden") { res.status(403).json({ error: "not your gem" }); return; }
     res.json({ deleted: true, key, version });
