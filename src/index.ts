@@ -51,6 +51,7 @@ import { mkdirSync } from "node:fs";
 import { originGuard } from "./originGuard.js";
 import { playNoCache } from "./playCache.js";
 import { gameHtmlCache } from "./arcadeCache.js";
+import { gemNoCache } from "./gemCache.js";
 import { getWarmStatus, beginForeground, endForeground } from "./warm/orchestrator.js";
 import { startWarmSchedule } from "./warm/schedule.js";
 import { registerDrizzle } from "@agentback/drizzle";
@@ -167,6 +168,10 @@ export async function createApp(port: number): Promise<RestApplication> {
   // max-age so a repeat visit skips the request — but never `immutable`, since a republish reuses
   // the same (key, version).
   app.bind("hooks.gameHtmlCache").to(gameHtmlCache).tag(REST_DISPATCH_HOOK_TAG);
+  // The inventory reads serve mutable local state (installing a skill changes them); without
+  // Cache-Control the browser heuristically caches them off the bare ETag. Same rationale and
+  // mechanism as hooks.playNoCache above.
+  app.bind("hooks.gemNoCache").to(gemNoCache).tag(REST_DISPATCH_HOOK_TAG);
   await installExplorer(app, { title: "agentgem API" });
   await installMcpHttp(app);
   const server = await app.restServer;
