@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
-import { inventoryRoute, makeClient, type Inventory, type Artifact } from "../../api/routes.js";
+import { inventoryRoute, artifactContentRoute, makeClient, type Inventory, type Artifact } from "../../api/routes.js";
 import { useSubRouteTabs } from "../../shell/useSubRouteTabs.js";
 import { useCopied } from "../../shell/useCopied.js";
 import { useDialogA11y } from "../../shell/useDialogA11y.js";
@@ -72,7 +72,10 @@ export function Setup({ apiBase }: { apiBase: string }) {
   useEffect(() => {
     let alive = true;
     // The server's parseProjectsQuery expects a JSON-encoded array of roots, not a raw path.
-    inventoryRoute.call(makeClient(apiBase), { query: root ? { projects: JSON.stringify([root]) } : {} })
+    // ?body=defer drops artifact bodies from the top-level (global) lists — the viewer fetches
+    // one by id when its modal opens. Project-layer artifacts have no entity-address scheme
+    // yet, so the server leaves them with inline content regardless.
+    inventoryRoute.call(makeClient(apiBase), { query: root ? { projects: JSON.stringify([root]), body: "defer" } : { body: "defer" } })
       .then((res) => {
         if (!alive) return;
         if (!root || !res.projects?.length) { setInv(res); return; }
@@ -173,7 +176,7 @@ export function Setup({ apiBase }: { apiBase: string }) {
         )}
       </div>
 
-      {selected ? <ArtifactViewer sel={selected} onClose={closeViewer} /> : null}
+      {selected ? <ArtifactViewer apiBase={apiBase} sel={selected} onClose={closeViewer} /> : null}
     </div>
   );
 }
@@ -270,13 +273,25 @@ function Row({ a, typeKey, onOpen }: { a: Artifact; typeKey: TypeKey; onOpen: (k
   );
 }
 
-function ArtifactViewer({ sel, onClose }: { sel: { artifact: Artifact; group: string }; onClose: () => void }) {
+function ArtifactViewer({ apiBase, sel, onClose }: { apiBase: string; sel: { artifact: Artifact; group: string }; onClose: () => void }) {
   const a = sel.artifact;
   const { copied, copy } = useCopied();
   // The viewer is only ever open when the URL already reads #/setup/<tab>?a=<name>, so the
   // current href IS the shareable deep link — no need to reconstruct it.
   const copyLink = () => copy(window.location.href);
   const panelRef = useDialogA11y(onClose);
+
+  const [lazyBody, setLazyBody] = useState<string | null>(null);
+  const [lazyErr, setLazyErr] = useState<string | null>(null);
+  useEffect(() => {
+    // A project artifact ships its body inline (no entity path exists for project scope).
+    if (a.content !== undefined || !a.id) return;
+    let alive = true;
+    artifactContentRoute.call(makeClient(apiBase), { query: { id: a.id } })
+      .then((r) => { if (alive) { setLazyBody(r.content); setLazyErr(null); } })
+      .catch((e: unknown) => { if (alive) setLazyErr(e instanceof Error ? e.message : String(e)); });
+    return () => { alive = false; };
+  }, [apiBase, a.id, a.content]);
 
   return (
     <div className="setup-modal" role="dialog" aria-modal="true" aria-label={a.name} onClick={onClose}>
@@ -294,10 +309,15 @@ function ArtifactViewer({ sel, onClose }: { sel: { artifact: Artifact; group: st
         </div>
         {a.description ? <p className="setup-modal-desc">{a.description}</p> : null}
         <div className="setup-modal-body">
-          {/* Skills/subagents/instructions ship markdown content; MCP/hooks show their config. */}
-          {a.content
-            ? <ContentView text={a.content} />
-            : <pre className="setup-config">{a.config ? JSON.stringify(a.config, null, 2) : "(no file body for this artifact)"}</pre>}
+          {/* Skills/subagents/instructions ship markdown content (inline for project artifacts,
+              lazily fetched by id for global ones); MCP/hooks show their config. */}
+          {(() => {
+            const body = a.content ?? lazyBody ?? undefined;
+            if (lazyErr) return <pre className="setup-config">Failed to load: {lazyErr}</pre>;
+            if (body !== undefined) return <ContentView text={body} />;
+            if (a.id) return <pre className="setup-config">Loading…</pre>;
+            return <pre className="setup-config">{a.config ? JSON.stringify(a.config, null, 2) : "(no file body for this artifact)"}</pre>;
+          })()}
         </div>
       </div>
     </div>
