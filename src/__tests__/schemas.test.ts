@@ -14,15 +14,24 @@ import {
 describe("wire schemas", () => {
   it("validates an inventory shape", () => {
     const parsed = InventorySchema.parse({
-      skills: [{ type: "skill", name: "review", source: "standalone", content: "x" }],
+      skills: [{ type: "skill", name: "review", source: "standalone", id: "workspace/skills/standalone/review", content: "x" }],
       mcpServers: [{ type: "mcp_server", name: "gh", transport: "stdio", config: { env: { T: "<redacted>" } } }],
-      instructions: [{ type: "instructions", name: "CLAUDE.md", content: "y" }],
+      instructions: [{ type: "instructions", name: "CLAUDE.md", id: "workspace/instructions/CLAUDE.md", content: "y" }],
       hooks: [{ type: "hook", name: "PreToolUse · Bash", event: "PreToolUse", matcher: "Bash", config: { hooks: [] }, source: "user" }],
-      subagents: [{ type: "subagent", name: "reviewer", source: "user", content: "z", tools: ["Read"], model: "sonnet" }],
+      subagents: [{ type: "subagent", name: "reviewer", source: "user", id: "workspace/subagents/user/reviewer", content: "z", tools: ["Read"], model: "sonnet" }],
     });
     expect(parsed.skills[0].name).toBe("review");
+    expect(parsed.skills[0].id).toBe("workspace/skills/standalone/review");
     expect(parsed.hooks[0].event).toBe("PreToolUse");
     expect(parsed.subagents[0]).toMatchObject({ name: "reviewer", tools: ["Read"], model: "sonnet" });
+    // Verify that InventorySchema rejects a skill missing id
+    expect(InventorySchema.safeParse({
+      skills: [{ type: "skill", name: "review", source: "standalone", content: "x" }],
+      mcpServers: [],
+      instructions: [],
+      hooks: [],
+      subagents: [],
+    }).success).toBe(false);
   });
 
   it("validates a gem-request with an all selection", () => {
