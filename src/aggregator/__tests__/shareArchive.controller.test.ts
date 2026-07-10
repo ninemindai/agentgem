@@ -74,3 +74,37 @@ describe("AggregatorController.shareArchive", () => {
     expect(await listCatalogGems(db)).toHaveLength(0);
   });
 });
+
+describe("AggregatorController.revokeShareArchive", () => {
+  function revokeBody(key: string, s: ReturnType<typeof signer>, signedAt = Date.now()) {
+    const payload = `revoke:${key}:${signedAt}`;
+    return { key, pubkey: s.pubkey, signedAt, signature: s.sign(payload) };
+  }
+
+  it("lets the minting account revoke its own share", async () => {
+    const { db, s } = await boundDb();
+    const c = new AggregatorController(db);
+    const { key } = await c.shareArchive({ body: signedArchiveBody(gameGem(), s) });
+    const res = await c.revokeShareArchive({ body: revokeBody(key, s) });
+    expect(res).toEqual({ revoked: true });
+    expect(await getGemArchive(db, key, "1")).toBeNull();
+  });
+
+  it("forbids a different account from revoking (fail-closed)", async () => {
+    const { db, s } = await boundDb();
+    const c = new AggregatorController(db);
+    const { key } = await c.shareArchive({ body: signedArchiveBody(gameGem(), s) });
+    // a second bound producer on a DIFFERENT account
+    const s2 = signer();
+    await db.insert(producers).values({ pubkey: s2.pubkey });
+    await db.insert(accounts).values({ id: randomUUID(), provider: "github", providerAccountId: "2", login: "mallory" });
+    await db.insert(accountBindings).values({ pubkey: s2.pubkey, provider: "github", accountId: "2", accountLogin: "mallory" });
+    await expect(c.revokeShareArchive({ body: revokeBody(key, s2) })).rejects.toMatchObject({ statusCode: 403 });
+    expect(await getGemArchive(db, key, "1")).not.toBeNull();
+  });
+
+  it("404s an unknown key", async () => {
+    const { db, s } = await boundDb();
+    await expect(new AggregatorController(db).revokeShareArchive({ body: revokeBody("nope", s) })).rejects.toMatchObject({ statusCode: 404 });
+  });
+});
