@@ -140,7 +140,7 @@ await db.execute(sql`alter table accounts alter column login drop not null`);
 await db.execute(sql`drop table if exists web_sessions`);
 ```
 
-`web_sessions` is created earlier in `ensureSchema` and dropped here. That is intentional and idempotent — a fresh database creates then drops it; an existing one just drops it. Leave the `create table` statement alone; removing it would break the ordering of the `handoff_codes` FK that references `accounts` in the same block.
+**Delete the `create table if not exists web_sessions (...)` statement from `ensureSchema` entirely**, keeping only the `drop table if exists web_sessions` above. A fresh database never creates it and the drop is a harmless no-op; an existing database drops it. `handoff_codes` references `accounts`, not `web_sessions`, so nothing depends on the create. Leaving a statement that builds a table only to destroy it eight lines later is dead code in the sole DDL authority.
 
 Then update the drizzle table objects in the same file:
 
@@ -1041,10 +1041,14 @@ export async function buildProfile(db: AppDb, rawHandle: string): Promise<Profil
     .select({ id: accounts.id, login: accounts.login, avatarUrl: accounts.avatarUrl })
     .from(accounts).where(eq(accounts.id, accountId)).limit(1))[0];
 
-  const bind = (await db
-    .select({ pubkey: accountBindings.pubkey }).from(accountBindings)
-    .where(sql`lower(${accountBindings.accountLogin}) = lower(${handle})`).limit(1))[0];
-  const verified = !!bind;
+  // `verified` follows the ACCOUNT, not the name. account_bindings.account_id is the PROVIDER's id
+  // (text), so pair it with `provider` to reach the anchor. Matching account_login against the handle
+  // would silently un-verify anyone who renamed, since the binding still holds their old login.
+  const bind = (await db.execute(sql`
+    select 1 from account_bindings ab
+    join accounts a on a.provider = ab.provider and a.provider_account_id = ab.account_id
+    where a.id = ${accountId} limit 1`));
+  const verified = (bind.rows?.length ?? 0) > 0;
 
   // Ownership read: gems this ACCOUNT owns. Matching published_by would list impostor rows whose
   // string happens to equal the handle but whose owner_account_id is NULL or someone else's.
