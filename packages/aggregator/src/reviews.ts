@@ -58,10 +58,14 @@ export async function reviewSummaries(db: AppDb, kind: string, ids: string[]): P
 // Latest N reviews joined to the reviewer's account, newest first. Order is by created_at (a
 // review's slot is fixed when first written); updatedAt travels along so the UI can flag edits.
 export async function listReviews(db: AppDb, kind: string, id: string, limit = 50): Promise<ReviewView[]> {
+  // login can be NULL (Task 3) since the anchor now writes an accounts row for any provider —
+  // display falls back to "user".handle then "user".name. Left join: not every accounts row has
+  // a same-id "user" row (e.g. bind-only accounts in tests/older data), so an inner join would
+  // silently drop the reviewer instead of falling all the way to ''.
   const r = await db.execute<{ login: string; avatarUrl: string | null; rating: number; body: string | null; createdAt: string; updatedAt: string }>(sql`
-    select a.login, a.avatar_url as "avatarUrl", r.rating, r.body,
+    select coalesce(a.login, u.handle, u.name, '') as login, a.avatar_url as "avatarUrl", r.rating, r.body,
            r.created_at as "createdAt", r.updated_at as "updatedAt"
-    from reviews r join accounts a on a.id = r.account_id
+    from reviews r join accounts a on a.id = r.account_id left join "user" u on u.id = a.id::text
     where r.target_kind = ${kind} and r.target_id = ${id}
     order by r.created_at desc
     limit ${limit}
