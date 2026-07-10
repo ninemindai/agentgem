@@ -89,37 +89,38 @@ export function makeAuth(opts: {
   return betterAuth(config);
 }
 
-async function anchorAndScopes(db: AppDb, account: { userId: string; providerId: string; accountId: string; accessToken?: string | null }, isCreate: boolean) {
-  if (account.providerId !== "github") return;
-  const row = (await db.execute(sql`select login, image from "user" where id = ${account.userId}`)).rows?.[0] as { login?: string; image?: string } | undefined;
-  const login = row?.login;
-  // 1) legacy accounts ANCHOR. accounts.id = user.id (uuid). No existing row for a new user, so the
-  //    insert with id=user.id succeeds; a migrated user re-logging in already has id=user.id, so the
-  //    (provider,provider_account_id) conflict updates login/avatar in place (id unchanged). This is
-  //    guaranteed for a fresh user; for a pre-existing legacy account it relies on the boot backfill
-  //    (migrateAccountsToBetterAuth, run at startup) having already created the matching better-auth
-  //    user with the same id — otherwise the (provider, provider_account_id) conflict keeps the legacy
-  //    id and this anchor write is a no-op.
-  //    On CREATE, the write is LOAD-BEARING — let a failure THROW to fail the sign-in, since a user
-  //    with no anchor is broken and must not get a session.
-  //    On UPDATE (re-login), the anchor already exists — the write is just refreshing login/avatar,
-  //    so it's best-effort: a transient failure here must not block an otherwise-legitimate sign-in.
-  if (login) {
-    if (isCreate) {
-      await upsertAccount(db, { provider: "github", accountId: account.accountId, login, avatarUrl: row?.image ?? null, id: account.userId });
-    } else {
-      try {
-        await upsertAccount(db, { provider: "github", accountId: account.accountId, login, avatarUrl: row?.image ?? null, id: account.userId });
-      } catch { /* re-login refresh is best-effort; the anchor already exists */ }
-    }
-  } else if (isCreate) {
-    throw new Error("anchor: user has no login; cannot create accounts anchor");
-  }
-  // 2) org scopes — best-effort, never throw (mirrors today's tolerance).
+async function anchorAndScopes(
+  db: AppDb,
+  account: { userId: string; providerId: string; accountId: string; accessToken?: string | null },
+  isCreate: boolean,
+) {
+  const row = (await db.execute(sql`select login, image from "user" where id = ${account.userId}`)).rows?.[0] as
+    { login?: string; image?: string } | undefined;
+  // GitHub supplies a login; every other provider does not. The anchor row is written either way,
+  // because ten tables carry a foreign key to accounts.id and the user's first star/review/group
+  // insert would otherwise violate it. A login-less anchor is legal since Task 1 (login is nullable).
+  const login = account.providerId === "github" ? (row?.login ?? null) : null;
+
+  // On CREATE the anchor is LOAD-BEARING: a user with no anchor is broken and must not get a
+  // session, so let a failure THROW and abort the sign-in. On UPDATE (re-login) the anchor already
+  // exists and we are only refreshing login/avatar — best-effort, never block a legitimate sign-in.
+  const write = () => upsertAccount(db, {
+    provider: account.providerId, accountId: account.accountId,
+    login, avatarUrl: row?.image ?? null, id: account.userId,
+  });
+  if (isCreate) await write();
+  else try { await write(); } catch { /* re-login refresh is best-effort */ }
+
+  // Org scopes are a GitHub concept: they are captured from the GitHub App / API and keyed on a
+  // login. A login-less provider simply has none, matches no org, and is denied — correct, not a gap.
+  if (account.providerId !== "github" || !login) return;
   try {
-    if (account.accessToken && login) {
+    if (account.accessToken) {
       const memberships = await fetchOrgMemberships(account.accessToken);
-      await setAccountScopes(db, account.userId, [{ scope: login, role: "self" as const }, ...memberships.map((m) => ({ scope: m.login, role: m.role }))]);
+      await setAccountScopes(db, account.userId, [
+        { scope: login, role: "self" as const },
+        ...memberships.map((m) => ({ scope: m.login, role: m.role })),
+      ]);
     }
   } catch { /* scopes are additive; never fail sign-in over them */ }
 }
