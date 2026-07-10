@@ -64,6 +64,12 @@ export async function getGemArchive(db: AppDb, gemKey: string, version: string):
   return r ? { bytes: r.bytes, digest: r.digest } : null;
 }
 
+export async function catalogGemExists(db: AppDb, gemKey: string, version: string): Promise<boolean> {
+  const r = (await db.select({ gemKey: catalogGems.gemKey }).from(catalogGems)
+    .where(and(eq(catalogGems.gemKey, gemKey), eq(catalogGems.version, version))).limit(1))[0];
+  return r != null;
+}
+
 export type DeleteGemResult = "deleted" | "not-found" | "forbidden";
 
 // Owner-only unpublish: remove a published gem's catalog row + archive bytes. Ownership is enforced

@@ -16,7 +16,8 @@ import { recordBinding } from "@agentgem/aggregator";
 import { GitHubVerifier } from "@agentgem/aggregator";
 import { sweepQuarantine, sweepAdoptionQuarantine } from "@agentgem/aggregator";
 import { issueKey, revokeKey, listKeys } from "@agentgem/aggregator";
-import { recordCatalogShare, upsertGemArchive, getGemArchive } from "@agentgem/aggregator";
+import { recordCatalogShare, upsertGemArchive, getGemArchive, catalogGemExists } from "@agentgem/aggregator";
+import { recordGamePlay, gamePlayCounts } from "@agentgem/aggregator";
 import { importGem } from "@agentgem/distribute";
 
 // Loose body schema — the real gate is the core's verifyAttestation (ed25519 + consistency).
@@ -139,6 +140,11 @@ const PublishGemBody = z.object({ manifest: CatalogManifestSchema, archiveBase64
 const GemArchiveQuery = z.object({ key: z.string(), version: z.string() });
 const GemArchiveResult = z.object({ archiveBase64: z.string() });
 const GameHtmlResult = z.object({ html: z.string() });
+// visitorId is an opaque client-minted dedupe key, never an identity — capped, never validated.
+const GamePlayBody = z.object({ gemKey: z.string(), version: z.string(), visitorId: z.string().max(64).optional() });
+const GamePlayResult = z.object({ ok: z.literal(true) });
+const GamePlaysQuery = z.object({ keys: z.string().optional() });
+const GamePlaysResult = z.object({ items: z.array(z.object({ gemKey: z.string(), plays: z.number() })) });
 
 // Constant-time token compare (length-guarded so timingSafeEqual never throws on mismatched lengths).
 function tokenEq(a: string, b: string): boolean {
@@ -303,6 +309,25 @@ export class AggregatorController {
     const game = gem.artifacts.find((x) => x.type === "game") as { html?: unknown } | undefined;
     if (!game || typeof game.html !== "string") throw new AgentError("this gem has no game to play", { status: 404, code: "not_a_game", retryable: false });
     return { html: game.html };
+  }
+
+  // A reader clicked into a mini-game's fullscreen play. Unauthenticated by design — the arcade needs
+  // no login — so this counts CLICKS, not people, and a determined caller can inflate it. The published
+  // gem must exist, which is what keeps the table to real games instead of arbitrary caller-named keys.
+  @post("/game-play", { body: GamePlayBody, response: GamePlayResult })
+  async gamePlay(input: { body: z.infer<typeof GamePlayBody> }): Promise<z.infer<typeof GamePlayResult>> {
+    const { gemKey, version, visitorId } = input.body;
+    if (!(await catalogGemExists(this.db, gemKey, version))) throw new AgentError("gem not found", { status: 404, code: "gem_not_found", retryable: false });
+    await recordGamePlay(this.db, { gemKey, version, visitorId });
+    return { ok: true };
+  }
+
+  // Play counts for the arcade cards. Plays only: the visitor id behind them is a dedupe key, and
+  // publishing a "unique" number from it would be claiming an identity the arcade never collects.
+  @get("/game-plays", { query: GamePlaysQuery, response: GamePlaysResult })
+  async gamePlays(input: { query: z.infer<typeof GamePlaysQuery> }): Promise<z.infer<typeof GamePlaysResult>> {
+    const keys = input.query.keys ? input.query.keys.split(",").map((s) => s.trim()).filter(Boolean) : undefined;
+    return { items: await gamePlayCounts(this.db, { keys }) };
   }
 
   // Admin-only: run the anti-sybil quarantine sweep. Dry-run by default; apply=true is
