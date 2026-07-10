@@ -1,194 +1,160 @@
-# Collapsible / resizable sidebar + full-width Play Studio
+# Resizable layout: collapsible sidebar, draggable pane splits, full-width Studio
 
 **Date:** 2026-07-10
 **Status:** Approved design → implementation
-**Scope:** `packages/console` (console shell + Play panel). No server changes.
+**Scope:** `packages/console` only (console shell + panels). No server changes.
 
 ## Problem
 
 The console shell is a two-column CSS grid with a **fixed 244px** left sidebar
 (`.console { grid-template-columns: 244px 1fr }`) that is always present, and a
-main panel capped at `max-width: 1100px`. Two consequences:
+main panel capped at `max-width: 1100px`. Inside several panels the working area
+is a **fixed-ratio two-pane grid** the user cannot re-proportion. Consequences:
 
-1. There is no way to reclaim the 244px rail to give the main panel more room.
-2. The 1100px cap applies to *every* panel, so the Play Studio's two-pane grid
-   (`.play-grid-2`) stops widening at 1100px — zooming out or using a wide
-   monitor buys it no extra space.
+1. No way to reclaim the 244px rail to give the main panel more room.
+2. The 1100px cap applies to *every* panel, so the Studio's two-pane grid
+   (`.play-grid-2`) stops widening at 1100px — zooming out / a wide monitor buys
+   it no space.
+3. Side-by-side panes (preview vs chat, master vs detail, editor vs side panel,
+   chart vs aside) are frozen at their designed ratio.
 
 ## Goals
 
-- Let the user **shrink or hide** the left sidebar to give the main panel more
-  width, via a single drag-driven mechanism that covers three states:
-  full → icon rail → hidden.
-- Make the **Play Studio (the whole Play page)** extend to fill available width
-  so it grows as the window widens / zooms out, instead of being capped.
-- Persist the user's chosen sidebar state across reloads.
-- Keep the change contained to `packages/console`; no structural markup rewrite.
+- **Shrink or hide** the left sidebar via one drag-driven mechanism covering
+  three states: full → icon rail → hidden.
+- **Resize every genuine two-pane "window"** in the console with a draggable
+  divider; the neighbor pane reflows dynamically.
+- Make the **Studio (whole Play page)** extend to fill available width.
+- **Persist** every resizable state across reloads.
+- Rename the Build-phase **"Play"** nav item to **"Studio"**.
+- One reusable primitive powers all of the above; contained to `packages/console`.
 
 ## Non-goals
 
-- No per-pixel resize of the *main* panel independently (only the sidebar).
-- No lifting the width cap on non-Play panels — prose and tables keep their
-  readable ~1100px measure.
-- No server / API / registry-wire changes beyond one optional page field.
+- No free-floating/movable windows — only fixed dividers between existing panes.
+- No lifting the width cap on non-Studio panels — prose/tables keep their ~1100px
+  measure; their internal splits resize *within* that cap.
+- No route change for Play (see Rename); no server/API changes.
 
 ---
 
 ## Design
 
-### 1. One CSS variable drives the grid
+### A. Shared resize primitive
 
-Replace the fixed track with a variable, defaulting to today's width:
+One low-level hook, `packages/console/src/shell/useDragResize.ts`, owns all the
+fiddly drag mechanics so nothing is duplicated across five call sites:
+
+```ts
+useDragResize(opts: {
+  value: number;                 // current size (px)
+  min: number; max: number;
+  onChange: (next: number) => void;
+  snap?: (raw: number) => number;   // optional (sidebar rail snap)
+  invert?: boolean;                 // handle on the pane's right edge (end-side)
+}): {
+  handleProps: {…};              // role="separator", aria-*, tabIndex, pointer/key handlers
+  dragging: boolean;
+}
+```
+
+- **Delta-based** drag: on `pointerdown`, capture `startClientX` + `startValue`;
+  on move, `raw = startValue ± (clientX − startClientX)` (± via `invert`); apply
+  optional `snap`, clamp to `[min, max]`, `onChange`. Delta mode works uniformly
+  for the sidebar (absolute-feeling) and internal splits (relative).
+- **Keyboard a11y:** handle is `role="separator"`, `aria-orientation="vertical"`,
+  `aria-valuenow/min/max`, `tabIndex=0`. `←/→` nudge ±16px, `Home`→min, `End`→max.
+- All arithmetic is testable without a DOM; the only DOM read is `clientX`.
+
+### B. Sidebar (`shell/sidebar.ts` + `useSidebar`)
+
+Pure logic + a hook that layers sidebar-specific behavior on `useDragResize`.
+
+Replace the fixed grid track with a variable:
 
 ```css
 .console { grid-template-columns: var(--rail-w) 1fr; }
-```
-
-`Shell` sets `--rail-w` inline on the `.console` element from state. Every
-sidebar behavior — drag, snap-to-rail, full-hide — reduces to *setting one
-number*. The sticky nav (`position: sticky; height: 100vh`) and the main panel
-follow automatically; no markup restructure.
-
-To allow a smooth animation on toggle (but not during drag), register the
-custom property so it is animatable:
-
-```css
 @property --rail-w { syntax: "<length>"; inherits: true; initial-value: 244px; }
 .console { transition: grid-template-columns .18s cubic-bezier(.2,.7,.2,1); }
-.console.is-dragging { transition: none; }   /* live-follow the pointer */
+.console.is-dragging { transition: none; }
 ```
 
-### 2. Sidebar state — pure logic in `sidebar.ts`
-
-A new `packages/console/src/shell/sidebar.ts` holds the state machine as **pure
-functions** (no DOM), so it is unit-testable — important because jsdom has no
-layout and the console test suite is not in CI (must be run locally).
+`Shell` sets `--rail-w` inline from state — drag, snap, hide all reduce to
+setting one number; the sticky nav and main follow automatically.
 
 Constants:
 
-| Name             | Value | Meaning                                        |
-|------------------|-------|------------------------------------------------|
-| `RAIL_W`         | 56    | Icon-rail width (px)                            |
-| `FULL_MIN`       | 190   | Narrowest "full" (labelled) width              |
-| `FULL_MAX`       | 420   | Widest sidebar                                 |
-| `SNAP_THRESHOLD` | 130   | Drag below this ⇒ snap to rail                 |
-| `DEFAULT_WIDTH`  | 244   | Initial / first-run width (today's value)      |
+| Name | Value | Meaning |
+|------|-------|---------|
+| `RAIL_W` | 56 | Icon-rail width |
+| `FULL_MIN` | 190 | Narrowest labelled width |
+| `FULL_MAX` | 420 | Widest sidebar |
+| `SNAP_THRESHOLD` | 130 | Drag below ⇒ snap to rail |
+| `DEFAULT_WIDTH` | 244 | First-run width |
 
-State shape (persisted):
+Pure functions: `resolveWidth(raw)` (`<130`→`RAIL_W`; else clamp to
+`[FULL_MIN,FULL_MAX]`) passed as the `snap` to `useDragResize`; `isRail(w)=w<=RAIL_W`;
+`effectiveWidth({width,collapsed})` (`collapsed?0:width`); tolerant
+`loadRail()/saveRail()` round-tripping `{width,collapsed}` to
+`localStorage["agentgem.console.rail"]`.
 
-```ts
-type RailState = { width: number; collapsed: boolean };
-```
+`useSidebar` exposes `{ width, collapsed, isRail, dragProps, toggleCollapsed }`,
+persists on change, and registers a global **`Cmd/Ctrl+B`** listener →
+`toggleCollapsed()`.
 
-Pure functions:
+**Full-hide + re-open:** a collapse toggle in the nav header and `Cmd/Ctrl+B` set
+`collapsed`; `--rail-w:0`, `.console.is-hidden`, and a small floating `☰` re-open
+button appears top-left.
 
-```ts
-// Snap + clamp a raw dragged width into a resolved sidebar width.
-// raw < SNAP_THRESHOLD  → rail mode (RAIL_W)
-// otherwise             → full mode, clamped to [FULL_MIN, FULL_MAX]
-resolveWidth(raw: number): number
+**Rail-mode reductions (`.console.is-rail`, pure CSS):** brand → mark only;
+`.console-nav-item` labels hidden, icon centered, React sets `title={p.title}` for
+tooltips; phase pills show their initial via `data-short={p.label[0]}` +
+`::before{content:attr(data-short)}`; `.console-group-label`, `WarmingPill` text,
+`IdentityChip` text hidden; **`ActiveGemSwitcher` hidden** (widen to switch gems).
 
-// Is this resolved width the icon rail?
-isRail(width: number): boolean            // width <= RAIL_W
+### C. Internal pane splits (`shell/useSplit.ts` + `.split-handle`)
 
-// Effective grid width given collapse.
-effectiveWidth(s: RailState): number      // collapsed ? 0 : s.width
+`useSplit(id, { initial, min, max, side })` wraps `useDragResize` for one panel,
+persisting the resizable pane's px size to `localStorage["agentgem.console.split."+id]`.
+Returns `{ containerProps, handle }`:
 
-// localStorage round-trip (tolerant parse; bad data → defaults).
-loadRail(): RailState
-saveRail(s: RailState): void
-```
+- `containerProps`: `ref`, `style={{ "--split": px+"px" }}`, adds `is-dragging`.
+- `handle`: `<span className="split-handle" data-side={side} {...handleProps} />`,
+  absolutely positioned on the seam inside the (now `position:relative`) container
+  — `left:var(--split)` for `side:"start"`, `right:var(--split)` for `side:"end"`.
 
-Persistence key: `localStorage["agentgem.console.rail"]`, matching the existing
-`agentgem.console.*` convention (`lastActive`, `lastRoute`). Storage failures
-are swallowed (nav still works, just no memory), same as existing code.
+Each panel keeps its existing JSX/grid but (1) makes the resizable column
+`var(--split)`, (2) drops in `{split.handle}`, (3) sets `position:relative`.
+The default `--split` falls back to the panel's current designed size, so
+first paint is unchanged until the user drags.
 
-### 3. `useSidebar` hook (wiring)
+| Panel | File | Grid becomes | side | initial / min / max | id |
+|-------|------|--------------|------|---------------------|-----|
+| Studio preview\|chat | `panels/Play/Studio.tsx` (`.play-grid-2`) | `var(--split) minmax(300px,1fr)` | start | 60% / 360 / — (cap = container−320) | `studio` |
+| Materialize master\|detail | `panels/Materialize/*` (`.targets-result`) | `var(--split) 1fr` | start | 240 / 190 / 460 | `materialize` |
+| Rubric editor\|panel | `panels/RubricLibrary/index.tsx` (`.rub-editor`) | `minmax(0,1fr) var(--split)` | end | 240 / 200 / 420 | `rubric` |
+| Hygiene chart\|aside | `.ct` (Received + Observe/ContextTimeline) | `minmax(0,1fr) var(--split)` | end | 288 / 240 / 460 | `hygiene` |
 
-A thin hook in `sidebar.ts` (or `useSidebar.ts`) wires the pure logic to React:
+Studio's `max` is computed from container width (keep chat ≥ ~320px) rather than a
+constant, since Studio is full-width. `.ct` keeps its `@media (max-width:880px)`
+collapse to one column; in that state the handle is hidden and `--split` ignored.
 
-- Initializes from `loadRail()`.
-- Exposes `{ width, collapsed, isRail, setWidth, toggleCollapsed, dragProps }`.
-- Persists on change (effect).
-- Registers the `Cmd/Ctrl+B` global key listener → `toggleCollapsed()`.
-- The pointer handler is a thin wire: `pointerdown` captures + sets
-  `is-dragging`; `pointermove` computes `clientX` → `resolveWidth` → `setWidth`;
-  `pointerup` releases + clears `is-dragging`. All arithmetic lives in
-  `resolveWidth`, so the handler itself needs no geometry a test must fake.
+### D. Studio full width
 
-### 4. Drag handle (the resize seam)
+Add optional `fullWidth?: boolean` to `ConsolePage` (`contract.ts`). `Shell` adds
+`.console-main--wide` (`max-width:none`) when `active.fullWidth`. Set it on the
+Play/Studio page so `.play-grid-2` fills space freed by collapsing the rail and by
+zooming out. Play's height budgeting already re-runs on `resize`/`ResizeObserver`;
+this unblocks the width axis. Other panels retain the 1100px cap.
 
-A single element rendered as a child of `.console`, absolutely positioned on the
-seam between the two grid tracks:
+### E. Rename Play → Studio
 
-```html
-<div class="console-rail-handle"
-     role="separator" aria-orientation="vertical"
-     aria-label="Resize sidebar"
-     aria-valuenow={width} aria-valuemin={RAIL_W} aria-valuemax={FULL_MAX}
-     tabindex="0" />
-```
-
-```css
-.console-rail-handle {
-  position: fixed; top: 0; bottom: 0; left: var(--rail-w);
-  width: 8px; transform: translateX(-4px); cursor: col-resize; z-index: 5;
-}
-.console.is-hidden .console-rail-handle { display: none; }
-```
-
-Keyboard support (handle focused): `←/→` nudge width ±16px (through
-`resolveWidth`), `Home` → rail, `End` → `FULL_MAX`.
-
-### 5. Full-hide + re-open
-
-- A collapse **toggle button** lives in the nav header (near the brand); it and
-  `Cmd/Ctrl+B` both call `toggleCollapsed()`.
-- When `collapsed`, `--rail-w` is `0px`, `.console.is-hidden` is set, and a small
-  **floating re-open button** (`☰`) is shown fixed at top-left to restore. The
-  hotkey also always restores.
-
-### 6. Rail-mode reductions (`.console.is-rail`)
-
-When the resolved width is the icon rail, the nav shows icons only. CSS-driven
-reductions (no conditional React branches beyond adding attributes):
-
-- `.console-brand` → mark only, hide the "AgentGem" text.
-- `.console-nav-item` → hide the label text, keep `.console-nav-icon`, center it.
-  React always sets `title={p.title}` on the nav button so the label surfaces as
-  a native tooltip in rail mode.
-- `.console-phase-switch` → phase pills show their **initial** (`O` / `B`). Shell
-  adds `data-short={p.label[0]}` to each phase button; CSS in rail mode hides the
-  full label and renders `::before { content: attr(data-short) }`.
-- `.console-group-label` (Configuration / Sessions / …) → hidden.
-- `WarmingPill` text and `IdentityChip` text → hidden (icon/dot only).
-- `ActiveGemSwitcher` → **hidden** in rail mode. Switching gems requires widening
-  the rail. (Accepted tradeoff: cramming a switcher into 56px is not worth it.)
-
-These are the fiddly bits; all are pure CSS keyed off the `is-rail` class plus a
-couple of always-present attributes, so no page/component logic changes.
-
-### 7. Play Studio full width
-
-Add one optional field to `ConsolePage` (`packages/console/src/contract.ts`):
-
-```ts
-/** Opt out of the default readable max-width; fill available main width. */
-fullWidth?: boolean;
-```
-
-`Shell` adds `.console-main--wide` to `<main>` when `active.fullWidth` is set:
-
-```css
-.console-main--wide { max-width: none; }
-```
-
-Set `fullWidth: true` on `playPage` (`panels/Play/index.tsx`). This lifts the
-cap for the entire Play page (Arcade grid, Composer, Studio) so `.play-grid-2`
-fills whatever space is freed by collapsing the rail and/or zooming out. Play's
-existing height budgeting (`plateMax` via `ResizeObserver` + `resize`) already
-reacts to viewport changes; this unblocks the width axis only. All other panels
-retain the global `.console-main { max-width: 1100px }`.
+In `panels/Play/index.tsx`, `playPage.title: "Play"` → `"Studio"`. **Keep**
+`id:"play"`, `route:"#/play"`, and icon 🎮 unchanged — the marketplace
+"Make your own" deep-link (`#/play?new=1&…`) and `LEGACY_ROUTES`/`normalizeHash`
+all key on `#/play`; renaming the route would break shared links for zero user
+benefit. Only the nav label changes. The internal `view.kind==="studio"` and the
+"Studio" sub-view are already named this; the container page now matches.
 
 ---
 
@@ -196,40 +162,47 @@ retain the global `.console-main { max-width: 1100px }`.
 
 | File | Change |
 |------|--------|
-| `packages/console/src/shell/sidebar.ts` | **New.** Pure state logic + `useSidebar` hook. |
-| `packages/console/src/shell/Shell.tsx` | Use `useSidebar`; set `--rail-w` + `is-rail`/`is-hidden`/`is-dragging` classes; render drag handle, collapse toggle, floating re-open; `data-short` on phase buttons; `title` on nav items; `console-main--wide` when `active.fullWidth`. |
-| `packages/console/src/shell/theme.css` | Variable grid track, `@property --rail-w`, transition, `.console-rail-handle`, `.console.is-rail` reductions, `.console.is-hidden`, `.console-main--wide`, re-open button. |
-| `packages/console/src/contract.ts` | Add optional `fullWidth?: boolean` to `ConsolePage`. |
-| `packages/console/src/panels/Play/index.tsx` | `fullWidth: true` on `playPage`. |
-| `packages/console/src/shell/sidebar.test.ts` | **New.** Unit tests for pure logic. |
-| `packages/console/src/shell/Shell.test.tsx` | Extend: class/var reflect state, `Cmd+B` collapse, `fullWidth` → `--wide`. |
+| `shell/useDragResize.ts` | **New.** Shared pointer/keyboard/aria drag primitive. |
+| `shell/sidebar.ts` | **New.** Sidebar pure logic + `useSidebar` (uses `useDragResize`). |
+| `shell/useSplit.ts` | **New.** Per-panel split state + `{containerProps,handle}` (uses `useDragResize`). |
+| `shell/Shell.tsx` | `useSidebar`; `--rail-w` + `is-rail`/`is-hidden`/`is-dragging` classes; drag handle, collapse toggle, floating re-open; `data-short`/`title` on nav; `console-main--wide` when `active.fullWidth`. |
+| `shell/theme.css` | Variable grid track, `@property`, transitions, `.console-rail-handle`, `.console.is-rail` reductions, `.console.is-hidden`, `.split-handle`, `.console-main--wide`; make the four split containers `position:relative` + `var(--split)` columns. |
+| `contract.ts` | Add optional `fullWidth?: boolean`. |
+| `panels/Play/index.tsx` | `title:"Studio"`, `fullWidth:true` on `playPage`. |
+| `panels/Play/Studio.tsx` | Wire `useSplit("studio")` into `.play-grid-2`. |
+| `panels/Materialize/*` | Wire `useSplit("materialize")` into `.targets-result`. |
+| `panels/RubricLibrary/index.tsx` | Wire `useSplit("rubric")` into `.rub-editor`. |
+| `panels/Received/*` + `panels/Observe/ContextTimeline.tsx` | Wire `useSplit("hygiene")` into `.ct`. |
+| `shell/sidebar.test.ts`, `shell/useSplit.test.ts` | **New.** Unit tests for pure logic. |
+| `shell/Shell.test.tsx` | Extend for sidebar state + `fullWidth` + rename. |
 
 ## Testing
 
-**Unit (`sidebar.test.ts`, pure — no DOM):**
-- `resolveWidth`: below `SNAP_THRESHOLD` → `RAIL_W`; within band → clamped to
-  `[FULL_MIN, FULL_MAX]`; at/above `FULL_MAX` → `FULL_MAX`.
-- `isRail`, `effectiveWidth(collapsed)` → 0.
-- `loadRail`/`saveRail`: round-trip; malformed JSON → defaults; storage throw →
-  defaults (no crash).
+**Unit (pure, no DOM):**
+- `resolveWidth` snap/clamp bands; `isRail`; `effectiveWidth(collapsed)→0`.
+- `useSplit`/`useDragResize` clamp + `snap` composition; `loadRail`/split persist
+  round-trip; malformed JSON / storage throw → defaults (no crash).
 
-**Component (`Shell.test.tsx`):**
-- `--rail-w` inline var reflects state; `is-rail` toggles when width is rail.
-- `Cmd/Ctrl+B` sets `is-hidden` and `--rail-w: 0px`; re-open button appears.
-- A `fullWidth` page renders `<main class="… console-main--wide">`; a normal
-  page does not.
+**Component (`Shell.test.tsx`, jsdom):**
+- `--rail-w` reflects state; `is-rail` at rail width; `Cmd/Ctrl+B` → `is-hidden`
+  + `--rail-w:0px` + re-open button present.
+- `fullWidth` page → `<main class="… console-main--wide">`; normal page not.
+- Nav renders the label **"Studio"** for the Play page (rename guard).
 
-Run locally (console tests are **not** in CI):
-`pnpm -C packages/console exec vitest`. Also run typecheck and `pnpm build`
-(a value-import footgun in console breaks only the browser bundle).
+Run locally — console tests are **not** in CI:
+`pnpm -C packages/console exec vitest`, then typecheck and `pnpm build` (a
+value-import footgun in console breaks only the browser bundle).
 
 ## Risks / tradeoffs
 
-- **Drag is the heaviest of the three behaviors** (pointer capture, snapping,
-  keyboard a11y). Mitigated by isolating all math in pure, tested functions.
+- **Drag is the heaviest behavior** (pointer capture, snapping, keyboard a11y) —
+  isolated once in `useDragResize`, reused five times, math in tested pure fns.
 - **Rail mode hides the gem switcher** — deliberate; widen to switch.
-- **`@property --rail-w`** for smooth toggle animation: if a target browser
-  lacks support, the width still updates (just without the tween). Acceptable.
-- **Grid-template-columns transition** can be janky cross-browser; disabled
-  during drag via `is-dragging`, and the animated case is only the discrete
-  toggle, so any jank is bounded to a 180ms toggle, never live dragging.
+- **Five persistence keys** (`rail` + 4 `split.<id>`) — tolerant parse; a bad/old
+  value falls back to the panel default, never a crash or a broken layout.
+- **`@property --rail-w`** unsupported ⇒ width still updates, just no tween.
+- **Grid-template transition** jank is bounded to the 180ms sidebar toggle (off
+  during drag via `is-dragging`); splits don't animate.
+- **Touching four panels** widens the blast radius; mitigated by the non-invasive
+  wiring (existing JSX kept; add a var + one handle element + `position:relative`)
+  and a default `--split` that leaves first paint identical until a drag.
