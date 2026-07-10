@@ -34,6 +34,20 @@ describe("stars store", () => {
     expect(await starredIds(db, a.id, "ingredient", ["skill:s/a", "skill:s/b"])).toEqual(["skill:s/a"]);
   });
 
+  it("concurrent toggle on the same target never crashes on the unique constraint", async () => {
+    const db = await makeTestDb();
+    const a = await acct(db, "1");
+    // Two simultaneous toggles for the same (account, kind, id). The old read-then-insert both saw
+    // no row and both INSERTed → the second hit unique(account_id,target_kind,target_id) → HTTP 500.
+    await Promise.all([
+      toggleStar(db, a.id, "gem", "race"),
+      toggleStar(db, a.id, "gem", "race"),
+    ]);
+    // No throw, and the row count settled to a valid single-or-zero state (never a duplicate).
+    const count = (await starCounts(db, "gem", ["race"])).race ?? 0;
+    expect(count === 0 || count === 1).toBe(true);
+  });
+
   it("kinds are independent (same id under gem vs ingredient)", async () => {
     const db = await makeTestDb();
     const a = await acct(db, "1");
