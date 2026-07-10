@@ -74,7 +74,14 @@ export function mcpToolFor(app: { name: string; meta: MiniappMeta }): McpUiTool 
   return {
     name: `play_${app.name}`,
     description: `Launch the "${app.meta.title}" miniapp`,
-    inputSchema: { type: "object", properties: {} },
+    inputSchema: {
+      type: "object",
+      properties: {
+        // Optional focus hint an external host may stream via ui/notifications/tool-input. The shim
+        // dispatches it on "ui/notifications/tool-input"; a game may ignore it (our own Runner does).
+        view: { type: "string", description: "optional initial view/state hint" },
+      },
+    },
     _meta: { ui: { resourceUri: uiUri(app.name), visibility: ["app"] } },
   };
 }
