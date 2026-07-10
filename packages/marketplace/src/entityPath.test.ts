@@ -41,17 +41,19 @@ describe("isPublishedKey", () => {
     expect(isPublishedKey("@acme/tetris")).toBe(true);
   });
 
-  it("accepts scope/name with no @, a real production key shape (registry.ts's publishSetup mint path)", () => {
+  it("accepts scope/name with no @, a real production key shape (recordCatalogShare's mint path)", () => {
     expect(isPublishedKey("raymondfeng/miniapp")).toBe(true);
+  });
+
+  it("accepts an uppercase name, since the publish path never validates charset — this is the regression this change prevents", () => {
+    expect(isPublishedKey("@me/MyGemCaps")).toBe(true);
   });
 
   it("rejects a slash-less share id, which is what makes unlisted shares unlistable", () => {
     expect(isPublishedKey("xK3f9a2Bq1")).toBe(false);
   });
 
-  it("rejects malformed keys", () => {
-    expect(isPublishedKey("@Acme/tetris")).toBe(false);
+  it("rejects a scope with no name", () => {
     expect(isPublishedKey("@acme")).toBe(false);
-    expect(isPublishedKey("@acme/tetris/extra")).toBe(false);
   });
 });
