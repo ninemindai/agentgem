@@ -62,7 +62,10 @@
     <span style="background:#1f1b15;color:#e9e1cf;padding:8px 14px;border-radius:8px;white-space:nowrap">$ npx @ninemind/agentgem</span>
     <span style="margin-left:10px">then open <b style="color:#4a4133">localhost:4317</b></span>
   </p>
-  <!-- OS-aware desktop download. Bump DV/DTAG below when cutting a desktop-v* release. -->
+  <!-- OS-aware desktop download. Bump DV/DTAG below when cutting a desktop-v* release.
+       When DV moves past 0.4.1, ALSO switch `win` to "AgentGem-Setup-" + DV + ".exe":
+       nsis.artifactName now emits the dashed name, but desktop-v0.4.1 and earlier were
+       published with the dotted one (GitHub rewrites spaces to dots). -->
   <div class="dl" style="margin-top:16px">
     <a id="dlBtn" class="btn btn-ghost" href="https://github.com/ninemindai/agentgem/releases">Download the desktop app</a>
     <p id="dlAlt" style="margin-top:8px;font-size:13px;color:#857a64">for macOS, Windows &amp; Linux</p>
