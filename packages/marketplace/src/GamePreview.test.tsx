@@ -46,3 +46,29 @@ describe("GamePreview play counting", () => {
     expect(recordPlay).toHaveBeenCalledWith("@o/duel", "1.0.0", expect.any(String));
   });
 });
+
+describe("GamePreview navigation", () => {
+  // The arcade grid wants a copyable URL (onPlay); the gem-detail page wants the existing
+  // in-place fullscreen portal (no onPlay). Both must keep counting the play either way.
+  it("calls onPlay instead of portalling when onPlay is given", async () => {
+    const onPlay = vi.fn();
+    render(<GamePreview api={api(async () => true)} gemKey="@o/duel" version="1.0.0" onPlay={onPlay} />);
+    await waitFor(ready);
+
+    thumb().click();
+
+    expect(onPlay).toHaveBeenCalledOnce();
+    expect(document.querySelectorAll("iframe").length).toBe(1); // thumbnail only — no overlay
+  });
+
+  it("still portals fullscreen when onPlay is absent (gem-detail page)", async () => {
+    render(<GamePreview api={api(async () => true)} gemKey="@o/duel" version="1.0.0" />);
+    await waitFor(ready);
+
+    thumb().click();
+
+    // GamePlayer's fullscreen overlay carries no stable class name (inline `style` only,
+    // see GamePlayer.tsx) so there is nothing more specific to assert on than iframe count.
+    await waitFor(() => expect(document.querySelectorAll("iframe").length).toBe(2)); // thumb + overlay
+  });
+});

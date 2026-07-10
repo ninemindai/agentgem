@@ -13,8 +13,12 @@ type Api = ReturnType<typeof makeApi>;
 // onPlayCountChange reports a delta, mirroring StarButton's optimistic → revert: +1 the instant the
 // reader clicks, then -1 if the beacon never reached the server. The arcade card owns the number; the
 // gem-detail page passes nothing and just plays.
-export function GamePreview({ api, gemKey, version, onPlayCountChange }: {
-  api: Api; gemKey: string; version: string; onPlayCountChange?: (delta: number) => void;
+//
+// onPlay is the arcade grid's escape hatch to a copyable URL: given, a click navigates to /games/<key>
+// instead of portalling in place. The gem-detail page passes nothing and keeps the in-place fullscreen
+// portal below. Either way the click still counts as a play.
+export function GamePreview({ api, gemKey, version, onPlayCountChange, onPlay }: {
+  api: Api; gemKey: string; version: string; onPlayCountChange?: (delta: number) => void; onPlay?: () => void;
 }) {
   const [html, setHtml] = useState<string | null>(null);
   const [err, setErr] = useState(false);
@@ -49,7 +53,7 @@ export function GamePreview({ api, gemKey, version, onPlayCountChange }: {
           for every card, so fetching html means "the card rendered", never "someone played". */}
       <button ref={thumbRef} type="button" className="gp-thumb" disabled={!html}
         onClick={() => {
-          setPlaying(true);
+          if (onPlay) onPlay(); else setPlaying(true);
           onPlayCountChange?.(1); // optimistic — the reader sees their own play land immediately
           void api.recordPlay(gemKey, version, visitorId()).then((ok) => { if (!ok) onPlayCountChange?.(-1); });
         }}

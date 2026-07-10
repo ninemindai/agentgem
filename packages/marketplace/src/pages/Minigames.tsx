@@ -7,6 +7,7 @@ import { StarButton } from "../StarButton";
 import type { StarsCtx } from "../Router";
 import type { StarState } from "../stars";
 import { navigate } from "../nav";
+import { gamePath } from "../entityPath";
 
 type Api = ReturnType<typeof makeApi>;
 
@@ -40,7 +41,7 @@ function GameCard({ api, gem, stars, starState, plays }: { api: Api; gem: Gem; s
     <li className="mg-card">
       <div className="mg-thumb">
         <GamePreview api={api} gemKey={gem.key} version={gem.version}
-          onPlayCountChange={(d) => setN((c) => c + d)} />
+          onPlayCountChange={(d) => setN((c) => c + d)} onPlay={() => navigate(gamePath(gem.key))} />
       </div>
       <div className="mg-body">
         <div className="mg-title">{gem.key}</div>
