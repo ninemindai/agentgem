@@ -6,7 +6,7 @@
 import { homedir } from "node:os";
 import { join, sep } from "node:path";
 import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
-import { safePathSegment, CAP_TOOL } from "@agentgem/model";
+import { safePathSegment, CAP_TOOL, CAP_METHOD } from "@agentgem/model";
 import type { Gem, GameArtifact, GameGenre, GameSource, GameCapability } from "@agentgem/model";
 import { workspaceDir } from "@agentgem/base";
 import { writeGemArchive, writeArchiveDir } from "@agentgem/archive";
@@ -127,8 +127,11 @@ export async function saveMiniapp(input: SaveMiniappInput): Promise<SaveMiniappR
   // BEFORE assertPortable so a pruned phantom `session-data` no longer demands a baked fallback.
   const rec = reconcileNeeds(html, input.meta.needs);
   if (rec.missing.length) {
-    const detail = rec.missing.map((c) => `${CAP_TOOL[c]} (declare "${c}")`).join("; ");
-    throw new Error(`miniapp calls a host tool it does not declare: ${detail} — add it to meta.json "needs"`);
+    const detail = rec.missing.map((c) => {
+      const via = (CAP_TOOL as Record<string, string>)[c] ?? `agentgemApp.${(CAP_METHOD as Record<string, string>)[c]}`;
+      return `${via} (declare "${c}")`;
+    }).join("; ");
+    throw new Error(`miniapp uses a capability it does not declare: ${detail} — add it to meta.json "needs"`);
   }
   const meta: MiniappMeta = { ...input.meta };
   if (rec.needs.length) meta.needs = rec.needs; else delete meta.needs;
