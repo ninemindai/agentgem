@@ -69,7 +69,14 @@ export function makeAuth(opts: {
       ...(opts.cookieDomain ? { crossSubDomainCookies: { enabled: true, domain: opts.cookieDomain } } : {}),
     },
     session: { expiresIn: SESSION_TTL_S, updateAge: 60 * 60 * 24 },   // review fix 2A
-    user: { additionalFields: { login: { type: "string", required: false } } },
+    user: { additionalFields: {
+      login: { type: "string", required: false },
+      // The re-key made `handle` a column on "user" (the account's public name; NULL until claimed).
+      // Surfacing it here lets the SPA tell a handle-less account (a fresh Google user) from a named
+      // one, which is what gates the lazy handle-claim flow. additionalFields reads the column
+      // directly — no query change.
+      handle: { type: "string", required: false },
+    } },
     socialProviders: {
       github: {
         clientId: opts.githubClientId, clientSecret: opts.githubClientSecret,
