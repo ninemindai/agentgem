@@ -898,7 +898,13 @@ export const sourceImportRoute = defineRoute("POST", "/api/sources/import", {
 });
 
 // ---- Play (miniapps) — client mirrors of the server /api/play/* routes ----
-const PlayNeedsSchema = z.array(z.enum(["session-data", "live-session-events", "local-project-access", "invoke-agent"])).optional();
+// The 3 action caps (open-link/send-message/update-model-context) are included alongside the 4 tool caps
+// so this schema covers the full GameCapability union (@agentgem/model) — the built-in Protocol Inspector
+// below declares all seven, and a response `needs` array response validation would otherwise reject it.
+const PlayNeedsSchema = z.array(z.enum([
+  "session-data", "live-session-events", "local-project-access", "invoke-agent",
+  "open-link", "send-message", "update-model-context",
+])).optional();
 const PlaySourceSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("session"), agent: z.string(), project: z.string().optional(), sessionId: z.string(), summary: z.string() }),
   z.object({ kind: z.literal("skill"), skillName: z.string(), sourceId: z.string().optional() }),
@@ -916,6 +922,10 @@ export const playMiniappsRoute = defineRoute("GET", "/api/play/miniapps", {
 });
 export const playMiniappRoute = defineRoute("GET", "/api/play/miniapp", {
   query: z.object({ name: z.string() }),
+  response: z.object({ name: z.string(), html: z.string(), meta: z.object({ title: z.string(), genre: z.string(), createdFrom: PlaySourceSchema, engineVersion: z.string(), needs: PlayNeedsSchema }) }),
+});
+// The built-in Protocol Inspector (never saved to the registry) — served as a constant by the API.
+export const playInspectorRoute = defineRoute("GET", "/api/play/inspector", {
   response: z.object({ name: z.string(), html: z.string(), meta: z.object({ title: z.string(), genre: z.string(), createdFrom: PlaySourceSchema, engineVersion: z.string(), needs: PlayNeedsSchema }) }),
 });
 // `name` optional on all three: omitted it is derived from the source, supplied it must be free (409).

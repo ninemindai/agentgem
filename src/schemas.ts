@@ -1052,6 +1052,13 @@ export const PlayMiniappSchema = z.object({
   name: z.string(), html: z.string(),
   meta: z.object({ title: z.string(), genre: z.string(), createdFrom: GameArtifactSchema.shape.createdFrom, engineVersion: z.string(), needs: PlayNeedsSchema }),
 });
+// The built-in Protocol Inspector (GET /play/inspector): same shape as PlayMiniappSchema, but this one is
+// NEVER backed by the registry — the controller serves it from the `@agentgem/play` INSPECTOR_HTML/
+// INSPECTOR_META constants, so it gets its own schema rather than implying a readMiniapp-backed route.
+export const PlayInspectorSchema = z.object({
+  name: z.string(), html: z.string(),
+  meta: z.object({ title: z.string(), genre: z.string(), createdFrom: GameArtifactSchema.shape.createdFrom, engineVersion: z.string(), needs: PlayNeedsSchema }),
+});
 export const PlayPublishRequestSchema = z.object({ remote: z.string().url().optional() });
 export const PlayPublishResponseSchema = z.object({ ok: z.boolean() });
 // `name` is the optional miniapp id. Omitted, it is derived from the source (and suffixed on collision);
