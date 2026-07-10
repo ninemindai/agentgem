@@ -3,9 +3,15 @@ name: CI
 # Build + test on every push to main and every PR. `pnpm test` runs
 # `tsc -b && vitest run` — tests execute against the compiled dist/, so the
 # build is exercised as part of the test step.
+#
+# Node 24 runs on every push/PR; Node 26 is added only on release tags
+# (v*, desktop-v*) — see the matrix below — to keep PR CI fast.
 on:
   push:
     branches: [main]
+    tags:
+      - "v*" # core npm release
+      - "desktop-v*" # desktop (Electron) release
   pull_request:
 
 permissions:
@@ -17,7 +23,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [24, 26]
+        # Node 24 on every push/PR; Node 26 added only on release tags (the
+        # on.push.tags filter guarantees any refs/tags/* ref here is a release).
+        # 24 stays the always-on gate, so 'test (24)' is the sole required check.
+        node-version: ${{ startsWith(github.ref, 'refs/tags/') && fromJSON('[24, 26]') || fromJSON('[24]') }}
     steps:
       - uses: actions/checkout@v6
       # bubblewrap so the linux-bubblewrap sandbox boundary test actually runs here (it
