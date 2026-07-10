@@ -177,6 +177,29 @@ describe("Studio", () => {
     expect(await screen.findByText(/read this miniapp's own source session/i)).toBeTruthy();
   });
 
+  // Save re-reads meta.json and stores it. A capability ADDED there (by the agent, or by hand) must reach
+  // `meta` state, because <Runner needs> is what decides whether a host attaches at all. Adopting only the
+  // prune left the miniapp host-less until an unmount/remount — and there is no reload control.
+  it("adopts a capability added to meta.json on the next save", async () => {
+    renderStudio([]);                       // mounted with nothing declared → no host
+    await waitFor(() => expect(playMiniappRoute.call).toHaveBeenCalled());
+    expect(screen.queryByText(/read your local setup/i)).toBeNull();
+
+    // the agent edited meta.json between mount and Save: the re-read inside save() now sees the new cap
+    vi.spyOn(playMiniappRoute, "call").mockResolvedValue({
+      name: "g1", html: "<!doctype html><body><canvas></canvas></body>",
+      meta: {
+        title: "G1", genre: "project-fun", engineVersion: "1",
+        createdFrom: { kind: "project", path: "/p", flavor: "node" }, needs: ["local-project-access"],
+      },
+    } as never);
+    vi.spyOn(playSaveRoute, "call").mockResolvedValue({ name: "g1", commit: "abc1234", prunedNeeds: [] } as never);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Save$/ }));
+
+    expect(await screen.findByText(/read your local setup/i)).toBeTruthy();
+  });
+
   it("clears a prior prune notice when a later save prunes nothing", async () => {
     renderStudio(["invoke-agent"]);
     const save = vi.spyOn(playSaveRoute, "call").mockResolvedValue({ name: "g1", commit: "a", prunedNeeds: ["invoke-agent"] } as never);

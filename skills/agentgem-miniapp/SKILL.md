@@ -98,7 +98,8 @@ An undeclared capability fails with JSON-RPC `-32601`. A refused consent fails w
 no host at all the handshake gives up after roughly four seconds and every `callTool` rejects with
 `"no host"`. Handle all three: a game that hangs waiting for a host is broken on the marketplace.
 
-Editing `meta.json` takes effect on the next Save; reload the preview to renegotiate.
+Editing `meta.json` takes effect on the next Save, which re-reads it and renegotiates the preview's
+host with the new capabilities. There is no separate reload.
 
 **Save reconciles `needs` against your code.** Call a tool you did not declare and the Save fails,
 naming the capability to add. Declare a capability nothing calls and it is pruned back out, and you are
