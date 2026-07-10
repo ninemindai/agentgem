@@ -171,28 +171,49 @@ count; reassignment is a manual admin action.
 
 Ten call sites authorize on the `login` string. They fall into three groups.
 
+### Two surfaces named `publishedBy`, and only one of them authorizes
+
+This distinction is load-bearing, and easy to get wrong. `catalog_gems` — the marketplace
+database table — has exactly **one writer in the whole repo**: `recordCatalogShare`
+(`catalog.ts:126`), the signed CLI/desktop share path. Its `published_by` column is what
+`deleteCatalogGem` checks, so it **authorizes**.
+
+`publishGem`'s `publishedBy` argument is a different thing entirely. It flows into
+`buildDiscovery` and lands in the **git registry index's JSON**
+(`packages/distribute/src/registry.ts:217,270`). It is a public attribution string in a
+file, touches no database row, and gates nothing.
+
+Two consequences:
+
+- **`src/registry/uploadPublish.ts` needs no ownership re-key.** It already authorizes with
+  `accountOwnsScope(deps.db, who.accountId, scope)` (`uploadPublish.ts:55`) — uuid-keyed today.
+- **`resolvePublishedBy` must keep returning a string, and that string becomes the `handle`**
+  (`undefined` when unclaimed). A uuid in a public registry index names nobody.
+
 ### Ownership checks compare uuids
 
 | Site | Change |
 |---|---|
-| `catalog.ts:73-81` `deleteCatalogGem` | string compare → `row.ownerAccountId === who.accountId` |
-| `src/registry/publishedBy.ts:21` `resolvePublishedBy` | returns `accountId`, not `login` |
-| `src/registry/uploadPublish.ts:76` | writes `owner_account_id`; keeps writing `published_by` for display |
-| `src/gem.controller.ts:1244` | same |
-| `catalog.ts:127` `recordCatalogShare` | resolves its binding to an `accountId` rather than stopping at `account_login` |
-| `profile.ts:64-88` `buildProfile` | resolves `handle → accountId`, then lists gems by `owner_account_id`, not by `lower(published_by)` |
-| `orgCatalog.ts:64-67` | the trust filter's `ownerSet` becomes a set of `accountId`s, matched against `owner_account_id` |
+| `catalog.ts:73-81` `deleteCatalogGem` | string compare → `row.ownerAccountId !== null && row.ownerAccountId === who.accountId` |
+| `src/catalog/install.ts:31-34` `sessionLogin` | becomes `sessionAccountId`; passes `who.accountId` |
+| `catalog.ts:126` `recordCatalogShare` | resolves its binding to an `accountId`, writes `owner_account_id` |
+| `profile.ts:64-88` `buildProfile` | resolves `handle → accountId`, lists gems by `owner_account_id` |
+| `orgCatalog.ts:64-67` | trust filter's `ownerSet` becomes a set of `accountId`s, matched against `owner_account_id` |
+| `src/registry/publishedBy.ts:21` | returns the `handle` (a string), not the `login` |
 
-`buildProfile` and the org-catalog trust filter are ownership reads, not display reads. If
+`buildProfile` and the org-catalog trust filter are **ownership reads**, not display reads. If
 they kept matching on `published_by`, a profile page would list gems by string match — the
 precise behavior this spec removes — and a gem with an unresolved `owner_account_id` would
 still appear to belong to someone.
 
 `account_bindings.account_id` is `text not null` (`schema.ts:397`) holding the **provider's**
-account id, paired with `provider` to match `accounts(provider, provider_account_id)`. It
-is *not* a uuid FK. The CLI publish path therefore reaches an account by
-`(provider, provider_account_id)`, and must be given a uuid before it can populate
-`owner_account_id`.
+account id, paired with `provider` to match `accounts(provider, provider_account_id)`. It is
+*not* a uuid FK. `recordCatalogShare` therefore reaches an account by
+`(provider, provider_account_id)` and must be given a uuid before it can populate
+`owner_account_id`. If no `accounts` row resolves, it rejects with the existing
+`"not-connected"` — you cannot own what the server cannot identify you as. This is a
+deliberate tightening: `recordBinding` writes its `accounts` row best-effort, so a bind could
+previously succeed without one.
 
 ### Self-scope checks look up the row, they do not compare strings
 
