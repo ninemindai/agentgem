@@ -8,10 +8,15 @@ describe("Publish", () => {
     render(<Publish api={{} as never} me={null} base="" />);
     expect(screen.getByText(/sign in to publish/i)).toBeTruthy();
   });
-  it("shows the publish form (scope defaults to the login) when signed in", () => {
-    render(<Publish api={{} as never} me={{ login: "alice", avatarUrl: null, orgs: [] }} base="" />);
+  it("shows the publish form (scope defaults to the handle) when signed in", () => {
+    render(<Publish api={{} as never} me={{ id: "1", name: "Alice", handle: "alice", avatarUrl: null, orgs: [] }} base="" />);
     expect((screen.getByLabelText(/scope/i) as HTMLInputElement).value).toBe("alice");
     expect(screen.getByLabelText(/\.gem/i)).toBeTruthy(); // the file input
+  });
+  it("shows the handle-claim form instead of the publish form when signed in with no handle", () => {
+    render(<Publish api={{} as never} me={{ id: "1", name: "Alice", handle: null, avatarUrl: null, orgs: [] }} base="" />);
+    expect(screen.getByLabelText("handle")).toBeTruthy();
+    expect(screen.queryByLabelText(/scope/i)).toBeNull();
   });
   it("surfaces a failed sign-in instead of the click having no visible effect", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 500, json: async () => ({}) }) as unknown as Response));

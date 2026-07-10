@@ -2,11 +2,12 @@ import { useState } from "react";
 import { makeAuth, type Me } from "../auth";
 import type { makeApi } from "../api";
 import { makeUpload, NotSignedIn } from "../upload";
+import { HandleClaim } from "../HandleClaim";
 
 type Result = { ok: true; ref: string } | { ok: false; msg: string };
 
 export function Publish({ api: _api, me, base }: { api: ReturnType<typeof makeApi>; me: Me | null; base: string }) {
-  const [scope, setScope] = useState(me?.login ?? "");
+  const [scope, setScope] = useState(me?.handle ?? "");
   const [version, setVersion] = useState("1.0.0");
   const [tags, setTags] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -22,6 +23,16 @@ export function Publish({ api: _api, me, base }: { api: ReturnType<typeof makeAp
       <div className="ex-card">
         <p>Sign in to publish your gems. <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn(); }}>Sign in with GitHub</a></p>
         {result && !result.ok && <p className="ex-error">{result.msg}</p>}
+      </div>
+    );
+  }
+
+  if (!me.handle) {
+    // Lazy claim: a signed-in user with no handle (a fresh Google account) cannot publish until they
+    // pick a public name. Refetch the session on success so `me.handle` (and the scope default) fill in.
+    return (
+      <div className="ex-card">
+        <HandleClaim base={base} onClaimed={() => { window.location.reload(); }} />
       </div>
     );
   }
