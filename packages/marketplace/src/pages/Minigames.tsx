@@ -32,17 +32,22 @@ function remixAppUrl(gem: Gem): string {
 // GamePreview). A broker-fed replay (no baked data, no host here) shows its own waiting state — that's
 // expected off the machine that owns the session.
 function GameCard({ api, gem, stars, starState, plays }: { api: Api; gem: Gem; stars: StarsCtx; starState: StarState; plays: number }) {
+  // Own the count locally so a play shows up the instant it is clicked (same shape as StarButton).
+  // `plays` arrives after the page's bulk fetch resolves, and useState only reads it at mount.
+  const [n, setN] = useState(plays);
+  useEffect(() => setN(plays), [plays]);
   return (
     <li className="mg-card">
       <div className="mg-thumb">
-        <GamePreview api={api} gemKey={gem.key} version={gem.version} />
+        <GamePreview api={api} gemKey={gem.key} version={gem.version}
+          onPlayCountChange={(d) => setN((c) => c + d)} />
       </div>
       <div className="mg-body">
         <div className="mg-title">{gem.key}</div>
         {gem.description && <div className="mg-desc">{gem.description}</div>}
         <div className="mg-row">
           {gem.author && <span className="mg-meta">by {gem.author}</span>}
-          {plays > 0 && <span className="mg-meta">{plays === 1 ? "1 play" : `${plays} plays`}</span>}
+          {n > 0 && <span className="mg-meta">{n === 1 ? "1 play" : `${n} plays`}</span>}
           <StarButton kind="gem" id={gem.key} count={starState.counts[gem.key] ?? 0} starred={starState.mine.includes(gem.key)}
             signedIn={stars.signedIn} loginUrl={stars.loginUrl} api={stars.api} />
         </div>

@@ -21,9 +21,19 @@ describe("recordPlay", () => {
     expect(JSON.parse(String(init?.body))).toEqual({ gemKey: "@octocat/duel", version: "1.0.0" });
   });
 
-  it("swallows a failed beacon — telemetry must never stop the game from opening", async () => {
+  it("resolves false on a failed beacon — never throws, so the game opens and the count can revert", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("offline"); }));
-    await expect(makeApi("https://api.x").recordPlay("@octocat/duel", "1.0.0", "v1")).resolves.toBeUndefined();
+    await expect(makeApi("https://api.x").recordPlay("@octocat/duel", "1.0.0", "v1")).resolves.toBe(false);
+  });
+
+  it("resolves false on a non-ok response (404 unpublished gem, 500)", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => res({ error: "nope" }, false)));
+    await expect(makeApi("https://api.x").recordPlay("@octocat/duel", "1.0.0", "v1")).resolves.toBe(false);
+  });
+
+  it("resolves true when the server accepted the play", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => res({ ok: true })));
+    await expect(makeApi("https://api.x").recordPlay("@octocat/duel", "1.0.0", "v1")).resolves.toBe(true);
   });
 });
 

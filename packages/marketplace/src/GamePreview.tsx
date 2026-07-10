@@ -10,7 +10,12 @@ import { visitorId } from "./visitor";
 
 type Api = ReturnType<typeof makeApi>;
 
-export function GamePreview({ api, gemKey, version }: { api: Api; gemKey: string; version: string }) {
+// onPlayCountChange reports a delta, mirroring StarButton's optimistic → revert: +1 the instant the
+// reader clicks, then -1 if the beacon never reached the server. The arcade card owns the number; the
+// gem-detail page passes nothing and just plays.
+export function GamePreview({ api, gemKey, version, onPlayCountChange }: {
+  api: Api; gemKey: string; version: string; onPlayCountChange?: (delta: number) => void;
+}) {
   const [html, setHtml] = useState<string | null>(null);
   const [err, setErr] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -26,7 +31,11 @@ export function GamePreview({ api, gemKey, version }: { api: Api; gemKey: string
       {/* The click — not the html fetch above — is what counts as a play: the grid mounts a thumbnail
           for every card, so fetching html means "the card rendered", never "someone played". */}
       <button type="button" className="gp-thumb" disabled={!html}
-        onClick={() => { setPlaying(true); void api.recordPlay(gemKey, version, visitorId()); }}
+        onClick={() => {
+          setPlaying(true);
+          onPlayCountChange?.(1); // optimistic — the reader sees their own play land immediately
+          void api.recordPlay(gemKey, version, visitorId()).then((ok) => { if (!ok) onPlayCountChange?.(-1); });
+        }}
         title={html ? "Play" : undefined} aria-label={`Play ${gemKey}`}>
         {html
           ? <GamePlayer html={html} interactive={false} />

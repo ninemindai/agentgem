@@ -58,17 +58,19 @@ export function makeApi(base: string) {
     // Sealed HTML of a gem's game artifact (for the playable Minigames arcade). 404s a non-game gem.
     getGameHtml: (key: string, version: string) =>
       get<{ html: string }>(base, "/api/aggregator/game-html", { key, version }).then((r) => r.html),
-    // Fire-and-forget beacon: the reader clicked into fullscreen play. NOT sent when the arcade grid
-    // renders a thumbnail — every card fetches its html on mount, so that would count page views.
-    // Never rejects: a game must open even when the beacon is blocked (offline, ad-blocker, 500).
-    recordPlay: async (gemKey: string, version: string, visitorId: string): Promise<void> => {
+    // The beacon: the reader clicked into fullscreen play. NOT sent when the arcade grid renders a
+    // thumbnail — every card fetches its html on mount, so that would count page views. Never rejects
+    // (a game must open even when the beacon is blocked); resolves false instead, so an optimistic
+    // count can take back a play the server never recorded.
+    recordPlay: async (gemKey: string, version: string, visitorId: string): Promise<boolean> => {
       try {
-        await fetch(base + "/api/aggregator/game-play", {
+        const res = await fetch(base + "/api/aggregator/game-play", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(visitorId ? { gemKey, version, visitorId } : { gemKey, version }),
         });
-      } catch { /* telemetry is never worth a broken game */ }
+        return res.ok;
+      } catch { return false; } // telemetry is never worth a broken game
     },
     // Plays per gem for the arcade cards. Plays, not people — see visitor.ts.
     getGamePlays: (keys: string[]) =>
