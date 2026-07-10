@@ -401,10 +401,9 @@ export async function backfillGemOwners(db: AppDb): Promise<{ resolved: number; 
           where login is not null
           group by lower(login) having count(*) = 1) m
     where m.lg = lower(cg.published_by) and cg.owner_account_id is null`);
-  const r = await db.execute(sql`select count(*)::int as n from catalog_gems where owner_account_id is null`);
-  const unresolved = (r.rows as { n: number }[])[0].n;
-  const t = await db.execute(sql`select count(*)::int as n from catalog_gems`);
-  return { resolved: (t.rows as { n: number }[])[0].n - unresolved, unresolved };
+  const r = await db.execute(sql`select count(*) filter (where owner_account_id is null)::int as unresolved, count(*)::int as total from catalog_gems`);
+  const { unresolved, total } = (r.rows as { unresolved: number; total: number }[])[0];
+  return { resolved: total - unresolved, unresolved };
 }
 
 // Idempotent DDL. (Schema-as-tables above is the query source of truth; this DDL
