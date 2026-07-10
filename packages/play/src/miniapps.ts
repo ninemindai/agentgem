@@ -34,14 +34,39 @@ export function miniappDir(name: string): string {
   return dir;
 }
 
-// Claim a FRESH dir for a newly-created miniapp, suffixing on collision: `duel`, `duel-2`, `duel-3`.
-// Only the create paths (seed/import/blank) call this — opening an existing miniapp to edit it keeps
-// its name, so saveMiniapp still upserts in place.
+// A miniapp's bundle filename. New miniapps store it as `index.html`, so the file no longer has to be
+// renamed alongside the id (and `duel-2.html` never has to exist). Miniapps created before that store
+// `<name>.html` and KEEP it: writing index.html beside an existing <name>.html would leave two bundles in
+// one dir, and the gate/portability checks would only ever see one of them. Reads AND writes go through
+// here, so a legacy miniapp keeps its filename for life and a new one is index.html from birth.
+export const MINIAPP_HTML = "index.html";
+export function miniappHtmlPath(name: string): string {
+  const dir = miniappDir(name);                   // validates the name + jails the path
+  const legacy = join(dir, `${name}.html`);
+  const current = join(dir, MINIAPP_HTML);
+  return !existsSync(current) && existsSync(legacy) ? legacy : current;
+}
+
+// Claim a FRESH dir for a newly-created miniapp. Only the create paths (seed/import/blank) call this —
+// opening an existing miniapp to edit it keeps its name, so saveMiniapp still upserts in place.
 //
 // The non-recursive mkdirSync IS the claim: it throws EEXIST when the name is taken, which makes the
 // check-and-take a single atomic syscall. An existsSync() test would leave a window in which two
 // concurrent creates both see "free" and pick the same name, and the second would clobber the first.
-export function claimMiniappDir(base: string): { name: string; dir: string } {
+//
+// A DERIVED name (from a session id, folder, or title) suffixes on collision: `duel`, `duel-2`, `duel-3`.
+// A name the user typed is honored exactly or rejected — quietly handing back `duel-2` when they asked
+// for `duel` is worse than failing.
+export function claimMiniappDir(base: string, opts: { exact?: boolean } = {}): { name: string; dir: string } {
+  if (opts.exact) {
+    const dir = miniappDir(base);
+    try { mkdirSync(dir); return { name: base, dir }; }
+    catch (e) {
+      // Stable prefix: play.controller.ts keys the 409-vs-400 split off it.
+      if ((e as NodeJS.ErrnoException).code === "EEXIST") throw new Error(`miniapp already exists: '${base}'`);
+      throw e;
+    }
+  }
   for (let n = 1; n <= 999; n++) {
     const name = n === 1 ? base : `${base}-${n}`;
     const dir = miniappDir(name);                 // validates the (suffixed) name + jails the path
@@ -76,7 +101,7 @@ export async function saveMiniapp(input: SaveMiniappInput): Promise<{ name: stri
   const root = miniappsRoot();
   await ensureRepo(root);                          // the registry is a git repo
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, `${safe}.html`), input.html);
+  writeFileSync(miniappHtmlPath(safe), input.html);  // legacy miniapps keep <name>.html; new ones index.html
   writeFileSync(join(dir, "meta.json"), JSON.stringify(input.meta, null, 2));
   const commit = await commitWithLock(root, `save miniapp ${safe}`);
   writeGameGem(safe, input.html, input.meta);      // strict path: gate already passed above
@@ -133,7 +158,7 @@ export async function checkpointMiniapp(name: string): Promise<{ name: string; c
 // `readMiniapp()` would always look already-migrated and the stored file would never get rewritten.
 function readMiniappRaw(name: string): { name: string; html: string; meta: MiniappMeta } {
   const dir = miniappDir(name); // validates + jails
-  const html = readFileSync(join(dir, `${name}.html`), "utf8");
+  const html = readFileSync(miniappHtmlPath(name), "utf8");  // index.html, else the legacy <name>.html
   const meta = JSON.parse(readFileSync(join(dir, "meta.json"), "utf8")) as MiniappMeta;
   return { name, html, meta };
 }

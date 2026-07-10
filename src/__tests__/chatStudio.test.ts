@@ -27,7 +27,7 @@ describe("studioChatArgs", () => {
     const { name } = await seedStudio({ kind: "skill", skillName: "brainstorming" }, readers);
     const args = await studioChatArgs({ agentId: "claude", miniapp: name }, neutralDeps);
     expect(args.cwd).toBe(join(miniappsRoot(), name));
-    expect(args.brief).toContain(`${name}.html`);
+    expect(args.brief).toContain("index.html");
     expect(args.agentId).toBe("claude");
     expect(args.permission).toBe("allow"); // studio agent may edit its (jailed) miniapp
   });

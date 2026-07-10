@@ -99,6 +99,39 @@ describe("Composer", () => {
     expect(screen.getByPlaceholderText("title")).toHaveProperty("value", "duel-remix");
     fireEvent.click(screen.getByText("Create miniapp"));
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith("duel-remix", "Build my own version"));
-    expect(blank.mock.calls[0][1]).toEqual({ body: { title: "duel-remix" } });
+    expect(blank.mock.calls[0][1]).toEqual({ body: { title: "duel-remix" } });  // no name typed -> field omitted
+  });
+
+  // A typed name is the miniapp's id. Omitted, the server derives one; supplied, it must be free.
+  it("sends a typed name on blank, and omits it when left empty", async () => {
+    const blank = vi.spyOn(playBlankRoute, "call").mockResolvedValue({ name: "my-duel" });
+    renderComposer(vi.fn());
+    fireEvent.click(screen.getByText("Blank"));
+    fireEvent.change(screen.getByPlaceholderText("title"), { target: { value: "Anything" } });
+    fireEvent.change(screen.getByLabelText("Miniapp name"), { target: { value: "My Duel" } });
+    fireEvent.click(screen.getByText("Create miniapp"));
+    await waitFor(() => expect(blank).toHaveBeenCalled());
+    expect(blank.mock.calls[0][1]).toEqual({ body: { title: "Anything", name: "My Duel" } });
+  });
+
+  it("carries the typed name onto a source-seeded miniapp too", async () => {
+    vi.spyOn(testbedProjectsRoute, "call").mockResolvedValue({ projects: [{ path: "/p/demo", flavor: "node", lastUsed: null, exists: true }] } as never);
+    const studio = vi.spyOn(playStudioRoute, "call").mockResolvedValue({ name: "chosen" });
+    renderComposer(vi.fn());
+    await waitFor(() => expect(screen.getByText("/p/demo")).toBeTruthy());
+    fireEvent.change(screen.getByLabelText("Miniapp name"), { target: { value: "chosen" } });
+    fireEvent.click(screen.getByText("/p/demo"));
+    await waitFor(() => expect(studio).toHaveBeenCalled());
+    expect(studio.mock.calls[0][1]).toMatchObject({ body: { name: "chosen" } });
+  });
+
+  it("surfaces a taken-name conflict instead of silently renaming", async () => {
+    vi.spyOn(playBlankRoute, "call").mockRejectedValue(new Error("miniapp already exists: 'my-duel'"));
+    renderComposer(vi.fn());
+    fireEvent.click(screen.getByText("Blank"));
+    fireEvent.change(screen.getByPlaceholderText("title"), { target: { value: "Anything" } });
+    fireEvent.change(screen.getByLabelText("Miniapp name"), { target: { value: "my-duel" } });
+    fireEvent.click(screen.getByText("Create miniapp"));
+    await waitFor(() => expect(screen.getByText(/already exists/i)).toBeTruthy());
   });
 });

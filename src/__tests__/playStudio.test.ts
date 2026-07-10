@@ -19,7 +19,7 @@ describe("PlayController.studio", () => {
       const ctrl = new PlayController();
       const res = await ctrl.studio({ body: { source: { kind: "project", path: proj, flavor: "node" } } });
       expect(res.name.length).toBeGreaterThan(0);
-      expect(existsSync(join(miniappsRoot(), res.name, `${res.name}.html`))).toBe(true);
+      expect(existsSync(join(miniappsRoot(), res.name, "index.html"))).toBe(true);
     } finally { rmSync(proj, { recursive: true, force: true }); }
   });
 });
