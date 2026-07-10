@@ -33,6 +33,7 @@ export function mcpAppClient(): string {
   var api = {
     ready: false,
     hostTools: [],
+    hostContext: {},
     callTool: function (name, args) {
       return new Promise(function (resolve, reject) {
         var id = nextId++;
@@ -51,13 +52,24 @@ export function mcpAppClient(): string {
   };
   window.agentgemApp = api;
 
+  function dispatch(method, payload) {
+    var list = (subs[method] || []).concat(subs["*"] || []);
+    for (var i = 0; i < list.length; i++) { try { list[i](payload); } catch (err) { /* subscriber threw */ } }
+  }
+
+  // PR 2 leaves this a no-op; PR 3 fills in the real theme/CSS-variable/size application.
+  function applyHostContext(ctx) { /* PR 3 fills this in (theme/styles/size) */ }
+
   window.addEventListener("message", function (e) {
     if (e.source !== host) return;        // only the trusted host frame; nothing else is the boundary
     var d = e.data;
     if (!d || d.jsonrpc !== "2.0") return;
     if (d.id != null && initIds[d.id] && d.result && !api.ready) {  // ui/initialize result
       api.ready = true;
-      api.hostTools = d.result.tools || [];
+      var hostMeta = (d.result._meta || {})["ai.agentgem/host"] || {};
+      api.hostTools = hostMeta.tools || [];                          // granted tools ride _meta now, not result.tools
+      api.hostContext = d.result.hostContext || {};
+      if (api.hostContext) applyHostContext(api.hostContext);        // PR 3 wires applyHostContext; PR 2 defines a no-op
       if (iv) { clearInterval(iv); iv = null; }
       post({ jsonrpc: "2.0", method: "ui/notifications/initialized" });
       for (var qi = 0; qi < queue.length; qi++) post(queue[qi]);  // flush anything queued before ready
@@ -70,9 +82,27 @@ export function mcpAppClient(): string {
       else p.resolve(d.result);
       return;
     }
-    if (d.method === "ui/notifications/tool-result" && d.params) {  // a streamed chunk
-      var list = (subs[d.method] || []).concat(subs["*"] || []);
-      for (var i = 0; i < list.length; i++) { try { list[i]({ toolName: d.params.toolName, chunk: d.params.chunk }); } catch (err) { /* subscriber threw */ } }
+    if (d.method === "ui/notifications/tool-result" && d.params) {   // spec: params IS a CallToolResult
+      var s = (d.params._meta || {})["ai.agentgem/stream"] || {};
+      var evt = { toolName: s.toolName, chunk: d.params.structuredContent };  // FROZEN shape the games expect
+      dispatch("ui/notifications/tool-result", evt);
+      return;
+    }
+    if (d.method === "ui/notifications/tool-input" && d.params) {    // launcher args (host->app)
+      dispatch("ui/notifications/tool-input", d.params.arguments || {});
+      return;
+    }
+    if (d.method === "ui/notifications/tool-cancelled") { dispatch("ui/notifications/tool-cancelled", d.params || {}); return; }
+    if (d.method === "ui/notifications/host-context-changed" && d.params) {
+      api.hostContext = Object.assign(api.hostContext || {}, d.params);
+      applyHostContext(d.params);                                    // PR 3
+      dispatch("ui/notifications/host-context-changed", d.params);
+      return;
+    }
+    if (d.method === "ui/resource-teardown") {                       // REQUEST — must reply
+      var res = {};
+      try { dispatch("ui/resource-teardown", d.params || {}); } catch (err) { /* handler threw */ }
+      post({ jsonrpc: "2.0", id: d.id, result: res });
       return;
     }
   });
@@ -80,7 +110,14 @@ export function mcpAppClient(): string {
   // Handshake with bounded retry (~5x / 800ms) — defeats the race where the host hasn't attached its
   // message listener yet when the miniapp first loads. Stops early once the initialize result lands.
   var tries = 0;
-  function sendInit() { var id = nextId++; initIds[id] = 1; post({ jsonrpc: "2.0", id: id, method: "ui/initialize" }); }
+  function sendInit() {
+    var id = nextId++; initIds[id] = 1;
+    post({ jsonrpc: "2.0", id: id, method: "ui/initialize", params: {
+      appInfo: { name: "agentgem-miniapp", version: "2" },
+      appCapabilities: { availableDisplayModes: ["inline", "fullscreen"] },
+      protocolVersion: "2026-01-26",
+    }});
+  }
   sendInit();
   iv = setInterval(function () {
     if (api.ready || ++tries > 5) {
