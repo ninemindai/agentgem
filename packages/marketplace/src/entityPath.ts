@@ -7,21 +7,17 @@
 // function, so there is nothing to keep in sync.
 //
 // Deviation from the sibling: game paths are NOT percent-encoded. Artifact names carry '/' as data,
-// so workspaceArtifactPath must encode. A gem key carries '/' as structure (@scope/name, both
-// [a-z0-9-]), and a copy-friendly link is this feature's whole point. We still DECODE on parse.
+// so workspaceArtifactPath must encode. A gem key carries '/' as structure — the '@' is optional
+// and the charset is unvalidated, but the key's slashes are always structure, never data — and a
+// copy-friendly link is this feature's whole point. We still DECODE on parse.
 
 /**
- * A published gem key is scope/name, both segments [a-z0-9-] — the '/' is the discriminator,
- * not the '@'. The two mint paths disagree on the '@': gem.controller.ts's publishSetup builds
- * `${scope}/${name}`, while distribute/src/registry.ts builds `"@" + scope + "/" + name`. So the
- * '@' is optional here. genShareId() output (an unlisted share id) has no slash, so it can never
- * match this regex regardless of the '@'.
+ * A share id from genShareId() never contains a slash; a published key is scope/name and always
+ * does. The slash is the whole discriminator. (The charset is deliberately unchecked here — the
+ * publish path that writes gemKey into the registry does not validate it either.)
  */
-const PUBLISHED_KEY = /^@?[a-z0-9-]+\/[a-z0-9-]+$/;
-
-/** True for a published registry key. Scope-less keys are unlisted shares — unlistable by construction. */
 export function isPublishedKey(key: string): boolean {
-  return PUBLISHED_KEY.test(key);
+  return key.includes("/");
 }
 
 /** Keys are [a-z0-9-@/] only, so no percent-encoding is needed and the URL stays copy-friendly. */

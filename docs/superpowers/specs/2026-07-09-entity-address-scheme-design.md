@@ -98,10 +98,14 @@ A published gem key is `scope/name` and always contains a `/` (`@acme/tetris`,
 `raymondfeng/miniapp`). The `@` prefix is optional and inconsistent across mint paths —
 `gem.controller.ts`'s `publishSetup` builds `${scope}/${name}`, while
 `distribute/src/registry.ts` builds `"@" + scope + "/" + name` — so the `/` is the real
-discriminator, not the `@`. An unlisted share is therefore a **slash-less key** —
-`xK3f9a2Bq1`, from `genShareId()` — and it *cannot* be listed, because `catalog_gems` requires
-`scope/name` (`registry.ts:31-41` validates scope/name as `[a-z0-9-]`). The invariant is
-enforced by a format the registry already validates, not by remembering to skip a write.
+discriminator, not the `@`. The charset isn't guaranteed either: `recordCatalogShare`
+(`packages/aggregator/src/catalog.ts`) writes `gemKey` into `catalog_gems` with no charset
+validation — only signature, freshness, and binding checks. `[a-z0-9-]` is enforced solely by
+the separate CLI path (`registry.ts`'s `parseRef`), which production publishing does not go
+through. An unlisted share is therefore a **slash-less key** — `xK3f9a2Bq1`, from
+`genShareId()` — and it *cannot* be listed, because listing means writing a key containing `/`
+into `catalog_gems`, and `genShareId()`'s output never does. The invariant is enforced by the
+slash alone, not by remembering to skip a write.
 
 This makes unlisted-ness a property of the id *shape*: PR 2 must verify at `genShareId()`'s
 mint site that a generated share id can never match `isPublishedKey` — ideally with a test
@@ -176,7 +180,7 @@ POST /api/aggregator/share-archive
   server  importGem(bytes)                     # verifies gem.lock, throws -> 400
           manifest.gemDigest === digest        # else 400 digest-mismatch
           staticGate(html)                     # re-run server-side on any game artifact
-          key = genShareId()                   # scope-less => unlistable (Rule 1)
+          key = genShareId()                   # slash-less => unlistable (Rule 1)
                                                # today lives in src/share/shareStore.ts,
                                                # whose share_cards path this design retires;
                                                # move it beside upsertGemArchive
@@ -199,7 +203,7 @@ Three load-bearing properties:
   regex+tokenizer half; jsdom's `gameGate` is not re-run.
 - **Reads need nothing new.** `GET /api/aggregator/game-html?key=&version=` is already in
   `PUBLIC_READ_PATHS` (`src/originGuard.ts:36`) with `Access-Control-Allow-Origin: *`. A
-  scope-less key flows through it unchanged.
+  slash-less key flows through it unchanged.
 
 ### Revocation
 
@@ -244,10 +248,10 @@ then, via the `cuts.ts` mirror-plus-drift-guard precedent.
 
 **Deviation — game paths are not percent-encoded.** `workspaceArtifactPath` encodes every
 segment because artifact names carry `/` as *data* (`codex:rules/default.rules`). A gem key
-carries `/` as *structure*: `@scope/name`, both segments `[a-z0-9-]`. Encoding would yield
-`/games/%40acme%2Ftetris`, and a copy-friendly link is this spec's entire goal. `games/<key>` is
-therefore emitted raw and parsed greedily. The parser still decodes, so a hand-edited or legacy
-encoded link resolves.
+carries `/` as *structure* — the `@` is optional and the charset is unvalidated, but the key's
+slashes are always structure, never data. Encoding would yield `/games/%40acme%2Ftetris`, and a
+copy-friendly link is this spec's entire goal. `games/<key>` is therefore emitted raw and parsed
+greedily. The parser still decodes, so a hand-edited or legacy encoded link resolves.
 
 Each app gets a **router conformance test**: every registered route must be either a declared
 collection, a well-formed entity path, or a route explicitly listed as a panel. A new route
