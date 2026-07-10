@@ -278,6 +278,7 @@ import {
   UsageSchema, UsageQuerySchema,
   PlaybookPrepareBodySchema, PlaybookPrepareResponseSchema,
   PlaybookPublishBodySchema, PlaybookPublishResponseSchema,
+  ArtifactContentQuerySchema, ArtifactContentSchema,
 } from "./schemas.js";
 import { collectScorecard, selectScorecardRoots, scorecardTranscriptPaths, defaultScorecardDeps, isPortable, type Scorecard } from "./gem/scorecard.js";
 import { preparePlaybook } from "./gem/playbookPrepareCore.js";
@@ -328,7 +329,7 @@ import type { AppDb } from "@agentgem/aggregator";
 import { listCatalogGems } from "@agentgem/aggregator";
 import { resolvePublishedBy } from "./registry/publishedBy.js";
 import { GemTypeRegistry, defaultGemTypeRegistry, resolvePublishType } from "./gem/gemTypeRegistry.js";
-import { resolveDirs, resolveProject, agentgemHome } from "@agentgem/model";
+import { resolveDirs, resolveProject, agentgemHome, workspaceArtifactPath, parseWorkspaceArtifactPath } from "@agentgem/model";
 import { pickFolder } from "./pickFolder.js";
 import { readShareAdoption, setShareAdoption } from "./agentgemConfig.js";
 import { emitAdoption } from "./registry/emitAdoption.js";
@@ -375,6 +376,24 @@ function deriveRunDir(gemName: string): string {
   return runDir;
 }
 
+// The three body-bearing collections. `hook` and `mcp_server` have no `content`, so they have
+// nothing to address and get no id.
+const BODY_COLLECTIONS = ["skills", "subagents", "instructions"] as const;
+
+/** Mint an `id` on every body-bearing artifact; drop `content` when deferring. Mutates a fresh
+ *  inventory object (introspectAll returns one per call), so there is nothing to clone. */
+function decorateInventory(inv: ConfigInventory, defer: boolean): ConfigInventory {
+  for (const key of BODY_COLLECTIONS) {
+    const arr = inv[key] as { type: string; name: string; source?: string; content?: string; id?: string }[];
+    for (const a of arr) {
+      const id = workspaceArtifactPath(a);
+      if (id) a.id = id;
+      if (defer) delete a.content;
+    }
+  }
+  return inv; // inv.projects[] is deliberately untouched: no project-scoped entity path exists yet
+}
+
 @api({ basePath: "/api" })
 export class GemController {
   constructor(
@@ -385,7 +404,20 @@ export class GemController {
 
   @get("/inventory", { query: DirQuerySchema, response: InventorySchema })
   async inventory(input: { query: z.infer<typeof DirQuerySchema> }): Promise<z.infer<typeof InventorySchema>> {
-    return introspectAll(input.query.dir, parseProjectsQuery(input.query.projects));
+    const inv = introspectAll(input.query.dir, parseProjectsQuery(input.query.projects));
+    return decorateInventory(inv, input.query.body === "defer") as z.infer<typeof InventorySchema>;
+  }
+
+  @get("/artifact/content", { query: ArtifactContentQuerySchema, response: ArtifactContentSchema })
+  async artifactContent(input: { query: z.infer<typeof ArtifactContentQuerySchema> }): Promise<z.infer<typeof ArtifactContentSchema>> {
+    const { id } = input.query;
+    const ref = parseWorkspaceArtifactPath(id);
+    if (!ref) throw new AgentError(`unknown artifact id: ${id}`, { status: 404, code: "artifact_not_found", retryable: false });
+    const inv = introspectConfig(resolveDirs(input.query.dir));
+    const arr = inv[ref.collection] as { name: string; source?: string; content?: string }[];
+    const hit = arr.find((a) => a.name === ref.name && (ref.source === undefined || a.source === ref.source));
+    if (!hit?.content) throw new AgentError(`unknown artifact id: ${id}`, { status: 404, code: "artifact_not_found", retryable: false });
+    return { id, content: hit.content };
   }
 
   @get("/usage", { query: UsageQuerySchema, response: UsageSchema })

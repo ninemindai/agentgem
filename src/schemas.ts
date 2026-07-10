@@ -60,6 +60,14 @@ export const SubagentArtifactSchema = z.object({
   model: z.string().optional(),
 });
 
+// Inventory-only artifact variants. `GET /api/inventory` mints an `id` (the canonical entity path)
+// and, under ?body=defer, omits `content`. These are SEPARATE schemas on purpose: the base
+// SkillArtifactSchema/SubagentArtifactSchema/InstructionsArtifactSchema are members of
+// GemArtifactSchema — the gem-archive contract — where `content` must stay required.
+export const InventorySkillSchema = SkillArtifactSchema.extend({ id: z.string(), content: z.string().optional() });
+export const InventorySubagentSchema = SubagentArtifactSchema.extend({ id: z.string(), content: z.string().optional() });
+export const InventoryInstructionsSchema = InstructionsArtifactSchema.extend({ id: z.string(), content: z.string().optional() });
+
 export const ChannelPlatformSchema = z.enum(["slack", "telegram", "discord", "teams", "twilio", "github"]);
 
 export const ChannelArtifactSchema = z.object({
@@ -166,11 +174,11 @@ export const ProjectInventorySchema = z.object({
 });
 
 export const InventorySchema = z.object({
-  skills: z.array(SkillArtifactSchema),
+  skills: z.array(InventorySkillSchema),
   mcpServers: z.array(McpServerArtifactSchema),
-  instructions: z.array(InstructionsArtifactSchema),
+  instructions: z.array(InventoryInstructionsSchema),
   hooks: z.array(HookArtifactSchema),
-  subagents: z.array(SubagentArtifactSchema),
+  subagents: z.array(InventorySubagentSchema),
   projects: z.array(ProjectInventorySchema).optional(),
 });
 
@@ -476,7 +484,15 @@ const AgentcoreResultSchema = z.object({
 export const PublishResultSchema = z.discriminatedUnion("kind", [ManagedAgentResultSchema, AgentcoreResultSchema]);
 
 // `projects` is a JSON-encoded string array of root paths (query params can't carry arrays cleanly).
-export const DirQuerySchema = z.object({ dir: z.string().optional(), projects: z.string().optional() });
+export const DirQuerySchema = z.object({
+  dir: z.string().optional(),
+  projects: z.string().optional(),
+  // `defer` omits artifact bodies (97.8% of the payload) and returns only the `id` that addresses
+  // them. Opt-in: the default stays `full` so no existing caller changes shape.
+  body: z.enum(["full", "defer"]).optional(),
+});
+export const ArtifactContentQuerySchema = z.object({ id: z.string(), dir: z.string().optional() });
+export const ArtifactContentSchema = z.object({ id: z.string(), content: z.string() });
 export const UsageQuerySchema = z.object({
   dir: z.string().optional(),
   projects: z.string().optional(),
