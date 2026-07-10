@@ -13,7 +13,7 @@ const mkUser = async (db: Db, pid: string) => {
 };
 
 describe("claimHandle", () => {
-  it("claims a free handle, sets the self-scope, and is resolvable both ways", async () => {
+  it("claims a free handle, which IS the self grant, and is resolvable both ways", async () => {
     const db = await makeTestDb();
     const a = await mkUser(db, "1");
     expect(await claimHandle(db, a, "raymond")).toEqual({ ok: true, handle: "raymond" });
@@ -38,8 +38,9 @@ describe("claimHandle", () => {
     expect(await claimHandle(db, b, "taken")).toEqual({ ok: false, reason: "unavailable" });
   });
 
-  // THE privilege-escalation guard. Claiming an org's name would grant a role='self' scope row,
-  // and accountOwnsScope ignores role — so it would authorize publishing under that org.
+  // THE namespace guard. The handle IS the self grant (accountOwnsScope reads it), so claiming an
+  // org's name would authorize publishing under that org for as long as it has no active App
+  // installation. Not the authorization boundary — resolveOrgAccess path 1 is (githubApp.ts).
   it("rejects a handle that names a known GitHub org, indistinguishably from `taken`", async () => {
     const db = await makeTestDb();
     const a = await mkUser(db, "1");
@@ -49,7 +50,7 @@ describe("claimHandle", () => {
     expect(await claimHandle(db, a, "ninemindai")).toEqual({ ok: false, reason: "unavailable" });
     expect(await claimHandle(db, a, "NINEMINDAI")).toEqual({ ok: false, reason: "unavailable" });
     expect(await claimHandle(db, a, "acme")).toEqual({ ok: false, reason: "unavailable" });
-    expect(await accountOwnsScope(db, a, "ninemindai")).toBe(false);   // no scope row was written
+    expect(await accountOwnsScope(db, a, "ninemindai")).toBe(false);   // no handle was written
   });
 
   it("renaming preserves the account, org memberships, and frees the old handle, which grants the next claimant nothing", async () => {
