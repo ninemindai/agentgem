@@ -26,6 +26,7 @@ export interface UiHostDeps {
   target: Window;                                    // the iframe.contentWindow: post target + e.source boundary
   requestConsent: (cap: string) => Promise<boolean>; // gated caps only; AUTO caps bypass. Runner owns the modal.
   hostContext?: () => Record<string, unknown>;       // PR 3 wires the Runner's live theme/size; PR 2: absent -> {}
+  onDisplayMode?: (mode: string) => string;          // PR 3: Runner applies/refuses; returns the mode ACTUALLY applied
 }
 
 export interface UiHost {
@@ -33,6 +34,7 @@ export interface UiHost {
   dispose(): void;
   bumpGeneration(): void;
   feedSessionData(sessionId: string, agent: string): void; // host-initiated "Replay yours" rebind
+  pushHostContext(partial: Record<string, unknown>): void;  // host-initiated host-context-changed push (fullscreen toggle)
 }
 
 interface RpcMessage { jsonrpc?: string; id?: number; method?: string; params?: { name?: string; arguments?: Record<string, unknown> } }
@@ -65,6 +67,11 @@ export function createUiHost(deps: UiHostDeps): UiHost {
   const register = (gen: number, handle: StreamHandle) => {
     if (stale(gen)) { try { handle.close(); } catch { /* ignore */ } } else handles.add(handle);
   };
+  // Host-initiated push (fullscreen toggle, button- or request-driven): not a reply to any `id`, so the
+  // game's onNotification handler picks it up the same way it does tool-result chunks.
+  const notifyCtx = (partial: Record<string, unknown>) =>
+    post({ jsonrpc: "2.0", method: "ui/notifications/host-context-changed", params: partial });
+  function pushHostContext(partial: Record<string, unknown>): void { notifyCtx(partial); }
 
   // Execute a permitted capability. One-shot caps reply with the JSON-RPC result; streaming caps reply
   // with an ack and push each event via a notification. Mirrors Runner.serve()'s per-cap branches.
@@ -155,6 +162,14 @@ export function createUiHost(deps: UiHostDeps): UiHost {
       return;
     }
     if (d.method === "ui/notifications/initialized") return; // handshake ack — nothing to do
+    if (d.method === "ui/request-display-mode") {
+      // Spec: the host may refuse, so reply with the mode it ACTUALLY applied, not the requested one
+      // (e.g. a thumbnail's onDisplayMode always refuses fullscreen).
+      const req = (d.params as { mode?: string } | undefined)?.mode ?? "inline";
+      const applied = deps.onDisplayMode ? deps.onDisplayMode(req) : "inline";
+      reply(d.id, { mode: applied });
+      return;
+    }
     if (d.method === "tools/call") { void handleCall(d); return; }
   }
 
@@ -189,5 +204,5 @@ export function createUiHost(deps: UiHostDeps): UiHost {
     feeding = false;
   }
 
-  return { handleMessage, dispose, bumpGeneration, feedSessionData };
+  return { handleMessage, dispose, bumpGeneration, feedSessionData, pushHostContext };
 }

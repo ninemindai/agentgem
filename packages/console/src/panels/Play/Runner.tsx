@@ -52,6 +52,27 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
     });
   }, [interactive, name]);
 
+  // The live host context sent on ui/initialize and re-pushed on every fullscreen toggle. Colors must
+  // resolve to concrete hex here: the sealed iframe has no `allow-same-origin`, so it can't see the
+  // console's stylesheet — a `var(--paper)` reference would be inert inside it. Fallbacks are theme.css's
+  // current values (shell/theme.css) so a resolve failure still yields a real theme instead of unset vars.
+  const hostContext = useCallback(() => {
+    const cs = getComputedStyle(document.documentElement);
+    const v = (name_: string, fb: string) => cs.getPropertyValue(name_).trim() || fb;
+    return {
+      theme: "light",
+      styles: { variables: {
+        "--color-background-primary": v("--paper", "#f1eadb"),
+        "--color-background-secondary": v("--paper-2", "#e9e0cd"),
+        "--color-text-primary": v("--ink", "#20190f"),
+        "--color-border-primary": v("--line", "#ddd0b7"),
+      } },
+      displayMode: fs ? "fullscreen" : "inline",
+      availableDisplayModes: ["inline", "fullscreen"],
+      containerDimensions: { width: vw, height: vh },
+    };
+  }, [fs, vw, vh]);
+
   // Wire the sealed iframe to the router: create the host once its contentWindow exists and the gem declares
   // needs, delegate every `message` to host.handleMessage, and invalidate it on teardown. The iframe has no
   // `key`, so React reuses the same contentWindow across a game switch — bumpGeneration() (not dispose())
@@ -62,12 +83,27 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
     if (name == null || apiBase == null || !needs?.length) return;   // apiBase="" (same-origin) is valid
     const target = iframeRef.current?.contentWindow;
     if (!target) return;
-    const host = createUiHost({ apiBase, name, needs, interactive, target, requestConsent });
+    const host = createUiHost({
+      apiBase, name, needs, interactive, target, requestConsent, hostContext,
+      onDisplayMode: (m) => { const ok = interactive && m === "fullscreen"; setFs(ok); return ok ? "fullscreen" : "inline"; },
+    });
     hostRef.current = host;
     const onMsg = (e: MessageEvent) => host.handleMessage(e);
     window.addEventListener("message", onMsg);
     return () => { window.removeEventListener("message", onMsg); host.bumpGeneration(); hostRef.current = null; };
-  }, [name, apiBase, needs, interactive, requestConsent]);
+  }, [name, apiBase, needs, interactive, requestConsent, hostContext]);
+
+  // Push host-context-changed on every fullscreen toggle, whether button- or request-driven, so the game
+  // re-lays-out from the new dimensions instead of scaling a magnified vw×vh. Skip the very first render
+  // (host doesn't exist yet / nothing has changed to announce) via the mounted ref below.
+  const fsMounted = useRef(false);
+  useEffect(() => {
+    if (!fsMounted.current) { fsMounted.current = true; return; }
+    hostRef.current?.pushHostContext({
+      displayMode: fs ? "fullscreen" : "inline",
+      containerDimensions: fs ? { width: window.innerWidth, height: window.innerHeight } : { width: vw, height: vh },
+    });
+  }, [fs, vw, vh]);
 
   // Close the picker and return focus to its trigger (a11y: focus must not fall to <body>).
   const closePicker = useCallback(() => { setPickerOpen(false); rebindBtnRef.current?.focus(); }, []);

@@ -90,6 +90,23 @@ describe("Runner", () => {
     expect(post).not.toHaveBeenCalledWith(expect.objectContaining({ id, result: expect.objectContaining({ meta: { project: "STALE-A" } }) }), "*");
   });
 
+  it("ui/request-display-mode enters fullscreen, replies with the applied mode, and pushes host-context-changed", async () => {
+    const { container } = render(<Runner html="<p>x</p>" name="g1" apiBase="" needs={["session-data"]} vw={1200} vh={780} />);
+    const win = (container.querySelector("iframe") as HTMLIFrameElement).contentWindow as Window;
+    const post = vi.spyOn(win, "postMessage").mockImplementation(() => {});
+    initialize(win);
+    const id = rpcId++;
+    fromIframe(win, { jsonrpc: "2.0", id, method: "ui/request-display-mode", params: { mode: "fullscreen" } });
+    // The reply carries the mode the host ACTUALLY applied, not merely an echo of the request.
+    await waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({ id, result: { mode: "fullscreen" } }), "*"));
+    // Entering fullscreen fires the pushHostContext effect (fs changed): a host-context-changed notification
+    // announces the new displayMode so the game re-lays-out at real screen size instead of a magnified vw×vh.
+    await waitFor(() => expect(post).toHaveBeenCalledWith(expect.objectContaining({
+      method: "ui/notifications/host-context-changed",
+      params: expect.objectContaining({ displayMode: "fullscreen" }),
+    }), "*"));
+  });
+
   it("ignores a tools/call for a capability the gem did NOT declare", async () => {
     const inv = vi.spyOn(inventoryRoute, "call").mockResolvedValue({ skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [] } as never);
     const { container } = render(<Runner html="<p>x</p>" name="g1" apiBase="" needs={["session-data"]} />);
