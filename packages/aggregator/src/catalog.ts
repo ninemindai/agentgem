@@ -55,9 +55,9 @@ export async function listCatalogGems(db: AppDb): Promise<CatalogRow[]> {
   }));
 }
 
-export async function upsertGemArchive(db: AppDb, a: { gemKey: string; version: string; bytes: Uint8Array; digest: string; createdAtMs: number }): Promise<void> {
-  await db.insert(gemArchives).values({ gemKey: a.gemKey, version: a.version, bytes: a.bytes, size: a.bytes.length, digest: a.digest, createdAtMs: a.createdAtMs })
-    .onConflictDoUpdate({ target: [gemArchives.gemKey, gemArchives.version], set: { bytes: a.bytes, size: a.bytes.length, digest: a.digest, createdAtMs: a.createdAtMs } });
+export async function upsertGemArchive(db: AppDb, a: { gemKey: string; version: string; bytes: Uint8Array; digest: string; createdAtMs: number; ownerAccountId?: string }): Promise<void> {
+  await db.insert(gemArchives).values({ gemKey: a.gemKey, version: a.version, bytes: a.bytes, size: a.bytes.length, digest: a.digest, createdAtMs: a.createdAtMs, ownerAccountId: a.ownerAccountId ?? null })
+    .onConflictDoUpdate({ target: [gemArchives.gemKey, gemArchives.version], set: { bytes: a.bytes, size: a.bytes.length, digest: a.digest, createdAtMs: a.createdAtMs, ownerAccountId: a.ownerAccountId ?? null } });
 }
 
 export async function getGemArchive(db: AppDb, gemKey: string, version: string): Promise<{ bytes: Uint8Array; digest: string } | null> {
@@ -100,6 +100,36 @@ export async function deleteCatalogGem(db: AppDb, gemKey: string, version: strin
   await db.delete(gemArchives).where(and(eq(gemArchives.gemKey, gemKey), eq(gemArchives.version, version)));
   await db.delete(catalogGems).where(and(eq(catalogGems.gemKey, gemKey), eq(catalogGems.version, version)));
   return "deleted";
+}
+
+// Owner-only revoke of an UNLISTED share archive (no catalog_gems row exists for it). Mirrors
+// deleteCatalogGem's rule exactly: NULL owner is owned by nobody; compare the accounts.id uuid,
+// never a string. Deletes only the gem_archives row.
+export async function deleteGemArchiveOwned(db: AppDb, gemKey: string, ownerAccountId: string): Promise<DeleteGemResult> {
+  const row = (await db.select({ ownerAccountId: gemArchives.ownerAccountId }).from(gemArchives)
+    .where(eq(gemArchives.gemKey, gemKey)).limit(1))[0];
+  if (!row) return "not-found";
+  if (row.ownerAccountId === null || row.ownerAccountId !== ownerAccountId) return "forbidden";
+  await db.delete(gemArchives).where(eq(gemArchives.gemKey, gemKey));
+  return "deleted";
+}
+
+// The version of a gem_archives row that has NO catalog_gems row — i.e. an unlisted share. Used by
+// game-meta to resolve /games/<shareId> (a scope-less key has no catalog "latest"). Returns null
+// for a published gem (its version comes from latestGemVersion) or an absent key.
+export async function archiveOnlyVersion(db: AppDb, gemKey: string): Promise<string | null> {
+  const listed = await catalogGemExists2(db, gemKey);
+  if (listed) return null;
+  const row = (await db.select({ version: gemArchives.version }).from(gemArchives)
+    .where(eq(gemArchives.gemKey, gemKey)).orderBy(desc(gemArchives.createdAtMs)).limit(1))[0];
+  return row?.version ?? null;
+}
+
+// True if ANY catalog_gems row exists for this key (any version). Distinct from catalogGemExists,
+// which needs a specific version.
+async function catalogGemExists2(db: AppDb, gemKey: string): Promise<boolean> {
+  const r = (await db.select({ gemKey: catalogGems.gemKey }).from(catalogGems).where(eq(catalogGems.gemKey, gemKey)).limit(1))[0];
+  return r != null;
 }
 
 export interface CatalogManifest {

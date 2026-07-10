@@ -290,6 +290,7 @@ export const gemArchives = pgTable("gem_archives", {
   size: integer("size").notNull(),
   digest: text("digest").notNull(),
   createdAtMs: bigint("created_at_ms", { mode: "number" }).notNull(),
+  ownerAccountId: uuid("owner_account_id").references(() => accounts.id),
 }, (t) => [primaryKey({ columns: [t.gemKey, t.version] })]);
 
 // Append-only: one row per click into a mini-game's fullscreen play (POST /api/aggregator/game-play).
@@ -630,6 +631,11 @@ export async function ensureSchema(db: AppDb): Promise<void> {
   // The authorization key for a published gem. NULL = owned by nobody (see the backfill).
   await db.execute(sql`alter table catalog_gems add column if not exists owner_account_id uuid references accounts(id)`);
   await db.execute(sql`create index if not exists catalog_gems_owner_idx on catalog_gems (owner_account_id)`);
+
+  // Owner of an UNLISTED share archive (no catalog_gems row). NULL = owned by nobody (published
+  // gems, whose ownership lives on catalog_gems). Same fail-closed rule as catalog_gems.
+  await db.execute(sql`alter table gem_archives add column if not exists owner_account_id uuid references accounts(id)`);
+  await db.execute(sql`create index if not exists gem_archives_owner_idx on gem_archives (owner_account_id)`);
 
   // A login-less provider (Google, Slack, X) must still get an `accounts` anchor row, because ten
   // tables carry a foreign key to accounts.id. See anchorAndScopes.
