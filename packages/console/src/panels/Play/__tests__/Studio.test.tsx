@@ -171,4 +171,20 @@ describe("Studio", () => {
     expect(await screen.findByText(/removed invoke-agent — nothing in the miniapp uses it/i)).toBeTruthy();
     await waitFor(() => expect(screen.queryByText(/run a local AI agent on your machine/i)).toBeNull());
   });
+
+  it("renders the auto-approved session-data capability with a fallback label, not a blank row", async () => {
+    renderStudio(["session-data"]);
+    expect(await screen.findByText(/read this miniapp's own source session/i)).toBeTruthy();
+  });
+
+  it("clears a prior prune notice when a later save prunes nothing", async () => {
+    renderStudio(["invoke-agent"]);
+    const save = vi.spyOn(playSaveRoute, "call").mockResolvedValue({ name: "g1", commit: "a", prunedNeeds: ["invoke-agent"] } as never);
+    fireEvent.click(await screen.findByRole("button", { name: /^Save$/ }));
+    expect(await screen.findByText(/removed invoke-agent/i)).toBeTruthy();
+
+    save.mockResolvedValue({ name: "g1", commit: "b", prunedNeeds: [] } as never);
+    fireEvent.click(screen.getByRole("button", { name: /^Save$/ }));
+    await waitFor(() => expect(screen.queryByText(/removed invoke-agent/i)).toBeNull());
+  });
 });

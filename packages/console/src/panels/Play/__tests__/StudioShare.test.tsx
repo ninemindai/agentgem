@@ -35,7 +35,7 @@ describe("Studio → Share to app.agentgem.ai", () => {
   it("bound: saves then publishes with the verified login as scope", async () => {
     vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob", sessionActive: true } as never);
     vi.spyOn(routes.playMiniappRoute, "call").mockResolvedValue(miniapp as never);
-    vi.spyOn(routes.playSaveRoute, "call").mockResolvedValue({ ok: true } as never);
+    vi.spyOn(routes.playSaveRoute, "call").mockResolvedValue({ name: "g1", commit: "abc1234", prunedNeeds: [] } as never);
     const publish = vi.spyOn(routes.publishSetupRoute, "call").mockResolvedValue({ exploreRef: "@bob/snake", version: "0.1.0", shareUrl: "https://agentgem.ai/share/s" } as never);
     mount();
     fireEvent.click(await screen.findByRole("button", { name: /share to app\.agentgem\.ai/i }));
@@ -47,7 +47,7 @@ describe("Studio → Share to app.agentgem.ai", () => {
   it("unbound: shows the inline connect instead of publishing, and does not dead-end", async () => {
     vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: false } as never);
     vi.spyOn(routes.playMiniappRoute, "call").mockResolvedValue(miniapp as never);
-    vi.spyOn(routes.playSaveRoute, "call").mockResolvedValue({ ok: true } as never);
+    vi.spyOn(routes.playSaveRoute, "call").mockResolvedValue({ name: "g1", commit: "abc1234", prunedNeeds: [] } as never);
     const publish = vi.spyOn(routes.publishSetupRoute, "call");
     mount();
     fireEvent.click(await screen.findByRole("button", { name: /share to app\.agentgem\.ai/i }));
@@ -61,7 +61,7 @@ describe("Studio → Share to app.agentgem.ai", () => {
       .mockResolvedValueOnce({ bound: false } as never)
       .mockResolvedValueOnce({ bound: true, login: "bob", sessionActive: true } as never);
     vi.spyOn(routes.playMiniappRoute, "call").mockResolvedValue(miniapp as never);
-    const save = vi.spyOn(routes.playSaveRoute, "call").mockResolvedValue({ ok: true } as never);
+    const save = vi.spyOn(routes.playSaveRoute, "call").mockResolvedValue({ name: "g1", commit: "abc1234", prunedNeeds: [] } as never);
     vi.spyOn(routes.bindStartRoute, "call").mockResolvedValue({ configured: true, userCode: "AB-12", verificationUri: "https://gh/d", deviceCode: "dc" } as never);
     vi.spyOn(routes.bindCompleteRoute, "call").mockResolvedValue({ bound: true, login: "bob" } as never);
     const publish = vi.spyOn(routes.publishSetupRoute, "call").mockResolvedValue({ exploreRef: "@bob/snake", version: "0.1.0", shareUrl: "https://agentgem.ai/share/s" } as never);
@@ -93,7 +93,7 @@ describe("Studio → Share to app.agentgem.ai", () => {
   it("dismissing the connect banner clears the pending publish", async () => {
     vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: false } as never);
     vi.spyOn(routes.playMiniappRoute, "call").mockResolvedValue(miniapp as never);
-    vi.spyOn(routes.playSaveRoute, "call").mockResolvedValue({ ok: true } as never);
+    vi.spyOn(routes.playSaveRoute, "call").mockResolvedValue({ name: "g1", commit: "abc1234", prunedNeeds: [] } as never);
     const publish = vi.spyOn(routes.publishSetupRoute, "call");
     mount();
     fireEvent.click(await screen.findByRole("button", { name: /share to app\.agentgem\.ai/i }));
@@ -107,7 +107,7 @@ describe("Studio → Share to app.agentgem.ai", () => {
       .mockResolvedValueOnce({ bound: false } as never)
       .mockResolvedValueOnce({ bound: true, login: "bob", avatarUrl: "https://a/bob.png", sessionActive: true } as never);
     vi.spyOn(routes.playMiniappRoute, "call").mockResolvedValue(miniapp as never);
-    const save = vi.spyOn(routes.playSaveRoute, "call").mockResolvedValue({ ok: true } as never);
+    const save = vi.spyOn(routes.playSaveRoute, "call").mockResolvedValue({ name: "g1", commit: "abc1234", prunedNeeds: [] } as never);
     vi.spyOn(routes.bindStartRoute, "call").mockResolvedValue({ configured: true, userCode: "AB-12", verificationUri: "https://gh/d", deviceCode: "dc" } as never);
     vi.spyOn(routes.bindCompleteRoute, "call").mockResolvedValue({ bound: true, login: "bob" } as never);
     const publish = vi.spyOn(routes.publishSetupRoute, "call").mockResolvedValue({ exploreRef: "@bob/snake", version: "0.1.0", shareUrl: "https://agentgem.ai/share/s" } as never);
