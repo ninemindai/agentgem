@@ -323,6 +323,49 @@ describe("GemController", () => {
     await client.get(`/api/artifact/content?dir=${encodeURIComponent(dir)}&id=${encodeURIComponent("gems/@acme/tetris")}`).expect(404);
   });
 
+  it("GET /api/artifact/content 404s (ambiguous) rather than silently returning the wrong body when two instructions mint the same id", async () => {
+    // `instructions` carry no `source`, so their id is just `workspace/instructions/<name>` — and
+    // introspectConfig does NOT de-dup instructions by name (unlike skills/subagents). Two
+    // instruction artifacts from different sources that happen to share a name mint the SAME id.
+    // Root layout: <root>/claude/CLAUDE.md (name "CLAUDE.md") and
+    // <root>/.agentgem/distilled/lessons/CLAUDE.md.md (name "CLAUDE.md" after the .md strip) collide.
+    const root = mkdtempSync(join(tmpdir(), "instr-collide-"));
+    const claudeDir = join(root, "claude");
+    mkdirSync(claudeDir, { recursive: true });
+    writeFileSync(join(claudeDir, "CLAUDE.md"), "FIRST-INSTRUCTIONS-BODY");
+    const lessonsDir = join(root, ".agentgem", "distilled", "lessons");
+    mkdirSync(lessonsDir, { recursive: true });
+    writeFileSync(join(lessonsDir, "CLAUDE.md.md"), "SECOND-INSTRUCTIONS-BODY");
+    try {
+      const inv = await client.get(`/api/inventory?dir=${encodeURIComponent(claudeDir)}`).expect(200);
+      const collidingIds = inv.body.instructions
+        .map((i: { id?: string }) => i.id)
+        .filter((id: string) => id === "workspace/instructions/CLAUDE.md");
+      expect(collidingIds.length).toBe(2); // sanity: the fixture really does mint a duplicate id
+
+      const id = "workspace/instructions/CLAUDE.md";
+      const r = await client.get(`/api/artifact/content?dir=${encodeURIComponent(claudeDir)}&id=${encodeURIComponent(id)}`);
+      expect(r.status).toBe(404); // must fail visibly, not silently return the first match's body
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("GET /api/artifact/content returns 200 with an empty body for an artifact whose file is empty", async () => {
+    const root = mkdtempSync(join(tmpdir(), "instr-empty-"));
+    writeFileSync(join(root, "CLAUDE.md"), "");
+    try {
+      const inv = await client.get(`/api/inventory?dir=${encodeURIComponent(root)}`).expect(200);
+      expect(inv.body.instructions.find((i: { name: string }) => i.name === "CLAUDE.md")?.id).toBe("workspace/instructions/CLAUDE.md");
+
+      const id = "workspace/instructions/CLAUDE.md";
+      const r = await client.get(`/api/artifact/content?dir=${encodeURIComponent(root)}&id=${encodeURIComponent(id)}`).expect(200);
+      expect(r.body.content).toBe("");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   // The gem ARCHIVE contract must stay strict. This is the guard that stops a future
   // refactor from loosening the shared schema to make the inventory variant simpler.
   it("GemArtifactSchema still requires content", async () => {
