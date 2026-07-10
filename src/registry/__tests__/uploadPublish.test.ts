@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { makeTestDb, makeAuth, mintSession, setAccountScopes, upsertInstallation, upsertOrgMember } from "@agentgem/aggregator";
+import { makeTestDb, makeAuth, mintSession, resolveSession, claimHandle, setAccountScopes, upsertInstallation, upsertOrgMember } from "@agentgem/aggregator";
 import type { AppDb } from "@agentgem/aggregator";
 import { exportGem, type RegistryPublisher, type RegistrySource, type RegistryIndex } from "@agentgem/distribute";
 import { uploadPublishHandler } from "../uploadPublish.js";
@@ -67,6 +67,20 @@ describe("upload-publish", () => {
     expect(idx.items["@alice/test-gem"].discovery.publishedBy).toBe("alice"); // VERIFIED attribution
     expect(res._h["access-control-allow-origin"]).toBe("https://app.agentgem.ai");
     expect(res._h["access-control-allow-credentials"]).toBe("true");
+  });
+  it("stamps publishedBy with the account's claimed handle, not the raw login, once renamed", async () => {
+    const db = await makeTestDb(); const auth = testAuth(db); const token = await session(db, auth, "alice"); const { publisher, commits } = capturing(); const res = mkRes();
+    // GitHub sign-in auto-claims a handle equal to the login (Task 5b). Rename it here so this
+    // assertion can only pass if publishedBy is reading the HANDLE, not the verified session login.
+    // claimHandle REPLACES the account's self-scope with the new handle (a rename's job — see
+    // handles.ts), so the owned scope moves from "alice" to "alice-handle" too; publish there.
+    const who = await resolveSession(auth, bearer(token));
+    await claimHandle(db, who!.accountId, "alice-handle");
+    await uploadPublishHandler(deps(db, auth, publisher))(mkReq({ headers:{ ...bearer(token), origin:"https://app.agentgem.ai" }, body:{ scope:"alice-handle", version:"1.0.0", tags:["x"], bytesBase64: gemBase64() } }) as any, res as any);
+    expect(res._s).toBe(200);
+    expect((res._b as any).ref).toBe("@alice-handle/test-gem");
+    const idx = JSON.parse((commits[0].files as any)["registry.json"]);
+    expect(idx.items["@alice-handle/test-gem"].discovery.publishedBy).toBe("alice-handle"); // HANDLE, not login "alice"
   });
   it("publishes to an owned org scope (captured at login)", async () => {
     const db = await makeTestDb(); const auth = testAuth(db); const token = await session(db, auth, "alice", ["alice", "ninemind"]); const { publisher, commits } = capturing(); const res = mkRes();
