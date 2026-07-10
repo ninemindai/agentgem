@@ -33,6 +33,7 @@ export function Benchmark({ apiBase }: { apiBase: string }) {
   const sorted = [...rows].sort((a, b) => b.producers - a.producers || a.model.localeCompare(b.model));
   return (
     <section className="analyze">
+      <div className="obs-head"><h2 className="obs-title">Benchmark</h2></div>
       <p className="analyze-intro">How models perform on real published work — success rate per model, aggregated across producers (k-anonymised; only models with enough independent producers appear).</p>
       {sorted.length === 0 ? (
         <p className="ledger-empty">No network benchmark data yet. Publish Gems with <code>includeOutcomes</code> to contribute — once enough producers do, per-model success rates appear here.</p>

@@ -133,6 +133,7 @@ export function Rubrics({ apiBase }: { apiBase: string }) {
 
   return (
     <section className="analyze">
+      <div className="obs-head"><h2 className="obs-title">Rubrics</h2></div>
       <p className="analyze-intro">Pick a rubric — a named lens of checks — then a scope. agentgem runs its factors over your sessions and shows what needs action, worst-first.</p>
 
       <div className="rub-picker">

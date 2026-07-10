@@ -73,6 +73,7 @@ export function Insights({ apiBase }: { apiBase: string }) {
 
   return (
     <section className="analyze">
+      <div className="obs-head"><h2 className="obs-title">Insights</h2></div>
       <p className="analyze-intro">Pick a project — agentgem reads its sessions and tells you what you were working on, how it went, and which wins are worth publishing.</p>
       {(projects || recents) && (
         <input
