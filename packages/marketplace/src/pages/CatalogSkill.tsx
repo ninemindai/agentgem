@@ -3,7 +3,7 @@ import type { makeApi } from "../api";
 import { RatingInput } from "../RatingInput";
 import { NotSignedIn } from "../stars";
 import type { ReviewsCtx } from "../Router";
-import type { ReviewsData } from "../reviews";
+import { ratingStars, type ReviewsData } from "../reviews";
 
 // Catalog-skill page (/skill/:sourceId/*path). Reviews key on the concrete skill (repo+path), so
 // this page — reached from a card, which holds both — is their home. Reviews lead; SKILL.md follows.
@@ -104,7 +104,7 @@ export function CatalogSkill({ api, reviews, sourceId, path }: {
                 <div className="ex-review-meta">
                   {r.avatarUrl && <img className="ex-avatar" src={r.avatarUrl} alt="" width={24} height={24} />}
                   <a href={"/@" + r.login}>{r.login}</a>
-                  <span className="ex-review-rating" aria-label={`${r.rating} of 5`}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</span>
+                  <span className="ex-review-rating" aria-label={`${r.rating} of 5`}>{ratingStars(r.rating)}</span>
                   {r.updatedAt > r.createdAt && <span className="ex-review-edited">edited</span>}
                   <time className="ex-review-date" dateTime={r.createdAt}>{new Date(r.createdAt).toLocaleDateString()}</time>
                 </div>
