@@ -15,17 +15,19 @@ async function countFor(db: AppDb, kind: string, id: string): Promise<number> {
 }
 
 export async function toggleStar(db: AppDb, accountId: string, kind: string, id: string): Promise<{ starred: boolean; count: number }> {
-  const existing = await db
-    .select({ id: stars.id })
-    .from(stars)
-    .where(and(eq(stars.accountId, accountId), eq(stars.targetKind, kind), eq(stars.targetId, id)))
-    .limit(1);
-  if (existing[0]) {
-    await db.delete(stars).where(eq(stars.id, existing[0].id));
-    return { starred: false, count: await countFor(db, kind, id) };
-  }
-  await db.insert(stars).values({ id: randomUUID(), accountId, targetKind: kind, targetId: id });
-  return { starred: true, count: await countFor(db, kind, id) };
+  // Atomic insert-or-detect against the unique(account_id, target_kind, target_id) constraint
+  // (ensureSchema DDL). The old read-then-write let two concurrent requests both see no row and both
+  // INSERT — the second violated the constraint and surfaced as an HTTP 500. ON CONFLICT DO NOTHING
+  // makes the losing insert a no-op: if a row was returned we created the star; if not, it already
+  // existed, so this call is the toggle-off.
+  const inserted = await db
+    .insert(stars)
+    .values({ id: randomUUID(), accountId, targetKind: kind, targetId: id })
+    .onConflictDoNothing({ target: [stars.accountId, stars.targetKind, stars.targetId] })
+    .returning({ id: stars.id });
+  if (inserted.length > 0) return { starred: true, count: await countFor(db, kind, id) };
+  await db.delete(stars).where(and(eq(stars.accountId, accountId), eq(stars.targetKind, kind), eq(stars.targetId, id)));
+  return { starred: false, count: await countFor(db, kind, id) };
 }
 
 export async function starCounts(db: AppDb, kind: string, ids: string[]): Promise<Record<string, number>> {
