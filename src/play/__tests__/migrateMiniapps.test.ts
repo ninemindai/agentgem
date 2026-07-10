@@ -1,6 +1,6 @@
 // src/play/__tests__/migrateMiniapps.test.ts
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { saveMiniapp, readMiniapp, migrateAllMiniapps, miniappDir, MCP_CLIENT_MARKER } from "@agentgem/play";
@@ -14,6 +14,7 @@ afterEach(() => { rmSync(home, { recursive: true, force: true }); delete process
 const oldBridgeHtml = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8" /><title>Session Replay</title></head>
 <body>
+  <script id="game-data" type="application/json">{"meta":{},"timeline":[{"role":"user","tsMs":0,"text":"hi"}]}</script>
   <div id="app"></div>
   <script>
   (function () {
@@ -37,7 +38,15 @@ const oldBridgeHtml = `<!doctype html>
     if (!(DATA.timeline && DATA.timeline.length)) requestData();
   })();
   </script>
-</body></html>`; // baked with the OLD private postMessage bridge
+</body></html>`; // baked with the OLD private postMessage bridge, PLUS a baked timeline (assertPortable requires it)
+
+// Same as oldBridgeHtml, but WITHOUT the baked <script id="game-data"> timeline — declaring session-data
+// against this html fails assertPortable (no fallback data), so it proves migrateAllMiniapps records an
+// unsaveable miniapp instead of throwing.
+const oldBridgeHtmlWithoutBakedData = oldBridgeHtml.replace(
+  `  <script id="game-data" type="application/json">{"meta":{},"timeline":[{"role":"user","tsMs":0,"text":"hi"}]}</script>\n`,
+  "",
+);
 const meta = {
   title: "Old Replay", genre: "replay" as const,
   createdFrom: { kind: "session" as const, agent: "claude", sessionId: "s1", summary: "a replay" },
@@ -70,6 +79,60 @@ describe("migrateAllMiniapps", () => {
     const entry = results.find((r) => r.name === "fresh");
     expect(entry?.outcome).toBe("unrecognized");
     expect(entry?.commit).toBeNull();
+  });
+
+  it("declares the capability the codemod injected, so the migrated bundle saves", async () => {
+    const dir = miniappDir("old-replay");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "old-replay.html"), oldBridgeHtml);
+    writeFileSync(join(dir, "meta.json"), JSON.stringify({
+      title: "Old", genre: "replay", createdFrom: { kind: "blank", title: "Old" }, engineVersion: "1",
+    }));
+
+    const results = await migrateAllMiniapps();
+    expect(results.find((r) => r.name === "old-replay")?.outcome).toBe("migrated");
+
+    const after = JSON.parse(readFileSync(join(dir, "meta.json"), "utf8")) as { needs?: string[] };
+    expect(after.needs).toEqual(["session-data"]);   // the codemod declared what it injected
+  });
+
+  it("prunes a stale declaration even when the html needs no rewrite", async () => {
+    // live-watch on disk: 'unrecognized' html, declares a capability it never uses.
+    const dir = miniappDir("live-watch");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "live-watch.html"), "<!doctype html><body><canvas></canvas><script>const x=1;</script></body>");
+    writeFileSync(join(dir, "meta.json"), JSON.stringify({
+      title: "Live Watch", genre: "project-fun", createdFrom: { kind: "blank", title: "Live Watch" },
+      engineVersion: "1", needs: ["live-session-events"],
+    }));
+
+    const results = await migrateAllMiniapps();
+    expect(results.find((r) => r.name === "live-watch")?.outcome).toBe("unrecognized");
+
+    const after = JSON.parse(readFileSync(join(dir, "meta.json"), "utf8")) as { needs?: string[] };
+    expect(after.needs).toBeUndefined();   // pruned, though the html was never rewritten
+  });
+
+  it("records an unsaveable miniapp and keeps migrating the rest", async () => {
+    // Declares session-data (a 'content' capability) but bakes no timeline -> assertPortable rejects it.
+    const bad = miniappDir("bad-replay");
+    mkdirSync(bad, { recursive: true });
+    writeFileSync(join(bad, "bad-replay.html"), oldBridgeHtmlWithoutBakedData);
+    writeFileSync(join(bad, "meta.json"), JSON.stringify({
+      title: "Bad", genre: "replay", createdFrom: { kind: "blank", title: "Bad" }, engineVersion: "1",
+    }));
+    const good = miniappDir("fine");
+    mkdirSync(good, { recursive: true });
+    writeFileSync(join(good, "fine.html"), "<!doctype html><body><canvas></canvas><script>const x=1;</script></body>");
+    writeFileSync(join(good, "meta.json"), JSON.stringify({
+      title: "Fine", genre: "project-fun", createdFrom: { kind: "blank", title: "Fine" }, engineVersion: "1",
+    }));
+
+    const results = await migrateAllMiniapps();          // must NOT throw
+    const badRow = results.find((r) => r.name === "bad-replay");
+    expect(badRow?.commit).toBeNull();
+    expect(badRow?.error).toMatch(/not portable|bakes no fallback/i);
+    expect(results.find((r) => r.name === "fine")).toBeDefined();   // the pass continued
   });
 });
 

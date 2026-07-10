@@ -1,6 +1,6 @@
 // src/play/__tests__/checkpoint.test.ts
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { checkpointMiniapp, miniappDir } from "@agentgem/play";
@@ -45,5 +45,20 @@ describe("checkpointMiniapp", () => {
     expect(r.commit).toMatch(/^[0-9a-f]{7,40}$/);
     const art = readGemArchive(readArchiveDir(workspaceDir("keep"))).artifacts[0] as { html: string };
     expect(art.html).toContain("data-v1");                     // gem still holds the last sealed build
+  });
+
+  it("checkpoint never reconciles needs — it must not rewrite meta or fail", async () => {
+    const dir = miniappDir("ckpt-caps");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "ckpt-caps.html"), "<!doctype html><body><canvas></canvas><script>const x=1;</script></body>");
+    writeFileSync(join(dir, "meta.json"), JSON.stringify({
+      title: "C", genre: "project-fun", createdFrom: { kind: "blank", title: "C" },
+      engineVersion: "1", needs: ["invoke-agent"],
+    }));
+
+    await expect(checkpointMiniapp("ckpt-caps")).resolves.toBeDefined();
+
+    const after = JSON.parse(readFileSync(join(dir, "meta.json"), "utf8")) as { needs?: string[] };
+    expect(after.needs).toEqual(["invoke-agent"]);   // untouched: durability, not sealing
   });
 });

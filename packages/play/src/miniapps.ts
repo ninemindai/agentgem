@@ -14,7 +14,7 @@ import { gameGate } from "./gameGate.js";
 import { assertPortable } from "./portability.js";
 import { ensureRepo, commitWithLock } from "./git.js";
 import { migrateMiniappHtml, type MigrateOutcome } from "./migrate.js";
-import { reconcileNeeds } from "./capabilityScan.js";
+import { reconcileNeeds, deriveNeeds } from "./capabilityScan.js";
 
 export interface MiniappMeta {
   title: string; genre: GameGenre; createdFrom: GameSource; engineVersion: string; needs?: GameCapability[];
@@ -202,22 +202,59 @@ export function listMiniapps(): { name: string; meta: MiniappMeta }[] {
 }
 
 // Rewrites every stored miniapp's html to the current MCP Apps client shim, one codemod pass over the
-// whole registry. This is an OPTIMIZATION, not a correctness prerequisite — readMiniapp()'s on-read
-// backstop already serves migrated html regardless. Reads the RAW stored file (never readMiniapp) so
-// it sees the true on-disk bytes; otherwise the backstop would make a raw miniapp look already-migrated
-// and its file would never actually get rewritten.
-export async function migrateAllMiniapps(): Promise<{ name: string; outcome: MigrateOutcome; commit: string | null }[]> {
-  const results: { name: string; outcome: MigrateOutcome; commit: string | null }[] = [];
+// whole registry, AND reconciles every miniapp's declaration against its code. This is an OPTIMIZATION
+// for the html — readMiniapp()'s on-read backstop already serves migrated html regardless — but the
+// meta reconciliation is a real repair: a stale `needs` makes the Runner prompt a viewer for consent to
+// a capability the bundle never exercises. Reads the RAW stored file (never readMiniapp) so it sees the
+// true on-disk bytes; otherwise the backstop would make a raw miniapp look already-migrated and its
+// file would never actually get rewritten.
+//
+// A miniapp that cannot be saved (e.g. it declares a content capability but bakes no fallback) is
+// RECORDED and skipped, never thrown: one bad entry must not abort the registry-wide pass.
+export async function migrateAllMiniapps(): Promise<{ name: string; outcome: MigrateOutcome; commit: string | null; error?: string }[]> {
+  const results: { name: string; outcome: MigrateOutcome; commit: string | null; error?: string }[] = [];
+  const root = miniappsRoot();
   for (const { name } of listMiniapps()) {
     const raw = readMiniappRaw(name);
     const { html, outcome } = migrateMiniappHtml(raw.html);
-    if (outcome !== "migrated") { results.push({ name, outcome, commit: null }); continue; }
+
+    if (outcome !== "migrated") {
+      // The html is current, but the DECLARATION can still be stale. Prune what the code never uses.
+      // `missing` cannot be repaired here (widening is an authored act) — record it and move on.
+      const rec = reconcileNeeds(raw.html, raw.meta.needs);
+      if (rec.missing.length) {
+        results.push({ name, outcome, commit: null, error: `calls undeclared ${rec.missing.join(", ")}` });
+        continue;
+      }
+      if (!rec.pruned.length) { results.push({ name, outcome, commit: null }); continue; }
+      const meta: MiniappMeta = { ...raw.meta };
+      if (rec.needs.length) meta.needs = rec.needs; else delete meta.needs;
+      await ensureRepo(root);
+      writeFileSync(join(miniappDir(name), "meta.json"), JSON.stringify(meta, null, 2));
+      // Keep the shareable gem in step, or it keeps the phantom capability. Best-effort, like a
+      // checkpoint: a gate failure must never abort the pass.
+      try { if ((await gameGate(raw.html)).ok) writeGameGem(name, raw.html, meta); } catch { /* best-effort */ }
+      const commit = await commitWithLock(root, `reconcile ${name} (pruned unused capability: ${rec.pruned.join(", ")})`);
+      results.push({ name, outcome, commit });
+      continue;
+    }
+
     const meta: MiniappMeta = {
       ...raw.meta,
       engineVersion: `${raw.meta.engineVersion}+mcp`,
+      // The codemod above INJECTED `callTool("agentgem_get_session_data")` into this html, so the bundle
+      // now uses a capability the stored meta may not declare — and saveMiniapp rightly throws on a
+      // called-but-undeclared tool. The codemod authored the code, so it authors the declaration. Safe
+      // ONLY because the sole injected capability is `session-data`, which is auto-approved (AUTO_CAPS);
+      // a codemod that injects a consent-gated capability must NOT auto-declare it.
+      needs: deriveNeeds(html),
     };
-    const { commit } = await saveMiniapp({ name, html, meta });
-    results.push({ name, outcome, commit });
+    try {
+      const { commit } = await saveMiniapp({ name, html, meta });
+      results.push({ name, outcome, commit });
+    } catch (e) {
+      results.push({ name, outcome, commit: null, error: (e as Error).message });
+    }
   }
   return results;
 }
