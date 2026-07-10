@@ -390,6 +390,27 @@ export const verification = pgTable("verification", {
 export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, handoffCodes, stars, reviews, gemAdoptions, accountScopes, usageDays, usageDayModels, orgSettings, catalogGems, gemArchives, gamePlays, curatedSkills, appInstallations, orgMembers, groups, groupMembers, groupInvites, user, session, account, verification };
 export type AppDb = PgDatabase<any, typeof schema>;
 
+/** One-time, idempotent: give every account_binding with no matching `accounts` anchor row one,
+ *  copying provider/account_id/login off the binding. recordBinding's own upsertAccount write is
+ *  best-effort (see binding.ts) — it never fails the bind — so a bound producer can be left with
+ *  no anchor and fail closed on every future share ("not-connected"), even though everything the
+ *  anchor needs (provider, the provider's account id, and the login) already lives on the
+ *  binding row. `unique (provider, provider_account_id)` on accounts is the race arbiter; the
+ *  `on conflict ... do nothing` makes concurrent boots safe. Never touches an existing anchor
+ *  row — its accounts.id must never change once assigned (better-auth's user.id mirrors it 1:1
+ *  after migrateAccountsToBetterAuth, so re-keying it here would silently orphan that user). */
+export async function backfillBindingAnchors(db: AppDb): Promise<{ created: number }> {
+  const res = await db.execute(sql`
+    insert into accounts (id, provider, provider_account_id, login)
+    select gen_random_uuid(), ab.provider, ab.account_id, ab.account_login
+    from account_bindings ab
+    where not exists (
+      select 1 from accounts a
+      where a.provider = ab.provider and a.provider_account_id = ab.account_id)
+    on conflict (provider, provider_account_id) do nothing`);
+  return { created: (res as any).rowCount ?? (res as any).affectedRows ?? 0 };
+}
+
 /** One-time, idempotent: map catalog_gems.published_by (a login string) onto owner_account_id.
  *  accounts.login has NO unique constraint, so assign ONLY where exactly one account matches —
  *  a naive join would silently hand the gem to whichever duplicate the planner returned first.
@@ -542,6 +563,11 @@ export async function ensureSchema(db: AppDb): Promise<void> {
     id text primary key, identifier text not null, value text not null, expires_at timestamptz not null,
     created_at timestamptz not null default now(), updated_at timestamptz not null default now())`);
 
+  // MUST run before backfillGemOwners: gem-owner resolution matches against `accounts`, and
+  // migrateAccountsToBetterAuth (run at boot right after ensureSchema, see src/index.ts) mirrors
+  // every `accounts` row into a same-id better-auth `user` row — an anchor created after either
+  // step would resolve fewer gems and dodge the better-auth mirror entirely.
+  await backfillBindingAnchors(db);
   const owners = await backfillGemOwners(db);
   if (owners.unresolved > 0) {
     console.warn(`[schema] ${owners.unresolved} catalog_gems row(s) have no resolvable owner; they cannot be unpublished by anyone until reassigned`);

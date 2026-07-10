@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
 import { generateKeyPairSync, sign as edSign } from "node:crypto";
-import { makeTestDb, producers, accountBindings, accounts, catalogSigningPayload, recordCatalogShare, listCatalogGems, type CatalogManifest } from "@agentgem/aggregator";
+import { makeTestDb, producers, accountBindings, accounts, catalogSigningPayload, recordCatalogShare, listCatalogGems, backfillBindingAnchors, type CatalogManifest } from "@agentgem/aggregator";
 
 function signer() {
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
@@ -47,6 +47,18 @@ describe("recordCatalogShare", () => {
     const sig = s.sign(catalogSigningPayload(M, s.pubkey, now));
     const res = await recordCatalogShare(db, { manifest: M, pubkey: s.pubkey, signedAt: now, signature: sig }, now);
     expect(res).toEqual({ shared: false, rejected: "not-connected" });
+  });
+
+  it("a previously-stranded binding (no accounts anchor) succeeds once backfillBindingAnchors has run", async () => {
+    const db = await makeTestDb();
+    const s = signer();
+    await db.insert(producers).values({ pubkey: s.pubkey });
+    await db.insert(accountBindings).values({ pubkey: s.pubkey, provider: "github", accountId: "42", accountLogin: "octocat" });
+    expect(await backfillBindingAnchors(db)).toEqual({ created: 1 });
+    const now = 1_000_000;
+    const sig = s.sign(catalogSigningPayload(M, s.pubkey, now));
+    const res = await recordCatalogShare(db, { manifest: M, pubkey: s.pubkey, signedAt: now, signature: sig }, now);
+    expect(res).toEqual({ shared: true, publishedBy: "octocat", gemKey: "@octocat/kit", version: "1.0.0" });
   });
 
   it("rejects a bad signature", async () => {

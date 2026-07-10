@@ -132,7 +132,7 @@ export async function recordCatalogShare(db: AppDb, req: ShareRequest, now: numb
   if (!bind) return { shared: false, rejected: "not-connected" };
   // account_bindings.account_id is the PROVIDER's id (text), not accounts.id — pair it with
   // `provider` to reach the anchor row whose uuid owns the gem.
-  const acct = (await db.select({ id: accounts.id, login: accounts.login }).from(accounts)
+  const acct = (await db.select({ id: accounts.id }).from(accounts)
     .where(and(eq(accounts.provider, bind.provider), eq(accounts.providerAccountId, bind.accountId))).limit(1))[0];
   // No anchor row → the server cannot identify the publisher, so it must not record ownership.
   // recordBinding writes the anchor best-effort, so this is reachable; failing closed is correct.
