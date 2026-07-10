@@ -6,7 +6,7 @@ import { makeTestDb, producers, accountBindings, accounts, getGemArchive, listCa
 import { exportGem, importGem } from "@agentgem/distribute";
 import { catalogSigningPayload } from "@agentgem/aggregator";
 import { AggregatorController } from "../../aggregator.controller.js";
-import { signer, gameGem } from "./helpers/publishFixtures.js";
+import { signer, gameGem, signedPublishBody } from "./helpers/publishFixtures.js";
 
 async function boundDb() {
   const db = await makeTestDb();
@@ -72,6 +72,28 @@ describe("AggregatorController.shareArchive", () => {
     await expect(new AggregatorController(db).shareArchive({ body }))
       .rejects.toMatchObject({ statusCode: 400, code: "digest_mismatch" });
     expect(await listCatalogGems(db)).toHaveLength(0);
+  });
+
+  it("a share id cannot be hijacked via publish-gem (slash-less key rejected)", async () => {
+    const { db, s } = await boundDb();
+    const c = new AggregatorController(db);
+    const { key } = await c.shareArchive({ body: signedArchiveBody(gameGem(), s) });
+    const before = await getGemArchive(db, key, "1");
+
+    // attacker: a DIFFERENT bound account tries to publish OVER the victim's share id
+    const atk = signer();
+    await db.insert(producers).values({ pubkey: atk.pubkey });
+    await db.insert(accounts).values({ id: randomUUID(), provider: "github", providerAccountId: "9", login: "mallory" });
+    await db.insert(accountBindings).values({ pubkey: atk.pubkey, provider: "github", accountId: "9", accountLogin: "mallory" });
+    const body = signedPublishBody(gameGem(), atk, { gemKey: key, version: "1", signedAt: Date.now() });
+    const res = await c.publishGem({ body });
+
+    expect(res).toMatchObject({ shared: false, rejected: "invalid-key" });   // publish refused
+    expect(await getGemArchive(db, key, "1")).toEqual(before);               // bytes NOT overwritten
+    expect(await listCatalogGems(db)).toHaveLength(0);                       // still unlisted
+    // victim can still revoke (owner intact)
+    const t = Date.now();
+    expect(await c.revokeShareArchive({ body: { key, pubkey: s.pubkey, signedAt: t, signature: s.sign(`revoke:${key}:${t}`) } })).toEqual({ revoked: true });
   });
 });
 
