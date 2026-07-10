@@ -96,6 +96,7 @@
     "@agentgem/transfer": "workspace:*",
     "@resvg/resvg-wasm": "^2.6.2",
     "@types/express": "^5",
+    "@types/jsdom": "^28",
     "@types/node": "^26",
     "@types/pg": "^8.20.0",
     "@types/supertest": "^7",

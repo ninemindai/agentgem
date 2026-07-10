@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ensureClientShim } from "../migrate.js";
-import { MCP_CLIENT_MARKER } from "../mcpAppClient.js";
+import { ensureClientShim, MCP_CLIENT_MARKER } from "@agentgem/play";
 
 // A stored v1 miniapp: old marker, game logic that reads agentgemApp.
 const V1 = `<!doctype html><html><head><script>

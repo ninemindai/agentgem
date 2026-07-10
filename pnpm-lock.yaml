@@ -138,6 +138,9 @@ importers:
       '@types/express':
         specifier: ^5
         version: 5.0.6
+      '@types/jsdom':
+        specifier: ^28
+        version: 28.0.3
       '@types/node':
         specifier: ^26
         version: 26.1.1
