@@ -24,10 +24,10 @@ function Thumb({ apiBase, name, needs }: { apiBase: string; name: string; needs?
   );
 }
 
-// The card's own delete affordance. Every control here stops propagation: the whole <li> is the "open"
-// target, so an un-stopped click on ✕ / Cancel / Delete would also launch the miniapp behind the overlay.
-// Titles are NOT unique (creating twice from one source yields two miniapps with the same title), so the
-// id is shown alongside — it is the only thing that tells two same-titled cards apart.
+// The card's own delete affordance. The wrapper stops propagation, so clicks that bubble up from Cancel /
+// Delete never reach the <li>, which is the "open" target — otherwise confirming would also launch the
+// miniapp behind the overlay. Titles are NOT unique (creating twice from one source yields two miniapps
+// with the same title), so the id is shown alongside — it is the only thing telling two cards apart.
 function DeleteOverlay({ name, title, busy, error, onCancel, onConfirm }: {
   name: string; title: string; busy: boolean; error: string | null; onCancel: () => void; onConfirm: () => void;
 }) {
@@ -51,8 +51,10 @@ function DeleteOverlay({ name, title, busy, error, onCancel, onConfirm }: {
 export function Arcade({ apiBase, onOpen }: { apiBase: string; onOpen: (name: string) => void }) {
   const [items, setItems] = useState<Item[] | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Both are keyed to the miniapp they belong to, not to the grid: a plain boolean/string would let an
+  // in-flight delete on one card render "Deleting…" (or its error) inside a different card's dialog.
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [error, setError] = useState<{ name: string; message: string } | null>(null);
   useEffect(() => {
     playMiniappsRoute.call(makeClient(apiBase)).then((r) => setItems(r.miniapps)).catch(() => setItems([]));
   }, [apiBase]);
@@ -61,14 +63,14 @@ export function Arcade({ apiBase, onOpen }: { apiBase: string; onOpen: (name: st
   const cancelDelete = () => { setConfirming(null); setError(null); };
 
   const doDelete = async (name: string) => {
-    setBusy(true); setError(null);
+    setDeleting(name); setError(null);
     try {
       await playDeleteRoute.call(makeClient(apiBase), { body: { name } });
       setItems((prev) => (prev ?? []).filter((m) => m.name !== name));
-      setConfirming(null);
+      setConfirming((c) => (c === name ? null : c));   // never dismiss a dialog this delete didn't open
     } catch (e) {
-      setError((e as Error).message);   // leave the card + confirm up so the failure is visible and retryable
-    } finally { setBusy(false); }
+      setError({ name, message: (e as Error).message }); // keep the card + confirm up: visible and retryable
+    } finally { setDeleting(null); }
   };
 
   if (!items) return <p className="play-intro">Loading miniapps…</p>;
@@ -87,6 +89,7 @@ export function Arcade({ apiBase, onOpen }: { apiBase: string; onOpen: (name: st
           <li key={m.name} className="play-card" onClick={() => !asking && onOpen(m.name)} title={`Open ${m.title}`}>
             <button
               type="button" className="play-card__del" aria-label={`Delete ${m.name}`}
+              disabled={deleting !== null}   // no second dialog while a delete is in flight
               onClick={(e) => { e.stopPropagation(); askDelete(m.name); }}
             >✕</button>
             <Thumb apiBase={apiBase} name={m.name} needs={m.needs} />
@@ -101,7 +104,9 @@ export function Arcade({ apiBase, onOpen }: { apiBase: string; onOpen: (name: st
             </div>
             {asking && (
               <DeleteOverlay
-                name={m.name} title={m.title} busy={busy} error={error}
+                name={m.name} title={m.title}
+                busy={deleting === m.name}
+                error={error?.name === m.name ? error.message : null}
                 onCancel={cancelDelete} onConfirm={() => void doDelete(m.name)}
               />
             )}

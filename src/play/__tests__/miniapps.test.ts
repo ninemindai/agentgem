@@ -1,9 +1,10 @@
 // src/play/__tests__/miniapps.test.ts
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+// (rmSync is used both for temp-home cleanup and to simulate a delete landing mid-checkpoint)
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { saveMiniapp, deleteMiniapp, listMiniapps, miniappDir } from "@agentgem/play";
+import { saveMiniapp, deleteMiniapp, checkpointMiniapp, listMiniapps, miniappDir } from "@agentgem/play";
 import { workspaceDir } from "@agentgem/base";
 import { readGemArchive, readArchiveDir } from "@agentgem/archive";
 
@@ -63,6 +64,25 @@ describe("miniapps store", () => {
     await deleteMiniapp("shared");
     expect(existsSync(miniappDir("shared"))).toBe(false);  // the miniapp is gone
     expect(existsSync(manifestPath)).toBe(true);           // the foreign gem survives
+  });
+
+  // deleteMiniapp is the first destructive op in a registry that previously only appended, and
+  // commitWithLock serializes the git commits but NOT the fs work around them. checkpointMiniapp reads
+  // its html synchronously, before its first await -- so a studio turn finishing as the user clicks ✕
+  // holds a PRE-deletion snapshot and would write it back out as a gem after the delete removed it. The
+  // workspace gem is not under git, so a resurrected one is orphaned forever.
+  //
+  // Racing the two calls for real is timing-dependent (the checkpoint's commit is enqueued first, so it
+  // usually wins), so this drives the hazard directly: apply the delete's fs effects while the checkpoint
+  // is suspended at its first await, then let its tail run.
+  it("a checkpoint in flight when a delete lands does not resurrect the deleted gem", async () => {
+    await saveMiniapp({ name: "racy", html: sealed, meta });
+    const checkpoint = checkpointMiniapp("racy");   // snapshot taken; now suspended on ensureRepo
+    rmSync(miniappDir("racy"), { recursive: true, force: true });    // <- what deleteMiniapp does
+    rmSync(workspaceDir("racy"), { recursive: true, force: true });  // <- what deletePlayGem does
+    await checkpoint.catch(() => {});               // let its tail (gameGate -> writeGameGem) run
+
+    expect(existsSync(workspaceDir("racy"))).toBe(false);  // the gem must STAY deleted
   });
 
   it("deleteMiniapp rejects an unknown name and a traversal attempt", async () => {
