@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WARMABLES } from "../registry.js";
 import { distillToken, writeDistillCache, claudeTranscriptsForCwd } from "@agentgem/insight";
+import { closeSharedIndex } from "@agentgem/capture";
 
 const orig = process.env.AGENTGEM_HOME;
 afterEach(() => { if (orig === undefined) delete process.env.AGENTGEM_HOME; else process.env.AGENTGEM_HOME = orig; });
@@ -51,6 +52,29 @@ describe("usage warmable", () => {
       expect(await usage().warm(null, { dir })).toBe("hit");
       expect(await usage().warm(null, { dir, force: true })).toBe("warmed");
     } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  // /api/usage serves getGlobalUsageIndexed first and only falls back to the JSON
+  // cache when the index throws. Warming via the full scan therefore spent a
+  // whole-corpus reparse (~15s on a real home, blocking the loop) on a cache the
+  // healthy path never reads. Warm through the index instead — and keep writing the
+  // JSON cache, or a later index failure would reparse the corpus inside a request.
+  it("warms the transcript index the endpoint reads, and still fills the fallback cache", async () => {
+    const home = mkdtempSync(join(tmpdir(), "reg-usage-idx-"));
+    process.env.AGENTGEM_HOME = home;
+    const claudeDir = join(home, ".claude", "projects", "-proj");
+    mkdirSync(claudeDir, { recursive: true });
+    writeFileSync(join(claudeDir, "s.jsonl"), JSON.stringify({ cwd: "/proj" }) + "\n");
+    const dir = join(home, ".claude");
+
+    try {
+      expect(await usage().warm(null, { dir })).toBe("warmed");
+      expect(existsSync(join(home, ".agentgem", "transcript-index.db"))).toBe(true);
+      expect(existsSync(join(home, ".agentgem", "global-usage-cache.json"))).toBe(true);
+    } finally {
+      await closeSharedIndex();
       rmSync(home, { recursive: true, force: true });
     }
   });
