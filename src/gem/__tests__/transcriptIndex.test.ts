@@ -193,6 +193,37 @@ describe("transcript index — raw rows, inventory-independent", () => {
     expect(parseCount.get(b)).toBe(1); // b, already up to date, was NOT reparsed
   });
 
+  // T-D (regression): an UNCAUGHT exception thrown by parseFile — not the typed `{failed:true}`
+  // contract, a real `throw` — must converge on the same handling as a read failure: it must
+  // not propagate out of the BEGIN/COMMIT transaction and abort the whole sync. One pathological
+  // transcript must not block usage indexing for the rest of the corpus, and it must be retried
+  // next sync rather than silently recorded as done.
+  it("T-D: an uncaught parseFile exception does not abort the sync; the file is retried next sync", async () => {
+    const a = join(dir, "a.jsonl");
+    const b = join(dir, "b.jsonl");
+    write(a, "a");
+    write(b, "b");
+    const { files, parseFile: parseOk } = makeParser();
+    files.set(a, { raw: [{ kind: "skill", token: "a-token", invocations: 1 }], hooks: [] });
+    files.set(b, { raw: [{ kind: "skill", token: "qa", invocations: 1 }], hooks: [] });
+    let throwForA = true;
+    const throwingParse = (path: string): FileUsage => {
+      if (path === a && throwForA) throw new Error("pathological transcript");
+      return parseOk(path);
+    };
+
+    // 1. The whole sync resolves rather than rejecting.
+    const out = await index.syncUsage([a, b], "hooks1", throwingParse);
+    // 2. b's legitimate update survived — the transaction was not rolled back.
+    expect(out.raw.some((r) => r.path === b && r.token === "qa")).toBe(true);
+    expect(out.raw.some((r) => r.path === a)).toBe(false);
+
+    // 3. a was not recorded as done, so once it stops throwing it is reparsed and its rows land.
+    throwForA = false;
+    const out2 = await index.syncUsage([a, b], "hooks1", throwingParse);
+    expect(out2.raw.some((r) => r.path === a && r.token === "a-token")).toBe(true);
+  });
+
   it("persists across reopen and reparses nothing when unchanged", async () => {
     const storeDir = mkdtempSync(join(tmpdir(), "tidx-store-"));
     const store = join(storeDir, "transcript-index.db");

@@ -135,7 +135,9 @@ export async function openTranscriptIndex(dataDir?: string): Promise<TranscriptI
 //   │  row.mtime==st.mtime && row.size==st.size                           │
 //   │     && row.hook_digest == current  ───────────► SKIP (up to date)   │
 //   │  else ─────────────► reparse: scanFileUsage(path, hooks)            │
-//   │                      DELETE raw_usage/hook_usage WHERE path          │
+//   │      throws OR returns failed:true ───────────► leave rows/row as-is,│
+//   │                                                  seen.add, continue  │
+//   │      else ─────────► DELETE raw_usage/hook_usage WHERE path          │
 //   │                      re-INSERT rows                                  │
 //   │                      UPSERT transcript_file(path, mtime, size,       │
 //   │                                             hook_digest=current)     │
@@ -170,7 +172,21 @@ async function doSync(
         continue; // up to date
       }
 
-      const u = parseFile(path);
+      let u: FileUsage;
+      try {
+        u = parseFile(path);
+      } catch (e) {
+        // An uncaught exception from parseFile (a latent bug, a pathological transcript, a
+        // future implementation that throws instead of returning `failed: true`) must converge
+        // on the exact same handling as the typed read-failure path below: it is not this
+        // sync's job to let one bad file roll back the whole transaction and reject the whole
+        // corpus. Leave transcript_file un-upserted (retried next sync), leave prior rows
+        // untouched, and still mark it `seen` so it isn't pruned out from under a file that's
+        // still genuinely on disk and was previously recorded successfully.
+        log.warn("parseFile threw for transcript, will retry next sync: %s: %s", path, e);
+        seen.add(path);
+        continue;
+      }
       if (u.failed) {
         // A3: a read failure is not an empty parse. Leave transcript_file un-upserted (so this
         // path stays stale and is retried next sync) and leave any prior rows untouched — but
