@@ -24,4 +24,18 @@ describe("decryptGem (browser parity with seal.open)", () => {
     const { ciphertext } = seal(Buffer.from("secret"));
     await expect(decryptGem(new Uint8Array(ciphertext), new Uint8Array(32))).rejects.toThrow();
   });
+
+  it("rejects a too-short (but auth-valid) ciphertext with a clean error, not a RangeError", async () => {
+    // A hand-crafted 28-byte wire (iv || tag, zero encrypted bytes) authenticates and decrypts to a
+    // 0-byte plaintext — then getUint32(0) on the empty buffer threw a raw RangeError. seal() always
+    // pads past this, but a corrupt/adversarial ticket can hit it.
+    const key = new Uint8Array(randomBytes(32));
+    const iv = new Uint8Array(randomBytes(12));
+    const ck = await crypto.subtle.importKey("raw", key, { name: "AES-GCM" }, false, ["encrypt"]);
+    const tag = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv, tagLength: 128 }, ck, new Uint8Array(0)));
+    const wire = new Uint8Array(28);
+    wire.set(iv, 0);
+    wire.set(tag, 12);
+    await expect(decryptGem(wire, key)).rejects.toThrow(/too short/);
+  });
 });
