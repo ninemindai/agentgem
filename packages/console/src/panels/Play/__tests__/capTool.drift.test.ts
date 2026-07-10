@@ -4,7 +4,8 @@
 // test runs in Node, where the import is free, and fails the moment the two drift apart.
 import { describe, it, expect } from "vitest";
 import { CAP_TOOL as CANONICAL } from "@agentgem/play";
-import { CAP_TOOL, TOOL_CAP } from "../consent.js";
+import { CAP_METHOD } from "@agentgem/model";
+import { CAP_TOOL, TOOL_CAP, CONSENT_CAPS } from "../consent.js";
 
 describe("console CAP_TOOL mirrors @agentgem/model's canonical map", () => {
   it("has identical entries", () => {
@@ -13,5 +14,8 @@ describe("console CAP_TOOL mirrors @agentgem/model's canonical map", () => {
   it("TOOL_CAP is its exact inverse", () => {
     for (const [cap, tool] of Object.entries(CAP_TOOL)) expect(TOOL_CAP[tool]).toBe(cap);
     expect(Object.keys(TOOL_CAP)).toHaveLength(Object.keys(CAP_TOOL).length);
+  });
+  it("CONSENT_CAPS covers every ActionCapability", () => {
+    for (const cap of Object.keys(CAP_METHOD)) expect(CONSENT_CAPS).toContain(cap);
   });
 });
