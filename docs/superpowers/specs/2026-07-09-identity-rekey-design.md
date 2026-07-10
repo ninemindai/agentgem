@@ -1,0 +1,323 @@
+# Identity Re-key: uuid Authorizes, Handle Names
+
+**Status:** approved, not yet planned
+**Depends on:** #255 (better-auth Plan 1a) and #256 (Plan 1b cutover) merged and deployed
+**Blocks:** the multi-provider spec (Google/Slack/X, `linkSocial`, passkey)
+
+## Goal
+
+Make AgentGem's identity provider-agnostic, so that a second sign-in provider can be
+added without breaking authorization, ownership, or referential integrity.
+
+Today the GitHub `login` **string** is the de-facto identity. This spec moves every
+authorization and ownership decision onto the `accounts.id` uuid, and demotes the
+human-readable name to a `handle` used only for display, URLs, and gem scopes.
+
+There is **no user-visible change** for existing users.
+
+## Why this must land before any second provider
+
+Two independent defects make a second provider unsafe today. Both were found by reading
+the code, not by reasoning from the design.
+
+### 1. The `accounts` anchor is GitHub-only, and it fails silently
+
+`packages/aggregator/src/auth/betterAuth.ts:93` — `anchorAndScopes` opens with:
+
+```ts
+if (account.providerId !== "github") return;
+```
+
+A Google sign-in would therefore create a better-auth `user` row with **no `accounts`
+anchor**. Ten tables carry a foreign key to `accounts.id`:
+
+`web_sessions`, `handoff_codes`, `stars`, `reviews`, `account_scopes`, `usage_days`,
+`usage_day_models`, `groups.created_by`, `group_members`, `group_invites.created_by`
+
+The user's *first* authenticated write — starring a gem, leaving a review, creating a
+group — violates the foreign key. None of those call sites catch it, so it surfaces as an
+unhandled rejection and a 500, not a graceful denial.
+
+### 2. `login` is load-bearing authorization, and it has no uniqueness constraint
+
+`resolveSession` (`packages/aggregator/src/webAuth.ts:69`) returns `login: u.login ?? ""`.
+A provider that supplies no login yields the identity `""`.
+
+There is **no unique constraint** on `accounts.login`, `user.login`, or
+`account_scopes.scope` anywhere in `ensureSchema`. GitHub logins are unique *upstream*, so
+the schema never had to enforce it. Uniqueness that lives in an external system is a
+borrowed invariant; it evaporates the moment a second source of identity exists.
+
+The sharpest consequence is in `deleteCatalogGem` (`packages/aggregator/src/catalog.ts:73-81`):
+
+```ts
+if ((row.publishedBy ?? "").toLowerCase() !== ownerLogin.toLowerCase()) return "forbidden";
+```
+
+With two empty-login users, this evaluates `"" === ""` and **authorizes any such user to
+delete any gem whose `published_by` is empty**.
+
+## Decisions
+
+### uuid authorizes, handle names
+
+Ownership and access are decided by `accounts.id` (uuid). The handle is a display and URL
+key that authorizes nothing.
+
+The alternative — a unique, non-null handle carrying string-keyed ownership — was rejected
+because it preserves the GitHub login rename/reuse attack: rename your handle, and whoever
+claims the freed name inherits every gem whose `published_by` still reads it. Under uuid
+authorization that attack is not expressible.
+
+A pure uuid re-key (no handle at all) was rejected because gem keys and profile URLs are
+public, human-readable strings — `raymond/my-gem`, `/@raymond`, `/orgs/ninemindai`. A
+uuid-only scheme has to reintroduce a name-to-account lookup, which is the handle arrived
+at the long way.
+
+### The handle is nullable, and claimed lazily
+
+Because the handle authorizes nothing, it need not exist. Postgres `UNIQUE` permits
+multiple `NULL`s, so a user without a handle simply has no profile URL and cannot publish.
+Every other authenticated action — starring, reviewing, joining a group, reporting usage —
+is already uuid-keyed and works without one.
+
+`NULL` is also not `''`, so the empty-string collision class becomes *unrepresentable*
+rather than merely guarded against.
+
+A handle is claimed at the first action that needs a public name: publishing, or wanting a
+profile. Existing GitHub users' handles are backfilled from their login and are already
+claimed, so they never see the flow.
+
+### Handle allocation is a security boundary, not a UX choice
+
+User handles and GitHub org scopes share **one namespace** — the publish scope is either
+your own handle or an org you belong to.
+
+`setAccountScopes` writes the user's own name as a `role='self'` scope row
+(`betterAuth.ts:118`), and `uploadPublish` authorizes publishing via
+`accountOwnsScope(accountId, scope)` (`src/registry/uploadPublish.ts:53-55`), which does
+**not** inspect the role. So a user who could freely claim the handle `ninemindai` would
+obtain a self-scope row for `ninemindai` and thereby the right to publish gems under a
+GitHub org's scope.
+
+`claimHandle` therefore performs a reserved-name check, and it is the only place that does.
+
+## Data model
+
+Two new columns, one relaxed constraint, one dropped table. No new tables.
+
+```sql
+-- "user" (better-auth's table)
+alter table "user" add column if not exists handle text;
+create unique index if not exists user_handle_uniq on "user" (handle);
+alter table "user" add constraint user_handle_shape
+  check (handle is null or handle ~ '^[A-Za-z0-9-]{1,39}$');
+
+-- catalog_gems: the authorization key
+alter table catalog_gems add column if not exists owner_account_id uuid references accounts(id);
+
+-- the anchor must accept a login-less user
+alter table accounts alter column login drop not null;
+
+-- dead since the Plan 1b cutover; zero readers
+drop table if exists web_sessions;
+```
+
+`catalog_gems.published_by` is **kept**, demoted to a denormalized display string. It
+authorizes nothing. Deleting it would mean rewriting the marketplace's author links, the
+org-catalog trust filter, and the profile query in the same change, and it remains useful
+as a display value that survives account deletion.
+
+All DDL goes in `ensureSchema` (`packages/aggregator/src/schema.ts`), which stays the sole
+idempotent authority — there is no drizzle-kit in this repo. Dropping `web_sessions` edits
+the hardcoded alphabetized table list in `schema.test.ts`, which exists precisely to catch
+an unannounced schema change.
+
+`handle` lives on `"user"` while `owner_account_id` references `accounts(id)`. These are the
+same uuid: `accounts.id === user.id` is guaranteed by the anchor hook and the Plan 1a
+backfill. `resolveSession`'s `accountId` therefore indexes both tables, and no join is
+needed to go from a session to an ownership check.
+
+### The backfill must not mis-assign
+
+Because `accounts.login` has no unique constraint, a naive
+`where lower(a.login) = lower(cg.published_by)` can match more than one account and
+silently assign the gem to whichever row the planner returns first. Assign only where
+exactly one account matches:
+
+```sql
+update catalog_gems cg set owner_account_id = m.id
+from (select lower(login) lg, min(id) id from accounts
+      where login is not null
+      group by lower(login) having count(*) = 1) m
+where m.lg = lower(cg.published_by) and cg.owner_account_id is null;
+```
+
+Rows that do not resolve — a `published_by` naming an account that no longer exists, or a
+login renamed after publishing — keep `owner_account_id = NULL`.
+
+**Unresolved rows are owned by nobody.** The ownership predicate is:
+
+```ts
+owner_account_id !== null && owner_account_id === who.accountId
+```
+
+An unresolved gem cannot be unpublished by anyone, including a user whose login string
+matches `published_by`. This fails closed. A string-compare fallback for NULL rows would
+reintroduce the exact hole this spec closes. The boot backfill reports the unresolved
+count; reassignment is a manual admin action.
+
+## The authorization re-key
+
+Ten call sites authorize on the `login` string. They fall into three groups.
+
+### Ownership checks compare uuids
+
+| Site | Change |
+|---|---|
+| `catalog.ts:73-81` `deleteCatalogGem` | string compare → `row.ownerAccountId === who.accountId` |
+| `src/registry/publishedBy.ts:21` `resolvePublishedBy` | returns `accountId`, not `login` |
+| `src/registry/uploadPublish.ts:76` | writes `owner_account_id`; keeps writing `published_by` for display |
+| `src/gem.controller.ts:1244` | same |
+| `catalog.ts:127` `recordCatalogShare` | resolves its binding to an `accountId` rather than stopping at `account_login` |
+| `profile.ts:64-88` `buildProfile` | resolves `handle → accountId`, then lists gems by `owner_account_id`, not by `lower(published_by)` |
+| `orgCatalog.ts:64-67` | the trust filter's `ownerSet` becomes a set of `accountId`s, matched against `owner_account_id` |
+
+`buildProfile` and the org-catalog trust filter are ownership reads, not display reads. If
+they kept matching on `published_by`, a profile page would list gems by string match — the
+precise behavior this spec removes — and a gem with an unresolved `owner_account_id` would
+still appear to belong to someone.
+
+`account_bindings.account_id` is `text not null` (`schema.ts:397`) holding the **provider's**
+account id, paired with `provider` to match `accounts(provider, provider_account_id)`. It
+is *not* a uuid FK. The CLI publish path therefore reaches an account by
+`(provider, provider_account_id)`, and must be given a uuid before it can populate
+`owner_account_id`.
+
+### Self-scope checks look up the row, they do not compare strings
+
+| Site | Change |
+|---|---|
+| `githubApp.ts:107` `resolveOrgAccess` | `who.login === scope` → uuid-keyed lookup for a `role='self'` row |
+| `src/usage/install.ts:136,160` | personal-vs-org branch → same lookup |
+
+This is what makes the shared namespace safe: claiming a name is no longer *itself* the
+grant; holding the scope row is.
+
+### GitHub-org checks are left alone, and fail closed
+
+`memberRole` / `appOrgRole` read `org_members.gh_login`, the GitHub App's own roster. Orgs
+remain GitHub-shaped, deliberately. A user with no GitHub identity matches no org, receives
+no org role, and is denied. That is correct behavior, not a gap.
+
+## Handle claim
+
+```ts
+claimHandle(db, accountId, handle):
+  400 if !/^[A-Za-z0-9-]{1,39}$/            // charset
+  409 if the handle is already taken         // arbitrated by the unique index
+  409 if reserved: present in org_members.gh_login or as an org_settings scope
+  -> update "user" set handle = $handle where id = $accountId
+  -> replace the role='self' row in account_scopes with the new handle
+```
+
+`claimHandle` does **not** distinguish "taken" from "reserved". Both are true statements
+about availability, and separating them tells a prober which GitHub orgs the App has seen.
+
+The unique index is the race arbiter: a concurrent claim loses on the constraint, not on a
+prior `SELECT`. This is the same TOCTOU discipline as `removeMemberGuarded` in the groups
+work.
+
+### Rename is safe by construction
+
+Renaming a handle updates the `role='self'` scope row and leaves `owner_account_id`
+untouched. Gems follow the account, not the name, and the freed handle carries no ownership
+to whoever claims it next.
+
+## Anchor generalization
+
+`anchorAndScopes` loses its `if (account.providerId !== "github") return` guard. For any
+provider it writes the `accounts` anchor with `login = NULL`; it derives a login and
+captures org scopes only for GitHub.
+
+This is what makes the ten `accounts.id` foreign keys satisfiable for a login-less user,
+and it is testable **today**, against a fake provider, before any real provider exists.
+
+The eight display sites that read `accounts.login` — `profile.ts`, `orgCatalog.ts`,
+`usageDays.ts`, `groups.ts`, `reviews.ts`, `projectAdoption.ts` — render
+`coalesce(login, handle, name)`.
+
+## Failure modes
+
+| Condition | Behavior |
+|---|---|
+| Gem with unresolved `owner_account_id` | Unpublishable by anyone. Fails closed. |
+| Two accounts share a login | Both their gems stay unresolved. No mis-assignment. |
+| Concurrent claim of the same handle | One wins on the unique index; the other gets 409. |
+| Claim of a name matching a known org | 409, indistinguishable from "taken". |
+| Profile requested for a handle nobody holds | 404. `buildProfile` resolves handle → accountId; no account, no page. |
+| Handle-less user's own profile | Does not exist. There is no URL that names them until they claim. |
+| Login-less user attempts to publish | Routed to the claim flow. |
+| Non-GitHub user in an org-gated route | Matches no `gh_login`, denied. Correct. |
+
+## Testing
+
+PGlite against the real `ensureSchema` DDL, per repo convention. Aggregator store code
+lives in `packages/aggregator/src/`; its tests live at `src/aggregator/__tests__/` and
+import `@agentgem/aggregator`. Tests run against compiled `dist/`.
+
+The tests that would actually catch a regression:
+
+1. An unresolved gem cannot be unpublished by anyone, **including** a user whose login
+   string equals its `published_by`. If the string fallback ever creeps back, this fails.
+2. Two accounts sharing a login leave both gems unresolved rather than mis-assigning either.
+3. Claiming a handle equal to a known org scope is rejected — the escalation guard.
+4. Renaming a handle preserves gem ownership; re-claiming the freed handle grants nothing.
+5. The anchor writes an `accounts` row for a **fake non-GitHub provider** with
+   `login IS NULL`, and a subsequent `stars` insert against that account succeeds — proving
+   the ten foreign keys are satisfiable before any real provider exists.
+6. `claimHandle` rejects `''`, `NULL`, and out-of-charset input at the DDL level, not only
+   in application code.
+
+## Non-goals
+
+Recorded with reasons, so they stay decided.
+
+**Google, Slack, X, `linkSocial`, passkey.** The next spec. Additive once this lands,
+because every invariant they would have broken is fixed here.
+
+**ed25519 signed provenance and royalty attribution.** A pubkey proves *possession*, not
+identity — the codebase already says so at `catalog.ts:108-111`. The keypair is generated
+lazily on first CLI use and written to a local file (`packages/model/src/identity.ts:44-62`),
+so it is a **per-device credential, born anonymous**: `producers.pubkey` rows exist with no
+binding at all, and `recordBinding` is a *server assertion* that a key belongs to an
+account, not a cryptographic fact about the key. It follows that (a) browser sign-ups have
+no key, (b) one user holds many keys — `account_bindings.pubkey` is the primary key, one
+row per machine — so publishing from a laptop and unpublishing from a desktop would fail,
+and (c) key loss would mean ownership loss unless the account can recover it, in which case
+the account was the root of trust all along.
+
+`accountId` is the only key reachable from **both** publish paths: CLI publish hops
+`pubkey → account_bindings → account`; web publish goes `session → account`.
+
+Signed authorship remains worth building, as a purely additive `published_by_pubkey` plus
+an archive signature — columns that authorize nothing. The claim it would make is not "gem
+authored by key K" but "gem authored by a **device bound to account X**", which still roots
+in `accountId`. That is the seam royalties will key off, and this spec does not foreclose it.
+
+**Collapsing `accounts` into `"user"`.** `accounts.id === user.id` is already guaranteed by
+the anchor and the Plan 1a backfill, so the collapse is a pure foreign-key repoint with zero
+semantic change, safe at any later time. Doing it here would double the diff of an already
+risky migration.
+
+**Re-keying orgs away from GitHub.** `org_members.gh_login` stays the GitHub App's roster.
+
+## Rollout
+
+1. Merge and deploy #255, then #256. This spec presumes better-auth is authoritative and
+   `resolveSession` returns a uuid `accountId`.
+2. Deploy this migration. `ensureSchema` runs the DDL and the backfill idempotently at boot.
+3. Read the unresolved-row count from the boot log. Reassign manually if non-zero.
+
+No forced re-auth. No UI change for existing users. The only new surface is a claim flow
+that no user can reach until the next spec ships.
