@@ -1004,7 +1004,12 @@ export const MiniappListSchema = z.object({ miniapps: z.array(z.object({ name: z
 // MCP Apps client shim on disk. Optimization only — readMiniapp()'s on-read backstop already serves
 // migrated html regardless of whether this route has run.
 export const PlayMigrateResponseSchema = z.object({
-  results: z.array(z.object({ name: z.string(), outcome: z.enum(["migrated", "already", "unrecognized"]), commit: z.string().nullable() })),
+  results: z.array(z.object({
+    name: z.string(),
+    outcome: z.enum(["migrated", "already", "unrecognized"]),
+    commit: z.string().nullable(),
+    error: z.string().optional(),   // set when the miniapp could not be saved; the pass continued
+  })),
 });
 export const PlayMiniappQuerySchema = z.object({ name: z.string() });
 export const PlaySessionDataQuerySchema = z.object({ name: z.string(), sessionId: z.string().optional(), agent: z.string().optional() });
