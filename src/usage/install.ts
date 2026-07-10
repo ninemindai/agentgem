@@ -11,7 +11,7 @@
 //   membership alone; otherwise the captured account_scopes (TTL'd) apply.
 import type { AppDb, makeAuth } from "@agentgem/aggregator";
 import {
-  resolveSession, resolveOrgAccess, normalizeUsageReport, normalizeUsageModels, recordUsageDays, recordUsageModels,
+  resolveSession, resolveOrgAccess, accountScopeRole, normalizeUsageReport, normalizeUsageModels, recordUsageDays, recordUsageModels,
   buildOrgUsage, getOrgSettings, putOrgSettings, normalizeRetentionDays, applyRetentionForScopes,
   RANGE_DAYS, type OrgUsageRange,
 } from "@agentgem/aggregator";
@@ -48,6 +48,12 @@ async function whoami(deps: UsageDeps, req: Req): Promise<{ accountId: string; l
   const who = await resolveSession(deps.auth, req.headers);
   return who ? { accountId: who.accountId, login: who.login } : null;
 }
+
+// The caller's own dashboard = they hold the role='self' scope row for `scope`. Never a login
+// string compare: a login-less user's "" would equal no valid scope, silently routing every
+// personal request through the org gate.
+const isSelfScope = async (deps: UsageDeps, accountId: string, scope: string): Promise<boolean> =>
+  (await accountScopeRole(deps.db, accountId, scope)) === "self";
 
 export function reportHandler(deps: UsageDeps) {
   return async (req: Req, res: Res): Promise<void> => {
@@ -131,9 +137,10 @@ export function orgUsageHandler(deps: UsageDeps) {
     if (scope.length === 0 || scope.length > 100 || !(range in RANGE_DAYS)) { res.status(400).json({ error: "invalid scope or range" }); return; }
     // Internal dashboard: the caller must be a member of the org (captured at sign-in/bind), and
     // the capture must be fresh — a stale grant 403s with reason "stale" so the UI can offer a
-    // one-click membership refresh instead of a dead end. The caller's own login is exempt from
-    // freshness (it IS their identity), so /api/usage/org?scope=<their-login> stays a personal view.
-    if (scope !== who.login) {
+    // one-click membership refresh instead of a dead end. The caller's own claimed scope is exempt
+    // from freshness (it IS their identity), so /api/usage/org?scope=<their-handle> stays personal.
+    const isSelf = await isSelfScope(deps, who.accountId, scope);
+    if (!isSelf) {
       // The settings read is independent of the gate — overlap them instead of stacking.
       const [gate, settings] = await Promise.all([
         memberGate(deps, res, who, scope),
@@ -157,7 +164,7 @@ export function orgUsageHandler(deps: UsageDeps) {
     // Personal view folds in unattributed ("") rows — sessions outside any repo are still the
     // caller's own work. Org views stay strictly scope-attributed (the anti-leak boundary).
     res.json(await buildOrgUsage(deps.db, scope, range as OrgUsageRange, Date.now(), {
-      includeUnattributed: scope === who.login,
+      includeUnattributed: isSelf,
       ...(member ? { memberLogin: member } : {}),
       ...(agent ? { agent } : {}),
       ...(model ? { model } : {}),

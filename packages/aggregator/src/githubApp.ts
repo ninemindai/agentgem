@@ -89,7 +89,8 @@ export type OrgAccess = { status: "ok" | "stale" | "none"; role: "self" | "admin
 
 /**
  * Combined org-access check, in precedence order:
- *   1. self — scope IS the caller's login (their identity; never stale).
+ *   1. self — the caller HOLDS the role='self' account_scopes row for scope (their claimed
+ *      handle; never stale). Never a login-string match: claiming a name is not the grant.
  *   2. App-authoritative — when the scope has an ACTIVE (non-suspended) installation,
  *      webhook-synced App membership decides ALONE: in org_members → "ok", otherwise "none".
  *      Captured account_scopes are NOT consulted in this case. Rationale: on GitHub, removing a
@@ -104,7 +105,12 @@ export type OrgAccess = { status: "ok" | "stale" | "none"; role: "self" | "admin
 export async function resolveOrgAccess(
   db: AppDb, who: { accountId: string; login: string }, scope: string, scopeTtlMs: number, now: number = Date.now(),
 ): Promise<OrgAccess> {
-  if (who.login.toLowerCase() === scope.toLowerCase()) return { status: "ok", role: "self", via: "self" };
+  // Self is HOLDING the role='self' scope row (written by claimHandle, which runs the reserved-org
+  // guard), never a login-string match. A string compare would grant `self` on "" === "" for two
+  // login-less accounts, and would let a freely-claimed name become a grant.
+  if ((await accountScopeRole(db, who.accountId, scope)) === "self") {
+    return { status: "ok", role: "self", via: "self" };
+  }
   const scopeLower = scope.toLowerCase();
   const inst = await installationForScope(db, scopeLower);
   if (inst && !inst.suspended) {
