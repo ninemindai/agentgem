@@ -7,7 +7,7 @@ import { testbedProjectsRoute, playStudioRoute, playImportRoute, playBlankRoute,
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 const agents = [{ id: "codex", name: "Codex", available: true }, { id: "claude-code", name: "Claude Code", available: true }];
-const renderComposer = (onCreated: (name: string) => void) =>
+const renderComposer = (onCreated: (name: string, seedPrompt?: string) => void) =>
   render(<Composer apiBase="" agents={agents} agentId="codex" onAgentIdChange={() => {}} onCreated={onCreated} />);
 
 describe("Composer", () => {
@@ -133,5 +133,64 @@ describe("Composer", () => {
     fireEvent.change(screen.getByLabelText("Miniapp name"), { target: { value: "my-duel" } });
     fireEvent.click(screen.getByText("Create miniapp"));
     await waitFor(() => expect(screen.getByText(/already exists/i)).toBeTruthy());
+  });
+});
+
+describe("Composer capability checkboxes", () => {
+  const stubProjects = () =>
+    vi.spyOn(testbedProjectsRoute, "call").mockResolvedValue({
+      projects: [{ path: "/p/demo", flavor: "node", lastUsed: null, exists: true }],
+    } as never);
+
+  it("passes a capability preamble as the seed prompt when a box is checked", async () => {
+    stubProjects();
+    vi.spyOn(playStudioRoute, "call").mockResolvedValue({ name: "demo" });
+    const onCreated = vi.fn();
+    renderComposer(onCreated);
+    await waitFor(() => expect(screen.getByText("/p/demo")).toBeTruthy());
+    fireEvent.click(screen.getByLabelText(/watch your live coding sessions in real time/i));
+    fireEvent.click(screen.getByText("/p/demo"));
+    await waitFor(() => expect(onCreated).toHaveBeenCalled());
+    const seedPrompt = onCreated.mock.calls[0][1] as string;
+    expect(seedPrompt).toContain("agentgem_subscribe_sessions");
+    expect(seedPrompt).toContain("live-session-events");
+  });
+
+  it("passes no seed prompt when nothing is checked", async () => {
+    stubProjects();
+    vi.spyOn(playStudioRoute, "call").mockResolvedValue({ name: "demo" });
+    const onCreated = vi.fn();
+    renderComposer(onCreated);
+    await waitFor(() => expect(screen.getByText("/p/demo")).toBeTruthy());
+    fireEvent.click(screen.getByText("/p/demo"));
+    await waitFor(() => expect(onCreated).toHaveBeenCalled());
+    expect(onCreated.mock.calls[0][1]).toBeUndefined();
+  });
+
+  it("never sends needs to the server — checkboxes are intent, not declaration", async () => {
+    stubProjects();
+    const studio = vi.spyOn(playStudioRoute, "call").mockResolvedValue({ name: "demo" });
+    renderComposer(vi.fn());
+    await waitFor(() => expect(screen.getByText("/p/demo")).toBeTruthy());
+    fireEvent.click(screen.getByLabelText(/run a local AI agent on your machine/i));
+    fireEvent.click(screen.getByText("/p/demo"));
+    await waitFor(() => expect(studio).toHaveBeenCalled());
+    expect(JSON.stringify(studio.mock.calls[0][1])).not.toContain("needs");
+  });
+
+  it("combines the preamble with the Blank tab description", async () => {
+    stubProjects();
+    vi.spyOn(playBlankRoute, "call").mockResolvedValue({ name: "my-app" });
+    const onCreated = vi.fn();
+    renderComposer(onCreated);
+    fireEvent.click(screen.getByText("Blank"));
+    fireEvent.change(screen.getByPlaceholderText("title"), { target: { value: "My App" } });
+    fireEvent.change(screen.getByPlaceholderText(/describe the mini-game/i), { target: { value: "a dashboard" } });
+    fireEvent.click(screen.getByLabelText(/read your local setup/i));
+    fireEvent.click(screen.getByRole("button", { name: /Create miniapp/ }));
+    await waitFor(() => expect(onCreated).toHaveBeenCalled());
+    const seedPrompt = onCreated.mock.calls[0][1] as string;
+    expect(seedPrompt).toContain("agentgem_get_inventory");
+    expect(seedPrompt).toContain("a dashboard");
   });
 });
