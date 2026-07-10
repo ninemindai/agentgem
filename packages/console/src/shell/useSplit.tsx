@@ -35,6 +35,6 @@ export function useSplit(
       style: { ["--split" as string]: `${size}px` } as React.CSSProperties,
       className: dragging ? "is-dragging" : "",
     },
-    handle: <span className="split-handle" data-side={o.side ?? "start"} {...handleProps} />,
+    handle: <span className="split-handle" data-side={o.side ?? "start"} aria-label="Resize panel" {...handleProps} />,
   };
 }
