@@ -2,7 +2,8 @@ import { useState } from "react";
 
 /** Claim a public handle. POSTs to /api/handle (credentialed, cross-origin CORS handled by the
  *  route). The handle names the account; it authorizes nothing. On success the caller refetches the
- *  session so the new handle propagates to the chip and the publish scope. */
+ *  session so the new handle propagates to the chip and the publish scope. Styled to match the
+ *  sibling publish form: `.ex-search` input + `.ex-signin` (gradient) button. */
 export function HandleClaim({ base, onClaimed }: { base: string; onClaimed: () => void }) {
   const [handle, setHandle] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
@@ -30,11 +31,28 @@ export function HandleClaim({ base, onClaimed }: { base: string; onClaimed: () =
   };
 
   return (
-    <form className="ex-card" onSubmit={submit}>
-      <p>Claim a handle to publish and get a profile page at <code>/@your-handle</code>.</p>
-      <input aria-label="handle" placeholder="your-handle" value={handle} onChange={(e) => setHandle(e.target.value)} />
-      <button type="submit" disabled={busy || handle.trim().length === 0}>Claim</button>
-      {msg && <p className="ex-error" role="alert">{msg}</p>}
-    </form>
+    <div className="ex-card">
+      <h2>Claim your handle</h2>
+      <p style={{ color: "var(--muted)", fontSize: "0.88rem", lineHeight: 1.5, margin: "0 0 14px" }}>
+        Your handle is your public name — your profile at <code>/@your-handle</code> and the scope you
+        publish gems under. Letters, numbers, and hyphens, up to 39 characters.
+      </p>
+      <form onSubmit={submit} style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
+        <input
+          aria-label="handle" type="text" placeholder="your-handle"
+          value={handle} onChange={(e) => setHandle(e.target.value)}
+          className="ex-search" style={{ margin: 0, flex: 1 }}
+          autoCapitalize="off" autoCorrect="off" spellCheck={false}
+        />
+        <button
+          type="submit" className="ex-signin"
+          disabled={busy || handle.trim().length === 0}
+          style={{ padding: "0 16px", whiteSpace: "nowrap" }}
+        >
+          {busy ? "Claiming…" : "Claim"}
+        </button>
+      </form>
+      {msg && <p className="ex-error" role="alert" style={{ margin: "12px 0 0" }}>{msg}</p>}
+    </div>
   );
 }
