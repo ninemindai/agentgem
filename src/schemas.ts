@@ -96,6 +96,13 @@ export const ReferenceArtifactSchema = z.object({
   ref: ArtifactRefSchema,
 });
 
+// The GameCapability union (packages/model types.ts) as a wire enum. Kept in lockstep by
+// __tests__ drift guard. Widening this widens the gem-archive contract — additive only.
+export const GameCapabilityEnum = z.enum([
+  "session-data", "live-session-events", "local-project-access", "invoke-agent",
+  "open-link", "send-message", "update-model-context",
+]);
+
 export const GameArtifactSchema = z.object({
   type: z.literal("game"),
   name: z.string(),
@@ -111,7 +118,7 @@ export const GameArtifactSchema = z.object({
     z.object({ kind: z.literal("blank"), title: z.string() }),
   ]),
   engineVersion: z.string(),
-  needs: z.array(z.enum(["session-data", "live-session-events", "local-project-access", "invoke-agent"])).optional(),
+  needs: z.array(GameCapabilityEnum).optional(),
   meta: z.object({ controls: z.string().optional(), estPlaySeconds: z.number().optional() }).optional(),
 });
 
@@ -977,20 +984,20 @@ export const PlaySaveRequestSchema = z.object({
     genre: z.enum(["replay", "skill-run", "project-fun"]),
     createdFrom: GameArtifactSchema.shape.createdFrom,
     engineVersion: z.string().default("1"),
-    needs: z.array(z.enum(["session-data", "live-session-events", "local-project-access", "invoke-agent"])).optional(),
+    needs: z.array(GameCapabilityEnum).optional(),
   }),
 });
 export const PlaySaveResponseSchema = z.object({
   name: z.string(),
   commit: z.string().nullable(),
   // Declared capabilities the html never used. Reported, never silent — the Studio surfaces these.
-  prunedNeeds: z.array(z.enum(["session-data", "live-session-events", "local-project-access", "invoke-agent"])).default([]),
+  prunedNeeds: z.array(GameCapabilityEnum).default([]),
 });
 export const PlayDeleteRequestSchema = z.object({ name: z.string() });
 // Delete shares {name, commit} with save but never reconciles capabilities, so it gets its own response
 // rather than inheriting a prunedNeeds field it could only ever report as empty.
 export const PlayDeleteResponseSchema = z.object({ name: z.string(), commit: z.string().nullable() });
-const PlayNeedsSchema = z.array(z.enum(["session-data", "live-session-events", "local-project-access", "invoke-agent"])).optional();
+const PlayNeedsSchema = z.array(GameCapabilityEnum).optional();
 const EmptyObjectSchema = z.object({});
 export const PlayMcpAppSchema = z.object({
   resource: z.object({
