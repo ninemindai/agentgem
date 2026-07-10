@@ -89,7 +89,27 @@ export async function appOrgRole(db: AppDb, login: string, orgScope: string): Pr
 export type OrgAccess = { status: "ok" | "stale" | "none"; role: "self" | "admin" | "member" | null; via: "self" | "app" | "scopes" | null };
 
 /**
- * Combined org-access check, in precedence order:
+ * Combined org-access check. THE single gate: every "may this caller act on this scope?" question
+ * routes through here. A caller that re-derives "is this my own scope?" ahead of the gate reopens
+ * the pre-onboarding-squat hole (see path 1) — read `via === "self"` off the result instead.
+ *
+ *                          ┌──────────────────────────────────────────────┐
+ *   resolveOrgAccess ─────▶│ 1. active, non-suspended app_installations?   │
+ *                          └──────────────────────────────────────────────┘
+ *                             │ yes                        │ no
+ *                             ▼                            ▼
+ *              org_members roster DECIDES      ┌────────────────────────────┐
+ *              ALONE  →  {ok|none, via:"app"}  │ 2. "user".handle == scope? │
+ *              (self + captured never consulted)└───────────────────────────┘
+ *                                                 │ yes            │ no
+ *                                                 ▼                ▼
+ *                                    {ok, role:"self",   ┌──────────────────────┐
+ *                                     via:"self"}        │ 3. captured scope +  │
+ *                                    (no freshness TTL)  │    freshness TTL     │
+ *                                                        └──────────────────────┘
+ *                                                          → {ok|stale|none, via:"scopes"}
+ *
+ * Precedence order:
  *   1. App-authoritative — when the scope has an ACTIVE (non-suspended) installation,
  *      webhook-synced App membership decides ALONE: in org_members → "ok", otherwise "none".
  *      Neither captured account_scopes NOR a role='self' row are consulted in this case (see
