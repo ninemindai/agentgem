@@ -60,10 +60,23 @@ describe("org members store", () => {
 });
 
 describe("resolveOrgAccess", () => {
-  it("self scope is always ok", async () => {
+  it("grants self from the role='self' scope row, not from a login string match", async () => {
     const db = await makeTestDb();
     const a = await upsertAccount(db, { provider: "github", accountId: "1", login: "alice" });
-    expect(await resolveOrgAccess(db, { accountId: a.id, login: "alice" }, "Alice", 1000)).toEqual({ status: "ok", role: "self", via: "self" });
+    await setAccountScopes(db, a.id, [{ scope: "alice", role: "self" }]);
+    // holds the row → self
+    expect(await resolveOrgAccess(db, { accountId: a.id, login: "alice" }, "alice", 1000)).toEqual({ status: "ok", role: "self", via: "self" });
+
+    // a DIFFERENT account whose login string is also "alice" but holds NO role='self' row must not
+    // be granted self — claiming/having that login string is not the grant, holding the row is.
+    const bare = await upsertAccount(db, { provider: "github", accountId: "2", login: "alice" });
+    expect(await resolveOrgAccess(db, { accountId: bare.id, login: "alice" }, "alice", 1000)).toEqual({ status: "none", role: null, via: null });
+  });
+
+  it("two login-less accounts do not collide on the empty scope", async () => {
+    const db = await makeTestDb();
+    const a = await upsertAccount(db, { provider: "github", accountId: "1", login: null });
+    expect(await resolveOrgAccess(db, { accountId: a.id, login: "" }, "", 1000)).toEqual({ status: "none", role: null, via: null });
   });
 
   it("app membership passes without any captured scope (and beats stale scopes)", async () => {

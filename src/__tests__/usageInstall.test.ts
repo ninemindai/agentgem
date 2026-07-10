@@ -44,9 +44,12 @@ async function roleMember(db: any, auth: any, login: string, scope: string, role
   return { a, token };
 }
 
+// The bare `login` entry now needs an explicit role='self' grant — resolveOrgAccess no longer
+// treats "scope === login" as the self grant, so a test account must hold the row like a real
+// account does (written in production by claimHandle/anchorAndScopes on every sign-in).
 async function member(db: any, auth: any, login: string, scopes: string[]) {
   const a = await mintUser(db, auth, login);
-  await setAccountScopes(db, a.id, [login, ...scopes]);
+  await setAccountScopes(db, a.id, [{ scope: login, role: "self" as const }, ...scopes]);
   const { token } = await mintSession(auth, a.id);
   return { a, token };
 }
@@ -247,6 +250,28 @@ describe("membership freshness on GET /api/usage/org", () => {
     const ok = mockRes();
     await orgUsageHandler(deps(db, auth))(req({ headers: { authorization: `Bearer ${token}` }, query: { scope: "acme", range: "all" } }) as any, ok as any);
     expect(ok._status).toBe(200);
+  });
+});
+
+describe("personal-view gate uses the claimed self scope, not the login string", () => {
+  it("a stale login string (post-rename) does not bypass the org gate; the claimed handle does", async () => {
+    const db = await makeTestDb();
+    const auth = makeAuth({ db, ...authOpts });
+    const a = await mintUser(db, auth, "alice"); // GitHub login "alice"
+    // Renamed away from "alice" to "carol": the self scope row now lives at "carol", and the stale
+    // "alice" login string grants nothing (mirrors claimHandle, which drops the old self row).
+    await setAccountScopes(db, a.id, [{ scope: "carol", role: "self" as const }]);
+    const { token } = await mintSession(auth, a.id);
+
+    // The stale login string must NOT be treated as the personal scope (no org gate bypass).
+    const stale = mockRes();
+    await orgUsageHandler(deps(db, auth))(req({ headers: { authorization: `Bearer ${token}` }, query: { scope: "alice", range: "all" } }) as any, stale as any);
+    expect(stale._status).toBe(403);
+
+    // The claimed handle IS the personal scope.
+    const own = mockRes();
+    await orgUsageHandler(deps(db, auth))(req({ headers: { authorization: `Bearer ${token}` }, query: { scope: "carol", range: "all" } }) as any, own as any);
+    expect(own._status).toBe(200);
   });
 });
 
