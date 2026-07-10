@@ -61,7 +61,7 @@ import { requireShareOriginSecret } from "./originSecret.js";
 import { ShareProxyController } from "./share.proxy.controller.js";
 import { SourcesController } from "./sources.controller.js";
 import { PlayController } from "./play.controller.js";
-import { resolveAggregatorDb, type AppDb, migrateAccountsToBetterAuth } from "@agentgem/aggregator";
+import { resolveAggregatorDb, type AppDb, migrateAccountsToBetterAuth, backfillUserHandles } from "@agentgem/aggregator";
 import { mountGating } from "./gating.js";
 import { installHandoff } from "./auth/handoff.js";
 import { mountAuth, AUTH_BINDING } from "./auth/mount.js";
@@ -246,6 +246,18 @@ export async function createApp(port: number): Promise<RestApplication> {
     // see migrateAccountsOrFail below.
     const { migrated } = await migrateAccountsOrFail(aggDb);
     console.log(`better-auth migration: backfilled ${migrated} account(s)`);
+    // Re-run the handle backfill at cutover too (5b fix pass): migrateAccountsOrFail (above) is what
+    // mirrors legacy `accounts` rows into "user" rows, and it runs AFTER ensureSchema's own
+    // backfillUserHandles call — so any account created via the old OAuth path since the last boot
+    // gets its "user" row created here, too late for that earlier pass to claim its handle. Left
+    // alone, that account has handle = NULL for this whole boot: buildProfile resolves handle ->
+    // accountId and 404s with none, so the profile and its gems are effectively invisible until the
+    // next boot or the user's next re-login. backfillUserHandles is idempotent, so calling it again
+    // only claims the newly-mirrored rows and is cheap.
+    const rebackfill = await backfillUserHandles(aggDb);
+    if (rebackfill.claimed > 0) {
+      console.log(`better-auth migration: backfilled ${rebackfill.claimed} handle(s) for newly-mirrored user(s)`);
+    }
   }
   // Stars + reviews + team usage need the DB + an allowlisted web origin + a live better-auth
   // instance to resolve sessions through (Plan 1b) — the last of which needs the GitHub OAuth

@@ -31,7 +31,7 @@ async function isReserved(db: AppDb, handleLc: string): Promise<boolean> {
  *  its transaction-rollback path). A deadlock, a lost connection, or a DIFFERENT constraint has a
  *  different code (or none) and must propagate, not collapse into "handle taken". */
 const UNIQUE_VIOLATION = "23505";
-function isUniqueViolation(err: unknown): boolean {
+export function isUniqueViolation(err: unknown): boolean {
   return typeof err === "object" && err !== null && "code" in err && (err as { code?: unknown }).code === UNIQUE_VIOLATION;
 }
 

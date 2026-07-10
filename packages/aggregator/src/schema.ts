@@ -3,6 +3,7 @@
 import { pgTable, text, integer, uuid, timestamp, boolean, real, primaryKey, jsonb, bigint, customType, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { PgDatabase } from "drizzle-orm/pg-core";
+import { isUniqueViolation } from "./handles.js";
 
 export const producers = pgTable("producers", {
   pubkey: text("pubkey").primaryKey(),
@@ -338,7 +339,11 @@ export const user = pgTable("user", {
   emailVerified: boolean("email_verified").default(false).notNull(),
   image: text("image"),
   login: text("login"),
-  handle: text("handle").unique(),
+  // NOT `.unique()`: the DDL authority (ensureSchema, below) enforces uniqueness case-insensitively
+  // via a `unique index on (lower(handle))`, not a plain per-value unique constraint — declaring
+  // `.unique()` here would claim a stronger-but-wrong guarantee (drizzle's own metadata, unused by
+  // any query in this codebase) than what's actually enforced at the DB level.
+  handle: text("handle"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -444,23 +449,39 @@ export async function backfillGemOwners(db: AppDb): Promise<{ resolved: number; 
  *  re-evaluates against the first run's already-committed rows (handle no longer NULL), rather
  *  than racing the unique index the way a per-row claim would.
  *  `claimed` is per-call (0 on a re-run, like backfillBindingAnchors' `created`); `skipped` is the
- *  total still-unclaimed count so an operator can see backlog, like backfillGemOwners' `unresolved`. */
+ *  total still-unclaimed count so an operator can see backlog, like backfillGemOwners' `unresolved`.
+ *
+ *  Runs inside ensureSchema on every boot, so it must never abort a boot (like backfillBindingAnchors
+ *  above). Unlike that backfill, this is an UPDATE, not an INSERT, so there is no `on conflict do
+ *  nothing` to let the database arbitrate a lost race — a concurrent claimHandle rename that commits
+ *  between this statement's snapshot read and its write attempt raises 23505 (unique violation on
+ *  user_handle_uniq), which would otherwise propagate out of ensureSchema and fail startup over a
+ *  condition that heals itself on the very next boot. Narrow the catch to that one SQLSTATE
+ *  (isUniqueViolation, shared with handles.ts rather than re-deriving it) so a genuinely different
+ *  failure (a deadlock, a lost connection) still propagates. */
 export async function backfillUserHandles(db: AppDb): Promise<{ claimed: number; skipped: number }> {
-  const res = await db.execute(sql`
-    update "user" u set handle = m.login
-    from (
-      select lower(login) as lg, min(login) as login
-      from "user"
-      where login is not null and login ~ '^[A-Za-z0-9-]{1,39}$'
-      group by lower(login)
-      having count(*) = 1
-    ) m
-    where lower(u.login) = m.lg
-      and u.handle is null
-      and not exists (select 1 from "user" u2 where lower(u2.handle) = m.lg)
-      and not exists (select 1 from org_members om where lower(om.org_scope) = m.lg)
-      and not exists (select 1 from org_settings os where lower(os.scope) = m.lg)`);
-  const claimed = (res as any).rowCount ?? (res as any).affectedRows ?? 0;
+  let claimed = 0;
+  try {
+    const res = await db.execute(sql`
+      update "user" u set handle = m.login
+      from (
+        select lower(login) as lg, min(login) as login
+        from "user"
+        where login is not null and login ~ '^[A-Za-z0-9-]{1,39}$'
+        group by lower(login)
+        having count(*) = 1
+      ) m
+      where lower(u.login) = m.lg
+        and u.handle is null
+        and not exists (select 1 from "user" u2 where lower(u2.handle) = m.lg)
+        and not exists (select 1 from org_members om where lower(om.org_scope) = m.lg)
+        and not exists (select 1 from org_settings os where lower(os.scope) = m.lg)`);
+    claimed = (res as any).rowCount ?? (res as any).affectedRows ?? 0;
+  } catch (err) {
+    if (!isUniqueViolation(err)) throw err;
+    // Lost the race: the whole statement rolled back (nothing claimed this call), and the next
+    // boot's re-run re-reads committed state, so this self-heals. claimed stays 0.
+  }
   const r = await db.execute(sql`select count(*)::int as skipped from "user" where login is not null and handle is null`);
   const { skipped } = (r.rows as { skipped: number }[])[0];
   return { claimed, skipped };
@@ -570,7 +591,37 @@ export async function ensureSchema(db: AppDb): Promise<void> {
   // be NULL until claimed. Postgres UNIQUE permits many NULLs. NULL is not '', which makes the
   // empty-string identity collision unrepresentable rather than merely guarded.
   await db.execute(sql`alter table "user" add column if not exists handle text`);
-  await db.execute(sql`create unique index if not exists user_handle_uniq on "user" (handle)`);
+
+  // The index is the race arbiter for claimHandle/claimHandleIfUnset (see handles.ts), which both
+  // compare handles case-insensitively — so the index must too, or two concurrent claims of "bob"
+  // and "Bob" both pass their own app-level guard on their own MVCC snapshot and both get admitted.
+  // `create unique index if not exists` does NOT redefine an existing same-named index — it no-ops
+  // — so a plain swap from the old `(handle)` definition would leave an already-deployed database
+  // stuck on the case-sensitive index forever. Detect that stale definition by name and DROP it
+  // before recreating under the SAME name (rather than parking the new one under a different name,
+  // which would leave the old one behind consuming space/write cost with no reader left).
+  //
+  // If real data already has case-variant duplicates ("Bob" and "bob" both present), the CREATE
+  // UNIQUE INDEX below fails outright — and this code does not try to silently pick a winner by
+  // renaming or deleting either user's handle; that is not this migration's call to make. Detect
+  // that case first and log loudly instead of letting the raw constraint-violation error propagate
+  // out of ensureSchema and abort the boot. The stale case-sensitive index (if one exists) is left
+  // in place so exact-match uniqueness keeps holding while an operator resolves the collision.
+  const handleDupes = (await db.execute(sql`
+    select count(*)::int as n from (
+      select lower(handle) from "user" where handle is not null group by lower(handle) having count(*) > 1
+    ) d`)).rows as { n: number }[];
+  if ((handleDupes[0]?.n ?? 0) > 0) {
+    console.error(`[schema] ${handleDupes[0].n} "user".handle value(s) collide case-insensitively — skipping the case-insensitive unique index (user_handle_uniq) until resolved manually; handle claims stay racy until then`);
+  } else {
+    const stale = await db.execute(sql`
+      select 1 from pg_indexes
+      where schemaname = 'public' and indexname = 'user_handle_uniq' and indexdef not ilike '%lower(handle)%'`);
+    if ((stale.rows?.length ?? 0) > 0) {
+      await db.execute(sql`drop index user_handle_uniq`);
+    }
+    await db.execute(sql`create unique index if not exists user_handle_uniq on "user" (lower(handle))`);
+  }
   await db.execute(sql`do $$ begin
     alter table "user" add constraint user_handle_shape
       check (handle is null or handle ~ '^[A-Za-z0-9-]{1,39}$');
