@@ -14,3 +14,6 @@ export { MINIAPP_BUILDER_BRIEF } from "./builderBrief.js";
 export { redactForBake } from "./redact.js";
 export { assertPortable, type PortabilityResult } from "./portability.js";
 export { resolveSessionRef, type SessionRef } from "./sessionRef.js";
+// Re-exported so packages/console — which depends on @agentgem/play, not @agentgem/model — can share
+// the one capability<->tool map instead of keeping a second copy.
+export { CAP_TOOL, TOOL_CAP } from "@agentgem/model";
