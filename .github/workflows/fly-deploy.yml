@@ -19,8 +19,11 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: superfly/flyctl-actions/setup-flyctl@master
+      # Actions pinned to immutable commit SHAs: this workflow holds the production
+      # FLY_API_TOKEN, and a mutable ref (@master / @v6) re-fetches whatever sits there
+      # each run, so a compromised upstream would execute with the deploy credential.
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # master (2026-07)
       # --remote-only builds the Docker image on Fly's builders, so the runner
       # needs no Docker setup and the build cache lives with Fly.
       - run: flyctl deploy --remote-only
