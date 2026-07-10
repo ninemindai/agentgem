@@ -14,7 +14,7 @@ export type OrgSettingsResult =
   | { status: "ok"; settings: OrgSettingsView }
   | { status: "denied" };
 
-export interface GameMeta { title: string; genre: "replay" | "skill-run" | "project-fun"; version: string }
+export interface GameMeta { title: string; genre: "replay" | "skill-run" | "project-fun" | "session-heatmap"; version: string }
 
 type Query = Record<string, string | number | undefined>;
 

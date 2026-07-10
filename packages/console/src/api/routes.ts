@@ -907,7 +907,7 @@ const PlaySourceSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("blank"), title: z.string() }),
 ]);
 const PlayMetaSchema = z.object({
-  title: z.string(), genre: z.enum(["replay", "skill-run", "project-fun"]),
+  title: z.string(), genre: z.enum(["replay", "skill-run", "project-fun", "session-heatmap"]),
   createdFrom: PlaySourceSchema, engineVersion: z.string().default("1"), needs: PlayNeedsSchema,
 });
 
