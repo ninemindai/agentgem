@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
 import { randomUUID } from "node:crypto";
-import { makeTestDb, accounts, upsertGemArchive, getGemArchive, deleteGemArchiveOwned, archiveOnlyVersion } from "@agentgem/aggregator";
+import { makeTestDb, accounts, upsertGemArchive, getGemArchive, deleteGemArchiveOwned, archiveOnlyVersion, upsertCatalogGem } from "@agentgem/aggregator";
 
 async function acct(db: Awaited<ReturnType<typeof makeTestDb>>): Promise<string> {
   const id = randomUUID();
@@ -44,6 +44,19 @@ describe("gem_archives ownership", () => {
     const db = await makeTestDb();
     await upsertGemArchive(db, { gemKey: "xK3f9a2Bq1", version: "1", bytes: new Uint8Array([1]), digest: "d", createdAtMs: 1, ownerAccountId: await acct(db) });
     expect(await archiveOnlyVersion(db, "xK3f9a2Bq1")).toBe("1");
+  });
+
+  it("archiveOnlyVersion returns null for a PUBLISHED key (has a catalog row)", async () => {
+    const db = await makeTestDb();
+    const owner = await acct(db);
+    await upsertGemArchive(db, { gemKey: "@octocat/tetris", version: "1.0.0", bytes: new Uint8Array([1]), digest: "d", createdAtMs: 1, ownerAccountId: owner });
+    await upsertCatalogGem(db, { gemKey: "@octocat/tetris", version: "1.0.0", publishedBy: "octocat", ownerAccountId: owner, createdAtMs: 1 });
+    expect(await archiveOnlyVersion(db, "@octocat/tetris")).toBeNull();
+  });
+
+  it("archiveOnlyVersion returns null for an absent key", async () => {
+    const db = await makeTestDb();
+    expect(await archiveOnlyVersion(db, "does-not-exist")).toBeNull();
   });
 
   it("deletes only the caller's own row, never a co-key row owned by someone else", async () => {
