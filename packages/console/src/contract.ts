@@ -20,6 +20,8 @@ export interface ConsolePage {
   /** Nav item is dimmed ("locked") until a gem is active — for build stages that
    *  can't do anything without curated artifacts (Materialize/Deploy). */
   requiresGem?: boolean;
+  /** Opt out of the default readable max-width; the panel fills available main width. */
+  fullWidth?: boolean;
   /** Hash route, e.g. '#/ledger'. */
   route: string;
   component: (props: { apiBase: string }) => ReactNode;

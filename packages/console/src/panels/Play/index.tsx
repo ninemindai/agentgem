@@ -85,8 +85,9 @@ export function Play({ apiBase }: { apiBase: string }) {
 }
 
 export const playPage = defineConsolePage({
-  id: "play", title: "Play", icon: "🎮", order: 35,
+  id: "play", title: "Studio", icon: "🎮", order: 35,
   phase: "build", category: "setup",
   route: "#/play",
+  fullWidth: true,
   component: ({ apiBase }) => <Play apiBase={apiBase} />,
 });

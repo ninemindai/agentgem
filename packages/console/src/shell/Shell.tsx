@@ -187,7 +187,7 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
           ))}
           <div className="console-footer"><NotifyBell />{footer.map(item)}<IdentityChip apiBase={apiBase} /></div>
         </nav>
-        <main className="console-main">{ActivePage ? <ActivePage apiBase={apiBase} /> : null}</main>
+        <main className={"console-main" + (active?.fullWidth ? " console-main--wide" : "")}>{ActivePage ? <ActivePage apiBase={apiBase} /> : null}</main>
         <NotificationsProvider apiBase={apiBase} />
         {!sidebar.collapsed && <div className="console-rail-handle" {...sidebar.handleProps} />}
       </div>
