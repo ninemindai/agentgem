@@ -1,7 +1,7 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
-import { makeTestDb, producers, accountBindings, type AppDb } from "@agentgem/aggregator";
+import { makeTestDb, producers, accountBindings, upsertAccount, type AppDb } from "@agentgem/aggregator";
 import { AggregatorController } from "../../aggregator.controller.js";
 import { signer, sampleGem, signedPublishBody } from "./helpers/publishFixtures.js";
 
@@ -10,6 +10,11 @@ async function publishGame(db: AppDb, gemKey: string, version = "1.0.0"): Promis
   const s = signer();
   await db.insert(producers).values({ pubkey: s.pubkey });
   await db.insert(accountBindings).values({ pubkey: s.pubkey, provider: "github", accountId: "1", accountLogin: "octocat" });
+  // The identity re-key keys gem ownership on the accounts.id uuid, so recordCatalogShare now
+  // requires an `accounts` anchor for the binding's (provider, accountId) — in production
+  // recordBinding writes both. Mirror that here, or the publish rejects "not-connected" and writes
+  // nothing (the gem the play/html endpoints then can't find).
+  await upsertAccount(db, { provider: "github", accountId: "1", login: "octocat" });
   const gameGem = { ...sampleGem(), artifacts: [{ type: "game" as const, name: "duel", title: "Duel", genre: "project-fun" as const,
     html: "<!doctype html><body>PLAY ME</body>", createdFrom: { kind: "html" as const, title: "Duel" }, engineVersion: "1" }] };
   const c = new AggregatorController(db);
