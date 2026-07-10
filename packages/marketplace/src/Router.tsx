@@ -16,6 +16,8 @@ import { OrgCatalog } from "./pages/OrgCatalog";
 import { TeamUsage } from "./pages/TeamUsage";
 import { Sources } from "./pages/Sources";
 import { Minigames } from "./pages/Minigames";
+import { Play } from "./pages/Play";
+import { parseGamePath } from "./entityPath";
 
 // `loginUrl` triggers sign-in (better-auth's social sign-in is POST-only, so there is no
 // synchronous URL to hand to an anchor's href anymore) — the name is kept for a minimal diff
@@ -38,6 +40,9 @@ export function Router({ api, stars, reviews, me }: { api: ReturnType<typeof mak
   // Miniapps is the home tab. "/minigames" is the old path, kept alive for shared links and the
   // desktop deep-link; "/" is home. The ingredients board moved to its own "/ingredients".
   if (path === "/" || path === "/miniapps" || path === "/minigames") return <Minigames api={api} stars={stars} />;
+
+  const gameKey = parseGamePath(path);
+  if (gameKey) return <Play api={api} gemKey={gameKey} />;
 
   const gemDetail = path.match(/^\/gems\/(.+)$/);
   if (gemDetail) return <Gem api={api} keyName={decodeURIComponent(gemDetail[1])} stars={stars} me={me} />;
