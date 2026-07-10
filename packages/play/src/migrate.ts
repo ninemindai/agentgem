@@ -6,7 +6,7 @@
 // injecting the shim into a bundle that calls `window.agentgemApp` but never had one. Never throws — a
 // bundle that talks to no host is reported "unrecognized" rather than blown up; the caller (the
 // storage-layer route) decides what that means for its flow.
-import { MCP_CLIENT_MARKER, mcpAppClient } from "./mcpAppClient.js";
+import { MCP_CLIENT_MARKER, MCP_CLIENT_MARKER_RE, mcpAppClient } from "./mcpAppClient.js";
 
 export type MigrateOutcome = "migrated" | "already" | "unrecognized";
 
@@ -41,8 +41,22 @@ const HOST_API = "agentgemApp";
 // a capability — it can never widen a grant. That is what makes it safe to run on the SAVE path, where a
 // silent widening would be a security bug. Idempotent, and a no-op for a bundle that talks to no host.
 export function ensureClientShim(html: string): string {
-  if (html.includes(MCP_CLIENT_MARKER) || !html.includes(HOST_API)) return html;
-  return injectClientShim(html);
+  if (!html.includes(HOST_API)) return html;                     // talks to no host — nothing to do
+  if (html.includes(MCP_CLIENT_MARKER)) return html;              // already current
+  if (MCP_CLIENT_MARKER_RE.test(html)) return replaceShim(html);  // an OLDER shim — swap it wholesale
+  return injectClientShim(html);                                  // no shim at all — inject
+}
+
+// Replace the <script>…older marker…</script> element with the current shim script. The shim is always a
+// single <script> whose body carries the marker comment; walk from its <script open to the matching close.
+function replaceShim(html: string): string {
+  const markerIdx = html.search(MCP_CLIENT_MARKER_RE);
+  if (markerIdx === -1) return injectClientShim(html);
+  const open = html.lastIndexOf("<script", markerIdx);
+  const closeToken = "</script>";
+  const close = html.indexOf(closeToken, markerIdx);
+  if (open === -1 || close === -1) return injectClientShim(html);
+  return html.slice(0, open) + mcpAppClient().trim() + html.slice(close + closeToken.length);
 }
 
 function injectClientShim(html: string): string {
