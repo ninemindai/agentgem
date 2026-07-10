@@ -6,6 +6,19 @@
 // constants so they compile into dist (no fs paths).
 import { mcpAppClient } from "./mcpAppClient.js";
 
+// `title`/`subtitle` reach sealedTemplate from user input (blankStudio) and are baked
+// into the shared bundle outside the editable AGENTGEM:GAME-LOGIC markers, so any
+// injection is permanent. Escape per interpolation context before it lands in the HTML.
+function htmlEscape(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+}
+// Encode as a JS string literal safe inside a <script>: JSON quoting handles ", \, and
+// control chars; escaping `<` stops a literal </script> from closing the script element.
+// Returns the value WITH its surrounding quotes.
+function jsString(s: string): string {
+  return JSON.stringify(s).replace(/</g, "\\u003c");
+}
+
 // The shim goes FIRST in <head>, exactly as replayScaffold() places it: `window.agentgemApp` must exist
 // before the game's own script runs, or an app that polls for it on boot loses the race. Every scaffold
 // carries it — the studio agent writes bridge calls into whichever one it was handed, and a bundle born
@@ -14,7 +27,7 @@ export function sealedTemplate(title: string, subtitle: string): string {
   return `<!doctype html>
 <html lang="en"><head>${mcpAppClient()}<meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>${title}</title>
+<title>${htmlEscape(title)}</title>
 <style>
   :root { color-scheme: dark; }
   html,body { height:100%; margin:0; background:#0d1117; color:#e8edf4; font:16px/1.4 system-ui, sans-serif; overflow:hidden; }
@@ -23,7 +36,7 @@ export function sealedTemplate(title: string, subtitle: string): string {
   #hud { position:fixed; top:12px; left:12px; font:600 14px system-ui; opacity:.85; }
 </style></head>
 <body>
-  <div id="hud">${subtitle}</div>
+  <div id="hud">${htmlEscape(subtitle)}</div>
   <div id="stage"><canvas id="c" width="640" height="400"></canvas></div>
   <script>
   (function () {
@@ -37,7 +50,7 @@ export function sealedTemplate(title: string, subtitle: string): string {
     function frame() {
       ctx.fillStyle = "#0d1117"; ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = "#3b82f6"; ctx.font = "20px system-ui";
-      ctx.fillText("${title}", 24, 40 + Math.sin(t / 20) * 4);
+      ctx.fillText(${jsString(title)}, 24, 40 + Math.sin(t / 20) * 4);
       t++; requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
