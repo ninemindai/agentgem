@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 // (rmSync is used both for temp-home cleanup and to simulate a delete landing mid-checkpoint)
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { saveMiniapp, deleteMiniapp, checkpointMiniapp, listMiniapps, miniappDir } from "@agentgem/play";
@@ -88,5 +89,50 @@ describe("miniapps store", () => {
   it("deleteMiniapp rejects an unknown name and a traversal attempt", async () => {
     await expect(deleteMiniapp("nope")).rejects.toThrow(/not found/i);
     await expect(deleteMiniapp("../escape")).rejects.toThrow();
+  });
+});
+
+describe("saveMiniapp reconciles needs against the html", () => {
+  // Guarded like every real generated bundle (scaffolds.ts, migrate.ts): gameGate's jsdom load-smoke
+  // actually EXECUTES this script with no mcpAppClient shim present, so an unguarded call throws before
+  // reconcile ever runs. The literal tool-name string still survives for deriveNeeds' static scan.
+  const uses = (tool: string) => `<!doctype html><body><canvas></canvas><script>if (window.agentgemApp) window.agentgemApp.callTool("${tool}");</script></body>`;
+
+  it("throws when the code calls a tool the meta does not declare", async () => {
+    await expect(saveMiniapp({ name: "undeclared", html: uses("agentgem_subscribe_sessions"), meta }))
+      .rejects.toThrow(/agentgem_subscribe_sessions.*live-session-events/s);
+  });
+
+  it("prunes a declared capability nothing uses, and reports it", async () => {
+    const res = await saveMiniapp({ name: "over", html: sealed, meta: { ...meta, needs: ["live-session-events"] } });
+    expect(res.prunedNeeds).toEqual(["live-session-events"]);
+    const onDisk = JSON.parse(readFileSync(join(miniappDir("over"), "meta.json"), "utf8")) as { needs?: string[] };
+    expect(onDisk.needs).toBeUndefined();
+  });
+
+  it("names the pruned capability in the commit message", async () => {
+    await saveMiniapp({ name: "msg", html: sealed, meta: { ...meta, needs: ["invoke-agent"] } });
+    const log = execFileSync("git", ["-C", join(home, "miniapps"), "log", "-1", "--pretty=%s"], { encoding: "utf8" });
+    expect(log).toContain("pruned unused capability: invoke-agent");
+  });
+
+  it("writes the PRUNED needs into the game gem, not the authored ones", async () => {
+    await saveMiniapp({ name: "gemprune", html: sealed, meta: { ...meta, needs: ["local-project-access"] } });
+    const gem = readGemArchive(readArchiveDir(workspaceDir("gemprune")));
+    expect((gem.artifacts[0] as { needs?: string[] }).needs).toBeUndefined();
+  });
+
+  it("keeps a capability the code actually uses", async () => {
+    const res = await saveMiniapp({
+      name: "kept", html: uses("agentgem_get_inventory"), meta: { ...meta, needs: ["local-project-access"] },
+    });
+    expect(res.prunedNeeds).toEqual([]);
+    const gem = readGemArchive(readArchiveDir(workspaceDir("kept")));
+    expect((gem.artifacts[0] as { needs?: string[] }).needs).toEqual(["local-project-access"]);
+  });
+
+  it("prunes a phantom session-data so an unbaked stub becomes portable (reconcile precedes assertPortable)", async () => {
+    const res = await saveMiniapp({ name: "phantom", html: sealed, meta: { ...meta, needs: ["session-data"] } });
+    expect(res.prunedNeeds).toEqual(["session-data"]);
   });
 });

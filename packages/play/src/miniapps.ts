@@ -6,7 +6,7 @@
 import { homedir } from "node:os";
 import { join, sep } from "node:path";
 import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
-import { safePathSegment } from "@agentgem/model";
+import { safePathSegment, CAP_TOOL } from "@agentgem/model";
 import type { Gem, GameArtifact, GameGenre, GameSource, GameCapability } from "@agentgem/model";
 import { workspaceDir } from "@agentgem/base";
 import { writeGemArchive, writeArchiveDir } from "@agentgem/archive";
@@ -14,11 +14,13 @@ import { gameGate } from "./gameGate.js";
 import { assertPortable } from "./portability.js";
 import { ensureRepo, commitWithLock } from "./git.js";
 import { migrateMiniappHtml, type MigrateOutcome } from "./migrate.js";
+import { reconcileNeeds } from "./capabilityScan.js";
 
 export interface MiniappMeta {
   title: string; genre: GameGenre; createdFrom: GameSource; engineVersion: string; needs?: GameCapability[];
 }
 export interface SaveMiniappInput { name: string; html: string; meta: MiniappMeta }
+export interface SaveMiniappResult { name: string; commit: string | null; prunedNeeds: GameCapability[] }
 
 export function miniappsRoot(): string {
   // SAME convention as workspacesRoot(): AGENTGEM_HOME is already the ~/.agentgem dir.
@@ -91,21 +93,36 @@ function writeGameGem(name: string, html: string, meta: MiniappMeta): void {
   writeArchiveDir(wdir, writeGemArchive(gem).files);
 }
 
-export async function saveMiniapp(input: SaveMiniappInput): Promise<{ name: string; commit: string | null }> {
+export async function saveMiniapp(input: SaveMiniappInput): Promise<SaveMiniappResult> {
   const dir = miniappDir(input.name);             // validates the name (throws on bad) + jails the path
   const safe = input.name;
   const gate = await gameGate(input.html);
   if (!gate.ok) throw new Error(`miniapp failed the gate: ${gate.failures.join("; ")}`);
-  const port = assertPortable(input.html, input.meta.needs);
+
+  // Reconcile the DECLARATION against the CODE. The two drift directions are not symmetric: calling an
+  // undeclared tool WIDENS what the app reaches, so it must be a deliberate authored act (throw, and let
+  // the agent self-repair from the failure string, exactly as it does for a gate failure). Declaring a
+  // tool nothing calls NARROWS to nothing — always safe — so prune it, but never silently. This runs
+  // BEFORE assertPortable so a pruned phantom `session-data` no longer demands a baked fallback.
+  const rec = reconcileNeeds(input.html, input.meta.needs);
+  if (rec.missing.length) {
+    const detail = rec.missing.map((c) => `${CAP_TOOL[c]} (declare "${c}")`).join("; ");
+    throw new Error(`miniapp calls a host tool it does not declare: ${detail} — add it to meta.json "needs"`);
+  }
+  const meta: MiniappMeta = { ...input.meta };
+  if (rec.needs.length) meta.needs = rec.needs; else delete meta.needs;
+
+  const port = assertPortable(input.html, meta.needs);
   if (!port.ok) throw new Error(`miniapp is not portable: ${port.failures.join("; ")}`);
   const root = miniappsRoot();
   await ensureRepo(root);                          // the registry is a git repo
   mkdirSync(dir, { recursive: true });
   writeFileSync(miniappHtmlPath(safe), input.html);  // legacy miniapps keep <name>.html; new ones index.html
-  writeFileSync(join(dir, "meta.json"), JSON.stringify(input.meta, null, 2));
-  const commit = await commitWithLock(root, `save miniapp ${safe}`);
-  writeGameGem(safe, input.html, input.meta);      // strict path: gate already passed above
-  return { name: safe, commit };
+  writeFileSync(join(dir, "meta.json"), JSON.stringify(meta, null, 2));
+  const note = rec.pruned.length ? ` (pruned unused capability: ${rec.pruned.join(", ")})` : "";
+  const commit = await commitWithLock(root, `save miniapp ${safe}${note}`);
+  writeGameGem(safe, input.html, meta);            // the PRUNED meta — a phantom cap must not reach the gem
+  return { name: safe, commit, prunedNeeds: rec.pruned };
 }
 
 // Remove the dual-written game gem — but ONLY the one WE wrote. workspaceDir() is a shared, name-keyed
