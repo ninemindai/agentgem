@@ -98,4 +98,12 @@ describe("POST /api/handle", () => {
     await claimHandler(deps(db, auth))(req({ headers: { cookie }, body: {} }), r);
     expect(r.code).toBe(400);
   });
+
+  it("OPTIONS from a foreign origin sets no ACAO header", async () => {
+    const db = await makeTestDb();
+    const auth = makeAuth({ db, ...authOpts });
+    const r = res();
+    await claimHandler(deps(db, auth))(req({ method: "OPTIONS", headers: { origin: "https://evil.example" } }), r);
+    expect(r.headers["Access-Control-Allow-Origin"]).toBeUndefined();
+  });
 });

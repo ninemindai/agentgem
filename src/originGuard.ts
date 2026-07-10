@@ -85,8 +85,11 @@ export function originGuard(req: GuardReq, res: GuardRes, next: GuardNext): void
   // /api/auth/* is now better-auth itself (mount.ts) — the Plan 1a TEMPORARY /api/betterauth mount is
   // gone (Plan 1b-Task 5 flipped better-auth onto the real /api/auth prefix once the hand-rolled OAuth
   // it coexisted with was deleted) — same cross-site sign-in shape, with better-auth's own CSRF
-  // defenses (trustedOrigins) plus mountAuth's credentialed CORS for the allowlist.
-  if (req.path.startsWith("/api/auth/") || req.path.startsWith("/api/stars") || req.path.startsWith("/api/reviews") || req.path.startsWith("/api/usage") || req.path.startsWith("/api/orgs/") || req.path.startsWith("/api/github/") || req.path.startsWith("/api/registry/upload-publish") || req.path.startsWith("/api/catalog/")) { next(); return; }
+  // defenses (trustedOrigins) plus mountAuth's credentialed CORS for the allowlist. /api/handle is the
+  // SPA's handle-claim POST (install.ts) — a single leaf endpoint (no sub-paths), same shape as
+  // upload-publish: credentialed, own CORS for the AGENTGEM_WEB_ORIGINS allowlist, and a 401 on the
+  // authed route.
+  if (req.path.startsWith("/api/auth/") || req.path.startsWith("/api/stars") || req.path.startsWith("/api/reviews") || req.path.startsWith("/api/usage") || req.path.startsWith("/api/orgs/") || req.path.startsWith("/api/github/") || req.path.startsWith("/api/registry/upload-publish") || req.path.startsWith("/api/catalog/") || req.path.startsWith("/api/handle")) { next(); return; }
   const site = req.get("sec-fetch-site");
   if (site !== undefined) {
     if (site === "same-origin") { next(); return; }
