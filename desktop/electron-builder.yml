@@ -69,6 +69,16 @@ mac:
 win:
   target:
     - nsis
+nsis:
+  # electron-builder's default is "${productName} Setup ${version}.${ext}" — with spaces.
+  # `gh release upload` hands GitHub that raw name and GitHub rewrites spaces to DOTS
+  # ("AgentGem.Setup.0.4.1.exe"), while electron-updater resolves a latest.yml url through
+  # `p.replace(/ /g, "-")` and fetches the DASHED name. The two never met, so the Windows
+  # download step 404'd. electron-builder's own publisher would have uploaded the dashed
+  # safeArtifactName, but the release job bypasses it to keep the desktop-v* tag. Name the
+  # artifact with dashes up front so the emitted file, latest.yml, and the release asset agree.
+  # macOS/Linux artifact names contain no spaces and were never affected.
+  artifactName: ${productName}-Setup-${version}.${ext}
 linux:
   category: Development
   target:

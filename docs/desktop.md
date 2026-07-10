@@ -19,7 +19,7 @@ Grab the latest build from the
 | Platform | File |
 | --- | --- |
 | macOS (Apple Silicon / Intel) | `AgentGem-<version>-arm64.dmg` · `AgentGem-<version>.dmg` |
-| Windows | `AgentGem.Setup.<version>.exe` |
+| Windows | `AgentGem-Setup-<version>.exe` (`AgentGem.Setup.<version>.exe` in 0.4.1 and earlier) |
 | Linux | `AgentGem-<version>.AppImage` |
 
 > **macOS builds are signed and notarized** (as of `desktop-v0.4.0`). Gatekeeper
