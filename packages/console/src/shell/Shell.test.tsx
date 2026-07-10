@@ -167,3 +167,23 @@ describe("Shell — phase-primary nav", () => {
     expect(await screen.findByRole("button", { name: /sign in/i })).toBeTruthy();
   });
 });
+
+describe("Shell — collapsible sidebar", () => {
+  it("sets --rail-w and toggles is-hidden on Cmd+B", () => {
+    const { container } = render(<Shell pages={pages} apiBase="" />);
+    const console_ = container.querySelector(".console") as HTMLElement;
+    expect(console_.style.getPropertyValue("--rail-w")).toBe("244px");
+    act(() => { fireEvent.keyDown(window, { key: "b", metaKey: true }); });
+    expect(console_.classList.contains("is-hidden")).toBe(true);
+    expect(console_.style.getPropertyValue("--rail-w")).toBe("0px");
+    // re-open affordance appears when hidden
+    expect(screen.getByRole("button", { name: /open sidebar/i })).toBeTruthy();
+  });
+
+  it("renders a resize separator with sidebar bounds", () => {
+    const { container } = render(<Shell pages={pages} apiBase="" />);
+    const sep = container.querySelector(".console-rail-handle") as HTMLElement;
+    expect(sep.getAttribute("role")).toBe("separator");
+    expect(sep.getAttribute("aria-valuemax")).toBe("420");
+  });
+});

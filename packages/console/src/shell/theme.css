@@ -62,7 +62,55 @@ body::before {
 ::-webkit-scrollbar-thumb:hover { background: var(--muted); background-clip: content-box; }
 :focus-visible { outline: none; box-shadow: var(--ring); border-radius: 6px; }
 
-.console { display: grid; grid-template-columns: 244px 1fr; min-height: 100vh; }
+@property --rail-w { syntax: "<length>"; inherits: true; initial-value: 244px; }
+.console {
+  display: grid; grid-template-columns: var(--rail-w) 1fr; min-height: 100vh;
+  transition: grid-template-columns .18s cubic-bezier(.2,.7,.2,1);
+}
+.console.is-dragging { transition: none; }
+
+/* Resize seam between rail and main. Fixed so it spans the viewport height. */
+.console-rail-handle {
+  position: fixed; top: 0; bottom: 0; left: var(--rail-w);
+  width: 8px; transform: translateX(-4px); z-index: 6; cursor: col-resize;
+  background: transparent;
+}
+.console-rail-handle:hover, .console-rail-handle:focus-visible {
+  background: linear-gradient(90deg, transparent 2px, var(--accent) 3px, var(--accent) 5px, transparent 6px);
+  outline: none;
+}
+
+/* Collapse (in the brand) and floating re-open button. */
+.console-collapse {
+  margin-right: 2px; border: 0; background: none; cursor: pointer;
+  color: var(--muted); font-size: 15px; line-height: 1; padding: 2px 4px; border-radius: 5px;
+}
+.console-collapse:hover { color: var(--accent); background: rgba(154,51,36,.06); }
+.console-reopen {
+  position: fixed; top: 14px; left: 10px; z-index: 7;
+  width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--raised); color: var(--ink-soft); cursor: pointer;
+  box-shadow: var(--shadow-sm); font-size: 15px;
+}
+.console-reopen:hover { color: var(--accent); border-color: var(--accent); }
+
+/* Fully hidden: no rail padding bleed, no handle. */
+.console.is-hidden .console-nav { display: none; }
+
+/* ── Icon-rail mode: icons only, labels as tooltips ── */
+.console.is-rail .console-nav { padding-left: 8px; padding-right: 8px; align-items: stretch; }
+.console.is-rail .console-brand { justify-content: center; }
+.console.is-rail .console-brand svg { margin: 0; }
+/* hide the wordmark text nodes but keep the mark + collapse button */
+.console.is-rail .console-brand { font-size: 0; gap: 0; }
+.console.is-rail .console-brand svg { width: 20px; height: 20px; }
+.console.is-rail .console-collapse { font-size: 13px; }
+.console.is-rail .console-nav-item { justify-content: center; padding-left: 0; padding-right: 0; font-size: 0; gap: 0; }
+.console.is-rail .console-nav-icon { font-size: 15px; width: auto; }
+.console.is-rail .console-group-label { display: none; }
+.console.is-rail .console-switcher { display: none; }         /* ActiveGemSwitcher — widen to use */
+.console.is-rail .console-phase-btn { font-size: 0; }
+.console.is-rail .console-phase-btn::before { content: attr(data-short); font-size: 12px; font-weight: 600; }
 
 /* ── Sidebar masthead ── */
 .console-nav {

@@ -9,6 +9,7 @@ import { NotificationsProvider } from "../notify/NotificationsProvider.js";
 import { NotifyBell } from "../notify/NotifyBell.js";
 import { IdentityProvider } from "../identity/IdentityProvider.js";
 import { IdentityChip } from "../identity/IdentityChip.js";
+import { useSidebar } from "./sidebar.js";
 
 const PHASES: { id: Phase; label: string }[] = [
   { id: "observe", label: "Observe" },
@@ -58,6 +59,7 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
   // state of Build items tracks the active gem.
   const { keys } = useActiveGem();
   const hasGem = keys.size > 0;
+  const sidebar = useSidebar();
   const [hash, setHash] = useState(() => normalizeHash(window.location.hash));
 
   // Route normalization lives in ONE place: legacy routes (#/your-gems, #/get-gems?…)
@@ -129,6 +131,7 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
   const item = (p: ConsolePage) => (
     <button
       key={p.id}
+      title={p.title}
       className={"console-nav-item" + (p === active ? " is-active" : "") + (p.requiresGem && !hasGem ? " is-locked" : "")}
       onClick={() => { window.location.hash = p.route; }}
     >
@@ -140,9 +143,16 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
   return (
     <ToastProvider>
       <IdentityProvider apiBase={apiBase}>
-      <div className="console">
+      <div
+        className={"console" + (sidebar.isRail ? " is-rail" : "") + (sidebar.collapsed ? " is-hidden" : "") + (sidebar.dragging ? " is-dragging" : "")}
+        style={{ ["--rail-w" as string]: `${sidebar.width}px` }}
+      >
+        {sidebar.collapsed && (
+          <button className="console-reopen" aria-label="Open sidebar" onClick={sidebar.toggleCollapsed}>☰</button>
+        )}
         <nav className="console-nav">
           <div className="console-brand">
+            <button className="console-collapse" aria-label="Collapse sidebar" onClick={sidebar.toggleCollapsed}>⟨</button>
             <svg className="console-mark" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path d="M6 3h12l4 6-10 12L2 9l4-6Z" fill="currentColor" fillOpacity=".14" />
               <path d="M6 3h12l4 6-10 12L2 9l4-6Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
@@ -157,6 +167,8 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
                 key={p.id}
                 type="button"
                 role="radio"
+                data-short={p.label[0]}
+                aria-label={p.label}
                 aria-checked={p.id === phase}
                 className={"console-phase-btn" + (p.id === phase ? " is-active" : "")}
                 {...roving.getTabProps(i)}
@@ -177,6 +189,7 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
         </nav>
         <main className="console-main">{ActivePage ? <ActivePage apiBase={apiBase} /> : null}</main>
         <NotificationsProvider apiBase={apiBase} />
+        {!sidebar.collapsed && <div className="console-rail-handle" {...sidebar.handleProps} />}
       </div>
       </IdentityProvider>
     </ToastProvider>
