@@ -113,6 +113,10 @@ async function anchorAndScopes(
 
   // Org scopes are a GitHub concept: they are captured from the GitHub App / API and keyed on a
   // login. A login-less provider simply has none, matches no org, and is denied — correct, not a gap.
+  // The provider check is REDUNDANT today (`login` is null for every non-github provider, computed
+  // above) and so cannot be falsified by a test. Keep it: the day a non-github provider starts
+  // supplying a `login`, it is the only thing stopping us from calling GitHub's org API with that
+  // provider's access token. Do not "simplify" it away to `if (!login) return`.
   if (account.providerId !== "github" || !login) return;
   try {
     if (account.accessToken) {
