@@ -166,6 +166,8 @@ export const INSPECTOR_HTML = `<!doctype html>
     // capabilityScan.ts). Every result — success OR error — is logged: send-message/update-model-context
     // are external-chat-host-only, so our own console host replies with a JSON-RPC -32601 for them, and
     // logging that reply (rather than swallowing it) is exactly the inspector's job.
+    // requestDisplayMode buttons below exercise the shim's method too, but display-mode isn't a
+    // GameCapability (no entry in TOOL_CAP/capabilityScan.ts), so they don't add an 8th need.
     function fireButton(label, kind, run) {
       var b = document.createElement("button");
       b.textContent = label;
@@ -194,6 +196,10 @@ export const INSPECTOR_HTML = `<!doctype html>
         function () { return window.agentgemApp.sendMessage({ role: "user", content: "protocol inspector ping" }); });
       fireButton("updateModelContext", "action:update-model-context",
         function () { return window.agentgemApp.updateModelContext({ structuredContent: { source: "protocol-inspector", turns: (DATA.timeline || []).length } }); });
+      fireButton("requestDisplayMode: fullscreen", "action:request-display-mode-fullscreen",
+        function () { return window.agentgemApp.requestDisplayMode("fullscreen"); });
+      fireButton("requestDisplayMode: inline", "action:request-display-mode-inline",
+        function () { return window.agentgemApp.requestDisplayMode("inline"); });
     } else {
       hostInfoBody.textContent = "no host bridge present (window.agentgemApp is undefined)";
     }

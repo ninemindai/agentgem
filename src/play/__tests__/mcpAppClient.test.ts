@@ -19,6 +19,7 @@ type Win = {
     openLink(url: string): Promise<unknown>;
     sendMessage(params: unknown): Promise<unknown>;
     updateModelContext(params: unknown): Promise<unknown>;
+    requestDisplayMode(mode: string): Promise<unknown>;
     onNotification(m: string, cb: (x: unknown) => void): void;
   };
   addEventListener(type: string, cb: (e: { data: unknown; source: unknown }) => void): void;
@@ -195,6 +196,25 @@ describe("mcpAppClient shim", () => {
       const result = await child.agentgemApp.updateModelContext(params);
       expect(posted).toContainEqual(expect.objectContaining({ method: "ui/update-model-context", params }));
       expect(result).toEqual({});
+    });
+
+    it("requestDisplayMode posts a ui/request-display-mode request with params:{mode} and resolves with the host's reply", async () => {
+      const child = makeWindow();
+      const parent = makeWindow();
+      child.parent = parent;
+      const posted: Array<{ jsonrpc?: string; id?: number; method?: string; params?: unknown }> = [];
+      parent.postMessage = (msg) => {
+        posted.push(msg);
+        if (msg.method === "ui/initialize") { child.deliver({ jsonrpc: "2.0", id: msg.id, result: { protocolVersion: "x", _meta: { "ai.agentgem/host": { tools: [] } } } }, parent); return; }
+        // The host may refuse and apply a different mode than requested — reply with what it actually applied.
+        if (msg.method === "ui/request-display-mode") { child.deliver({ jsonrpc: "2.0", id: msg.id, result: { mode: "fullscreen" } }, parent); return; }
+      };
+      runShim(child);
+      expect(child.agentgemApp.ready).toBe(true);
+
+      const result = await child.agentgemApp.requestDisplayMode("fullscreen");
+      expect(posted).toContainEqual(expect.objectContaining({ method: "ui/request-display-mode", params: { mode: "fullscreen" } }));
+      expect(result).toEqual({ mode: "fullscreen" });
     });
 
     it("rejects a queued openLink call before ui/initialize once the handshake retries are exhausted (proves callTool's queue-gating is shared, not duplicated)", async () => {

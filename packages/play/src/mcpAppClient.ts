@@ -65,6 +65,9 @@ ${hostStyleScript()}
     openLink: function (url) { return sendRequest("ui/open-link", { url: url }); },
     sendMessage: function (params) { return sendRequest("ui/message", params); },
     updateModelContext: function (params) { return sendRequest("ui/update-model-context", params); },
+    // Resolves to the host's reply { mode }: the mode the host ACTUALLY applied, not necessarily the
+    // one requested — the host may refuse (e.g. a thumbnail always refuses fullscreen), see mcpUiHost.ts.
+    requestDisplayMode: function (mode) { return sendRequest("ui/request-display-mode", { mode: mode }); },
     onNotification: function (method, cb) { (subs[method] || (subs[method] = [])).push(cb); }
   };
   window.agentgemApp = api;
