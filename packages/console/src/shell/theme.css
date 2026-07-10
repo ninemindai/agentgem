@@ -1802,3 +1802,7 @@ button.scorecard-intent { line-height: 1.4; }
   border-radius: 4px; padding: .06em .34em; color: var(--accent); }
 .rc-emptywork { color: var(--muted); font-style: italic; text-align: center; padding: 26px; font-size: 13px; }
 @media (prefers-reduced-motion: reduce) { .rc-work, .rc-funnel .spark { animation: none; } }
+
+.play-caps-pick { border: 0; padding: 0; margin: 10px 0; }
+.play-caps-pick legend { font-size: 12px; opacity: 0.7; padding: 0; }
+.play-caps-pick__row { display: flex; gap: 8px; align-items: center; font-size: 13px; margin-top: 4px; }

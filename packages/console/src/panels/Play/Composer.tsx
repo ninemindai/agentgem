@@ -1,8 +1,10 @@
 // packages/console/src/panels/Play/Composer.tsx
 import { useEffect, useState } from "react";
+import { CAP_TOOL } from "@agentgem/play";
 import { makeClient, playStudioRoute, playImportRoute, playBlankRoute, testbedProjectsRoute, inventoryRoute } from "../../api/routes.js";
 import { fetchSessions, type WatchSession } from "../Watch/watchStream.js";
 import { AgentSelector, type PlayAgent } from "./AgentSelector.js";
+import { CAP_LABEL, CONSENT_CAPS } from "./consent.js";
 
 type Kind = "project" | "session" | "skill" | "html" | "blank";
 type Proj = { path: string; flavor: string; exists: boolean };
@@ -20,6 +22,23 @@ const TABS: { kind: Kind; label: string }[] = [
   { kind: "html", label: "HTML" },
   { kind: "blank", label: "Blank" },
 ];
+
+// The checkbox universe is exactly CONSENT_CAPS — narrower than the full GameCapability union (it
+// excludes the auto-approved session-data) but still a valid CAP_TOOL key, so no cast is needed.
+type Cap = (typeof CONSENT_CAPS)[number];
+
+// Checkboxes are INTENT: they only steer the agent's first prompt. They never write meta.json — the
+// code is the single authority over `needs`, reconciled at save. An unchecked box that the agent uses
+// anyway fails the save; a checked box the agent ignores is pruned back out and reported.
+function capPreamble(caps: Cap[]): string {
+  if (!caps.length) return "";
+  const lines = caps.map((c) => `- ${c} — call \`${CAP_TOOL[c]}\` via window.agentgemApp`);
+  return [
+    "This miniapp should use these host capabilities. For each one, call the listed MCP tool and add the",
+    'capability to `"needs"` in meta.json:',
+    ...lines,
+  ].join("\n");
+}
 
 export function Composer({
   apiBase,
@@ -57,6 +76,8 @@ export function Composer({
   // suffixes it on collision; typed, the server claims it exactly and 409s if it is taken.
   const [name, setName] = useState("");
   const named = () => (name.trim() ? { name: name.trim() } : {});
+  const [caps, setCaps] = useState<Cap[]>([]);
+  const toggleCap = (c: Cap) => setCaps((cs) => (cs.includes(c) ? cs.filter((x) => x !== c) : [...cs, c]));
 
   // Lazy-load each list the first time its tab is shown.
   useEffect(() => {
@@ -70,7 +91,10 @@ export function Composer({
     setBusy(true); setError("");
     try {
       const res = await playStudioRoute.call(makeClient(apiBase), { body: { source, ...named() } });
-      onCreated(res.name);
+      // Only pass a second argument when there's a preamble to carry — preserves the old single-arg
+      // call shape when no capability is checked (seedPrompt reads as undefined either way).
+      const preamble = capPreamble(caps);
+      if (preamble) onCreated(res.name, preamble); else onCreated(res.name);
     } catch (e) { setError((e as Error).message); setBusy(false); }
   }
 
@@ -101,7 +125,7 @@ export function Composer({
     try {
       const res = await playBlankRoute.call(makeClient(apiBase), { body: { title: blankTitle.trim(), ...named() } });
       // The description isn't baked server-side; it's auto-sent as the studio's first build prompt.
-      onCreated(res.name, blankPrompt.trim() || undefined);
+      onCreated(res.name, [capPreamble(caps), blankPrompt.trim()].filter(Boolean).join("\n\n") || undefined);
     } catch (e) { setError((e as Error).message); setBusy(false); }
   }
 
@@ -114,6 +138,15 @@ export function Composer({
         onChange={onAgentIdChange}
         note="Used when you ask the studio to build or edit the game."
       />
+      <fieldset className="play-caps-pick">
+        <legend>This miniapp may:</legend>
+        {CONSENT_CAPS.map((c) => (
+          <label key={c} className="play-caps-pick__row">
+            <input type="checkbox" checked={caps.includes(c)} onChange={() => toggleCap(c)} />
+            <span>{CAP_LABEL[c]}</span>
+          </label>
+        ))}
+      </fieldset>
       <div className="play-tabs">
         {TABS.map((t) => (
           <button key={t.kind} className={`play-tab${kind === t.kind ? " is-active" : ""}`} onClick={() => setKind(t.kind)}>{t.label}</button>
