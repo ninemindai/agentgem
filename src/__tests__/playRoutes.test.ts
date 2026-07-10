@@ -1,8 +1,9 @@
 // src/__tests__/playRoutes.test.ts
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { miniappsRoot } from "@agentgem/play";
 import { PlayController } from "../play.controller.js";
 
 let home: string;
@@ -84,6 +85,23 @@ describe("PlayController", () => {
     const b = await ctrl.blank({ body: { title: "Duel" } });
     expect([a.name, b.name]).toEqual(["duel", "duel-2"]);
     expect((await ctrl.miniapps()).miniapps.map((m) => m.name).sort()).toEqual(["duel", "duel-2"]);
+  });
+
+  // A typed name is honored exactly; a taken one is a 409 (well-formed request, id not free), never a
+  // silent rename. A derived name still suffixes.
+  it("an explicit name is claimed exactly and 409s when taken", async () => {
+    const ctrl = new PlayController();
+    expect((await ctrl.blank({ body: { title: "Anything", name: "My Duel" } })).name).toBe("my-duel");
+    await expect(ctrl.blank({ body: { title: "Anything", name: "my-duel" } })).rejects.toMatchObject({ statusCode: 409 });
+    expect((await ctrl.miniapps()).miniapps.map((m) => m.name)).toEqual(["my-duel"]);  // no my-duel-2
+  });
+
+  it("an explicit name works on import too, and the bundle lands in index.html", async () => {
+    const ctrl = new PlayController();
+    const res = await ctrl.import({ body: { title: "Whatever", html: "<body>x</body>", name: "chosen" } });
+    expect(res.name).toBe("chosen");
+    expect(existsSync(join(miniappsRoot(), "chosen", "index.html"))).toBe(true);
+    expect((await ctrl.miniapp({ query: { name: "chosen" } })).html).toBe("<body>x</body>");
   });
 
   it("POST /play/migrate reports the saved miniapp's migration outcome", async () => {

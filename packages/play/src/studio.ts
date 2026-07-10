@@ -3,13 +3,13 @@
 // The Chat studio seam: seed a miniapp dir from a source (scaffold + injected DATA), build the agent's
 // studio brief from its meta, and guard which cwd a chat session may adopt. studioCwd is the security
 // gate: only a path under the miniapps registry (or the neutral fallback) is ever honored.
-import { join, sep, resolve } from "node:path";
+import { join, sep, resolve, basename } from "node:path";
 import { readFileSync, writeFileSync } from "node:fs";
 import type { GameSource } from "@agentgem/model";
 import { extractSource, type SourceReaders } from "./sourceContext.js";
 import { genreFor } from "./genres.js";
 import { scaffoldFor, sealedTemplate } from "./scaffolds.js";
-import { miniappDir, miniappsRoot, claimMiniappDir, type MiniappMeta } from "./miniapps.js";
+import { miniappDir, miniappsRoot, claimMiniappDir, miniappHtmlPath, MINIAPP_HTML, type MiniappMeta } from "./miniapps.js";
 import { ensureRepo, commitWithLock } from "./git.js";
 import { redactForBake } from "./redact.js";
 import { MINIAPP_BUILDER_BRIEF } from "./builderBrief.js";
@@ -26,17 +26,32 @@ export function studioCwd(requested: string | undefined, fallback: string): stri
   return norm === resolve(fallback) || norm.startsWith(root + sep) ? norm : fallback;
 }
 
+// Fold arbitrary text into a single clean path segment miniappDir() will accept as-is.
+export function slugify(raw: string): string {
+  const slug = raw.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^[-.]+|-+$/g, "").slice(0, 40);
+  return slug || "miniapp"; // strip leading dots too, so a title like ".git" can't target a dotfile dir
+}
+
 // Derive a clean single-segment slug BASE for a new miniapp from its source. The base is not the final
 // name: claimMiniappDir() suffixes it on collision, so "new miniapp" always yields a new miniapp even
 // when the source (a session, a project folder, a title) has been used before.
 function slugFor(source: GameSource): string {
-  const raw =
+  return slugify(
     source.kind === "session" ? `session-${source.sessionId}` :
     source.kind === "skill" ? source.skillName :
     source.kind === "html" || source.kind === "blank" ? source.title :
-    (source.path.split(/[\\/]/).filter(Boolean).pop() ?? "project");
-  const slug = raw.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^[-.]+|-+$/g, "").slice(0, 40);
-  return slug || "miniapp"; // strip leading dots too, so a title like ".git" can't target a dotfile dir
+    (source.path.split(/[\\/]/).filter(Boolean).pop() ?? "project"),
+  );
+}
+
+// Pick the dir for a new miniapp. `name` is what the user typed, if anything: it is slugified (so "My
+// Duel" is accepted, not rejected) and then claimed EXACTLY — a collision is an error, not a silent
+// rename. With no explicit name we fall back to the source-derived base, which suffixes on collision.
+function claimFor(source: GameSource, name?: string): { name: string; dir: string } {
+  const typed = name?.trim();
+  return typed
+    ? claimMiniappDir(slugify(typed), { exact: true })
+    : claimMiniappDir(slugFor(source));
 }
 
 // Inject the source DATA as an inert JSON <script> the game reads. It goes in <head> so it's parsed
@@ -48,60 +63,62 @@ function seedHtml(scaffold: string, data: unknown): string {
 }
 
 // The full authoring contract, injected on the agent's first turn only (chatSession.ts nulls the brief
-// afterwards). The leading line names THIS miniapp; everything below it is the shared contract, which
-// also ships as skills/agentgem-miniapp/SKILL.md.
-function studioInstructions(name: string): string {
-  return `You are building the miniapp in ${name}.html.\n\n${MINIAPP_BUILDER_BRIEF}`;
+// afterwards). The leading line names the file the agent must edit — new miniapps are index.html, older
+// ones <name>.html — and everything below it is the shared contract, which also ships as
+// skills/agentgem-miniapp/SKILL.md.
+function studioInstructions(file: string): string {
+  return `You are building the miniapp in ${file}.\n\n${MINIAPP_BUILDER_BRIEF}`;
 }
 
-export async function seedStudio(source: GameSource, readers: SourceReaders): Promise<{ name: string; brief: string }> {
+export async function seedStudio(source: GameSource, readers: SourceReaders, name?: string): Promise<{ name: string; brief: string }> {
   const input = await extractSource(source, readers);
   const g = genreFor(input.genre);
   await ensureRepo(miniappsRoot());                   // must exist before we can claim a dir inside it
-  const { name, dir } = claimMiniappDir(slugFor(source));
+  const { name: id, dir } = claimFor(source, name);
   // Bake a REDACTED, self-contained snapshot so the miniapp runs everywhere — offline and on
   // app.agentgem.ai, which has no capability broker. Broker-fed genres additionally keep their `needs`
   // (below) so a LOCAL host that pushes a ui/notifications/tool-result refresh can still upgrade the baked snapshot
   // to fresh/full data; the scaffold already renders from the baked <script id="game-data"> and
   // re-renders when that refresh arrives.
-  writeFileSync(join(dir, `${name}.html`), seedHtml(scaffoldFor(g.scaffold), redactForBake(input.data)));
-  const meta: MiniappMeta = { title: name, genre: input.genre, createdFrom: input.createdFrom, engineVersion: "1", ...(g.needs ? { needs: g.needs } : {}) };
+  writeFileSync(join(dir, MINIAPP_HTML), seedHtml(scaffoldFor(g.scaffold), redactForBake(input.data)));
+  const meta: MiniappMeta = { title: id, genre: input.genre, createdFrom: input.createdFrom, engineVersion: "1", ...(g.needs ? { needs: g.needs } : {}) };
   writeFileSync(join(dir, "meta.json"), JSON.stringify(meta, null, 2));
-  await commitWithLock(miniappsRoot(), `seed miniapp ${name}`);
-  return { name, brief: `${input.brief}\n\n${studioInstructions(name)}` };
+  await commitWithLock(miniappsRoot(), `seed miniapp ${id}`);
+  return { name: id, brief: `${input.brief}\n\n${studioInstructions(MINIAPP_HTML)}` };
 }
 
 // Import a miniapp from existing self-contained HTML. The HTML becomes the miniapp verbatim (a draft);
 // NOT gated here — Save enforces the seal, so imperfect HTML can be brought in and fixed in the studio.
-export async function importStudio(title: string, html: string): Promise<{ name: string; brief: string }> {
+export async function importStudio(title: string, html: string, name?: string): Promise<{ name: string; brief: string }> {
   const source: GameSource = { kind: "html", title };
   await ensureRepo(miniappsRoot());
-  const { name, dir } = claimMiniappDir(slugFor(source));
-  writeFileSync(join(dir, `${name}.html`), html);
+  const { name: id, dir } = claimFor(source, name);
+  writeFileSync(join(dir, MINIAPP_HTML), html);
   const meta: MiniappMeta = { title, genre: "project-fun", createdFrom: source, engineVersion: "1" };
   writeFileSync(join(dir, "meta.json"), JSON.stringify(meta, null, 2));
-  await commitWithLock(miniappsRoot(), `import miniapp ${name}`);
-  return { name, brief: `You are refining "${title}", a self-contained HTML mini-game the user imported.\n\n${studioInstructions(name)}` };
+  await commitWithLock(miniappsRoot(), `import miniapp ${id}`);
+  return { name: id, brief: `You are refining "${title}", a self-contained HTML mini-game the user imported.\n\n${studioInstructions(MINIAPP_HTML)}` };
 }
 
 // Create a miniapp from scratch — no source context. Seeds a fresh blank sealed canvas titled with the
 // user's title; the user then builds it by chatting in the studio. `prompt` is optional creative
 // direction (NOT baked into the HTML — it just opens the studio brief).
-export async function blankStudio(title: string, prompt?: string): Promise<{ name: string; brief: string }> {
+export async function blankStudio(title: string, prompt?: string, name?: string): Promise<{ name: string; brief: string }> {
   const source: GameSource = { kind: "blank", title };
   await ensureRepo(miniappsRoot());
-  const { name, dir } = claimMiniappDir(slugFor(source));
-  writeFileSync(join(dir, `${name}.html`), sealedTemplate(title, "✦ new"));
+  const { name: id, dir } = claimFor(source, name);
+  writeFileSync(join(dir, MINIAPP_HTML), sealedTemplate(title, "✦ new"));
   const meta: MiniappMeta = { title, genre: "project-fun", createdFrom: source, engineVersion: "1" };
   writeFileSync(join(dir, "meta.json"), JSON.stringify(meta, null, 2));
-  await commitWithLock(miniappsRoot(), `create miniapp ${name}`);
+  await commitWithLock(miniappsRoot(), `create miniapp ${id}`);
   const want = prompt?.trim()
     ? `The user wants to build: ${prompt.trim()}`
     : `Ask the user what kind of mini-game they want, then build it. If they don't say, make a small, delightful arcade game.`;
-  return { name, brief: `You are building "${title}" from scratch — a self-contained HTML mini-game with no source data. ${want}\n\n${studioInstructions(name)}` };
+  return { name: id, brief: `You are building "${title}" from scratch — a self-contained HTML mini-game with no source data. ${want}\n\n${studioInstructions(MINIAPP_HTML)}` };
 }
 
 export function studioBrief(name: string): string {
   const meta = JSON.parse(readFileSync(join(miniappDir(name), "meta.json"), "utf8")) as MiniappMeta;
-  return `Continue building the "${meta.title}" miniapp (a ${meta.genre}).\n\n${studioInstructions(name)}`;
+  // Name the file that actually exists: a legacy miniapp is still <name>.html on disk.
+  return `Continue building the "${meta.title}" miniapp (a ${meta.genre}).\n\n${studioInstructions(basename(miniappHtmlPath(name)))}`;
 }

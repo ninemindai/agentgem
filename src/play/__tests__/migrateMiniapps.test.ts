@@ -53,7 +53,7 @@ describe("migrateAllMiniapps", () => {
     expect(entry?.outcome).toBe("migrated");
     expect(entry?.commit).toMatch(/^[0-9a-f]{7,40}$/);
 
-    const storedHtml = readFileSync(join(miniappDir("old-replay"), "old-replay.html"), "utf8");
+    const storedHtml = readFileSync(join(miniappDir("old-replay"), "index.html"), "utf8");
     expect(storedHtml).toContain(MCP_CLIENT_MARKER);
     const storedMeta = JSON.parse(readFileSync(join(miniappDir("old-replay"), "meta.json"), "utf8")) as { engineVersion: string };
     expect(storedMeta.engineVersion).not.toBe("1");
@@ -77,7 +77,7 @@ describe("readMiniapp on-read backstop", () => {
   it("returns migrated html even before migrateAllMiniapps runs, while the stored file stays raw", async () => {
     await saveMiniapp({ name: "backstop", html: oldBridgeHtml, meta });
 
-    const stored = readFileSync(join(miniappDir("backstop"), "backstop.html"), "utf8");
+    const stored = readFileSync(join(miniappDir("backstop"), "index.html"), "utf8");
     expect(stored).not.toContain(MCP_CLIENT_MARKER); // file untouched
 
     const read = readMiniapp("backstop");

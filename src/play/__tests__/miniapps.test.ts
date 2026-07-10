@@ -24,7 +24,7 @@ describe("miniapps store", () => {
   it("saveMiniapp gates, dual-writes (git file + gem), and lists", async () => {
     const res = await saveMiniapp({ name: "my-game", html: sealed, meta });
     expect(res.commit).toMatch(/^[0-9a-f]{7,40}$/);
-    expect(readFileSync(join(miniappDir("my-game"), "my-game.html"), "utf8")).toContain("canvas");
+    expect(readFileSync(join(miniappDir("my-game"), "index.html"), "utf8")).toContain("canvas");
     expect(existsSync(join(miniappDir("my-game"), "meta.json"))).toBe(true);
     expect(existsSync(join(workspaceDir("my-game"), "gem.json"))).toBe(true);
     expect(listMiniapps().map((m) => m.name)).toContain("my-game");

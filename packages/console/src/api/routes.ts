@@ -907,14 +907,15 @@ export const playMiniappRoute = defineRoute("GET", "/api/play/miniapp", {
   query: z.object({ name: z.string() }),
   response: z.object({ name: z.string(), html: z.string(), meta: z.object({ title: z.string(), genre: z.string(), createdFrom: PlaySourceSchema, engineVersion: z.string(), needs: PlayNeedsSchema }) }),
 });
+// `name` optional on all three: omitted it is derived from the source, supplied it must be free (409).
 export const playStudioRoute = defineRoute("POST", "/api/play/studio", {
-  body: z.object({ source: PlaySourceSchema }), response: z.object({ name: z.string() }),
+  body: z.object({ source: PlaySourceSchema, name: z.string().optional() }), response: z.object({ name: z.string() }),
 });
 export const playImportRoute = defineRoute("POST", "/api/play/import", {
-  body: z.object({ title: z.string(), html: z.string() }), response: z.object({ name: z.string() }),
+  body: z.object({ title: z.string(), html: z.string(), name: z.string().optional() }), response: z.object({ name: z.string() }),
 });
 export const playBlankRoute = defineRoute("POST", "/api/play/blank", {
-  body: z.object({ title: z.string(), prompt: z.string().optional() }), response: z.object({ name: z.string() }),
+  body: z.object({ title: z.string(), prompt: z.string().optional(), name: z.string().optional() }), response: z.object({ name: z.string() }),
 });
 export const playSaveRoute = defineRoute("POST", "/api/play/save", {
   body: z.object({ name: z.string(), html: z.string(), meta: PlayMetaSchema }),

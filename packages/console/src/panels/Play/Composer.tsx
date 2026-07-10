@@ -53,6 +53,10 @@ export function Composer({
   const [dragOver, setDragOver] = useState(false);
   const [blankTitle, setBlankTitle] = useState(initialTitle ?? "");     // Blank (from-scratch) tab
   const [blankPrompt, setBlankPrompt] = useState(initialPrompt ?? "");
+  // Optional miniapp id, shared by every tab. Left empty the server derives one from the source and
+  // suffixes it on collision; typed, the server claims it exactly and 409s if it is taken.
+  const [name, setName] = useState("");
+  const named = () => (name.trim() ? { name: name.trim() } : {});
 
   // Lazy-load each list the first time its tab is shown.
   useEffect(() => {
@@ -65,7 +69,7 @@ export function Composer({
     if (busy) return;
     setBusy(true); setError("");
     try {
-      const res = await playStudioRoute.call(makeClient(apiBase), { body: { source } });
+      const res = await playStudioRoute.call(makeClient(apiBase), { body: { source, ...named() } });
       onCreated(res.name);
     } catch (e) { setError((e as Error).message); setBusy(false); }
   }
@@ -86,7 +90,7 @@ export function Composer({
     if (busy || !importHtml.trim()) return;
     setBusy(true); setError("");
     try {
-      const res = await playImportRoute.call(makeClient(apiBase), { body: { title: importTitle.trim() || "imported-game", html: importHtml } });
+      const res = await playImportRoute.call(makeClient(apiBase), { body: { title: importTitle.trim() || "imported-game", html: importHtml, ...named() } });
       onCreated(res.name);
     } catch (e) { setError((e as Error).message); setBusy(false); }
   }
@@ -95,7 +99,7 @@ export function Composer({
     if (busy || !blankTitle.trim()) return;
     setBusy(true); setError("");
     try {
-      const res = await playBlankRoute.call(makeClient(apiBase), { body: { title: blankTitle.trim() } });
+      const res = await playBlankRoute.call(makeClient(apiBase), { body: { title: blankTitle.trim(), ...named() } });
       // The description isn't baked server-side; it's auto-sent as the studio's first build prompt.
       onCreated(res.name, blankPrompt.trim() || undefined);
     } catch (e) { setError((e as Error).message); setBusy(false); }
@@ -115,6 +119,14 @@ export function Composer({
           <button key={t.kind} className={`play-tab${kind === t.kind ? " is-active" : ""}`} onClick={() => setKind(t.kind)}>{t.label}</button>
         ))}
       </div>
+      {/* One id field for every tab. Blank/import default it from the title; project/session/skill default
+          it from the folder, session id, or skill name — none of which is meaningful to a human. */}
+      <input
+        className="play-input" style={{ marginBottom: 10 }}
+        aria-label="Miniapp name"
+        placeholder="name (optional — defaults to the title; must be unique)"
+        value={name} onChange={(e) => setName(e.target.value)}
+      />
       {error && <div className="play-banner"><span className="play-banner__ico">⚠</span><div className="play-banner__body"><div className="play-banner__detail">{error}</div></div></div>}
 
       {kind === "project" && (!projects ? <p className="play-intro">Loading projects…</p> :

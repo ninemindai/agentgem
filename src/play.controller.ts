@@ -39,28 +39,35 @@ export class PlayController {
     }
   }
 
+  // A user-typed `name` that is already taken is a 409, not a 400: the request was well-formed, the id
+  // just isn't free. Everything else (a malformed name, an unreadable source) stays a 400.
+  private createError(e: unknown): AgentError {
+    const msg = (e as Error).message;
+    return new AgentError(msg, { status: msg.startsWith("miniapp already exists") ? 409 : 400 });
+  }
+
   @post("/play/studio", { body: PlayStudioRequestSchema, response: PlayStudioResponseSchema })
   async studio(input: { body: z.infer<typeof PlayStudioRequestSchema> }): Promise<z.infer<typeof PlayStudioResponseSchema>> {
     try {
-      const { name } = await seedStudio(input.body.source, defaultReaders);
+      const { name } = await seedStudio(input.body.source, defaultReaders, input.body.name);
       return { name };
-    } catch (e) { throw new AgentError((e as Error).message, { status: 400 }); }
+    } catch (e) { throw this.createError(e); }
   }
 
   @post("/play/import", { body: PlayImportRequestSchema, response: PlayStudioResponseSchema })
   async import(input: { body: z.infer<typeof PlayImportRequestSchema> }): Promise<z.infer<typeof PlayStudioResponseSchema>> {
     try {
-      const { name } = await importStudio(input.body.title, input.body.html);
+      const { name } = await importStudio(input.body.title, input.body.html, input.body.name);
       return { name };
-    } catch (e) { throw new AgentError((e as Error).message, { status: 400 }); }
+    } catch (e) { throw this.createError(e); }
   }
 
   @post("/play/blank", { body: PlayBlankRequestSchema, response: PlayStudioResponseSchema })
   async blank(input: { body: z.infer<typeof PlayBlankRequestSchema> }): Promise<z.infer<typeof PlayStudioResponseSchema>> {
     try {
-      const { name } = await blankStudio(input.body.title, input.body.prompt);
+      const { name } = await blankStudio(input.body.title, input.body.prompt, input.body.name);
       return { name };
-    } catch (e) { throw new AgentError((e as Error).message, { status: 400 }); }
+    } catch (e) { throw this.createError(e); }
   }
 
   // Host-brokered feed: a replay's source-session transcript, compacted. Defaults to the miniapp's OWN
