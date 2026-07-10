@@ -106,12 +106,16 @@ export async function deleteCatalogGem(db: AppDb, gemKey: string, version: strin
 // deleteCatalogGem's rule exactly: NULL owner is owned by nobody; compare the accounts.id uuid,
 // never a string. Deletes only the gem_archives row.
 export async function deleteGemArchiveOwned(db: AppDb, gemKey: string, ownerAccountId: string): Promise<DeleteGemResult> {
-  const row = (await db.select({ ownerAccountId: gemArchives.ownerAccountId }).from(gemArchives)
+  // Delete only rows this account owns (a NULL owner never matches a uuid), then classify what
+  // happened. This is fully correct regardless of how many versions/owners share the key: no
+  // nondeterministic pre-check, and a co-key row owned by someone else is never touched.
+  const deleted = await db.delete(gemArchives)
+    .where(and(eq(gemArchives.gemKey, gemKey), eq(gemArchives.ownerAccountId, ownerAccountId)))
+    .returning({ gemKey: gemArchives.gemKey });
+  if (deleted.length > 0) return "deleted";
+  const exists = (await db.select({ gemKey: gemArchives.gemKey }).from(gemArchives)
     .where(eq(gemArchives.gemKey, gemKey)).limit(1))[0];
-  if (!row) return "not-found";
-  if (row.ownerAccountId === null || row.ownerAccountId !== ownerAccountId) return "forbidden";
-  await db.delete(gemArchives).where(and(eq(gemArchives.gemKey, gemKey), eq(gemArchives.ownerAccountId, ownerAccountId)));
-  return "deleted";
+  return exists ? "forbidden" : "not-found";
 }
 
 // The version of a gem_archives row that has NO catalog_gems row — i.e. an unlisted share. Used by
