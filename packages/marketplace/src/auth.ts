@@ -36,12 +36,12 @@ export function makeAuth(base: string) {
      *  handler instead. A non-2xx response, a 2xx with no (or empty) `url`, or a network failure
      *  all throw — this is the primary login path, so a caller MUST be able to catch/render the
      *  failure rather than have the click silently do nothing (see App.tsx's `signIn`). */
-    async signIn(returnTo: string): Promise<void> {
+    async signIn(provider: "github" | "google", returnTo: string): Promise<void> {
       const r = await fetch(base + "/api/auth/sign-in/social", {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ provider: "github", callbackURL: returnTo }),
+        body: JSON.stringify({ provider, callbackURL: returnTo }),
       });
       if (!r.ok) throw new Error(`sign-in failed (${r.status})`);
       const j = (await r.json()) as { url?: string };

@@ -16,7 +16,7 @@ export function Publish({ api: _api, me, base }: { api: ReturnType<typeof makeAp
   if (!me) {
     const signIn = () => {
       setResult(null);
-      makeAuth(base).signIn(window.location.href).catch((err) => setResult({ ok: false, msg: err instanceof Error ? err.message : String(err) }));
+      makeAuth(base).signIn("github", window.location.href).catch((err) => setResult({ ok: false, msg: err instanceof Error ? err.message : String(err) }));
     };
     return (
       <div className="ex-card">
