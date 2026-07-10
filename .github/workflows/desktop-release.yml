@@ -47,6 +47,14 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           CSC_IDENTITY_AUTO_DISCOVERY: ${{ matrix.os == 'macos-latest' && secrets.MAC_CSC_LINK != '' && 'true' || 'false' }}
+      # The latest*.yml channel files are what electron-updater actually fetches — it reads
+      # the version and sha512s from there, not from the tag. Omitting them 404s every update
+      # check with ERR_UPDATER_CHANNEL_FILE_NOT_FOUND. electron-builder writes them even under
+      # `--publish never` (PublishManager gates the *upload* on isPublish, but the update-info
+      # *write* on isWriteUpdateInfo, which macPackager hardcodes true). Each OS emits a
+      # distinct name — latest-mac.yml / latest.yml / latest-linux.yml — so merge-multiple in
+      # the release job cannot collide them. The .blockmap files let Squirrel fetch a delta
+      # instead of the full ~275MB zip.
       - uses: actions/upload-artifact@v4
         with:
           name: installers-${{ matrix.os }}
@@ -55,6 +63,8 @@ jobs:
             desktop/release/*.zip
             desktop/release/*.exe
             desktop/release/*.AppImage
+            desktop/release/latest*.yml
+            desktop/release/*.blockmap
           if-no-files-found: ignore
 
   release:

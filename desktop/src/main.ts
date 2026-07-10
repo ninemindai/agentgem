@@ -120,6 +120,11 @@ function setupUpdates(): void {
   configureUpdater(autoUpdater, {
     onAvailable: () => notify("available"),
     onDownloaded: () => notify("downloaded"),
+    onError: (err) => {
+      // Never surface an update-check failure as a dialog: the app works fine without it.
+      console.error("[updater] check failed:", err?.message ?? err);
+      notify("error");
+    },
   });
 }
 
@@ -162,7 +167,9 @@ async function boot(): Promise<void> {
         platform: process.platform,
         isDev,
         appName: DESKTOP_NAME,
-        onCheckUpdates: () => void autoUpdater.checkForUpdatesAndNotify(),
+        // Rejection is reported by the "error" listener setupUpdates() registers; swallow it
+        // here so a failed check can't become an unhandled rejection in the main process.
+        onCheckUpdates: () => void autoUpdater.checkForUpdatesAndNotify().catch(() => {}),
       }),
     ),
   );
