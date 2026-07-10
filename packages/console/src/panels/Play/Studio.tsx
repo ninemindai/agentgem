@@ -9,6 +9,7 @@ import { genre as genreOf, parseGateFailure, fixSealPrompt } from "./playMeta.js
 import { useIdentity } from "../../identity/IdentityProvider.js";
 import { useGitHubBind } from "../../identity/useGitHubBind.js";
 import { ConnectGitHub } from "../../identity/ConnectGitHub.js";
+import { useSplit } from "../../shell/useSplit.js";
 
 const j = (r: Response) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); };
 
@@ -54,6 +55,7 @@ export function Studio({
   const composerRef = useRef<HTMLDivElement>(null);
   const [plateMax, setPlateMax] = useState<number | undefined>(undefined);
   const seededRef = useRef(false);   // guards the one-shot seed-prompt auto-send
+  const split = useSplit("studio", { initial: 560, min: 360, max: 900, side: "start" });
 
   // Resume the publish the user already asked for. `login` comes straight from
   // bindComplete — reading it off the refreshed identity context would race the
@@ -287,7 +289,10 @@ export function Studio({
         note={chatId ? "Changing agent starts a fresh studio chat." : "This agent will build/edit the miniapp."}
       />
 
-      <div className="play-grid-2">
+      <div
+        className={"play-grid-2" + (split.containerProps.className ? " " + split.containerProps.className : "")}
+        style={split.containerProps.style}
+      >
         <div className="play-stage">
           <div className="play-cap-row"><span className="play-cap">Preview</span><span className="play-cap__rule" /></div>
           <div className="play-plate" ref={plateRef}>
@@ -301,6 +306,7 @@ export function Studio({
               ) : <div className="play-plate__state"><span>Loading the preview…</span></div>}
           </div>
         </div>
+        {split.handle}
         <div className="play-chat">
           <div className="play-cap-row"><span className="play-cap">Studio chat</span><span className="play-cap__rule" /></div>
           <div className="play-log" ref={logRef}>

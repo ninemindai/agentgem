@@ -541,7 +541,22 @@ body::before {
 .play-caps__row--pruned { font-size: 12px; opacity: 0.7; font-style: italic; }
 /* stretch (not start): the transcript column takes its height from the plate column, so the log
    tracks whatever size Runner computes for the preview instead of guessing at a fixed height. */
-.play-grid-2 { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); gap: 18px; align-items: stretch; }
+.play-grid-2 { position: relative; display: grid; grid-template-columns: minmax(0, var(--split, 1.5fr)) minmax(300px, 1fr); gap: 18px; align-items: stretch; }
+
+/* Draggable divider between two panes. Absolutely positioned on the seam of its
+   relatively-positioned container; --split feeds the resizable column. */
+.split-handle {
+  position: absolute; top: 0; bottom: 0; width: 12px; z-index: 3; cursor: col-resize;
+  transform: translateX(-6px); border-radius: 6px;
+}
+.split-handle[data-side="start"] { left: var(--split); }
+.split-handle[data-side="end"]   { right: var(--split); transform: translateX(6px); }
+.split-handle::before {
+  content: ""; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 3px; height: 34px; border-radius: 3px; background: var(--line);
+}
+.split-handle:hover::before, .split-handle:focus-visible::before { background: var(--accent); }
+.split-handle:focus-visible { outline: none; }
 /* height:0 + min-height:100% — contribute no height to the grid row (so a long transcript can't
    stretch it), then fill whatever height the plate column establishes. */
 .play-chat { display: flex; flex-direction: column; gap: 9px; min-width: 0; height: 0; min-height: 100%; }
