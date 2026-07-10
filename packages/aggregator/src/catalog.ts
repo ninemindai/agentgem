@@ -146,7 +146,7 @@ export interface CatalogManifest {
 export interface ShareRequest { manifest: CatalogManifest; pubkey: string; signedAt: number; signature: string }
 export type ShareResult =
   | { shared: true; publishedBy: string; gemKey: string; version: string }
-  | { shared: false; rejected: "bad-signature" | "stale" | "not-connected" | "conflict" };
+  | { shared: false; rejected: "bad-signature" | "stale" | "not-connected" | "conflict" | "invalid-key" };
 
 const FRESHNESS_MS = 300_000;
 
@@ -196,6 +196,10 @@ export async function recordCatalogShare(db: AppDb, req: ShareRequest, now: numb
     signedAt: req.signedAt, signature: req.signature,
   }, now);
   if (!who.ok) return { shared: false, rejected: who.rejected };
+  // Rule 1 (entity-address scheme): a published gem key is scope/name and ALWAYS contains "/".
+  // A slash-less key is an UNLISTED share id (genShareId, base62). Refusing it here is what keeps
+  // publish-gem from overwriting/listing/orphaning a share via the shared gem_archives table.
+  if (!req.manifest.gemKey.includes("/")) return { shared: false, rejected: "invalid-key" };
   const m = req.manifest;
   // Ownership guard: (re)publishing a (gemKey, version) is allowed only when it is unclaimed or
   // already owned by THIS account. A row owned by a different account — or by nobody (null owner,
@@ -205,7 +209,7 @@ export async function recordCatalogShare(db: AppDb, req: ShareRequest, now: numb
   // the same brand-new key by two different accounts is a benign namespace race, not a takeover.
   const existing = (await db.select({ ownerAccountId: catalogGems.ownerAccountId }).from(catalogGems)
     .where(and(eq(catalogGems.gemKey, m.gemKey), eq(catalogGems.version, m.version))).limit(1))[0];
-  if (existing && existing.ownerAccountId !== acct.id) return { shared: false, rejected: "conflict" };
+  if (existing && existing.ownerAccountId !== who.accountId) return { shared: false, rejected: "conflict" };
   await upsertCatalogGem(db, {
     gemKey: m.gemKey, version: m.version, publishedBy: who.login, ownerAccountId: who.accountId,
     author: m.author, description: m.description, tags: m.tags, artifactKinds: m.artifactKinds,
