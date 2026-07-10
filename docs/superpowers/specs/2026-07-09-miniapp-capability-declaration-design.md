@@ -124,7 +124,28 @@ Three ways this can go wrong, each of which the implementation must close:
    never fail on it").
 3. `migrateAllMiniapps` calls `saveMiniapp` and inherits the prune. A symmetric
    equality check would make migration *throw* on exactly the two over-declared
-   miniapps on disk. With prune, one run cleans them and reports what it removed.
+   miniapps on disk.
+
+   **Corrected during implementation.** Three claims above were wrong, and the
+   migration needed real source changes, not just to inherit `saveMiniapp`:
+
+   - `migrate.ts`'s codemod **injects** `callTool("agentgem_get_session_data")`
+     into old html. A migrated bundle therefore *uses* a capability its stored
+     meta never declared, and `saveMiniapp` rightly throws. The codemod authored
+     the code, so it must author the declaration: it now passes
+     `needs: deriveNeeds(html)`. This is safe **only** because the sole injected
+     capability is `session-data`, which `AUTO_CAPS` marks auto-approved. A
+     codemod injecting a consent-gated capability must not auto-declare it.
+   - Migration only called `saveMiniapp` when it *rewrote* the html
+     (`outcome === "migrated"`). On disk that is 1 of 10 miniapps — `live-watch`
+     is `"unrecognized"`, so "one run cleans them" was false. The declaration can
+     be stale even when the html is current, so migration now reconciles the meta
+     of **every** miniapp, rewriting `meta.json` (and refreshing the gem) when
+     `needs` drifted, without touching the html.
+   - One unsaveable miniapp aborted the whole registry pass — `session-2de8e278-…`
+     declares `session-data` but bakes no timeline, so `assertPortable` rejects it.
+     That already failed on `origin/main`. Migration now records the reason on that
+     row and continues.
 
 **Prerequisite.** `CAP_TOOL` lives in `packages/console`, but `saveMiniapp` lives
 in `packages/play`. Move the map to `@agentgem/model` beside the `GameCapability`
@@ -199,8 +220,32 @@ Composer checkbox  ──(prompt text only)──▶  agent writes html + meta.n
   nothing → the capability is pruned → the miniapp gets `-32601` at runtime.
   **This design does not close that hole.** `SKILL.md` gains a line requiring
   literal tool-name strings, and the prune notice is the user-visible tell.
+- **A tool name in a comment or an unrelated string literal** → the scan counts
+  it, because it must match `p.toolName === "agentgem_get_session_data"` in an
+  `onNotification` handler (`scaffolds.ts` receives data that way and never
+  calls). So a bundle whose only mention of `agentgem_get_inventory` is a comment
+  will *declare* `local-project-access`, and — being derived, not declared —
+  it is not pruned. A viewer then sees a consent prompt for a tool the code never
+  calls. This is the **safe error direction** (over-declare; never silently
+  widen), it is visible in the Studio strip, and it is inherent to matching
+  anywhere in executable code. Accepted, not fixed.
 - **No host at all** → unchanged: the handshake gives up after ~4s and every
   `callTool` rejects with `"no host"`.
+
+## Browser-bundle constraint (found during implementation)
+
+`packages/console` is bundled for the browser by esbuild. `@agentgem/play`'s
+barrel re-exports `miniapps.js` / `redact.js`, which import `node:os` /
+`node:path` / `node:fs`. A **value** import of `CAP_TOOL` from `@agentgem/play`
+therefore breaks `pnpm build` — while `tsc -b`, the console typecheck, and the
+console vitest suite (Node environment) all still pass. Only the bundle catches
+it, and CI runs the full build.
+
+So `consent.ts` keeps a browser-safe mirror of `CAP_TOOL` / `TOOL_CAP`, and
+`packages/console/src/panels/Play/__tests__/capTool.drift.test.ts` — which runs
+in Node, where the import is free — asserts the mirror equals the canonical map.
+A rename in `@agentgem/model` fails that test instead of drifting silently. The
+console's every other `@agentgem/play` import is `import type`, which is erased.
 
 ## Testing
 
