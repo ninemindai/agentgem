@@ -265,4 +265,26 @@ describe("betterAuth over drizzle+PGlite — account hook integration (1a-Task 6
     expect(session?.user?.id).toBe(user.id);
     expect((session?.user as { login?: string } | undefined)?.login).toBe("neo");
   });
+
+  it("get-session exposes the account's handle — null before a claim, set after", async () => {
+    stubGithubMembershipsFetch();
+    const db = await makeTestDb();
+    const auth = makeAuth({ db, ...opts });
+    const { user } = await createGithubUser(db, auth, "neo", "neo@example.com");
+    // A GitHub sign-in auto-claims handle=login. NULL it to model a login-less (Google) account,
+    // so this test proves BOTH states of the field, not just the happy one. Confirmed empirically
+    // (see task-1-report.md "Fix pass") that better-auth's additionalFields serializes a NULL column
+    // as an explicit `handle: null` key rather than omitting it, so `toHaveProperty` below is
+    // discriminating: it fails if the field were ever absent (e.g. not configured), not just if it
+    // held a truthy value.
+    await db.execute(sql`update "user" set handle = null where id = ${user.id}`);
+    const { token } = await mintSession(auth, user.id);
+
+    const before = await auth.api.getSession({ headers: new Headers({ authorization: `Bearer ${token}` }) });
+    expect(before?.user).toHaveProperty("handle", null);
+
+    expect(await claimHandle(db, user.id, "neo")).toEqual({ ok: true, handle: "neo" });
+    const after = await auth.api.getSession({ headers: new Headers({ authorization: `Bearer ${token}` }) });
+    expect((after as { user?: { handle?: string | null } })?.user?.handle).toBe("neo");
+  });
 });
