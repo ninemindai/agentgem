@@ -7,7 +7,8 @@ import { createClient, defineRoute, type Client } from "@agentback/client";
 const ArtifactSchema = z.looseObject({
   name: z.string(),
   description: z.string().optional(),
-  content: z.string().optional(),
+  id: z.string().optional(),        // canonical entity path; present on skills/subagents/instructions
+  content: z.string().optional(),   // absent under ?body=defer — fetch it with artifactContentRoute
   config: z.record(z.string(), z.unknown()).optional(),
   source: z.string().optional(), // "standalone", a plugin name, "user"/"project", …
 });
@@ -39,8 +40,18 @@ export type UsageItem = z.infer<typeof UsageItemSchema>;
 export type Usage = z.infer<typeof UsageSchema>;
 
 export const inventoryRoute = defineRoute("GET", "/api/inventory", {
-  query: z.object({ dir: z.string().optional(), projects: z.string().optional() }),
+  query: z.object({
+    dir: z.string().optional(),
+    projects: z.string().optional(),
+    body: z.enum(["full", "defer"]).optional(),
+  }),
   response: InventorySchema,
+});
+
+// Resolve one deferred artifact body by its canonical entity path id.
+export const artifactContentRoute = defineRoute("GET", "/api/artifact/content", {
+  query: z.object({ id: z.string() }),
+  response: z.object({ id: z.string(), content: z.string() }),
 });
 
 // Rubrics catalog (built-in + user rubrics) for the picker + library panels.

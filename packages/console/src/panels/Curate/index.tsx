@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
-import { inventoryRoute, usageRoute, createWorkspaceRoute, scaffoldChecksRoute, playbookPrepareRoute, makeClient, type Usage, type GemCheck } from "../../api/routes.js";
+import { inventoryRoute, usageRoute, artifactContentRoute, createWorkspaceRoute, scaffoldChecksRoute, playbookPrepareRoute, makeClient, type Usage, type GemCheck } from "../../api/routes.js";
 import { groupInventory, mergeUsage, applyView, sortGroupItems, relativeTime, formatSource, DEFAULT_VIEW, type LedgerGroup, type SortKey, type SortDir } from "./data.js";
 import { selKey, visibleKeys, buildSelection } from "./selection.js";
 import { useActiveGem, setKeys, toggleKey as toggleKeyStore, clearKeys, setName as setNameStore } from "../../activeGem.js";
@@ -131,11 +131,12 @@ export function Curate({ apiBase }: { apiBase: string }) {
     const client = makeClient(apiBase);
     (async () => {
       try {
-        const inv = await inventoryRoute.call(client, { query: {} });
-        let usage: Usage = { artifacts: [] };
-        // scope:global aggregates usage across all projects; without it the count
-        // is scoped to the server's cwd (usually empty for global artifacts).
-        try { usage = await usageRoute.call(client, { query: { scope: "global" } }); } catch { /* usage badges are optional */ }
+        // Parallel, not serial: first paint used to wait for usage too. `body=defer` drops the
+        // artifact bodies (97.8% of the payload); a body is fetched on expand.
+        const [inv, usage] = await Promise.all([
+          inventoryRoute.call(client, { query: { body: "defer" } }),
+          usageRoute.call(client, { query: { scope: "global" } }).catch(() => ({ artifacts: [] }) as Usage),
+        ]);
         if (alive) setGroups(mergeUsage(groupInventory(inv), usage));
       } catch (e) {
         if (alive) setError(e instanceof Error ? e.message : String(e));
@@ -143,6 +144,20 @@ export function Curate({ apiBase }: { apiBase: string }) {
     })();
     return () => { alive = false; };
   }, [apiBase]);
+
+  const [bodies, setBodies] = useState<Record<string, string>>({});
+  const [bodyError, setBodyError] = useState<Record<string, string>>({});
+
+  // Memoized by id: re-expanding a row must not re-fetch.
+  const loadBody = async (id: string) => {
+    if (bodies[id] !== undefined) return;
+    try {
+      const r = await artifactContentRoute.call(makeClient(apiBase), { query: { id } });
+      setBodies((b) => ({ ...b, [id]: r.content }));
+    } catch (e) {
+      setBodyError((b) => ({ ...b, [id]: e instanceof Error ? e.message : String(e) }));
+    }
+  };
 
   const [groupSort, setGroupSort] = useState<Record<string, { sort: SortKey; dir: SortDir }>>({});
   const getSectionSort = (key: string) => groupSort[key] ?? { sort: "uses" as SortKey, dir: "desc" as SortDir };
@@ -168,11 +183,13 @@ export function Curate({ apiBase }: { apiBase: string }) {
   const toggle = (key: string) => toggleKeyStore(key);
   const selectAllShown = () => setKeys(new Set([...selected, ...visibleKeys(visible)]));
   const clearSelection = () => clearKeys();
-  const toggleExpand = (key: string) => setExpanded((s) => {
-    const n = new Set(s);
-    if (n.has(key)) n.delete(key); else n.add(key);
-    return n;
-  });
+  const toggleExpand = (key: string, id?: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else { next.add(key); if (id) void loadBody(id); }
+      return next;
+    });
+  };
 
   const saveWorkspace = async () => {
     const name = wsName.trim();
@@ -367,8 +384,8 @@ export function Curate({ apiBase }: { apiBase: string }) {
                     {i.lastUsedMs != null && (
                       <span className="ledger-last" title="last used">{relativeTime(i.lastUsedMs)}</span>
                     )}
-                    {i.detail && (
-                      <button type="button" className="ledger-view" aria-label={isExpanded ? "hide" : "view"} onClick={() => toggleExpand(key)}>
+                    {(i.detail || i.id) && (
+                      <button type="button" className="ledger-view" aria-label={isExpanded ? "hide" : "view"} onClick={() => toggleExpand(key, i.id)}>
                         {isExpanded ? (
                           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                             <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
@@ -383,11 +400,15 @@ export function Curate({ apiBase }: { apiBase: string }) {
                       </button>
                     )}
                   </div>
-                  {i.detail && isExpanded && (
-                    g.key === "skills" || g.key === "subagents" || g.key === "instructions"
-                      ? <ContentView text={i.detail} />
-                      : <pre className="ledger-detail">{i.detail}</pre>
-                  )}
+                  {isExpanded && (() => {
+                    const body = i.detail ?? (i.id ? bodies[i.id] : undefined);
+                    const err = i.id ? bodyError[i.id] : undefined;
+                    if (err) return <pre className="ledger-detail">Failed to load: {err}</pre>;
+                    if (body === undefined) return <pre className="ledger-detail">Loading…</pre>;
+                    return g.key === "skills" || g.key === "subagents" || g.key === "instructions"
+                      ? <ContentView text={body} />
+                      : <pre className="ledger-detail">{body}</pre>;
+                  })()}
                 </li>
               );
             })}

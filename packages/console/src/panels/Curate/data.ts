@@ -1,6 +1,6 @@
 import type { Inventory, Usage } from "../../api/routes.js";
 
-export interface LedgerItem { name: string; invocations: number; lastUsedMs: number | null; detail?: string; source?: string }
+export interface LedgerItem { name: string; invocations: number; lastUsedMs: number | null; detail?: string; source?: string; id?: string }
 export interface LedgerGroup { key: string; label: string; items: LedgerItem[] }
 
 export type SortKey = "uses" | "last" | "name";
@@ -40,8 +40,11 @@ export function groupInventory(inv: Inventory): LedgerGroup[] {
         name: a.name,
         invocations: 0,
         lastUsedMs: null,
+        // `content` is present only under ?body=full. Under defer, `id` addresses the body and the
+        // panel fetches it on expand. Config-bearing types (mcp/hooks) have no id and render inline.
         detail: a.content ?? (a.config ? JSON.stringify(a.config, null, 2) : undefined),
         source: a.source,
+        id: a.id,
       })),
     }))
     .filter((g) => g.items.length > 0);

@@ -20,7 +20,13 @@ function mockFetch() {
   return vi.fn(async (url: string | URL) => {
     const u = String(url);
     if (u.includes("/api/inventory"))
-      return res({ skills: [{ name: "pdf", content: "PDF-SKILL-BODY" }, { name: "csv" }, { name: "zip" }], mcpServers: [], instructions: [], hooks: [], subagents: [] });
+      // pdf carries an id and no content — the shape ?body=defer returns; the panel
+      // fetches its body from /api/artifact/content on expand.
+      return res({ skills: [{ name: "pdf", id: "workspace/skills/standalone/pdf" }, { name: "csv" }, { name: "zip" }], mcpServers: [], instructions: [], hooks: [], subagents: [] });
+    if (u.includes("/api/artifact/content")) {
+      const id = new URL(u, "http://localhost").searchParams.get("id") ?? "";
+      return res({ id, content: "LAZY-BODY" });
+    }
     if (u.includes("/api/usage"))
       return res({ artifacts: [
         { type: "skill", name: "pdf", invocations: 7, lastUsedMs: 100 },
@@ -112,9 +118,25 @@ describe("Curate", () => {
     vi.stubGlobal("fetch", mockFetch());
     renderCurate({ apiBase: "" });
     await screen.findByText("pdf");
-    expect(screen.queryByText("PDF-SKILL-BODY")).toBeNull();
+    expect(screen.queryByText("LAZY-BODY")).toBeNull();
     fireEvent.click(screen.getByLabelText("view"));
-    expect(await screen.findByText("PDF-SKILL-BODY")).toBeTruthy();
+    expect(await screen.findByText("LAZY-BODY")).toBeTruthy();
+  });
+
+  it("lazily fetches a deferred body on expand, once", async () => {
+    const fetchMock = mockFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    renderCurate({ apiBase: "" });
+    const view = await screen.findByLabelText("view");   // button renders from `id`, with no body loaded
+    fireEvent.click(view);
+    expect(await screen.findByText("LAZY-BODY")).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText("hide"));
+    fireEvent.click(screen.getByLabelText("view"));      // re-expand
+    await screen.findByText("LAZY-BODY");
+
+    const contentCalls = fetchMock.mock.calls.filter(([url]) => String(url).includes("/api/artifact/content"));
+    expect(contentCalls).toHaveLength(1);                // memoized: fetched exactly once
   });
 
   it("suggests checks for the selection", async () => {
