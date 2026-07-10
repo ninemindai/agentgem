@@ -445,6 +445,10 @@ export async function run(port: number = Number(process.env.PORT ?? 4317)): Prom
   const sched = process.env.SERVE_CONSOLE !== "false" ? startWarmSchedule() : null;
   installGracefulShutdown({ stop: async () => { sched?.stop(); await app.stop(); } });
   const server = await app.restServer;
+  // A parent process (the desktop host forks this entry with PORT=0) needs the
+  // OS-assigned port back. One JSON line, before the human lines, so the parent
+  // never has to parse prose that log rewording would break.
+  if (process.env.AGENTGEM_IPC === "1") console.log(JSON.stringify({ type: "ready", url: server.url }));
   console.log(`agentgem listening at ${server.url}`);
   console.log(`  UI:       ${server.url}/`);
   console.log(`  API:      ${server.url}/api/inventory  ·  POST ${server.url}/api/gem`);

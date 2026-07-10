@@ -1,9 +1,9 @@
-import { app, BrowserWindow, Menu, dialog, ipcMain, shell, Notification } from "electron";
+import { app, BrowserWindow, Menu, dialog, ipcMain, shell, Notification, utilityProcess } from "electron";
 import { join } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 import { autoUpdater } from "electron-updater";
 import type { Tray } from "electron";
-import { startEmbeddedServer, type EmbeddedServer } from "./server.js";
+import { startEmbeddedServer, type EmbeddedServer, type ForkCore } from "./server.js";
 import { PICK_FOLDER, UPDATE_EVENT, NOTIFY, pickFolderResult, notifyPayload } from "./ipc.js";
 import { buildMenuTemplate } from "./menu.js";
 import { configureUpdater, updaterFeed, repoUrlFromPackageJson } from "./updater.js";
@@ -128,6 +128,19 @@ function setupUpdates(): void {
   });
 }
 
+// The core runs in a utility process, not on main's event loop. stdio must be "pipe"
+// (it defaults to "inherit") or the child's ready line never reaches startEmbeddedServer.
+// Electron reaps the child when the app exits, so a crashed host leaves no orphan.
+const forkCore: ForkCore = (entry, env) =>
+  utilityProcess.fork(entry, [], { stdio: "pipe", env, serviceName: "agentgem-core" });
+
+// The window is still up but everything behind it is gone: the renderer's next fetch
+// would fail with no explanation. Say so, then exit rather than pretend.
+function onCrash(code: number | null): void {
+  dialog.showErrorBox("AgentGem stopped", `The AgentGem background service exited unexpectedly (code ${code}).`);
+  app.exit(1);
+}
+
 async function boot(): Promise<void> {
   ipcMain.handle(PICK_FOLDER, async () => {
     const r = await dialog.showOpenDialog({ properties: ["openDirectory"] });
@@ -146,7 +159,7 @@ async function boot(): Promise<void> {
   });
 
   try {
-    server = await startEmbeddedServer(join(__dirname), process.resourcesPath);
+    server = await startEmbeddedServer(join(__dirname), process.resourcesPath, { fork: forkCore, onCrash });
   } catch (err) {
     dialog.showErrorBox("AgentGem failed to start", String((err as Error)?.message ?? err));
     app.exit(1);
