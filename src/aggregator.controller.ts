@@ -141,7 +141,8 @@ const CatalogManifestSchema = z.object({
 const CatalogBody = z.object({ manifest: CatalogManifestSchema, pubkey: z.string(), signedAt: z.number(), signature: z.string() });
 const CatalogResult = z.object({ shared: z.boolean(), publishedBy: z.string().optional(), gemKey: z.string().optional(), version: z.string().optional(), rejected: z.string().optional() });
 const PublishGemBody = z.object({ manifest: CatalogManifestSchema, archiveBase64: z.string(), pubkey: z.string(), signedAt: z.number(), signature: z.string() });
-const ShareArchiveBody = z.object({ manifest: CatalogManifestSchema, archiveBase64: z.string(), pubkey: z.string(), signedAt: z.number(), signature: z.string() });
+const ShareArchiveManifest = CatalogManifestSchema.extend({ gemDigest: z.string() }); // required for share-archive
+const ShareArchiveBody = z.object({ manifest: ShareArchiveManifest, archiveBase64: z.string(), pubkey: z.string(), signedAt: z.number(), signature: z.string() });
 const ShareArchiveResult = z.object({ key: z.string(), url: z.string() });
 const GemArchiveQuery = z.object({ key: z.string(), version: z.string() });
 const GemArchiveResult = z.object({ archiveBase64: z.string() });
@@ -315,13 +316,13 @@ export class AggregatorController {
     const who = await resolveSignedAccount(this.db, {
       pubkey: b.pubkey, payload: catalogSigningPayload(b.manifest, b.pubkey, b.signedAt), signedAt: b.signedAt, signature: b.signature,
     });
-    if (!who.ok) throw new AgentError("not connected", { status: who.rejected === "not-connected" ? 401 : 400, code: who.rejected, retryable: false });
+    if (!who.ok) throw new AgentError(`share rejected: ${who.rejected}`, { status: who.rejected === "not-connected" ? 401 : 400, code: who.rejected, retryable: false });
 
     const bytes = Buffer.from(b.archiveBase64, "base64");
     let digest: string, gem;
     try { const imp = importGem(bytes); digest = imp.meta.gemDigest; gem = imp.gem; }
     catch { throw new AgentError("invalid gem archive", { status: 400, code: "invalid_archive", retryable: false }); }
-    if (b.manifest.gemDigest && b.manifest.gemDigest !== digest) throw new AgentError("digest mismatch", { status: 400, code: "digest_mismatch", retryable: false });
+    if (b.manifest.gemDigest !== digest) throw new AgentError("digest mismatch", { status: 400, code: "digest_mismatch", retryable: false });
 
     const game = gem.artifacts.find((x) => x.type === "game") as { html?: unknown } | undefined;
     if (!game || typeof game.html !== "string") throw new AgentError("this gem has no game to share", { status: 400, code: "not_a_game", retryable: false });

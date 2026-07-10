@@ -58,4 +58,19 @@ describe("AggregatorController.shareArchive", () => {
     await expect(new AggregatorController(db).shareArchive({ body: signedArchiveBody(notGame, s) }))
       .rejects.toMatchObject({ statusCode: 400, code: "not_a_game" });
   });
+
+  it("rejects an archive whose digest does not match the signed manifest, storing nothing", async () => {
+    // The manifest must carry the wrong digest BEFORE signing: the signature covers the whole
+    // manifest, so tampering gemDigest after signing would fail signature verification (401)
+    // rather than exercising the digest-binding check (400 digest_mismatch) this test targets.
+    const { db, s } = await boundDb();
+    const { bytes } = exportGem(gameGem(), { version: "1" });
+    const signedAt = Date.now();
+    const manifest = { gemKey: "_", version: "1", gemDigest: "sha256:deadbeef" };
+    const signature = s.sign(catalogSigningPayload(manifest, s.pubkey, signedAt));
+    const body = { manifest, archiveBase64: bytes.toString("base64"), pubkey: s.pubkey, signedAt, signature };
+    await expect(new AggregatorController(db).shareArchive({ body }))
+      .rejects.toMatchObject({ statusCode: 400, code: "digest_mismatch" });
+    expect(await listCatalogGems(db)).toHaveLength(0);
+  });
 });
