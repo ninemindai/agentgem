@@ -79,18 +79,24 @@ describe("Gem (detail)", () => {
 
   const apiOwned = { getGems: () => Promise.resolve([{ key: "owned-gem", version: "1.0.0", publishedBy: "rfeng", description: "d", tags: [], artifactKinds: ["skill"] }]), gemAdoption: () => Promise.resolve({}) } as never;
 
-  it("shows the owner-only Unpublish button when the signed-in login matches publishedBy (case-insensitive)", async () => {
-    render(<Gem api={apiOwned} keyName="owned-gem" stars={stars} me={{ login: "RFeng", avatarUrl: null, orgs: [] }} />);
+  it("shows the owner-only Unpublish button when the signed-in handle matches publishedBy (case-insensitive)", async () => {
+    render(<Gem api={apiOwned} keyName="owned-gem" stars={stars} me={{ id: "u1", name: "RFeng", handle: "RFeng", avatarUrl: null, orgs: [] }} />);
     await screen.findByRole("heading", { name: /owned-gem/ });
     expect(screen.getByRole("button", { name: /unpublish/i })).toBeTruthy();
   });
 
   it("hides the Unpublish button from a non-owner (and when signed out)", async () => {
-    render(<Gem api={apiOwned} keyName="owned-gem" stars={stars} me={{ login: "someone-else", avatarUrl: null, orgs: [] }} />);
+    render(<Gem api={apiOwned} keyName="owned-gem" stars={stars} me={{ id: "u2", name: "someone-else", handle: "someone-else", avatarUrl: null, orgs: [] }} />);
     await screen.findByRole("heading", { name: /owned-gem/ });
     expect(screen.queryByRole("button", { name: /unpublish/i })).toBeNull();
     cleanup();
     render(<Gem api={apiOwned} keyName="owned-gem" stars={stars} me={null} />);
+    await screen.findByRole("heading", { name: /owned-gem/ });
+    expect(screen.queryByRole("button", { name: /unpublish/i })).toBeNull();
+  });
+
+  it("hides the Unpublish button from a signed-in user with no handle", async () => {
+    render(<Gem api={apiOwned} keyName="owned-gem" stars={stars} me={{ id: "u3", name: "Ray", handle: null, avatarUrl: null, orgs: [] }} />);
     await screen.findByRole("heading", { name: /owned-gem/ });
     expect(screen.queryByRole("button", { name: /unpublish/i })).toBeNull();
   });

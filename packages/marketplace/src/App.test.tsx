@@ -124,7 +124,7 @@ describe("App link interceptor", () => {
 
   it("shows the login + Sign out when authenticated", async () => {
     vi.stubGlobal("fetch", vi.fn(async (u: string) => {
-      if (u.includes("/api/auth/get-session")) return res({ session: { token: "t" }, user: { login: "octocat", image: null } });
+      if (u.includes("/api/auth/get-session")) return res({ session: { token: "t" }, user: { id: "u0", login: "octocat", handle: "octocat", image: null } });
       if (u.includes("/popular-skills")) return res({ skills: [], groups: [] });
       return res([]);
     }));
@@ -133,6 +133,30 @@ describe("App link interceptor", () => {
     expect(screen.getByRole("button", { name: /sign out/i })).toBeTruthy();
     // The identity links to the user's own profile page.
     expect(screen.getByRole("link", { name: "octocat" }).getAttribute("href")).toBe("/@octocat");
+  });
+
+  it("chip: a handle-less (Google) user shows their name and NO profile link", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (u: string) => {
+      if (u.includes("/api/auth/get-session")) return res({ user: { id: "u1", name: "Ray Feng", handle: null, image: null }, orgs: [] });
+      if (u.includes("/popular-skills")) return res({ skills: [], groups: [] });
+      return res([]);
+    }));
+    render(<App />);
+    expect(await screen.findByText("Ray Feng")).toBeTruthy();
+    // no /@ profile link anywhere in the header
+    expect(screen.queryByRole("link", { name: "Ray Feng" })).toBeNull();
+    expect(screen.getByRole("button", { name: /sign out/i })).toBeTruthy();
+  });
+
+  it("chip: a handled user's name links to their /@handle profile", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (u: string) => {
+      if (u.includes("/api/auth/get-session")) return res({ user: { id: "u2", name: "octocat", handle: "octocat", image: null }, orgs: [] });
+      if (u.includes("/popular-skills")) return res({ skills: [], groups: [] });
+      return res([]);
+    }));
+    render(<App />);
+    const link = await screen.findByRole("link", { name: "octocat" });
+    expect(link.getAttribute("href")).toBe("/@octocat");
   });
 });
 

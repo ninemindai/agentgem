@@ -72,10 +72,17 @@ export function App() {
           </button>
           {me ? (
             <>
-              <a className="ex-me" href={`/@${me.login}`} title="Your profile">
-                {me.avatarUrl && <img className="ex-avatar" src={me.avatarUrl} alt="" width={20} height={20} />}
-                <span className="ex-login">{me.login}</span>
-              </a>
+              {me.handle ? (
+                <a className="ex-me" href={`/@${me.handle}`} title="Your profile">
+                  {me.avatarUrl && <img className="ex-avatar" src={me.avatarUrl} alt="" width={20} height={20} />}
+                  <span className="ex-login">{me.name}</span>
+                </a>
+              ) : (
+                <span className="ex-me" title="Claim a handle from Publish to get a profile page">
+                  {me.avatarUrl && <img className="ex-avatar" src={me.avatarUrl} alt="" width={20} height={20} />}
+                  <span className="ex-login">{me.name}</span>
+                </span>
+              )}
               <button type="button" className="ex-signout" onClick={signOut}>Sign out</button>
             </>
           ) : (
