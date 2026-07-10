@@ -198,6 +198,70 @@ describe("mcpUiHost — streaming + generation + dispose", () => {
   });
 });
 
+describe("mcpUiHost — action capabilities (open-link / send-message / update-model-context)", () => {
+  it("ui/open-link with the cap declared + consent granted calls openExternal and replies {}", async () => {
+    const openExternal = vi.fn();
+    const { host, target, requestConsent } = mkHost({ needs: ["open-link"], openExternal });
+    host.handleMessage(msg(target, { method: "ui/open-link", id: 30, params: { url: "https://x.test" } }));
+    await tick();
+    expect(requestConsent).toHaveBeenCalledWith("open-link", "https://x.test");
+    expect(openExternal).toHaveBeenCalledWith("https://x.test");
+    expect(posted(target)).toHaveBeenCalledWith(expect.objectContaining({ id: 30, result: {} }), "*");
+  });
+
+  it("ui/open-link with the cap NOT in needs replies -32601", async () => {
+    const openExternal = vi.fn();
+    const { host, target, requestConsent } = mkHost({ needs: ["session-data"], openExternal });
+    host.handleMessage(msg(target, { method: "ui/open-link", id: 31, params: { url: "https://x.test" } }));
+    await tick();
+    expect(requestConsent).not.toHaveBeenCalled();
+    expect(openExternal).not.toHaveBeenCalled();
+    expect(posted(target)).toHaveBeenCalledWith(expect.objectContaining({ id: 31, error: expect.objectContaining({ code: -32601 }) }), "*");
+  });
+
+  it("ui/open-link with consent denied replies -32001 and does not call openExternal", async () => {
+    const openExternal = vi.fn();
+    const requestConsent = vi.fn(async () => false);
+    const { host, target } = mkHost({ needs: ["open-link"], openExternal, requestConsent });
+    host.handleMessage(msg(target, { method: "ui/open-link", id: 32, params: { url: "https://x.test" } }));
+    await tick();
+    expect(openExternal).not.toHaveBeenCalled();
+    expect(posted(target)).toHaveBeenCalledWith(expect.objectContaining({ id: 32, error: expect.objectContaining({ code: -32001 } ) }), "*");
+  });
+
+  it("ui/open-link rejects a non-http(s) url with -32602 invalid params", async () => {
+    const openExternal = vi.fn();
+    const { host, target, requestConsent } = mkHost({ needs: ["open-link"], openExternal });
+    host.handleMessage(msg(target, { method: "ui/open-link", id: 33, params: { url: "javascript:alert(1)" } }));
+    await tick();
+    expect(requestConsent).not.toHaveBeenCalled();
+    expect(openExternal).not.toHaveBeenCalled();
+    expect(posted(target)).toHaveBeenCalledWith(expect.objectContaining({ id: 33, error: expect.objectContaining({ code: -32602 }) }), "*");
+  });
+
+  it("ui/message with the cap declared replies -32601 'unsupported by this host'", async () => {
+    const { host, target, requestConsent } = mkHost({ needs: ["send-message"] });
+    host.handleMessage(msg(target, { method: "ui/message", id: 34, params: { role: "user", content: "hi" } }));
+    await tick();
+    expect(requestConsent).not.toHaveBeenCalled();
+    expect(posted(target)).toHaveBeenCalledWith(expect.objectContaining({ id: 34, error: { code: -32601, message: "unsupported by this host" } }), "*");
+  });
+
+  it("ui/message with the cap NOT in needs replies -32601 'capability not permitted'", async () => {
+    const { host, target } = mkHost({ needs: ["session-data"] });
+    host.handleMessage(msg(target, { method: "ui/message", id: 35, params: { role: "user", content: "hi" } }));
+    await tick();
+    expect(posted(target)).toHaveBeenCalledWith(expect.objectContaining({ id: 35, error: expect.objectContaining({ code: -32601, message: expect.stringContaining("capability not permitted") }) }), "*");
+  });
+
+  it("ui/update-model-context with the cap declared replies -32601 'unsupported by this host'", async () => {
+    const { host, target } = mkHost({ needs: ["update-model-context"] });
+    host.handleMessage(msg(target, { method: "ui/update-model-context", id: 36, params: { state: {} } }));
+    await tick();
+    expect(posted(target)).toHaveBeenCalledWith(expect.objectContaining({ id: 36, error: { code: -32601, message: "unsupported by this host" } }), "*");
+  });
+});
+
 describe("mcpUiHost — feedSessionData (host-initiated 'Replay yours' rebind)", () => {
   it("fetches the picked session and pushes it as a session-data notification", async () => {
     const spy = vi.spyOn(playSessionDataRoute, "call").mockResolvedValue({ meta: { picked: true }, timeline: [] });

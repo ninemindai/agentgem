@@ -28,6 +28,7 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
   const [scale, setScale] = useState(0.5);
   const [fs, setFs] = useState(false);
   const [pending, setPending] = useState<string | null>(null); // a gated capability awaiting consent
+  const [pendingDetail, setPendingDetail] = useState<string | undefined>(undefined); // extra context for the prompt (e.g. open-link's URL)
   const [pickerOpen, setPickerOpen] = useState(false);
   const [sessions, setSessions] = useState<WatchSession[] | null>(null);
   const hostRef = useRef<UiHost | null>(null);                 // the MCP Apps router — owns protocol + brokering
@@ -38,16 +39,21 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
   // Consent gate handed to the router: the router calls this for GATED caps only (AUTO caps bypass it).
   // Thumbnails never prompt/feed sensitive caps; remembered per-gem choices resolve immediately; a fresh
   // ask opens the modal and parks its resolver until Allow/Deny (decide()).
-  const requestConsent = useCallback((cap: string): Promise<boolean> => {
+  // open-link is special: it always shows the URL (`detail`) and is NEVER remembered — every call prompts
+  // fresh, unlike the cache-backed behavior every other gated cap gets.
+  const requestConsent = useCallback((cap: string, detail?: string): Promise<boolean> => {
     if (!interactive) return Promise.resolve(false);                 // thumbnails never prompt/feed sensitive caps
     if (name == null) return Promise.resolve(false);
-    const decision = getConsent(name, cap);
-    if (decision === "granted") return Promise.resolve(true);
-    if (decision === "denied") return Promise.resolve(false);
+    if (cap !== "open-link") {
+      const decision = getConsent(name, cap);
+      if (decision === "granted") return Promise.resolve(true);
+      if (decision === "denied") return Promise.resolve(false);
+    }
     return new Promise<boolean>((resolve) => {                        // ask (once)
       pendingResolve.current?.(false);                               // resolve any superseded consent prompt
       pendingResolve.current = resolve;
       setPending(cap);
+      setPendingDetail(detail);
       setPickerOpen(false);                                          // the ask takes precedence over an open picker
     });
   }, [interactive, name]);
@@ -86,6 +92,7 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
     const host = createUiHost({
       apiBase, name, needs, interactive, target, requestConsent, hostContext,
       onDisplayMode: (m) => { const ok = interactive && m === "fullscreen"; setFs(ok); return ok ? "fullscreen" : "inline"; },
+      openExternal: (url) => { window.open(url, "_blank", "noopener"); },
     });
     hostRef.current = host;
     const onMsg = (e: MessageEvent) => host.handleMessage(e);
@@ -127,6 +134,7 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
   // above recreates the router for the new game; open streams close via its dispose()).
   useEffect(() => {
     setPending(null);
+    setPendingDetail(undefined);
     pendingResolve.current?.(false);
     pendingResolve.current = null;
   }, [name]);
@@ -135,12 +143,14 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
     // Re-validate the pending cap is still one this game declared — defends the grant against any
     // future in-place name/needs swap while a prompt is open.
     if (pending == null || name == null || !needs?.includes(pending)) {
-      pendingResolve.current?.(false); pendingResolve.current = null; setPending(null); return;
+      pendingResolve.current?.(false); pendingResolve.current = null; setPending(null); setPendingDetail(undefined); return;
     }
-    setConsent(name, pending, allow ? "granted" : "denied");         // remember the choice for this game
+    // open-link is never remembered — every call re-prompts, so don't cache a grant/denial for it.
+    if (pending !== "open-link") setConsent(name, pending, allow ? "granted" : "denied");
     pendingResolve.current?.(allow);                                 // resume the router's gated call
     pendingResolve.current = null;
     setPending(null);
+    setPendingDetail(undefined);
   };
 
   // Inline only: fit the column width and any height budget, never upscale. Fullscreen needs no scale — the
@@ -229,7 +239,14 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
           <div className="play-consent__box">
             <div className="play-consent__ico">🔒</div>
             <div className="play-consent__title">“{name}” wants to {CAP_LABEL[pending] ?? pending}</div>
-            <div className="play-consent__sub">The game stays sealed (no network of its own) — the host feeds this in only if you allow. Remembered for this game.</div>
+            {pending === "open-link" && pendingDetail && (
+              <div className="play-consent__sub"><code>{pendingDetail}</code></div>
+            )}
+            <div className="play-consent__sub">
+              {pending === "open-link"
+                ? "The game stays sealed (no network of its own) — the host feeds this in only if you allow. Asked every time."
+                : "The game stays sealed (no network of its own) — the host feeds this in only if you allow. Remembered for this game."}
+            </div>
             <div className="play-consent__btns">
               <button className="play-btn play-btn--primary" onClick={() => decide(true)}>Allow</button>
               <button className="play-btn" onClick={() => decide(false)}>Deny</button>
