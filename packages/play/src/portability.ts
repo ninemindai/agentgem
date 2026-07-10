@@ -18,6 +18,9 @@ const CAP_CLASS: Record<GameCapability, "content" | "enhancement"> = {
   "live-session-events": "enhancement",
   "local-project-access": "enhancement",
   "invoke-agent": "enhancement",
+  "open-link": "enhancement",            // egress, never a game's primary content
+  "send-message": "enhancement",
+  "update-model-context": "enhancement",
 };
 
 const CONTENT_CAPS: readonly GameCapability[] = (Object.entries(CAP_CLASS) as [GameCapability, "content" | "enhancement"][])

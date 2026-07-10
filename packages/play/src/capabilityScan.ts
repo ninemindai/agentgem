@@ -14,7 +14,7 @@
 // A dynamic tool name — callTool(t) where t is a variable — scans as nothing and gets pruned. That hole
 // is closed by convention, not by this module: MINIAPP_BUILDER_BRIEF requires literal tool-name strings.
 import type { GameCapability } from "@agentgem/model";
-import { TOOL_CAP } from "@agentgem/model";
+import { TOOL_CAP, METHOD_CAP } from "@agentgem/model";
 import { scannableCode } from "./gameGate.js";
 
 export interface Reconciled {
@@ -25,10 +25,17 @@ export interface Reconciled {
 
 export function deriveNeeds(html: string): GameCapability[] {
   const code = scannableCode(html);
-  return Object.keys(TOOL_CAP)
-    .filter((tool) => code.includes(tool))
-    .map((tool) => TOOL_CAP[tool])
-    .sort();
+  const tool = Object.keys(TOOL_CAP).filter((t) => code.includes(t)).map((t) => TOOL_CAP[t]);
+  // Anchor on `agentgemApp.` — a bare `sendMessage` is a plausible game-local function name, and a bare
+  // match would over-declare (then reconcileNeeds prunes it, or the Runner prompts for consent the game
+  // never needs). The bridge cannot be aliased without naming `agentgemApp` at least once (see migrate.ts
+  // HOST_API), so anchoring loses nothing a total scan would keep. KNOWN GAP: `var a = agentgemApp; a.openLink`
+  // aliases past it — closed by convention in MINIAPP_BUILDER_BRIEF + the save-time missing-cap error, the
+  // same way hasDynamicToolCall handles dynamic tool names.
+  const method = Object.keys(METHOD_CAP)
+    .filter((m) => code.includes(`agentgemApp.${m}`))
+    .map((m) => METHOD_CAP[m]);
+  return [...tool, ...method].sort();
 }
 
 export function reconcileNeeds(html: string, declared: GameCapability[] | undefined): Reconciled {
