@@ -5,7 +5,7 @@
 // `game` gem via createWorkspace so a miniapp is both a shareable HTML file and a marketplace gem.
 import { homedir } from "node:os";
 import { join, sep } from "node:path";
-import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { safePathSegment } from "@agentgem/model";
 import type { Gem, GameArtifact, GameGenre, GameSource, GameCapability } from "@agentgem/model";
 import { workspaceDir } from "@agentgem/base";
@@ -32,6 +32,23 @@ export function miniappDir(name: string): string {
   const dir = join(miniappsRoot(), name);
   if (!dir.startsWith(miniappsRoot() + sep)) throw new Error("miniapp dir escaped the registry root");
   return dir;
+}
+
+// Claim a FRESH dir for a newly-created miniapp, suffixing on collision: `duel`, `duel-2`, `duel-3`.
+// Only the create paths (seed/import/blank) call this — opening an existing miniapp to edit it keeps
+// its name, so saveMiniapp still upserts in place.
+//
+// The non-recursive mkdirSync IS the claim: it throws EEXIST when the name is taken, which makes the
+// check-and-take a single atomic syscall. An existsSync() test would leave a window in which two
+// concurrent creates both see "free" and pick the same name, and the second would clobber the first.
+export function claimMiniappDir(base: string): { name: string; dir: string } {
+  for (let n = 1; n <= 999; n++) {
+    const name = n === 1 ? base : `${base}-${n}`;
+    const dir = miniappDir(name);                 // validates the (suffixed) name + jails the path
+    try { mkdirSync(dir); return { name, dir }; }
+    catch (e) { if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e; }
+  }
+  throw new Error(`too many miniapps named '${base}'`);
 }
 
 // Write (create-or-overwrite) the marketplace game-gem for a miniapp. Shared by saveMiniapp (strict,
@@ -64,6 +81,32 @@ export async function saveMiniapp(input: SaveMiniappInput): Promise<{ name: stri
   const commit = await commitWithLock(root, `save miniapp ${safe}`);
   writeGameGem(safe, input.html, input.meta);      // strict path: gate already passed above
   return { name: safe, commit };
+}
+
+// Remove the dual-written game gem — but ONLY the one WE wrote. workspaceDir() is a shared, name-keyed
+// namespace, so a gem authored by another producer can sit at the very same path, and unlike the
+// registry it is NOT under git, so a wrong delete is unrecoverable. `createdFrom: "play"` in the
+// manifest is the proof of authorship; anything foreign, missing, or unreadable is left untouched.
+function deletePlayGem(name: string): void {
+  const wdir = workspaceDir(name);
+  try {
+    const m = JSON.parse(readFileSync(join(wdir, "gem.json"), "utf8")) as { name?: string; createdFrom?: string };
+    if (m.createdFrom !== "play" || m.name !== name) return;
+  } catch { return; }
+  rmSync(wdir, { recursive: true, force: true });
+}
+
+export async function deleteMiniapp(name: string): Promise<{ name: string; commit: string | null }> {
+  const dir = miniappDir(name);                    // validates the name (throws on bad) + jails the path
+  if (!existsSync(dir)) throw new Error(`miniapp '${name}' not found`);
+  const root = miniappsRoot();
+  await ensureRepo(root);
+  rmSync(dir, { recursive: true, force: true });
+  // Commit AFTER the rm: commitAll's `git add -A` stages the deletion, so the removed miniapp stays
+  // recoverable from history. This is the only reason a delete is safe to offer without a hard confirm.
+  const commit = await commitWithLock(root, `delete miniapp ${name}`);
+  deletePlayGem(name);
+  return { name, commit };
 }
 
 // Auto-checkpoint: persist the CURRENT on-disk miniapp WITHOUT gating (durability for in-progress agent

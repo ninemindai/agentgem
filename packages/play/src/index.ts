@@ -5,7 +5,7 @@ export { GENRES, genreFor, type GenreSpec } from "./genres.js";
 export { scaffoldFor } from "./scaffolds.js";
 export { extractSource, compactTurns, type GenerationInput, type SourceReaders } from "./sourceContext.js";
 export { git, ensureRepo, commitAll, commitWithLock, setRemote, push } from "./git.js";
-export { miniappsRoot, miniappDir, saveMiniapp, checkpointMiniapp, readMiniapp, listMiniapps, migrateAllMiniapps, type MiniappMeta, type SaveMiniappInput } from "./miniapps.js";
+export { miniappsRoot, miniappDir, claimMiniappDir, saveMiniapp, deleteMiniapp, checkpointMiniapp, readMiniapp, listMiniapps, migrateAllMiniapps, type MiniappMeta, type SaveMiniappInput } from "./miniapps.js";
 export { MCP_APP_MIME, uiUri, mcpResourceFor, mcpToolFor, mcpAppFor, type McpUiCsp, type AgentGemGameMeta, type McpUiResource, type McpUiTool, type McpApp } from "./mcpApp.js";
 export { mcpAppClient, MCP_CLIENT_MARKER } from "./mcpAppClient.js";
 export { migrateMiniappHtml, type MigrateOutcome } from "./migrate.js";
