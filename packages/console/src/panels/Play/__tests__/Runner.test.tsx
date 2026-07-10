@@ -140,7 +140,10 @@ describe("Runner", () => {
     fireEvent.click(screen.getByText("Allow"));
     await waitFor(() => expect(watchStream.openWatchStream).toHaveBeenCalledWith("", "/f.jsonl", expect.any(Function)));
     emit({ type: "event", index: 0 }); // a live session event arrives
-    expect(post).toHaveBeenCalledWith(expect.objectContaining({ method: "ui/notifications/tool-result", params: { toolName: "agentgem_subscribe_sessions", chunk: { type: "event", index: 0 } } }), "*");
+    expect(post).toHaveBeenCalledWith(expect.objectContaining({
+      method: "ui/notifications/tool-result",
+      params: { content: [], structuredContent: { type: "event", index: 0 }, _meta: { "ai.agentgem/stream": { toolName: "agentgem_subscribe_sessions" } } },
+    }), "*");
   });
 
   it("live-session-events: a no-session request replies idle but does NOT wedge a later retry", async () => {
@@ -173,7 +176,10 @@ describe("Runner", () => {
     fireEvent.click(screen.getByText("Allow"));
     await waitFor(() => expect(studioStream.openStudioStream).toHaveBeenCalledWith("", "c1", "hello agent", expect.anything()));
     onDelta!("hi there");
-    expect(post).toHaveBeenCalledWith(expect.objectContaining({ method: "ui/notifications/tool-result", params: { toolName: "agentgem_invoke_agent", chunk: { kind: "delta", text: "hi there" } } }), "*");
+    expect(post).toHaveBeenCalledWith(expect.objectContaining({
+      method: "ui/notifications/tool-result",
+      params: { content: [], structuredContent: { kind: "delta", text: "hi there" }, _meta: { "ai.agentgem/stream": { toolName: "agentgem_invoke_agent" } } },
+    }), "*");
     vi.unstubAllGlobals();
   });
 
