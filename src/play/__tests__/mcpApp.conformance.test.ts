@@ -90,7 +90,10 @@ describe("mcpApp.conformance", () => {
     // Tool shape.
     expect(tool.name).toBe("play_conf");
     expect(tool.description).toBe('Launch the "Conf" miniapp');
-    expect(tool.inputSchema).toEqual({ type: "object", properties: {} });
+    expect(tool.inputSchema).toEqual({
+      type: "object",
+      properties: { view: { type: "string", description: "optional initial view/state hint" } },
+    });
 
     // Contract: _meta.ui.resourceUri is present and matches ui:// scheme.
     expect(tool._meta.ui.resourceUri).toBe("ui://agentgem/conf");

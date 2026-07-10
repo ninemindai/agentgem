@@ -46,7 +46,7 @@ describe("mcpAppClient shim", () => {
     parent.postMessage = (msg) => {
       if (msg.method === "ui/initialize") {
         initCount++;
-        if (initCount >= 2) child.deliver({ jsonrpc: "2.0", id: msg.id, result: { protocolVersion: "x", tools: [{ name: "agentgem_get_session_data" }] } }, parent);
+        if (initCount >= 2) child.deliver({ jsonrpc: "2.0", id: msg.id, result: { protocolVersion: "x", _meta: { "ai.agentgem/host": { tools: [{ name: "agentgem_get_session_data" }] } } } }, parent);
         return;
       }
       if (msg.method === "ui/notifications/initialized") return;
@@ -71,7 +71,14 @@ describe("mcpAppClient shim", () => {
     // `d.params.toolName`, or every real miniapp silently drops host-pushed notifications.
     const chunks: unknown[] = [];
     child.agentgemApp.onNotification("ui/notifications/tool-result", (m) => chunks.push(m));
-    child.deliver({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { toolName: "agentgem_subscribe_sessions", chunk: { type: "event" } } }, parent);
+    child.deliver(
+      {
+        jsonrpc: "2.0",
+        method: "ui/notifications/tool-result",
+        params: { content: [], structuredContent: { type: "event" }, _meta: { "ai.agentgem/stream": { toolName: "agentgem_subscribe_sessions" } } },
+      },
+      parent,
+    );
     expect(chunks).toEqual([{ toolName: "agentgem_subscribe_sessions", chunk: { type: "event" } }]);
   });
 
@@ -82,7 +89,7 @@ describe("mcpAppClient shim", () => {
     const parent = makeWindow();
     child.parent = parent;
     parent.postMessage = (msg) => {
-      if (msg.method === "ui/initialize") child.deliver({ jsonrpc: "2.0", id: msg.id, result: { protocolVersion: "x", tools: [] } }, parent);
+      if (msg.method === "ui/initialize") child.deliver({ jsonrpc: "2.0", id: msg.id, result: { protocolVersion: "x", _meta: { "ai.agentgem/host": { tools: [] } } } }, parent);
     };
     runShim(child);
 
@@ -93,7 +100,11 @@ describe("mcpAppClient shim", () => {
     });
 
     child.deliver(
-      { jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { toolName: "agentgem_get_session_data", chunk: { meta: {}, timeline: [] } } },
+      {
+        jsonrpc: "2.0",
+        method: "ui/notifications/tool-result",
+        params: { content: [], structuredContent: { meta: {}, timeline: [] }, _meta: { "ai.agentgem/stream": { toolName: "agentgem_get_session_data" } } },
+      },
       parent,
     );
 
@@ -111,8 +122,22 @@ describe("mcpAppClient shim", () => {
   });
 
   it("carries the MCP_CLIENT_MARKER for migration idempotence", () => {
-    expect(MCP_CLIENT_MARKER).toBe("agentgem:mcp-app-client");
+    expect(MCP_CLIENT_MARKER).toBe("agentgem:mcp-app-client:2");
     expect(mcpAppClient()).toContain(MCP_CLIENT_MARKER);
+  });
+
+  it("replies to a ui/resource-teardown request with an empty JSON-RPC result", () => {
+    const child = makeWindow();
+    const parent = makeWindow();
+    child.parent = parent;
+    const posted: Array<{ jsonrpc?: string; id?: number; method?: string; result?: unknown }> = [];
+    parent.postMessage = (msg) => { posted.push(msg); };
+    runShim(child);
+    posted.length = 0; // drop the initial ui/initialize the shim posts on load
+
+    child.deliver({ jsonrpc: "2.0", id: 7, method: "ui/resource-teardown" }, parent);
+
+    expect(posted).toContainEqual({ jsonrpc: "2.0", id: 7, result: {} });
   });
 
   describe("callTool ready-gating", () => {
@@ -128,7 +153,7 @@ describe("mcpAppClient shim", () => {
       const toolCalls: Array<{ id?: number; params?: unknown }> = [];
       let deliverInit: (() => void) | null = null;
       parent.postMessage = (msg) => {
-        if (msg.method === "ui/initialize") { deliverInit = () => child.deliver({ jsonrpc: "2.0", id: msg.id, result: { protocolVersion: "x", tools: [] } }, parent); return; }
+        if (msg.method === "ui/initialize") { deliverInit = () => child.deliver({ jsonrpc: "2.0", id: msg.id, result: { protocolVersion: "x", _meta: { "ai.agentgem/host": { tools: [] } } } }, parent); return; }
         if (msg.method === "tools/call") { toolCalls.push(msg); child.deliver({ jsonrpc: "2.0", id: msg.id, result: { ok: true } }, parent); return; }
       };
       runShim(child);
@@ -169,7 +194,7 @@ describe("mcpAppClient shim", () => {
       child.parent = parent;
       let toolCallMsg: { id?: number } | null = null;
       parent.postMessage = (msg) => {
-        if (msg.method === "ui/initialize") { child.deliver({ jsonrpc: "2.0", id: msg.id, result: { protocolVersion: "x", tools: [] } }, parent); return; }
+        if (msg.method === "ui/initialize") { child.deliver({ jsonrpc: "2.0", id: msg.id, result: { protocolVersion: "x", _meta: { "ai.agentgem/host": { tools: [] } } } }, parent); return; }
         if (msg.method === "tools/call") toolCallMsg = msg; // host holds the call — e.g. slow user consent
       };
       runShim(child);
