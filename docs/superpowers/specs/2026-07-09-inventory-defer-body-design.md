@@ -181,13 +181,55 @@ Row expand (id = workspace/skills/standalone/agentback)
 
 ## Verification
 
-Measured against a real home (413 skills), not asserted:
+Measured against a real home (413 skills) on the built server, not asserted:
 
-| | before | expected after |
+| | before | after (measured) |
 |---|---|---|
-| `GET /api/inventory` payload | 6.13 MB | ~0.16 MB |
-| Curate mount | serial (inventory → usage) | parallel |
-| revalidation | full 6.13 MB re-sent | `304`, 0 bytes |
+| `GET /api/inventory` payload | 6,214,881 bytes | **166,872 bytes** — 37.2× smaller, 97.3% removed |
+| `GET /api/artifact/content?id=` | — | `200`, 17.9 ms |
+| unparseable id / unknown id | — | `404` / `404` |
+| `Cache-Control` | absent | `no-cache` |
+| revalidation (`If-None-Match`) | full payload re-sent | **`304`, 0 bytes** |
+| Curate mount | serial (inventory → usage) | parallel (`Promise.all`) |
+| bodies present under `defer` | all | **none** (verified: no `content` on any skill/instruction) |
+
+The predicted shrink was 46×; the actual is **37.2×**, because the minted ids themselves
+add ~33 KB. Recorded as measured, not as predicted.
+
+Real-data encoding check: the instruction whose name contains a `/` addresses correctly as
+`workspace/instructions/codex%3Arules%2Fdefault.rules`, confirming percent-encoded segments
+are load-bearing rather than theoretical.
+
+Root suite after the change: **2442 passed, 0 failed.**
+
+## Amendments made during implementation
+
+Recorded here so the spec matches what shipped. Each was forced by the code, not chosen.
+
+1. **`id` is minted only on `skills`, `subagents`, `instructions`** — not "every artifact". `hook`
+   and `mcp_server` have no `content`, so they have nothing to address, and those three are exactly
+   the entity scheme's workspace collections. `id` is **required** on the wire for them: the server
+   always mints it, and requiring it turns a mint regression into a loud test failure. (Response
+   validation in `@agentback/rest` only logs at `debug` and still returns the payload, so this is a
+   contract statement, not a runtime guard.)
+
+2. **`defer` strips bodies from the GLOBAL lists only; `inventory.projects[]` is untouched.**
+   `introspectAll` fills `projects[]` when `?projects=` is passed (Setup does this). The scheme's
+   `workspace/*` addresses local, gem-less artifacts and has no project-scoped path. Rather than
+   invent one, project artifacts keep inline `content` and get no `id`. `ProjectInventorySchema` is
+   unchanged. Setup therefore has two live render paths, both tested.
+
+3. **Curate's expand button gates on `detail || id`, not `detail`.** It previously rendered only
+   `if (i.detail)`; under `defer` there is no `detail`, so the button would have vanished and no body
+   could ever be loaded. The gate now means "has a body to load", not "has a body loaded".
+
+Two defects found by review during implementation, both fixed and regression-tested:
+
+- **Curate:** a recorded body-load error was never cleared on a later success, and the render checked
+  the error before the body — so a transient failure permanently masked a successful retry.
+- **Setup:** `<ArtifactViewer>` was unkeyed, so a hash-driven artifact switch
+  (`#/setup/<tab>?a=<name>`, a documented cross-panel deep-link) re-rendered it in place and showed
+  artifact A's body under artifact B's title. Fixed by keying on artifact identity so React remounts.
 
 ## Accepted costs
 
