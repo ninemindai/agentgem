@@ -84,17 +84,6 @@ export const accounts = pgTable("accounts", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// DEAD/UNUSED as of the Plan 1b cutover: better-auth's own `session` table (below) is now
-// authoritative — no code writes or reads this table anymore (webAuth.ts dropped its mint/lookup
-// functions). The DDL stays because dropping a table is a separate migration, not a code change.
-export const webSessions = pgTable("web_sessions", {
-  id: uuid("id").primaryKey(),
-  tokenHash: text("token_hash").notNull().unique(),
-  accountId: uuid("account_id").notNull().references(() => accounts.id),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-});
-
 // Single-use, short-TTL codes for the desktop→web SSO handoff. The local app mints a code (bearer-
 // authenticated), opens the redeem URL in the browser, and the redeem route swaps the code for a
 // fresh web session cookie. Only the code's sha256 is stored, and it maps to an account (never a
@@ -283,6 +272,7 @@ export const catalogGems = pgTable("catalog_gems", {
   // publish path. Distinct from artifactKinds (the deduped kind summary).
   artifacts: jsonb("artifacts").$type<{ name: string; type: string }[]>(),
   createdAtMs: bigint("created_at_ms", { mode: "number" }).notNull(),
+  ownerAccountId: uuid("owner_account_id"),
 }, (t) => [primaryKey({ columns: [t.gemKey, t.version] })]);
 
 // Installable gem content: the .gem archive bytes for a published (gem_key, version). A row here
@@ -348,6 +338,7 @@ export const user = pgTable("user", {
   emailVerified: boolean("email_verified").default(false).notNull(),
   image: text("image"),
   login: text("login"),
+  handle: text("handle").unique(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -396,7 +387,7 @@ export const verification = pgTable("verification", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, webSessions, handoffCodes, stars, reviews, gemAdoptions, accountScopes, usageDays, usageDayModels, orgSettings, catalogGems, gemArchives, gamePlays, curatedSkills, appInstallations, orgMembers, groups, groupMembers, groupInvites, user, session, account, verification };
+export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, handoffCodes, stars, reviews, gemAdoptions, accountScopes, usageDays, usageDayModels, orgSettings, catalogGems, gemArchives, gamePlays, curatedSkills, appInstallations, orgMembers, groups, groupMembers, groupInvites, user, session, account, verification };
 export type AppDb = PgDatabase<any, typeof schema>;
 
 // Idempotent DDL. (Schema-as-tables above is the query source of truth; this DDL
@@ -414,9 +405,6 @@ export async function ensureSchema(db: AppDb): Promise<void> {
   await db.execute(sql`alter table share_cards alter column counts drop not null`);
   await db.execute(sql`create table if not exists api_keys (id uuid primary key, key_hash text not null unique, label text not null, created_at timestamptz not null default now(), revoked_at timestamptz)`);
   await db.execute(sql`create table if not exists accounts (id uuid primary key, provider text not null, provider_account_id text not null, login text not null, avatar_url text, created_at timestamptz not null default now(), unique (provider, provider_account_id))`);
-  // DEAD as of the Plan 1b cutover (see the `webSessions` table comment above) — kept, not dropped,
-  // since dropping a table is a separate migration.
-  await db.execute(sql`create table if not exists web_sessions (id uuid primary key, token_hash text not null unique, account_id uuid not null references accounts(id), created_at timestamptz not null default now(), expires_at timestamptz not null)`);
   await db.execute(sql`create table if not exists handoff_codes (code_hash text primary key, account_id uuid not null references accounts(id), expires_at timestamptz not null)`);
   await db.execute(sql`create table if not exists stars (id uuid primary key, account_id uuid not null references accounts(id), target_kind text not null, target_id text not null, created_at timestamptz not null default now(), unique (account_id, target_kind, target_id))`);
   await db.execute(sql`create index if not exists stars_target_idx on stars (target_kind, target_id)`);
@@ -501,6 +489,28 @@ export async function ensureSchema(db: AppDb): Promise<void> {
   await db.execute(sql`create table if not exists "user" (
     id text primary key, name text, email text unique, email_verified boolean not null default false,
     image text, login text, created_at timestamptz not null default now(), updated_at timestamptz not null default now())`);
+
+  // Identity re-key. `handle` is the ONLY human-readable name; it authorizes nothing, so it may
+  // be NULL until claimed. Postgres UNIQUE permits many NULLs. NULL is not '', which makes the
+  // empty-string identity collision unrepresentable rather than merely guarded.
+  await db.execute(sql`alter table "user" add column if not exists handle text`);
+  await db.execute(sql`create unique index if not exists user_handle_uniq on "user" (handle)`);
+  await db.execute(sql`do $$ begin
+    alter table "user" add constraint user_handle_shape
+      check (handle is null or handle ~ '^[A-Za-z0-9-]{1,39}$');
+  exception when duplicate_object then null; end $$`);
+
+  // The authorization key for a published gem. NULL = owned by nobody (see the backfill).
+  await db.execute(sql`alter table catalog_gems add column if not exists owner_account_id uuid references accounts(id)`);
+  await db.execute(sql`create index if not exists catalog_gems_owner_idx on catalog_gems (owner_account_id)`);
+
+  // A login-less provider (Google, Slack, X) must still get an `accounts` anchor row, because ten
+  // tables carry a foreign key to accounts.id. See anchorAndScopes.
+  await db.execute(sql`alter table accounts alter column login drop not null`);
+
+  // Dead since the Plan 1b cutover: zero readers, sessions now live in better-auth's `session`.
+  await db.execute(sql`drop table if exists web_sessions`);
+
   await db.execute(sql`create table if not exists "session" (
     id text primary key, user_id text not null references "user"(id) on delete cascade,
     token text not null unique, expires_at timestamptz not null, ip_address text, user_agent text,
