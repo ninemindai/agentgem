@@ -176,7 +176,12 @@ export function Setup({ apiBase }: { apiBase: string }) {
         )}
       </div>
 
-      {selected ? <ArtifactViewer apiBase={apiBase} sel={selected} onClose={closeViewer} /> : null}
+      {selected ? (
+        // Keyed by artifact identity so switching artifacts (e.g. hash-driven, without closing
+        // the modal) remounts the viewer instead of reusing it — otherwise its lazyBody/lazyErr
+        // state from the previous artifact would survive into the new one's render.
+        <ArtifactViewer key={selected.artifact.id ?? selected.artifact.name} apiBase={apiBase} sel={selected} onClose={closeViewer} />
+      ) : null}
     </div>
   );
 }

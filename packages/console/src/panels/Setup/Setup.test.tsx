@@ -129,6 +129,37 @@ describe("Setup", () => {
     expect(fetchSpy.mock.calls.some(([u]) => String(u).includes("/api/artifact/content"))).toBe(false);
   });
 
+  it("discards a stale body when the hash switches directly from one deferred artifact to another", async () => {
+    // Two deferred global artifacts (id, no content); the second's body-fetch is left
+    // permanently pending so the bug (stale first body under the second's title) is
+    // observable rather than a one-frame flicker.
+    const invTwo = {
+      ...inv,
+      skills: [
+        inv.skills[0],
+        { type: "skill", name: "second", source: "superpowers", description: "another skill", id: "workspace/skills/superpowers/second" },
+      ],
+    };
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+      const u = String(url);
+      if (u.includes("/api/artifact/content")) {
+        const id = new URL(u, "http://x").searchParams.get("id");
+        if (id === "workspace/skills/superpowers/brainstorming") return res({ id, content: "BODY-A" });
+        if (id === "workspace/skills/superpowers/second") return new Promise<Response>(() => {}); // never resolves
+      }
+      return res(invTwo);
+    }));
+    window.location.hash = "#/setup/skills?a=brainstorming";
+    render(<Setup apiBase="" />);
+    expect(await screen.findByText("BODY-A")).toBeTruthy();
+
+    // Drive straight to the second artifact without closing the modal — e.g. browser
+    // back/forward, or any other panel deep-linking to #/setup/<tab>?a=<name>.
+    setHash("#/setup/skills?a=second");
+    await waitFor(() => expect(screen.getByRole("dialog").getAttribute("aria-label")).toBe("second"));
+    expect(screen.queryByText("BODY-A")).toBeNull();
+  });
+
   it("shows config for an artifact with no content (MCP server)", async () => {
     window.location.hash = "#/setup/mcp?a=github";
     vi.stubGlobal("fetch", vi.fn(async () => res(inv)));
