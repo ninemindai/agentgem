@@ -618,7 +618,7 @@ export async function ensureSchema(db: AppDb): Promise<void> {
       select 1 from pg_indexes
       where schemaname = 'public' and indexname = 'user_handle_uniq' and indexdef not ilike '%lower(handle)%'`);
     if ((stale.rows?.length ?? 0) > 0) {
-      await db.execute(sql`drop index user_handle_uniq`);
+      await db.execute(sql`drop index if exists user_handle_uniq`);
     }
     await db.execute(sql`create unique index if not exists user_handle_uniq on "user" (lower(handle))`);
   }
