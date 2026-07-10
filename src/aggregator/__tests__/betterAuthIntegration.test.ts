@@ -266,6 +266,35 @@ describe("betterAuth over drizzle+PGlite — account hook integration (1a-Task 6
     expect((session?.user as { login?: string } | undefined)?.login).toBe("neo");
   });
 
+  // Task 3 (Google sign-in slice): regression guard pinning that Google specifically works, not
+  // just "some non-github provider". The identity re-key already generalized anchorAndScopes to any
+  // non-github provider (see the test above), so this is expected to pass immediately with no
+  // production change — it exercises makeAuth with a real googleClientId/googleClientSecret pair
+  // wired up (c56838f7) rather than a bare providerId string.
+  it("a Google account.create anchors a NULL-login account, auto-claims NO handle, and satisfies the uuid FK", async () => {
+    const db = await makeTestDb();
+    const auth = makeAuth({ db, ...opts, googleClientId: "gid", googleClientSecret: "gsec" });
+    const { user } = await createNonGithubUser(db, auth, "google", "trinity@gmail.com");
+
+    const anchor = (await db.execute(sql`select id, provider, login from accounts where id = ${user.id}`))
+      .rows as { id: string; provider: string; login: string | null }[];
+    expect(anchor).toHaveLength(1);
+    expect(anchor[0]).toMatchObject({ provider: "google", login: null });
+
+    // Non-github ⇒ no handle auto-claim (only a GitHub login seeds a handle for free).
+    const handleRow = (await db.execute(sql`select handle from "user" where id = ${user.id}`))
+      .rows as { handle: string | null }[];
+    expect(handleRow[0].handle).toBeNull();
+
+    // The uuid anchor actually satisfies one of the ten accounts.id FKs — the user's first star
+    // (or review/group) must not 500.
+    await db.execute(sql`insert into stars (id, account_id, target_kind, target_id)
+                         values (${crypto.randomUUID()}, ${user.id}, 'gem', '@a/b')`);
+    const starN = (await db.execute(sql`select count(*)::int as n from stars where account_id = ${user.id}`))
+      .rows as { n: number }[];
+    expect(starN[0].n).toBe(1);
+  });
+
   it("get-session exposes the account's handle — null before a claim, set after", async () => {
     stubGithubMembershipsFetch();
     const db = await makeTestDb();
