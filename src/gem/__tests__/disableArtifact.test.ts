@@ -112,6 +112,22 @@ describe("plugin disable/enable", () => {
     expect(s.someOther).toBe(1); // untouched
   });
 
+  it("refuses to overwrite a malformed settings.json instead of nuking all other config", () => {
+    const malformed = "{ this is not valid json ";
+    writeFileSync(settingsFile(), malformed);
+    const [r] = disableArtifacts([{ type: "skill", name: "brooks-review", source: "plugin:brooks-lint" }], opts);
+    expect(r.ok).toBe(false);
+    expect(r.message).toMatch(/malformed|refus/i);
+    expect(readFileSync(settingsFile(), "utf8")).toBe(malformed); // left untouched, not overwritten
+  });
+
+  it("still creates settings.json when it is absent (fresh install must keep working)", () => {
+    rmSync(settingsFile());
+    const [r] = disableArtifacts([{ type: "skill", name: "brooks-review", source: "plugin:brooks-lint" }], opts);
+    expect(r.ok).toBe(true);
+    expect(readSettings().enabledPlugins["brooks-lint"]).toBe(false);
+  });
+
   it("lists a disabled plugin and re-enables it", () => {
     disableArtifacts([{ type: "skill", name: "brooks-review", source: "plugin:brooks-lint" }], opts);
     const disabled = listDisabled(opts);
