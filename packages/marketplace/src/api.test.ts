@@ -81,6 +81,34 @@ describe("makeApi", () => {
   });
 });
 
+describe("getGameMeta", () => {
+  it("omits version when absent so the server resolves latest", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => {
+      calls.push(url);
+      return { ok: true, text: async () => JSON.stringify({ title: "Tetris", genre: "project-fun", version: "2.0.0" }) };
+    });
+    const api = makeApi("https://api.test");
+
+    const meta = await api.getGameMeta("@acme/tetris");
+
+    expect(meta).toEqual({ title: "Tetris", genre: "project-fun", version: "2.0.0" });
+    expect(calls[0]).toBe("https://api.test/api/aggregator/game-meta?key=%40acme%2Ftetris");
+  });
+
+  it("sends an explicit version when given", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => {
+      calls.push(url);
+      return { ok: true, text: async () => JSON.stringify({ title: "Tetris", genre: "project-fun", version: "1.0.0" }) };
+    });
+
+    await makeApi("https://api.test").getGameMeta("@acme/tetris", "1.0.0");
+
+    expect(calls[0]).toContain("version=1.0.0");
+  });
+});
+
 describe("makeApi sources", () => {
   it("getSources unwraps {sources}", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => res({ sources: [{ id: "agency-agents", label: "The Agency", description: "d", repo: "o/r", ref: "main", kind: "agency-layout" }] })));
