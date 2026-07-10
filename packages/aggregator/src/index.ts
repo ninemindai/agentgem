@@ -28,6 +28,7 @@ export * from "./curatedSkills.js";
 export * from "./githubApp.js";
 export * from "./groups.js";
 export * from "./groupInvites.js";
+export * from "./handles.js";
 export * from "./auth/betterAuth.js";
 export * from "./auth/mintSession.js";
 export * from "./auth/mintCookie.js";
