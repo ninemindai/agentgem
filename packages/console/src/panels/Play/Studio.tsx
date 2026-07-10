@@ -173,12 +173,15 @@ export function Studio({
         createdFrom: cur.meta.createdFrom, engineVersion: cur.meta.engineVersion,
         ...(cur.meta.needs ? { needs: cur.meta.needs } : {}),
       } } });
-      // The save is the reconciliation. Drop what it pruned so the strip tells the truth and <Runner needs>
-      // renegotiates with the host on the correct set.
+      // The save is the reconciliation. Adopt the meta we just read and stored, minus what the save
+      // pruned, so the strip tells the truth and <Runner needs> renegotiates on the correct set.
+      //
+      // Adopting only the PRUNE was a one-way street: a capability ADDED to meta.json (by the agent or by
+      // hand) never reached `meta` state, so <Runner needs> stayed stale, the host never attached, and the
+      // miniapp ran host-less until an unmount/remount. There is no reload control to escape that with.
       setPruned(res.prunedNeeds);
-      if (res.prunedNeeds.length) {
-        setMeta((m) => (m ? { ...m, needs: (m.needs ?? []).filter((n) => !(res.prunedNeeds as string[]).includes(n)) } : m));
-      }
+      const needs = (cur.meta.needs ?? []).filter((n) => !(res.prunedNeeds as string[]).includes(n));
+      setMeta({ title: cur.meta.title, genre: cur.meta.genre, ...(needs.length ? { needs } : {}) });
       setStatus("saved ✓"); return true;
     } catch (e) {
       const failures = parseGateFailure((e as Error).message);

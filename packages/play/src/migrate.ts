@@ -46,11 +46,18 @@ export function ensureClientShim(html: string): string {
 }
 
 function injectClientShim(html: string): string {
-  // Same head-injection approach as sandboxDoc: insert at the very start of <head> so
-  // `window.agentgemApp` exists before the game's own script runs. Falls back to synthesizing a
-  // <head> if the document doesn't have one (mirrors sandboxDoc's fallback).
-  if (/<head[\s>]/i.test(html)) return html.replace(/<head([^>]*)>/i, `<head$1>${mcpAppClient()}`);
-  return `<!doctype html><html><head>${mcpAppClient()}</head><body>${html}</body></html>`;
+  const shim = mcpAppClient();
+  // Insert at the very start of <head> so `window.agentgemApp` exists before the game's own script runs.
+  if (/<head[\s>]/i.test(html)) return html.replace(/<head([^>]*)>/i, `<head$1>${shim}`);
+
+  // No <head>. Wrapping the WHOLE input in a synthesized document would nest a second <!doctype> and a
+  // second <body> inside the new body — malformed, and gameGate admits it (it only scans for external
+  // references and network syntax), so the broken bytes would be stored, dual-written to the game gem,
+  // and served as the MCP Apps resource text. Splice a head into the document that already exists, and
+  // only synthesize a whole one for a bare fragment. Each branch keeps the shim ahead of the game script.
+  if (/<html[\s>]/i.test(html)) return html.replace(/<html([^>]*)>/i, `<html$1><head>${shim}</head>`);
+  if (/<body[\s>]/i.test(html)) return html.replace(/<body([^>]*)>/i, `<body$1>${shim}`);
+  return `<!doctype html><html><head>${shim}</head><body>${html}</body></html>`;
 }
 
 export function migrateMiniappHtml(html: string): { html: string; outcome: MigrateOutcome } {

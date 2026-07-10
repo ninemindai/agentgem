@@ -165,6 +165,49 @@ describe("migrateMiniappHtml", () => {
     expect(hasDynamicToolCall(html)).toBe(false);
   });
 
+  // Wrapping a whole document inside a synthesized <body> nests a second <!doctype> and <body>. It is
+  // malformed, gameGate admits it (ok:true), and it then gets STORED, dual-written to the game gem, and
+  // served as the MCP Apps resource text. Splice a head into the document that is already there.
+  describe("shim injection into a document with no <head>", () => {
+    const count = (h: string, re: RegExp) => (h.match(re) || []).length;
+    const wellFormed = (h: string) => ({
+      doctype: count(h, /<!doctype/gi), html: count(h, /<html[\s>]/gi), body: count(h, /<body[\s>]/gi),
+    });
+
+    it("<html> + <body>, no <head>: splices a head, nests nothing", () => {
+      const src = `<!doctype html><html lang="en"><body><canvas></canvas><script>window.agentgemApp.callTool("agentgem_get_inventory",{})</script></body></html>`;
+      const { html, outcome } = migrateMiniappHtml(src);
+      expect(outcome).toBe("migrated");
+      expect(html).toContain(MCP_CLIENT_MARKER);
+      expect(wellFormed(html)).toEqual({ doctype: 1, html: 1, body: 1 });
+      expect(html.indexOf(MCP_CLIENT_MARKER)).toBeLessThan(html.indexOf("callTool"));
+      expect(html).toContain('<html lang="en">');   // attributes preserved
+    });
+
+    it("<body> only, no <html>/<head>: injects into the body, nests nothing", () => {
+      const src = `<!doctype html><body><script>window.agentgemApp.callTool("agentgem_get_inventory",{})</script></body>`;
+      const { html } = migrateMiniappHtml(src);
+      expect(wellFormed(html)).toEqual({ doctype: 1, html: 0, body: 1 });
+      expect(html.indexOf(MCP_CLIENT_MARKER)).toBeLessThan(html.indexOf("callTool"));
+    });
+
+    it("a bare fragment is wrapped into one well-formed document", () => {
+      const src = `<div id="app"></div><script>window.agentgemApp.callTool("agentgem_get_inventory",{})</script>`;
+      const { html } = migrateMiniappHtml(src);
+      expect(wellFormed(html)).toEqual({ doctype: 1, html: 1, body: 1 });
+      expect(html.indexOf(MCP_CLIENT_MARKER)).toBeLessThan(html.indexOf("callTool"));
+    });
+
+    it("the spliced document still passes the gate and stays idempotent", async () => {
+      const src = `<!doctype html><html><body><script>window.agentgemApp.callTool("agentgem_get_inventory",{})</script></body></html>`;
+      const { html } = migrateMiniappHtml(src);
+      expect(await gameGate(html)).toEqual({ ok: true, failures: [] });
+      const again = migrateMiniappHtml(html);
+      expect(again.outcome).toBe("already");
+      expect(again.html).toBe(html);
+    });
+  });
+
   it("never throws on garbage input", () => {
     expect(() => migrateMiniappHtml("")).not.toThrow();
     expect(migrateMiniappHtml("").outcome).toBe("unrecognized");
