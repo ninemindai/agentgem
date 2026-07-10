@@ -919,7 +919,11 @@ export const playBlankRoute = defineRoute("POST", "/api/play/blank", {
 });
 export const playSaveRoute = defineRoute("POST", "/api/play/save", {
   body: z.object({ name: z.string(), html: z.string(), meta: PlayMetaSchema }),
-  response: z.object({ name: z.string(), commit: z.string().nullable() }),
+  response: z.object({
+    name: z.string(),
+    commit: z.string().nullable(),
+    prunedNeeds: z.array(z.enum(["session-data", "live-session-events", "local-project-access", "invoke-agent"])).default([]),
+  }),
 });
 export const playDeleteRoute = defineRoute("POST", "/api/play/delete", {
   body: z.object({ name: z.string() }), response: z.object({ name: z.string(), commit: z.string().nullable() }),

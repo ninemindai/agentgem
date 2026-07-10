@@ -7,7 +7,7 @@ import { saveMiniapp, deleteMiniapp, listMiniapps, readMiniapp, miniappsRoot, se
 import { defaultReaders } from "./play.readers.js";
 import { listActiveSessions } from "./watchSessions.js";
 import {
-  PlaySaveRequestSchema, PlaySaveResponseSchema, PlayDeleteRequestSchema, MiniappListSchema,
+  PlaySaveRequestSchema, PlaySaveResponseSchema, PlayDeleteRequestSchema, PlayDeleteResponseSchema, MiniappListSchema,
   PlayPublishRequestSchema, PlayPublishResponseSchema,
   PlayStudioRequestSchema, PlayStudioResponseSchema, PlayImportRequestSchema, PlayBlankRequestSchema,
   PlayMiniappQuerySchema, PlayMiniappSchema, PlaySessionDataSchema, PlaySessionDataQuerySchema, PlayMcpAppSchema,
@@ -29,8 +29,8 @@ export class PlayController {
   // Only an absent miniapp is a 404. A malformed/traversing name is a client error (400), matching the
   // sibling save/studio/import/blank routes and chatRoutes.ts — collapsing both into 404 would report a
   // rejected `../escape` as "not found", and would report a genuine git failure as "not found" too.
-  @post("/play/delete", { body: PlayDeleteRequestSchema, response: PlaySaveResponseSchema })
-  async delete(input: { body: z.infer<typeof PlayDeleteRequestSchema> }): Promise<z.infer<typeof PlaySaveResponseSchema>> {
+  @post("/play/delete", { body: PlayDeleteRequestSchema, response: PlayDeleteResponseSchema })
+  async delete(input: { body: z.infer<typeof PlayDeleteRequestSchema> }): Promise<z.infer<typeof PlayDeleteResponseSchema>> {
     try {
       return await deleteMiniapp(input.body.name);
     } catch (e) {
