@@ -66,40 +66,20 @@ export async function applyRetentionForScopes(db: AppDb, scopes: string[], nowMs
   }
 }
 
-/** The caller's role for a scope ("self" | "admin" | "member") or null when not a member. EXACT
- *  (case-sensitive) scope match — this backs `resolveOrgAccess`'s path 3 (captured org-membership
- *  role), which must stay byte-for-byte consistent with `accountScopeStatus`'s freshness lookup
- *  (also an exact match) so the two agree on which row they're both reading. Do not loosen this to
- *  case-insensitive for the self grant — use `accountSelfScope` below instead. */
+/** The caller's captured ORG role ("admin" | "member") for a scope, or null when not a member.
+ *  Backs `resolveOrgAccess`'s path 3. Case-insensitive, and filtered to org roles — kept
+ *  byte-for-byte consistent with `accountScopeInfo`'s freshness lookup so the two always agree on
+ *  which row they are reading. The self grant is NOT here: it derives from `"user".handle` via
+ *  `accountSelfScope` (handles.ts). */
 export async function accountScopeRole(db: AppDb, accountId: string, scope: string): Promise<string | null> {
-  const rows = await db
-    .select({ role: accountScopes.role })
-    .from(accountScopes)
-    .where(and(eq(accountScopes.accountId, accountId), eq(accountScopes.scope, scope)))
-    .limit(1);
-  return rows[0]?.role ?? null;
-}
-
-/** True iff the account HOLDS the role='self' account_scopes row for `scope`, matched
- *  case-insensitively — GitHub logins/handles are case-insensitive (the `user_handle_uniq` index
- *  is on `lower(handle)`, and `claimHandle`/`accountIdForHandle` already compare case-insensitively),
- *  so the self grant must not regress to a case-sensitive miss just because the caller's URL/route
- *  param carries different casing than the stored handle. Still never a login-string match: this
- *  reads the row the caller holds, filtered to role='self', same as `accountScopeRole`'s self
- *  check — just case-insensitive on the scope column. Deliberately a SEPARATE function from
- *  `accountScopeRole` (rather than making that one case-insensitive) because `accountScopeRole`'s
- *  other caller (`resolveOrgAccess` path 3) must stay an exact match to agree with
- *  `accountScopeStatus`'s freshness lookup — see the comment there. */
-export async function accountSelfScope(db: AppDb, accountId: string, scope: string): Promise<boolean> {
-  const scopeLc = scope.toLowerCase();
   const rows = await db
     .select({ role: accountScopes.role })
     .from(accountScopes)
     .where(and(
       eq(accountScopes.accountId, accountId),
-      sql`lower(${accountScopes.scope}) = ${scopeLc}`,
-      eq(accountScopes.role, "self"),
+      sql`lower(${accountScopes.scope}) = lower(${scope})`,
+      sql`${accountScopes.role} in ('admin','member')`,
     ))
     .limit(1);
-  return rows.length > 0;
+  return rows[0]?.role ?? null;
 }

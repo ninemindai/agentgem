@@ -10,7 +10,8 @@
 import { and, eq, sql } from "drizzle-orm";
 import { appInstallations, orgMembers, type AppDb } from "./schema.js";
 import { accountScopeStatus } from "./webAuth.js";
-import { accountScopeRole, accountSelfScope } from "./orgSettings.js";
+import { accountScopeRole } from "./orgSettings.js";
+import { accountSelfScope } from "./handles.js";
 import { deleteOrgSkills } from "./curatedSkills.js";
 
 export interface AppInstallation { installationId: number; orgScope: string; repoSelection: "all" | "selected"; suspended: boolean }

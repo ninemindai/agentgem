@@ -11,7 +11,7 @@ import { sql } from "drizzle-orm";
 import type { AppDb } from "../schema.js";
 import { fetchOrgMemberships } from "../accountVerifier.js";
 import { setAccountScopes, upsertAccount, getAccountScopes } from "../webAuth.js";
-import { claimHandleIfUnset, handleForAccountId } from "../handles.js";
+import { claimHandleIfUnset } from "../handles.js";
 
 const SESSION_TTL_S = 30 * 24 * 60 * 60; // 30 days — matches web_sessions/binding today (review fix 2A)
 
@@ -130,18 +130,12 @@ async function anchorAndScopes(
 
   try {
     if (account.accessToken) {
-      // The self-scope names the account by its HANDLE, never unconditionally by `login` — a user
-      // who renamed away from their GitHub login must keep authorizing under the new name after
-      // this re-login, not get reset back to `login` on every sign-in. `?? login` is a fallback
-      // between two non-empty identity strings (not a `?? ""`): claimHandleIfUnset can no-op on a
-      // reserved/taken name, in which case the account has no handle yet and `login` is the only
-      // name available for its own self-scope row.
-      const handle = (await handleForAccountId(db, account.userId)) ?? login;
+      // ORG memberships only. The account's own namespace is `"user".handle` (claimed just above),
+      // read directly by accountSelfScope/accountOwnsScope — it is never mirrored into a scope row.
+      // Writing one here is what used to let `recordBinding` and this hook disagree about the
+      // account's name; `ScopeGrant` no longer admits a "self" role, so the drift is a type error.
       const memberships = await fetchOrgMemberships(account.accessToken);
-      await setAccountScopes(db, account.userId, [
-        { scope: handle, role: "self" as const },
-        ...memberships.map((m) => ({ scope: m.login, role: m.role })),
-      ]);
+      await setAccountScopes(db, account.userId, memberships.map((m) => ({ scope: m.login, role: m.role })));
     }
   } catch { /* scopes are additive; never fail sign-in over them */ }
 }

@@ -57,12 +57,11 @@ describe("claimHandle", () => {
     const a = await mkUser(db, "1");
     const b = await mkUser(db, "2");
     await claimHandle(db, a, "old");
-    // Simulate an org membership captured alongside the self-scope (e.g. from a GitHub sign-in) —
-    // setAccountScopes REPLACES the whole set, so a naive rename could silently drop this.
-    await setAccountScopes(db, a, [{ scope: "old", role: "self" }, { scope: "myorg", role: "admin" }]);
+    // An org membership captured from a GitHub sign-in. A rename must not disturb it.
+    await setAccountScopes(db, a, [{ scope: "myorg", role: "admin" }]);
     await claimHandle(db, a, "new");
     expect(await handleForAccountId(db, a)).toBe("new");
-    expect(await accountOwnsScope(db, a, "old")).toBe(false);   // stale self-scope is gone
+    expect(await accountOwnsScope(db, a, "old")).toBe(false);   // the abandoned name grants nothing
     expect(await accountOwnsScope(db, a, "new")).toBe(true);
     expect(await accountOwnsScope(db, a, "myorg")).toBe(true);   // org membership survived the rename
 

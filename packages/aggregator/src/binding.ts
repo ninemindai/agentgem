@@ -14,6 +14,7 @@ import { accountBindings } from "./schema.js";
 import type { AccountVerifier, OrgMembership } from "./accountVerifier.js";
 import { fetchOrgMemberships } from "./accountVerifier.js";
 import { upsertAccount, setAccountScopes } from "./webAuth.js";
+import { claimHandleIfUnset } from "./handles.js";
 import { ensureBetterAuthUser } from "./auth/migrateAccounts.js";
 import { mintSession } from "./auth/mintSession.js";
 
@@ -62,14 +63,22 @@ export async function recordBinding<O extends BetterAuthOptions>(
   try {
     account = await upsertAccount(db, { provider: acct.provider, accountId: acct.accountId, login: acct.login, avatarUrl: acct.avatarUrl ?? null });
   } catch { /* avatar/profile is best-effort */ }
-  // 4c. capture owned scopes (login + org memberships w/ role) at bind, mirroring the web sign-in
-  // path — CLI-only users must pass membership-gated reads (team usage) without ever visiting the
-  // web. Best-effort: an org-fetch failure still records the self-login scope; never fails the bind.
+  // 4c. capture ORG memberships at bind, mirroring the web sign-in path — CLI-only users must pass
+  // membership-gated reads (team usage) without ever visiting the web. Best-effort: an org-fetch
+  // failure still binds; never fails the bind.
+  //
+  // The account's OWN namespace is not captured here. It is `"user".handle`, auto-claimed below
+  // exactly as `anchorAndScopes` does on web sign-in, and read directly by accountSelfScope /
+  // accountOwnsScope. This function used to write `{ scope: acct.login, role: "self" }`, and since
+  // setAccountScopes REPLACES the whole set, a CLI `bind` silently reverted a renamed handle back to
+  // the raw GitHub login — handing the renamer a `self` grant on whoever had since claimed the name
+  // they abandoned. `ScopeGrant` no longer admits "self", so that regression cannot be reintroduced
+  // without a type error.
   if (account) {
     try {
       let memberships: OrgMembership[] = [];
       try { memberships = await orgs(req.token); } catch { memberships = []; }
-      await setAccountScopes(db, account.id, [{ scope: acct.login, role: "self" }, ...memberships.map((m) => ({ scope: m.login, role: m.role }))]);
+      await setAccountScopes(db, account.id, memberships.map((m) => ({ scope: m.login, role: m.role })));
     } catch { /* scopes are additive to the bind */ }
   }
   // 5. upsert (pubkey PK -> one account per key; rebind updates in place)
@@ -79,19 +88,28 @@ export async function recordBinding<O extends BetterAuthOptions>(
       target: accountBindings.pubkey,
       set: { provider: acct.provider, accountId: acct.accountId, accountLogin: acct.login, boundAt: sql`now()` },
     });
-  // 6. mint a first-party session for the reconciled account (the bearer the API + web SSO honor).
-  // better-auth's `session` row FKs "user"(id), but recordBinding's account model is the legacy
-  // `accounts` table — ensure a same-id better-auth user (+github account) anchor exists first,
-  // mirroring migrateAccountsToBetterAuth's backfill insert but scoped to this one row (raw SQL,
-  // so it bypasses better-auth's adapter and the LOUD anchorAndScopes create-hook never fires here).
-  // Additive: a session failure never fails the bind, which already succeeded above.
+  // 6. ensure the same-id better-auth `user` anchor, then auto-claim the handle. `"user".handle` is
+  // where the account's own namespace lives now, so a CLI-only user who never opens the web app
+  // still needs one to publish under their own name (accountOwnsScope reads it). This mirrors
+  // `anchorAndScopes`' auto-claim exactly, including the `handle IS NULL` guard inside
+  // claimHandleIfUnset that is what lets a rename survive a later re-bind.
+  //
+  // The anchor insert runs whether or not `auth` was supplied (it is the same raw-SQL insert
+  // migrateAccountsToBetterAuth performs at boot, bypassing better-auth's adapter and the LOUD
+  // anchorAndScopes create-hook); only the session mint needs `auth`. Both are additive — a failure
+  // never fails the bind, which already succeeded above.
   let session: { sessionToken: string; expiresAt: string } | undefined;
-  if (account && auth) {
+  if (account) {
     try {
       await ensureBetterAuthUser(db, account);
-      const { token, expiresAt } = await mintSession(auth, account.id);
-      session = { sessionToken: token, expiresAt };
-    } catch { /* session is additive; bind already succeeded */ }
+      if (acct.provider === "github") await claimHandleIfUnset(db, account.id, acct.login);
+    } catch { /* anchor + handle claim are additive; bind already succeeded */ }
+    if (auth) {
+      try {
+        const { token, expiresAt } = await mintSession(auth, account.id);
+        session = { sessionToken: token, expiresAt };
+      } catch { /* session is additive; bind already succeeded */ }
+    }
   }
   return { bound: true, provider: acct.provider, login: acct.login, accountId: acct.accountId, ...(acct.avatarUrl ? { avatarUrl: acct.avatarUrl } : {}), ...(session ?? {}) };
 }
