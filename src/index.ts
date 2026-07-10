@@ -436,13 +436,20 @@ export function installGracefulShutdown(
   on("SIGINT", () => void shutdown("SIGINT"));
 }
 
+// Background cache warming is console-only (never on the hosted API, which does not
+// serve one). AGENTGEM_WARM=off disables it independently: the desktop host pays for
+// warm in the core process's working set, so it needs a way to turn it off that does
+// not also stop the console from being served.
+export function warmEnabled(env: Record<string, string | undefined>): boolean {
+  return env.SERVE_CONSOLE !== "false" && env.AGENTGEM_WARM !== "off";
+}
+
 // Start the server and print where its surfaces live. Shared by the default
 // entry point (below) and the `agentgem` CLI (src/cli.ts).
 export async function run(port: number = Number(process.env.PORT ?? 4317)): Promise<RestApplication> {
   const app = await createApp(port);
   await app.start();
-  // Background cache warming — console (local desktop) only; never on the hosted API.
-  const sched = process.env.SERVE_CONSOLE !== "false" ? startWarmSchedule() : null;
+  const sched = warmEnabled(process.env) ? startWarmSchedule() : null;
   installGracefulShutdown({ stop: async () => { sched?.stop(); await app.stop(); } });
   const server = await app.restServer;
   // A parent process (the desktop host forks this entry with PORT=0) needs the

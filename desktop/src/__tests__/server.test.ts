@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { spawn } from "node:child_process";
 import { join } from "node:path";
-import { startEmbeddedServer, parseReadyUrl, type CoreChild, type ForkCore } from "../server.js";
+import { startEmbeddedServer, parseReadyUrl, coreEnv, type CoreChild, type ForkCore } from "../server.js";
 
 // __dirname at runtime is desktop/src/__tests__ under vitest; the core resolver
 // expects the compiled main dir (desktop/dist). The dev candidate walks two
@@ -47,7 +47,37 @@ describe("parseReadyUrl", () => {
   });
 });
 
+describe("coreEnv", () => {
+  it("asks the OS for a port and asks the core for a machine-readable ready line", () => {
+    expect(coreEnv({})).toMatchObject({ PORT: "0", AGENTGEM_IPC: "1" });
+  });
+
+  it("keeps warm off by default, since the old in-process host never warmed", () => {
+    expect(coreEnv({}).AGENTGEM_WARM).toBe("off");
+  });
+
+  it("lets an explicit AGENTGEM_WARM through", () => {
+    expect(coreEnv({ AGENTGEM_WARM: "on" }).AGENTGEM_WARM).toBe("on");
+  });
+
+  it("passes the rest of the environment down to the core", () => {
+    expect(coreEnv({ HOME: "/home/x" }).HOME).toBe("/home/x");
+  });
+});
+
 describe("startEmbeddedServer", () => {
+  it("forks the core with the environment coreEnv() builds", async () => {
+    const child = new FakeChild();
+    const seen: NodeJS.ProcessEnv[] = [];
+    const pending = startEmbeddedServer(fakeMainDir, NO_RESOURCES, {
+      fork: (_entry, env) => { seen.push(env); return child; },
+      signal: noSignal,
+    });
+    child.say('{"type":"ready","url":"http://127.0.0.1:5051"}\n');
+    await pending;
+    expect(seen[0]).toMatchObject({ PORT: "0", AGENTGEM_IPC: "1", AGENTGEM_WARM: "off" });
+  });
+
   it("resolves the url from a ready line split across stdout chunks", async () => {
     const child = new FakeChild();
     const pending = startEmbeddedServer(fakeMainDir, NO_RESOURCES, { fork: forkFake(child), signal: noSignal });
