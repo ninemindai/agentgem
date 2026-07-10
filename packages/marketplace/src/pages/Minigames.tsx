@@ -79,7 +79,7 @@ export function Minigames({ api, stars }: { api: Api; stars: StarsCtx }) {
     return () => { alive = false; };
   }, [gameKeys, stars.api, api]);
 
-  if (!gems) return <p className="mg-intro">Loading mini-games…</p>;
+  if (!gems) return <p className="mg-intro">Loading miniapps…</p>;
   return (
     <div className="mg">
       <h2 className="mg-h">Miniapps</h2>

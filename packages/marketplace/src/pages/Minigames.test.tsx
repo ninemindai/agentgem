@@ -31,6 +31,12 @@ describe("Minigames", () => {
     });
   });
 
+  it("says it is loading miniapps before the gem list arrives", () => {
+    stubFetch([]);
+    render(<Minigames api={makeApi("")} stars={stars} />);
+    expect(screen.getByText("Loading miniapps…")).toBeTruthy(); // before any await: gems is still null
+  });
+
   it("shows an empty state when no games are published", async () => {
     stubFetch([{ key: "@me/kit", version: "1.0.0", artifactKinds: ["skill"], description: "kit" }]);
     render(<Minigames api={makeApi("")} stars={stars} />);
