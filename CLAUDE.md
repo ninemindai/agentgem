@@ -28,7 +28,7 @@ worktrees, `main` drifts if it's committed to directly or left stale, and ends u
 both ahead of and behind `origin/main` (not fast-forwardable) — and it's often
 **checked out in another worktree** (e.g. `../agentgem-run`) you must not disturb.
 Keep `main` clean and **a PR is the default integration path**; a direct local
-merge is the exception. The PR route runs CI (`test (24)` + `test (26)`) before
+merge is the exception. The PR route runs CI (`test (24)`) before
 anything lands, never touches the `main` checkout, and serializes safely when
 several sessions integrate at once — worth the round-trip as the default.
 
@@ -76,10 +76,13 @@ landed both times).
   just the first. Don't trust the "merged" notification. If commits were dropped,
   they're safe on the local branch: `git rebase origin/main` (already-merged commits
   auto-skip) → fresh branch → new PR.
-- **Merge gating:** `main` requires the CI checks `test (24)` + `test (26)`; no
-  required reviews. Repo auto-merge is disabled, so `gh pr merge --rebase` only
-  works once CI is green — `gh run watch <run-id> --exit-status` first. Do **not**
-  `--admin`-bypass branch protection without explicit human say-so.
+- **Merge gating:** `main` requires the single CI check `test (24)`; no required
+  reviews. `test (26)` runs only on release tags (`v*`, `desktop-v*`), so it is
+  **not** a PR gate. "Require branches up to date before merging" (`strict`) is
+  off, so a green PR needn't be rebased onto the latest `main` before merging.
+  Repo auto-merge is disabled, so `gh pr merge --rebase` only works once CI is
+  green — `gh run watch <run-id> --exit-status` first. Do **not** `--admin`-bypass
+  branch protection without explicit human say-so.
 - **`gh pr merge --delete-branch` will error** on the local branch-delete step
   because `main` is checked out in another worktree — but the **remote merge still
   succeeds**. Verify the merge landed; don't trust the error.
