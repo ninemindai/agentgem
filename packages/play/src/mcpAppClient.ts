@@ -11,7 +11,9 @@
 
 // A detectable substring carried inside the emitted <script>. A migration that swaps the old bridge for
 // this shim greps for it to stay idempotent (don't inject twice).
-export const MCP_CLIENT_MARKER = "agentgem:mcp-app-client";
+export const MCP_CLIENT_MARKER = "agentgem:mcp-app-client:2";
+// Matches any shim version so the on-read backstop can replace an older one wholesale.
+export const MCP_CLIENT_MARKER_RE = /agentgem:mcp-app-client(?::\d+)?/;
 
 export function mcpAppClient(): string {
   return `<script>
