@@ -11,6 +11,7 @@ import { RecallIndex } from "@agentgem/recall";
 import { searchSessions, getArtifactDetail } from "./tools.js";
 import { collectBehaviorFindings } from "./behaviorFindings.js";
 import { defaultRecallDbPath } from "./recall.js";
+import { resolveAllowedProjectRoot } from "./projectRoots.js";
 
 const SearchInput = z.object({
   query: z.string().default(""),
@@ -90,7 +91,14 @@ export class GoldmineTools {
   })
   async getArtifactDetailTool({ type, name, root }: z.infer<typeof DetailInput>) {
     const global = introspectConfig();
-    const project = root ? introspectProject(root) : null;
+    let project = null;
+    if (root) {
+      // `root` is caller-supplied and reachable via prompt injection; only introspect
+      // allow-listed project roots so it can never redirect the read outside them.
+      const allowed = resolveAllowedProjectRoot(root);
+      if (!allowed) throw new Error(`project root not allowed: ${root}`);
+      project = introspectProject(allowed);
+    }
     const detail = getArtifactDetail(global, project, type, name);
     return { detail };
   }
