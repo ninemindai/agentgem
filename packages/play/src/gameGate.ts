@@ -34,7 +34,7 @@ const JSON_TYPE = /\btype\s*=\s*["']application\/json["']/i;
 // That matters: a regex can start matching a fake `<script type="application/json">` that appears inside a
 // REAL executable script's string literal and delete the executable payload with it; the tokenizer walk
 // cannot, because an executable script's content only ends at a real </script>, so its code is preserved.
-function scannableCode(html: string): string {
+export function scannableCode(html: string): string {
   const lower = html.toLowerCase();
   let out = "";
   let i = 0;
