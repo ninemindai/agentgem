@@ -139,6 +139,36 @@ describe("Curate", () => {
     expect(contentCalls).toHaveLength(1);                // memoized: fetched exactly once
   });
 
+  it("clears a stale body-load error once a retry succeeds", async () => {
+    // First /api/artifact/content request fails (transient 500); the second (the
+    // retry via collapse + re-expand, since bodies[id] is still undefined) succeeds.
+    let contentCalls = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+      const u = String(url);
+      if (u.includes("/api/inventory"))
+        return res({ skills: [{ name: "pdf", id: "workspace/skills/standalone/pdf" }], mcpServers: [], instructions: [], hooks: [], subagents: [] });
+      if (u.includes("/api/artifact/content")) {
+        contentCalls += 1;
+        if (contentCalls === 1) return { ok: false, status: 500, text: async () => "boom" } as unknown as Response;
+        const id = new URL(u, "http://localhost").searchParams.get("id") ?? "";
+        return res({ id, content: "LAZY-BODY" });
+      }
+      if (u.includes("/api/usage")) return res({ artifacts: [] });
+      throw new Error(`unexpected url ${u}`);
+    }));
+    renderCurate({ apiBase: "" });
+
+    const view = await screen.findByLabelText("view");
+    fireEvent.click(view);
+    expect(await screen.findByText(/Failed to load/)).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText("hide"));
+    fireEvent.click(screen.getByLabelText("view")); // retry via collapse + re-expand
+
+    expect(await screen.findByText("LAZY-BODY")).toBeTruthy();
+    expect(screen.queryByText(/Failed to load/)).toBeNull();
+  });
+
   it("suggests checks for the selection", async () => {
     vi.stubGlobal("fetch", mockFetch());
     renderCurate({ apiBase: "" });
