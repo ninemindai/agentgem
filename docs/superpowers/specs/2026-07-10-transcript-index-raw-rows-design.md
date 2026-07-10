@@ -196,13 +196,27 @@ guard.
 
 ## Verification
 
-Measured against a real home, not asserted:
+Measured on the real corpus (3,739 transcripts / 3.1 GB), not asserted:
 
-| | before | expected after |
+| | before | after (measured) |
 |---|---|---|
-| install a skill, then `GET /api/usage` | 17.4 s (full reparse) | < 0.15 s |
-| unchanged corpus, warm | 0.10 s | 0.10 s |
-| `/api/usage` output | baseline | **byte-identical** |
+| **install a skill, then `GET /api/usage`** | ~16 s (full reparse) | **0.03 s** |
+| unchanged corpus, warm | 0.10 s | 0.11 s |
+| cold build (one-time v2 migration) | — | 16.49 s |
+| old full scan (`computeGlobalUsage`, for reference) | 15.88 s | — |
+| `/api/usage` output (old vs new path) | baseline | **counts byte-identical across all 59 artifacts** |
+
+The install-a-skill case — the churn that actually happens — dropped from a full
+~16 s reparse to **0.03 s**, because the raw rows are inventory-independent and only
+resolution (25 ms of in-memory work) re-runs. A one-time 16.5 s cold build pays the
+v2 migration; every subsequent skill/MCP install is free.
+
+The differential gate (`AGENTGEM_DIFFERENTIAL_REAL=1`) confirmed `type`, `name`,
+`invocations`, and `sessionsUsedIn` are **byte-identical** between the old parse-time
+path and the new query-time path across all 59 artifacts. `lastUsedMs` is excluded
+from the *real-corpus* comparison only — it is a live file mtime that legitimately
+advances between two sequential ~16 s scans while a session is active; the *fixture*
+differential (static files) asserts full `lastUsedMs` equality.
 
 ## Follow-up (tracked separately)
 
