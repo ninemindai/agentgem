@@ -9,6 +9,13 @@ import type { FileTree } from "./archive.js";
 
 const BLOCK = 512;
 
+// A .tar.gz can arrive from an untrusted caller (e.g. the unauthenticated publishGem
+// route → importGem → unpackTar). Never decompress unbounded: a ~18MB gzip bomb can
+// expand to >10GB and OOM the server. Cap the decompressed size well above any real
+// gem (skills/config are text, a few MB at most) but far below memory exhaustion.
+// gunzipSync throws past the cap, which callers already treat as an invalid archive.
+const MAX_UNPACK_BYTES = 64 * 1024 * 1024;
+
 // Write `value` as a NUL-terminated octal ASCII field of width `len` at `offset`.
 function writeOctal(buf: Buffer, value: number, offset: number, len: number): void {
   const s = value.toString(8).padStart(len - 1, "0").slice(-(len - 1));
@@ -50,7 +57,7 @@ export function packTar(files: FileTree): Buffer {
 }
 
 export function unpackTar(buf: Buffer): FileTree {
-  const tar = gunzipSync(buf);
+  const tar = gunzipSync(buf, { maxOutputLength: MAX_UNPACK_BYTES });
   const files: FileTree = {};
   let off = 0;
   while (off + BLOCK <= tar.length) {
