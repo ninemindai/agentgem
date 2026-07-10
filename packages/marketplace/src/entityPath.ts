@@ -10,8 +10,14 @@
 // so workspaceArtifactPath must encode. A gem key carries '/' as structure (@scope/name, both
 // [a-z0-9-]), and a copy-friendly link is this feature's whole point. We still DECODE on parse.
 
-/** A published gem key: @scope/name, both segments [a-z0-9-] (see distribute/src/registry.ts). */
-const PUBLISHED_KEY = /^@[a-z0-9-]+\/[a-z0-9-]+$/;
+/**
+ * A published gem key is scope/name, both segments [a-z0-9-] — the '/' is the discriminator,
+ * not the '@'. The two mint paths disagree on the '@': gem.controller.ts's publishSetup builds
+ * `${scope}/${name}`, while distribute/src/registry.ts builds `"@" + scope + "/" + name`. So the
+ * '@' is optional here. genShareId() output (an unlisted share id) has no slash, so it can never
+ * match this regex regardless of the '@'.
+ */
+const PUBLISHED_KEY = /^@?[a-z0-9-]+\/[a-z0-9-]+$/;
 
 /** True for a published registry key. Scope-less keys are unlisted shares — unlistable by construction. */
 export function isPublishedKey(key: string): boolean {

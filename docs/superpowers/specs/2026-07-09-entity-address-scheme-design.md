@@ -94,11 +94,18 @@ routes. The apparent `/gems` vs `/gems/:key` ambiguity is already resolved by ma
 
 ### Rule 1 — ids are scoped, so unlisted is unlistable by construction
 
-A published gem key begins with `@` (`@acme/tetris`). Nothing else does. An unlisted share is
-therefore a **scope-less key** — `xK3f9a2Bq1` — and it *cannot* be listed, because
-`catalog_gems` requires `@scope/name` (`registry.ts:31-41` validates scope/name as
-`[a-z0-9-]`). The invariant is enforced by a format the registry already validates, not by
-remembering to skip a write.
+A published gem key is `scope/name` and always contains a `/` (`@acme/tetris`,
+`raymondfeng/miniapp`). The `@` prefix is optional and inconsistent across mint paths —
+`gem.controller.ts`'s `publishSetup` builds `${scope}/${name}`, while
+`distribute/src/registry.ts` builds `"@" + scope + "/" + name` — so the `/` is the real
+discriminator, not the `@`. An unlisted share is therefore a **slash-less key** —
+`xK3f9a2Bq1`, from `genShareId()` — and it *cannot* be listed, because `catalog_gems` requires
+`scope/name` (`registry.ts:31-41` validates scope/name as `[a-z0-9-]`). The invariant is
+enforced by a format the registry already validates, not by remembering to skip a write.
+
+This makes unlisted-ness a property of the id *shape*: PR 2 must verify at `genShareId()`'s
+mint site that a generated share id can never match `isPublishedKey` — ideally with a test
+asserting exactly that.
 
 ### Rule 2 — nesting expresses containment
 
