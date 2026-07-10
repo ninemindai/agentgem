@@ -415,8 +415,18 @@ export class GemController {
     if (!ref) throw new AgentError(`unknown artifact id: ${id}`, { status: 404, code: "artifact_not_found", retryable: false });
     const inv = introspectConfig(resolveDirs(input.query.dir));
     const arr = inv[ref.collection] as { name: string; source?: string; content?: string }[];
-    const hit = arr.find((a) => a.name === ref.name && (ref.source === undefined || a.source === ref.source));
-    if (!hit?.content) throw new AgentError(`unknown artifact id: ${id}`, { status: 404, code: "artifact_not_found", retryable: false });
+    const matches = arr.filter((a) => a.name === ref.name && (ref.source === undefined || a.source === ref.source));
+    // `instructions` carry no `source`, so their id can't disambiguate two same-named artifacts
+    // (introspectConfig doesn't de-dup instructions, unlike skills/subagents). Rather than
+    // silently returning the first match's body, fail visibly: the UI shows "Failed to load"
+    // instead of another artifact's content.
+    if (matches.length > 1) throw new AgentError(`ambiguous artifact id: ${id}`, { status: 404, code: "artifact_ambiguous", retryable: false });
+    const hit = matches[0];
+    // `content === ""` is a real, existing artifact (an empty file) — only an actually-missing
+    // artifact (no match, or a `content` that isn't a string) is 404.
+    if (!hit || typeof hit.content !== "string") {
+      throw new AgentError(`unknown artifact id: ${id}`, { status: 404, code: "artifact_not_found", retryable: false });
+    }
     return { id, content: hit.content };
   }
 
