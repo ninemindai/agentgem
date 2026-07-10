@@ -16,7 +16,7 @@ export function HandleClaim({ base, onClaimed }: { base: string; onClaimed: () =
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ handle }),
+        body: JSON.stringify({ handle: handle.trim() }),
       });
       if (r.ok) { onClaimed(); return; }
       if (r.status === 400) setMsg("Handles use letters, numbers, and hyphens only (1–39 characters).");
