@@ -13,7 +13,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { isMain } from "@agentback/core";
-import { RestApplication } from "@agentback/rest";
+import { RestApplication, REST_DISPATCH_HOOK_TAG } from "@agentback/rest";
 import { installExplorer } from "@agentback/rest-explorer";
 import { MCPComponent } from "@agentback/mcp";
 import { GemTypesComponent } from "./gem/gemTypeRegistry.js";
@@ -156,8 +156,11 @@ export async function createApp(port: number): Promise<RestApplication> {
   // the framework middleware chain so it runs before controller dispatch.
   app.expressMiddleware("middleware.originGuard", originGuard);
   // The Play registry reads serve mutable on-disk state; without Cache-Control the browser
-  // heuristically caches them off the bare ETag and the Studio renders a stale miniapp.
-  app.expressMiddleware("middleware.playNoCache", playNoCache);
+  // heuristically caches them off the bare ETag and the Studio renders a stale miniapp. A dispatch
+  // hook keys on the matched route rather than a path string, and writes through the neutral
+  // responseHeaders collector so it holds on the Web/edge pipeline too. Bound before start(): the
+  // hook list is resolved once, on the first dispatched request, and cached.
+  app.bind("hooks.playNoCache").to(playNoCache).tag(REST_DISPATCH_HOOK_TAG);
   await installExplorer(app, { title: "agentgem API" });
   await installMcpHttp(app);
   const server = await app.restServer;
