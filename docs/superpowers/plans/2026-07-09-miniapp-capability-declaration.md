@@ -449,54 +449,67 @@ git commit -m "feat(play): saveMiniapp throws on undeclared tool calls, prunes u
 
 ---
 
-### Task 4: Guard the migration and checkpoint paths
+### Task 4: Make migration reconcile, and never die on one bad miniapp
 
-`migrateAllMiniapps` calls `saveMiniapp`, so it inherits the reconciliation. A symmetric equality check would have made migration **throw** on the two over-declared miniapps that exist on disk today. Prune makes it clean them instead. `checkpointMiniapp` must reconcile nothing — it is the durability path and must never fail.
+`saveMiniapp` now throws on a called-but-undeclared tool. That exposed two real bugs in `migrateAllMiniapps`, both confirmed against the ten miniapps in `~/.agentgem/miniapps`.
 
-**But migration also needs a source change**, discovered while implementing Task 3. `migrate.ts` *injects* code into old HTML:
+**Bug 1 — the codemod injects a capability it never declares.** `migrate.ts` rewrites old HTML to inject:
 
 ```js
-'... p.toolName === "agentgem_get_session_data" ...'
+'... if (p && p.toolName === "agentgem_get_session_data") { DATA = p.chunk || {}; boot(); }'
 'function requestData() { ... callTool("agentgem_get_session_data") ... }'
 ```
 
-So a migrated bundle **uses** `session-data`, while the raw `meta.needs` it was saved with never declared it → `saveMiniapp` throws `missing`, and `migrateAllMiniapps` dies. This is correct behaviour from `saveMiniapp`: the codemod is a code *author*, so it must author the declaration too. `migrateAllMiniapps` therefore passes `needs: deriveNeeds(html)` for the html it just produced.
+So a migrated bundle **uses** `session-data` while the stored `meta.needs` may not declare it → `saveMiniapp` throws. The codemod authored the code, so it must author the declaration: pass `needs: deriveNeeds(html)` for the html it just produced.
 
-This is safe **only** because the sole capability the codemod injects is `session-data`, which `consent.ts`'s `AUTO_CAPS` marks auto-approved. If a future codemod injects a consent-gated capability, auto-declaring it would silently widen a permission and this approach must be revisited. Say so in a comment.
+Safe **only** because the sole injected capability is `session-data`, which `consent.ts`'s `AUTO_CAPS` marks auto-approved. A future codemod injecting a consent-gated capability must NOT auto-declare it. Say so in a comment.
+
+**Bug 2 — migration only reconciles miniapps whose HTML it rewrites.** `migrateAllMiniapps` does `if (outcome !== "migrated") { …; continue; }`, so it never calls `saveMiniapp` for `"already"` or `"unrecognized"` miniapps. On disk, exactly one of ten is `"migrated"`. `live-watch` is `"unrecognized"`, so its phantom `live-session-events` is never pruned and it keeps asking viewers to consent to something it never uses. The declaration can be stale even when the HTML is current, so **reconcile the meta of every miniapp**, rewriting `meta.json` when `needs` drifted — no HTML rewrite.
+
+**Bug 3 (pre-existing, exposed) — one unsaveable miniapp aborts the whole pass.** `session-2de8e278-…` declares `session-data` but bakes no `<script id="game-data">` timeline, so `assertPortable` rejects it. This already fails on `origin/main` today. A registry-wide pass must not die on one bad entry: catch per miniapp, record the reason, keep going.
 
 **Files:**
-- Modify: `packages/play/src/miniapps.ts` (`migrateAllMiniapps` meta construction only)
-- Test: `src/play/__tests__/migrateMiniapps.test.ts` (append)
+- Modify: `packages/play/src/miniapps.ts` (`migrateAllMiniapps` only)
+- Modify: `src/schemas.ts` (`PlayMigrateResponseSchema` gains optional `error`)
+- Test: `src/play/__tests__/migrateMiniapps.test.ts`
 - Test: `src/play/__tests__/checkpoint.test.ts` (append)
 
 **Interfaces:**
-- Consumes: `saveMiniapp` / `SaveMiniappResult` (Task 3), `deriveNeeds` (Task 2), `checkpointMiniapp`, `migrateAllMiniapps`.
-- Produces: nothing new. Regression guards plus one fix.
+- Consumes: `saveMiniapp` / `SaveMiniappResult`, `deriveNeeds`, `reconcileNeeds`, `checkpointMiniapp`, `commitWithLock`, `ensureRepo`, `gameGate`, and the module-private `writeGameGem` / `readMiniappRaw` (all already in `miniapps.ts` or imported there).
+- Produces: `migrateAllMiniapps(): Promise<{ name: string; outcome: MigrateOutcome; commit: string | null; error?: string }[]>`.
 
-**The fix.** In `migrateAllMiniapps`, replace the meta construction:
+**Do NOT** widen `MigrateOutcome`. It describes the **html codemod's** result (`"migrated" | "already" | "unrecognized"`); a blocked *save* did not fail to migrate. Carry the failure in a separate optional `error` field.
 
-```ts
-    const meta: MiniappMeta = {
-      ...raw.meta,
-      engineVersion: `${raw.meta.engineVersion}+mcp`,
-      // The codemod above INJECTED `callTool("agentgem_get_session_data")` into this html, so the bundle
-      // now uses a capability the stored meta may not declare — and saveMiniapp rightly throws on a
-      // called-but-undeclared tool. The codemod authored the code, so it authors the declaration. Safe
-      // only because the sole injected capability is `session-data`, which is auto-approved (AUTO_CAPS);
-      // a codemod that injects a consent-gated capability must NOT auto-declare it.
-      needs: deriveNeeds(html),
-    };
+**`checkpointMiniapp` must remain byte-for-byte untouched.** It is the durability path: never reconciles, never fails, never rewrites `meta.json`.
+
+- [ ] **Step 1: Fix the unrepresentative fixture, then write the failing tests**
+
+The existing `oldBridgeHtml` fixture in `src/play/__tests__/migrateMiniapps.test.ts` bakes no timeline. That state cannot exist on disk for a miniapp declaring `session-data` — `assertPortable` forbids it at save — so the fixture hid Bug 3. Give it a baked timeline. Find the fixture and add, inside its `<body>`:
+
+```html
+<script id="game-data" type="application/json">{"meta":{},"timeline":[{"role":"user","tsMs":0,"text":"hi"}]}</script>
 ```
 
-and add `deriveNeeds` to the existing `./capabilityScan.js` import. `saveMiniapp` still prunes anything the html does not use, so an empty `deriveNeeds` result correctly drops the `needs` key.
-
-- [ ] **Step 1: Write the failing test**
-
-Append to `src/play/__tests__/migrateMiniapps.test.ts`:
+Then append these tests to `src/play/__tests__/migrateMiniapps.test.ts`:
 
 ```ts
-it("cleans an over-declared miniapp instead of throwing (the two on disk today)", async () => {
-  // Seed a miniapp the way seedStudio does: meta.json declares a genre's needs before any code exists.
+it("declares the capability the codemod injected, so the migrated bundle saves", async () => {
+  const dir = miniappDir("old-replay");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "old-replay.html"), oldBridgeHtml);
+  writeFileSync(join(dir, "meta.json"), JSON.stringify({
+    title: "Old", genre: "replay", createdFrom: { kind: "blank", title: "Old" }, engineVersion: "1",
+  }));
+
+  const results = await migrateAllMiniapps();
+  expect(results.find((r) => r.name === "old-replay")?.outcome).toBe("migrated");
+
+  const after = JSON.parse(readFileSync(join(dir, "meta.json"), "utf8")) as { needs?: string[] };
+  expect(after.needs).toEqual(["session-data"]);   // the codemod declared what it injected
+});
+
+it("prunes a stale declaration even when the html needs no rewrite", async () => {
+  // live-watch on disk: 'unrecognized' html, declares a capability it never uses.
   const dir = miniappDir("live-watch");
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "live-watch.html"), "<!doctype html><body><canvas></canvas><script>const x=1;</script></body>");
@@ -505,14 +518,37 @@ it("cleans an over-declared miniapp instead of throwing (the two on disk today)"
     engineVersion: "1", needs: ["live-session-events"],
   }));
 
-  await expect(migrateAllMiniapps()).resolves.toBeDefined();  // must not throw
+  const results = await migrateAllMiniapps();
+  expect(results.find((r) => r.name === "live-watch")?.outcome).toBe("unrecognized");
 
   const after = JSON.parse(readFileSync(join(dir, "meta.json"), "utf8")) as { needs?: string[] };
-  expect(after.needs).toBeUndefined();
+  expect(after.needs).toBeUndefined();   // pruned, though the html was never rewritten
+});
+
+it("records an unsaveable miniapp and keeps migrating the rest", async () => {
+  // Declares session-data (a 'content' capability) but bakes no timeline -> assertPortable rejects it.
+  const bad = miniappDir("bad-replay");
+  mkdirSync(bad, { recursive: true });
+  writeFileSync(join(bad, "bad-replay.html"), oldBridgeHtmlWithoutBakedData);
+  writeFileSync(join(bad, "meta.json"), JSON.stringify({
+    title: "Bad", genre: "replay", createdFrom: { kind: "blank", title: "Bad" }, engineVersion: "1",
+  }));
+  const good = miniappDir("fine");
+  mkdirSync(good, { recursive: true });
+  writeFileSync(join(good, "fine.html"), "<!doctype html><body><canvas></canvas><script>const x=1;</script></body>");
+  writeFileSync(join(good, "meta.json"), JSON.stringify({
+    title: "Fine", genre: "project-fun", createdFrom: { kind: "blank", title: "Fine" }, engineVersion: "1",
+  }));
+
+  const results = await migrateAllMiniapps();          // must NOT throw
+  const badRow = results.find((r) => r.name === "bad-replay");
+  expect(badRow?.commit).toBeNull();
+  expect(badRow?.error).toMatch(/not portable|bakes no fallback/i);
+  expect(results.find((r) => r.name === "fine")).toBeDefined();   // the pass continued
 });
 ```
 
-Ensure that file imports `mkdirSync`, `writeFileSync`, `readFileSync` from `node:fs`, `join` from `node:path`, and `miniappDir`, `migrateAllMiniapps` from `@agentgem/play`.
+Define `oldBridgeHtmlWithoutBakedData` next to `oldBridgeHtml` as the same string **without** the `<script id="game-data">` element you just added.
 
 Append to `src/play/__tests__/checkpoint.test.ts`:
 
@@ -533,30 +569,102 @@ it("checkpoint never reconciles needs — it must not rewrite meta or fail", asy
 });
 ```
 
-Ensure that file imports the same helpers plus `checkpointMiniapp`.
+Ensure each file imports what it uses (`mkdirSync`, `writeFileSync`, `readFileSync`, `join`, `miniappDir`, `migrateAllMiniapps`, `checkpointMiniapp`). Add only what is missing.
 
-- [ ] **Step 2: Run tests to verify the current state**
+- [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `pnpm exec tsc -b && pnpm exec vitest run dist/play/__tests__/migrateMiniapps.test.js dist/play/__tests__/checkpoint.test.js`
 
-Expected, before your fix: `migrateMiniapps.test.js` **FAILS** — including its pre-existing `rewrites the stored file, bumps engineVersion` test — with `miniapp calls a host tool it does not declare: agentgem_get_session_data (declare "session-data")`. That is the bug this task fixes; it is real, not a bad test. The `checkpoint` tests should already pass (`checkpointMiniapp` must not reconcile).
+Expected before the fix: `migrateMiniapps.test.js` FAILS — the pre-existing `rewrites the stored file, bumps engineVersion` test now dies with `miniapp calls a host tool it does not declare: agentgem_get_session_data`, and the three new tests fail. `checkpoint.test.js` PASSES (its new test included) — `checkpointMiniapp` already reconciles nothing.
 
-- [ ] **Step 3: Apply the `migrateAllMiniapps` fix**
+- [ ] **Step 3: Rewrite `migrateAllMiniapps`**
 
-Make the meta-construction change shown above, and add `deriveNeeds` to the `./capabilityScan.js` import in `packages/play/src/miniapps.ts`. Change nothing else — `checkpointMiniapp` in particular must remain untouched.
+In `packages/play/src/miniapps.ts`, extend the existing `./capabilityScan.js` import to `import { reconcileNeeds, deriveNeeds } from "./capabilityScan.js";` and replace the whole function:
+
+```ts
+// Rewrites every stored miniapp's html to the current MCP Apps client shim, one codemod pass over the
+// whole registry, AND reconciles every miniapp's declaration against its code. This is an OPTIMIZATION
+// for the html — readMiniapp()'s on-read backstop already serves migrated html regardless — but the
+// meta reconciliation is a real repair: a stale `needs` makes the Runner prompt a viewer for consent to
+// a capability the bundle never exercises. Reads the RAW stored file (never readMiniapp) so it sees the
+// true on-disk bytes; otherwise the backstop would make a raw miniapp look already-migrated and its
+// file would never actually get rewritten.
+//
+// A miniapp that cannot be saved (e.g. it declares a content capability but bakes no fallback) is
+// RECORDED and skipped, never thrown: one bad entry must not abort the registry-wide pass.
+export async function migrateAllMiniapps(): Promise<{ name: string; outcome: MigrateOutcome; commit: string | null; error?: string }[]> {
+  const results: { name: string; outcome: MigrateOutcome; commit: string | null; error?: string }[] = [];
+  const root = miniappsRoot();
+  for (const { name } of listMiniapps()) {
+    const raw = readMiniappRaw(name);
+    const { html, outcome } = migrateMiniappHtml(raw.html);
+
+    if (outcome !== "migrated") {
+      // The html is current, but the DECLARATION can still be stale. Prune what the code never uses.
+      // `missing` cannot be repaired here (widening is an authored act) — record it and move on.
+      const rec = reconcileNeeds(raw.html, raw.meta.needs);
+      if (rec.missing.length) {
+        results.push({ name, outcome, commit: null, error: `calls undeclared ${rec.missing.join(", ")}` });
+        continue;
+      }
+      if (!rec.pruned.length) { results.push({ name, outcome, commit: null }); continue; }
+      const meta: MiniappMeta = { ...raw.meta };
+      if (rec.needs.length) meta.needs = rec.needs; else delete meta.needs;
+      await ensureRepo(root);
+      writeFileSync(join(miniappDir(name), "meta.json"), JSON.stringify(meta, null, 2));
+      // Keep the shareable gem in step, or it keeps the phantom capability. Best-effort, like a
+      // checkpoint: a gate failure must never abort the pass.
+      try { if ((await gameGate(raw.html)).ok) writeGameGem(name, raw.html, meta); } catch { /* best-effort */ }
+      const commit = await commitWithLock(root, `reconcile ${name} (pruned unused capability: ${rec.pruned.join(", ")})`);
+      results.push({ name, outcome, commit });
+      continue;
+    }
+
+    const meta: MiniappMeta = {
+      ...raw.meta,
+      engineVersion: `${raw.meta.engineVersion}+mcp`,
+      // The codemod above INJECTED `callTool("agentgem_get_session_data")` into this html, so the bundle
+      // now uses a capability the stored meta may not declare — and saveMiniapp rightly throws on a
+      // called-but-undeclared tool. The codemod authored the code, so it authors the declaration. Safe
+      // ONLY because the sole injected capability is `session-data`, which is auto-approved (AUTO_CAPS);
+      // a codemod that injects a consent-gated capability must NOT auto-declare it.
+      needs: deriveNeeds(html),
+    };
+    try {
+      const { commit } = await saveMiniapp({ name, html, meta });
+      results.push({ name, outcome, commit });
+    } catch (e) {
+      results.push({ name, outcome, commit: null, error: (e as Error).message });
+    }
+  }
+  return results;
+}
+```
+
+In `src/schemas.ts`, widen `PlayMigrateResponseSchema` (leave the three-value `outcome` enum alone):
+
+```ts
+export const PlayMigrateResponseSchema = z.object({
+  results: z.array(z.object({
+    name: z.string(),
+    outcome: z.enum(["migrated", "already", "unrecognized"]),
+    commit: z.string().nullable(),
+    error: z.string().optional(),   // set when the miniapp could not be saved; the pass continued
+  })),
+});
+```
 
 - [ ] **Step 4: Run the whole play suite**
 
 Run: `pnpm exec tsc -b && pnpm exec vitest run dist/play/`
-Expected: PASS, all files — including the previously-failing `migrateMiniapps` test.
+Expected: PASS, every file — including the previously-failing `migrateMiniapps` test.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/play/src/miniapps.ts src/play/__tests__/migrateMiniapps.test.ts src/play/__tests__/checkpoint.test.ts
-git commit -m "fix(play): the migration codemod declares the capability it injects"
+git add packages/play/src/miniapps.ts src/schemas.ts src/play/__tests__/migrateMiniapps.test.ts src/play/__tests__/checkpoint.test.ts
+git commit -m "fix(play): migration declares what its codemod injects, prunes stale needs, survives one bad miniapp"
 ```
-
 ---
 
 ### Task 5: Carry `prunedNeeds` across the REST boundary
@@ -1087,14 +1195,18 @@ Expected: PASS, no type errors.
 - [ ] **Step 3: Reconcile the real miniapps on disk**
 
 Run: `pnpm exec agentgem play migrate` (or invoke `migrateAllMiniapps()` via the `/api/play/migrate` route).
-Expected: `live-watch` and `session-2de8e278-…` have `needs` removed from their `meta.json`; no throw. Verify with:
+
+Expected, per Task 4's three repairs:
+- **No throw.** The pass completes over all ten miniapps.
+- `live-watch` (outcome `unrecognized`) has `needs` **removed** from `meta.json` — the stale-declaration prune, even though its html was never rewritten.
+- `session-2de8e278-…` (outcome `migrated`) is either saved with `needs: ["session-data"]`, or **recorded with a non-null `error`** if it still bakes no `<script id="game-data">` timeline. Either is correct; a throw is not.
 
 ```bash
 cat ~/.agentgem/miniapps/live-watch/meta.json
 git -C ~/.agentgem/miniapps log --oneline -3
 ```
 
-Expected: no `needs` key, and a commit naming the pruned capability.
+Expected: no `needs` key on `live-watch`, and a commit naming the pruned capability.
 
 - [ ] **Step 4: Confirm the branch is ahead of origin/main only**
 
