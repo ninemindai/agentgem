@@ -88,19 +88,53 @@ A handle is claimed at the first action that needs a public name: publishing, or
 profile. Existing GitHub users' handles are backfilled from their login and are already
 claimed, so they never see the flow.
 
+### The self grant is derived from the handle, never stored
+
+*(Added after the engineering review. The original design mirrored the handle into a
+`role='self'` row in `account_scopes`; that mirror produced two reachable security defects,
+described below.)*
+
+`"user".handle` is the single source of truth for what an account is named. `accountSelfScope`
+and `accountOwnsScope` read that column directly. **Nothing writes a `role='self'` scope row**,
+and `ScopeGrant` does not admit the role, so reintroducing the mirror is a compile error.
+`account_scopes` holds captured GitHub **org memberships only**.
+
+The mirror had three writers — `anchorAndScopes` (web sign-in), `claimHandle` (rename), and
+`recordBinding` (CLI bind) — and they did not agree. `recordBinding` wrote the raw GitHub
+`login`, and `setAccountScopes` *replaces* the account's whole scope set. Consequences, both
+reproduced against PGlite:
+
+1. **A rename did not survive `agentgem bind`.** After renaming `alice` → `carol`, a bind
+   reset the self grant to `alice`. If anyone had since claimed the freed `alice`, the renamer
+   held a `self` grant on *that stranger's* namespace — `accountOwnsScope` is the publish gate
+   — while losing the right to publish under `carol`. The rename/reuse attack this spec claims
+   is "not expressible" *was* expressible, one table down.
+2. **`GET /api/usage/org` skipped the App roster.** `usageDaysHandler` tested "is this scope my
+   own name?" *before* calling `resolveOrgAccess`, so the roster-decides-alone rule never
+   reached it. A handle squatting an org's name kept reading that org's usage dashboard after
+   the org onboarded.
+
+Deriving the grant removes the class, not just the two instances: there is no second copy to
+drift, and a rename is a single `UPDATE` that moves ownership atomically. Every consumer of
+"does this account own this scope?" now reads one column, and every consumer of "may this
+caller see this org?" goes through `resolveOrgAccess`.
+
 ### Handle allocation is a security boundary, not a UX choice
 
 User handles and GitHub org scopes share **one namespace** — the publish scope is either
 your own handle or an org you belong to.
 
-`setAccountScopes` writes the user's own name as a `role='self'` scope row
-(`betterAuth.ts:118`), and `uploadPublish` authorizes publishing via
-`accountOwnsScope(accountId, scope)` (`src/registry/uploadPublish.ts:53-55`), which does
-**not** inspect the role. So a user who could freely claim the handle `ninemindai` would
-obtain a self-scope row for `ninemindai` and thereby the right to publish gems under a
-GitHub org's scope.
+`uploadPublish` authorizes publishing via `accountOwnsScope(accountId, scope)`
+(`src/registry/uploadPublish.ts:56`), and that function grants a scope the account's handle
+names. So a user who could freely claim the handle `ninemindai` would thereby obtain the right
+to publish gems under a GitHub org's scope — *for as long as that org has no active App
+installation*, since an active installation routes publishing through `appOrgRole` instead.
 
 `claimHandle` therefore performs a reserved-name check, and it is the only place that does.
+It is a **namespace** guard, not the authorization boundary: `resolveOrgAccess`'s
+roster-decides-alone rule is what actually revokes a squatter once the org onboards. Reserving
+names an org has already touched narrows the window; it does not close it, and it cannot — the
+org does not exist in our database until it interacts with us.
 
 ## Data model
 
@@ -339,8 +373,18 @@ risky migration.
 onboarded — `isReserved` has nothing to check until the org's first installation or settings
 write exists. Post-onboarding, this grants **no authorization** over the org: `resolveOrgAccess`
 resolves an active installation first, so the App-synced roster decides membership alone and
-the squatted `role='self'` row is never consulted (final-review Finding 1); publishing is
-already gated by `appOrgRole`, not by `self`, whenever an installation is active. What remains
+the squatted handle is never consulted (final-review Finding 1); publishing is
+already gated by `appOrgRole`, not by `self`, whenever an installation is active.
+
+> **This claim is conditional, and the condition is load-bearing.** It holds only because every
+> caller that asks "may this session act on this scope?" routes through `resolveOrgAccess`. The
+> engineering review found that `usageDaysHandler` did not — it short-circuited on a self check
+> ahead of the gate, and leaked the org's usage dashboard to a pre-onboarding squatter. Any new
+> handler that re-derives "is this my own scope?" instead of reading `resolveOrgAccess`'s
+> `via === 'self'` verdict silently reopens this hole. The gate is the invariant; the sentence
+> above is only its consequence.
+
+What remains
 is ordinary username-registry squatting: `/@<org>` resolves to the squatter's profile, not the
 org, and any gems the squatter published under that scope before the org onboarded still render
 on the org's catalog page. Closing that means seizing or re-assigning a name already in active
