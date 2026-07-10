@@ -14,6 +14,8 @@ export type OrgSettingsResult =
   | { status: "ok"; settings: OrgSettingsView }
   | { status: "denied" };
 
+export interface GameMeta { title: string; genre: "replay" | "skill-run" | "project-fun"; version: string }
+
 type Query = Record<string, string | number | undefined>;
 
 // The ONE querystring encoder: undefined params are dropped, everything else (incl. "" and 0)
@@ -58,6 +60,10 @@ export function makeApi(base: string) {
     // Sealed HTML of a gem's game artifact (for the playable Minigames arcade). 404s a non-game gem.
     getGameHtml: (key: string, version: string) =>
       get<{ html: string }>(base, "/api/aggregator/game-html", { key, version }).then((r) => r.html),
+    // Title/genre for a game addressed by bare key; omitting version asks the server for latest.
+    // buildQs drops undefined, so this sends ?key=… alone.
+    getGameMeta: (key: string, version?: string) =>
+      get<GameMeta>(base, "/api/aggregator/game-meta", { key, version }),
     // The beacon: the reader clicked into fullscreen play. NOT sent when the arcade grid renders a
     // thumbnail — every card fetches its html on mount, so that would count page views. Never rejects
     // (a game must open even when the beacon is blocked); resolves false instead, so an optimistic
