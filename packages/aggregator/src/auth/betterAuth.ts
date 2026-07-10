@@ -17,6 +17,7 @@ const SESSION_TTL_S = 30 * 24 * 60 * 60; // 30 days — matches web_sessions/bin
 
 export function makeAuth(opts: {
   db: AppDb; secret: string; baseURL: string; githubClientId: string; githubClientSecret: string;
+  googleClientId?: string; googleClientSecret?: string;
   webOrigins: string[]; cookieDomain?: string;
 }): Auth<BetterAuthOptions> {
   // Widened to `BetterAuthOptions` (rather than letting TS infer the literal options-object type)
@@ -83,6 +84,18 @@ export function makeAuth(opts: {
         scope: ["read:user", "read:org"],
         mapProfileToUser: (p: any) => ({ login: p.login, name: p.name ?? p.login, image: p.avatar_url }),
       },
+      // Google is additive and optional — registered only when BOTH creds are present (a partial
+      // config registers nothing, failing closed). Non-sensitive scopes only. Google supplies no
+      // username, so mapProfileToUser sets name + image and NO login; the re-key's anchorAndScopes
+      // writes a NULL-login accounts anchor for any non-github provider, and the handle stays NULL
+      // until the user claims one.
+      ...(opts.googleClientId && opts.googleClientSecret ? {
+        google: {
+          clientId: opts.googleClientId, clientSecret: opts.googleClientSecret,
+          scope: ["openid", "email", "profile"],
+          mapProfileToUser: (p: any) => ({ name: p.name ?? p.email, image: p.picture }),
+        },
+      } : {}),
     },
     databaseHooks: {
       account: {
