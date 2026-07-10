@@ -61,6 +61,37 @@ describe("recordCatalogShare", () => {
     expect(res).toEqual({ shared: true, publishedBy: "octocat", gemKey: "@octocat/kit", version: "1.0.0" });
   });
 
+  it("rejects a cross-account overwrite of an existing gem (supply-chain takeover)", async () => {
+    const db = await makeTestDb();
+    const alice = signer(), bob = signer();
+    await db.insert(producers).values({ pubkey: alice.pubkey });
+    await db.insert(accounts).values({ id: crypto.randomUUID(), provider: "github", providerAccountId: "1", login: "alice" });
+    await db.insert(accountBindings).values({ pubkey: alice.pubkey, provider: "github", accountId: "1", accountLogin: "alice" });
+    await db.insert(producers).values({ pubkey: bob.pubkey });
+    await db.insert(accounts).values({ id: crypto.randomUUID(), provider: "github", providerAccountId: "2", login: "bob" });
+    await db.insert(accountBindings).values({ pubkey: bob.pubkey, provider: "github", accountId: "2", accountLogin: "bob" });
+    const now = 1_000_000;
+    const aliceRes = await recordCatalogShare(db, { manifest: M, pubkey: alice.pubkey, signedAt: now, signature: alice.sign(catalogSigningPayload(M, alice.pubkey, now)) }, now);
+    expect(aliceRes).toMatchObject({ shared: true, publishedBy: "alice" });
+    // Bob signs the SAME gemKey/version with his own key and tries to overwrite it.
+    const bobRes = await recordCatalogShare(db, { manifest: M, pubkey: bob.pubkey, signedAt: now, signature: bob.sign(catalogSigningPayload(M, bob.pubkey, now)) }, now);
+    expect(bobRes).toEqual({ shared: false, rejected: "conflict" });
+    // Alice still owns the row — no takeover.
+    expect((await listCatalogGems(db))[0]).toMatchObject({ publishedBy: "alice" });
+  });
+
+  it("allows the same owner to re-publish their own gem version", async () => {
+    const db = await makeTestDb();
+    const alice = signer();
+    await db.insert(producers).values({ pubkey: alice.pubkey });
+    await db.insert(accounts).values({ id: crypto.randomUUID(), provider: "github", providerAccountId: "1", login: "alice" });
+    await db.insert(accountBindings).values({ pubkey: alice.pubkey, provider: "github", accountId: "1", accountLogin: "alice" });
+    const now = 1_000_000;
+    expect(await recordCatalogShare(db, { manifest: M, pubkey: alice.pubkey, signedAt: now, signature: alice.sign(catalogSigningPayload(M, alice.pubkey, now)) }, now)).toMatchObject({ shared: true });
+    const m2 = { ...M, description: "updated" };
+    expect(await recordCatalogShare(db, { manifest: m2, pubkey: alice.pubkey, signedAt: now, signature: alice.sign(catalogSigningPayload(m2, alice.pubkey, now)) }, now)).toMatchObject({ shared: true });
+  });
+
   it("rejects a bad signature", async () => {
     const db = await makeTestDb();
     const s = signer();

@@ -112,7 +112,7 @@ export interface CatalogManifest {
 export interface ShareRequest { manifest: CatalogManifest; pubkey: string; signedAt: number; signature: string }
 export type ShareResult =
   | { shared: true; publishedBy: string; gemKey: string; version: string }
-  | { shared: false; rejected: "bad-signature" | "stale" | "not-connected" };
+  | { shared: false; rejected: "bad-signature" | "stale" | "not-connected" | "conflict" };
 
 const FRESHNESS_MS = 300_000;
 // Grade is a 1..3 floor. Exported so the read path (mapDbToGems) can re-clamp defensively —
@@ -152,6 +152,15 @@ export async function recordCatalogShare(db: AppDb, req: ShareRequest, now: numb
   if (!acct) return { shared: false, rejected: "not-connected" };
   const login = bind.accountLogin;
   const m = req.manifest;
+  // Ownership guard: (re)publishing a (gemKey, version) is allowed only when it is unclaimed or
+  // already owned by THIS account. A row owned by a different account — or by nobody (null owner,
+  // an orphaned backfill) — is a supply-chain takeover attempt (sign any archive for someone else's
+  // key/version and overwrite their catalog row + archive bytes). Mirrors deleteCatalogGem's check.
+  // Note: this fully closes the deliberate overwrite of an existing gem; a dead-heat first-publish of
+  // the same brand-new key by two different accounts is a benign namespace race, not a takeover.
+  const existing = (await db.select({ ownerAccountId: catalogGems.ownerAccountId }).from(catalogGems)
+    .where(and(eq(catalogGems.gemKey, m.gemKey), eq(catalogGems.version, m.version))).limit(1))[0];
+  if (existing && existing.ownerAccountId !== acct.id) return { shared: false, rejected: "conflict" };
   await upsertCatalogGem(db, {
     gemKey: m.gemKey, version: m.version, publishedBy: login, ownerAccountId: acct.id,
     author: m.author, description: m.description, tags: m.tags, artifactKinds: m.artifactKinds,
