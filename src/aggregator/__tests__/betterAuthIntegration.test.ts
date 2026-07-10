@@ -35,6 +35,17 @@ async function createGithubUser(db: Awaited<ReturnType<typeof makeTestDb>>, auth
   return { ctx, user, account };
 }
 
+// Non-GitHub provider: no `login` on the user row, matching what a Google/Slack/X sign-in actually
+// looks like (mapProfileToUser only exists for the github socialProviders entry).
+async function createNonGithubUser(db: Awaited<ReturnType<typeof makeTestDb>>, auth: ReturnType<typeof makeAuth>, providerId: string, email: string) {
+  const ctx = await auth.$context;
+  const user = await ctx.internalAdapter.createUser({ name: "Trinity", email, emailVerified: true } as never);
+  const account = (await ctx.internalAdapter.createAccount({
+    userId: user.id, providerId, accountId: "ext-999",
+  } as never)) as { id: string };
+  return { ctx, user, account };
+}
+
 describe("betterAuth over drizzle+PGlite — account hook integration (1a-Task 6)", () => {
   afterEach(() => vi.unstubAllGlobals());
 
@@ -85,6 +96,35 @@ describe("betterAuth over drizzle+PGlite — account hook integration (1a-Task 6
 
     const userCount = (await db.execute(sql`select count(*)::int as n from "user"`)).rows?.[0] as { n: number };
     expect(userCount.n).toBe(1);
+  });
+
+  // Critical review fix (Task 3): the earlier anchorGeneralized.test.ts drove upsertAccount
+  // directly and never exercised anchorAndScopes itself, so restoring the deleted
+  // `if (account.providerId !== "github") return;` early-return wouldn't fail any test in the
+  // repo. This one drives the real databaseHooks.account.create.after hook for a non-github
+  // provider, pinning both halves of the generalization: the anchor row IS written (satisfying
+  // the ten accounts.id FKs), and org-scope capture IS skipped (that stays GitHub-only).
+  it("account.create.after anchors a non-github user with a NULL login and skips org-scope capture", async () => {
+    const db = await makeTestDb();
+    const auth = makeAuth({ db, ...opts });
+    const { user } = await createNonGithubUser(db, auth, "google", "trinity-google@example.com");
+
+    const anchorRows = (await db.execute(sql`select id, provider, login from accounts where id = ${user.id}`))
+      .rows as { id: string; provider: string; login: string | null }[];
+    expect(anchorRows).toHaveLength(1);
+    expect(anchorRows[0].id).toBe(user.id);
+    expect(anchorRows[0].login).toBeNull();
+
+    const scopeRows = (await db.execute(sql`select scope, role from account_scopes where account_id = ${user.id}`))
+      .rows as { scope: string; role: string }[];
+    expect(scopeRows).toEqual([]);
+
+    // One of the ten accounts.id FK tables — proves the anchor row actually satisfies the FK, so
+    // this user's first star/review/group-create doesn't 500.
+    await db.execute(sql`insert into stars (id, account_id, target_kind, target_id) values (${crypto.randomUUID()}, ${user.id}, 'gem', '@a/b')`);
+    const starRows = (await db.execute(sql`select count(*)::int as n from stars where account_id = ${user.id}`))
+      .rows as { n: number }[];
+    expect(starRows[0].n).toBe(1);
   });
 
   it("a minted session for the anchored user resolves via auth.api.getSession", async () => {
