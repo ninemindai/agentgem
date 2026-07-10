@@ -9,6 +9,7 @@ class FakeES {
   addEventListener(type: string, cb: (e: unknown) => void) { (this.listeners[type] ??= []).push(cb); }
   close() { this.closed = true; }
   emit(type: string, data: unknown) { for (const cb of this.listeners[type] ?? []) cb({ data: JSON.stringify(data) }); }
+  emitRaw(type: string, raw: string) { for (const cb of this.listeners[type] ?? []) cb({ data: raw }); }
 }
 
 afterEach(() => { FakeES.last = null; });
@@ -34,5 +35,27 @@ describe("openAnalyzeStream", () => {
       { type: "done", cached: false, candidates: [] },
     ]);
     expect(es.closed).toBe(true);
+  });
+
+  it("a malformed done frame closes the stream and reports failure instead of freezing", () => {
+    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
+    const events: AnalyzeEvent[] = [];
+    openAnalyzeStream("", "/p", false, (e) => events.push(e));
+    const es = FakeES.last!;
+    expect(() => es.emitRaw("done", "{ not json")).not.toThrow();
+    expect(es.closed).toBe(true);
+    expect(events.at(-1)?.type).toBe("failed");
+  });
+
+  it("a malformed delta frame is skipped without throwing or killing the stream", () => {
+    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
+    const events: AnalyzeEvent[] = [];
+    openAnalyzeStream("", "/p", false, (e) => events.push(e));
+    const es = FakeES.last!;
+    expect(() => es.emitRaw("delta", "garbage")).not.toThrow();
+    expect(events).toEqual([]);            // bad frame dropped
+    expect(es.closed).toBe(false);          // stream still alive
+    es.emit("done", { cached: true });
+    expect(events.at(-1)).toEqual({ type: "done", cached: true, candidates: [] });
   });
 });

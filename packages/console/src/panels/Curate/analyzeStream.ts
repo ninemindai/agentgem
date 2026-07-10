@@ -23,19 +23,25 @@ export function openAnalyzeStream(
   const params = new URLSearchParams({ root });
   if (fresh) params.set("fresh", "1");
   const es = new EventSource(`${apiBase}/api/workflow/analyze/stream?${params.toString()}`);
-  const data = (m: Event) => JSON.parse((m as MessageEvent).data);
+  // Parse safely: a malformed frame must never throw out of a listener. For phase/delta that would drop
+  // the frame, but for the terminal done/failed events the throw skips es.close() and the terminal event,
+  // freezing the UI on a stream that never completes.
+  const data = (m: Event): any | undefined => {
+    try { return JSON.parse((m as MessageEvent).data); } catch { return undefined; }
+  };
 
   es.addEventListener("phase", (m) => {
     const d = data(m);
-    onEvent({ type: "phase", phase: d.phase, transcripts: d.transcripts, sessions: d.sessions });
+    if (d) onEvent({ type: "phase", phase: d.phase, transcripts: d.transcripts, sessions: d.sessions });
   });
-  es.addEventListener("delta", (m) => onEvent({ type: "delta", text: data(m).text }));
+  es.addEventListener("delta", (m) => { const d = data(m); if (d) onEvent({ type: "delta", text: d.text }); });
   es.addEventListener("done", (m) => {
     const d = data(m);
-    onEvent({ type: "done", cached: !!d.cached, candidates: Array.isArray(d.candidates) ? d.candidates : [] });
     es.close();
+    if (d) onEvent({ type: "done", cached: !!d.cached, candidates: Array.isArray(d.candidates) ? d.candidates : [] });
+    else onEvent({ type: "failed", message: "malformed done frame" });
   });
-  es.addEventListener("failed", (m) => { onEvent({ type: "failed", message: data(m).message }); es.close(); });
+  es.addEventListener("failed", (m) => { const d = data(m); es.close(); onEvent({ type: "failed", message: d?.message ?? "stream failed" }); });
   es.addEventListener("error", () => onEvent({ type: "failed", message: "stream connection error" }));
 
   return () => es.close();
