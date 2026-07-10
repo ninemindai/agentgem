@@ -6,7 +6,7 @@
 // constants so they compile into dist (no fs paths).
 import { mcpAppClient } from "./mcpAppClient.js";
 
-// `title`/`subtitle` reach sealedTemplate from user input (blankStudio) and are baked
+// `title`/`subtitle` reach minimalTemplate from user input (blankStudio) and are baked
 // into the shared bundle outside the editable AGENTGEM:GAME-LOGIC markers, so any
 // injection is permanent. Escape per interpolation context before it lands in the HTML.
 function htmlEscape(s: string): string {
