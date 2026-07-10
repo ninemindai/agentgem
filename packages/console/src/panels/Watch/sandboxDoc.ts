@@ -21,6 +21,12 @@ const STORAGE_SHIM =
 
 export function sandboxDoc(html: string): string {
   const head = `<meta http-equiv="Content-Security-Policy" content="${CSP}">${STORAGE_SHIM}`;
-  if (/<head[\s>]/i.test(html)) return html.replace(/<head([^>]*)>/i, `<head$1>${head}`);
-  return `<!doctype html><html><head>${head}</head><body>${html}</body></html>`;
+  // Force the CSP meta to be the FIRST node in <head>, whatever the input's shape. The old code
+  // injected after an existing <head>, so a <script> placed BEFORE that <head> ran at parse time —
+  // before the policy applied — and could open a network connection the CSP would otherwise block.
+  // DOMParser does NOT execute scripts; HTML5 tree construction relocates any pre-<head> script into
+  // <head>. Re-emit with our static CSP first, then the parsed head/body, so the policy parses before
+  // any of the document's own scripts when the iframe re-parses this string.
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  return `<!doctype html><html><head>${head}${doc.head.innerHTML}</head><body>${doc.body.innerHTML}</body></html>`;
 }
