@@ -163,10 +163,11 @@ Two pieces of machinery from the pre-scheme design turned out not to exist:
   either a registry key or a share id. Both resolve through the same
   `GET /api/aggregator/game-html?key=&version=`.
 - **A table variant.** With the share id *being* the gem key, there is no opaque-id →
-  `(gemKey, version)` indirection to store. No `share_cards` row, no `kind:"miniapp"`, no
-  `payload jsonb` widening, **no schema change** — and so no
-  `ensureSchema`-add-column-if-not-exists drift risk. `gem_archives` holds the bytes;
-  `game-meta` unpacks the archive for a title.
+  `(gemKey, version)` indirection to store: no `share_cards` row, no `kind:"miniapp"`, no
+  `payload jsonb` widening. `gem_archives` holds the bytes; `game-meta` unpacks the archive for
+  a title. (PR 2 does add **one** `gem_archives` column — `owner_account_id`, for revoke
+  ownership — via the idempotent `add column if not exists` pattern; see *Minting*. That is the
+  scheme's only schema touch, and it's an addition, not a variant.)
 
 ## Minting a public address (the only new mechanism)
 
@@ -177,40 +178,64 @@ key.
 ```
 POST /api/aggregator/share-archive
   body    { manifest, archiveBase64, pubkey, signedAt, signature }   # mirrors PublishGemBody
-  server  importGem(bytes)                     # verifies gem.lock, throws -> 400
+  server  accountId = resolveSignedAccount(pubkey, signedAt, signature)  # else 401/not-connected
+          importGem(bytes)                     # verifies gem.lock, throws -> 400
           manifest.gemDigest === digest        # else 400 digest-mismatch
           staticGate(html)                     # re-run server-side on any game artifact
           key = genShareId()                   # slash-less => unlistable (Rule 1)
-                                               # today lives in src/share/shareStore.ts,
-                                               # whose share_cards path this design retires;
-                                               # move it beside upsertGemArchive
-          upsertGemArchive(key, "1", bytes)
-          # deliberately NO recordCatalogShare
+          upsertGemArchive(key, "1", bytes)     # NEW column: owner_account_id = accountId
+          # deliberately NO recordCatalogShare (no catalog row => unlisted)
   returns { key, url: "https://app.agentgem.ai/games/xK3f9a2Bq1" }
 
-DELETE /api/aggregator/share-archive?key=      # same signature gate; revokes the link
+DELETE /api/aggregator/share-archive?key=
+  body    { pubkey, signedAt, signature }       # signature over the shareId
+  server  accountId = resolveSignedAccount(pubkey, signedAt, signature)  # else 401
+          row = gem_archives[key]               # 404 if absent
+          row.owner_account_id != null && row.owner_account_id === accountId  # else 403 forbidden
+          delete gem_archives[key]              # fail-closed on NULL owner
 ```
 
-Three load-bearing properties:
+Four load-bearing properties:
 
-- **The route is generic.** It hosts *an archive*, unlisted. Games are its first caller; an
-  unlisted gem share is the same operation with a `/gems/<id>` URL. Naming it `share-miniapp`
-  would freeze the scheme's first conformer into its permanent shape.
+- **Ownership conforms to the identity re-key (already merged, PR #285).** A share is owned by
+  an **`accounts.id` UUID** (== better-auth `"user".id`) — the authorizing "user id", never the
+  device key and never a login string. `resolveSignedAccount` is the `recordCatalogShare` chain
+  extracted into a reusable helper: `verify(pubkey, payload, signature)` + ±300s freshness +
+  `account_bindings → accounts.id`. The revoke check copies `deleteCatalogGem` verbatim —
+  UUID `===`, and **a NULL owner is owned by nobody, fail closed** (the invariant the re-key
+  exists to protect; never a string-compare fallback). Revoke therefore works from **any device
+  bound to the owning account**, not just the minting one.
+- **Light-share requires a connected identity.** An unconnected device resolves to no
+  `accounts.id`, so it cannot own — and an unowned share is un-revokable by construction. Light
+  share is lighter than *publish* (no scope, no catalog row, no listing) but not lighter than
+  *signed-in*. The console shows a connect prompt when `!identity.bound`.
+- **One schema change.** `gem_archives` gains a nullable `owner_account_id uuid references
+  accounts(id)` column + index, via the established `ensureSchema` `alter table ... add column
+  if not exists` idempotent pattern (copy the `catalog_gems.owner_account_id` block). This is
+  PR 2's departure from PR 1's zero-schema-change property: revoke ownership genuinely needs a
+  place to record the owner.
 - **`staticGate` runs server-side.** `gameGate.ts:3-10` says in its own header that the gate
   is not a security boundary — the sealed null-origin `sandbox="allow-scripts"` iframe with
   `default-src 'none'` (`GamePlayer.tsx`, `sealedDoc`) is. But we serve attacker-authored HTML
   from our origin, and client-side gating is not gating. `staticGate` is the cheap
   regex+tokenizer half; jsdom's `gameGate` is not re-run.
-- **Reads need nothing new.** `GET /api/aggregator/game-html?key=&version=` is already in
-  `PUBLIC_READ_PATHS` (`src/originGuard.ts:36`) with `Access-Control-Allow-Origin: *`. A
-  slash-less key flows through it unchanged.
+
+### The version-resolution fallback (a PR 1 seam this fixes)
+
+`game-meta` resolves a bare key's version through `latestGemVersion`, which reads `catalog_gems`
+— and a scope-less share id has **no catalog row**, so it returns `null` and the `/games/<id>`
+link 404s. PR 2 must make version-resolution fall back to `gem_archives` for unlisted keys: a
+share has exactly one `(shareId, "1")` archive row, so resolve to it directly when the catalog
+yields nothing. Without this, the share link does not work at all.
 
 ### Revocation
 
-An unlisted URL is a capability: unguessable, permanent, unauthenticated. Standing up public
-hosting of user-authored HTML with no takedown path is not acceptable, and revocation is
-awkward to retrofit once links are in the wild. `DELETE /api/aggregator/share-archive` ships
-in the same PR as the mint, with a "Revoke link" affordance beside "Copy link."
+An unlisted URL is a capability: unguessable, permanent. Standing up public hosting of
+user-authored HTML with no takedown path is not acceptable, and revocation is awkward to
+retrofit once links are in the wild. The signed `DELETE /api/aggregator/share-archive` ships in
+the same PR as the mint, with a "Revoke link" affordance beside "Copy link." Because ownership
+is the account UUID, revoke succeeds from any of the owner's connected devices and fails closed
+for everyone else.
 
 ### Immutable links
 
