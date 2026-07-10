@@ -26,17 +26,10 @@ describe("getSessionData", () => {
 });
 
 describe("getInventory", () => {
-  it("calls inventoryRoute.call and returns its result", async () => {
+  it("returns result and requests deferred bodies (metadata only, not 5.81MB of SKILL.md)", async () => {
     const inv = { skills: [{ name: "brainstorming" }], mcpServers: [], instructions: [], hooks: [], subagents: [] };
     const spy = vi.spyOn(inventoryRoute, "call").mockResolvedValue(inv as never);
     await expect(getInventory("")).resolves.toEqual(inv);
-    expect(spy).toHaveBeenCalled();
-  });
-
-  it("getInventory requests deferred bodies (miniapps get metadata, not 5.81MB of SKILL.md)", async () => {
-    const spy = vi.fn(async () => ({ skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [] }));
-    inventoryRoute.call = spy as never;
-    await getInventory("http://x");
     expect(spy).toHaveBeenCalledWith(expect.anything(), { query: { body: "defer" } });
   });
 });
