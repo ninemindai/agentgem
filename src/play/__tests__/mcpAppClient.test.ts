@@ -13,7 +13,14 @@ import { mcpAppClient, MCP_CLIENT_MARKER } from "@agentgem/play";
 type Win = {
   parent: unknown;
   document: { documentElement: { setAttribute(k: string, v: string): void; style: { setProperty(k: string, v: string): void } } };
-  agentgemApp: { ready: boolean; hostTools: unknown[]; callTool(n: string, a?: unknown): Promise<unknown>; onNotification(m: string, cb: (x: unknown) => void): void };
+  agentgemApp: {
+    ready: boolean; hostTools: unknown[];
+    callTool(n: string, a?: unknown): Promise<unknown>;
+    openLink(url: string): Promise<unknown>;
+    sendMessage(params: unknown): Promise<unknown>;
+    updateModelContext(params: unknown): Promise<unknown>;
+    onNotification(m: string, cb: (x: unknown) => void): void;
+  };
   addEventListener(type: string, cb: (e: { data: unknown; source: unknown }) => void): void;
   removeEventListener(type: string, cb: (e: { data: unknown; source: unknown }) => void): void;
   deliver(data: unknown, source: unknown): void;
@@ -131,6 +138,79 @@ describe("mcpAppClient shim", () => {
   it("carries the MCP_CLIENT_MARKER for migration idempotence", () => {
     expect(MCP_CLIENT_MARKER).toBe("agentgem:mcp-app-client:2");
     expect(mcpAppClient()).toContain(MCP_CLIENT_MARKER);
+  });
+
+  describe("action capability methods (open-link / send-message / update-model-context)", () => {
+    it("openLink posts a ui/open-link request with params:{url} and resolves on the host's reply", async () => {
+      const child = makeWindow();
+      const parent = makeWindow();
+      child.parent = parent;
+      const posted: Array<{ jsonrpc?: string; id?: number; method?: string; params?: unknown }> = [];
+      parent.postMessage = (msg) => {
+        posted.push(msg);
+        if (msg.method === "ui/initialize") { child.deliver({ jsonrpc: "2.0", id: msg.id, result: { protocolVersion: "x", _meta: { "ai.agentgem/host": { tools: [] } } } }, parent); return; }
+        if (msg.method === "ui/open-link") { child.deliver({ jsonrpc: "2.0", id: msg.id, result: {} }, parent); return; }
+      };
+      runShim(child);
+      expect(child.agentgemApp.ready).toBe(true);
+
+      const result = await child.agentgemApp.openLink("https://x.test");
+      expect(posted).toContainEqual(expect.objectContaining({ method: "ui/open-link", params: { url: "https://x.test" } }));
+      expect(result).toEqual({});
+    });
+
+    it("sendMessage posts a ui/message request with the given params and resolves on the host's reply", async () => {
+      const child = makeWindow();
+      const parent = makeWindow();
+      child.parent = parent;
+      const posted: Array<{ jsonrpc?: string; id?: number; method?: string; params?: unknown }> = [];
+      parent.postMessage = (msg) => {
+        posted.push(msg);
+        if (msg.method === "ui/initialize") { child.deliver({ jsonrpc: "2.0", id: msg.id, result: { protocolVersion: "x", _meta: { "ai.agentgem/host": { tools: [] } } } }, parent); return; }
+        if (msg.method === "ui/message") { child.deliver({ jsonrpc: "2.0", id: msg.id, result: {} }, parent); return; }
+      };
+      runShim(child);
+      expect(child.agentgemApp.ready).toBe(true);
+
+      const params = { role: "user", content: "hi" };
+      const result = await child.agentgemApp.sendMessage(params);
+      expect(posted).toContainEqual(expect.objectContaining({ method: "ui/message", params }));
+      expect(result).toEqual({});
+    });
+
+    it("updateModelContext posts a ui/update-model-context request with the given params and resolves on the host's reply", async () => {
+      const child = makeWindow();
+      const parent = makeWindow();
+      child.parent = parent;
+      const posted: Array<{ jsonrpc?: string; id?: number; method?: string; params?: unknown }> = [];
+      parent.postMessage = (msg) => {
+        posted.push(msg);
+        if (msg.method === "ui/initialize") { child.deliver({ jsonrpc: "2.0", id: msg.id, result: { protocolVersion: "x", _meta: { "ai.agentgem/host": { tools: [] } } } }, parent); return; }
+        if (msg.method === "ui/update-model-context") { child.deliver({ jsonrpc: "2.0", id: msg.id, result: {} }, parent); return; }
+      };
+      runShim(child);
+      expect(child.agentgemApp.ready).toBe(true);
+
+      const params = { state: { score: 3 } };
+      const result = await child.agentgemApp.updateModelContext(params);
+      expect(posted).toContainEqual(expect.objectContaining({ method: "ui/update-model-context", params }));
+      expect(result).toEqual({});
+    });
+
+    it("rejects a queued openLink call before ui/initialize once the handshake retries are exhausted (proves callTool's queue-gating is shared, not duplicated)", async () => {
+      vi.useFakeTimers();
+      const child = makeWindow();
+      const parent = makeWindow();
+      child.parent = parent;
+      parent.postMessage = () => {}; // no host reply, ever
+      runShim(child);
+
+      const promise = child.agentgemApp.openLink("https://x.test");
+      const assertion = expect(promise).rejects.toThrow(/no host/);
+      await vi.advanceTimersByTimeAsync(6 * 800 + 100);
+      await assertion;
+      vi.useRealTimers();
+    });
   });
 
   it("replies to a ui/resource-teardown request with an empty JSON-RPC result", () => {

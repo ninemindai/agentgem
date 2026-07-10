@@ -33,24 +33,38 @@ ${hostStyleScript()}
 
   function post(msg) { try { if (host && host !== window) host.postMessage(msg, "*"); } catch (e) { /* sealed / no host */ } }
 
+  // Shared REQUEST plumbing behind callTool + the three action methods: allocate an id, park its
+  // resolve/reject, and gate the post on the handshake exactly the way callTool always has (queue
+  // pre-ready, post-and-wait once ready — see the comment on the queue gate below).
+  function sendRequest(method, params) {
+    return new Promise(function (resolve, reject) {
+      var id = nextId++;
+      var msg = { jsonrpc: "2.0", id: id, method: method, params: params };
+      pending[id] = { resolve: resolve, reject: reject };
+      // Gate on the handshake: posting before the host has attached its listener would lose the
+      // call (only ui/initialize retries), and a fixed timeout would break slow user consent (a
+      // gated cap can wait on the user clicking Allow for well over 10s). So: not ready yet, queue
+      // it (flushed once ui/initialize resolves, below); ready, post now and just wait for the reply
+      // however long it takes — if the host is gone the frame is being torn down and the promise
+      // dies with it, and if the handshake never completes the retry-exhaustion below rejects it.
+      if (api.ready) post(msg); else queue.push(msg);
+    });
+  }
+
   var api = {
     ready: false,
     hostTools: [],
     hostContext: {},
     callTool: function (name, args) {
-      return new Promise(function (resolve, reject) {
-        var id = nextId++;
-        var msg = { jsonrpc: "2.0", id: id, method: "tools/call", params: { name: name, arguments: args || {} } };
-        pending[id] = { resolve: resolve, reject: reject };
-        // Gate on the handshake: posting before the host has attached its listener would lose the
-        // call (only ui/initialize retries), and a fixed timeout would break slow user consent (a
-        // gated cap can wait on the user clicking Allow for well over 10s). So: not ready yet, queue
-        // it (flushed once ui/initialize resolves, below); ready, post now and just wait for the reply
-        // however long it takes — if the host is gone the frame is being torn down and the promise
-        // dies with it, and if the handshake never completes the retry-exhaustion below rejects it.
-        if (api.ready) post(msg); else queue.push(msg);
-      });
+      return sendRequest("tools/call", { name: name, arguments: args || {} });
     },
+    // The three action caps (open-link real console semantics; send-message/update-model-context are
+    // external-chat-host-only — our console host replies -32601 for those, see mcpUiHost.ts). All three
+    // reuse sendRequest, so a call before handshake queues and the host's reply resolves/rejects it,
+    // exactly like callTool.
+    openLink: function (url) { return sendRequest("ui/open-link", { url: url }); },
+    sendMessage: function (params) { return sendRequest("ui/message", params); },
+    updateModelContext: function (params) { return sendRequest("ui/update-model-context", params); },
     onNotification: function (method, cb) { (subs[method] || (subs[method] = [])).push(cb); }
   };
   window.agentgemApp = api;

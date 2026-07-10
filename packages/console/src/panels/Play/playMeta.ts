@@ -15,6 +15,9 @@ export const CHIP: Record<string, { label: string; title: string }> = {
   "local-project-access": { label: "🟡 local", title: "reads local projects (host-brokered, read-only)" },
   "invoke-agent": { label: "⚙ agent", title: "runs a local agent (local-authored only)" },
   "session-data": { label: "📊 data", title: "reads its source session (host-brokered)" },
+  "open-link": { label: "🔗 link", title: "can open an external link (asks each time, shows the URL)" },
+  "send-message": { label: "💬 say", title: "can message the conversation (external hosts only)" },
+  "update-model-context": { label: "🧠 context", title: "can push state to the model (external hosts only)" },
 };
 
 // The server surfaces a failed seal gate as: "miniapp failed the gate: <a>; <b>". Pull the reasons out so

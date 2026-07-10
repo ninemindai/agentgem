@@ -24,9 +24,10 @@ export interface UiHostDeps {
   needs: string[];
   interactive: boolean;
   target: Window;                                    // the iframe.contentWindow: post target + e.source boundary
-  requestConsent: (cap: string) => Promise<boolean>; // gated caps only; AUTO caps bypass. Runner owns the modal.
+  requestConsent: (cap: string, detail?: string) => Promise<boolean>; // gated caps only; AUTO caps bypass. Runner owns the modal. `detail` surfaces extra context (e.g. the open-link URL) to the prompt.
   hostContext?: () => Record<string, unknown>;       // PR 3 wires the Runner's live theme/size; PR 2: absent -> {}
   onDisplayMode?: (mode: string) => string;          // PR 3: Runner applies/refuses; returns the mode ACTUALLY applied
+  openExternal?: (url: string) => void;              // 3.4: open-link's actual browser navigation, injected by the Runner
 }
 
 export interface UiHost {
@@ -37,7 +38,10 @@ export interface UiHost {
   pushHostContext(partial: Record<string, unknown>): void;  // host-initiated host-context-changed push (fullscreen toggle)
 }
 
-interface RpcMessage { jsonrpc?: string; id?: number; method?: string; params?: { name?: string; arguments?: Record<string, unknown> } }
+interface RpcMessage {
+  jsonrpc?: string; id?: number; method?: string;
+  params?: { name?: string; arguments?: Record<string, unknown>; url?: string } & Record<string, unknown>;
+}
 
 export function createUiHost(deps: UiHostDeps): UiHost {
   let generation = 0;                                // bumped per game; async continuations pin to their start value
@@ -146,6 +150,31 @@ export function createUiHost(deps: UiHostDeps): UiHost {
     await execute(cap, d.id, args, gen);
   }
 
+  // ui/open-link: real console semantics — consent (showing the URL, never remembered — see
+  // requestConsent's "open-link" branch in Runner.tsx) then delegate the actual navigation to the
+  // injected `openExternal` so this module stays DOM-free.
+  async function handleOpenLink(d: RpcMessage): Promise<void> {
+    const cap = "open-link";
+    if (!deps.needs.includes(cap)) { replyError(d.id, -32601, `capability not permitted: ${cap}`); return; }
+    const url = d.params?.url;
+    if (typeof url !== "string" || !/^https?:\/\//.test(url)) { replyError(d.id, -32602, "invalid params: url must be an http(s) string"); return; }
+    const gen = generation;
+    const ok = await deps.requestConsent(cap, url);
+    if (stale(gen)) return;                            // game changed while the prompt was open
+    if (!ok) { replyError(d.id, -32001, "consent denied"); return; }
+    deps.openExternal?.(url);
+    reply(d.id, {});
+  }
+
+  // ui/message / ui/update-model-context: only meaningful in an EXTERNAL chat host (Claude Desktop) that
+  // spawned the miniapp — the console Play panel has no conversation sink to write into. Still enforce
+  // the needs gate (a game that never declared the cap gets -32601 either way), but a declared-and-denied
+  // cap here means "recognized, not supported by this host" rather than a consent prompt.
+  function handleUnsupportedAction(d: RpcMessage, cap: string): void {
+    if (!deps.needs.includes(cap)) { replyError(d.id, -32601, `capability not permitted: ${cap}`); return; }
+    replyError(d.id, -32601, "unsupported by this host");
+  }
+
   function handleMessage(e: MessageEvent): void {
     if (e.source !== deps.target) return;            // only our own sealed iframe — the security boundary
     const d = e.data as RpcMessage | null;
@@ -171,6 +200,9 @@ export function createUiHost(deps: UiHostDeps): UiHost {
       return;
     }
     if (d.method === "tools/call") { void handleCall(d); return; }
+    if (d.method === "ui/open-link") { void handleOpenLink(d); return; }
+    if (d.method === "ui/message") { handleUnsupportedAction(d, "send-message"); return; }
+    if (d.method === "ui/update-model-context") { handleUnsupportedAction(d, "update-model-context"); return; }
   }
 
   // Host-initiated rebind for the "Replay yours" picker (Runner's feedSession, PR D): the sealed
