@@ -36,6 +36,23 @@ is a **fixed-ratio two-pane grid** the user cannot re-proportion. Consequences:
   measure; their internal splits resize *within* that cap.
 - No route change for Play (see Rename); no server/API changes.
 
+## Phasing
+
+Ship in two passes so the first is small and self-contained:
+
+- **Phase 1 (this plan) — the Play/Studio experience + sidebar.** The shared
+  primitive (`useDragResize`), the full sidebar (drag / rail-snap / hide,
+  section B), the Studio preview\|chat split (`useSplit("studio")`), Studio
+  full-width (`fullWidth`), and the Play→Studio rename. This is the whole
+  original ask end-to-end and builds the reusable pieces.
+- **Phase 2 (follow-up) — the remaining internal splits.** Materialize
+  (`.targets-result`), RubricLibrary (`.rub-editor`), and context-hygiene
+  (`.ct`) reuse `useSplit` with no new primitive work. Deferred; a separate PR.
+
+Sections B–E below are Phase 1. Section C's table lists all four splits for
+completeness, but only the **Studio** row ships in Phase 1; the other three
+rows are Phase 2.
+
 ---
 
 ## Design
