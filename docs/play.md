@@ -66,6 +66,21 @@ network. Capabilities are declared in the game's `meta.json`
 `needs`: `session-data` (auto-approved), and the consent-gated `local-project-access`,
 `live-session-events`, and `invoke-agent`.
 
+![Miniapp ↔ host handshake](diagrams/miniapp-host-handshake.svg)
+
+> Diagram: [`diagrams/miniapp-host-handshake.svg`](diagrams/miniapp-host-handshake.svg) ·
+> [PNG](diagrams/miniapp-host-handshake.png) ·
+> [interactive HTML](diagrams/miniapp-host-handshake.html) (Copy / PNG / PDF export)
+
+The two files carry different halves of the same contract, and **neither one alone makes
+the app work**. `index.html` carries the *transport* — the injected client shim, which
+must run before the game's own script so `window.agentgemApp` exists when it's needed.
+`meta.json` carries the *grant* — the host only attaches when `needs` is non-empty, and
+answers `ui/initialize` advertising exactly the declared capabilities. A bundle that
+declares `needs` but carries no shim never sends `ui/initialize` at all: the handshake
+retries exhaust, every `callTool` rejects with `"no host"`, and the game quietly falls
+back to its baked `game-data` while the host waits for a frame that cannot speak.
+
 ## The git-backed registry
 
 Your mini-games live in **`~/.agentgem/miniapps/`** (or `$AGENTGEM_HOME/miniapps`),
