@@ -31,10 +31,15 @@ interface MinimalUpdater {
 // (a real update requires a published, signed release).
 export function configureUpdater(
   updater: MinimalUpdater,
-  handlers: { onAvailable: () => void; onDownloaded: () => void },
+  handlers: { onAvailable: () => void; onDownloaded: () => void; onError: (err: Error) => void },
 ): void {
   updater.autoDownload = true;
   updater.on("update-available", handlers.onAvailable);
   updater.on("update-downloaded", handlers.onDownloaded);
-  void updater.checkForUpdatesAndNotify();
+  // A failed check emits "error" AND rejects the promise. Without a listener the emit throws
+  // (EventEmitter's unhandled-"error" rule) and the rejection goes unhandled — which is how a
+  // 404 on the release's latest*.yml stayed invisible for two releases.
+  updater.on("error", handlers.onError);
+  // The listener above already reported it; this only keeps the rejection from going unhandled.
+  void updater.checkForUpdatesAndNotify().catch(() => {});
 }
