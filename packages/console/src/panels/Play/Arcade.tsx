@@ -102,7 +102,7 @@ export function Arcade({ apiBase, onOpen }: { apiBase: string; onOpen: (name: st
         return (
           <li key={m.name} className="play-card" onClick={() => !asking && onOpen(m.name)} title={`Open ${m.name}`}>
             <button
-              type="button" className="play-card__del" aria-label={`Delete ${m.name}`}
+              type="button" className="play-card__del" aria-label={`Delete ${m.name}`} title={`Delete ${m.name}`}
               disabled={deleting !== null}   // no second dialog while a delete is in flight
               onClick={(e) => { e.stopPropagation(); askDelete(m.name); }}
             >✕</button>
