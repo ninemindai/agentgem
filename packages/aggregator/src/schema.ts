@@ -390,6 +390,23 @@ export const verification = pgTable("verification", {
 export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, handoffCodes, stars, reviews, gemAdoptions, accountScopes, usageDays, usageDayModels, orgSettings, catalogGems, gemArchives, gamePlays, curatedSkills, appInstallations, orgMembers, groups, groupMembers, groupInvites, user, session, account, verification };
 export type AppDb = PgDatabase<any, typeof schema>;
 
+/** One-time, idempotent: map catalog_gems.published_by (a login string) onto owner_account_id.
+ *  accounts.login has NO unique constraint, so assign ONLY where exactly one account matches —
+ *  a naive join would silently hand the gem to whichever duplicate the planner returned first.
+ *  Rows that do not resolve keep owner_account_id = NULL and are owned by NOBODY (fail closed). */
+export async function backfillGemOwners(db: AppDb): Promise<{ resolved: number; unresolved: number }> {
+  await db.execute(sql`
+    update catalog_gems cg set owner_account_id = m.id
+    from (select lower(login) lg, min(id::text)::uuid id from accounts
+          where login is not null
+          group by lower(login) having count(*) = 1) m
+    where m.lg = lower(cg.published_by) and cg.owner_account_id is null`);
+  const r = await db.execute(sql`select count(*)::int as n from catalog_gems where owner_account_id is null`);
+  const unresolved = (r.rows as { n: number }[])[0].n;
+  const t = await db.execute(sql`select count(*)::int as n from catalog_gems`);
+  return { resolved: (t.rows as { n: number }[])[0].n - unresolved, unresolved };
+}
+
 // Idempotent DDL. (Schema-as-tables above is the query source of truth; this DDL
 // creates them. A column drift is caught immediately by the typed drizzle inserts.
 // drizzle-kit migrations are a deferred follow-up when the schema starts evolving.)
@@ -525,4 +542,9 @@ export async function ensureSchema(db: AppDb): Promise<void> {
   await db.execute(sql`create table if not exists "verification" (
     id text primary key, identifier text not null, value text not null, expires_at timestamptz not null,
     created_at timestamptz not null default now(), updated_at timestamptz not null default now())`);
+
+  const owners = await backfillGemOwners(db);
+  if (owners.unresolved > 0) {
+    console.warn(`[schema] ${owners.unresolved} catalog_gems row(s) have no resolvable owner; they cannot be unpublished by anyone until reassigned`);
+  }
 }
