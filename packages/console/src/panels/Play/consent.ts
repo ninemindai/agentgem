@@ -11,6 +11,10 @@ export const CAP_LABEL: Record<string, string> = {
   "invoke-agent": "run a local AI agent on your machine",
 };
 
+// The consent-gated capabilities, in display order. `session-data` is deliberately absent: AUTO_CAPS
+// marks it auto-approved (declared at seed), so it is never something a user opts into.
+export const CONSENT_CAPS = ["local-project-access", "live-session-events", "invoke-agent"] as const;
+
 type Decision = "granted" | "denied";
 const key = (name: string, cap: string) => `agentgem:play:consent:${name}:${cap}`;
 

@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { Studio } from "../Studio.js";
-import { playMiniappRoute } from "../../../api/routes.js";
+import { playMiniappRoute, playSaveRoute } from "../../../api/routes.js";
 import { IdentityProvider } from "../../../identity/IdentityProvider.js";
 
 class FakeES {
@@ -135,5 +135,40 @@ describe("Studio", () => {
     rerender(<IdentityProvider apiBase=""><Studio {...props} agents={codex} agentId="codex" /></IdentityProvider>);
     await waitFor(() => expect(FakeES.last).toBeTruthy());
     expect(FakeES.last!.url).toContain("message=dodge+asteroids");
+  });
+
+  // Studio mounts an agent list over raw fetch and an EventSource; stub both, then the two client routes.
+  const renderStudio = (needs: string[]) => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({}) })) as unknown as typeof fetch);
+    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
+    vi.spyOn(playMiniappRoute, "call").mockResolvedValue({
+      name: "g1",
+      html: "<!doctype html><body><canvas></canvas></body>",
+      meta: {
+        title: "G1", genre: "project-fun", engineVersion: "1",
+        createdFrom: { kind: "project", path: "/p", flavor: "node" }, needs,
+      },
+    } as never);
+    return render(<IdentityProvider apiBase=""><Studio
+      apiBase="" name="g1"
+      agents={[{ id: "codex", name: "Codex", available: true }]}
+      agentId="codex" onAgentIdChange={() => {}} onBack={() => {}}
+    /></IdentityProvider>);
+  };
+
+  it("lists each declared capability with the cost the viewer will see", async () => {
+    renderStudio(["live-session-events"]);
+    expect(await screen.findByText(/watch your live coding sessions in real time/i)).toBeTruthy();
+  });
+
+  it("announces a prune after save and drops the capability from the strip", async () => {
+    renderStudio(["invoke-agent"]);
+    vi.spyOn(playSaveRoute, "call").mockResolvedValue({ name: "g1", commit: "abc1234", prunedNeeds: ["invoke-agent"] });
+    expect(await screen.findByText(/run a local AI agent on your machine/i)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /^Save$/ }));
+
+    expect(await screen.findByText(/removed invoke-agent — nothing in the miniapp uses it/i)).toBeTruthy();
+    await waitFor(() => expect(screen.queryByText(/run a local AI agent on your machine/i)).toBeNull());
   });
 });
