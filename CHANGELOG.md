@@ -7,6 +7,50 @@ All notable changes to AgentGem are documented here. The format follows
 The npm core (`@ninemind/agentgem`) and the desktop app share a version number but
 are tagged separately: core releases are tagged `v*`, desktop releases `desktop-v*`.
 
+## [0.4.1] — `@ninemind/agentgem` (npm core) — 2026-07-09
+
+### Fixed
+
+- **The Studio preview no longer renders a stale mini-app.** The Play registry reads
+  serve mutable on-disk state — the Studio agent rewrites the mini-app's html between
+  requests — but they answered with a bare `ETag` and no `Cache-Control`. That let the
+  browser apply heuristic freshness and serve a cached body without revalidating, so
+  the preview could show html the agent had already replaced, with nothing to indicate
+  it was stale. The four mutable reads are now marked `no-cache` (revalidate, not
+  `no-store`), so a repeat mount costs a conditional request and still answers `304`.
+- **Studio fullscreen now covers the chat and composer.** The preview stage animated
+  with `fill-mode: both`, leaving the opacity animation permanently in effect — and an
+  in-effect opacity animation is a permanent stacking context, which pinned the
+  fullscreen overlay inside the preview column while the chat panel painted over it.
+- **A failed Studio preview now says so.** Studio swallowed every load error and
+  handed an empty string to the iframe, which reads as a working preview of an empty
+  app rather than as a failure. It now renders a distinct loading, failed (with the
+  server's reason and a **Retry**), or loaded state, and a refresh that fails after a
+  build keeps the last good preview on screen. This does not fix the intermittent
+  blank preview, whose root cause is still unknown — it makes the next occurrence
+  name the failing layer instead of leaving a white rectangle.
+
+### Changed
+
+- **Documentation covers the 0.4.0 feature set.** New `docs/play.md`,
+  `docs/recall.md`, and `docs/sharing.md`, refreshed console screenshots, and a
+  website rewritten around the shipped console.
+
+## [desktop-v0.4.1] — desktop app — 2026-07-09
+
+### Added
+
+- **A real app icon.** The icon was a blank dark square placeholder, which fed both
+  the packaged app icon and the system tray. It is now the AgentGem gem on a warm-dark
+  rounded tile, with `build/icon.svg` checked in as the vector source. This missed the
+  `desktop-v0.4.0` tag by one commit, so 0.4.0 installers shipped with the placeholder.
+
+### Fixed
+
+- Everything in npm core 0.4.1 above, since the desktop app embeds the same console
+  and server: the stale Studio preview, the fullscreen overlay, and the silent
+  preview failure.
+
 ## [0.4.0] — `@ninemind/agentgem` (npm core) — 2026-07-09
 
 ### Added
