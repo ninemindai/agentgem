@@ -40,3 +40,52 @@ export function reconcileNeeds(html: string, declared: GameCapability[] | undefi
     pruned: [...new Set(d.filter((c) => !needs.includes(c)))].sort(),
   };
 }
+
+// The code with comments removed and every string/template literal EMPTIED to its bare quotes. Only
+// hasDynamicToolCall() uses it, and only to ask "is the argument an identifier rather than a literal?".
+//
+// Both transforms exist to kill false positives: `MINIAPP_BUILDER_BRIEF` states the rule using the text
+// `callTool(name)`, so an agent that echoes it into a comment — or into a help string — must not have
+// its save blocked by it.
+//
+// Best-effort by design: it models neither regex literals nor `${}` interpolation, and a stray
+// apostrophe in markup ("don't") makes it treat following code as a string. EVERY such error only DROPS
+// text, and dropping text can only make hasDynamicToolCall() MISS a dynamic call — never invent one. A
+// miss is exactly the pre-existing behaviour, so the failure direction is safe.
+//
+// This must never be used to narrow deriveNeeds(): there, a missed match prunes a capability the miniapp
+// really uses, and the app breaks at runtime with -32601.
+function codeSkeleton(code: string): string {
+  let out = "";
+  for (let i = 0; i < code.length; ) {
+    const c = code[i];
+    if (c === '"' || c === "'" || c === "`") {         // keep the quotes, drop what is between them
+      out += c;
+      for (i++; i < code.length; ) {
+        if (code[i] === "\\") { i += 2; continue; }
+        if (code[i++] === c) { out += c; break; }
+      }
+      continue;
+    }
+    if (c === "/" && code[i + 1] === "/") { while (i < code.length && code[i] !== "\n") i++; continue; }
+    if (c === "/" && code[i + 1] === "*") {
+      for (i += 2; i < code.length && !(code[i] === "*" && code[i + 1] === "/"); i++);
+      i += 2;
+      continue;
+    }
+    out += c;
+    i++;
+  }
+  return out;
+}
+
+// `callTool(` followed by an identifier start — i.e. a variable, not a literal. The shim's own
+// `callTool: function (name, args)` is a DEFINITION, not a call, so the `(` never follows the name.
+const DYNAMIC_CALL = /\bcallTool\s*\(\s*[A-Za-z_$]/;
+
+// MINIAPP_BUILDER_BRIEF requires literal tool-name strings, because deriveNeeds() reads the source: a
+// name it cannot see is a capability it prunes, and the call then fails at runtime with -32601. This
+// turns that convention into a save-time error the agent can self-repair from.
+export function hasDynamicToolCall(html: string): boolean {
+  return DYNAMIC_CALL.test(codeSkeleton(scannableCode(html)));
+}

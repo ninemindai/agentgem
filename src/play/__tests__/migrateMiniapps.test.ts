@@ -1,6 +1,6 @@
 // src/play/__tests__/migrateMiniapps.test.ts
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync, mkdirSync, writeFileSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { saveMiniapp, readMiniapp, migrateAllMiniapps, miniappDir, MCP_CLIENT_MARKER } from "@agentgem/play";
@@ -147,4 +147,35 @@ describe("readMiniapp on-read backstop", () => {
     expect(read.html).toContain(MCP_CLIENT_MARKER); // but the read is migrated
     expect(read.html).not.toContain("agentgem:request");
   });
+});
+
+it("records an I/O failure on the meta-only prune path and keeps migrating the rest", async () => {
+  // 'aaa-locked' is over-declared (so it takes the prune path) but its meta.json is read-only, so the
+  // rewrite throws. That must be recorded on its row, not abort the pass. 'zzz-fine' proves it continued.
+  const locked = miniappDir("aaa-locked");
+  mkdirSync(locked, { recursive: true });
+  writeFileSync(join(locked, "aaa-locked.html"), "<!doctype html><body><canvas></canvas><script>const x=1;</script></body>");
+  const lockedMeta = join(locked, "meta.json");
+  writeFileSync(lockedMeta, JSON.stringify({
+    title: "L", genre: "project-fun", createdFrom: { kind: "blank", title: "L" },
+    engineVersion: "1", needs: ["invoke-agent"],
+  }));
+  chmodSync(lockedMeta, 0o444);
+
+  const fine = miniappDir("zzz-fine");
+  mkdirSync(fine, { recursive: true });
+  writeFileSync(join(fine, "zzz-fine.html"), "<!doctype html><body><canvas></canvas><script>const y=2;</script></body>");
+  writeFileSync(join(fine, "meta.json"), JSON.stringify({
+    title: "F", genre: "project-fun", createdFrom: { kind: "blank", title: "F" }, engineVersion: "1",
+  }));
+
+  try {
+    const results = await migrateAllMiniapps();   // must NOT throw
+    const bad = results.find((r) => r.name === "aaa-locked");
+    expect(bad?.commit).toBeNull();
+    expect(bad?.error).toBeTruthy();
+    expect(results.find((r) => r.name === "zzz-fine")).toBeDefined();  // the pass continued
+  } finally {
+    chmodSync(lockedMeta, 0o644);
+  }
 });
