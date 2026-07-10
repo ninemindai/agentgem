@@ -34,5 +34,7 @@ describe("Targets", () => {
     await waitFor(() => expect(screen.getByText("hello agents")).toBeTruthy());
     fireEvent.click(screen.getByText("skills/pdf/SKILL.md"));
     expect(screen.getByText("pdf skill")).toBeTruthy();
+    // the master|detail divider is wired onto .targets-result (list is the resizable pane)
+    expect(document.querySelector(".targets-result .split-handle")?.getAttribute("data-side")).toBe("start");
   });
 });

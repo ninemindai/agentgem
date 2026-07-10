@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSplit } from "../../shell/useSplit.js";
 import { materializeRoute, makeClient, TARGET_IDS, type MaterializeResult } from "../../api/routes.js";
 import type { GemSelection } from "../Curate/selection.js";
 import { ContentView } from "../Curate/ContentView.js";
@@ -15,6 +16,7 @@ export function Targets({ apiBase, selection, name }: { apiBase: string; selecti
   const [active, setActive] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const split = useSplit("materialize", { initial: 240, min: 190, max: 460, side: "start" });
 
   const run = async () => {
     setBusy(true);
@@ -48,7 +50,10 @@ export function Targets({ apiBase, selection, name }: { apiBase: string; selecti
 
       {result && (
         <>
-          <div className="targets-result">
+          <div
+            className={"targets-result" + (split.containerProps.className ? " " + split.containerProps.className : "")}
+            style={split.containerProps.style}
+          >
             <ul className="targets-files">
               {files.map((f) => (
                 <li
@@ -58,6 +63,7 @@ export function Targets({ apiBase, selection, name }: { apiBase: string; selecti
                 >{f}</li>
               ))}
             </ul>
+            {split.handle}
             <div className="targets-content-wrap">
               {active && active.endsWith(".md")
                 ? <ContentView text={result.files[active]} />

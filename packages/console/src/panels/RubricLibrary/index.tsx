@@ -6,6 +6,7 @@ import {
 import { defineConsolePage } from "../../registry.js";
 import { setPendingRubric } from "../../pendingAnalyze.js";
 import { Loading } from "../../shell/Loading.js";
+import { useSplit } from "../../shell/useSplit.js";
 
 function isCheap(r: RubricSummary): boolean {
   return !r.criteria || r.criteria.length === 0;
@@ -36,6 +37,7 @@ function RubricEditor({ apiBase, initial, onClose, onSaved }: { apiBase: string;
   const [check, setCheck] = useState<RubricValidation | null>(null);
   const [saving, setSaving] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const split = useSplit("rubric", { initial: 240, min: 200, max: 420, side: "end" });
 
   // Debounced parse → server validate, so the preview tracks what you type.
   useEffect(() => {
@@ -62,8 +64,12 @@ function RubricEditor({ apiBase, initial, onClose, onSaved }: { apiBase: string;
 
   const canSave = !parseError && check?.valid && !saving;
   return (
-    <div className="rub-editor">
+    <div
+      className={"rub-editor" + (split.containerProps.className ? " " + split.containerProps.className : "")}
+      style={split.containerProps.style}
+    >
       <textarea className="rub-editor-text" spellCheck={false} value={text} onChange={(e) => setText(e.target.value)} rows={16} aria-label="rubric JSON" />
+      {split.handle}
       <div className="rub-editor-side">
         {parseError && <p className="ledger-error">JSON: {parseError}</p>}
         {!parseError && check && !check.valid && <p className="ledger-error">{check.error}</p>}

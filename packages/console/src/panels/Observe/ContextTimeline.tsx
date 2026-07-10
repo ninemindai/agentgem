@@ -13,6 +13,7 @@ import { hygieneRoute, makeClient, type HygieneReport as Report } from "../../ap
 import { buildTimeline } from "./ctxTimeline.js";
 import { CATEGORY_COLOR } from "./toolCategory.js";
 import { fmtTokens } from "./data.js";
+import { useSplit } from "../../shell/useSplit.js";
 
 export function ContextTimeline({ apiBase, agent, sessionId }: { apiBase: string; agent: "claude" | "codex"; sessionId: string }) {
   const [rep, setRep] = useState<Report | null>(null);
@@ -30,6 +31,10 @@ export function ContextTimeline({ apiBase, agent, sessionId }: { apiBase: string
     return () => { alive = false; };
   }, [apiBase, agent, sessionId]);
 
+  // Hook must run before the early returns below (rules of hooks); the aside
+  // (.ct-rail) is the resizable pane, so side:"end".
+  const split = useSplit("hygiene", { initial: 288, min: 240, max: 460, side: "end" });
+
   if (agent !== "claude") return null;
   if (loading) return <div className="obs hyg"><div className="obs-muted">Analyzing…</div></div>;
   if (error) return <div className="obs hyg"><div className="obs-error">{error}</div></div>;
@@ -42,7 +47,10 @@ export function ContextTimeline({ apiBase, agent, sessionId }: { apiBase: string
   const Y = (v: number) => PT + ih - (v / (m.ymax || 1)) * ih;
 
   return (
-    <div className="obs ct">
+    <div
+      className={"obs ct" + (split.containerProps.className ? " " + split.containerProps.className : "")}
+      style={split.containerProps.style}
+    >
       <div className="ct-chart">
         <div className="ct-scroll" style={{ overflowX: "auto" }}>
           <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img" aria-label="Context window over the session">
@@ -75,6 +83,7 @@ export function ContextTimeline({ apiBase, agent, sessionId }: { apiBase: string
           </svg>
         </div>
       </div>
+      {split.handle}
       <div className="ct-rail">
         <div className={"hyg-verdict is-" + rep.hygiene.verdict}>
           <span className="hyg-score">{fmtTokens(Math.max(...rep.curve.map((c) => c.ctxTokens)))}</span>

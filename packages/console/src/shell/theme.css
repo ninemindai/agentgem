@@ -420,7 +420,8 @@ body::before {
 .targets, .run, .checks, .publish { margin-bottom: 24px; }
 .targets-bar, .run-bar, .checks-bar { margin-bottom: 12px; }
 .targets-result {
-  display: grid; grid-template-columns: minmax(190px, 270px) 1fr; gap: 0;
+  position: relative;
+  display: grid; grid-template-columns: minmax(0, var(--split, 240px)) minmax(0, 1fr); gap: 0;
   border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm);
 }
 .targets-files { list-style: none; margin: 0; padding: 8px; background: var(--paper);
@@ -1259,9 +1260,12 @@ button.scorecard-intent { line-height: 1.4; }
 .ct {
   margin: 0 0 16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius);
   background: var(--raised); box-shadow: var(--shadow-sm);
-  display: grid; grid-template-columns: 1fr 288px; gap: 16px; align-items: start;
+  position: relative;
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, var(--split, 288px)); gap: 16px; align-items: start;
 }
-@media (max-width: 880px) { .ct { grid-template-columns: 1fr; } }
+/* Below the responsive collapse the panel is a single column, so the divider
+   has no seam to sit on — hide it and let --split fall back to the 1fr stack. */
+@media (max-width: 880px) { .ct { grid-template-columns: 1fr; } .ct .split-handle { display: none; } }
 .ct-chart { min-width: 0; }
 .ct-scroll { overflow-x: auto; }
 .ct-rail {
@@ -1654,7 +1658,7 @@ button.scorecard-intent { line-height: 1.4; }
 .rub-lib-top { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
 .rub-lib-top .analyze-intro { flex: 1; }
 .rub-del { color: var(--accent); }
-.rub-editor { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 12px; margin: 8px 0 12px;
+.rub-editor { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, var(--split, 240px)); gap: 12px; margin: 8px 0 12px;
   border: 1px solid var(--line); border-radius: var(--radius); background: var(--raised); padding: 12px; }
 .rub-editor-text { font: 12.5px/1.5 var(--font-mono); color: var(--ink); background: var(--paper);
   border: 1px solid var(--line); border-radius: 7px; padding: 10px; resize: vertical; width: 100%; }
