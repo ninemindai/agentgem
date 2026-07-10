@@ -30,7 +30,7 @@ beforeAll(async () => {
 
   dir = mkdtempSync(join(tmpdir(), "ap-"));
   mkdirSync(join(dir, "skills", "review"), { recursive: true });
-  writeFileSync(join(dir, "skills", "review", "SKILL.md"), "---\nname: review\ndescription: Review code\n---\n# Review\n");
+  writeFileSync(join(dir, "skills", "review", "SKILL.md"), "---\nname: review\ndescription: Review code\n---\n# Review\nSKILL-BODY\n");
   writeFileSync(join(dir, "settings.json"), JSON.stringify({ mcpServers: { gh: { command: "npx", env: { GH_TOKEN: "ghp_secret" } } } }));
   writeFileSync(join(dir, "CLAUDE.md"), "global instructions");
 
@@ -293,6 +293,41 @@ describe("GemController", () => {
     expect(JSON.stringify(r.body)).not.toContain("ghp_secret");
     expect(r.body.skills[0].source).toBe("standalone");
     expect(r.body.mcpServers[0].source).toBe("user");
+  });
+
+  it("GET /api/inventory mints an entity-path id on body-bearing artifacts", async () => {
+    const r = await client.get(`/api/inventory?dir=${encodeURIComponent(dir)}`).expect(200);
+    expect(r.body.skills[0].id).toBe("workspace/skills/standalone/review");
+    expect(r.body.skills[0].content).toBeTypeOf("string"); // default is body=full
+    // Body-less types have nothing to address.
+    expect(r.body.mcpServers[0].id).toBeUndefined();
+  });
+
+  it("GET /api/inventory?body=defer omits content but keeps the id", async () => {
+    const r = await client.get(`/api/inventory?dir=${encodeURIComponent(dir)}&body=defer`).expect(200);
+    expect(r.body.skills[0].id).toBe("workspace/skills/standalone/review");
+    expect(r.body.skills[0].content).toBeUndefined();
+    expect(r.body.skills[0].name).toBe("review"); // metadata survives
+    expect(JSON.stringify(r.body)).not.toContain("SKILL-BODY");
+  });
+
+  it("GET /api/artifact/content?id= resolves a body by its id", async () => {
+    const id = "workspace/skills/standalone/review";
+    const r = await client.get(`/api/artifact/content?dir=${encodeURIComponent(dir)}&id=${encodeURIComponent(id)}`).expect(200);
+    expect(r.body.id).toBe(id);
+    expect(r.body.content).toContain("SKILL-BODY");
+  });
+
+  it("GET /api/artifact/content 404s on an unknown or unparseable id", async () => {
+    await client.get(`/api/artifact/content?dir=${encodeURIComponent(dir)}&id=${encodeURIComponent("workspace/skills/standalone/nope")}`).expect(404);
+    await client.get(`/api/artifact/content?dir=${encodeURIComponent(dir)}&id=${encodeURIComponent("gems/@acme/tetris")}`).expect(404);
+  });
+
+  // The gem ARCHIVE contract must stay strict. This is the guard that stops a future
+  // refactor from loosening the shared schema to make the inventory variant simpler.
+  it("GemArtifactSchema still requires content", async () => {
+    const { SkillArtifactSchema } = await import("../schemas.js");
+    expect(SkillArtifactSchema.safeParse({ type: "skill", name: "x", source: "standalone" }).success).toBe(false);
   });
 
   it("POST /api/gem builds a gem from a selection", async () => {
