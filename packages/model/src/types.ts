@@ -45,7 +45,7 @@ export interface SubagentArtifact {
 // A pre-bundled, self-contained mini-game authored by the Play feature. `html` carries its own
 // inline JS/CSS and data: assets — it is run in a sealed sandboxed iframe (no network, no LLM at
 // runtime). `createdFrom` is provenance only (a reference + one-line summary), never the raw source.
-export type GameGenre = "replay" | "skill-run" | "project-fun"; // v2: "watch" | "team"
+export type GameGenre = "replay" | "skill-run" | "project-fun" | "session-heatmap"; // v2: "watch" | "team"
 
 // A capability a game may DECLARE. The trusted Play host — never the game — decides whether to grant
 // it, consent-gated per gem. Absent `needs` = a pure sealed offline snapshot (the safe default). The

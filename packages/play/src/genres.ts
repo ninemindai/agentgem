@@ -35,6 +35,12 @@ export const GENRES: Record<GameGenre, GenreSpec> = {
       "Build a light, themed mini-game seeded by the PROJECT in the DATA (name, flavor, notable files). Theme " +
       "the visuals and copy to the project; gameplay can be simple.",
   },
+  "session-heatmap": {
+    id: "session-heatmap", sourceKind: "session", title: "Session Heatmap", scaffold: "heatmap", needs: ["session-data"],
+    guidance:
+      "Build a heatmap of session activity from the DATA timeline: cells by time bucket, colored by " +
+      "intensity (tool calls, edits, message volume). Clickable cells reveal what happened. Analytical, not a game.",
+  },
 };
 
 export function genreFor(id: string): GenreSpec {

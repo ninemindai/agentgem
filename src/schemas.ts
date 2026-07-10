@@ -103,11 +103,15 @@ export const GameCapabilityEnum = z.enum([
   "open-link", "send-message", "update-model-context",
 ]);
 
+// The GameGenre union (packages/model types.ts) as a wire enum. Used both by the archive-facing
+// GameArtifactSchema below and by the Play save-request meta — kept in one place so the two never drift.
+export const GameGenreEnum = z.enum(["replay", "skill-run", "project-fun", "session-heatmap"]);
+
 export const GameArtifactSchema = z.object({
   type: z.literal("game"),
   name: z.string(),
   title: z.string(),
-  genre: z.enum(["replay", "skill-run", "project-fun"]),
+  genre: GameGenreEnum,
   html: z.string(),
   poster: z.string().optional(),
   createdFrom: z.discriminatedUnion("kind", [
@@ -981,7 +985,7 @@ export const PlaySaveRequestSchema = z.object({
   html: z.string(),
   meta: z.object({
     title: z.string(),
-    genre: z.enum(["replay", "skill-run", "project-fun"]),
+    genre: GameGenreEnum,
     createdFrom: GameArtifactSchema.shape.createdFrom,
     engineVersion: z.string().default("1"),
     needs: z.array(GameCapabilityEnum).optional(),

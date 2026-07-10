@@ -23,14 +23,21 @@ function jsString(s: string): string {
 // before the game's own script runs, or an app that polls for it on boot loses the race. Every scaffold
 // carries it — the studio agent writes bridge calls into whichever one it was handed, and a bundle born
 // without the transport can never answer the host's ui/initialize.
-export function sealedTemplate(title: string, subtitle: string): string {
+//
+// Themed via the host's CSS variables (`--color-*`) with a hardcoded fallback: on a real host (the
+// console Runner) the shim applies the host's palette to these vars (see hostStyles.ts), so the miniapp
+// picks up light/dark automatically; on app.agentgem.ai — no host — the fallback is what renders.
+export function minimalTemplate(title: string, subtitle: string): string {
   return `<!doctype html>
 <html lang="en"><head>${mcpAppClient()}<meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${htmlEscape(title)}</title>
 <style>
-  :root { color-scheme: dark; }
-  html,body { height:100%; margin:0; background:#0d1117; color:#e8edf4; font:16px/1.4 system-ui, sans-serif; overflow:hidden; }
+  :root { color-scheme: light dark; }
+  html,body { height:100%; margin:0;
+    background: var(--color-background-primary, #0d1117);
+    color: var(--color-text-primary, #e8edf4);
+    font:16px/1.4 system-ui, sans-serif; overflow:hidden; }
   #stage { position:fixed; inset:0; display:grid; place-items:center; }
   canvas { max-width:100%; max-height:100%; }
   #hud { position:fixed; top:12px; left:12px; font:600 14px system-ui; opacity:.85; }
@@ -41,14 +48,13 @@ export function sealedTemplate(title: string, subtitle: string): string {
   <script>
   (function () {
     "use strict";
-    const canvas = document.getElementById("c");
-    const ctx = canvas.getContext("2d");
-    const dataEl = document.getElementById("game-data");
-    const DATA = dataEl ? JSON.parse(dataEl.textContent || "{}") : {};
+    var canvas = document.getElementById("c"), ctx = canvas.getContext("2d");
+    var dataEl = document.getElementById("game-data");
+    var DATA = dataEl ? JSON.parse(dataEl.textContent || "{}") : {};
     // ==== AGENTGEM:GAME-LOGIC START ====
-    let t = 0;
+    var t = 0;
     function frame() {
-      ctx.fillStyle = "#0d1117"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = "#3b82f6"; ctx.font = "20px system-ui";
       ctx.fillText(${jsString(title)}, 24, 40 + Math.sin(t / 20) * 4);
       t++; requestAnimationFrame(frame);
@@ -195,10 +201,128 @@ function replayScaffold(): string {
 </body></html>`;
 }
 
+// The heatmap scaffold renders a session-activity HEATMAP from the injected/broked DATA ({meta,
+// timeline}): rows are turn roles (human / agent), columns are equal time buckets spanning the session,
+// and a cell's intensity is how many turns of that role landed in that bucket. Click a cell to see what
+// happened in it. Same host-data broker boilerplate as replayScaffold — boot on the baked snapshot,
+// upgrade on a live push, retry a bounded few times if neither has landed yet — so the pattern (and its
+// failure modes) is identical across both session-sourced genres.
+function heatmapScaffold(): string {
+  return `<!doctype html>
+<html lang="en"><head>${mcpAppClient()}<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Session Heatmap</title>
+<style>
+  :root { color-scheme: light dark; }
+  html,body { height:100%; margin:0; overflow:hidden;
+    background: var(--color-background-primary, #0d1117);
+    color: var(--color-text-primary, #e8edf4);
+    font:14px/1.5 system-ui, sans-serif; }
+  #wrap { max-width:820px; margin:0 auto; padding:18px; box-sizing:border-box; height:100%; display:flex; flex-direction:column; }
+  .wait { display:grid; place-items:center; height:100%; color:#8b98ac; font-size:15px; }
+  .title { font:700 18px Georgia, serif; text-align:center; }
+  .title .sub { display:block; font:600 11px system-ui; letter-spacing:.14em; text-transform:uppercase; opacity:.6; margin-top:3px; }
+  #grid { display:grid; gap:3px; margin:16px 0; }
+  .row-label { font:600 11px system-ui; text-transform:uppercase; letter-spacing:.08em; opacity:.7; align-self:center; padding-right:6px; }
+  .cell { border-radius:4px; border:1px solid var(--color-border-primary, #2a2340); cursor:pointer; aspect-ratio:1; }
+  .cell:hover { outline:2px solid #7c5cff; }
+  .axis { font:500 10px system-ui; opacity:.55; text-align:center; }
+  #detail { flex:1; overflow:auto; background: var(--color-background-secondary, #100d1c);
+    border:1px solid var(--color-border-primary, #241d38); border-radius:12px; padding:10px 12px; min-height:70px; }
+  #detail .line { font:500 12.5px system-ui; opacity:.9; margin-bottom:5px; }
+  #detail .empty { opacity:.5; }
+  #legend { display:flex; align-items:center; gap:6px; font:500 11px system-ui; opacity:.7; margin-bottom:6px; }
+  #legend .sw { width:12px; height:12px; border-radius:3px; display:inline-block; }
+</style></head>
+<body>
+  <div id="wrap"><div id="app"></div></div>
+  <script>
+  (function () {
+    "use strict";
+    var app = document.getElementById("app");
+    var esc = function (s) { return String(s).replace(/[&<>]/g, function (c) { return ({ "&":"&amp;", "<":"&lt;", ">":"&gt;" })[c]; }); };
+
+    // --- host data bridge (boilerplate — keep this) --- same broker pattern as the replay scaffold: boot
+    // on the baked snapshot, upgrade on a live push, and retry a bounded few times if neither has landed.
+    var dataEl = document.getElementById("game-data");
+    var DATA = dataEl ? JSON.parse(dataEl.textContent || "{}") : {};
+    if (window.agentgemApp) window.agentgemApp.onNotification("ui/notifications/tool-result", function (p) { if (p && p.toolName === "agentgem_get_session_data") { DATA = p.chunk || {}; boot(); } });
+    function requestData() { if (window.agentgemApp) window.agentgemApp.callTool("agentgem_get_session_data").then(function (d) { if (d) { DATA = d; boot(); } }).catch(function () {}); }
+
+    // ==== AGENTGEM:GAME-LOGIC START ====
+    // A session-activity heatmap: rows are turn roles (human / agent), columns are equal time buckets
+    // spanning the session. Click a cell to see what happened in it. Analytical, not a game — the studio
+    // agent can re-theme this block (more rows, a calendar day×hour layout, etc).
+    var ROWS = [{ key: "user", label: "You" }, { key: "assistant", label: "Agent" }];
+    var BUCKETS = 12;
+    function boot() {
+      var timeline = Array.isArray(DATA.timeline) ? DATA.timeline : [];
+      if (!timeline.length) { app.innerHTML = '<div class="wait">▦ Waiting for session data…</div>'; return; }
+      var meta = DATA.meta || {};
+      var project = String(meta.project || "this session");
+      var tsAll = timeline.map(function (t) { return Number((t && t.tsMs) || 0); });
+      var minTs = Math.min.apply(null, tsAll), maxTs = Math.max.apply(null, tsAll);
+      var span = Math.max(1, maxTs - minTs);
+      var cells = {}; // "role,bucket" -> turns[]
+      timeline.forEach(function (t) {
+        var role = (t && t.role) === "user" ? "user" : "assistant";
+        var col = Math.min(BUCKETS - 1, Math.floor(((Number((t && t.tsMs) || 0) - minTs) / span) * BUCKETS));
+        var key = role + "," + col;
+        (cells[key] || (cells[key] = [])).push(t);
+      });
+      var max = 1;
+      Object.keys(cells).forEach(function (k) { max = Math.max(max, cells[k].length); });
+
+      var html = '<div class="title">▦ ' + esc(project) + '<span class="sub">session activity heatmap · ' + timeline.length + ' turns</span></div>' +
+        '<div id="legend"><span class="sw" style="background:rgba(124,92,255,.15)"></span> low' +
+        '<span class="sw" style="background:rgba(124,92,255,.9)"></span> high</div>' +
+        '<div id="grid" style="grid-template-columns:56px repeat(' + BUCKETS + ', 1fr);"><div></div>';
+      for (var c = 0; c < BUCKETS; c++) html += '<div class="axis">' + (c + 1) + '</div>';
+      ROWS.forEach(function (r) {
+        html += '<div class="row-label">' + esc(r.label) + '</div>';
+        for (var c2 = 0; c2 < BUCKETS; c2++) {
+          var n = (cells[r.key + "," + c2] || []).length;
+          var alpha = n ? 0.12 + 0.78 * (n / max) : 0.04;
+          html += '<div class="cell" data-row="' + r.key + '" data-col="' + c2 + '" style="background:rgba(124,92,255,' + alpha.toFixed(2) + ')" title="' + n + ' ' + esc(r.label) + ' turn(s)"></div>';
+        }
+      });
+      html += '</div><div id="detail"><div class="empty">Click a cell to see what happened.</div></div>';
+      app.innerHTML = html;
+
+      var detail = document.getElementById("detail");
+      app.querySelectorAll(".cell").forEach(function (el) {
+        el.addEventListener("click", function () {
+          var key = el.getAttribute("data-row") + "," + el.getAttribute("data-col");
+          var turns = cells[key] || [];
+          detail.innerHTML = turns.length
+            ? turns.map(function (t) { return '<div class="line">' + (t.role === "user" ? "🧑‍💻" : "🤖") + ' ' + esc(t.text || "(no text)") + '</div>'; }).join("")
+            : '<div class="empty">No activity in this cell.</div>';
+        });
+      });
+    }
+    // ==== AGENTGEM:GAME-LOGIC END ====
+
+    boot();
+    // Broker-fed: ask the host for the transcript, retrying a few times so a transient miss (or a
+    // listener-attach race) still resolves rather than sticking on the waiting state.
+    if (!(DATA.timeline && DATA.timeline.length)) {
+      requestData();
+      var tries = 0;
+      var retry = setInterval(function () {
+        if ((DATA.timeline && DATA.timeline.length) || ++tries > 5) { clearInterval(retry); return; }
+        requestData();
+      }, 800);
+    }
+  })();
+  </script>
+</body></html>`;
+}
+
 const SCAFFOLDS: Record<string, string> = {
   replay: replayScaffold(),
-  "skill-run": sealedTemplate("Skill Run", "⚙ practice"),
-  "project-fun": sealedTemplate("Project Fun", "★ play"),
+  "skill-run": minimalTemplate("Skill Run", "⚙ practice"),
+  "project-fun": minimalTemplate("Project Fun", "★ play"),
+  heatmap: heatmapScaffold(),
 };
 
 export function scaffoldFor(scaffoldId: string): string {

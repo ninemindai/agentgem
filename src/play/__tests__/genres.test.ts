@@ -3,11 +3,12 @@ import { describe, it, expect } from "vitest";
 import { GENRES, genreFor } from "@agentgem/play";
 
 describe("genres", () => {
-  it("has the three v1 genres, each mapping to its source kind", () => {
-    expect(Object.keys(GENRES).sort()).toEqual(["project-fun", "replay", "skill-run"]);
+  it("has the four genres, each mapping to its source kind", () => {
+    expect(Object.keys(GENRES).sort()).toEqual(["project-fun", "replay", "session-heatmap", "skill-run"]);
     expect(GENRES.replay.sourceKind).toBe("session");
     expect(GENRES["skill-run"].sourceKind).toBe("skill");
     expect(GENRES["project-fun"].sourceKind).toBe("project");
+    expect(GENRES["session-heatmap"].sourceKind).toBe("session");
   });
   it("genreFor resolves a known genre and throws on unknown", () => {
     expect(genreFor("replay").id).toBe("replay");
