@@ -964,8 +964,16 @@ export const PlaySaveRequestSchema = z.object({
     needs: z.array(z.enum(["session-data", "live-session-events", "local-project-access", "invoke-agent"])).optional(),
   }),
 });
-export const PlaySaveResponseSchema = z.object({ name: z.string(), commit: z.string().nullable() });
+export const PlaySaveResponseSchema = z.object({
+  name: z.string(),
+  commit: z.string().nullable(),
+  // Declared capabilities the html never used. Reported, never silent — the Studio surfaces these.
+  prunedNeeds: z.array(z.enum(["session-data", "live-session-events", "local-project-access", "invoke-agent"])).default([]),
+});
 export const PlayDeleteRequestSchema = z.object({ name: z.string() });
+// Delete shares {name, commit} with save but never reconciles capabilities, so it gets its own response
+// rather than inheriting a prunedNeeds field it could only ever report as empty.
+export const PlayDeleteResponseSchema = z.object({ name: z.string(), commit: z.string().nullable() });
 const PlayNeedsSchema = z.array(z.enum(["session-data", "live-session-events", "local-project-access", "invoke-agent"])).optional();
 const EmptyObjectSchema = z.object({});
 export const PlayMcpAppSchema = z.object({
