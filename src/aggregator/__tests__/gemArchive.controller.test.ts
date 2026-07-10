@@ -1,7 +1,7 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
-import { makeTestDb, producers, accountBindings } from "@agentgem/aggregator";
+import { makeTestDb, producers, accountBindings, accounts } from "@agentgem/aggregator";
 import { AggregatorController } from "../../aggregator.controller.js";
 import { signer, sampleGem, signedPublishBody } from "./helpers/publishFixtures.js";
 
@@ -10,6 +10,9 @@ describe("AggregatorController.gemArchive", () => {
     const db = await makeTestDb();
     const s = signer();
     await db.insert(producers).values({ pubkey: s.pubkey });
+    // account_bindings.account_id is the PROVIDER's id (text); recordCatalogShare pairs it with
+    // `provider` against the accounts anchor row to resolve the uuid that owns the gem.
+    await db.insert(accounts).values({ id: crypto.randomUUID(), provider: "github", providerAccountId: "1", login: "octocat" });
     await db.insert(accountBindings).values({ pubkey: s.pubkey, provider: "github", accountId: "1", accountLogin: "octocat" });
     const body = signedPublishBody(sampleGem(), s, { gemKey: "@octocat/setup", version: "1.0.0", signedAt: Date.now() });
     const c = new AggregatorController(db);
@@ -26,6 +29,9 @@ describe("AggregatorController.gemArchive", () => {
     const db = await makeTestDb();
     const s = signer();
     await db.insert(producers).values({ pubkey: s.pubkey });
+    // account_bindings.account_id is the PROVIDER's id (text); recordCatalogShare pairs it with
+    // `provider` against the accounts anchor row to resolve the uuid that owns the gem.
+    await db.insert(accounts).values({ id: crypto.randomUUID(), provider: "github", providerAccountId: "1", login: "octocat" });
     await db.insert(accountBindings).values({ pubkey: s.pubkey, provider: "github", accountId: "1", accountLogin: "octocat" });
     const gameGem = { ...sampleGem(), artifacts: [{ type: "game" as const, name: "duel", title: "Duel", genre: "project-fun" as const,
       html: "<!doctype html><body><h1>PLAY ME</h1></body>", createdFrom: { kind: "html" as const, title: "Duel" }, engineVersion: "1" }] };
@@ -40,6 +46,9 @@ describe("AggregatorController.gemArchive", () => {
     const db = await makeTestDb();
     const s = signer();
     await db.insert(producers).values({ pubkey: s.pubkey });
+    // account_bindings.account_id is the PROVIDER's id (text); recordCatalogShare pairs it with
+    // `provider` against the accounts anchor row to resolve the uuid that owns the gem.
+    await db.insert(accounts).values({ id: crypto.randomUUID(), provider: "github", providerAccountId: "1", login: "octocat" });
     await db.insert(accountBindings).values({ pubkey: s.pubkey, provider: "github", accountId: "1", accountLogin: "octocat" });
     const body = signedPublishBody(sampleGem(), s, { gemKey: "@octocat/setup", version: "1.0.0", signedAt: Date.now() });
     const c = new AggregatorController(db);

@@ -4,7 +4,7 @@
 // and verified, materializes into the Claude target, and gates its executable artifacts — all with
 // NO registry configured (pure aggregator DB), which is the whole point of the hosted-store model.
 import { describe, it, expect } from "vitest";
-import { makeTestDb, producers, accountBindings, listCatalogGems } from "@agentgem/aggregator";
+import { makeTestDb, producers, accountBindings, accounts, listCatalogGems } from "@agentgem/aggregator";
 import { importGem } from "@agentgem/distribute";
 import { materialize } from "@agentgem/model";
 import { AggregatorController } from "../../aggregator.controller.js";
@@ -16,6 +16,9 @@ describe("share → preview → zero-config install (e2e)", () => {
     const db = await makeTestDb();
     const s = signer();
     await db.insert(producers).values({ pubkey: s.pubkey });
+    // account_bindings.account_id is the PROVIDER's id (text); recordCatalogShare pairs it with
+    // `provider` against the accounts anchor row to resolve the uuid that owns the gem.
+    await db.insert(accounts).values({ id: crypto.randomUUID(), provider: "github", providerAccountId: "1", login: "octocat" });
     await db.insert(accountBindings).values({ pubkey: s.pubkey, provider: "github", accountId: "1", accountLogin: "octocat" });
     const c = new AggregatorController(db);
 
@@ -47,6 +50,7 @@ describe("share → preview → zero-config install (e2e)", () => {
     const db = await makeTestDb();
     const s = signer();
     await db.insert(producers).values({ pubkey: s.pubkey });
+    await db.insert(accounts).values({ id: crypto.randomUUID(), provider: "github", providerAccountId: "9", login: "octocat" });
     await db.insert(accountBindings).values({ pubkey: s.pubkey, provider: "github", accountId: "9", accountLogin: "octocat" });
     const c = new AggregatorController(db);
     const textGem = { name: "notes", createdFrom: "/x", checks: [], requiredSecrets: [], artifacts: [{ type: "skill", name: "s", source: "standalone", content: "# S" } as const, { type: "instructions", name: "i", content: "guide" } as const] };

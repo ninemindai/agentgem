@@ -6,7 +6,7 @@ import { sql, desc, and, eq } from "drizzle-orm";
 import { verify } from "@agentgem/model";
 import { canonicalJSON } from "@agentgem/insight";
 import type { AppDb } from "./schema.js";
-import { catalogGems, gemArchives, producers, accountBindings } from "./schema.js";
+import { catalogGems, gemArchives, producers, accountBindings, accounts } from "./schema.js";
 
 export interface GemArtifactRef { name: string; type: string }
 export interface CatalogRow {
@@ -15,6 +15,7 @@ export interface CatalogRow {
   type?: string; grade?: number; createdAtMs: number;
   artifacts?: GemArtifactRef[];
   installable?: boolean; // derived: a gem_archives row exists (read path only)
+  ownerAccountId?: string | null;
 }
 
 export async function upsertCatalogGem(db: AppDb, row: CatalogRow): Promise<void> {
@@ -23,13 +24,14 @@ export async function upsertCatalogGem(db: AppDb, row: CatalogRow): Promise<void
     author: row.author ?? null, description: row.description ?? null,
     tags: row.tags ?? null, artifactKinds: row.artifactKinds ?? null,
     type: row.type ?? null, grade: row.grade ?? null, artifacts: row.artifacts ?? null,
-    createdAtMs: row.createdAtMs,
+    createdAtMs: row.createdAtMs, ownerAccountId: row.ownerAccountId ?? null,
   }).onConflictDoUpdate({
     target: [catalogGems.gemKey, catalogGems.version],
     set: {
       publishedBy: row.publishedBy, author: row.author ?? null, description: row.description ?? null,
       tags: row.tags ?? null, artifactKinds: row.artifactKinds ?? null, type: row.type ?? null,
       grade: row.grade ?? null, artifacts: row.artifacts ?? null, createdAtMs: row.createdAtMs,
+      ownerAccountId: row.ownerAccountId ?? null,
     },
   });
 }
@@ -72,15 +74,16 @@ export async function catalogGemExists(db: AppDb, gemKey: string, version: strin
 
 export type DeleteGemResult = "deleted" | "not-found" | "forbidden";
 
-// Owner-only unpublish: remove a published gem's catalog row + archive bytes. Ownership is enforced
-// against `publishedBy`, which is the server-derived verified GitHub login (never client-supplied —
-// see recordCatalogShare), matched case-insensitively to the caller's session login. "not-found" =
-// no such (key, version); "forbidden" = a different publisher owns it; "deleted" = removed.
-export async function deleteCatalogGem(db: AppDb, gemKey: string, version: string, ownerLogin: string): Promise<DeleteGemResult> {
-  const row = (await db.select({ publishedBy: catalogGems.publishedBy }).from(catalogGems)
+// Owner-only unpublish. Ownership is the accounts.id uuid — NEVER the `published_by` string,
+// which is a denormalized display value with no uniqueness constraint anywhere in the schema.
+// A row with owner_account_id = NULL (an unresolvable backfill; see backfillGemOwners) is owned
+// by NOBODY and cannot be unpublished by anyone. Do not add a string-compare fallback for it:
+// that is the "" === "" hole this re-key exists to close.
+export async function deleteCatalogGem(db: AppDb, gemKey: string, version: string, ownerAccountId: string): Promise<DeleteGemResult> {
+  const row = (await db.select({ ownerAccountId: catalogGems.ownerAccountId }).from(catalogGems)
     .where(and(eq(catalogGems.gemKey, gemKey), eq(catalogGems.version, version))).limit(1))[0];
   if (!row) return "not-found";
-  if ((row.publishedBy ?? "").toLowerCase() !== ownerLogin.toLowerCase()) return "forbidden";
+  if (row.ownerAccountId === null || row.ownerAccountId !== ownerAccountId) return "forbidden";
   await db.delete(gemArchives).where(and(eq(gemArchives.gemKey, gemKey), eq(gemArchives.version, version)));
   await db.delete(catalogGems).where(and(eq(catalogGems.gemKey, gemKey), eq(catalogGems.version, version)));
   return "deleted";
@@ -125,12 +128,19 @@ export async function recordCatalogShare(db: AppDb, req: ShareRequest, now: numb
   // Bootstrap: register the producer so a first-time desktop can share (mirrors ingest's implicit
   // producer creation). No-op if it already exists.
   await db.insert(producers).values({ pubkey: req.pubkey }).onConflictDoNothing();
-  const bind = await db.select().from(accountBindings).where(sql`pubkey = ${req.pubkey}`);
-  const login = bind[0]?.accountLogin;
-  if (!login) return { shared: false, rejected: "not-connected" };
+  const bind = (await db.select().from(accountBindings).where(sql`pubkey = ${req.pubkey}`))[0];
+  if (!bind) return { shared: false, rejected: "not-connected" };
+  // account_bindings.account_id is the PROVIDER's id (text), not accounts.id — pair it with
+  // `provider` to reach the anchor row whose uuid owns the gem.
+  const acct = (await db.select({ id: accounts.id, login: accounts.login }).from(accounts)
+    .where(and(eq(accounts.provider, bind.provider), eq(accounts.providerAccountId, bind.accountId))).limit(1))[0];
+  // No anchor row → the server cannot identify the publisher, so it must not record ownership.
+  // recordBinding writes the anchor best-effort, so this is reachable; failing closed is correct.
+  if (!acct) return { shared: false, rejected: "not-connected" };
+  const login = bind.accountLogin;
   const m = req.manifest;
   await upsertCatalogGem(db, {
-    gemKey: m.gemKey, version: m.version, publishedBy: login,
+    gemKey: m.gemKey, version: m.version, publishedBy: login, ownerAccountId: acct.id,
     author: m.author, description: m.description, tags: m.tags, artifactKinds: m.artifactKinds,
     type: m.type, grade: clampGrade(m.grade), artifacts: m.artifacts, createdAtMs: now,
   });
