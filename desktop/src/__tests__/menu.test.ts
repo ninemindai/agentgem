@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildMenuTemplate } from "../menu.js";
+import { buildMenuTemplate, buildContextMenuTemplate } from "../menu.js";
 
 const noop = () => {};
 const base = { appName: "AgentGem", onCheckUpdates: noop };
@@ -33,5 +33,37 @@ describe("buildMenuTemplate", () => {
       t.some((m) => Array.isArray(m.submenu) && m.submenu.some((i: any) => i.role === "toggleDevTools"));
     expect(hasDevtools(dev)).toBe(true);
     expect(hasDevtools(prod)).toBe(false);
+  });
+});
+
+const flags = (over: Partial<Record<"canCut" | "canCopy" | "canPaste", boolean>> = {}) => ({
+  canCut: false,
+  canCopy: false,
+  canPaste: false,
+  ...over,
+});
+const roles = (t: any[]) => t.map((i) => i.role);
+
+describe("buildContextMenuTemplate", () => {
+  it("offers copy alone over a selection in non-editable content", () => {
+    const t = buildContextMenuTemplate({ isEditable: false, editFlags: flags({ canCopy: true }) });
+    expect(roles(t)).toEqual(["copy"]);
+  });
+
+  it("offers cut/copy/paste in an editable field", () => {
+    const t = buildContextMenuTemplate({
+      isEditable: true,
+      editFlags: flags({ canCut: true, canCopy: true, canPaste: true }),
+    });
+    expect(roles(t)).toEqual(["cut", "copy", "paste"]);
+  });
+
+  it("withholds paste from non-editable content even when the clipboard has content", () => {
+    const t = buildContextMenuTemplate({ isEditable: false, editFlags: flags({ canPaste: true }) });
+    expect(t).toEqual([]);
+  });
+
+  it("returns nothing to popup on a bare right-click", () => {
+    expect(buildContextMenuTemplate({ isEditable: false, editFlags: flags() })).toEqual([]);
   });
 });

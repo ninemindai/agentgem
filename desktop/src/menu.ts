@@ -55,3 +55,22 @@ export function buildMenuTemplate(opts: MenuOpts): MenuItemConstructorOptions[] 
   }
   return template;
 }
+
+// The subset of Electron's ContextMenuParams this needs, so the template stays
+// testable without an Electron runtime.
+export interface ContextMenuOpts {
+  isEditable: boolean;
+  editFlags: { canCut: boolean; canCopy: boolean; canPaste: boolean };
+}
+
+// Electron ships no default context menu, so right-click copy/paste has to be
+// built. Roles again supply the native behavior and labels. An empty result
+// means there is nothing to offer (right-click on blank space) — don't popup.
+export function buildContextMenuTemplate(opts: ContextMenuOpts): MenuItemConstructorOptions[] {
+  const { isEditable, editFlags } = opts;
+  const items: MenuItemConstructorOptions[] = [];
+  if (isEditable && editFlags.canCut) items.push({ role: "cut" });
+  if (editFlags.canCopy) items.push({ role: "copy" });
+  if (isEditable && editFlags.canPaste) items.push({ role: "paste" });
+  return items;
+}
