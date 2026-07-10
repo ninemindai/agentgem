@@ -259,6 +259,32 @@ New app→host methods on `window.agentgemApp`: `openLink`, `sendMessage`, `upda
 `requestDisplayMode`, plus `sendLog` (`notifications/message`, ungated — it is inbound-only from the
 host's perspective and carries no data the host does not already have).
 
+#### `window.agentgemApp` is producer-side sugar, and the spec has no name for it
+
+The MCP Apps spec defines **no global API object**, and rejected the idea
+(`specification/2026-01-26/apps.mdx:1615`):
+
+> **Global API object:** Rejected because it requires host-specific injection and doesn't work with
+> external iframe sources. Syntactic sugar may still be added on the server/UI side.
+
+The rejected pattern is a *host-injected* global (ChatGPT's `window.openai`). A view depending on one
+cannot run in a host that does not inject it. `window.agentgemApp` is not that: our host injects
+nothing, and the shim travels **inside the artifact's own HTML**, placed there by the producer. That is
+the "syntactic sugar on the server/UI side" the very next sentence permits — the same role the SDK's
+`App` class plays, differing only in that a sealed single-file classic `<script>` has no module scope
+to hold `const app = new App(...)` in, so it must be a global.
+
+Two consequences, and they are why D3 (freeze the API) costs nothing in interop:
+
+- Our miniapp runs in Claude Desktop because the shim ships with it, not because Claude knows the name.
+- A third-party MCP app built with `new App(...)` runs in our `Runner` without touching
+  `window.agentgemApp`, because our host only speaks the wire.
+
+So the name is ours to choose and carries no interop cost. **Do not** rename it to match a host's
+injected global; that would be adopting the pattern the spec rejected.
+
+#### Marker
+
 Marker: `agentgem:mcp-app-client` → `agentgem:mcp-app-client:2`. `ensureClientShim` and
 `readMiniapp`'s on-read backstop both locate **any** `agentgem:mcp-app-client*` region and replace it
 wholesale. `migrateMiniappHtml` still owns the legacy-bridge rewrite; `saveMiniapp` still calls
