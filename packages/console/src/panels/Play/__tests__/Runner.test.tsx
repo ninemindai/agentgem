@@ -6,6 +6,14 @@ import { playSessionDataRoute, inventoryRoute } from "../../../api/routes.js";
 import { getConsent } from "../consent.js";
 import * as watchStream from "../../Watch/watchStream.js";
 import * as studioStream from "../studioStream.js";
+import * as mcpUiHost from "../mcpUiHost.js";
+
+// Partial mock: wraps the REAL createUiHost in a vi.fn so a test can count host creations, while every
+// other test in this file still gets the actual protocol/brokering behavior (nothing else is replaced).
+vi.mock("../mcpUiHost.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../mcpUiHost.js")>();
+  return { ...actual, createUiHost: vi.fn(actual.createUiHost) };
+});
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); try { localStorage.clear(); } catch { /* ignore */ } });
 
@@ -105,6 +113,32 @@ describe("Runner", () => {
       method: "ui/notifications/host-context-changed",
       params: expect.objectContaining({ displayMode: "fullscreen" }),
     }), "*"));
+  });
+
+  // Regression: hostContext used to be a useCallback keyed on [fs, vw, vh] AND a dependency of the
+  // host-creation effect, so every setFs(...) toggle minted a new hostContext identity, tearing down and
+  // recreating the host. That called bumpGeneration() — closing every open stream (e.g. a live-session-events
+  // subscription silently stops) and stale-guarding any in-flight tools/call (the shim's pending promise
+  // hangs forever). The host only calls deps.hostContext() ONCE at ui/initialize; fs/dimension changes are
+  // announced via the separate pushHostContext effect instead, so the host-creation effect must not depend
+  // on hostContext's identity.
+  it("does not recreate the MCP host on a fullscreen toggle", async () => {
+    const createSpy = vi.mocked(mcpUiHost.createUiHost);
+    const before = createSpy.mock.calls.length;
+    const { container } = render(<Runner html="<p>x</p>" name="fsg1" apiBase="" needs={["session-data"]} vw={1200} vh={780} />);
+    await waitFor(() => expect(createSpy.mock.calls.length).toBe(before + 1)); // host created once on mount
+    fireEvent.click(screen.getByRole("button", { name: "Play fullscreen" }));  // enter fullscreen
+    await waitFor(() => {
+      const iframe = container.querySelector("iframe") as HTMLIFrameElement;
+      expect(iframe.style.width).toBe("100%"); // fullscreen layout applied
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Exit fullscreen" }));  // exit fullscreen
+    await waitFor(() => {
+      const iframe = container.querySelector("iframe") as HTMLIFrameElement;
+      expect(iframe.style.width).toBe("1200px"); // back to inline layout
+    });
+    // Two more fs toggles must NOT have created any additional host.
+    expect(createSpy.mock.calls.length).toBe(before + 1);
   });
 
   it("ignores a tools/call for a capability the gem did NOT declare", async () => {

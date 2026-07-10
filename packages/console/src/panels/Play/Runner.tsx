@@ -79,18 +79,30 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
     };
   }, [fs, vw, vh]);
 
+  // The host calls deps.hostContext() exactly ONCE, at ui/initialize — thereafter fs/dimension changes are
+  // announced via the separate pushHostContext effect below. So the host-creation effect must NOT depend on
+  // hostContext's identity (which changes every fs/vw/vh render): a ref keeps it reading fresh values while
+  // handing the effect a stable closure, so toggling fullscreen doesn't recreate the host (see effect below).
+  const hostContextRef = useRef(hostContext);
+  hostContextRef.current = hostContext;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const stableHostContext = useCallback(() => hostContextRef.current(), []);
+
   // Wire the sealed iframe to the router: create the host once its contentWindow exists and the gem declares
   // needs, delegate every `message` to host.handleMessage, and invalidate it on teardown. The iframe has no
   // `key`, so React reuses the same contentWindow across a game switch — bumpGeneration() (not dispose())
   // is required here: it closes streams AND advances `generation`, so any in-flight continuation from the
   // old game (e.g. a one-shot session-data fetch) sees `stale(gen)` and drops its reply instead of posting
   // stale data into the new game's iframe.
+  // NOTE: hostContext/fs are deliberately NOT in this dependency list — see stableHostContext above. Toggling
+  // fullscreen must not tear down and recreate the host: that would call bumpGeneration(), closing every open
+  // stream (e.g. a live-session-events subscription) and dropping any in-flight tools/call as stale.
   useEffect(() => {
     if (name == null || apiBase == null || !needs?.length) return;   // apiBase="" (same-origin) is valid
     const target = iframeRef.current?.contentWindow;
     if (!target) return;
     const host = createUiHost({
-      apiBase, name, needs, interactive, target, requestConsent, hostContext,
+      apiBase, name, needs, interactive, target, requestConsent, hostContext: stableHostContext,
       onDisplayMode: (m) => { const ok = interactive && m === "fullscreen"; setFs(ok); return ok ? "fullscreen" : "inline"; },
       openExternal: (url) => { window.open(url, "_blank", "noopener"); },
     });
@@ -98,7 +110,7 @@ export function Runner({ html, vw = 1200, vh = 780, interactive = true, name, ap
     const onMsg = (e: MessageEvent) => host.handleMessage(e);
     window.addEventListener("message", onMsg);
     return () => { window.removeEventListener("message", onMsg); host.bumpGeneration(); hostRef.current = null; };
-  }, [name, apiBase, needs, interactive, requestConsent, hostContext]);
+  }, [name, apiBase, needs, interactive, requestConsent, stableHostContext]);
 
   // Push host-context-changed on every fullscreen toggle, whether button- or request-driven, so the game
   // re-lays-out from the new dimensions instead of scaling a magnified vw×vh. Skip the very first render
