@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GemController } from "../../gem.controller.js";
-import { computeGlobalUsage, closeSharedIndex } from "@agentgem/capture";
+import { computeGlobalUsage, closeSharedIndex, getGlobalUsageIndexed, hookDigest } from "@agentgem/capture";
 import { readGlobalUsageCacheStale, writeGlobalUsageCache } from "@agentgem/capture";
 import { allClaudeTranscripts } from "@agentgem/insight";
 import { resolveDirs } from "@agentgem/model";
@@ -71,5 +71,41 @@ describe("stale-while-revalidate", () => {
     await closeSharedIndex();                                          // idempotent — safe to call twice
     const again = await new GemController().usage({ query: { dir: claudeDir, scope: "global" } });
     expect(again.artifacts.map((a) => a.name)).toContain("diagram");   // transparently reopened
+  });
+});
+
+describe("getGlobalUsageIndexed — inventory-independent", () => {
+  let h3: string, prev3: string | undefined;
+  beforeEach(() => { h3 = mkdtempSync(join(tmpdir(), "guse-idx-")); prev3 = process.env.AGENTGEM_HOME; process.env.AGENTGEM_HOME = h3; });
+  afterEach(async () => {
+    await closeSharedIndex();
+    if (prev3 === undefined) delete process.env.AGENTGEM_HOME; else process.env.AGENTGEM_HOME = prev3;
+    rmSync(h3, { recursive: true, force: true });
+  });
+
+  it("returns the same artifacts as computeGlobalUsage for the same corpus", async () => {
+    const dirs = resolveDirs(claudeDir);
+    const paths = allClaudeTranscripts(dirs.claudeDir);
+    const want = computeGlobalUsage(dirs, paths).artifacts;
+    const got = (await getGlobalUsageIndexed(dirs, paths)).artifacts;
+    const key = (a: { type: string; name: string }) => `${a.type} ${a.name}`;
+    const sort = <T extends { type: string; name: string }>(xs: T[]) => [...xs].sort((a, b) => key(a).localeCompare(key(b)));
+    expect(sort(got)).toEqual(sort(want));
+  });
+});
+
+describe("hookDigest", () => {
+  it("changes when a hook's config changes, not when a skill is added", () => {
+    const h = (cmd: string) => [{ type: "hook" as const, name: "s", event: "Stop", config: { hooks: [{ command: cmd }] } }];
+    expect(hookDigest(h("/a.sh"))).toBe(hookDigest(h("/a.sh")));
+    expect(hookDigest(h("/a.sh"))).not.toBe(hookDigest(h("/b.sh")));
+    // hookDigest's signature takes only hooks — a skill added to the inventory is not even
+    // representable here, which IS the fix: skills cannot influence this digest.
+  });
+
+  it("is stable under hook reorder (T-I)", () => {
+    const hA = { type: "hook" as const, name: "a", event: "Stop", config: { hooks: [{ command: "/a.sh" }] } };
+    const hB = { type: "hook" as const, name: "b", event: "Stop", config: { hooks: [{ command: "/b.sh" }] } };
+    expect(hookDigest([hA, hB])).toBe(hookDigest([hB, hA]));
   });
 });
