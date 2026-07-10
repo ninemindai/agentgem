@@ -9,12 +9,35 @@ const stars = { signedIn: false, loginUrl: () => "/login", api: { get: async () 
 const reviews = { signedIn: false, loginUrl: () => "/login", api: { getSummaries: async () => ({}), get: async () => ({ summary: { avg: 0, count: 0 }, reviews: [], mine: null }), submit: async () => ({}), remove: async () => ({}) } as never };
 
 describe("Router", () => {
-  it("renders the leaderboard at /", async () => {
+  // Miniapps is the home tab: / lands on the arcade, and Ingredients moved to its own path.
+  it("renders Miniapps at / — the home tab", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => res({ gems: [] })));
+    window.history.pushState({}, "", "/");
+    render(<Router api={makeApi("")} stars={stars} reviews={reviews} me={null} />);
+    expect(await screen.findByRole("heading", { name: "Miniapps" })).toBeTruthy();
+  });
+
+  it("renders Miniapps at /miniapps", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => res({ gems: [] })));
+    window.history.pushState({}, "", "/miniapps");
+    render(<Router api={makeApi("")} stars={stars} reviews={reviews} me={null} />);
+    expect(await screen.findByRole("heading", { name: "Miniapps" })).toBeTruthy();
+  });
+
+  // Old shared links and the desktop deep-link still point at /minigames — never 404 them.
+  it("still serves the old /minigames path", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => res({ gems: [] })));
+    window.history.pushState({}, "", "/minigames");
+    render(<Router api={makeApi("")} stars={stars} reviews={reviews} me={null} />);
+    expect(await screen.findByRole("heading", { name: "Miniapps" })).toBeTruthy();
+  });
+
+  it("renders the leaderboard at /ingredients", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       if (String(url).includes("/popular-skills")) return res({ skills: [], groups: [] });
       return res([{ id: "skill:a/b", kind: "skill", producers: 5, verifiedProducers: 2, invocations: 9, sessions: 4 }]);
     }));
-    window.history.pushState({}, "", "/");
+    window.history.pushState({}, "", "/ingredients");
     render(<Router api={makeApi("")} stars={stars} reviews={reviews} me={null} />);
     expect(await screen.findByText("b")).toBeTruthy();
   });

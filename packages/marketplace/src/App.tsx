@@ -34,9 +34,11 @@ export function App() {
   }, []);
 
   const onGems = path.startsWith("/gems");
-  const onMinigames = path.startsWith("/minigames");
+  // Home ("/") is Miniapps; "/minigames" is the old path we still serve. `startsWith("/ingredient")`
+  // deliberately covers both the "/ingredients" board and an "/ingredient/:id" detail page.
+  const onMiniapps = path === "/" || path.startsWith("/miniapps") || path.startsWith("/minigames");
   const onSources = path.startsWith("/sources");
-  const onIngredients = path === "/" || path.startsWith("/ingredient");
+  const onIngredients = path.startsWith("/ingredient");
   const signOut = async () => { await auth.logout(); setMe(null); };
   const toggleTheme = () => {
     const next = theme === "dark" ? "light" : "dark";
@@ -50,9 +52,9 @@ export function App() {
       <header className="ex-header">
         <a href="/" className="ex-brand">AgentGem</a>
         <nav className="ex-nav">
-          <a href="/" className={"ex-navlink" + (onIngredients ? " is-active" : "")}>Ingredients</a>
+          <a href="/miniapps" className={"ex-navlink" + (onMiniapps ? " is-active" : "")}>Miniapps</a>
+          <a href="/ingredients" className={"ex-navlink" + (onIngredients ? " is-active" : "")}>Ingredients</a>
           <a href="/gems" className={"ex-navlink" + (onGems ? " is-active" : "")}>Gems</a>
-          <a href="/minigames" className={"ex-navlink" + (onMinigames ? " is-active" : "")}>Minigames</a>
           <a href="/sources" className={"ex-navlink" + (onSources ? " is-active" : "")}>Sources</a>
           {me && <a href="/publish" className="ex-navlink">Publish</a>}
         </nav>

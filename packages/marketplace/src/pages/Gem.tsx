@@ -94,7 +94,7 @@ export function Gem({ api, keyName, stars, me }: { api: ReturnType<typeof makeAp
     setRemoving(true); setRemoveErr(null);
     try {
       await api.unpublishGem(gemKey, gemVersion);
-      navigate(isGame ? "/minigames" : "/gems");
+      navigate(isGame ? "/miniapps" : "/gems");
     } catch (e) {
       const s = String(e);
       setRemoveErr(/-> 401/.test(s) ? "Please sign in again to unpublish." : /-> 403/.test(s) ? "You can only unpublish your own gems." : "Unpublish failed — please try again.");

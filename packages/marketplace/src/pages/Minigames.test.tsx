@@ -34,7 +34,7 @@ describe("Minigames", () => {
   it("shows an empty state when no games are published", async () => {
     stubFetch([{ key: "@me/kit", version: "1.0.0", artifactKinds: ["skill"], description: "kit" }]);
     render(<Minigames api={makeApi("")} stars={stars} />);
-    await waitFor(() => expect(screen.getByText(/No mini-games published yet/i)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/No miniapps published yet/i)).toBeTruthy());
   });
 
   // "Make your own" must land the reader in a Composer already seeded from THIS game — the whole

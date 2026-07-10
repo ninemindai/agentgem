@@ -32,7 +32,9 @@ export function Router({ api, stars, reviews, me }: { api: ReturnType<typeof mak
 
   if (path === "/publish") return <Publish api={api} me={me} base={defaultApiBase()} />;
   if (path === "/sources") return <Sources api={api} />;
-  if (path === "/minigames") return <Minigames api={api} stars={stars} />;
+  // Miniapps is the home tab. "/minigames" is the old path, kept alive for shared links and the
+  // desktop deep-link; "/" is home. The ingredients board moved to its own "/ingredients".
+  if (path === "/" || path === "/miniapps" || path === "/minigames") return <Minigames api={api} stars={stars} />;
 
   const gemDetail = path.match(/^\/gems\/(.+)$/);
   if (gemDetail) return <Gem api={api} keyName={decodeURIComponent(gemDetail[1])} stars={stars} me={me} />;
