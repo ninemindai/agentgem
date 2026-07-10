@@ -11,7 +11,10 @@
 ## Global Constraints
 
 - Worktree: `../agentgem-miniapp-caps`, branch `feat/miniapp-capability-declaration`, based on `origin/main`. All commands run from the worktree root.
-- Root tests run compiled output: `pnpm test` is `tsc -b && vitest run`. A rename leaves stale `dist/` — run `pnpm build` (or `tsc -b`) before `vitest`, never `vitest` alone after changing exports.
+- Root tests run **compiled output**: `pnpm test` is `tsc -b && vitest run`, and vitest's `include` is `dist/**/__tests__/**/*.test.js`. Two consequences:
+  - Always `pnpm build` (or `tsc -b`) before `vitest`, never `vitest` alone after changing exports — a rename leaves stale `dist/`.
+  - **Filter on the `dist/` path, not the `src/` path.** `pnpm exec vitest run src/play/__tests__/foo.test.ts` matches **zero** test files and exits 1. Use `pnpm exec vitest run dist/play/__tests__/foo.test.js`. Where a step below names a `src/...test.ts` path in a `vitest run` command, translate it to the `dist/...test.js` equivalent.
+  - Console tests are the exception — `packages/console` runs vitest on source directly.
 - Console tests are **not** in CI. Run them locally: `pnpm -C packages/console exec vitest run` and `pnpm -C packages/console typecheck`.
 - `packages/console` depends on `@agentgem/play` only. It must **not** gain a direct `@agentgem/model` dependency — re-export through play's barrel instead.
 - `skills/agentgem-miniapp/SKILL.md` must end byte-identically with `MINIAPP_BUILDER_BRIEF` from `packages/play/src/builderBrief.ts`. A drift guard test enforces this.
