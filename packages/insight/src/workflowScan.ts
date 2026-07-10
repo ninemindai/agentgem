@@ -146,7 +146,7 @@ export function safeMtime(file: string): number {
 }
 
 // "mcp__plugin_context7_context7__query-docs" -> "plugin_context7_context7"
-function mcpServerToken(toolName: string): string {
+export function mcpServerToken(toolName: string): string {
   const body = toolName.slice("mcp__".length);
   const idx = body.lastIndexOf("__");
   return idx >= 0 ? body.slice(0, idx) : body;
@@ -154,7 +154,7 @@ function mcpServerToken(toolName: string): string {
 
 // Match an inventory MCP server to a runtime server token (lossy namespacing):
 // equal, or the inventory name appears as a substring of the runtime token.
-function matchMcpServer(token: string, servers: { name: string }[]): string | null {
+export function matchMcpServer(token: string, servers: { name: string }[]): string | null {
   const norm = token.toLowerCase();
   for (const s of servers) {
     const n = s.name.toLowerCase();
@@ -163,7 +163,20 @@ function matchMcpServer(token: string, servers: { name: string }[]): string | nu
   return null;
 }
 
-function firstHookCommand(config: Record<string, unknown>): string | null {
+// Match an inventory skill to a runtime Skill(...) token. The token may be namespaced
+// ("superpowers:brainstorming"), so an exact name hit is tried first across the WHOLE
+// inventory before falling back to a `:`-suffix hit. This makes resolution a pure
+// function of (token, inventory SET), not (token, inventory ORDER).
+// EXPORTED because the transcript index resolves stored raw tokens at QUERY time and
+// must use this exact function, or mint-time and query-time resolution could drift.
+export function matchSkill(list: { name: string }[], skill: string): string | null {
+  const exact = list.find((s) => s.name === skill);
+  if (exact) return exact.name;
+  const suffix = list.find((s) => skill.endsWith(`:${s.name}`));
+  return suffix ? suffix.name : null;
+}
+
+export function firstHookCommand(config: Record<string, unknown>): string | null {
   const hooks = (config?.hooks as Array<Record<string, unknown>>) ?? [];
   for (const h of hooks) if (typeof h.command === "string") return h.command;
   return null;
@@ -387,7 +400,6 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
     e.acc.sessions.add(sessionId);
     e.acc.lastMs = Math.max(e.acc.lastMs, ms);
   };
-  const matchSkill = (list: { name: string }[], skill: string) => list.find((s) => s.name === skill || skill.endsWith(`:${s.name}`));
 
   for (const path of [...paths].sort()) {
     let text: string;
@@ -446,9 +458,9 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
             const skill = block.input.skill as string;
             if (opts.retainSequences && !rec?.isSidechain) eventSeries.push({ msgIndex: lineIdx, kind: "skill", name: skill });
             const p = matchSkill(project.skills, skill);
-            const g = p ? undefined : matchSkill(global.skills, skill);
-            if (p) { touch("p", p.name, "skill", ms, path, `Skill(${skill})`); sessionNames.add(p.name); }
-            else if (g) { touch("g", g.name, "skill", ms, path, `Skill(${skill})`); sessionNames.add(g.name); }
+            const g = p ? null : matchSkill(global.skills, skill);
+            if (p) { touch("p", p, "skill", ms, path, `Skill(${skill})`); sessionNames.add(p); }
+            else if (g) { touch("g", g, "skill", ms, path, `Skill(${skill})`); sessionNames.add(g); }
             else bumpUnresolved(unresolved, skill, "builtin");
           } else if (name.startsWith("mcp__")) {
             const token = mcpServerToken(name);
