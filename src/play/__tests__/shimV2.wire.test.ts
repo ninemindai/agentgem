@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mcpAppClient } from "../mcpAppClient.js";
-import { mcpAppFor } from "../mcpApp.js";
+import { mcpAppClient, mcpAppFor } from "@agentgem/play";
 
 describe("shim v2 wire", () => {
   const src = mcpAppClient();

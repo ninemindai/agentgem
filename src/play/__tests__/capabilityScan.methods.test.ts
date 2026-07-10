@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { deriveNeeds } from "../capabilityScan.js";
+import { deriveNeeds } from "@agentgem/play";
 
 const wrap = (body: string) => `<!doctype html><html><body><script>${body}</script></body></html>`;
 
