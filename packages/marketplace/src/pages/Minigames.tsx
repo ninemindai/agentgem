@@ -82,10 +82,10 @@ export function Minigames({ api, stars }: { api: Api; stars: StarsCtx }) {
   if (!gems) return <p className="mg-intro">Loading mini-games…</p>;
   return (
     <div className="mg">
-      <h2 className="mg-h">Minigames</h2>
-      <p className="mg-intro">AI-authored mini-games — sealed and playable right here. Click any game to play fullscreen.</p>
+      <h2 className="mg-h">Miniapps</h2>
+      <p className="mg-intro">AI-authored miniapps — sealed and playable right here. Click any one to play fullscreen.</p>
       {games.length === 0
-        ? <div className="mg-empty">No mini-games published yet. Build one in AgentGem → <b>Play</b> → <b>Share to app.agentgem.ai</b>.</div>
+        ? <div className="mg-empty">No miniapps published yet. Build one in AgentGem → <b>Play</b> → <b>Share to app.agentgem.ai</b>.</div>
         : <>
             <ul className="mg-grid">{games.map((g) => <GameCard key={g.key} api={api} gem={g} stars={stars} starState={starState} plays={plays[g.key] ?? 0} />)}</ul>
             <p className="mg-foot"><b>Make your own</b> opens the AgentGem desktop app straight to <strong>Play</strong>, prefilled to build your own version of that game. Running the CLI console instead? Open <a className="mg-foot-link" href={`${LOCAL_CONSOLE}/#/play`} target="_blank" rel="noreferrer">localhost:4317 → Play</a>.</p>

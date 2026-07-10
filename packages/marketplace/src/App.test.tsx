@@ -30,7 +30,7 @@ function stubFetch() {
 describe("App link interceptor", () => {
   it("intercepts an internal link and does pushState without a full reload", async () => {
     stubFetch();
-    window.history.pushState({}, "", "/");
+    window.history.pushState({}, "", "/ingredients"); // the leaderboard moved off "/" (Miniapps is home)
     render(<App />);
 
     // Wait for the leaderboard row link to appear
@@ -49,7 +49,7 @@ describe("App link interceptor", () => {
 
   it("leaves external links alone (does not change pathname)", async () => {
     stubFetch();
-    window.history.pushState({}, "", "/");
+    window.history.pushState({}, "", "/ingredients"); // the leaderboard moved off "/" (Miniapps is home)
     render(<App />);
 
     // Wait for the app to render (footer is always present)
@@ -61,19 +61,36 @@ describe("App link interceptor", () => {
     fireEvent.click(externalLink);
 
     // Interceptor must NOT have called pushState — pathname unchanged
-    expect(window.location.pathname).toBe("/");
+    expect(window.location.pathname).toBe("/ingredients");
   });
 
-  it("renders Ingredients + Gems nav links, marking the active surface on /gems", () => {
+  it("renders Miniapps + Ingredients + Gems nav links, marking the active surface on /gems", () => {
     vi.stubGlobal("fetch", vi.fn(async () => res([])));
     window.history.pushState({}, "", "/gems");
     render(<App />);
     const gemsLink = screen.getByRole("link", { name: "Gems" });
     const ingLink = screen.getByRole("link", { name: "Ingredients" });
     expect(gemsLink.getAttribute("href")).toBe("/gems");
-    expect(ingLink.getAttribute("href")).toBe("/");
+    expect(ingLink.getAttribute("href")).toBe("/ingredients");
     expect(gemsLink.className).toMatch(/is-active/);
     expect(ingLink.className).not.toMatch(/is-active/);
+  });
+
+  it("puts Miniapps first in the nav and marks it active on the home path", () => {
+    vi.stubGlobal("fetch", vi.fn(async () => res({ gems: [] })));
+    window.history.pushState({}, "", "/");
+    render(<App />);
+    const links = screen.getAllByRole("link").filter((a) => a.className.includes("ex-navlink"));
+    expect(links[0].textContent).toBe("Miniapps");
+    expect(links[0].getAttribute("href")).toBe("/miniapps");
+    expect(links[0].className).toMatch(/is-active/);
+  });
+
+  it("keeps Miniapps active on the old /minigames path", () => {
+    vi.stubGlobal("fetch", vi.fn(async () => res({ gems: [] })));
+    window.history.pushState({}, "", "/minigames");
+    render(<App />);
+    expect(screen.getByRole("link", { name: "Miniapps" }).className).toMatch(/is-active/);
   });
 
   it("shows a Sign in link when unauthenticated", async () => {
