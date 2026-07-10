@@ -5,7 +5,7 @@
 // name asc).
 import { describe, it, expect } from "vitest";
 import { sql } from "drizzle-orm";
-import { makeTestDb, upsertCuratedSkills, popularSkills, popularSkillGroups, type CuratedSkillRow } from "@agentgem/aggregator";
+import { makeTestDb, upsertCuratedSkills, popularSkills, popularSkillGroups, replaceOrgRepoSkills, listOrgSkills, type CuratedSkillRow, type OrgSkillRow } from "@agentgem/aggregator";
 
 function row(over: Partial<CuratedSkillRow>): CuratedSkillRow {
   return {
@@ -96,5 +96,22 @@ describe("popularSkillGroups", () => {
     const groups = await popularSkillGroups(db, { sources: 2, perSource: 2 });
     expect(groups.map((g) => g.sourceId)).toEqual(["s1", "s2"]);
     expect(groups[0]!.skills).toHaveLength(2);
+  });
+});
+
+describe("replaceOrgRepoSkills atomicity", () => {
+  const orgRow = (path: string): OrgSkillRow =>
+    ({ sourceId: "org:acme/repo1", path, division: "d", name: "n", repo: "repo1", description: null });
+
+  it("rolls back the delete when the insert fails — no data loss or access-gate gap", async () => {
+    const db = await makeTestDb();
+    await replaceOrgRepoSkills(db, "acme", "repo1", [orgRow("a.md")]);
+    expect(await listOrgSkills(db, "acme")).toHaveLength(1);
+    // A batch with a duplicate (source_id, path) makes the INSERT throw AFTER the delete has run.
+    // Without a wrapping transaction the delete is already committed → the org's skills vanish, and
+    // orgSkillExists (the body-proxy access gate) falsely denies them.
+    const dup = orgRow("dup.md");
+    await expect(replaceOrgRepoSkills(db, "acme", "repo1", [dup, dup])).rejects.toThrow();
+    expect(await listOrgSkills(db, "acme")).toHaveLength(1); // original survives the failed replace
   });
 });

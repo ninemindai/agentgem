@@ -148,23 +148,28 @@ export interface OrgSkillRow { sourceId: string; path: string; division: string;
  *  disappear. Metadata only — bodies are never stored. Returns the new row count. */
 export async function replaceOrgRepoSkills(db: AppDb, orgScope: string, repo: string, rows: OrgSkillRow[]): Promise<number> {
   const scope = orgScope.toLowerCase();
-  await db.execute(sql`delete from curated_skills where org_scope = ${scope} and repo = ${repo}`);
-  for (let i = 0; i < rows.length; i += UPSERT_CHUNK) {
-    const chunk = rows.slice(i, i + UPSERT_CHUNK);
-    if (chunk.length === 0) continue;
-    const values = sql.join(
-      chunk.map((r) => sql`(${r.sourceId}, ${r.path}, ${r.division}, ${r.name}, ${r.repo}, ${r.repo}, ${null}, ${0}, ${null}, ${r.description}, ${scope})`),
-      sql`, `,
-    );
-    await db.execute(sql`
-      insert into curated_skills (source_id, path, division, name, repo, source_label, homepage, stars, installs, description, org_scope)
-      values ${values}
-      on conflict (source_id, path) do update set
-        division = excluded.division, name = excluded.name, repo = excluded.repo,
-        source_label = excluded.source_label, description = excluded.description,
-        org_scope = excluded.org_scope, indexed_at = now()
-    `);
-  }
+  // One transaction so the delete + re-insert are atomic. Without it, a concurrent request between
+  // the delete and the first insert sees zero rows — orgSkillExists (the body-proxy access gate)
+  // falsely denies a legitimate private skill — and an insert failure leaves the org's skills deleted.
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`delete from curated_skills where org_scope = ${scope} and repo = ${repo}`);
+    for (let i = 0; i < rows.length; i += UPSERT_CHUNK) {
+      const chunk = rows.slice(i, i + UPSERT_CHUNK);
+      if (chunk.length === 0) continue;
+      const values = sql.join(
+        chunk.map((r) => sql`(${r.sourceId}, ${r.path}, ${r.division}, ${r.name}, ${r.repo}, ${r.repo}, ${null}, ${0}, ${null}, ${r.description}, ${scope})`),
+        sql`, `,
+      );
+      await tx.execute(sql`
+        insert into curated_skills (source_id, path, division, name, repo, source_label, homepage, stars, installs, description, org_scope)
+        values ${values}
+        on conflict (source_id, path) do update set
+          division = excluded.division, name = excluded.name, repo = excluded.repo,
+          source_label = excluded.source_label, description = excluded.description,
+          org_scope = excluded.org_scope, indexed_at = now()
+      `);
+    }
+  });
   return rows.length;
 }
 
