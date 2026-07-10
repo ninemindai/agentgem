@@ -211,11 +211,20 @@ codebase.
 
 ## Enforcement
 
-A doc decays; a test does not.
+A doc decays; a test does not. `entityPath.ts` exports the declared collections plus the
+canonical path builders and parsers — it is the artifact that makes this a scheme rather than a
+naming convention.
 
-`packages/model/src/entityPath.ts` (new) exports the declared collections plus the canonical
-path builders and parsers. Both apps import it — it is the artifact that makes this a scheme
-rather than a naming convention.
+**It cannot live in `packages/model`.** The marketplace is deliberately dependency-isolated: it
+has zero workspace dependencies, its `tsconfig.json` carries no `references`, and
+`gems/cuts.ts:1-2` states the rule — *"mirrored from the server's GEM_TYPES for the marketplace
+(which can't import `@agentgem/model`)"*. `@agentgem/model` also pulls in `yaml`.
+
+So `entityPath.ts` starts at **`packages/marketplace/src/entityPath.ts`**, its only consumer.
+The server's `game-meta` returns `{title, genre, version}` and never builds a path; the console
+is untouched until its own spec. When a second importer actually exists, promote the module —
+either via the `cuts.ts` mirror-plus-drift-guard precedent or a zero-dep shared package —
+decided then, with two real call sites to design against.
 
 Each app gets a **router conformance test**: every registered route must be either a declared
 collection, a well-formed entity path, or a route explicitly listed as a panel. A new route
@@ -223,7 +232,8 @@ that invents its own shape fails CI.
 
 ## Files
 
-- `packages/model/src/entityPath.ts` *(new)* — collections, builders, parsers.
+- `packages/marketplace/src/entityPath.ts` *(new)* — collections, builders, parsers. See
+  *Enforcement* for why not `packages/model`.
 - `packages/marketplace/src/Router.tsx` — add `/games/:key`; plural canonical forms for
   `/ingredient/:id` and `/skill/:sourceId/*path`, keeping the singular forms as matching
   aliases that `replaceState` to canonical (no redirect infrastructure needed).
