@@ -1,17 +1,20 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
-// Public profile assembly: one GitHub identity → avatar + verified flag + published gems with engagement.
-// Reads catalog_gems.published_by (a plain login string, not a FK), so a profile renders even for a
-// bind-only user with no accounts row — accounts only enriches it with an avatar. Decoupled from SP1.
-import { sql, desc } from "drizzle-orm";
+// Public profile assembly: one identity → avatar + verified flag + published gems with engagement.
+// Ownership read (identity re-key, task 7): gems are matched by owner_account_id, not by the
+// published_by display string — that string has no uniqueness constraint, and an unresolved gem
+// (owner_account_id NULL) belongs to nobody. A profile now requires a claimed "user".handle; a
+// bind-only account (device-flow only, no web sign-in) has no handle and no profile.
+import { sql, desc, eq } from "drizzle-orm";
 import type { AppDb } from "./schema.js";
-import { accounts, accountBindings, catalogGems } from "./schema.js";
+import { accounts, catalogGems } from "./schema.js";
+import { accountIdForHandle } from "./handles.js";
 import { starCounts } from "./stars.js";
 import { reviewsByAccount } from "./reviews.js";
 import { skillNamesByTargetId } from "./curatedSkills.js";
 import { gemAdoption } from "./aggregates.js";
 
-const LOGIN_RE = /^[A-Za-z0-9-]+$/; // GitHub login charset
+const HANDLE_RE = /^[A-Za-z0-9-]{1,39}$/;
 
 export interface ProfileGem {
   key: string;
@@ -61,36 +64,36 @@ function parseSkillReview(
   return { sourceId, path, name, rating: r.rating, body: r.body, createdAt: r.createdAt };
 }
 
-export async function buildProfile(db: AppDb, rawLogin: string): Promise<Profile | null> {
-  const login = rawLogin.trim();
-  if (!LOGIN_RE.test(login)) return null; // reject junk before any query or URL build
+export async function buildProfile(db: AppDb, rawHandle: string): Promise<Profile | null> {
+  const handle = rawHandle.trim();
+  if (!HANDLE_RE.test(handle)) return null;   // reject junk before any query or URL build
+
+  const accountId = await accountIdForHandle(db, handle);
+  if (!accountId) return null;                // no handle, no profile — there is no other name
 
   const acct = (await db
     .select({ id: accounts.id, login: accounts.login, avatarUrl: accounts.avatarUrl })
-    .from(accounts)
-    .where(sql`lower(${accounts.login}) = lower(${login})`)
-    .limit(1))[0];
+    .from(accounts).where(eq(accounts.id, accountId)).limit(1))[0];
 
-  const bind = (await db
-    .select({ pubkey: accountBindings.pubkey })
-    .from(accountBindings)
-    .where(sql`lower(${accountBindings.accountLogin}) = lower(${login})`)
-    .limit(1))[0];
-  const verified = !!bind;
+  // `verified` follows the ACCOUNT, not the name. account_bindings.account_id is the PROVIDER's id
+  // (text), so pair it with `provider` to reach the anchor. Matching account_login against the handle
+  // would silently un-verify anyone who renamed, since the binding still holds their old login.
+  const bind = (await db.execute(sql`
+    select 1 from account_bindings ab
+    join accounts a on a.provider = ab.provider and a.provider_account_id = ab.account_id
+    where a.id = ${accountId} limit 1`));
+  const verified = (bind.rows?.length ?? 0) > 0;
 
-  // All published rows for this author, newest first → dedupe to the latest version per gemKey.
-  // Secondary sort on version keeps the pick deterministic when two versions share createdAtMs
-  // (a stability tiebreaker, not semver ordering).
+  // Ownership read: gems this ACCOUNT owns. Matching published_by would list impostor rows whose
+  // string happens to equal the handle but whose owner_account_id is NULL or someone else's.
   const rows = await db
     .select({ gemKey: catalogGems.gemKey, version: catalogGems.version, description: catalogGems.description, grade: catalogGems.grade })
     .from(catalogGems)
-    .where(sql`lower(${catalogGems.publishedBy}) = lower(${login})`)
+    .where(eq(catalogGems.ownerAccountId, accountId))
     .orderBy(desc(catalogGems.createdAtMs), desc(catalogGems.version));
   const latest = new Map<string, { gemKey: string; version: string; description: string | null; grade: number | null }>();
   for (const r of rows) if (!latest.has(r.gemKey)) latest.set(r.gemKey, r);
   const base = [...latest.values()];
-
-  if (!acct && base.length === 0 && !verified) return null;
 
   const keys = base.map((g) => g.gemKey);
   const starMap = await starCounts(db, "gem", keys); // guards keys.length === 0 internally
@@ -119,6 +122,6 @@ export async function buildProfile(db: AppDb, rawLogin: string): Promise<Profile
     const nameMap = await skillNamesByTargetId(db, authored.map((r) => r.targetId));
     reviews = authored.map((r) => parseSkillReview(r, nameMap[r.targetId]));
   }
-  const canonical = acct?.login ?? login;
-  return { login: canonical, avatarUrl: acct?.avatarUrl ?? null, verified, githubUrl: `https://github.com/${canonical}`, totalStars, gems, reviews };
+  const canonical = acct?.login ?? handle;
+  return { login: handle, avatarUrl: acct?.avatarUrl ?? null, verified, githubUrl: `https://github.com/${canonical}`, totalStars, gems, reviews };
 }
