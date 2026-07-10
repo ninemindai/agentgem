@@ -448,6 +448,10 @@ body::before {
 .play-card__body { padding: 11px 13px 13px; }
 .play-card__title { font: 600 15px var(--font-display); color: var(--ink); line-height: 1.25; margin-bottom: 5px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The id, shown only when the title can't identify the card. Same mono/muted treatment as the delete
+   confirm's id line, so the two read as the same thing. Sits between the title and the pills. */
+.play-card__id { font: 500 11px var(--font-mono); color: var(--muted); margin: -3px 0 6px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .play-card__row { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
 /* Delete affordance: hidden until the card is hovered (or the button is keyboard-focused, so it stays
    reachable without a pointer). Sits above the thumb's scrim and play glyph. */

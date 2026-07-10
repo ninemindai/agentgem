@@ -6,6 +6,19 @@ import { genre as genreOf, CHIP } from "./playMeta.js";
 
 type Item = { name: string; title: string; genre: string; needs?: string[] };
 
+// Mirrors the server's slugify (packages/play/src/studio.ts) closely enough to answer one cosmetic
+// question: could the reader have guessed this id from the title? Drift is harmless — the worst case is
+// an id subtitle that didn't need to be there, never a wrong one.
+const slugify = (raw: string): string =>
+  raw.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^[-.]+|-+$/g, "").slice(0, 40) || "miniapp";
+
+// Show a card's id only when the title can't identify it. Two cases: the id isn't derivable from the
+// title (a `-2` suffix, or a name the user typed), or a sibling card shares the title. Printing it
+// always would be noise — seedStudio sets meta.title to the id, so most seeded cards would say it twice.
+function idIsWorthShowing(m: Item, all: Item[]): boolean {
+  return slugify(m.title) !== m.name || all.some((o) => o.name !== m.name && o.title === m.title);
+}
+
 // A live but click-through preview of the game, lazily fetched per card. Broker-fed games (needs) get
 // their host data postMessaged in by the Runner, so the thumbnail is a real replay, not a waiting state.
 function Thumb({ apiBase, name, needs }: { apiBase: string; name: string; needs?: string[] }) {
@@ -85,8 +98,9 @@ export function Arcade({ apiBase, onOpen }: { apiBase: string; onOpen: (name: st
       {items.map((m) => {
         const g = genreOf(m.genre);
         const asking = confirming === m.name;
+        const showId = idIsWorthShowing(m, items);
         return (
-          <li key={m.name} className="play-card" onClick={() => !asking && onOpen(m.name)} title={`Open ${m.title}`}>
+          <li key={m.name} className="play-card" onClick={() => !asking && onOpen(m.name)} title={`Open ${m.name}`}>
             <button
               type="button" className="play-card__del" aria-label={`Delete ${m.name}`}
               disabled={deleting !== null}   // no second dialog while a delete is in flight
@@ -95,6 +109,7 @@ export function Arcade({ apiBase, onOpen }: { apiBase: string; onOpen: (name: st
             <Thumb apiBase={apiBase} name={m.name} needs={m.needs} />
             <div className="play-card__body">
               <div className="play-card__title">{m.title}</div>
+              {showId && <div className="play-card__id">{m.name}</div>}
               <div className="play-card__row">
                 <span className="play-pill"><span className="play-pill__dot" style={{ background: g.tint }} />{g.icon} {g.label}</span>
                 {m.needs && m.needs.length
