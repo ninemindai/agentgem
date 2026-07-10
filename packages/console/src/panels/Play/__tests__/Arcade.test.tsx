@@ -14,6 +14,27 @@ const twoApps = {
 };
 
 describe("Arcade", () => {
+  // The id subtitle earns its place only when the title can't identify the card. seedStudio sets
+  // meta.title = the id, so printing it unconditionally would render the same string twice.
+  it("shows the id under the title only when the title cannot identify the card", async () => {
+    vi.spyOn(playMiniappsRoute, "call").mockResolvedValue({
+      miniapps: [
+        { name: "space-dodger", title: "Space Dodger", genre: "project-fun" },   // id inferable from title
+        { name: "api", title: "api", genre: "project-fun" },                     // seeded: title IS the id
+        { name: "space-dodger-2", title: "Space Dodger", genre: "project-fun" }, // suffixed: not inferable
+        { name: "my-duel", title: "Anything", genre: "project-fun" },            // explicitly named
+      ],
+    });
+    render(<Arcade apiBase="" onOpen={vi.fn()} />);
+    await waitFor(() => expect(screen.getAllByText("Space Dodger")).toHaveLength(2));
+
+    // Both same-titled cards carry an id, so neither is left ambiguous.
+    expect(screen.getByText("space-dodger")).toBeTruthy();
+    expect(screen.getByText("space-dodger-2")).toBeTruthy();
+    expect(screen.getByText("my-duel")).toBeTruthy();       // title says nothing about the id
+    expect(screen.getAllByText("api")).toHaveLength(1);      // the title alone — no duplicate line
+  });
+
   it("lists miniapps and calls onOpen when a card is clicked", async () => {
     vi.spyOn(playMiniappsRoute, "call").mockResolvedValue({
       miniapps: [{ name: "auth-replay", title: "Auth Replay", genre: "replay", needs: ["live-session-events"] }],
@@ -77,8 +98,10 @@ describe("Arcade", () => {
     render(<Arcade apiBase="" onOpen={vi.fn()} />);
     await waitFor(() => expect(screen.getAllByText("Duel")).toHaveLength(2));
 
+    // Both cards already carry an id subtitle (same title), so once the confirm opens the id appears
+    // twice: once on the card, once in the dialog naming what it will remove.
     fireEvent.click(screen.getByLabelText("Delete duel-2"));  // unambiguous even though titles collide
-    expect(screen.getByText("duel-2")).toBeTruthy();          // the confirm names the id it will remove
+    expect(screen.getAllByText("duel-2")).toHaveLength(2);
     fireEvent.click(screen.getByRole("button", { name: /^delete$/i }));
 
     await waitFor(() => expect(screen.getAllByText("Duel")).toHaveLength(1));
