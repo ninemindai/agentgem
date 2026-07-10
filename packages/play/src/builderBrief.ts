@@ -106,6 +106,14 @@ no host at all the handshake gives up after roughly four seconds and every \`cal
 
 Editing \`meta.json\` takes effect on the next Save; reload the preview to renegotiate.
 
+**Save reconciles \`needs\` against your code.** Call a tool you did not declare and the Save fails,
+naming the capability to add. Declare a capability nothing calls and it is pruned back out, and you are
+told. So \`needs\` can never drift from what the miniapp actually does.
+
+Pass every tool name as a **literal string** — \`callTool("agentgem_get_inventory")\`, never
+\`callTool(name)\`. The reconciler reads your source; a name it cannot see is a capability it prunes,
+and your call then fails at runtime with \`-32601\`.
+
 ## What you must not assume
 
 - **The seal gate is not a security boundary**, it is an admission check. The

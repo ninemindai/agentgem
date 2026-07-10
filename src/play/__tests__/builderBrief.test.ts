@@ -43,4 +43,12 @@ describe("agentgem-miniapp skill", () => {
   it("says invoke-agent is read-only", () => {
     expect(MINIAPP_BUILDER_BRIEF).toContain("read-only");
   });
+
+  it("requires literal tool-name strings (the scan cannot see a dynamic name)", () => {
+    expect(MINIAPP_BUILDER_BRIEF).toContain("literal string");
+  });
+
+  it("explains that Save reconciles needs against the code", () => {
+    expect(MINIAPP_BUILDER_BRIEF).toContain("Save reconciles");
+  });
 });
