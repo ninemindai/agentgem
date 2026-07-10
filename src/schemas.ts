@@ -965,6 +965,7 @@ export const PlaySaveRequestSchema = z.object({
   }),
 });
 export const PlaySaveResponseSchema = z.object({ name: z.string(), commit: z.string().nullable() });
+export const PlayDeleteRequestSchema = z.object({ name: z.string() });
 const PlayNeedsSchema = z.array(z.enum(["session-data", "live-session-events", "local-project-access", "invoke-agent"])).optional();
 const EmptyObjectSchema = z.object({});
 export const PlayMcpAppSchema = z.object({

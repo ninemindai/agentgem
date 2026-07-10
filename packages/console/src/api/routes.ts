@@ -920,6 +920,9 @@ export const playSaveRoute = defineRoute("POST", "/api/play/save", {
   body: z.object({ name: z.string(), html: z.string(), meta: PlayMetaSchema }),
   response: z.object({ name: z.string(), commit: z.string().nullable() }),
 });
+export const playDeleteRoute = defineRoute("POST", "/api/play/delete", {
+  body: z.object({ name: z.string() }), response: z.object({ name: z.string(), commit: z.string().nullable() }),
+});
 export const playPublishRoute = defineRoute("POST", "/api/play/publish", {
   body: z.object({ remote: z.string().url().optional() }), response: z.object({ ok: z.boolean() }),
 });

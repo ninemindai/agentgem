@@ -449,6 +449,23 @@ body::before {
 .play-card__title { font: 600 15px var(--font-display); color: var(--ink); line-height: 1.25; margin-bottom: 5px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .play-card__row { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+/* Delete affordance: hidden until the card is hovered (or the button is keyboard-focused, so it stays
+   reachable without a pointer). Sits above the thumb's scrim and play glyph. */
+.play-card__del { position: absolute; top: 7px; right: 7px; z-index: 2; width: 24px; height: 24px; padding: 0;
+  display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--line); cursor: pointer;
+  background: rgba(251,247,238,.92); color: var(--ink-soft); font: 600 11px var(--font-ui);
+  opacity: 0; transition: opacity .16s, color .16s, border-color .16s; }
+.play-card:hover .play-card__del, .play-card__del:focus-visible { opacity: 1; }
+.play-card__del:hover { color: var(--red); border-color: var(--red); }
+.play-card__confirm { position: absolute; inset: 0; z-index: 3; cursor: default; padding: 14px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center;
+  background: rgba(251,247,238,.97); backdrop-filter: blur(2px); }
+.play-card__confirm-msg { font: 600 14px var(--font-display); color: var(--ink); }
+.play-card__confirm-id { font: 500 11px var(--font-mono); color: var(--muted); margin-top: -4px; }
+.play-card__confirm-note { font: 400 11.5px var(--font-ui); color: var(--muted); }
+.play-card__confirm-err { font: 500 11.5px var(--font-ui); color: var(--red); }
+.play-card__confirm-actions { display: flex; gap: 8px; margin-top: 2px; }
+.play-card__confirm-actions .play-btn { padding: 6px 14px; }
 
 .play-pill { display: inline-flex; align-items: center; gap: 5px; font: 600 11px var(--font-ui); letter-spacing: .02em;
   padding: 2px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--paper); color: var(--ink-soft); }
@@ -556,6 +573,8 @@ body::before {
 .play-btn--primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .play-btn--primary:hover:not(:disabled) { background: var(--accent-2); border-color: var(--accent-2); }
 .play-btn--ghost { background: transparent; }
+.play-btn--danger { background: var(--red); border-color: var(--red); color: #fff; }
+.play-btn--danger:hover:not(:disabled) { background: var(--accent-2); border-color: var(--accent-2); }
 
 /* Actionable seal-gate banner */
 .play-banner { display: flex; align-items: flex-start; gap: 11px; padding: 11px 13px; border-radius: var(--radius);

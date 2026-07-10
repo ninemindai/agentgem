@@ -1,6 +1,6 @@
 // packages/console/src/panels/Play/Arcade.tsx
 import { useEffect, useState } from "react";
-import { makeClient, playMiniappsRoute, playMiniappRoute } from "../../api/routes.js";
+import { makeClient, playMiniappsRoute, playMiniappRoute, playDeleteRoute } from "../../api/routes.js";
 import { Runner } from "./Runner.js";
 import { genre as genreOf, CHIP } from "./playMeta.js";
 
@@ -24,11 +24,52 @@ function Thumb({ apiBase, name, needs }: { apiBase: string; name: string; needs?
   );
 }
 
+// The card's own delete affordance. Every control here stops propagation: the whole <li> is the "open"
+// target, so an un-stopped click on ✕ / Cancel / Delete would also launch the miniapp behind the overlay.
+// Titles are NOT unique (creating twice from one source yields two miniapps with the same title), so the
+// id is shown alongside — it is the only thing that tells two same-titled cards apart.
+function DeleteOverlay({ name, title, busy, error, onCancel, onConfirm }: {
+  name: string; title: string; busy: boolean; error: string | null; onCancel: () => void; onConfirm: () => void;
+}) {
+  return (
+    <div className="play-card__confirm" onClick={(e) => e.stopPropagation()}>
+      <div className="play-card__confirm-msg">Delete “{title}”?</div>
+      <div className="play-card__confirm-id">{name}</div>
+      {error
+        ? <div className="play-card__confirm-err">{error}</div>
+        : <div className="play-card__confirm-note">Restorable from the registry’s git history.</div>}
+      <div className="play-card__confirm-actions">
+        <button type="button" className="play-btn" disabled={busy} onClick={onCancel}>Cancel</button>
+        <button type="button" className="play-btn play-btn--danger" disabled={busy} onClick={onConfirm}>
+          {busy ? "Deleting…" : "Delete"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function Arcade({ apiBase, onOpen }: { apiBase: string; onOpen: (name: string) => void }) {
   const [items, setItems] = useState<Item[] | null>(null);
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     playMiniappsRoute.call(makeClient(apiBase)).then((r) => setItems(r.miniapps)).catch(() => setItems([]));
   }, [apiBase]);
+
+  const askDelete = (name: string) => { setConfirming(name); setError(null); };
+  const cancelDelete = () => { setConfirming(null); setError(null); };
+
+  const doDelete = async (name: string) => {
+    setBusy(true); setError(null);
+    try {
+      await playDeleteRoute.call(makeClient(apiBase), { body: { name } });
+      setItems((prev) => (prev ?? []).filter((m) => m.name !== name));
+      setConfirming(null);
+    } catch (e) {
+      setError((e as Error).message);   // leave the card + confirm up so the failure is visible and retryable
+    } finally { setBusy(false); }
+  };
 
   if (!items) return <p className="play-intro">Loading miniapps…</p>;
   if (items.length === 0) return (
@@ -41,8 +82,13 @@ export function Arcade({ apiBase, onOpen }: { apiBase: string; onOpen: (name: st
     <ul className="play-grid">
       {items.map((m) => {
         const g = genreOf(m.genre);
+        const asking = confirming === m.name;
         return (
-          <li key={m.name} className="play-card" onClick={() => onOpen(m.name)} title={`Open ${m.title}`}>
+          <li key={m.name} className="play-card" onClick={() => !asking && onOpen(m.name)} title={`Open ${m.title}`}>
+            <button
+              type="button" className="play-card__del" aria-label={`Delete ${m.name}`}
+              onClick={(e) => { e.stopPropagation(); askDelete(m.name); }}
+            >✕</button>
             <Thumb apiBase={apiBase} name={m.name} needs={m.needs} />
             <div className="play-card__body">
               <div className="play-card__title">{m.title}</div>
@@ -53,6 +99,12 @@ export function Arcade({ apiBase, onOpen }: { apiBase: string; onOpen: (name: st
                   : <span className="play-pill play-pill--offline">🟢 offline</span>}
               </div>
             </div>
+            {asking && (
+              <DeleteOverlay
+                name={m.name} title={m.title} busy={busy} error={error}
+                onCancel={cancelDelete} onConfirm={() => void doDelete(m.name)}
+              />
+            )}
           </li>
         );
       })}

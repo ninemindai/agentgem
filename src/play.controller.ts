@@ -3,11 +3,11 @@
 // Play JSON routes over the miniapps registry: save (gate + dual-write), list, publish (git push).
 import { api, get, post, AgentError } from "@agentback/openapi";
 import { z } from "zod";
-import { saveMiniapp, listMiniapps, readMiniapp, miniappsRoot, setRemote, push, seedStudio, importStudio, blankStudio, compactTurns, resolveSessionRef, mcpAppFor, migrateAllMiniapps } from "@agentgem/play";
+import { saveMiniapp, deleteMiniapp, listMiniapps, readMiniapp, miniappsRoot, setRemote, push, seedStudio, importStudio, blankStudio, compactTurns, resolveSessionRef, mcpAppFor, migrateAllMiniapps } from "@agentgem/play";
 import { defaultReaders } from "./play.readers.js";
 import { listActiveSessions } from "./watchSessions.js";
 import {
-  PlaySaveRequestSchema, PlaySaveResponseSchema, MiniappListSchema,
+  PlaySaveRequestSchema, PlaySaveResponseSchema, PlayDeleteRequestSchema, MiniappListSchema,
   PlayPublishRequestSchema, PlayPublishResponseSchema,
   PlayStudioRequestSchema, PlayStudioResponseSchema, PlayImportRequestSchema, PlayBlankRequestSchema,
   PlayMiniappQuerySchema, PlayMiniappSchema, PlaySessionDataSchema, PlaySessionDataQuerySchema, PlayMcpAppSchema,
@@ -21,6 +21,15 @@ export class PlayController {
     try {
       return await saveMiniapp({ name: input.body.name, html: input.body.html, meta: input.body.meta });
     } catch (e) { throw new AgentError((e as Error).message, { status: 400 }); }
+  }
+
+  // Removal is a git commit in the registry, so it stays recoverable from history; the dual-written
+  // gem is dropped only when play authored it (see deleteMiniapp).
+  @post("/play/delete", { body: PlayDeleteRequestSchema, response: PlaySaveResponseSchema })
+  async delete(input: { body: z.infer<typeof PlayDeleteRequestSchema> }): Promise<z.infer<typeof PlaySaveResponseSchema>> {
+    try {
+      return await deleteMiniapp(input.body.name);
+    } catch (e) { throw new AgentError((e as Error).message, { status: 404 }); }
   }
 
   @post("/play/studio", { body: PlayStudioRequestSchema, response: PlayStudioResponseSchema })
