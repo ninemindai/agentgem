@@ -90,4 +90,12 @@ describe("AggregatorController.gameMeta", () => {
     await expect(new AggregatorController(db).gameMeta({ query: { key: "@acme/search" } }))
       .rejects.toMatchObject({ statusCode: 404, code: "not_a_game" });
   });
+
+  it("resolves an unlisted share key (no catalog row) via its archive", async () => {
+    const db = await makeTestDb();
+    await seedGame(db, { gemKey: "xK3f9a2Bq1", version: "1", name: "t", title: "Unlisted Game", createdAtMs: 1, catalog: false });
+
+    const res = await new AggregatorController(db).gameMeta({ query: { key: "xK3f9a2Bq1" } });
+    expect(res).toEqual({ title: "Unlisted Game", genre: "project-fun", version: "1" });
+  });
 });

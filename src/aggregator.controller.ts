@@ -17,7 +17,7 @@ import { recordBinding } from "@agentgem/aggregator";
 import { GitHubVerifier } from "@agentgem/aggregator";
 import { sweepQuarantine, sweepAdoptionQuarantine } from "@agentgem/aggregator";
 import { issueKey, revokeKey, listKeys } from "@agentgem/aggregator";
-import { recordCatalogShare, upsertGemArchive, getGemArchive, catalogGemExists, latestGemVersion, deleteGemArchiveOwned } from "@agentgem/aggregator";
+import { recordCatalogShare, upsertGemArchive, getGemArchive, catalogGemExists, latestGemVersion, deleteGemArchiveOwned, archiveOnlyVersion } from "@agentgem/aggregator";
 import { recordGamePlay, gamePlayCounts } from "@agentgem/aggregator";
 import { resolveSignedAccount, catalogSigningPayload } from "@agentgem/aggregator";
 import { staticGate } from "@agentgem/play";
@@ -381,7 +381,7 @@ export class AggregatorController {
   @get("/game-meta", { query: GameMetaQuery, response: GameMetaResult })
   async gameMeta(input: { query: z.infer<typeof GameMetaQuery> }): Promise<z.infer<typeof GameMetaResult>> {
     const { key } = input.query;
-    const version = input.query.version ?? (await latestGemVersion(this.db, key));
+    const version = input.query.version ?? (await latestGemVersion(this.db, key)) ?? (await archiveOnlyVersion(this.db, key));
     if (!version) throw new AgentError("gem archive not found", { status: 404, code: "gem_archive_not_found", retryable: false });
     const a = await getGemArchive(this.db, key, version);
     if (!a) throw new AgentError("gem archive not found", { status: 404, code: "gem_archive_not_found", retryable: false });
