@@ -10,3 +10,4 @@ website/dist/
 # Local-only Apple code-signing / notarization secrets (never commit).
 # Load these from the Keychain or a secrets manager at build time instead.
 .apple/
+
