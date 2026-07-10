@@ -83,6 +83,11 @@ describe("originGuard (CSRF / drive-by guard)", () => {
     expect(r.nexted).toBe(true);
     expect(r.blocked).toBe(false);
   });
+  it("allows the cross-site handle-claim POST (/api/handle) — credentialed, own CORS + 401 gate", () => {
+    const r = run({ "sec-fetch-site": "cross-site" }, "app.agentgem.ai", "POST", "/api/handle");
+    expect(r.nexted).toBe(true);
+    expect(r.blocked).toBe(false);
+  });
   it("blocks a malformed Origin", () => {
     expect(run({ origin: "not a url" }).blocked).toBe(true);
   });
