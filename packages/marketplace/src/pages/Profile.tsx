@@ -3,6 +3,7 @@ import type { makeApi } from "../api";
 import type { Me } from "../auth";
 import type { Profile as ProfileT } from "../types";
 import { StoneRating } from "../StoneRating";
+import { ratingStars } from "../reviews";
 
 type View = { status: "loading" } | { status: "notfound" } | { status: "ok"; profile: ProfileT };
 
@@ -78,7 +79,7 @@ export function Profile({ api, login, me }: { api: ReturnType<typeof makeApi>; l
                 <div className="ex-review-meta">
                   <a href={`/skill/${encodeURIComponent(r.sourceId)}/${r.path}`}>{r.name}</a>
                   <span className="ex-scope">{r.sourceId}</span>
-                  <span className="ex-review-rating" aria-label={`${r.rating} of 5`}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</span>
+                  <span className="ex-review-rating" aria-label={`${r.rating} of 5`}>{ratingStars(r.rating)}</span>
                   <time className="ex-review-date" dateTime={r.createdAt}>{new Date(r.createdAt).toLocaleDateString()}</time>
                 </div>
                 {r.body && <p className="ex-review-body">{r.body}</p>}

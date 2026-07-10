@@ -6,6 +6,14 @@ export interface ReviewView { login: string; avatarUrl: string | null; rating: n
 export interface MyReview { rating: number; body: string | null; createdAt: string; updatedAt: string }
 export interface ReviewsData { summary: ReviewSummary; reviews: ReviewView[]; mine: MyReview | null }
 
+// Render a rating as five filled/empty stars. Clamps to 0..5 (and coerces NaN to 0) so a corrupt or
+// out-of-range `rating` from the API can't make String.repeat throw RangeError — which would blank the
+// entire review list for the page.
+export function ratingStars(rating: number): string {
+  const n = Math.max(0, Math.min(5, Math.round(rating) || 0));
+  return "★".repeat(n) + "☆".repeat(5 - n);
+}
+
 export function makeReviews(base: string) {
   return {
     async getSummaries(kind: string, ids: string[]): Promise<Record<string, ReviewSummary>> {
