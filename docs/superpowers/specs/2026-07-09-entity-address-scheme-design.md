@@ -215,16 +215,32 @@ A doc decays; a test does not. `entityPath.ts` exports the declared collections 
 canonical path builders and parsers — it is the artifact that makes this a scheme rather than a
 naming convention.
 
-**It cannot live in `packages/model`.** The marketplace is deliberately dependency-isolated: it
-has zero workspace dependencies, its `tsconfig.json` carries no `references`, and
-`gems/cuts.ts:1-2` states the rule — *"mirrored from the server's GEM_TYPES for the marketplace
-(which can't import `@agentgem/model`)"*. `@agentgem/model` also pulls in `yaml`.
+**It has two homes, on purpose.**
 
-So `entityPath.ts` starts at **`packages/marketplace/src/entityPath.ts`**, its only consumer.
-The server's `game-meta` returns `{title, genre, version}` and never builds a path; the console
-is untouched until its own spec. When a second importer actually exists, promote the module —
-either via the `cuts.ts` mirror-plus-drift-guard precedent or a zero-dep shared package —
-decided then, with two real call sites to design against.
+`packages/model/src/entityPath.ts` already exists on `origin/main` — the deferred-inventory work
+(`?body=defer`) conformed to this scheme first, while it was still an unmerged draft, and
+implements the `workspace/*` collections. Its header states the norm this spec adopts: *"other
+collections get added by whoever conforms them next, rather than shipping builders with no
+caller."*
+
+The marketplace cannot import it. It is deliberately dependency-isolated — zero workspace
+dependencies, no `references` in its `tsconfig.json` — and `gems/cuts.ts:1-2` says so outright:
+*"mirrored from the server's GEM_TYPES for the marketplace (which can't import
+`@agentgem/model`)"*. `@agentgem/model` also pulls in `yaml`.
+
+So the game builders live at **`packages/marketplace/src/entityPath.ts`**, their only consumer.
+The server's `game-meta` returns `{title, genre, version}` and never builds a path. **The two
+files share the scheme, not a single function** — `workspace/*` builders have no marketplace
+caller and `games/*` builders have no server caller — so there is nothing to drift and no mirror
+to guard. If a future change gives one of them a caller on the other side, promote that function
+then, via the `cuts.ts` mirror-plus-drift-guard precedent.
+
+**Deviation — game paths are not percent-encoded.** `workspaceArtifactPath` encodes every
+segment because artifact names carry `/` as *data* (`codex:rules/default.rules`). A gem key
+carries `/` as *structure*: `@scope/name`, both segments `[a-z0-9-]`. Encoding would yield
+`/games/%40acme%2Ftetris`, and a copy-friendly link is this spec's entire goal. `games/<key>` is
+therefore emitted raw and parsed greedily. The parser still decodes, so a hand-edited or legacy
+encoded link resolves.
 
 Each app gets a **router conformance test**: every registered route must be either a declared
 collection, a well-formed entity path, or a route explicitly listed as a panel. A new route

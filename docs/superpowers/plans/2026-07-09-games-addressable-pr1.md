@@ -14,7 +14,9 @@
 - **Worktree:** `../agentgem-entity-addr`, branch `docs/entity-address-scheme`, branched off freshly-fetched `origin/main`. Do not commit to `main`.
 - **Canonical path form:** `<plural-collection>/<entity-id>`. Games are `games/<key>`.
 - **`@`-prefix rule:** a published gem key matches `/^@[a-z0-9-]+\/[a-z0-9-]+$/`. Scope-less keys are unlisted shares (PR 2) and must already parse correctly here.
-- **`entityPath.ts` lives in `packages/marketplace/src/`**, NOT `packages/model`. The marketplace has zero workspace deps and cannot import `@agentgem/model` (see `packages/marketplace/src/gems/cuts.ts:1-2`).
+- **`packages/model/src/entityPath.ts` already exists** on `origin/main` (the `?body=defer` inventory work conformed to this scheme first). It implements `workspace/*` only, and percent-encodes segments. **Do not add game builders to it** — it has no marketplace caller and its own header says builders ship only with a caller.
+- **The game builders live in `packages/marketplace/src/entityPath.ts`.** The marketplace has zero workspace deps and cannot import `@agentgem/model` (see `packages/marketplace/src/gems/cuts.ts:1-2`). The two files share the scheme, not a function — nothing to drift, no mirror to guard.
+- **Game paths are raw, not percent-encoded** — `/games/@acme/tetris`, not `/games/%40acme%2Ftetris`. A gem key's `/` is structure, not data, and a copy-friendly link is the whole goal. This deliberately diverges from `workspaceArtifactPath`'s encoding; the parser still decodes so legacy/encoded links resolve.
 - **Out of scope for PR 1:** the Cloudflare Worker, OG tags, `share-archive` upload/revoke, console changes, plural renames of `/ingredient` and `/skill`. Do not touch them.
 - **No schema change.** Do not add columns or tables.
 - **Deferred from the spec, deliberately:** the *router conformance test* (Enforcement section). It
@@ -41,6 +43,11 @@ The pure, dependency-free module that turns a gem key into a URL and back. Nothi
   - `gamePath(key: string): string`
   - `parseGamePath(pathname: string): string | null`
   - `isPublishedKey(key: string): boolean`
+
+Read `packages/model/src/entityPath.ts` first — it is the sibling implementation of this same
+scheme (for `workspace/*`), and its header explains why it percent-encodes. You are **not** editing
+it, and you are **not** importing it (the marketplace has no workspace deps). You are writing the
+`games/*` half in the app that consumes it.
 
 Note on encoding: gem keys are `@scope/name` where scope and name are `[a-z0-9-]` (validated in `packages/distribute/src/registry.ts:31-41`), and share ids are alphanumeric. Neither needs percent-encoding, and a raw `/games/@acme/tetris` is far nicer to copy than `/games/%40acme%2Ftetris`. The parser still tolerates the encoded form, because `pages/Gems.tsx` and friends currently emit `encodeURIComponent`'d gem links and a user may hand-edit one.
 
@@ -122,8 +129,13 @@ Create `packages/marketplace/src/entityPath.ts`:
 // The canonical entity-address scheme: <plural-collection>/<entity-id>, rendered into this app's
 // pathname space. See docs/superpowers/specs/2026-07-09-entity-address-scheme-design.md.
 //
-// Lives here, not in @agentgem/model: the marketplace takes no workspace deps (see gems/cuts.ts).
-// Promote it when a second importer actually exists.
+// Sibling: packages/model/src/entityPath.ts implements the workspace/* half. This file cannot import
+// it — the marketplace takes no workspace deps (see gems/cuts.ts). The two share the scheme, not a
+// function, so there is nothing to keep in sync.
+//
+// Deviation from the sibling: game paths are NOT percent-encoded. Artifact names carry '/' as data,
+// so workspaceArtifactPath must encode. A gem key carries '/' as structure (@scope/name, both
+// [a-z0-9-]), and a copy-friendly link is this feature's whole point. We still DECODE on parse.
 
 /** A published gem key: @scope/name, both segments [a-z0-9-] (see distribute/src/registry.ts). */
 const PUBLISHED_KEY = /^@[a-z0-9-]+\/[a-z0-9-]+$/;
