@@ -2,7 +2,7 @@
 import { useState, type ReactNode } from "react";
 import {
   ResponsiveContainer, BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell,
-  XAxis, YAxis, Tooltip, CartesianGrid,
+  XAxis, YAxis, Tooltip, CartesianGrid, type TooltipValueType,
 } from "recharts";
 import type { ObservePayload, ObserveRange, ObserveFilter } from "../../api/routes.js";
 import { fmtTokens, fmtDuration, tokenSeries, heatmapCells, heatmapMonths } from "./data.js";
@@ -13,6 +13,12 @@ import { setupLink, type SetupType } from "../Setup/link.js";
 
 const WEEKDAY_LABELS = ["", "Mon", "", "Wed", "", "Fri", ""];
 const SLICE_COLORS = ["var(--accent)", "var(--emerald, #34d399)", "#f59e0b", "#8b5cf6", "#ec4899", "#64748b"];
+
+// A tooltip value is `number | string | ReadonlyArray<number | string> | undefined`, and
+// Tooltip is not generic, so a formatter cannot narrow it away. Every series charted here
+// is numeric; anything else renders as-is rather than reaching fmtTokens' arithmetic.
+const fmtTokenValue = (v: TooltipValueType | undefined): string =>
+  typeof v === "number" ? fmtTokens(v) : String(v ?? "");
 
 // The per-session ledger table lives in the Sessions screen (panels/Sessions). Inspect is
 // the aggregate usage view: pulse, activity/token charts, by-model, and the heatmap.
@@ -93,7 +99,7 @@ export function Dashboard({ data, range, onRange, filter, onFilter, pending, onR
                     <CartesianGrid strokeOpacity={0.1} vertical={false} />
                     <XAxis dataKey="date" tick={{ fontSize: 10 }} />
                     <YAxis tick={{ fontSize: 10 }} width={36} tickFormatter={fmtTokens} />
-                    <Tooltip formatter={(v: number) => fmtTokens(v)} />
+                    <Tooltip formatter={fmtTokenValue} />
                     <Area dataKey="in" stackId="t" stroke="var(--accent)" fill="var(--accent)" fillOpacity={0.5} />
                     <Area dataKey="out" stackId="t" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.5} />
                     <Area dataKey="cache" stackId="t" stroke="#64748b" fill="#64748b" fillOpacity={0.4} />
@@ -107,7 +113,7 @@ export function Dashboard({ data, range, onRange, filter, onFilter, pending, onR
                     <Pie data={data.models} dataKey="tokens" nameKey="model" innerRadius={36} outerRadius={60} paddingAngle={2}>
                       {data.models.map((m, i) => <Cell key={m.agent + "|" + m.model} fill={SLICE_COLORS[i % SLICE_COLORS.length]} />)}
                     </Pie>
-                    <Tooltip formatter={(v: number) => fmtTokens(v)} />
+                    <Tooltip formatter={fmtTokenValue} />
                   </PieChart>
                 </ResponsiveContainer>
                 <ul className="obs-legend">
