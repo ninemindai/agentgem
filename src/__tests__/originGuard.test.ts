@@ -232,6 +232,19 @@ describe("originGuard — public aggregator reads (CORS + cross-site exemption)"
     expect(r.set["access-control-allow-origin"]).toBe("*");
   });
 
+  it("serves game-meta cross-origin: the Play page fetches it from app.agentgem.ai", () => {
+    const r = run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "GET", "/api/aggregator/game-meta");
+    expect(r.nexted).toBe(true);
+    expect(r.blocked).toBe(false);
+    expect(r.set["access-control-allow-origin"]).toBe("*");
+  });
+
+  it("answers the game-meta preflight without dispatching the route", () => {
+    const r = run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "OPTIONS", "/api/aggregator/game-meta");
+    expect(r.status).toBe(204);
+    expect(r.nexted).toBe(false);
+  });
+
   it("allows a cross-site GET to effectiveness and sets permissive CORS", () => {
     const r = run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "GET", "/api/aggregator/effectiveness");
     expect(r.nexted).toBe(true);
