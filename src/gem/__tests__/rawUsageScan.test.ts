@@ -65,6 +65,16 @@ describe("scanFileUsage", () => {
     expect(scanFileUsage(join(dir, "nope.jsonl"), [])).toEqual({ raw: [], hooks: [], failed: true });
   });
 
+  // A3: an empty-but-readable file must be distinguishable from a read failure —
+  // it parses to nothing, but `failed` must not be set.
+  it("returns an empty (not failed) result for a 0-byte readable file", () => {
+    const p = join(dir, "empty.jsonl");
+    writeFileSync(p, "");
+    const result = scanFileUsage(p, []);
+    expect(result).toEqual({ raw: [], hooks: [] });
+    expect(result.failed).toBeFalsy();
+  });
+
   // Hooks have no token: a hook fired iff a hook-signal record contains that hook's
   // own event name or its command basename, both taken from the inventory.
   it("resolves hook hits against the hook inventory, by event or command basename", () => {
@@ -119,12 +129,16 @@ describe("exported matchers (must be shared by mint and query, never re-implemen
   });
 
   // A4: exact match outranks a `:`-suffix match, across the WHOLE inventory, regardless
-  // of array order — resolution is a pure function of (token, inventory SET).
+  // of array order — resolution is a pure function of (token, inventory SET). The token
+  // "x:brainstorming" is genuinely ambiguous here: it is an exact hit against
+  // {name:"x:brainstorming"} AND a `:`-suffix hit against {name:"brainstorming"} (since
+  // "x:brainstorming".endsWith(":brainstorming")). A first-match-wins implementation
+  // would return the wrong name when the suffix candidate comes first.
   it("matchSkill resolves an exact name over a suffix match, order-independent", () => {
-    const forward = [{ name: "x:brainstorming" }, { name: "brainstorming" }];
-    const reversed = [{ name: "brainstorming" }, { name: "x:brainstorming" }];
-    expect(matchSkill(forward, "brainstorming")).toBe("brainstorming");
-    expect(matchSkill(reversed, "brainstorming")).toBe("brainstorming");
+    const exact = { name: "x:brainstorming" };
+    const suffix = { name: "brainstorming" };
+    expect(matchSkill([exact, suffix], "x:brainstorming")).toBe("x:brainstorming");
+    expect(matchSkill([suffix, exact], "x:brainstorming")).toBe("x:brainstorming");
   });
 
   // T-E: both matchers return null (not undefined) on no match.
