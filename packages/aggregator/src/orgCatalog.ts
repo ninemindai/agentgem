@@ -4,9 +4,10 @@
 // (filters catalog_gems), but keys off the gem's SCOPE rather than published_by, and returns an EMPTY
 // catalog (not null) for an unknown scope so the page shows a friendly empty state; null is reserved
 // for a malformed scope → the route maps that to 400.
-import { sql, desc, eq } from "drizzle-orm";
+import { sql, desc } from "drizzle-orm";
 import type { AppDb } from "./schema.js";
-import { catalogGems, accounts, accountScopes } from "./schema.js";
+import { catalogGems, accountScopes } from "./schema.js";
+import { accountIdForHandle } from "./handles.js";
 import { starCounts } from "./stars.js";
 import { gemAdoption } from "./aggregates.js";
 import { computeGemRubric, type RubricResult } from "./orgRubric.js";
@@ -38,7 +39,9 @@ export async function buildOrgCatalog(db: AppDb, rawScope: string): Promise<OrgC
 
   const prefix = `@${scope}/%`.toLowerCase();
   const rows = await db
-    .select({ gemKey: catalogGems.gemKey, version: catalogGems.version, publishedBy: catalogGems.publishedBy, description: catalogGems.description, tags: catalogGems.tags, artifactKinds: catalogGems.artifactKinds, type: catalogGems.type, grade: catalogGems.grade })
+    .select({ gemKey: catalogGems.gemKey, version: catalogGems.version, publishedBy: catalogGems.publishedBy,
+              ownerAccountId: catalogGems.ownerAccountId, description: catalogGems.description,
+              tags: catalogGems.tags, artifactKinds: catalogGems.artifactKinds, type: catalogGems.type, grade: catalogGems.grade })
     .from(catalogGems)
     .where(sql`lower(${catalogGems.gemKey}) like ${prefix}`)
     .orderBy(desc(catalogGems.createdAtMs), desc(catalogGems.version));
@@ -48,28 +51,24 @@ export async function buildOrgCatalog(db: AppDb, rawScope: string): Promise<OrgC
   for (const r of rows) if (!latest.has(r.gemKey)) latest.set(r.gemKey, r);
   const base = [...latest.values()];
 
-  // Trust filter: a @scope/* gem is shown on this org's page only if its (server-derived) publisher
-  // actually owns `scope` — either it IS their own login (self-scope, always legitimate) or account_scopes
-  // records that they own it (their public GitHub org membership, the same gate the publish path uses via
-  // accountOwnsScope). Without this, anyone could share a @scope/* gem through recordCatalogShare — which
-  // does NOT verify scope ownership — and have it render under an official-looking org page. (PR #99 review
-  // finding #1; the write-path gap is tracked as a separate follow-up.) Self-scope is allowed without an
-  // account_scopes lookup so a bind-only user (no web sign-in → no captured scopes) still lists their own gems.
+  // Trust filter: a @scope/* gem renders on this org's page only if its OWNER actually owns `scope`
+  // — either the owner is the account whose handle IS the scope (self), or account_scopes records
+  // the ownership (their GitHub org membership, the same gate the publish path uses). Matching the
+  // published_by STRING here would let anyone share a @scope/* gem through recordCatalogShare
+  // (which does not verify scope ownership) and have it render under an official-looking org page.
+  // (PR #99 review finding #1; the write-path gap is tracked as a separate follow-up.) Identity
+  // re-key (task 7): the set is now uuids (owner_account_id), not login strings — an unresolved
+  // gem (owner_account_id NULL) can never match and is excluded, closing the impersonation hole a
+  // string compare left open for backfill rows that failed to resolve.
   const scopeLc = scope.toLowerCase();
   const owners = await db
-    .select({ login: accounts.login })
+    .select({ accountId: accountScopes.accountId })
     .from(accountScopes)
-    .innerJoin(accounts, eq(accountScopes.accountId, accounts.id))
     .where(sql`lower(${accountScopes.scope}) = ${scopeLc}`);
-  // account_scopes is only ever captured for github logins (anchorAndScopes gates on providerId
-  // === "github" && login), so a null login here can't own any scope — drop it rather than match.
-  const ownerSet = new Set(
-    owners.filter((o): o is { login: string } => o.login != null).map((o) => o.login.toLowerCase()),
-  );
-  const owned = base.filter((g) => {
-    const pub = g.publishedBy.toLowerCase();
-    return pub === scopeLc || ownerSet.has(pub);
-  });
+  const ownerSet = new Set(owners.map((o) => o.accountId));
+  const selfId = await accountIdForHandle(db, scope);
+  if (selfId) ownerSet.add(selfId);
+  const owned = base.filter((g) => g.ownerAccountId !== null && ownerSet.has(g.ownerAccountId));
 
   const keys = owned.map((g) => g.gemKey);
   const starMap = await starCounts(db, "gem", keys); // guards keys.length === 0 internally
