@@ -21,9 +21,13 @@ export interface SweepReport {
   dryRun: boolean;                // mirrors opts.dryRun — false means updates were applied
 }
 
+// All DETECT_* thresholds are strictly positive. Reject <= 0 (and non-finite): `Number("") === 0`
+// and `Number("0") === 0` are both finite, so a blank/zero env var (a k8s ConfigMap with no value,
+// `export VAR=`) would otherwise collapse a threshold to 0 — making `>= 0` guards always true and
+// letting a single real-mode sweep quarantine the entire unbound corpus.
 const num = (v: string | undefined, d: number): number => {
   const n = Number(v);
-  return Number.isFinite(n) ? n : d;
+  return Number.isFinite(n) && n > 0 ? n : d;
 };
 
 /**
