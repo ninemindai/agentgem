@@ -6,9 +6,13 @@
 // constants so they compile into dist (no fs paths).
 import { mcpAppClient } from "./mcpAppClient.js";
 
+// The shim goes FIRST in <head>, exactly as replayScaffold() places it: `window.agentgemApp` must exist
+// before the game's own script runs, or an app that polls for it on boot loses the race. Every scaffold
+// carries it — the studio agent writes bridge calls into whichever one it was handed, and a bundle born
+// without the transport can never answer the host's ui/initialize.
 export function sealedTemplate(title: string, subtitle: string): string {
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8" />
+<html lang="en"><head>${mcpAppClient()}<meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${title}</title>
 <style>

@@ -16,6 +16,12 @@ describe("scaffolds", () => {
     for (const g of Object.values(GENRES)) expect(await gameGate(scaffoldFor(g.scaffold))).toEqual({ ok: true, failures: [] });
   });
   it("scaffolds carry the agent-editable marker", () => { expect(scaffoldFor("replay")).toContain("AGENTGEM:GAME-LOGIC"); });
+  // EVERY scaffold ships the transport, not just replay's. The studio agent writes `window.agentgemApp`
+  // calls into whichever scaffold it was handed, and a bundle born without the shim can never answer the
+  // host's ui/initialize — it degrades to its baked data while meta.json still declares `needs`.
+  it("every genre's scaffold ships the MCP Apps client shim", () => {
+    for (const g of Object.values(GENRES)) expect(scaffoldFor(g.scaffold)).toContain(MCP_CLIENT_MARKER);
+  });
   it("the replay scaffold renders the session (reads game-data: meta + timeline)", () => {
     const html = scaffoldFor("replay");
     expect(html).toContain("game-data");

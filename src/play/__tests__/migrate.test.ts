@@ -1,6 +1,6 @@
 // src/play/__tests__/migrate.test.ts
 import { describe, it, expect } from "vitest";
-import { migrateMiniappHtml, scaffoldFor, gameGate, assertPortable, MCP_CLIENT_MARKER } from "@agentgem/play";
+import { migrateMiniappHtml, scaffoldFor, gameGate, assertPortable, deriveNeeds, hasDynamicToolCall, MCP_CLIENT_MARKER } from "@agentgem/play";
 
 // The old private postMessage bridge, verbatim as `replayScaffold()` used to bake it (pre-cutover to the
 // MCP Apps client shim). replayScaffold() now emits the new bridge natively (born with MCP_CLIENT_MARKER
@@ -51,6 +51,49 @@ const OLD_BRIDGE_HTML = `<!doctype html>
   </script>
 </body></html>`;
 
+// A bundle the studio agent authored from scratch: it CALLS the bridge but carries no shim, because only
+// replayScaffold() bakes one and an agent that regenerates the document drops whatever was in <head>. It
+// is neither old-bridge nor current, and before the injection branch existed it scanned as "unrecognized"
+// and was passed through untouched — so `window.agentgemApp` was never defined and every callTool hung.
+// Shape taken from a real `project-fun` miniapp found in the wild.
+const SHIMLESS_HOST_APP = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Project Fun</title>
+</head>
+<body>
+  <div id="app"></div>
+  <script id="game-data" type="application/json">{"path":"agentgem","files":["README.md"]}</script>
+  <script>
+  (function () {
+    "use strict";
+    const app = document.getElementById("app");
+    const dataEl = document.getElementById("game-data");
+    const DATA = dataEl ? JSON.parse(dataEl.textContent || "{}") : {};
+
+    function waitForApp(tries) {
+      return new Promise((resolve) => {
+        let n = 0;
+        const iv = setInterval(() => {
+          if (window.agentgemApp) { clearInterval(iv); resolve(window.agentgemApp); }
+          else if (++n > tries) { clearInterval(iv); resolve(null); }
+        }, 100);
+      });
+    }
+
+    // ==== AGENTGEM:GAME-LOGIC START ====
+    async function boot() {
+      const host = await waitForApp(50);
+      if (!host) { app.textContent = "No host connected — running standalone."; return; }
+      const inv = await host.callTool("agentgem_get_inventory", {});
+      app.textContent = "skills: " + (inv.skills || []).length;
+    }
+    boot();
+    // ==== AGENTGEM:GAME-LOGIC END ====
+  })();
+  </script>
+</body></html>`;
+
 // assertPortable(["session-data"]) requires a non-empty baked <script id="game-data"> timeline; the bare
 // fixture bakes none, so inject one into <body> before asserting (per the task brief).
 function withBakedTimeline(html: string): string {
@@ -86,10 +129,40 @@ describe("migrateMiniappHtml", () => {
     expect(html).toBe(scaffoldFor("replay"));
   });
 
-  it("reports unrecognized for a bundle with no old bridge, and never throws", () => {
-    const { html, outcome } = migrateMiniappHtml(scaffoldFor("project-fun"));
+  // A sealed bundle that talks to no host needs no transport. (Not scaffoldFor("project-fun") — every
+  // scaffold now ships the shim, so it would report "already" and prove nothing.)
+  it("reports unrecognized for a bundle that never touches the bridge, and never throws", () => {
+    const sealed = "<!doctype html><html><head></head><body><canvas id=\"c\"></canvas></body></html>";
+    const { html, outcome } = migrateMiniappHtml(sealed);
     expect(outcome).toBe("unrecognized");
-    expect(html).toBe(scaffoldFor("project-fun"));
+    expect(html).toBe(sealed);
+  });
+
+  it("injects the shim into a bundle that uses the bridge but carries no shim", () => {
+    const { html, outcome } = migrateMiniappHtml(SHIMLESS_HOST_APP);
+    expect(outcome).toBe("migrated");
+    expect(html).toContain(MCP_CLIENT_MARKER);
+    // the shim must run BEFORE the app's own script, or `window.agentgemApp` is still undefined when it polls
+    expect(html.indexOf(MCP_CLIENT_MARKER)).toBeLessThan(html.indexOf("waitForApp"));
+    expect(html).toContain("AGENTGEM:GAME-LOGIC START");   // the agent's block is untouched
+  });
+
+  it("is idempotent for an injected bundle: a second pass is a no-op", () => {
+    const first = migrateMiniappHtml(SHIMLESS_HOST_APP);
+    expect(first.outcome).toBe("migrated");
+    const second = migrateMiniappHtml(first.html);
+    expect(second.outcome).toBe("already");
+    expect(second.html).toBe(first.html);
+  });
+
+  it("an injected bundle passes gameGate, and its capability scan is unchanged", async () => {
+    const { html } = migrateMiniappHtml(SHIMLESS_HOST_APP);
+    expect(await gameGate(html)).toEqual({ ok: true, failures: [] });
+    // the shim is TRANSPORT, not capability: injecting it must not add or remove a declared need, and
+    // its own `callTool: function (name, args)` definition must not scan as a dynamic call.
+    expect(deriveNeeds(html)).toEqual(deriveNeeds(SHIMLESS_HOST_APP));
+    expect(deriveNeeds(html)).toEqual(["local-project-access"]);
+    expect(hasDynamicToolCall(html)).toBe(false);
   });
 
   it("never throws on garbage input", () => {

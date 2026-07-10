@@ -1,10 +1,11 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
-// Codemod for stored miniapps: rewrites the old private postMessage bridge
-// (`agentgem:request` / `agentgem:feed`, baked by `replayScaffold()` in scaffolds.ts) to the standard
-// MCP Apps client shim (`mcpAppClient()` in mcpAppClient.ts). Never throws — a miniapp that predates the
-// old bridge, or that has already been migrated, is reported rather than blown up; the caller (the
-// storage-layer route) decides what "unrecognized" means for its flow.
+// Codemod for stored miniapps: bring any bundle up to the standard MCP Apps client shim
+// (`mcpAppClient()` in mcpAppClient.ts). Two paths reach it — rewriting the old private postMessage
+// bridge (`agentgem:request` / `agentgem:feed`, once baked by `replayScaffold()` in scaffolds.ts), and
+// injecting the shim into a bundle that calls `window.agentgemApp` but never had one. Never throws — a
+// bundle that talks to no host is reported "unrecognized" rather than blown up; the caller (the
+// storage-layer route) decides what that means for its flow.
 import { MCP_CLIENT_MARKER, mcpAppClient } from "./mcpAppClient.js";
 
 export type MigrateOutcome = "migrated" | "already" | "unrecognized";
@@ -29,6 +30,21 @@ const NEW_FEED_LISTENER =
 const NEW_REQUEST_DATA =
   'function requestData() { if (window.agentgemApp) window.agentgemApp.callTool("agentgem_get_session_data").then(function (d) { if (d) { DATA = d; boot(); } }).catch(function () {}); }\n';
 
+// The bridge IS `window.agentgemApp`, so a bundle that uses it must NAME it at least once to get a
+// reference — there is no aliasing its way in. That makes this substring test total for "does this
+// document talk to a host?", for the same reason capabilityScan's tool-name scan is total: gameGate
+// seals every other channel out of the frame.
+const HOST_API = "agentgemApp";
+
+// TRANSPORT ONLY: give a bundle that calls the bridge the shim that defines it. It rewrites no code, so
+// unlike the old-bridge codemod below — which injects a `callTool("agentgem_get_session_data")` and thus
+// a capability — it can never widen a grant. That is what makes it safe to run on the SAVE path, where a
+// silent widening would be a security bug. Idempotent, and a no-op for a bundle that talks to no host.
+export function ensureClientShim(html: string): string {
+  if (html.includes(MCP_CLIENT_MARKER) || !html.includes(HOST_API)) return html;
+  return injectClientShim(html);
+}
+
 function injectClientShim(html: string): string {
   // Same head-injection approach as sandboxDoc: insert at the very start of <head> so
   // `window.agentgemApp` exists before the game's own script runs. Falls back to synthesizing a
@@ -41,7 +57,16 @@ export function migrateMiniappHtml(html: string): { html: string; outcome: Migra
   try {
     if (html.includes(MCP_CLIENT_MARKER)) return { html, outcome: "already" };
     if (!html.includes("agentgem:request") || !html.includes("agentgem:feed")) {
-      return { html, outcome: "unrecognized" };
+      // No old bridge and no shim. Two very different documents land here, and conflating them is what
+      // let a broken miniapp ship: one that never talks to a host (a sealed canvas game — nothing to do),
+      // and one that CALLS the bridge but carries no shim. The latter comes from the studio agent
+      // regenerating the document and dropping whatever <head> held, and from every miniapp stored before
+      // the scaffolds all shipped the shim. It has no legacy code to rewrite; it is simply
+      // missing its transport, so give it one. Without this it stays mute: `window.agentgemApp` is never
+      // defined, the handshake never opens, and the app silently degrades to its baked data while
+      // meta.json still declares `needs` — so the host advertises tools to a frame that cannot speak.
+      const shimmed = ensureClientShim(html);
+      return shimmed === html ? { html, outcome: "unrecognized" } : { html: shimmed, outcome: "migrated" };
     }
     if (!FEED_LISTENER_RE.test(html) || !REQUEST_DATA_RE.test(html)) {
       return { html, outcome: "unrecognized" };
