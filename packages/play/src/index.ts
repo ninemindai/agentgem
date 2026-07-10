@@ -19,3 +19,4 @@ export { resolveSessionRef, type SessionRef } from "./sessionRef.js";
 // the one capability<->tool map instead of keeping a second copy.
 export { CAP_TOOL, TOOL_CAP, CAP_METHOD, METHOD_CAP } from "@agentgem/model";
 export { deriveNeeds, reconcileNeeds, hasDynamicToolCall, type Reconciled } from "./capabilityScan.js";
+export { INSPECTOR_HTML, INSPECTOR_META } from "./inspector.js";
