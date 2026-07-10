@@ -47,9 +47,11 @@ describe("saveMiniapp portability gate", () => {
   afterEach(() => { rmSync(home, { recursive: true, force: true }); delete process.env.AGENTGEM_HOME; });
 
   it("rejects saving a session-data miniapp with no baked fallback", async () => {
+    // Must actually CALL the session-data tool, or reconcileNeeds prunes the phantom "session-data"
+    // declaration before assertPortable ever runs, and the save would wrongly succeed.
     await expect(saveMiniapp({
       name: "bad-replay",
-      html: sealed(""),
+      html: sealed(`<script>if (window.agentgemApp) window.agentgemApp.callTool("agentgem_get_session_data");</script>`),
       meta: { title: "Bad", genre: "replay", createdFrom: { kind: "session", agent: "claude", sessionId: "s1", summary: "x" }, engineVersion: "1", needs: ["session-data"] },
     })).rejects.toThrow(/not portable/i);
   });
