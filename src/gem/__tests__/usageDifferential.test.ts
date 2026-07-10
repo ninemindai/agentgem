@@ -120,5 +120,6 @@ describe.skipIf(!process.env.AGENTGEM_DIFFERENTIAL_REAL)("differential: real cor
     const want = computeGlobalUsage(dirs, paths).artifacts;
     const got = (await getGlobalUsageIndexed(dirs, paths)).artifacts;
     expect(sorted(got)).toEqual(sorted(want));
+    expect(want.length).toBeGreaterThan(0); // guard: an empty corpus would make this vacuous
   }, 120_000); // a real ~/.claude/projects corpus can run to thousands of transcripts
 });
