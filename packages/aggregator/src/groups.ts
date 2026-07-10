@@ -25,7 +25,7 @@ export type GroupKind = "federated" | "native";
 export type GroupRole = "admin" | "member";
 
 export interface Group { id: string; kind: GroupKind; installationId: number | null; scope: string | null; name: string }
-export interface GroupMember { accountId: string; login: string; avatarUrl: string | null; role: GroupRole; viaSync: boolean; viaInvite: boolean }
+export interface GroupMember { accountId: string; login: string | null; avatarUrl: string | null; role: GroupRole; viaSync: boolean; viaInvite: boolean }
 
 const groupCols = { id: groups.id, kind: groups.kind, installationId: groups.installationId, scope: groups.scope, name: groups.name };
 

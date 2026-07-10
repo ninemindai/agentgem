@@ -142,7 +142,7 @@ export async function recordUsageDays(db: AppDb, accountId: string, machine: str
 export type OrgUsageRange = "7d" | "30d" | "all";
 
 export interface OrgUsageMember {
-  login: string;
+  login: string | null;
   avatarUrl: string | null;
   sessions: number;
   msgs: number;
@@ -338,7 +338,7 @@ export async function buildOrgUsage(
     }));
     daily = dailyRows.map((r) => ({ date: r.date, sessions: Number(r.sessions ?? 0), tokens: Number(r.tokens ?? 0) }));
   }
-  members.sort((a, b) => b.tokens - a.tokens || a.login.localeCompare(b.login));
+  members.sort((a, b) => b.tokens - a.tokens || (a.login ?? "").localeCompare(b.login ?? ""));
 
   const allSlices: OrgUsageModel[] = (await facetsPromise)
     .map((r) => ({ agent: r.agent, model: r.model, sessions: Number(r.sessions ?? 0), tokens: Number(r.tokens ?? 0) }))

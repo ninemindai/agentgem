@@ -12,11 +12,11 @@ import { accounts, accountScopes, handoffCodes } from "./schema.js";
 
 const sha256hex = (s: string): string => createHash("sha256").update(s).digest("hex");
 
-export interface Account { id: string; provider: string; providerAccountId: string; login: string; avatarUrl: string | null }
+export interface Account { id: string; provider: string; providerAccountId: string; login: string | null; avatarUrl: string | null }
 
 export async function upsertAccount(
   db: AppDb,
-  a: { provider: string; accountId: string; login: string; avatarUrl?: string | null; id?: string },
+  a: { provider: string; accountId: string; login: string | null; avatarUrl?: string | null; id?: string },
 ): Promise<Account> {
   const id = a.id ?? randomUUID();
   const rows = await db

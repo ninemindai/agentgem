@@ -61,7 +61,11 @@ export async function buildOrgCatalog(db: AppDb, rawScope: string): Promise<OrgC
     .from(accountScopes)
     .innerJoin(accounts, eq(accountScopes.accountId, accounts.id))
     .where(sql`lower(${accountScopes.scope}) = ${scopeLc}`);
-  const ownerSet = new Set(owners.map((o) => o.login.toLowerCase()));
+  // account_scopes is only ever captured for github logins (anchorAndScopes gates on providerId
+  // === "github" && login), so a null login here can't own any scope — drop it rather than match.
+  const ownerSet = new Set(
+    owners.filter((o): o is { login: string } => o.login != null).map((o) => o.login.toLowerCase()),
+  );
   const owned = base.filter((g) => {
     const pub = g.publishedBy.toLowerCase();
     return pub === scopeLc || ownerSet.has(pub);

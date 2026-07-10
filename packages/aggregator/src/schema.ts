@@ -79,7 +79,7 @@ export const accounts = pgTable("accounts", {
   id: uuid("id").primaryKey(),
   provider: text("provider").notNull(),
   providerAccountId: text("provider_account_id").notNull(),
-  login: text("login").notNull(),
+  login: text("login"),
   avatarUrl: text("avatar_url"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
