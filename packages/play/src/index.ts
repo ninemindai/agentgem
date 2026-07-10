@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 export { staticGate, gameGate, type GateResult, type GateOptions } from "./gameGate.js";
 export { GENRES, genreFor, type GenreSpec } from "./genres.js";
-export { scaffoldFor } from "./scaffolds.js";
+export { scaffoldFor, sealedTemplate } from "./scaffolds.js";
 export { extractSource, compactTurns, type GenerationInput, type SourceReaders } from "./sourceContext.js";
 export { git, ensureRepo, commitAll, commitWithLock, setRemote, push } from "./git.js";
 export { miniappsRoot, miniappDir, miniappHtmlPath, MINIAPP_HTML, claimMiniappDir, saveMiniapp, deleteMiniapp, checkpointMiniapp, readMiniapp, listMiniapps, migrateAllMiniapps, type MiniappMeta, type SaveMiniappInput, type SaveMiniappResult } from "./miniapps.js";
