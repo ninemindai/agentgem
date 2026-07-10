@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
 import { sql } from "drizzle-orm";
-import { backfillGemOwners } from "@agentgem/aggregator";
-import { makeTestDb } from "@agentgem/aggregator";
+import { backfillGemOwners, makeTestDb } from "@agentgem/aggregator";
 
 const acct = (login: string | null, pid: string) =>
   sql`insert into accounts (id, provider, provider_account_id, login)
@@ -53,5 +52,19 @@ describe("backfillGemOwners", () => {
     await db.execute(sql`update catalog_gems set owner_account_id = ${a} where gem_key = '@k/a'`);
     await backfillGemOwners(db);
     expect(await ownerOf(db, "@k/a")).toBe(a);   // not reassigned to 'other'
+  });
+
+  it("resolved counts ALL owned rows, not just the ones assigned on this call", async () => {
+    const db = await makeTestDb();
+    await db.execute(acct("first", "1"));
+    await db.execute(gem("@r/a", "first"));
+    expect(await backfillGemOwners(db)).toEqual({ resolved: 1, unresolved: 0 });
+
+    // A second resolvable gem for a DIFFERENT account, assigned on this call. A per-run-count
+    // implementation would report resolved: 1 here (only @r/b was touched by this UPDATE); the
+    // contract requires resolved: 2, because @r/a is still owned too.
+    await db.execute(acct("second", "2"));
+    await db.execute(gem("@r/b", "second"));
+    expect(await backfillGemOwners(db)).toEqual({ resolved: 2, unresolved: 0 });
   });
 });
