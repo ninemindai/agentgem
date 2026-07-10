@@ -3,7 +3,7 @@
 // via live dogfood on 2026-07-08 — screenshots showed a self-contained miniapp rendering in the reference
 // double-iframe sandbox with no compat tweaks.
 import { describe, it, expect } from "vitest";
-import { mcpAppFor, mcpResourceFor, mcpToolFor, MCP_APP_MIME } from "@agentgem/play";
+import { mcpAppFor, mcpResourceFor, mcpToolFor, MCP_APP_MIME, mcpAppClient } from "@agentgem/play";
 
 describe("mcpApp.conformance", () => {
   it("mcpResourceFor emits MCP Apps 2026-01-26 MVP contract: mimeType, uri scheme, _meta.ui.csp keys, reverse-DNS extension", () => {
@@ -161,5 +161,13 @@ describe("mcpApp.conformance", () => {
     const resourceWithoutNeeds = mcpResourceFor(appWithoutNeeds);
     expect(resourceWithoutNeeds._meta["ai.agentgem/game"].offline).toBe(true);
     expect(resourceWithoutNeeds._meta["ai.agentgem/game"]).not.toHaveProperty("needs");
+  });
+
+  it("shim inlines the host-style helpers and applies context", () => {
+    const src = mcpAppClient();
+    expect(src).toContain("applyDocumentTheme");
+    expect(src).toContain("applyHostStyleVariables");
+    // Only observes size when the host did not fix dimensions.
+    expect(src).toContain("containerDimensions");
   });
 });

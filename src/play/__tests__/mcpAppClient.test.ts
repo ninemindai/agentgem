@@ -5,9 +5,14 @@ import { mcpAppClient, MCP_CLIENT_MARKER } from "@agentgem/play";
 // A tiny two-window harness. The shim runs against `child` (its `window`); it posts to `child.parent`
 // (the host). The host "responds" by delivering a MessageEvent-shaped object back into `child`, with
 // source = parent — exactly what the shim's `e.source === window.parent` gate requires. No jsdom needed:
-// the shim only touches window.parent / window.addEventListener / window.agentgemApp, all injected here.
+// the shim touches window.parent / window.addEventListener / window.agentgemApp, plus (since PR 3)
+// document.documentElement for theme/style application — all injected here. ResizeObserver and
+// window.innerWidth are deliberately left unmocked: they're absent in this Node harness the same way
+// they'd be present in a real browser, so `typeof ResizeObserver === "undefined"` short-circuits
+// maybeObserveSize before it would need them.
 type Win = {
   parent: unknown;
+  document: { documentElement: { setAttribute(k: string, v: string): void; style: { setProperty(k: string, v: string): void } } };
   agentgemApp: { ready: boolean; hostTools: unknown[]; callTool(n: string, a?: unknown): Promise<unknown>; onNotification(m: string, cb: (x: unknown) => void): void };
   addEventListener(type: string, cb: (e: { data: unknown; source: unknown }) => void): void;
   removeEventListener(type: string, cb: (e: { data: unknown; source: unknown }) => void): void;
@@ -19,6 +24,7 @@ function makeWindow(): Win {
   const listeners: Array<(e: { data: unknown; source: unknown }) => void> = [];
   return {
     parent: null,
+    document: { documentElement: { setAttribute() { /* no-op */ }, style: { setProperty() { /* no-op */ } } } },
     agentgemApp: undefined as never,
     addEventListener(type, cb) { if (type === "message") listeners.push(cb); },
     removeEventListener(_type, cb) { const i = listeners.indexOf(cb); if (i >= 0) listeners.splice(i, 1); },
@@ -29,8 +35,9 @@ function makeWindow(): Win {
 
 function runShim(win: Win): void {
   const body = mcpAppClient().replace(/<\/?script>/g, "");
-  // The shim references only `window`, resolved via this Function parameter (browser: the global).
-  new Function("window", body)(win);
+  // The shim references `window` and (since PR 3) `document`, resolved via these Function parameters
+  // (browser: both are globals; here, `document` is `win.document`, distinct per two-window harness).
+  new Function("window", "document", body)(win, win.document);
 }
 
 describe("mcpAppClient shim", () => {

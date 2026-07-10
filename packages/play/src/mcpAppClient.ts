@@ -9,6 +9,8 @@
 // mounted miniapp on its waiting state. Returned as a <script> string injected into the miniapp document;
 // this module is pure/string-only (no I/O, no DOM here).
 
+import { hostStyleScript } from "./hostStyles.js";
+
 // A detectable substring carried inside the emitted <script>. A migration that swaps the old bridge for
 // this shim greps for it to stay idempotent (don't inject twice).
 export const MCP_CLIENT_MARKER = "agentgem:mcp-app-client:2";
@@ -20,6 +22,7 @@ export function mcpAppClient(): string {
 // ${MCP_CLIENT_MARKER}
 (function () {
   "use strict";
+${hostStyleScript()}
   var host = window.parent;               // the trusted host frame (the console Runner)
   var nextId = 1;
   var pending = {};                       // JSON-RPC id -> { resolve, reject } for in-flight tools/call
@@ -57,8 +60,25 @@ export function mcpAppClient(): string {
     for (var i = 0; i < list.length; i++) { try { list[i](payload); } catch (err) { /* subscriber threw */ } }
   }
 
-  // PR 2 leaves this a no-op; PR 3 fills in the real theme/CSS-variable/size application.
-  function applyHostContext(ctx) { /* PR 3 fills this in (theme/styles/size) */ }
+  function applyHostContext(ctx) {
+    if (!ctx) return;
+    if (ctx.theme) applyDocumentTheme(ctx.theme);
+    if (ctx.styles && ctx.styles.variables) applyHostStyleVariables(ctx.styles.variables);
+  }
+
+  // Reports our rendered size to the host only when the host hasn't already fixed our container
+  // (containerDimensions with both width AND height set — the Runner does this). Reporting on top of a
+  // host-fixed size would fight the host's own layout.
+  function maybeObserveSize(ctx) {
+    var cd = (ctx && ctx.containerDimensions) || {};
+    if (cd.width != null && cd.height != null) return;       // host fixed our size — do not report
+    if (typeof ResizeObserver === "undefined") return;
+    var report = function () {
+      var h = document.documentElement.scrollHeight, w = window.innerWidth;
+      post({ jsonrpc: "2.0", method: "ui/notifications/size-changed", params: { width: w, height: h } });
+    };
+    try { new ResizeObserver(report).observe(document.documentElement); report(); } catch (e) { /* no-op */ }
+  }
 
   window.addEventListener("message", function (e) {
     if (e.source !== host) return;        // only the trusted host frame; nothing else is the boundary
@@ -69,7 +89,8 @@ export function mcpAppClient(): string {
       var hostMeta = (d.result._meta || {})["ai.agentgem/host"] || {};
       api.hostTools = hostMeta.tools || [];                          // granted tools ride _meta now, not result.tools
       api.hostContext = d.result.hostContext || {};
-      if (api.hostContext) applyHostContext(api.hostContext);        // PR 3 wires applyHostContext; PR 2 defines a no-op
+      if (api.hostContext) applyHostContext(api.hostContext);
+      maybeObserveSize(api.hostContext);
       if (iv) { clearInterval(iv); iv = null; }
       post({ jsonrpc: "2.0", method: "ui/notifications/initialized" });
       for (var qi = 0; qi < queue.length; qi++) post(queue[qi]);  // flush anything queued before ready
@@ -95,7 +116,7 @@ export function mcpAppClient(): string {
     if (d.method === "ui/notifications/tool-cancelled") { dispatch("ui/notifications/tool-cancelled", d.params || {}); return; }
     if (d.method === "ui/notifications/host-context-changed" && d.params) {
       api.hostContext = Object.assign(api.hostContext || {}, d.params);
-      applyHostContext(d.params);                                    // PR 3
+      applyHostContext(d.params);
       dispatch("ui/notifications/host-context-changed", d.params);
       return;
     }
