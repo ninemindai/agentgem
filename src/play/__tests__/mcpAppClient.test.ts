@@ -140,6 +140,84 @@ describe("mcpAppClient shim", () => {
     expect(posted).toContainEqual({ jsonrpc: "2.0", id: 7, result: {} });
   });
 
+  it("routes an inbound ui/resource-teardown REQUEST by method, not id, even when the host's id-space collides with an in-flight callTool id", async () => {
+    // ui/resource-teardown is the first id-bearing inbound REQUEST the shim ever sees — every prior
+    // id-bearing inbound message was a RESPONSE to the shim's own request. The host picks the
+    // teardown id from its own id-space, which can collide with the shim's tools/call ids (the shim's
+    // start at 1). A response-branch match on id alone would intercept the teardown, resolve the
+    // in-flight callTool with `undefined` (a request has no `.result`), and never post the teardown
+    // reply — the host hangs waiting for it and the game gets a spurious tool result.
+    const child = makeWindow();
+    const parent = makeWindow();
+    child.parent = parent;
+    const posted: Array<{ jsonrpc?: string; id?: number; method?: string; result?: unknown }> = [];
+    let toolCallId: number | undefined;
+    parent.postMessage = (msg) => {
+      posted.push(msg);
+      if (msg.method === "ui/initialize") { child.deliver({ jsonrpc: "2.0", id: msg.id, result: { protocolVersion: "x", _meta: { "ai.agentgem/host": { tools: [] } } } }, parent); return; }
+      if (msg.method === "tools/call") { toolCallId = msg.id; } // host holds the call in flight, no reply yet
+    };
+    runShim(child);
+    expect(child.agentgemApp.ready).toBe(true);
+
+    const promise = child.agentgemApp.callTool("agentgem_get_session_data");
+    expect(toolCallId).toBeDefined();
+    posted.length = 0;
+
+    let settled = false;
+    promise.then(() => { settled = true; }, () => { settled = true; });
+
+    // The host's teardown request id collides with the in-flight tools/call id above.
+    child.deliver({ jsonrpc: "2.0", id: toolCallId, method: "ui/resource-teardown" }, parent);
+
+    await new Promise((r) => setTimeout(r, 0)); // flush microtasks so a wrongly-resolved promise would show up
+
+    expect(posted).toContainEqual({ jsonrpc: "2.0", id: toolCallId, result: {} }); // teardown reply posted
+    expect(settled).toBe(false); // the in-flight callTool must still be pending, NOT resolved with undefined
+  });
+
+  it("dispatches ui/notifications/tool-input with params.arguments", () => {
+    const child = makeWindow();
+    const parent = makeWindow();
+    child.parent = parent;
+    parent.postMessage = (msg) => { if (msg.method === "ui/initialize") child.deliver({ jsonrpc: "2.0", id: msg.id, result: { protocolVersion: "x", _meta: { "ai.agentgem/host": { tools: [] } } } }, parent); };
+    runShim(child);
+
+    const received: unknown[] = [];
+    child.agentgemApp.onNotification("ui/notifications/tool-input", (p) => received.push(p));
+    child.deliver({ jsonrpc: "2.0", method: "ui/notifications/tool-input", params: { arguments: { level: 3 } } }, parent);
+
+    expect(received).toEqual([{ level: 3 }]);
+  });
+
+  it("dispatches ui/notifications/tool-cancelled with params as-is", () => {
+    const child = makeWindow();
+    const parent = makeWindow();
+    child.parent = parent;
+    parent.postMessage = (msg) => { if (msg.method === "ui/initialize") child.deliver({ jsonrpc: "2.0", id: msg.id, result: { protocolVersion: "x", _meta: { "ai.agentgem/host": { tools: [] } } } }, parent); };
+    runShim(child);
+
+    const received: unknown[] = [];
+    child.agentgemApp.onNotification("ui/notifications/tool-cancelled", (p) => received.push(p));
+    child.deliver({ jsonrpc: "2.0", method: "ui/notifications/tool-cancelled", params: { toolCallId: "abc" } }, parent);
+
+    expect(received).toEqual([{ toolCallId: "abc" }]);
+  });
+
+  it("dispatches ui/notifications/host-context-changed with params as-is", () => {
+    const child = makeWindow();
+    const parent = makeWindow();
+    child.parent = parent;
+    parent.postMessage = (msg) => { if (msg.method === "ui/initialize") child.deliver({ jsonrpc: "2.0", id: msg.id, result: { protocolVersion: "x", _meta: { "ai.agentgem/host": { tools: [] } } } }, parent); };
+    runShim(child);
+
+    const received: unknown[] = [];
+    child.agentgemApp.onNotification("ui/notifications/host-context-changed", (p) => received.push(p));
+    child.deliver({ jsonrpc: "2.0", method: "ui/notifications/host-context-changed", params: { theme: "dark" } }, parent);
+
+    expect(received).toEqual([{ theme: "dark" }]);
+  });
+
   describe("callTool ready-gating", () => {
     afterEach(() => {
       vi.useRealTimers();
