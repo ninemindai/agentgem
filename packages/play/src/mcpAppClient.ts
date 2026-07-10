@@ -76,7 +76,7 @@ export function mcpAppClient(): string {
       queue = [];
       return;
     }
-    if (d.id != null && pending[d.id]) {  // a tools/call reply, matched by id
+    if (d.method == null && d.id != null && pending[d.id]) {  // a tools/call reply: responses never carry a method
       var p = pending[d.id]; delete pending[d.id];
       if (d.error) p.reject(new Error((d.error && d.error.message) || "tool error"));
       else p.resolve(d.result);

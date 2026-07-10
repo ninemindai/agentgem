@@ -5,9 +5,9 @@
 //
 // The shim-side half (evaluating the actual emitted shim source in a real jsdom window and proving it
 // agrees with the host on `_meta` shapes for tool-result unwrapping + resource-teardown) has moved to
-// the CI-gated root test src/play/__tests__/wireShim.test.ts — it depends only on @agentgem/play's
-// `mcpAppClient` + jsdom, not on this package's `createUiHost`, and packages/console tests are not
-// collected by root `pnpm test`.
+// the CI-gated root tests src/play/__tests__/mcpAppClient.test.ts, shimV2.frozen.test.ts, and
+// shimV2.wire.test.ts — they depend only on @agentgem/play's `mcpAppClient` + jsdom, not on this
+// package's `createUiHost`, and packages/console tests are not collected by root `pnpm test`.
 import { describe, it, expect } from "vitest";
 import { createUiHost, type UiHostDeps } from "../mcpUiHost.js";
 
