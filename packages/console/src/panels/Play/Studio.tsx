@@ -171,7 +171,7 @@ export function Studio({
     try {
       const cur = await playMiniappRoute.call(makeClient(apiBase), { query: { name } });
       const res = await playSaveRoute.call(makeClient(apiBase), { body: { name, html: cur.html, meta: {
-        title: cur.meta.title, genre: cur.meta.genre as "replay" | "skill-run" | "project-fun",
+        title: cur.meta.title, genre: cur.meta.genre as "replay" | "skill-run" | "project-fun" | "session-heatmap",
         createdFrom: cur.meta.createdFrom, engineVersion: cur.meta.engineVersion,
         ...(cur.meta.needs ? { needs: cur.meta.needs } : {}),
       } } });
