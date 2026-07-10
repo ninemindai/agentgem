@@ -13,7 +13,8 @@ import { writeGemArchive, writeArchiveDir } from "@agentgem/archive";
 import { gameGate } from "./gameGate.js";
 import { assertPortable } from "./portability.js";
 import { ensureRepo, commitWithLock } from "./git.js";
-import { migrateMiniappHtml, type MigrateOutcome } from "./migrate.js";
+import { migrateMiniappHtml, ensureClientShim, type MigrateOutcome } from "./migrate.js";
+import { MCP_CLIENT_MARKER } from "./mcpAppClient.js";
 import { reconcileNeeds, deriveNeeds, hasDynamicToolCall } from "./capabilityScan.js";
 
 export interface MiniappMeta {
@@ -96,13 +97,26 @@ function writeGameGem(name: string, html: string, meta: MiniappMeta): void {
 export async function saveMiniapp(input: SaveMiniappInput): Promise<SaveMiniappResult> {
   const dir = miniappDir(input.name);             // validates the name (throws on bad) + jails the path
   const safe = input.name;
-  const gate = await gameGate(input.html);
+
+  // A stored bundle must carry its TRANSPORT. Every scaffold ships the shim now, but the studio agent
+  // regenerates the document wholesale and drops whatever <head> held — so html that calls
+  // `window.agentgemApp` still arrives here with nothing that defines it. Normalize before anything reads
+  // the bytes, so the gate, the scan, the stored file and the dual-written gem all see the same document
+  // the player will run.
+  //
+  // ensureClientShim, NOT migrateMiniappHtml: the full codemod also rewrites the old bridge, and that
+  // path INJECTS a `callTool("agentgem_get_session_data")` — a capability the caller never declared.
+  // Widening a grant must stay an authored act, so the save path only ever adds transport. Migrating old
+  // html is migrateAllMiniapps's job, where the derived declaration is written alongside it.
+  const html = ensureClientShim(input.html);
+
+  const gate = await gameGate(html);
   if (!gate.ok) throw new Error(`miniapp failed the gate: ${gate.failures.join("; ")}`);
 
   // The reconciler below reads the SOURCE, so a tool name it cannot see is a capability it prunes — and
   // the call then fails in a viewer's browser with -32601. MINIAPP_BUILDER_BRIEF requires literal names;
   // enforce it here, where the failure is actionable, instead of leaving it to blow up at play time.
-  if (hasDynamicToolCall(input.html)) {
+  if (hasDynamicToolCall(html)) {
     throw new Error(`miniapp passes a non-literal tool name to callTool(...) — pass the name as a literal string, e.g. callTool("${CAP_TOOL["local-project-access"]}")`);
   }
 
@@ -111,7 +125,7 @@ export async function saveMiniapp(input: SaveMiniappInput): Promise<SaveMiniappR
   // the agent self-repair from the failure string, exactly as it does for a gate failure). Declaring a
   // tool nothing calls NARROWS to nothing — always safe — so prune it, but never silently. This runs
   // BEFORE assertPortable so a pruned phantom `session-data` no longer demands a baked fallback.
-  const rec = reconcileNeeds(input.html, input.meta.needs);
+  const rec = reconcileNeeds(html, input.meta.needs);
   if (rec.missing.length) {
     const detail = rec.missing.map((c) => `${CAP_TOOL[c]} (declare "${c}")`).join("; ");
     throw new Error(`miniapp calls a host tool it does not declare: ${detail} — add it to meta.json "needs"`);
@@ -119,16 +133,26 @@ export async function saveMiniapp(input: SaveMiniappInput): Promise<SaveMiniappR
   const meta: MiniappMeta = { ...input.meta };
   if (rec.needs.length) meta.needs = rec.needs; else delete meta.needs;
 
-  const port = assertPortable(input.html, meta.needs);
+  // `needs` is what the HOST grants: the Runner only attaches a host when it is non-empty, and answers
+  // ui/initialize with the tool list it selects. So a bundle that declares needs and carries no shim is
+  // one the host talks to and that cannot answer — it degrades in silence to its baked data. The
+  // normalization above makes this unreachable for any bundle that names `window.agentgemApp`; what is
+  // left is the bundle that trips deriveNeeds on a bare tool-name string without ever holding a bridge
+  // reference. That would store an over-granting miniapp, so fail loudly rather than ship it mute.
+  if (meta.needs?.length && !html.includes(MCP_CLIENT_MARKER)) {
+    throw new Error(`miniapp declares capabilities (${meta.needs.join(", ")}) but never references window.agentgemApp — it cannot reach the host`);
+  }
+
+  const port = assertPortable(html, meta.needs);
   if (!port.ok) throw new Error(`miniapp is not portable: ${port.failures.join("; ")}`);
   const root = miniappsRoot();
   await ensureRepo(root);                          // the registry is a git repo
   mkdirSync(dir, { recursive: true });
-  writeFileSync(miniappHtmlPath(safe), input.html);  // legacy miniapps keep <name>.html; new ones index.html
+  writeFileSync(miniappHtmlPath(safe), html);      // legacy miniapps keep <name>.html; new ones index.html
   writeFileSync(join(dir, "meta.json"), JSON.stringify(meta, null, 2));
   const note = rec.pruned.length ? ` (pruned unused capability: ${rec.pruned.join(", ")})` : "";
   const commit = await commitWithLock(root, `save miniapp ${safe}${note}`);
-  writeGameGem(safe, input.html, meta);            // the PRUNED meta — a phantom cap must not reach the gem
+  writeGameGem(safe, html, meta);                  // the PRUNED meta — a phantom cap must not reach the gem
   return { name: safe, commit, prunedNeeds: rec.pruned };
 }
 
@@ -256,11 +280,13 @@ export async function migrateAllMiniapps(): Promise<{ name: string; outcome: Mig
     const meta: MiniappMeta = {
       ...raw.meta,
       engineVersion: `${raw.meta.engineVersion}+mcp`,
-      // The codemod above INJECTED `callTool("agentgem_get_session_data")` into this html, so the bundle
-      // now uses a capability the stored meta may not declare — and saveMiniapp rightly throws on a
-      // called-but-undeclared tool. The codemod authored the code, so it authors the declaration. Safe
-      // ONLY because the sole injected capability is `session-data`, which is auto-approved (AUTO_CAPS);
-      // a codemod that injects a consent-gated capability must NOT auto-declare it.
+      // On the old-bridge rewrite the codemod INJECTS `callTool("agentgem_get_session_data")`, so the
+      // bundle now uses a capability the stored meta may not declare — and saveMiniapp rightly throws on
+      // a called-but-undeclared tool. The codemod authored the code, so it authors the declaration. Safe
+      // ONLY because the sole capability it ever injects is `session-data`, which is auto-approved
+      // (AUTO_CAPS); a codemod that injects a consent-gated capability must NOT auto-declare it. The
+      // shim-injection path adds TRANSPORT and no capability at all, so deriveNeeds simply re-reads the
+      // calls the bundle already made — it cannot widen a grant here either.
       needs: deriveNeeds(html),
     };
     try {

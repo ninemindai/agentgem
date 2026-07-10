@@ -8,7 +8,7 @@ export { git, ensureRepo, commitAll, commitWithLock, setRemote, push } from "./g
 export { miniappsRoot, miniappDir, miniappHtmlPath, MINIAPP_HTML, claimMiniappDir, saveMiniapp, deleteMiniapp, checkpointMiniapp, readMiniapp, listMiniapps, migrateAllMiniapps, type MiniappMeta, type SaveMiniappInput, type SaveMiniappResult } from "./miniapps.js";
 export { MCP_APP_MIME, uiUri, mcpResourceFor, mcpToolFor, mcpAppFor, type McpUiCsp, type AgentGemGameMeta, type McpUiResource, type McpUiTool, type McpApp } from "./mcpApp.js";
 export { mcpAppClient, MCP_CLIENT_MARKER } from "./mcpAppClient.js";
-export { migrateMiniappHtml, type MigrateOutcome } from "./migrate.js";
+export { migrateMiniappHtml, ensureClientShim, type MigrateOutcome } from "./migrate.js";
 export { studioCwd, studioBrief, seedStudio, importStudio, blankStudio, slugify } from "./studio.js";
 export { MINIAPP_BUILDER_BRIEF } from "./builderBrief.js";
 export { redactForBake } from "./redact.js";
