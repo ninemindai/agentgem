@@ -108,4 +108,19 @@ describe("betterAuth factory", () => {
     const session = await auth.api.getSession({ headers: new Headers({ authorization: `Bearer ${token}` }) });
     expect((session as { orgs?: unknown })?.orgs).toEqual([]);
   });
+
+  it("registers Google iff both Google creds are supplied; GitHub is unaffected", async () => {
+    const db = await makeTestDb();
+    const withGoogle = makeAuth({ db, ...opts, googleClientId: "gid", googleClientSecret: "gsec" });
+    const provWith = Object.keys((withGoogle.options.socialProviders ?? {}) as Record<string, unknown>).sort();
+    expect(provWith).toEqual(["github", "google"]);
+
+    const noGoogle = makeAuth({ db, ...opts });
+    const provNone = Object.keys((noGoogle.options.socialProviders ?? {}) as Record<string, unknown>);
+    expect(provNone).toEqual(["github"]);
+
+    // one cred without the other must NOT register google (fail closed on partial config)
+    const partial = makeAuth({ db, ...opts, googleClientId: "gid" });
+    expect(Object.keys((partial.options.socialProviders ?? {}) as Record<string, unknown>)).toEqual(["github"]);
+  });
 });

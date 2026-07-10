@@ -213,6 +213,8 @@ export async function createApp(port: number): Promise<RestApplication> {
   // AGENTGEM_WEB_ORIGINS. Enabled only when the OAuth secret is set.
   const ghClientId = process.env.AGENTGEM_GITHUB_CLIENT_ID;
   const ghSecret = process.env.AGENTGEM_GITHUB_CLIENT_SECRET;
+  const googleClientId = process.env.AGENTGEM_GOOGLE_CLIENT_ID;
+  const googleClientSecret = process.env.AGENTGEM_GOOGLE_CLIENT_SECRET;
   const webOrigins = (process.env.AGENTGEM_WEB_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   // Hoisted so the route installers below (stars/reviews/catalog/groups/usage/orgsApi/registry) can
   // reuse the SAME instance resolveSession(auth, headers) resolves sessions through (Plan 1b) —
@@ -227,6 +229,8 @@ export async function createApp(port: number): Promise<RestApplication> {
       baseURL: `${process.env.AGENTGEM_PUBLIC_BASE ?? "https://api.agentgem.ai"}/api/auth`,
       githubClientId: ghClientId,
       githubClientSecret: ghSecret,
+      googleClientId,
+      googleClientSecret,
       webOrigins,
       cookieDomain: process.env.AGENTGEM_SESSION_COOKIE_DOMAIN,
     });
