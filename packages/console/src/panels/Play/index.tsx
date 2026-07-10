@@ -1,7 +1,7 @@
 // packages/console/src/panels/Play/index.tsx
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { defineConsolePage } from "../../contract.js";
-import { discoveredAgentsFromSessions, mergeRunnableAndDiscoveredAgents, preferredAgentId, type DiscoveredPlayAgent, type PlayAgent } from "./AgentSelector.js";
+import { discoveredAgentsFromSessions, mergeRunnableAndDiscoveredAgents, preferredAgentId, lastAgentId, rememberAgentId, type DiscoveredPlayAgent, type PlayAgent } from "./AgentSelector.js";
 import { fetchSessions } from "../Watch/watchStream.js";
 import { Arcade } from "./Arcade.js";
 import { Composer } from "./Composer.js";
@@ -57,9 +57,16 @@ export function Play({ apiBase }: { apiBase: string }) {
   useEffect(() => {
     if (selectorAgents === null) return;
     if (agentId && selectorAgents.some((a) => a.id === agentId && a.available)) return;
-    const next = preferredAgentId(selectorAgents);
+    const next = preferredAgentId(selectorAgents, lastAgentId());
     if (next !== agentId) setAgentId(next);
   }, [agentId, selectorAgents]);
+
+  // Only an explicit pick is remembered. Persisting the derived default too would pin
+  // whichever agent happened to be installed first, and outlive it.
+  const chooseAgent = useCallback((id: string) => {
+    setAgentId(id);
+    rememberAgentId(id);
+  }, []);
 
   return (
     <section className="analyze">
@@ -71,8 +78,8 @@ export function Play({ apiBase }: { apiBase: string }) {
       )}
       {view.kind === "arcade" && <Arcade apiBase={apiBase} onOpen={(name) => setView({ kind: "studio", name })} />}
       {/* keyed on the seed so a fresh deep-link remounts the Composer — its prefill is useState-initial. */}
-      {view.kind === "composer" && <Composer key={`${view.title ?? ""}|${view.prompt ?? ""}`} apiBase={apiBase} agents={selectorAgents} agentId={agentId} onAgentIdChange={setAgentId} initialTitle={view.title} initialPrompt={view.prompt} onCreated={(name, seedPrompt) => setView({ kind: "studio", name, seedPrompt })} />}
-      {view.kind === "studio" && <Studio apiBase={apiBase} name={view.name} seedPrompt={view.seedPrompt} agents={selectorAgents} agentId={agentId} onAgentIdChange={setAgentId} onBack={() => setView({ kind: "arcade" })} />}
+      {view.kind === "composer" && <Composer key={`${view.title ?? ""}|${view.prompt ?? ""}`} apiBase={apiBase} agents={selectorAgents} agentId={agentId} onAgentIdChange={chooseAgent} initialTitle={view.title} initialPrompt={view.prompt} onCreated={(name, seedPrompt) => setView({ kind: "studio", name, seedPrompt })} />}
+      {view.kind === "studio" && <Studio apiBase={apiBase} name={view.name} seedPrompt={view.seedPrompt} agents={selectorAgents} agentId={agentId} onAgentIdChange={chooseAgent} onBack={() => setView({ kind: "arcade" })} />}
     </section>
   );
 }

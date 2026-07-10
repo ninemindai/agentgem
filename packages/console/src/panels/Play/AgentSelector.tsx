@@ -71,10 +71,28 @@ export function mergeRunnableAndDiscoveredAgents(runnable: PlayAgent[], discover
   });
 }
 
-export function preferredAgentId(agents: PlayAgent[]): string {
-  return agents.find((a) => a.available && a.seenInSessions && a.id === "codex")?.id
-    ?? agents.find((a) => a.available && a.seenInSessions)?.id
-    ?? agents.find((a) => a.available && a.id === "codex")?.id
+// Which agent you picked last time you authored a miniapp. That is a better signal of
+// intent than either list order or a transcript count, which measures all your other work.
+const LAST_AGENT_KEY = "agentgem:play:agent";
+
+export function lastAgentId(): string | null {
+  try { return localStorage.getItem(LAST_AGENT_KEY) || null; } catch { return null; }
+}
+export function rememberAgentId(id: string): void {
+  try { localStorage.setItem(LAST_AGENT_KEY, id); } catch { /* private mode / disabled storage */ }
+}
+
+/**
+ * The agent to select when the user hasn't chosen one.
+ *
+ * `agents` arrives in display order from mergeRunnableAndDiscoveredAgents, and this walks
+ * that same order — so the default is always the option the dropdown shows first. Anything
+ * that ranks agents belongs in the sort, not here, or the two drift apart (they did: the
+ * list led with Claude Code while this hardcoded Codex, so the selected item was never the
+ * first item).
+ */
+export function preferredAgentId(agents: PlayAgent[], lastUsed?: string | null): string {
+  return agents.find((a) => a.available && a.id === lastUsed)?.id
     ?? agents.find((a) => a.available)?.id
     ?? "";
 }
