@@ -121,3 +121,20 @@ describe("App link interceptor", () => {
     expect(screen.getByRole("link", { name: "octocat" }).getAttribute("href")).toBe("/@octocat");
   });
 });
+
+describe("game route", () => {
+  it("routes /games/@scope/name to the Play page", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.includes("/game-meta")) return res({ title: "Tetris", genre: "project-fun", version: "2.0.0" });
+      if (url.includes("/game-html")) return res({ html: "<!doctype html><title>t</title>" });
+      return res([]);
+    }));
+    window.history.pushState({}, "", "/games/@acme/tetris");
+
+    render(<App />);
+
+    // Play renders "Loading <title>…" once game-meta lands, then swaps in the sealed iframe.
+    expect(await screen.findByText(/Loading/i)).toBeTruthy();
+    await waitFor(() => expect(document.querySelector("iframe[sandbox]")).not.toBeNull());
+  });
+});
