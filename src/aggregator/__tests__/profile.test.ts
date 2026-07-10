@@ -31,6 +31,23 @@ async function install(db: never, gemKey: string, n: number) {
 }
 
 describe("buildProfile", () => {
+  it("a login-less (Google) account gets NO GitHub URL — its handle is not a GitHub username", async () => {
+    const db = await makeTestDb();
+    const id = randomUUID();
+    // A non-GitHub account: NULL login, provider 'google', with a claimed handle. The handle
+    // ("raymondg") is a chosen name, NOT a GitHub username — a github.com/<handle> link would
+    // imply an identity the user never proved.
+    await db.insert(accounts).values({ id, provider: "google", providerAccountId: "g-" + id, login: null });
+    await (db as never as { execute: (q: unknown) => Promise<unknown> }).execute(
+      sql`insert into "user" (id, email, email_verified, handle) values (${id}, ${id + "@e.com"}, false, 'raymondg')`,
+    );
+    const p = await buildProfile(db, "raymondg");
+    expect(p).not.toBeNull();
+    expect(p!.login).toBe("raymondg");   // canonical name = the claimed handle
+    expect(p!.githubUrl).toBeNull();     // NO GitHub link for a non-GitHub account
+    expect(p!.verified).toBe(false);
+  });
+
   it("assembles account + gems + stars, sorted by stars desc, totalStars summed", async () => {
     const db = await makeTestDb();
     const id = await ghUser(db as never, "octocat", { avatarUrl: "https://avatars/octocat" });

@@ -65,7 +65,7 @@ export interface Profile {
   login: string;
   avatarUrl: string | null;
   verified: boolean;
-  githubUrl: string;
+  githubUrl: string | null;
   totalStars: number;
   gems: ProfileGem[];
   reviews: ProfileReview[];
