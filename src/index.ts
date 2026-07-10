@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 // src/index.ts
 import { config as loadEnv } from "dotenv";
-import { credentialsEnvPath, closeSharedIndex, readRecents } from "@agentgem/capture";
+import { credentialsEnvPath, closeSharedIndex } from "@agentgem/capture";
 // Load env before anything reads it: cwd .env (a dev override) layered over the
 // persisted server credentials in ~/.agentgem/.env. `override` defaults to false,
 // so a value already set in the cwd .env wins. `quiet` silences dotenv's banner/
@@ -35,6 +35,7 @@ import { streamWatchHygiene } from "./watchHygiene.js";
 import { streamWatchDashboard } from "./watchDashboard.js";
 import { listActiveSessions } from "./watchSessions.js";
 import { registerChatRoutes, makeChatConnectFn, installAgentFn, goldmineMcpServers, resolveChatCwd } from "./goldmine/chatRoutes.js";
+import { resolveAllowedProjectRoot } from "./goldmine/projectRoots.js";
 import { collectBehaviorFindings } from "./goldmine/behaviorFindings.js";
 import { RecallIndex } from "@agentgem/recall";
 import { defaultRecallDbPath, serverFunnelDeps } from "./goldmine/recall.js";
@@ -44,8 +45,7 @@ import { miniappDir, studioBrief, checkpointMiniapp } from "@agentgem/play";
 import { availableAgents, adapterRuntimeCtx, resolveLaunch, npmAdapterInstaller, createLogger } from "@agentgem/base";
 import { collectScorecard, defaultScorecardDeps } from "./gem/scorecard.js";
 import { buildGoldmineBrief, type GoldmineBriefInput } from "@agentgem/insight";
-import { agentgemHome, resolveProject, resolveDirs } from "@agentgem/model";
-import { discoverProjects } from "@agentgem/testbed";
+import { agentgemHome } from "@agentgem/model";
 import { join as pathJoin } from "node:path";
 import { mkdirSync } from "node:fs";
 import { originGuard } from "./originGuard.js";
@@ -392,16 +392,9 @@ export async function createApp(port: number): Promise<RestApplication> {
   {
     const chatCwd = pathJoin(agentgemHome(), ".agentgem", "chat");
     try { mkdirSync(chatCwd, { recursive: true }); } catch { /* already exists */ }
-    // Allow-list of honorable project roots = discovered ∪ recent, canonicalized. Recomputed
-    // per open()/launch (a disk scan, but each runs once per session start).
-    const resolveProjectCwd = (root: string): string | null => {
-      const allow = new Set(
-        [...discoverProjects(resolveDirs(undefined)).map((p) => p.path),
-         ...readRecents(agentgemHome()).map((r) => r.path)].map(resolveProject),
-      );
-      const canon = resolveProject(root);
-      return allow.has(canon) ? canon : null;
-    };
+    // Allow-list of honorable project roots = discovered ∪ recent, canonicalized.
+    // Shared with the goldmine MCP server so both validate roots identically.
+    const resolveProjectCwd = resolveAllowedProjectRoot;
     const adapterCtx = adapterRuntimeCtx();
     const chatConnect = makeChatConnectFn((d) => resolveLaunch(d, adapterCtx) ?? d);
     const chatManager = new ChatManager({
