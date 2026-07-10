@@ -19,7 +19,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import type { AppDb } from "./schema.js";
-import { accounts, groups, groupMembers } from "./schema.js";
+import { accounts, groups, groupMembers, user } from "./schema.js";
 
 export type GroupKind = "federated" | "native";
 export type GroupRole = "admin" | "member";
@@ -73,14 +73,18 @@ export async function listGroupsForAccount(db: AppDb, accountId: string): Promis
 }
 
 export async function listGroupMembers(db: AppDb, groupId: string): Promise<GroupMember[]> {
+  // login can be NULL (Task 3) — fall back to "user".handle then "user".name. Left join: not
+  // every accounts row has a same-id "user" row, so an inner join would drop the member instead
+  // of falling all the way to ''.
   const rows = await db
     .select({
-      accountId: accounts.id, login: accounts.login, avatarUrl: accounts.avatarUrl,
+      accountId: accounts.id, login: sql<string>`coalesce(${accounts.login}, ${user.handle}, ${user.name}, '')`, avatarUrl: accounts.avatarUrl,
       viaSync: groupMembers.viaSync, viaInvite: groupMembers.viaInvite,
       syncRole: groupMembers.syncRole, inviteRole: groupMembers.inviteRole,
     })
     .from(groupMembers)
     .innerJoin(accounts, eq(groupMembers.accountId, accounts.id))
+    .leftJoin(user, sql`${user.id} = ${accounts.id}::text`)
     .where(eq(groupMembers.groupId, groupId));
   return rows.map((r) => ({
     accountId: r.accountId, login: r.login, avatarUrl: r.avatarUrl,

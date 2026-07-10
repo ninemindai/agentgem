@@ -5,7 +5,7 @@
 // the org catalog uses; the caller (src/usage/install.ts) enforces accountOwnsScope before reading.
 import { and, eq, gte, sql } from "drizzle-orm";
 import type { AppDb } from "./schema.js";
-import { usageDays, usageDayModels, accounts, accountScopes } from "./schema.js";
+import { usageDays, usageDayModels, accounts, accountScopes, user } from "./schema.js";
 
 /** One UTC day of local agent usage in one repo-owner scope, as scanned from the machine's
  *  transcripts. `scope` = lowercased owner of the repo the sessions ran in ("" = unattributed) —
@@ -261,8 +261,12 @@ export async function buildOrgUsage(
   let daily: OrgUsageDay[];
   if (!filtered) {
     const [memberRows, dailyRows] = await Promise.all([
+      // login can be NULL (Task 3) — fall back to "user".handle then "user".name. Left join: not
+      // every accounts row has a same-id "user" row, so an inner join would drop the member
+      // instead of falling all the way to ''. user.id joins the group by accounts.id so its
+      // functional dependency (handle/name depend on user's own primary key) satisfies Postgres.
       db.select({
-        login: accounts.login,
+        login: sql<string>`coalesce(${accounts.login}, ${user.handle}, ${user.name}, '')`,
         avatarUrl: accounts.avatarUrl,
         sessions: sql<number>`sum(${usageDays.sessions})::int`,
         msgs: sql<number>`sum(${usageDays.msgs})::int`,
@@ -276,8 +280,9 @@ export async function buildOrgUsage(
         .from(usageDays)
         .innerJoin(accounts, eq(usageDays.accountId, accounts.id))
         .innerJoin(accountScopes, eq(accountScopes.accountId, accounts.id))
+        .leftJoin(user, sql`${user.id} = ${accounts.id}::text`)
         .where(boundary(usageDays))
-        .groupBy(accounts.id, accounts.login, accounts.avatarUrl),
+        .groupBy(accounts.id, accounts.login, accounts.avatarUrl, user.id, user.handle, user.name),
       db.select({
         date: usageDays.date,
         sessions: sql<number>`sum(${usageDays.sessions})::int`,
@@ -305,8 +310,9 @@ export async function buildOrgUsage(
     // Agent/model filter active: the day rollups have no model dimension, so members and daily
     // both re-aggregate from the slices. Only sessions + tokens exist here; the rest is zeroed.
     const [memberRows, dailyRows] = await Promise.all([
+      // Same NULL-login fallback + left join as the unfiltered branch above.
       db.select({
-        login: accounts.login,
+        login: sql<string>`coalesce(${accounts.login}, ${user.handle}, ${user.name}, '')`,
         avatarUrl: accounts.avatarUrl,
         sessions: sql<number>`sum(${usageDayModels.sessions})::int`,
         tokens: sql<number>`sum(${usageDayModels.tokens})::bigint`,
@@ -316,8 +322,9 @@ export async function buildOrgUsage(
         .from(usageDayModels)
         .innerJoin(accounts, eq(usageDayModels.accountId, accounts.id))
         .innerJoin(accountScopes, eq(accountScopes.accountId, usageDayModels.accountId))
+        .leftJoin(user, sql`${user.id} = ${accounts.id}::text`)
         .where(sliceCond)
-        .groupBy(accounts.id, accounts.login, accounts.avatarUrl),
+        .groupBy(accounts.id, accounts.login, accounts.avatarUrl, user.id, user.handle, user.name),
       db.select({
         date: usageDayModels.date,
         sessions: sql<number>`sum(${usageDayModels.sessions})::int`,
