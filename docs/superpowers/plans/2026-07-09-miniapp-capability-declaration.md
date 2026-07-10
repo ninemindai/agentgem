@@ -451,16 +451,44 @@ git commit -m "feat(play): saveMiniapp throws on undeclared tool calls, prunes u
 
 ### Task 4: Guard the migration and checkpoint paths
 
-`migrateAllMiniapps` calls `saveMiniapp`, so it inherits the reconciliation. A symmetric equality check would have made migration **throw** on exactly the two over-declared miniapps that exist on disk today. Prune makes it clean them instead. `checkpointMiniapp` must reconcile nothing — it is the durability path and must never fail.
+`migrateAllMiniapps` calls `saveMiniapp`, so it inherits the reconciliation. A symmetric equality check would have made migration **throw** on the two over-declared miniapps that exist on disk today. Prune makes it clean them instead. `checkpointMiniapp` must reconcile nothing — it is the durability path and must never fail.
+
+**But migration also needs a source change**, discovered while implementing Task 3. `migrate.ts` *injects* code into old HTML:
+
+```js
+'... p.toolName === "agentgem_get_session_data" ...'
+'function requestData() { ... callTool("agentgem_get_session_data") ... }'
+```
+
+So a migrated bundle **uses** `session-data`, while the raw `meta.needs` it was saved with never declared it → `saveMiniapp` throws `missing`, and `migrateAllMiniapps` dies. This is correct behaviour from `saveMiniapp`: the codemod is a code *author*, so it must author the declaration too. `migrateAllMiniapps` therefore passes `needs: deriveNeeds(html)` for the html it just produced.
+
+This is safe **only** because the sole capability the codemod injects is `session-data`, which `consent.ts`'s `AUTO_CAPS` marks auto-approved. If a future codemod injects a consent-gated capability, auto-declaring it would silently widen a permission and this approach must be revisited. Say so in a comment.
 
 **Files:**
+- Modify: `packages/play/src/miniapps.ts` (`migrateAllMiniapps` meta construction only)
 - Test: `src/play/__tests__/migrateMiniapps.test.ts` (append)
 - Test: `src/play/__tests__/checkpoint.test.ts` (append)
-- No source changes expected. If a test fails, the bug is in Task 3.
 
 **Interfaces:**
-- Consumes: `saveMiniapp` / `SaveMiniappResult` (Task 3), `checkpointMiniapp`, `migrateAllMiniapps`.
-- Produces: nothing. Regression guards only.
+- Consumes: `saveMiniapp` / `SaveMiniappResult` (Task 3), `deriveNeeds` (Task 2), `checkpointMiniapp`, `migrateAllMiniapps`.
+- Produces: nothing new. Regression guards plus one fix.
+
+**The fix.** In `migrateAllMiniapps`, replace the meta construction:
+
+```ts
+    const meta: MiniappMeta = {
+      ...raw.meta,
+      engineVersion: `${raw.meta.engineVersion}+mcp`,
+      // The codemod above INJECTED `callTool("agentgem_get_session_data")` into this html, so the bundle
+      // now uses a capability the stored meta may not declare — and saveMiniapp rightly throws on a
+      // called-but-undeclared tool. The codemod authored the code, so it authors the declaration. Safe
+      // only because the sole injected capability is `session-data`, which is auto-approved (AUTO_CAPS);
+      // a codemod that injects a consent-gated capability must NOT auto-declare it.
+      needs: deriveNeeds(html),
+    };
+```
+
+and add `deriveNeeds` to the existing `./capabilityScan.js` import. `saveMiniapp` still prunes anything the html does not use, so an empty `deriveNeeds` result correctly drops the `needs` key.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -507,25 +535,26 @@ it("checkpoint never reconciles needs — it must not rewrite meta or fail", asy
 
 Ensure that file imports the same helpers plus `checkpointMiniapp`.
 
-- [ ] **Step 2: Run tests to verify they fail (or pass, revealing the truth)**
+- [ ] **Step 2: Run tests to verify the current state**
 
-Run: `pnpm build && pnpm exec vitest run src/play/__tests__/migrateMiniapps.test.ts src/play/__tests__/checkpoint.test.ts`
-Expected: both PASS if Task 3 is correct. If the migrate test throws, `saveMiniapp` is erroring on `extra` instead of pruning — fix Task 3, not the test. If the checkpoint test shows `needs: undefined`, `checkpointMiniapp` is wrongly routing through `saveMiniapp` — fix Task 3.
+Run: `pnpm exec tsc -b && pnpm exec vitest run dist/play/__tests__/migrateMiniapps.test.js dist/play/__tests__/checkpoint.test.js`
 
-- [ ] **Step 3: No implementation needed**
+Expected, before your fix: `migrateMiniapps.test.js` **FAILS** — including its pre-existing `rewrites the stored file, bumps engineVersion` test — with `miniapp calls a host tool it does not declare: agentgem_get_session_data (declare "session-data")`. That is the bug this task fixes; it is real, not a bad test. The `checkpoint` tests should already pass (`checkpointMiniapp` must not reconcile).
 
-These guard behavior established in Task 3. Skip to verification.
+- [ ] **Step 3: Apply the `migrateAllMiniapps` fix**
+
+Make the meta-construction change shown above, and add `deriveNeeds` to the `./capabilityScan.js` import in `packages/play/src/miniapps.ts`. Change nothing else — `checkpointMiniapp` in particular must remain untouched.
 
 - [ ] **Step 4: Run the whole play suite**
 
-Run: `pnpm build && pnpm exec vitest run src/play/`
-Expected: PASS, all files.
+Run: `pnpm exec tsc -b && pnpm exec vitest run dist/play/`
+Expected: PASS, all files — including the previously-failing `migrateMiniapps` test.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/play/__tests__/migrateMiniapps.test.ts src/play/__tests__/checkpoint.test.ts
-git commit -m "test(play): migration prunes over-declared needs; checkpoint leaves meta alone"
+git add packages/play/src/miniapps.ts src/play/__tests__/migrateMiniapps.test.ts src/play/__tests__/checkpoint.test.ts
+git commit -m "fix(play): the migration codemod declares the capability it injects"
 ```
 
 ---
