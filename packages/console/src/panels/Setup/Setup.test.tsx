@@ -5,8 +5,12 @@ import { Setup } from "./index.js";
 const res = (body: unknown) =>
   ({ ok: true, status: 200, text: async () => JSON.stringify(body) }) as unknown as Response;
 
+// Under ?body=defer, top-level global artifacts (skills/subagents/instructions) carry an
+// `id` and no `content` — the modal must fetch the body lazily by id. Project-layer artifacts
+// (see the "projects" fixture below) have no entity-address scheme yet, so they keep inline
+// `content` and no `id`.
 const inv = {
-  skills: [{ type: "skill", name: "brainstorming", source: "superpowers", description: "explore intent", content: "# Brainstorming\nfull skill body" }],
+  skills: [{ type: "skill", name: "brainstorming", source: "superpowers", description: "explore intent", id: "workspace/skills/superpowers/brainstorming" }],
   subagents: [{ type: "subagent", name: "code-reviewer", source: "pr-review-toolkit", content: "reviewer agent body" }],
   mcpServers: [{ type: "mcpServer", name: "github", transport: "http", config: { url: "x" } }],
   hooks: [{ type: "hook", name: "onstop", event: "Stop", config: {} }],
@@ -66,11 +70,63 @@ describe("Setup", () => {
 
   it("opens the viewer for an artifact addressed by #/setup/<tab>?a=<name>", async () => {
     window.location.hash = "#/setup/skills?a=brainstorming";
-    vi.stubGlobal("fetch", vi.fn(async () => res(inv)));
+    // brainstorming is deferred (id, no content) — the modal fetches its body by id.
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+      const u = String(url);
+      if (u.includes("/api/artifact/content"))
+        return res({ id: "workspace/skills/superpowers/brainstorming", content: "full skill body" });
+      return res(inv);
+    }));
     render(<Setup apiBase="" />);
     expect(await screen.findByRole("dialog")).toBeTruthy();
-    expect(screen.getByText(/full skill body/)).toBeTruthy(); // rendered via ContentView
+    expect(await screen.findByText(/full skill body/)).toBeTruthy(); // rendered via ContentView
     expect(screen.getByRole("button", { name: /copy link/i })).toBeTruthy();
+  });
+
+  it("lazily loads a deferred global artifact body when the modal opens", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+      const u = String(url);
+      if (u.includes("/api/artifact/content"))
+        return res({ id: "workspace/skills/superpowers/brainstorming", content: "LAZY-SETUP-BODY" });
+      return res(inv);
+    }));
+    render(<Setup apiBase="" />);
+    fireEvent.click(await screen.findByText("brainstorming"));
+    expect(await screen.findByText(/LAZY-SETUP-BODY/)).toBeTruthy();
+  });
+
+  it("renders a project artifact's inline body without fetching (it has no id)", async () => {
+    const invWithProject = {
+      ...inv,
+      projects: [{
+        root: "/p", name: "p",
+        skills: [{ type: "skill", name: "proj-skill", source: "project", content: "PROJECT-BODY" }],
+        mcpServers: [], instructions: [], hooks: [], subagents: [],
+      }],
+    };
+    const fetchSpy = vi.fn(async (url: string | URL) => {
+      const u = String(url);
+      if (u.includes("/api/testbed/recents"))
+        return res({ recents: [{ path: "/p", flavor: "x", name: "p", lastUsed: "2026-01-01", exists: true }] });
+      if (u.includes("/api/testbed/projects")) return res({ projects: [] });
+      if (u.includes("/api/inventory")) {
+        const raw = new URL(u, "http://x").searchParams.get("projects");
+        let roots: unknown = null;
+        try { roots = raw ? JSON.parse(raw) : null; } catch { roots = null; }
+        const ok = Array.isArray(roots) && roots.includes("/p");
+        return res(ok ? invWithProject : inv);
+      }
+      throw new Error("unexpected " + u);
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+    render(<Setup apiBase="" />);
+    await screen.findByText("brainstorming");
+    fireEvent.click(screen.getByRole("button", { name: /project/i }));
+    fireEvent.click(await screen.findByText("/p"));
+    fireEvent.click(await screen.findByText("proj-skill"));
+    expect(await screen.findByText(/PROJECT-BODY/)).toBeTruthy();
+    // The project artifact has no id — the modal must render its inline content, not fetch.
+    expect(fetchSpy.mock.calls.some(([u]) => String(u).includes("/api/artifact/content"))).toBe(false);
   });
 
   it("shows config for an artifact with no content (MCP server)", async () => {
