@@ -44,9 +44,9 @@ export function App() {
   // Surface a failed sign-in (misconfigured provider, rate-limit, 5xx, network error) instead of
   // the click having zero visible effect — this is the primary login path, shared by the header
   // link and every loginUrl-triggered prompt (StarButton, review prompts, Team Pulse sign-in).
-  const signIn = () => {
+  const signIn = (provider: "github" | "google" = "github") => {
     setSignInError(null);
-    auth.signIn(window.location.href).catch((err) => setSignInError(err instanceof Error ? err.message : String(err)));
+    auth.signIn(provider, window.location.href).catch((err) => setSignInError(err instanceof Error ? err.message : String(err)));
   };
   const toggleTheme = () => {
     const next = theme === "dark" ? "light" : "dark";
@@ -79,7 +79,10 @@ export function App() {
               <button type="button" className="ex-signout" onClick={signOut}>Sign out</button>
             </>
           ) : (
-            <a className="ex-signin" href="#" onClick={(e) => { e.preventDefault(); signIn(); }}>Sign in with GitHub</a>
+            <>
+              <a className="ex-signin" href="#" onClick={(e) => { e.preventDefault(); signIn("github"); }}>Sign in with GitHub</a>
+              <a className="ex-signin" href="#" onClick={(e) => { e.preventDefault(); signIn("google"); }}>Sign in with Google</a>
+            </>
           )}
         </span>
       </header>

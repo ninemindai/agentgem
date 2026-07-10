@@ -103,9 +103,23 @@ describe("App link interceptor", () => {
       return res([]); // leaderboard / other reads
     }));
     render(<App />);
-    const link = await screen.findByRole("link", { name: /sign in/i });
+    const link = await screen.findByRole("link", { name: /sign in with github/i });
     fireEvent.click(link);
     await waitFor(() => expect(signInBody && JSON.parse(signInBody)).toMatchObject({ provider: "github" }));
+  });
+
+  it("shows a Sign in with Google link that POSTs sign-in/social with the google provider", async () => {
+    let signInBody: string | undefined;
+    vi.stubGlobal("fetch", vi.fn(async (u: string, o?: RequestInit) => {
+      if (u.includes("/api/auth/get-session")) return res(null);
+      if (u.includes("/api/auth/sign-in/social")) { signInBody = o?.body as string; return res({ url: "https://accounts.google.com/o?state=abc", redirect: true }); }
+      if (u.includes("/popular-skills")) return res({ skills: [], groups: [] });
+      return res([]);
+    }));
+    render(<App />);
+    const link = await screen.findByRole("link", { name: /sign in with google/i });
+    fireEvent.click(link);
+    await waitFor(() => expect(signInBody && JSON.parse(signInBody)).toMatchObject({ provider: "google" }));
   });
 
   it("shows the login + Sign out when authenticated", async () => {

@@ -46,7 +46,7 @@ describe("makeAuth", () => {
     }));
     const assign = vi.fn();
     vi.stubGlobal("location", { assign } as unknown as Location);
-    await makeAuth("https://app.x").signIn("https://explore.y/gems");
+    await makeAuth("https://app.x").signIn("github", "https://explore.y/gems");
     expect(url).toBe("https://app.x/api/auth/sign-in/social");
     expect(opts?.method).toBe("POST");
     expect(opts?.credentials).toBe("include");
@@ -57,21 +57,21 @@ describe("makeAuth", () => {
     vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("net"); }));
     const assign = vi.fn();
     vi.stubGlobal("location", { assign } as unknown as Location);
-    await expect(makeAuth("https://app.x").signIn("https://explore.y/gems")).rejects.toThrow("net");
+    await expect(makeAuth("https://app.x").signIn("github", "https://explore.y/gems")).rejects.toThrow("net");
     expect(assign).not.toHaveBeenCalled();
   });
   it("signIn throws and does not navigate on a non-2xx response (misconfigured provider, rate-limit, 5xx)", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => res({ error: "provider not configured" }, false, 401)));
     const assign = vi.fn();
     vi.stubGlobal("location", { assign } as unknown as Location);
-    await expect(makeAuth("https://app.x").signIn("https://explore.y/gems")).rejects.toThrow(/401/);
+    await expect(makeAuth("https://app.x").signIn("github", "https://explore.y/gems")).rejects.toThrow(/401/);
     expect(assign).not.toHaveBeenCalled();
   });
   it("signIn throws and does not navigate on a 2xx response with no url (malformed body)", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => res({ redirect: true })));
     const assign = vi.fn();
     vi.stubGlobal("location", { assign } as unknown as Location);
-    await expect(makeAuth("https://app.x").signIn("https://explore.y/gems")).rejects.toThrow(/no redirect url/);
+    await expect(makeAuth("https://app.x").signIn("github", "https://explore.y/gems")).rejects.toThrow(/no redirect url/);
     expect(assign).not.toHaveBeenCalled();
   });
   it("logout POSTs sign-out with credentials", async () => {
@@ -81,5 +81,20 @@ describe("makeAuth", () => {
     expect(url).toBe("https://app.x/api/auth/sign-out");
     expect(method).toBe("POST");
     expect(cred).toBe("include");
+  });
+});
+
+describe("signIn", () => {
+  it("POSTs sign-in/social with the given provider and follows the returned url", async () => {
+    let body: string | undefined;
+    const assign = vi.fn();
+    vi.stubGlobal("location", { assign } as unknown as Location);
+    vi.stubGlobal("fetch", vi.fn(async (_u: string, o?: RequestInit) => {
+      body = o?.body as string;
+      return res({ url: "https://accounts.google.com/o/oauth2/v2/auth?state=abc", redirect: true });
+    }));
+    await makeAuth("https://api.x").signIn("google", "https://app.x/gems");
+    expect(JSON.parse(body!)).toEqual({ provider: "google", callbackURL: "https://app.x/gems" });
+    expect(assign).toHaveBeenCalledWith("https://accounts.google.com/o/oauth2/v2/auth?state=abc");
   });
 });
