@@ -3,7 +3,7 @@
 // Org dashboard settings — the first admin-gated write surface (account_scopes.role = "admin",
 // captured from GitHub at sign-in/bind). v1 knob: usage retention. The caller (src/usage/install.ts)
 // enforces the admin gate; this module is pure storage + the retention prune.
-import { and, eq, inArray, lt } from "drizzle-orm";
+import { and, eq, inArray, lt, sql } from "drizzle-orm";
 import type { AppDb } from "./schema.js";
 import { orgSettings, usageDays, usageDayModels, accountScopes } from "./schema.js";
 
@@ -66,7 +66,11 @@ export async function applyRetentionForScopes(db: AppDb, scopes: string[], nowMs
   }
 }
 
-/** The caller's role for a scope ("self" | "admin" | "member") or null when not a member. */
+/** The caller's role for a scope ("self" | "admin" | "member") or null when not a member. EXACT
+ *  (case-sensitive) scope match — this backs `resolveOrgAccess`'s path 3 (captured org-membership
+ *  role), which must stay byte-for-byte consistent with `accountScopeStatus`'s freshness lookup
+ *  (also an exact match) so the two agree on which row they're both reading. Do not loosen this to
+ *  case-insensitive for the self grant — use `accountSelfScope` below instead. */
 export async function accountScopeRole(db: AppDb, accountId: string, scope: string): Promise<string | null> {
   const rows = await db
     .select({ role: accountScopes.role })
@@ -74,4 +78,28 @@ export async function accountScopeRole(db: AppDb, accountId: string, scope: stri
     .where(and(eq(accountScopes.accountId, accountId), eq(accountScopes.scope, scope)))
     .limit(1);
   return rows[0]?.role ?? null;
+}
+
+/** True iff the account HOLDS the role='self' account_scopes row for `scope`, matched
+ *  case-insensitively — GitHub logins/handles are case-insensitive (the `user_handle_uniq` index
+ *  is on `lower(handle)`, and `claimHandle`/`accountIdForHandle` already compare case-insensitively),
+ *  so the self grant must not regress to a case-sensitive miss just because the caller's URL/route
+ *  param carries different casing than the stored handle. Still never a login-string match: this
+ *  reads the row the caller holds, filtered to role='self', same as `accountScopeRole`'s self
+ *  check — just case-insensitive on the scope column. Deliberately a SEPARATE function from
+ *  `accountScopeRole` (rather than making that one case-insensitive) because `accountScopeRole`'s
+ *  other caller (`resolveOrgAccess` path 3) must stay an exact match to agree with
+ *  `accountScopeStatus`'s freshness lookup — see the comment there. */
+export async function accountSelfScope(db: AppDb, accountId: string, scope: string): Promise<boolean> {
+  const scopeLc = scope.toLowerCase();
+  const rows = await db
+    .select({ role: accountScopes.role })
+    .from(accountScopes)
+    .where(and(
+      eq(accountScopes.accountId, accountId),
+      sql`lower(${accountScopes.scope}) = ${scopeLc}`,
+      eq(accountScopes.role, "self"),
+    ))
+    .limit(1);
+  return rows.length > 0;
 }

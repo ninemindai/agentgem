@@ -273,6 +273,21 @@ describe("personal-view gate uses the claimed self scope, not the login string",
     await orgUsageHandler(deps(db, auth))(req({ headers: { authorization: `Bearer ${token}` }, query: { scope: "carol", range: "all" } }) as any, own as any);
     expect(own._status).toBe(200);
   });
+
+  // Fix pass (Task 7/8 review — case sensitivity), Finding 1: the `scope` query param can carry
+  // different casing than the stored handle (GitHub logins are case-insensitive in URLs) and must
+  // still be treated as the caller's own personal view, not routed through the org member gate.
+  it("treats a differently-cased scope param as self for a claimed handle ('RayMond' vs stored 'raymond')", async () => {
+    const db = await makeTestDb();
+    const auth = makeAuth({ db, ...authOpts });
+    const a = await mintUser(db, auth, "raymond");
+    await setAccountScopes(db, a.id, [{ scope: "raymond", role: "self" as const }]);
+    const { token } = await mintSession(auth, a.id);
+
+    const own = mockRes();
+    await orgUsageHandler(deps(db, auth))(req({ headers: { authorization: `Bearer ${token}` }, query: { scope: "RayMond", range: "all" } }) as any, own as any);
+    expect(own._status).toBe(200);
+  });
 });
 
 describe("model breakdowns", () => {

@@ -11,7 +11,7 @@
 //   membership alone; otherwise the captured account_scopes (TTL'd) apply.
 import type { AppDb, makeAuth } from "@agentgem/aggregator";
 import {
-  resolveSession, resolveOrgAccess, accountScopeRole, normalizeUsageReport, normalizeUsageModels, recordUsageDays, recordUsageModels,
+  resolveSession, resolveOrgAccess, accountSelfScope, normalizeUsageReport, normalizeUsageModels, recordUsageDays, recordUsageModels,
   buildOrgUsage, getOrgSettings, putOrgSettings, normalizeRetentionDays, applyRetentionForScopes,
   RANGE_DAYS, type OrgUsageRange,
 } from "@agentgem/aggregator";
@@ -51,9 +51,11 @@ async function whoami(deps: UsageDeps, req: Req): Promise<{ accountId: string; l
 
 // The caller's own dashboard = they hold the role='self' scope row for `scope`. Never a login
 // string compare: a login-less user's "" would equal no valid scope, silently routing every
-// personal request through the org gate.
+// personal request through the org gate. Case-insensitive (accountSelfScope): the `scope` query
+// param can carry different casing than the stored handle (GitHub logins are case-insensitive in
+// URLs), and must still match the row the caller holds.
 const isSelfScope = async (deps: UsageDeps, accountId: string, scope: string): Promise<boolean> =>
-  (await accountScopeRole(deps.db, accountId, scope)) === "self";
+  accountSelfScope(deps.db, accountId, scope);
 
 export function reportHandler(deps: UsageDeps) {
   return async (req: Req, res: Res): Promise<void> => {

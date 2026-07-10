@@ -125,19 +125,28 @@ describe("buildProfile", () => {
     expect(p!.gems[0]).toMatchObject({ version: "2.0.0", description: "two" }); // higher version wins the tie, deterministically
   });
 
-  // Replaces "is case-insensitive on login": that test asserted the canonical casing came from
-  // accounts.login, which is the deleted behavior. Profile.login now carries the HANDLE — and per
-  // the plan, it echoes the caller's own input casing (accountIdForHandle resolves case-
-  // insensitively, but the returned field is not re-fetched from storage). Proven by giving the
-  // stored handle a DIFFERENT casing than what's passed to buildProfile.
-  it("resolves the handle case-insensitively; Profile.login echoes the caller's input casing, not the stored handle's", async () => {
+  // Fix pass (Task 7/8 review — case sensitivity), Finding 2: buildProfile used to echo the
+  // caller's raw input casing (`login: handle`), so `/@RayMond` rendered a profile displayed as
+  // "RayMond" even though the stored handle is "raymond". Profile.login now carries the CANONICAL
+  // stored casing, re-read via handleForAccountId after the case-insensitive resolve. Proven by
+  // giving the stored handle a DIFFERENT casing than what's passed to buildProfile.
+  it("resolves the handle case-insensitively; Profile.login echoes the STORED handle's casing, not the caller's input", async () => {
     const db = await makeTestDb();
     const id = await ghUser(db as never, "somelogin", { handle: "OctoCat" });
     await db.insert(catalogGems).values({ gemKey: "@o/g", version: "1.0.0", publishedBy: "somelogin", createdAtMs: 1, ownerAccountId: id });
     const p = await buildProfile(db, "octocat"); // different case than the stored handle "OctoCat"
     expect(p).not.toBeNull();
     expect(p!.gems).toHaveLength(1);
-    expect(p!.login).toBe("octocat");
+    expect(p!.login).toBe("OctoCat");
+  });
+
+  it("buildProfile('RayMond') resolves and returns the stored casing 'raymond'", async () => {
+    const db = await makeTestDb();
+    const id = await ghUser(db as never, "raymond", { handle: "raymond" });
+    await db.insert(catalogGems).values({ gemKey: "@r/g", version: "1.0.0", publishedBy: "raymond", createdAtMs: 1, ownerAccountId: id });
+    const p = await buildProfile(db, "RayMond");
+    expect(p).not.toBeNull();
+    expect(p!.login).toBe("raymond");
   });
 
   it("verified is false with no binding", async () => {

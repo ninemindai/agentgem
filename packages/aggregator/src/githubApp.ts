@@ -10,7 +10,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { appInstallations, orgMembers, type AppDb } from "./schema.js";
 import { accountScopeStatus } from "./webAuth.js";
-import { accountScopeRole } from "./orgSettings.js";
+import { accountScopeRole, accountSelfScope } from "./orgSettings.js";
 import { deleteOrgSkills } from "./curatedSkills.js";
 
 export interface AppInstallation { installationId: number; orgScope: string; repoSelection: "all" | "selected"; suspended: boolean }
@@ -90,7 +90,8 @@ export type OrgAccess = { status: "ok" | "stale" | "none"; role: "self" | "admin
 /**
  * Combined org-access check, in precedence order:
  *   1. self — the caller HOLDS the role='self' account_scopes row for scope (their claimed
- *      handle; never stale). Never a login-string match: claiming a name is not the grant.
+ *      handle; never stale), matched case-insensitively (GitHub logins/handles are
+ *      case-insensitive). Never a login-string match: claiming a name is not the grant.
  *   2. App-authoritative — when the scope has an ACTIVE (non-suspended) installation,
  *      webhook-synced App membership decides ALONE: in org_members → "ok", otherwise "none".
  *      Captured account_scopes are NOT consulted in this case. Rationale: on GitHub, removing a
@@ -107,8 +108,11 @@ export async function resolveOrgAccess(
 ): Promise<OrgAccess> {
   // Self is HOLDING the role='self' scope row (written by claimHandle, which runs the reserved-org
   // guard), never a login-string match. A string compare would grant `self` on "" === "" for two
-  // login-less accounts, and would let a freely-claimed name become a grant.
-  if ((await accountScopeRole(db, who.accountId, scope)) === "self") {
+  // login-less accounts, and would let a freely-claimed name become a grant. Case-insensitive
+  // (accountSelfScope, not accountScopeRole): GitHub treats logins case-insensitively in URLs, and
+  // the stored handle keeps whatever casing the user claimed — a scope param with different casing
+  // must still match the row the caller holds.
+  if (await accountSelfScope(db, who.accountId, scope)) {
     return { status: "ok", role: "self", via: "self" };
   }
   const scopeLower = scope.toLowerCase();
