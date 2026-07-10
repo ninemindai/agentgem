@@ -23,6 +23,18 @@ async function isReserved(db: AppDb, handleLc: string): Promise<boolean> {
   return (r.rows?.length ?? 0) > 0;
 }
 
+/** Postgres SQLSTATE for a unique-constraint violation. Verified directly against both drivers
+ *  this repo runs against (see testDb.ts / localDb.ts): PGlite's thrown error and node-postgres'
+ *  DatabaseError both surface it as a plain top-level `err.code` string — drizzle's `execute()`
+ *  doesn't catch/rewrap around a plain query in either the pglite or node-postgres session
+ *  (checked drizzle-orm@0.45.2's session sources: no try/catch around query execution outside of
+ *  its transaction-rollback path). A deadlock, a lost connection, or a DIFFERENT constraint has a
+ *  different code (or none) and must propagate, not collapse into "handle taken". */
+const UNIQUE_VIOLATION = "23505";
+function isUniqueViolation(err: unknown): boolean {
+  return typeof err === "object" && err !== null && "code" in err && (err as { code?: unknown }).code === UNIQUE_VIOLATION;
+}
+
 export async function accountIdForHandle(db: AppDb, handle: string): Promise<string | null> {
   if (!HANDLE_RE.test(handle)) return null;
   const r = await db.execute(sql`select id from "user" where lower(handle) = lower(${handle}) limit 1`);
@@ -32,6 +44,35 @@ export async function accountIdForHandle(db: AppDb, handle: string): Promise<str
 export async function handleForAccountId(db: AppDb, accountId: string): Promise<string | null> {
   const r = await db.execute(sql`select handle from "user" where id = ${accountId} limit 1`);
   return (r.rows as { handle: string | null }[])[0]?.handle ?? null;
+}
+
+/** The auto-claim half of the identity re-key (Task 5b): give a login-less account's handle for
+ *  free on GitHub sign-in, so `backfillUserHandles`' bulk pass and this per-account path are the
+ *  only two places besides `claimHandle` that ever write "user".handle. Same guards (charset,
+ *  reserved, uniqueness) as `claimHandle`, enforced here directly rather than by calling
+ *  `claimHandle` itself — `claimHandle` also REPLACES the account's entire scope set (a rename's
+ *  job), and `anchorAndScopes` needs to fold the self-scope into its own single `setAccountScopes`
+ *  call alongside org memberships, not clobber them twice.
+ *
+ *  Only claims when the account's handle IS NULL — an existing (possibly renamed) handle is never
+ *  touched, which is what lets a rename survive re-login. Best-effort: returns `null` (not a throw)
+ *  on a reserved/taken/malformed name, so a caller can no-op past it. */
+export async function claimHandleIfUnset(db: AppDb, accountId: string, raw: string): Promise<string | null> {
+  const handle = raw.trim();
+  if (!HANDLE_RE.test(handle)) return null;
+  if (await isReserved(db, handle.toLowerCase())) return null;
+  try {
+    const r = await db.execute(sql`
+      update "user" set handle = ${handle}
+      where id = ${accountId}
+        and handle is null
+        and not exists (select 1 from "user" u2 where lower(u2.handle) = lower(${handle}) and u2.id <> ${accountId})
+      returning id`);
+    return (r.rows?.length ?? 0) > 0 ? handle : null;
+  } catch (err) {
+    if (isUniqueViolation(err)) return null;   // unique index lost the race
+    throw err;
+  }
 }
 
 /** Claim or rename. "taken" and "reserved" collapse into one `unavailable` result on purpose:
@@ -50,14 +91,21 @@ export async function claimHandle(db: AppDb, accountId: string, raw: string): Pr
         and not exists (select 1 from "user" u2 where lower(u2.handle) = lower(${handle}) and u2.id <> ${accountId})
       returning id`);
     if ((r.rows?.length ?? 0) === 0) return { ok: false, reason: "unavailable" };
-  } catch {
-    return { ok: false, reason: "unavailable" };   // unique index lost the race
+  } catch (err) {
+    // Narrow to the unique index actually losing the race — anything else (a deadlock, a lost
+    // connection, an unrelated constraint) is a real failure and must not be reported as a normal
+    // "handle taken" domain result.
+    if (isUniqueViolation(err)) return { ok: false, reason: "unavailable" };
+    throw err;
   }
 
   // Replace the role='self' scope with the new handle, dropping the stale one. Org memberships
-  // (role 'admin'/'member') are preserved: a rename must not revoke them.
+  // (role 'admin'/'member') are preserved: a rename must not revoke them. `prior` is nullable
+  // (first-ever claim has no prior handle) — checked explicitly rather than via a `?? ""`
+  // fallback, since the whole point of this migration is that an empty string is not an identity.
+  const isStalePriorHandleScope = (s: { scope: string }) => prior != null && s.scope.toLowerCase() === prior.toLowerCase();
   const kept = (await getAccountScopes(db, accountId))
-    .filter((s) => s.role !== "self" && s.scope.toLowerCase() !== (prior ?? "").toLowerCase())
+    .filter((s) => s.role !== "self" && !isStalePriorHandleScope(s))
     .map((s) => ({ scope: s.scope, role: s.role as "admin" | "member" }));
   await setAccountScopes(db, accountId, [{ scope: handle, role: "self" as const }, ...kept]);
   return { ok: true, handle };

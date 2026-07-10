@@ -7,7 +7,7 @@
 // adapter in a spike. This test drives it over makeTestDb() (real drizzle-over-PGlite).
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { sql } from "drizzle-orm";
-import { makeTestDb, makeAuth, mintSession } from "@agentgem/aggregator";
+import { makeTestDb, makeAuth, mintSession, claimHandle, setAccountScopes } from "@agentgem/aggregator";
 
 const opts = {
   secret: "test-secret",
@@ -177,6 +177,66 @@ describe("betterAuth over drizzle+PGlite — account hook integration (1a-Task 6
     const scopeRows = (await db.execute(sql`select scope, role from account_scopes where account_id = ${user.id}`))
       .rows as { scope: string; role: string }[];
     expect(scopeRows).toEqual([]);
+  });
+
+  // Identity re-key, Task 5b: a fresh GitHub sign-in has no handle yet, so anchorAndScopes'
+  // auto-claim (claimHandleIfUnset) should give it one for free, and the role='self' scope row
+  // must equal that handle (not the login string directly — same thing here, but for the RIGHT
+  // reason: see the rename-survives-re-login test below for what happens once they diverge).
+  it("a new GitHub sign-in auto-claims handle = login and writes a role='self' scope equal to the handle", async () => {
+    stubGithubMembershipsFetch();
+    const db = await makeTestDb();
+    const auth = makeAuth({ db, ...opts });
+    const { user } = await createGithubUser(db, auth, "raymond", "raymond@example.com");
+
+    const handleRows = (await db.execute(sql`select handle from "user" where id = ${user.id}`))
+      .rows as { handle: string | null }[];
+    expect(handleRows[0].handle).toBe("raymond");
+
+    const scopeRows = (await db.execute(sql`select scope, role from account_scopes where account_id = ${user.id}`))
+      .rows as { scope: string; role: string }[];
+    expect(scopeRows).toEqual([{ scope: "raymond", role: "self" }]);
+  });
+
+  // THE TEST THAT MATTERS (Task 5b, defect B). `anchorAndScopes` used to call
+  // `setAccountScopes(db, userId, [{ scope: login, role: "self" }, ...orgs])` on EVERY sign-in, and
+  // `setAccountScopes` REPLACES the whole scope set — so a user who claimed the handle `bob` would
+  // have their self-scope silently reset back to their GitHub login (`raymond`) on the very next
+  // re-login, dropping the name they claimed. The fix reads the CURRENT handle and writes the
+  // self-scope from that, not from `login`, and the auto-claim only fires when handle IS NULL —
+  // so a rename must survive re-login. Org memberships must survive too (a stubbed GitHub response
+  // supplies one), proving the fix doesn't just drop the org row wholesale to dodge the bug.
+  it("THE TEST THAT MATTERS — a handle rename survives re-login, and org memberships survive alongside it", async () => {
+    stubGithubMembershipsFetch();
+    const db = await makeTestDb();
+    const auth = makeAuth({ db, ...opts });
+    const { user, account } = await createGithubUser(db, auth, "raymond", "raymond@example.com");
+    const ctx = await auth.$context;
+
+    // The user renames away from their GitHub login.
+    expect(await claimHandle(db, user.id, "bob")).toEqual({ ok: true, handle: "bob" });
+    // Simulate the state a real account carries into a re-login: self-scope on the NEW handle,
+    // plus an org membership captured at some earlier sign-in.
+    await setAccountScopes(db, user.id, [{ scope: "bob", role: "self" }, { scope: "zion", role: "admin" }]);
+
+    // Re-login: GitHub now reports the "zion" org membership over the API, so a correct re-login
+    // must refresh it (not just happen to leave it alone).
+    vi.stubGlobal("fetch", (async () => ({
+      ok: true, status: 200,
+      json: async () => [{ organization: { login: "zion" }, role: "admin" }],
+    })) as unknown as typeof fetch);
+    await ctx.internalAdapter.updateAccount(account.id, { accessToken: "gho_again" });
+
+    const handleRows = (await db.execute(sql`select handle from "user" where id = ${user.id}`))
+      .rows as { handle: string | null }[];
+    expect(handleRows[0].handle).toBe("bob");   // NOT reset to "raymond"
+
+    const scopeRows = (await db.execute(sql`select scope, role from account_scopes where account_id = ${user.id} order by scope`))
+      .rows as { scope: string; role: string }[];
+    expect(scopeRows).toEqual([
+      { scope: "bob", role: "self" },      // self-scope keyed on the HANDLE, not the login
+      { scope: "zion", role: "admin" },    // org membership survived the re-login
+    ]);
   });
 
   it("a minted session for the anchored user resolves via auth.api.getSession", async () => {

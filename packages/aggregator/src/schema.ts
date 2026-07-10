@@ -427,6 +427,45 @@ export async function backfillGemOwners(db: AppDb): Promise<{ resolved: number; 
   return { resolved: total - unresolved, unresolved };
 }
 
+/** One-time, idempotent: claim `"user".handle = "user".login` for every existing GitHub user, so
+ *  a user who signed up before handles existed is already claimed and never sees the claim flow
+ *  ("Existing GitHub users' handles are backfilled from their login and are already claimed" —
+ *  design doc). Modeled on backfillGemOwners' duplicate guard for the same reason: `"user".login`
+ *  has no unique constraint, so a naive claim would non-deterministically hand the name to
+ *  whichever duplicate the planner returns first. Assign only where ALL of:
+ *    - the account's handle is still NULL (never overwrites an existing claim/rename)
+ *    - the login is unambiguous: exactly one "user" row has it, case-insensitively
+ *    - the login matches the handle charset (defensively — GitHub logins already do, but the
+ *      CHECK constraint must never abort a boot over one that somehow doesn't)
+ *    - the name isn't already claimed as someone else's handle
+ *    - the name isn't reserved (a known org in org_members/org_settings) — on GitHub the user and
+ *      org namespaces are shared upstream, so this should never fire, but don't assume it
+ *  A single atomic UPDATE, so concurrent boots are safe under READ COMMITTED: a second run's WHERE
+ *  re-evaluates against the first run's already-committed rows (handle no longer NULL), rather
+ *  than racing the unique index the way a per-row claim would.
+ *  `claimed` is per-call (0 on a re-run, like backfillBindingAnchors' `created`); `skipped` is the
+ *  total still-unclaimed count so an operator can see backlog, like backfillGemOwners' `unresolved`. */
+export async function backfillUserHandles(db: AppDb): Promise<{ claimed: number; skipped: number }> {
+  const res = await db.execute(sql`
+    update "user" u set handle = m.login
+    from (
+      select lower(login) as lg, min(login) as login
+      from "user"
+      where login is not null and login ~ '^[A-Za-z0-9-]{1,39}$'
+      group by lower(login)
+      having count(*) = 1
+    ) m
+    where lower(u.login) = m.lg
+      and u.handle is null
+      and not exists (select 1 from "user" u2 where lower(u2.handle) = m.lg)
+      and not exists (select 1 from org_members om where lower(om.org_scope) = m.lg)
+      and not exists (select 1 from org_settings os where lower(os.scope) = m.lg)`);
+  const claimed = (res as any).rowCount ?? (res as any).affectedRows ?? 0;
+  const r = await db.execute(sql`select count(*)::int as skipped from "user" where login is not null and handle is null`);
+  const { skipped } = (r.rows as { skipped: number }[])[0];
+  return { claimed, skipped };
+}
+
 // Idempotent DDL. (Schema-as-tables above is the query source of truth; this DDL
 // creates them. A column drift is caught immediately by the typed drizzle inserts.
 // drizzle-kit migrations are a deferred follow-up when the schema starts evolving.)
@@ -568,6 +607,15 @@ export async function ensureSchema(db: AppDb): Promise<void> {
   // every `accounts` row into a same-id better-auth `user` row — an anchor created after either
   // step would resolve fewer gems and dodge the better-auth mirror entirely.
   await backfillBindingAnchors(db);
+
+  // Placed right after the anchor backfill and before the gem-owner backfill: it has no functional
+  // dependency on either (it reads/writes only "user", org_members, org_settings — none of which
+  // backfillBindingAnchors or backfillGemOwners touch), but anchoring an account's EXISTENCE before
+  // naming it reads in the same order the rollout narrative does ("existing users are already
+  // claimed"), and gem-ownership resolution — the one with a security consequence for unresolved
+  // rows (see the warning below) — stays adjacent to its own anchor dependency.
+  await backfillUserHandles(db);
+
   const owners = await backfillGemOwners(db);
   if (owners.unresolved > 0) {
     console.warn(`[schema] ${owners.unresolved} catalog_gems row(s) have no resolvable owner; they cannot be unpublished by anyone until reassigned`);
