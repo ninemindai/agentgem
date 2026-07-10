@@ -98,7 +98,9 @@ function deletePlayGem(name: string): void {
 
 export async function deleteMiniapp(name: string): Promise<{ name: string; commit: string | null }> {
   const dir = miniappDir(name);                    // validates the name (throws on bad) + jails the path
-  if (!existsSync(dir)) throw new Error(`miniapp '${name}' not found`);
+  // Stable prefix: play.controller.ts keys the 404-vs-400 split off it, the way chatRoutes.ts keys off
+  // miniappDir's "invalid miniapp name".
+  if (!existsSync(dir)) throw new Error(`miniapp not found: '${name}'`);
   const root = miniappsRoot();
   await ensureRepo(root);
   rmSync(dir, { recursive: true, force: true });
@@ -117,7 +119,11 @@ export async function checkpointMiniapp(name: string): Promise<{ name: string; c
   const root = miniappsRoot();
   await ensureRepo(root);
   const commit = await commitWithLock(root, `checkpoint ${name}`);
-  try { if ((await gameGate(html)).ok) writeGameGem(name, html, meta); }
+  // `html` is a snapshot taken above, and gameGate awaits — so a deleteMiniapp can land in between and
+  // this write would RESURRECT the gem it just removed (the workspace is not under git: unrecoverable).
+  // Re-check the registry dir immediately before writing; existsSync and writeGameGem are both sync, so
+  // nothing can delete between them.
+  try { if ((await gameGate(html)).ok && existsSync(miniappDir(name))) writeGameGem(name, html, meta); }
   catch { /* gate/gem is best-effort — a checkpoint must never fail on it */ }
   return { name, commit };
 }

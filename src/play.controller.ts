@@ -25,11 +25,18 @@ export class PlayController {
 
   // Removal is a git commit in the registry, so it stays recoverable from history; the dual-written
   // gem is dropped only when play authored it (see deleteMiniapp).
+  //
+  // Only an absent miniapp is a 404. A malformed/traversing name is a client error (400), matching the
+  // sibling save/studio/import/blank routes and chatRoutes.ts — collapsing both into 404 would report a
+  // rejected `../escape` as "not found", and would report a genuine git failure as "not found" too.
   @post("/play/delete", { body: PlayDeleteRequestSchema, response: PlaySaveResponseSchema })
   async delete(input: { body: z.infer<typeof PlayDeleteRequestSchema> }): Promise<z.infer<typeof PlaySaveResponseSchema>> {
     try {
       return await deleteMiniapp(input.body.name);
-    } catch (e) { throw new AgentError((e as Error).message, { status: 404 }); }
+    } catch (e) {
+      const msg = (e as Error).message;
+      throw new AgentError(msg, { status: msg.startsWith("miniapp not found") ? 404 : 400 });
+    }
   }
 
   @post("/play/studio", { body: PlayStudioRequestSchema, response: PlayStudioResponseSchema })

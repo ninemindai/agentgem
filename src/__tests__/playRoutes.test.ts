@@ -62,6 +62,30 @@ describe("PlayController", () => {
     await expect(ctrl.sessionData({ query: { name: "imported" } })).rejects.toThrow(/no session data/);
   });
 
+  it("delete removes the miniapp and drops it from the list", async () => {
+    const ctrl = new PlayController();
+    await ctrl.save({ body: { name: "g1", html: "<!doctype html><body><canvas></canvas></body>", meta } });
+    const res = await ctrl.delete({ body: { name: "g1" } });
+    expect(res.name).toBe("g1");
+    expect((await ctrl.miniapps()).miniapps.map((m) => m.name)).not.toContain("g1");
+  });
+
+  // An absent miniapp is a 404; a malformed name is a CLIENT error (400), like every sibling mutation
+  // route. Collapsing both into 404 would report a rejected '../escape' as "not found".
+  it("delete 404s for an absent miniapp but 400s for an invalid name", async () => {
+    const ctrl = new PlayController();
+    await expect(ctrl.delete({ body: { name: "ghost" } })).rejects.toMatchObject({ statusCode: 404 });
+    await expect(ctrl.delete({ body: { name: "../escape" } })).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it("creating twice from the same source yields two miniapps, not one overwrite", async () => {
+    const ctrl = new PlayController();
+    const a = await ctrl.blank({ body: { title: "Duel" } });
+    const b = await ctrl.blank({ body: { title: "Duel" } });
+    expect([a.name, b.name]).toEqual(["duel", "duel-2"]);
+    expect((await ctrl.miniapps()).miniapps.map((m) => m.name).sort()).toEqual(["duel", "duel-2"]);
+  });
+
   it("POST /play/migrate reports the saved miniapp's migration outcome", async () => {
     const ctrl = new PlayController();
     await ctrl.save({ body: { name: "g1", html: "<!doctype html><body><canvas></canvas></body>", meta } });

@@ -85,6 +85,30 @@ describe("Arcade", () => {
     expect(del).toHaveBeenCalledWith(expect.anything(), { body: { name: "duel-2" } });
   });
 
+  // busy/error used to be component-scoped, so an in-flight delete on one card leaked into another's
+  // dialog: opening B mid-delete showed "Deleting…", A's completion dismissed B, and A's failure showed
+  // A's error inside B's overlay. Each card's confirm must stand on its own.
+  it("an in-flight delete on one card cannot leak into another card's dialog", async () => {
+    vi.spyOn(playMiniappsRoute, "call").mockResolvedValue(twoApps);
+    let rejectA: (e: Error) => void = () => {};
+    vi.spyOn(playDeleteRoute, "call").mockReturnValue(new Promise((_, rej) => { rejectA = rej; }) as never);
+    render(<Arcade apiBase="" onOpen={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Duel")).toBeTruthy());
+
+    fireEvent.click(screen.getByLabelText("Delete duel"));
+    fireEvent.click(screen.getByRole("button", { name: /^delete$/i }));   // A is now in flight
+    await waitFor(() => expect(screen.getByRole("button", { name: /deleting/i })).toBeTruthy());
+
+    // While A is in flight, B's ✕ must not open a second dialog on top of it.
+    expect(screen.getByLabelText("Delete auth-replay")).toHaveProperty("disabled", true);
+
+    rejectA(new Error("boom"));                                          // A fails
+    await waitFor(() => expect(screen.getByText(/boom/i)).toBeTruthy());
+    // The error belongs to A's overlay only; B has no dialog and shows no error.
+    expect(screen.getAllByText(/boom/i)).toHaveLength(1);
+    expect(screen.getByText("duel")).toBeTruthy();                       // A's confirm still identifies A
+  });
+
   it("keeps the card and surfaces the error when the delete fails", async () => {
     vi.spyOn(playMiniappsRoute, "call").mockResolvedValue(twoApps);
     vi.spyOn(playDeleteRoute, "call").mockRejectedValue(new Error("miniapp 'duel' not found"));
