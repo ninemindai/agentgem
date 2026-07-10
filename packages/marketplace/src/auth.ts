@@ -1,6 +1,6 @@
 /** Web sign-in client. All calls are credentialed so the parent-domain session cookie travels. */
 export interface MyOrg { scope: string; role: string }
-export interface Me { login: string; avatarUrl: string | null; orgs: MyOrg[] }
+export interface Me { id: string; name: string; handle: string | null; avatarUrl: string | null; orgs: MyOrg[] }
 
 export function makeAuth(base: string) {
   return {
@@ -8,14 +8,23 @@ export function makeAuth(base: string) {
       try {
         const r = await fetch(base + "/api/auth/get-session", { credentials: "include" });
         if (!r.ok) return null;
-        // better-auth's get-session returns `{ session, user, orgs } | null` — never the old flat
-        // `{ login, avatarUrl, orgs, authenticated }` shape. `login`/`image` are the additionalField
-        // + built-in mapped by mapProfileToUser (packages/aggregator/src/auth/betterAuth.ts). `orgs`
-        // is enriched onto the same payload by the `customSession` plugin there, sourced from
-        // getAccountScopes (self scope excluded) — see betterAuth.ts.
-        const j = (await r.json()) as { user?: { login?: string; image?: string | null }; orgs?: MyOrg[] } | null;
-        const login = j?.user?.login;
-        return login ? { login, avatarUrl: j?.user?.image ?? null, orgs: j?.orgs ?? [] } : null;
+        // Identity is the uuid + an OPTIONAL handle, never `login`: a Google user has no login and
+        // no handle until they claim one, but they ARE signed in. Gate on `user.id`, not `login`.
+        // `handle` falls back to `login` so an existing GitHub user's /@ profile link keeps working
+        // even if their handle column is somehow unset; `name` falls back to login then "".
+        const j = (await r.json()) as {
+          user?: { id?: string; name?: string; login?: string; handle?: string | null; image?: string | null };
+          orgs?: MyOrg[];
+        } | null;
+        const u = j?.user;
+        if (!u?.id) return null;
+        return {
+          id: u.id,
+          name: u.name ?? u.login ?? "",
+          handle: u.handle ?? u.login ?? null,
+          avatarUrl: u.image ?? null,
+          orgs: j?.orgs ?? [],
+        };
       } catch { return null; }
     },
     async logout(): Promise<void> {
