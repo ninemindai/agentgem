@@ -66,6 +66,19 @@ export async function getGemArchive(db: AppDb, gemKey: string, version: string):
   return r ? { bytes: r.bytes, digest: r.digest } : null;
 }
 
+// The most recently PUBLISHED version of a gem. Ordering is by publish time, not semver: "latest"
+// here means "what the publisher last shipped", which is what a bare /games/<key> URL should serve.
+// Unlisted (scope-less) keys have no catalog row and therefore no latest — callers pass an explicit
+// version for those.
+export async function latestGemVersion(db: AppDb, gemKey: string): Promise<string | null> {
+  const rows = await db.select({ version: catalogGems.version })
+    .from(catalogGems)
+    .where(eq(catalogGems.gemKey, gemKey))
+    .orderBy(desc(catalogGems.createdAtMs))
+    .limit(1);
+  return rows[0]?.version ?? null;
+}
+
 export async function catalogGemExists(db: AppDb, gemKey: string, version: string): Promise<boolean> {
   const r = (await db.select({ gemKey: catalogGems.gemKey }).from(catalogGems)
     .where(and(eq(catalogGems.gemKey, gemKey), eq(catalogGems.version, version))).limit(1))[0];

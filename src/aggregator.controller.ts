@@ -17,7 +17,7 @@ import { recordBinding } from "@agentgem/aggregator";
 import { GitHubVerifier } from "@agentgem/aggregator";
 import { sweepQuarantine, sweepAdoptionQuarantine } from "@agentgem/aggregator";
 import { issueKey, revokeKey, listKeys } from "@agentgem/aggregator";
-import { recordCatalogShare, upsertGemArchive, getGemArchive, catalogGemExists } from "@agentgem/aggregator";
+import { recordCatalogShare, upsertGemArchive, getGemArchive, catalogGemExists, latestGemVersion } from "@agentgem/aggregator";
 import { recordGamePlay, gamePlayCounts } from "@agentgem/aggregator";
 import { importGem } from "@agentgem/distribute";
 
@@ -141,6 +141,12 @@ const PublishGemBody = z.object({ manifest: CatalogManifestSchema, archiveBase64
 const GemArchiveQuery = z.object({ key: z.string(), version: z.string() });
 const GemArchiveResult = z.object({ archiveBase64: z.string() });
 const GameHtmlResult = z.object({ html: z.string() });
+const GameMetaQuery = z.object({ key: z.string(), version: z.string().optional() });
+const GameMetaResult = z.object({
+  title: z.string(),
+  genre: z.enum(["replay", "skill-run", "project-fun"]),
+  version: z.string(),
+});
 // visitorId is an opaque client-minted dedupe key, never an identity — capped, never validated.
 const GamePlayBody = z.object({ gemKey: z.string(), version: z.string(), visitorId: z.string().max(64).optional() });
 const GamePlayResult = z.object({ ok: z.literal(true) });
@@ -313,6 +319,22 @@ export class AggregatorController {
     const game = gem.artifacts.find((x) => x.type === "game") as { html?: unknown } | undefined;
     if (!game || typeof game.html !== "string") throw new AgentError("this gem has no game to play", { status: 404, code: "not_a_game", retryable: false });
     return { html: game.html };
+  }
+
+  // Public: title/genre for a game addressed by BARE key (/games/@scope/name), resolving "latest" to
+  // the most recently published version. The Play page renders a heading from this before the (up to
+  // 1.5 MB) sealed HTML arrives. originGuard PUBLIC_READ-exempt.
+  @get("/game-meta", { query: GameMetaQuery, response: GameMetaResult })
+  async gameMeta(input: { query: z.infer<typeof GameMetaQuery> }): Promise<z.infer<typeof GameMetaResult>> {
+    const { key } = input.query;
+    const version = input.query.version ?? (await latestGemVersion(this.db, key));
+    if (!version) throw new AgentError("gem archive not found", { status: 404, code: "gem_archive_not_found", retryable: false });
+    const a = await getGemArchive(this.db, key, version);
+    if (!a) throw new AgentError("gem archive not found", { status: 404, code: "gem_archive_not_found", retryable: false });
+    const { gem } = importGem(Buffer.from(a.bytes));
+    const game = gem.artifacts.find((x) => x.type === "game") as { title?: unknown; genre?: unknown } | undefined;
+    if (!game || typeof game.title !== "string") throw new AgentError("this gem has no game to play", { status: 404, code: "not_a_game", retryable: false });
+    return { title: game.title, genre: game.genre as z.infer<typeof GameMetaResult>["genre"], version };
   }
 
   // A reader clicked into a mini-game's fullscreen play. Unauthenticated by design — the arcade needs
