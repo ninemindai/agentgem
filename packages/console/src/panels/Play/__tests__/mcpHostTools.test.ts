@@ -32,6 +32,13 @@ describe("getInventory", () => {
     await expect(getInventory("")).resolves.toEqual(inv);
     expect(spy).toHaveBeenCalled();
   });
+
+  it("getInventory requests deferred bodies (miniapps get metadata, not 5.81MB of SKILL.md)", async () => {
+    const spy = vi.fn(async () => ({ skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [] }));
+    inventoryRoute.call = spy as never;
+    await getInventory("http://x");
+    expect(spy).toHaveBeenCalledWith(expect.anything(), { query: { body: "defer" } });
+  });
 });
 
 describe("subscribeSessions", () => {

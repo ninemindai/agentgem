@@ -52,9 +52,11 @@ export async function getSessionData(
   });
 }
 
-// getInventory: Runner.serve()'s "local-project-access" cap.
+// getInventory: Runner.serve()'s "local-project-access" cap. Deferred: the capability is "get the
+// viewer's local inventory", never every artifact's SKILL.md — which was 97.8% of the payload,
+// forwarded opaquely into a sealed iframe. No miniapp reads `.content`.
 export async function getInventory(apiBase: string): Promise<unknown> {
-  return inventoryRoute.call(makeClient(apiBase), { query: {} });
+  return inventoryRoute.call(makeClient(apiBase), { query: { body: "defer" } });
 }
 
 // subscribeSessions: Runner.serve()'s "live-session-events" cap — the most-recent session is "live";
