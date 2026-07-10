@@ -144,18 +144,25 @@ GET /api/auth/get-session ──▶ { user:{ id, name, handle:null, image }, ses
 
 ## Manual deploy prerequisite
 
-Like the GitHub callback-URL change, one manual step gates the deploy:
+Like the GitHub callback-URL change, one manual step gates the deploy. **Done** as of
+2026-07-10:
 
-1. Register a Google OAuth 2.0 Client (Google Cloud Console → Credentials).
-2. Authorized redirect URI: `https://api.agentgem.ai/api/auth/callback/google`.
-3. Authorized JavaScript origin: `https://app.agentgem.ai`.
-4. Set `AGENTGEM_GOOGLE_CLIENT_ID` / `AGENTGEM_GOOGLE_CLIENT_SECRET` on Fly (the api host).
+1. ✅ Registered a Google OAuth 2.0 Web client. Client ID
+   `94243720748-gbh3thj2bl5ebfupirithro1psup2ve4.apps.googleusercontent.com` (project number
+   `94243720748`, owned by the ninemind Google account — a different account than the one that
+   holds the faction/MyAgent scratch projects, so it is not inspectable from those).
+2. ⚠ **To confirm before shipping:** authorized redirect URI is *exactly*
+   `https://api.agentgem.ai/api/auth/callback/google`, and the consent screen is **External +
+   Published to production** with scopes limited to `openid`/`email`/`profile` (non-sensitive;
+   no Google verification review needed). These are the two silent-failure points; verify at
+   smoke-test.
+3. ✅ `AGENTGEM_GOOGLE_CLIENT_ID` / `AGENTGEM_GOOGLE_CLIENT_SECRET` set on Fly (`agentgem-api`).
 
-Until the env vars are set, `socialProviders.google` is simply not registered and the Google
-button 404s at `sign-in/social` — a clean degrade, not a crash. The button should be
-hidden/disabled when Google is unconfigured (the SPA can key off a small `providers` field
-on a public config response, or simply attempt and surface the failure — decided at plan
-time).
+Until the code reads these env vars (this slice), they sit unused — the current GitHub-only
+build ignores them. When the code ships, `socialProviders.google` registers only when both are
+present, so the Google button must be hidden/disabled when Google is unconfigured (the SPA can
+key off a small `providers` field on a public config response, or simply attempt and surface
+the failure — decided at plan time).
 
 ## Non-goals
 
