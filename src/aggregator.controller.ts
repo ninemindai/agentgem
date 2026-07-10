@@ -17,7 +17,7 @@ import { recordBinding } from "@agentgem/aggregator";
 import { GitHubVerifier } from "@agentgem/aggregator";
 import { sweepQuarantine, sweepAdoptionQuarantine } from "@agentgem/aggregator";
 import { issueKey, revokeKey, listKeys } from "@agentgem/aggregator";
-import { recordCatalogShare, upsertGemArchive, getGemArchive, catalogGemExists, latestGemVersion } from "@agentgem/aggregator";
+import { recordCatalogShare, upsertGemArchive, getGemArchive, catalogGemExists, latestGemVersion, deleteGemArchiveOwned } from "@agentgem/aggregator";
 import { recordGamePlay, gamePlayCounts } from "@agentgem/aggregator";
 import { resolveSignedAccount, catalogSigningPayload } from "@agentgem/aggregator";
 import { staticGate } from "@agentgem/play";
@@ -144,6 +144,8 @@ const PublishGemBody = z.object({ manifest: CatalogManifestSchema, archiveBase64
 const ShareArchiveManifest = CatalogManifestSchema.extend({ gemDigest: z.string() }); // required for share-archive
 const ShareArchiveBody = z.object({ manifest: ShareArchiveManifest, archiveBase64: z.string(), pubkey: z.string(), signedAt: z.number(), signature: z.string() });
 const ShareArchiveResult = z.object({ key: z.string(), url: z.string() });
+const RevokeShareBody = z.object({ key: z.string(), pubkey: z.string(), signedAt: z.number(), signature: z.string() });
+const RevokeShareResult = z.object({ revoked: z.boolean() });
 const GemArchiveQuery = z.object({ key: z.string(), version: z.string() });
 const GemArchiveResult = z.object({ archiveBase64: z.string() });
 const GameHtmlResult = z.object({ html: z.string() });
@@ -332,6 +334,23 @@ export class AggregatorController {
     const key = genShareId();                                  // slash-less => can never be a published key
     await upsertGemArchive(this.db, { gemKey: key, version: "1", bytes: new Uint8Array(bytes), digest, createdAtMs: Date.now(), ownerAccountId: who.accountId });
     return { key, url: `https://app.agentgem.ai/games/${key}` };
+  }
+
+  // Owner-only revoke of an unlisted share (POST, not DELETE — AgentBack controllers have no @del;
+  // see the framework note). The signature is over `revoke:<key>:<signedAt>`, proving the caller
+  // holds a device key bound to the OWNING account — any of the owner's devices works, since
+  // ownership is the accounts.id, not the key. Fail-closed: wrong/NULL owner -> 403.
+  @post("/share-archive/revoke", { body: RevokeShareBody, response: RevokeShareResult })
+  async revokeShareArchive(input: { body: z.infer<typeof RevokeShareBody> }): Promise<z.infer<typeof RevokeShareResult>> {
+    const b = input.body;
+    const who = await resolveSignedAccount(this.db, {
+      pubkey: b.pubkey, payload: `revoke:${b.key}:${b.signedAt}`, signedAt: b.signedAt, signature: b.signature,
+    });
+    if (!who.ok) throw new AgentError("not connected", { status: who.rejected === "not-connected" ? 401 : 400, code: who.rejected, retryable: false });
+    const r = await deleteGemArchiveOwned(this.db, b.key, who.accountId);
+    if (r === "not-found") throw new AgentError("share not found", { status: 404, code: "share_not_found", retryable: false });
+    if (r === "forbidden") throw new AgentError("not the owner", { status: 403, code: "forbidden", retryable: false });
+    return { revoked: true };
   }
 
   // Public: stream a published gem's archive bytes (base64) for zero-config install. Serves only
