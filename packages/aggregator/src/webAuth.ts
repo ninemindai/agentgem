@@ -5,7 +5,7 @@
 // handoff helpers below stay live: every legacy FK (stars/reviews/usage/scopes/groups) still points
 // at `accounts.id`, which better-auth's migration preserves as `user.id`.
 import { randomUUID, randomBytes, createHash } from "node:crypto";
-import { and, eq, lt } from "drizzle-orm";
+import { and, eq, lt, sql } from "drizzle-orm";
 import type { Auth, BetterAuthOptions } from "better-auth";
 import type { AppDb } from "./schema.js";
 import { accounts, accountScopes, handoffCodes } from "./schema.js";
@@ -116,12 +116,18 @@ export async function getAccountScopes(db: AppDb, accountId: string): Promise<{ 
     .where(eq(accountScopes.accountId, accountId));
 }
 
-/** True iff the account owns `scope` (its login or a captured org membership). */
+/** True iff the account owns `scope` (its login or a captured org membership), matched
+ *  case-insensitively — GitHub logins/handles are case-insensitive (the `user_handle_uniq` index
+ *  is on `lower(handle)`, and `claimHandle`/`accountIdForHandle`/`accountSelfScope` already compare
+ *  case-insensitively), so a role='self' row captured as e.g. `Raymond` must still match the
+ *  lowercase publish scope `raymond`. Still never a login-string match: this only changes which
+ *  row matches, not who counts as the account — `account_id` stays an exact equality. */
 export async function accountOwnsScope(db: AppDb, accountId: string, scope: string): Promise<boolean> {
+  const scopeLc = scope.toLowerCase();
   const rows = await db
     .select({ scope: accountScopes.scope })
     .from(accountScopes)
-    .where(and(eq(accountScopes.accountId, accountId), eq(accountScopes.scope, scope)))
+    .where(and(eq(accountScopes.accountId, accountId), sql`lower(${accountScopes.scope}) = ${scopeLc}`))
     .limit(1);
   return rows.length > 0;
 }

@@ -45,6 +45,40 @@ describe("account_scopes", () => {
     await setAccountScopes(db, alice, ["ninemind"]);
     expect(await accountOwnsScope(db, bob, "ninemind")).toBe(false);
   });
+
+  it("matches case-insensitively — a self scope captured as `Raymond` (a GitHub login with a\n     capital) is owned when queried as the lowercase `raymond` the publish gate uses, and vice versa", async () => {
+    const db = await makeTestDb();
+    const id = await acct(db, "Raymond");
+    await setAccountScopes(db, id, [{ scope: "Raymond", role: "self" }]);
+    expect(await accountOwnsScope(db, id, "raymond")).toBe(true);
+    expect(await accountOwnsScope(db, id, "Raymond")).toBe(true);
+    expect(await accountOwnsScope(db, id, "RAYMOND")).toBe(true);
+  });
+
+  it("matches an org scope captured as `NineMindAI` when queried as lowercase `ninemindai`", async () => {
+    const db = await makeTestDb();
+    const id = await acct(db, "alice");
+    await setAccountScopes(db, id, [{ scope: "NineMindAI", role: "admin" }]);
+    expect(await accountOwnsScope(db, id, "ninemindai")).toBe(true);
+  });
+
+  it("security: an account with no row for a scope still gets false, in any casing", async () => {
+    const db = await makeTestDb();
+    const id = await acct(db, "alice");
+    await setAccountScopes(db, id, ["alice"]);
+    expect(await accountOwnsScope(db, id, "bob")).toBe(false);
+    expect(await accountOwnsScope(db, id, "Bob")).toBe(false);
+    expect(await accountOwnsScope(db, id, "BOB")).toBe(false);
+  });
+
+  it("security: a row belonging to a different account never grants ownership, regardless of casing", async () => {
+    const db = await makeTestDb();
+    const raymond = await acct(db, "Raymond");
+    const other = await acct(db, "someone-else");
+    await setAccountScopes(db, raymond, [{ scope: "Raymond", role: "self" }]);
+    expect(await accountOwnsScope(db, other, "raymond")).toBe(false);
+    expect(await accountOwnsScope(db, other, "Raymond")).toBe(false);
+  });
 });
 
 describe("scope roles + freshness", () => {

@@ -116,6 +116,14 @@ describe("upload-publish", () => {
     await uploadPublishHandler(deps(db, auth, publisher))(mkReq({ headers: { ...bearer(token), origin: "https://app.agentgem.ai" }, body: { scope: "acme", version: "1.0.0", bytesBase64: gemBase64() } }) as any, res as any);
     expect(res._s).toBe(200);
   });
+  it("a user whose GitHub login has a capital (e.g. `Raymond`) can publish under the lowercase scope `raymond`", async () => {
+    const db = await makeTestDb(); const auth = testAuth(db); const token = await session(db, auth, "Raymond"); const { publisher, commits } = capturing(); const res = mkRes();
+    await uploadPublishHandler(deps(db, auth, publisher))(mkReq({ headers:{ ...bearer(token), origin:"https://app.agentgem.ai" }, body:{ scope:"raymond", version:"1.0.0", bytesBase64: gemBase64() } }) as any, res as any);
+    expect(res._s).toBe(200);
+    expect((res._b as any).ref).toBe("@raymond/test-gem");
+    const idx = JSON.parse((commits[0].files as any)["registry.json"]);
+    expect(idx.items["@raymond/test-gem"].discovery.publishedBy).toBe("Raymond"); // verified login, unchanged casing
+  });
   it("removed member with captured scope cannot publish to an org with an active installation", async () => {
     const db = await makeTestDb();
     const auth = testAuth(db);
