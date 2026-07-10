@@ -69,12 +69,16 @@ body::before {
 }
 .console.is-dragging { transition: none; }
 
-/* Resize seam between rail and main. Fixed so it spans the viewport height. */
+/* Resize seam between rail and main. Fixed so it spans the viewport height. The
+   `left` transition keeps the handle glued to the grid seam during the collapse
+   tween; it's killed under .is-dragging so a live drag tracks the pointer 1:1. */
 .console-rail-handle {
   position: fixed; top: 0; bottom: 0; left: var(--rail-w);
   width: 8px; transform: translateX(-4px); z-index: 6; cursor: col-resize;
   background: transparent;
+  transition: left .18s cubic-bezier(.2,.7,.2,1);
 }
+.console.is-dragging .console-rail-handle { transition: none; }
 .console-rail-handle:hover, .console-rail-handle:focus-visible {
   background: linear-gradient(90deg, transparent 2px, var(--accent) 3px, var(--accent) 5px, transparent 6px);
   outline: none;
@@ -111,6 +115,13 @@ body::before {
 .console.is-rail .console-switcher { display: none; }         /* ActiveGemSwitcher — widen to use */
 .console.is-rail .console-phase-btn { font-size: 0; }
 .console.is-rail .console-phase-btn::before { content: attr(data-short); font-size: 12px; font-weight: 600; }
+/* Footer chips shed their text in the rail: the identity chip keeps just its
+   avatar, and the warming pill collapses to a single accent dot (it only shows
+   while precompute is running, so the dot is enough of a signal). */
+.console.is-rail .identity-chip { justify-content: center; }
+.console.is-rail .identity-chip__label, .console.is-rail .identity-chip__ext { display: none; }
+.console.is-rail .warming-pill { font-size: 0; padding: 4px; text-align: center; }
+.console.is-rail .warming-pill::before { content: "•"; font-size: 15px; color: var(--accent); }
 
 /* ── Sidebar masthead ── */
 .console-nav {
