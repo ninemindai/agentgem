@@ -1307,3 +1307,185 @@ git commit -m "docs: record the measured raw-index numbers"
 **Type consistency.** `FileUsage` / `RawUsageRow` / `HookUsageRow` — defined in Task 1, consumed in Tasks 3, 4. `StoredRawRow` / `StoredHookRow` — defined in Task 2, consumed in Tasks 3, 4. `syncUsage(paths, hookDigest, parseFile)` — defined in Task 3, called in Task 4. `hookDigest(hooks)` — defined in Task 4, tested in Task 4. `matchSkill` returns `{ name } | undefined`; `matchMcpServer` returns `string | null` — both used accordingly in Task 2's `resolveUsage`.
 
 **No placeholders.** Every code step carries real code; every run step carries a real command and its expected output.
+
+---
+
+## Review Amendments (plan-eng-review 2026-07-10)
+
+Seven decisions from the engineering review. Each amends the tasks above; apply them as you implement.
+
+### A1 — `hook_digest` is a column on `transcript_file`; delete the wipe (Issue 1, P1)
+
+**The bug being fixed:** the plan's `doSync` wiped `transcript_file` on a hook-digest change but kept `raw_usage`. The prune loop reads `existing` (from `transcript_file`), so after a wipe it prunes nothing, and `raw_usage` rows for deleted transcripts leak forever — silently inflating `invocations`/`sessionsUsedIn`. Two authorities (file bytes, hook inventory) were clobbering each other's bookkeeping.
+
+**The fix:** `transcript_file` gains a `hook_digest TEXT` column. A file is up to date iff `mtime+size` match **and** its stored `hook_digest` equals the current one. Delete the `meta.hook_digest` guard block entirely. Data-flow state machine (put this ASCII above `doSync`, per A5):
+
+```
+                          per file, in doSync:
+  ┌────────────────────────────────────────────────────────────────────┐
+  │  stat(path) fails ────────────────────────────► skip (vanished)     │
+  │  row.mtime==st.mtime && row.size==st.size                           │
+  │     && row.hook_digest == current  ───────────► SKIP (up to date)   │
+  │  else ─────────────► reparse: scanFileUsage(path, hooks)            │
+  │                      DELETE raw_usage/hook_usage WHERE path          │
+  │                      re-INSERT rows                                  │
+  │                      UPSERT transcript_file(path, mtime, size,       │
+  │                                             hook_digest=current)     │
+  └────────────────────────────────────────────────────────────────────┘
+  prune: for path in transcript_file NOT in `seen`: DELETE all three   ← now always correct
+```
+
+Concretely, in Task 3:
+- `transcript_file` DDL: add `hook_digest TEXT NOT NULL`.
+- `syncUsage(paths, hookDigest, parseFile)` keeps its signature. Remove the `meta.hook_digest` read/write and the `DELETE FROM hook_usage; DELETE FROM transcript_file;` block.
+- The "unchanged" guard becomes: `if (prev && prev.mtime === st.mtimeMs && prev.size === st.size && prev.hookDigest === hookDigest) continue;`
+- Load `hook_digest` into `existing` alongside mtime/size.
+- The `transcript_file` upsert writes `hook_digest = hookDigest`.
+- Task 3's hook-digest test (T-B) asserts: unchanged file + changed `hookDigest` → reparsed; unchanged file + same `hookDigest` → not reparsed.
+
+### A2 — `last_used_ms` dropped from `raw_usage`/`hook_usage`; joined on read (Issue 3, P2)
+
+`last_used_ms` was `transcript_file.mtime_ms` stored a second time (and stat'd twice). Remove it:
+- `scanFileUsage` drops its `lastUsedMs` field and its `safeMtime` import. `FileUsage` becomes `{ raw, hooks }`.
+- `raw_usage` and `hook_usage` drop the `last_used_ms` column.
+- `syncUsage` returns rows joined to `transcript_file` for the timestamp: `SELECT r.path, r.kind, r.token, r.invocations, f.mtime_ms AS last_used_ms FROM raw_usage r JOIN transcript_file f USING(path)` (and likewise for `hook_usage`). `StoredRawRow`/`StoredHookRow` keep `lastUsedMs: number | null` — it now comes from the join, so `resolveUsage` is unchanged.
+- Delete Task 2's "takes MAX lastUsedMs ... tolerates nulls" fixture assumption only insofar as the source changes; the aggregation (`MAX`) stays.
+
+### A3 — read failure is distinguished from empty parse (Issue 4, P2, pre-existing)
+
+A transient `readFileSync` failure must not mark the file as parsed (today it does, so the file is never retried and its usage reads zero until mtime changes).
+- `scanFileUsage` signals a read failure distinctly from an empty file: return `{ raw: [], hooks: [], failed: true }` on the `readFileSync` catch; `failed` is absent/false otherwise. (A genuinely empty transcript returns `failed: false`.)
+- In `doSync`: if `parseFile(path)` returns `failed`, do **not** upsert `transcript_file` for that path and do not delete its existing rows — leave it to be retried next sync. `log.warn` the path. (`createLogger` from `@agentgem/base`, matching `gem.controller.ts`.)
+- Test T-C: a path whose read throws is absent from `transcript_file` after sync and is reparsed on the next sync.
+- Note: the differential fallback (`computeGlobalUsage`) still swallows this error, so the two paths diverge only on an unreadable file — acceptable and documented.
+
+### A4 — matchers normalized, and exact-match outranks suffix (Issues 5 + 7; 7A subsumes 5A)
+
+`matchSkill` and `matchMcpServer` currently return different absences (`{name}|undefined` vs `string|null`) AND are first-match-wins over inventory order. Storing raw rows exposes the order-dependence: an ambiguous token could resolve differently between runs.
+- Both matchers return `string | null` (the resolved name, or null). `matchSkill`'s two `scanWorkflow` call sites (`:448`, `:449`) read `.name` today — update them to use the returned name directly.
+- **`matchSkill` tries an exact-name match across ALL skills first, then falls back to `:suffix`:**
+  ```ts
+  export function matchSkill(list: { name: string }[], skill: string): string | null {
+    const exact = list.find((s) => s.name === skill);
+    if (exact) return exact.name;
+    const suffix = list.find((s) => skill.endsWith(`:${s.name}`));
+    return suffix ? suffix.name : null;
+  }
+  ```
+  This makes resolution a pure function of (token, inventory SET), not (token, ORDER).
+- `resolveUsage`'s guard becomes `if (name === null) continue;`.
+- **Re-baseline the differential test once** after this lands (the tie-break for any genuinely ambiguous historical token shifts, correctly, one time).
+- New test: inventory `[{name:"x:brainstorming"},{name:"brainstorming"}]` resolves token `"brainstorming"` to `"brainstorming"` regardless of array order (run it with the array both ways).
+
+### A5 — ASCII diagrams in the plan and inline (Issue 2, P2)
+
+- The A1 state machine above goes verbatim above `doSync` in `transcriptIndex.ts`.
+- A token-vs-hook fork diagram goes above `scanFileUsage` in `rawUsageScan.ts`:
+  ```
+  one transcript record ─┬─ assistant tool_use "Skill"     → raw skill token   (inventory-independent)
+                         ├─ assistant tool_use "mcp__x__y" → raw mcp token      (inventory-independent)
+                         └─ any record matching /Hook\b/    → hook hit, matched
+                                                              by THIS hook's event/cmd (needs inventory)
+  ```
+- **Diagram maintenance is part of the change:** if a future edit adds a fifth invalidation trigger or a new token kind, the diagram is updated in the same commit. State this in the file header comment.
+
+### A6 — differential test: fixture in CI + opt-in real-corpus (Issue 6)
+
+Task 5's fixture test stays in CI. Add a second test in `usageDifferential.test.ts`, guarded by `if (!process.env.AGENTGEM_DIFFERENTIAL_REAL) return;` (or `it.skipIf`), that runs `computeGlobalUsage` vs `getGlobalUsageIndexed` over the real `~/.claude/projects` and asserts sorted equality. Task 6 gains a checklist line: **run `AGENTGEM_DIFFERENTIAL_REAL=1 pnpm exec vitest run dist/gem/__tests__/usageDifferential.test.js` once before merge; it must pass.** If it fails, the raw path diverges from the parse path on a real token shape — fix the implementation, never the expectation.
+
+### A7 — no covering index on `raw_usage`; this is intentional
+
+The old `global_usage` had a `(type,name)` index for its SQL `GROUP BY`. The new read is `SELECT * FROM raw_usage` folded in JS (~810 rows, 25 ms measured), so no covering index is needed and one would only slow writes. Add a one-line comment on the `raw_usage` DDL: `-- no secondary index: the read is a full scan folded in JS (~hundreds of rows); an index would only slow the per-file upserts.` so a future reader does not "restore" it.
+
+### Mandatory tests added by the review (regression rule + fix coverage)
+
+Fold these into Tasks 3-5. T-A is a **CRITICAL regression** (no AskUserQuestion — the iron rule):
+
+- **T-A (CRITICAL, Task 3):** prune after a `hook_digest` change. Sync files a+b (b has rows), change the hook digest, delete b from disk, sync [a]. Assert b's rows are gone. This is the P1 bug; the existing prune test uses a stable digest and would not catch it.
+- **T-B (Task 3):** unchanged bytes + changed `hook_digest` → reparse; both unchanged → no reparse (the A1 column mechanism).
+- **T-C (Task 3):** read failure → path not recorded in `transcript_file`, reparsed next sync (fix A3).
+- **T-D (Task 2/3):** `lastUsedMs` derived from the `transcript_file` join (fix A2); delete the stored-`lastUsedMs` assumption.
+- **T-E (Task 1):** both matchers return `null` on no-match (fix A4).
+- **T-F (Task 3):** a `schema_version="1"` db migrates to v2 (drops `global_usage`, sets `schema_version="2"`, empty new tables). The spec asked for this; the original plan dropped it.
+- **T-G (Task 2):** a hook and a skill sharing a `name` do NOT merge (fold key must include `type`).
+- **T-H (Task 1):** two hooks matching one record both count; a record matching `/Hook\b/` but no hook fires contributes zero.
+- **T-I (Task 4):** `hookDigest` is stable under hook reorder (it sorts by name).
+
+---
+
+## NOT in scope
+
+- **The first cold-build parse (3.1 GB, ~17 s, on the event loop).** Tracked as issue #284. This plan removes rebuilds, not the one-time build; the two compose (a worker parses, the main thread owns the `DatabaseSync` handle).
+- **Making hooks inventory-independent.** Hooks have no token; matching them raw would mean inverting a `flat.includes(...)` heuristic over arbitrary record text, a fidelity risk for 12 of 436 artifacts. Deliberate.
+- **An aggregate-result cache keyed by (hook_digest + inventory_digest).** Suggested by the outside voice; rejected because query-time resolution is 25 ms measured. Caching it would reintroduce the inventory-digest invalidation coupling this change exists to remove.
+- **Strengthening hook match fidelity** (event+basename substring on JSON text). Pre-existing behavior, unchanged here; a stricter hook signal is its own change.
+- **Refactoring `scanWorkflow` to a shared event scanner** (removes the duplicated parser). 16 modules depend on `scanWorkflow`; the differential test guards drift instead. Decided in review D2.
+
+## What already exists
+
+- **`transcript_file` incremental machinery** (mtime+size skip, prune) — reused as-is; only the `hook_digest` column is added.
+- **`matchSkill` / `matchMcpServer` / `mcpServerToken` / `firstHookCommand`** — already exist in `scanWorkflow`; exported and shared, not rewritten. `matchSkill`'s tie-break is the only behavioral change (A4).
+- **`sharedIndex()` single-flight chain** (`globalUsage.ts:48-60`) — reused unchanged; still serializes overlapping SWR syncs.
+- **`computeGlobalUsage`** — kept as the endpoint fallback AND as the differential test's oracle. Not deleted.
+- **The `schema_version` migration guard** (`transcriptIndex.ts:83-89`) — reused; the v1→v2 bump rides it, no hand-written migration.
+- **`unresolved` map in `scanWorkflow`** — NOT reused: it drops `lastUsedMs` and collapses skill/mcp to `kind:"builtin"`, so it cannot back a raw-token store.
+
+## Failure modes (per new codepath)
+
+| Codepath | Realistic production failure | Test? | Error handling? | Silent? |
+|---|---|---|---|---|
+| `doSync` prune after hook change | deleted transcripts leak → inflated counts | **T-A (added)** | structural (A1 removes the wipe) | was silent; now impossible |
+| `scanFileUsage` read failure | EMFILE/EACCES → file marked parsed, usage zeroed | **T-C (added)** | A3: skip upsert, retry, log.warn | was silent; now logged + retried |
+| `resolveUsage` fold | hook+skill same name merge → wrong count | **T-G (added)** | fold key includes `type` | would be silent without T-G |
+| `matchSkill` ambiguous token | order-dependent resolution → count flips between runs | **T (A4, added)** | A4: exact outranks suffix, order-free | was silent; now deterministic |
+| v1→v2 migration | old rows can't carry raw tokens → stale data | **T-F (added)** | schema guard drops derived rows, one rebuild | not silent (one-time 17 s) |
+
+No remaining failure mode is both untested AND silent AND unhandled. **No critical gaps.**
+
+## Worktree parallelization strategy
+
+Sequential implementation, no parallelization opportunity. The six tasks form a single dependency chain through three files in one package pair (`insight` → `capture`): `scanFileUsage` (T1) → `resolveUsage` (T2) → schema (T3) → rewire (T4) → differential gate (T5) → measure (T6). Every task's `tsc -b` depends on the prior task's exports, and T3 cannot even typecheck until T4. Splitting across worktrees would only create merge conflicts in `transcriptIndex.ts` and `globalUsage.ts`.
+
+## Implementation Tasks
+Synthesized from this review's findings. Each derives from a specific finding above.
+
+- [ ] **T1 (P1, human: ~1.5h / CC: ~15min)** — transcriptIndex — hook_digest column, no wipe; delete meta.hook_digest guard
+  - Surfaced by: Architecture — Issue 1 (deleted transcripts leak after a hook change)
+  - Files: `packages/capture/src/transcriptIndex.ts`, `src/gem/__tests__/transcriptIndex.test.ts`
+  - Verify: T-A (prune-after-hook-change) + T-B pass under `pnpm exec vitest run dist/gem/__tests__/transcriptIndex.test.js`
+- [ ] **T2 (P2, human: ~1h / CC: ~10min)** — schema — drop last_used_ms, JOIN transcript_file on read
+  - Surfaced by: Code Quality — Issue 3 (last_used_ms duplicated 3×, stat'd 2×)
+  - Files: `packages/capture/src/transcriptIndex.ts`, `packages/insight/src/rawUsageScan.ts`, `packages/capture/src/resolveUsage.ts`
+  - Verify: T-D passes; `FileUsage` no longer carries `lastUsedMs`
+- [ ] **T3 (P2, human: ~1.5h / CC: ~12min)** — rawUsageScan — distinguish read failure from empty parse
+  - Surfaced by: Code Quality — Issue 4 (transient read error zeroes usage silently)
+  - Files: `packages/insight/src/rawUsageScan.ts`, `packages/capture/src/transcriptIndex.ts`, tests
+  - Verify: T-C — a throwing read is not recorded and is reparsed next sync
+- [ ] **T4 (P2, human: ~1h / CC: ~10min)** — matchers — normalize to string|null; exact outranks suffix
+  - Surfaced by: Code Quality Issue 5 + Cross-model Issue 7 (order-dependent resolution)
+  - Files: `packages/insight/src/workflowScan.ts` (:390,:448,:449,:157), `packages/capture/src/resolveUsage.ts`
+  - Verify: T-E + the order-independence test; re-baseline the differential once
+- [ ] **T5 (P2, human: ~45min / CC: ~8min)** — diagrams — invalidation state machine + token/hook fork, in plan and inline
+  - Surfaced by: Architecture — Issue 2
+  - Files: `packages/capture/src/transcriptIndex.ts`, `packages/insight/src/rawUsageScan.ts`
+  - Verify: diagrams present above `doSync` and `scanFileUsage`; header notes maintenance is part of the change
+- [ ] **T6 (P2, human: ~1h / CC: ~10min)** — tests — opt-in real-corpus differential + T-F/T-G/T-H/T-I
+  - Surfaced by: Test review — Issue 6 + coverage gaps
+  - Files: `src/gem/__tests__/usageDifferential.test.ts`, `rawUsageScan.test.ts`, `resolveUsage.test.ts`, `globalUsage.test.ts`
+  - Verify: `AGENTGEM_DIFFERENTIAL_REAL=1 pnpm exec vitest run dist/gem/__tests__/usageDifferential.test.js` passes once before merge
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
+| Codex Review | `/codex review` | Independent 2nd opinion | 1 | issues_found | 3 new (root:null defused, order-dependence→7A, aggregate-cache rejected) |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAR | 7 issues, all folded; 0 critical gaps |
+| Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
+
+- **CODEX:** ran (high effort). 12 raised, 8 already-handled or wrong (`safeMtime` IS exported; `root:null` was always the contract — verified `globalUsage.ts:15,25,89`), 1 folded (order-dependence → 7A), 3 noted-not-raised (aggregate cache premature at 25 ms; duplicate-name → test T-G; hooks out of scope).
+- **CROSS-MODEL:** one tension. Review scored the matcher asymmetry P3-style; Codex reframed raw-row resolution as order-*unstable*. Resolved by 7A (exact outranks suffix → order-free), which subsumes review Issue 5. Both reviewers now agree.
+- **VERDICT:** ENG CLEARED — ready to implement. Scope reduced: no (proceed-as-planned + 7 fixes). 1 CRITICAL regression test mandated (T-A, prune-after-hook-change). 0 unresolved.
+
+NO UNRESOLVED DECISIONS
