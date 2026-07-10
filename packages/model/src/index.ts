@@ -14,6 +14,7 @@ export * from "./binPath.js";
 export * from "./identity.js";
 export * from "./inputError.js";
 export * from "./resolveDir.js";
+export * from "./entityPath.js";
 export * from "./gemTypes.js";
 export * from "./gemGrade.js";
 export * from "./loop.js";
