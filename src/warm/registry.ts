@@ -7,7 +7,7 @@
 // warmables ignore the root argument; per-root warmables receive a project root.
 import { resolveDirs } from "@agentgem/model";
 // usage scan + its cache live in @agentgem/capture:
-import { computeGlobalUsage, readGlobalUsageCache, writeGlobalUsageCache } from "@agentgem/capture";
+import { computeGlobalUsage, getGlobalUsageIndexed, readGlobalUsageCache, writeGlobalUsageCache } from "@agentgem/capture";
 // transcript helpers + the analysis cache live in @agentgem/insight:
 import { allClaudeTranscripts, transcriptToken, readAnalysisCache, writeAnalysisCache, scanSessionsCached, isSessionScanFresh, loadSessionTranscript } from "@agentgem/insight";
 // recall index sync:
@@ -41,13 +41,21 @@ export const WARMABLES: Warmable[] = [
     },
   },
   {
+    // /api/usage serves getGlobalUsageIndexed and only reads the JSON cache when that
+    // rejects. Warming via computeGlobalUsage therefore reparsed the whole corpus —
+    // synchronously, on the server's loop — to fill a cache the healthy path never
+    // touches. Warm through the index instead (it reparses only changed transcripts),
+    // then mirror the result into the JSON cache so a later index failure is served
+    // from disk rather than reparsing the corpus inside a request.
     id: "usage", cost: "cheap", scope: "global",
     async warm(_root, { dir, force }) {
       const dirs = resolveDirs(dir);
       const paths = allClaudeTranscripts(dirs.claudeDir);
       const token = transcriptToken(paths);
       if (!force && readGlobalUsageCache(token)) return "hit";
-      writeGlobalUsageCache(token, computeGlobalUsage(dirs, paths), dirs.claudeDir);
+      // getGlobalUsageIndexed documents the full scan as its fallback when it rejects.
+      const result = await getGlobalUsageIndexed(dirs, paths).catch(() => computeGlobalUsage(dirs, paths));
+      writeGlobalUsageCache(token, result, dirs.claudeDir);
       return "warmed";
     },
   },
