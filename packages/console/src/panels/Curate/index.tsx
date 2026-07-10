@@ -153,8 +153,17 @@ export function Curate({ apiBase }: { apiBase: string }) {
     if (bodies[id] !== undefined) return;
     try {
       const r = await artifactContentRoute.call(makeClient(apiBase), { query: { id } });
+      if (!mounted.current) return;
+      // A retry (re-expand after a prior failure) succeeded — clear the stale
+      // error so the render's error-before-body check doesn't mask the body.
+      setBodyError((b) => {
+        if (!(id in b)) return b;
+        const { [id]: _drop, ...rest } = b;
+        return rest;
+      });
       setBodies((b) => ({ ...b, [id]: r.content }));
     } catch (e) {
+      if (!mounted.current) return;
       setBodyError((b) => ({ ...b, [id]: e instanceof Error ? e.message : String(e) }));
     }
   };
