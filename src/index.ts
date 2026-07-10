@@ -50,6 +50,7 @@ import { join as pathJoin } from "node:path";
 import { mkdirSync } from "node:fs";
 import { originGuard } from "./originGuard.js";
 import { playNoCache } from "./playCache.js";
+import { gameHtmlCache } from "./arcadeCache.js";
 import { getWarmStatus, beginForeground, endForeground } from "./warm/orchestrator.js";
 import { startWarmSchedule } from "./warm/schedule.js";
 import { registerDrizzle } from "@agentback/drizzle";
@@ -161,6 +162,11 @@ export async function createApp(port: number): Promise<RestApplication> {
   // responseHeaders collector so it holds on the Web/edge pipeline too. Bound before start(): the
   // hook list is resolved once, on the first dispatched request, and cached.
   app.bind("hooks.playNoCache").to(playNoCache).tag(REST_DISPATCH_HOOK_TAG);
+  // The arcade's sealed-game read is the opposite case: versioned, re-read by every card on the
+  // Miniapps grid, and expensive to serve (bytea out of Postgres, then unzip). Give it a short
+  // max-age so a repeat visit skips the request — but never `immutable`, since a republish reuses
+  // the same (key, version).
+  app.bind("hooks.gameHtmlCache").to(gameHtmlCache).tag(REST_DISPATCH_HOOK_TAG);
   await installExplorer(app, { title: "agentgem API" });
   await installMcpHttp(app);
   const server = await app.restServer;
