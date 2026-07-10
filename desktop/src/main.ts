@@ -5,7 +5,7 @@ import { autoUpdater } from "electron-updater";
 import type { Tray } from "electron";
 import { startEmbeddedServer, type EmbeddedServer, type ForkCore } from "./server.js";
 import { PICK_FOLDER, UPDATE_EVENT, NOTIFY, pickFolderResult, notifyPayload } from "./ipc.js";
-import { buildMenuTemplate } from "./menu.js";
+import { buildMenuTemplate, buildContextMenuTemplate } from "./menu.js";
 import { configureUpdater, updaterFeed, repoUrlFromPackageJson } from "./updater.js";
 import { createTray } from "./tray.js";
 import { DESKTOP_NAME } from "./version.js";
@@ -95,6 +95,10 @@ async function createWindow(url: string): Promise<void> {
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
     return { action: "deny" };
+  });
+  win.webContents.on("context-menu", (_e, params) => {
+    const template = buildContextMenuTemplate(params);
+    if (template.length && win) Menu.buildFromTemplate(template).popup({ window: win });
   });
   // Closing the window hides to tray; the server keeps running until Quit.
   win.on("close", (e) => {
