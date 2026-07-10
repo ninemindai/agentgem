@@ -52,11 +52,21 @@ export type GameGenre = "replay" | "skill-run" | "project-fun"; // v2: "watch" |
 // first two are read-only data feeds brokered into the sealed iframe; "invoke-agent" is privileged
 // code execution (the host runs an ACP agent in the run-sandbox and streams back a sanitized
 // transcript) and is restricted at runtime to locally-authored games, never shared/marketplace ones.
-export type GameCapability =
+// Brokered by a host MCP tool. deriveNeeds() matches these by TOOL NAME (capabilities.ts CAP_TOOL).
+export type ToolCapability =
   | "session-data"          // read-only: the game's own source-session transcript ({meta,timeline}), host-brokered on demand
   | "live-session-events"   // read-only: streamed live session events (host -> /api/watch/stream)
   | "local-project-access"  // read-only: local projects / setup / inventory (host-brokered)
   | "invoke-agent";         // privileged: host runs a local ACP agent in the sandbox; game gets the transcript
+
+// A ui/* method on window.agentgemApp with no backing tool. deriveNeeds() matches these by METHOD NAME
+// (capabilities.ts CAP_METHOD). Egress channels out of the sealed frame — see the design spec F5.
+export type ActionCapability =
+  | "open-link"             // ui/open-link: navigate the user to an external URL (consent-gated, URL shown)
+  | "send-message"          // ui/message: speak into the conversation as the user (local-only)
+  | "update-model-context"; // ui/update-model-context: push structured state into the model (local-only)
+
+export type GameCapability = ToolCapability | ActionCapability;
 
 export type GameSource =
   | { kind: "session"; agent: string; project?: string; sessionId: string; summary: string }
