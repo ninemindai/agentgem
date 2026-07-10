@@ -4,12 +4,12 @@
 // studio brief from its meta, and guard which cwd a chat session may adopt. studioCwd is the security
 // gate: only a path under the miniapps registry (or the neutral fallback) is ever honored.
 import { join, sep, resolve } from "node:path";
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import type { GameSource } from "@agentgem/model";
 import { extractSource, type SourceReaders } from "./sourceContext.js";
 import { genreFor } from "./genres.js";
 import { scaffoldFor, sealedTemplate } from "./scaffolds.js";
-import { miniappDir, miniappsRoot, type MiniappMeta } from "./miniapps.js";
+import { miniappDir, miniappsRoot, claimMiniappDir, type MiniappMeta } from "./miniapps.js";
 import { ensureRepo, commitWithLock } from "./git.js";
 import { redactForBake } from "./redact.js";
 import { MINIAPP_BUILDER_BRIEF } from "./builderBrief.js";
@@ -26,7 +26,9 @@ export function studioCwd(requested: string | undefined, fallback: string): stri
   return norm === resolve(fallback) || norm.startsWith(root + sep) ? norm : fallback;
 }
 
-// Derive a clean single-segment slug for a new miniapp from its source.
+// Derive a clean single-segment slug BASE for a new miniapp from its source. The base is not the final
+// name: claimMiniappDir() suffixes it on collision, so "new miniapp" always yields a new miniapp even
+// when the source (a session, a project folder, a title) has been used before.
 function slugFor(source: GameSource): string {
   const raw =
     source.kind === "session" ? `session-${source.sessionId}` :
@@ -54,11 +56,9 @@ function studioInstructions(name: string): string {
 
 export async function seedStudio(source: GameSource, readers: SourceReaders): Promise<{ name: string; brief: string }> {
   const input = await extractSource(source, readers);
-  const name = slugFor(source);
-  const dir = miniappDir(name);                       // validates the slug + jails the path
   const g = genreFor(input.genre);
-  await ensureRepo(miniappsRoot());
-  mkdirSync(dir, { recursive: true });
+  await ensureRepo(miniappsRoot());                   // must exist before we can claim a dir inside it
+  const { name, dir } = claimMiniappDir(slugFor(source));
   // Bake a REDACTED, self-contained snapshot so the miniapp runs everywhere — offline and on
   // app.agentgem.ai, which has no capability broker. Broker-fed genres additionally keep their `needs`
   // (below) so a LOCAL host that pushes a ui/notifications/tool-result refresh can still upgrade the baked snapshot
@@ -75,10 +75,8 @@ export async function seedStudio(source: GameSource, readers: SourceReaders): Pr
 // NOT gated here — Save enforces the seal, so imperfect HTML can be brought in and fixed in the studio.
 export async function importStudio(title: string, html: string): Promise<{ name: string; brief: string }> {
   const source: GameSource = { kind: "html", title };
-  const name = slugFor(source);
-  const dir = miniappDir(name); // validates the slug + jails the path
   await ensureRepo(miniappsRoot());
-  mkdirSync(dir, { recursive: true });
+  const { name, dir } = claimMiniappDir(slugFor(source));
   writeFileSync(join(dir, `${name}.html`), html);
   const meta: MiniappMeta = { title, genre: "project-fun", createdFrom: source, engineVersion: "1" };
   writeFileSync(join(dir, "meta.json"), JSON.stringify(meta, null, 2));
@@ -91,10 +89,8 @@ export async function importStudio(title: string, html: string): Promise<{ name:
 // direction (NOT baked into the HTML — it just opens the studio brief).
 export async function blankStudio(title: string, prompt?: string): Promise<{ name: string; brief: string }> {
   const source: GameSource = { kind: "blank", title };
-  const name = slugFor(source);
-  const dir = miniappDir(name); // validates the slug + jails the path
   await ensureRepo(miniappsRoot());
-  mkdirSync(dir, { recursive: true });
+  const { name, dir } = claimMiniappDir(slugFor(source));
   writeFileSync(join(dir, `${name}.html`), sealedTemplate(title, "✦ new"));
   const meta: MiniappMeta = { title, genre: "project-fun", createdFrom: source, engineVersion: "1" };
   writeFileSync(join(dir, "meta.json"), JSON.stringify(meta, null, 2));

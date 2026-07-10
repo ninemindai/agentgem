@@ -1,9 +1,9 @@
 // src/play/__tests__/studio.test.ts
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { seedStudio, blankStudio, studioBrief, studioCwd, miniappsRoot, type SourceReaders } from "@agentgem/play";
+import { seedStudio, blankStudio, saveMiniapp, studioBrief, studioCwd, miniappsRoot, type SourceReaders } from "@agentgem/play";
 
 let home: string;
 beforeEach(() => { home = mkdtempSync(join(tmpdir(), "agh-")); process.env.AGENTGEM_HOME = home; });
@@ -75,5 +75,44 @@ describe("studio", () => {
     const b = studioBrief(name);
     expect(b).toContain(`${name}.html`);
     expect(b.toLowerCase()).toContain("sealed");
+  });
+
+  // "New miniapp" is always a NEW miniapp. Creating from a source you've already used must never
+  // silently clobber the earlier one — reuse of an id happens only on the open-for-editing path.
+  it("seedStudio twice from the SAME session mints a second miniapp and leaves the first intact", async () => {
+    const source = { kind: "session" as const, agent: "claude", sessionId: "s1", summary: "auth" };
+    const first = await seedStudio(source, readers);
+    // mark the first so an overwrite would be detectable
+    const firstHtml = join(miniappsRoot(), first.name, `${first.name}.html`);
+    writeFileSync(firstHtml, `${readFileSync(firstHtml, "utf8")}<!--ORIGINAL-->`);
+
+    const second = await seedStudio(source, readers);
+    expect(second.name).not.toBe(first.name);
+    expect(second.name).toBe(`${first.name}-2`);
+    expect(readFileSync(firstHtml, "utf8")).toContain("<!--ORIGINAL-->"); // untouched
+    expect(existsSync(join(miniappsRoot(), second.name, `${second.name}.html`))).toBe(true);
+  });
+
+  it("two different projects sharing a folder basename get distinct miniapps", async () => {
+    const a = await seedStudio({ kind: "project", path: "/one/api", flavor: "node" }, readers);
+    const b = await seedStudio({ kind: "project", path: "/two/api", flavor: "node" }, readers);
+    expect(a.name).toBe("api");
+    expect(b.name).toBe("api-2");
+  });
+
+  it("blankStudio suffixes a repeated title rather than overwriting", async () => {
+    expect((await blankStudio("Untitled")).name).toBe("untitled");
+    expect((await blankStudio("Untitled")).name).toBe("untitled-2");
+    expect((await blankStudio("Untitled")).name).toBe("untitled-3");
+  });
+
+  // The other half of the contract: editing an EXISTING miniapp reuses its id (no new entry per save).
+  it("saving an existing miniapp reuses its id instead of minting a new one", async () => {
+    const { name } = await blankStudio("Reuse Me");
+    await saveMiniapp({ name, html: "<!doctype html><body><canvas></canvas><script>const x=1;</script></body>", meta: {
+      title: "Reuse Me", genre: "project-fun", createdFrom: { kind: "blank", title: "Reuse Me" }, engineVersion: "1",
+    } });
+    expect(existsSync(join(miniappsRoot(), `${name}-2`))).toBe(false);
+    expect(readFileSync(join(miniappsRoot(), name, `${name}.html`), "utf8")).toContain("canvas");
   });
 });
