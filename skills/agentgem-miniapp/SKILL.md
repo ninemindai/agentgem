@@ -20,6 +20,12 @@ under this Content-Security-Policy:
 So inline every byte of JS and CSS, use only `data:` URIs for images, fonts and media, and make no
 network calls of any kind.
 
+**Theming.** The host may supply CSS variables — `--color-background-primary`,
+`--color-background-secondary`, `--color-text-primary`, `--color-border-primary` — and sets `theme`
+(`"light"` or `"dark"`) on `<html data-theme>` automatically. Read them with a fallback, because most
+hosts send none: `background: var(--color-background-primary, #0d1117)`. On app.agentgem.ai, and any
+other host that sends no variables, the fallback is what renders.
+
 ## What Save enforces
 
 Two gates run when the user saves. Both throw a message you will see in the studio.
@@ -110,6 +116,23 @@ Pass every tool name as a **literal string** — `callTool("agentgem_get_invento
 and your call would then fail at play time with `-32601`. So the Save rejects a non-literal name
 outright. Naming a tool inside a comment or a string is fine — only a real call is checked.
 
+`window.agentgemApp` also exposes action methods beyond `callTool`. Same rule applies: write the
+method name as a **literal** on `agentgemApp.` — Save derives your declared capabilities from the
+source and cannot see an aliased reference.
+
+- `agentgemApp.openLink(url)` opens an external link. The host asks the user every time and shows the
+  URL. Returns a promise.
+- `agentgemApp.sendMessage({ role, content })` and `agentgemApp.updateModelContext({ structuredContent })`
+  speak into, or push structured state into, the host's conversation. These only work in an external
+  chat host (for example Claude Desktop) that rendered the miniapp — in the AgentGem console, and on
+  app.agentgem.ai, they reject with "unsupported by this host"; catch that rejection and degrade
+  gracefully rather than treating it as a bug. Declaring either one is local-only: never call them from
+  a miniapp you intend to share or publish.
+- `agentgemApp.requestDisplayMode("fullscreen")` (or `"inline"`) requests a display change. The host
+  may refuse, so its reply names the mode it actually applied, and it then pushes fresh
+  `containerDimensions` via a `ui/notifications/host-context-changed` notification. Re-read your
+  layout from those dimensions rather than measuring the scaled frame yourself.
+
 ## What you must not assume
 
 - **The seal gate is not a security boundary**, it is an admission check. The
@@ -147,6 +170,9 @@ a guarantee. So:
   viewport underneath you.
 - Do not poll for the host. The shim already retries the handshake about five times over four seconds,
   and queues any `callTool` you make before it is ready.
+- **Register every `onNotification` handler before your first render.** The host can push a
+  `tool-input` or a `tool-result` immediately after the handshake completes, and a handler wired up
+  after your first frame paints misses it.
 - A canvas game takes three to five seconds to first paint. A blank frame right after load is usually
   slow paint, not a bug. Wait before you debug.
 - Stay well under 1.5 MB.
