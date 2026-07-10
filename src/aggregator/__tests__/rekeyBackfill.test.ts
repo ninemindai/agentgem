@@ -1,6 +1,6 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { backfillGemOwners, backfillBindingAnchors, backfillUserHandles, ensureSchema, makeTestDb } from "@agentgem/aggregator";
 
@@ -181,5 +181,43 @@ describe("backfillUserHandles", () => {
     await mkGhUser(db, "once", "f@e.com");
     expect(await backfillUserHandles(db)).toEqual({ claimed: 1, skipped: 0 });
     expect(await backfillUserHandles(db)).toEqual({ claimed: 0, skipped: 0 });
+  });
+
+  // Finding 2 (5b review): backfillUserHandles' UPDATE has no error handling of its own, so a boot
+  // racing a concurrent claimHandle rename (which can commit between this statement's snapshot read
+  // and its write, raising 23505) would otherwise propagate out of ensureSchema and fail the whole
+  // boot over a condition that self-heals on the next boot. Simulate that 23505 directly on the
+  // UPDATE call (real cross-connection concurrency isn't reproducible against a single PGlite
+  // instance) and assert the function absorbs it rather than throwing.
+  it("does not throw out of a concurrent-rename-style unique violation on its own UPDATE", async () => {
+    const db = await makeTestDb();
+    await mkGhUser(db, "racer", "racer@e.com");
+    const realExecute = db.execute.bind(db);
+    let calls = 0;
+    const spy = vi.spyOn(db, "execute").mockImplementation(((query: unknown) => {
+      calls += 1;
+      if (calls === 1) {
+        const err = new Error('duplicate key value violates unique constraint "user_handle_uniq"') as Error & { code: string };
+        err.code = "23505";
+        return Promise.reject(err);
+      }
+      return realExecute(query as never);
+    }) as typeof db.execute);
+
+    await expect(backfillUserHandles(db)).resolves.toEqual({ claimed: 0, skipped: 1 });
+    spy.mockRestore();
+  });
+
+  // Finding 3 (5b review): ensureSchema's backfillUserHandles call runs before
+  // migrateAccountsOrFail mirrors legacy `accounts` rows into "user" rows (src/index.ts) — so a
+  // "user" row created after ensureSchema already ran (exactly what migrateAccountsOrFail does at
+  // boot) would otherwise sit with handle = NULL for the whole boot unless backfillUserHandles is
+  // invoked again. Pins that a second, later call still claims it.
+  it("claims a handle for a \"user\" row created AFTER ensureSchema's own backfill already ran, when re-invoked", async () => {
+    const db = await makeTestDb(); // ensureSchema's one backfillUserHandles call already ran, against empty tables
+    const id = await mkGhUser(db, "late-arrival", "h@e.com"); // mirrors migrateAccountsOrFail's post-boot "user" row
+    expect(await handleOf(db, id)).toBeNull();
+    expect(await backfillUserHandles(db)).toEqual({ claimed: 1, skipped: 0 }); // src/index.ts's re-run, right after migrateAccountsOrFail
+    expect(await handleOf(db, id)).toBe("late-arrival");
   });
 });

@@ -89,7 +89,7 @@ export function originGuard(req: GuardReq, res: GuardRes, next: GuardNext): void
   // SPA's handle-claim POST (install.ts) — a single leaf endpoint (no sub-paths), same shape as
   // upload-publish: credentialed, own CORS for the AGENTGEM_WEB_ORIGINS allowlist, and a 401 on the
   // authed route.
-  if (req.path.startsWith("/api/auth/") || req.path.startsWith("/api/stars") || req.path.startsWith("/api/reviews") || req.path.startsWith("/api/usage") || req.path.startsWith("/api/orgs/") || req.path.startsWith("/api/github/") || req.path.startsWith("/api/registry/upload-publish") || req.path.startsWith("/api/catalog/") || req.path.startsWith("/api/handle")) { next(); return; }
+  if (req.path.startsWith("/api/auth/") || req.path.startsWith("/api/stars") || req.path.startsWith("/api/reviews") || req.path.startsWith("/api/usage") || req.path.startsWith("/api/orgs/") || req.path.startsWith("/api/github/") || req.path.startsWith("/api/registry/upload-publish") || req.path.startsWith("/api/catalog/") || req.path === "/api/handle") { next(); return; }
   const site = req.get("sec-fetch-site");
   if (site !== undefined) {
     if (site === "same-origin") { next(); return; }

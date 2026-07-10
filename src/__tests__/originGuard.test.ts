@@ -88,6 +88,14 @@ describe("originGuard (CSRF / drive-by guard)", () => {
     expect(r.nexted).toBe(true);
     expect(r.blocked).toBe(false);
   });
+  // Finding 4 (5b review): the exemption used to be a startsWith prefix match, which also (wrongly)
+  // covered a sibling route like /api/handles or /api/handle/foo. /api/handle is a single leaf
+  // endpoint with no sub-paths, so it's now an exact match — a future sibling route must not
+  // silently inherit the cross-site exemption.
+  it("does NOT exempt a path that merely starts with /api/handle (tightened to an exact match)", () => {
+    const r = run({ "sec-fetch-site": "cross-site" }, "app.agentgem.ai", "POST", "/api/handles");
+    expect(r.blocked).toBe(true);
+  });
   it("blocks a malformed Origin", () => {
     expect(run({ origin: "not a url" }).blocked).toBe(true);
   });

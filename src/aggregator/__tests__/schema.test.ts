@@ -64,6 +64,21 @@ describe("schema/testDb", () => {
     await expect(db.execute(u("a".repeat(40)))).rejects.toThrow(); // length
   });
 
+  // Finding 1 (5b review): claimHandle/claimHandleIfUnset/accountIdForHandle all compare handles
+  // case-insensitively, but the OLD unique index was case-sensitive on plain `handle` — the index,
+  // not a prior SELECT, is the actual race arbiter (see claimHandle's comment), so a case-sensitive
+  // index would let two concurrent claims of "bob" and "Bob" both get admitted. This drives raw
+  // inserts directly against "user" — bypassing claimHandle/claimHandleIfUnset entirely — to prove
+  // the DATABASE itself rejects the case-variant collision, not merely the app-level guard.
+  it("handle uniqueness is enforced case-insensitively by the DATABASE, not just the app-level guard", async () => {
+    const db = await makeTestDb();
+    await db.execute(sql`insert into "user" (id, email, email_verified, handle)
+                         values (gen_random_uuid()::text, 'bob1@e.com', false, 'Bob')`);
+    await expect(db.execute(sql`insert into "user" (id, email, email_verified, handle)
+                                values (gen_random_uuid()::text, 'bob2@e.com', false, 'bob')`))
+      .rejects.toThrow();
+  });
+
   it("accounts.login is nullable; catalog_gems has a nullable owner FK", async () => {
     const db = await makeTestDb();
     await db.execute(sql`insert into accounts (id, provider, provider_account_id, login)
