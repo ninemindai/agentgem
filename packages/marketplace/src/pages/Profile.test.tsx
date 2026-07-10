@@ -62,7 +62,7 @@ describe("Profile own-orgs navigation", () => {
   const orgs = [{ scope: "ninemind", role: "admin" }, { scope: "acme", role: "member" }];
 
   it("shows the signed-in owner their orgs with role badges and Team Pulse links", async () => {
-    render(<Profile api={apiP} login="alice" me={{ login: "alice", avatarUrl: null, orgs }} />);
+    render(<Profile api={apiP} login="alice" me={{ id: "u1", name: "alice", handle: "alice", avatarUrl: null, orgs }} />);
     expect(await screen.findByLabelText("your orgs")).toBeTruthy();
     expect(screen.getByText("@ninemind").getAttribute("href")).toBe("/orgs/ninemind");
     expect(screen.getByText("admin")).toBeTruthy(); // role badge on ninemind only
@@ -71,7 +71,7 @@ describe("Profile own-orgs navigation", () => {
   });
 
   it("hides the section from other viewers and when signed out", async () => {
-    const { unmount } = render(<Profile api={apiP} login="alice" me={{ login: "bob", avatarUrl: null, orgs }} />);
+    const { unmount } = render(<Profile api={apiP} login="alice" me={{ id: "u2", name: "bob", handle: "bob", avatarUrl: null, orgs }} />);
     await screen.findByText("@alice");
     expect(screen.queryByLabelText("your orgs")).toBeNull();
     unmount();

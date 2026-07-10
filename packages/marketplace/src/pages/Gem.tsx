@@ -87,7 +87,7 @@ export function Gem({ api, keyName, stars, me }: { api: ReturnType<typeof makeAp
   // Owner-only unpublish. Display-gating only — the server re-checks ownership (login === publishedBy).
   const { key: gemKey, version: gemVersion, publishedBy } = gem;
   const isGame = gem.artifactKinds.includes("game");
-  const isOwner = !!(me && publishedBy && me.login.toLowerCase() === publishedBy.toLowerCase());
+  const isOwner = !!(me && me.handle && publishedBy && me.handle.toLowerCase() === publishedBy.toLowerCase());
   const label = isGame ? "mini-game" : "gem";
   const unpublish = async () => {
     if (!window.confirm(`Unpublish "${gemKey}"? This permanently removes it from app.agentgem.ai for everyone. This can't be undone.`)) return;

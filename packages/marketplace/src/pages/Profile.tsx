@@ -35,7 +35,7 @@ export function Profile({ api, login, me }: { api: ReturnType<typeof makeApi>; l
       {/* Own-profile only: org memberships are never in the public profile payload, so private
           org memberships are visible to their owner alone. `me.orgs` comes from the get-session
           payload, enriched server-side by the `customSession` plugin (see auth.ts, betterAuth.ts). */}
-      {me && me.login === p.login && me.orgs.length > 0 && (
+      {me && me.handle && me.handle.toLowerCase() === login.toLowerCase() && me.orgs.length > 0 && (
         <section className="ex-profile-orgs" aria-label="your orgs">
           <h3 className="ex-profile-subhead">Your orgs <span className="ex-profile-orgs-note">(only you see this)</span></h3>
           <ul className="ex-org-chips">
