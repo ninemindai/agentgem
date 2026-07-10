@@ -85,6 +85,31 @@ describe("originGuard (CSRF / drive-by guard)", () => {
     expect(run({ origin: "not a url" }).blocked).toBe(true);
   });
 
+  // The arcade's play beacon: app.agentgem.ai → api.agentgem.ai, no login, no cookie. It is the one
+  // exempted WRITE, so the exemption must be exact-path and must not widen to its neighbours.
+  it("allows the cross-site play beacon (POST /api/aggregator/game-play) with wildcard CORS", () => {
+    const r = run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "POST", "/api/aggregator/game-play");
+    expect(r.nexted).toBe(true);
+    expect(r.set["access-control-allow-origin"]).toBe("*");
+  });
+  it("answers the play beacon's preflight without dispatching the route", () => {
+    const r = run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "OPTIONS", "/api/aggregator/game-play");
+    expect(r.nexted).toBe(false);
+    expect(r.status).toBe(204);
+    expect(r.set["access-control-allow-methods"]).toContain("POST");
+    expect(r.set["access-control-allow-headers"]).toContain("content-type");
+  });
+  it("serves the play counts cross-origin (GET /api/aggregator/game-plays) — the arcade cards read it", () => {
+    const r = run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "GET", "/api/aggregator/game-plays");
+    expect(r.nexted).toBe(true);
+    expect(r.set["access-control-allow-origin"]).toBe("*");
+  });
+  it("does not let the play-beacon exemption widen to other methods or aggregator writes", () => {
+    expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "DELETE", "/api/aggregator/game-play").blocked).toBe(true);
+    expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "POST", "/api/aggregator/ingest").blocked).toBe(true);
+    expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "POST", "/api/aggregator/sweep").blocked).toBe(true);
+  });
+
   // "Open in AgentGem" (marketplace → local console): clicking the link is a cross-site top-level
   // document navigation. Loading the SPA is side-effect-free and its own API calls are then
   // same-origin, so allow the navigation — but ONLY a real document navigation on a non-/api path.

@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import type { makeApi } from "./api";
 import { GamePlayer } from "./GamePlayer";
+import { visitorId } from "./visitor";
 
 type Api = ReturnType<typeof makeApi>;
 
@@ -22,7 +23,10 @@ export function GamePreview({ api, gemKey, version }: { api: Api; gemKey: string
 
   return (
     <>
-      <button type="button" className="gp-thumb" disabled={!html} onClick={() => setPlaying(true)}
+      {/* The click — not the html fetch above — is what counts as a play: the grid mounts a thumbnail
+          for every card, so fetching html means "the card rendered", never "someone played". */}
+      <button type="button" className="gp-thumb" disabled={!html}
+        onClick={() => { setPlaying(true); void api.recordPlay(gemKey, version, visitorId()); }}
         title={html ? "Play" : undefined} aria-label={`Play ${gemKey}`}>
         {html
           ? <GamePlayer html={html} interactive={false} />

@@ -18,6 +18,7 @@ export * from "./reviews.js";
 export * from "./projectAdoption.js";
 export * from "./ingestAdoption.js";
 export * from "./catalog.js";
+export * from "./gamePlays.js";
 export * from "./profile.js";
 export * from "./orgRubric.js";
 export * from "./orgCatalog.js";

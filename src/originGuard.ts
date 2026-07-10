@@ -33,13 +33,34 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 // write (and every other route) stays guarded. Also covers the curated-sources reads (list/divisions/
 // agents/import) that the marketplace fetches cross-origin — /api/sources/install stays off this list
 // because it writes to disk.
-const PUBLIC_READ_PATHS = new Set(["/api/aggregator/popularity", "/api/aggregator/co-occurrence", "/api/aggregator/adoption", "/api/aggregator/co-occurrence-matrix", "/api/registry/gems", "/api/aggregator/profile", "/api/aggregator/org-catalog", "/api/aggregator/popular-skills", "/api/aggregator/gem-archive", "/api/aggregator/game-html", "/api/aggregator/effectiveness", "/api/aggregator/gem-adoption", "/api/sources", "/api/sources/divisions", "/api/sources/agents", "/api/sources/import"]);
+const PUBLIC_READ_PATHS = new Set(["/api/aggregator/popularity", "/api/aggregator/co-occurrence", "/api/aggregator/adoption", "/api/aggregator/co-occurrence-matrix", "/api/registry/gems", "/api/aggregator/profile", "/api/aggregator/org-catalog", "/api/aggregator/popular-skills", "/api/aggregator/gem-archive", "/api/aggregator/game-html", "/api/aggregator/game-plays", "/api/aggregator/effectiveness", "/api/aggregator/gem-adoption", "/api/sources", "/api/sources/divisions", "/api/sources/agents", "/api/sources/import"]);
+
+// The single exempted WRITE: the arcade's play beacon (app.agentgem.ai → api.agentgem.ai). It takes no
+// credentials, so there is no ambient authority to forge — a drive-by POST can only append a play row
+// for an already-published game, which is the same thing the attacker could do with curl. That is the
+// whole threat: the count is inflatable, which is why it is never presented as a count of people. Exact
+// path + POST only, so no other aggregator write inherits the exemption.
+const PUBLIC_WRITE_PATHS = new Set(["/api/aggregator/game-play"]);
 
 function block(res: GuardRes): void {
   res.status(403).type("application/json").send(JSON.stringify({ error: "cross-site request blocked" }));
 }
 
 export function originGuard(req: GuardReq, res: GuardRes, next: GuardNext): void {
+  const method = req.method.toUpperCase();
+  if (PUBLIC_WRITE_PATHS.has(req.path) && (method === "POST" || method === "OPTIONS")) {
+    res.set("Access-Control-Allow-Origin", "*"); // credential-less beacon — any origin may post it
+    if (method === "OPTIONS") {
+      // The beacon sends Content-Type: application/json, which is not a CORS-simple header, so the
+      // browser preflights. Answer it here; never dispatch the route.
+      res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+      res.set("Access-Control-Allow-Headers", "content-type");
+      res.status(204).send("");
+      return;
+    }
+    next();
+    return;
+  }
   if (SAFE_METHODS.has(req.method.toUpperCase()) && PUBLIC_READ_PATHS.has(req.path)) {
     res.set("Access-Control-Allow-Origin", "*"); // public, credential-less data — any origin may read it
     if (req.method.toUpperCase() === "OPTIONS") {

@@ -31,7 +31,7 @@ function remixAppUrl(gem: Gem): string {
 // One arcade card: an animated thumbnail with a ▶ badge; click launches the sealed game fullscreen (see
 // GamePreview). A broker-fed replay (no baked data, no host here) shows its own waiting state — that's
 // expected off the machine that owns the session.
-function GameCard({ api, gem, stars, starState }: { api: Api; gem: Gem; stars: StarsCtx; starState: StarState }) {
+function GameCard({ api, gem, stars, starState, plays }: { api: Api; gem: Gem; stars: StarsCtx; starState: StarState; plays: number }) {
   return (
     <li className="mg-card">
       <div className="mg-thumb">
@@ -42,6 +42,7 @@ function GameCard({ api, gem, stars, starState }: { api: Api; gem: Gem; stars: S
         {gem.description && <div className="mg-desc">{gem.description}</div>}
         <div className="mg-row">
           {gem.author && <span className="mg-meta">by {gem.author}</span>}
+          {plays > 0 && <span className="mg-meta">{plays === 1 ? "1 play" : `${plays} plays`}</span>}
           <StarButton kind="gem" id={gem.key} count={starState.counts[gem.key] ?? 0} starred={starState.mine.includes(gem.key)}
             signedIn={stars.signedIn} loginUrl={stars.loginUrl} api={stars.api} />
         </div>
@@ -58,6 +59,7 @@ function GameCard({ api, gem, stars, starState }: { api: Api; gem: Gem; stars: S
 export function Minigames({ api, stars }: { api: Api; stars: StarsCtx }) {
   const [gems, setGems] = useState<Gem[] | null>(null);
   const [starState, setStarState] = useState<StarState>({ counts: {}, mine: [] });
+  const [plays, setPlays] = useState<Record<string, number>>({});
   useEffect(() => { let alive = true; loadGems(api).then((g) => { if (alive) setGems(g); }).catch(() => setGems([])); return () => { alive = false; }; }, [api]);
 
   // Games are gems, so they star through the very same ("gem", <key>) identity the Gems pages use —
@@ -68,8 +70,9 @@ export function Minigames({ api, stars }: { api: Api; stars: StarsCtx }) {
     if (!gameKeys) return;
     let alive = true;
     stars.api.get("gem", gameKeys.split(",")).then((s) => { if (alive) setStarState(s); }).catch(() => {});
+    api.getGamePlays(gameKeys.split(",")).then((p) => { if (alive) setPlays(p); }).catch(() => {});
     return () => { alive = false; };
-  }, [gameKeys, stars.api]);
+  }, [gameKeys, stars.api, api]);
 
   if (!gems) return <p className="mg-intro">Loading mini-games…</p>;
   return (
@@ -79,7 +82,7 @@ export function Minigames({ api, stars }: { api: Api; stars: StarsCtx }) {
       {games.length === 0
         ? <div className="mg-empty">No mini-games published yet. Build one in AgentGem → <b>Play</b> → <b>Share to app.agentgem.ai</b>.</div>
         : <>
-            <ul className="mg-grid">{games.map((g) => <GameCard key={g.key} api={api} gem={g} stars={stars} starState={starState} />)}</ul>
+            <ul className="mg-grid">{games.map((g) => <GameCard key={g.key} api={api} gem={g} stars={stars} starState={starState} plays={plays[g.key] ?? 0} />)}</ul>
             <p className="mg-foot"><b>Make your own</b> opens the AgentGem desktop app straight to <strong>Play</strong>, prefilled to build your own version of that game. Running the CLI console instead? Open <a className="mg-foot-link" href={`${LOCAL_CONSOLE}/#/play`} target="_blank" rel="noreferrer">localhost:4317 → Play</a>.</p>
           </>}
     </div>

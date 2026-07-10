@@ -298,6 +298,20 @@ export const gemArchives = pgTable("gem_archives", {
   createdAtMs: bigint("created_at_ms", { mode: "number" }).notNull(),
 }, (t) => [primaryKey({ columns: [t.gemKey, t.version] })]);
 
+// Append-only: one row per click into a mini-game's fullscreen play (POST /api/aggregator/game-play).
+// A play is a CLICK, not a person — the arcade needs no login, so this table can never answer "how many
+// unique users". `visitorId` is an opaque localStorage uuid the SPA mints: a dedupe key for checking a
+// count against distinct browsers, NOT an identity. Never surface it as "users". Null when the client
+// sends none (older SPA, curl, bots). The write is unauthenticated, so the count is analytics-pixel
+// grade — anyone willing to replay the POST can inflate it.
+export const gamePlays = pgTable("game_plays", {
+  id: uuid("id").primaryKey(),
+  gemKey: text("gem_key").notNull(),
+  version: text("version").notNull(),
+  visitorId: text("visitor_id"),
+  playedAt: timestamp("played_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // Skills discovered across the curated sources (@agentgem/distribute CURATED_SOURCES), indexed by
 // curatedSkillsIndexer for the marketplace "Popular Skills" board. `sourceLabel` duplicates the
 // source's display label (rather than joining back to the static CURATED_SOURCES list at read
@@ -319,7 +333,7 @@ export const curatedSkills = pgTable("curated_skills", {
   indexedAt: timestamp("indexed_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.sourceId, t.path] })]);
 
-export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, webSessions, handoffCodes, stars, reviews, gemAdoptions, accountScopes, usageDays, usageDayModels, orgSettings, catalogGems, gemArchives, curatedSkills, appInstallations, orgMembers, groups, groupMembers, groupInvites };
+export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, webSessions, handoffCodes, stars, reviews, gemAdoptions, accountScopes, usageDays, usageDayModels, orgSettings, catalogGems, gemArchives, gamePlays, curatedSkills, appInstallations, orgMembers, groups, groupMembers, groupInvites };
 export type AppDb = PgDatabase<any, typeof schema>;
 
 // Idempotent DDL. (Schema-as-tables above is the query source of truth; this DDL
@@ -370,6 +384,8 @@ export async function ensureSchema(db: AppDb): Promise<void> {
   // Added post-creation (installable shared setups): the per-artifact preview list + the archive store.
   await db.execute(sql`alter table catalog_gems add column if not exists artifacts jsonb`);
   await db.execute(sql`create table if not exists gem_archives (gem_key text not null, version text not null, bytes bytea not null, size int not null, digest text not null, created_at_ms bigint not null, primary key (gem_key, version))`);
+  await db.execute(sql`create table if not exists game_plays (id uuid primary key, gem_key text not null, version text not null, visitor_id text, played_at timestamptz not null default now())`);
+  await db.execute(sql`create index if not exists game_plays_key_idx on game_plays (gem_key)`);
   await db.execute(sql`create table if not exists curated_skills (source_id text not null, path text not null, division text not null, name text not null, repo text not null, source_label text not null, homepage text, stars int not null default 0, installs int, indexed_at timestamptz not null default now(), primary key (source_id, path))`);
   await db.execute(sql`alter table curated_skills add column if not exists description text`);
   await db.execute(sql`alter table curated_skills add column if not exists org_scope text`);
