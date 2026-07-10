@@ -52,3 +52,7 @@ describe("agentgem-miniapp skill", () => {
     expect(MINIAPP_BUILDER_BRIEF).toContain("Save reconciles");
   });
 });
+
+it("says the Save REJECTS a non-literal tool name (it is enforced, not merely advised)", () => {
+  expect(MINIAPP_BUILDER_BRIEF).toContain("the Save rejects a non-literal name");
+});

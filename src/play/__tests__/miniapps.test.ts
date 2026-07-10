@@ -136,3 +136,17 @@ describe("saveMiniapp reconciles needs against the html", () => {
     expect(res.prunedNeeds).toEqual(["session-data"]);
   });
 });
+
+describe("saveMiniapp enforces literal tool names", () => {
+  const shell = (js: string) => `<!doctype html><body><canvas></canvas><script>${js}</script></body>`;
+
+  it("refuses a bundle that passes a tool name as a variable", async () => {
+    const html = shell(`const t = "agentgem_get_inventory"; if (window.agentgemApp) window.agentgemApp.callTool(t);`);
+    await expect(saveMiniapp({ name: "dyn", html, meta })).rejects.toThrow(/literal/i);
+  });
+
+  it("still saves a bundle that only mentions callTool(name) in a comment", async () => {
+    const html = shell(`// pass a literal string, never callTool(name)\nconst x = 1;`);
+    await expect(saveMiniapp({ name: "commented", html, meta })).resolves.toBeDefined();
+  });
+});

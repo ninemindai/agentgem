@@ -217,9 +217,21 @@ Composer checkbox  ──(prompt text only)──▶  agent writes html + meta.n
 - **`missing`** → thrown failure string → the existing gate banner
   (`Studio.tsx`), which already offers to have the agent fix it.
 - **Dynamic tool name** (`callTool(t)` where `t` is a variable) → the scan sees
-  nothing → the capability is pruned → the miniapp gets `-32601` at runtime.
-  **This design does not close that hole.** `SKILL.md` gains a line requiring
-  literal tool-name strings, and the prune notice is the user-visible tell.
+  nothing → the capability would be pruned and the call would fail at play time
+  with `-32601`. **Closed:** `saveMiniapp` rejects it via `hasDynamicToolCall`,
+  turning a viewer-facing runtime failure into an actionable save-time error the
+  agent self-repairs from. `SKILL.md` states the rule; the save now enforces it.
+
+  The probe runs over a `codeSkeleton()` — comments removed, string bodies
+  emptied — because `MINIAPP_BUILDER_BRIEF` states the rule using the very text
+  `callTool(name)`, and an agent echoing it into a comment or a help string must
+  not have its save blocked. That skeleton models neither regex literals nor
+  `${}` interpolation, but every such error only *drops* text, and dropping text
+  can only make the probe **miss** a dynamic call — never invent one. A miss is
+  the pre-existing behaviour, so the failure direction is safe.
+
+  The same skeleton must never narrow `deriveNeeds`: there a missed match prunes
+  a capability the miniapp really uses, and the app breaks at `-32601`.
 - **A tool name in a comment or an unrelated string literal** → the scan counts
   it, because it must match `p.toolName === "agentgem_get_session_data"` in an
   `onNotification` handler (`scaffolds.ts` receives data that way and never

@@ -14,7 +14,7 @@ import { gameGate } from "./gameGate.js";
 import { assertPortable } from "./portability.js";
 import { ensureRepo, commitWithLock } from "./git.js";
 import { migrateMiniappHtml, type MigrateOutcome } from "./migrate.js";
-import { reconcileNeeds, deriveNeeds } from "./capabilityScan.js";
+import { reconcileNeeds, deriveNeeds, hasDynamicToolCall } from "./capabilityScan.js";
 
 export interface MiniappMeta {
   title: string; genre: GameGenre; createdFrom: GameSource; engineVersion: string; needs?: GameCapability[];
@@ -98,6 +98,13 @@ export async function saveMiniapp(input: SaveMiniappInput): Promise<SaveMiniappR
   const safe = input.name;
   const gate = await gameGate(input.html);
   if (!gate.ok) throw new Error(`miniapp failed the gate: ${gate.failures.join("; ")}`);
+
+  // The reconciler below reads the SOURCE, so a tool name it cannot see is a capability it prunes — and
+  // the call then fails in a viewer's browser with -32601. MINIAPP_BUILDER_BRIEF requires literal names;
+  // enforce it here, where the failure is actionable, instead of leaving it to blow up at play time.
+  if (hasDynamicToolCall(input.html)) {
+    throw new Error(`miniapp passes a non-literal tool name to callTool(...) — pass the name as a literal string, e.g. callTool("${CAP_TOOL["local-project-access"]}")`);
+  }
 
   // Reconcile the DECLARATION against the CODE. The two drift directions are not symmetric: calling an
   // undeclared tool WIDENS what the app reaches, so it must be a deliberate authored act (throw, and let
@@ -229,13 +236,20 @@ export async function migrateAllMiniapps(): Promise<{ name: string; outcome: Mig
       if (!rec.pruned.length) { results.push({ name, outcome, commit: null }); continue; }
       const meta: MiniappMeta = { ...raw.meta };
       if (rec.needs.length) meta.needs = rec.needs; else delete meta.needs;
-      await ensureRepo(root);
-      writeFileSync(join(miniappDir(name), "meta.json"), JSON.stringify(meta, null, 2));
-      // Keep the shareable gem in step, or it keeps the phantom capability. Best-effort, like a
-      // checkpoint: a gate failure must never abort the pass.
-      try { if ((await gameGate(raw.html)).ok) writeGameGem(name, raw.html, meta); } catch { /* best-effort */ }
-      const commit = await commitWithLock(root, `reconcile ${name} (pruned unused capability: ${rec.pruned.join(", ")})`);
-      results.push({ name, outcome, commit });
+      // Same contract as the migrated path below: one miniapp that cannot be repaired — a read-only
+      // meta.json, a git failure — is RECORDED and skipped, never thrown. A registry-wide pass must not
+      // die on one bad entry.
+      try {
+        await ensureRepo(root);
+        writeFileSync(join(miniappDir(name), "meta.json"), JSON.stringify(meta, null, 2));
+        // Keep the shareable gem in step, or it keeps the phantom capability. Best-effort, like a
+        // checkpoint: a gate failure must never abort the pass.
+        try { if ((await gameGate(raw.html)).ok) writeGameGem(name, raw.html, meta); } catch { /* best-effort */ }
+        const commit = await commitWithLock(root, `reconcile ${name} (pruned unused capability: ${rec.pruned.join(", ")})`);
+        results.push({ name, outcome, commit });
+      } catch (e) {
+        results.push({ name, outcome, commit: null, error: (e as Error).message });
+      }
       continue;
     }
 

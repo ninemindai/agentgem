@@ -112,7 +112,8 @@ told. So \`needs\` can never drift from what the miniapp actually does.
 
 Pass every tool name as a **literal string** — \`callTool("agentgem_get_inventory")\`, never
 \`callTool(name)\`. The reconciler reads your source; a name it cannot see is a capability it prunes,
-and your call then fails at runtime with \`-32601\`.
+and your call would then fail at play time with \`-32601\`. So the Save rejects a non-literal name
+outright. Naming a tool inside a comment or a string is fine — only a real call is checked.
 
 ## What you must not assume
 
