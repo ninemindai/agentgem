@@ -1,10 +1,9 @@
 // packages/console/src/panels/Play/Composer.tsx
 import { useEffect, useState } from "react";
-import { CAP_TOOL } from "@agentgem/play";
 import { makeClient, playStudioRoute, playImportRoute, playBlankRoute, testbedProjectsRoute, inventoryRoute } from "../../api/routes.js";
 import { fetchSessions, type WatchSession } from "../Watch/watchStream.js";
 import { AgentSelector, type PlayAgent } from "./AgentSelector.js";
-import { CAP_LABEL, CONSENT_CAPS } from "./consent.js";
+import { CAP_TOOL, CAP_LABEL, CONSENT_CAPS } from "./consent.js";
 
 type Kind = "project" | "session" | "skill" | "html" | "blank";
 type Proj = { path: string; flavor: string; exists: boolean };

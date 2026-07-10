@@ -15,6 +15,21 @@ export const CAP_LABEL: Record<string, string> = {
 // marks it auto-approved (declared at seed), so it is never something a user opts into.
 export const CONSENT_CAPS = ["local-project-access", "live-session-events", "invoke-agent"] as const;
 
+// GameCapability -> MCP tool name, and the inverse. Browser-safe mirror of @agentgem/model's canonical
+// map (packages/model/src/capabilities.ts): the console is bundled for the browser by
+// scripts/build-console.mjs, and @agentgem/play's barrel (which re-exports this map) pulls in
+// node:os/node:path/node:fs at runtime, so it cannot be value-imported here. A drift-guard test
+// (__tests__/capTool.drift.test.ts) pins this copy to the canonical one.
+export const CAP_TOOL: Record<string, string> = {
+  "session-data": "agentgem_get_session_data",
+  "local-project-access": "agentgem_get_inventory",
+  "live-session-events": "agentgem_subscribe_sessions",
+  "invoke-agent": "agentgem_invoke_agent",
+};
+export const TOOL_CAP: Record<string, string> = Object.fromEntries(
+  Object.entries(CAP_TOOL).map(([cap, tool]) => [tool, cap]),
+);
+
 type Decision = "granted" | "denied";
 const key = (name: string, cap: string) => `agentgem:play:consent:${name}:${cap}`;
 
