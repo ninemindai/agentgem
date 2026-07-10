@@ -1,6 +1,11 @@
 // src/registry/__tests__/publishedBy.test.ts
 import { describe, it, expect } from "vitest";
-import { makeTestDb, makeAuth, mintSession } from "@agentgem/aggregator";
+import { sql } from "drizzle-orm";
+import { makeTestDb, makeAuth, resolveSession, claimHandle } from "@agentgem/aggregator";
+import type { AppDb } from "@agentgem/aggregator";
+// Test-only helper — not re-exported from the main barrel (see aggregator/src/index.ts), imported
+// via the package's "testing" subpath instead. Mirrors src/handles/__tests__/install.test.ts.
+import { mintBetterAuthCookieForTest } from "@agentgem/aggregator/testing";
 import { resolvePublishedBy } from "../publishedBy.js";
 
 const authOpts = {
@@ -13,29 +18,57 @@ const authOpts = {
 
 const reqWith = (headers: Record<string, string | undefined> = {}) => ({ headers });
 
+// Mints a REAL better-auth session cookie (see webAuthShim.test.ts's cookie-path regression guard)
+// for a fresh account, and resolves it back to the accountId the route will see. claimHandle's
+// setAccountScopes writes account_scopes, which FKs to accounts.id, so the legacy accounts anchor
+// is inserted here directly, same id as "user" (accounts.id === "user".id by construction — see
+// handles.ts) — same pattern as src/handles/__tests__/install.test.ts's `signedIn` fixture.
+async function makeAuthedFixture(db: AppDb, auth: ReturnType<typeof makeAuth>) {
+  const cookie = await mintBetterAuthCookieForTest(db, authOpts);
+  const who = await resolveSession(auth, { cookie });
+  if (!who) throw new Error("test setup: cookie did not resolve to a session");
+  await db.execute(sql`insert into accounts (id, provider, provider_account_id) values (${who.accountId}, 'test', ${who.accountId})`);
+  return { headers: { cookie }, accountId: who.accountId };
+}
+
 describe("resolvePublishedBy", () => {
-  it("returns the session account's login for a valid bearer token", async () => {
+  it("returns the caller's handle once claimed, and undefined before they claim one", async () => {
     const db = await makeTestDb();
     const auth = makeAuth({ db, ...authOpts });
-    const ctx = await auth.$context;
-    const user = await ctx.internalAdapter.createUser({ name: "neo", email: "neo@example.com", emailVerified: true, login: "neo" } as never);
-    const { token } = await mintSession(auth, user.id);
-    expect(await resolvePublishedBy(reqWith({ authorization: `Bearer ${token}` }), auth)).toBe("neo");
+    const { headers, accountId } = await makeAuthedFixture(db, auth);
+    expect(await resolvePublishedBy(reqWith(headers), auth, db)).toBeUndefined(); // no handle yet
+    const claimed = await claimHandle(db, accountId, "raymond");
+    expect(claimed).toEqual({ ok: true, handle: "raymond" });
+    expect(await resolvePublishedBy(reqWith(headers), auth, db)).toBe("raymond");
   });
-  it("returns undefined when req or auth is missing (the local/trusted path)", async () => {
+
+  it("returns undefined with no req, no auth, or no db (the local/trusted path)", async () => {
     const db = await makeTestDb();
     const auth = makeAuth({ db, ...authOpts });
-    expect(await resolvePublishedBy(undefined, auth)).toBeUndefined();
-    expect(await resolvePublishedBy(reqWith({ authorization: "Bearer x" }), undefined)).toBeUndefined();
+    const { headers } = await makeAuthedFixture(db, auth);
+    expect(await resolvePublishedBy(undefined, auth, db)).toBeUndefined();
+    expect(await resolvePublishedBy(reqWith(headers), undefined, db)).toBeUndefined();
+    expect(await resolvePublishedBy(reqWith(headers), auth, undefined)).toBeUndefined();
   });
-  it("returns undefined for no headers / unknown token", async () => {
+
+  it("returns undefined for no headers / unknown session", async () => {
     const db = await makeTestDb();
     const auth = makeAuth({ db, ...authOpts });
-    expect(await resolvePublishedBy(reqWith(), auth)).toBeUndefined();
-    expect(await resolvePublishedBy(reqWith({ authorization: "Bearer nope" }), auth)).toBeUndefined();
+    expect(await resolvePublishedBy(reqWith(), auth, db)).toBeUndefined();
+    expect(await resolvePublishedBy(reqWith({ cookie: "not-a-real-cookie" }), auth, db)).toBeUndefined();
   });
-  it("degrades to undefined (not a throw) on an internal error — attribution is best-effort", async () => {
+
+  it("degrades to undefined (not a throw) when session resolution throws — attribution is best-effort", async () => {
+    const db = await makeTestDb();
     const throwingAuth = { api: { getSession: () => { throw new Error("down"); } } } as never;
-    await expect(resolvePublishedBy(reqWith({ authorization: "Bearer x" }), throwingAuth)).resolves.toBeUndefined();
+    await expect(resolvePublishedBy(reqWith({ authorization: "Bearer x" }), throwingAuth, db)).resolves.toBeUndefined();
+  });
+
+  it("degrades to undefined (not a throw) when the handle lookup itself throws", async () => {
+    const db = await makeTestDb();
+    const auth = makeAuth({ db, ...authOpts });
+    const { headers } = await makeAuthedFixture(db, auth);
+    const throwingDb = { execute: () => { throw new Error("db down"); } } as unknown as AppDb;
+    await expect(resolvePublishedBy(reqWith(headers), auth, throwingDb)).resolves.toBeUndefined();
   });
 });

@@ -1283,7 +1283,7 @@ export class GemController {
     const gem = readGemArchive(readWorkspace(input.body.workspace).files); // WorkspaceDetail exposes .files, not .gem
     const type = resolvePublishType(this.gemTypes, input.body.type, gem);
     const index = await source.getIndex();
-    const publishedBy = await resolvePublishedBy(this.req, this.auth);
+    const publishedBy = await resolvePublishedBy(this.req, this.auth, this.db);
     return publishGem({
       gem, scope: input.body.scope, name: input.body.name, version: input.body.version,
       dependencies: input.body.dependencies, index, publisher: githubRegistryPublisher(cfg),

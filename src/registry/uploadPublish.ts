@@ -2,14 +2,15 @@
 // SPDX-License-Identifier: MIT
 // src/registry/uploadPublish.ts
 //
-// Signed-in .gem upload → publish, with #4a attribution (publishedBy = the verified
-// session login) and #4b account-scope ownership: you may publish to a scope only if
+// Signed-in .gem upload → publish, with #4a attribution (publishedBy = the caller's claimed
+// handle, or undefined if none — never the raw login or a uuid) and #4b account-scope ownership:
+// you may publish to a scope only if
 // accountOwnsScope confirms it (your login or a captured GitHub org). Raw-express +
 // credentialed CORS + originGuard-exempt, mirroring auth/stars. account_scopes is
 // populated at login, so a pre-#4b session with no rows is fail-closed (403 on its own
 // login) until the user signs in again. importGem rejects tampering.
 import type { AppDb, makeAuth } from "@agentgem/aggregator";
-import { resolveSession, accountOwnsScope, appOrgRole, installationForScope } from "@agentgem/aggregator";
+import { resolveSession, accountOwnsScope, appOrgRole, installationForScope, handleForAccountId } from "@agentgem/aggregator";
 import { importGem, publishGem, type RegistrySource, type RegistryPublisher } from "@agentgem/distribute";
 import { resolvePublishType, type GemTypeRegistry } from "../gem/gemTypeRegistry.js";
 import { InvalidInputError } from "@agentgem/model";
@@ -73,7 +74,7 @@ export function uploadPublishHandler(deps: UploadPublishDeps) {
         tags: Array.isArray(body.tags) ? body.tags.filter((t): t is string => typeof t === "string") : undefined,
         description: typeof body.description === "string" ? body.description : undefined,
         index, publisher: deps.publisher, type,
-        publishedBy: who.login,                                            // VERIFIED attribution (#4a)
+        publishedBy: (await handleForAccountId(deps.db, who.accountId)) ?? undefined, // VERIFIED attribution (#4a) — the caller's claimed handle, never a uuid or the raw login
         grade: gem.grade,                                                  // forwarded from the archive (never the request body)
       });
       res.json(result);
