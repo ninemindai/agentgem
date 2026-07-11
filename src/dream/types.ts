@@ -25,7 +25,6 @@ export interface DreamQueueEntry {
   status: DreamStatus;
   firstSeenMs: number;
   reviewedMs?: number;
-  target?: "claude" | "agents";           // guardrail write-back target; default resolved at apply
 }
 
 export interface DreamDiaryEntry {

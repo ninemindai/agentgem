@@ -57,7 +57,6 @@ const QueueItemSchema = z.object({
   status: z.enum(["queued", "accepted", "dismissed"]),
   firstSeenMs: z.number(),
   reviewedMs: z.number().optional(),
-  target: z.enum(["claude", "agents"]).optional(),
   draft: z.unknown(), // opaque body (DistilledSkill | Reflection | GuardrailDraft) — not re-validated here
 });
 const QueueSchema = z.object({ items: z.array(QueueItemSchema) });

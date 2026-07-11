@@ -8,7 +8,7 @@
 // only — never from a raw arg (privacy boundary).
 import type { WorkflowSignal } from "./workflowScan.js";
 import type { Provenance } from "./distillTypes.js";
-import { runDetectors, type DetectorFinding, type DetectorSeverity } from "./detectors.js";
+import { runDetectors, type DetectorSeverity } from "./detectors.js";
 
 const GUARDRAIL_IDS = new Set(["repeated-tool-error", "tool-rejection"]);
 
