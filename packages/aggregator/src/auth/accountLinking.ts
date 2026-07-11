@@ -107,3 +107,37 @@ export async function connectedProviders(db: AppDb, accountId: string): Promise<
   const rows = (await db.execute(sql`select distinct provider_id from account where user_id = ${accountId} order by provider_id`)).rows ?? [];
   return rows.map((r: unknown) => (r as { provider_id: string }).provider_id);
 }
+
+/**
+ * Task 4: the C-guard over EVERY table that FKs `accounts.id` — checked against `packages/
+ * aggregator/src/schema.ts` (both the drizzle `.references(() => accounts.id)` declarations and
+ * `ensureSchema`'s raw DDL, since `catalog_gems.owner_account_id` is only FK'd via the latter).
+ * None of these FKs cascade on delete (see the file header / Task 5's absorb), so a stray child row
+ * makes a later `DELETE accounts` throw. `handle` is not itself an accounts.id FK — `"user".id`
+ * mirrors `accounts.id` 1:1 (see anchorAndScopes) — but a claimed handle is still a reason an
+ * account cannot be silently absorbed/deleted, so it gates the same way.
+ * Order is fixed on purpose: `blocker` names the FIRST non-empty source, so callers get a stable,
+ * single reason rather than an unordered set.
+ */
+const FRESHNESS_CHECKS: Array<{ blocker: string; q: (id: string) => ReturnType<typeof sql> }> = [
+  { blocker: "handle",        q: (id) => sql`select 1 from "user" where id = ${id} and handle is not null limit 1` },
+  { blocker: "gem",           q: (id) => sql`select 1 from catalog_gems where owner_account_id = ${id} limit 1` },
+  { blocker: "gem_archive",   q: (id) => sql`select 1 from gem_archives where owner_account_id = ${id} limit 1` },
+  { blocker: "star",          q: (id) => sql`select 1 from stars where account_id = ${id} limit 1` },
+  { blocker: "review",        q: (id) => sql`select 1 from reviews where account_id = ${id} limit 1` },
+  { blocker: "group_member",  q: (id) => sql`select 1 from group_members where account_id = ${id} limit 1` },
+  { blocker: "group_owner",   q: (id) => sql`select 1 from groups where created_by = ${id} limit 1` },
+  { blocker: "group_invite",  q: (id) => sql`select 1 from group_invites where created_by = ${id} limit 1` },
+  { blocker: "account_scope", q: (id) => sql`select 1 from account_scopes where account_id = ${id} limit 1` },
+  { blocker: "usage",         q: (id) => sql`select 1 from usage_days where account_id = ${id} limit 1` },
+  { blocker: "usage_model",   q: (id) => sql`select 1 from usage_day_models where account_id = ${id} limit 1` },
+  { blocker: "handoff",       q: (id) => sql`select 1 from handoff_codes where account_id = ${id} limit 1` },
+];
+
+export async function accountFreshness(db: AppDb, accountId: string): Promise<{ fresh: boolean; blocker: string | null }> {
+  for (const c of FRESHNESS_CHECKS) {
+    const hit = (await db.execute(c.q(accountId))).rows?.length ?? 0;
+    if (hit > 0) return { fresh: false, blocker: c.blocker };
+  }
+  return { fresh: true, blocker: null };
+}
