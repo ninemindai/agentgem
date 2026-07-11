@@ -12,8 +12,8 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import type { AppDb } from "./schema.js";
-import { reviewRequests } from "./schema.js";
-import { groupMemberRole } from "./groups.js";
+import { reviewRequests, reviewSeen, type ReviewStatus } from "./schema.js";
+import { groupMemberRole, listGroupsForAccount } from "./groups.js";
 import { accountOwnsScope } from "./webAuth.js";
 import { catalogGemExists, type CatalogManifest } from "./catalog.js";
 
@@ -52,4 +52,45 @@ export async function submitReviewRequest(
     archiveBytes: args.archiveBytes, archiveDigest: args.archiveDigest, createdAtMs: now, resolvedAtMs: null,
   });
   return { ok: true, requestId: id };
+}
+
+export interface ReviewRequestSummary {
+  id: string; groupId: string; groupName: string; gemKey: string; version: string;
+  authorAccountId: string; authorLogin: string | null; status: ReviewStatus;
+  description: string | null; createdAtMs: number; resolvedAtMs: number | null;
+  messageCount: number; unread: boolean;
+}
+
+/** Open/changes-requested requests across every group the viewer belongs to, newest activity
+ *  first. `unread` compares the request's last activity (its own createdAtMs, or a later message)
+ *  against this account's review_seen marker for the request — a missing marker is unread. */
+export async function listInbox(db: AppDb, accountId: string): Promise<ReviewRequestSummary[]> {
+  const groups = await listGroupsForAccount(db, accountId);
+  if (groups.length === 0) return [];
+  const groupIds = groups.map((g) => g.id);
+  const nameById = new Map(groups.map((g) => [g.id, g.name]));
+  const rows = await db.execute(sql`
+    select r.id, r.group_id, r.gem_key, r.version, r.author_account_id, r.status, r.description,
+           r.created_at_ms, r.resolved_at_ms, a.login as author_login,
+           (select count(*)::int from review_messages m where m.request_id = r.id) as message_count,
+           coalesce(greatest(r.created_at_ms, (select max(m.created_at_ms) from review_messages m where m.request_id = r.id)), r.created_at_ms) as last_activity_ms,
+           (select s.last_seen_at_ms from review_seen s where s.request_id = r.id and s.account_id = ${accountId}) as last_seen_ms
+    from review_requests r
+    join accounts a on a.id = r.author_account_id
+    where r.group_id in (${sql.join(groupIds.map((g) => sql`${g}`), sql`, `)})
+      and r.status in ('open','changes-requested')
+    order by last_activity_ms desc`);
+  return (rows.rows as any[]).map((r) => ({
+    id: r.id, groupId: r.group_id, groupName: nameById.get(r.group_id) ?? "", gemKey: r.gem_key, version: r.version,
+    authorAccountId: r.author_account_id, authorLogin: r.author_login ?? null, status: r.status as ReviewStatus,
+    description: r.description ?? null, createdAtMs: Number(r.created_at_ms), resolvedAtMs: r.resolved_at_ms == null ? null : Number(r.resolved_at_ms),
+    messageCount: Number(r.message_count),
+    unread: r.last_seen_ms == null || Number(r.last_seen_ms) < Number(r.last_activity_ms),
+  }));
+}
+
+/** Marks `requestId` as seen by `accountId` at `now`, upserting the review_seen marker. */
+export async function markSeen(db: AppDb, accountId: string, requestId: string, now: number = Date.now()): Promise<void> {
+  await db.insert(reviewSeen).values({ accountId, requestId, lastSeenAtMs: now })
+    .onConflictDoUpdate({ target: [reviewSeen.accountId, reviewSeen.requestId], set: { lastSeenAtMs: now } });
 }

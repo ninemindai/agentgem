@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { makeTestDb, reviewRequests, upsertAccount, createNativeGroup, grantInvite, submitReviewRequest, upsertCatalogGem, accountScopes } from "@agentgem/aggregator";
+import { makeTestDb, reviewRequests, upsertAccount, createNativeGroup, grantInvite, submitReviewRequest, upsertCatalogGem, accountScopes, listInbox, markSeen } from "@agentgem/aggregator";
 
 describe("review staging schema", () => {
   it("ensureSchema creates review_requests and the table accepts a row", async () => {
@@ -76,5 +76,39 @@ describe("submitReviewRequest", () => {
       archiveBytes: new Uint8Array([1]), archiveDigest: "sha256:x",
     });
     expect(r).toEqual({ ok: false, rejected: "invalid-key" });
+  });
+});
+
+describe("listInbox + markSeen", () => {
+  it("lists open requests for the viewer's groups, newest first, unread until seen", async () => {
+    const db = await makeTestDb();
+    const author = await upsertAccount(db, { provider: "github", accountId: "a1", login: "alice" });
+    await ownScope(db, author.id);
+    const reviewer = await upsertAccount(db, { provider: "github", accountId: "r1", login: "rob" });
+    const g = await createNativeGroup(db, author.id, "Team");
+    await grantInvite(db, g.id, reviewer.id, "member");
+    const r = await submitReviewRequest(db, {
+      accountId: author.id, groupId: g.id, manifest: mkManifest("@team/bot"),
+      archiveBytes: new Uint8Array([1]), archiveDigest: "sha256:x", description: "d",
+    }, 1000);
+    if (!r.ok) throw new Error("submit failed");
+
+    const before = await listInbox(db, reviewer.id);
+    expect(before).toHaveLength(1);
+    expect(before[0]).toMatchObject({ id: r.requestId, gemKey: "@team/bot", authorLogin: "alice", status: "open", unread: true });
+
+    await markSeen(db, reviewer.id, r.requestId, 2000);
+    const after = await listInbox(db, reviewer.id);
+    expect(after[0].unread).toBe(false);
+  });
+
+  it("does not list requests from groups the viewer is not in", async () => {
+    const db = await makeTestDb();
+    const author = await upsertAccount(db, { provider: "github", accountId: "a1", login: "alice" });
+    await ownScope(db, author.id);
+    const outsider = await upsertAccount(db, { provider: "github", accountId: "x", login: "mallory" });
+    const g = await createNativeGroup(db, author.id, "Team");
+    await submitReviewRequest(db, { accountId: author.id, groupId: g.id, manifest: mkManifest("@team/bot"), archiveBytes: new Uint8Array([1]), archiveDigest: "sha256:x" }, 1000);
+    expect(await listInbox(db, outsider.id)).toEqual([]);
   });
 });
