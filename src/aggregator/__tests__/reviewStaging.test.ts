@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { makeTestDb, reviewRequests, upsertAccount, createNativeGroup, grantInvite, submitReviewRequest, upsertCatalogGem, accountScopes, listInbox, markSeen } from "@agentgem/aggregator";
+import { makeTestDb, reviewRequests, upsertAccount, createNativeGroup, grantInvite, submitReviewRequest, upsertCatalogGem, accountScopes, listInbox, markSeen, getReviewRequest, getReviewArchive, addReviewMessage } from "@agentgem/aggregator";
 
 describe("review staging schema", () => {
   it("ensureSchema creates review_requests and the table accepts a row", async () => {
@@ -110,5 +110,41 @@ describe("listInbox + markSeen", () => {
     const g = await createNativeGroup(db, author.id, "Team");
     await submitReviewRequest(db, { accountId: author.id, groupId: g.id, manifest: mkManifest("@team/bot"), archiveBytes: new Uint8Array([1]), archiveDigest: "sha256:x" }, 1000);
     expect(await listInbox(db, outsider.id)).toEqual([]);
+  });
+});
+
+describe("request detail / messages / archive", () => {
+  async function seed() {
+    const db = await makeTestDb();
+    const author = await upsertAccount(db, { provider: "github", accountId: "a1", login: "alice" });
+    await ownScope(db, author.id);
+    const reviewer = await upsertAccount(db, { provider: "github", accountId: "r1", login: "rob" });
+    const outsider = await upsertAccount(db, { provider: "github", accountId: "x", login: "mallory" });
+    const g = await createNativeGroup(db, author.id, "Team");
+    await grantInvite(db, g.id, reviewer.id, "member");
+    const r = await submitReviewRequest(db, { accountId: author.id, groupId: g.id, manifest: mkManifest("@team/bot"), archiveBytes: new Uint8Array([9, 9]), archiveDigest: "sha256:x", description: "d" }, 1000);
+    if (!r.ok) throw new Error("submit failed");
+    return { db, author, reviewer, outsider, g, requestId: r.requestId };
+  }
+
+  it("a member reads detail + archive; posts a message that appears in detail", async () => {
+    const { db, reviewer, requestId } = await seed();
+    const detail = await getReviewRequest(db, reviewer.id, requestId);
+    expect(detail?.gemKey).toBe("@team/bot");
+    expect(detail?.messages).toEqual([]);
+    const arch = await getReviewArchive(db, reviewer.id, requestId);
+    expect(Array.from(arch!.bytes)).toEqual([9, 9]);
+    const m = await addReviewMessage(db, { accountId: reviewer.id, requestId, body: "looks good" }, 1500);
+    expect(m.ok).toBe(true);
+    const after = await getReviewRequest(db, reviewer.id, requestId);
+    expect(after?.messages).toHaveLength(1);
+    expect(after?.messages[0]).toMatchObject({ authorLogin: "rob", body: "looks good" });
+  });
+
+  it("a non-member gets null / not-found for detail, archive, and message", async () => {
+    const { db, outsider, requestId } = await seed();
+    expect(await getReviewRequest(db, outsider.id, requestId)).toBeNull();
+    expect(await getReviewArchive(db, outsider.id, requestId)).toBeNull();
+    expect(await addReviewMessage(db, { accountId: outsider.id, requestId, body: "x" })).toEqual({ ok: false, rejected: "not-a-member" });
   });
 });

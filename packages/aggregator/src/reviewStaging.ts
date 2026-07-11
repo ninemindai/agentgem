@@ -12,7 +12,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import type { AppDb } from "./schema.js";
-import { reviewRequests, reviewSeen, type ReviewStatus } from "./schema.js";
+import { accounts, reviewMessages, reviewRequests, reviewSeen, type ReviewStatus } from "./schema.js";
 import { groupMemberRole, listGroupsForAccount } from "./groups.js";
 import { accountOwnsScope } from "./webAuth.js";
 import { catalogGemExists, type CatalogManifest } from "./catalog.js";
@@ -93,4 +93,82 @@ export async function listInbox(db: AppDb, accountId: string): Promise<ReviewReq
 export async function markSeen(db: AppDb, accountId: string, requestId: string, now: number = Date.now()): Promise<void> {
   await db.insert(reviewSeen).values({ accountId, requestId, lastSeenAtMs: now })
     .onConflictDoUpdate({ target: [reviewSeen.accountId, reviewSeen.requestId], set: { lastSeenAtMs: now } });
+}
+
+export interface ReviewMessageRow { id: string; authorAccountId: string; authorLogin: string | null; body: string; createdAtMs: number }
+
+// Its OWN shape (does NOT extend ReviewRequestSummary): the detail view has no groupName/unread/
+// messageCount to fill — those are inbox-only. Carrying them here would force stub values, so we
+// don't (explicit over clever).
+export interface ReviewRequestDetail {
+  id: string; groupId: string; gemKey: string; version: string;
+  authorAccountId: string; authorLogin: string | null; status: ReviewStatus;
+  description: string | null; createdAtMs: number; resolvedAtMs: number | null;
+  manifest: CatalogManifest; archiveDigest: string; messages: ReviewMessageRow[];
+}
+
+export type MessageResult = { ok: true; messageId: string } | { ok: false; rejected: "not-found" | "not-a-member" };
+
+// Every request column EXCEPT archive_bytes. loadForMember uses this so the two hot read paths
+// (detail view, comment post) never pull the multi-MB archive into memory (D4). Bytes are fetched
+// separately, only where actually needed (getReviewArchive, approveReviewRequest).
+const REQ_COLS = {
+  id: reviewRequests.id, groupId: reviewRequests.groupId, gemKey: reviewRequests.gemKey,
+  version: reviewRequests.version, authorAccountId: reviewRequests.authorAccountId,
+  status: reviewRequests.status, description: reviewRequests.description,
+  manifest: reviewRequests.manifest, archiveDigest: reviewRequests.archiveDigest,
+  createdAtMs: reviewRequests.createdAtMs, resolvedAtMs: reviewRequests.resolvedAtMs,
+} as const;
+
+/** Load the request (WITHOUT archive bytes) and confirm the viewer is a member of its group.
+ *  Returns the bytes-free row, or a reason. Shared by every membership-gated read/write below. */
+async function loadForMember(db: AppDb, accountId: string, requestId: string) {
+  const row = (await db.select(REQ_COLS).from(reviewRequests).where(eq(reviewRequests.id, requestId)).limit(1))[0];
+  if (!row) return { kind: "not-found" as const };
+  if ((await groupMemberRole(db, row.groupId, accountId)) === null) return { kind: "not-a-member" as const };
+  return { kind: "ok" as const, row };
+}
+
+/** Full request detail (manifest + messages, no archive bytes) for a group member. Non-members and
+ *  unknown ids both come back null — collapsing "not found" and "not a member" so a caller can't
+ *  use this as an enumeration oracle to probe which request ids exist. */
+export async function getReviewRequest(db: AppDb, accountId: string, requestId: string): Promise<ReviewRequestDetail | null> {
+  const r = await loadForMember(db, accountId, requestId);
+  if (r.kind !== "ok") return null;
+  const row = r.row;
+  const author = (await db.select({ login: accounts.login }).from(accounts).where(eq(accounts.id, row.authorAccountId)).limit(1))[0];
+  const msgs = await db.execute(sql`
+    select m.id, m.author_account_id, m.body, m.created_at_ms, a.login as author_login
+    from review_messages m join accounts a on a.id = m.author_account_id
+    where m.request_id = ${requestId} order by m.created_at_ms asc`);
+  return {
+    id: row.id, groupId: row.groupId, gemKey: row.gemKey, version: row.version,
+    authorAccountId: row.authorAccountId, authorLogin: author?.login ?? null, status: row.status,
+    description: row.description ?? null, createdAtMs: Number(row.createdAtMs),
+    resolvedAtMs: row.resolvedAtMs == null ? null : Number(row.resolvedAtMs),
+    manifest: row.manifest as unknown as CatalogManifest, archiveDigest: row.archiveDigest,
+    messages: (msgs.rows as any[]).map((m) => ({ id: m.id, authorAccountId: m.author_account_id, authorLogin: m.author_login ?? null, body: m.body, createdAtMs: Number(m.created_at_ms) })),
+  };
+}
+
+/** The staged .gem bytes for a group member, fetched in a query separate from `loadForMember` so
+ *  the multi-MB payload is only ever read when a caller actually needs it. */
+export async function getReviewArchive(db: AppDb, accountId: string, requestId: string): Promise<{ bytes: Uint8Array; digest: string } | null> {
+  const r = await loadForMember(db, accountId, requestId);
+  if (r.kind !== "ok") return null;
+  // Membership confirmed on the bytes-free row; NOW fetch the bytes in a targeted query.
+  const a = (await db.select({ bytes: reviewRequests.archiveBytes, digest: reviewRequests.archiveDigest })
+    .from(reviewRequests).where(eq(reviewRequests.id, requestId)).limit(1))[0];
+  return a && a.bytes != null ? { bytes: a.bytes, digest: a.digest } : null;
+}
+
+export async function addReviewMessage(db: AppDb, args: { accountId: string; requestId: string; body: string }, now: number = Date.now()): Promise<MessageResult> {
+  const r = await loadForMember(db, args.accountId, args.requestId);
+  if (r.kind === "not-found") return { ok: false, rejected: "not-found" };
+  if (r.kind === "not-a-member") return { ok: false, rejected: "not-a-member" };
+  // Gated on membership only, NOT status: commenting on an already-approved/withdrawn request is
+  // allowed (post-hoc discussion / an audit trail).
+  const id = randomUUID();
+  await db.insert(reviewMessages).values({ id, requestId: args.requestId, authorAccountId: args.accountId, body: args.body, createdAtMs: now });
+  return { ok: true, messageId: id };
 }
