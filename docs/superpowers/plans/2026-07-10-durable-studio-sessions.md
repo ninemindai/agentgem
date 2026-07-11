@@ -152,16 +152,50 @@ Add a `stateOf` method (place it just after `closeChat`, ~line 165):
 Run: `pnpm -C /Users/rfeng/Projects/ninemind/agentgem-durable-sessions exec vitest run src/gem/__tests__/chatSession.test.ts`
 Expected: PASS (all existing tests + the new one).
 
-- [ ] **Step 5: Typecheck (a required field was added to two interfaces)**
+- [ ] **Step 5: Typecheck + FULL test sweep (a required field was added to two interfaces)**
 
-Run: `pnpm -C /Users/rfeng/Projects/ninemind/agentgem-durable-sessions build` (or the repo's typecheck)
-Expected: no errors. If `makeChatConnectFn` or `acpSession` open() report a missing `sessionId`, you missed Step 3a/3c.
+Run: `pnpm -C /Users/rfeng/Projects/ninemind/agentgem-durable-sessions build && pnpm -C /Users/rfeng/Projects/ninemind/agentgem-durable-sessions test`
+Expected: no errors. The only *real* producers of `RawAcpSession`/`ChatSessionHandle` are `acpSession.ts` open() and `makeChatConnectFn` — both patched in Step 3. The existing fakes in `chatSession.test.ts` / `chatRoutes.test.ts` cast `connectFn as any`, so the new required field does not typecheck-fail them. **But do not assume — run the full suite here (eng-review NEW P2).** If any fake trips at runtime (`stateOf` reads `undefined`), add `sessionId: "sess_fake"` to that fake in THIS task, not later.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Live smoke — the id↔file mapping (eng-review A1, the #1 risk; both reviewers)**
+
+Every test above uses a fake `sessionId`, so none of them prove the real assumption the whole feature rests on: **the `sessionId` `session.sessionId` returns over ACP equals the id the adapter writes on disk.** Add a gated live smoke (needs `claude-agent-acp` installed; NOT in CI — mark it `describe.skipIf(!process.env.AGENTGEM_LIVE)` like the existing runner/recommender smokes):
+
+Create `src/gem/__tests__/chatSession.live.test.ts`:
+```ts
+import { describe, it, expect } from "vitest";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
+import { ChatManager } from "@agentgem/run";
+import { chatConnectFn, goldmineMcpServers } from "../../goldmine/chatRoutes.js";
+import { loadSessionTranscript } from "@agentgem/insight";
+
+describe.skipIf(!process.env.AGENTGEM_LIVE)("ACP sessionId ↔ on-disk transcript (live)", () => {
+  it("session.sessionId names the file inspectSession reads", async () => {
+    const cwd = join(homedir(), ".agentgem", "chat");
+    const mgr = new ChatManager({ connectFn: async (d) => { const c = await chatConnectFn(d, { permission: "deny" }); return c as any; } });
+    const chatId = await mgr.openChat({ agentId: "claude-code", brief: "reply with the single word: ok", mcpServers: goldmineMcpServers(), cwd });
+    const sessionId = mgr.stateOf(chatId).alive ? (mgr.stateOf(chatId) as any).sessionId : "";
+    expect(sessionId).toBeTruthy();
+    for await (const _ of mgr.sendMessage(chatId, "ok")) { /* drive one turn so the adapter flushes the file */ }
+    // claude: filename IS the sessionId
+    expect(existsSync(join(homedir(), ".claude", "projects", cwd.replace(/[/.]/g, "-"), `${sessionId}.jsonl`))).toBe(true);
+    // and our read path resolves it by that id
+    const view = await loadSessionTranscript(sessionId, "claude");
+    expect(view?.turns.length).toBeGreaterThan(0);
+    mgr.closeChat(chatId);
+  }, 120_000);
+});
+```
+Run: `AGENTGEM_LIVE=1 pnpm -C /Users/rfeng/Projects/ninemind/agentgem-durable-sessions exec vitest run src/gem/__tests__/chatSession.live.test.ts`
+Expected: PASS. **If this fails, STOP — the client tasks (4–7) are built on a false premise.** (Codex uses `session_meta.sessionId` inside `rollout-*`, not the filename; `loadSessionTranscript` already scans+matches for it — extend this smoke with `agent:"codex"` before trusting codex restore.)
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add packages/base/src/acpSession.ts packages/run/src/chatSession.ts src/goldmine/chatRoutes.ts src/gem/__tests__/chatSession.test.ts
-git commit -m "feat(chat): surface ACP sessionId + ChatManager.stateOf"
+git add packages/base/src/acpSession.ts packages/run/src/chatSession.ts src/goldmine/chatRoutes.ts src/gem/__tests__/chatSession.test.ts src/gem/__tests__/chatSession.live.test.ts
+git commit -m "feat(chat): surface ACP sessionId + ChatManager.stateOf (+ live id↔file smoke)"
 ```
 
 ---
@@ -362,7 +396,30 @@ it("GET /api/chat/:chatId/state reports liveness", async () => {
 });
 ```
 
-> If the existing test file's harness differs (helper names, how `deps.manager` is constructed), mirror it exactly — do not invent a new harness. The two assertions above are the contract; adapt only the plumbing.
+Add a **regression test for R1 background-completion (eng-review A2, mandatory per REGRESSION RULE — it guards existing behavior against a future `req.on("close")` abort, which this file's history shows is a natural hardening, e.g. commit 7dcc46f0):**
+
+```ts
+it("[R1] finishes the turn + checkpoints even after the client disconnects", async () => {
+  // A res whose write() throws after the first frame simulates the browser closing the SSE mid-turn.
+  let checkpointed = ""; let drained = 0; let wrote = 0;
+  const deps2 = { ...deps, checkpointMiniapp: async (n: string) => { checkpointed = n; } };
+  // fake manager whose sendMessage yields several frames (so there IS a "mid-turn" to disconnect at)
+  const events = [{ type: "phase", phase: "running" }, { type: "delta", text: "a" }, { type: "delta", text: "b" }, { type: "done", result: { text: "ab", toolCalls: [] } }];
+  deps2.manager = { ...deps.manager, stateOf: () => ({ alive: true, running: false, sessionId: "s", agent: "claude-code" }),
+    async *sendMessage() { for (const e of events) { drained++; yield e as any; } } } as any;
+  const { app, calls } = makeApp();
+  registerChatRoutes(app, deps2);
+  const opened = await calls.post("/api/chat", { body: { agentId: "claude-code", miniapp: "demo" } });
+  // stream with a res that throws on the 2nd write (disconnect after the first frame)
+  await calls.getStream(`/api/chat/stream?chatId=${opened.json.chatId}&message=hi`, {
+    write: () => { if (++wrote >= 2) throw new Error("EPIPE: socket closed"); },
+  });
+  expect(drained).toBe(events.length);   // generator drained to completion despite the dead socket
+  expect(checkpointed).toBe("demo");      // checkpoint still ran after the turn (durability)
+});
+```
+
+> If the existing test file's harness differs (helper names, how `deps.manager` is constructed, whether `getStream` exists), mirror it exactly — do not invent a new harness. The assertions are the contract: **generator fully drained + `checkpointMiniapp` called, with a `res.write` that throws mid-stream**. If the harness has no throwing-`res` helper, add one — this is the only test that proves the feature's headline guarantee. The two `state`/`sessionId` assertions above and this R1 test together are the contract; adapt only the plumbing.
 
 - [ ] **Step 3: Run tests to verify they fail**
 
@@ -418,7 +475,8 @@ git commit -m "feat(chat): POST returns sessionId + GET /api/chat/:id/state"
   - `setStudioChat(name: string, v: StudioChat): void`
   - `clearChatId(name: string): void` — drops `chatId` (session dead) but keeps `sessionId`/`agent` so history still renders.
   - `clearStudioChat(name: string): void` — removes the entry entirely.
-  - `useStudioChat(name: string): StudioChat | null` — `useSyncExternalStore` hook.
+
+> **Review note (eng-review C1):** an earlier draft exported a `useStudioChat` `useSyncExternalStore` hook plus `listeners`/`emit()` plumbing. Task 7 consumes the store through `loadStudioSession`/`getStudioChat` directly and never calls the hook, and there is no `storage`-event listener so it can't do the cross-tab job either — it was dead code. The store below is get/set/clear only. Do NOT add the hook back unless a live consumer exists.
 
 - [ ] **Step 1: Write the failing test** — `packages/console/src/panels/Play/__tests__/studioChatStore.test.ts`:
 
@@ -466,15 +524,13 @@ Expected: FAIL — module not found.
 ```ts
 // packages/console/src/panels/Play/studioChatStore.ts
 // Per-miniapp durable pointer to its ACP session, so a Studio chat survives panel
-// navigation and full reloads. Mirrors consent.ts's try/localStorage/catch idiom and
-// activeGem.ts's module-store + useSyncExternalStore pattern.
-import { useSyncExternalStore } from "react";
+// navigation and full reloads. Mirrors consent.ts's try/localStorage/catch idiom.
+// Plain get/set/clear — no store/hook (see Review note C1); Studio reads it once
+// on mount via loadStudioSession, then drives its own React state.
 
 export type StudioChat = { chatId: string; sessionId: string; agent: string };
 
 const key = (name: string) => `agentgem:play:studiochat:${name}`;
-const listeners = new Set<() => void>();
-function emit() { for (const l of listeners) l(); }
 
 export function getStudioChat(name: string): StudioChat | null {
   try {
@@ -488,7 +544,6 @@ export function getStudioChat(name: string): StudioChat | null {
 
 export function setStudioChat(name: string, v: StudioChat): void {
   try { localStorage.setItem(key(name), JSON.stringify(v)); } catch { /* private mode */ }
-  emit();
 }
 
 export function clearChatId(name: string): void {
@@ -498,19 +553,8 @@ export function clearChatId(name: string): void {
 
 export function clearStudioChat(name: string): void {
   try { localStorage.removeItem(key(name)); } catch { /* private mode */ }
-  emit();
-}
-
-export function useStudioChat(name: string): StudioChat | null {
-  return useSyncExternalStore(
-    (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
-    () => getStudioChat(name),
-    () => null,
-  );
 }
 ```
-
-> Note: `useSyncExternalStore`'s snapshot must be referentially stable when unchanged, but here the consuming component reads it once on mount and otherwise drives state itself, so a fresh object per call is acceptable (the hook is used only for cross-tab/`emit` nudges, not in a render-hot path). If a lint/`useSyncExternalStore` warning appears, memoize by caching the last `{raw → parsed}` pair.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -574,6 +618,19 @@ describe("transcriptToMsgs", () => {
       turn({ role: "assistant", spans: [{ kind: "tool_call", name: "Bash", input: "x", error: true }] }),
     ];
     expect(transcriptToMsgs(turns)).toEqual([{ role: "tool", title: "Bash", failed: true }]);
+  });
+
+  // eng-review C3: strip on FIRST marker only, and only on turn 0, so a later user
+  // message that legitimately contains the marker text is left intact.
+  it("strips only the first marker and only the first user turn", () => {
+    const turns: TranscriptTurn[] = [
+      turn({ role: "user", spans: [{ kind: "message", role: "user", text: "BRIEF\n---\nUser: first" }] }),
+      turn({ role: "user", spans: [{ kind: "message", role: "user", text: "here is a log\n---\nUser: kept literally" }] }),
+    ];
+    expect(transcriptToMsgs(turns)).toEqual([
+      { role: "user", text: "first" },
+      { role: "user", text: "here is a log\n---\nUser: kept literally" },
+    ]);
   });
 });
 ```
@@ -805,6 +862,9 @@ import { loadStudioSession } from "./studioResume.js";
       if (cancelled) return;
       if (r.msgs.length) setMsgs(r.msgs);
       if (r.chatId) setChatId(r.chatId);
+      // eng-review NEW P3: dead session with history → tell the user the old thread is
+      // archived and the next message starts fresh, so restored-but-read-only doesn't read as data loss.
+      if (!r.chatId && r.msgs.length) setStatus("previous chat archived — a new message starts a fresh session");
       if (r.running) { setBusy(true); setWorking("resuming…"); pollWhileRunning(r.chatId!); }
     })();
     return () => {
@@ -816,7 +876,13 @@ import { loadStudioSession } from "./studioResume.js";
   }, [apiBase, name]);
 
   // Poll /state until the background turn finishes, then refresh history + preview.
+  // eng-review C2: cap the poll so a genuinely wedged turn doesn't spin a silent spinner forever —
+  // after the cap, surface an actionable "still running — Stop?" instead. Guard against a 2nd loop.
+  const POLL_MS = 1500;
+  const POLL_MAX = Math.round((10 * 60_000) / POLL_MS); // ~10 min
   function pollWhileRunning(id: string) {
+    if (pollRef.current) { clearTimeout(pollRef.current); pollRef.current = null; } // never run two loops
+    let ticks = 0;
     const tick = async () => {
       try {
         const st = await fetch(`${apiBase}/api/chat/${encodeURIComponent(id)}/state`).then((r) => r.ok ? r.json() : { alive: false });
@@ -828,9 +894,10 @@ import { loadStudioSession } from "./studioResume.js";
           return;
         }
       } catch { /* transient — keep polling */ }
-      pollRef.current = setTimeout(tick, 1500);
+      if (++ticks >= POLL_MAX) { setWorking(""); setStatus("agent still running — press Stop to end it"); return; }
+      pollRef.current = setTimeout(tick, POLL_MS);
     };
-    pollRef.current = setTimeout(tick, 1500);
+    pollRef.current = setTimeout(tick, POLL_MS);
   }
 ```
 
@@ -849,11 +916,27 @@ import { loadStudioSession } from "./studioResume.js";
   }
 ```
 
-Header button — add to the `play-studio-head` row (after the Save button at line 293), shown only when a turn is active:
+Header button — add to the `play-studio-head` row (after the Save button at line 293). **eng-review NEW P2: show it whenever a session is live OR a turn is running** (not just `busy`), so a live-but-idle session (which can now trip the Task 2 `"too many active sessions"` cap across miniapps) always has a way to free its slot:
 
 ```tsx
-        {busy && <button className="play-btn play-btn--ghost" onClick={stop} title="kill the running agent session">Stop</button>}
+        {(busy || chatId) && <button className="play-btn play-btn--ghost" onClick={stop} title="kill the agent session">Stop</button>}
 ```
+
+- [ ] **Step 3b: Multi-tab — treat "already running" as attach, not failure** (eng-review A3; the fix promised in decision D2). Two tabs share the localStorage key; if tab B sends while tab A's turn runs, the server guard returns `failed: "a turn is already running for this chat"`. Rendering that as a red failed chip reads as a bug. In `send()`'s `onFailed`, special-case it into the resume/poll path:
+
+```ts
+        onFailed: (e) => {
+          if (/already running/i.test(e) && id) {
+            // Another tab (or this one, post-reload) owns the live turn — attach to it instead of failing.
+            setWorking("resuming…"); pollWhileRunning(id);
+            return;
+          }
+          setBusy(false); setWorking("");
+          setMsgs((m) => [...m, { role: "tool", title: `failed: ${e}`, failed: true }]);
+        },
+```
+
+(`id` is the chat id resolved earlier in `send()`. Leave `busy` true so the composer stays disabled while the other tab's turn finishes.)
 
 - [ ] **Step 4: `changeAgent` clears the store pointer** — the old session belonged to the previous agent; drop the whole entry so a stale sessionId/agent can't resurface. In `changeAgent` (after `setChatId(null)`, line 139):
 
@@ -946,3 +1029,35 @@ Expected: clean.
 - **`maxLive` all-running** → Task 2 Step 3d (throws `"too many active sessions"`). ✓
 - **Error/edge (404 empty, localStorage off, corrupt JSON)** → Task 4 (corrupt JSON), Task 6 (404 → empty), `try/catch` throughout. ✓
 - **Out of scope** (live re-attach tailing, ACP `session/load`, Chat panel) → not implemented, per Global Constraints. ✓
+
+## Eng-review hardening (folded in 2026-07-11)
+
+- **A1 (critical)** — live id↔file smoke → Task 1 Step 6 (gated `AGENTGEM_LIVE`, blocks trusting Tasks 4–7).
+- **A2 (critical, regression)** — background-completion + checkpoint test with a throwing `res` → Task 3 Step 2.
+- **C1** — dead `useStudioChat`/`emit`/`listeners` cut → Task 4 (store is get/set/clear only).
+- **NEW P2** — Task 1 Step 5 runs the FULL suite (not just build); Stop shown on `busy || chatId` → Task 7 Step 3.
+- **A3** — "already running" → attach+poll, not a failed chip → Task 7 Step 3b (per decision D2).
+- **C2** — poll capped at ~10 min → "still running — Stop" → Task 7 Step 2.
+- **C3** — brief-strip: first-marker-only, turn-0-only, with a regression test → Task 5.
+- **NEW P3** — restart→continue "previous chat archived" note → Task 7 Step 2.
+- **Codex restore** — extend the A1 smoke with `agent:"codex"` before trusting it (filename ≠ sessionId; resolved by scan) → Task 1 Step 6 note.
+
+## NOT in scope (considered, deferred)
+
+- **Live token re-attach to an in-flight turn** — v1 polls + shows a spinner; the detached-buffer/`/attach`-SSE subsystem is the upgrade path.
+- **Cross-browser / server-side session pointer** — decision D2 chose client localStorage for this scope; server-side is the follow-up if cross-browser is ever needed.
+- **ACP `session/load` live-resume** — R4 is fresh-continue.
+- **Neutral Chat panel** — shares the plumbing; fast-follow.
+- **`maxLive` cross-miniapp recovery UI** — when 3 miniapps have concurrent *running* turns, `openChat` throws a clear "too many active sessions"; freeing a slot means Stopping one (per-miniapp). A global session manager is deferred.
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | issues_folded | 3 architecture, 3 code-quality, test-diagram (3 real gaps), 2 perf; all folded into the plan |
+| Outside Voice | Claude subagent | Independent 2nd opinion | 1 | issues_found | 11 findings; strong overlap on A1/A2/C1; surfaced 3 new (Stop visibility, Task 1 sequencing, restart-seam) |
+
+- **CROSS-MODEL:** Both reviewers independently ranked the **sessionId↔on-disk-file mapping (A1)** and **untested background-completion (A2)** as the top two risks — high-signal agreement. One genuine tension (persistence home: localStorage vs server-side) was resolved by the user at **D2 → client localStorage + multi-tab attach fix**.
+- **VERDICT:** ENG CLEARED — plan hardened; A1 (live smoke) and A2 (background-completion regression test) are the two must-pass gates before the client tasks are trusted. Ready to implement.
+
+NO UNRESOLVED DECISIONS
