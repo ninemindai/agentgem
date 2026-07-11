@@ -1,7 +1,7 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
-import { makeTestDb, makeAuth, stashConnectState, consumeConnectState, CONNECT_STATE_TTL_MS } from "@agentgem/aggregator";
+import { makeTestDb, makeAuth, stashConnectState, consumeConnectState, CONNECT_STATE_TTL_MS, connectStates } from "@agentgem/aggregator";
 import { createHash } from "node:crypto";
 
 const h = (s: string) => createHash("sha256").update(s).digest("hex");
@@ -31,8 +31,17 @@ describe("connect_states", () => {
     expect(await consumeConnectState(db, h("s1"))).toBeNull();
     // unknown state -> null
     expect(await consumeConnectState(db, h("nope"))).toBeNull();
-    // expired -> null (and cleaned)
+    // expired -> null; the row is left behind by consumeConnectState (its WHERE only skips
+    // expired rows, it never deletes them) but reaped opportunistically on the *next* stash below
     await stashConnectState(db, { stateHash: h("s2"), codeVerifier: "v2", currentUserId: u2.id, provider: "google" }, -1);
     expect(await consumeConnectState(db, h("s2"))).toBeNull();
+
+    // reaper: a later stash deletes the still-present expired s2 row as a side effect
+    const beforeReap = await db.select().from(connectStates);
+    expect(beforeReap.some((r) => r.stateHash === h("s2"))).toBe(true);
+    await stashConnectState(db, { stateHash: h("s3"), codeVerifier: "v3", currentUserId: u1.id, provider: "github" });
+    const afterReap = await db.select().from(connectStates);
+    expect(afterReap.some((r) => r.stateHash === h("s2"))).toBe(false);
+    expect(afterReap.some((r) => r.stateHash === h("s3"))).toBe(true);
   });
 });
