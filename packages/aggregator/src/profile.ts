@@ -82,12 +82,18 @@ export async function buildProfile(db: AppDb, rawHandle: string): Promise<Profil
     .from(accounts).where(eq(accounts.id, accountId)).limit(1))[0];
 
   // `verified` follows the ACCOUNT, not the name. account_bindings.account_id is the PROVIDER's id
-  // (text), so pair it with `provider` to reach the anchor. Matching account_login against the handle
-  // would silently un-verify anyone who renamed, since the binding still holds their old login.
+  // (text), so pair it with `provider` to reach the owning account. Matching account_login against
+  // the handle would silently un-verify anyone who renamed, since the binding still holds their old
+  // login. Resolved the same way accountIdForProvider does (Task 2): better-auth's `account` table
+  // first — authoritative for every linked provider, unlike the legacy `accounts.provider`/
+  // `provider_account_id` columns, which hold only the PRIMARY provider (Task 1) and would
+  // otherwise never verify a Google-primary user who linked GitHub — falling back to the legacy
+  // anchor for a binding whose `account` mirror write was skipped (best-effort; see binding.ts).
   const bind = (await db.execute(sql`
     select 1 from account_bindings ab
-    join accounts a on a.provider = ab.provider and a.provider_account_id = ab.account_id
-    where a.id = ${accountId} limit 1`));
+    where exists (select 1 from account a where a.provider_id = ab.provider and a.account_id = ab.account_id and a.user_id = ${accountId})
+       or exists (select 1 from accounts leg where leg.provider = ab.provider and leg.provider_account_id = ab.account_id and leg.id = ${accountId})
+    limit 1`));
   const verified = (bind.rows?.length ?? 0) > 0;
 
   // Ownership read: gems this ACCOUNT owns. Matching published_by would list impostor rows whose

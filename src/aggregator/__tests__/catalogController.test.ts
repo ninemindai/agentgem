@@ -16,8 +16,9 @@ describe("AggregatorController.catalog", () => {
     const db = await makeTestDb();
     const s = signer();
     await db.insert(producers).values({ pubkey: s.pubkey });
-    // account_bindings.account_id is the PROVIDER's id (text); recordCatalogShare pairs it with
-    // `provider` against the accounts anchor row to resolve the uuid that owns the gem.
+    // account_bindings.account_id is the PROVIDER's id (text); recordCatalogShare resolves it via
+    // accountIdForProvider (Task 2), which checks better-auth's `account` table first and falls
+    // back to this legacy accounts anchor when there is no mirror row.
     await db.insert(accounts).values({ id: crypto.randomUUID(), provider: "github", providerAccountId: "1", login: "octocat" });
     await db.insert(accountBindings).values({ pubkey: s.pubkey, provider: "github", accountId: "1", accountLogin: "octocat" });
     const c = new AggregatorController(db);

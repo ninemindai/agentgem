@@ -18,7 +18,7 @@
 // resolves the provider identity itself and stashes it, keyed to the caller's session, via
 // `stashPendingLink` below. `/api/account/absorb` then reads it back via `pendingLink` — which
 // derives the identity ONLY from that server-side record, never from a client-supplied id.
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, sql } from "drizzle-orm";
 import type { AppDb } from "../schema.js";
 import { pendingAccountLinks } from "../schema.js";
 
@@ -69,4 +69,30 @@ export async function pendingLink(db: AppDb, sessionUserId: string): Promise<Pen
     .limit(1);
   const r = rows[0];
   return r ? { providerId: r.providerId, providerAccountId: r.providerAccountId } : null;
+}
+
+/**
+ * Task 2: resolve a provider identity to its owning `accounts.id` uuid — PRIMARY or LINKED. The
+ * legacy `accounts` anchor (Task 1) stores only the primary provider's `(provider,
+ * providerAccountId)`, so joining/filtering against it silently fails for any provider a user
+ * linked afterward. better-auth's own `account` table is authoritative for every provider it has
+ * ever recorded for a user, and `account.user_id` equals the anchor's `accounts.id` uuid (the
+ * anchor is always written with id = user.id — see anchorAndScopes). Callers that need to map a
+ * desktop/producer-key `(provider, providerAccountId)` binding back to the account it authorizes
+ * MUST use this instead of querying `accounts.provider`/`accounts.provider_account_id` directly.
+ *
+ * Falls back to the legacy `accounts` anchor when there is no `account` row: the mirror write
+ * (anchorAndScopes on web sign-in, ensureBetterAuthUser on desktop bind) is best-effort and can be
+ * skipped (see binding.ts's try/catch around it), so a legitimate anchor can outlive its mirror.
+ * The fallback can only ever match a PRIMARY provider — Task 1 restricts the anchor to one row per
+ * user — so it never mis-resolves a linked provider to the wrong owner.
+ */
+export async function accountIdForProvider(db: AppDb, providerId: string, providerAccountId: string): Promise<string | null> {
+  const viaAccount = (await db.execute(sql`
+    select user_id from account where provider_id = ${providerId} and account_id = ${providerAccountId} limit 1`)).rows;
+  const resolved = (viaAccount?.[0] as { user_id?: string } | undefined)?.user_id ?? null;
+  if (resolved) return resolved;
+  const viaAnchor = (await db.execute(sql`
+    select id as user_id from accounts where provider = ${providerId} and provider_account_id = ${providerAccountId} limit 1`)).rows;
+  return (viaAnchor?.[0] as { user_id?: string } | undefined)?.user_id ?? null;
 }
