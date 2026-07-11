@@ -80,6 +80,26 @@ export async function latestGemVersion(db: AppDb, gemKey: string): Promise<strin
   return rows[0]?.version ?? null;
 }
 
+export interface GemStatus { exists: boolean; ownedByMe: boolean; latestVersion: string | null }
+
+// Signed payload for a gem-status pre-flight query. Mirrors catalogSigningPayload but commits to
+// the queried key (not a full manifest), so resolveSignedAccount can attribute the request.
+export function gemStatusSigningPayload(gemKey: string, pubkey: string, signedAt: number): string {
+  return canonicalJSON({ pubkey, signedAt, gemKey });
+}
+
+// Pre-flight for the publish dialog: does this key exist, is it owned by `accountId` (the resolved
+// signer; null = unresolved/anonymous), and what is the latest-published version?
+export async function gemStatusFor(db: AppDb, gemKey: string, accountId: string | null): Promise<GemStatus> {
+  const rows = await db.select({ version: catalogGems.version, ownerAccountId: catalogGems.ownerAccountId, createdAtMs: catalogGems.createdAtMs })
+    .from(catalogGems)
+    .where(eq(catalogGems.gemKey, gemKey))
+    .orderBy(desc(catalogGems.createdAtMs));
+  if (rows.length === 0) return { exists: false, ownedByMe: false, latestVersion: null };
+  const latest = rows[0];
+  return { exists: true, ownedByMe: accountId != null && latest.ownerAccountId === accountId, latestVersion: latest.version };
+}
+
 export async function catalogGemExists(db: AppDb, gemKey: string, version: string): Promise<boolean> {
   const r = (await db.select({ gemKey: catalogGems.gemKey }).from(catalogGems)
     .where(and(eq(catalogGems.gemKey, gemKey), eq(catalogGems.version, version))).limit(1))[0];
