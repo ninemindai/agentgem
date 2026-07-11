@@ -109,10 +109,15 @@ export async function setAccountScopes(db: AppDb, accountId: string, scopes: Sco
     const entry = typeof g === "string" ? { scope: g, role: "member" } : g;
     if (!byScope.has(entry.scope)) byScope.set(entry.scope, entry);
   }
-  await db.delete(accountScopes).where(eq(accountScopes.accountId, accountId));
-  if (byScope.size > 0) {
-    await db.insert(accountScopes).values([...byScope.values()].map((e) => ({ accountId, scope: e.scope, role: e.role })));
-  }
+  // One transaction so the delete + re-insert are atomic. Without it a concurrent reader lands in the
+  // window between them and sees zero scopes (accountScopeStatus → "none", membership-gated endpoints
+  // fail); an insert failure would leave the account's org memberships permanently erased.
+  await db.transaction(async (tx) => {
+    await tx.delete(accountScopes).where(eq(accountScopes.accountId, accountId));
+    if (byScope.size > 0) {
+      await tx.insert(accountScopes).values([...byScope.values()].map((e) => ({ accountId, scope: e.scope, role: e.role })));
+    }
+  });
 }
 
 /** All scopes the account owns, with role + capture time — the authed "my orgs" listing. */

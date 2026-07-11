@@ -127,4 +127,18 @@ describe("scope roles + freshness", () => {
     await setAccountScopes(db, id, ["ninemind"]);
     expect(await accountScopeStatus(db, id, "ninemind", week)).toBe("ok");
   });
+
+  it("a concurrent read never observes the empty gap during a replace (atomic delete+insert)", async () => {
+    const db = await makeTestDb();
+    const id = await acct(db, "carol");
+    await setAccountScopes(db, id, ["orgA"]);
+    // Replace concurrently with several reads. Without a transaction the delete commits first, so a
+    // read landing in the window sees zero scopes and accountScopeStatus would report the user out of
+    // every org. Atomic replace → every read sees the old set or the new set, never [].
+    const [, reads] = await Promise.all([
+      setAccountScopes(db, id, ["orgB"]),
+      Promise.all(Array.from({ length: 8 }, () => getAccountScopes(db, id))),
+    ]);
+    for (const r of reads) expect(r.length).toBeGreaterThan(0);
+  });
 });
