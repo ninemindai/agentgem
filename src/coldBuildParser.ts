@@ -13,7 +13,13 @@ import type { OffThreadParse } from "@agentgem/capture";
 import type { ParseResult } from "./transcriptParseWorker.js";
 
 const CANDIDATES = ["./transcriptParseWorker.js"] as const;
-const BATCH_SIZE = 64;
+// Files per streamed batch. The worker parses off-thread, but the main thread still
+// writes each batch in one synchronous BEGIN/COMMIT, so the heaviest batch bounds the
+// worst event-loop block. Measured on the real 3,829-transcript corpus: 64 → ~144ms
+// worst block (over the <100ms target); 16 → ~32-50ms with identical ~16s wall-clock
+// (a few dozen extra txns over a one-time cold build is free). See the spec's
+// Verification table.
+const BATCH_SIZE = 16;
 
 /** `candidates` param is for tests (force an unresolvable path); production uses the default. */
 export function buildOffThreadParse(candidates: readonly string[] = CANDIDATES): OffThreadParse {
