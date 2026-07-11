@@ -36,12 +36,54 @@ describe("Studio → Share to app.agentgem.ai", () => {
     vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob", sessionActive: true } as never);
     vi.spyOn(routes.playMiniappRoute, "call").mockResolvedValue(miniapp as never);
     vi.spyOn(routes.playSaveRoute, "call").mockResolvedValue({ name: "g1", commit: "abc1234", prunedNeeds: [] } as never);
+    vi.spyOn(routes.publishStatusRoute, "call").mockResolvedValue({ exists: false, ownedByMe: false, latestVersion: null } as never);
     const publish = vi.spyOn(routes.publishSetupRoute, "call").mockResolvedValue({ exploreRef: "@bob/snake", version: "0.1.0", shareUrl: "https://agentgem.ai/share/s" } as never);
     mount();
     fireEvent.click(await screen.findByRole("button", { name: /share to app\.agentgem\.ai/i }));
     await waitFor(() => expect(publish).toHaveBeenCalledTimes(1));
-    expect(publish.mock.calls[0][1]).toMatchObject({ body: expect.objectContaining({ scope: "bob", workspace: "snake" }) });
+    expect(publish.mock.calls[0][1]).toMatchObject({ body: expect.objectContaining({ scope: "bob", workspace: "snake", version: "0.1.0" }) });
     expect(await screen.findByText(/Published to app\.agentgem\.ai/)).toBeTruthy();
+  });
+
+  it("bound + already published by me: shows the confirm banner, and each button publishes the right version", async () => {
+    vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob", sessionActive: true } as never);
+    vi.spyOn(routes.playMiniappRoute, "call").mockResolvedValue(miniapp as never);
+    vi.spyOn(routes.playSaveRoute, "call").mockResolvedValue({ name: "g1", commit: "abc1234", prunedNeeds: [] } as never);
+    vi.spyOn(routes.publishStatusRoute, "call").mockResolvedValue({ exists: true, ownedByMe: true, latestVersion: "1.2.3" } as never);
+    const publish = vi.spyOn(routes.publishSetupRoute, "call").mockResolvedValue({ exploreRef: "@bob/snake", version: "1.2.4", shareUrl: "https://agentgem.ai/share/s" } as never);
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: /share to app\.agentgem\.ai/i }));
+    expect(await screen.findByText(/already published \(v1\.2\.3\)/)).toBeTruthy();
+    expect(publish).not.toHaveBeenCalled();
+
+    fireEvent.click(await screen.findByRole("button", { name: /publish v1\.2\.4/i }));
+    await waitFor(() => expect(publish).toHaveBeenCalledTimes(1));
+    expect(publish.mock.calls[0][1]).toMatchObject({ body: expect.objectContaining({ version: "1.2.4" }) });
+  });
+
+  it("bound + already published by me: Overwrite publishes the latest version, not the bumped one", async () => {
+    vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob", sessionActive: true } as never);
+    vi.spyOn(routes.playMiniappRoute, "call").mockResolvedValue(miniapp as never);
+    vi.spyOn(routes.playSaveRoute, "call").mockResolvedValue({ name: "g1", commit: "abc1234", prunedNeeds: [] } as never);
+    vi.spyOn(routes.publishStatusRoute, "call").mockResolvedValue({ exists: true, ownedByMe: true, latestVersion: "1.2.3" } as never);
+    const publish = vi.spyOn(routes.publishSetupRoute, "call").mockResolvedValue({ exploreRef: "@bob/snake", version: "1.2.3", shareUrl: "https://agentgem.ai/share/s" } as never);
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: /share to app\.agentgem\.ai/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /overwrite v1\.2\.3/i }));
+    await waitFor(() => expect(publish).toHaveBeenCalledTimes(1));
+    expect(publish.mock.calls[0][1]).toMatchObject({ body: expect.objectContaining({ version: "1.2.3" }) });
+  });
+
+  it("bound + name taken by someone else: surfaces a message and never publishes", async () => {
+    vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob", sessionActive: true } as never);
+    vi.spyOn(routes.playMiniappRoute, "call").mockResolvedValue(miniapp as never);
+    vi.spyOn(routes.playSaveRoute, "call").mockResolvedValue({ name: "g1", commit: "abc1234", prunedNeeds: [] } as never);
+    vi.spyOn(routes.publishStatusRoute, "call").mockResolvedValue({ exists: true, ownedByMe: false, latestVersion: "1.0.0" } as never);
+    const publish = vi.spyOn(routes.publishSetupRoute, "call");
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: /share to app\.agentgem\.ai/i }));
+    expect(await screen.findByText(/already published by another account/)).toBeTruthy();
+    expect(publish).not.toHaveBeenCalled();
   });
 
   it("unbound: shows the inline connect instead of publishing, and does not dead-end", async () => {
@@ -64,6 +106,7 @@ describe("Studio → Share to app.agentgem.ai", () => {
     const save = vi.spyOn(routes.playSaveRoute, "call").mockResolvedValue({ name: "g1", commit: "abc1234", prunedNeeds: [] } as never);
     vi.spyOn(routes.bindStartRoute, "call").mockResolvedValue({ configured: true, userCode: "AB-12", verificationUri: "https://gh/d", deviceCode: "dc" } as never);
     vi.spyOn(routes.bindCompleteRoute, "call").mockResolvedValue({ bound: true, login: "bob" } as never);
+    const status = vi.spyOn(routes.publishStatusRoute, "call").mockResolvedValue({ exists: false, ownedByMe: false, latestVersion: null } as never);
     const publish = vi.spyOn(routes.publishSetupRoute, "call").mockResolvedValue({ exploreRef: "@bob/snake", version: "0.1.0", shareUrl: "https://agentgem.ai/share/s" } as never);
     vi.stubGlobal("open", vi.fn());
 
@@ -75,7 +118,8 @@ describe("Studio → Share to app.agentgem.ai", () => {
     fireEvent.click(await screen.findByRole("button", { name: /copy code & open github/i }));
 
     await waitFor(() => expect(publish).toHaveBeenCalledTimes(1));
-    expect(publish.mock.calls[0][1]).toMatchObject({ body: expect.objectContaining({ scope: "bob" }) });
+    expect(status.mock.calls[0][1]).toMatchObject({ query: expect.objectContaining({ scope: "bob" }) });
+    expect(publish.mock.calls[0][1]).toMatchObject({ body: expect.objectContaining({ scope: "bob", version: "0.1.0" }) });
     expect(save).toHaveBeenCalledTimes(1); // NOT re-saved on resume
     expect(await screen.findByText(/Published to app\.agentgem\.ai/)).toBeTruthy();
   });
@@ -110,6 +154,7 @@ describe("Studio → Share to app.agentgem.ai", () => {
     const save = vi.spyOn(routes.playSaveRoute, "call").mockResolvedValue({ name: "g1", commit: "abc1234", prunedNeeds: [] } as never);
     vi.spyOn(routes.bindStartRoute, "call").mockResolvedValue({ configured: true, userCode: "AB-12", verificationUri: "https://gh/d", deviceCode: "dc" } as never);
     vi.spyOn(routes.bindCompleteRoute, "call").mockResolvedValue({ bound: true, login: "bob" } as never);
+    vi.spyOn(routes.publishStatusRoute, "call").mockResolvedValue({ exists: false, ownedByMe: false, latestVersion: null } as never);
     const publish = vi.spyOn(routes.publishSetupRoute, "call").mockResolvedValue({ exploreRef: "@bob/snake", version: "0.1.0", shareUrl: "https://agentgem.ai/share/s" } as never);
     vi.stubGlobal("open", vi.fn());
 

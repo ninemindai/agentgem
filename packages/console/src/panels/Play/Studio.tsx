@@ -1,6 +1,6 @@
 // packages/console/src/panels/Play/Studio.tsx
 import { useEffect, useRef, useState } from "react";
-import { makeClient, playMiniappRoute, playSaveRoute, playPublishRoute, publishSetupRoute, shareMiniappRoute, revokeMiniappRoute } from "../../api/routes.js";
+import { makeClient, playMiniappRoute, playSaveRoute, playPublishRoute, publishSetupRoute, publishStatusRoute, shareMiniappRoute, revokeMiniappRoute } from "../../api/routes.js";
 import { AgentSelector, type PlayAgent } from "./AgentSelector.js";
 import { CapabilityStrip } from "./CapabilityStrip.js";
 import { Runner } from "./Runner.js";
@@ -12,6 +12,7 @@ import { ConnectGitHub } from "../../identity/ConnectGitHub.js";
 import { useSplit } from "../../shell/useSplit.js";
 import { setStudioChat, clearChatId, clearStudioChat } from "./studioChatStore.js";
 import { loadStudioSession } from "./studioResume.js";
+import { resolvePublishAction, type PublishAction } from "./publishAction.js";
 
 const j = (r: Response) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); };
 
@@ -51,6 +52,7 @@ export function Studio({
   const [pendingPublish, setPendingPublish] = useState(false);   // Share clicked while unbound
   const [shareLink, setShareLink] = useState<string | null>(null);   // light unlisted share; persists via the miniapp read's `share`
   const [pendingShare, setPendingShare] = useState(false);   // Copy-share clicked while unbound
+  const [pendingVersion, setPendingVersion] = useState<{ latestVersion: string; nextVersion: string; login: string } | null>(null);
   const [sharing, setSharing] = useState(false);   // in-flight guard: blocks a double-mint from orphaning an un-revokable link
   const { status: identity } = useIdentity();
   const closeRef = useRef<null | (() => void)>(null);
@@ -67,7 +69,7 @@ export function Studio({
   // React render that applies the refresh, and resume could see a stale null.
   const bind = useGitHubBind(apiBase, {
     onBound: (login) => {
-      if (pendingPublish) { setPendingPublish(false); void publishWorkspace(login); }
+      if (pendingPublish) { setPendingPublish(false); void checkAndPublish(login); }
       if (pendingShare) { setPendingShare(false); void mintShare(); }
     },
   });
@@ -271,12 +273,12 @@ export function Studio({
 
   // The actual publish. Takes `login` explicitly (see the onBound comment above) and
   // deliberately does NOT save: the caller already did, and the workspace + seal exist.
-  async function publishWorkspace(login: string) {
+  async function publishWorkspace(login: string, version: string) {
     setStatus("publishing to app.agentgem.ai…");
     try {
       const g = genreOf(meta?.genre ?? "project-fun");
       const pub = await publishSetupRoute.call(makeClient(apiBase), { body: {
-        workspace: name, scope: login, name, version: "0.1.0", provenance: "play",
+        workspace: name, scope: login, name, version, provenance: "play",
         description: `${g.label} mini-game`, tags: ["game", meta?.genre ?? "project-fun"],
       } });
       // Link the gem's marketplace page (installable / playable), not just the OG teaser card.
@@ -287,14 +289,31 @@ export function Studio({
     }
   }
 
+  // Pre-flight + publish, given a verified login. Split out from shareToExplore so the
+  // post-connect resume (below) can re-enter the check without re-saving and without
+  // reading `identity.login` — see the onBound comment: that context read can race the
+  // render that applies the refresh, and resume could see a stale null.
+  async function checkAndPublish(login: string) {
+    setStatus("checking app.agentgem.ai…");
+    let action: PublishAction;
+    try {
+      const st = await publishStatusRoute.call(makeClient(apiBase), { query: { workspace: name, scope: login, name } });
+      action = resolvePublishAction(st);
+    } catch (e) {
+      setStatus(`could not check for an existing app: ${(e as Error).message}`); return;
+    }
+    if (action.kind === "publish") { await publishWorkspace(login, action.version); return; }
+    if (action.kind === "taken") { setStatus(`“${name}” is already published by another account — choose a different name.`); return; }
+    setStatus(""); setPendingVersion({ latestVersion: action.latestVersion, nextVersion: action.nextVersion, login });
+  }
+
   // Share to Explore (app.agentgem.ai): Save (creates the game-gem workspace + enforces
   // the seal), then publish. Unbound → offer the inline connect and resume afterwards.
   async function shareToExplore() {
-    setStatus("preparing…"); setShare(null);
+    setStatus("preparing…"); setShare(null); setPendingVersion(null);
     if (!(await save())) return; // gate failure already surfaced as the banner
-    if (identity?.bound && identity.login) { await publishWorkspace(identity.login); return; }
-    setStatus("");
-    setPendingPublish(true);
+    if (!(identity?.bound && identity.login)) { setStatus(""); setPendingPublish(true); return; }
+    await checkAndPublish(identity.login);
   }
 
   // A latent resume flag that fires on some later, unrelated bind is worse than no
@@ -377,6 +396,17 @@ export function Studio({
           </div>
           <button className="play-btn" onClick={() => navigator.clipboard?.writeText(share.gemUrl)}>Copy</button>
           <button className="play-btn play-btn--ghost" onClick={() => window.open(share.gemUrl, "_blank", "noopener")}>Open</button>
+        </div>
+      )}
+      {pendingVersion && (
+        <div className="play-banner">
+          <span className="play-banner__ico">📦</span>
+          <div className="play-banner__body">
+            <div className="play-banner__title">“{name}” is already published (v{pendingVersion.latestVersion})</div>
+            <div className="play-banner__detail">Publish a new version, or overwrite the current one.</div>
+          </div>
+          <button className="play-btn play-btn--primary" onClick={() => { const p = pendingVersion; setPendingVersion(null); void publishWorkspace(p.login, p.nextVersion); }}>Publish v{pendingVersion.nextVersion}</button>
+          <button className="play-btn play-btn--ghost" onClick={() => { const p = pendingVersion; setPendingVersion(null); void publishWorkspace(p.login, p.latestVersion); }}>Overwrite v{pendingVersion.latestVersion}</button>
         </div>
       )}
       {shareLink && (
