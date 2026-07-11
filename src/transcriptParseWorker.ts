@@ -25,6 +25,10 @@ export function parseChangedFiles(input: ParseWorkerInput, emit: (batch: ParseRe
   const seen: string[] = [];
   let buf: ParseResult[] = [];
   for (const c of input.changed) {
+    // No per-file try/catch by design: scanFileUsage catches its own read/parse errors and
+    // returns { failed:true } rather than throwing (see rawUsageScan). If that ever changes, a
+    // throw here aborts the worker → the producer rejects → callers fall back to the inline scan
+    // (slow but correct, and prune-safe because `done` never fires). Keep scanFileUsage total.
     const usage = scanFileUsage(c.path, input.hooks);
     seen.push(c.path);
     buf.push({ path: c.path, mtime: c.mtime, size: c.size, usage });
