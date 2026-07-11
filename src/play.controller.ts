@@ -3,22 +3,16 @@
 // Play JSON routes over the miniapps registry: save (gate + dual-write), list, publish (git push).
 import { api, get, post, AgentError } from "@agentback/openapi";
 import { z } from "zod";
-import { readWorkspace } from "@agentgem/base";
-import { readGemArchive } from "@agentgem/archive";
-import { exportGem, importGem } from "@agentgem/distribute";
-import { loadOrCreateIdentity } from "@agentgem/model";
 import {
   saveMiniapp, deleteMiniapp, listMiniapps, readMiniapp, miniappsRoot, setRemote, push, seedStudio, importStudio, blankStudio,
   compactTurns, resolveSessionRef, mcpAppFor, migrateAllMiniapps, INSPECTOR_HTML, INSPECTOR_META, type MiniappMeta,
-  readMiniappShare, writeMiniappShare, clearMiniappShare,
+  readMiniappShare,
 } from "@agentgem/play";
-import { postShareArchive, postShareArchiveRevoke } from "./gem/shareArchiveClient.js";
 import { defaultReaders } from "./play.readers.js";
 import { listActiveSessions } from "./watchSessions.js";
 import {
   PlaySaveRequestSchema, PlaySaveResponseSchema, PlayDeleteRequestSchema, PlayDeleteResponseSchema, MiniappListSchema,
   PlayPublishRequestSchema, PlayPublishResponseSchema,
-  PlayShareRequestSchema, PlayShareResponseSchema, PlayRevokeRequestSchema, PlayRevokeResponseSchema,
   PlayStudioRequestSchema, PlayStudioResponseSchema, PlayImportRequestSchema, PlayBlankRequestSchema,
   PlayMiniappQuerySchema, PlayMiniappSchema, PlaySessionDataSchema, PlaySessionDataQuerySchema, PlayMcpAppSchema,
   PlayMigrateResponseSchema, PlayInspectorSchema,
@@ -111,38 +105,6 @@ export class PlayController {
         ...(share ? { share } : {}),
       };
     } catch (e) { throw new AgentError((e as Error).message, { status: 404 }); }
-  }
-
-  // Light unlisted share: build the miniapp's portable archive (a miniapp name IS a workspace, same as
-  // publishSetup), mint an unlisted /games/<id> link owned by the local identity's account, and persist
-  // the shareId so revoke works across restarts. Requires a connected identity server-side (the
-  // aggregator rejects an unbound key); the console shows a connect prompt before calling this.
-  @post("/play/share", { body: PlayShareRequestSchema, response: PlayShareResponseSchema })
-  async share(input: { body: z.infer<typeof PlayShareRequestSchema> }): Promise<z.infer<typeof PlayShareResponseSchema>> {
-    const { name } = input.body;
-    let bytes: Buffer, digest: string;
-    try {
-      const gem = readGemArchive(readWorkspace(name).files);
-      bytes = exportGem(gem, { version: "1" }).bytes;
-      digest = importGem(bytes).meta.gemDigest;
-    } catch (e) { throw new AgentError(`could not read miniapp: ${(e as Error).message}`, { status: 404 }); }
-    // gemKey is unused for shares — the server mints its own scope-less id — but is still part of the
-    // signed manifest payload, so a stable placeholder keeps the signature well-defined.
-    const manifest = { gemKey: "_", version: "1", gemDigest: digest };
-    const r = await postShareArchive({ manifest, archiveBase64: bytes.toString("base64"), identity: loadOrCreateIdentity() });
-    if (!r.ok) throw new AgentError(`share failed: ${r.rejected}`, { status: 400 });
-    writeMiniappShare(name, { shareId: r.key, url: r.url, sharedAtMs: Date.now() });
-    return { url: r.url };
-  }
-
-  @post("/play/revoke", { body: PlayRevokeRequestSchema, response: PlayRevokeResponseSchema })
-  async revoke(input: { body: z.infer<typeof PlayRevokeRequestSchema> }): Promise<z.infer<typeof PlayRevokeResponseSchema>> {
-    const cur = readMiniappShare(input.body.name);
-    if (!cur) throw new AgentError("miniapp is not shared", { status: 404 });
-    const r = await postShareArchiveRevoke({ key: cur.shareId, identity: loadOrCreateIdentity() });
-    if (!r.ok) throw new AgentError(`revoke failed: ${r.rejected}`, { status: 400 });
-    clearMiniappShare(input.body.name);
-    return { revoked: true };
   }
 
   // Serve-time MCP Apps adapter: the same stored miniapp, re-shaped as a ui:// resource + launcher tool.
