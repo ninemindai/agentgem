@@ -31,6 +31,17 @@ describe("ingestAttestation", () => {
     const n = (await db.execute<{ c: number }>(sql`select count(*)::int as c from attestations`)).rows[0].c;
     expect(n).toBe(1); // no duplicate
   });
+  it("keeps a per-producer record: two producers of the same gem digest are both stored", async () => {
+    const db = await makeTestDb();
+    const p1 = make("sha256:shared"); // producer A
+    const p2 = make("sha256:shared"); // producer B — SAME digest, different key
+    expect(await ingestAttestation(db, p1)).toMatchObject({ accepted: true, idempotent: false });
+    // Before the re-key this was deduped away (idempotent: true) and B's data + producer row vanished.
+    expect(await ingestAttestation(db, p2)).toMatchObject({ accepted: true, idempotent: false });
+    expect((await db.execute<{ c: number }>(sql`select count(*)::int as c from attestations`)).rows[0].c).toBe(2);
+    expect((await db.execute<{ c: number }>(sql`select count(*)::int as c from producers`)).rows[0].c).toBe(2); // B is now visible
+  });
+
   it("rejects a tampered signature without writing", async () => {
     const db = await makeTestDb();
     const r = await ingestAttestation(db, { ...make("sha256:u2"), signature: "AAAA" });

@@ -36,8 +36,11 @@ export type IngestResult =
 export async function ingestAttestation(db: AppDb, att: UsageAttestation): Promise<IngestResult> {
   const v = verifyAttestation(att);
   if (!v.ok) return { accepted: false, rejected: v.reason };
+  // Idempotency is per (gem_digest, producer_pubkey): the SAME producer re-submitting the same gem is
+  // a no-op, but a DIFFERENT producer of the same gem binary gets their own attestation (previously the
+  // gem_digest-global unique dropped the second producer's data and hid them from the aggregates).
   const prior = await db.execute<{ id: string; private_count: number }>(
-    sql`select id, private_count from attestations where gem_digest = ${att.gem.digest}`);
+    sql`select id, private_count from attestations where gem_digest = ${att.gem.digest} and producer_pubkey = ${att.producer.publicKey}`);
   if (prior.rows.length > 0) {
     const row = prior.rows[0];
     const pub = await db.execute<{ c: number }>(
