@@ -166,7 +166,8 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middlew
       const chatId = await deps.manager.openChat(args);
       const miniapp = req.body?.miniapp ? String(req.body.miniapp) : "";
       if (miniapp) chatMiniapps.set(chatId, miniapp);
-      res.json({ chatId });
+      const st = deps.manager.stateOf(chatId);
+      res.json({ chatId, sessionId: st.alive ? st.sessionId : "", agent: args.agentId });
     } catch (e) {
       const msg = (e as Error).message;
       // Client errors (missing agentId, a bad/unknown miniapp or project) → 400; anything else → 500.
@@ -215,11 +216,17 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middlew
     try {
       for await (const ev of deps.manager.sendMessage(chatId, message)) {
         if (ev.type === "failed") failed = true;
-        send(ev.type, ev);
+        // A `send` (res.write) failure here means the client already disconnected (tab closed,
+        // network drop, navigated away). Swallow it INSIDE the loop body — letting it escape would
+        // make `for await` run IteratorClose on the manager's generator, which (a) skips the
+        // `await running` that lets the underlying prompt() finish before `chat.running` clears,
+        // and (b) aborts before `done`, so the checkpoint below never runs. Draining to completion
+        // regardless of the dead socket is the background-completion guarantee (R1).
+        try { send(ev.type, ev); } catch { /* client gone; turn continues in the background */ }
       }
     } catch (e) {
       failed = true;
-      send("failed", { error: (e as Error).message });
+      try { send("failed", { error: (e as Error).message }); } catch { /* client gone */ }
     }
 
     // Turn done. For a studio session that did NOT fail, checkpoint the miniapp (durability + opportunistic
@@ -231,7 +238,7 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middlew
       catch (e) { console.error(`checkpoint failed for miniapp ${miniapp}:`, (e as Error).message); }
     }
 
-    res.end();
+    try { res.end(); } catch { /* client already disconnected */ }
   });
 
   // POST /api/chat/:chatId/draft-gem — drive one selection turn and return a built Gem.
@@ -252,6 +259,12 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middlew
     deps.manager.closeChat(req.params.chatId);
     chatMiniapps.delete(req.params.chatId);
     res.json({ ok: true });
+  });
+
+  // GET /api/chat/:chatId/state — liveness for client reconciliation after navigation/reload.
+  // { alive:false } if the session was swept/evicted or the core restarted.
+  app.get("/api/chat/:chatId/state", guard, (req, res) => {
+    res.json(deps.manager.stateOf(req.params.chatId));
   });
 }
 
