@@ -7,6 +7,7 @@ import type {
   SkillArtifact, McpServerArtifact, HookArtifact, GemCheck,
   ChannelArtifact, SecretRef, ReferenceArtifact, SubagentArtifact, GemContract, GameArtifact,
   LoopSpec, LoopGuardrails, LoopSchedule, LoopGoal,
+  RubricArtifact, RubricScopeKind, RubricFactorRef, LlmCriterion,
 } from "@agentgem/model";
 import { safePathSegment } from "@agentgem/model";
 
@@ -150,6 +151,12 @@ export function writeGemArchive(gem: Gem, opts: { version?: string; dependencies
       if (a.source !== undefined) body.source = a.source;
       if (a.secretRefs !== undefined) body.secretRefs = a.secretRefs;
       if (place(path, JSON.stringify(body, null, 2), a.name, "hook")) artifacts.push({ type: "hook", name: a.name, path });
+    } else if (a.type === "rubric") {
+      const path = `rubrics/${withExt(seg, ".json")}`;
+      const body: Record<string, unknown> = { title: a.title, target: a.target, factors: a.factors };
+      if (a.naturalScope !== undefined) body.naturalScope = a.naturalScope;
+      if (a.criteria !== undefined) body.criteria = a.criteria;
+      if (place(path, JSON.stringify(body, null, 2), a.name, "rubric")) artifacts.push({ type: "rubric", name: a.name, path });
     }
   }
 
@@ -319,6 +326,13 @@ export function readGemArchive(files: FileTree): Gem {
       if (m.poster !== undefined) a.poster = m.poster;
       if (m.needs !== undefined) a.needs = m.needs;
       if (m.meta !== undefined) a.meta = m.meta;
+      return a;
+    }
+    if (e.type === "rubric") {
+      const o = JSON.parse(body(e.path)) as { title: string; target: string; naturalScope?: RubricScopeKind; factors: RubricFactorRef[]; criteria?: LlmCriterion[] };
+      const a: RubricArtifact = { type: "rubric", name: e.name, title: o.title, target: o.target, factors: o.factors };
+      if (o.naturalScope !== undefined) a.naturalScope = o.naturalScope;
+      if (o.criteria !== undefined) a.criteria = o.criteria;
       return a;
     }
     if (e.type !== "hook") throw new Error(`unknown artifact type '${e.type}' in manifest`);
