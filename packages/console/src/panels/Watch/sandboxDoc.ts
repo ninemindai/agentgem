@@ -19,8 +19,21 @@ const STORAGE_SHIM =
   "['localStorage','sessionStorage'].forEach(function(n){var ok=false;try{window[n]&&window[n].getItem;ok=true;}catch(e){}" +
   "if(!ok){try{Object.defineProperty(window,n,{value:make(),configurable:true});}catch(e){}}});})();</script>";
 
+// A srcdoc frame inherits the PARENT's document URL as its base, so a bare in-page anchor (<a href="#x">)
+// resolves against the host origin (e.g. http://localhost:4317/) rather than the frame's own about:srcdoc.
+// Clicking it therefore navigates the sealed null-origin frame to the host root — a cross-document GET that
+// originGuard rejects with `{"error":"cross-site request blocked"}`, wiping out the miniapp. Intercept
+// same-page anchors in the capture phase and drive location.hash on THIS document instead: that is a
+// same-document fragment change, so it scrolls / fires hashchange in-frame (hash-router miniapps keep
+// working) and can never reach the host. preventDefault only — the miniapp's own click handlers still run.
+const ANCHOR_SHIM =
+  "<script>(function(){document.addEventListener('click',function(e){" +
+  "var a=e.target&&e.target.closest?e.target.closest('a[href]'):null;if(!a)return;" +
+  "var h=a.getAttribute('href');if(!h||h.charAt(0)!=='#')return;" +
+  "e.preventDefault();try{location.hash=h.slice(1);}catch(_e){}},true);})();</script>";
+
 export function sandboxDoc(html: string): string {
-  const head = `<meta http-equiv="Content-Security-Policy" content="${CSP}">${STORAGE_SHIM}`;
+  const head = `<meta http-equiv="Content-Security-Policy" content="${CSP}">${STORAGE_SHIM}${ANCHOR_SHIM}`;
   // Force the CSP meta to be the FIRST node in <head>, whatever the input's shape. The old code
   // injected after an existing <head>, so a <script> placed BEFORE that <head> ran at parse time —
   // before the policy applied — and could open a network connection the CSP would otherwise block.

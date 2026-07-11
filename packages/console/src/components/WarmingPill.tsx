@@ -21,5 +21,10 @@ export function WarmingPill({ apiBase }: { apiBase: string }): ReactElement | nu
     return () => { alive = false; clearInterval(h); };
   }, [apiBase]);
   if (!running) return null;
-  return <span className="warming-pill" title="Precomputing insights in the background">warming…</span>;
+  return (
+    <span className="warming-pill" title="Precomputing insights in the background">
+      <span className="warming-pill__spark" aria-hidden="true">✦</span>
+      warming…
+    </span>
+  );
 }

@@ -17,6 +17,19 @@ describe("sandboxDoc", () => {
     expect(sandboxDoc("<p>hi</p>")).toContain("<head>");
   });
 
+  it("neutralizes in-page '#' anchors so they can't escape the srcdoc frame to the host origin", () => {
+    // In a srcdoc iframe the document's base URL is the PARENT's URL (e.g. http://localhost:4317/), so a
+    // bare <a href="#top"> resolves to the host origin and navigates the sealed null-origin frame there —
+    // originGuard then 403s it ("cross-site request blocked"), replacing the miniapp with an error page.
+    // sandboxDoc injects a capture-phase click handler that drives the fragment on THIS document instead,
+    // so #-nav scrolls / fires hashchange in-frame and cannot reach the host.
+    const doc = sandboxDoc('<a href="#top">go</a>');
+    expect(doc).toContain("addEventListener('click'");
+    expect(doc).toContain("location.hash");
+    // armed before the body so the listener is live before the miniapp's own scripts/clicks
+    expect(doc.indexOf("location.hash")).toBeLessThan(doc.indexOf("<body"));
+  });
+
   it("keeps the CSP meta ahead of a script placed before <head> (pre-CSP execution)", () => {
     // A miniapp whose HTML puts a script before <head> would, with naive head-injection, run
     // that script at parse time BEFORE the CSP meta applied — free to open a blocked connection.
