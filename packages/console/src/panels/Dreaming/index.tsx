@@ -18,29 +18,30 @@ function GuardrailReview({ apiBase, event, onApplied }: { apiBase: string; event
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const load = useCallback(async () => {
-    setErr(null);
-    try {
-      const p = await previewGuardrail(apiBase, event.key!);
-      setPreview(p);
-      setDirective(p.seed);
-      setTarget(p.target ?? "claude");
-    } catch { setErr("Could not load the preview — try again."); }
-  }, [apiBase, event.key]);
-
-  // Toggling claude/agents when both files exist must re-preview against the chosen
-  // target — the hash Apply sends has to match whichever file it writes, or the
-  // hash-guard on accept spuriously rejects as "stale". Unlike `load`, this pins the
-  // target the user picked instead of re-resolving a default, and leaves a directive
-  // the user already edited alone (the seed text is the same regardless of target).
-  const chooseTarget = useCallback(async (chosen: "claude" | "agents") => {
+  // Shared re-preview: `chosen` pins the target (falls back to the preview's resolved
+  // default only on the very first, target-less load), and `seedDirective` seeds the
+  // directive box from the fresh seed ONLY on that first load. Every later re-preview
+  // (target toggle, or an apply-conflict retry) must pin the CURRENTLY SELECTED target
+  // and must NOT clobber a directive the user has already hand-edited.
+  const doPreview = useCallback(async (chosen: "claude" | "agents" | undefined, seedDirective: boolean) => {
     setErr(null);
     try {
       const p = await previewGuardrail(apiBase, event.key!, chosen);
       setPreview(p);
-      setTarget(chosen);
+      setTarget(chosen ?? p.target ?? "claude");
+      if (seedDirective) setDirective(p.seed);
     } catch { setErr("Could not load the preview — try again."); }
   }, [apiBase, event.key]);
+
+  const load = useCallback(() => doPreview(undefined, true), [doPreview]);
+
+  // Toggling claude/agents when both files exist must re-preview against the chosen
+  // target — the hash Apply sends has to match whichever file it writes, or the
+  // hash-guard on accept spuriously rejects as "stale". Unlike the initial `load`,
+  // this pins the target the user picked instead of re-resolving a default, and
+  // leaves a directive the user already edited alone (the seed text is the same
+  // regardless of target).
+  const chooseTarget = useCallback((chosen: "claude" | "agents") => doPreview(chosen, false), [doPreview]);
 
   if (!preview) {
     return <button className="dream-act is-accept" onClick={load}>Apply to CLAUDE.md…</button>;
@@ -55,9 +56,11 @@ function GuardrailReview({ apiBase, event, onApplied }: { apiBase: string; event
       onApplied();
     } catch {
       // Stale/corrupt drift: re-fetch so the diff + hash match the file's current
-      // state (and a now-malformed block surfaces its hand-fix warning).
+      // state (and a now-malformed block surfaces its hand-fix warning). Re-preview
+      // against the target the user has SELECTED (not the resolved default) and
+      // don't touch the directive — the user's edits must survive a failed apply.
       setErr(`${fileLabel} changed since preview — re-review the diff below and apply again.`);
-      await load();
+      await doPreview(target, false);
     } finally {
       setBusy(false);
     }

@@ -161,6 +161,56 @@ describe("Journey panel", () => {
     });
   });
 
+  it("apply-conflict retry preserves the selected target and the user's edited directive", async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes("/api/dream/status")) return new Response(JSON.stringify({ enabled: true, phasesLit: ["DEEP"], promoted: 0, queued: 1, lastPassAtMs: 1 }));
+      if (url.includes("/api/journey")) return new Response(JSON.stringify({ events: [
+        { ts: 700, kind: "guardrail", title: "repeated-tool-error", detail: "Bash errored 2x", status: "queued", key: "g1", firstSeenMs: 700, root: "/p" },
+      ], truncated: false }));
+      if (url.includes("/api/dream/guardrail/preview")) {
+        const body = init?.body ? JSON.parse(init.body as string) : {};
+        const target = body.target === "agents" ? "agents" : "claude";
+        return new Response(JSON.stringify({
+          current: "base\n",
+          next: "base\n\n<!-- agentgem:learnings -->\n- Bash errored 2x\n<!-- /agentgem:learnings -->\n",
+          hash: target === "agents" ? "H-AGENTS" : "H-CLAUDE",
+          file: target === "agents" ? "/p/AGENTS.md" : "/p/CLAUDE.md",
+          target, ambiguous: true, malformed: false, seed: "- Bash errored 2x",
+        }));
+      }
+      if (url.includes("/api/dream/queue/accept")) return new Response(JSON.stringify({ error: "stale" }), { status: 409 });
+      return new Response(JSON.stringify({ ok: true }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<Dreaming apiBase="" />);
+    await waitFor(() => screen.getByText("repeated-tool-error"));
+
+    fireEvent.click(screen.getByRole("button", { name: /apply to claude\.md/i }));
+    const box = await screen.findByLabelText(/directive/i) as HTMLTextAreaElement;
+
+    // User toggles to AGENTS.md, then hand-edits the directive.
+    fireEvent.click(screen.getByRole("button", { name: "AGENTS.md" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "AGENTS.md" }).getAttribute("aria-pressed")).toBe("true"));
+    fireEvent.change(box, { target: { value: "- My hand-edited directive." } });
+
+    // Apply fails (stale/corrupt drift) → the catch path re-previews.
+    fetchMock.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: /^apply$/i }));
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find((c) => String(c[0]).includes("/api/dream/guardrail/preview"));
+      expect(call).toBeTruthy();
+      const body = JSON.parse((call![1] as RequestInit).body as string);
+      expect(body).toMatchObject({ key: "g1", target: "agents" });
+    });
+
+    // The re-preview must not have flipped the target back to CLAUDE.md...
+    await waitFor(() => expect(screen.getByRole("button", { name: "AGENTS.md" }).getAttribute("aria-pressed")).toBe("true"));
+    expect(screen.getByRole("button", { name: "CLAUDE.md" }).getAttribute("aria-pressed")).toBe("false");
+    // ...nor overwritten the user's edited directive with the seed.
+    expect((screen.getByLabelText(/directive/i) as HTMLTextAreaElement).value).toBe("- My hand-edited directive.");
+  });
+
   it("warns (no apply) when the managed block is malformed", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       if (url.includes("/api/dream/status")) return new Response(JSON.stringify({ enabled: true, phasesLit: ["DEEP"], promoted: 0, queued: 1, lastPassAtMs: 1 }));
