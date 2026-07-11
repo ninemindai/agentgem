@@ -22,3 +22,4 @@ export * from "./atomicWrite.js";
 export * from "./publicPackage.js";
 export * from "./secretPatterns.js";
 export * from "./leakCanary.js";
+export { resolveTarget, previewGuardrails, applyGuardrails } from "./managedRegion.js";
