@@ -9,7 +9,7 @@ import { createHash } from "node:crypto";
 import { introspectConfig } from "./introspect.js";
 import { scanWorkflow, scanFileUsage } from "@agentgem/insight";
 import type { HookArtifact, resolveDirs } from "@agentgem/model";
-import { openTranscriptIndex, defaultIndexDir, type TranscriptIndex } from "./transcriptIndex.js";
+import { openTranscriptIndex, defaultIndexDir, type TranscriptIndex, type OffThreadParse } from "./transcriptIndex.js";
 import { resolveUsage } from "./resolveUsage.js";
 
 export interface GlobalUsageResult {
@@ -79,10 +79,12 @@ export async function closeSharedIndex(): Promise<void> {
  * (raw tokens are stored; resolution happens here, per call). The caller should fall back to
  * `computeGlobalUsage` if this rejects.
  */
-export async function getGlobalUsageIndexed(dirs: ReturnType<typeof resolveDirs>, paths: string[]): Promise<GlobalUsageResult> {
+export async function getGlobalUsageIndexed(
+  dirs: ReturnType<typeof resolveDirs>, paths: string[], offThreadParse?: OffThreadParse,
+): Promise<GlobalUsageResult> {
   const globalInv = introspectConfig(dirs);
   const parseFile = (path: string) => scanFileUsage(path, globalInv.hooks);
   const index = await sharedIndex();
-  const stored = await index.syncUsage(paths, hookDigest(globalInv.hooks), parseFile);
+  const stored = await index.syncUsage(paths, hookDigest(globalInv.hooks), parseFile, offThreadParse, globalInv.hooks);
   return resolveUsage(stored.raw, stored.hooks, { skills: globalInv.skills, mcpServers: globalInv.mcpServers });
 }

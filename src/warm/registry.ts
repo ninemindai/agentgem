@@ -18,6 +18,7 @@ import { defaultRecallDbPath } from "../goldmine/recall.js";
 // the scorecard warm body + its off-thread entry (see runScorecardWarm):
 import { warmScorecardSync, type ScorecardWarmInput } from "./scorecardWorker.js";
 import { resolveWorkerPath } from "./workerPath.js";
+import { buildOffThreadParse } from "../coldBuildParser.js";
 import { computeInsights } from "../insightsCore.js";
 import { computeWorkflowAnalysis } from "../workflowCore.js";
 import { computeDistill, DISTILL_BACKGROUND_TIMEOUT_MS } from "../distillCore.js";
@@ -89,7 +90,7 @@ export const WARMABLES: Warmable[] = [
       // getGlobalUsageIndexed documents the full scan as its fallback when it rejects.
       // Log it: the fallback reparses the whole corpus and blocks the loop for ~15s, so a
       // silent catch turns an index failure into an unexplained stall (it did, once, here).
-      const result = await getGlobalUsageIndexed(dirs, paths).catch((e: unknown) => {
+      const result = await getGlobalUsageIndexed(dirs, paths, buildOffThreadParse()).catch((e: unknown) => {
         log.warn("[warm] usage index path failed, falling back to full scan: %s", (e as Error)?.message ?? e);
         return computeGlobalUsage(dirs, paths);
       });

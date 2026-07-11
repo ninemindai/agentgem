@@ -237,6 +237,7 @@ import type { DeployBackend } from "@agentgem/base";
 import { transcriptToken, readAnalysisCache, writeAnalysisCache } from "@agentgem/insight";
 import { readGlobalUsageCache, writeGlobalUsageCache, readGlobalUsageCacheStale } from "@agentgem/capture";
 import { computeGlobalUsage, getGlobalUsageIndexed } from "@agentgem/capture";
+import { buildOffThreadParse } from "./coldBuildParser.js";
 import { undeployManagedAgent, anthropicPublishClient } from "@agentgem/deploy";
 import { undeployAgentcoreHarness, realAgentcoreControlClient } from "@agentgem/deploy";
 
@@ -442,7 +443,7 @@ export class GemController {
         // transcripts). On any failure, fall through to the legacy token-cache +
         // stale-while-revalidate full scan below — behavior-identical, just slower.
         try {
-          return await getGlobalUsageIndexed(dirs, paths) as z.infer<typeof UsageSchema>;
+          return await getGlobalUsageIndexed(dirs, paths, buildOffThreadParse()) as z.infer<typeof UsageSchema>;
         } catch (e) {
           log.warn("[usage] index path failed, falling back to full scan: %s", (e as Error)?.message ?? e);
         }
