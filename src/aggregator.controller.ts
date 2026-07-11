@@ -138,6 +138,7 @@ const CatalogManifestSchema = z.object({
   type: z.string().optional(), grade: z.number().optional(),
   artifacts: z.array(z.object({ name: z.string(), type: z.string() })).optional(),
   gemDigest: z.string().optional(),
+  visibility: z.enum(["public", "unlisted", "private"]).optional(),
 });
 const CatalogBody = z.object({ manifest: CatalogManifestSchema, pubkey: z.string(), signedAt: z.number(), signature: z.string() });
 const CatalogResult = z.object({ shared: z.boolean(), publishedBy: z.string().optional(), gemKey: z.string().optional(), version: z.string().optional(), rejected: z.string().optional() });

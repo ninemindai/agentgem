@@ -595,6 +595,7 @@ export class GemController {
         const gem = readGemArchive(readWorkspace(b.workspace).files);
         const manifest = {
           gemKey: `${b.scope}/${b.name ?? b.workspace}`, version: b.version,
+          visibility: b.visibility,
           description: b.description, tags: b.tags, grade: gem.grade,
           artifactKinds: [...new Set(gem.artifacts.map((a) => a.type))],
         };
@@ -626,6 +627,7 @@ export class GemController {
         const { meta } = importGem(bytes);
         const manifest = {
           gemKey: `${b.scope}/${b.name ?? b.workspace}`, version: b.version,
+          visibility: b.visibility,
           description: b.description, tags: b.tags, grade: gem.grade,
           artifactKinds: [...new Set(gem.artifacts.map((a) => a.type))],
           artifacts: gem.artifacts.map((a) => ({ name: a.name, type: a.type })),
