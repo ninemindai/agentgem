@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { eq } from "drizzle-orm";
-import { makeTestDb, reviewRequests, upsertAccount, createNativeGroup, grantInvite, submitReviewRequest, upsertCatalogGem, accountScopes, listInbox, markSeen, getReviewRequest, getReviewArchive, addReviewMessage, approveReviewRequest, listCatalogGems, getGemArchive } from "@agentgem/aggregator";
+import { makeTestDb, reviewRequests, upsertAccount, createNativeGroup, grantInvite, submitReviewRequest, upsertCatalogGem, accountScopes, listInbox, markSeen, getReviewRequest, getReviewArchive, addReviewMessage, approveReviewRequest, listCatalogGems, getGemArchive, requestChanges, resubmitReviewRequest, withdrawReviewRequest } from "@agentgem/aggregator";
 
 describe("review staging schema", () => {
   it("ensureSchema creates review_requests and the table accepts a row", async () => {
@@ -209,5 +209,59 @@ describe("approveReviewRequest", () => {
     await db.delete(accountScopes).where(eq(accountScopes.accountId, author.id));
     expect(await approveReviewRequest(db, { accountId: reviewer.id, requestId }, 2000)).toEqual({ ok: false, rejected: "not-scope-owner" });
     expect((await getReviewRequest(db, reviewer.id, requestId))?.status).toBe("open"); // rolled back
+  });
+});
+
+describe("requestChanges / resubmit / withdraw", () => {
+  async function seedOpen() {
+    const db = await makeTestDb();
+    const author = await upsertAccount(db, { provider: "github", accountId: "a1", login: "alice" });
+    await ownScope(db, author.id);
+    const reviewer = await upsertAccount(db, { provider: "github", accountId: "r1", login: "rob" });
+    const g = await createNativeGroup(db, author.id, "Team");
+    await grantInvite(db, g.id, reviewer.id, "member");
+    const r = await submitReviewRequest(db, { accountId: author.id, groupId: g.id, manifest: mkManifest("@team/bot"), archiveBytes: new Uint8Array([1]), archiveDigest: "sha256:x", description: "d" }, 1000);
+    if (!r.ok) throw new Error("submit failed");
+    return { db, author, reviewer, requestId: r.requestId };
+  }
+
+  it("reviewer requests changes; author resubmits back to open with new bytes; seen markers cleared", async () => {
+    const { db, author, reviewer, requestId } = await seedOpen();
+    await markSeen(db, reviewer.id, requestId, 1100);
+    expect(await requestChanges(db, { accountId: reviewer.id, requestId }, 1200)).toEqual({ ok: true });
+    let detail = await getReviewRequest(db, reviewer.id, requestId);
+    expect(detail?.status).toBe("changes-requested");
+    const rs = await resubmitReviewRequest(db, { accountId: author.id, requestId, manifest: mkManifest("@team/bot"), archiveBytes: new Uint8Array([2, 2]), archiveDigest: "sha256:y" }, 1300);
+    expect(rs).toEqual({ ok: true });
+    detail = await getReviewRequest(db, reviewer.id, requestId);
+    expect(detail?.status).toBe("open");
+    const arch = await getReviewArchive(db, author.id, requestId);
+    expect(Array.from(arch!.bytes)).toEqual([2, 2]);
+    // reviewer's badge is unread again after resubmit
+    const inbox = await listInbox(db, reviewer.id);
+    expect(inbox.find((x) => x.id === requestId)?.unread).toBe(true);
+  });
+
+  it("author cannot self-request-changes; reviewer cannot resubmit or withdraw", async () => {
+    const { db, author, reviewer, requestId } = await seedOpen();
+    expect(await requestChanges(db, { accountId: author.id, requestId })).toEqual({ ok: false, rejected: "self" });
+    expect(await resubmitReviewRequest(db, { accountId: reviewer.id, requestId, manifest: mkManifest("@team/bot"), archiveBytes: new Uint8Array([1]), archiveDigest: "z" })).toEqual({ ok: false, rejected: "not-changes-requested" });
+    expect(await withdrawReviewRequest(db, { accountId: reviewer.id, requestId })).toEqual({ ok: false, rejected: "forbidden" });
+  });
+
+  it("author withdraws an open request; bytes cleared, status withdrawn, drops off inbox", async () => {
+    const { db, author, reviewer, requestId } = await seedOpen();
+    expect(await withdrawReviewRequest(db, { accountId: author.id, requestId }, 1400)).toEqual({ ok: true });
+    expect(await getReviewArchive(db, reviewer.id, requestId)).toBeNull();
+    expect((await getReviewRequest(db, reviewer.id, requestId))?.status).toBe("withdrawn");
+    expect(await listInbox(db, reviewer.id)).toEqual([]);
+  });
+
+  it("commenting on a terminal (withdrawn) request is still allowed — post-hoc discussion", async () => {
+    const { db, author, reviewer, requestId } = await seedOpen();
+    await withdrawReviewRequest(db, { accountId: author.id, requestId }, 1400);
+    const m = await addReviewMessage(db, { accountId: reviewer.id, requestId, body: "why withdrawn?" }, 1500);
+    expect(m.ok).toBe(true);
+    expect((await getReviewRequest(db, reviewer.id, requestId))?.messages).toHaveLength(1);
   });
 });
