@@ -77,3 +77,26 @@ describe("clampGrade", () => {
     expect(clampGrade(NaN)).toBeUndefined();
   });
 });
+
+describe("deleteCatalogGem atomicity", () => {
+  const mkAccount2 = async (db: Awaited<ReturnType<typeof makeTestDb>>) => {
+    const id = crypto.randomUUID();
+    await db.execute(sql`insert into accounts (id, provider, provider_account_id, login) values (${id}, 'github', ${id}, 'o')`);
+    return id;
+  };
+  it("a concurrent read never sees the gem half-deleted (archive gone, catalog row orphaned)", async () => {
+    const db = await makeTestDb();
+    const owner = await mkAccount2(db);
+    await upsertCatalogGem(db, { gemKey: "@a/g", version: "1", publishedBy: "o", ownerAccountId: owner, createdAtMs: 1 });
+    await upsertGemArchive(db, { gemKey: "@a/g", version: "1", bytes: new Uint8Array([1]), digest: "d", createdAtMs: 1 });
+    const [res, reads] = await Promise.all([
+      deleteCatalogGem(db, "@a/g", "1", owner),
+      Promise.all(Array.from({ length: 8 }, () => listCatalogGems(db))),
+    ]);
+    expect(res).toBe("deleted");
+    for (const rows of reads) {
+      const g = rows.find((r) => r.gemKey === "@a/g");
+      if (g) expect(g.installable).toBe(true); // never the orphaned archive-gone / catalog-present gap
+    }
+  });
+});
