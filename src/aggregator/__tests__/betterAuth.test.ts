@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
 import { sql } from "drizzle-orm";
-import { makeTestDb, makeAuth, mintSession, setAccountScopes, upsertAccount } from "@agentgem/aggregator";
+import { makeTestDb, makeAuth, mintSession, setAccountScopes, upsertAccount, connectedProviders } from "@agentgem/aggregator";
 
 const opts = {
   secret: "test-secret",
@@ -141,5 +141,41 @@ describe("betterAuth factory", () => {
     // one cred without the other must NOT register google (fail closed on partial config)
     const partial = makeAuth({ db, ...opts, googleClientId: "gid" });
     expect(Object.keys((partial.options.socialProviders ?? {}) as Record<string, unknown>)).toEqual(["github"]);
+  });
+
+  // Task 3 — Flow A (connecting a provider you've never separately used) relies on better-auth's
+  // native linkSocial, gated entirely by this config: trustedProviders skips the email-ownership
+  // re-verification step for github/google (both first-party OAuth apps already used for primary
+  // sign-in), and allowDifferentEmails is what permits linking a provider whose account uses a
+  // different email than the caller's primary (a github user signed in as A@x.com linking a google
+  // account B@y.com) — without it, better-auth would reject that pairing.
+  it("enables native account linking with trusted providers and allowDifferentEmails at the config level", async () => {
+    const db = await makeTestDb();
+    const auth = makeAuth({ db, ...opts, googleClientId: "gid", googleClientSecret: "gsec" });
+    expect(auth.options.account?.accountLinking).toEqual({
+      enabled: true,
+      trustedProviders: ["github", "google"],
+      allowDifferentEmails: true,
+    });
+  });
+
+  it("linking a second provider (native account linking) leaves one accounts anchor and connectedProviders lists both", async () => {
+    const db = await makeTestDb();
+    const auth = makeAuth({ db, ...opts, googleClientId: "gid", googleClientSecret: "gsec" });
+    const ctx = await auth.$context;
+    const user = await ctx.internalAdapter.createUser({ email: "flowa@x.com", name: "FlowA", emailVerified: false, login: "flowa" } as never);
+    // Primary provider anchor (github), as anchorAndScopes writes it on first sign-in (Task 1: per-user, idempotent).
+    await upsertAccount(db, { provider: "github", accountId: "gh-flowa", login: "flowa", avatarUrl: null, id: user.id });
+    // Simulate better-auth's native linkSocial (gated by the account.accountLinking config above)
+    // having recorded a second, DIFFERENT-EMAIL provider (google) for the SAME user — this is the
+    // shape allowDifferentEmails permits. linkSocial itself only ever writes to better-auth's own
+    // `account` table; the legacy `accounts` anchor gets no second row (Task 1).
+    await db.execute(sql`insert into account (id, user_id, account_id, provider_id, created_at, updated_at) values
+      (gen_random_uuid()::text, ${user.id}, 'gh-flowa', 'github', now(), now()),
+      (gen_random_uuid()::text, ${user.id}, 'goog-flowa', 'google', now(), now())`);
+
+    const rows = await db.execute(sql`select provider from accounts where id = ${user.id}`);
+    expect(rows.rows).toHaveLength(1); // still exactly one anchor, primary provider unchanged
+    expect(await connectedProviders(db, user.id)).toEqual(["github", "google"]);
   });
 });
