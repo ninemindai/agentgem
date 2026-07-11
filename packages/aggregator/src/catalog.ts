@@ -222,6 +222,13 @@ export function catalogSigningPayload(m: CatalogManifest, pubkey: string, signed
   return canonicalJSON({ pubkey, signedAt, manifestHash });
 }
 
+// Canonical payload for a review-staging action that has no manifest to sign (approve/changes/
+// withdraw/seen/get/archive/message/inbox). Binds the action verb + target request id so a captured
+// signature for one action can't be replayed as another. `requestId` is "" for the inbox list.
+export function reviewActionPayload(action: string, requestId: string, pubkey: string, signedAt: number): string {
+  return canonicalJSON({ scope: "review", action, requestId, pubkey, signedAt });
+}
+
 // publishedBy is ALWAYS server-derived from the account_bindings lookup below — never
 // from req.manifest.author or any other client-supplied field. The signature only proves
 // producer-key possession; the binding is what proves that key maps to a verified GitHub
