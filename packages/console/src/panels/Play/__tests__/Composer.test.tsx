@@ -92,6 +92,27 @@ describe("Composer", () => {
     expect(blank.mock.calls[0][1]).toEqual({ body: { title: "Space Dodger" } });
   });
 
+  it("threads attached docs/photos into the first studio prompt", async () => {
+    vi.spyOn(testbedProjectsRoute, "call").mockResolvedValue({ projects: [] } as never);
+    const blank = vi.spyOn(playBlankRoute, "call").mockResolvedValue({ name: "brand-clicker" });
+    const onCreated = vi.fn();
+    renderComposer(onCreated);
+    fireEvent.click(screen.getByText("Blank"));
+    fireEvent.change(screen.getByLabelText("Add reference docs/photos"), {
+      target: { files: [new File(["Make it use the acme brand colors."], "brief.md", { type: "text/markdown" })] },
+    });
+    expect(await screen.findByText(/brief\.md/)).toBeTruthy();
+    fireEvent.change(screen.getByPlaceholderText("title"), { target: { value: "Brand Clicker" } });
+    fireEvent.change(screen.getByPlaceholderText(/describe the mini-game/i), { target: { value: "click targets" } });
+    fireEvent.click(screen.getByText("Create miniapp"));
+    await waitFor(() => expect(onCreated).toHaveBeenCalled());
+    const seedPrompt = onCreated.mock.calls[0][1] as string;
+    expect(seedPrompt).toContain("Document: brief.md");
+    expect(seedPrompt).toContain("Make it use the acme brand colors.");
+    expect(seedPrompt).toContain("click targets");
+    expect(blank.mock.calls[0][1]).toEqual({ body: { title: "Brand Clicker" } });
+  });
+
   it("Blank tab threads no seed prompt when the description is left empty", async () => {
     vi.spyOn(testbedProjectsRoute, "call").mockResolvedValue({ projects: [] } as never);
     const blank = vi.spyOn(playBlankRoute, "call").mockResolvedValue({ name: "untitled" });

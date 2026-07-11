@@ -8,12 +8,13 @@ import { IdentityProvider } from "../../../identity/IdentityProvider.js";
 class FakeES {
   static last: FakeES | null = null;
   listeners: Record<string, ((e: unknown) => void)[]> = {};
+  closed = false;
   constructor(public url: string) { FakeES.last = this; }
   addEventListener(t: string, cb: (e: unknown) => void) { (this.listeners[t] ??= []).push(cb); }
-  close() {}
+  close() { this.closed = true; }
   emit(t: string, data: unknown) { for (const cb of this.listeners[t] ?? []) cb({ data: JSON.stringify(data) }); }
 }
-afterEach(() => { cleanup(); FakeES.last = null; vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); FakeES.last = null; sessionStorage.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("Studio", () => {
   it("opens a studio chat targeting the miniapp and refreshes the preview on done", async () => {
@@ -53,6 +54,46 @@ describe("Studio", () => {
     const before = spy.mock.calls.length;
     FakeES.last!.emit("done", { result: { text: "done", toolCalls: [] } });
     await waitFor(() => expect(spy.mock.calls.length).toBeGreaterThan(before)); // refreshed on done
+  });
+
+  it("lets an in-flight studio turn keep running after the user navigates away", async () => {
+    const post = stubChat();
+    vi.spyOn(playMiniappRoute, "call").mockResolvedValue(blankApp as never);
+    const { unmount } = render(<IdentityProvider apiBase=""><Studio apiBase="" name="space-dodger" agents={codex} agentId="codex" onAgentIdChange={() => {}} onBack={() => {}} /></IdentityProvider>);
+    const box = await screen.findByPlaceholderText(/build\/edit/i);
+    fireEvent.change(box, { target: { value: "make it blue" } });
+    fireEvent.click(screen.getByText("Send"));
+    await waitFor(() => expect(FakeES.last).toBeTruthy());
+    expect(post).toHaveBeenCalledTimes(1);
+
+    const stream = FakeES.last!;
+    unmount();
+
+    expect(stream.closed).toBe(false); // do not cancel the server-side turn on Studio unmount
+    stream.emit("done", { result: { text: "done", toolCalls: [] } });
+    expect(stream.closed).toBe(true);
+  });
+
+  it("reuses the saved studio chat when returning to the same miniapp and agent", async () => {
+    const post = stubChat();
+    vi.spyOn(playMiniappRoute, "call").mockResolvedValue(blankApp as never);
+    const first = render(<IdentityProvider apiBase=""><Studio apiBase="" name="space-dodger" agents={codex} agentId="codex" onAgentIdChange={() => {}} onBack={() => {}} /></IdentityProvider>);
+    fireEvent.change(await screen.findByPlaceholderText(/build\/edit/i), { target: { value: "first turn" } });
+    fireEvent.click(screen.getByText("Send"));
+    await waitFor(() => expect(FakeES.last).toBeTruthy());
+    expect(post).toHaveBeenCalledTimes(1);
+    FakeES.last!.emit("done", { result: { text: "done", toolCalls: [] } });
+    await waitFor(() => expect(sessionStorage.getItem("agentgem:play:chat:space-dodger:codex")).toBe("c1"));
+    first.unmount();
+
+    render(<IdentityProvider apiBase=""><Studio apiBase="" name="space-dodger" agents={codex} agentId="codex" onAgentIdChange={() => {}} onBack={() => {}} /></IdentityProvider>);
+    await screen.findByText(/Changing agent starts a fresh studio chat/i);
+    fireEvent.change(await screen.findByPlaceholderText(/build\/edit/i), { target: { value: "second turn" } });
+    fireEvent.click(screen.getByText("Send"));
+
+    await waitFor(() => expect(FakeES.last!.url).toContain("chatId=c1"));
+    expect(FakeES.last!.url).toContain("message=second+turn");
+    expect(post).toHaveBeenCalledTimes(1); // no new /api/chat; reused the saved server chat
   });
 
   // A blank miniapp created with a description auto-kicks the build: the description is sent as the

@@ -8,6 +8,7 @@ import { CAP_TOOL, CAP_LABEL, CONSENT_CAPS } from "./consent.js";
 type Kind = "project" | "session" | "skill" | "html" | "blank";
 type Proj = { path: string; flavor: string; exists: boolean };
 type Skill = { name: string; description?: string };
+type Attachment = { name: string; mime: string; size: number; kind: "text" | "image"; content: string };
 // The source shapes accepted by POST /api/play/studio (mirrors the server's GameSource union).
 type Source =
   | { kind: "project"; path: string; flavor: string }
@@ -25,6 +26,8 @@ const TABS: { kind: Kind; label: string }[] = [
 // The checkbox universe is exactly CONSENT_CAPS — narrower than the full GameCapability union (it
 // excludes the auto-approved session-data) but still a valid CAP_TOOL key, so no cast is needed.
 type Cap = (typeof CONSENT_CAPS)[number];
+const MAX_TEXT_CHARS = 12_000;
+const MAX_IMAGE_BYTES = 500_000;
 
 // Checkboxes are INTENT: they only steer the agent's first prompt. They never write meta.json — the
 // code is the single authority over `needs`, reconciled at save. An unchecked box that the agent uses
@@ -36,6 +39,46 @@ function capPreamble(caps: Cap[]): string {
     "This miniapp should use these host capabilities. For each one, call the listed MCP tool and add the",
     'capability to `"needs"` in meta.json:',
     ...lines,
+  ].join("\n");
+}
+
+function dataUrl(f: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result ?? ""));
+    r.onerror = () => reject(r.error ?? new Error("could not read file"));
+    r.readAsDataURL(f);
+  });
+}
+
+function isTextDoc(f: File): boolean {
+  return f.type.startsWith("text/")
+    || /\.(md|markdown|txt|csv|json|ya?ml|html?|css|js|jsx|ts|tsx)$/i.test(f.name);
+}
+
+async function readAttachment(f: File): Promise<Attachment> {
+  if (f.type.startsWith("image/")) {
+    if (f.size > MAX_IMAGE_BYTES) throw new Error(`${f.name} is too large; keep images under 500 KB`);
+    return { name: f.name, mime: f.type || "image/*", size: f.size, kind: "image", content: await dataUrl(f) };
+  }
+  if (!isTextDoc(f)) throw new Error(`${f.name} is not a supported doc/photo type`);
+  const text = await f.text();
+  return {
+    name: f.name,
+    mime: f.type || "text/plain",
+    size: f.size,
+    kind: "text",
+    content: text.length > MAX_TEXT_CHARS ? `${text.slice(0, MAX_TEXT_CHARS)}\n\n[truncated]` : text,
+  };
+}
+
+function attachmentPreamble(attachments: Attachment[]): string {
+  if (!attachments.length) return "";
+  return [
+    "Use these reference docs/photos while building the miniapp. If you use an image asset, inline it as a data: URI so the game remains one self-contained HTML file.",
+    ...attachments.map((a) => a.kind === "image"
+      ? `\n## Image: ${a.name} (${a.mime}, ${Math.round(a.size / 1024)} KB)\n${a.content}`
+      : `\n## Document: ${a.name} (${a.mime})\n${a.content}`),
   ].join("\n");
 }
 
@@ -71,6 +114,8 @@ export function Composer({
   const [dragOver, setDragOver] = useState(false);
   const [blankTitle, setBlankTitle] = useState(initialTitle ?? "");     // Blank (from-scratch) tab
   const [blankPrompt, setBlankPrompt] = useState(initialPrompt ?? "");
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [attachmentError, setAttachmentError] = useState("");
   // Optional miniapp id, shared by every tab. Left empty the server derives one from the source and
   // suffixes it on collision; typed, the server claims it exactly and 409s if it is taken.
   const [name, setName] = useState("");
@@ -80,6 +125,7 @@ export function Composer({
   const [sessionGenre, setSessionGenre] = useState<"replay" | "session-heatmap">("replay");
   const [caps, setCaps] = useState<Cap[]>([]);
   const toggleCap = (c: Cap) => setCaps((cs) => (cs.includes(c) ? cs.filter((x) => x !== c) : [...cs, c]));
+  const seedPreamble = () => [capPreamble(caps), attachmentPreamble(attachments)].filter(Boolean).join("\n\n") || undefined;
 
   // Lazy-load each list the first time its tab is shown.
   useEffect(() => {
@@ -96,7 +142,7 @@ export function Composer({
       const res = await playStudioRoute.call(makeClient(apiBase), { body: { source, ...named(), ...genre } });
       // Only pass a second argument when there's a preamble to carry — preserves the old single-arg
       // call shape when no capability is checked (seedPrompt reads as undefined either way).
-      const preamble = capPreamble(caps);
+      const preamble = seedPreamble();
       if (preamble) onCreated(res.name, preamble); else onCreated(res.name);
     } catch (e) { setError((e as Error).message); setBusy(false); }
   }
@@ -112,6 +158,19 @@ export function Composer({
   }
   const onFile = (e: React.ChangeEvent<HTMLInputElement>) => loadFile(e.target.files?.[0]);
   const onDrop = (e: React.DragEvent) => { e.preventDefault(); setDragOver(false); loadFile(e.dataTransfer.files?.[0]); };
+  const onAttachments = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = [...(e.target.files ?? [])];
+    if (!files.length) return;
+    setAttachmentError("");
+    try {
+      const next = await Promise.all(files.map(readAttachment));
+      setAttachments((a) => [...a, ...next]);
+    } catch (err) {
+      setAttachmentError((err as Error).message);
+    } finally {
+      e.target.value = "";
+    }
+  };
 
   async function doImport() {
     if (busy || !importHtml.trim()) return;
@@ -128,7 +187,7 @@ export function Composer({
     try {
       const res = await playBlankRoute.call(makeClient(apiBase), { body: { title: blankTitle.trim(), ...named() } });
       // The description isn't baked server-side; it's auto-sent as the studio's first build prompt.
-      onCreated(res.name, [capPreamble(caps), blankPrompt.trim()].filter(Boolean).join("\n\n") || undefined);
+      onCreated(res.name, [seedPreamble(), blankPrompt.trim()].filter(Boolean).join("\n\n") || undefined);
     } catch (e) { setError((e as Error).message); setBusy(false); }
   }
 
@@ -150,6 +209,20 @@ export function Composer({
           </label>
         ))}
       </fieldset>
+      <div className="play-caps-pick" style={{ marginBottom: 12 }}>
+        <label className="play-caps-pick__row">
+          <span>Add reference docs/photos</span>
+          <input aria-label="Add reference docs/photos" type="file" multiple
+            accept="image/*,.md,.markdown,.txt,.csv,.json,.yaml,.yml,.html,.htm,.css,.js,.jsx,.ts,.tsx,text/*"
+            onChange={onAttachments} />
+        </label>
+        {attachments.length > 0 && (
+          <div className="play-intro" style={{ margin: "6px 0 0" }}>
+            Attached: {attachments.map((a) => a.name).join(", ")}
+          </div>
+        )}
+        {attachmentError && <div className="play-banner__detail">{attachmentError}</div>}
+      </div>
       <div className="play-tabs">
         {TABS.map((t) => (
           <button key={t.kind} className={`play-tab${kind === t.kind ? " is-active" : ""}`} onClick={() => setKind(t.kind)}>{t.label}</button>

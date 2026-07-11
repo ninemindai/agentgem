@@ -52,6 +52,8 @@ export function Studio({
   const [sharing, setSharing] = useState(false);   // in-flight guard: blocks a double-mint from orphaning an un-revokable link
   const { status: identity } = useIdentity();
   const closeRef = useRef<null | (() => void)>(null);
+  const mountedRef = useRef(false);
+  const busyRef = useRef(false);
   const logRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const plateRef = useRef<HTMLDivElement>(null);
@@ -59,6 +61,22 @@ export function Studio({
   const [plateMax, setPlateMax] = useState<number | undefined>(undefined);
   const seededRef = useRef(false);   // guards the one-shot seed-prompt auto-send
   const split = useSplit("studio", { initial: 560, min: 360, max: 900, side: "start" });
+  const chatStoreKey = agentId ? `agentgem:play:chat:${name}:${agentId}` : "";
+
+  function markBusy(next: boolean) {
+    busyRef.current = next;
+    if (mountedRef.current) setBusy(next);
+  }
+
+  function rememberChat(id: string) {
+    if (!chatStoreKey) return;
+    try { sessionStorage.setItem(chatStoreKey, id); } catch { /* disabled storage */ }
+  }
+
+  function forgetChat(idKey = chatStoreKey) {
+    if (!idKey) return;
+    try { sessionStorage.removeItem(idKey); } catch { /* disabled storage */ }
+  }
 
   // Resume the publish the user already asked for. `login` comes straight from
   // bindComplete — reading it off the refreshed identity context would race the
@@ -79,10 +97,22 @@ export function Studio({
       .catch((e: unknown) => setLoadErr(e instanceof Error ? e.message : String(e)));
 
   useEffect(() => {
+    mountedRef.current = true;
     refresh();
-    return () => closeRef.current?.();
+    return () => {
+      mountedRef.current = false;
+      // If the agent is mid-turn, leave the stream alive so the server-side turn can finish and
+      // checkpoint the miniapp. The terminal stream event closes itself; returning to Studio reloads
+      // the latest saved HTML. If idle, close normally.
+      if (!busyRef.current) closeRef.current?.();
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiBase, name]);
+
+  useEffect(() => {
+    if (!chatStoreKey) { setChatId(null); return; }
+    try { setChatId(sessionStorage.getItem(chatStoreKey) || null); } catch { setChatId(null); }
+  }, [chatStoreKey]);
 
   // Kick off the build from the blank-tab description: send it as the first chat message, once an agent
   // is ready. One-shot (seededRef) so it never re-fires when the agent list resolves or agent changes.
@@ -136,6 +166,7 @@ export function Studio({
     if (nextAgentId === agentId) return;
     closeRef.current?.();
     closeRef.current = null;
+    forgetChat();
     setChatId(null);
     setMsgs([]);
     setWorking("");
@@ -148,21 +179,36 @@ export function Studio({
   async function send(text: string) {
     const message = text.trim();
     if (!message || busy || !agentId) return;
-    setBusy(true); setWorking("thinking…"); setGate(null); setShare(null);
+    markBusy(true); setWorking("thinking…"); setGate(null); setShare(null);
     setMsgs((m) => [...m, { role: "user", text: message }]);
     try {
       let id = chatId;
       if (!id) {
         const res = await fetch(`${apiBase}/api/chat`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ agentId, miniapp: name }) }).then(j);
-        id = res.chatId as string; setChatId(id);
+        id = res.chatId as string;
+        rememberChat(id);
+        if (mountedRef.current) setChatId(id);
       }
       closeRef.current = openStudioStream(apiBase, id, message, {
-        onDelta: (t) => { setWorking("responding…"); pushDelta(t); },
-        onTool: (tool) => { setWorking(activity(tool)); setMsgs((m) => [...m, { role: "tool", title: tool.title ?? tool.kind ?? "tool", failed: tool.status === "failed" }]); },
-        onDone: async () => { setBusy(false); setWorking(""); await refresh(); },
-        onFailed: (e) => { setBusy(false); setWorking(""); setMsgs((m) => [...m, { role: "tool", title: `failed: ${e}`, failed: true }]); },
+        onDelta: (t) => { if (!mountedRef.current) return; setWorking("responding…"); pushDelta(t); },
+        onTool: (tool) => {
+          if (!mountedRef.current) return;
+          setWorking(activity(tool)); setMsgs((m) => [...m, { role: "tool", title: tool.title ?? tool.kind ?? "tool", failed: tool.status === "failed" }]);
+        },
+        onDone: async () => {
+          closeRef.current = null;
+          if (!mountedRef.current) return;
+          markBusy(false); setWorking(""); await refresh();
+        },
+        onFailed: (e) => {
+          closeRef.current = null; forgetChat();
+          if (!mountedRef.current) return;
+          markBusy(false); setWorking(""); setMsgs((m) => [...m, { role: "tool", title: `failed: ${e}`, failed: true }]);
+        },
       });
-    } catch (e) { setBusy(false); setWorking(""); setStatus(`error: ${(e as Error).message}`); }
+    } catch (e) {
+      markBusy(false); setWorking(""); setStatus(`error: ${(e as Error).message}`);
+    }
   }
 
   function submit() { send(input); setInput(""); }
