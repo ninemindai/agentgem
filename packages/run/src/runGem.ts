@@ -44,10 +44,17 @@ export type AgentId = "claude" | "codex";
 export interface RunMeta { gemName?: string; gemDigest?: string; contract?: GemContract }
 
 const RUN_REGISTRY = new Map<string, { dir: string; agent: AgentId; meta?: RunMeta }>();
+const RUN_REGISTRY_MAX = 1000;
 
 export function registerRun(dir: string, agent: AgentId, meta?: RunMeta): string {
   const id = randomUUID();
   RUN_REGISTRY.set(id, { dir, agent, ...(meta ? { meta } : {}) });
+  // resolveRun never deletes, so a client that prepares but never opens the stream would leak its
+  // entry forever. Bound it: once over the cap, evict the oldest (Map preserves insertion order).
+  if (RUN_REGISTRY.size > RUN_REGISTRY_MAX) {
+    const oldest = RUN_REGISTRY.keys().next().value;
+    if (oldest !== undefined) RUN_REGISTRY.delete(oldest);
+  }
   return id;
 }
 export function resolveRun(id: string): { dir: string; agent: AgentId; meta?: RunMeta } | undefined {

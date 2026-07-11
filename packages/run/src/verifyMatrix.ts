@@ -123,9 +123,16 @@ export interface VerifySpec {
   gemName: string;
 }
 const VERIFY_REGISTRY = new Map<string, VerifySpec>();
+const VERIFY_REGISTRY_MAX = 1000;
 export function registerVerify(spec: VerifySpec): string {
   const id = randomUUID();
   VERIFY_REGISTRY.set(id, spec);
+  // Each spec holds a full Gem; a prepare that never opens the stream is never consumed, so cap the
+  // registry and evict the oldest once over it (Map preserves insertion order).
+  if (VERIFY_REGISTRY.size > VERIFY_REGISTRY_MAX) {
+    const oldest = VERIFY_REGISTRY.keys().next().value;
+    if (oldest !== undefined) VERIFY_REGISTRY.delete(oldest);
+  }
   return id;
 }
 export function resolveVerify(id: string): VerifySpec | undefined {
