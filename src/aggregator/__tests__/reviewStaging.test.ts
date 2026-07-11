@@ -113,6 +113,49 @@ describe("listInbox + markSeen", () => {
     await submitReviewRequest(db, { accountId: author.id, groupId: g.id, manifest: mkManifest("@team/bot"), archiveBytes: new Uint8Array([1]), archiveDigest: "sha256:x" }, 1000);
     expect(await listInbox(db, outsider.id)).toEqual([]);
   });
+
+  it("orders multiple requests newest-activity-first", async () => {
+    const db = await makeTestDb();
+    const author = await upsertAccount(db, { provider: "github", accountId: "a1", login: "alice" });
+    await ownScope(db, author.id);
+    const reviewer = await upsertAccount(db, { provider: "github", accountId: "r1", login: "rob" });
+    const g = await createNativeGroup(db, author.id, "Team");
+    await grantInvite(db, g.id, reviewer.id, "member");
+    const older = await submitReviewRequest(db, {
+      accountId: author.id, groupId: g.id, manifest: mkManifest("@team/bot"),
+      archiveBytes: new Uint8Array([1]), archiveDigest: "sha256:x",
+    }, 1000);
+    const newer = await submitReviewRequest(db, {
+      accountId: author.id, groupId: g.id, manifest: mkManifest("@team/bot2"),
+      archiveBytes: new Uint8Array([2]), archiveDigest: "sha256:y",
+    }, 2000);
+    if (!older.ok || !newer.ok) throw new Error("submit failed");
+
+    const inbox = await listInbox(db, reviewer.id);
+    expect(inbox.map((r) => r.id)).toEqual([newer.requestId, older.requestId]);
+  });
+
+  it("a later message pushes a seen request back to unread", async () => {
+    const db = await makeTestDb();
+    const author = await upsertAccount(db, { provider: "github", accountId: "a1", login: "alice" });
+    await ownScope(db, author.id);
+    const reviewer = await upsertAccount(db, { provider: "github", accountId: "r1", login: "rob" });
+    const g = await createNativeGroup(db, author.id, "Team");
+    await grantInvite(db, g.id, reviewer.id, "member");
+    const r = await submitReviewRequest(db, {
+      accountId: author.id, groupId: g.id, manifest: mkManifest("@team/bot"),
+      archiveBytes: new Uint8Array([1]), archiveDigest: "sha256:x",
+    }, 1000);
+    if (!r.ok) throw new Error("submit failed");
+
+    await markSeen(db, reviewer.id, r.requestId, 1500);
+    let inbox = await listInbox(db, reviewer.id);
+    expect(inbox.find((x) => x.id === r.requestId)?.unread).toBe(false);
+
+    await addReviewMessage(db, { accountId: author.id, requestId: r.requestId, body: "bump" }, 2000);
+    inbox = await listInbox(db, reviewer.id);
+    expect(inbox.find((x) => x.id === r.requestId)?.unread).toBe(true);
+  });
 });
 
 // Critical fix: markSeen used to be a raw upsert with no existence/membership gate, so a
@@ -295,6 +338,20 @@ describe("requestChanges / resubmit / withdraw", () => {
     const m = await addReviewMessage(db, { accountId: reviewer.id, requestId, body: "why withdrawn?" }, 1500);
     expect(m.ok).toBe(true);
     expect((await getReviewRequest(db, reviewer.id, requestId))?.messages).toHaveLength(1);
+  });
+
+  it("a non-author cannot resubmit a changes-requested request; nothing mutated", async () => {
+    const { db, reviewer, requestId } = await seedOpen();
+    expect(await requestChanges(db, { accountId: reviewer.id, requestId }, 1200)).toEqual({ ok: true });
+    const rs = await resubmitReviewRequest(db, {
+      accountId: reviewer.id, requestId, manifest: mkManifest("@team/bot"),
+      archiveBytes: new Uint8Array([9]), archiveDigest: "z",
+    }, 1300);
+    expect(rs).toEqual({ ok: false, rejected: "forbidden" });
+    const detail = await getReviewRequest(db, reviewer.id, requestId);
+    expect(detail?.status).toBe("changes-requested");
+    const arch = await getReviewArchive(db, reviewer.id, requestId);
+    expect(Array.from(arch!.bytes)).toEqual([1]); // original bytes, not [9]
   });
 });
 
