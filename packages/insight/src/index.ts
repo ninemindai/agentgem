@@ -58,3 +58,4 @@ export * from "./contextCap.js";
 export * from "./taskCluster.js";
 export * from "./contextHygiene.js";
 export * from "./boundarySegments.js";
+export { detectorGuardrails, type GuardrailDraft } from "./guardrails.js";

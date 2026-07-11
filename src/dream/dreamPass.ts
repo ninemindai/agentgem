@@ -4,12 +4,13 @@
 //
 // Reads the (cache-hit) analyze + insights payloads for a root and enqueues new
 // drafts + a diary entry. DEEP: analyze's DistilledSkill[]/Reflection[] → skill/
-// lesson drafts. REM: insights' PublishCandidate[] → "opportunity" entries.
-import type { DistilledSkill, Reflection, PublishCandidate } from "@agentgem/insight";
+// lesson drafts; analyze's GuardrailDraft[] → "guardrail" drafts. REM: insights'
+// PublishCandidate[] → "opportunity" entries.
+import type { DistilledSkill, Reflection, PublishCandidate, GuardrailDraft } from "@agentgem/insight";
 import { computeWorkflowAnalysis } from "../workflowCore.js";
 import { computeInsights } from "../insightsCore.js";
 import { dreamEnabled } from "./config.js";
-import { harvestEntries, opportunityEntries } from "./harvest.js";
+import { harvestEntries, opportunityEntries, guardrailEntries } from "./harvest.js";
 import { enqueueNew, appendDiary } from "./store.js";
 
 interface DreamDeps {
@@ -36,10 +37,12 @@ export async function dreamRoot(root: string, deps: DreamDeps = {}): Promise<"wa
 
   const distilled = (a.payload.distilled as DistilledSkill[] | undefined) ?? [];
   const reflections = (a.payload.reflections as Reflection[] | undefined) ?? [];
+  const guardrails = (a.payload.guardrails as GuardrailDraft[] | undefined) ?? [];
   const candidates = (ins.payload.report?.publish_candidates as PublishCandidate[] | undefined) ?? [];
   const nowMs = now();
   const added = enqueueNew([
     ...harvestEntries(root, distilled, reflections, nowMs),
+    ...guardrailEntries(root, guardrails, nowMs),
     ...opportunityEntries(root, candidates, nowMs),
   ], deps.base);
   appendDiary({
@@ -48,6 +51,7 @@ export async function dreamRoot(root: string, deps: DreamDeps = {}): Promise<"wa
       skills: added.filter((e) => e.kind === "skill").length,
       lessons: added.filter((e) => e.kind === "lesson").length,
       opportunities: added.filter((e) => e.kind === "opportunity").length,
+      guardrails: added.filter((e) => e.kind === "guardrail").length,
     },
     degraded: Boolean(a.payload.degraded || ins.payload.degraded),
   }, deps.base);
