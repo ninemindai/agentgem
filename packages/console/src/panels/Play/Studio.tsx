@@ -15,6 +15,7 @@ const j = (r: Response) => { if (!r.ok) throw new Error(String(r.status)); retur
 
 // Structured chat log entries so we can render bubbles + tool chips instead of one rolling string.
 type Msg = { role: "user" | "agent"; text: string } | { role: "tool"; title: string; failed?: boolean };
+type StoredTurn = { turnId: string; message: string };
 
 export function Studio({
   apiBase,
@@ -62,6 +63,7 @@ export function Studio({
   const seededRef = useRef(false);   // guards the one-shot seed-prompt auto-send
   const split = useSplit("studio", { initial: 560, min: 360, max: 900, side: "start" });
   const chatStoreKey = agentId ? `agentgem:play:chat:${name}:${agentId}` : "";
+  const turnStoreKey = agentId ? `agentgem:play:turn:${name}:${agentId}` : "";
 
   function markBusy(next: boolean) {
     busyRef.current = next;
@@ -70,12 +72,38 @@ export function Studio({
 
   function rememberChat(id: string) {
     if (!chatStoreKey) return;
-    try { sessionStorage.setItem(chatStoreKey, id); } catch { /* disabled storage */ }
+    try { localStorage.setItem(chatStoreKey, id); } catch { /* disabled storage */ }
   }
 
   function forgetChat(idKey = chatStoreKey) {
     if (!idKey) return;
-    try { sessionStorage.removeItem(idKey); } catch { /* disabled storage */ }
+    try { localStorage.removeItem(idKey); } catch { /* disabled storage */ }
+  }
+
+  function newTurnId(): string {
+    return typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `turn-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+
+  function rememberTurn(turn: StoredTurn) {
+    if (!turnStoreKey) return;
+    try { localStorage.setItem(turnStoreKey, JSON.stringify(turn)); } catch { /* disabled storage */ }
+  }
+
+  function readTurn(): StoredTurn | null {
+    if (!turnStoreKey) return null;
+    try {
+      const raw = localStorage.getItem(turnStoreKey);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as Partial<StoredTurn>;
+      return parsed.turnId && parsed.message ? { turnId: parsed.turnId, message: parsed.message } : null;
+    } catch { return null; }
+  }
+
+  function forgetTurn(idKey = turnStoreKey) {
+    if (!idKey) return;
+    try { localStorage.removeItem(idKey); } catch { /* disabled storage */ }
   }
 
   // Resume the publish the user already asked for. `login` comes straight from
@@ -111,13 +139,28 @@ export function Studio({
 
   useEffect(() => {
     if (!chatStoreKey) { setChatId(null); return; }
-    try { setChatId(sessionStorage.getItem(chatStoreKey) || null); } catch { setChatId(null); }
-  }, [chatStoreKey]);
+    let storedChatId: string | null = null;
+    try { storedChatId = localStorage.getItem(chatStoreKey) || null; setChatId(storedChatId); } catch { setChatId(null); }
+    const storedTurn = readTurn();
+    if (!storedChatId || !storedTurn) return;
+    markBusy(true);
+    setWorking("finishing in background…");
+    setMsgs((m) => m.length ? m : [{ role: "user", text: storedTurn.message }]);
+    closeRef.current?.();
+    closeRef.current = openStudioStream(
+      apiBase,
+      storedChatId,
+      storedTurn.message,
+      streamHandlers(turnStoreKey),
+      { turnId: storedTurn.turnId, resume: true },
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiBase, chatStoreKey, turnStoreKey]);
 
   // Kick off the build from the blank-tab description: send it as the first chat message, once an agent
   // is ready. One-shot (seededRef) so it never re-fires when the agent list resolves or agent changes.
   useEffect(() => {
-    if (seededRef.current || !seedPrompt || !agentId) return;
+    if (seededRef.current || !seedPrompt || !agentId || busyRef.current || readTurn()) return;
     seededRef.current = true;
     send(seedPrompt);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -162,11 +205,46 @@ export function Studio({
     switch (tool.kind) { case "execute": return "running a command…"; case "read": return "reading files…"; case "edit": return "editing the miniapp…"; default: return "working…"; }
   }
 
+  function streamHandlers(activeTurnKey = turnStoreKey, retryExpired?: { message: string }) {
+    return {
+      onDelta: (t: string) => { if (!mountedRef.current) return; setWorking("responding…"); pushDelta(t); },
+      onTool: (tool: { kind?: string; title?: string; status?: string }) => {
+        if (!mountedRef.current) return;
+        setWorking(activity(tool)); setMsgs((m) => [...m, { role: "tool", title: tool.title ?? tool.kind ?? "tool", failed: tool.status === "failed" }]);
+      },
+      onDone: async () => {
+        closeRef.current = null;
+        forgetTurn(activeTurnKey);
+        if (!mountedRef.current) return;
+        markBusy(false); setWorking(""); await refresh();
+      },
+      onFailed: (e: string) => {
+        closeRef.current = null; forgetTurn(activeTurnKey); forgetChat();
+        if (!mountedRef.current) return;
+        setChatId(null);
+        const expired = /^unknown chat\b/i.test(e);
+        if (expired && retryExpired) {
+          markBusy(false); setWorking(""); setStatus("Previous agent session expired; starting a fresh one…");
+          setTimeout(() => { void send(retryExpired.message, { echo: false, retryExpired: false, forceNewChat: true }); }, 0);
+          return;
+        }
+        markBusy(false); setWorking(""); setMsgs((m) => [...m, { role: "tool", title: `failed: ${e}`, failed: true }]);
+      },
+      onLost: (e: string) => {
+        closeRef.current = null;
+        if (!mountedRef.current) return;
+        setWorking(`${e}; run may still be finishing…`);
+        setStatus("Reopen this miniapp to reconnect to the active agent run.");
+      },
+    };
+  }
+
   function changeAgent(nextAgentId: string) {
     if (nextAgentId === agentId) return;
     closeRef.current?.();
     closeRef.current = null;
     forgetChat();
+    forgetTurn();
     setChatId(null);
     setMsgs([]);
     setWorking("");
@@ -176,37 +254,24 @@ export function Studio({
     onAgentIdChange(nextAgentId);
   }
 
-  async function send(text: string) {
+  async function send(text: string, opts: { echo?: boolean; retryExpired?: boolean; forceNewChat?: boolean } = {}) {
     const message = text.trim();
-    if (!message || busy || !agentId) return;
-    markBusy(true); setWorking("thinking…"); setGate(null); setShare(null);
-    setMsgs((m) => [...m, { role: "user", text: message }]);
+    if (!message || busyRef.current || !agentId) return;
+    markBusy(true); setWorking("thinking…"); setGate(null); setShare(null); setStatus("");
+    if (opts.echo !== false) setMsgs((m) => [...m, { role: "user", text: message }]);
     try {
-      let id = chatId;
+      let id = opts.forceNewChat ? null : chatId;
       if (!id) {
         const res = await fetch(`${apiBase}/api/chat`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ agentId, miniapp: name }) }).then(j);
         id = res.chatId as string;
         rememberChat(id);
         if (mountedRef.current) setChatId(id);
       }
-      closeRef.current = openStudioStream(apiBase, id, message, {
-        onDelta: (t) => { if (!mountedRef.current) return; setWorking("responding…"); pushDelta(t); },
-        onTool: (tool) => {
-          if (!mountedRef.current) return;
-          setWorking(activity(tool)); setMsgs((m) => [...m, { role: "tool", title: tool.title ?? tool.kind ?? "tool", failed: tool.status === "failed" }]);
-        },
-        onDone: async () => {
-          closeRef.current = null;
-          if (!mountedRef.current) return;
-          markBusy(false); setWorking(""); await refresh();
-        },
-        onFailed: (e) => {
-          closeRef.current = null; forgetChat();
-          if (!mountedRef.current) return;
-          markBusy(false); setWorking(""); setMsgs((m) => [...m, { role: "tool", title: `failed: ${e}`, failed: true }]);
-        },
-      });
+      const turn = { turnId: newTurnId(), message };
+      rememberTurn(turn);
+      closeRef.current = openStudioStream(apiBase, id, message, streamHandlers(turnStoreKey, opts.retryExpired === false ? undefined : { message }), { turnId: turn.turnId });
     } catch (e) {
+      forgetTurn();
       markBusy(false); setWorking(""); setStatus(`error: ${(e as Error).message}`);
     }
   }

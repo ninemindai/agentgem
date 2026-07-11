@@ -21,7 +21,7 @@ import { connectAcpAdapter, stdioMcpServer, resolveLaunch, adapterRuntimeCtx, AG
 import type { AgentAvailability, AgentDescriptor, McpServerStdio, AdapterCtx, AdapterInstaller } from "@agentgem/base";
 import { createAccumulator, applyUpdate } from "@agentgem/run";
 import { studioCwd } from "@agentgem/play";
-import type { ChatManager, ChatConnectFn, ChatCtx, ChatSessionHandle, ToolInvocation } from "@agentgem/run";
+import type { ChatManager, ChatConnectFn, ChatCtx, ChatSessionHandle, ToolInvocation, ChatEvent } from "@agentgem/run";
 import { draftGemFromChat } from "./draftGem.js";
 import { createAguiMapper } from "./aguiStream.js";
 import type { AguiEvent } from "./aguiStream.js";
@@ -31,6 +31,7 @@ interface Req {
   body?: Record<string, unknown>;
   query: Record<string, unknown>;
   params: Record<string, string>;
+  on?(event: "close", cb: () => void): void;
 }
 interface Res {
   status(code: number): Res;
@@ -38,6 +39,7 @@ interface Res {
   setHeader(name: string, value: string): void;
   write(chunk: string): void;
   end(): void;
+  writableEnded?: boolean;
 }
 // Minimal Express middleware shape (same duck-typing as originGuard.ts).
 type Middleware = (req: Req, res: Res, next: () => void) => void;
@@ -130,6 +132,53 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middlew
   // chatId → miniapp name, for studio sessions only. Lets the turn-end handler know which miniapp to
   // checkpoint. Populated on open, cleared on close. A leaked short string is harmless; we tidy anyway.
   const chatMiniapps = new Map<string, string>();
+  type TurnSubscriber = (ev: ChatEvent) => void;
+  type BackgroundTurn = {
+    chatId: string;
+    message: string;
+    events: ChatEvent[];
+    done: boolean;
+    subscribers: Set<TurnSubscriber>;
+  };
+  const backgroundTurns = new Map<string, BackgroundTurn>();
+
+  const terminal = (ev: ChatEvent) => ev.type === "done" || ev.type === "failed";
+  const rememberEvent = (turn: BackgroundTurn, ev: ChatEvent) => {
+    turn.events.push(ev);
+    for (const sub of [...turn.subscribers]) sub(ev);
+  };
+  const checkpointStudioTurn = async (chatId: string, failed: boolean) => {
+    const miniapp = chatMiniapps.get(chatId);
+    if (!failed && miniapp && deps.checkpointMiniapp) {
+      try { await deps.checkpointMiniapp(miniapp); }
+      catch (e) { console.error(`checkpoint failed for miniapp ${miniapp}:`, (e as Error).message); }
+    }
+  };
+  const getOrStartBackgroundTurn = (turnId: string, chatId: string, message: string): BackgroundTurn => {
+    const existing = backgroundTurns.get(turnId);
+    if (existing) return existing;
+    const turn: BackgroundTurn = { chatId, message, events: [], done: false, subscribers: new Set() };
+    backgroundTurns.set(turnId, turn);
+    void (async () => {
+      let failed = false;
+      try {
+        for await (const ev of deps.manager.sendMessage(chatId, message)) {
+          if (ev.type === "failed") failed = true;
+          rememberEvent(turn, ev);
+        }
+        await checkpointStudioTurn(chatId, failed);
+      } catch (e) {
+        failed = true;
+        rememberEvent(turn, { type: "failed", error: (e as Error).message });
+      } finally {
+        turn.done = true;
+        // Keep completed turns briefly so a tab/window that closed near completion can reconnect and
+        // receive the terminal event, then let memory drain. This is process-local, not a durable queue.
+        setTimeout(() => backgroundTurns.delete(turnId), 10 * 60_000).unref?.();
+      }
+    })();
+    return turn;
+  };
 
   // GET /api/agents — list which agents are on PATH
   app.get("/api/agents", guard, (_req, res) => {
@@ -188,6 +237,8 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middlew
 
     const chatId = String(req.query.chatId ?? "");
     const message = String(req.query.message ?? "");
+    const turnId = String(req.query.turnId ?? "");
+    const resume = String(req.query.resume ?? "") === "1";
 
     // AG-UI protocol opt-in: same underlying ChatEvent stream, translated via the
     // aguiStream mapper into standard AG-UI events. The event type lives inside the
@@ -208,8 +259,34 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middlew
       return;
     }
 
-    const send = (event: string, data: unknown) =>
+    const send = (event: string, data: unknown) => {
+      if (res.writableEnded) return;
       res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
+    if (turnId) {
+      const turn = resume ? backgroundTurns.get(turnId) : getOrStartBackgroundTurn(turnId, chatId, message);
+      if (!turn) {
+        send("failed", { type: "failed", error: `unknown turn ${turnId}` });
+        res.end();
+        return;
+      }
+      for (const ev of turn.events) send(ev.type, ev);
+      if (turn.done || turn.events.some(terminal)) {
+        res.end();
+        return;
+      }
+      const sub = (ev: ChatEvent) => {
+        send(ev.type, ev);
+        if (terminal(ev)) {
+          turn.subscribers.delete(sub);
+          res.end();
+        }
+      };
+      turn.subscribers.add(sub);
+      req.on?.("close", () => { turn.subscribers.delete(sub); });
+      return;
+    }
 
     let failed = false;
     try {
@@ -225,11 +302,7 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middlew
     // Turn done. For a studio session that did NOT fail, checkpoint the miniapp (durability + opportunistic
     // gem). The client already received `done`; this runs after and never affects the turn — a checkpoint
     // failure is logged and swallowed.
-    const miniapp = chatMiniapps.get(chatId);
-    if (!failed && miniapp && deps.checkpointMiniapp) {
-      try { await deps.checkpointMiniapp(miniapp); }
-      catch (e) { console.error(`checkpoint failed for miniapp ${miniapp}:`, (e as Error).message); }
-    }
+    await checkpointStudioTurn(chatId, failed);
 
     res.end();
   });

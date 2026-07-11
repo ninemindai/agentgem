@@ -160,6 +160,24 @@ describe("chat routes", () => {
     expect(checkpoints).toEqual(["space-run"]);
   });
 
+  it("replays a completed background turn by turnId without running it again", async () => {
+    const checkpoints: string[] = [];
+    const app = await buildTestApp({ checkpoints });
+    const created = await request(app).post("/api/chat")
+      .set("Content-Type", "application/json")
+      .send(JSON.stringify({ agentId: "claude-code", miniapp: "space-run" }));
+    const chatId = created.body.chatId;
+
+    const first = await request(app).get(`/api/chat/stream?chatId=${chatId}&message=hi&turnId=turn-1`);
+    expect(first.text).toContain("event: done");
+    expect(checkpoints).toEqual(["space-run"]);
+
+    const replay = await request(app).get(`/api/chat/stream?chatId=${chatId}&message=ignored&turnId=turn-1&resume=1`);
+    expect(replay.text).toContain("event: delta");
+    expect(replay.text).toContain("event: done");
+    expect(checkpoints).toEqual(["space-run"]); // replay did not prompt/checkpoint again
+  });
+
   it("does NOT checkpoint a neutral (non-miniapp) chat", async () => {
     const checkpoints: string[] = [];
     const app = await buildTestApp({ checkpoints });

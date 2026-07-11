@@ -6,9 +6,16 @@ export interface StudioStreamHandlers {
   onTool: (tool: StudioTool) => void;
   onDone: (result: { text: string; toolCalls: unknown[] }) => void;
   onFailed: (error: string) => void;
+  onLost?: (error: string) => void;
 }
-export function openStudioStream(apiBase: string, chatId: string, message: string, h: StudioStreamHandlers): () => void {
+export interface StudioStreamOptions {
+  turnId?: string;
+  resume?: boolean;
+}
+export function openStudioStream(apiBase: string, chatId: string, message: string, h: StudioStreamHandlers, opts: StudioStreamOptions = {}): () => void {
   const params = new URLSearchParams({ chatId, message });
+  if (opts.turnId) params.set("turnId", opts.turnId);
+  if (opts.resume) params.set("resume", "1");
   const es = new EventSource(`${apiBase}/api/chat/stream?${params.toString()}`);
   // A malformed SSE frame must never throw out of a listener: for delta/tool it would silently drop the
   // frame, but for the terminal done/failed events an uncaught throw skips es.close() and the terminal
@@ -20,6 +27,6 @@ export function openStudioStream(apiBase: string, chatId: string, message: strin
   es.addEventListener("tool", (e) => { const d = parse(e); if (d) h.onTool(d.tool); });
   es.addEventListener("done", (e) => { const d = parse(e); es.close(); d ? h.onDone(d.result) : h.onFailed("malformed done frame"); });
   es.addEventListener("failed", (e) => { const d = parse(e); es.close(); h.onFailed(d?.error ?? "stream failed"); });
-  es.addEventListener("error", () => { h.onFailed("connection lost"); es.close(); });
+  es.addEventListener("error", () => { es.close(); (h.onLost ?? h.onFailed)("connection lost"); });
   return () => es.close();
 }

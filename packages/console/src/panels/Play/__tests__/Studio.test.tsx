@@ -14,7 +14,7 @@ class FakeES {
   close() { this.closed = true; }
   emit(t: string, data: unknown) { for (const cb of this.listeners[t] ?? []) cb({ data: JSON.stringify(data) }); }
 }
-afterEach(() => { cleanup(); FakeES.last = null; sessionStorage.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); FakeES.last = null; localStorage.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("Studio", () => {
   it("opens a studio chat targeting the miniapp and refreshes the preview on done", async () => {
@@ -65,6 +65,7 @@ describe("Studio", () => {
     fireEvent.click(screen.getByText("Send"));
     await waitFor(() => expect(FakeES.last).toBeTruthy());
     expect(post).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem("agentgem:play:turn:space-dodger:codex")).toContain("make it blue");
 
     const stream = FakeES.last!;
     unmount();
@@ -72,6 +73,51 @@ describe("Studio", () => {
     expect(stream.closed).toBe(false); // do not cancel the server-side turn on Studio unmount
     stream.emit("done", { result: { text: "done", toolCalls: [] } });
     expect(stream.closed).toBe(true);
+    expect(localStorage.getItem("agentgem:play:turn:space-dodger:codex")).toBeNull();
+  });
+
+  it("reconnects to a stored background turn after the window is reopened", async () => {
+    localStorage.setItem("agentgem:play:chat:space-dodger:codex", "c1");
+    localStorage.setItem("agentgem:play:turn:space-dodger:codex", JSON.stringify({ turnId: "turn-1", message: "finish it" }));
+    stubChat();
+    const preview = vi.spyOn(playMiniappRoute, "call").mockResolvedValue(blankApp as never);
+
+    render(<IdentityProvider apiBase=""><Studio apiBase="" name="space-dodger" agents={codex} agentId="codex" onAgentIdChange={() => {}} onBack={() => {}} /></IdentityProvider>);
+
+    await waitFor(() => expect(FakeES.last).toBeTruthy());
+    expect(FakeES.last!.url).toContain("chatId=c1");
+    expect(FakeES.last!.url).toContain("turnId=turn-1");
+    expect(FakeES.last!.url).toContain("resume=1");
+    expect(screen.getByText("finish it")).toBeTruthy();
+
+    const before = preview.mock.calls.length;
+    FakeES.last!.emit("done", { result: { text: "done", toolCalls: [] } });
+    await waitFor(() => expect(preview.mock.calls.length).toBeGreaterThan(before));
+    expect(localStorage.getItem("agentgem:play:turn:space-dodger:codex")).toBeNull();
+  });
+
+  it("clears a stale stored chat after server restart and retries once with a fresh chat", async () => {
+    localStorage.setItem("agentgem:play:chat:space-dodger:codex", "chat_1");
+    const post = vi.fn();
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).includes("/api/chat") && init?.method === "POST") { post(init); return { ok: true, json: async () => ({ chatId: "chat_2" }) }; }
+      return { ok: true, json: async () => ({}) };
+    }) as unknown as typeof fetch);
+    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
+    vi.spyOn(playMiniappRoute, "call").mockResolvedValue(blankApp as never);
+
+    render(<IdentityProvider apiBase=""><Studio apiBase="" name="space-dodger" agents={codex} agentId="codex" onAgentIdChange={() => {}} onBack={() => {}} /></IdentityProvider>);
+    await screen.findByText(/Changing agent starts a fresh studio chat/i);
+    fireEvent.change(await screen.findByPlaceholderText(/build\/edit/i), { target: { value: "rename it" } });
+    fireEvent.click(screen.getByText("Send"));
+    await waitFor(() => expect(FakeES.last?.url).toContain("chatId=chat_1"));
+
+    FakeES.last!.emit("failed", { error: "unknown chat chat_1" });
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(FakeES.last?.url).toContain("chatId=chat_2"));
+    expect(FakeES.last!.url).toContain("message=rename+it");
+    expect(localStorage.getItem("agentgem:play:chat:space-dodger:codex")).toBe("chat_2");
   });
 
   it("reuses the saved studio chat when returning to the same miniapp and agent", async () => {
@@ -83,7 +129,7 @@ describe("Studio", () => {
     await waitFor(() => expect(FakeES.last).toBeTruthy());
     expect(post).toHaveBeenCalledTimes(1);
     FakeES.last!.emit("done", { result: { text: "done", toolCalls: [] } });
-    await waitFor(() => expect(sessionStorage.getItem("agentgem:play:chat:space-dodger:codex")).toBe("c1"));
+    await waitFor(() => expect(localStorage.getItem("agentgem:play:chat:space-dodger:codex")).toBe("c1"));
     first.unmount();
 
     render(<IdentityProvider apiBase=""><Studio apiBase="" name="space-dodger" agents={codex} agentId="codex" onAgentIdChange={() => {}} onBack={() => {}} /></IdentityProvider>);
