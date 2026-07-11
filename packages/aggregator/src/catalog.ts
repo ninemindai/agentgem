@@ -6,7 +6,8 @@ import { sql, desc, and, eq } from "drizzle-orm";
 import { verify } from "@agentgem/model";
 import { canonicalJSON } from "@agentgem/insight";
 import type { AppDb } from "./schema.js";
-import { catalogGems, gemArchives, producers, accountBindings, accounts } from "./schema.js";
+import { catalogGems, gemArchives, producers, accountBindings } from "./schema.js";
+import { accountIdForProvider } from "./auth/accountLinking.js";
 
 export interface GemArtifactRef { name: string; type: string }
 export interface CatalogRow {
@@ -162,6 +163,11 @@ export type SignedAccount =
 // check freshness, then resolve the producer key to its authorizing accounts.id (== "user".id) via
 // the binding. Callers pass whatever canonical payload their route signs (a manifest hash for
 // publish/mint, the shareId for revoke). Fail-closed: an unbound or unresolvable key owns nothing.
+//
+// The binding's provider identity is resolved via `accountIdForProvider` (better-auth's `account`
+// table), NOT the legacy `accounts.provider`/`provider_account_id` columns — those hold only the
+// PRIMARY provider (Task 1), so a desktop binding for a LINKED (non-primary) provider would
+// otherwise never resolve, wrongly rejecting a legitimate publish as `not-connected`.
 export async function resolveSignedAccount(
   db: AppDb,
   args: { pubkey: string; payload: string; signedAt: number; signature: string },
@@ -172,10 +178,9 @@ export async function resolveSignedAccount(
   await db.insert(producers).values({ pubkey: args.pubkey }).onConflictDoNothing();
   const bind = (await db.select().from(accountBindings).where(sql`pubkey = ${args.pubkey}`))[0];
   if (!bind) return { ok: false, rejected: "not-connected" };
-  const acct = (await db.select({ id: accounts.id }).from(accounts)
-    .where(and(eq(accounts.provider, bind.provider), eq(accounts.providerAccountId, bind.accountId))).limit(1))[0];
-  if (!acct) return { ok: false, rejected: "not-connected" };
-  return { ok: true, accountId: acct.id, login: bind.accountLogin };
+  const acctId = await accountIdForProvider(db, bind.provider, bind.accountId);
+  if (!acctId) return { ok: false, rejected: "not-connected" };
+  return { ok: true, accountId: acctId, login: bind.accountLogin };
 }
 
 // Grade is a 1..3 floor. Exported so the read path (mapDbToGems) can re-clamp defensively —
