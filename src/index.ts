@@ -72,6 +72,7 @@ import { installCatalog } from "./catalog/install.js";
 import { installGroups } from "./groups/install.js";
 import { installHandles } from "./handles/install.js";
 import { installAccount } from "./account/install.js";
+import { installConnect } from "./account/connect.js";
 import { installUsage } from "./usage/install.js";
 import { installRegistryUploadPublish } from "./registry/uploadPublish.js";
 import { registryConfigFromEnv, githubRegistrySource, githubRegistryPublisher, defaultHttp } from "@agentgem/distribute";
@@ -242,6 +243,11 @@ export async function createApp(port: number): Promise<RestApplication> {
     // to the FIRST matching route registered, so installHandoff must run first or the catch-all would
     // swallow them. Neither path collides with a better-auth-served route (sign-in/*, sign-out,
     // get-session, callback/*, ...).
+    // Flow B bespoke connect (Task 2): its callback shim sits at better-auth's OWN callback path
+    // (/api/auth/callback/:provider) and routes on `state` — OUR state we exchange, any foreign state
+    // it next()s through. Like installHandoff, it MUST register BEFORE mountAuth's /api/auth/*splat
+    // catch-all so Express dispatches to it first (and its next() then falls through to better-auth).
+    installConnect(server.expressApp as never, { db: aggDb, auth, webOrigins, publicBase: webOrigins[0] ?? "" });
     installHandoff(server.expressApp as never, { db: aggDb, auth, config: { webOrigins } });
     mountAuth(server.expressApp as never, auth, webOrigins, "/api/auth");
     // Re-run the boot backfill at cutover (Plan 1b-Task 5): the 1a boot backfill only caught accounts
