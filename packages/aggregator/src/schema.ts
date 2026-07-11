@@ -516,6 +516,27 @@ export async function backfillUserHandles(db: AppDb): Promise<{ claimed: number;
   return { claimed, skipped };
 }
 
+/** better-auth requires a non-null email STRING in both user creation AND linkSocial's OAuth state
+ *  (`link.email: z.string()`) — but GitHub logins are frequently email-less (see the `"user".email`
+ *  nullable-column comment), so a null-email account throws an unhandled `internal_server_error` on
+ *  the Connect (linkSocial) callback. Give every email-less user GitHub's noreply address, keyed on
+ *  their login (or uuid id when login is null), so `email` is a stable, unique, non-null string.
+ *  Runs inside ensureSchema every boot; idempotent (a no-op once drained). Like backfillUserHandles,
+ *  narrow the catch to a unique violation (email is UNIQUE) so a benign collision self-heals on the
+ *  next boot while a genuinely different failure still propagates. */
+export async function backfillUserEmails(db: AppDb): Promise<{ filled: number }> {
+  let filled = 0;
+  try {
+    const res = await db.execute(sql`
+      update "user" set email = coalesce(login, id) || '@users.noreply.github.com'
+      where email is null`);
+    filled = (res as { rowCount?: number; affectedRows?: number }).rowCount ?? (res as { affectedRows?: number }).affectedRows ?? 0;
+  } catch (err) {
+    if (!isUniqueViolation(err)) throw err;
+  }
+  return { filled };
+}
+
 // Idempotent DDL. (Schema-as-tables above is the query source of truth; this DDL
 // creates them. A column drift is caught immediately by the typed drizzle inserts.
 // drizzle-kit migrations are a deferred follow-up when the schema starts evolving.)
@@ -718,6 +739,12 @@ export async function ensureSchema(db: AppDb): Promise<void> {
   // claimed"), and gem-ownership resolution — the one with a security consequence for unresolved
   // rows (see the warning below) — stays adjacent to its own anchor dependency.
   await backfillUserHandles(db);
+
+  // better-auth's linkSocial (Connect) bakes the caller's email into its OAuth state as a required
+  // string, and user creation requires it too — but GitHub logins are often email-less, so a null
+  // email throws an unhandled 500 on Connect. Give every email-less user a noreply address. Runs
+  // after the handle backfill (both touch "user") but is independent of it; idempotent.
+  await backfillUserEmails(db);
 
   // Drop the pre-re-key `role='self'` mirror rows. The account's own namespace is `"user".handle`
   // (just backfilled above), read directly by accountSelfScope/accountOwnsScope — a scope row

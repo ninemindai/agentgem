@@ -82,7 +82,15 @@ export function makeAuth(opts: {
       github: {
         clientId: opts.githubClientId, clientSecret: opts.githubClientSecret,
         scope: ["read:user", "read:org"],
-        mapProfileToUser: (p: any) => ({ login: p.login, name: p.name ?? p.login, image: p.avatar_url }),
+        // GitHub returns email:null for accounts without a public email even after better-auth fetches
+        // /user/emails; better-auth requires a non-null email STRING (user creation + linkSocial's
+        // OAuth state), so a null there is an unhandled 500 on the Connect callback. Fall back to the
+        // noreply address — matches backfillUserEmails (schema.ts) for existing rows, so re-login on a
+        // backfilled account is a no-op rather than churn.
+        mapProfileToUser: (p: any) => ({
+          login: p.login, name: p.name ?? p.login, image: p.avatar_url,
+          email: p.email ?? `${p.login ?? p.id}@users.noreply.github.com`,
+        }),
       },
       // Google is additive and optional — registered only when BOTH creds are present (a partial
       // config registers nothing, failing closed). Non-sensitive scopes only. Google supplies no
