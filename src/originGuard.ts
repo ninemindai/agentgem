@@ -88,8 +88,9 @@ export function originGuard(req: GuardReq, res: GuardRes, next: GuardNext): void
   // defenses (trustedOrigins) plus mountAuth's credentialed CORS for the allowlist. /api/handle is the
   // SPA's handle-claim POST (install.ts) — a single leaf endpoint (no sub-paths), same shape as
   // upload-publish: credentialed, own CORS for the AGENTGEM_WEB_ORIGINS allowlist, and a 401 on the
-  // authed route.
-  if (req.path.startsWith("/api/auth/") || req.path.startsWith("/api/stars") || req.path.startsWith("/api/reviews") || req.path.startsWith("/api/usage") || req.path.startsWith("/api/orgs/") || req.path.startsWith("/api/github/") || req.path.startsWith("/api/registry/upload-publish") || req.path.startsWith("/api/catalog/") || req.path === "/api/handle") { next(); return; }
+  // authed route. /api/account/* is the account-linking SPA's providers-list GET (account/install.ts)
+  // — same shape, credentialed CORS + a 401 on the authed route.
+  if (req.path.startsWith("/api/auth/") || req.path.startsWith("/api/account/") || req.path.startsWith("/api/stars") || req.path.startsWith("/api/reviews") || req.path.startsWith("/api/usage") || req.path.startsWith("/api/orgs/") || req.path.startsWith("/api/github/") || req.path.startsWith("/api/registry/upload-publish") || req.path.startsWith("/api/catalog/") || req.path === "/api/handle") { next(); return; }
   const site = req.get("sec-fetch-site");
   if (site !== undefined) {
     if (site === "same-origin") { next(); return; }
