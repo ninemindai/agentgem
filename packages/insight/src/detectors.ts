@@ -196,9 +196,51 @@ const unverifiedTail: DetectorSpec = {
   },
 };
 
+// Count same-tool occurrences flagged by a predicate; fire once per tool at >=GUARDRAIL_MIN.
+export const GUARDRAIL_MIN = 2;
+
+function guardrailFindings(
+  spec: Pick<DetectorSpec, "id" | "severity">, session: SessionSequence,
+  pick: (s: ProcedureStep) => boolean, label: string,
+): DetectorFinding[] {
+  const byTool = new Map<string, number[]>();   // tool -> msgIndices
+  for (const s of session.steps) {
+    if (!pick(s)) continue;
+    let idxs = byTool.get(s.tool);
+    if (!idxs) { idxs = []; byTool.set(s.tool, idxs); }
+    idxs.push(s.msgIndex);
+  }
+  const out: DetectorFinding[] = [];
+  for (const [tool, idxs] of byTool) {
+    if (idxs.length >= GUARDRAIL_MIN) {
+      out.push(mkFinding(spec, session, `${tool} ${label} ${idxs.length}x`, idxs));
+    }
+  }
+  return out;
+}
+
+const repeatedToolError: DetectorSpec = {
+  id: "repeated-tool-error",
+  title: "Same tool failed repeatedly",
+  cost: "cheap",
+  severity: "warn",
+  advice: "A tool that keeps failing the same way usually signals a missing prerequisite or a wrong usage pattern — capture the fix as a durable instruction so the next session skips the failures.",
+  detect(session) { return guardrailFindings(repeatedToolError, session, (s) => s.error === true, "errored"); },
+};
+
+const toolRejection: DetectorSpec = {
+  id: "tool-rejection",
+  title: "Tool actions the user repeatedly blocked",
+  cost: "cheap",
+  severity: "warn",
+  advice: "When the user repeatedly blocks the same kind of action, record it as a guardrail so the agent stops proposing it.",
+  detect(session) { return guardrailFindings(toolRejection, session, (s) => s.rejected === true, "rejected"); },
+};
+
 export const DETECTORS: DetectorSpec[] = [
   retryStorm, thrashLoop, noVerifyFinish, regressionCycle, unverifiedTail,
   taskSprawl, taskPingpong, rereadChurn, contextPinned, cacheChurnLate,
+  repeatedToolError, toolRejection,
 ];
 
 /**
