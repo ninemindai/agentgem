@@ -5,7 +5,8 @@
 // gate: only a path under the miniapps registry (or the neutral fallback) is ever honored.
 import { join, sep, resolve, basename } from "node:path";
 import { readFileSync, writeFileSync } from "node:fs";
-import type { GameSource, GameGenre } from "@agentgem/model";
+import { type GameSource, type GameGenre, AUTO_CAPS } from "@agentgem/model";
+import { deriveNeeds } from "./capabilityScan.js";
 import { extractSource, type SourceReaders } from "./sourceContext.js";
 import { genreFor } from "./genres.js";
 import { scaffoldFor, minimalTemplate } from "./scaffolds.js";
@@ -94,7 +95,14 @@ export async function importStudio(title: string, html: string, name?: string): 
   await ensureRepo(miniappsRoot());
   const { name: id, dir } = claimFor(source, name);
   writeFileSync(join(dir, MINIAPP_HTML), html);
-  const meta: MiniappMeta = { title, genre: "project-fun", createdFrom: source, engineVersion: "1" };
+  // Declare the capabilities the imported html already uses so it actually works before the first Save —
+  // otherwise the Runner never wires the host and every capability call silently fails (an <a>-CTA that
+  // openLinks does nothing). Import IS the authored act, so deriving needs from the code is a legitimate
+  // initial declaration, NOT the silent widening saveMiniapp guards against. AUTO caps are excluded: they
+  // bypass the consent prompt, so auto-declaring one (session-data) would let imported html read the
+  // viewer's sessions with no gate — that stays an explicit Save. Gated caps keep their per-use prompt.
+  const needs = deriveNeeds(html).filter((c) => !AUTO_CAPS.has(c));
+  const meta: MiniappMeta = { title, genre: "project-fun", createdFrom: source, engineVersion: "1", ...(needs.length ? { needs } : {}) };
   writeFileSync(join(dir, "meta.json"), JSON.stringify(meta, null, 2));
   await commitWithLock(miniappsRoot(), `import miniapp ${id}`);
   return { name: id, brief: `You are refining "${title}", a self-contained HTML mini-game the user imported.\n\n${studioInstructions(MINIAPP_HTML)}` };

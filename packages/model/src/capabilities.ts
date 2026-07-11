@@ -5,7 +5,16 @@
 // executor) and packages/play's save-time reconciliation (which derives `needs` back out of the html).
 // Two copies would drift silently. Keyed by GameCapability, so adding a capability to the union without
 // naming its tool is a COMPILE error — the same guard portability.ts's CAP_CLASS uses.
-import type { ToolCapability, ActionCapability } from "./types.js";
+import type { ToolCapability, ActionCapability, GameCapability } from "./types.js";
+
+// Capabilities the host brokers WITHOUT a per-use consent prompt — implicit consent, granted at seed
+// (only the game's OWN source session). EVERY other capability reaches other data, live sessions,
+// external links, or runs code, so the Runner gates it behind an explicit Allow/Deny. This is a
+// security-critical classification and the single source of truth for it: importStudio auto-declares
+// only NON-auto (gated) caps derived from imported html, so an imported bundle can never silently gain
+// an auto-approved capability like reading the viewer's sessions. Console's consent.ts keeps a
+// browser-safe mirror, pinned by a drift test.
+export const AUTO_CAPS: ReadonlySet<GameCapability> = new Set<GameCapability>(["session-data"]);
 
 // ToolCapability <-> host MCP tool name. Keyed by ToolCapability so adding a tool cap without naming its
 // tool is a COMPILE error (the guard portability.ts's CAP_CLASS also relies on).
