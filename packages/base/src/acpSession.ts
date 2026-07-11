@@ -67,6 +67,7 @@ export function spawnEnv(descriptor: AgentDescriptor, base: NodeJS.ProcessEnv = 
 // A live session over a connected adapter. `prompt` sends one turn and dispatches
 // each session_update's `.update` payload to `onUpdate` until the turn stops.
 export interface RawAcpSession {
+  sessionId: string;
   setMode(mode: string): Promise<void>;
   prompt(text: string, onUpdate: (update: unknown) => void): Promise<void>;
   dispose(): void;
@@ -137,6 +138,7 @@ export async function connectAcpAdapter(
       const session: any = await builder.start();
       const sessionId = session.sessionId as string;
       return {
+        sessionId,
         async setMode(mode: string) {
           try { await agentCtx.request("session/set_mode", { sessionId, modeId: mode }); } catch { /* best-effort */ }
         },

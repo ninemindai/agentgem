@@ -21,6 +21,7 @@ export type ChatEvent =
   | { type: "failed"; error: string };
 
 export interface ChatSessionHandle {
+  sessionId: string;
   setMode(m: string): Promise<void>;
   prompt(
     text: string,
@@ -41,11 +42,14 @@ export type ChatConnectFn = (descriptor: AgentDescriptor, opts?: ChatConnectOpts
 
 interface LiveChat {
   agentId: string;
+  sessionId: string;
   /** brief is injected on the first turn, then nulled so it's not repeated */
   brief: string | null;
   conn: { ctx: ChatCtx; close: () => void };
   handle: ChatSessionHandle;
   lastMs: number;
+  /** Set while a turn is in flight (Task 2); absent here, so stateOf defaults it to false. */
+  running?: boolean;
 }
 
 let counter = 0;
@@ -101,6 +105,7 @@ export class ChatManager {
     const chatId = `chat_${++counter}`;
     this.live.set(chatId, {
       agentId: input.agentId,
+      sessionId: handle.sessionId,
       brief: input.brief,
       conn,
       handle,
@@ -162,6 +167,13 @@ export class ChatManager {
     try { chat.handle.dispose(); } catch { /* ignore */ }
     try { chat.conn.close(); } catch { /* ignore */ }
     this.live.delete(chatId);
+  }
+
+  /** Liveness + identity for a chat, for client reconciliation after navigation/reload. */
+  stateOf(chatId: string): { alive: true; running: boolean; sessionId: string; agent: string } | { alive: false } {
+    const c = this.live.get(chatId);
+    if (!c) return { alive: false };
+    return { alive: true, running: c.running ?? false, sessionId: c.sessionId, agent: c.agentId };
   }
 
   sweepIdle(): void {
