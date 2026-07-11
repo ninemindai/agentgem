@@ -82,17 +82,24 @@ real versioning is the hardcoded version string.
 
 ### Pre-flight status check
 
-New authenticated endpoint, session-gated (org-skills pattern):
+New **signed** endpoint (refined during planning — the console authenticates to the
+aggregator by ed25519 signature, not a session cookie, so this mirrors the existing
+signed `/api/aggregator/catalog` publish rather than the session-gated org reads):
 
 ```
-GET /api/aggregator/gem-status?key=<gemKey>
-  → resolveSession(auth, req.headers)
+POST /api/aggregator/gem-status   body { key, pubkey, signedAt, signature }
+  → resolveSignedAccount(db, ...)   (ed25519, 5-min freshness — same as publish)
   → { exists: boolean, ownedByMe: boolean, latestVersion: string | null }
 ```
 
-Reuses `latestGemVersion` (`catalog.ts:74`) plus an `owner_account_id ===
-session.accountId` comparison. Must be `originGuard`-exempt with credentialed CORS,
-like the other `/api/aggregator/*` and `/api/orgs/*` session routes.
+Signing happens server-to-server in the console's local server
+(`src/gem.controller.ts`, which already loads the producer key via
+`loadOrCreateIdentity` and signs publishes); the browser reaches it through a thin
+local proxy route `GET /api/publish-status`. Existence + latest version are public;
+`ownedByMe` is true only for the verified owner. Reuses `latestGemVersion`
+(`catalog.ts:74`) plus an `owner_account_id === accountId` comparison. **No
+`originGuard`/CORS/session changes** — a signed POST behaves exactly like the
+existing publish POST.
 
 ### Publish dialog behavior
 
