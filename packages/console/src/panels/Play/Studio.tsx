@@ -49,6 +49,7 @@ export function Studio({
   const [pendingPublish, setPendingPublish] = useState(false);   // Share clicked while unbound
   const [shareLink, setShareLink] = useState<string | null>(null);   // light unlisted share; persists via the miniapp read's `share`
   const [pendingShare, setPendingShare] = useState(false);   // Copy-share clicked while unbound
+  const [sharing, setSharing] = useState(false);   // in-flight guard: blocks a double-mint from orphaning an un-revokable link
   const { status: identity } = useIdentity();
   const closeRef = useRef<null | (() => void)>(null);
   const logRef = useRef<HTMLDivElement>(null);
@@ -239,13 +240,19 @@ export function Studio({
   // as shareToExplore saves before publishing.
   async function copyShareLink() {
     if (shareLink) { navigator.clipboard?.writeText(shareLink); setStatus("link copied ✓"); return; }
+    if (sharing) return;   // a mint is already in flight; don't re-enter and risk a second mint
     setStatus("minting link…");
     if (!(await save())) return; // gate failure already surfaced as the banner
     if (!(identity?.bound && identity.login)) { setStatus(""); setPendingShare(true); return; }
     await mintShare();
   }
 
+  // Re-entrant-safe: two rapid callers (the bound copyShareLink path and the post-bind onBound
+  // resume) must never both reach shareMiniappRoute, or the server mints two shareIds and
+  // writeMiniappShare keeps only the second — orphaning the first as a live, un-revokable link.
   async function mintShare() {
+    if (sharing || shareLink) return;
+    setSharing(true);
     try {
       const r = await shareMiniappRoute.call(makeClient(apiBase), { body: { name } });
       setShareLink(r.url);
@@ -253,6 +260,8 @@ export function Studio({
       setStatus("link copied ✓");
     } catch (e) {
       setStatus(`share failed: ${(e as Error).message}`);
+    } finally {
+      setSharing(false);
     }
   }
 
@@ -283,7 +292,7 @@ export function Studio({
         {status && <span className="play-intro" style={{ margin: 0 }}>{status}</span>}
         <button className="play-btn" onClick={save}>Save</button>
         <button className="play-btn play-btn--ghost" onClick={pushGit} title="git push the miniapps registry to your git remote">Push to git</button>
-        <button className="play-btn" onClick={copyShareLink}>Copy share link</button>
+        <button className="play-btn" disabled={sharing} onClick={copyShareLink}>Copy share link</button>
         <button className="play-btn play-btn--primary" onClick={shareToExplore}>Share to app.agentgem.ai</button>
       </div>
 

@@ -18,6 +18,10 @@ let realHomeDir: string;
 let prevAgentgemHome: string | undefined;
 let prevHome: string | undefined;
 let prevAggregatorUrl: string | undefined;
+// Mutable switches the stub handler reads per-request, so individual tests can force the
+// aggregator to reject a mint or a revoke without touching the shared beforeAll/afterAll setup.
+let failShareArchive = false;
+let failRevoke = false;
 
 const meta = (title: string) => ({
   title, genre: "project-fun" as const, createdFrom: { kind: "blank" as const, title }, engineVersion: "1",
@@ -44,9 +48,11 @@ beforeAll(async () => {
     req.on("end", () => {
       res.setHeader("content-type", "application/json");
       if (req.method === "POST" && req.url === "/api/aggregator/share-archive") {
+        if (failShareArchive) { res.writeHead(500); res.end(JSON.stringify({ error: "mint rejected" })); return; }
         res.writeHead(200);
         res.end(JSON.stringify({ key: "s1", url: "https://app.agentgem.ai/games/s1" }));
       } else if (req.method === "POST" && req.url === "/api/aggregator/share-archive/revoke") {
+        if (failRevoke) { res.writeHead(500); res.end(JSON.stringify({ error: "revoke rejected" })); return; }
         res.writeHead(200);
         res.end(JSON.stringify({ revoked: true }));
       } else {
@@ -105,5 +111,32 @@ describe("POST /api/play/share + /api/play/revoke", () => {
 
   it("share 404s for a name with no miniapp/workspace", async () => {
     await client.post("/api/play/share").send({ name: "ghost" }).expect(404);
+  });
+
+  it("mint rejected: the aggregator's non-2xx fails the request and the sidecar is not written", async () => {
+    const name = "share-mint-rejected";
+    await client.post("/api/play/save").send({ name, html: sealedHtml, meta: meta("Mint Rejected") }).expect(200);
+
+    failShareArchive = true;
+    try {
+      await client.post("/api/play/share").send({ name }).expect(400);
+    } finally { failShareArchive = false; }
+
+    const after = await client.get("/api/play/miniapp").query({ name }).expect(200);
+    expect(after.body.share).toBeUndefined();
+  });
+
+  it("revoke rejected: the aggregator's non-2xx fails the request and the sidecar is still present", async () => {
+    const name = "share-revoke-rejected";
+    await client.post("/api/play/save").send({ name, html: sealedHtml, meta: meta("Revoke Rejected") }).expect(200);
+    await client.post("/api/play/share").send({ name }).expect(200);
+
+    failRevoke = true;
+    try {
+      await client.post("/api/play/revoke").send({ name }).expect(400);
+    } finally { failRevoke = false; }
+
+    const after = await client.get("/api/play/miniapp").query({ name }).expect(200);
+    expect(after.body.share).toMatchObject({ shareId: "s1" });
   });
 });
