@@ -102,4 +102,17 @@ describe("ChatManager", () => {
     const mgr = new ChatManager({ connectFn: fake.fn as any });
     await expect(mgr.openChat({ agentId: "does-not-exist", brief: "B" })).rejects.toThrow(/Unknown agentId/);
   });
+
+  it("exposes sessionId + agent via stateOf for a live chat", async () => {
+    const connect = async () => ({ ctx: { open: async () => ({
+      sessionId: "sess_abc",
+      setMode: async () => {},
+      prompt: async () => ({ text: "", toolCalls: [] }),
+      dispose: () => {},
+    }) }, close: () => {} });
+    const mgr = new ChatManager({ connectFn: connect as any });
+    const id = await mgr.openChat({ agentId: "claude-code", brief: "B" });
+    expect(mgr.stateOf(id)).toEqual({ alive: true, running: false, sessionId: "sess_abc", agent: "claude-code" });
+    expect(mgr.stateOf("nope")).toEqual({ alive: false });
+  });
 });

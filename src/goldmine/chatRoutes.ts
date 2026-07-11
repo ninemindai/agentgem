@@ -277,6 +277,7 @@ export function makeChatConnectFn(resolve: (d: AgentDescriptor) => AgentDescript
       async open(cwd: string, openOpts?: { mcpServers?: unknown[] }): Promise<ChatSessionHandle> {
         const session = await raw.open(cwd, { mcpServers: openOpts?.mcpServers as never });
         return {
+          sessionId: session.sessionId,
           setMode: (m: string) => session.setMode(m),
           async prompt(text: string, onDelta?: (c: string) => void, onToolCall?: (t: ToolInvocation) => void) {
             const acc = createAccumulator();

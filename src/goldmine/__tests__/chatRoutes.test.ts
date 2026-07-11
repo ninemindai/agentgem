@@ -18,6 +18,7 @@ function makeFakeConnectFn(opts: { fail?: boolean } = {}): ChatConnectFn {
   return async () => ({
     ctx: {
       open: async () => ({
+        sessionId: "sess_fake",
         setMode: async () => {},
         prompt: async (_text: string, onDelta?: (c: string) => void) => {
           if (opts.fail) throw new Error("boom");
