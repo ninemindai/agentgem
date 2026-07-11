@@ -6,7 +6,7 @@ import { basename, resolve, sep, join as pathJoin } from "node:path";
 import { z } from "zod";
 import { api, get, post, AgentError } from "@agentback/openapi";
 import { scanSessionsCached, aggregateObserve, loadSessionTranscript, resolveClaudeSession, dehomeDistilled, scrubText, sessionToAtif, summarizeSession } from "@agentgem/insight";
-import { scanArtifactUsageCached } from "@agentgem/insight";
+import { scanArtifactUsage, optimizeUsageMap, type ArtifactUsage } from "@agentgem/insight";
 import { buildOptimizePayload, buildDiscover, rerankCandidates, installSkill, type OptimizeRange } from "@agentgem/insight";
 import { createLogger } from "@agentgem/base";
 
@@ -660,29 +660,47 @@ export class GemController {
     return { workspace: name, executables };
   }
 
+  // Global-scope Optimize usage via the persistent transcript index (incremental, off the event
+  // loop through buildOffThreadParse, ~0.03s warm) — the same source /api/usage serves, and the
+  // same off-thread cold build it inherits (#284/#335). Falls back to the synchronous full scan
+  // when the index is unavailable, exactly as /api/usage does. Project (cwd) scope does NOT use
+  // this: syncUsage would prune every file not in the passed path-subset from the shared table,
+  // and one project's transcripts are a small slice a sync scan handles fine.
+  private async optimizeUsageGlobal(dirs: ReturnType<typeof resolveDirs>): Promise<Map<string, ArtifactUsage>> {
+    const paths = allClaudeTranscripts(dirs.claudeDir);
+    try {
+      const res = await getGlobalUsageIndexed(dirs, paths, buildOffThreadParse());
+      return optimizeUsageMap(res.artifacts);
+    } catch (e) {
+      log.warn("[optimize] index path failed, falling back to full scan: %s", (e as Error)?.message ?? e);
+      return scanArtifactUsage(introspectConfig(dirs), dirs.claudeDir);
+    }
+  }
+
   @get("/optimize", { query: OptimizeQuerySchema, response: OptimizePayloadSchema })
   async optimize(input: { query: z.infer<typeof OptimizeQuerySchema> }): Promise<z.infer<typeof OptimizePayloadSchema>> {
     const range: OptimizeRange = input.query.range ?? "30d";
     const now = Date.now();
-    const refresh = input.query.refresh ?? false;
     const root = input.query.root;
     if (root) {
       const canon = resolveProject(root);
       const inv = mergedInventory(canon);
-      const usage = await scanArtifactUsageCached(inv, now, undefined, refresh, canon);   // project-cwd usage
+      const usage = scanArtifactUsage(inv, resolveDirs().claudeDir, canon);   // project-cwd usage: one project's slice, sync
       const payload = buildOptimizePayload(inv, usage, range, now, canon);
       return { ...payload, disabled: listDisabled(projectDisableOpts(canon)) };
     }
-    const inv = introspectConfig();
-    const usage = await scanArtifactUsageCached(inv, now, undefined, refresh);
+    const dirs = resolveDirs();
+    const inv = introspectConfig(dirs);
+    const usage = await this.optimizeUsageGlobal(dirs);   // ?refresh is a no-op now: the index is always incrementally fresh
     const payload = buildOptimizePayload(inv, usage, range, now);
     return { ...payload, disabled: listDisabled() };
   }
 
   @get("/optimize/discover", { response: DiscoverPayloadSchema })
   async optimizeDiscover(): Promise<z.infer<typeof DiscoverPayloadSchema>> {
-    const inv = introspectConfig();
-    const usage = await scanArtifactUsageCached(inv, Date.now());
+    const dirs = resolveDirs();
+    const inv = introspectConfig(dirs);
+    const usage = await this.optimizeUsageGlobal(dirs);
     return buildDiscover(usage, inv);
   }
 
@@ -731,7 +749,9 @@ export class GemController {
     const now = Date.now();
     const range = input.body.range ?? "30d";
     const inv = root ? mergedInventory(resolveProject(root)) : introspectConfig();
-    const usage = await scanArtifactUsageCached(inv, now, undefined, false, root ? resolveProject(root) : undefined);
+    const usage = root
+      ? scanArtifactUsage(inv, resolveDirs().claudeDir, resolveProject(root))   // project-cwd usage: sync
+      : await this.optimizeUsageGlobal(resolveDirs());
     const payload = buildOptimizePayload(inv, usage, range, now, root ? resolveProject(root) : undefined);
     const artifacts = payload.artifacts.filter((a) => okKeys.has(`${a.type}:${a.source}:${a.name}`));
     return { results, artifacts };
