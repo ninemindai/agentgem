@@ -10,7 +10,7 @@
 // staging gem can never leak into any published/marketplace/org-catalog read. Approval is the only
 // path that writes the published tables, and it re-applies the catalog owner-conflict guard.
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, lt, sql } from "drizzle-orm";
 import type { AppDb } from "./schema.js";
 import { accounts, catalogGems, reviewMessages, reviewRequests, reviewSeen, type ReviewStatus } from "./schema.js";
 import { groupMemberRole, listGroupsForAccount } from "./groups.js";
@@ -28,7 +28,12 @@ export function gemScope(gemKey: string): string {
 
 export type SubmitResult =
   | { ok: true; requestId: string }
-  | { ok: false; rejected: "not-a-member" | "not-scope-owner" | "version-published" | "invalid-key" };
+  | { ok: false; rejected: "not-a-member" | "not-scope-owner" | "version-published" | "invalid-key" | "too-many-open" };
+
+// Storage-quota backstop (S3): each open/changes-requested request retains its full .gem archive as
+// bytea indefinitely, so an unbounded number of open requests is unbounded Postgres storage. Counted
+// per AUTHOR across every group they're in (simplest, strict enough) rather than per group+key.
+export const MAX_OPEN_REVIEW_REQUESTS_PER_AUTHOR = 25;
 
 export async function submitReviewRequest(
   db: AppDb,
@@ -44,6 +49,9 @@ export async function submitReviewRequest(
   // arbitrary scope a one-click team action otherwise.
   if (!(await accountOwnsScope(db, args.accountId, gemScope(args.manifest.gemKey)))) return { ok: false, rejected: "not-scope-owner" };
   if (await catalogGemExists(db, args.manifest.gemKey, args.manifest.version)) return { ok: false, rejected: "version-published" };
+  const openCount = (await db.select({ count: sql<number>`count(*)::int` }).from(reviewRequests)
+    .where(and(eq(reviewRequests.authorAccountId, args.accountId), inArray(reviewRequests.status, ["open", "changes-requested"]))))[0]?.count ?? 0;
+  if (openCount >= MAX_OPEN_REVIEW_REQUESTS_PER_AUTHOR) return { ok: false, rejected: "too-many-open" };
   const id = randomUUID();
   await db.insert(reviewRequests).values({
     id, groupId: args.groupId, gemKey: args.manifest.gemKey, version: args.manifest.version,
@@ -268,7 +276,7 @@ export async function requestChanges(db: AppDb, args: { accountId: string; reque
   return claimed.length ? { ok: true } : { ok: false, rejected: "not-open" };
 }
 
-export type ResubmitResult = { ok: true } | { ok: false; rejected: "not-found" | "forbidden" | "not-changes-requested" };
+export type ResubmitResult = { ok: true } | { ok: false; rejected: "not-found" | "forbidden" | "not-changes-requested" | "key-mismatch" };
 
 /** The AUTHOR resubmits new bytes/manifest: atomic `changes-requested -> open`. Clears every
  *  review_seen marker for the request so each reviewer's inbox badge goes unread again — the old
@@ -293,6 +301,11 @@ export async function resubmitReviewRequest(
   const row = gate.row;
   if (row.status !== "changes-requested") return { ok: false, rejected: "not-changes-requested" };
   if (row.authorAccountId !== args.accountId) return { ok: false, rejected: "forbidden" };
+  // S2: the row's OWN gemKey/version (set once at submit, never updated by resubmit) is the gem's
+  // real identity — an author with two changes-requested requests must not be able to resubmit a
+  // DIFFERENT gem's manifest+archive against this requestId (that would publish gem B's content
+  // under gem A's trusted name on approval). Reject before the atomic UPDATE, not after.
+  if (args.manifest.gemKey !== row.gemKey || args.manifest.version !== row.version) return { ok: false, rejected: "key-mismatch" };
   // Claim + seen-marker clear share one transaction (D5): a crash between the two writes must not
   // leave stale review_seen markers pointing at a version nobody has actually reviewed.
   return await db.transaction(async (tx): Promise<ResubmitResult> => {
@@ -345,4 +358,19 @@ export async function withdrawRequestsForDepartedMember(db: AppDb, groupId: stri
     .where(and(eq(reviewRequests.groupId, groupId), eq(reviewRequests.authorAccountId, accountId), inArray(reviewRequests.status, ["open", "changes-requested"])))
     .returning({ id: reviewRequests.id });
   return { withdrawn: res.length };
+}
+
+// Storage-quota backstop (S3), part 2: the per-author cap in submitReviewRequest bounds count but not
+// age — a request can sit open/changes-requested (bytes retained) forever. This TTL sweep is the other
+// half: withdraw anything stale enough, same "clear bytes, keep row" shape as
+// withdrawRequestsForDepartedMember. Intended to be called periodically (see the admin /sweep route).
+export const STALE_REVIEW_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+export async function sweepStaleReviewRequests(db: AppDb, maxAgeMs: number, now: number = Date.now()): Promise<{ swept: number }> {
+  const cutoff = now - maxAgeMs;
+  const res = await db.update(reviewRequests)
+    .set({ status: "withdrawn", resolvedAtMs: now, archiveBytes: null })
+    .where(and(inArray(reviewRequests.status, ["open", "changes-requested"]), lt(reviewRequests.createdAtMs, cutoff)))
+    .returning({ id: reviewRequests.id });
+  return { swept: res.length };
 }

@@ -16,6 +16,7 @@ import type { UsageAttestation, GemAdoption } from "@agentgem/insight";
 import { recordBinding } from "@agentgem/aggregator";
 import { GitHubVerifier } from "@agentgem/aggregator";
 import { sweepQuarantine, sweepAdoptionQuarantine } from "@agentgem/aggregator";
+import { sweepStaleReviewRequests, STALE_REVIEW_TTL_MS } from "@agentgem/aggregator";
 import { issueKey, revokeKey, listKeys } from "@agentgem/aggregator";
 import { recordCatalogShare, upsertGemArchive, getGemArchive, catalogGemExists, latestGemVersion, archiveOnlyVersion, gemAccessInfo } from "@agentgem/aggregator";
 import { recordGamePlay, gamePlayCounts } from "@agentgem/aggregator";
@@ -112,6 +113,7 @@ const SweepBody = z.object({ apply: z.boolean().optional(), token: z.string() })
 const SweepReportSchema = z.object({
   clustersFound: z.number(), attestationsQuarantined: z.number(), producersFlagged: z.number(), dryRun: z.boolean(),
   adoptionsQuarantined: z.number(), adoptionGemsFlagged: z.number(), adoptionProducersFlagged: z.number(),
+  staleReviewRequestsSwept: z.number(),
 });
 const SweepResult = z.union([
   z.object({ ok: z.literal(true), report: SweepReportSchema }),
@@ -410,7 +412,10 @@ export class AggregatorController {
     if (!tokenEq(input.body.token, expected)) return { ok: false, rejected: "unauthorized" };
     const report = await sweepQuarantine(this.db, { dryRun: !input.body.apply });
     const ad = await sweepAdoptionQuarantine(this.db, { dryRun: !input.body.apply });
-    return { ok: true, report: { ...report, adoptionsQuarantined: ad.adoptionsQuarantined, adoptionGemsFlagged: ad.gemsFlagged, adoptionProducersFlagged: ad.producersFlagged } };
+    // sweepStaleReviewRequests has no dry-run mode of its own (it always withdraws what it matches),
+    // so honor the endpoint's dry-run default by only calling it when apply=true.
+    const stale = input.body.apply ? await sweepStaleReviewRequests(this.db, STALE_REVIEW_TTL_MS) : { swept: 0 };
+    return { ok: true, report: { ...report, adoptionsQuarantined: ad.adoptionsQuarantined, adoptionGemsFlagged: ad.gemsFlagged, adoptionProducersFlagged: ad.producersFlagged, staleReviewRequestsSwept: stale.swept } };
   }
 
   // Admin-only: mint an API key. Gated by AGGREGATOR_ADMIN_TOKEN (like /sweep). The plaintext

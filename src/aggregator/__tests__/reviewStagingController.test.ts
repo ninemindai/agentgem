@@ -25,8 +25,10 @@ function submitBody(s: ReturnType<typeof signer>, groupId: string, signedAt: num
 
 // A real signed /review/resubmit body, re-signed with reviewResubmitPayload (S1) — distinct from
 // both catalogSigningPayload and reviewSubmitPayload, and bound to `requestId` not `groupId`.
+// gemKey/version MUST match submitBody's (S2): resubmit rejects a mismatch against the target row's
+// own identity, set once at submit and never updated by resubmit.
 function resubmitBody(s: ReturnType<typeof signer>, requestId: string, signedAt: number, description?: string) {
-  const b = signedPublishBody(sampleGem(), s, { gemKey: "@team/bot", version: "1.0.1", signedAt });
+  const b = signedPublishBody(sampleGem(), s, { gemKey: "@team/bot", version: "1.0.0", signedAt });
   const signature = s.sign(reviewResubmitPayload(b.manifest, requestId, b.pubkey, signedAt));
   return { manifest: b.manifest, archiveBase64: b.archiveBase64, requestId, description, pubkey: b.pubkey, signedAt, signature, bytes: b.bytes, gemDigest: b.gemDigest };
 }
