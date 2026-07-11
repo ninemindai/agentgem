@@ -26,6 +26,46 @@ import { parseGamePath } from "./entityPath";
 export interface StarsCtx { signedIn: boolean; loginUrl: () => void; api: ReturnType<typeof makeStars> }
 export interface ReviewsCtx { signedIn: boolean; loginUrl: () => void; api: ReturnType<typeof makeReviews> }
 
+type Ctx = { api: ReturnType<typeof makeApi>; stars: StarsCtx; reviews: ReviewsCtx; me: Me | null };
+// match returns a truthy VALUE the render closure consumes (a RegExpMatchArray for regex routes,
+// the parsed game key `string` for games, `true` for exact-string panels/home), or null/false.
+type MatchVal = RegExpMatchArray | string | true;
+export type RouteDef = {
+  id: string;
+  kind: "home" | "panel" | "collection" | "profile" | "alias";
+  collection?: string;                 // the plural segment, for kind "collection"
+  match(path: string): MatchVal | null | false;
+  render(m: MatchVal, ctx: Ctx): React.ReactNode;
+  canonical?(path: string): string;    // aliases only: the plural URL to replaceState to
+};
+
+// The single source of truth for what paths this SPA serves. The Router iterates it (first match
+// wins, top to bottom — entity-before-collection order preserved); the conformance test enumerates
+// it. A NEW route MUST be added here, and pass the conformance rule (see Router.conformance.test).
+export const ROUTES: RouteDef[] = [
+  { id: "publish", kind: "panel", match: (p) => p === "/publish", render: (_m, c) => <Publish api={c.api} me={c.me} base={defaultApiBase()} /> },
+  // Signed-in guard lives inside Account itself (mirrors Publish's !me gate) rather than here.
+  { id: "account", kind: "panel", match: (p) => p === "/account", render: (_m, c) => <Account api={c.api} me={c.me} base={defaultApiBase()} /> },
+  { id: "sources", kind: "panel", match: (p) => p === "/sources", render: (_m, c) => <Sources api={c.api} /> },
+  // Miniapps is the home tab. "/minigames" is the old path, kept alive for shared links and the
+  // desktop deep-link; "/" is home. The ingredients board moved to its own "/ingredients".
+  { id: "home", kind: "home", match: (p) => p === "/" || p === "/miniapps" || p === "/minigames", render: (_m, c) => <Minigames api={c.api} stars={c.stars} /> },
+  { id: "games", kind: "collection", collection: "games", match: (p) => parseGamePath(p), render: (m, c) => <Play api={c.api} gemKey={m as string} /> },
+  { id: "gems-detail", kind: "collection", collection: "gems", match: (p) => p.match(/^\/gems\/(.+)$/), render: (m, c) => <Gem api={c.api} keyName={decodeURIComponent((m as RegExpMatchArray)[1])} stars={c.stars} me={c.me} /> },
+  { id: "gems", kind: "collection", collection: "gems", match: (p) => p === "/gems", render: (_m, c) => <Gems api={c.api} stars={c.stars} /> },
+  { id: "ingredients", kind: "collection", collection: "ingredients", match: (p) => p.match(/^\/ingredient\/(.+)$/), render: (m, c) => <Ingredient api={c.api} id={decodeURIComponent((m as RegExpMatchArray)[1])} stars={c.stars} /> },
+  // /skill/:sourceId/*path — the catalog-skill page (repo+path identity) hosting reviews + preview.
+  { id: "skills", kind: "collection", collection: "skills", match: (p) => p.match(/^\/skill\/([^/]+)\/(.+)$/), render: (m, c) => <CatalogSkill api={c.api} reviews={c.reviews} sourceId={decodeURIComponent((m as RegExpMatchArray)[1])} path={(m as RegExpMatchArray)[2]} /> },
+  { id: "profile", kind: "profile", match: (p) => p.match(/^\/@([^/]+)$/), render: (m, c) => <Profile api={c.api} login={decodeURIComponent((m as RegExpMatchArray)[1])} me={c.me} /> },
+  // Member-only team dashboard — must match before the public /orgs/:scope catalog.
+  { id: "org-usage", kind: "collection", collection: "orgs", match: (p) => p.match(/^\/orgs\/([^/]+)\/usage$/), render: (m, c) => <TeamUsage api={c.api} scope={decodeURIComponent((m as RegExpMatchArray)[1])} stars={c.stars} /> },
+  { id: "org", kind: "collection", collection: "orgs", match: (p) => p.match(/^\/orgs\/([^/]+)$/), render: (m, c) => <OrgCatalog api={c.api} scope={decodeURIComponent((m as RegExpMatchArray)[1])} /> },
+];
+
+// Declared classifications the conformance test checks against.
+export const COLLECTIONS = ["games", "gems", "ingredients", "skills", "orgs"];  // plural
+export const PANELS = ["publish", "account", "sources"];
+
 // Navigation is intercepted globally in App (same-origin <a> clicks → pushState + popstate),
 // so pages just use plain <a href> and this Router reacts to popstate.
 export function Router({ api, stars, reviews, me }: { api: ReturnType<typeof makeApi>; stars: StarsCtx; reviews: ReviewsCtx; me: Me | null }) {
@@ -36,38 +76,11 @@ export function Router({ api, stars, reviews, me }: { api: ReturnType<typeof mak
     return () => window.removeEventListener("popstate", onPop);
   }, []);
 
-  if (path === "/publish") return <Publish api={api} me={me} base={defaultApiBase()} />;
-  // Signed-in guard lives inside Account itself (mirrors Publish's !me gate) rather than here.
-  if (path === "/account") return <Account api={api} me={me} base={defaultApiBase()} />;
-  if (path === "/sources") return <Sources api={api} />;
-  // Miniapps is the home tab. "/minigames" is the old path, kept alive for shared links and the
-  // desktop deep-link; "/" is home. The ingredients board moved to its own "/ingredients".
-  if (path === "/" || path === "/miniapps" || path === "/minigames") return <Minigames api={api} stars={stars} />;
-
-  const gameKey = parseGamePath(path);
-  if (gameKey) return <Play api={api} gemKey={gameKey} />;
-
-  const gemDetail = path.match(/^\/gems\/(.+)$/);
-  if (gemDetail) return <Gem api={api} keyName={decodeURIComponent(gemDetail[1])} stars={stars} me={me} />;
-  if (path === "/gems") return <Gems api={api} stars={stars} />;
-
-  const ing = path.match(/^\/ingredient\/(.+)$/);
-  if (ing) return <Ingredient api={api} id={decodeURIComponent(ing[1])} stars={stars} />;
-
-  // /skill/:sourceId/*path — the catalog-skill page (repo+path identity) hosting reviews + preview.
-  const skill = path.match(/^\/skill\/([^/]+)\/(.+)$/);
-  if (skill) return <CatalogSkill api={api} reviews={reviews} sourceId={decodeURIComponent(skill[1])} path={skill[2]} />;
-
-  const prof = path.match(/^\/@([^/]+)$/);
-  if (prof) return <Profile api={api} login={decodeURIComponent(prof[1])} me={me} />;
-
-  // Member-only team dashboard — must match before the public /orgs/:scope catalog.
-  const orgUsage = path.match(/^\/orgs\/([^/]+)\/usage$/);
-  if (orgUsage) return <TeamUsage api={api} scope={decodeURIComponent(orgUsage[1])} stars={stars} />;
-
-  const org = path.match(/^\/orgs\/([^/]+)$/);
-  if (org) return <OrgCatalog api={api} scope={decodeURIComponent(org[1])} />;
-
+  const ctx: Ctx = { api, stars, reviews, me };
+  for (const r of ROUTES) {
+    const m = r.match(path);
+    if (m) return <>{r.render(m, ctx)}</>;   // m is a truthy MatchVal here
+  }
   return (
     <>
       <PopularSkills api={api} stars={stars} reviews={reviews} />
