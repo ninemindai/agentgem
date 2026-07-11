@@ -19,7 +19,11 @@ import { sweepQuarantine, sweepAdoptionQuarantine } from "@agentgem/aggregator";
 import { issueKey, revokeKey, listKeys } from "@agentgem/aggregator";
 import { recordCatalogShare, upsertGemArchive, getGemArchive, catalogGemExists, latestGemVersion, archiveOnlyVersion, gemAccessInfo } from "@agentgem/aggregator";
 import { recordGamePlay, gamePlayCounts } from "@agentgem/aggregator";
-import { resolveSignedAccount, gemStatusFor, gemStatusSigningPayload } from "@agentgem/aggregator";
+import { resolveSignedAccount, gemStatusFor, gemStatusSigningPayload, catalogSigningPayload, reviewActionPayload } from "@agentgem/aggregator";
+import {
+  submitReviewRequest, resubmitReviewRequest, listInbox, getReviewRequest, getReviewArchive,
+  addReviewMessage, approveReviewRequest, requestChanges, withdrawReviewRequest, markSeen,
+} from "@agentgem/aggregator";
 import { importGem } from "@agentgem/distribute";
 import { GameGenreEnum } from "./schemas.js";
 
@@ -157,6 +161,24 @@ const GamePlayBody = z.object({ gemKey: z.string(), version: z.string(), visitor
 const GamePlayResult = z.object({ ok: z.literal(true) });
 const GamePlaysQuery = z.object({ keys: z.string().optional() });
 const GamePlaysResult = z.object({ items: z.array(z.object({ gemKey: z.string(), plays: z.number() })) });
+
+const ReviewManifestWrite = z.object({
+  manifest: CatalogManifestSchema, archiveBase64: z.string(), groupId: z.string().uuid(),
+  description: z.string().max(4000).optional(), pubkey: z.string(), signedAt: z.number(), signature: z.string(),
+});
+const ReviewResubmit = z.object({
+  requestId: z.string().uuid(), manifest: CatalogManifestSchema, archiveBase64: z.string(),
+  description: z.string().max(4000).optional(), pubkey: z.string(), signedAt: z.number(), signature: z.string(),
+});
+const ReviewSigned = z.object({ requestId: z.string().uuid(), pubkey: z.string(), signedAt: z.number(), signature: z.string() });
+const ReviewMessageBody = ReviewSigned.extend({ body: z.string().min(1).max(4000) });
+const ReviewInboxBody = z.object({ pubkey: z.string(), signedAt: z.number(), signature: z.string() });
+
+const ReviewSubmitResult = z.object({ ok: z.boolean(), requestId: z.string().optional(), rejected: z.string().optional() });
+const ReviewActionResult = z.object({ ok: z.boolean(), gemKey: z.string().optional(), version: z.string().optional(), rejected: z.string().optional() });
+const ReviewInboxResult = z.object({ requests: z.array(z.any()) });
+const ReviewDetailResult = z.object({ request: z.any().nullable() });
+const ReviewArchiveResult = z.object({ archiveBase64: z.string().nullable() });
 
 // Constant-time token compare (length-guarded so timingSafeEqual never throws on mismatched lengths).
 function tokenEq(a: string, b: string): boolean {
@@ -420,5 +442,109 @@ export class AggregatorController {
       id: k.id, label: k.label, createdAt: k.createdAt.toISOString(), revokedAt: k.revokedAt ? k.revokedAt.toISOString() : null,
     }));
     return { ok: true, keys };
+  }
+
+  // Shared account resolution for every /review/* route: verify the signature over `payload`
+  // (which each caller builds from either catalogSigningPayload (manifest writes) or
+  // reviewActionPayload (action verb + requestId)) and resolve it to an authorizing accounts.id.
+  // Fail-closed: an unbound/unresolvable/stale/bad key is always a 401, never a silent no-op.
+  private async signedAccount(payload: string, body: { pubkey: string; signedAt: number; signature: string }) {
+    const who = await resolveSignedAccount(this.db, { pubkey: body.pubkey, payload, signedAt: body.signedAt, signature: body.signature });
+    if (!who.ok) throw new AgentError("not authorized", { status: 401, code: "review_unauthorized", retryable: false });
+    return who; // { ok:true, accountId, login }
+  }
+
+  // Submit a draft gem to a group for review. D3: the manifest's advertised digest MUST match the
+  // real archive bytes, so a staged (and later published) row never claims a hash its bytes don't
+  // have — mirrors /publish-gem's guard exactly.
+  @post("/review/request", { body: ReviewManifestWrite, response: ReviewSubmitResult })
+  async reviewRequest(input: { body: z.infer<typeof ReviewManifestWrite> }): Promise<z.infer<typeof ReviewSubmitResult>> {
+    const b = input.body;
+    const who = await this.signedAccount(catalogSigningPayload(b.manifest, b.pubkey, b.signedAt), b);
+    const bytes = new Uint8Array(Buffer.from(b.archiveBase64, "base64"));
+    let digest: string;
+    try {
+      digest = importGem(Buffer.from(bytes)).meta.gemDigest; // throws on tamper / bad lock
+    } catch {
+      throw new AgentError("invalid gem archive", { status: 400, code: "invalid_archive", retryable: false });
+    }
+    if (b.manifest.gemDigest !== digest) throw new AgentError("manifest digest does not match archive", { status: 400, code: "review_digest_mismatch", retryable: false });
+    const r = await submitReviewRequest(this.db, { accountId: who.accountId, groupId: b.groupId, manifest: b.manifest, archiveBytes: bytes, archiveDigest: digest, description: b.description });
+    return r.ok ? { ok: true, requestId: r.requestId } : { ok: false, rejected: r.rejected };
+  }
+
+  // The author resubmits new bytes/manifest after changes were requested. Same D3 digest guard as submit.
+  @post("/review/resubmit", { body: ReviewResubmit, response: ReviewActionResult })
+  async reviewResubmit(input: { body: z.infer<typeof ReviewResubmit> }): Promise<z.infer<typeof ReviewActionResult>> {
+    const b = input.body;
+    const who = await this.signedAccount(catalogSigningPayload(b.manifest, b.pubkey, b.signedAt), b);
+    const bytes = new Uint8Array(Buffer.from(b.archiveBase64, "base64"));
+    let digest: string;
+    try {
+      digest = importGem(Buffer.from(bytes)).meta.gemDigest;
+    } catch {
+      throw new AgentError("invalid gem archive", { status: 400, code: "invalid_archive", retryable: false });
+    }
+    if (b.manifest.gemDigest !== digest) throw new AgentError("manifest digest does not match archive", { status: 400, code: "review_digest_mismatch", retryable: false }); // D3, mirrors submit
+    const r = await resubmitReviewRequest(this.db, { accountId: who.accountId, requestId: b.requestId, manifest: b.manifest, archiveBytes: bytes, archiveDigest: digest, description: b.description });
+    return r.ok ? { ok: true } : { ok: false, rejected: r.rejected };
+  }
+
+  // Open/changes-requested requests across every group the caller belongs to. POST (not GET) because
+  // the signature travels in the body, same reason /game-play is POST.
+  @post("/review/inbox", { body: ReviewInboxBody, response: ReviewInboxResult })
+  async reviewInbox(input: { body: z.infer<typeof ReviewInboxBody> }): Promise<z.infer<typeof ReviewInboxResult>> {
+    const who = await this.signedAccount(reviewActionPayload("inbox", "", input.body.pubkey, input.body.signedAt), input.body);
+    return { requests: await listInbox(this.db, who.accountId) };
+  }
+
+  @post("/review/get", { body: ReviewSigned, response: ReviewDetailResult })
+  async reviewGet(input: { body: z.infer<typeof ReviewSigned> }): Promise<z.infer<typeof ReviewDetailResult>> {
+    const who = await this.signedAccount(reviewActionPayload("get", input.body.requestId, input.body.pubkey, input.body.signedAt), input.body);
+    await markSeen(this.db, who.accountId, input.body.requestId); // opening the detail marks it read
+    return { request: await getReviewRequest(this.db, who.accountId, input.body.requestId) };
+  }
+
+  @post("/review/archive", { body: ReviewSigned, response: ReviewArchiveResult })
+  async reviewArchive(input: { body: z.infer<typeof ReviewSigned> }): Promise<z.infer<typeof ReviewArchiveResult>> {
+    const who = await this.signedAccount(reviewActionPayload("archive", input.body.requestId, input.body.pubkey, input.body.signedAt), input.body);
+    const a = await getReviewArchive(this.db, who.accountId, input.body.requestId);
+    return { archiveBase64: a ? Buffer.from(a.bytes).toString("base64") : null };
+  }
+
+  @post("/review/message", { body: ReviewMessageBody, response: ReviewActionResult })
+  async reviewMessage(input: { body: z.infer<typeof ReviewMessageBody> }): Promise<z.infer<typeof ReviewActionResult>> {
+    const b = input.body;
+    const who = await this.signedAccount(reviewActionPayload("message:" + b.body, b.requestId, b.pubkey, b.signedAt), b);
+    const r = await addReviewMessage(this.db, { accountId: who.accountId, requestId: b.requestId, body: b.body });
+    return r.ok ? { ok: true } : { ok: false, rejected: r.rejected };
+  }
+
+  @post("/review/approve", { body: ReviewSigned, response: ReviewActionResult })
+  async reviewApprove(input: { body: z.infer<typeof ReviewSigned> }): Promise<z.infer<typeof ReviewActionResult>> {
+    const who = await this.signedAccount(reviewActionPayload("approve", input.body.requestId, input.body.pubkey, input.body.signedAt), input.body);
+    const r = await approveReviewRequest(this.db, { accountId: who.accountId, requestId: input.body.requestId });
+    return r.ok ? { ok: true, gemKey: r.gemKey, version: r.version } : { ok: false, rejected: r.rejected };
+  }
+
+  @post("/review/changes", { body: ReviewSigned, response: ReviewActionResult })
+  async reviewChanges(input: { body: z.infer<typeof ReviewSigned> }): Promise<z.infer<typeof ReviewActionResult>> {
+    const who = await this.signedAccount(reviewActionPayload("changes", input.body.requestId, input.body.pubkey, input.body.signedAt), input.body);
+    const r = await requestChanges(this.db, { accountId: who.accountId, requestId: input.body.requestId });
+    return r.ok ? { ok: true } : { ok: false, rejected: r.rejected };
+  }
+
+  @post("/review/withdraw", { body: ReviewSigned, response: ReviewActionResult })
+  async reviewWithdraw(input: { body: z.infer<typeof ReviewSigned> }): Promise<z.infer<typeof ReviewActionResult>> {
+    const who = await this.signedAccount(reviewActionPayload("withdraw", input.body.requestId, input.body.pubkey, input.body.signedAt), input.body);
+    const r = await withdrawReviewRequest(this.db, { accountId: who.accountId, requestId: input.body.requestId });
+    return r.ok ? { ok: true } : { ok: false, rejected: r.rejected };
+  }
+
+  @post("/review/seen", { body: ReviewSigned, response: ReviewActionResult })
+  async reviewSeen(input: { body: z.infer<typeof ReviewSigned> }): Promise<z.infer<typeof ReviewActionResult>> {
+    const who = await this.signedAccount(reviewActionPayload("seen", input.body.requestId, input.body.pubkey, input.body.signedAt), input.body);
+    await markSeen(this.db, who.accountId, input.body.requestId);
+    return { ok: true };
   }
 }
