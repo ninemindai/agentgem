@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { scanArtifactUsage } from "../optimizeScan.js";
+import { scanArtifactUsage, optimizeUsageMap, type IndexedUsageArtifact } from "../optimizeScan.js";
 import type { ConfigInventory } from "@agentgem/model";
 
 let dir: string;
@@ -38,5 +38,25 @@ describe("scanArtifactUsage cwd filter", () => {
     const scoped = scanArtifactUsage(inv, dir, "/repo/a");
     expect(all.get("skill:alpha")?.invocations).toBe(2);
     expect(scoped.get("skill:alpha")?.invocations).toBe(1);
+  });
+});
+
+describe("optimizeUsageMap (indexed global-usage adapter)", () => {
+  const rows: IndexedUsageArtifact[] = [
+    { type: "skill", name: "alpha", root: null, invocations: 3, sessionsUsedIn: 2, lastUsedMs: 111 },
+    { type: "mcp_server", name: "ctx7", root: null, invocations: 1, sessionsUsedIn: 1, lastUsedMs: 222 },
+    { type: "hook", name: "some-hook", root: null, invocations: 9, sessionsUsedIn: 4, lastUsedMs: 333 },
+  ];
+
+  it("keys skill/mcp rows by `${type}:${name}` and preserves usage fields", () => {
+    const map = optimizeUsageMap(rows);
+    expect(map.get("skill:alpha")).toMatchObject({ type: "skill", name: "alpha", invocations: 3, lastUsedMs: 111, confidence: "high" });
+    expect(map.get("mcp_server:ctx7")).toMatchObject({ type: "mcp_server", name: "ctx7", invocations: 1, lastUsedMs: 222 });
+  });
+
+  it("drops non skill/mcp artifacts (hooks are not part of the Optimize view)", () => {
+    const map = optimizeUsageMap(rows);
+    expect(map.has("hook:some-hook")).toBe(false);
+    expect(map.size).toBe(2);
   });
 });
