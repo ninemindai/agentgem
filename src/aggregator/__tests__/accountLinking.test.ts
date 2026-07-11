@@ -187,8 +187,22 @@ describe("accountFreshness (the C-guard over every accounts.id FK)", () => {
       await db.execute(sql`insert into groups (id, kind, name) values (${groupId}, 'native', 'g')`);
       await db.execute(sql`insert into group_members (group_id, account_id, via_invite, invite_role) values (${groupId}, ${id}, true, 'member')`);
     }],
+    // group_owner is `groups.created_by = id` — a groups row owned by the tested account. group_owner
+    // is checked before group_invite in FRESHNESS_CHECKS, so this case must NOT also seed a
+    // group_invites row (that would still resolve to "group_owner" and not discriminate it from
+    // group_invite below).
+    ["group_owner", (db: any, id: string) => db.execute(sql`insert into groups (id, kind, name, created_by) values (gen_random_uuid(), 'native', 'g', ${id})`)],
+    // group_invite is `group_invites.created_by = id`. The backing groups row must NOT be owned by
+    // `id` (created_by left null here) or the earlier group_owner check would fire first and mask
+    // this case.
+    ["group_invite", async (db: any, id: string) => {
+      const groupId = crypto.randomUUID();
+      await db.execute(sql`insert into groups (id, kind, name) values (${groupId}, 'native', 'g')`);
+      await db.execute(sql`insert into group_invites (id, token_hash, group_id, expires_at, created_by) values (gen_random_uuid(), 'th-' || ${id}, ${groupId}, now() + interval '1 day', ${id})`);
+    }],
     ["account_scope", (db: any, id: string) => db.execute(sql`insert into account_scopes (account_id, scope, role) values (${id}, 'org', 'member')`)],
     ["usage", (db: any, id: string) => db.execute(sql`insert into usage_days (account_id, machine, scope, date) values (${id}, 'm', '', '2026-07-10')`)],
+    ["usage_model", (db: any, id: string) => db.execute(sql`insert into usage_day_models (account_id, machine, scope, date) values (${id}, 'm', '', '2026-07-10')`)],
     ["handoff", (db: any, id: string) => db.execute(sql`insert into handoff_codes (code_hash, account_id, expires_at) values ('h', ${id}, now())`)],
   ])("is NOT fresh when it has a %s", async (blocker, seed) => {
     const db = await makeTestDb();
