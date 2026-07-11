@@ -287,6 +287,7 @@ import { publishPlaybookCore } from "./gem/playbookPublishCore.js";
 import { postShare } from "./gem/shareClient.js";
 import { postCatalogShare, shareRejectedError } from "./gem/catalogShareClient.js";
 import { postGemPublish } from "./gem/gemPublishClient.js";
+import { postGemStatus } from "./gem/gemStatusClient.js";
 import { fetchHostedArchive, executableArtifacts, hasExecutable } from "./gem/hostedInstall.js";
 import { sanitizeShareText } from "@agentgem/insight";
 import { claudeTranscriptsForCwd, scanWorkflow, allClaudeTranscripts, bucketTranscriptsByCwd } from "@agentgem/insight";
@@ -395,6 +396,9 @@ function decorateInventory(inv: ConfigInventory, defer: boolean): ConfigInventor
   }
   return inv; // inv.projects[] is deliberately untouched: no project-scoped entity path exists yet
 }
+
+const PublishStatusQuerySchema = z.object({ workspace: z.string(), scope: z.string(), name: z.string().optional() });
+const PublishStatusResponseSchema = z.object({ exists: z.boolean(), ownedByMe: z.boolean(), latestVersion: z.string().nullable() });
 
 @api({ basePath: "/api" })
 export class GemController {
@@ -640,6 +644,16 @@ export class GemController {
         return r;
       },
     });
+  }
+
+  // Pre-flight for the publish dialog: is this workspace's gem already published, do we own it, and
+  // what's the latest version? Signs with the local producer key (like publishSetup). Same gemKey
+  // derivation as publishSetup so the check matches what publish will write.
+  @get("/publish-status", { query: PublishStatusQuerySchema, response: PublishStatusResponseSchema })
+  async publishStatus(input: { query: z.infer<typeof PublishStatusQuerySchema> }): Promise<z.infer<typeof PublishStatusResponseSchema>> {
+    const q = input.query;
+    const gemKey = `${q.scope}/${q.name ?? q.workspace}`;
+    return postGemStatus({ gemKey, identity: loadOrCreateIdentity() });
   }
 
   // Zero-config install: download a shared gem's archive from the hosted aggregator (no registry
