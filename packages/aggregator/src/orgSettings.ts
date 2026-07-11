@@ -40,6 +40,31 @@ export async function putOrgSettings(db: AppDb, scope: string, values: { retenti
   return getOrgSettings(db, scopeLc);
 }
 
+/** Atomically apply a PARTIAL settings update: only the fields present in `patch` change; the rest keep
+ *  their stored value. Read-merge-write in one transaction with a row lock so two admins editing
+ *  different fields concurrently can't clobber each other (the old handler did get→merge→put across two
+ *  statements, losing one change under concurrency). */
+export async function patchOrgSettings(
+  db: AppDb,
+  scope: string,
+  patch: { retentionDays?: number | null; dashboardEnabled?: boolean },
+  updatedBy: string,
+  nowMs: number = Date.now(),
+): Promise<OrgSettings> {
+  const scopeLc = scope.toLowerCase();
+  const retentionDays = await db.transaction(async (tx) => {
+    const cur = (await tx.select().from(orgSettings).where(eq(orgSettings.scope, scopeLc)).for("update").limit(1))[0];
+    const nextRetention = "retentionDays" in patch ? patch.retentionDays! : (cur?.retentionDays ?? null);
+    const nextDashboard = "dashboardEnabled" in patch ? patch.dashboardEnabled! : (cur?.dashboardEnabled ?? true);
+    await tx.insert(orgSettings)
+      .values({ scope: scopeLc, retentionDays: nextRetention, dashboardEnabled: nextDashboard, updatedBy })
+      .onConflictDoUpdate({ target: [orgSettings.scope], set: { retentionDays: nextRetention, dashboardEnabled: nextDashboard, updatedBy, updatedAt: new Date(nowMs) } });
+    return nextRetention;
+  });
+  await applyRetention(db, scopeLc, retentionDays, nowMs);
+  return getOrgSettings(db, scopeLc);
+}
+
 /** Delete this org's usage rows older than the retention window. No-op for null (keep forever).
  *  Scope-bounded on purpose: retention is an ORG policy, so it must never touch rows attributed
  *  to other scopes (or unattributed personal rows). */

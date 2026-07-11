@@ -12,7 +12,7 @@
 import type { AppDb, makeAuth } from "@agentgem/aggregator";
 import {
   resolveSession, resolveOrgAccess, normalizeUsageReport, normalizeUsageModels, recordUsageDays, recordUsageModels,
-  buildOrgUsage, getOrgSettings, putOrgSettings, normalizeRetentionDays, applyRetentionForScopes,
+  buildOrgUsage, getOrgSettings, patchOrgSettings, normalizeRetentionDays, applyRetentionForScopes,
   RANGE_DAYS, type OrgUsageRange,
 } from "@agentgem/aggregator";
 
@@ -106,19 +106,19 @@ export function orgSettingsHandler(deps: UsageDeps) {
       // concurrent admins safe (changing retention can't clobber a visibility flip made from
       // another tab) and keeps retention-only clients (pre-toggle bundles) working.
       const body = req.body ?? {};
-      const current = await getOrgSettings(deps.db, scope);
-      let retentionDays = current.retentionDays;
+      // Build a PARTIAL patch (only the validated fields the caller sent); patchOrgSettings merges it
+      // atomically so two admins editing different fields concurrently can't clobber each other.
+      const patch: { retentionDays?: number | null; dashboardEnabled?: boolean } = {};
       if ("retentionDays" in body) {
         const norm = normalizeRetentionDays(body.retentionDays);
         if (norm === undefined) { res.status(400).json({ error: "retentionDays must be null or 7–730" }); return; }
-        retentionDays = norm;
+        patch.retentionDays = norm;
       }
-      let dashboardEnabled = current.dashboardEnabled;
       if ("dashboardEnabled" in body) {
         if (typeof body.dashboardEnabled !== "boolean") { res.status(400).json({ error: "dashboardEnabled must be a boolean" }); return; }
-        dashboardEnabled = body.dashboardEnabled;
+        patch.dashboardEnabled = body.dashboardEnabled;
       }
-      const saved = await putOrgSettings(deps.db, scope, { retentionDays, dashboardEnabled }, who.login);
+      const saved = await patchOrgSettings(deps.db, scope, patch, who.login);
       res.json({ ...saved, viewerRole: role });
       return;
     }
