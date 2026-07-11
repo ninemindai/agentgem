@@ -51,6 +51,7 @@ export * from "./atif/atifExport.js";
 export * from "./goldmineContext.js";
 export * from "./cachedCompute.js";
 export * from "./rubrics.js";
+export * from "./rubricArtifact.js";
 export * from "./criterionJudge.js";
 export * from "./rubricReport.js";
 export * from "./dashboardRender.js";
