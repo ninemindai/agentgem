@@ -12,12 +12,13 @@ import { createHash } from "node:crypto";
 import { basename, join } from "node:path";
 import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { introspectConfig, introspectProject } from "@agentgem/capture";
-import { resolveDirs, resolveProject } from "@agentgem/model";
+import { resolveDirs, resolveProject, type Gem, type RubricArtifact } from "@agentgem/model";
 import {
   claudeTranscriptsForCwd, allClaudeTranscripts, scanWorkflow,
   transcriptToken, readAnalysisCacheEntry, writeAnalysisCache,
   computeCached, type CacheHit,
   builtinRubrics, loadRubrics, validateRubric, defaultRubricsDir, evaluateRubric,
+  artifactToRubric,
   DETECTORS, loadRuleDetectors,
   type Rubric, type RubricScope, type RubricReport, type WorkflowSignal, type AcpConnectFn,
 } from "@agentgem/insight";
@@ -118,6 +119,29 @@ export function deleteRubric(id: string, dir = defaultRubricsDir()): { deleted: 
   if (builtinRubrics().some((b) => b.id === id)) return { deleted: false, error: "Cannot delete a built-in rubric." };
   try { rmSync(join(dir, `${id}.json`)); return { deleted: true }; }
   catch { return { deleted: false, error: "No such user rubric." }; }
+}
+
+/**
+ * Install a gem's rubric artifacts into the rubric store (~/.agentgem/rubrics),
+ * where loadRubrics already reads them. validateRubric is the authority (bad
+ * rubrics are skipped); a built-in id is never overwritten. Returns the ids
+ * written and the names skipped. Callers wire this into an install flow (Phase 2).
+ */
+export function installRubricGem(gem: Gem, dir = defaultRubricsDir()): { installed: string[]; skipped: string[] } {
+  const builtinIds = new Set(builtinRubrics().map((r) => r.id));
+  const reserved = new Set(rubricRegistry().map((s) => s.id));
+  const installed: string[] = [];
+  const skipped: string[] = [];
+  for (const art of gem.artifacts) {
+    if (art.type !== "rubric") continue;
+    const rubricArt = art as RubricArtifact;
+    const rubric = validateRubric(artifactToRubric(rubricArt), reserved);
+    if (!rubric || builtinIds.has(rubric.id)) { skipped.push(rubricArt.name); continue; }
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, `${rubric.id}.json`), JSON.stringify(rubric, null, 2));
+    installed.push(rubric.id);
+  }
+  return { installed, skipped };
 }
 
 function selectPaths(scope: RubricScope, claudeDir: string): string[] {
