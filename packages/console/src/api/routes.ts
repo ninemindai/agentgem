@@ -965,13 +965,6 @@ export const playDeleteRoute = defineRoute("POST", "/api/play/delete", {
 export const playPublishRoute = defineRoute("POST", "/api/play/publish", {
   body: z.object({ remote: z.string().url().optional() }), response: z.object({ ok: z.boolean() }),
 });
-// Light unlisted share: mint/revoke an unlisted /games/<id> link for a miniapp's archive.
-export const shareMiniappRoute = defineRoute("POST", "/api/play/share", {
-  body: z.object({ name: z.string() }), response: z.object({ url: z.string() }),
-});
-export const revokeMiniappRoute = defineRoute("POST", "/api/play/revoke", {
-  body: z.object({ name: z.string() }), response: z.object({ revoked: z.boolean() }),
-});
 // Host-brokered feed: a replay miniapp's source-session transcript, fetched on demand and postMessaged
 // into the sealed iframe by the Runner.
 export const playSessionDataRoute = defineRoute("GET", "/api/play/session-data", {
