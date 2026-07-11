@@ -922,7 +922,11 @@ export const playMiniappsRoute = defineRoute("GET", "/api/play/miniapps", {
 });
 export const playMiniappRoute = defineRoute("GET", "/api/play/miniapp", {
   query: z.object({ name: z.string() }),
-  response: z.object({ name: z.string(), html: z.string(), meta: z.object({ title: z.string(), genre: z.string(), createdFrom: PlaySourceSchema, engineVersion: z.string(), needs: PlayNeedsSchema }) }),
+  response: z.object({
+    name: z.string(), html: z.string(),
+    meta: z.object({ title: z.string(), genre: z.string(), createdFrom: PlaySourceSchema, engineVersion: z.string(), needs: PlayNeedsSchema }),
+    share: z.object({ shareId: z.string(), url: z.string(), sharedAtMs: z.number() }).optional(),
+  }),
 });
 // The built-in Protocol Inspector (never saved to the registry) — served as a constant by the API.
 export const playInspectorRoute = defineRoute("GET", "/api/play/inspector", {
@@ -954,6 +958,13 @@ export const playDeleteRoute = defineRoute("POST", "/api/play/delete", {
 });
 export const playPublishRoute = defineRoute("POST", "/api/play/publish", {
   body: z.object({ remote: z.string().url().optional() }), response: z.object({ ok: z.boolean() }),
+});
+// Light unlisted share: mint/revoke an unlisted /games/<id> link for a miniapp's archive.
+export const shareMiniappRoute = defineRoute("POST", "/api/play/share", {
+  body: z.object({ name: z.string() }), response: z.object({ url: z.string() }),
+});
+export const revokeMiniappRoute = defineRoute("POST", "/api/play/revoke", {
+  body: z.object({ name: z.string() }), response: z.object({ revoked: z.boolean() }),
 });
 // Host-brokered feed: a replay miniapp's source-session transcript, fetched on demand and postMessaged
 // into the sealed iframe by the Runner.
