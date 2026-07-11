@@ -250,6 +250,7 @@ export function Curate({ apiBase }: { apiBase: string }) {
 
   return (
     <div className="ledger">
+      <div className="obs-head"><h2 className="obs-title">Curate</h2></div>
       <div className="curate-tabs" role="tablist">
         <button
           type="button"
