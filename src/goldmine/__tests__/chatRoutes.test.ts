@@ -181,6 +181,95 @@ describe("chat routes", () => {
     expect(res.text).toContain("event: failed");
     expect(checkpoints).toEqual([]);
   });
+
+  it("POST /api/chat returns chatId, sessionId, and agent", async () => {
+    const app = await buildTestApp();
+    const res = await request(app)
+      .post("/api/chat")
+      .set("Content-Type", "application/json")
+      .send(JSON.stringify({ agentId: "claude-code", miniapp: "demo" }));
+    expect(res.status).toBe(200);
+    // makeFakeConnectFn's handle returns sessionId: "sess_fake" (see top of this file).
+    expect(res.body).toMatchObject({ chatId: expect.any(String), sessionId: "sess_fake", agent: "claude-code" });
+  });
+
+  it("GET /api/chat/:chatId/state reports liveness", async () => {
+    const app = await buildTestApp();
+    const created = await request(app)
+      .post("/api/chat")
+      .set("Content-Type", "application/json")
+      .send(JSON.stringify({ agentId: "claude-code", miniapp: "demo" }));
+    const chatId = created.body.chatId;
+
+    const live = await request(app).get(`/api/chat/${chatId}/state`);
+    expect(live.status).toBe(200);
+    expect(live.body).toMatchObject({ alive: true, running: false, sessionId: "sess_fake", agent: "claude-code" });
+
+    const dead = await request(app).get("/api/chat/chat_missing/state");
+    expect(dead.status).toBe(200);
+    expect(dead.body).toEqual({ alive: false });
+  });
+});
+
+// ── R1 regression: background completion survives a client disconnect ────────
+// supertest drives a real (in-process) HTTP server, so it cannot make a server-side res.write()
+// throw synchronously the way a broken client pipe eventually would. To exercise that exact edge,
+// this suite bypasses supertest/RestApplication for just this one route: it hands registerChatRoutes
+// a hand-rolled duck-typed `app` (matching the file's own App/Req/Res shapes) so it can capture the
+// raw handlers and invoke them directly with a `res` whose write() throws mid-stream.
+describe("[R1] chat stream background completion", () => {
+  it("finishes the turn + checkpoints even after the client disconnects", async () => {
+    let checkpointed = "";
+    let drained = 0;
+    let wrote = 0;
+    // Several frames so there IS a "mid-turn" to disconnect at.
+    const events = [
+      { type: "phase", phase: "running" },
+      { type: "delta", text: "a" },
+      { type: "delta", text: "b" },
+      { type: "done", result: { text: "ab", toolCalls: [] } },
+    ];
+    const fakeManager = {
+      openChat: async () => "chat_1",
+      stateOf: () => ({ alive: true, running: false, sessionId: "s", agent: "claude-code" }),
+      async *sendMessage() {
+        for (const e of events) { drained++; yield e; }
+      },
+    };
+
+    const routes: Record<string, (req: unknown, res: unknown) => unknown> = {};
+    const fakeApp = {
+      get: (path: string, _guard: unknown, handler: (req: unknown, res: unknown) => unknown) => { routes[`GET ${path}`] = handler; },
+      post: (path: string, _guard: unknown, handler: (req: unknown, res: unknown) => unknown) => { routes[`POST ${path}`] = handler; },
+      delete: (path: string, _guard: unknown, handler: (req: unknown, res: unknown) => unknown) => { routes[`DELETE ${path}`] = handler; },
+    };
+    registerChatRoutes(fakeApp as never, {
+      manager: fakeManager as unknown as ChatManager,
+      buildBrief: async () => "BRIEF",
+      goldmineMcp: () => [],
+      listAgents: () => [],
+      resolveStudio: () => ({ cwd: "/tmp/miniapp", brief: "STUDIO" }),
+      neutralCwd: "/neutral",
+      checkpointMiniapp: async (name: string) => { checkpointed = name; },
+    });
+
+    let chatId = "";
+    const postRes = { json: (b: { chatId: string }) => { chatId = b.chatId; }, status() { return this; }, setHeader() {}, write() {}, end() {} };
+    await routes["POST /api/chat"]({ body: { agentId: "claude-code", miniapp: "demo" }, query: {}, params: {} }, postRes);
+    expect(chatId).toBeTruthy();
+
+    // res.write() throws starting on the 2nd call — simulating the browser closing the SSE
+    // connection partway through the turn.
+    const streamRes = {
+      json() {}, status() { return this; }, setHeader() {},
+      write: () => { if (++wrote >= 2) throw new Error("EPIPE: socket closed"); },
+      end() {},
+    };
+    await routes["GET /api/chat/stream"]({ query: { chatId, message: "hi" }, body: {}, params: {} }, streamRes);
+
+    expect(drained).toBe(events.length);   // generator drained to completion despite the dead socket
+    expect(checkpointed).toBe("demo");      // checkpoint still ran after the turn (durability)
+  });
 });
 
 describe("POST /api/chat project launch (HTTP)", () => {
