@@ -215,7 +215,7 @@ describe("Account page", () => {
     }));
     vi.stubGlobal("location", { ...window.location, pathname: "/account", search: "?merge=1&handle=raymond" } as unknown as Location);
     render(<Account api={makeApi("https://api.x")} me={me} base="https://api.x" />);
-    const banner = await screen.findByText(/to claim @raymond, connect the account that owns it/i);
+    const banner = await screen.findByText(/that handle \(@raymond\) isn't available\. if you have another account that might own it, connect it below\./i);
     expect(banner).toBeTruthy();
     expect(banner.textContent).not.toMatch(/github|google/i);
   });
