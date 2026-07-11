@@ -15,7 +15,7 @@ import type { AppDb } from "./schema.js";
 import { accounts, catalogGems, reviewMessages, reviewRequests, reviewSeen, type ReviewStatus } from "./schema.js";
 import { groupMemberRole, listGroupsForAccount } from "./groups.js";
 import { accountOwnsScope } from "./webAuth.js";
-import { catalogGemExists, upsertCatalogGem, upsertGemArchive, type CatalogManifest } from "./catalog.js";
+import { catalogGemExists, clampGrade, upsertCatalogGem, upsertGemArchive, type CatalogManifest } from "./catalog.js";
 
 /** "@acme/bot" -> "acme"; "" for a malformed/slash-less key (caller rejects that as invalid-key
  *  first, so "" never reaches accountOwnsScope). The scope is everything between the leading "@"
@@ -241,7 +241,7 @@ export async function approveReviewRequest(db: AppDb, args: { accountId: string;
     await upsertCatalogGem(tx, {
       gemKey: row.gemKey, version: row.version, publishedBy: authorLogin, ownerAccountId: row.authorAccountId,
       author: m.author, description: m.description ?? row.description ?? undefined, tags: m.tags,
-      artifactKinds: m.artifactKinds, type: m.type, grade: m.grade, artifacts: m.artifacts, createdAtMs: now,
+      artifactKinds: m.artifactKinds, type: m.type, grade: clampGrade(m.grade), artifacts: m.artifacts, createdAtMs: now,
     });
     if (bytesRow?.bytes != null) {
       await upsertGemArchive(tx, { gemKey: row.gemKey, version: row.version, bytes: bytesRow.bytes, digest: row.archiveDigest, createdAtMs: now, ownerAccountId: row.authorAccountId });
@@ -287,18 +287,22 @@ export async function resubmitReviewRequest(
   if (!row) return { ok: false, rejected: "not-found" };
   if (row.status !== "changes-requested") return { ok: false, rejected: "not-changes-requested" };
   if (row.authorAccountId !== args.accountId) return { ok: false, rejected: "forbidden" };
-  const claimed = await db.update(reviewRequests)
-    .set({
-      status: "open", resolvedAtMs: null,
-      manifest: args.manifest as unknown as Record<string, unknown>,
-      archiveBytes: args.archiveBytes, archiveDigest: args.archiveDigest,
-      description: args.description ?? row.description ?? null,
-    })
-    .where(and(eq(reviewRequests.id, args.requestId), eq(reviewRequests.status, "changes-requested")))
-    .returning({ id: reviewRequests.id });
-  if (claimed.length === 0) return { ok: false, rejected: "not-changes-requested" };
-  await db.delete(reviewSeen).where(eq(reviewSeen.requestId, args.requestId)); // everyone's badge unread again
-  return { ok: true };
+  // Claim + seen-marker clear share one transaction (D5): a crash between the two writes must not
+  // leave stale review_seen markers pointing at a version nobody has actually reviewed.
+  return await db.transaction(async (tx): Promise<ResubmitResult> => {
+    const claimed = await tx.update(reviewRequests)
+      .set({
+        status: "open", resolvedAtMs: null,
+        manifest: args.manifest as unknown as Record<string, unknown>,
+        archiveBytes: args.archiveBytes, archiveDigest: args.archiveDigest,
+        description: args.description ?? row.description ?? null,
+      })
+      .where(and(eq(reviewRequests.id, args.requestId), eq(reviewRequests.status, "changes-requested")))
+      .returning({ id: reviewRequests.id });
+    if (claimed.length === 0) return { ok: false, rejected: "not-changes-requested" };
+    await tx.delete(reviewSeen).where(eq(reviewSeen.requestId, args.requestId)); // everyone's badge unread again
+    return { ok: true };
+  });
 }
 
 export type WithdrawResult = { ok: true } | { ok: false; rejected: "not-found" | "forbidden" | "not-open" };
