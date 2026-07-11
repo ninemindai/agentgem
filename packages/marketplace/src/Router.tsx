@@ -12,6 +12,7 @@ import { Gems } from "./pages/Gems";
 import { Gem } from "./pages/Gem";
 import { Publish } from "./pages/Publish";
 import { Profile } from "./pages/Profile";
+import { Account } from "./pages/Account";
 import { OrgCatalog } from "./pages/OrgCatalog";
 import { TeamUsage } from "./pages/TeamUsage";
 import { Sources } from "./pages/Sources";
@@ -36,6 +37,8 @@ export function Router({ api, stars, reviews, me }: { api: ReturnType<typeof mak
   }, []);
 
   if (path === "/publish") return <Publish api={api} me={me} base={defaultApiBase()} />;
+  // Signed-in guard lives inside Account itself (mirrors Publish's !me gate) rather than here.
+  if (path === "/account") return <Account api={api} me={me} base={defaultApiBase()} />;
   if (path === "/sources") return <Sources api={api} />;
   // Miniapps is the home tab. "/minigames" is the old path, kept alive for shared links and the
   // desktop deep-link; "/" is home. The ingredients board moved to its own "/ingredients".

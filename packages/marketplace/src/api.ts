@@ -152,6 +152,15 @@ export function makeApi(base: string) {
         return ((await res.json()) as { skills: OrgSkill[] }).skills;
       } catch { return null; }
     },
+    // Task 6's route: the providers linked to the caller's own account. Credentialed — 401s when
+    // signed out, which the caller (Account.tsx) never sends this from since the page itself is
+    // gated on `me`. Raw ids from better-auth's `account` table are provider-agnostic (e.g.
+    // "credential" if email/password sign-up is ever enabled) — the caller filters to the known set.
+    getAccountProviders: async (): Promise<{ connected: string[] }> => {
+      const res = await fetch(base + "/api/account/providers", { credentials: "include" });
+      if (!res.ok) throw new Error(`/api/account/providers -> ${res.status}`);
+      return JSON.parse(await res.text()) as { connected: string[] };
+    },
     getSources: () =>
       get<{ sources: CuratedSource[] }>(base, "/api/sources").then((r) => r.sources),
     getSourceDivisions: (source: string) =>
