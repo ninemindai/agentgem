@@ -504,13 +504,19 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
 
       // tool_result blocks live on USER messages, paired back to the step by
       // toolUseId. Outcome only (error/rejected booleans) — never the result
-      // content itself, which may carry arg/path/command text.
+      // content itself, which may carry arg/path/command text. No need to also
+      // check !rec?.isSidechain here: sidechain tool_use blocks are never pushed
+      // into `steps` (see the push above), so a sidechain result can never find
+      // a target to pair with.
       if (opts.retainSequences && role === "user" && Array.isArray(content)) {
         for (const block of content) {
           if (block?.type !== "tool_result" || typeof block.tool_use_id !== "string") continue;
           const target = steps.find((s) => s.toolUseId === block.tool_use_id);
           if (!target) continue;   // result for a capped/skipped/non-builtin call
           if (block.is_error === true) {
+            // Only the error path sets `error`; a successful (is_error: false)
+            // result leaves it undefined, so "no result yet" and "confirmed
+            // success" both read as undefined to a consumer (e.g. Task 2's detector).
             target.error = true;
             target.rejected = isDenialResult(block.content);
           }
