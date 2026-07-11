@@ -140,7 +140,7 @@ export function Account({ api, me, base }: { api: ReturnType<typeof makeApi>; me
     <div className="ex-card">
       <h2>Account</h2>
       {mergeNudgeHandle && (
-        <p className="ex-empty" role="status">To claim @{mergeNudgeHandle}, connect the account that owns it.</p>
+        <p className="ex-empty" role="status">That handle (@{mergeNudgeHandle}) isn&apos;t available. If you have another account that might own it, connect it below.</p>
       )}
       {collision && (
         <p className="ex-error" role="alert">
