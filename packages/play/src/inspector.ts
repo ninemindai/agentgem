@@ -148,6 +148,16 @@ export const INSPECTOR_HTML = `<!doctype html>
     }
     renderHostInfo();
 
+    // window.agentgemApp.ready flips true (and the initial hostContext lands) when the shim receives the
+    // ui/initialize RESULT — not a notification — so the boot-time renderHostInfo() above can't see it.
+    // Poll until ready flips, then a few more ticks to catch a late hostContext; give up after ~6s so a
+    // no-host render (a plain page load, or app.agentgem.ai) doesn't spin forever.
+    var hostinfoTicks = 0;
+    var hostinfoPoll = setInterval(function () {
+      renderHostInfo();
+      if ((app && app.ready) ? ++hostinfoTicks > 3 : ++hostinfoTicks > 20) clearInterval(hostinfoPoll);
+    }, 300);
+
     // Subscribe to every notification the shim dispatches, before the first frame — the host may push
     // tool-input/tool-result immediately after the handshake (see MINIAPP_BUILDER_BRIEF).
     if (app) {

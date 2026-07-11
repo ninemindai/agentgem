@@ -20,4 +20,11 @@ describe("protocol inspector", () => {
     const app = mcpAppFor({ name: INSPECTOR_META.name, html: INSPECTOR_HTML, meta: INSPECTOR_META });
     expect(app.resource.uri).toBe("ui://agentgem/__inspector");
   });
+
+  // ready/hostContext arrive with the ui/initialize RESULT, not a notification — the boot-time
+  // renderHostInfo() call can't see them, so a bounded poll re-renders the HOST panel until it does.
+  it("re-renders the HOST panel with a bounded poll (ready isn't a notification)", () => {
+    expect(INSPECTOR_HTML).toContain("setInterval");
+    expect(INSPECTOR_HTML).toContain("clearInterval");
+  });
 });
