@@ -798,6 +798,12 @@ export const publishSetupRoute = defineRoute("POST", "/api/publish-setup", {
   body: z.object({ workspace: z.string(), scope: z.string(), name: z.string().optional(), version: z.string(), description: z.string().optional(), tags: z.array(z.string()).optional(), provenance: z.string() }),
   response: z.object({ exploreRef: z.string(), version: z.string(), shareUrl: z.string() }),
 });
+// Pre-flight for the publish dialog: is this workspace's gem already published, do we own it, and
+// what's the latest version?
+export const publishStatusRoute = defineRoute("GET", "/api/publish-status", {
+  query: z.object({ workspace: z.string(), scope: z.string(), name: z.string().optional() }),
+  response: z.object({ exists: z.boolean(), ownedByMe: z.boolean(), latestVersion: z.string().nullable() }),
+});
 // Zero-config install of a hosted (shared) gem: the server downloads the archive from the hosted
 // aggregator and materializes it. consent=true is required when the gem has executable artifacts.
 export const installHostedRoute = defineRoute("POST", "/api/install-hosted", {
