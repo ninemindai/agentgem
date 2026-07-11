@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { makeTestDb, reviewRequests, upsertAccount, createNativeGroup, grantInvite, submitReviewRequest, upsertCatalogGem, accountScopes, listInbox, markSeen, getReviewRequest, getReviewArchive, addReviewMessage } from "@agentgem/aggregator";
+import { eq } from "drizzle-orm";
+import { makeTestDb, reviewRequests, upsertAccount, createNativeGroup, grantInvite, submitReviewRequest, upsertCatalogGem, accountScopes, listInbox, markSeen, getReviewRequest, getReviewArchive, addReviewMessage, approveReviewRequest, listCatalogGems, getGemArchive } from "@agentgem/aggregator";
 
 describe("review staging schema", () => {
   it("ensureSchema creates review_requests and the table accepts a row", async () => {
@@ -146,5 +147,67 @@ describe("request detail / messages / archive", () => {
     expect(await getReviewRequest(db, outsider.id, requestId)).toBeNull();
     expect(await getReviewArchive(db, outsider.id, requestId)).toBeNull();
     expect(await addReviewMessage(db, { accountId: outsider.id, requestId, body: "x" })).toEqual({ ok: false, rejected: "not-a-member" });
+  });
+});
+
+describe("approveReviewRequest", () => {
+  async function seedOpen() {
+    const db = await makeTestDb();
+    const author = await upsertAccount(db, { provider: "github", accountId: "a1", login: "alice" });
+    await ownScope(db, author.id);
+    const reviewer = await upsertAccount(db, { provider: "github", accountId: "r1", login: "rob" });
+    const g = await createNativeGroup(db, author.id, "Team");
+    await grantInvite(db, g.id, reviewer.id, "member");
+    const r = await submitReviewRequest(db, { accountId: author.id, groupId: g.id, manifest: mkManifest("@team/bot"), archiveBytes: new Uint8Array([7]), archiveDigest: "sha256:x", description: "d" }, 1000);
+    if (!r.ok) throw new Error("submit failed");
+    return { db, author, reviewer, g, requestId: r.requestId };
+  }
+
+  it("a member approval publishes the gem + archive and clears staging bytes", async () => {
+    const { db, reviewer, requestId } = await seedOpen();
+    const res = await approveReviewRequest(db, { accountId: reviewer.id, requestId }, 2000);
+    expect(res).toEqual({ ok: true, gemKey: "@team/bot", version: "1.0.0" });
+    const catalog = await listCatalogGems(db);
+    expect(catalog.find((c) => c.gemKey === "@team/bot")).toMatchObject({ publishedBy: "alice", installable: true });
+    const arch = await getGemArchive(db, "@team/bot", "1.0.0");
+    expect(Array.from(arch!.bytes)).toEqual([7]);
+    expect(await getReviewArchive(db, reviewer.id, requestId)).toBeNull(); // staging bytes cleared
+  });
+
+  it("blocks self-approval by the author", async () => {
+    const { db, author, requestId } = await seedOpen();
+    expect(await approveReviewRequest(db, { accountId: author.id, requestId })).toEqual({ ok: false, rejected: "self-approval" });
+  });
+
+  it("blocks a non-member", async () => {
+    const { db, requestId } = await seedOpen();
+    const outsider = await upsertAccount(db, { provider: "github", accountId: "x", login: "mallory" });
+    expect(await approveReviewRequest(db, { accountId: outsider.id, requestId })).toEqual({ ok: false, rejected: "not-a-member" });
+  });
+
+  it("a second approval is a no-op (not-open), gem published exactly once", async () => {
+    const { db, reviewer, requestId } = await seedOpen();
+    const first = await approveReviewRequest(db, { accountId: reviewer.id, requestId }, 2000);
+    expect(first.ok).toBe(true);
+    const second = await approveReviewRequest(db, { accountId: reviewer.id, requestId }, 2001);
+    expect(second).toEqual({ ok: false, rejected: "not-open" });
+  });
+
+  it("rejects with conflict when the (key,version) is already owned by someone else", async () => {
+    const { db, reviewer, requestId } = await seedOpen();
+    const other = await upsertAccount(db, { provider: "github", accountId: "o2", login: "otto" });
+    await upsertCatalogGem(db, { gemKey: "@team/bot", version: "1.0.0", publishedBy: "otto", createdAtMs: 1, ownerAccountId: other.id });
+    expect(await approveReviewRequest(db, { accountId: reviewer.id, requestId }, 2000)).toEqual({ ok: false, rejected: "conflict" });
+    // transition rolled back — still open
+    const detail = await getReviewRequest(db, reviewer.id, requestId);
+    expect(detail?.status).toBe("open");
+  });
+
+  it("re-checks scope ownership at approval: rejects if the author lost the scope since submitting", async () => {
+    const { db, author, reviewer, requestId } = await seedOpen();
+    // Author owned `team` at submit; now they lose it (e.g. left the org). Approval must re-check.
+    await db.delete(accountScopes).where(eq(accountScopes.accountId, author.id));
+    expect(await approveReviewRequest(db, { accountId: reviewer.id, requestId }, 2000)).toEqual({ ok: false, rejected: "not-scope-owner" });
+    expect((await getReviewRequest(db, reviewer.id, requestId))?.status).toBe("open"); // rolled back
   });
 });

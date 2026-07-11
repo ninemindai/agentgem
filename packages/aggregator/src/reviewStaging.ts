@@ -12,10 +12,10 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import type { AppDb } from "./schema.js";
-import { accounts, reviewMessages, reviewRequests, reviewSeen, type ReviewStatus } from "./schema.js";
+import { accounts, catalogGems, reviewMessages, reviewRequests, reviewSeen, type ReviewStatus } from "./schema.js";
 import { groupMemberRole, listGroupsForAccount } from "./groups.js";
 import { accountOwnsScope } from "./webAuth.js";
-import { catalogGemExists, type CatalogManifest } from "./catalog.js";
+import { catalogGemExists, upsertCatalogGem, upsertGemArchive, type CatalogManifest } from "./catalog.js";
 
 /** "@acme/bot" -> "acme"; "" for a malformed/slash-less key (caller rejects that as invalid-key
  *  first, so "" never reaches accountOwnsScope). The scope is everything between the leading "@"
@@ -171,4 +171,76 @@ export async function addReviewMessage(db: AppDb, args: { accountId: string; req
   const id = randomUUID();
   await db.insert(reviewMessages).values({ id, requestId: args.requestId, authorAccountId: args.accountId, body: args.body, createdAtMs: now });
   return { ok: true, messageId: id };
+}
+
+export type ApproveResult =
+  | { ok: true; gemKey: string; version: string }
+  | { ok: false; rejected: "not-found" | "not-a-member" | "self-approval" | "not-open" | "not-scope-owner" | "conflict" };
+
+/** The crux of the review flow: approve `requestId` on behalf of `accountId` and, iff every guard
+ *  passes, PUBLISH it (catalog_gems + gem_archives) atomically with the open->approved claim.
+ *
+ *  Guard order matters:
+ *    1. membership + not-found (loadForMember)              -- read, before the tx
+ *    2. not the author (no self-approval)                   -- read, before the tx
+ *    3. status === "open"                                   -- read, before the tx (fails fast)
+ *    4. the AUTHOR still owns the gem's scope (D2 re-check)  -- read, before the tx
+ *    5. no catalog owner-conflict for (gemKey, version)      -- read, INSIDE the tx
+ *    6. atomic open->approved claim (conditional UPDATE)     -- write, INSIDE the tx
+ *    7. publish: upsertCatalogGem + upsertGemArchive         -- write, INSIDE the tx
+ *  Steps 5-7 share one `db.transaction` (D5): if the claim loses the race, or the conflict guard
+ *  fires, the function returns from inside the transaction callback WITHOUT having written
+ *  anything, so nothing to roll back and the request is left `open`. If a write after the claim
+ *  were to fail, the transaction rolls the claim back too — a catalog row never appears without
+ *  its archive, and a "claimed" request is never left stuck.
+ */
+export async function approveReviewRequest(db: AppDb, args: { accountId: string; requestId: string }, now: number = Date.now()): Promise<ApproveResult> {
+  const load = await loadForMember(db, args.accountId, args.requestId);
+  if (load.kind === "not-found") return { ok: false, rejected: "not-found" };
+  if (load.kind === "not-a-member") return { ok: false, rejected: "not-a-member" };
+  const row = load.row;
+  if (row.authorAccountId === args.accountId) return { ok: false, rejected: "self-approval" };
+  if (row.status !== "open") return { ok: false, rejected: "not-open" };
+
+  // Re-apply the AUTHOR's scope ownership AT APPROVAL (D2): the author is the publisher, and they may
+  // have lost the scope (left the org) since submitting. Publish is a different code path than submit,
+  // so the submit-time check must not be trusted here.
+  if (!(await accountOwnsScope(db, row.authorAccountId, gemScope(row.gemKey)))) return { ok: false, rejected: "not-scope-owner" };
+
+  // The owner-conflict re-check + atomic claim + BOTH publish writes run in ONE transaction, so a
+  // mid-publish failure rolls the claim back — we never leave a catalog row without its archive, nor a
+  // claimed request with no publish (D5). upsertCatalogGem/upsertGemArchive accept the tx handle
+  // (PgTransaction is assignable to AppDb). A clean early return commits (only harmless reads / a
+  // 0-row update happened), so conflict/not-open still leave the request `open`.
+  return await db.transaction(async (tx): Promise<ApproveResult> => {
+    // Owner-conflict guard INSIDE the tx: an intervening publish of the same key/version by another
+    // account must not be overwritten, and the check must be consistent with our own write.
+    const existing = (await tx.select({ ownerAccountId: catalogGems.ownerAccountId }).from(catalogGems)
+      .where(and(eq(catalogGems.gemKey, row.gemKey), eq(catalogGems.version, row.version))).limit(1))[0];
+    if (existing && existing.ownerAccountId !== row.authorAccountId) return { ok: false, rejected: "conflict" };
+
+    // Fetch bytes BEFORE the claim (which nulls the column); loadForMember excludes them for perf (D4).
+    const bytesRow = (await tx.select({ bytes: reviewRequests.archiveBytes }).from(reviewRequests)
+      .where(eq(reviewRequests.id, args.requestId)).limit(1))[0];
+
+    // Atomic claim: only the row still `open` flips. A concurrent approve/withdraw updates 0 rows -> not-open.
+    const claimed = await tx.update(reviewRequests)
+      .set({ status: "approved", resolvedAtMs: now, archiveBytes: null })
+      .where(and(eq(reviewRequests.id, args.requestId), eq(reviewRequests.status, "open")))
+      .returning({ id: reviewRequests.id });
+    if (claimed.length === 0) return { ok: false, rejected: "not-open" };
+
+    // Publish through the normal functions. publishedBy/owner are the AUTHOR's, never the approver's.
+    const authorLogin = (await tx.select({ login: accounts.login }).from(accounts).where(eq(accounts.id, row.authorAccountId)).limit(1))[0]?.login ?? row.authorAccountId;
+    const m = row.manifest as unknown as CatalogManifest;
+    await upsertCatalogGem(tx, {
+      gemKey: row.gemKey, version: row.version, publishedBy: authorLogin, ownerAccountId: row.authorAccountId,
+      author: m.author, description: m.description ?? row.description ?? undefined, tags: m.tags,
+      artifactKinds: m.artifactKinds, type: m.type, grade: m.grade, artifacts: m.artifacts, createdAtMs: now,
+    });
+    if (bytesRow?.bytes != null) {
+      await upsertGemArchive(tx, { gemKey: row.gemKey, version: row.version, bytes: bytesRow.bytes, digest: row.archiveDigest, createdAtMs: now, ownerAccountId: row.authorAccountId });
+    }
+    return { ok: true, gemKey: row.gemKey, version: row.version };
+  });
 }
