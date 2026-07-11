@@ -290,13 +290,17 @@ async function doSyncRouted(
   }
 
   // Streamed: the producer parses `changed` off-thread; we write each batch in its own
-  // transaction, yielding between so a small concurrent request is served between writes. The
-  // producer's `seen` covers only the changed files it processed; union in the up-to-date files
+  // transaction, yielding between so a small concurrent request is served between writes. Every
+  // batched result — including `failed:true` ones — is added to `seen` from the batch itself
+  // (mirroring the inline branch), so prune-protection never depends on what the producer's
+  // returned `seen` happens to include. The producer's own `{ seen }` is unioned in too (harmless,
+  // covers up-to-date files it may report without batching) alongside the up-to-date files
   // planSync already put in `seen` before pruning.
   const { seen: parsedSeen } = await offThreadParse({ changed, hooks }, async (results) => {
     db.exec("BEGIN");
     try {
       for (const r of results) {
+        seen.add(r.path); // protect from prune regardless of outcome (mirror inline branch)
         if (r.usage.failed) { log.warn("failed to read transcript (worker), will retry next sync: %s", r.path); continue; }
         writeFileRows(db, r.path, r.mtime, r.size, hookDigest, r.usage);
       }
