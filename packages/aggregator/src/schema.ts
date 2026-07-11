@@ -288,6 +288,9 @@ export const catalogGems = pgTable("catalog_gems", {
   artifacts: jsonb("artifacts").$type<{ name: string; type: string }[]>(),
   createdAtMs: bigint("created_at_ms", { mode: "number" }).notNull(),
   ownerAccountId: uuid("owner_account_id"),
+  // Sharing scope. 'public' = listed in Explore; 'unlisted' = hidden from Explore but reachable by
+  // its /games/<key> link; 'private' = owner-only (enforcement lands in PR 2b). Default public.
+  visibility: text("visibility").notNull().default("public"),
 }, (t) => [primaryKey({ columns: [t.gemKey, t.version] })]);
 
 // Installable gem content: the .gem archive bytes for a published (gem_key, version). A row here
@@ -588,6 +591,7 @@ export async function ensureSchema(db: AppDb): Promise<void> {
   await db.execute(sql`create table if not exists catalog_gems (gem_key text not null, version text not null, published_by text not null, author text, description text, tags jsonb, artifact_kinds jsonb, type text, grade integer, created_at_ms bigint not null, primary key (gem_key, version))`);
   // Added post-creation (installable shared setups): the per-artifact preview list + the archive store.
   await db.execute(sql`alter table catalog_gems add column if not exists artifacts jsonb`);
+  await db.execute(sql`alter table catalog_gems add column if not exists visibility text not null default 'public'`);
   await db.execute(sql`create table if not exists gem_archives (gem_key text not null, version text not null, bytes bytea not null, size int not null, digest text not null, created_at_ms bigint not null, primary key (gem_key, version))`);
   await db.execute(sql`create table if not exists game_plays (id uuid primary key, gem_key text not null, version text not null, visitor_id text, played_at timestamptz not null default now())`);
   await db.execute(sql`create index if not exists game_plays_key_idx on game_plays (gem_key)`);
