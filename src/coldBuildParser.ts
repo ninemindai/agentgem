@@ -28,8 +28,9 @@ export function buildOffThreadParse(candidates: readonly string[] = CANDIDATES):
     if (!workerPath) throw new Error("transcript parse worker not found");
     return await new Promise<{ seen: string[] }>((resolve, reject) => {
       const worker = new Worker(workerPath, { workerData: { changed: input.changed, hooks: input.hooks, batchSize: BATCH_SIZE } });
-      const chain: Promise<void> = Promise.resolve();
-      let tail = chain;
+      // `tail` serializes onBatch writes in FIFO message order; `done` resolves behind it so it
+      // never fires before the last batch is written.
+      let tail: Promise<void> = Promise.resolve();
       let settled = false;
       worker.on("message", (m: { results?: ParseResult[]; done?: boolean; seen?: string[] }) => {
         if (m.results) { const results = m.results; tail = tail.then(() => onBatch(results)); return; }

@@ -266,7 +266,11 @@ async function doSyncRouted(
 ): Promise<{ raw: StoredRawRow[]; hooks: StoredHookRow[] }> {
   const { existing, changed, seen, pendingBytes } = planSync(db, paths, hookDigest);
 
-  const byteThreshold = Number(process.env.AGENTGEM_USAGE_WORKER_BYTES ?? BYTE_THRESHOLD);
+  // Guard the env override: a non-numeric value would yield NaN, and `pendingBytes <= NaN`
+  // is always false — silently forcing the streamed branch for every build. Fall back to the
+  // default rather than let a malformed knob change routing.
+  const envThreshold = Number(process.env.AGENTGEM_USAGE_WORKER_BYTES);
+  const byteThreshold = Number.isFinite(envThreshold) ? envThreshold : BYTE_THRESHOLD;
 
   // Inline: no producer, or the pending parse is cheap. Identical to the old doSync loop.
   if (!offThreadParse || pendingBytes <= byteThreshold) {
