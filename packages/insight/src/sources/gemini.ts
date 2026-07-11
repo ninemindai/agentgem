@@ -120,9 +120,12 @@ export function resolveGeminiHtmlPaths(text: string): string[] {
 // ("""..."""), and literal ('''...''') strings. Does not handle arbitrary TOML (tables, arrays,
 // nested escapes beyond \" \n \\) — sufficient for Gemini's flat command files.
 function tomlField(text: string, key: string): string | null {
-  const triple = text.match(new RegExp(`${key}\\s*=\\s*("""|''')([\\s\\S]*?)\\1`));
+  // Escape the key before interpolating it into a RegExp (callers pass literals today; a
+  // metacharacter in a future caller's key would otherwise be treated as a pattern).
+  const k = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const triple = text.match(new RegExp(`${k}\\s*=\\s*("""|''')([\\s\\S]*?)\\1`));
   if (triple) return triple[2];
-  const basic = text.match(new RegExp(`${key}\\s*=\\s*"((?:[^"\\\\]|\\\\.)*)"`));
+  const basic = text.match(new RegExp(`${k}\\s*=\\s*"((?:[^"\\\\]|\\\\.)*)"`));
   if (basic) return basic[1].replace(/\\(["\\n])/g, (_, c) => (c === "n" ? "\n" : c));
   return null;
 }
