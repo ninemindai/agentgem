@@ -3,7 +3,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, writeFileSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, basename } from "node:path";
 import { openTranscriptIndex, type TranscriptIndex, type OffThreadParse } from "@agentgem/capture";
 import type { FileUsage } from "@agentgem/insight";
 
@@ -117,21 +117,32 @@ describe("syncUsage streamed path (offThreadParse)", () => {
   });
 
   it("serializes an overlapping streamed + inline sync (shared single-flight chain)", async () => {
-    const a = join(dir, "a.jsonl"); write(a, "a");
+    // A single-file, single-batch overlap is toothless: node:sqlite writes are synchronous, and
+    // the streamed producer's BEGIN..writeFileRows..COMMIT for one batch completes before its
+    // first real suspension point, so plain single-threaded JS execution "serializes" the two
+    // calls even with the chain removed. To actually exercise the single-flight guarantee, p1
+    // must have a genuine suspension point (the `await setImmediate` between batches) that p2's
+    // synchronous body could run inside of if the two calls were not chained. So p1 streams 3
+    // files with batchSize 1 → 3 batches, 2 real setImmediate gaps between them.
+    const a = join(dir, "a.jsonl"); const b = join(dir, "b.jsonl"); const c = join(dir, "c.jsonl");
+    write(a, "a"); write(b, "b"); write(c, "c");
     const order: string[] = [];
-    const slow = (_p: string) => { order.push("streamed-parse"); return usage([{ kind: "skill", token: "qa", invocations: 1 }]); };
+    const slow = (p: string) => { order.push(`streamed-parse:${basename(p)}`); return usage([{ kind: "skill", token: "qa", invocations: 1 }]); };
+    const prod = fakeProducer(slow, 1); // 3 files, batchSize 1 → 3 batches, 2 setImmediate gaps
     // Fire both without awaiting the first: the chain must run them one at a time. p2 uses a
     // different hookDigest so its planSync sees "a" as changed (needing reparse) even though p1
     // already synced it with the same mtime/size — otherwise p2 would see the file as already
     // up-to-date (since the chain makes p1 fully land before p2's planSync runs) and never call
     // its parse fn at all, which would defeat this test regardless of serialization.
-    const p1 = index.syncUsage([a], "hd", slow, fakeProducer(slow).p);
+    const p1 = index.syncUsage([a, b, c], "hd", slow, prod.p);
     const p2 = index.syncUsage([a], "hd2", (_p) => { order.push("inline-parse"); return usage([{ kind: "skill", token: "qa", invocations: 1 }]); });
     await Promise.all([p1, p2]);
     // Not interleaved: p1 (streamed) is issued first, so the single-flight chain must run it fully
-    // to completion before p2 (inline) starts. Assert the exact sequence, not just that pushes
-    // happened, so a chain-bypass regression (the two calls interleaving) actually fails this test.
-    expect(order).toEqual(["streamed-parse", "inline-parse"]);
+    // to completion — all 3 batches, across their setImmediate gaps — before p2 (inline) starts.
+    // Without the chain, p2's synchronous body runs during p1's first setImmediate gap (right
+    // after "streamed-parse:a" lands but before "streamed-parse:b"/"streamed-parse:c"), so this
+    // exact-sequence assertion is false under a chain-bypass regression.
+    expect(order).toEqual(["streamed-parse:a.jsonl", "streamed-parse:b.jsonl", "streamed-parse:c.jsonl", "inline-parse"]);
     const out = await index.syncUsage([a], "hd", slow);
     expect(out.raw.find((r) => r.token === "qa")?.invocations).toBe(1); // consistent, not doubled
   });
