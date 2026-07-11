@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { eq } from "drizzle-orm";
-import { makeTestDb, reviewRequests, upsertAccount, createNativeGroup, grantInvite, submitReviewRequest, upsertCatalogGem, accountScopes, listInbox, markSeen, getReviewRequest, getReviewArchive, addReviewMessage, approveReviewRequest, listCatalogGems, getGemArchive, requestChanges, resubmitReviewRequest, withdrawReviewRequest } from "@agentgem/aggregator";
+import { makeTestDb, reviewRequests, upsertAccount, createNativeGroup, grantInvite, submitReviewRequest, upsertCatalogGem, accountScopes, listInbox, markSeen, getReviewRequest, getReviewArchive, addReviewMessage, approveReviewRequest, listCatalogGems, getGemArchive, requestChanges, resubmitReviewRequest, withdrawReviewRequest, withdrawRequestsForDepartedMember, removeMemberGuarded } from "@agentgem/aggregator";
 
 describe("review staging schema", () => {
   it("ensureSchema creates review_requests and the table accepts a row", async () => {
@@ -263,5 +263,23 @@ describe("requestChanges / resubmit / withdraw", () => {
     const m = await addReviewMessage(db, { accountId: reviewer.id, requestId, body: "why withdrawn?" }, 1500);
     expect(m.ok).toBe(true);
     expect((await getReviewRequest(db, reviewer.id, requestId))?.messages).toHaveLength(1);
+  });
+});
+
+describe("member-removal cleanup", () => {
+  it("removing an author from a group withdraws their open requests", async () => {
+    const db = await makeTestDb();
+    const admin = await upsertAccount(db, { provider: "github", accountId: "ad", login: "admin" });
+    const author = await upsertAccount(db, { provider: "github", accountId: "a1", login: "alice" });
+    await ownScope(db, author.id);
+    const g = await createNativeGroup(db, admin.id, "Team");
+    await grantInvite(db, g.id, author.id, "member");
+    const r = await submitReviewRequest(db, { accountId: author.id, groupId: g.id, manifest: mkManifest("@team/bot"), archiveBytes: new Uint8Array([1]), archiveDigest: "x" }, 1000);
+    if (!r.ok) throw new Error("submit failed");
+
+    const removed = await removeMemberGuarded(db, g.id, author.id);
+    expect(removed).toBe("removed");
+    // author's request is now withdrawn, its bytes gone; admin's inbox no longer shows it
+    expect(await listInbox(db, admin.id)).toEqual([]);
   });
 });

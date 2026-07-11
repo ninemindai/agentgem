@@ -20,6 +20,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import type { AppDb } from "./schema.js";
 import { accounts, groups, groupMembers, user } from "./schema.js";
+import { withdrawRequestsForDepartedMember } from "./reviewStaging.js";
 
 export type GroupKind = "federated" | "native";
 export type GroupRole = "admin" | "member";
@@ -153,6 +154,11 @@ export async function removeMemberGuarded(
     await tx.execute(sql`
       delete from group_members
       where group_id = ${groupId} and account_id = ${accountId} and not via_sync`);
+    // tx (a PgTransaction), not the outer db: this runs INSIDE the same transaction as the removal
+    // above, so cleanup is atomic with it. Calling it with `db` instead deadlocks under the
+    // single-connection test DB (PGlite) — the outer db query blocks waiting for a connection the
+    // still-open tx callback holds, while the tx itself awaits this call's completion.
+    await withdrawRequestsForDepartedMember(tx, groupId, accountId);
     return "removed";
   });
 }
