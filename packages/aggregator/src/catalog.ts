@@ -9,6 +9,8 @@ import type { AppDb } from "./schema.js";
 import { catalogGems, gemArchives, producers, accountBindings } from "./schema.js";
 import { accountIdForProvider } from "./auth/accountLinking.js";
 
+export type Visibility = "public" | "unlisted" | "private";
+
 export interface GemArtifactRef { name: string; type: string }
 export interface CatalogRow {
   gemKey: string; version: string; publishedBy: string;
@@ -17,6 +19,7 @@ export interface CatalogRow {
   artifacts?: GemArtifactRef[];
   installable?: boolean; // derived: a gem_archives row exists (read path only)
   ownerAccountId?: string | null;
+  visibility?: Visibility;
 }
 
 export async function upsertCatalogGem(db: AppDb, row: CatalogRow): Promise<void> {
@@ -26,6 +29,7 @@ export async function upsertCatalogGem(db: AppDb, row: CatalogRow): Promise<void
     tags: row.tags ?? null, artifactKinds: row.artifactKinds ?? null,
     type: row.type ?? null, grade: row.grade ?? null, artifacts: row.artifacts ?? null,
     createdAtMs: row.createdAtMs, ownerAccountId: row.ownerAccountId ?? null,
+    visibility: row.visibility ?? "public",
   }).onConflictDoUpdate({
     target: [catalogGems.gemKey, catalogGems.version],
     set: {
@@ -33,6 +37,7 @@ export async function upsertCatalogGem(db: AppDb, row: CatalogRow): Promise<void
       tags: row.tags ?? null, artifactKinds: row.artifactKinds ?? null, type: row.type ?? null,
       grade: row.grade ?? null, artifacts: row.artifacts ?? null, createdAtMs: row.createdAtMs,
       ownerAccountId: row.ownerAccountId ?? null,
+      visibility: row.visibility ?? "public",
     },
   });
 }
@@ -46,6 +51,7 @@ export async function listCatalogGems(db: AppDb): Promise<CatalogRow[]> {
     artifacts: catalogGems.artifacts, createdAtMs: catalogGems.createdAtMs, archiveKey: gemArchives.gemKey,
   }).from(catalogGems)
     .leftJoin(gemArchives, and(eq(catalogGems.gemKey, gemArchives.gemKey), eq(catalogGems.version, gemArchives.version)))
+    .where(eq(catalogGems.visibility, "public"))
     .orderBy(desc(catalogGems.createdAtMs));
   return rows.map((r) => ({
     gemKey: r.gemKey, version: r.version, publishedBy: r.publishedBy,
@@ -167,6 +173,7 @@ export interface CatalogManifest {
   // Set by the archive-publish path: the per-artifact preview list and the archive's content
   // digest. Both are inside the signed manifest, so the signature binds the publish to this archive.
   artifacts?: GemArtifactRef[]; gemDigest?: string;
+  visibility?: Visibility;
 }
 export interface ShareRequest { manifest: CatalogManifest; pubkey: string; signedAt: number; signature: string }
 export type ShareResult =
@@ -243,6 +250,7 @@ export async function recordCatalogShare(db: AppDb, req: ShareRequest, now: numb
     gemKey: m.gemKey, version: m.version, publishedBy: who.login, ownerAccountId: who.accountId,
     author: m.author, description: m.description, tags: m.tags, artifactKinds: m.artifactKinds,
     type: m.type, grade: clampGrade(m.grade), artifacts: m.artifacts, createdAtMs: now,
+    visibility: m.visibility ?? "public",
   });
   return { shared: true, publishedBy: who.login, gemKey: m.gemKey, version: m.version };
 }
