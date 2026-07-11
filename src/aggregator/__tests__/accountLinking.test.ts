@@ -6,7 +6,7 @@ import { sql } from "drizzle-orm";
 import {
   makeTestDb, makeAuth, stashPendingLink, pendingLink, upsertAccount, accountIdForProvider,
   producers, accountBindings, catalogGems, catalogSigningPayload, recordCatalogShare, deleteCatalogGem, buildProfile,
-  accountFreshness,
+  accountFreshness, absorbAccount, connectedProviders,
 } from "@agentgem/aggregator";
 
 function signer() {
@@ -213,5 +213,95 @@ describe("accountFreshness (the C-guard over every accounts.id FK)", () => {
     const r = await accountFreshness(db, id);
     expect(r.fresh).toBe(false);
     expect(r.blocker).toBe(blocker);
+  });
+});
+
+describe("absorbAccount (Task 5: one-transaction attach fresh account + delete empty user)", () => {
+  it("absorb re-points the fresh account's providers to the data-bearing survivor and deletes the empty user", async () => {
+    const db = await makeTestDb();
+    const auth = makeAuth({ db, ...opts, googleClientId: "g", googleClientSecret: "g" });
+    const ctx = await auth.$context;
+    const keep = await ctx.internalAdapter.createUser({ email: "keep@x.com", name: "K", emailVerified: false } as never); // data-bearing
+    const drop = await ctx.internalAdapter.createUser({ email: "drop@x.com", name: "D", emailVerified: false } as never); // fresh
+    await upsertAccount(db, { provider: "github", accountId: "gh-keep", login: "keep", avatarUrl: null, id: keep.id });
+    await upsertAccount(db, { provider: "google", accountId: "go-drop", login: null, avatarUrl: null, id: drop.id });
+    await db.execute(sql`insert into account (id, user_id, account_id, provider_id, created_at, updated_at) values
+      (gen_random_uuid()::text, ${keep.id}, 'gh-keep', 'github', now(), now()),
+      (gen_random_uuid()::text, ${drop.id}, 'go-drop', 'google', now(), now())`);
+    await db.execute(sql`update "user" set handle = 'keep' where id = ${keep.id}`); // keep is data-bearing
+
+    const r = await absorbAccount(db, { current: keep.id, other: drop.id });
+    expect(r).toEqual({ ok: true, keep: keep.id });
+    expect(await connectedProviders(db, keep.id)).toEqual(["github", "google"]); // absorbed
+    expect((await db.execute(sql`select 1 from "user" where id = ${drop.id}`)).rows).toHaveLength(0); // gone
+    expect((await db.execute(sql`select 1 from accounts where id = ${drop.id}`)).rows).toHaveLength(0); // anchor gone
+  });
+
+  it("absorb refuses (merge-not-supported) when NEITHER account is fresh", async () => {
+    const db = await makeTestDb();
+    const auth = makeAuth({ db, ...opts, googleClientId: "g", googleClientSecret: "g" });
+    const ctx = await auth.$context;
+    const a = await ctx.internalAdapter.createUser({ email: "abs-a@x.com", name: "A", emailVerified: false } as never);
+    const b = await ctx.internalAdapter.createUser({ email: "abs-b@x.com", name: "B", emailVerified: false } as never);
+    await upsertAccount(db, { provider: "github", accountId: "gh-abs-a", login: "absa", avatarUrl: null, id: a.id });
+    await upsertAccount(db, { provider: "google", accountId: "go-abs-b", login: null, avatarUrl: null, id: b.id });
+    // both data-bearing (claimed handles) — neither side is safe to delete.
+    await db.execute(sql`update "user" set handle = 'absa' where id = ${a.id}`);
+    await db.execute(sql`update "user" set handle = 'absb' where id = ${b.id}`);
+
+    const r = await absorbAccount(db, { current: a.id, other: b.id });
+    expect(r).toEqual({ ok: false, reason: "merge-not-supported" });
+    // nothing was touched — both users and both anchors still exist.
+    expect((await db.execute(sql`select 1 from "user" where id = ${a.id}`)).rows).toHaveLength(1);
+    expect((await db.execute(sql`select 1 from "user" where id = ${b.id}`)).rows).toHaveLength(1);
+    expect((await db.execute(sql`select 1 from accounts where id = ${a.id}`)).rows).toHaveLength(1);
+    expect((await db.execute(sql`select 1 from accounts where id = ${b.id}`)).rows).toHaveLength(1);
+  });
+
+  it("when BOTH are fresh, current survives", async () => {
+    const db = await makeTestDb();
+    const auth = makeAuth({ db, ...opts, googleClientId: "g", googleClientSecret: "g" });
+    const ctx = await auth.$context;
+    const cur = await ctx.internalAdapter.createUser({ email: "abs-cur@x.com", name: "C", emailVerified: false } as never);
+    const oth = await ctx.internalAdapter.createUser({ email: "abs-oth@x.com", name: "O", emailVerified: false } as never);
+    await upsertAccount(db, { provider: "github", accountId: "gh-abs-cur", login: "abscur", avatarUrl: null, id: cur.id });
+    await upsertAccount(db, { provider: "google", accountId: "go-abs-oth", login: null, avatarUrl: null, id: oth.id });
+    await db.execute(sql`insert into account (id, user_id, account_id, provider_id, created_at, updated_at) values
+      (gen_random_uuid()::text, ${cur.id}, 'gh-abs-cur', 'github', now(), now()),
+      (gen_random_uuid()::text, ${oth.id}, 'go-abs-oth', 'google', now(), now())`);
+
+    const r = await absorbAccount(db, { current: cur.id, other: oth.id });
+    expect(r).toEqual({ ok: true, keep: cur.id });
+    expect(await connectedProviders(db, cur.id)).toEqual(["github", "google"]);
+    expect((await db.execute(sql`select 1 from "user" where id = ${oth.id}`)).rows).toHaveLength(0);
+    expect((await db.execute(sql`select 1 from accounts where id = ${oth.id}`)).rows).toHaveLength(0);
+  });
+
+  it("refuses same-account absorb without touching anything", async () => {
+    const db = await makeTestDb();
+    const id = crypto.randomUUID();
+    await upsertAccount(db, { provider: "google", accountId: "g-" + id, login: null, avatarUrl: null, id });
+    const r = await absorbAccount(db, { current: id, other: id });
+    expect(r).toEqual({ ok: false, reason: "same-account" });
+  });
+
+  // Proves Task 4's accountFreshness gate is actually consulted by absorb, not bypassed: `drop` has
+  // no handle/gem/gem_archive/star/review (would look fresh under an old, shorter check list) but
+  // DOES have a usage_days row — one of the later FRESHNESS_CHECKS entries. If absorb used a stale or
+  // partial freshness check, this would wrongly succeed and silently drop the usage_days row's owner.
+  it("refuses to absorb an account that looks fresh under the first few checks but has a usage_days row", async () => {
+    const db = await makeTestDb();
+    const auth = makeAuth({ db, ...opts, googleClientId: "g", googleClientSecret: "g" });
+    const ctx = await auth.$context;
+    const keep = await ctx.internalAdapter.createUser({ email: "abs-keep2@x.com", name: "K2", emailVerified: false } as never);
+    const drop = await ctx.internalAdapter.createUser({ email: "abs-drop2@x.com", name: "D2", emailVerified: false } as never);
+    await upsertAccount(db, { provider: "github", accountId: "gh-abs-keep2", login: "abskeep2", avatarUrl: null, id: keep.id });
+    await upsertAccount(db, { provider: "google", accountId: "go-abs-drop2", login: null, avatarUrl: null, id: drop.id });
+    await db.execute(sql`update "user" set handle = 'abskeep2' where id = ${keep.id}`); // keep is data-bearing
+    await db.execute(sql`insert into usage_days (account_id, machine, scope, date) values (${drop.id}, 'm', '', '2026-07-10')`);
+
+    const r = await absorbAccount(db, { current: keep.id, other: drop.id });
+    expect(r).toEqual({ ok: false, reason: "merge-not-supported" });
+    expect((await db.execute(sql`select 1 from "user" where id = ${drop.id}`)).rows).toHaveLength(1); // untouched
   });
 });

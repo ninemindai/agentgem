@@ -141,3 +141,47 @@ export async function accountFreshness(db: AppDb, accountId: string): Promise<{ 
   }
   return { fresh: true, blocker: null };
 }
+
+/**
+ * Task 5: the one-transaction attach-and-discard. Re-points a FRESH account's providers onto the
+ * data-bearing survivor and deletes the now-empty account, so a user who OAuth'd a second provider
+ * that already has its own (unused) account ends up with one account that has both providers instead
+ * of two accounts.
+ *
+ * `current` is the caller-session account uuid; `other` is the OAuth-verified other account uuid
+ * (Flow B, deferred — see the file header; this function is not yet reachable from any route). Which
+ * side is kept is NOT caller-chosen: `keep` is always the data-bearing (non-fresh) side, because
+ * deleting a fresh account is the only side of this operation `accountFreshness` (Task 4) can prove
+ * safe — its whole FK sweep is "does anything point at this id", and only a fresh id is guaranteed to
+ * have nothing pointing at it. If both are fresh, `current` survives (arbitrary but deterministic —
+ * there is no data to lose either way). If neither is fresh, there is no side `accountFreshness`
+ * clears to delete, so the merge is refused outright rather than guessing.
+ *
+ * Delete order inside the transaction is load-bearing (see the file header's FK note): no FK to
+ * `accounts.id` cascades, so (1) better-auth `account` rows are re-pointed drop→keep BEFORE (2) the
+ * legacy `accounts` anchor and (3) the better-auth `user` row for `drop` are deleted. Reversing (1)
+ * and (3) would cascade-delete (via better-auth's own `account`-cascades-on-`user`) the very provider
+ * rows step (1) is moving onto the survivor.
+ */
+export async function absorbAccount(
+  db: AppDb,
+  { current, other }: { current: string; other: string },
+): Promise<{ ok: true; keep: string } | { ok: false; reason: "merge-not-supported" | "same-account" }> {
+  if (current === other) return { ok: false, reason: "same-account" };
+  const [fc, fo] = [await accountFreshness(db, current), await accountFreshness(db, other)];
+  if (!fc.fresh && !fo.fresh) return { ok: false, reason: "merge-not-supported" };
+  // keep = data-bearing side; if both fresh, current survives (spec).
+  const keep = fc.fresh && !fo.fresh ? other : current;
+  const drop = keep === current ? other : current;
+
+  await db.transaction(async (tx) => {
+    // 1. Move the fresh account's per-provider rows onto the survivor. (drop is FK-empty per the
+    //    freshness gate, so ONLY its better-auth `account` rows carry the providers we keep.)
+    await tx.execute(sql`update account set user_id = ${keep} where user_id = ${drop}`);
+    // 2. Delete the fresh account's legacy anchor. Safe: freshness proved no child rows FK it.
+    await tx.execute(sql`delete from accounts where id = ${drop}`);
+    // 3. Delete the fresh better-auth user. session (and any residual account rows) cascade on user.
+    await tx.execute(sql`delete from "user" where id = ${drop}`);
+  });
+  return { ok: true, keep };
+}
