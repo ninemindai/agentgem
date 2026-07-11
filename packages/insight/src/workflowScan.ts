@@ -24,8 +24,26 @@ export interface ArtifactUsage {
 }
 
 // One captured builtin tool call: the tool name, its scrubbed { verb, arg }, and
-// the JSONL line index it was parsed from (provenance coordinate).
-export interface ProcedureStep extends ScrubbedStep { tool: string; msgIndex: number }
+// the JSONL line index it was parsed from (provenance coordinate). toolUseId
+// pairs the step to its later tool_result (see the retainSequences user branch
+// below); error/rejected are outcome booleans only — never raw content.
+export interface ProcedureStep extends ScrubbedStep {
+  tool: string;
+  msgIndex: number;
+  toolUseId?: string;   // the tool_use block id, for pairing its later tool_result
+  error?: boolean;      // paired tool_result.is_error
+  rejected?: boolean;   // paired tool_result denial (confirmed marker, see isDenialResult)
+}
+
+// Confirmed via the Task 1 spike against real transcripts in ~/.claude/projects:
+// a user-denied tool_use always surfaces as a string tool_result with is_error
+// true and this exact, stable Claude Code marker (68 hits across 58 distinct
+// transcripts, zero variants seen). If the marker is ever absent, this simply
+// returns false and rejected stays disabled — it never guesses.
+function isDenialResult(content: unknown): boolean {
+  const t = typeof content === "string" ? content : JSON.stringify(content ?? "");
+  return t.includes("The user doesn't want to proceed with this tool use");
+}
 
 // per-assistant-turn token accounting — the bloat curve. Optional: only present
 // when retainSequences is on (see scanWorkflow). `ctxTokens` is the full window
@@ -477,9 +495,24 @@ export function scanWorkflow(paths: string[], inv: ScanInventory, opts: ScanOpti
             }
             // Capture the ordered scrubbed builtin step for distillation (§3a/§3c).
             if (opts.retainSequences && !rec?.isSidechain && steps.length < SEQ_CAP_PER_SESSION) {
-              try { steps.push({ tool: name, msgIndex: lineIdx, ...scrub(name, block.input) }); }
+              try { steps.push({ tool: name, msgIndex: lineIdx, toolUseId: typeof block.id === "string" ? block.id : undefined, ...scrub(name, block.input) }); }
               catch { notes.push(`scrub failed for a ${name} step in ${path.split("/").pop()}`); }
             }
+          }
+        }
+      }
+
+      // tool_result blocks live on USER messages, paired back to the step by
+      // toolUseId. Outcome only (error/rejected booleans) — never the result
+      // content itself, which may carry arg/path/command text.
+      if (opts.retainSequences && role === "user" && Array.isArray(content)) {
+        for (const block of content) {
+          if (block?.type !== "tool_result" || typeof block.tool_use_id !== "string") continue;
+          const target = steps.find((s) => s.toolUseId === block.tool_use_id);
+          if (!target) continue;   // result for a capped/skipped/non-builtin call
+          if (block.is_error === true) {
+            target.error = true;
+            target.rejected = isDenialResult(block.content);
           }
         }
       }
