@@ -8,11 +8,10 @@
 // esbuild inlines this module into dist/index.js, so import.meta.url is dist/ in loose AND bundled
 // layouts; the single candidate "./transcriptParseWorker.js" covers both (A5).
 import { Worker } from "node:worker_threads";
-import { createLogger } from "@agentgem/base";
 import { resolveWorkerPath } from "./warm/workerPath.js";
 import type { OffThreadParse } from "@agentgem/capture";
+import type { ParseResult } from "./transcriptParseWorker.js";
 
-const log = createLogger("capture");
 const CANDIDATES = ["./transcriptParseWorker.js"] as const;
 const BATCH_SIZE = 64;
 
@@ -26,8 +25,8 @@ export function buildOffThreadParse(candidates: readonly string[] = CANDIDATES):
       const chain: Promise<void> = Promise.resolve();
       let tail = chain;
       let settled = false;
-      worker.on("message", (m: { results?: never[]; done?: boolean; seen?: string[] }) => {
-        if (m.results) { tail = tail.then(() => onBatch(m.results as never)); return; }
+      worker.on("message", (m: { results?: ParseResult[]; done?: boolean; seen?: string[] }) => {
+        if (m.results) { const results = m.results; tail = tail.then(() => onBatch(results)); return; }
         if (m.done) { settled = true; tail.then(() => { resolve({ seen: m.seen ?? [] }); void worker.terminate(); }).catch(reject); }
       });
       worker.on("error", reject);
