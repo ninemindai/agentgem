@@ -310,6 +310,42 @@ export const gemArchives = pgTable("gem_archives", {
   ownerAccountId: uuid("owner_account_id").references(() => accounts.id),
 }, (t) => [primaryKey({ columns: [t.gemKey, t.version] })]);
 
+export type ReviewStatus = "open" | "approved" | "changes-requested" | "withdrawn";
+
+// A staging gem under review. Bytes + manifest live HERE, isolated from every published surface
+// (catalog_gems / gem_archives), until approval publishes through the normal upsert functions.
+// Ownership/authorship is the accounts.id uuid, never a login string. Timestamps are epoch-ms
+// bigints (matching the gem tables) so store fns take an explicit `now` and tests stay deterministic.
+export const reviewRequests = pgTable("review_requests", {
+  id: uuid("id").primaryKey(),
+  groupId: uuid("group_id").notNull().references(() => groups.id, { onDelete: "cascade" }),
+  gemKey: text("gem_key").notNull(),
+  version: text("version").notNull(),
+  authorAccountId: uuid("author_account_id").notNull().references(() => accounts.id),
+  status: text("status").$type<ReviewStatus>().notNull().default("open"),
+  description: text("description"),
+  manifest: jsonb("manifest").notNull(),          // the CatalogManifest to publish on approval
+  archiveBytes: bytea("archive_bytes"),           // .gem bytes; nulled on approve/withdraw
+  archiveDigest: text("archive_digest").notNull(),
+  createdAtMs: bigint("created_at_ms", { mode: "number" }).notNull(),
+  resolvedAtMs: bigint("resolved_at_ms", { mode: "number" }),
+}, (t) => [index("review_requests_group_idx").on(t.groupId)]);
+
+export const reviewMessages = pgTable("review_messages", {
+  id: uuid("id").primaryKey(),
+  requestId: uuid("request_id").notNull().references(() => reviewRequests.id, { onDelete: "cascade" }),
+  authorAccountId: uuid("author_account_id").notNull().references(() => accounts.id),
+  body: text("body").notNull(),
+  createdAtMs: bigint("created_at_ms", { mode: "number" }).notNull(),
+}, (t) => [index("review_messages_request_idx").on(t.requestId)]);
+
+// Read-tracking marker: when this account last opened this request. Drives the inbox unread badge.
+export const reviewSeen = pgTable("review_seen", {
+  accountId: uuid("account_id").notNull().references(() => accounts.id),
+  requestId: uuid("request_id").notNull().references(() => reviewRequests.id, { onDelete: "cascade" }),
+  lastSeenAtMs: bigint("last_seen_at_ms", { mode: "number" }).notNull(),
+}, (t) => [primaryKey({ columns: [t.accountId, t.requestId] })]);
+
 // Append-only: one row per click into a mini-game's fullscreen play (POST /api/aggregator/game-play).
 // A play is a CLICK, not a person — the arcade needs no login, so this table can never answer "how many
 // unique users". `visitorId` is an opaque localStorage uuid the SPA mints: a dedupe key for checking a
@@ -424,7 +460,7 @@ export const pendingAccountLinks = pgTable("pending_account_links", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, handoffCodes, stars, reviews, gemAdoptions, accountScopes, usageDays, usageDayModels, orgSettings, catalogGems, gemArchives, gamePlays, curatedSkills, appInstallations, orgMembers, groups, groupMembers, groupInvites, user, session, account, verification, pendingAccountLinks, connectStates };
+export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, handoffCodes, stars, reviews, gemAdoptions, accountScopes, usageDays, usageDayModels, orgSettings, catalogGems, gemArchives, gamePlays, curatedSkills, appInstallations, orgMembers, groups, groupMembers, groupInvites, reviewRequests, reviewMessages, reviewSeen, user, session, account, verification, pendingAccountLinks, connectStates };
 export type AppDb = PgDatabase<any, typeof schema>;
 
 /** One-time, idempotent: give every account_binding with no matching `accounts` anchor row one,
@@ -729,6 +765,36 @@ export async function ensureSchema(db: AppDb): Promise<void> {
     current_user_id text not null references "user"(id) on delete cascade,
     provider text not null,
     expires_at timestamptz not null, created_at timestamptz not null default now())`);
+
+  await db.execute(sql`create table if not exists review_requests (
+    id uuid primary key,
+    group_id uuid not null references groups(id) on delete cascade,
+    gem_key text not null,
+    version text not null,
+    author_account_id uuid not null references accounts(id),
+    status text not null default 'open' check (status in ('open','approved','changes-requested','withdrawn')),
+    description text,
+    manifest jsonb not null,
+    archive_bytes bytea,
+    archive_digest text not null,
+    created_at_ms bigint not null,
+    resolved_at_ms bigint
+  )`);
+  await db.execute(sql`create index if not exists review_requests_group_idx on review_requests (group_id)`);
+  await db.execute(sql`create table if not exists review_messages (
+    id uuid primary key,
+    request_id uuid not null references review_requests(id) on delete cascade,
+    author_account_id uuid not null references accounts(id),
+    body text not null,
+    created_at_ms bigint not null
+  )`);
+  await db.execute(sql`create index if not exists review_messages_request_idx on review_messages (request_id)`);
+  await db.execute(sql`create table if not exists review_seen (
+    account_id uuid not null references accounts(id),
+    request_id uuid not null references review_requests(id) on delete cascade,
+    last_seen_at_ms bigint not null,
+    primary key (account_id, request_id)
+  )`);
 
   // MUST run before backfillGemOwners: gem-owner resolution matches against `accounts`, and
   // migrateAccountsToBetterAuth (run at boot right after ensureSchema, see src/index.ts) mirrors
