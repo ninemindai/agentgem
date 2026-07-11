@@ -244,3 +244,73 @@ export async function approveReviewRequest(db: AppDb, args: { accountId: string;
     return { ok: true, gemKey: row.gemKey, version: row.version };
   });
 }
+
+export type ChangesResult = { ok: true } | { ok: false; rejected: "not-found" | "not-a-member" | "self" | "not-open" };
+
+/** A member (not the author) sends `requestId` back for changes: atomic `open -> changes-requested`.
+ *  The atomic claim (conditional UPDATE) means a concurrent approve/withdraw/request-changes leaves
+ *  this a no-op `not-open`, same pattern as approveReviewRequest. */
+export async function requestChanges(db: AppDb, args: { accountId: string; requestId: string }, now: number = Date.now()): Promise<ChangesResult> {
+  const load = await loadForMember(db, args.accountId, args.requestId);
+  if (load.kind === "not-found") return { ok: false, rejected: "not-found" };
+  if (load.kind === "not-a-member") return { ok: false, rejected: "not-a-member" };
+  if (load.row.authorAccountId === args.accountId) return { ok: false, rejected: "self" };
+  const claimed = await db.update(reviewRequests)
+    .set({ status: "changes-requested", resolvedAtMs: now })
+    .where(and(eq(reviewRequests.id, args.requestId), eq(reviewRequests.status, "open")))
+    .returning({ id: reviewRequests.id });
+  return claimed.length ? { ok: true } : { ok: false, rejected: "not-open" };
+}
+
+export type ResubmitResult = { ok: true } | { ok: false; rejected: "not-found" | "forbidden" | "not-changes-requested" };
+
+/** The AUTHOR resubmits new bytes/manifest: atomic `changes-requested -> open`. Clears every
+ *  review_seen marker for the request so each reviewer's inbox badge goes unread again — the old
+ *  markers point at a version nobody has actually reviewed.
+ *
+ *  Status is checked BEFORE authorship: a non-author calling this on a request that isn't in
+ *  `changes-requested` gets `not-changes-requested`, not `forbidden` — the caller learns the
+ *  request isn't in a resubmittable state at all, which is the more useful signal when both are
+ *  true. `forbidden` is reserved for a non-author hitting a request that IS `changes-requested`. */
+export async function resubmitReviewRequest(
+  db: AppDb,
+  args: { accountId: string; requestId: string; manifest: CatalogManifest; archiveBytes: Uint8Array; archiveDigest: string; description?: string },
+  now: number = Date.now(),
+): Promise<ResubmitResult> {
+  const row = (await db.select({ authorAccountId: reviewRequests.authorAccountId, description: reviewRequests.description, status: reviewRequests.status })
+    .from(reviewRequests).where(eq(reviewRequests.id, args.requestId)).limit(1))[0];
+  if (!row) return { ok: false, rejected: "not-found" };
+  if (row.status !== "changes-requested") return { ok: false, rejected: "not-changes-requested" };
+  if (row.authorAccountId !== args.accountId) return { ok: false, rejected: "forbidden" };
+  const claimed = await db.update(reviewRequests)
+    .set({
+      status: "open", resolvedAtMs: null,
+      manifest: args.manifest as unknown as Record<string, unknown>,
+      archiveBytes: args.archiveBytes, archiveDigest: args.archiveDigest,
+      description: args.description ?? row.description ?? null,
+    })
+    .where(and(eq(reviewRequests.id, args.requestId), eq(reviewRequests.status, "changes-requested")))
+    .returning({ id: reviewRequests.id });
+  if (claimed.length === 0) return { ok: false, rejected: "not-changes-requested" };
+  await db.delete(reviewSeen).where(eq(reviewSeen.requestId, args.requestId)); // everyone's badge unread again
+  return { ok: true };
+}
+
+export type WithdrawResult = { ok: true } | { ok: false; rejected: "not-found" | "forbidden" | "not-open" };
+
+/** The AUTHOR withdraws an open request: atomic `open -> withdrawn`, bytes cleared, row kept for
+ *  history (same "clear bytes, keep row" shape as approval's claim). Status is checked before
+ *  authorship, matching resubmit's ordering (see its comment): `not-open` beats `forbidden` when a
+ *  non-author hits a request that's already left the `open` state. */
+export async function withdrawReviewRequest(db: AppDb, args: { accountId: string; requestId: string }, now: number = Date.now()): Promise<WithdrawResult> {
+  const row = (await db.select({ authorAccountId: reviewRequests.authorAccountId, status: reviewRequests.status })
+    .from(reviewRequests).where(eq(reviewRequests.id, args.requestId)).limit(1))[0];
+  if (!row) return { ok: false, rejected: "not-found" };
+  if (row.status !== "open") return { ok: false, rejected: "not-open" };
+  if (row.authorAccountId !== args.accountId) return { ok: false, rejected: "forbidden" };
+  const claimed = await db.update(reviewRequests)
+    .set({ status: "withdrawn", resolvedAtMs: now, archiveBytes: null })
+    .where(and(eq(reviewRequests.id, args.requestId), eq(reviewRequests.status, "open")))
+    .returning({ id: reviewRequests.id });
+  return claimed.length ? { ok: true } : { ok: false, rejected: "not-open" };
+}
