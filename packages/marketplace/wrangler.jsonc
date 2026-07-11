@@ -1,7 +1,13 @@
 // Cloudflare Worker that serves the public marketplace SPA (app.agentgem.ai) from
-// Workers Static Assets — assets-only, no worker script. Mirrors website/edge/ but
-// without markdown negotiation: the SPA needs only static serving + an SPA fallback
-// (Cloudflare rewrites unknown paths to /index.html, replacing Render's rewrite rule).
+// Workers Static Assets, fronted by src/worker.ts, which injects per-route OG/
+// unfurl tags (e.g. for shared game gems) before delegating to env.ASSETS.fetch
+// for the actual asset bytes + SPA fallback.
+//
+// run_worker_first = true (below) is REQUIRED for the injection: by default
+// Cloudflare serves a matching static asset directly and never invokes the
+// Worker, so the OG-injection branch would be dead code. With it true the
+// Worker runs first on every request, then serves the asset via env.ASSETS
+// for the normal case.
 //
 // Deployed by .github/workflows/deploy-worker.yml, which builds dist/ with
 // VITE_API_BASE=https://api.agentgem.ai first.
@@ -19,6 +25,7 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "agentgem-app",
+  "main": "src/worker.ts",
   "compatibility_date": "2026-06-23",
   "account_id": "8c60d6f6b0408a55768ec315042db967",
 
@@ -28,8 +35,14 @@
   "workers_dev": false,
   "routes": [{ "pattern": "app.agentgem.ai", "custom_domain": true }],
 
+  // Hosted aggregator base URL, no trailing slash. The Worker reads this to
+  // fetch share/gem metadata server-to-server when building OG tags.
+  "vars": { "AGGREGATOR_API": "https://api.agentgem.ai" },
+
   "assets": {
     "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": true,
     "not_found_handling": "single-page-application"
   }
 }
