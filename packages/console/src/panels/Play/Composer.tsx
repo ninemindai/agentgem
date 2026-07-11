@@ -75,6 +75,9 @@ export function Composer({
   // suffixes it on collision; typed, the server claims it exactly and 409s if it is taken.
   const [name, setName] = useState("");
   const named = () => (name.trim() ? { name: name.trim() } : {});
+  // Session-only: which genre a session source forks into. Defaults to Replay; only threaded to the
+  // server when the user picks Heatmap, so the default seed call stays byte-identical to before.
+  const [sessionGenre, setSessionGenre] = useState<"replay" | "session-heatmap">("replay");
   const [caps, setCaps] = useState<Cap[]>([]);
   const toggleCap = (c: Cap) => setCaps((cs) => (cs.includes(c) ? cs.filter((x) => x !== c) : [...cs, c]));
 
@@ -89,7 +92,8 @@ export function Composer({
     if (busy) return;
     setBusy(true); setError("");
     try {
-      const res = await playStudioRoute.call(makeClient(apiBase), { body: { source, ...named() } });
+      const genre = source.kind === "session" && sessionGenre === "session-heatmap" ? { genre: sessionGenre } : {};
+      const res = await playStudioRoute.call(makeClient(apiBase), { body: { source, ...named(), ...genre } });
       // Only pass a second argument when there's a preamble to carry — preserves the old single-arg
       // call shape when no capability is checked (seedPrompt reads as undefined either way).
       const preamble = capPreamble(caps);
@@ -170,15 +174,24 @@ export function Composer({
           ))}
         </ul>)}
 
-      {kind === "session" && (!sessions ? <p className="play-intro">Loading sessions…</p> :
-        <ul className="play-src">
-          {sessions.map((s) => (
-            <li key={s.id} className="play-src-row"
-              onClick={() => seed({ kind: "session", agent: s.agent, ...(s.project ? { project: s.project } : {}), sessionId: s.id, summary: sessionSummary(s) })}>
-              <span className="play-src-row__main">{s.project ?? "session"}</span><span className="play-src-row__meta">{s.agent} · {s.msgs} msgs</span>
-            </li>
-          ))}
-        </ul>)}
+      {kind === "session" && (
+        <>
+          <div className="play-tabs" style={{ marginBottom: 10, alignItems: "center" }}>
+            <span className="play-intro" style={{ margin: 0 }}>Genre:</span>
+            <button type="button" className={`play-tab${sessionGenre === "replay" ? " is-active" : ""}`} onClick={() => setSessionGenre("replay")}>Replay</button>
+            <button type="button" className={`play-tab${sessionGenre === "session-heatmap" ? " is-active" : ""}`} onClick={() => setSessionGenre("session-heatmap")}>Heatmap</button>
+          </div>
+          {!sessions ? <p className="play-intro">Loading sessions…</p> :
+            <ul className="play-src">
+              {sessions.map((s) => (
+                <li key={s.id} className="play-src-row"
+                  onClick={() => seed({ kind: "session", agent: s.agent, ...(s.project ? { project: s.project } : {}), sessionId: s.id, summary: sessionSummary(s) })}>
+                  <span className="play-src-row__main">{s.project ?? "session"}</span><span className="play-src-row__meta">{s.agent} · {s.msgs} msgs</span>
+                </li>
+              ))}
+            </ul>}
+        </>
+      )}
 
       {kind === "skill" && (!skills ? <p className="play-intro">Loading skills…</p> :
         <ul className="play-src">

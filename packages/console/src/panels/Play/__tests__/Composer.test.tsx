@@ -37,6 +37,34 @@ describe("Composer", () => {
     expect(studio.mock.calls[0][1]).toMatchObject({ body: { source: { kind: "session", sessionId: "sess-1", agent: "claude" } } });
   });
 
+  // The Session tab defaults to Replay; the default seed call must stay byte-identical (no `genre` key)
+  // so existing behavior is unaffected by the new control.
+  it("Session tab defaults to Replay and omits genre from the seed call", async () => {
+    vi.spyOn(testbedProjectsRoute, "call").mockResolvedValue({ projects: [] } as never);
+    const studio = vi.spyOn(playStudioRoute, "call").mockResolvedValue({ name: "s1" });
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ sessions: [{ id: "sess-1", file: "/f", agent: "claude", project: "app", model: "opus", msgs: 5, startMs: 0, endMs: 1, ageMs: 1 }] }) })) as unknown as typeof fetch);
+    renderComposer(vi.fn());
+    fireEvent.click(screen.getByText("Session"));
+    await waitFor(() => expect(screen.getByText("app")).toBeTruthy());
+    fireEvent.click(screen.getByText("app"));
+    await waitFor(() => expect(studio).toHaveBeenCalled());
+    expect(JSON.stringify(studio.mock.calls[0][1])).not.toContain("genre");
+  });
+
+  // Picking Heatmap threads `genre: "session-heatmap"` into the seed call.
+  it("Session tab threads session-heatmap genre when the user picks Heatmap", async () => {
+    vi.spyOn(testbedProjectsRoute, "call").mockResolvedValue({ projects: [] } as never);
+    const studio = vi.spyOn(playStudioRoute, "call").mockResolvedValue({ name: "s1" });
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ sessions: [{ id: "sess-1", file: "/f", agent: "claude", project: "app", model: "opus", msgs: 5, startMs: 0, endMs: 1, ageMs: 1 }] }) })) as unknown as typeof fetch);
+    renderComposer(vi.fn());
+    fireEvent.click(screen.getByText("Session"));
+    await waitFor(() => expect(screen.getByText("app")).toBeTruthy());
+    fireEvent.click(screen.getByText("Heatmap"));
+    fireEvent.click(screen.getByText("app"));
+    await waitFor(() => expect(studio).toHaveBeenCalled());
+    expect(studio.mock.calls[0][1]).toMatchObject({ body: { genre: "session-heatmap" } });
+  });
+
   it("switches to the HTML tab and imports pasted HTML", async () => {
     vi.spyOn(testbedProjectsRoute, "call").mockResolvedValue({ projects: [] } as never);
     const imp = vi.spyOn(playImportRoute, "call").mockResolvedValue({ name: "my-game" });

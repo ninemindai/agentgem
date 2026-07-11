@@ -929,8 +929,11 @@ export const playInspectorRoute = defineRoute("GET", "/api/play/inspector", {
   response: z.object({ name: z.string(), html: z.string(), meta: z.object({ title: z.string(), genre: z.string(), createdFrom: PlaySourceSchema, engineVersion: z.string(), needs: PlayNeedsSchema }) }),
 });
 // `name` optional on all three: omitted it is derived from the source, supplied it must be free (409).
+// `genre` picks between a session source's two forks (replay | session-heatmap); omitted, the source
+// kind's default genre applies unchanged.
 export const playStudioRoute = defineRoute("POST", "/api/play/studio", {
-  body: z.object({ source: PlaySourceSchema, name: z.string().optional() }), response: z.object({ name: z.string() }),
+  body: z.object({ source: PlaySourceSchema, name: z.string().optional(), genre: z.enum(["replay", "session-heatmap"]).optional() }),
+  response: z.object({ name: z.string() }),
 });
 export const playImportRoute = defineRoute("POST", "/api/play/import", {
   body: z.object({ title: z.string(), html: z.string(), name: z.string().optional() }), response: z.object({ name: z.string() }),
