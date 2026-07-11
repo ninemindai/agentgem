@@ -184,12 +184,13 @@ git commit -m "feat(aggregator): review-staging tables (review_requests/messages
 - Test: `src/aggregator/__tests__/reviewStaging.test.ts`
 
 **Interfaces:**
-- Consumes: `groupMemberRole(db, groupId, accountId)` (groups.ts), `catalogGemExists(db, gemKey, version)` (catalog.ts), `type CatalogManifest` (catalog.ts).
+- Consumes: `groupMemberRole(db, groupId, accountId)` (groups.ts), `catalogGemExists(db, gemKey, version)` (catalog.ts), `accountOwnsScope(db, accountId, scope)` (webAuth.ts), `type CatalogManifest` (catalog.ts).
 - Produces:
   ```ts
+  export function gemScope(gemKey: string): string; // "@acme/bot" -> "acme"; "" if malformed
   export type SubmitResult =
     | { ok: true; requestId: string }
-    | { ok: false; rejected: "not-a-member" | "version-published" | "invalid-key" };
+    | { ok: false; rejected: "not-a-member" | "not-scope-owner" | "version-published" | "invalid-key" };
   export async function submitReviewRequest(
     db: AppDb,
     args: { accountId: string; groupId: string; manifest: CatalogManifest; archiveBytes: Uint8Array; archiveDigest: string; description?: string },
@@ -202,14 +203,21 @@ git commit -m "feat(aggregator): review-staging tables (review_requests/messages
 Append to `src/aggregator/__tests__/reviewStaging.test.ts`:
 
 ```ts
-import { makeTestDb, upsertAccount, createNativeGroup, grantInvite, submitReviewRequest, upsertCatalogGem } from "@agentgem/aggregator";
+import { makeTestDb, upsertAccount, createNativeGroup, grantInvite, submitReviewRequest, upsertCatalogGem, accountScopes } from "@agentgem/aggregator";
 
 const mkManifest = (gemKey: string, version = "1.0.0") => ({ gemKey, version, description: "d", gemDigest: "sha256:deadbeef" });
 
+// Grant an account ownership of a publish scope (the org-membership half of accountOwnsScope). Every
+// seed that will submit `@team/bot` must first grant the AUTHOR the `team` scope, or the new
+// scope-ownership guard rejects the submit with `not-scope-owner`. Reused across all describes below.
+const ownScope = (db: any, accountId: string, scope = "team") =>
+  db.insert(accountScopes).values({ accountId, scope, role: "member" });
+
 describe("submitReviewRequest", () => {
-  it("a group member can submit a staging request", async () => {
+  it("a group member who owns the scope can submit a staging request", async () => {
     const db = await makeTestDb();
     const author = await upsertAccount(db, { provider: "github", accountId: "a1", login: "alice" });
+    await ownScope(db, author.id);
     const g = await createNativeGroup(db, author.id, "Team");
     const r = await submitReviewRequest(db, {
       accountId: author.id, groupId: g.id, manifest: mkManifest("@team/bot"),
@@ -218,10 +226,22 @@ describe("submitReviewRequest", () => {
     expect(r.ok).toBe(true);
   });
 
+  it("rejects a member who does NOT own the gem's scope", async () => {
+    const db = await makeTestDb();
+    const author = await upsertAccount(db, { provider: "github", accountId: "a1", login: "alice" });
+    const g = await createNativeGroup(db, author.id, "Team"); // author owns no scope
+    const r = await submitReviewRequest(db, {
+      accountId: author.id, groupId: g.id, manifest: mkManifest("@microsoft/tool"),
+      archiveBytes: new Uint8Array([1]), archiveDigest: "sha256:x",
+    });
+    expect(r).toEqual({ ok: false, rejected: "not-scope-owner" });
+  });
+
   it("rejects a non-member", async () => {
     const db = await makeTestDb();
     const owner = await upsertAccount(db, { provider: "github", accountId: "o", login: "owner" });
     const outsider = await upsertAccount(db, { provider: "github", accountId: "x", login: "mallory" });
+    await ownScope(db, outsider.id); // owns the scope, but is not in the group — membership fails first
     const g = await createNativeGroup(db, owner.id, "Team");
     const r = await submitReviewRequest(db, {
       accountId: outsider.id, groupId: g.id, manifest: mkManifest("@team/bot"),
@@ -233,6 +253,7 @@ describe("submitReviewRequest", () => {
   it("rejects a version that is already published", async () => {
     const db = await makeTestDb();
     const author = await upsertAccount(db, { provider: "github", accountId: "a1", login: "alice" });
+    await ownScope(db, author.id);
     const g = await createNativeGroup(db, author.id, "Team");
     await upsertCatalogGem(db, { gemKey: "@team/bot", version: "1.0.0", publishedBy: "alice", createdAtMs: 1, ownerAccountId: author.id });
     const r = await submitReviewRequest(db, {
@@ -281,11 +302,21 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import type { AppDb } from "./schema.js";
 import { reviewRequests } from "./schema.js";
 import { groupMemberRole } from "./groups.js";
+import { accountOwnsScope } from "./webAuth.js";
 import { catalogGemExists, type CatalogManifest } from "./catalog.js";
+
+/** "@acme/bot" -> "acme"; "" for a malformed/slash-less key (caller rejects that as invalid-key
+ *  first, so "" never reaches accountOwnsScope). The scope is everything between the leading "@"
+ *  and the first "/". */
+export function gemScope(gemKey: string): string {
+  const slash = gemKey.indexOf("/");
+  if (slash < 0) return "";
+  return gemKey.slice(gemKey.startsWith("@") ? 1 : 0, slash);
+}
 
 export type SubmitResult =
   | { ok: true; requestId: string }
-  | { ok: false; rejected: "not-a-member" | "version-published" | "invalid-key" };
+  | { ok: false; rejected: "not-a-member" | "not-scope-owner" | "version-published" | "invalid-key" };
 
 export async function submitReviewRequest(
   db: AppDb,
@@ -295,6 +326,11 @@ export async function submitReviewRequest(
   // Same key rule as recordCatalogShare: a published key is scope/name and ALWAYS contains "/".
   if (!args.manifest.gemKey.includes("/")) return { ok: false, rejected: "invalid-key" };
   if ((await groupMemberRole(db, args.groupId, args.accountId)) === null) return { ok: false, rejected: "not-a-member" };
+  // Scope-ownership guard (D2): you may only stage under a scope you own — your handle, or an org
+  // membership captured at sign-in/bind. Re-checked at approval (that is the actual publish). This
+  // is a guard the raw publish path lacks; the review flow adds it because it makes staging under an
+  // arbitrary scope a one-click team action otherwise.
+  if (!(await accountOwnsScope(db, args.accountId, gemScope(args.manifest.gemKey)))) return { ok: false, rejected: "not-scope-owner" };
   if (await catalogGemExists(db, args.manifest.gemKey, args.manifest.version)) return { ok: false, rejected: "version-published" };
   const id = randomUUID();
   await db.insert(reviewRequests).values({
@@ -310,7 +346,7 @@ export async function submitReviewRequest(
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run src/aggregator/__tests__/reviewStaging.test.ts -t submitReviewRequest`
-Expected: PASS (all 4 cases).
+Expected: PASS (all 5 cases).
 
 - [ ] **Step 5: Commit**
 
@@ -353,6 +389,7 @@ describe("listInbox + markSeen", () => {
   it("lists open requests for the viewer's groups, newest first, unread until seen", async () => {
     const db = await makeTestDb();
     const author = await upsertAccount(db, { provider: "github", accountId: "a1", login: "alice" });
+    await ownScope(db, author.id);
     const reviewer = await upsertAccount(db, { provider: "github", accountId: "r1", login: "rob" });
     const g = await createNativeGroup(db, author.id, "Team");
     await grantInvite(db, g.id, reviewer.id, "member");
@@ -374,6 +411,7 @@ describe("listInbox + markSeen", () => {
   it("does not list requests from groups the viewer is not in", async () => {
     const db = await makeTestDb();
     const author = await upsertAccount(db, { provider: "github", accountId: "a1", login: "alice" });
+    await ownScope(db, author.id);
     const outsider = await upsertAccount(db, { provider: "github", accountId: "x", login: "mallory" });
     const g = await createNativeGroup(db, author.id, "Team");
     await submitReviewRequest(db, { accountId: author.id, groupId: g.id, manifest: mkManifest("@team/bot"), archiveBytes: new Uint8Array([1]), archiveDigest: "sha256:x" }, 1000);
@@ -459,13 +497,22 @@ git commit -m "feat(aggregator): review inbox listing + seen markers"
 - Produces:
   ```ts
   export interface ReviewMessageRow { id: string; authorAccountId: string; authorLogin: string | null; body: string; createdAtMs: number }
-  export interface ReviewRequestDetail extends ReviewRequestSummary { manifest: CatalogManifest; archiveDigest: string; messages: ReviewMessageRow[] }
+  // Its OWN shape (does NOT extend ReviewRequestSummary): the detail view has no groupName/unread/
+  // messageCount to fill — those are inbox-only. Carrying them here would force stub values, so we
+  // don't (explicit over clever).
+  export interface ReviewRequestDetail {
+    id: string; groupId: string; gemKey: string; version: string;
+    authorAccountId: string; authorLogin: string | null; status: ReviewStatus;
+    description: string | null; createdAtMs: number; resolvedAtMs: number | null;
+    manifest: CatalogManifest; archiveDigest: string; messages: ReviewMessageRow[];
+  }
   export async function getReviewRequest(db: AppDb, accountId: string, requestId: string): Promise<ReviewRequestDetail | null>; // null = not found OR viewer not a member of its group
   export async function getReviewArchive(db: AppDb, accountId: string, requestId: string): Promise<{ bytes: Uint8Array; digest: string } | null>;
   export type MessageResult = { ok: true; messageId: string } | { ok: false; rejected: "not-found" | "not-a-member" };
   export async function addReviewMessage(db: AppDb, args: { accountId: string; requestId: string; body: string }, now?: number): Promise<MessageResult>;
   ```
 - All three gate on `groupMemberRole(db, request.groupId, accountId) !== null`; a non-member gets `null` / `not-found` (membership and existence collapsed — no enumeration oracle).
+- `loadForMember` (the shared gate helper) selects every request column **except `archiveBytes`** so detail/comment reads never drag the multi-MB archive into memory (D4). Only `getReviewArchive` and `approveReviewRequest` fetch the bytes, in a separate targeted query.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -478,6 +525,7 @@ describe("request detail / messages / archive", () => {
   async function seed() {
     const db = await makeTestDb();
     const author = await upsertAccount(db, { provider: "github", accountId: "a1", login: "alice" });
+    await ownScope(db, author.id);
     const reviewer = await upsertAccount(db, { provider: "github", accountId: "r1", login: "rob" });
     const outsider = await upsertAccount(db, { provider: "github", accountId: "x", login: "mallory" });
     const g = await createNativeGroup(db, author.id, "Team");
@@ -524,10 +572,21 @@ export interface ReviewMessageRow { id: string; authorAccountId: string; authorL
 export interface ReviewRequestDetail extends ReviewRequestSummary { manifest: CatalogManifest; archiveDigest: string; messages: ReviewMessageRow[] }
 export type MessageResult = { ok: true; messageId: string } | { ok: false; rejected: "not-found" | "not-a-member" };
 
-/** Load the request row and confirm the viewer is a member of its group. Returns the row + role, or a
- *  reason. Shared by every membership-gated read/write below. */
+// Every request column EXCEPT archive_bytes. loadForMember uses this so the two hot read paths
+// (detail view, comment post) never pull the multi-MB archive into memory (D4). Bytes are fetched
+// separately, only where actually needed (getReviewArchive, approveReviewRequest).
+const REQ_COLS = {
+  id: reviewRequests.id, groupId: reviewRequests.groupId, gemKey: reviewRequests.gemKey,
+  version: reviewRequests.version, authorAccountId: reviewRequests.authorAccountId,
+  status: reviewRequests.status, description: reviewRequests.description,
+  manifest: reviewRequests.manifest, archiveDigest: reviewRequests.archiveDigest,
+  createdAtMs: reviewRequests.createdAtMs, resolvedAtMs: reviewRequests.resolvedAtMs,
+} as const;
+
+/** Load the request (WITHOUT archive bytes) and confirm the viewer is a member of its group. Returns
+ *  the bytes-free row, or a reason. Shared by every membership-gated read/write below. */
 async function loadForMember(db: AppDb, accountId: string, requestId: string) {
-  const row = (await db.select().from(reviewRequests).where(eq(reviewRequests.id, requestId)).limit(1))[0];
+  const row = (await db.select(REQ_COLS).from(reviewRequests).where(eq(reviewRequests.id, requestId)).limit(1))[0];
   if (!row) return { kind: "not-found" as const };
   if ((await groupMemberRole(db, row.groupId, accountId)) === null) return { kind: "not-a-member" as const };
   return { kind: "ok" as const, row };
@@ -538,17 +597,15 @@ export async function getReviewRequest(db: AppDb, accountId: string, requestId: 
   if (r.kind !== "ok") return null; // not-found and not-a-member collapse to null (no enumeration oracle)
   const row = r.row;
   const author = (await db.select({ login: accounts.login }).from(accounts).where(eq(accounts.id, row.authorAccountId)).limit(1))[0];
-  const groupName = (await db.select({ name: sql<string>`name` }).from(reviewRequests).where(sql`false`)); // placeholder removed below
   const msgs = await db.execute(sql`
     select m.id, m.author_account_id, m.body, m.created_at_ms, a.login as author_login
     from review_messages m join accounts a on a.id = m.author_account_id
     where m.request_id = ${requestId} order by m.created_at_ms asc`);
   return {
-    id: row.id, groupId: row.groupId, groupName: "", gemKey: row.gemKey, version: row.version,
+    id: row.id, groupId: row.groupId, gemKey: row.gemKey, version: row.version,
     authorAccountId: row.authorAccountId, authorLogin: author?.login ?? null, status: row.status,
     description: row.description ?? null, createdAtMs: Number(row.createdAtMs),
     resolvedAtMs: row.resolvedAtMs == null ? null : Number(row.resolvedAtMs),
-    messageCount: (msgs.rows as any[]).length, unread: false,
     manifest: row.manifest as unknown as CatalogManifest, archiveDigest: row.archiveDigest,
     messages: (msgs.rows as any[]).map((m) => ({ id: m.id, authorAccountId: m.author_account_id, authorLogin: m.author_login ?? null, body: m.body, createdAtMs: Number(m.created_at_ms) })),
   };
@@ -556,21 +613,24 @@ export async function getReviewRequest(db: AppDb, accountId: string, requestId: 
 
 export async function getReviewArchive(db: AppDb, accountId: string, requestId: string): Promise<{ bytes: Uint8Array; digest: string } | null> {
   const r = await loadForMember(db, accountId, requestId);
-  if (r.kind !== "ok" || r.row.archiveBytes == null) return null;
-  return { bytes: r.row.archiveBytes, digest: r.row.archiveDigest };
+  if (r.kind !== "ok") return null;
+  // Membership confirmed on the bytes-free row; NOW fetch the bytes in a targeted query.
+  const a = (await db.select({ bytes: reviewRequests.archiveBytes, digest: reviewRequests.archiveDigest })
+    .from(reviewRequests).where(eq(reviewRequests.id, requestId)).limit(1))[0];
+  return a && a.bytes != null ? { bytes: a.bytes, digest: a.digest } : null;
 }
 
 export async function addReviewMessage(db: AppDb, args: { accountId: string; requestId: string; body: string }, now: number = Date.now()): Promise<MessageResult> {
   const r = await loadForMember(db, args.accountId, args.requestId);
   if (r.kind === "not-found") return { ok: false, rejected: "not-found" };
   if (r.kind === "not-a-member") return { ok: false, rejected: "not-a-member" };
+  // Gated on membership only, NOT status: commenting on an already-approved/withdrawn request is
+  // allowed (post-hoc discussion / an audit trail). Tested in Task 6 against a withdrawn request.
   const id = randomUUID();
   await db.insert(reviewMessages).values({ id, requestId: args.requestId, authorAccountId: args.accountId, body: args.body, createdAtMs: now });
   return { ok: true, messageId: id };
 }
 ```
-
-Then delete the dead `groupName` placeholder line (`const groupName = ...`) — `getReviewRequest` returns `groupName: ""`; the inbox is where `groupName` is populated (Task 3). Keeping detail's `groupName` empty is intentional: the detail view already knows its group from context.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -601,7 +661,8 @@ git commit -m "feat(aggregator): review detail/messages/archive (membership-gate
     | { ok: false; rejected: "not-found" | "not-a-member" | "self-approval" | "not-open" | "conflict" };
   export async function approveReviewRequest(db: AppDb, args: { accountId: string; requestId: string }, now?: number): Promise<ApproveResult>;
   ```
-- Guarantees: (a) approver must be a group member and NOT the author; (b) the `open → approved` transition is a conditional UPDATE so a double-approve loses as a no-op; (c) publishes via `upsertCatalogGem` (`publishedBy` = author login, `ownerAccountId` = author) + `upsertGemArchive`; (d) re-applies the catalog owner-conflict guard (an existing `(gemKey,version)` owned by a different account → `conflict`, transition rolled back); (e) clears `archive_bytes` after publishing.
+- Guarantees: (a) approver must be a group member and NOT the author; (b) the `open → approved` transition is a conditional UPDATE so a double-approve loses as a no-op; (c) publishes via `upsertCatalogGem` (`publishedBy` = author login, `ownerAccountId` = author) + `upsertGemArchive`; (d) re-applies the AUTHOR's scope ownership (`accountOwnsScope`) AND the catalog owner-conflict guard, both BEFORE the claim so a rejection leaves the request `open`; (e) fetches archive bytes in a targeted query (loadForMember excludes them) then clears `archive_bytes` after publishing.
+- Consumes additionally: `accountOwnsScope` + `gemScope` (already imported/defined in Task 2).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -614,6 +675,7 @@ describe("approveReviewRequest", () => {
   async function seedOpen() {
     const db = await makeTestDb();
     const author = await upsertAccount(db, { provider: "github", accountId: "a1", login: "alice" });
+    await ownScope(db, author.id);
     const reviewer = await upsertAccount(db, { provider: "github", accountId: "r1", login: "rob" });
     const g = await createNativeGroup(db, author.id, "Team");
     await grantInvite(db, g.id, reviewer.id, "member");
@@ -661,10 +723,18 @@ describe("approveReviewRequest", () => {
     const detail = await getReviewRequest(db, reviewer.id, requestId);
     expect(detail?.status).toBe("open");
   });
+
+  it("re-checks scope ownership at approval: rejects if the author lost the scope since submitting", async () => {
+    const { db, author, reviewer, requestId } = await seedOpen();
+    // Author owned `team` at submit; now they lose it (e.g. left the org). Approval must re-check.
+    await db.delete(accountScopes).where(eq(accountScopes.accountId, author.id));
+    expect(await approveReviewRequest(db, { accountId: reviewer.id, requestId }, 2000)).toEqual({ ok: false, rejected: "not-scope-owner" });
+    expect((await getReviewRequest(db, reviewer.id, requestId))?.status).toBe("open"); // rolled back
+  });
 });
 ```
 
-Note the conflict test seeds the catalog row AFTER submit (so the submit-time `version-published` guard is passed), proving the guard is re-applied at approval — the exact delete-guard-≠-publish-guard class of bug the spec calls out.
+Note the conflict test seeds the catalog row AFTER submit (so the submit-time `version-published` guard is passed), proving the guard is re-applied at approval — the exact delete-guard-≠-publish-guard class of bug the spec calls out. The scope-recheck test deletes the author's scope grant after submit, proving `accountOwnsScope` is re-evaluated at approval, not trusted from submit time. Both need `eq` and `accountScopes` — add them to the test file imports: `import { eq } from "drizzle-orm";` and add `accountScopes` to the `@agentgem/aggregator` import (already imported in Task 2's block).
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -681,7 +751,7 @@ import { reviewRequests, reviewMessages, reviewSeen, accounts, catalogGems, type
 
 export type ApproveResult =
   | { ok: true; gemKey: string; version: string }
-  | { ok: false; rejected: "not-found" | "not-a-member" | "self-approval" | "not-open" | "conflict" };
+  | { ok: false; rejected: "not-found" | "not-a-member" | "self-approval" | "not-open" | "not-scope-owner" | "conflict" };
 
 export async function approveReviewRequest(db: AppDb, args: { accountId: string; requestId: string }, now: number = Date.now()): Promise<ApproveResult> {
   const load = await loadForMember(db, args.accountId, args.requestId);
@@ -691,11 +761,21 @@ export async function approveReviewRequest(db: AppDb, args: { accountId: string;
   if (row.authorAccountId === args.accountId) return { ok: false, rejected: "self-approval" };
   if (row.status !== "open") return { ok: false, rejected: "not-open" };
 
-  // Re-apply the catalog owner-conflict guard AT APPROVAL (publish is a different code path than submit;
-  // an intervening publish of the same key/version by another account must not be overwritten).
+  // Re-apply the AUTHOR's scope ownership AT APPROVAL (D2): the author is the publisher, and they may
+  // have lost the scope (left the org) since submitting. Publish is a different code path than submit,
+  // so the submit-time check must not be trusted here.
+  if (!(await accountOwnsScope(db, row.authorAccountId, gemScope(row.gemKey)))) return { ok: false, rejected: "not-scope-owner" };
+
+  // Re-apply the catalog owner-conflict guard AT APPROVAL (an intervening publish of the same
+  // key/version by another account must not be overwritten).
   const existing = (await db.select({ ownerAccountId: catalogGems.ownerAccountId }).from(catalogGems)
     .where(and(eq(catalogGems.gemKey, row.gemKey), eq(catalogGems.version, row.version))).limit(1))[0];
   if (existing && existing.ownerAccountId !== row.authorAccountId) return { ok: false, rejected: "conflict" };
+
+  // Fetch the archive bytes BEFORE the claim (which nulls the column). loadForMember excludes bytes
+  // for perf (D4), so this targeted read is where approval — the one path that needs them — gets them.
+  const bytesRow = (await db.select({ bytes: reviewRequests.archiveBytes }).from(reviewRequests)
+    .where(eq(reviewRequests.id, args.requestId)).limit(1))[0];
 
   // Atomic claim of the transition: only the row still `open` flips. A concurrent approve/withdraw that
   // already moved it updates 0 rows -> not-open (no double publish).
@@ -713,19 +793,19 @@ export async function approveReviewRequest(db: AppDb, args: { accountId: string;
     author: m.author, description: m.description ?? row.description ?? undefined, tags: m.tags,
     artifactKinds: m.artifactKinds, type: m.type, grade: m.grade, artifacts: m.artifacts, createdAtMs: now,
   });
-  if (row.archiveBytes != null) {
-    await upsertGemArchive(db, { gemKey: row.gemKey, version: row.version, bytes: row.archiveBytes, digest: row.archiveDigest, createdAtMs: now, ownerAccountId: row.authorAccountId });
+  if (bytesRow?.bytes != null) {
+    await upsertGemArchive(db, { gemKey: row.gemKey, version: row.version, bytes: bytesRow.bytes, digest: row.archiveDigest, createdAtMs: now, ownerAccountId: row.authorAccountId });
   }
   return { ok: true, gemKey: row.gemKey, version: row.version };
 }
 ```
 
-Note: `row.archiveBytes` is read into `row` before the UPDATE nulls the column, so the publish still has the bytes. (Drizzle's `.returning()` on the UPDATE is only used to detect the claim; the bytes come from the earlier `load`.)
+Note: the scope re-check and owner-conflict guard both run BEFORE the atomic claim, so a rejection leaves the request `open` (rolled back). The archive bytes are read in their own query before the claim nulls the column, because `loadForMember` no longer carries them (D4).
 
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run src/aggregator/__tests__/reviewStaging.test.ts -t approveReviewRequest`
-Expected: PASS (all 5 cases).
+Expected: PASS (all 6 cases).
 
 - [ ] **Step 5: Commit**
 
@@ -767,6 +847,7 @@ describe("requestChanges / resubmit / withdraw", () => {
   async function seedOpen() {
     const db = await makeTestDb();
     const author = await upsertAccount(db, { provider: "github", accountId: "a1", login: "alice" });
+    await ownScope(db, author.id);
     const reviewer = await upsertAccount(db, { provider: "github", accountId: "r1", login: "rob" });
     const g = await createNativeGroup(db, author.id, "Team");
     await grantInvite(db, g.id, reviewer.id, "member");
@@ -806,6 +887,14 @@ describe("requestChanges / resubmit / withdraw", () => {
     expect((await getReviewRequest(db, reviewer.id, requestId))?.status).toBe("withdrawn");
     expect(await listInbox(db, reviewer.id)).toEqual([]);
   });
+
+  it("commenting on a terminal (withdrawn) request is still allowed — post-hoc discussion", async () => {
+    const { db, author, reviewer, requestId } = await seedOpen();
+    await withdrawReviewRequest(db, { accountId: author.id, requestId }, 1400);
+    const m = await addReviewMessage(db, { accountId: reviewer.id, requestId, body: "why withdrawn?" }, 1500);
+    expect(m.ok).toBe(true);
+    expect((await getReviewRequest(db, reviewer.id, requestId))?.messages).toHaveLength(1);
+  });
 });
 ```
 
@@ -838,7 +927,8 @@ export async function resubmitReviewRequest(
   args: { accountId: string; requestId: string; manifest: CatalogManifest; archiveBytes: Uint8Array; archiveDigest: string; description?: string },
   now: number = Date.now(),
 ): Promise<ResubmitResult> {
-  const row = (await db.select().from(reviewRequests).where(eq(reviewRequests.id, args.requestId)).limit(1))[0];
+  const row = (await db.select({ authorAccountId: reviewRequests.authorAccountId, description: reviewRequests.description })
+    .from(reviewRequests).where(eq(reviewRequests.id, args.requestId)).limit(1))[0];
   if (!row) return { ok: false, rejected: "not-found" };
   if (row.authorAccountId !== args.accountId) return { ok: false, rejected: "forbidden" };
   const claimed = await db.update(reviewRequests)
@@ -857,7 +947,8 @@ export async function resubmitReviewRequest(
 
 export type WithdrawResult = { ok: true } | { ok: false; rejected: "not-found" | "forbidden" | "not-open" };
 export async function withdrawReviewRequest(db: AppDb, args: { accountId: string; requestId: string }, now: number = Date.now()): Promise<WithdrawResult> {
-  const row = (await db.select().from(reviewRequests).where(eq(reviewRequests.id, args.requestId)).limit(1))[0];
+  const row = (await db.select({ authorAccountId: reviewRequests.authorAccountId })
+    .from(reviewRequests).where(eq(reviewRequests.id, args.requestId)).limit(1))[0];
   if (!row) return { ok: false, rejected: "not-found" };
   if (row.authorAccountId !== args.accountId) return { ok: false, rejected: "forbidden" };
   const claimed = await db.update(reviewRequests)
@@ -908,6 +999,7 @@ describe("member-removal cleanup", () => {
     const db = await makeTestDb();
     const admin = await upsertAccount(db, { provider: "github", accountId: "ad", login: "admin" });
     const author = await upsertAccount(db, { provider: "github", accountId: "a1", login: "alice" });
+    await ownScope(db, author.id);
     const g = await createNativeGroup(db, admin.id, "Team");
     await grantInvite(db, g.id, author.id, "member");
     const r = await submitReviewRequest(db, { accountId: author.id, groupId: g.id, manifest: mkManifest("@team/bot"), archiveBytes: new Uint8Array([1]), archiveDigest: "x" }, 1000);
@@ -976,7 +1068,8 @@ git commit -m "feat(aggregator): withdraw a departed member's open review reques
 - Test: `src/aggregator/__tests__/reviewStagingController.test.ts`
 
 **Interfaces:**
-- Consumes: `resolveSignedAccount` (catalog.ts), `catalogSigningPayload` (catalog.ts, reused for submit/resubmit which sign a manifest), all Task 2–7 store functions, `importGem` (already imported in the controller for `/publish-gem`).
+- Consumes: `resolveSignedAccount` (catalog.ts), `catalogSigningPayload` (catalog.ts, reused for submit/resubmit which sign a manifest), all Task 2–7 store functions, `importGem` (already imported in the controller for `/publish-gem`). The controller **test** reuses `src/aggregator/__tests__/helpers/publishFixtures.ts` (`signer`, `sampleGem`, `signedPublishBody`) to build a REAL `.gem` archive — a hand-rolled byte array would throw in `importGem`.
+- The `/review/request` and `/review/resubmit` routes verify `manifest.gemDigest === importGem(bytes).meta.gemDigest` (D3), throwing a 400 `review_digest_mismatch` on mismatch — mirroring `/publish-gem` so a published gem never advertises a digest its bytes don't match.
 - Produces these routes under `@api({ basePath: "/api/aggregator" })`:
   | Method | Path | Body (Zod) | Auth payload signed |
   |---|---|---|---|
@@ -1002,29 +1095,28 @@ Create `src/aggregator/__tests__/reviewStagingController.test.ts`. Model the sig
 
 ```ts
 import { describe, it, expect } from "vitest";
-import { generateKeyPairSync, sign as edSign } from "node:crypto";
-import { makeTestDb, upsertAccount, createNativeGroup, grantInvite, producers, accountBindings, catalogSigningPayload, reviewActionPayload } from "@agentgem/aggregator";
+import { makeTestDb, upsertAccount, createNativeGroup, grantInvite, producers, accountBindings, accountScopes, catalogSigningPayload, reviewActionPayload } from "@agentgem/aggregator";
+import { signer, sampleGem, signedPublishBody } from "./helpers/publishFixtures.js";
 import { AggregatorController } from "../../aggregator.controller.js";
-
-// ed25519 signer identical in shape to catalogController.test.ts's helper.
-function signer() {
-  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
-  const spki = publicKey.export({ type: "spki", format: "der" });
-  const pubkey = "ed25519:" + Buffer.from(spki).toString("base64");
-  return { pubkey, sign: (payload: string) => Buffer.from(edSign(null, Buffer.from(payload), privateKey)).toString("base64") };
-}
 
 // Bind a signer's pubkey to a seeded account so resolveSignedAccount maps key -> accounts.id.
 async function bind(db: any, pubkey: string, acct: { id: string; login: string }) {
   await db.insert(producers).values({ pubkey }).onConflictDoNothing();
   await db.insert(accountBindings).values({ pubkey, provider: "github", accountId: acct.login, accountLogin: acct.login });
 }
+const ownScope = (db: any, accountId: string, scope = "team") => db.insert(accountScopes).values({ accountId, scope, role: "member" });
 
-const manifest = { gemKey: "@team/bot", version: "1.0.0", description: "d", gemDigest: "sha256:00" };
+// A real signed /review/request body: a REAL .gem archive (so importGem succeeds) whose manifest.gemDigest
+// matches the bytes (so the D3 digest guard passes). Reuses the publish-path fixture.
+function submitBody(s: ReturnType<typeof signer>, groupId: string, signedAt: number, description?: string) {
+  const b = signedPublishBody(sampleGem(), s, { gemKey: "@team/bot", version: "1.0.0", signedAt });
+  return { manifest: b.manifest, archiveBase64: b.archiveBase64, groupId, description, pubkey: b.pubkey, signedAt, signature: b.signature, bytes: b.bytes, gemDigest: b.gemDigest };
+}
 
 it("submit -> inbox -> approve over the signed HTTP surface", async () => {
   const db = await makeTestDb();
   const author = await upsertAccount(db, { provider: "github", accountId: "alice", login: "alice" });
+  await ownScope(db, author.id);
   const reviewer = await upsertAccount(db, { provider: "github", accountId: "rob", login: "rob" });
   const g = await createNativeGroup(db, author.id, "Team");
   await grantInvite(db, g.id, reviewer.id, "member");
@@ -1033,16 +1125,14 @@ it("submit -> inbox -> approve over the signed HTTP surface", async () => {
   const c = new AggregatorController(db);
 
   const now = Date.now();
-  const sub = await c.reviewRequest({ body: {
-    manifest, archiveBase64: Buffer.from([1, 2, 3]).toString("base64"), groupId: g.id, description: "please",
-    pubkey: aliceKey.pubkey, signedAt: now, signature: aliceKey.sign(catalogSigningPayload(manifest as any, aliceKey.pubkey, now)),
-  } });
+  const { bytes: _b, gemDigest: _d, ...body } = submitBody(aliceKey, g.id, now, "please");
+  const sub = await c.reviewRequest({ body });
   expect(sub.ok).toBe(true);
   const requestId = (sub as { ok: true; requestId: string }).requestId;
 
   const inboxAt = Date.now();
   const inbox = await c.reviewInbox({ body: { pubkey: robKey.pubkey, signedAt: inboxAt, signature: robKey.sign(reviewActionPayload("inbox", "", robKey.pubkey, inboxAt)) } });
-  expect(inbox.requests.map((r) => r.id)).toContain(requestId);
+  expect(inbox.requests.map((r: any) => r.id)).toContain(requestId);
 
   const apAt = Date.now();
   const ap = await c.reviewApprove({ body: { requestId, pubkey: robKey.pubkey, signedAt: apAt, signature: robKey.sign(reviewActionPayload("approve", requestId, robKey.pubkey, apAt)) } });
@@ -1114,7 +1204,10 @@ async reviewRequest(input: { body: z.infer<typeof ReviewManifestWrite> }): Promi
   const b = input.body;
   const who = await this.signedAccount(catalogSigningPayload(b.manifest, b.pubkey, b.signedAt), b);
   const bytes = new Uint8Array(Buffer.from(b.archiveBase64, "base64"));
-  const digest = importGem(bytes).meta.gemDigest; // validates the .gem, throws AgentError on bad archive (reuse /publish-gem's guard)
+  const digest = importGem(Buffer.from(bytes)).meta.gemDigest; // validates the .gem, throws AgentError on bad archive (reuse /publish-gem's guard)
+  // D3: the manifest's advertised digest MUST match the real archive, so the published catalog row
+  // never claims a hash its bytes don't have. Mirrors /publish-gem exactly.
+  if (b.manifest.gemDigest !== digest) throw new AgentError("manifest digest does not match archive", { status: 400, code: "review_digest_mismatch", retryable: false });
   const r = await submitReviewRequest(this.db, { accountId: who.accountId, groupId: b.groupId, manifest: b.manifest, archiveBytes: bytes, archiveDigest: digest, description: b.description });
   return r.ok ? { ok: true, requestId: r.requestId } : { ok: false, rejected: r.rejected };
 }
@@ -1124,7 +1217,8 @@ async reviewResubmit(input: { body: z.infer<typeof ReviewResubmit> }): Promise<z
   const b = input.body;
   const who = await this.signedAccount(catalogSigningPayload(b.manifest, b.pubkey, b.signedAt), b);
   const bytes = new Uint8Array(Buffer.from(b.archiveBase64, "base64"));
-  const digest = importGem(bytes).meta.gemDigest;
+  const digest = importGem(Buffer.from(bytes)).meta.gemDigest;
+  if (b.manifest.gemDigest !== digest) throw new AgentError("manifest digest does not match archive", { status: 400, code: "review_digest_mismatch", retryable: false }); // D3, mirrors submit
   const r = await resubmitReviewRequest(this.db, { accountId: who.accountId, requestId: b.requestId, manifest: b.manifest, archiveBytes: bytes, archiveDigest: digest, description: b.description });
   return r.ok ? { ok: true } : { ok: false, rejected: r.rejected };
 }
@@ -1210,20 +1304,39 @@ Add these cases to `reviewStagingController.test.ts` (full assertions, not place
 it("self-approval over HTTP is rejected", async () => {
   const db = await makeTestDb();
   const author = await upsertAccount(db, { provider: "github", accountId: "alice", login: "alice" });
+  await ownScope(db, author.id);
   const g = await createNativeGroup(db, author.id, "Team");
   const k = signer(); await bind(db, k.pubkey, { id: author.id, login: "alice" });
   const c = new AggregatorController(db);
   const now = Date.now();
-  const sub = await c.reviewRequest({ body: { manifest, archiveBase64: Buffer.from([1]).toString("base64"), groupId: g.id, pubkey: k.pubkey, signedAt: now, signature: k.sign(catalogSigningPayload(manifest as any, k.pubkey, now)) } });
+  const { bytes: _b, gemDigest: _d, ...body } = submitBody(k, g.id, now);
+  const sub = await c.reviewRequest({ body });
   const requestId = (sub as any).requestId;
   const at = Date.now();
   const res = await c.reviewApprove({ body: { requestId, pubkey: k.pubkey, signedAt: at, signature: k.sign(reviewActionPayload("approve", requestId, k.pubkey, at)) } });
   expect(res).toEqual({ ok: false, rejected: "self-approval" });
 });
 
+it("rejects a submit whose manifest.gemDigest does not match the archive (D3)", async () => {
+  const db = await makeTestDb();
+  const author = await upsertAccount(db, { provider: "github", accountId: "alice", login: "alice" });
+  await ownScope(db, author.id);
+  const g = await createNativeGroup(db, author.id, "Team");
+  const k = signer(); await bind(db, k.pubkey, { id: author.id, login: "alice" });
+  const c = new AggregatorController(db);
+  const now = Date.now();
+  const good = submitBody(k, g.id, now);
+  const badManifest = { ...good.manifest, gemDigest: "sha256:0000" }; // lie about the digest
+  await expect(c.reviewRequest({ body: {
+    manifest: badManifest, archiveBase64: good.archiveBase64, groupId: g.id,
+    pubkey: k.pubkey, signedAt: now, signature: k.sign(catalogSigningPayload(badManifest as any, k.pubkey, now)),
+  } })).rejects.toThrow(); // AgentError 400 review_digest_mismatch (signature is valid; the digest guard fires)
+});
+
 it("a signature bound to one action cannot be replayed for another", async () => {
   const db = await makeTestDb();
   const author = await upsertAccount(db, { provider: "github", accountId: "alice", login: "alice" });
+  await ownScope(db, author.id);
   const reviewer = await upsertAccount(db, { provider: "github", accountId: "rob", login: "rob" });
   const g = await createNativeGroup(db, author.id, "Team");
   await grantInvite(db, g.id, reviewer.id, "member");
@@ -1231,7 +1344,8 @@ it("a signature bound to one action cannot be replayed for another", async () =>
   const rk = signer(); await bind(db, rk.pubkey, { id: reviewer.id, login: "rob" });
   const c = new AggregatorController(db);
   const now = Date.now();
-  const sub = await c.reviewRequest({ body: { manifest, archiveBase64: Buffer.from([1]).toString("base64"), groupId: g.id, pubkey: ak.pubkey, signedAt: now, signature: ak.sign(catalogSigningPayload(manifest as any, ak.pubkey, now)) } });
+  const { bytes: _b, gemDigest: _d, ...body } = submitBody(ak, g.id, now);
+  const sub = await c.reviewRequest({ body });
   const requestId = (sub as any).requestId;
   const at = Date.now();
   // A signature for "withdraw" replayed against the approve route must fail the signature check.
@@ -1269,10 +1383,11 @@ Backend for review-gated gem staging (team collaboration slice D). Store state m
 Spec: docs/superpowers/specs/2026-07-10-gem-review-staging-design.md
 
 ## Guards verified by tests
-- member-gated submit; version-already-published + slash-less-key rejects
+- member-gated + scope-ownership-gated submit; version-already-published + slash-less-key rejects
+- manifest.gemDigest === archive digest (D3), mirroring /publish-gem
 - membership-gated detail/archive/message reads (non-member -> null/not-found)
 - self-approval blocked; approve is an atomic open->approved claim (double-approve = no-op)
-- owner-conflict guard RE-APPLIED at approval (not just submit)
+- scope-ownership AND owner-conflict guards RE-APPLIED at approval (not just submit)
 - resubmit clears seen markers; withdraw + departed-member cleanup
 
 ## ⚠️ CI gap
@@ -1299,17 +1414,56 @@ Then verify each commit's content landed on `origin/main` (`git fetch` + grep `o
 **1. Spec coverage** (spec §Section 1–4 → task):
 - §1 staging status + data model → Tasks 1, 2 (refined: bytes/manifest on `review_requests`, not a `catalog_gems` status — flagged in the plan header and File Structure). ✓
 - §1 lifecycle (submit/approve/request-changes/withdraw/resubmit) → Tasks 2, 5, 6. ✓
-- §1 "publishing respects ownership guards" → Task 5 re-applies the catalog owner-conflict guard at approval (the concrete, existing publish guard; the spec's broader "scope-ownership" wording is narrowed to what `recordCatalogShare` actually enforces — noted). ✓
+- §1 "publishing respects ownership guards" / "can't stage into a scope you don't own" → Tasks 2 + 5 enforce `accountOwnsScope` at BOTH submit and approval (added in eng review, D2), PLUS the catalog owner-conflict guard re-applied at approval. ✓
 - §2 `review_messages` conversation + membership-gated surfaces → Task 4. ✓
 - §2 "both sides in the console / install-to-test" → the archive-fetch endpoint (Task 4 `getReviewArchive` + Task 8 `/review/archive`) is the backend half; the console UI is Plan 2. ✓ (backend obligations met)
 - §3 inbox badge + `review_seen` `last_seen_at` → Task 3 (`listInbox` `unread`, `markSeen`); §3 "transitions as named events for a later Slack webhook" → NOT built (spec defers it); the transition functions are the single choke points a webhook would later hook, satisfying "seam left clean." ✓ (deferred as speced)
 - §4 self-approval, atomic transitions, scope/owner re-check, version collision, resubmit-reuses-request, departed-member cleanup, withdraw-keeps-history → Tasks 2, 5, 6, 7. ✓
 - §4 testing (aggregator state machine) → Tasks 2–8; §4 CI caveat → Global Constraints + Task 9 PR body. ✓
 
-**2. Placeholder scan:** no TBD/TODO; every code step shows real code; the one intentional dead line in Task 4 Step 3 (`const groupName = ...`) is explicitly called out for deletion in the same step. ✓
+**2. Placeholder scan:** no TBD/TODO; every code step shows real code (the earlier dead `const groupName = ...` placeholder was removed in the eng-review pass). ✓
 
-**3. Type consistency:** `submitReviewRequest`/`resubmitReviewRequest` share the `{ manifest, archiveBytes, archiveDigest, description? }` arg shape; `ReviewRequestSummary` (Task 3) is extended by `ReviewRequestDetail` (Task 4); controller methods reference the exact store fn names exported in Tasks 2–7; `reviewActionPayload` is defined in Task 8 Step 3a before its first use in Step 3b/tests. Store fns all take a trailing `now?: number`. ✓
+**3. Type consistency:** `submitReviewRequest`/`resubmitReviewRequest` share the `{ manifest, archiveBytes, archiveDigest, description? }` arg shape; `ReviewRequestDetail` (Task 4) is its OWN interface (no longer extends `ReviewRequestSummary`, per the eng-review type-cleanup); `gemScope`/`accountOwnsScope` (Task 2) reused by approve (Task 5); controller methods reference the exact store fn names exported in Tasks 2–7; `reviewActionPayload` is defined in Task 8 Step 3a before its first use. Store fns all take a trailing `now?: number`. The new `not-scope-owner` reject appears in both `SubmitResult` and `ApproveResult`. ✓
 
 ## Follow-on: Plan 2 (console integration)
 
 Not in this plan. Plan 2 will: (a) add local backend signing routes that mirror `src/gem/catalogShareClient.ts` to call `/api/aggregator/review/*`; (b) add a "Request review" button + group-picker to `packages/console/src/panels/Play/Studio.tsx`; (c) add a `panels/Reviews/` inbox panel + `reviewsPage` registered in `pages.tsx`, using the Watch fetch-list + NotificationsProvider polling idioms for a live unread badge. It depends on the routes this plan ships.
+
+## Eng Review Outcome (2026-07-10)
+
+**What already exists (reused, not rebuilt):** `resolveSignedAccount` + `catalogSigningPayload` (signed-write auth), `accountOwnsScope` (scope-ownership), `groupMemberRole`/`listGroupsForAccount` (membership), `upsertCatalogGem`/`upsertGemArchive`/`catalogGemExists`/`listCatalogGems`/`getGemArchive` (publish + read), `importGem`/`exportGem` (archive), `makeTestDb`/`upsertAccount` + `helpers/publishFixtures.ts` (test harness). No auth or publish machinery is rebuilt.
+
+**NOT in scope (deferred, with rationale):**
+- Assigned/required reviewers — MVP is any-member; extend `review_requests` later.
+- Marketplace SPA review surface — the console is the only client that can install-to-test; a web view is a Plan-2+ follow-on.
+- Slack/email push — deferred behind the transition-events seam (spec §3).
+- Real-time concurrency test — PGlite is single-connection, so the "double-approve" test proves the conditional-UPDATE guard logic, not a true race. Acceptable: the `WHERE status='open'` claim is atomic in real Postgres.
+- Staging archive size/count caps — flagged (P2, confidence 6); relies on the existing HTTP body limit + `importGem` zip-bomb cap. Captured as a TODO for Plan 2's rate-limit pass, not built here.
+- Wiring the aggregator/controller tests into CI — the tests exist and run locally (`pnpm test`); moving `dist/__tests__` gating to include them is a separate CI change.
+
+**Failure modes (new codepaths):**
+- `approveReviewRequest` publish step throws mid-way (e.g. `upsertGemArchive` fails after `upsertCatalogGem`) → catalog row exists without archive (`installable:false`). Not transactional across the two upserts. Low likelihood (same-DB writes); a re-approve is blocked (`not-open`). **Captured as a TODO** (wrap the two publish upserts + the claim in one transaction) — see below.
+- Author loses scope between submit and approve → approval returns `not-scope-owner`, request stays `open` (tested). Visible, not silent.
+- Departed-member cleanup runs inside `removeMemberGuarded` — if it throws, removal already returned "removed" before cleanup. Ordered so removal is the durable step; cleanup is idempotent and self-heals on a re-run.
+
+No **critical gaps** (no failure that is silent AND untested AND unhandled).
+
+**Parallelization:** Sequential — every task edits the same `reviewStaging.ts` + the shared test file. Task 8 (controller) depends on Tasks 2–7. No worktree parallelization opportunity.
+
+**Decisions folded in (all approved):** D2 scope-ownership guard (submit + approval), D3 manifest-digest match (submit + resubmit), D4 bytes-excluded `loadForMember`. Plus quality cleanups applied without a separate gate: `ReviewRequestDetail` as its own type, dead-line removal, terminal-comment allowed + tested, real-archive controller fixture (the original hand-rolled `[1,2,3]` bytes would have thrown in `importGem`).
+
+**One TODO surfaced (not yet folded — your call):** wrap approval's claim + two publish upserts in a single DB transaction so a mid-publish failure can't leave a catalog row without its archive. Small change; worth doing in Task 5. Say the word and I'll add it.
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | issues_found → folded | 7 findings; 3 decisions folded (D2/D3/D4) + 3 quality fixes; 0 critical gaps; 1 TODO open |
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
+| Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | n/a (backend-only) |
+| Outside Voice | `/plan-eng-review` | Independent 2nd opinion | 0 | not run | offered as next step |
+
+- **VERDICT:** ENG CLEARED — plan updated with all approved changes; ready to implement. Outside-voice pass not run (offered).
+
+**UNRESOLVED DECISIONS:**
+- Transaction-wrap approval's publish (claim + `upsertCatalogGem` + `upsertGemArchive`) — surfaced as a TODO, awaiting your yes/no before folding into Task 5.
