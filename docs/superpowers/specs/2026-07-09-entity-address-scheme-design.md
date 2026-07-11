@@ -289,9 +289,15 @@ slashes are always structure, never data. Encoding would yield `/games/%40acme%2
 copy-friendly link is this spec's entire goal. `games/<key>` is therefore emitted raw and parsed
 greedily. The parser still decodes, so a hand-edited or legacy encoded link resolves.
 
-Each app gets a **router conformance test**: every registered route must be either a declared
-collection, a well-formed entity path, or a route explicitly listed as a panel. A new route
-that invents its own shape fails CI.
+The marketplace gets a **router conformance test**: every registered route must be either a
+declared collection, a well-formed entity path, or a route explicitly listed as a panel. A new
+route that invents its own shape fails the test.
+
+**"Fails CI" requires wiring.** The marketplace's jsdom suite is not in CI today (root
+`pnpm test` globs only `dist/**/__tests__` + `website/edge/**`); it runs via a local
+`--filter`. So PR 3b adds a `pnpm --filter @agentgem/marketplace test` step to `ci.yml` — the
+first CI coverage of the user-facing marketplace — so the conformance test actually gates. The
+suite is green today (38 files / 256 tests), so the wiring lands clean.
 
 ## Files
 
@@ -305,11 +311,17 @@ that invents its own shape fails CI.
 - `packages/marketplace/src/pages/Minigames.tsx` — the grid's fullscreen portal calls
   `navigate()`, so the URL appears in the address bar while you play. *This is the fix for the
   original complaint.*
-- `packages/marketplace/src/worker.js` *(new)* + `wrangler.jsonc` — `main` +
-  `assets.binding` + `run_worker_first`, copying `website/edge/wrangler.toml` (the only
-  existing `main` + `assets` pattern in the repo). Injects OG title/description. **On API
-  failure, serves `index.html` unmodified** — an API blip must never take down the play
-  surface. Mirrors `share.js`'s `placeholderHtml()` degradation.
+- `packages/marketplace/src/worker.ts` *(new, PR 3a)* + `wrangler.jsonc` — `main` +
+  `assets.binding` + `run_worker_first` + `vars.AGGREGATOR_API`, copying
+  `website/edge/wrangler.toml` (the only existing `main` + `assets` pattern in the repo). For a
+  `GET /games/<key>`, fetches `${AGGREGATOR_API}/api/aggregator/game-meta?key=`, and on success
+  injects `og:title`/`og:description` + a `twitter:card=summary` (NO `og:image`) into the SPA
+  shell's `<head>` (mirroring `share.js`'s `renderGemShareHtml` + its `esc()`), then serves the
+  full SPA body so React still hydrates and plays. **On ANY failure — no `AGGREGATOR_API`, a
+  non-2xx `game-meta`, a fetch throw — serves `env.ASSETS.fetch(request)` unmodified.** Every
+  non-games request passes straight through to `env.ASSETS`. Because `run_worker_first` runs the
+  worker on every hit, this degradation is load-bearing: a worker bug or API blip must never take
+  down `app.agentgem.ai`.
 - `src/aggregator.controller.ts` — `POST`/`DELETE /share-archive`; `GET /game-meta?key=` →
   `{ title, genre, version }`, used by both the Worker (for OG) and `Play.tsx` (for a title
   while HTML loads). It is the one genuinely new read route.
@@ -349,11 +361,18 @@ Three PRs, **each branched off freshly-fetched `origin/main`**. Per `CLAUDE.md`,
 settled scope; commits appended to an already-merged PR's branch are silently dropped from the
 trunk (this has bitten multi-commit PRs here twice).
 
-1. `entityPath.ts` + `/games/:key` + `Play.tsx` + grid `navigate()` + `game-meta`.
-   **Ships copyable links for published games.** No Worker, no new storage, no upload path.
-2. `share-archive` mint + revoke + console Copy/Revoke.
-   **Ships links for locally-authored miniapps.**
-3. Worker OG injection + plural renames with aliases.
+1. **MERGED (#287).** `entityPath.ts` + `/games/:key` + `Play.tsx` + grid `navigate()` +
+   `game-meta`. Copyable links for published games. No Worker, no new storage, no upload path.
+2. **MERGED (2a #304, 2b #330).** `share-archive` mint + revoke (server) + console Copy/Revoke.
+   Links for locally-authored miniapps.
+3. **Split — the OG Worker is deploy-risky (`run_worker_first` fronts ALL app.agentgem.ai
+   traffic), the renames are SPA-only.** So:
+   - **3a** — the OG-unfurl Worker alone (`worker.ts` + `wrangler.jsonc`: `main`,
+     `assets.binding`, `run_worker_first`, `vars.AGGREGATOR_API`). Lands + deploys in isolation,
+     watchable/rollback-able on its own.
+   - **3b** — plural renames of `/ingredient`→`/ingredients` and `/skill`→`/skills` (update the
+     link generators; keep the singular forms as aliases that `replaceState` to canonical) +
+     the router conformance test + wiring the marketplace suite into CI.
 
 Console entity routes (`#/gems/:key`, `workspace/…` replacing `#/setup/:tab?a=`) are real
 value but serve resumability, not sharing. They get their own spec after this one.
