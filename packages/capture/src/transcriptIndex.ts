@@ -27,16 +27,32 @@ import { statSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { createLogger } from "@agentgem/base";
 import { agentgemHome } from "@agentgem/model";
+import type { HookArtifact } from "@agentgem/model";
 import type { FileUsage } from "@agentgem/insight";
 import type { StoredRawRow, StoredHookRow } from "./resolveUsage.js";
 
 const log = createLogger("capture");
+
+// Default routing threshold: pending parse bytes above this are worth handing to an off-thread
+// producer (A1). Overridable via AGENTGEM_USAGE_WORKER_BYTES so tests can force the streamed
+// branch on tiny fixtures without waiting on a real 20 MB corpus; read at decision time (inside
+// doSyncRouted), not cached here, so a test can toggle it between syncUsage calls.
+const BYTE_THRESHOLD = 20 * 1024 * 1024; // 20 MB of pending parse → worth the worker (A1)
 
 // "2": raw_usage/hook_usage replace global_usage; inv_digest is gone; hook_digest moved from a
 // meta row onto transcript_file. A bump drops derived rows and rebuilds from scratch.
 const SCHEMA_VERSION = "2";
 
 export interface ChangedFile { path: string; mtime: number; size: number }
+
+/** The injected off-thread producer (root implements it with a worker; tests with a fake). It
+ *  receives the pre-identified changed files (already statted by planSync) so it never re-stats,
+ *  parses them off the event loop, and streams result batches back via onBatch. */
+export interface OffThreadParse {
+  (input: { changed: ChangedFile[]; hooks: HookArtifact[] },
+   onBatch: (results: { path: string; mtime: number; size: number; usage: FileUsage }[]) => Promise<void>,
+  ): Promise<{ seen: string[] }>;
+}
 
 export interface TranscriptIndex {
   /**
@@ -46,11 +62,19 @@ export interface TranscriptIndex {
    * a reparse of just that file — raw rows are re-derived from the same parse, not wiped).
    * Prunes files gone from `paths`. The skill/mcp inventory is NOT an input — resolution
    * happens in resolveUsage, at query time.
+   *
+   * `offThreadParse` is optional: when absent, or when the pending parse is cheap
+   * (<= BYTE_THRESHOLD), changed files are parsed inline via `parseFile` exactly as before. When
+   * present and the pending set is large, `offThreadParse` parses `changed` off-thread and streams
+   * batches back, each written in its own transaction. `hooks` is only needed to hand the producer
+   * the inventory; the inline path ignores it.
    */
   syncUsage(
     paths: string[],
     hookDigest: string,
     parseFile: (path: string) => FileUsage,
+    offThreadParse?: OffThreadParse,
+    hooks?: HookArtifact[],
   ): Promise<{ raw: StoredRawRow[]; hooks: StoredHookRow[] }>;
   close(): Promise<void>;
 }
@@ -120,8 +144,8 @@ export async function openTranscriptIndex(dataDir?: string): Promise<TranscriptI
   let closed = false;
 
   return {
-    syncUsage(paths, hookDigest, parseFile) {
-      const run = chain.then(() => doSync(db, paths, hookDigest, parseFile));
+    syncUsage(paths, hookDigest, parseFile, offThreadParse, hooks) {
+      const run = chain.then(() => doSyncRouted(db, paths, hookDigest, parseFile, offThreadParse, hooks ?? []));
       chain = run.catch(() => {}); // keep the chain alive past a failed sync
       return run;
     },
@@ -211,7 +235,7 @@ function readbackRows(db: DatabaseSync): { raw: StoredRawRow[]; hooks: StoredHoo
   return { raw, hooks };
 }
 
-//                          per file, in doSync:
+//                          per file, in the inline branch:
 //   ┌────────────────────────────────────────────────────────────────────┐
 //   │  stat(path) fails ────────────────────────────► skip (vanished)     │
 //   │  row.mtime==st.mtime && row.size==st.size                           │
@@ -225,23 +249,67 @@ function readbackRows(db: DatabaseSync): { raw: StoredRawRow[]; hooks: StoredHoo
 //   │                                             hook_digest=current)     │
 //   └────────────────────────────────────────────────────────────────────┘
 //   prune: for path in transcript_file NOT in `seen`: DELETE all three   ← now always correct
-async function doSync(
+//
+// Routing (doSyncRouted): one planSync stat pass yields pendingBytes; no offThreadParse, or a
+// cheap pending set, takes the inline branch above unchanged. A large pending set with a producer
+// takes the streamed branch instead — the producer parses `changed` off the event loop and streams
+// batches back, each written in its own transaction with a setImmediate yield between them so the
+// event loop stays responsive during a big cold build. Both branches run inside the same
+// single-flight `chain` (see openTranscriptIndex), so an overlapping sync never interleaves writes.
+async function doSyncRouted(
   db: DatabaseSync,
   paths: string[],
   hookDigest: string,
   parseFile: (path: string) => FileUsage,
+  offThreadParse: OffThreadParse | undefined,
+  hooks: HookArtifact[],
 ): Promise<{ raw: StoredRawRow[]; hooks: StoredHookRow[] }> {
-  const { existing, changed, seen } = planSync(db, paths, hookDigest);
+  const { existing, changed, seen, pendingBytes } = planSync(db, paths, hookDigest);
+
+  const byteThreshold = Number(process.env.AGENTGEM_USAGE_WORKER_BYTES ?? BYTE_THRESHOLD);
+
+  // Inline: no producer, or the pending parse is cheap. Identical to the old doSync loop.
+  if (!offThreadParse || pendingBytes <= byteThreshold) {
+    db.exec("BEGIN");
+    try {
+      for (const c of changed) {
+        let u: FileUsage;
+        try { u = parseFile(c.path); }
+        catch (e) { log.warn("parseFile threw for transcript, will retry next sync: %s: %s", c.path, e); seen.add(c.path); continue; }
+        if (u.failed) { log.warn("failed to read transcript, will retry next sync: %s", c.path); seen.add(c.path); continue; }
+        seen.add(c.path);
+        writeFileRows(db, c.path, c.mtime, c.size, hookDigest, u);
+      }
+      pruneVanished(db, existing, seen);
+      db.exec("COMMIT");
+    } catch (e) {
+      try { db.exec("ROLLBACK"); } catch { /* keep the original error */ }
+      throw e;
+    }
+    return readbackRows(db);
+  }
+
+  // Streamed: the producer parses `changed` off-thread; we write each batch in its own
+  // transaction, yielding between so a small concurrent request is served between writes. The
+  // producer's `seen` covers only the changed files it processed; union in the up-to-date files
+  // planSync already put in `seen` before pruning.
+  const { seen: parsedSeen } = await offThreadParse({ changed, hooks }, async (results) => {
+    db.exec("BEGIN");
+    try {
+      for (const r of results) {
+        if (r.usage.failed) { log.warn("failed to read transcript (worker), will retry next sync: %s", r.path); continue; }
+        writeFileRows(db, r.path, r.mtime, r.size, hookDigest, r.usage);
+      }
+      db.exec("COMMIT");
+    } catch (e) {
+      try { db.exec("ROLLBACK"); } catch { /* keep the original error */ }
+      throw e;
+    }
+    await new Promise<void>((res) => setImmediate(res)); // yield to the event loop between batches
+  });
+  for (const p of parsedSeen) seen.add(p);
   db.exec("BEGIN");
   try {
-    for (const c of changed) {
-      let u: FileUsage;
-      try { u = parseFile(c.path); }
-      catch (e) { log.warn("parseFile threw for transcript, will retry next sync: %s: %s", c.path, e); seen.add(c.path); continue; }
-      if (u.failed) { log.warn("failed to read transcript, will retry next sync: %s", c.path); seen.add(c.path); continue; }
-      seen.add(c.path);
-      writeFileRows(db, c.path, c.mtime, c.size, hookDigest, u);
-    }
     pruneVanished(db, existing, seen);
     db.exec("COMMIT");
   } catch (e) {
