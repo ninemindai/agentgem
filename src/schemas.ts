@@ -126,21 +126,28 @@ export const GameArtifactSchema = z.object({
   meta: z.object({ controls: z.string().optional(), estPlaySeconds: z.number().optional() }).optional(),
 });
 
+const RubricFactorRefSchema = z.object({
+  factor: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
+  weight: z.number().finite().min(0).optional(),
+});
+
+const LlmCriterionSchema = z.object({
+  id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
+  title: z.string().min(1),
+  question: z.string().min(1),
+  severity: z.enum(["info", "warn"]).optional(),
+  advice: z.string().min(1),
+  granularity: z.enum(["session", "aggregate"]).optional(),
+});
+
 export const RubricArtifactSchema = z.object({
   type: z.literal("rubric"),
-  name: z.string(),
-  title: z.string(),
-  target: z.string(),
+  name: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
+  title: z.string().min(1),
+  target: z.string().min(1),
   naturalScope: z.enum(["session", "project", "all"]).optional(),
-  factors: z.array(z.object({ factor: z.string(), weight: z.number().optional() })),
-  criteria: z.array(z.object({
-    id: z.string(),
-    title: z.string(),
-    question: z.string(),
-    severity: z.enum(["info", "warn"]).optional(),
-    advice: z.string(),
-    granularity: z.enum(["session", "aggregate"]).optional(),
-  })).optional(),
+  factors: z.array(RubricFactorRefSchema).min(1),
+  criteria: z.array(LlmCriterionSchema).optional(),
 });
 
 export const GemArtifactSchema = z.discriminatedUnion("type", [
