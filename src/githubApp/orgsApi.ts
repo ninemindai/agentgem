@@ -102,7 +102,9 @@ export function orgSkillBodyHandler(deps: OrgsApiDeps) {
       if (Array.isArray(node)) { res.status(404).json({ error: "unknown skill" }); return; }
       res.type("text/markdown; charset=utf-8").send(decodeFile(node));
     } catch (e) {
-      res.status(502).json({ error: `upstream fetch failed: ${(e as Error).message}` });
+      // ghContents' error carries the full GitHub response body; keep it server-side only.
+      console.error("orgs skill-body upstream fetch failed:", (e as Error).message);
+      res.status(502).json({ error: "upstream fetch failed" });
     }
   };
 }

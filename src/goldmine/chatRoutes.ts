@@ -148,7 +148,10 @@ export function registerChatRoutes(app: App, deps: ChatRouteDeps, guard: Middlew
       const err = e as Error & { code?: string };
       if (err.code === "consent_required") { res.status(409).json({ error: err.message, code: "consent_required" }); return; }
       if (/no install source|unknown agent/i.test(err.message)) { res.status(400).json({ error: err.message }); return; }
-      res.status(500).json({ error: err.message });
+      // Log the raw error (paths, subprocess command lines, package-manager output) server-side only;
+      // return a generic message so an unclassified install failure can't disclose internals.
+      console.error(`agent install failed for ${id}:`, err.message);
+      res.status(500).json({ error: "install failed" });
     }
   });
 

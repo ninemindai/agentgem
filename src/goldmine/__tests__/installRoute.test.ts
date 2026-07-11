@@ -36,6 +36,17 @@ describe("POST /api/agents/:id/install", () => {
     expect(res.body).toMatchObject({ code: "consent_required" });
   });
 
+  it("500 returns a generic message, not the raw exception (no internal disclosure)", async () => {
+    const { app, routes } = fakeApp();
+    const installAgent = vi.fn(async () => { throw new Error("spawn /usr/local/bin/npm ENOENT reading /secret/path"); });
+    registerChatRoutes(app as never, { ...baseDeps(), installAgent } as never);
+    const res = fakeRes();
+    await routes["POST /api/agents/:id/install"]({ params: { id: "codex" }, body: { consent: true }, query: {} }, res);
+    expect(res.code).toBe(500);
+    expect(res.body).toEqual({ error: "install failed" });
+    expect(JSON.stringify(res.body)).not.toContain("/secret/path");
+  });
+
   it("200 with the ensure result when consent is given", async () => {
     const { app, routes } = fakeApp();
     const installAgent = vi.fn(async () => ({ available: true, source: "managed", needsLogin: true }));

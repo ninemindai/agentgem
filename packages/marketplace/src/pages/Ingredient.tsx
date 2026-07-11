@@ -19,7 +19,7 @@ export function Ingredient({ api, id, stars }: { api: ReturnType<typeof makeApi>
     setError(null); setCo([]); setSeries([]);
     Promise.all([api.getCoOccurrence({ id }), api.getAdoption({ id, bucket })])
       .then(([c, a]) => { if (!alive) return; setCo(c); setSeries(a); })
-      .catch((e) => { if (alive) setError(String(e?.message ?? e)); });
+      .catch(() => { if (alive) setError("Couldn't load this ingredient's data — please try again."); });
     return () => { alive = false; };
     // api is a stable module-level singleton (App.tsx) — excluded so re-renders don't refetch.
   }, [id, bucket]);
@@ -32,7 +32,7 @@ export function Ingredient({ api, id, stars }: { api: ReturnType<typeof makeApi>
   }, [id, stars.api]);
 
   const head = prettifyId(id, "skill");
-  if (error) return <div className="ex-detail"><p className="ex-error">Couldn't load this ingredient: {error}</p></div>;
+  if (error) return <div className="ex-detail"><p className="ex-error">{error}</p></div>;
 
   return (
     <div className="ex-detail">
