@@ -229,6 +229,23 @@ export function reviewActionPayload(action: string, requestId: string, pubkey: s
   return canonicalJSON({ scope: "review", action, requestId, pubkey, signedAt });
 }
 
+// Canonical payload for /review/request. A distinct `scope` from catalogSigningPayload (which
+// /publish-gem and /catalog also verify) so a captured submit body can never be replayed as a
+// publish, and binding `groupId` stops it being redirected to stage the same signed manifest under
+// a different group.
+export function reviewSubmitPayload(m: CatalogManifest, groupId: string, pubkey: string, signedAt: number): string {
+  const manifestHash = createHash("sha256").update(canonicalJSON(m)).digest("hex");
+  return canonicalJSON({ scope: "review-submit", manifestHash, groupId, pubkey, signedAt });
+}
+
+// Canonical payload for /review/resubmit. Distinct `scope` from both catalogSigningPayload and
+// reviewSubmitPayload, and binds `requestId` (not groupId — resubmit targets an existing request,
+// not a group) so submit and resubmit signatures can never be swapped for one another.
+export function reviewResubmitPayload(m: CatalogManifest, requestId: string, pubkey: string, signedAt: number): string {
+  const manifestHash = createHash("sha256").update(canonicalJSON(m)).digest("hex");
+  return canonicalJSON({ scope: "review-resubmit", manifestHash, requestId, pubkey, signedAt });
+}
+
 // publishedBy is ALWAYS server-derived from the account_bindings lookup below — never
 // from req.manifest.author or any other client-supplied field. The signature only proves
 // producer-key possession; the binding is what proves that key maps to a verified GitHub

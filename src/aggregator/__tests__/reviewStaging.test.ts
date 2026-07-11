@@ -221,7 +221,7 @@ describe("request detail / messages / archive", () => {
     const { db, outsider, requestId } = await seed();
     expect(await getReviewRequest(db, outsider.id, requestId)).toBeNull();
     expect(await getReviewArchive(db, outsider.id, requestId)).toBeNull();
-    expect(await addReviewMessage(db, { accountId: outsider.id, requestId, body: "x" })).toEqual({ ok: false, rejected: "not-a-member" });
+    expect(await addReviewMessage(db, { accountId: outsider.id, requestId, body: "x" })).toEqual({ ok: false, rejected: "not-found" });
   });
 });
 
@@ -257,7 +257,7 @@ describe("approveReviewRequest", () => {
   it("blocks a non-member", async () => {
     const { db, requestId } = await seedOpen();
     const outsider = await upsertAccount(db, { provider: "github", accountId: "x", login: "mallory" });
-    expect(await approveReviewRequest(db, { accountId: outsider.id, requestId })).toEqual({ ok: false, rejected: "not-a-member" });
+    expect(await approveReviewRequest(db, { accountId: outsider.id, requestId })).toEqual({ ok: false, rejected: "not-found" });
   });
 
   it("a second approval is a no-op (not-open), gem published exactly once", async () => {
@@ -352,6 +352,32 @@ describe("requestChanges / resubmit / withdraw", () => {
     expect(detail?.status).toBe("changes-requested");
     const arch = await getReviewArchive(db, reviewer.id, requestId);
     expect(Array.from(arch!.bytes)).toEqual([1]); // original bytes, not [9]
+  });
+
+  // S4: resubmit/withdraw used to gate on authorship ONLY, with no group-membership check at all —
+  // an outsider (not in the group) could call either and learn the request's real status (`forbidden`
+  // vs `not-changes-requested`/`not-open`), an enumeration oracle. Both must now collapse a non-member
+  // to the same opaque `not-found` a nonexistent id gets, matching getReviewRequest/getReviewArchive.
+  it("a non-member gets the same opaque not-found from resubmit and withdraw as a nonexistent id", async () => {
+    const { db, requestId } = await seedOpen();
+    const outsider = await upsertAccount(db, { provider: "github", accountId: "x", login: "mallory" });
+    const fakeId = randomUUID();
+
+    const resubmitReal = await resubmitReviewRequest(db, {
+      accountId: outsider.id, requestId, manifest: mkManifest("@team/bot"),
+      archiveBytes: new Uint8Array([9]), archiveDigest: "z",
+    });
+    const resubmitFake = await resubmitReviewRequest(db, {
+      accountId: outsider.id, requestId: fakeId, manifest: mkManifest("@team/bot"),
+      archiveBytes: new Uint8Array([9]), archiveDigest: "z",
+    });
+    expect(resubmitReal).toEqual({ ok: false, rejected: "not-found" });
+    expect(resubmitReal).toEqual(resubmitFake);
+
+    const withdrawReal = await withdrawReviewRequest(db, { accountId: outsider.id, requestId });
+    const withdrawFake = await withdrawReviewRequest(db, { accountId: outsider.id, requestId: fakeId });
+    expect(withdrawReal).toEqual({ ok: false, rejected: "not-found" });
+    expect(withdrawReal).toEqual(withdrawFake);
   });
 });
 
