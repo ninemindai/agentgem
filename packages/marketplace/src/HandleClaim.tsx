@@ -1,9 +1,17 @@
 import { useState } from "react";
+import { navigate } from "./nav";
 
 /** Claim a public handle. POSTs to /api/handle (credentialed, cross-origin CORS handled by the
  *  route). The handle names the account; it authorizes nothing. On success the caller refetches the
  *  session so the new handle propagates to the chip and the publish scope. Styled to match the
- *  sibling publish form: `.ex-search` input + `.ex-signin` (gradient) button. */
+ *  sibling publish form: `.ex-search` input + `.ex-signin` (gradient) button.
+ *
+ *  A 409 means the handle is unavailable — but the server deliberately collapses "owned by another
+ *  account" and "reserved (an org name AgentGem has seen)" into the same status/message (see
+ *  handles.ts's claimHandle doc comment: distinguishing them would let a prober enumerate GitHub
+ *  orgs). So this can't show "connect the account that owns it" itself with any certainty — instead
+ *  it hands off to /account with a nudge, which never claims to know a provider either; it just
+ *  points the caller at the Connect buttons already there. */
 export function HandleClaim({ base, onClaimed }: { base: string; onClaimed: () => void }) {
   const [handle, setHandle] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
@@ -21,7 +29,7 @@ export function HandleClaim({ base, onClaimed }: { base: string; onClaimed: () =
       });
       if (r.ok) { onClaimed(); return; }
       if (r.status === 400) setMsg("Handles use letters, numbers, and hyphens only (1–39 characters).");
-      else if (r.status === 409) setMsg("That handle is taken or reserved. Try another.");
+      else if (r.status === 409) { navigate(`/account?merge=1&handle=${encodeURIComponent(handle.trim())}`); return; }
       else setMsg(`Could not claim handle (${r.status}).`);
     } catch {
       setMsg("Network error — try again.");
