@@ -203,14 +203,24 @@ back joined rows → return. `getGlobalUsageIndexed` then calls `resolveUsage`.
 
 ## Verification
 
-Measured, not asserted:
+Measured, not asserted. The "after" column is the measured result on the real
+3,829-transcript / 2.69 GB `~/.claude` corpus (heartbeat harness, worst event-loop
+block during a genuine cold build into a fresh temp `AGENTGEM_HOME`):
 
-| | before | expected after |
+| | before | after (measured) |
 |---|---|---|
-| 463-byte `GET` during a cold build | up to ~16 s (blocked) | < 100 ms |
-| cold build wall-clock | ~16 s (blocking) | ~16 s (off-thread) |
+| worst event-loop block during a cold build (= worst added latency for a concurrent 463-byte `GET`) | **15,883 ms** (inline, whole corpus synchronous) | **~32–50 ms** (worker; two runs 50.4 ms / 32.3 ms) |
+| cold build wall-clock | ~15.9 s (blocking) | ~16.1 s (off-thread; total parse work unchanged) |
 | warm, unchanged `/api/usage` | 0.11 s | 0.11 s (inline path, unchanged) |
-| `/api/usage` output, worker vs inline | — | byte-identical |
+| `/api/usage` output, worker vs inline | — | byte-identical (`usageDifferential` + streamed unit tests) |
+
+The `<100 ms` target was met but not by a comfortable margin at the planned
+`BATCH_SIZE=64` (heaviest single batch's synchronous DB write measured ~144 ms —
+the stat pass is only 7.7 ms, so the residual is batch-write, not I/O). Tuning to
+`BATCH_SIZE=16` yields more often to the loop and brings the worst block to
+~32–50 ms with identical wall-clock. The synthetic acceptance gate (one >150 ms
+single file, `coldBuildWorker.test.ts`) blocks only ~1.6 ms — an inline impl of the
+same fixture blocks ~197 ms, proving the gate distinguishes off-thread from inline.
 
 ## Non-goals
 
