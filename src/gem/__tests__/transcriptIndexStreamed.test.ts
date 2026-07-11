@@ -87,6 +87,25 @@ describe("syncUsage streamed path (offThreadParse)", () => {
     expect(out.raw.find((r) => r.token === "qa")?.invocations).toBe(3); // prior row survives
   });
 
+  it("an adversarial producer's seen:[] does not prune a failed file's prior rows", async () => {
+    // The producer's returned `seen` must not be the only thing protecting a failed file from
+    // pruneVanished: even a producer that (wrongly, or just differently) omits attempted-but-failed
+    // paths from its own `seen` must not cause the file's prior rows to be deleted. The batch
+    // handler itself must add every processed path to `seen`, mirroring the inline branch.
+    const a = join(dir, "a.jsonl"); write(a, "a", 1000);
+    await index.syncUsage([a], "hd", () => usage([{ kind: "skill", token: "qa", invocations: 3 }]));
+    write(a, "a-longer", 2000); // now changed, will be handed to the producer
+    const adversarial: OffThreadParse = async (input, onBatch) => {
+      await onBatch(input.changed.map((c) => ({
+        path: c.path, mtime: c.mtime, size: c.size,
+        usage: { raw: [], hooks: [], failed: true } as FileUsage,
+      })));
+      return { seen: [] }; // adversarial: does not report the failed path as seen
+    };
+    const out = await index.syncUsage([a], "hd", () => ({ raw: [], hooks: [], failed: true }), adversarial);
+    expect(out.raw.find((r) => r.token === "qa")?.invocations).toBe(3); // prior row survives, not pruned
+  });
+
   it("prunes files that vanished from paths", async () => {
     const a = join(dir, "a.jsonl"); const b = join(dir, "b.jsonl");
     write(a, "a"); write(b, "b");
@@ -101,12 +120,18 @@ describe("syncUsage streamed path (offThreadParse)", () => {
     const a = join(dir, "a.jsonl"); write(a, "a");
     const order: string[] = [];
     const slow = (_p: string) => { order.push("streamed-parse"); return usage([{ kind: "skill", token: "qa", invocations: 1 }]); };
-    // Fire both without awaiting the first: the chain must run them one at a time.
+    // Fire both without awaiting the first: the chain must run them one at a time. p2 uses a
+    // different hookDigest so its planSync sees "a" as changed (needing reparse) even though p1
+    // already synced it with the same mtime/size — otherwise p2 would see the file as already
+    // up-to-date (since the chain makes p1 fully land before p2's planSync runs) and never call
+    // its parse fn at all, which would defeat this test regardless of serialization.
     const p1 = index.syncUsage([a], "hd", slow, fakeProducer(slow).p);
-    const p2 = index.syncUsage([a], "hd", (_p) => { order.push("inline-parse"); return usage([{ kind: "skill", token: "qa", invocations: 1 }]); });
+    const p2 = index.syncUsage([a], "hd2", (_p) => { order.push("inline-parse"); return usage([{ kind: "skill", token: "qa", invocations: 1 }]); });
     await Promise.all([p1, p2]);
-    // Not interleaved: streamed fully finishes before inline starts (or vice-versa), never mixed.
-    expect(order.length).toBeGreaterThan(0);
+    // Not interleaved: p1 (streamed) is issued first, so the single-flight chain must run it fully
+    // to completion before p2 (inline) starts. Assert the exact sequence, not just that pushes
+    // happened, so a chain-bypass regression (the two calls interleaving) actually fails this test.
+    expect(order).toEqual(["streamed-parse", "inline-parse"]);
     const out = await index.syncUsage([a], "hd", slow);
     expect(out.raw.find((r) => r.token === "qa")?.invocations).toBe(1); // consistent, not doubled
   });
