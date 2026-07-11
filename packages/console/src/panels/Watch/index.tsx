@@ -96,6 +96,7 @@ export function Watch({ apiBase }: { apiBase: string }) {
 
   return (
     <section className="analyze">
+      <div className="obs-head"><h2 className="obs-title">Watch</h2></div>
       <p className="analyze-intro">
         Watch a running coding session (Claude Code, Codex, Gemini, Cline, Continue) as it works — the live Feed streams every
         message and tool call as it happens, or switch to Artifact to preview an HTML page it builds. Content is redacted before it reaches this panel.
