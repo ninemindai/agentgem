@@ -15,4 +15,5 @@ execFileSync("node", ["build-client.mjs"], { cwd: pkg, stdio: "inherit" });
 const dest = join(root, "dist", "public", "console");
 mkdirSync(dest, { recursive: true });
 copyFileSync(join(pkg, "dist", "index.html"), join(dest, "index.html"));
+copyFileSync(join(pkg, "dist", "manifest.webmanifest"), join(dest, "manifest.webmanifest"));
 console.log(`[build-console] copied console SPA -> ${join(dest, "index.html")}`);

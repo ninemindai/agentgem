@@ -87,16 +87,20 @@ const serverLog = createLogger("server");
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-// The React console SPA (one self-contained file). dist build path first, then a
-// dev fallback to the console package's own dist; finally a placeholder.
-function consoleHtml(): string {
+// Read a built console asset (index.html, manifest.webmanifest). dist path first,
+// then the dev fallback to the console package's own dist. Returns null if absent.
+function consoleFile(name: string): string | null {
   for (const p of [
-    join(here, "public", "console", "index.html"),
-    join(here, "..", "packages", "console", "dist", "index.html"),
+    join(here, "public", "console", name),
+    join(here, "..", "packages", "console", "dist", name),
   ]) {
     try { return readFileSync(p, "utf8"); } catch { /* try next */ }
   }
-  return '<!doctype html><div id="root"></div><p>console not built — run pnpm build</p>';
+  return null;
+}
+function consoleHtml(): string {
+  return consoleFile("index.html")
+    ?? '<!doctype html><div id="root"></div><p>console not built — run pnpm build</p>';
 }
 
 // The bind address. Defaults to loopback so local runs stay loopback-only (the
@@ -329,6 +333,13 @@ export async function createApp(port: number): Promise<RestApplication> {
     const consolePage = consoleHtml();
     server.expressApp.get("/", (_req, res) => res.type("html").send(consolePage));
     server.expressApp.get("/console", (_req, res) => res.type("html").send(consolePage));
+    // The PWA manifest, so Chromium offers "Install app". Local-only (same guard as
+    // the console itself); skipped if the build hasn't produced it yet.
+    const manifest = consoleFile("manifest.webmanifest");
+    if (manifest) {
+      server.expressApp.get("/manifest.webmanifest", (_req, res) =>
+        res.type("application/manifest+json").send(manifest));
+    }
   } else {
     server.expressApp.get("/", (_req, res) => res.redirect(302, "https://agentgem.ai"));
   }
