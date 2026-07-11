@@ -1,6 +1,6 @@
 // packages/console/src/panels/Play/Studio.tsx
 import { useEffect, useRef, useState } from "react";
-import { makeClient, playMiniappRoute, playSaveRoute, playPublishRoute, publishSetupRoute } from "../../api/routes.js";
+import { makeClient, playMiniappRoute, playSaveRoute, playPublishRoute, publishSetupRoute, shareMiniappRoute, revokeMiniappRoute } from "../../api/routes.js";
 import { AgentSelector, type PlayAgent } from "./AgentSelector.js";
 import { CapabilityStrip } from "./CapabilityStrip.js";
 import { Runner } from "./Runner.js";
@@ -47,6 +47,8 @@ export function Studio({
   const [gate, setGate] = useState<string[] | null>(null);       // seal failures → actionable banner
   const [share, setShare] = useState<{ gemUrl: string; cardUrl?: string } | null>(null);
   const [pendingPublish, setPendingPublish] = useState(false);   // Share clicked while unbound
+  const [shareLink, setShareLink] = useState<string | null>(null);   // light unlisted share; persists via the miniapp read's `share`
+  const [pendingShare, setPendingShare] = useState(false);   // Copy-share clicked while unbound
   const { status: identity } = useIdentity();
   const closeRef = useRef<null | (() => void)>(null);
   const logRef = useRef<HTMLDivElement>(null);
@@ -62,9 +64,8 @@ export function Studio({
   // React render that applies the refresh, and resume could see a stale null.
   const bind = useGitHubBind(apiBase, {
     onBound: (login) => {
-      if (!pendingPublish) return;
-      setPendingPublish(false);
-      void publishWorkspace(login);
+      if (pendingPublish) { setPendingPublish(false); void publishWorkspace(login); }
+      if (pendingShare) { setPendingShare(false); void mintShare(); }
     },
   });
 
@@ -73,7 +74,7 @@ export function Studio({
   // after a build shouldn't blank a preview that is still on screen and still correct.
   const refresh = () =>
     playMiniappRoute.call(makeClient(apiBase), { query: { name } })
-      .then((r) => { setHtml(r.html); setMeta(r.meta); setLoadErr(null); })
+      .then((r) => { setHtml(r.html); setMeta(r.meta); setLoadErr(null); setShareLink(r.share?.url ?? null); })
       .catch((e: unknown) => setLoadErr(e instanceof Error ? e.message : String(e)));
 
   useEffect(() => {
@@ -233,6 +234,44 @@ export function Studio({
     bind.reset();
   }
 
+  // Light unlisted share: mint (or copy, once minted) a /games/<id> link. Save first —
+  // readWorkspace only works once saveMiniapp has dual-written the workspace, exactly
+  // as shareToExplore saves before publishing.
+  async function copyShareLink() {
+    if (shareLink) { navigator.clipboard?.writeText(shareLink); setStatus("link copied ✓"); return; }
+    setStatus("minting link…");
+    if (!(await save())) return; // gate failure already surfaced as the banner
+    if (!(identity?.bound && identity.login)) { setStatus(""); setPendingShare(true); return; }
+    await mintShare();
+  }
+
+  async function mintShare() {
+    try {
+      const r = await shareMiniappRoute.call(makeClient(apiBase), { body: { name } });
+      setShareLink(r.url);
+      navigator.clipboard?.writeText(r.url);
+      setStatus("link copied ✓");
+    } catch (e) {
+      setStatus(`share failed: ${(e as Error).message}`);
+    }
+  }
+
+  async function revokeShareLink() {
+    setStatus("revoking…");
+    try {
+      await revokeMiniappRoute.call(makeClient(apiBase), { body: { name } });
+      setShareLink(null);
+      setStatus("link revoked ✓");
+    } catch (e) {
+      setStatus(`revoke failed: ${(e as Error).message}`);
+    }
+  }
+
+  function dismissShareConnect() {
+    setPendingShare(false);
+    bind.reset();
+  }
+
   const g = genreOf(meta?.genre ?? "");
   return (
     <section className="analyze">
@@ -244,6 +283,7 @@ export function Studio({
         {status && <span className="play-intro" style={{ margin: 0 }}>{status}</span>}
         <button className="play-btn" onClick={save}>Save</button>
         <button className="play-btn play-btn--ghost" onClick={pushGit} title="git push the miniapps registry to your git remote">Push to git</button>
+        <button className="play-btn" onClick={copyShareLink}>Copy share link</button>
         <button className="play-btn play-btn--primary" onClick={shareToExplore}>Share to app.agentgem.ai</button>
       </div>
 
@@ -258,6 +298,27 @@ export function Studio({
           </div>
           <button className="play-btn" onClick={() => navigator.clipboard?.writeText(share.gemUrl)}>Copy</button>
           <button className="play-btn play-btn--ghost" onClick={() => window.open(share.gemUrl, "_blank", "noopener")}>Open</button>
+        </div>
+      )}
+      {shareLink && (
+        <div className="play-banner">
+          <span className="play-banner__ico">🔗</span>
+          <div className="play-banner__body">
+            <div className="play-banner__title">Share link</div>
+            <div className="play-banner__detail">{shareLink}</div>
+          </div>
+          <button className="play-btn" onClick={() => navigator.clipboard?.writeText(shareLink)}>Copy</button>
+          <button className="play-btn play-btn--ghost" onClick={revokeShareLink}>Revoke link</button>
+        </div>
+      )}
+      {pendingShare && (
+        <div className="play-banner">
+          <span className="play-banner__ico">🔑</span>
+          <div className="play-banner__body">
+            <div className="play-banner__title">Connect GitHub to share</div>
+            <ConnectGitHub bind={bind} idleHint={<p className="play-banner__detail">Sharing continues automatically once you authorize.</p>} />
+          </div>
+          <button className="play-btn play-btn--ghost" onClick={dismissShareConnect}>Dismiss</button>
         </div>
       )}
       {gate && (
