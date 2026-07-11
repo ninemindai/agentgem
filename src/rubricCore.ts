@@ -12,7 +12,7 @@ import { createHash } from "node:crypto";
 import { basename, join } from "node:path";
 import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { introspectConfig, introspectProject } from "@agentgem/capture";
-import { resolveDirs, resolveProject, type Gem, type RubricArtifact } from "@agentgem/model";
+import { resolveDirs, resolveProject, type Gem } from "@agentgem/model";
 import {
   claudeTranscriptsForCwd, allClaudeTranscripts, scanWorkflow,
   transcriptToken, readAnalysisCacheEntry, writeAnalysisCache,
@@ -134,9 +134,8 @@ export function installRubricGem(gem: Gem, dir = defaultRubricsDir()): { install
   const skipped: string[] = [];
   for (const art of gem.artifacts) {
     if (art.type !== "rubric") continue;
-    const rubricArt = art as RubricArtifact;
-    const rubric = validateRubric(artifactToRubric(rubricArt), reserved);
-    if (!rubric || builtinIds.has(rubric.id)) { skipped.push(rubricArt.name); continue; }
+    const rubric = validateRubric(artifactToRubric(art), reserved);
+    if (!rubric || builtinIds.has(rubric.id)) { skipped.push(art.name); continue; }
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, `${rubric.id}.json`), JSON.stringify(rubric, null, 2));
     installed.push(rubric.id);

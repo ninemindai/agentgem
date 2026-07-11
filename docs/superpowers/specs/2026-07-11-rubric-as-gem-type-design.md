@@ -166,7 +166,14 @@ Add `RubricArtifactSchema` to the `GemArtifactSchema` discriminated union in
 - `name`: kebab (`/^[a-z0-9][a-z0-9-]{0,63}$/`), `title`: non-empty, `target`:
   non-empty, `naturalScope`: `session|project|all` optional, `factors`: non-empty
   array of `{ factor: kebab, weight?: number>=0 }`, `criteria?`: array of
-  `LlmCriterion` with the id-collision-with-detector rejection preserved.
+  `LlmCriterion` (structural shape only).
+
+The wire schema is a **structural gate**, not the full authority: the
+id-collision-with-detector rejection cannot live here — the schema can't import
+`DETECTORS` without recreating the `model→insight` cycle the design avoids — so
+that rejection stays with `validateRubric` at the install bridge (§C). A `.gem`
+may therefore carry a criterion whose id shadows a built-in detector; it parses
+and round-trips, and is refused only at install time.
 
 Update the union drift-guard test in `src/__tests__/schemas.test.ts` (this test
 **is** in CI, unlike `packages/*/src/__tests__`). Keep the TS union and the Zod
