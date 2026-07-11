@@ -115,4 +115,59 @@ describe("ChatManager", () => {
     expect(mgr.stateOf(id)).toEqual({ alive: true, running: false, sessionId: "sess_abc", agent: "claude-code" });
     expect(mgr.stateOf("nope")).toEqual({ alive: false });
   });
+
+  it("rejects a second concurrent turn while one is running", async () => {
+    // prompt() blocks until we release it, so the first turn stays 'running'.
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const connect = async () => ({ ctx: { open: async () => ({
+      sessionId: "s", setMode: async () => {},
+      prompt: async () => { await gate; return { text: "ok", toolCalls: [] }; },
+      dispose: () => {},
+    }) }, close: () => {} });
+    const mgr = new ChatManager({ connectFn: connect as any });
+    const id = await mgr.openChat({ agentId: "claude-code", brief: "B" });
+
+    const first = (async () => { const e: any[] = []; for await (const x of mgr.sendMessage(id, "a")) e.push(x); return e; })();
+    await new Promise((r) => setTimeout(r, 0)); // let the first turn start + set running
+    expect(mgr.stateOf(id)).toMatchObject({ running: true });
+
+    const second: any[] = []; for await (const x of mgr.sendMessage(id, "b")) second.push(x);
+    expect(second.at(-1)).toMatchObject({ type: "failed", error: expect.stringContaining("already") });
+
+    release(); await first;
+    expect(mgr.stateOf(id)).toMatchObject({ running: false }); // cleared in finally
+  });
+
+  it("sweepIdle does NOT tear down a chat with a running turn", async () => {
+    let t = 1000; let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const connect = async () => ({ ctx: { open: async () => ({
+      sessionId: "s", setMode: async () => {},
+      prompt: async () => { await gate; return { text: "", toolCalls: [] }; },
+      dispose: () => {},
+    }) }, close: () => {} });
+    const mgr = new ChatManager({ connectFn: connect as any, now: () => t, idleMs: 100 });
+    const id = await mgr.openChat({ agentId: "claude-code", brief: "B" });
+    const running = (async () => { for await (const _ of mgr.sendMessage(id, "x")) { /* drain */ } })();
+    await new Promise((r) => setTimeout(r, 0));
+    t = 5000; mgr.sweepIdle();
+    expect(mgr.stateOf(id)).toMatchObject({ alive: true }); // NOT swept while running
+    release(); await running;
+  });
+
+  it("openChat throws when at cap and every live chat is running", async () => {
+    let release!: () => void; const gate = new Promise<void>((r) => { release = r; });
+    const connect = async () => ({ ctx: { open: async () => ({
+      sessionId: "s", setMode: async () => {},
+      prompt: async () => { await gate; return { text: "", toolCalls: [] }; },
+      dispose: () => {},
+    }) }, close: () => {} });
+    const mgr = new ChatManager({ connectFn: connect as any, maxLive: 1 });
+    const a = await mgr.openChat({ agentId: "claude-code", brief: "B" });
+    const running = (async () => { for await (const _ of mgr.sendMessage(a, "x")) { /* drain */ } })();
+    await new Promise((r) => setTimeout(r, 0));
+    await expect(mgr.openChat({ agentId: "claude-code", brief: "B" })).rejects.toThrow(/too many active sessions/);
+    release(); await running;
+  });
 });

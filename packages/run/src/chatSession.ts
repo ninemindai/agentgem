@@ -48,8 +48,9 @@ interface LiveChat {
   conn: { ctx: ChatCtx; close: () => void };
   handle: ChatSessionHandle;
   lastMs: number;
-  /** Set while a turn is in flight (Task 2); absent here, so stateOf defaults it to false. */
-  running?: boolean;
+  /** Set while a turn is in flight; guards against a second concurrent turn and protects
+   * this chat from idle-sweep and LRU-eviction while it's running. */
+  running: boolean;
 }
 
 let counter = 0;
@@ -83,7 +84,9 @@ export class ChatManager {
     permission?: "allow" | "deny";   // tool-confirmation policy for this session (default from the connectFn)
   }): Promise<string> {
     // Evict LRU sessions until we're under the cap
-    while (this.live.size >= this.maxLive) this.evictLru();
+    while (this.live.size >= this.maxLive) {
+      if (!this.evictLru()) throw new Error("too many active sessions; stop one to start another");
+    }
 
     // Resolve descriptor from the AGENTS registry; throw if not found (unless overridden)
     const descriptor: AgentDescriptor = input.descriptor
@@ -106,6 +109,7 @@ export class ChatManager {
     this.live.set(chatId, {
       agentId: input.agentId,
       sessionId: handle.sessionId,
+      running: false,
       brief: input.brief,
       conn,
       handle,
@@ -120,45 +124,53 @@ export class ChatManager {
       yield { type: "failed", error: `unknown chat ${chatId}` };
       return;
     }
-
-    chat.lastMs = this.now();
-
-    // Inject the brief on the first turn only
-    const prompt = chat.brief ? `${chat.brief}\n\n---\nUser: ${message}` : message;
-    chat.brief = null;
-
-    yield { type: "phase", phase: "running" };
-
-    // Live streaming: bridge the prompt's push-callbacks to this generator so deltas/tools are yielded
-    // AS they arrive, not buffered until the turn ends. Without this, a long turn shows only
-    // "phase: running" until it completes — indistinguishable from a hang.
-    const queue: ChatEvent[] = [];
-    let wake: (() => void) | null = null;
-    const bump = () => { if (wake) { wake(); wake = null; } };
-    let settled = false;
-    let result: Awaited<ReturnType<ChatSessionHandle["prompt"]>> | undefined;
-    let error: Error | undefined;
-
-    const running = chat.handle
-      .prompt(
-        prompt,
-        (text) => { queue.push({ type: "delta", text }); bump(); },
-        (tool) => { queue.push({ type: "tool", tool }); bump(); },
-      )
-      .then((r) => { result = r; })
-      .catch((e) => { error = e as Error; })
-      .finally(() => { settled = true; bump(); });
-
-    while (true) {
-      while (queue.length) yield queue.shift()!;
-      if (settled) break;
-      await new Promise<void>((res) => { wake = res; });
+    if (chat.running) {
+      yield { type: "failed", error: "a turn is already running for this chat" };
+      return;
     }
-    await running; // ensure the promise's finally has run
+    chat.running = true;
+    try {
+      chat.lastMs = this.now();
 
-    if (error) { yield { type: "failed", error: error.message }; return; }
-    chat.lastMs = this.now();
-    yield { type: "done", result: result! };
+      // Inject the brief on the first turn only
+      const prompt = chat.brief ? `${chat.brief}\n\n---\nUser: ${message}` : message;
+      chat.brief = null;
+
+      yield { type: "phase", phase: "running" };
+
+      // Live streaming: bridge the prompt's push-callbacks to this generator so deltas/tools are yielded
+      // AS they arrive, not buffered until the turn ends. Without this, a long turn shows only
+      // "phase: running" until it completes — indistinguishable from a hang.
+      const queue: ChatEvent[] = [];
+      let wake: (() => void) | null = null;
+      const bump = () => { if (wake) { wake(); wake = null; } };
+      let settled = false;
+      let result: Awaited<ReturnType<ChatSessionHandle["prompt"]>> | undefined;
+      let error: Error | undefined;
+
+      const running = chat.handle
+        .prompt(
+          prompt,
+          (text) => { queue.push({ type: "delta", text }); bump(); },
+          (tool) => { queue.push({ type: "tool", tool }); bump(); },
+        )
+        .then((r) => { result = r; })
+        .catch((e) => { error = e as Error; })
+        .finally(() => { settled = true; bump(); });
+
+      while (true) {
+        while (queue.length) yield queue.shift()!;
+        if (settled) break;
+        await new Promise<void>((res) => { wake = res; });
+      }
+      await running; // ensure the promise's finally has run
+
+      if (error) { yield { type: "failed", error: error.message }; return; }
+      chat.lastMs = this.now();
+      yield { type: "done", result: result! };
+    } finally {
+      chat.running = false;
+    }
   }
 
   closeChat(chatId: string): void {
@@ -173,22 +185,24 @@ export class ChatManager {
   stateOf(chatId: string): { alive: true; running: boolean; sessionId: string; agent: string } | { alive: false } {
     const c = this.live.get(chatId);
     if (!c) return { alive: false };
-    return { alive: true, running: c.running ?? false, sessionId: c.sessionId, agent: c.agentId };
+    return { alive: true, running: c.running, sessionId: c.sessionId, agent: c.agentId };
   }
 
   sweepIdle(): void {
     const cutoff = this.now() - this.idleMs;
     for (const [id, c] of this.live) {
-      if (c.lastMs < cutoff) this.closeChat(id);
+      if (!c.running && c.lastMs < cutoff) this.closeChat(id);
     }
   }
 
-  private evictLru(): void {
+  private evictLru(): boolean {
     let oldest: string | null = null;
     let oldestMs = Infinity;
     for (const [id, c] of this.live) {
+      if (c.running) continue;               // never evict an in-flight background turn
       if (c.lastMs < oldestMs) { oldestMs = c.lastMs; oldest = id; }
     }
-    if (oldest) this.closeChat(oldest);
+    if (oldest) { this.closeChat(oldest); return true; }
+    return false;
   }
 }
