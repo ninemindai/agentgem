@@ -112,7 +112,7 @@ export interface ReviewRequestDetail {
   manifest: CatalogManifest; archiveDigest: string; messages: ReviewMessageRow[];
 }
 
-export type MessageResult = { ok: true; messageId: string } | { ok: false; rejected: "not-found" | "not-a-member" };
+export type MessageResult = { ok: true; messageId: string } | { ok: false; rejected: "not-found" };
 
 // Every request column EXCEPT archive_bytes. loadForMember uses this so the two hot read paths
 // (detail view, comment post) never pull the multi-MB archive into memory (D4). Bytes are fetched
@@ -169,8 +169,9 @@ export async function getReviewArchive(db: AppDb, accountId: string, requestId: 
 
 export async function addReviewMessage(db: AppDb, args: { accountId: string; requestId: string; body: string }, now: number = Date.now()): Promise<MessageResult> {
   const r = await loadForMember(db, args.accountId, args.requestId);
-  if (r.kind === "not-found") return { ok: false, rejected: "not-found" };
-  if (r.kind === "not-a-member") return { ok: false, rejected: "not-a-member" };
+  // Nonexistent id and non-member both collapse to the same opaque "not-found" (enumeration guard):
+  // a caller must not be able to tell "no such request" apart from "exists in a group I'm not in".
+  if (r.kind !== "ok") return { ok: false, rejected: "not-found" };
   // Gated on membership only, NOT status: commenting on an already-approved/withdrawn request is
   // allowed (post-hoc discussion / an audit trail).
   const id = randomUUID();
@@ -180,7 +181,7 @@ export async function addReviewMessage(db: AppDb, args: { accountId: string; req
 
 export type ApproveResult =
   | { ok: true; gemKey: string; version: string }
-  | { ok: false; rejected: "not-found" | "not-a-member" | "self-approval" | "not-open" | "not-scope-owner" | "conflict" };
+  | { ok: false; rejected: "not-found" | "self-approval" | "not-open" | "not-scope-owner" | "conflict" };
 
 /** The crux of the review flow: approve `requestId` on behalf of `accountId` and, iff every guard
  *  passes, PUBLISH it (catalog_gems + gem_archives) atomically with the open->approved claim.
@@ -201,8 +202,8 @@ export type ApproveResult =
  */
 export async function approveReviewRequest(db: AppDb, args: { accountId: string; requestId: string }, now: number = Date.now()): Promise<ApproveResult> {
   const load = await loadForMember(db, args.accountId, args.requestId);
-  if (load.kind === "not-found") return { ok: false, rejected: "not-found" };
-  if (load.kind === "not-a-member") return { ok: false, rejected: "not-a-member" };
+  // Nonexistent id and non-member collapse to the same opaque "not-found" (enumeration guard).
+  if (load.kind !== "ok") return { ok: false, rejected: "not-found" };
   const row = load.row;
   if (row.authorAccountId === args.accountId) return { ok: false, rejected: "self-approval" };
   if (row.status !== "open") return { ok: false, rejected: "not-open" };
@@ -250,15 +251,15 @@ export async function approveReviewRequest(db: AppDb, args: { accountId: string;
   });
 }
 
-export type ChangesResult = { ok: true } | { ok: false; rejected: "not-found" | "not-a-member" | "self" | "not-open" };
+export type ChangesResult = { ok: true } | { ok: false; rejected: "not-found" | "self" | "not-open" };
 
 /** A member (not the author) sends `requestId` back for changes: atomic `open -> changes-requested`.
  *  The atomic claim (conditional UPDATE) means a concurrent approve/withdraw/request-changes leaves
  *  this a no-op `not-open`, same pattern as approveReviewRequest. */
 export async function requestChanges(db: AppDb, args: { accountId: string; requestId: string }, now: number = Date.now()): Promise<ChangesResult> {
   const load = await loadForMember(db, args.accountId, args.requestId);
-  if (load.kind === "not-found") return { ok: false, rejected: "not-found" };
-  if (load.kind === "not-a-member") return { ok: false, rejected: "not-a-member" };
+  // Nonexistent id and non-member collapse to the same opaque "not-found" (enumeration guard).
+  if (load.kind !== "ok") return { ok: false, rejected: "not-found" };
   if (load.row.authorAccountId === args.accountId) return { ok: false, rejected: "self" };
   const claimed = await db.update(reviewRequests)
     .set({ status: "changes-requested", resolvedAtMs: now })
@@ -273,18 +274,23 @@ export type ResubmitResult = { ok: true } | { ok: false; rejected: "not-found" |
  *  review_seen marker for the request so each reviewer's inbox badge goes unread again — the old
  *  markers point at a version nobody has actually reviewed.
  *
- *  Status is checked BEFORE authorship: a non-author calling this on a request that isn't in
- *  `changes-requested` gets `not-changes-requested`, not `forbidden` — the caller learns the
- *  request isn't in a resubmittable state at all, which is the more useful signal when both are
- *  true. `forbidden` is reserved for a non-author hitting a request that IS `changes-requested`. */
+ *  Gated on group membership FIRST (loadForMember), same as every other mutating route — a
+ *  nonexistent request and a request in a group `accountId` doesn't belong to both collapse to the
+ *  opaque `not-found`, so a non-member can't use this route to probe whether a request exists.
+ *
+ *  Only once membership is confirmed does status get checked BEFORE authorship: a non-author
+ *  calling this on a request that isn't in `changes-requested` gets `not-changes-requested`, not
+ *  `forbidden` — the caller learns the request isn't in a resubmittable state at all, which is the
+ *  more useful signal when both are true. `forbidden` is reserved for a fellow group member (not the
+ *  author) hitting a request that IS `changes-requested`. */
 export async function resubmitReviewRequest(
   db: AppDb,
   args: { accountId: string; requestId: string; manifest: CatalogManifest; archiveBytes: Uint8Array; archiveDigest: string; description?: string },
   now: number = Date.now(),
 ): Promise<ResubmitResult> {
-  const row = (await db.select({ authorAccountId: reviewRequests.authorAccountId, description: reviewRequests.description, status: reviewRequests.status })
-    .from(reviewRequests).where(eq(reviewRequests.id, args.requestId)).limit(1))[0];
-  if (!row) return { ok: false, rejected: "not-found" };
+  const gate = await loadForMember(db, args.accountId, args.requestId);
+  if (gate.kind !== "ok") return { ok: false, rejected: "not-found" };
+  const row = gate.row;
   if (row.status !== "changes-requested") return { ok: false, rejected: "not-changes-requested" };
   if (row.authorAccountId !== args.accountId) return { ok: false, rejected: "forbidden" };
   // Claim + seen-marker clear share one transaction (D5): a crash between the two writes must not
@@ -308,13 +314,18 @@ export async function resubmitReviewRequest(
 export type WithdrawResult = { ok: true } | { ok: false; rejected: "not-found" | "forbidden" | "not-open" };
 
 /** The AUTHOR withdraws an open request: atomic `open -> withdrawn`, bytes cleared, row kept for
- *  history (same "clear bytes, keep row" shape as approval's claim). Status is checked before
- *  authorship, matching resubmit's ordering (see its comment): `not-open` beats `forbidden` when a
- *  non-author hits a request that's already left the `open` state. */
+ *  history (same "clear bytes, keep row" shape as approval's claim).
+ *
+ *  Gated on group membership FIRST (loadForMember), same as resubmit — a nonexistent request and a
+ *  request in a group `accountId` doesn't belong to both collapse to the opaque `not-found`.
+ *
+ *  Status is checked before authorship, matching resubmit's ordering (see its comment): `not-open`
+ *  beats `forbidden` when a fellow group member (not the author) hits a request that's already left
+ *  the `open` state. */
 export async function withdrawReviewRequest(db: AppDb, args: { accountId: string; requestId: string }, now: number = Date.now()): Promise<WithdrawResult> {
-  const row = (await db.select({ authorAccountId: reviewRequests.authorAccountId, status: reviewRequests.status })
-    .from(reviewRequests).where(eq(reviewRequests.id, args.requestId)).limit(1))[0];
-  if (!row) return { ok: false, rejected: "not-found" };
+  const gate = await loadForMember(db, args.accountId, args.requestId);
+  if (gate.kind !== "ok") return { ok: false, rejected: "not-found" };
+  const row = gate.row;
   if (row.status !== "open") return { ok: false, rejected: "not-open" };
   if (row.authorAccountId !== args.accountId) return { ok: false, rejected: "forbidden" };
   const claimed = await db.update(reviewRequests)

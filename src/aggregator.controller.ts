@@ -19,7 +19,7 @@ import { sweepQuarantine, sweepAdoptionQuarantine } from "@agentgem/aggregator";
 import { issueKey, revokeKey, listKeys } from "@agentgem/aggregator";
 import { recordCatalogShare, upsertGemArchive, getGemArchive, catalogGemExists, latestGemVersion, archiveOnlyVersion, gemAccessInfo } from "@agentgem/aggregator";
 import { recordGamePlay, gamePlayCounts } from "@agentgem/aggregator";
-import { resolveSignedAccount, gemStatusFor, gemStatusSigningPayload, catalogSigningPayload, reviewActionPayload } from "@agentgem/aggregator";
+import { resolveSignedAccount, gemStatusFor, gemStatusSigningPayload, catalogSigningPayload, reviewActionPayload, reviewSubmitPayload, reviewResubmitPayload } from "@agentgem/aggregator";
 import {
   submitReviewRequest, resubmitReviewRequest, listInbox, getReviewRequest, getReviewArchive,
   addReviewMessage, approveReviewRequest, requestChanges, withdrawReviewRequest, markSeen,
@@ -444,10 +444,14 @@ export class AggregatorController {
     return { ok: true, keys };
   }
 
-  // Shared account resolution for every /review/* route: verify the signature over `payload`
-  // (which each caller builds from either catalogSigningPayload (manifest writes) or
-  // reviewActionPayload (action verb + requestId)) and resolve it to an authorizing accounts.id.
-  // Fail-closed: an unbound/unresolvable/stale/bad key is always a 401, never a silent no-op.
+  // Shared account resolution for every /review/* route: verify the signature over `payload` and
+  // resolve it to an authorizing accounts.id. Each caller builds a payload scoped to ITS route so a
+  // captured signature can't be replayed elsewhere: reviewSubmitPayload (binds groupId, distinct
+  // from catalogSigningPayload so a /review/request body can't be replayed to /publish-gem or
+  // /catalog), reviewResubmitPayload (binds requestId, distinct from submit's), or reviewActionPayload
+  // (action verb + requestId, for the manifest-less actions: approve/changes/withdraw/seen/get/
+  // archive/message/inbox). Fail-closed: an unbound/unresolvable/stale/bad key is always a 401, never
+  // a silent no-op.
   private async signedAccount(payload: string, body: { pubkey: string; signedAt: number; signature: string }) {
     const who = await resolveSignedAccount(this.db, { pubkey: body.pubkey, payload, signedAt: body.signedAt, signature: body.signature });
     if (!who.ok) throw new AgentError("not authorized", { status: 401, code: "review_unauthorized", retryable: false });
@@ -460,7 +464,7 @@ export class AggregatorController {
   @post("/review/request", { body: ReviewManifestWrite, response: ReviewSubmitResult })
   async reviewRequest(input: { body: z.infer<typeof ReviewManifestWrite> }): Promise<z.infer<typeof ReviewSubmitResult>> {
     const b = input.body;
-    const who = await this.signedAccount(catalogSigningPayload(b.manifest, b.pubkey, b.signedAt), b);
+    const who = await this.signedAccount(reviewSubmitPayload(b.manifest, b.groupId, b.pubkey, b.signedAt), b);
     const bytes = new Uint8Array(Buffer.from(b.archiveBase64, "base64"));
     let digest: string;
     try {
@@ -477,7 +481,7 @@ export class AggregatorController {
   @post("/review/resubmit", { body: ReviewResubmit, response: ReviewActionResult })
   async reviewResubmit(input: { body: z.infer<typeof ReviewResubmit> }): Promise<z.infer<typeof ReviewActionResult>> {
     const b = input.body;
-    const who = await this.signedAccount(catalogSigningPayload(b.manifest, b.pubkey, b.signedAt), b);
+    const who = await this.signedAccount(reviewResubmitPayload(b.manifest, b.requestId, b.pubkey, b.signedAt), b);
     const bytes = new Uint8Array(Buffer.from(b.archiveBase64, "base64"));
     let digest: string;
     try {
