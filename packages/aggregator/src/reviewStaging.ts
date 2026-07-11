@@ -314,3 +314,15 @@ export async function withdrawReviewRequest(db: AppDb, args: { accountId: string
     .returning({ id: reviewRequests.id });
   return claimed.length ? { ok: true } : { ok: false, rejected: "not-open" };
 }
+
+/** Withdraws every open/changes-requested request `accountId` authored in `groupId` (status ->
+ *  `withdrawn`, bytes cleared) — called by removeMemberGuarded on the successful-removal path so a
+ *  departed author leaves no live staging gem behind. Idempotent: re-running after the requests are
+ *  already withdrawn matches zero rows and returns { withdrawn: 0 }. */
+export async function withdrawRequestsForDepartedMember(db: AppDb, groupId: string, accountId: string, now: number = Date.now()): Promise<{ withdrawn: number }> {
+  const res = await db.update(reviewRequests)
+    .set({ status: "withdrawn", resolvedAtMs: now, archiveBytes: null })
+    .where(and(eq(reviewRequests.groupId, groupId), eq(reviewRequests.authorAccountId, accountId), inArray(reviewRequests.status, ["open", "changes-requested"])))
+    .returning({ id: reviewRequests.id });
+  return { withdrawn: res.length };
+}
