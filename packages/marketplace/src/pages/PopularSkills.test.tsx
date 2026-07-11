@@ -51,8 +51,8 @@ describe("PopularSkills", () => {
     await screen.findByText("ai-engineer");
     const reviewLinks = screen.getAllByRole("link", { name: "Reviews" });
     expect(reviewLinks).toHaveLength(2);
-    expect(reviewLinks[0]!.getAttribute("href")).toBe("/skill/agency-agents/engineering/ai-engineer.md");
-    expect(reviewLinks[1]!.getAttribute("href")).toBe("/skill/matt-skills/productivity/brainstorming.md");
+    expect(reviewLinks[0]!.getAttribute("href")).toBe("/skills/agency-agents/engineering/ai-engineer.md");
+    expect(reviewLinks[1]!.getAttribute("href")).toBe("/skills/matt-skills/productivity/brainstorming.md");
   });
 
   it("renders a per-card author byline linking to the repo owner", async () => {
@@ -118,9 +118,9 @@ describe("PopularSkills", () => {
     const chip = await screen.findByText("★ 4.6 · 12");
     expect(screen.getAllByText(/★ \d/).filter((el) => /·/.test(el.textContent ?? ""))).toHaveLength(1);
     // the aggregate chip links to the skill page, same as the title
-    expect(chip.getAttribute("href")).toBe("/skill/matt-skills/productivity/brainstorming.md");
+    expect(chip.getAttribute("href")).toBe("/skills/matt-skills/productivity/brainstorming.md");
     const title = screen.getByText("brainstorming");
-    expect(title.getAttribute("href")).toBe("/skill/matt-skills/productivity/brainstorming.md");
+    expect(title.getAttribute("href")).toBe("/skills/matt-skills/productivity/brainstorming.md");
   });
 
   it("shows the empty state when the index hasn't run yet", async () => {

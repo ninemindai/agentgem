@@ -64,7 +64,7 @@ export function Leaderboard({ api, stars }: { api: ReturnType<typeof makeApi>; s
           const p = prettifyId(r.id, r.kind);
           return (
             <li key={r.id} className="ex-row-wrap">
-              <a className="ex-row" href={"/ingredient/" + encodeURIComponent(r.id)}>
+              <a className="ex-row" href={"/ingredients/" + encodeURIComponent(r.id)}>
                 <span className="ex-rank">{rank}</span>
                 <span className="ex-name">{p.name}{p.scope && <span className="ex-scope">{p.scope}</span>}</span>
                 <span className="ex-kind">{kindLabel(r.kind)}</span>

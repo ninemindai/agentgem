@@ -40,7 +40,7 @@ describe("Leaderboard", () => {
     vi.stubGlobal("fetch", vi.fn(async () => res(rows)));
     render(<Leaderboard api={makeApi("")} stars={stars} />);
     const link = (await screen.findByText("brainstorming")).closest("a");
-    expect(link?.getAttribute("href")).toBe("/ingredient/" + encodeURIComponent("skill:superpowers/brainstorming"));
+    expect(link?.getAttribute("href")).toBe("/ingredients/" + encodeURIComponent("skill:superpowers/brainstorming"));
   });
 
   it("renders a StarButton per row after load", async () => {

@@ -42,14 +42,34 @@ describe("Router", () => {
     expect(await screen.findByText("b")).toBeTruthy();
   });
 
-  it("renders the ingredient page at /ingredient/:id with the decoded id", async () => {
+  it("renders the ingredient page at /ingredients/:id with the decoded id", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.includes("/co-occurrence")) return res([{ id: "skill:c/d", producers: 1, verifiedProducers: 0 }]);
+      return res([]);
+    }));
+    window.history.pushState({}, "", "/ingredients/" + encodeURIComponent("skill:superpowers/brainstorming"));
+    render(<Router api={makeApi("")} stars={stars} reviews={reviews} me={null} />);
+    expect(await screen.findByText("brainstorming")).toBeTruthy(); // header from decoded id
+  });
+
+  // Legacy singular links must keep working, but the URL bar should show the plural canonical form.
+  it("redirects a legacy singular /ingredient/:id to canonical /ingredients/:id", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       if (url.includes("/co-occurrence")) return res([{ id: "skill:c/d", producers: 1, verifiedProducers: 0 }]);
       return res([]);
     }));
     window.history.pushState({}, "", "/ingredient/" + encodeURIComponent("skill:superpowers/brainstorming"));
     render(<Router api={makeApi("")} stars={stars} reviews={reviews} me={null} />);
-    expect(await screen.findByText("brainstorming")).toBeTruthy(); // header from decoded id
+    expect(await screen.findByText("brainstorming")).toBeTruthy(); // the Ingredient page still renders
+    expect(window.location.pathname).toBe("/ingredients/" + encodeURIComponent("skill:superpowers/brainstorming"));
+  });
+
+  it("redirects a legacy singular /skill/:sourceId/:path to canonical /skills/:sourceId/:path", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => res({ name: "brainstorming", content: "" })));
+    window.history.pushState({}, "", "/skill/matt-skills/productivity/brainstorming.md");
+    render(<Router api={makeApi("")} stars={stars} reviews={reviews} me={null} />);
+    expect(await screen.findByText("brainstorming")).toBeTruthy(); // the CatalogSkill page still renders (from decoded path)
+    expect(window.location.pathname).toBe("/skills/matt-skills/productivity/brainstorming.md");
   });
 
   it("renders the gem browse page at /gems", async () => {
