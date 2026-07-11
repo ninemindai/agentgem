@@ -41,8 +41,23 @@ describe("Studio → Share to app.agentgem.ai", () => {
     mount();
     fireEvent.click(await screen.findByRole("button", { name: /share to app\.agentgem\.ai/i }));
     await waitFor(() => expect(publish).toHaveBeenCalledTimes(1));
-    expect(publish.mock.calls[0][1]).toMatchObject({ body: expect.objectContaining({ scope: "bob", workspace: "snake", version: "0.1.0" }) });
+    expect(publish.mock.calls[0][1]).toMatchObject({ body: expect.objectContaining({ scope: "bob", workspace: "snake", version: "0.1.0", visibility: "public" }) });
     expect(await screen.findByText(/Published to app\.agentgem\.ai/)).toBeTruthy();
+  });
+
+  it("scope set to Unlisted: publishes with visibility: unlisted and surfaces the /games/ link", async () => {
+    vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob", sessionActive: true } as never);
+    vi.spyOn(routes.playMiniappRoute, "call").mockResolvedValue(miniapp as never);
+    vi.spyOn(routes.playSaveRoute, "call").mockResolvedValue({ name: "g1", commit: "abc1234", prunedNeeds: [] } as never);
+    vi.spyOn(routes.publishStatusRoute, "call").mockResolvedValue({ exists: false, ownedByMe: false, latestVersion: null } as never);
+    const publish = vi.spyOn(routes.publishSetupRoute, "call").mockResolvedValue({ exploreRef: "@bob/snake", version: "0.1.0", shareUrl: "https://agentgem.ai/share/s" } as never);
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: /^unlisted$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /share to app\.agentgem\.ai/i }));
+    await waitFor(() => expect(publish).toHaveBeenCalledTimes(1));
+    expect(publish.mock.calls[0][1]).toMatchObject({ body: expect.objectContaining({ scope: "bob", workspace: "snake", version: "0.1.0", visibility: "unlisted" }) });
+    expect(await screen.findByText(/Published to app\.agentgem\.ai/)).toBeTruthy();
+    expect(await screen.findByText(/https:\/\/app\.agentgem\.ai\/games\/@bob\/snake/)).toBeTruthy();
   });
 
   it("bound + already published by me: shows the confirm banner, and each button publishes the right version", async () => {
