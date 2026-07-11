@@ -20,14 +20,21 @@ const MAX_BODY = 4000;
 // Minimal per-account write guard: a sliding 60s window, max 20 writes. In-memory (per instance)
 // on purpose — a cheap brake on loops/floods for a new public write path; a persistent limiter is
 // a follow-up if it's ever needed at scale.
-const RL_WINDOW_MS = 60_000, RL_MAX = 20;
+const RL_WINDOW_MS = 60_000, RL_MAX = 20, RL_MAX_ACCOUNTS = 10_000;
 const writeLog = new Map<string, number[]>();
 function rateLimited(accountId: string): boolean {
   const now = Date.now();
   const arr = (writeLog.get(accountId) ?? []).filter((t) => now - t < RL_WINDOW_MS);
-  writeLog.set(accountId, arr);
+  if (arr.length === 0) writeLog.delete(accountId); else writeLog.set(accountId, arr);
   if (arr.length >= RL_MAX) return true;
   arr.push(now);
+  writeLog.set(accountId, arr); // re-store with this write recorded (arr is now non-empty)
+  // Backstop against unbounded growth from many one-off reviewers: evict the oldest account once
+  // over the cap. Worst case just resets a stranger's window; the limiter is a cheap brake anyway.
+  if (writeLog.size > RL_MAX_ACCOUNTS) {
+    const oldest = writeLog.keys().next().value;
+    if (oldest !== undefined && oldest !== accountId) writeLog.delete(oldest);
+  }
   return false;
 }
 
