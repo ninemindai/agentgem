@@ -31,6 +31,7 @@ export * from "./groupInvites.js";
 export * from "./handles.js";
 export * from "./auth/betterAuth.js";
 export * from "./auth/accountLinking.js";
+export * from "./auth/connectStates.js";
 export * from "./auth/mintSession.js";
 export * from "./auth/mintCookie.js";
 export * from "./auth/migrateAccounts.js";

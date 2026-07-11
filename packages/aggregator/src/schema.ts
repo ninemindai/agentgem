@@ -97,6 +97,18 @@ export const handoffCodes = pgTable("handoff_codes", {
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
 });
 
+// Short-lived, one-time record binding an in-flight Flow B connect-OAuth (its PKCE `code_verifier`)
+// to the caller's session user, so the later callback can prove who started the flow. `state_hash`
+// is sha256(state) — never store the raw state (mirrors handoffCodes). Consumed (deleted) on read.
+export const connectStates = pgTable("connect_states", {
+  stateHash: text("state_hash").primaryKey(),
+  codeVerifier: text("code_verifier").notNull(),
+  currentUserId: text("current_user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export const stars = pgTable("stars", {
   id: uuid("id").primaryKey(),
   accountId: uuid("account_id").notNull().references(() => accounts.id),
@@ -409,7 +421,7 @@ export const pendingAccountLinks = pgTable("pending_account_links", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, handoffCodes, stars, reviews, gemAdoptions, accountScopes, usageDays, usageDayModels, orgSettings, catalogGems, gemArchives, gamePlays, curatedSkills, appInstallations, orgMembers, groups, groupMembers, groupInvites, user, session, account, verification, pendingAccountLinks };
+export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, handoffCodes, stars, reviews, gemAdoptions, accountScopes, usageDays, usageDayModels, orgSettings, catalogGems, gemArchives, gamePlays, curatedSkills, appInstallations, orgMembers, groups, groupMembers, groupInvites, user, session, account, verification, pendingAccountLinks, connectStates };
 export type AppDb = PgDatabase<any, typeof schema>;
 
 /** One-time, idempotent: give every account_binding with no matching `accounts` anchor row one,
@@ -683,6 +695,14 @@ export async function ensureSchema(db: AppDb): Promise<void> {
   await db.execute(sql`create table if not exists "pending_account_links" (
     session_user_id text primary key references "user"(id) on delete cascade,
     provider_id text not null, provider_account_id text not null,
+    expires_at timestamptz not null, created_at timestamptz not null default now())`);
+  // Flow B connect-OAuth handoff: one short-lived, one-time record per in-flight state, binding its
+  // PKCE code_verifier to the caller's session user (Task 1).
+  await db.execute(sql`create table if not exists "connect_states" (
+    state_hash text primary key,
+    code_verifier text not null,
+    current_user_id text not null references "user"(id) on delete cascade,
+    provider text not null,
     expires_at timestamptz not null, created_at timestamptz not null default now())`);
 
   // MUST run before backfillGemOwners: gem-owner resolution matches against `accounts`, and
