@@ -120,8 +120,8 @@ body::before {
    while precompute is running, so the dot is enough of a signal). */
 .console.is-rail .identity-chip { justify-content: center; }
 .console.is-rail .identity-chip__label, .console.is-rail .identity-chip__ext { display: none; }
-.console.is-rail .warming-pill { font-size: 0; padding: 4px; text-align: center; }
-.console.is-rail .warming-pill::before { content: "•"; font-size: 15px; color: var(--accent); }
+.console.is-rail .warming-pill { font-size: 0; gap: 0; padding: 4px; align-self: center; background: none; border: none; box-shadow: none; animation: none; }
+.console.is-rail .warming-pill__spark { font-size: 14px; }
 
 /* ── Sidebar masthead ── */
 .console-nav {
@@ -144,6 +144,31 @@ body::before {
 }
 .console-mark { width: 18px; height: 18px; color: var(--accent); flex: none;
   filter: drop-shadow(0 1px 0 rgba(255,255,255,.6)); }
+/* Notification bell rides at the far end of the masthead. Nudged up to sit on the
+   wordmark's baseline, not the border-bottom padding. */
+.console-brand .notify-bell { margin-left: auto; align-self: center; margin-bottom: 12px; }
+.console.is-rail .console-brand .notify-bell { display: none; }
+
+/* Warming pill — shows only while background precompute runs. A soft terracotta
+   pill with a light sweep crossing it left→right (same shimmer language as the
+   scorecard) plus a pulsing spark, so it reads as actively working, not idle. */
+.warming-pill {
+  display: inline-flex; align-items: center; gap: 6px; align-self: flex-start;
+  margin: 0 8px 10px; padding: 4px 10px; border-radius: 999px;
+  font: 500 11.5px/1 var(--font-ui); letter-spacing: .02em; color: var(--accent);
+  border: 1px solid rgba(154, 51, 36, .16);
+  background:
+    linear-gradient(100deg, transparent 20%, rgba(255,255,255,.6) 50%, transparent 80%) 0 0 / 220% 100% no-repeat,
+    rgba(154, 51, 36, .08);
+  animation: warming-shimmer 1.9s linear infinite;
+}
+.warming-pill__spark { font-size: 12px; line-height: 1; animation: warming-pulse 1.5s ease-in-out infinite; }
+@keyframes warming-shimmer { from { background-position: 220% 0, 0 0; } to { background-position: -120% 0, 0 0; } }
+@keyframes warming-pulse { 0%, 100% { opacity: .5; transform: scale(.85); } 50% { opacity: 1; transform: scale(1.1); } }
+@media (prefers-reduced-motion: reduce) {
+  .warming-pill, .warming-pill__spark { animation: none; }
+}
+
 .console-nav-item {
   position: relative; display: flex; align-items: center; gap: 10px; width: 100%;
   background: none; border: 0; text-align: left; padding: 9px 11px; border-radius: 7px;
