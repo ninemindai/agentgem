@@ -34,4 +34,26 @@ describe("workflowScan tool-result outcome", () => {
     const step = sig.sequences!.sessions[0].steps.find((s) => s.toolUseId === "t2");
     expect(step?.error).toBeUndefined();
   });
+
+  it("marks a step rejected when its tool_result carries the denial marker", () => {
+    const p = transcript([
+      { sessionId: "s1", message: { role: "assistant", content: [{ type: "tool_use", id: "t3", name: "Bash", input: { command: "x" } }] } },
+      { sessionId: "s1", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "t3", is_error: true, content: "The user doesn't want to proceed with this tool use. The tool use was rejected" }] } },
+    ]);
+    const sig = scanWorkflow([p], EMPTY_INV as any, { retainSequences: true });
+    const step = sig.sequences!.sessions[0].steps.find((s) => s.toolUseId === "t3");
+    expect(step?.error).toBe(true);
+    expect(step?.rejected).toBe(true);
+  });
+
+  it("leaves rejected falsy for a non-denial error", () => {
+    const p = transcript([
+      { sessionId: "s1", message: { role: "assistant", content: [{ type: "tool_use", id: "t4", name: "Bash", input: { command: "x" } }] } },
+      { sessionId: "s1", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "t4", is_error: true, content: "boom" }] } },
+    ]);
+    const sig = scanWorkflow([p], EMPTY_INV as any, { retainSequences: true });
+    const step = sig.sequences!.sessions[0].steps.find((s) => s.toolUseId === "t4");
+    expect(step?.error).toBe(true);
+    expect(step?.rejected).not.toBe(true);
+  });
 });
