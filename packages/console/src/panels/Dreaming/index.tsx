@@ -28,6 +28,20 @@ function GuardrailReview({ apiBase, event, onApplied }: { apiBase: string; event
     } catch { setErr("Could not load the preview — try again."); }
   }, [apiBase, event.key]);
 
+  // Toggling claude/agents when both files exist must re-preview against the chosen
+  // target — the hash Apply sends has to match whichever file it writes, or the
+  // hash-guard on accept spuriously rejects as "stale". Unlike `load`, this pins the
+  // target the user picked instead of re-resolving a default, and leaves a directive
+  // the user already edited alone (the seed text is the same regardless of target).
+  const chooseTarget = useCallback(async (chosen: "claude" | "agents") => {
+    setErr(null);
+    try {
+      const p = await previewGuardrail(apiBase, event.key!, chosen);
+      setPreview(p);
+      setTarget(chosen);
+    } catch { setErr("Could not load the preview — try again."); }
+  }, [apiBase, event.key]);
+
   if (!preview) {
     return <button className="dream-act is-accept" onClick={load}>Apply to CLAUDE.md…</button>;
   }
@@ -63,11 +77,11 @@ function GuardrailReview({ apiBase, event, onApplied }: { apiBase: string; event
           />
           {preview.ambiguous && (
             <div className="guardrail-target" role="group" aria-label="Target file">
-              <button type="button" aria-pressed={target === "claude"} onClick={() => setTarget("claude")}>CLAUDE.md</button>
-              <button type="button" aria-pressed={target === "agents"} onClick={() => setTarget("agents")}>AGENTS.md</button>
+              <button type="button" aria-pressed={target === "claude"} onClick={() => chooseTarget("claude")}>CLAUDE.md</button>
+              <button type="button" aria-pressed={target === "agents"} onClick={() => chooseTarget("agents")}>AGENTS.md</button>
             </div>
           )}
-          <pre className="guardrail-diff"><code>{preview.next}</code></pre>
+          <pre className="guardrail-diff" aria-label="Resulting file"><code>{preview.next}</code></pre>
           <button className="dream-act is-accept" disabled={busy} onClick={apply}>Apply</button>
         </>
       )}

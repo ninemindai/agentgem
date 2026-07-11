@@ -151,17 +151,31 @@ export class DreamController {
   // Pure preview of the managed-region write for a guardrail entry: resolve the
   // target file, render current→next, and return the drift-guard hash. The `seed`
   // (derived from the detector detail) prefills the panel's editable directive box.
+  // When both CLAUDE.md and AGENTS.md exist (`ambiguous`), the caller may pin an
+  // explicit `target` — the returned hash MUST match whichever file Apply will
+  // write, or the hash-guard on accept will spuriously reject as "stale".
   @post("/dream/guardrail/preview", { body: KeyBody, response: GuardrailPreviewSchema })
   async previewGuardrail(input: { body: z.infer<typeof KeyBody> }): Promise<z.infer<typeof GuardrailPreviewSchema>> {
     const entry = readQueue(this.base).find((e) => e.key === input.body.key);
     if (!entry || entry.kind !== "guardrail") throw new InvalidInputError(`No guardrail '${input.body.key}'.`);
-    const resolved = resolveTarget(entry.root);
-    // No CLAUDE.md/AGENTS.md yet → default to creating CLAUDE.md in the project root.
-    const file = resolved.file ?? join(entry.root, "CLAUDE.md");
-    const target = resolved.target ?? "claude";
+    const requested = input.body.target;
+    let file: string;
+    let target: "claude" | "agents";
+    let ambiguous: boolean;
+    if (requested) {
+      file = join(entry.root, requested === "agents" ? "AGENTS.md" : "CLAUDE.md");
+      target = requested;
+      ambiguous = resolveTarget(entry.root).ambiguous;
+    } else {
+      const resolved = resolveTarget(entry.root);
+      // No CLAUDE.md/AGENTS.md yet → default to creating CLAUDE.md in the project root.
+      file = resolved.file ?? join(entry.root, "CLAUDE.md");
+      target = resolved.target ?? "claude";
+      ambiguous = resolved.ambiguous;
+    }
     const seed = `- ${(entry.draft as GuardrailDraft).detail}`;
     const { current, next, hash, malformed } = previewGuardrails(file, [seed]);
-    return { current, next, hash, file, target, ambiguous: resolved.ambiguous, malformed: !!malformed, seed };
+    return { current, next, hash, file, target, ambiguous, malformed: !!malformed, seed };
   }
 
   @post("/dream/queue/accept", { body: KeyBody, response: OkPathSchema })
@@ -176,7 +190,8 @@ export class DreamController {
       const { expectHash, target, directive } = input.body;
       const label = target === "agents" ? "AGENTS.md" : "CLAUDE.md";
       const file = join(entry.root, label);
-      const block = directive ?? `- ${(entry.draft as GuardrailDraft).detail}`;
+      const seed = `- ${(entry.draft as GuardrailDraft).detail}`;
+      const block = directive && directive.trim() ? directive : seed;
       const res = applyGuardrails(file, [block], expectHash ?? "");
       if (!res.ok) {
         if (res.reason === "corrupt") {

@@ -108,6 +108,59 @@ describe("Journey panel", () => {
     });
   });
 
+  it("ambiguous target: toggling to AGENTS.md re-previews with target:agents", async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes("/api/dream/status")) return new Response(JSON.stringify({ enabled: true, phasesLit: ["DEEP"], promoted: 0, queued: 1, lastPassAtMs: 1 }));
+      if (url.includes("/api/journey")) return new Response(JSON.stringify({ events: [
+        { ts: 700, kind: "guardrail", title: "repeated-tool-error", detail: "Bash errored 2x", status: "queued", key: "g1", firstSeenMs: 700, root: "/p" },
+      ], truncated: false }));
+      if (url.includes("/api/dream/guardrail/preview")) {
+        const body = init?.body ? JSON.parse(init.body as string) : {};
+        const target = body.target === "agents" ? "agents" : "claude";
+        return new Response(JSON.stringify({
+          current: "base\n",
+          next: "base\n\n<!-- agentgem:learnings -->\n- Bash errored 2x\n<!-- /agentgem:learnings -->\n",
+          hash: target === "agents" ? "H-AGENTS" : "H-CLAUDE",
+          file: target === "agents" ? "/p/AGENTS.md" : "/p/CLAUDE.md",
+          target, ambiguous: true, malformed: false, seed: "- Bash errored 2x",
+        }));
+      }
+      return new Response(JSON.stringify({ ok: true, path: "/p/AGENTS.md" }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<Dreaming apiBase="" />);
+    await waitFor(() => screen.getByText("repeated-tool-error"));
+
+    fireEvent.click(screen.getByRole("button", { name: /apply to claude\.md/i }));
+    await screen.findByLabelText(/directive/i);
+
+    // Both toggle buttons are present in the ambiguous case.
+    const claudeBtn = screen.getByRole("button", { name: "CLAUDE.md" });
+    const agentsBtn = screen.getByRole("button", { name: "AGENTS.md" });
+    expect(claudeBtn).toBeTruthy();
+    expect(agentsBtn.getAttribute("aria-pressed")).toBe("false");
+
+    fetchMock.mockClear();
+    fireEvent.click(agentsBtn);
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find((c) => String(c[0]).includes("/api/dream/guardrail/preview"));
+      expect(call).toBeTruthy();
+      const body = JSON.parse((call![1] as RequestInit).body as string);
+      expect(body).toMatchObject({ key: "g1", target: "agents" });
+    });
+    await waitFor(() => expect(agentsBtn.getAttribute("aria-pressed")).toBe("true"));
+
+    // Applying now must carry the re-previewed AGENTS.md hash, not the stale CLAUDE.md one.
+    fireEvent.click(screen.getByRole("button", { name: /^apply$/i }));
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find((c) => String(c[0]).endsWith("/api/dream/queue/accept"));
+      expect(call).toBeTruthy();
+      const body = JSON.parse((call![1] as RequestInit).body as string);
+      expect(body).toMatchObject({ key: "g1", expectHash: "H-AGENTS", target: "agents" });
+    });
+  });
+
   it("warns (no apply) when the managed block is malformed", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       if (url.includes("/api/dream/status")) return new Response(JSON.stringify({ enabled: true, phasesLit: ["DEEP"], promoted: 0, queued: 1, lastPassAtMs: 1 }));
