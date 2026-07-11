@@ -1090,12 +1090,6 @@ export const PlayInspectorSchema = z.object({
 });
 export const PlayPublishRequestSchema = z.object({ remote: z.string().url().optional() });
 export const PlayPublishResponseSchema = z.object({ ok: z.boolean() });
-// Light unlisted share: mint an unlisted /games/<id> link for a miniapp's archive on the hosted
-// aggregator (see src/gem/shareArchiveClient.ts), and revoke it.
-export const PlayShareRequestSchema = z.object({ name: z.string() });
-export const PlayShareResponseSchema = z.object({ url: z.string() });
-export const PlayRevokeRequestSchema = z.object({ name: z.string() });
-export const PlayRevokeResponseSchema = z.object({ revoked: z.boolean() });
 // `name` is the optional miniapp id. Omitted, it is derived from the source (and suffixed on collision);
 // supplied, it is slugified and claimed exactly — a collision is a 409, not a silent rename.
 // `genre` picks between the two genres a session source can fork into (replay | session-heatmap);

@@ -17,11 +17,9 @@ import { recordBinding } from "@agentgem/aggregator";
 import { GitHubVerifier } from "@agentgem/aggregator";
 import { sweepQuarantine, sweepAdoptionQuarantine } from "@agentgem/aggregator";
 import { issueKey, revokeKey, listKeys } from "@agentgem/aggregator";
-import { recordCatalogShare, upsertGemArchive, getGemArchive, catalogGemExists, latestGemVersion, deleteGemArchiveOwned, archiveOnlyVersion } from "@agentgem/aggregator";
+import { recordCatalogShare, upsertGemArchive, getGemArchive, catalogGemExists, latestGemVersion, archiveOnlyVersion } from "@agentgem/aggregator";
 import { recordGamePlay, gamePlayCounts } from "@agentgem/aggregator";
-import { resolveSignedAccount, catalogSigningPayload, gemStatusFor, gemStatusSigningPayload } from "@agentgem/aggregator";
-import { staticGate } from "@agentgem/play";
-import { genShareId } from "./share/shareStore.js";
+import { resolveSignedAccount, gemStatusFor, gemStatusSigningPayload } from "@agentgem/aggregator";
 import { importGem } from "@agentgem/distribute";
 import { GameGenreEnum } from "./schemas.js";
 
@@ -145,11 +143,6 @@ const CatalogResult = z.object({ shared: z.boolean(), publishedBy: z.string().op
 const GemStatusBody = z.object({ key: z.string(), pubkey: z.string(), signedAt: z.number(), signature: z.string() });
 const GemStatusResult = z.object({ exists: z.boolean(), ownedByMe: z.boolean(), latestVersion: z.string().nullable() });
 const PublishGemBody = z.object({ manifest: CatalogManifestSchema, archiveBase64: z.string(), pubkey: z.string(), signedAt: z.number(), signature: z.string() });
-const ShareArchiveManifest = CatalogManifestSchema.extend({ gemDigest: z.string() }); // required for share-archive
-const ShareArchiveBody = z.object({ manifest: ShareArchiveManifest, archiveBase64: z.string(), pubkey: z.string(), signedAt: z.number(), signature: z.string() });
-const ShareArchiveResult = z.object({ key: z.string(), url: z.string() });
-const RevokeShareBody = z.object({ key: z.string(), pubkey: z.string(), signedAt: z.number(), signature: z.string() });
-const RevokeShareResult = z.object({ revoked: z.boolean() });
 const GemArchiveQuery = z.object({ key: z.string(), version: z.string() });
 const GemArchiveResult = z.object({ archiveBase64: z.string() });
 const GameHtmlResult = z.object({ html: z.string() });
@@ -321,52 +314,6 @@ export class AggregatorController {
     if (!r.shared) return { shared: false, rejected: r.rejected };
     await upsertGemArchive(this.db, { gemKey: r.gemKey, version: r.version, bytes: new Uint8Array(bytes), digest, createdAtMs: Date.now() });
     return { shared: true, publishedBy: r.publishedBy, gemKey: r.gemKey, version: r.version };
-  }
-
-  // Unlisted share: upload a miniapp's archive and get a copyable /games/<shareId> URL, owned by the
-  // uploader's accounts.id so only they can revoke it. Distinct from publish-gem: no catalog_gems row
-  // (never lists), a scope-less genShareId key, and the game HTML is re-gated server-side because we
-  // serve it from our own origin. The sealed null-origin iframe is the real boundary; this gate is
-  // defense-in-depth. Console-originated (origin-less), so originGuard's fall-through allows it.
-  @post("/share-archive", { body: ShareArchiveBody, response: ShareArchiveResult })
-  async shareArchive(input: { body: z.infer<typeof ShareArchiveBody> }): Promise<z.infer<typeof ShareArchiveResult>> {
-    const b = input.body;
-    const who = await resolveSignedAccount(this.db, {
-      pubkey: b.pubkey, payload: catalogSigningPayload(b.manifest, b.pubkey, b.signedAt), signedAt: b.signedAt, signature: b.signature,
-    });
-    if (!who.ok) throw new AgentError(`share rejected: ${who.rejected}`, { status: who.rejected === "not-connected" ? 401 : 400, code: who.rejected, retryable: false });
-
-    const bytes = Buffer.from(b.archiveBase64, "base64");
-    let digest: string, gem;
-    try { const imp = importGem(bytes); digest = imp.meta.gemDigest; gem = imp.gem; }
-    catch { throw new AgentError("invalid gem archive", { status: 400, code: "invalid_archive", retryable: false }); }
-    if (b.manifest.gemDigest !== digest) throw new AgentError("digest mismatch", { status: 400, code: "digest_mismatch", retryable: false });
-
-    const game = gem.artifacts.find((x) => x.type === "game") as { html?: unknown } | undefined;
-    if (!game || typeof game.html !== "string") throw new AgentError("this gem has no game to share", { status: 400, code: "not_a_game", retryable: false });
-    const gate = staticGate(game.html);
-    if (!gate.ok) throw new AgentError(`static gate: ${gate.failures.join("; ")}`, { status: 400, code: "gate_failed", retryable: false });
-
-    const key = genShareId();                                  // slash-less => can never be a published key
-    await upsertGemArchive(this.db, { gemKey: key, version: "1", bytes: new Uint8Array(bytes), digest, createdAtMs: Date.now(), ownerAccountId: who.accountId });
-    return { key, url: `https://app.agentgem.ai/games/${key}` };
-  }
-
-  // Owner-only revoke of an unlisted share (POST, not DELETE — AgentBack controllers have no @del;
-  // see the framework note). The signature is over `revoke:<key>:<signedAt>`, proving the caller
-  // holds a device key bound to the OWNING account — any of the owner's devices works, since
-  // ownership is the accounts.id, not the key. Fail-closed: wrong/NULL owner -> 403.
-  @post("/share-archive/revoke", { body: RevokeShareBody, response: RevokeShareResult })
-  async revokeShareArchive(input: { body: z.infer<typeof RevokeShareBody> }): Promise<z.infer<typeof RevokeShareResult>> {
-    const b = input.body;
-    const who = await resolveSignedAccount(this.db, {
-      pubkey: b.pubkey, payload: `revoke:${b.key}:${b.signedAt}`, signedAt: b.signedAt, signature: b.signature,
-    });
-    if (!who.ok) throw new AgentError("not connected", { status: who.rejected === "not-connected" ? 401 : 400, code: who.rejected, retryable: false });
-    const r = await deleteGemArchiveOwned(this.db, b.key, who.accountId);
-    if (r === "not-found") throw new AgentError("share not found", { status: 404, code: "share_not_found", retryable: false });
-    if (r === "forbidden") throw new AgentError("not the owner", { status: 403, code: "forbidden", retryable: false });
-    return { revoked: true };
   }
 
   // Public: stream a published gem's archive bytes (base64) for zero-config install. Serves only
