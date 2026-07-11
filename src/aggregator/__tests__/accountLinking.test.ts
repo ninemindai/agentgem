@@ -6,6 +6,7 @@ import { sql } from "drizzle-orm";
 import {
   makeTestDb, makeAuth, stashPendingLink, pendingLink, upsertAccount, accountIdForProvider,
   producers, accountBindings, catalogGems, catalogSigningPayload, recordCatalogShare, deleteCatalogGem, buildProfile,
+  accountFreshness,
 } from "@agentgem/aggregator";
 
 function signer() {
@@ -153,5 +154,50 @@ describe("connectedProviders (Flow A: list every provider linked to an account)"
       (gen_random_uuid()::text, ${u.id}, 'go', 'google', now(), now())`);
     const { connectedProviders } = await import("@agentgem/aggregator");
     expect(await connectedProviders(db, u.id)).toEqual(["github", "google"]);
+  });
+});
+
+describe("accountFreshness (the C-guard over every accounts.id FK)", () => {
+  async function freshAccount(db: Awaited<ReturnType<typeof makeTestDb>>) {
+    const id = crypto.randomUUID();
+    await upsertAccount(db, { provider: "google", accountId: "g-" + id, login: null, avatarUrl: null, id });
+    return id;
+  }
+
+  it("a just-anchored account with nothing attached is fresh", async () => {
+    const db = await makeTestDb();
+    const id = await freshAccount(db);
+    expect(await accountFreshness(db, id)).toEqual({ fresh: true, blocker: null });
+  });
+
+  it.each([
+    ["handle", (db: any, id: string) => db.execute(sql`update "user" set handle = 'x' where id = ${id}`)],
+    ["gem", (db: any, id: string) => db.execute(sql`insert into catalog_gems (gem_key, version, published_by, created_at_ms, owner_account_id) values ('k','1','x',0,${id})`)],
+    ["gem_archive", (db: any, id: string) => db.execute(sql`insert into gem_archives (gem_key, version, bytes, size, digest, created_at_ms, owner_account_id) values ('k','1','\\x00'::bytea,1,'d',0,${id})`)],
+    ["star", (db: any, id: string) => db.execute(sql`insert into stars (id, account_id, target_kind, target_id) values (gen_random_uuid(), ${id}, 'skill', 't')`)],
+    ["review", (db: any, id: string) => db.execute(sql`insert into reviews (id, account_id, target_kind, target_id, rating) values (gen_random_uuid(), ${id}, 'skill', 't', 5)`)],
+    // NOTE ON THE SEED (not the brief's literal SQL — the brief's verbatim seed
+    // `insert into group_members (group_id, account_id) values (gen_random_uuid(), ${id})` fails
+    // against the real schema on TWO counts: group_id FKs a real groups.id row (a random uuid with
+    // no matching group violates the FK), and the group_members_some_grant check requires via_sync
+    // OR via_invite to be true (both default false). Fixed to insert a real group row and grant via
+    // invite, matching the actual table shape without weakening the assertion.
+    ["group_member", async (db: any, id: string) => {
+      const groupId = crypto.randomUUID();
+      await db.execute(sql`insert into groups (id, kind, name) values (${groupId}, 'native', 'g')`);
+      await db.execute(sql`insert into group_members (group_id, account_id, via_invite, invite_role) values (${groupId}, ${id}, true, 'member')`);
+    }],
+    ["account_scope", (db: any, id: string) => db.execute(sql`insert into account_scopes (account_id, scope, role) values (${id}, 'org', 'member')`)],
+    ["usage", (db: any, id: string) => db.execute(sql`insert into usage_days (account_id, machine, scope, date) values (${id}, 'm', '', '2026-07-10')`)],
+    ["handoff", (db: any, id: string) => db.execute(sql`insert into handoff_codes (code_hash, account_id, expires_at) values ('h', ${id}, now())`)],
+  ])("is NOT fresh when it has a %s", async (blocker, seed) => {
+    const db = await makeTestDb();
+    const id = await freshAccount(db);
+    // seed a matching user row for the handle case
+    await db.execute(sql`insert into "user" (id, name, email, email_verified, created_at, updated_at) values (${id}, 'U', ${"u" + id + "@x.com"}, false, now(), now()) on conflict do nothing`);
+    await seed(db, id);
+    const r = await accountFreshness(db, id);
+    expect(r.fresh).toBe(false);
+    expect(r.blocker).toBe(blocker);
   });
 });
