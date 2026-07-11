@@ -220,8 +220,10 @@ export function Studio({
         onTool: (tool) => { setWorking(activity(tool)); setMsgs((m) => [...m, { role: "tool", title: tool.title ?? tool.kind ?? "tool", failed: tool.status === "failed" }]); },
         onDone: async () => { setBusy(false); setWorking(""); await refresh(); },
         onFailed: (e) => {
-          if (/already running/i.test(e) && id) {
-            // Another tab (or this one, post-reload) owns the live turn — attach to it instead of failing.
+          // A turn stays alive server-side after a stream drop (Task 3). "already running" (another
+          // tab/reload owns it) and a transient transport drop ("connection lost", emitted by
+          // studioStream.ts's EventSource error handler) both mean: reconcile via /state, don't fail.
+          if (id && (/already running/i.test(e) || e === "connection lost")) {
             setWorking("resuming…"); pollWhileRunning(id);
             return;
           }
