@@ -15,7 +15,9 @@ import { jsonLines } from "../observeScan.js";
 
 // A path-like token ending in .htm/.html. The class excludes ':' so a URL like
 // http://x/a.html can't be mistaken for a local file path.
-const HTML_TOKEN = /([~\w.@/+-]+\.html?)\b/gi;
+// The hyphen is escaped so `+-` is not read as a range from '+' (0x2B) to '-' (0x2D), which would
+// silently include ',' (0x2C) and merge two comma-separated .html paths into one bogus token.
+const HTML_TOKEN = /([~\w.@/+\-]+\.html?)\b/gi;
 // apply_patch section headers name the file being added/updated.
 const PATCH_FILE = /\*\*\*\s+(?:Add|Update)\s+File:\s+(.+?\.html?)\b/gi;
 

@@ -42,6 +42,11 @@ describe("resolveCodexHtmlPaths", () => {
     expect(resolveCodexHtmlPaths(text)).toEqual([]);
   });
 
+  it("does not merge two comma-separated .html paths into one token", () => {
+    const text = [meta("/w"), call("shell", JSON.stringify({ command: ["bash", "-lc", "cp /w/a.html,/w/b.html ."] }))].join("\n");
+    expect(resolveCodexHtmlPaths(text)).toEqual(["/w/a.html", "/w/b.html"]);
+  });
+
   it("does not mistake a URL for a local file path", () => {
     const text = [meta("/w"), call("shell", JSON.stringify({ command: ["curl", "https://example.com/page.html"] }))].join("\n");
     // The '//example.com/...' fragment after the scheme is rejected; no bogus root path.

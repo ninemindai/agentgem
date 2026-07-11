@@ -66,7 +66,10 @@ export function splitFrontmatter(md: string): { fm: string; body: string } {
 // Read a single scalar `key: value` from a frontmatter block. Strips matching surrounding quotes.
 // Intentionally not a full YAML parser — these files are flat scalar frontmatter.
 export function fmField(fm: string, key: string): string | undefined {
-  const m = fm.match(new RegExp(`^${key}:[ \\t]*(.+?)[ \\t]*$`, "m"));
+  // Escape the key: it's interpolated into a RegExp, so a metacharacter (all callers pass literals
+  // today, but nothing enforces it) would otherwise be treated as a pattern, not matched literally.
+  const k = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const m = fm.match(new RegExp(`^${k}:[ \\t]*(.+?)[ \\t]*$`, "m"));
   if (!m) return undefined;
   let v = m[1].trim();
   if (v.length >= 2 && ((v[0] === '"' && v.endsWith('"')) || (v[0] === "'" && v.endsWith("'")))) {
