@@ -52,7 +52,7 @@ const banner = {
 // it is an entrypoint the bundler cannot see from any import graph — it needs the same
 // treatment or the worker thread dies on a consumer's install (the parent then logs and
 // falls back to warming inline, i.e. silently slow).
-const entries = ["cli.js", "index.js", "distill/mcpServer.js", "goldmine/mcpServer.js", "warm/scorecardWorker.js"];
+const entries = ["cli.js", "index.js", "distill/mcpServer.js", "goldmine/mcpServer.js", "warm/scorecardWorker.js", "transcriptParseWorker.js"];
 
 // `dist/index.js` self-runs the server behind `isMain(import.meta)` so that
 // `node dist/index.js` (the `start` script) boots it. That guard compares

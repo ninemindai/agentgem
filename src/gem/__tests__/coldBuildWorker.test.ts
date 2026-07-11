@@ -55,3 +55,11 @@ describe("cold-build worker", () => {
     expect(out.raw.find((r) => r.token === "qa")).toBeTruthy();
   });
 });
+
+import { readFileSync } from "node:fs";
+describe("packaging", () => {
+  it("transcriptParseWorker is a bundle-bins entry", () => {
+    const src = readFileSync(new URL("../../../scripts/bundle-bins.mjs", import.meta.url), "utf8");
+    expect(src).toContain("transcriptParseWorker.js");
+  });
+});
