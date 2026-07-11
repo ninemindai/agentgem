@@ -8,6 +8,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   window.history.pushState({}, "", "/account");
+  try { sessionStorage.clear(); } catch { /* ignore */ }
 });
 
 const me: Me = { id: "u1", name: "octocat", handle: "octocat", avatarUrl: null, orgs: [] };
@@ -101,5 +102,121 @@ describe("Account page", () => {
     render(<Account api={makeApi("https://api.x")} me={me} base="https://api.x" />);
     expect(await screen.findByText("GitHub connected")).toBeTruthy();
     expect(screen.queryByText(/credential/i)).toBeNull();
+  });
+
+  it("carries which provider a collision was for across the redirect, so Merge targets the right one", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (u: string, o?: RequestInit) => {
+      if (u.includes("/api/account/providers")) return res({ connected: ["github"] });
+      if (u.includes("/api/auth/link-social")) { void o; return res({ url: "https://accounts.google.com/o?state=abc", redirect: true }); }
+      throw new Error("unexpected fetch: " + u);
+    }));
+    const assignBeforeRedirect = vi.fn();
+    vi.stubGlobal("location", { ...window.location, assign: assignBeforeRedirect, origin: "https://app.x", pathname: "/account", href: "https://app.x/account", search: "" } as unknown as Location);
+
+    // First mount: clicking Connect Google stashes "google" as the in-flight attempt before the
+    // full-page OAuth redirect (which a real browser would now follow — this test doesn't simulate
+    // navigating away, just the write side).
+    const { unmount } = render(<Account api={makeApi("https://api.x")} me={me} base="https://api.x" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Connect Google" }));
+    await waitFor(() => expect(assignBeforeRedirect).toHaveBeenCalled());
+    unmount();
+
+    // Second mount simulates the page reloading fresh after the OAuth round trip collides: the
+    // provider is no longer in memory, only in sessionStorage from the first mount.
+    const assignOnMerge = vi.fn();
+    vi.stubGlobal("location", { ...window.location, assign: assignOnMerge, origin: "https://app.x", pathname: "/account", href: "https://app.x/account", search: "?error=account_already_linked_to_different_user" } as unknown as Location);
+    window.history.pushState({}, "", "/account?error=account_already_linked_to_different_user");
+
+    render(<Account api={makeApi("https://api.x")} me={me} base="https://api.x" />);
+    const mergeBtn = await screen.findByRole("button", { name: /merge this account/i });
+    fireEvent.click(mergeBtn);
+    expect(assignOnMerge).toHaveBeenCalledWith("https://api.x/api/account/connect/google");
+  });
+
+  it("withholds the Merge button when the attempted provider wasn't carried (defensive: no guessing)", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (u: string) => {
+      if (u.includes("/api/account/providers")) return res({ connected: ["github"] });
+      throw new Error("unexpected fetch: " + u);
+    }));
+    window.history.pushState({}, "", "/account?error=account_already_linked_to_different_user");
+    render(<Account api={makeApi("https://api.x")} me={me} base="https://api.x" />);
+    expect(await screen.findByText(/already linked to another AgentGem account/i)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /merge this account/i })).toBeNull();
+  });
+
+  it("on ?connect=ready, confirming calls POST /api/account/absorb, shows the refreshed provider list, and reloads", async () => {
+    let absorbCalled = false;
+    vi.stubGlobal("fetch", vi.fn(async (u: string, o?: RequestInit) => {
+      if (u.includes("/api/account/providers")) return res({ connected: ["github"] });
+      if (u.includes("/api/account/absorb") && o?.method === "POST") { absorbCalled = true; return res({ keep: "u1", connected: ["github", "google"] }); }
+      throw new Error("unexpected fetch: " + u);
+    }));
+    const reload = vi.fn();
+    vi.stubGlobal("location", { ...window.location, reload, pathname: "/account", search: "?connect=ready" } as unknown as Location);
+
+    render(<Account api={makeApi("https://api.x")} me={me} base="https://api.x" />);
+
+    expect(await screen.findByText(/merges the just-verified account/i)).toBeTruthy();
+    const confirmBtn = screen.getByRole("button", { name: "Connect" });
+    fireEvent.click(confirmBtn);
+
+    expect(await screen.findByText("Google connected")).toBeTruthy();
+    expect(absorbCalled).toBe(true);
+    expect(reload).toHaveBeenCalled();
+  });
+
+  it("shows the server's message on absorb 409 (merge not supported) instead of reloading", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (u: string, o?: RequestInit) => {
+      if (u.includes("/api/account/providers")) return res({ connected: ["github"] });
+      if (u.includes("/api/account/absorb") && o?.method === "POST") {
+        return res({ error: "Both accounts have activity on AgentGem. Merging accounts with existing gems or a claimed handle isn't supported yet." }, false, 409);
+      }
+      throw new Error("unexpected fetch: " + u);
+    }));
+    const reload = vi.fn();
+    vi.stubGlobal("location", { ...window.location, reload, pathname: "/account", search: "?connect=ready" } as unknown as Location);
+
+    render(<Account api={makeApi("https://api.x")} me={me} base="https://api.x" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
+
+    expect(await screen.findByText(/merging accounts with existing gems/i)).toBeTruthy();
+    expect(reload).not.toHaveBeenCalled();
+    // the confirm button stays available to retry
+    expect(screen.getByRole("button", { name: "Connect" })).toBeTruthy();
+  });
+
+  it("shows a brief notice on ?connect=none, without offering a confirm", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (u: string) => {
+      if (u.includes("/api/account/providers")) return res({ connected: ["github"] });
+      throw new Error("unexpected fetch: " + u);
+    }));
+    vi.stubGlobal("location", { ...window.location, pathname: "/account", search: "?connect=none" } as unknown as Location);
+    render(<Account api={makeApi("https://api.x")} me={me} base="https://api.x" />);
+    expect(await screen.findByText(/nothing new to connect/i)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Connect" })).toBeNull();
+  });
+
+  it("shows a brief notice on ?connect=error, without offering a confirm", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (u: string) => {
+      if (u.includes("/api/account/providers")) return res({ connected: ["github"] });
+      throw new Error("unexpected fetch: " + u);
+    }));
+    vi.stubGlobal("location", { ...window.location, pathname: "/account", search: "?connect=error" } as unknown as Location);
+    render(<Account api={makeApi("https://api.x")} me={me} base="https://api.x" />);
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toMatch(/went wrong connecting/i);
+    expect(screen.queryByRole("button", { name: "Connect" })).toBeNull();
+  });
+
+  it("shows the handle-claim nudge banner from ?merge=1&handle=, without naming a provider", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (u: string) => {
+      if (u.includes("/api/account/providers")) return res({ connected: ["github"] });
+      throw new Error("unexpected fetch: " + u);
+    }));
+    vi.stubGlobal("location", { ...window.location, pathname: "/account", search: "?merge=1&handle=raymond" } as unknown as Location);
+    render(<Account api={makeApi("https://api.x")} me={me} base="https://api.x" />);
+    const banner = await screen.findByText(/to claim @raymond, connect the account that owns it/i);
+    expect(banner).toBeTruthy();
+    expect(banner.textContent).not.toMatch(/github|google/i);
   });
 });

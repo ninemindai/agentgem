@@ -161,6 +161,20 @@ export function makeApi(base: string) {
       if (!res.ok) throw new Error(`/api/account/providers -> ${res.status}`);
       return JSON.parse(await res.text()) as { connected: string[] };
     },
+    // Flow B's consumer side (account/install.ts's absorbHandler): merges the provider the caller
+    // just OAuth'd via `auth.connect` (server-verified, stashed as a pending link) into the caller's
+    // current account. `other` is never supplied by the client — the server reads it off the
+    // session-scoped pending-link row. A 409 covers two distinct server reasons ("no provider
+    // awaiting connection" and "both accounts have activity, merge not supported") — the caller
+    // surfaces whichever message the server sent rather than guessing which one applies.
+    absorbAccount: async (): Promise<{ keep: string; connected: string[] }> => {
+      const res = await fetch(base + "/api/account/absorb", { method: "POST", credentials: "include" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error ?? `/api/account/absorb -> ${res.status}`);
+      }
+      return JSON.parse(await res.text()) as { keep: string; connected: string[] };
+    },
     getSources: () =>
       get<{ sources: CuratedSource[] }>(base, "/api/sources").then((r) => r.sources),
     getSourceDivisions: (source: string) =>

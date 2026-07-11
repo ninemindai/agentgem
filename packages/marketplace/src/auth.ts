@@ -66,5 +66,14 @@ export function makeAuth(base: string) {
       if (!j.url) throw new Error("link response had no redirect url");
       window.location.assign(j.url);
     },
+    /** Flow B's bespoke connect start (`/api/account/connect/:provider`, account/connect.ts) — the
+     *  collision-recovery counterpart to `linkSocial`. Unlike `signIn`/`linkSocial`, this route is a
+     *  plain GET that 302s to the provider itself (it mints its own OAuth `state`/PKCE verifier
+     *  server-side rather than going through better-auth's POST-then-follow-`url` dance), so the
+     *  caller just navigates the browser there directly — no fetch, nothing to await or catch. The
+     *  session cookie rides along with the navigation like any other same-site GET. */
+    connect(provider: "github" | "google"): void {
+      window.location.assign(base + "/api/account/connect/" + provider);
+    },
   };
 }
