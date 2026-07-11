@@ -9,15 +9,18 @@ fetched `origin/main`, never the local `main`** (see below):
 
 ```bash
 git fetch origin
-git worktree add ../agentgem-<task> -b <task> origin/main
+git worktree add ../agentgem-worktrees/<task> -b <task> origin/main
 ```
 
-This keeps each session's branch, working tree, and build artifacts (`dist/`,
-`tsconfig.tsbuildinfo`) separate, avoiding cross-session interference. Remove the
-worktree when the work is merged or abandoned:
+**Always nest worktrees under the sibling `agentgem-worktrees/` directory** — one
+subdirectory per task — rather than scattering flat `agentgem-<task>` siblings next
+to the repo. Keeping them in one container makes the checkout list legible and the
+cleanup sweep easy. This keeps each session's branch, working tree, and build
+artifacts (`dist/`, `tsconfig.tsbuildinfo`) separate, avoiding cross-session
+interference. Remove the worktree when the work is merged or abandoned:
 
 ```bash
-git worktree remove ../agentgem-<task>
+git worktree remove ../agentgem-worktrees/<task>
 ```
 
 ## Integration: keep local `main` a clean mirror
@@ -26,7 +29,7 @@ Worktrees isolate each session's working tree — that part is automatic. The th
 that actually bites is a **divergent local `main`**: with many concurrent
 worktrees, `main` drifts if it's committed to directly or left stale, and ends up
 both ahead of and behind `origin/main` (not fast-forwardable) — and it's often
-**checked out in another worktree** (e.g. `../agentgem-run`) you must not disturb.
+**checked out in another worktree** (e.g. `../agentgem-worktrees/run`) you must not disturb.
 Keep `main` clean and **a PR is the default integration path**; a direct local
 merge is the exception. The PR route runs CI (`test (24)`) before
 anything lands, never touches the `main` checkout, and serializes safely when
