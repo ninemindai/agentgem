@@ -109,6 +109,25 @@ describe("betterAuth factory", () => {
     expect((session as { orgs?: unknown })?.orgs).toEqual([]);
   });
 
+  it("linking a second provider adds no second accounts anchor and does not throw", async () => {
+    const db = await makeTestDb();
+    const auth = makeAuth({ db, ...opts });
+    const ctx = await auth.$context;
+    const user = await ctx.internalAdapter.createUser({ email: "neo@x.com", name: "Neo", emailVerified: false, login: "neo" } as never);
+    // Primary provider anchor (as anchorAndScopes writes it on first github sign-in):
+    await upsertAccount(db, { provider: "github", accountId: "gh-neo", login: "neo", avatarUrl: null, id: user.id });
+    // Simulate the account.create hook firing for a SECOND provider on the same user:
+    await expect(
+      (async () => {
+        const { anchorAndScopesForTest } = await import("@agentgem/aggregator");
+        await anchorAndScopesForTest(db, { userId: user.id, providerId: "google", accountId: "goog-neo", accessToken: null }, true);
+      })()
+    ).resolves.not.toThrow();
+    const rows = await db.execute(sql`select provider, login from accounts where id = ${user.id}`);
+    expect(rows.rows).toHaveLength(1);
+    expect((rows.rows[0] as { provider: string }).provider).toBe("github"); // primary stamp unchanged
+  });
+
   it("registers Google iff both Google creds are supplied; GitHub is unaffected", async () => {
     const db = await makeTestDb();
     const withGoogle = makeAuth({ db, ...opts, googleClientId: "gid", googleClientSecret: "gsec" });
