@@ -56,7 +56,14 @@ describe("org-scoped curated skills", () => {
     await pruneOrgSkills(db, "ACME", ["acme/skills"]); // case-insensitive scope
     expect((await listOrgSkills(db, "acme")).map((s) => s.name)).toEqual(["deploy"]); // ghost pruned
     expect((await listOrgSkills(db, "globex")).map((s) => s.name)).toEqual(["other"]); // other org untouched
-    await pruneOrgSkills(db, "acme", []); // no visible repos → forget everything for the org
+    await pruneOrgSkills(db, "acme", [], { exhaustive: true }); // no visible repos → forget everything for the org
     expect(await listOrgSkills(db, "acme")).toEqual([]);
+  });
+
+  it("pruneOrgSkills refuses an empty keepRepos without the exhaustive flag (guards a truncated listing)", async () => {
+    const db = await makeTestDb();
+    await replaceOrgRepoSkills(db, "acme", "acme/skills", [priv("deploy")]);
+    await expect(pruneOrgSkills(db, "acme", [])).rejects.toThrow(/exhaustive/i);
+    expect((await listOrgSkills(db, "acme")).map((s) => s.name)).toEqual(["deploy"]); // nothing deleted
   });
 });
