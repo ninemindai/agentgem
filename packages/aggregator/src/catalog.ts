@@ -93,13 +93,17 @@ export type DeleteGemResult = "deleted" | "not-found" | "forbidden";
 // by NOBODY and cannot be unpublished by anyone. Do not add a string-compare fallback for it:
 // that is the "" === "" hole this re-key exists to close.
 export async function deleteCatalogGem(db: AppDb, gemKey: string, version: string, ownerAccountId: string): Promise<DeleteGemResult> {
-  const row = (await db.select({ ownerAccountId: catalogGems.ownerAccountId }).from(catalogGems)
-    .where(and(eq(catalogGems.gemKey, gemKey), eq(catalogGems.version, version))).limit(1))[0];
-  if (!row) return "not-found";
-  if (row.ownerAccountId === null || row.ownerAccountId !== ownerAccountId) return "forbidden";
-  await db.delete(gemArchives).where(and(eq(gemArchives.gemKey, gemKey), eq(gemArchives.version, version)));
-  await db.delete(catalogGems).where(and(eq(catalogGems.gemKey, gemKey), eq(catalogGems.version, version)));
-  return "deleted";
+  return db.transaction(async (tx) => {
+    const row = (await tx.select({ ownerAccountId: catalogGems.ownerAccountId }).from(catalogGems)
+      .where(and(eq(catalogGems.gemKey, gemKey), eq(catalogGems.version, version))).limit(1))[0];
+    if (!row) return "not-found";
+    if (row.ownerAccountId === null || row.ownerAccountId !== ownerAccountId) return "forbidden";
+    // Both deletes in one transaction: a crash/error after the archive delete but before the catalog
+    // delete would otherwise leave an orphaned catalog row that reads as installable:false forever.
+    await tx.delete(gemArchives).where(and(eq(gemArchives.gemKey, gemKey), eq(gemArchives.version, version)));
+    await tx.delete(catalogGems).where(and(eq(catalogGems.gemKey, gemKey), eq(catalogGems.version, version)));
+    return "deleted";
+  });
 }
 
 // Owner-only revoke of an UNLISTED share archive (no catalog_gems row exists for it). Mirrors
