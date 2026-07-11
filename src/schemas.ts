@@ -1063,7 +1063,13 @@ export const PlayPublishRequestSchema = z.object({ remote: z.string().url().opti
 export const PlayPublishResponseSchema = z.object({ ok: z.boolean() });
 // `name` is the optional miniapp id. Omitted, it is derived from the source (and suffixed on collision);
 // supplied, it is slugified and claimed exactly — a collision is a 409, not a silent rename.
-export const PlayStudioRequestSchema = z.object({ source: GameArtifactSchema.shape.createdFrom, name: z.string().optional() });
+// `genre` picks between the two genres a session source can fork into (replay | session-heatmap);
+// omitted, the source kind's default genre applies unchanged. Project→project-fun and skill→skill-run
+// have no alternate genre, so genre is not meaningful for those sources.
+export const PlayStudioRequestSchema = z.object({
+  source: GameArtifactSchema.shape.createdFrom, name: z.string().optional(),
+  genre: z.enum(["replay", "session-heatmap"]).optional(),
+});
 export const PlayStudioResponseSchema = z.object({ name: z.string() });
 // Import a miniapp from an existing self-contained HTML file. The HTML becomes the miniapp as-is (a
 // draft opened in the studio); the seal gate is enforced on Save, not import, so imperfect HTML can be

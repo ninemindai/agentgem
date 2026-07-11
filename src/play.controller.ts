@@ -49,7 +49,7 @@ export class PlayController {
   @post("/play/studio", { body: PlayStudioRequestSchema, response: PlayStudioResponseSchema })
   async studio(input: { body: z.infer<typeof PlayStudioRequestSchema> }): Promise<z.infer<typeof PlayStudioResponseSchema>> {
     try {
-      const { name } = await seedStudio(input.body.source, defaultReaders, input.body.name);
+      const { name } = await seedStudio(input.body.source, defaultReaders, input.body.name, input.body.genre);
       return { name };
     } catch (e) { throw this.createError(e); }
   }

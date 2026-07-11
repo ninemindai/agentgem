@@ -5,7 +5,7 @@
 // gate: only a path under the miniapps registry (or the neutral fallback) is ever honored.
 import { join, sep, resolve, basename } from "node:path";
 import { readFileSync, writeFileSync } from "node:fs";
-import type { GameSource } from "@agentgem/model";
+import type { GameSource, GameGenre } from "@agentgem/model";
 import { extractSource, type SourceReaders } from "./sourceContext.js";
 import { genreFor } from "./genres.js";
 import { scaffoldFor, minimalTemplate } from "./scaffolds.js";
@@ -70,8 +70,8 @@ function studioInstructions(file: string): string {
   return `You are building the miniapp in ${file}.\n\n${MINIAPP_BUILDER_BRIEF}`;
 }
 
-export async function seedStudio(source: GameSource, readers: SourceReaders, name?: string): Promise<{ name: string; brief: string }> {
-  const input = await extractSource(source, readers);
+export async function seedStudio(source: GameSource, readers: SourceReaders, name?: string, genre?: GameGenre): Promise<{ name: string; brief: string }> {
+  const input = await extractSource(source, readers, genre);
   const g = genreFor(input.genre);
   await ensureRepo(miniappsRoot());                   // must exist before we can claim a dir inside it
   const { name: id, dir } = claimFor(source, name);
