@@ -92,7 +92,7 @@ export const ArtifactRefSchema = z.object({
 export const ReferenceArtifactSchema = z.object({
   type: z.literal("reference"),
   name: z.string(),
-  refKind: z.enum(["skill", "mcp_server", "instructions", "hook", "channel", "subagent", "game"]),
+  refKind: z.enum(["skill", "mcp_server", "instructions", "hook", "channel", "subagent", "game", "rubric"]),
   ref: ArtifactRefSchema,
 });
 
@@ -126,6 +126,23 @@ export const GameArtifactSchema = z.object({
   meta: z.object({ controls: z.string().optional(), estPlaySeconds: z.number().optional() }).optional(),
 });
 
+export const RubricArtifactSchema = z.object({
+  type: z.literal("rubric"),
+  name: z.string(),
+  title: z.string(),
+  target: z.string(),
+  naturalScope: z.enum(["session", "project", "all"]).optional(),
+  factors: z.array(z.object({ factor: z.string(), weight: z.number().optional() })),
+  criteria: z.array(z.object({
+    id: z.string(),
+    title: z.string(),
+    question: z.string(),
+    severity: z.enum(["info", "warn"]).optional(),
+    advice: z.string(),
+    granularity: z.enum(["session", "aggregate"]).optional(),
+  })).optional(),
+});
+
 export const GemArtifactSchema = z.discriminatedUnion("type", [
   SkillArtifactSchema,
   McpServerArtifactSchema,
@@ -134,6 +151,7 @@ export const GemArtifactSchema = z.discriminatedUnion("type", [
   ChannelArtifactSchema,
   SubagentArtifactSchema,
   GameArtifactSchema,
+  RubricArtifactSchema,
   ReferenceArtifactSchema,
 ]);
 
@@ -309,7 +327,7 @@ export const TargetIdSchema = z.enum(TARGET_IDS);
 
 export const SkippedArtifactSchema = z.object({
   artifact: z.string(),
-  type: z.enum(["skill", "mcp_server", "instructions", "hook", "channel", "subagent", "reference", "game"]),
+  type: z.enum(["skill", "mcp_server", "instructions", "hook", "channel", "subagent", "reference", "game", "rubric"]),
   reason: z.string(),
 });
 
