@@ -46,6 +46,19 @@ describe("managed region", () => {
     expect(readFileSync(f, "utf8")).toContain("CHANGED BY HUMAN");   // untouched
   });
 
+  it("aborts on a malformed block (OPEN with no CLOSE) instead of discarding hand-written content", () => {
+    const dir = tmp(); const f = join(dir, "CLAUDE.md");
+    const original = "# My rules\n<!-- agentgem:learnings -->\n- old rule\n\n## My own section below\nhand content\n";
+    writeFileSync(f, original, "utf8");
+    const preview = previewGuardrails(f, ["- new"]);
+    expect(preview.malformed).toBe(true);
+    expect(preview.next).toBe(original);
+    const res = applyGuardrails(f, ["- new"], preview.hash);
+    expect(res.ok).toBe(false);
+    expect((res as { ok: false; reason: string }).reason).toBe("corrupt");
+    expect(readFileSync(f, "utf8")).toBe(original);   // byte-identical — hand content survives
+  });
+
   it("resolveTarget detects an existing file and flags ambiguity", () => {
     const dir = tmp();
     writeFileSync(join(dir, "CLAUDE.md"), "x", "utf8");
