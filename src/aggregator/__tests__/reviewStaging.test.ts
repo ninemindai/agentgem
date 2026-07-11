@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { eq } from "drizzle-orm";
-import { makeTestDb, reviewRequests, upsertAccount, createNativeGroup, grantInvite, submitReviewRequest, upsertCatalogGem, accountScopes, listInbox, markSeen, getReviewRequest, getReviewArchive, addReviewMessage, approveReviewRequest, listCatalogGems, getGemArchive, requestChanges, resubmitReviewRequest, withdrawReviewRequest, withdrawRequestsForDepartedMember, removeMemberGuarded } from "@agentgem/aggregator";
+import { randomUUID } from "node:crypto";
+import { eq, and } from "drizzle-orm";
+import { makeTestDb, reviewRequests, reviewSeen, upsertAccount, createNativeGroup, grantInvite, submitReviewRequest, upsertCatalogGem, accountScopes, listInbox, markSeen, getReviewRequest, getReviewArchive, addReviewMessage, approveReviewRequest, listCatalogGems, getGemArchive, requestChanges, resubmitReviewRequest, withdrawReviewRequest, withdrawRequestsForDepartedMember, removeMemberGuarded } from "@agentgem/aggregator";
 
 describe("review staging schema", () => {
   it("ensureSchema creates review_requests and the table accepts a row", async () => {
@@ -111,6 +112,37 @@ describe("listInbox + markSeen", () => {
     const g = await createNativeGroup(db, author.id, "Team");
     await submitReviewRequest(db, { accountId: author.id, groupId: g.id, manifest: mkManifest("@team/bot"), archiveBytes: new Uint8Array([1]), archiveDigest: "sha256:x" }, 1000);
     expect(await listInbox(db, outsider.id)).toEqual([]);
+  });
+});
+
+// Critical fix: markSeen used to be a raw upsert with no existence/membership gate, so a
+// nonexistent requestId FK-violated (uncaught 500) and a foreign-group request wrote an
+// unauthorized review_seen row. markSeen must now no-op silently in both cases.
+describe("markSeen gating", () => {
+  it("a nonexistent requestId does not throw and writes no review_seen row", async () => {
+    const db = await makeTestDb();
+    const member = await upsertAccount(db, { provider: "github", accountId: "a1", login: "alice" });
+    const fakeId = randomUUID();
+    await expect(markSeen(db, member.id, fakeId)).resolves.toBeUndefined();
+    const rows = await db.select().from(reviewSeen).where(and(eq(reviewSeen.accountId, member.id), eq(reviewSeen.requestId, fakeId)));
+    expect(rows).toEqual([]);
+  });
+
+  it("a non-member marking a real request seen is a silent no-op (no unauthorized write)", async () => {
+    const db = await makeTestDb();
+    const author = await upsertAccount(db, { provider: "github", accountId: "a1", login: "alice" });
+    await ownScope(db, author.id);
+    const outsider = await upsertAccount(db, { provider: "github", accountId: "x", login: "mallory" });
+    const g = await createNativeGroup(db, author.id, "Team");
+    const r = await submitReviewRequest(db, {
+      accountId: author.id, groupId: g.id, manifest: mkManifest("@team/bot"),
+      archiveBytes: new Uint8Array([1]), archiveDigest: "sha256:x", description: "d",
+    }, 1000);
+    if (!r.ok) throw new Error("submit failed");
+
+    await expect(markSeen(db, outsider.id, r.requestId)).resolves.toBeUndefined();
+    const rows = await db.select().from(reviewSeen).where(and(eq(reviewSeen.accountId, outsider.id), eq(reviewSeen.requestId, r.requestId)));
+    expect(rows).toEqual([]);
   });
 });
 

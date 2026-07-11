@@ -1,6 +1,7 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
+import { randomUUID } from "node:crypto";
 import { makeTestDb, upsertAccount, createNativeGroup, grantInvite, producers, accountBindings, accountScopes, catalogSigningPayload, reviewActionPayload } from "@agentgem/aggregator";
 import { signer, sampleGem, signedPublishBody } from "./helpers/publishFixtures.js";
 import { AggregatorController } from "../../aggregator.controller.js";
@@ -103,4 +104,19 @@ it("a signature bound to one action cannot be replayed for another", async () =>
   // A signature for "withdraw" replayed against the approve route must fail the signature check.
   const stolen = rk.sign(reviewActionPayload("withdraw", requestId, rk.pubkey, at));
   await expect(c.reviewApprove({ body: { requestId, pubkey: rk.pubkey, signedAt: at, signature: stolen } })).rejects.toThrow();
+});
+
+// Critical fix: reviewGet called markSeen (a raw upsert) BEFORE getReviewRequest, so a signed but
+// nonexistent requestId FK-violated on the review_seen insert -> uncaught 500 instead of a graceful
+// { request: null }. This also closed an enumeration oracle: a real foreign-group request and a
+// never-existed id must both come back as { request: null } without throwing.
+it("reviewGet with a signed but nonexistent requestId returns { request: null } and does not throw", async () => {
+  const db = await makeTestDb();
+  const someone = await upsertAccount(db, { provider: "github", accountId: "alice", login: "alice" });
+  const k = signer(); await bind(db, k.pubkey, { id: someone.id, login: "alice" });
+  const c = new AggregatorController(db);
+  const fakeId = randomUUID();
+  const at = Date.now();
+  const res = await c.reviewGet({ body: { requestId: fakeId, pubkey: k.pubkey, signedAt: at, signature: k.sign(reviewActionPayload("get", fakeId, k.pubkey, at)) } });
+  expect(res).toEqual({ request: null });
 });
