@@ -232,10 +232,21 @@ yields nothing. Without this, the share link does not work at all.
 
 An unlisted URL is a capability: unguessable, permanent. Standing up public hosting of
 user-authored HTML with no takedown path is not acceptable, and revocation is awkward to
-retrofit once links are in the wild. The signed `DELETE /api/aggregator/share-archive` ships in
-the same PR as the mint, with a "Revoke link" affordance beside "Copy link." Because ownership
-is the account UUID, revoke succeeds from any of the owner's connected devices and fails closed
-for everyone else.
+retrofit once links are in the wild. The signed revoke route ships in the same PR as the mint
+(server: PR 2a), with a "Revoke link" affordance beside "Copy link" (console: PR 2b). Because
+ownership is the account UUID, revoke succeeds from any of the owner's connected devices and
+fails closed for everyone else.
+
+**Durable revoke (PR 2b).** Revoke's purpose is a *later, different session* takedown, so the
+console must remember which miniapps are shared. Each shared miniapp persists its shareId in a
+**sidecar `share.json`** in its registry dir — NOT in `MiniappMeta`/`meta.json`, which
+`writeGameGem` bakes into the shared gem and which `saveMiniapp` reconstructs field-by-field
+(the id would leak into the gem and be dropped on re-save). The console's miniapp read surfaces
+the sidecar so the Play panel shows a persistent "Shared · Copy · Revoke" state across restarts.
+The light "Copy share link" button is distinct from the heavy "Share to app.agentgem.ai"
+publish button, and reuses Studio's existing `pendingPublish`/`ConnectGitHub` bind-resume for
+the connect-when-unbound path (light-share still requires a connected identity — an unconnected
+device owns nothing).
 
 ### Immutable links
 
