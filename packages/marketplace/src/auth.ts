@@ -59,7 +59,7 @@ export function makeAuth(base: string) {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ provider, callbackURL: returnTo }),
+        body: JSON.stringify({ provider, callbackURL: returnTo, errorCallbackURL: returnTo }),
       });
       if (!r.ok) throw new Error(`link failed (${r.status})`);
       const j = (await r.json()) as { url?: string };

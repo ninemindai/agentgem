@@ -531,6 +531,15 @@ a.ex-skillcard-rating:hover { text-decoration: underline; }
 .ex-co > li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; font-size: 0.92rem; }
 .ex-co > li + li { border-top: 1px solid var(--line); }
 
+/* ── Account: connected providers ────────────────────────────── */
+.ex-account-providers { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; }
+.ex-account-provider { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; font-size: 0.92rem; }
+.ex-account-provider + .ex-account-provider { border-top: 1px solid var(--line); }
+.ex-account-connected {
+  font-size: 0.66rem; letter-spacing: 0.05em; text-transform: uppercase; font-weight: 700;
+  color: var(--verified); background: color-mix(in srgb, var(--verified) 14%, transparent); border-radius: var(--r-pill); padding: 2px 7px;
+}
+
 .ex-spark { display: block; width: 100%; height: auto; overflow: visible; }
 .ex-legend { display: flex; align-items: center; gap: 8px; margin: 12px 0 0; font-size: 0.8rem; color: var(--muted); }
 .ex-dot { width: 9px; height: 9px; border-radius: var(--r-pill); display: inline-block; }

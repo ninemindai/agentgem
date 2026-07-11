@@ -34,7 +34,15 @@ describe("Account page", () => {
     fireEvent.click(connectGoogle);
 
     await waitFor(() => expect(linkBody).toBeDefined());
-    expect(JSON.parse(linkBody!)).toMatchObject({ provider: "google" });
+    // callbackURL AND errorCallbackURL must both point back to /account: better-auth's OAuth
+    // callback error path reads errorCallbackURL specifically (not callbackURL) when the
+    // provider collides with a different account — omitting it strands the user on better-auth's
+    // dead default /error route instead of returning here with ?error=... (see auth.ts).
+    expect(JSON.parse(linkBody!)).toMatchObject({
+      provider: "google",
+      callbackURL: "https://app.x/account",
+      errorCallbackURL: "https://app.x/account",
+    });
     expect(assign).toHaveBeenCalledWith("https://accounts.google.com/o?state=abc");
   });
 
