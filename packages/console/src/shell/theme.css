@@ -570,6 +570,7 @@ body::before {
 /* Studio */
 .play-studio-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
 .play-studio-head .sp { flex: 1; }
+.play-scope { display: inline-flex; gap: 6px; }
 .play-studio-title { font: 600 19px var(--font-display); letter-spacing: -.01em; color: var(--ink); }
 .play-caps { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 10px; }
 .play-caps__row { display: flex; gap: 8px; align-items: baseline; font-size: 12px; }

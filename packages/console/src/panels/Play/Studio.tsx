@@ -54,6 +54,7 @@ export function Studio({
   const [pendingShare, setPendingShare] = useState(false);   // Copy-share clicked while unbound
   const [pendingVersion, setPendingVersion] = useState<{ latestVersion: string; nextVersion: string; login: string } | null>(null);
   const [sharing, setSharing] = useState(false);   // in-flight guard: blocks a double-mint from orphaning an un-revokable link
+  const [scope, setScope] = useState<"public" | "unlisted">("public");
   const { status: identity } = useIdentity();
   const closeRef = useRef<null | (() => void)>(null);
   const logRef = useRef<HTMLDivElement>(null);
@@ -273,16 +274,20 @@ export function Studio({
 
   // The actual publish. Takes `login` explicitly (see the onBound comment above) and
   // deliberately does NOT save: the caller already did, and the workspace + seal exist.
-  async function publishWorkspace(login: string, version: string) {
+  async function publishWorkspace(login: string, version: string, visibility: "public" | "unlisted") {
     setStatus("publishing to app.agentgem.ai…");
     try {
       const g = genreOf(meta?.genre ?? "project-fun");
       const pub = await publishSetupRoute.call(makeClient(apiBase), { body: {
-        workspace: name, scope: login, name, version, provenance: "play",
+        workspace: name, scope: login, name, version, provenance: "play", visibility,
         description: `${g.label} mini-game`, tags: ["game", meta?.genre ?? "project-fun"],
       } });
       // Link the gem's marketplace page (installable / playable), not just the OG teaser card.
-      setShare({ gemUrl: `https://app.agentgem.ai/gems/${encodeURIComponent(pub.exploreRef)}`, cardUrl: pub.shareUrl }); setStatus("");
+      // Unlisted publishes aren't in Explore, so point straight at the playable /games/ link instead.
+      const gemUrl = visibility === "unlisted"
+        ? `https://app.agentgem.ai/games/${pub.exploreRef}`
+        : `https://app.agentgem.ai/gems/${encodeURIComponent(pub.exploreRef)}`;
+      setShare({ gemUrl, cardUrl: pub.shareUrl }); setStatus("");
     } catch (e) {
       const body = (e as Record<string, unknown>).body;
       setStatus(`share failed: ${typeof body === "string" ? body : (e as Error).message}`);
@@ -302,7 +307,7 @@ export function Studio({
     } catch (e) {
       setStatus(`could not check for an existing app: ${(e as Error).message}`); return;
     }
-    if (action.kind === "publish") { await publishWorkspace(login, action.version); return; }
+    if (action.kind === "publish") { await publishWorkspace(login, action.version, scope); return; }
     if (action.kind === "taken") { setStatus(`“${name}” is already published by another account — choose a different name.`); return; }
     setStatus(""); setPendingVersion({ latestVersion: action.latestVersion, nextVersion: action.nextVersion, login });
   }
@@ -382,6 +387,10 @@ export function Studio({
         {(busy || chatId) && <button className="play-btn play-btn--ghost" onClick={stop} title="kill the agent session">Stop</button>}
         <button className="play-btn play-btn--ghost" onClick={pushGit} title="git push the miniapps registry to your git remote">Push to git</button>
         <button className="play-btn" disabled={sharing} onClick={copyShareLink}>Copy share link</button>
+        <div className="play-scope" role="radiogroup" aria-label="Sharing scope">
+          <button type="button" className={`play-btn ${scope === "public" ? "play-btn--primary" : "play-btn--ghost"}`} aria-pressed={scope === "public"} onClick={() => setScope("public")}>Public</button>
+          <button type="button" className={`play-btn ${scope === "unlisted" ? "play-btn--primary" : "play-btn--ghost"}`} aria-pressed={scope === "unlisted"} onClick={() => setScope("unlisted")}>Unlisted</button>
+        </div>
         <button className="play-btn play-btn--primary" onClick={shareToExplore}>Share to app.agentgem.ai</button>
       </div>
 
@@ -405,8 +414,8 @@ export function Studio({
             <div className="play-banner__title">“{name}” is already published (v{pendingVersion.latestVersion})</div>
             <div className="play-banner__detail">Publish a new version, or overwrite the current one.</div>
           </div>
-          <button className="play-btn play-btn--primary" onClick={() => { const p = pendingVersion; setPendingVersion(null); void publishWorkspace(p.login, p.nextVersion); }}>Publish v{pendingVersion.nextVersion}</button>
-          <button className="play-btn play-btn--ghost" onClick={() => { const p = pendingVersion; setPendingVersion(null); void publishWorkspace(p.login, p.latestVersion); }}>Overwrite v{pendingVersion.latestVersion}</button>
+          <button className="play-btn play-btn--primary" onClick={() => { const p = pendingVersion; setPendingVersion(null); void publishWorkspace(p.login, p.nextVersion, scope); }}>Publish v{pendingVersion.nextVersion}</button>
+          <button className="play-btn play-btn--ghost" onClick={() => { const p = pendingVersion; setPendingVersion(null); void publishWorkspace(p.login, p.latestVersion, scope); }}>Overwrite v{pendingVersion.latestVersion}</button>
         </div>
       )}
       {shareLink && (
