@@ -7,7 +7,7 @@ export const post = (b: string, path: string, body?: unknown) =>
 
 export interface JourneyEvent {
   ts: number;
-  kind: "skill" | "lesson" | "opportunity" | "pass" | "verified";
+  kind: "skill" | "lesson" | "opportunity" | "guardrail" | "pass" | "verified";
   title: string;
   detail?: string;
   status?: "queued" | "accepted" | "dismissed";
@@ -21,3 +21,20 @@ export interface JourneyEvent {
 export interface JourneyResult { events: JourneyEvent[]; truncated: boolean }
 export const getJourney = (b: string, kind?: string): Promise<JourneyResult> =>
   fetch(`${b}/api/journey${kind ? `?kind=${kind}` : ""}`).then(j);
+
+// Guardrail apply flow: preview the managed-region write (with a drift-guard hash
+// and the editable seed), then apply the human-authored directive to CLAUDE.md/AGENTS.md.
+export interface GuardrailPreview {
+  current: string;
+  next: string;
+  hash: string;
+  file: string | null;
+  target: "claude" | "agents" | null;
+  ambiguous: boolean;
+  malformed: boolean;
+  seed: string;
+}
+export const previewGuardrail = (b: string, key: string): Promise<GuardrailPreview> =>
+  post(b, "guardrail/preview", { key });
+export const applyGuardrail = (b: string, key: string, expectHash: string, directive: string, target: "claude" | "agents") =>
+  post(b, "queue/accept", { key, expectHash, directive, target });

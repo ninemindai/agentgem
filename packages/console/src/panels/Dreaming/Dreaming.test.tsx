@@ -75,6 +75,58 @@ describe("Journey panel", () => {
       (c) => String(c[0]).endsWith("/api/dream/run") && (c[1] as RequestInit | undefined)?.method === "POST")).toBe(true));
   });
 
+  it("previews an editable directive and applies a guardrail with hash + directive + target", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.includes("/api/dream/status")) return new Response(JSON.stringify({ enabled: true, phasesLit: ["DEEP"], promoted: 0, queued: 1, lastPassAtMs: 1 }));
+      if (url.includes("/api/journey")) return new Response(JSON.stringify({ events: [
+        { ts: 700, kind: "guardrail", title: "repeated-tool-error", detail: "Bash errored 2x", status: "queued", key: "g1", firstSeenMs: 700, root: "/p" },
+      ], truncated: false }));
+      if (url.includes("/api/dream/guardrail/preview")) return new Response(JSON.stringify({
+        current: "base\n",
+        next: "base\n\n<!-- agentgem:learnings -->\n- Bash errored 2x\n<!-- /agentgem:learnings -->\n",
+        hash: "H1", file: "/p/CLAUDE.md", target: "claude", ambiguous: false, malformed: false, seed: "- Bash errored 2x",
+      }));
+      return new Response(JSON.stringify({ ok: true, path: "/p/CLAUDE.md" }));
+    }));
+    render(<Dreaming apiBase="" />);
+    await waitFor(() => screen.getByText("repeated-tool-error"));
+
+    // Open the preview → the seed prefills an EDITABLE directive box.
+    fireEvent.click(screen.getByRole("button", { name: /apply to claude\.md/i }));
+    const box = await screen.findByLabelText(/directive/i) as HTMLTextAreaElement;
+    expect(box.value).toBe("- Bash errored 2x");
+
+    // Human edits the directive, then applies.
+    fireEvent.change(box, { target: { value: "- Always run the Bash prereq first." } });
+    fireEvent.click(screen.getByRole("button", { name: /^apply$/i }));
+
+    await waitFor(() => {
+      const call = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.find((c) => String(c[0]).endsWith("/api/dream/queue/accept"));
+      expect(call).toBeTruthy();
+      const body = JSON.parse((call![1] as RequestInit).body as string);
+      expect(body).toMatchObject({ key: "g1", expectHash: "H1", directive: "- Always run the Bash prereq first.", target: "claude" });
+    });
+  });
+
+  it("warns (no apply) when the managed block is malformed", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.includes("/api/dream/status")) return new Response(JSON.stringify({ enabled: true, phasesLit: ["DEEP"], promoted: 0, queued: 1, lastPassAtMs: 1 }));
+      if (url.includes("/api/journey")) return new Response(JSON.stringify({ events: [
+        { ts: 700, kind: "guardrail", title: "repeated-tool-error", detail: "Bash errored 2x", status: "queued", key: "g1", firstSeenMs: 700, root: "/p" },
+      ], truncated: false }));
+      if (url.includes("/api/dream/guardrail/preview")) return new Response(JSON.stringify({
+        current: "x", next: "x", hash: "H1", file: "/p/CLAUDE.md", target: "claude", ambiguous: false, malformed: true, seed: "- Bash errored 2x",
+      }));
+      return new Response(JSON.stringify({ ok: true }));
+    }));
+    render(<Dreaming apiBase="" />);
+    await waitFor(() => screen.getByText("repeated-tool-error"));
+    fireEvent.click(screen.getByRole("button", { name: /apply to claude\.md/i }));
+    await waitFor(() => expect(screen.getByText(/malformed/i)).toBeTruthy());
+    // No apply-able diff → no Apply button and no accept POST.
+    expect(screen.queryByRole("button", { name: /^apply$/i })).toBeNull();
+  });
+
   it("polls until a new pass lands, shows a 'complete' note, and re-enables the button", async () => {
     let statusCalls = 0;
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {

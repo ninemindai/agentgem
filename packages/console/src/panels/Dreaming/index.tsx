@@ -2,10 +2,79 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { defineConsolePage } from "../../registry.js";
 import { timeAgo } from "../../util/timeAgo.js";
 import { setPendingAnalyze } from "../../pendingAnalyze.js";
-import { getStatus, getJourney, post, type DreamStatus, type JourneyEvent } from "./api.js";
+import { getStatus, getJourney, post, previewGuardrail, applyGuardrail, type DreamStatus, type JourneyEvent, type GuardrailPreview } from "./api.js";
 
-const KINDS = ["all", "skill", "lesson", "opportunity", "pass", "verified"] as const;
+const KINDS = ["all", "skill", "lesson", "opportunity", "guardrail", "pass", "verified"] as const;
 const PHASES = ["LIGHT", "DEEP", "REM"] as const;
+
+/** Guardrail review: preview the managed-region write, let the human author the real
+ *  directive (the seed is only a starting point), then apply it to CLAUDE.md/AGENTS.md.
+ *  Hash-guarded — a stale/corrupt apply re-fetches the preview so the diff reflects
+ *  the current file, and a malformed managed block is surfaced as a hand-fix warning. */
+function GuardrailReview({ apiBase, event, onApplied }: { apiBase: string; event: JourneyEvent; onApplied: () => void }) {
+  const [preview, setPreview] = useState<GuardrailPreview | null>(null);
+  const [directive, setDirective] = useState("");
+  const [target, setTarget] = useState<"claude" | "agents">("claude");
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    setErr(null);
+    try {
+      const p = await previewGuardrail(apiBase, event.key!);
+      setPreview(p);
+      setDirective(p.seed);
+      setTarget(p.target ?? "claude");
+    } catch { setErr("Could not load the preview — try again."); }
+  }, [apiBase, event.key]);
+
+  if (!preview) {
+    return <button className="dream-act is-accept" onClick={load}>Apply to CLAUDE.md…</button>;
+  }
+
+  const fileLabel = target === "agents" ? "AGENTS.md" : "CLAUDE.md";
+  const apply = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await applyGuardrail(apiBase, event.key!, preview.hash, directive, target);
+      onApplied();
+    } catch {
+      // Stale/corrupt drift: re-fetch so the diff + hash match the file's current
+      // state (and a now-malformed block surfaces its hand-fix warning).
+      setErr(`${fileLabel} changed since preview — re-review the diff below and apply again.`);
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="guardrail-review">
+      {preview.malformed ? (
+        <p className="ledger-error" role="alert">The managed block in {fileLabel} is malformed — fix it by hand, then re-apply.</p>
+      ) : (
+        <>
+          <textarea
+            className="guardrail-directive"
+            aria-label="Directive"
+            value={directive}
+            onChange={(e) => setDirective(e.target.value)}
+          />
+          {preview.ambiguous && (
+            <div className="guardrail-target" role="group" aria-label="Target file">
+              <button type="button" aria-pressed={target === "claude"} onClick={() => setTarget("claude")}>CLAUDE.md</button>
+              <button type="button" aria-pressed={target === "agents"} onClick={() => setTarget("agents")}>AGENTS.md</button>
+            </div>
+          )}
+          <pre className="guardrail-diff"><code>{preview.next}</code></pre>
+          <button className="dream-act is-accept" disabled={busy} onClick={apply}>Apply</button>
+        </>
+      )}
+      {err && <p className="ledger-error" role="alert">{err}</p>}
+    </div>
+  );
+}
 
 /** Journey: the unified learning timeline — everything the background job and
  *  intent-driven /learn distilled (queue items across all statuses), dream passes,
@@ -114,9 +183,12 @@ export function Dreaming({ apiBase }: { apiBase: string }) {
             {e.detail && <span className="dream-item-summary">{e.detail}</span>}
             {e.kind === "verified" && <span className="dream-item-verdict" data-passed={e.passed}>{e.passed ? `✓ ${e.agent}` : `✗ ${e.agent}`}</span>}
             {e.status && e.status !== "queued" && <span className="dream-item-status">{e.status}</span>}
-            {actionable(e) && (e.kind === "opportunity"
-              ? <button className="dream-act is-accept" onClick={() => openOpportunity(e)}>Publish →</button>
-              : <button className="dream-act is-accept" onClick={() => act("queue/accept", e.key!)}>Accept</button>)}
+            {actionable(e) && (
+              e.kind === "guardrail"
+                ? <GuardrailReview apiBase={apiBase} event={e} onApplied={() => { setError(null); refresh(); }} />
+                : e.kind === "opportunity"
+                  ? <button className="dream-act is-accept" onClick={() => openOpportunity(e)}>Publish →</button>
+                  : <button className="dream-act is-accept" onClick={() => act("queue/accept", e.key!)}>Accept</button>)}
             {actionable(e) && <button className="dream-act" onClick={() => act("queue/dismiss", e.key!)}>Dismiss</button>}
           </li>
         ))}

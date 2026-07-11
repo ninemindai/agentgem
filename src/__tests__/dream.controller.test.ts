@@ -95,7 +95,10 @@ describe("DreamController", () => {
     await expect(c.accept({ body: { key: "lesson:/p:todo:h" } })).rejects.toThrow();
   });
 
-  it("rejects accepting a guardrail (Task 5 implements the real write)", async () => {
+  it("accepting a guardrail with no drift-guard hash is rejected (never routed through the lesson branch)", async () => {
+    // Guardrails write a managed block into CLAUDE.md/AGENTS.md, hash-guarded. An
+    // accept with no matching expectHash fails the drift check and leaves the queue
+    // untouched — the full apply path is covered in dream/__tests__/acceptGuardrail.
     const e: DreamQueueEntry = { key: "guardrail:/p:repeated-tool-error:h", kind: "guardrail", root: "/p",
       name: "repeated-tool-error-h", summary: "Bash errored 2x", confidence: "medium", phase: "DEEP",
       draft: { detectorId: "repeated-tool-error", tool: "Bash", detail: "Bash errored 2x", confidence: "medium",
@@ -104,7 +107,7 @@ describe("DreamController", () => {
     enqueueNew([e], base);
     const c = new DreamController();
     (c as unknown as { base: string }).base = base;
-    await expect(c.accept({ body: { key: "guardrail:/p:repeated-tool-error:h" } })).rejects.toThrow(/Task 5/);
+    await expect(c.accept({ body: { key: "guardrail:/p:repeated-tool-error:h" } })).rejects.toThrow(/changed since preview/i);
     // Never silently routed through the lesson branch — status must remain queued.
     expect((await c.queue()).items[0].status).toBe("queued");
   });
