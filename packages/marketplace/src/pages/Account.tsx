@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import type { makeApi } from "../api";
 import { makeAuth, type Me } from "../auth";
-import { useLocationSearch } from "../nav";
 
 // The known, connectable providers (Task 3's socialProviders). `connected` from the API is
 // provider-agnostic (better-auth's own `account` table may carry ids this page doesn't know about,
@@ -21,8 +20,19 @@ export function Account({ api, me, base }: { api: ReturnType<typeof makeApi>; me
   const [view, setView] = useState<View>({ status: "loading" });
   const [linkError, setLinkError] = useState<string | null>(null);
   // better-auth's OAuth callback redirects a colliding link-social attempt back here with this exact
-  // query param (see auth.ts's linkSocial doc comment) rather than rejecting the initial POST.
-  const collision = new URLSearchParams(useLocationSearch()).get("error") === "account_already_linked_to_different_user";
+  // query param (see auth.ts's linkSocial doc comment) rather than rejecting the initial POST. Read
+  // once at mount (a fresh redirect always remounts this page via Router) so the banner survives the
+  // replaceState below instead of vanishing on the next unrelated re-render.
+  const [collision] = useState(
+    () => new URLSearchParams(window.location.search).get("error") === "account_already_linked_to_different_user",
+  );
+
+  // Strip `?error=...` from the address bar once it's been read: otherwise a refresh re-shows the
+  // banner, and a later Connect (see `connect` below) could pick up the stale param as its returnTo.
+  useEffect(() => {
+    if (!collision) return;
+    window.history.replaceState(window.history.state, "", window.location.pathname);
+  }, [collision]);
 
   useEffect(() => {
     if (!me) return;
@@ -49,7 +59,11 @@ export function Account({ api, me, base }: { api: ReturnType<typeof makeApi>; me
 
   const connect = (provider: "github" | "google") => {
     setLinkError(null);
-    makeAuth(base).linkSocial(provider, window.location.href)
+    // origin + pathname only, no query string: this page's own URL can still carry a just-stripped
+    // (or not-yet-stripped) `?error=...` from a prior collision, and that must never ride along as
+    // this Connect's success callbackURL — see auth.ts's linkSocial doc comment.
+    const returnTo = window.location.origin + window.location.pathname;
+    makeAuth(base).linkSocial(provider, returnTo)
       .catch((err) => setLinkError(err instanceof Error ? err.message : String(err)));
   };
 

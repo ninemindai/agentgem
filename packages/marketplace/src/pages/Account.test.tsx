@@ -24,7 +24,7 @@ describe("Account page", () => {
       throw new Error("unexpected fetch: " + u);
     }));
     const assign = vi.fn();
-    vi.stubGlobal("location", { ...window.location, assign, href: "https://app.x/account", search: "" } as unknown as Location);
+    vi.stubGlobal("location", { ...window.location, assign, origin: "https://app.x", pathname: "/account", href: "https://app.x/account", search: "" } as unknown as Location);
 
     render(<Account api={makeApi("https://api.x")} me={me} base="https://api.x" />);
 
@@ -54,7 +54,7 @@ describe("Account page", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("surfaces a plain message when link-social's OAuth round trip collides with another account", async () => {
+  it("surfaces a plain message when link-social's OAuth round trip collides with another account, then strips ?error= from the address bar so a refresh doesn't re-show it", async () => {
     vi.stubGlobal("fetch", vi.fn(async (u: string) => {
       if (u.includes("/api/account/providers")) return res({ connected: ["github"] });
       throw new Error("unexpected fetch: " + u);
@@ -64,6 +64,33 @@ describe("Account page", () => {
     render(<Account api={makeApi("https://api.x")} me={me} base="https://api.x" />);
 
     expect(await screen.findByText(/already linked to another AgentGem account/i)).toBeTruthy();
+    // The banner itself is expected to still be showing (read once at mount) — it's the URL that
+    // must be cleaned so a refresh, or a later Connect's returnTo, doesn't pick the param back up.
+    expect(window.location.pathname).toBe("/account");
+    expect(window.location.search).toBe("");
+  });
+
+  it("sends a clean callbackURL/errorCallbackURL (no stale ?error=) when Connect is triggered from a URL that still carries a collision error", async () => {
+    let linkBody: string | undefined;
+    vi.stubGlobal("fetch", vi.fn(async (u: string, o?: RequestInit) => {
+      if (u.includes("/api/account/providers")) return res({ connected: ["github"] });
+      if (u.includes("/api/auth/link-social")) { linkBody = o?.body as string; return res({ url: "https://accounts.google.com/o?state=abc", redirect: true }); }
+      throw new Error("unexpected fetch: " + u);
+    }));
+    const assign = vi.fn();
+    vi.stubGlobal("location", { ...window.location, assign, origin: "https://app.x", pathname: "/account", href: "https://app.x/account?error=account_already_linked_to_different_user", search: "?error=account_already_linked_to_different_user" } as unknown as Location);
+
+    render(<Account api={makeApi("https://api.x")} me={me} base="https://api.x" />);
+
+    const connectGoogle = await screen.findByRole("button", { name: "Connect Google" });
+    fireEvent.click(connectGoogle);
+
+    await waitFor(() => expect(linkBody).toBeDefined());
+    expect(JSON.parse(linkBody!)).toMatchObject({
+      provider: "google",
+      callbackURL: "https://app.x/account",
+      errorCallbackURL: "https://app.x/account",
+    });
   });
 
   it("ignores an unknown connected provider id (e.g. \"credential\") rather than rendering it", async () => {
