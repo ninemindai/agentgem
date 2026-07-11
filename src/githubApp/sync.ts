@@ -52,7 +52,8 @@ async function indexInstallationRepos(deps: GithubAppDeps, inst: AppInstallation
   // Ghost-skill prune: repos deleted/renamed/transferred upstream (or deselected while the
   // installation was suspended) never send a removal event this handler processes — the
   // authoritative current list closes the gap. Never prune from a partial (truncated) view.
-  if (!truncated) await pruneOrgSkills(deps.db, inst.orgScope, repos.map((r) => r.repo));
+  // `!truncated` here IS the exhaustiveness proof, so an empty repo list legitimately clears the org.
+  if (!truncated) await pruneOrgSkills(deps.db, inst.orgScope, repos.map((r) => r.repo), { exhaustive: true });
 }
 
 export async function handleWebhookEvent(deps: GithubAppDeps, event: string, payload: unknown): Promise<void> {

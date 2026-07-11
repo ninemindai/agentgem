@@ -202,11 +202,15 @@ export async function orgSkillExists(db: AppDb, orgScope: string, sourceId: stri
 /** Reconcile-time ghost-skill prune: delete this org's rows for repos NOT in keepRepos. Repos
  *  deleted/renamed/transferred upstream — or deselected while the installation was suspended —
  *  never produce a removal webhook this server processes; the authoritative current repo list
- *  closes that gap. Empty keepRepos = the installation sees no repos → forget all the org's rows.
- *  Callers must NOT invoke this from a truncated repo listing. */
-export async function pruneOrgSkills(db: AppDb, orgScope: string, keepRepos: string[]): Promise<void> {
+ *  closes that gap. Empty keepRepos = the installation sees no repos → forget all the org's rows — but
+ *  ONLY when the caller passes `{ exhaustive: true }` to confirm the repo listing was complete. A bare
+ *  empty array (a truncated/failed GitHub listing, a pagination bug) throws instead of nuking everything. */
+export async function pruneOrgSkills(db: AppDb, orgScope: string, keepRepos: string[], opts: { exhaustive?: boolean } = {}): Promise<void> {
   const scope = orgScope.toLowerCase();
   if (keepRepos.length === 0) {
+    if (!opts.exhaustive) {
+      throw new Error(`pruneOrgSkills(${scope}): empty keepRepos without { exhaustive: true } — refusing to delete all org skills (likely a truncated or failed repo listing)`);
+    }
     await db.execute(sql`delete from curated_skills where org_scope = ${scope}`);
     return;
   }
