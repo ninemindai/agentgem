@@ -36,6 +36,8 @@ const log = createLogger("capture");
 // meta row onto transcript_file. A bump drops derived rows and rebuilds from scratch.
 const SCHEMA_VERSION = "2";
 
+export interface ChangedFile { path: string; mtime: number; size: number }
+
 export interface TranscriptIndex {
   /**
    * Reconcile the index against `paths` and return the stored rows.
@@ -129,6 +131,86 @@ export async function openTranscriptIndex(dataDir?: string): Promise<TranscriptI
   };
 }
 
+/** One stat pass: split `paths` into up-to-date (seen) vs needs-reparse (changed), summing the
+ *  byte cost of the changed set. A file needs reparse if it's new, its mtime/size moved, OR its
+ *  stored hook_digest != the current one (a hook edit forces a reparse of every file). This is the
+ *  same detection doSync did inline; hoisting it lets the caller route on pendingBytes without a
+ *  second stat pass. */
+function planSync(
+  db: DatabaseSync,
+  paths: string[],
+  hookDigest: string,
+): { existing: Map<string, { mtime: number; size: number; hookDigest: string }>; changed: ChangedFile[]; seen: Set<string>; pendingBytes: number } {
+  const existing = new Map<string, { mtime: number; size: number; hookDigest: string }>();
+  for (const r of db.prepare("SELECT path, mtime_ms, size, hook_digest FROM transcript_file").all() as
+    { path: string; mtime_ms: number; size: number; hook_digest: string }[]) {
+    existing.set(r.path, { mtime: Number(r.mtime_ms), size: Number(r.size), hookDigest: r.hook_digest });
+  }
+  const changed: ChangedFile[] = [];
+  const seen = new Set<string>();
+  let pendingBytes = 0;
+  for (const path of paths) {
+    let st: ReturnType<typeof statSync>;
+    try { st = statSync(path); } catch { continue; } // vanished between listing and stat
+    const prev = existing.get(path);
+    if (prev && prev.mtime === st.mtimeMs && prev.size === st.size && prev.hookDigest === hookDigest) {
+      seen.add(path); // up to date
+      continue;
+    }
+    changed.push({ path, mtime: st.mtimeMs, size: st.size });
+    pendingBytes += st.size;
+  }
+  return { existing, changed, seen, pendingBytes };
+}
+
+/** One changed file's rows: replace its raw/hook rows and (re)record it in transcript_file. Caller
+ *  wraps in a transaction. Must run only for a successful, non-`failed` parse. */
+function writeFileRows(db: DatabaseSync, path: string, mtime: number, size: number, hookDigest: string, usage: FileUsage): void {
+  db.prepare("DELETE FROM raw_usage WHERE path = ?1").run(path);
+  db.prepare("DELETE FROM hook_usage WHERE path = ?1").run(path);
+  for (const r of usage.raw) {
+    db.prepare(
+      `INSERT INTO raw_usage(path, kind, token, invocations) VALUES(?1, ?2, ?3, ?4)
+       ON CONFLICT(path, kind, token) DO UPDATE SET invocations = ?4`,
+    ).run(path, r.kind, r.token, r.invocations);
+  }
+  for (const h of usage.hooks) {
+    db.prepare(
+      `INSERT INTO hook_usage(path, name, invocations) VALUES(?1, ?2, ?3)
+       ON CONFLICT(path, name) DO UPDATE SET invocations = ?3`,
+    ).run(path, h.name, h.invocations);
+  }
+  db.prepare(
+    `INSERT INTO transcript_file(path, mtime_ms, size, hook_digest) VALUES(?1, ?2, ?3, ?4)
+     ON CONFLICT(path) DO UPDATE SET mtime_ms = ?2, size = ?3, hook_digest = ?4`,
+  ).run(path, mtime, size, hookDigest);
+}
+
+/** Delete every file recorded in `existing` that this sync did not `seen`. Caller wraps in a txn. */
+function pruneVanished(db: DatabaseSync, existing: Map<string, unknown>, seen: Set<string>): void {
+  for (const path of existing.keys()) {
+    if (seen.has(path)) continue;
+    db.prepare("DELETE FROM raw_usage WHERE path = ?1").run(path);
+    db.prepare("DELETE FROM hook_usage WHERE path = ?1").run(path);
+    db.prepare("DELETE FROM transcript_file WHERE path = ?1").run(path);
+  }
+}
+
+/** The stored rows joined to transcript_file for lastUsedMs (A2). */
+function readbackRows(db: DatabaseSync): { raw: StoredRawRow[]; hooks: StoredHookRow[] } {
+  const raw = (db.prepare(
+    `SELECT r.path, r.kind, r.token, r.invocations, f.mtime_ms AS last_used_ms
+     FROM raw_usage r JOIN transcript_file f USING(path) ORDER BY r.path, r.kind, r.token`,
+  ).all() as { path: string; kind: string; token: string; invocations: number; last_used_ms: number }[])
+    .map((r) => ({ path: r.path, kind: r.kind as StoredRawRow["kind"], token: r.token, invocations: Number(r.invocations), lastUsedMs: Number(r.last_used_ms) }));
+  const hooks = (db.prepare(
+    `SELECT h.path, h.name, h.invocations, f.mtime_ms AS last_used_ms
+     FROM hook_usage h JOIN transcript_file f USING(path) ORDER BY h.path, h.name`,
+  ).all() as { path: string; name: string; invocations: number; last_used_ms: number }[])
+    .map((h) => ({ path: h.path, name: h.name, invocations: Number(h.invocations), lastUsedMs: Number(h.last_used_ms) }));
+  return { raw, hooks };
+}
+
 //                          per file, in doSync:
 //   ┌────────────────────────────────────────────────────────────────────┐
 //   │  stat(path) fails ────────────────────────────► skip (vanished)     │
@@ -149,101 +231,22 @@ async function doSync(
   hookDigest: string,
   parseFile: (path: string) => FileUsage,
 ): Promise<{ raw: StoredRawRow[]; hooks: StoredHookRow[] }> {
-  // 1. Load current file identities, including each file's hook_digest as of its last
-  //    successful parse. There is no meta-level guard/wipe here (A1): staleness is decided
-  //    per file below, so transcript_file is never wiped wholesale and this map is always a
-  //    complete, trustworthy record of every path we've ever successfully recorded.
-  const existing = new Map<string, { mtime: number; size: number; hookDigest: string }>();
-  for (const r of db.prepare("SELECT path, mtime_ms, size, hook_digest FROM transcript_file").all() as
-    { path: string; mtime_ms: number; size: number; hook_digest: string }[]) {
-    existing.set(r.path, { mtime: Number(r.mtime_ms), size: Number(r.size), hookDigest: r.hook_digest });
-  }
-
-  const seen = new Set<string>();
+  const { existing, changed, seen } = planSync(db, paths, hookDigest);
   db.exec("BEGIN");
   try {
-    // 2. Reparse only new/changed/hook-digest-stale files.
-    for (const path of paths) {
-      let st: ReturnType<typeof statSync>;
-      try { st = statSync(path); } catch { continue; } // vanished between listing and stat
-      const prev = existing.get(path);
-      if (prev && prev.mtime === st.mtimeMs && prev.size === st.size && prev.hookDigest === hookDigest) {
-        seen.add(path);
-        continue; // up to date
-      }
-
+    for (const c of changed) {
       let u: FileUsage;
-      try {
-        u = parseFile(path);
-      } catch (e) {
-        // An uncaught exception from parseFile (a latent bug, a pathological transcript, a
-        // future implementation that throws instead of returning `failed: true`) must converge
-        // on the exact same handling as the typed read-failure path below: it is not this
-        // sync's job to let one bad file roll back the whole transaction and reject the whole
-        // corpus. Leave transcript_file un-upserted (retried next sync), leave prior rows
-        // untouched, and still mark it `seen` so it isn't pruned out from under a file that's
-        // still genuinely on disk and was previously recorded successfully.
-        log.warn("parseFile threw for transcript, will retry next sync: %s: %s", path, e);
-        seen.add(path);
-        continue;
-      }
-      if (u.failed) {
-        // A3: a read failure is not an empty parse. Leave transcript_file un-upserted (so this
-        // path stays stale and is retried next sync) and leave any prior rows untouched — but
-        // still mark it `seen` so a merely-flaky read doesn't get pruned out from under a file
-        // that's still genuinely on disk and was previously recorded successfully.
-        log.warn("failed to read transcript, will retry next sync: %s", path);
-        seen.add(path);
-        continue;
-      }
-      seen.add(path);
-      db.prepare("DELETE FROM raw_usage WHERE path = ?1").run(path);
-      db.prepare("DELETE FROM hook_usage WHERE path = ?1").run(path);
-      for (const r of u.raw) {
-        db.prepare(
-          `INSERT INTO raw_usage(path, kind, token, invocations) VALUES(?1, ?2, ?3, ?4)
-           ON CONFLICT(path, kind, token) DO UPDATE SET invocations = ?4`,
-        ).run(path, r.kind, r.token, r.invocations);
-      }
-      for (const h of u.hooks) {
-        db.prepare(
-          `INSERT INTO hook_usage(path, name, invocations) VALUES(?1, ?2, ?3)
-           ON CONFLICT(path, name) DO UPDATE SET invocations = ?3`,
-        ).run(path, h.name, h.invocations);
-      }
-      db.prepare(
-        `INSERT INTO transcript_file(path, mtime_ms, size, hook_digest) VALUES(?1, ?2, ?3, ?4)
-         ON CONFLICT(path) DO UPDATE SET mtime_ms = ?2, size = ?3, hook_digest = ?4`,
-      ).run(path, st.mtimeMs, st.size, hookDigest);
+      try { u = parseFile(c.path); }
+      catch (e) { log.warn("parseFile threw for transcript, will retry next sync: %s: %s", c.path, e); seen.add(c.path); continue; }
+      if (u.failed) { log.warn("failed to read transcript, will retry next sync: %s", c.path); seen.add(c.path); continue; }
+      seen.add(c.path);
+      writeFileRows(db, c.path, c.mtime, c.size, hookDigest, u);
     }
-    // 3. Prune files that are gone from `paths` (or never made it past a failed read this sync
-    //    — those are `seen` above and thus protected). This is always correct now: transcript_file
-    //    is never wiped wholesale, so `existing` reflects every path ever successfully recorded.
-    for (const path of existing.keys()) {
-      if (seen.has(path)) continue;
-      db.prepare("DELETE FROM raw_usage WHERE path = ?1").run(path);
-      db.prepare("DELETE FROM hook_usage WHERE path = ?1").run(path);
-      db.prepare("DELETE FROM transcript_file WHERE path = ?1").run(path);
-    }
+    pruneVanished(db, existing, seen);
     db.exec("COMMIT");
   } catch (e) {
     try { db.exec("ROLLBACK"); } catch { /* keep the original error */ }
     throw e;
   }
-
-  // 4. Hand the stored rows to the caller; resolution + folding happens in resolveUsage.
-  //    lastUsedMs (A2) is not stored on the row — it's joined from transcript_file.mtime_ms.
-  const raw = (db.prepare(
-    `SELECT r.path, r.kind, r.token, r.invocations, f.mtime_ms AS last_used_ms
-     FROM raw_usage r JOIN transcript_file f USING(path)
-     ORDER BY r.path, r.kind, r.token`,
-  ).all() as { path: string; kind: string; token: string; invocations: number; last_used_ms: number }[])
-    .map((r) => ({ path: r.path, kind: r.kind as StoredRawRow["kind"], token: r.token, invocations: Number(r.invocations), lastUsedMs: Number(r.last_used_ms) }));
-  const hooks = (db.prepare(
-    `SELECT h.path, h.name, h.invocations, f.mtime_ms AS last_used_ms
-     FROM hook_usage h JOIN transcript_file f USING(path)
-     ORDER BY h.path, h.name`,
-  ).all() as { path: string; name: string; invocations: number; last_used_ms: number }[])
-    .map((h) => ({ path: h.path, name: h.name, invocations: Number(h.invocations), lastUsedMs: Number(h.last_used_ms) }));
-  return { raw, hooks };
+  return readbackRows(db);
 }
