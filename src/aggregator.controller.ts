@@ -19,7 +19,7 @@ import { sweepQuarantine, sweepAdoptionQuarantine } from "@agentgem/aggregator";
 import { issueKey, revokeKey, listKeys } from "@agentgem/aggregator";
 import { recordCatalogShare, upsertGemArchive, getGemArchive, catalogGemExists, latestGemVersion, deleteGemArchiveOwned, archiveOnlyVersion } from "@agentgem/aggregator";
 import { recordGamePlay, gamePlayCounts } from "@agentgem/aggregator";
-import { resolveSignedAccount, catalogSigningPayload } from "@agentgem/aggregator";
+import { resolveSignedAccount, catalogSigningPayload, gemStatusFor, gemStatusSigningPayload } from "@agentgem/aggregator";
 import { staticGate } from "@agentgem/play";
 import { genShareId } from "./share/shareStore.js";
 import { importGem } from "@agentgem/distribute";
@@ -141,6 +141,8 @@ const CatalogManifestSchema = z.object({
 });
 const CatalogBody = z.object({ manifest: CatalogManifestSchema, pubkey: z.string(), signedAt: z.number(), signature: z.string() });
 const CatalogResult = z.object({ shared: z.boolean(), publishedBy: z.string().optional(), gemKey: z.string().optional(), version: z.string().optional(), rejected: z.string().optional() });
+const GemStatusBody = z.object({ key: z.string(), pubkey: z.string(), signedAt: z.number(), signature: z.string() });
+const GemStatusResult = z.object({ exists: z.boolean(), ownedByMe: z.boolean(), latestVersion: z.string().nullable() });
 const PublishGemBody = z.object({ manifest: CatalogManifestSchema, archiveBase64: z.string(), pubkey: z.string(), signedAt: z.number(), signature: z.string() });
 const ShareArchiveManifest = CatalogManifestSchema.extend({ gemDigest: z.string() }); // required for share-archive
 const ShareArchiveBody = z.object({ manifest: ShareArchiveManifest, archiveBase64: z.string(), pubkey: z.string(), signedAt: z.number(), signature: z.string() });
@@ -285,6 +287,18 @@ export class AggregatorController {
     return r.shared
       ? { shared: true, publishedBy: r.publishedBy, gemKey: r.gemKey, version: r.version }
       : { shared: false, rejected: r.rejected };
+  }
+
+  // Pre-flight for the publish dialog. Signed like /catalog — the console has no session cookie; it
+  // authenticates with its ed25519 producer key. Existence + latest are public; ownedByMe is true
+  // only for the verified owner. Auth failure ⇒ public info with ownedByMe:false.
+  @post("/gem-status", { body: GemStatusBody, response: GemStatusResult })
+  async gemStatus(input: { body: z.infer<typeof GemStatusBody> }): Promise<z.infer<typeof GemStatusResult>> {
+    const b = input.body;
+    const who = await resolveSignedAccount(this.db, {
+      pubkey: b.pubkey, payload: gemStatusSigningPayload(b.key, b.pubkey, b.signedAt), signedAt: b.signedAt, signature: b.signature,
+    });
+    return gemStatusFor(this.db, b.key, who.ok ? who.accountId : null);
   }
 
   // Installable publish: the signed catalog share PLUS the .gem archive bytes. Verifies the archive
