@@ -152,15 +152,14 @@ In `ensureSchema` (schema.ts), immediately before the `backfillBindingAnchors(db
   )`);
 ```
 
-- [ ] **Step 5: Re-export from index.ts**
+- [ ] **Step 5: Confirm the new tables are re-exported from index.ts**
 
-In `packages/aggregator/src/index.ts`, add alongside the other schema/module re-exports:
+The three tables + `ReviewStatus` are reached through `packages/aggregator/src/index.ts`. Do NOT add `export * from "./reviewStaging.js"` here — that file does not exist until Task 2, and importing it now breaks the build. Instead:
 
-```ts
-export * from "./reviewStaging.js";
-```
+- If `index.ts` re-exports the schema with `export * from "./schema.js";`, the new tables are already reachable — no change needed.
+- If `index.ts` re-exports specific schema names rather than `*`, add `reviewRequests, reviewMessages, reviewSeen, type ReviewStatus` to that schema re-export list.
 
-Confirm the schema tables are already reachable via the existing `export * from "./schema.js";` (they are — Step 3 exported them). If `index.ts` re-exports specific names rather than `*`, add `reviewRequests, reviewMessages, reviewSeen, type ReviewStatus` to the schema re-export list.
+(The `export * from "./reviewStaging.js"` re-export is added in Task 2, when the module is created.)
 
 - [ ] **Step 6: Run test to verify it passes**
 
@@ -180,7 +179,7 @@ git commit -m "feat(aggregator): review-staging tables (review_requests/messages
 
 **Files:**
 - Create: `packages/aggregator/src/reviewStaging.ts`
-- Modify: `packages/aggregator/src/index.ts` (already re-exports `./reviewStaging.js` from Task 1)
+- Modify: `packages/aggregator/src/index.ts` — add `export * from "./reviewStaging.js";` (this task creates the module, so this is where the re-export is added)
 - Test: `src/aggregator/__tests__/reviewStaging.test.ts`
 
 **Interfaces:**
@@ -341,6 +340,12 @@ export async function submitReviewRequest(
   });
   return { ok: true, requestId: id };
 }
+```
+
+Then add the module re-export to `packages/aggregator/src/index.ts` (now that the file exists):
+
+```ts
+export * from "./reviewStaging.js";
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
