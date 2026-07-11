@@ -1048,9 +1048,12 @@ export const PlayMigrateResponseSchema = z.object({
 });
 export const PlayMiniappQuerySchema = z.object({ name: z.string() });
 export const PlaySessionDataQuerySchema = z.object({ name: z.string(), sessionId: z.string().optional(), agent: z.string().optional() });
+// Persisted share sidecar (see @agentgem/play's miniappShare.ts). Optional: most miniapps are never shared.
+const PlayShareStateSchema = z.object({ shareId: z.string(), url: z.string(), sharedAtMs: z.number() });
 export const PlayMiniappSchema = z.object({
   name: z.string(), html: z.string(),
   meta: z.object({ title: z.string(), genre: z.string(), createdFrom: GameArtifactSchema.shape.createdFrom, engineVersion: z.string(), needs: PlayNeedsSchema }),
+  share: PlayShareStateSchema.optional(),
 });
 // The built-in Protocol Inspector (GET /play/inspector): same shape as PlayMiniappSchema, but this one is
 // NEVER backed by the registry — the controller serves it from the `@agentgem/play` INSPECTOR_HTML/
@@ -1061,6 +1064,12 @@ export const PlayInspectorSchema = z.object({
 });
 export const PlayPublishRequestSchema = z.object({ remote: z.string().url().optional() });
 export const PlayPublishResponseSchema = z.object({ ok: z.boolean() });
+// Light unlisted share: mint an unlisted /games/<id> link for a miniapp's archive on the hosted
+// aggregator (see src/gem/shareArchiveClient.ts), and revoke it.
+export const PlayShareRequestSchema = z.object({ name: z.string() });
+export const PlayShareResponseSchema = z.object({ url: z.string() });
+export const PlayRevokeRequestSchema = z.object({ name: z.string() });
+export const PlayRevokeResponseSchema = z.object({ revoked: z.boolean() });
 // `name` is the optional miniapp id. Omitted, it is derived from the source (and suffixed on collision);
 // supplied, it is slugified and claimed exactly — a collision is a 409, not a silent rename.
 // `genre` picks between the two genres a session source can fork into (replay | session-heatmap);
