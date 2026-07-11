@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { randomUUID } from "node:crypto";
 import { eq, and } from "drizzle-orm";
-import { makeTestDb, reviewRequests, reviewSeen, upsertAccount, createNativeGroup, grantInvite, submitReviewRequest, upsertCatalogGem, accountScopes, listInbox, markSeen, getReviewRequest, getReviewArchive, addReviewMessage, approveReviewRequest, listCatalogGems, getGemArchive, requestChanges, resubmitReviewRequest, withdrawReviewRequest, withdrawRequestsForDepartedMember, removeMemberGuarded } from "@agentgem/aggregator";
+import { makeTestDb, reviewRequests, reviewSeen, upsertAccount, createNativeGroup, grantInvite, submitReviewRequest, upsertCatalogGem, accountScopes, listInbox, markSeen, getReviewRequest, getReviewArchive, addReviewMessage, approveReviewRequest, listCatalogGems, getGemArchive, requestChanges, resubmitReviewRequest, withdrawReviewRequest, withdrawRequestsForDepartedMember, removeMemberGuarded, MAX_OPEN_REVIEW_REQUESTS_PER_AUTHOR, sweepStaleReviewRequests, STALE_REVIEW_TTL_MS } from "@agentgem/aggregator";
 
 describe("review staging schema", () => {
   it("ensureSchema creates review_requests and the table accepts a row", async () => {
@@ -78,6 +78,67 @@ describe("submitReviewRequest", () => {
       archiveBytes: new Uint8Array([1]), archiveDigest: "sha256:x",
     });
     expect(r).toEqual({ ok: false, rejected: "invalid-key" });
+  });
+
+  // S3: no limit on open review_requests meant any account could self-serve the preconditions
+  // (a group + a scope it owns) and accumulate unbounded staged .gem archives in Postgres.
+  it("caps open requests per author; withdrawing one frees a slot", async () => {
+    const db = await makeTestDb();
+    const author = await upsertAccount(db, { provider: "github", accountId: "a1", login: "alice" });
+    await ownScope(db, author.id);
+    const g = await createNativeGroup(db, author.id, "Team");
+    const ids: string[] = [];
+    for (let i = 0; i < MAX_OPEN_REVIEW_REQUESTS_PER_AUTHOR; i++) {
+      const r = await submitReviewRequest(db, {
+        accountId: author.id, groupId: g.id, manifest: mkManifest(`@team/bot${i}`),
+        archiveBytes: new Uint8Array([1]), archiveDigest: "sha256:x",
+      });
+      if (!r.ok) throw new Error(`submit ${i} failed: ${r.rejected}`);
+      ids.push(r.requestId);
+    }
+    const overCap = await submitReviewRequest(db, {
+      accountId: author.id, groupId: g.id, manifest: mkManifest("@team/one-too-many"),
+      archiveBytes: new Uint8Array([1]), archiveDigest: "sha256:x",
+    });
+    expect(overCap).toEqual({ ok: false, rejected: "too-many-open" });
+
+    // withdrawing one open request frees a slot
+    expect(await withdrawReviewRequest(db, { accountId: author.id, requestId: ids[0] })).toEqual({ ok: true });
+    const afterWithdraw = await submitReviewRequest(db, {
+      accountId: author.id, groupId: g.id, manifest: mkManifest("@team/now-fits"),
+      archiveBytes: new Uint8Array([1]), archiveDigest: "sha256:x",
+    });
+    expect(afterWithdraw.ok).toBe(true);
+  });
+});
+
+describe("sweepStaleReviewRequests", () => {
+  it("withdraws open/changes-requested requests older than the TTL, clears their bytes, leaves fresh ones alone", async () => {
+    const db = await makeTestDb();
+    const author = await upsertAccount(db, { provider: "github", accountId: "a1", login: "alice" });
+    await ownScope(db, author.id);
+    const g = await createNativeGroup(db, author.id, "Team");
+    const now = 1_000_000_000_000; // arbitrary "current" instant
+    const old = await submitReviewRequest(db, {
+      accountId: author.id, groupId: g.id, manifest: mkManifest("@team/stale"),
+      archiveBytes: new Uint8Array([1]), archiveDigest: "sha256:x",
+    }, now - STALE_REVIEW_TTL_MS - 1);
+    const fresh = await submitReviewRequest(db, {
+      accountId: author.id, groupId: g.id, manifest: mkManifest("@team/fresh"),
+      archiveBytes: new Uint8Array([2]), archiveDigest: "sha256:y",
+    }, now - 1000);
+    if (!old.ok || !fresh.ok) throw new Error("submit failed");
+
+    const res = await sweepStaleReviewRequests(db, STALE_REVIEW_TTL_MS, now);
+    expect(res).toEqual({ swept: 1 });
+
+    const oldDetail = await getReviewRequest(db, author.id, old.requestId);
+    expect(oldDetail?.status).toBe("withdrawn");
+    expect(await getReviewArchive(db, author.id, old.requestId)).toBeNull();
+
+    const freshDetail = await getReviewRequest(db, author.id, fresh.requestId);
+    expect(freshDetail?.status).toBe("open");
+    expect(await getReviewArchive(db, author.id, fresh.requestId)).not.toBeNull();
   });
 });
 
@@ -352,6 +413,40 @@ describe("requestChanges / resubmit / withdraw", () => {
     expect(detail?.status).toBe("changes-requested");
     const arch = await getReviewArchive(db, reviewer.id, requestId);
     expect(Array.from(arch!.bytes)).toEqual([1]); // original bytes, not [9]
+  });
+
+  // S2: resubmit never checked that the resubmitted manifest's gemKey/version match the TARGET
+  // row's own gemKey/version (set once at submit, never updated by resubmit). An author with two
+  // changes-requested requests could resubmit gem-B's manifest+archive against gem-A's requestId;
+  // on approval, gem-A's trusted name would publish gem-B's content/metadata/bytes.
+  it("rejects a resubmit whose manifest gemKey/version don't match the target row (key-mismatch); row unchanged", async () => {
+    const { db, author, reviewer, requestId } = await seedOpen(); // @team/bot@1.0.0
+    expect(await requestChanges(db, { accountId: reviewer.id, requestId }, 1200)).toEqual({ ok: true });
+
+    const wrongKey = await resubmitReviewRequest(db, {
+      accountId: author.id, requestId, manifest: mkManifest("@team/other"),
+      archiveBytes: new Uint8Array([9, 9]), archiveDigest: "sha256:evil",
+    }, 1300);
+    expect(wrongKey).toEqual({ ok: false, rejected: "key-mismatch" });
+
+    const wrongVersion = await resubmitReviewRequest(db, {
+      accountId: author.id, requestId, manifest: mkManifest("@team/bot", "2.0.0"),
+      archiveBytes: new Uint8Array([9, 9]), archiveDigest: "sha256:evil",
+    }, 1300);
+    expect(wrongVersion).toEqual({ ok: false, rejected: "key-mismatch" });
+
+    // row untouched: still changes-requested, original bytes
+    const detail = await getReviewRequest(db, reviewer.id, requestId);
+    expect(detail?.status).toBe("changes-requested");
+    const arch = await getReviewArchive(db, author.id, requestId);
+    expect(Array.from(arch!.bytes)).toEqual([1]);
+
+    // a MATCHING gemKey/version still resubmits successfully
+    const ok = await resubmitReviewRequest(db, {
+      accountId: author.id, requestId, manifest: mkManifest("@team/bot"),
+      archiveBytes: new Uint8Array([2, 2]), archiveDigest: "sha256:y",
+    }, 1400);
+    expect(ok).toEqual({ ok: true });
   });
 
   // S4: resubmit/withdraw used to gate on authorship ONLY, with no group-membership check at all —
