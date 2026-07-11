@@ -481,6 +481,12 @@ git commit -m "feat(auth): accountFreshness gate covering every accounts.id FK (
 
 ## Task 5: `absorbAccount` — the one-transaction attach-and-discard
 
+> **Scope (decided post-spike):** Flow B's user-facing wiring is DEFERRED — the spike (Task 0)
+> proved better-auth won't surface the other account's identity on the reject, so Flow B needs a
+> bespoke connect-OAuth callback that is out of this slice. `absorbAccount` is still built and
+> fully tested here as the reusable backend core, so the follow-up slice only has to add the
+> callback + route. It is not reachable from any route in this slice.
+
 **Files:**
 - Modify: `packages/aggregator/src/auth/accountLinking.ts` (add `absorbAccount`)
 - Test: `src/aggregator/__tests__/accountLinking.test.ts`
@@ -571,32 +577,38 @@ git commit -m "feat(auth): absorbAccount — one-transaction attach fresh accoun
 
 ---
 
-## Task 6: `POST /api/account/absorb` + `/api/account/providers` route
+## Task 6: `GET /api/account/providers` route (Flow-A support)
+
+> **Descoped post-spike:** only the credentialed **providers-list** route ships in this slice — the
+> Flow-A `/account` page needs it to render "connected / connect." The `POST /api/account/absorb`
+> route and the bespoke `GET /api/account/connect/:provider/callback` OAuth-exchange route are
+> DEFERRED with Flow B (absorb has no server-verified `pendingLink` producer without the callback,
+> so wiring it now would be dead, unreachable code — YAGNI). `absorbAccount` (Task 5) stays as tested
+> backend logic for that follow-up. The `/api/account/` origin exemption is still added now.
 
 **Files:**
 - Create: `src/account/install.ts`
-- Create: `src/account/__tests__/absorb.route.test.ts`
+- Create: `src/account/__tests__/providers.route.test.ts`
 - Modify: `src/index.ts` (wire `installAccount` after `mountAuth`)
 - Modify: `src/originGuard.ts` (add `/api/account/` to the exempt prefix list, line ~92)
 
 **Interfaces:**
-- Consumes: `resolveSession`, `absorbAccount`, `connectedProviders`, `accountIdForProvider`, `pendingLink` (Task 0).
-- Produces: `installAccount(expressApp, { db, auth, webOrigins })`.
+- Consumes: `resolveSession`, `connectedProviders` (Task 3).
+- Produces: `installAccount(expressApp, { db, auth, webOrigins })` — registers the providers route.
 
-- [ ] **Step 1: Write the failing route test — server derives `other`, never the client**
+- [ ] **Step 1: Write the failing route test**
 
 ```ts
-// src/account/__tests__/absorb.route.test.ts — mirror handles/__tests__ harness (fake req/res).
-it("401 without a session; derives `other` from pendingLink, ignores any client-supplied id", async () => {
-  // Arrange a caller session for `current`, a server-verified pendingLink resolving to `other`.
-  // Assert: a body naming a DIFFERENT victim id is ignored; absorb runs against pendingLink's `other`.
-  // Assert: no session → 401; no pendingLink → 409 (nothing to absorb).
+// src/account/__tests__/providers.route.test.ts — mirror handles/__tests__ harness (fake req/res).
+it("401 without a session; lists connected providers for the signed-in account", async () => {
+  // no session → 401; with a session for an account that has github+google linked →
+  // { connected: ["github","google"] }.
 });
 ```
 
 - [ ] **Step 2: Run and watch it fail**
 
-Run: `pnpm -w build && pnpm -w vitest run src/account/__tests__/absorb.route.test.ts`
+Run: `pnpm -w build && pnpm -w vitest run src/account/__tests__/providers.route.test.ts`
 Expected: FAIL — `installAccount` not defined.
 
 - [ ] **Step 3: Implement the installer (mirror `src/handles/install.ts`)**
@@ -604,7 +616,7 @@ Expected: FAIL — `installAccount` not defined.
 ```ts
 // src/account/install.ts
 import type { AppDb, makeAuth } from "@agentgem/aggregator";
-import { resolveSession, absorbAccount, connectedProviders, accountIdForProvider, pendingLink } from "@agentgem/aggregator";
+import { resolveSession, connectedProviders } from "@agentgem/aggregator";
 
 export interface AccountDeps { db: AppDb; auth: ReturnType<typeof makeAuth>; webOrigins: string[] }
 // (Req/Res/ExpressApp/cors/preflight identical to handles/install.ts — copy them.)
@@ -619,41 +631,11 @@ export function providersHandler(deps: AccountDeps) {
   };
 }
 
-export function absorbHandler(deps: AccountDeps) {
-  return async (req, res) => {
-    cors(req, res, deps.webOrigins);
-    if (req.method === "OPTIONS") { preflight(res); return; }
-    const who = await resolveSession(deps.auth, req.headers);
-    if (!who) { res.status(401).json({ error: "sign in required" }); return; }
-    // `other` comes ONLY from server-verified OAuth state for THIS session — never req.body.
-    const pending = await pendingLink(deps.db, who.accountId);
-    if (!pending) { res.status(409).json({ error: "no provider awaiting connection" }); return; }
-    const other = await accountIdForProvider(deps.db, pending.providerId, pending.providerAccountId);
-    if (!other) { res.status(409).json({ error: "no provider awaiting connection" }); return; }
-    const r = await absorbAccount(deps.db, { current: who.accountId, other });
-    if (!r.ok) {
-      res.status(409).json({ error: "Both accounts have activity on AgentGem. Merging accounts with existing gems or a claimed handle isn't supported yet." });
-      return;
-    }
-    // If the caller's own (current) account was the one dropped, re-session them onto the survivor.
-    if (r.keep !== who.accountId) {
-      const { mintSessionCookie } = await import("@agentgem/aggregator");
-      const setCookie = await mintSessionCookie(deps.auth, r.keep); // Set-Cookie for keep's session
-      res.set("Set-Cookie", setCookie);
-    }
-    res.json({ keep: r.keep, connected: await connectedProviders(deps.db, r.keep) });
-  };
-}
-
 export function installAccount(expressApp, deps: AccountDeps): void {
-  expressApp.post("/api/account/absorb", absorbHandler(deps));
-  expressApp.options("/api/account/absorb", absorbHandler(deps));
   expressApp.get("/api/account/providers", providersHandler(deps));
   expressApp.options("/api/account/providers", providersHandler(deps));
 }
 ```
-
-(Confirm `mintSessionCookie`'s exact exported name/signature against `packages/aggregator/src/auth/mintCookie.ts` at implementation time; it drives the oneTimeToken plugin to produce a real Set-Cookie.)
 
 - [ ] **Step 4: Wire the route and the origin exemption; run**
 
@@ -669,30 +651,36 @@ In `src/originGuard.ts` line ~92, add `req.path.startsWith("/api/account/")` to 
 if (req.path.startsWith("/api/auth/") || req.path.startsWith("/api/account/") || req.path.startsWith("/api/stars") || /* ...existing... */) { next(); return; }
 ```
 
-Run: `pnpm -w build && pnpm -w vitest run src/account/__tests__/absorb.route.test.ts && pnpm -w vitest run src/__tests__`
+Run: `pnpm -w build && pnpm -w vitest run src/account/__tests__/providers.route.test.ts && pnpm -w vitest run src/__tests__`
 Expected: PASS; no origin-guard regression.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add src/account/ src/index.ts src/originGuard.ts
-git commit -m "feat(account): POST /api/account/absorb + providers route (server-derived other, credentialed CORS)"
+git commit -m "feat(account): GET /api/account/providers route (credentialed CORS, lists linked providers)"
 ```
 
 ---
 
-## Task 7: `/account` SPA page — connect providers + handle-claim nudge
+## Task 7: `/account` SPA page — connect providers (Flow A)
+
+> **Descoped post-spike:** Flow A only. The page lists connected providers and offers **Connect**
+> for a provider you've never separately used (native `linkSocial`). The collision path (the OAuth
+> resolves to an existing other account → absorb) and the handle-claim nudge are DEFERRED with
+> Flow B — a nudge pointing at `/account` would be a dead end while absorb is unavailable. Keep the
+> page honest: if a Connect resolves to an already-registered account, surface a plain "that
+> provider is already linked to another AgentGem account" message, no absorb.
 
 **Files:**
 - Create: `packages/marketplace/src/pages/Account.tsx`
 - Create: `packages/marketplace/src/pages/Account.test.tsx`
 - Modify: `packages/marketplace/src/Router.tsx` (add the `/account` route)
 - Modify: the authed nav/chip (near "Sign out") to link `/account`
-- Modify: `packages/marketplace/src/HandleClaim.tsx` — the ownership-409 nudge to `/account`
 
 **Interfaces:**
-- Consumes: `GET /api/account/providers` → `{ connected: string[] }`; `POST /api/account/absorb`;
-  better-auth `linkSocial` at `/api/auth/link-social` (Flow A).
+- Consumes: `GET /api/account/providers` → `{ connected: string[] }`; better-auth `linkSocial` at
+  `/api/auth/link-social` (Flow A).
 
 - [ ] **Step 1: Write the failing component test**
 
@@ -709,12 +697,11 @@ it("lists connected providers and offers Connect for the missing one", async () 
 Run: `pnpm -C packages/marketplace exec vitest run src/pages/Account.test.tsx`
 Expected: FAIL — `Account` not found.
 
-- [ ] **Step 3: Implement `Account.tsx`, the route, the nav link, and the nudge**
+- [ ] **Step 3: Implement `Account.tsx`, the route, and the nav link**
 
-- `Account.tsx`: fetch `/api/account/providers` (credentialed); render each of `["github","google"]` as *connected* or a **Connect** button. Connect for a never-used provider → better-auth `linkSocial`. When the OAuth resolves to an existing other account (link-social refuses), call `POST /api/account/absorb` and, on success, route to the survivor; on 409, show the merge-not-supported message.
+- `Account.tsx`: fetch `/api/account/providers` (credentialed); render each of `["github","google"]` as *connected* or a **Connect** button. Connect for a never-used provider → better-auth `linkSocial`. If `linkSocial` resolves to a provider already linked to another account, surface a plain "that provider is already linked to another AgentGem account" message (no absorb — Flow B is a follow-up).
 - `Router.tsx`: add `<Route path="/account" element={<Account/>} />` behind the signed-in guard.
 - Nav: a link to `/account` in the authed chip area.
-- `HandleClaim.tsx`: on a claim 409 caused by another *account* owning the handle, show *"@name belongs to another account — connect it from your account settings,"* linking `/account`. (Per the spec's note: if the API can't distinguish an account-owned 409 from a reserved-org 409 without a change, keep the generic message and add the nudge as a static line — decide here, do not add a new API field just for copy.)
 
 - [ ] **Step 4: Run the component test + marketplace suite**
 
@@ -724,8 +711,8 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/marketplace/src/pages/Account.tsx packages/marketplace/src/pages/Account.test.tsx packages/marketplace/src/Router.tsx packages/marketplace/src/HandleClaim.tsx
-git commit -m "feat(marketplace): /account page — connect providers (link + absorb) and handle-claim nudge"
+git add packages/marketplace/src/pages/Account.tsx packages/marketplace/src/pages/Account.test.tsx packages/marketplace/src/Router.tsx
+git commit -m "feat(marketplace): /account page — connect an unused provider (Flow A)"
 ```
 
 ---
@@ -734,7 +721,7 @@ git commit -m "feat(marketplace): /account page — connect providers (link + ab
 
 - [ ] `pnpm -w build && pnpm -w vitest run` — full root suite green (this is what CI's `test (24)`/`test (26)` gate).
 - [ ] `pnpm -C packages/marketplace exec vitest run` — marketplace green (NOT in CI; run locally).
-- [ ] Manual smoke against a local aggregator: (a) Flow A — sign in with GitHub, Connect Google, both listed; (b) Flow B — from a fresh Google account, Connect GitHub belonging to a data-bearing account, land on the data account with both providers; (c) C-guard — two data-bearing accounts → the merge-not-supported message; (d) regression — a Google-primary account that linked GitHub can still publish a gem from the desktop app (Task 2).
+- [ ] Manual smoke against a local aggregator: (a) Flow A — sign in with GitHub, Connect Google, both listed on `/account`; (b) regression — a Google-primary account that linked GitHub can still publish a gem from the desktop app (Task 2). (Flow B — absorbing an existing fresh account, and the C-guard message — is deferred to the follow-up slice with the bespoke connect-OAuth callback.)
 
 ---
 
