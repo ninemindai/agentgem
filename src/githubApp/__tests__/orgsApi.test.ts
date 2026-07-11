@@ -144,6 +144,7 @@ describe("GET /api/orgs/skill-body", () => {
     await orgSkillBodyHandler({ ...deps, http: failingHttp })(authed(memberToken, { scope: "acme", source: "org:acme/skills", path: "eng/deploy/SKILL.md" }) as any, res);
     expect(res._status).toBe(502);
     expect(JSON.stringify(res._body)).not.toContain("itok"); // installation token never leaks
+    expect(JSON.stringify(res._body)).not.toContain("boom upstream"); // raw upstream error not forwarded
   });
 
   it("404 when the installation is suspended (no active installation)", async () => {

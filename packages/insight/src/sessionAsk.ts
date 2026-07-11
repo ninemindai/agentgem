@@ -82,8 +82,10 @@ export async function askSession(
       return { answered: true, agentUsed: descriptor.id, answer };
     } finally { try { handle.dispose(); } catch { /* ignore */ } }
   } catch (err) {
+    // The raw adapter error (which can carry binary paths / system details) stays in the log; the
+    // client-facing answer is a fixed, non-revealing string.
     log.warn("askSession degraded: %s", (err as Error)?.message ?? err);
-    return { answered: false, agentUsed: descriptor.id, answer: `raw interrogation failed: ${(err as Error)?.message ?? "unknown error"}` };
+    return { answered: false, agentUsed: descriptor.id, answer: "session interrogation is temporarily unavailable" };
   } finally { try { conn?.close(); } catch { /* ignore */ } }
 }
 
