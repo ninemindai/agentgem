@@ -13,7 +13,9 @@ export const producers = pgTable("producers", {
 export const attestations = pgTable("attestations", {
   id: uuid("id").primaryKey(),
   gemName: text("gem_name").notNull(),
-  gemDigest: text("gem_digest").notNull().unique(),
+  // Uniqueness is per (gem_digest, producer_pubkey), NOT gem_digest alone: two legitimate producers
+  // of the same gem binary each keep their own attestation (the aggregates count distinct producers).
+  gemDigest: text("gem_digest").notNull(),
   producerPubkey: text("producer_pubkey").notNull().references(() => producers.pubkey),
   harnessId: text("harness_id").notNull(),
   models: text("models").array().notNull().default(sql`'{}'::text[]`),
@@ -24,7 +26,7 @@ export const attestations = pgTable("attestations", {
   trustScore: real("trust_score").notNull().default(1),
   quarantined: boolean("quarantined").notNull().default(false),
   ingestedAt: timestamp("ingested_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [uniqueIndex("attestations_gem_digest_producer_key").on(t.gemDigest, t.producerPubkey)]);
 export const ingredients = pgTable("ingredients", {
   id: text("id").primaryKey(),
   kind: text("kind").notNull(),
@@ -493,7 +495,12 @@ export async function backfillUserHandles(db: AppDb): Promise<{ claimed: number;
 // drizzle-kit migrations are a deferred follow-up when the schema starts evolving.)
 export async function ensureSchema(db: AppDb): Promise<void> {
   await db.execute(sql`create table if not exists producers (pubkey text primary key, first_seen timestamptz not null default now(), attest_count int not null default 0)`);
-  await db.execute(sql`create table if not exists attestations (id uuid primary key, gem_name text not null, gem_digest text not null unique, producer_pubkey text not null references producers(pubkey), harness_id text not null, models text[] not null default '{}', scan_sessions int not null, scan_span_days int not null, signal_digest text not null, private_count int not null default 0, trust_score real not null default 1, quarantined boolean not null default false, ingested_at timestamptz not null default now())`);
+  await db.execute(sql`create table if not exists attestations (id uuid primary key, gem_name text not null, gem_digest text not null, producer_pubkey text not null references producers(pubkey), harness_id text not null, models text[] not null default '{}', scan_sessions int not null, scan_span_days int not null, signal_digest text not null, private_count int not null default 0, trust_score real not null default 1, quarantined boolean not null default false, ingested_at timestamptz not null default now())`);
+  // Re-key: uniqueness is per (gem_digest, producer_pubkey), not gem_digest alone, so two producers of
+  // the same gem binary each keep their own attestation. Drop the old single-column unique on existing
+  // DBs (auto-named attestations_gem_digest_key) and add the composite. Both idempotent.
+  await db.execute(sql`alter table attestations drop constraint if exists attestations_gem_digest_key`);
+  await db.execute(sql`create unique index if not exists attestations_gem_digest_producer_key on attestations (gem_digest, producer_pubkey)`);
   await db.execute(sql`create table if not exists ingredients (id text primary key, kind text not null, id_kind text not null, display_name text, first_seen timestamptz not null default now(), last_seen timestamptz not null default now())`);
   await db.execute(sql`create table if not exists usage_edges (attestation_id uuid not null references attestations(id), ingredient_id text not null references ingredients(id), invocations int not null, sessions int not null, primary key (attestation_id, ingredient_id))`);
   await db.execute(sql`create table if not exists model_outcomes (attestation_id uuid not null references attestations(id), model text not null, mostly int not null, partially int not null, not_achieved int not null, primary key (attestation_id, model))`);
