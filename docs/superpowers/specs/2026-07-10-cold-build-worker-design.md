@@ -220,3 +220,174 @@ Measured, not asserted:
   correct and an interrupted build resumes.
 - **Moving `scanFileUsage`, `resolveUsage`, or the schema.** Those are #301; this only changes
   *where* parsing runs.
+
+---
+
+## Review Amendments (plan-eng-review 2026-07-10)
+
+Seven decisions from the engineering review + Codex outside voice. Each amends the design above.
+
+### A1 — Route on estimated parse COST (bytes), not file count (Issue 1, P2)
+
+**Measured:** the six largest transcripts (46–79 MB) each parse in 192–286 ms; one 79 MB file
+alone is 286 ms. File-count routing (`paths.length - fileCount() > THRESHOLD`) misses this — an
+active session's own transcript grows every turn, so every warm `/api/usage` re-parses one
+79 MB file **inline** (286 ms main-thread stall), because it's only 1 file.
+
+Route on the byte cost of the **pending set** instead:
+
+```
+pendingBytes = Σ size(p) for p in paths where p needs reparse
+             = new files (p ∉ existing) ∪ mtime/size-changed ∪ hook_digest-mismatched  ← Codex #9
+if (offThreadParse && pendingBytes > BYTE_THRESHOLD)  → syncUsageStreamed (worker)
+else                                                   → syncUsage (inline)
+```
+
+**The pending set MUST include hook_digest-mismatched files** (Codex #9): a hook-config edit
+mismatches every file's stored `hook_digest`, so the whole corpus needs reparse but count-routing
+would see them all as "seen" and block 16 s inline. Byte-routing over the hook_digest-mismatch set
+sends that to the worker too.
+
+**Where the stat pass runs:** the main thread already stats every path in the warm path today
+(that is most of the measured 0.11 s). Reuse it: the **main thread** computes the pending set +
+`pendingBytes` from that stat pass, then hands the worker the **pre-identified changed paths (with
+their mtime/size)** — the worker does pure read+parse, no re-stat. This also shrinks `workerData`
+to the changed-path list (not the whole `existing` map), dissolving the structured-clone concern
+(Codex #1). On a cold index short-circuit: `fileCount()===0` → all files pending → worker, no need
+to sum bytes.
+
+`BYTE_THRESHOLD` (e.g. 20 MB) is the one tuning constant. The rare "many tiny changed files just
+under threshold" case parses inline (fast, they're tiny). Document the metric.
+
+### A2 — syncUsageStreamed shares the single-flight chain (Issue 4 / Codex #5, P1 — the correctness fix)
+
+`syncUsage` serializes through `openTranscriptIndex`'s `chain` promise so two syncs never race the
+prune/write. `syncUsageStreamed` is a **new** entry point and MUST advance the **same** `chain`, or
+a background streamed build and a foreground inline sync run concurrently — one's prune deletes
+rows the other is still writing → intermittent index corruption. Both methods live inside
+`openTranscriptIndex` and both do `const run = chain.then(() => ...); chain = run.catch(()=>{})`.
+**Test:** fire `syncUsageStreamed` + `syncUsage` overlapping; assert the second waits and the final
+rows are consistent.
+
+### A3 — Accept + document: /api/usage awaits the chain during a cold build (Issue 2, P2)
+
+During a 16 s worker cold build (held by the chain, usually kicked off by the background warm
+pass), a concurrent `getGlobalUsageIndexed` from `/api/usage` awaits the chain ~16 s. The event
+loop stays free (other routes fine — the acceptance holds), but that one usage request spins. This
+is **strictly better than today** (today the event loop freezes 16 s for all routes) and the warm
+pass normally pre-builds the index before a user looks. The endpoint's `catch` fallback fires only
+on *reject*, not a slow resolve, so it stays on the index path. **Add a Verification row noting
+this is a known first-cold-load limitation, not a regression.** Fast-return-stale was considered
+and deferred (adds a build-in-flight flag + stale/202 shape for a narrow window).
+
+### A4 — Acceptance-gate fixture MUST include a >150 ms single file (Issue 3 / Codex #8, P1 test)
+
+The worker earns its complexity only because one file's parse (286 ms) can't be subdivided by a
+chunked-yield alternative. If the gate's fixture is many small files, a chunked-yield inline
+implementation would ALSO pass the heartbeat — the test wouldn't prove the worker is load-bearing.
+The fixture MUST generate (in-test, not committed) one synthetic transcript whose own
+`scanFileUsage` exceeds ~150 ms (size against the measured ~4 MB → ~20 ms rate; ~8–10 MB of
+`tool_use` records). The heartbeat gate then fails for any inline implementation and passes only
+when parsing is truly off-thread. Run the heartbeat while the worker is **actually parsing that
+large file**, not sleeping.
+
+### A5 — Fix the worker-path candidates + lock with a packed-artifact test (Codex #10, P2)
+
+`["./transcriptParseWorker.js", "./warm/transcriptParseWorker.js"]` is wrong — the second is copied
+from scorecard's `warm/` layout. `transcriptParseWorker.ts` and its spawner `coldBuildParser.ts`
+both sit at root `src/` → `dist/`, and esbuild inlines `coldBuildParser` into `dist/index.js`, so
+`import.meta.url` resolves to `dist/` in **both** loose and bundled layouts. The candidate is just
+`["./transcriptParseWorker.js"]`. **Verify with a test that runs `resolveWorkerPath` against the
+output of a real `node scripts/bundle-bins.mjs`** (the packed layout), not just source `dist/` —
+the #267 trap only reproduces from the packed artifact.
+
+### A6 — Backpressure: document the bound, defer ACK (Issue 5 / Codex #3, P2)
+
+Total result volume is measured-tiny: ~800 rows across 3,739 files. So even if the worker races
+ahead of the writer, queued batches are bounded-small and buffering is harmless. **Document this
+measured bound** and skip ACK backpressure now; add a one-line pointer that ACK (worker waits for a
+main-thread ACK before the next batch) is the fix **if per-file row counts ever grow**.
+
+### A7 — Notes (documentation, no code change)
+
+- **`failed:true` on a *changed* unreadable file serves stale rows** until a later successful read
+  (Codex #7). This matches #301's A3 behavior; state it as intentional stale-on-read-error, not
+  "identical correctness."
+- **Prune is `existing − seen`** (Codex #6). This is **pre-existing** to `syncUsage`, not introduced
+  here; `getGlobalUsageIndexed` always passes the full `allClaudeTranscripts` set, so a narrowed
+  path set never reaches it. Not blocking; noted for a future hardening (prune within input paths).
+
+## NOT in scope
+
+- **A worker pool / faster cold build.** Single worker; goal is non-blocking, not faster.
+- **ACK backpressure** (A6) — deferred; result volume is bounded-tiny.
+- **Fast-return-stale for /api/usage during a cold build** (A3) — deferred; strictly-better-than-today
+  behavior documented instead.
+- **Optimize panel's separate 16 s scan** — issue #321, its own spec after this lands.
+- **Moving `scanFileUsage` / `resolveUsage` / the schema** — those are #301.
+
+## What already exists (reused, not rebuilt)
+
+- **`src/warm/scorecardWorker.ts` + `src/warm/workerPath.ts` + `bundle-bins.mjs` entries** (#267) —
+  the exact worker + two-layout-resolution + self-contained-bundling pattern. `transcriptParseWorker`
+  mirrors it; `resolveWorkerPath(baseUrl, candidates)` already takes candidates as a param (no edit).
+- **`scanFileUsage`** (#301, `@agentgem/insight`) — the pure per-file parser the worker calls.
+- **`resolveUsage`** (#301) — the query-time fold, unchanged; runs on main after readback.
+- **`sharedIndex()` single-flight `chain`** — reused; `syncUsageStreamed` joins it (A2).
+- **The warm pass** (#265/#267) — already builds the index in the background, which is what makes
+  A3's "usually pre-built" true.
+
+## Failure modes (per new codepath)
+
+| Codepath | Realistic failure | Test? | Handled? | Silent? |
+|---|---|---|---|---|
+| worker spawn / resolve | `resolveWorkerPath`→null, spawn throws | Fallback test (A5) | inline `syncUsage` fallback | logged |
+| worker mid-run throw / nonzero exit w/o `done` | pathological file, OOM | Fallback + exit-without-done test | inline fallback; idempotent upserts, no double-write | logged |
+| streamed vs inline concurrent | two syncs race prune | Overlap test (A2) | shared chain serializes | corruption if unfixed → **A2 fixes** |
+| single unreadable changed file | EACCES/EMFILE | `failed:true` unit (A4) | skip upsert, keep prior (stale) rows | logged; stale-on-error (A7) |
+| large single file parse | 79 MB transcript | Heartbeat gate w/ >150ms file (A4) | off-thread, main <100 ms | — |
+
+No failure mode is untested AND silent AND unhandled. **No critical gaps.**
+
+## Worktree parallelization strategy
+
+Sequential. The chain is: extract `writeFileRows` + add `fileCount`/`syncUsageStreamed` (capture) →
+`transcriptParseWorker` + `coldBuildParser` (root) → wire `getGlobalUsageIndexed` + the two callers
+→ bundle-bins entry → tests. Each step depends on the prior's exports across the capture↔root
+boundary; splitting only creates conflicts in `transcriptIndex.ts` and `globalUsage.ts`.
+
+## Implementation Tasks
+Synthesized from the review. Each derives from a decision above.
+
+- [ ] **T1 (P1, human ~2h / CC ~15min)** — capture — `writeFileRows` extraction + `syncUsageStreamed` sharing the chain (A2)
+  - Files: `packages/capture/src/transcriptIndex.ts`; test `src/gem/__tests__/transcriptIndexStreamed.test.ts`
+  - Verify: fake-producer byte-identical to `syncUsage`; per-batch txn; `failed` skip; prune; **overlap-serialization test** (A2)
+- [ ] **T2 (P2, human ~1.5h / CC ~15min)** — capture — byte-cost routing incl. hook_digest-mismatch set (A1, Codex #9)
+  - Files: `packages/capture/src/{transcriptIndex.ts (pendingBytes/fileCount),globalUsage.ts}`
+  - Verify: warm+one-79MB-file → streamed; hook_digest change → streamed; many-tiny → inline; cold (`fileCount()===0`) → streamed
+- [ ] **T3 (P1, human ~3h / CC ~25min)** — root — `transcriptParseWorker.ts` + `coldBuildParser.ts` (offThreadParse producer), candidates `["./transcriptParseWorker.js"]` (A5)
+  - Files: `src/transcriptParseWorker.ts`, `src/coldBuildParser.ts`; wire `getGlobalUsageIndexed` + `gem.controller.ts` + `warm/registry.ts`
+  - Verify: fallback (unresolvable path, exit-without-done) → inline identical rows
+- [ ] **T4 (P1, human ~1h / CC ~10min)** — root — bundle-bins entry + packed-artifact resolution test (A5, Codex #10)
+  - Files: `scripts/bundle-bins.mjs`; test asserts 0 bare `@agentgem/*` imports + `resolveWorkerPath` finds it in real `node scripts/bundle-bins.mjs` output
+- [ ] **T5 (P1, human ~2h / CC ~20min)** — root — acceptance heartbeat gate with a >150ms in-test file (A4) + worker-vs-inline differential
+  - Files: `src/gem/__tests__/coldBuildWorker.test.ts`
+  - Verify: heartbeat max-block <100ms while the large file parses; byte-identical `/api/usage` worker vs inline; opt-in `AGENTGEM_COLD_BUILD_REAL`
+- [ ] **T6 (P2, human ~30min / CC ~8min)** — measure + record (Verification table incl. the A3 caveat row)
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
+| Codex Review | `/codex review` | Independent 2nd opinion | 1 | issues_found | 4 new; 1 CRITICAL (chain race) folded, +byte-routing/candidate/backpressure |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAR | 5 findings, all folded; 0 critical gaps |
+| Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
+
+- **Scope gate:** file count (9) tripped the 8-file smell; the simpler chunked-yield alternative was **measured and falsified** (worst single-file parse 286 ms > 100 ms bar — can't subdivide one file's sync parse). Worker complexity is essential, not accidental. Proceed as-is confirmed.
+- **CODEX:** ran (high effort). 10 raised; 4 genuinely new (chain race, worker→main backpressure, hook_digest routing gap, wrong worker-path candidate), 4 already-covered/pre-existing/nits, 2 sharpen review findings. The chain-race (Codex #5) is the highest-value catch — a latent concurrency corruption the review missed.
+- **CROSS-MODEL:** no contradiction — Codex extended the review. All substantive findings surfaced to the user and folded.
+- **VERDICT:** ENG CLEARED — ready to plan. Scope reduced: no (proceed + 7 amendments). 2 P1 test/correctness items mandated (chain-overlap test, >150ms-file acceptance gate). 0 unresolved.
+
+NO UNRESOLVED DECISIONS
