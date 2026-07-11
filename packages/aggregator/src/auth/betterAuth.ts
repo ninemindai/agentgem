@@ -110,6 +110,12 @@ export function makeAuth(opts: {
   return betterAuth(config);
 }
 
+export async function anchorAndScopesForTest(
+  db: AppDb,
+  account: { userId: string; providerId: string; accountId: string; accessToken?: string | null },
+  isCreate: boolean,
+) { return anchorAndScopes(db, account, isCreate); }
+
 async function anchorAndScopes(
   db: AppDb,
   account: { userId: string; providerId: string; accountId: string; accessToken?: string | null },
@@ -122,15 +128,22 @@ async function anchorAndScopes(
   // insert would otherwise violate it. A login-less anchor is legal since Task 1 (login is nullable).
   const login = account.providerId === "github" ? (row?.login ?? null) : null;
 
-  // On CREATE the anchor is LOAD-BEARING: a user with no anchor is broken and must not get a
-  // session, so let a failure THROW and abort the sign-in. On UPDATE (re-login) the anchor already
-  // exists and we are only refreshing login/avatar — best-effort, never block a legitimate sign-in.
-  const write = () => upsertAccount(db, {
-    provider: account.providerId, accountId: account.accountId,
-    login, avatarUrl: row?.image ?? null, id: account.userId,
-  });
-  if (isCreate) await write();
-  else try { await write(); } catch { /* re-login refresh is best-effort */ }
+  // The anchor is PER-USER: one row per user.id, stamped by the FIRST provider that created it.
+  // A second linked provider needs NO new anchor — the existing one already authorizes the user,
+  // and accounts.id is a PK, so writing a second row for the same user.id is a duplicate-PK throw.
+  // better-auth's `account` table holds the per-provider records natively; the anchor never does.
+  const existing = (await db.execute(sql`select 1 from accounts where id = ${account.userId} limit 1`)).rows?.length ?? 0;
+  if (existing === 0) {
+    // On CREATE the anchor is LOAD-BEARING: a user with no anchor is broken and must not get a
+    // session, so let a failure THROW and abort the sign-in. On UPDATE (re-login) the anchor already
+    // exists and we are only refreshing login/avatar — best-effort, never block a legitimate sign-in.
+    const write = () => upsertAccount(db, {
+      provider: account.providerId, accountId: account.accountId,
+      login, avatarUrl: row?.image ?? null, id: account.userId,
+    });
+    if (isCreate) await write();
+    else try { await write(); } catch { /* re-login refresh is best-effort */ }
+  }
 
   // Org scopes are a GitHub concept: they are captured from the GitHub App / API and keyed on a
   // login. A login-less provider simply has none, matches no org, and is denied — correct, not a gap.
