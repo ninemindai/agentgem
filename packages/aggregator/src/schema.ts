@@ -395,7 +395,21 @@ export const verification = pgTable("verification", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, handoffCodes, stars, reviews, gemAdoptions, accountScopes, usageDays, usageDayModels, orgSettings, catalogGems, gemArchives, gamePlays, curatedSkills, appInstallations, orgMembers, groups, groupMembers, groupInvites, user, session, account, verification };
+// Account-linking Flow B seam (Task 0 spike, seam b): better-auth's linkSocial does NOT persist the
+// server-resolved identity of a provider it rejects as "already linked to a different user" (its
+// OAuth callback redirects without a DB write). So Flow B cannot piggyback on linkSocial's rejection;
+// a bespoke connect-OAuth callback (Task 6) resolves the other provider's identity itself and stashes
+// it HERE — one short-lived row per session user (PK), read back by `pendingLink` scoped to the
+// caller's session. `session_user_id` is the server-verified session subject, never a request body.
+export const pendingAccountLinks = pgTable("pending_account_links", {
+  sessionUserId: text("session_user_id").primaryKey().references(() => user.id, { onDelete: "cascade" }),
+  providerId: text("provider_id").notNull(),
+  providerAccountId: text("provider_account_id").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, handoffCodes, stars, reviews, gemAdoptions, accountScopes, usageDays, usageDayModels, orgSettings, catalogGems, gemArchives, gamePlays, curatedSkills, appInstallations, orgMembers, groups, groupMembers, groupInvites, user, session, account, verification, pendingAccountLinks };
 export type AppDb = PgDatabase<any, typeof schema>;
 
 /** One-time, idempotent: give every account_binding with no matching `accounts` anchor row one,
@@ -665,6 +679,11 @@ export async function ensureSchema(db: AppDb): Promise<void> {
   await db.execute(sql`create table if not exists "verification" (
     id text primary key, identifier text not null, value text not null, expires_at timestamptz not null,
     created_at timestamptz not null default now(), updated_at timestamptz not null default now())`);
+  // Flow B connect-OAuth handoff (Task 0 seam b): one short-lived pending link per session user.
+  await db.execute(sql`create table if not exists "pending_account_links" (
+    session_user_id text primary key references "user"(id) on delete cascade,
+    provider_id text not null, provider_account_id text not null,
+    expires_at timestamptz not null, created_at timestamptz not null default now())`);
 
   // MUST run before backfillGemOwners: gem-owner resolution matches against `accounts`, and
   // migrateAccountsToBetterAuth (run at boot right after ensureSchema, see src/index.ts) mirrors
