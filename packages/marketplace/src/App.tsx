@@ -83,6 +83,7 @@ export function App() {
                   <span className="ex-login">{me.name}</span>
                 </span>
               )}
+              <a className="ex-navlink" href="/account">Account</a>
               <button type="button" className="ex-signout" onClick={signOut}>Sign out</button>
             </>
           ) : (

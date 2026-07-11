@@ -48,5 +48,23 @@ export function makeAuth(base: string) {
       if (!j.url) throw new Error("sign-in response had no redirect url");
       window.location.assign(j.url);
     },
+    /** better-auth's `/link-social` (Flow A, Task 3) — the logged-in analog of `signIn`: connects a
+     *  provider the caller has never separately used to their CURRENT session, rather than starting a
+     *  fresh sign-in. Same POST-then-follow-`url` shape as `signIn` (1.6.23 has no GET redirect form).
+     *  If the OAuth round trip resolves to a provider already linked to a DIFFERENT account, better-auth
+     *  redirects back to `returnTo` with `?error=account_already_linked_to_different_user` rather than
+     *  rejecting this initial call — the caller (Account.tsx) reads that query param after the redirect. */
+    async linkSocial(provider: "github" | "google", returnTo: string): Promise<void> {
+      const r = await fetch(base + "/api/auth/link-social", {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ provider, callbackURL: returnTo }),
+      });
+      if (!r.ok) throw new Error(`link failed (${r.status})`);
+      const j = (await r.json()) as { url?: string };
+      if (!j.url) throw new Error("link response had no redirect url");
+      window.location.assign(j.url);
+    },
   };
 }
