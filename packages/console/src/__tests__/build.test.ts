@@ -15,5 +15,11 @@ describe("build-client", () => {
     expect(html).toContain('class="boot-splash"');         // static pre-React loading screen
     expect(html).toContain('<script type="module">');
     expect(html.length).toBeGreaterThan(1000);
+    expect(html).toContain('<link rel="manifest" href="/manifest.webmanifest">');
+    expect(html).toContain('<meta name="theme-color" content="#f1eadb">');
+    // and the manifest file itself is emitted
+    const mani = JSON.parse(readFileSync(join(pkg, "dist", "manifest.webmanifest"), "utf8"));
+    expect(mani.display).toBe("standalone");
+    expect(mani.icons.length).toBe(3);
   });
 });

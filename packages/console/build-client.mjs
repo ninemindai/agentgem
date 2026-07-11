@@ -6,6 +6,8 @@ import { build } from "esbuild";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildManifest } from "./pwa-manifest.mjs";
+import { ICON_192 } from "./pwa-icons.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const out = join(here, "dist");
@@ -35,6 +37,9 @@ const html = `<!doctype html>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="icon" href="data:," />
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#f1eadb">
+<link rel="apple-touch-icon" href="${ICON_192}">
 <title>AgentGem Console</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -55,3 +60,5 @@ const html = `<!doctype html>
 mkdirSync(out, { recursive: true });
 writeFileSync(join(out, "index.html"), html);
 console.log(`[console] wrote ${join(out, "index.html")} (${html.length} bytes)`);
+writeFileSync(join(out, "manifest.webmanifest"), JSON.stringify(buildManifest()));
+console.log(`[console] wrote ${join(out, "manifest.webmanifest")}`);
