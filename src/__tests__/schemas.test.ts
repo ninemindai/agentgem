@@ -7,7 +7,7 @@ import {
   WorkspaceSummarySchema, CreateWorkspaceRequestSchema, RenderRequestSchema, RenderResultSchema,
   DeployTargetIdSchema, DeployReadyQuerySchema, DeployTargetsResponseSchema,
   RegistryResolveRequestSchema, RegistryInstallRequestSchema, RegistryPublishRequestSchema,
-  GemArtifactSchema, SkippedArtifactSchema,
+  GemArtifactSchema, RubricArtifactSchema, SkippedArtifactSchema,
   SkillArtifactSchema, TriggerContractSchema, DistilledSkillSchema,
 } from "../schemas.js";
 
@@ -248,5 +248,29 @@ describe("DistilledSkillSchema triggerContract", () => {
     const s = DistilledSkillSchema.parse({ ...base, triggerContract: { intent: "i", triggers: ["a"], antiTriggers: ["b"] } });
     expect(s.triggerContract?.intent).toBe("i");
     expect(s.triggerContract?.antiTriggers).toEqual(["b"]);
+  });
+});
+
+describe("RubricArtifactSchema", () => {
+  const valid = {
+    type: "rubric",
+    name: "my-rubric",
+    title: "My rubric",
+    target: "overview",
+    naturalScope: "project",
+    factors: [{ factor: "retry-storm", weight: 2 }],
+    criteria: [{ id: "c1", title: "T", question: "Q?", advice: "A", severity: "warn" }],
+  };
+
+  it("GemArtifactSchema parses a valid rubric artifact", () => {
+    expect(GemArtifactSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it("rejects a non-kebab name", () => {
+    expect(GemArtifactSchema.safeParse({ ...valid, name: "Bad Name" }).success).toBe(false);
+  });
+
+  it("rejects an empty factors array", () => {
+    expect(GemArtifactSchema.safeParse({ ...valid, factors: [] }).success).toBe(false);
   });
 });
