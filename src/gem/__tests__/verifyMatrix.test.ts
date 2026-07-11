@@ -138,6 +138,14 @@ describe("verifyGemAcrossAgents", () => {
     expect(resolveVerify(id)).toMatchObject({ gemName: "mx-gem", gemDigest: "sha:d" });
     expect(resolveVerify("bogus")).toBeUndefined();
   });
+
+  it("evicts the oldest spec once over the registry cap (each spec holds a full Gem)", () => {
+    const spec = { gem, baseDir: "/tmp/m", roster: ["claude" as const], gemDigest: "sha:d", gemName: gem.name } as Parameters<typeof registerVerify>[0];
+    const first = registerVerify(spec);
+    expect(resolveVerify(first)).toBeDefined();
+    for (let i = 0; i < 1000; i++) registerVerify(spec); // cap is 1000 → pushes `first` out
+    expect(resolveVerify(first)).toBeUndefined();
+  });
 });
 
 describe("deriveMatrixBaseDir", () => {

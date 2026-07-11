@@ -141,6 +141,13 @@ describe("run registry", () => {
     expect(resolveRun("not-a-real-id")).toBeUndefined();
   });
 
+  it("evicts the oldest entry once over the registry cap (bounded memory)", () => {
+    const first = registerRun("/tmp/oldest", "claude");
+    expect(resolveRun(first)).toBeDefined();
+    for (let i = 0; i < 1000; i++) registerRun("/tmp/d", "claude"); // cap is 1000 → pushes `first` out
+    expect(resolveRun(first)).toBeUndefined();
+  });
+
   it("issues distinct ids for distinct runs", () => {
     const a = registerRun("/tmp/a", "claude");
     const b = registerRun("/tmp/b", "codex");
