@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: MIT
 // src/dream.controller.ts
 import { z } from "zod";
+import { join } from "node:path";
 import { api, get, post } from "@agentback/openapi";
 import { writeDistilledDraft, writeDistilledLesson } from "@agentgem/capture";
-import type { DistilledSkill, Reflection } from "@agentgem/insight";
-import { agentgemHome, InvalidInputError } from "@agentgem/model";
+import type { DistilledSkill, Reflection, GuardrailDraft } from "@agentgem/insight";
+import { agentgemHome, InvalidInputError, resolveTarget, previewGuardrails, applyGuardrails } from "@agentgem/model";
 import { getWarmStatus, runWarmPass } from "./warm/orchestrator.js";
 import { reflectionToLesson } from "@agentgem/insight";
 import { readQueue, setStatus, promotedCount, readDiary } from "./dream/store.js";
@@ -17,7 +18,25 @@ import { buildJourney } from "./journeyCore.js";
 // lesson file). Mirrors the per-write re-validation in gem.controller.ts.
 const NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-const KeyBody = z.object({ key: z.string().min(1) });
+// `key` alone drives status reads/dismiss/preview. The guardrail accept leg also
+// carries the human-authored `directive`, the previewed `expectHash` (drift guard),
+// and the resolved `target` — all optional so the other routes ignore them.
+const KeyBody = z.object({
+  key: z.string().min(1),
+  expectHash: z.string().optional(),
+  target: z.enum(["claude", "agents"]).optional(),
+  directive: z.string().optional(),
+});
+const GuardrailPreviewSchema = z.object({
+  current: z.string(),
+  next: z.string(),
+  hash: z.string(),
+  file: z.string().nullable(),
+  target: z.enum(["claude", "agents"]).nullable(),
+  ambiguous: z.boolean(),
+  malformed: z.boolean(),
+  seed: z.string(),
+});
 const EnableBody = z.object({ enabled: z.boolean() });
 const StatusSchema = z.object({
   enabled: z.boolean(),
@@ -129,14 +148,44 @@ export class DreamController {
     return buildJourney({ base: this.base, kind: input.query.kind, limit: input.query.limit });
   }
 
+  // Pure preview of the managed-region write for a guardrail entry: resolve the
+  // target file, render current→next, and return the drift-guard hash. The `seed`
+  // (derived from the detector detail) prefills the panel's editable directive box.
+  @post("/dream/guardrail/preview", { body: KeyBody, response: GuardrailPreviewSchema })
+  async previewGuardrail(input: { body: z.infer<typeof KeyBody> }): Promise<z.infer<typeof GuardrailPreviewSchema>> {
+    const entry = readQueue(this.base).find((e) => e.key === input.body.key);
+    if (!entry || entry.kind !== "guardrail") throw new InvalidInputError(`No guardrail '${input.body.key}'.`);
+    const resolved = resolveTarget(entry.root);
+    // No CLAUDE.md/AGENTS.md yet → default to creating CLAUDE.md in the project root.
+    const file = resolved.file ?? join(entry.root, "CLAUDE.md");
+    const target = resolved.target ?? "claude";
+    const seed = `- ${(entry.draft as GuardrailDraft).detail}`;
+    const { current, next, hash, malformed } = previewGuardrails(file, [seed]);
+    return { current, next, hash, file, target, ambiguous: resolved.ambiguous, malformed: !!malformed, seed };
+  }
+
   @post("/dream/queue/accept", { body: KeyBody, response: OkPathSchema })
   async accept(input: { body: z.infer<typeof KeyBody> }): Promise<z.infer<typeof OkPathSchema>> {
     const entry = readQueue(this.base).find((e) => e.key === input.body.key);
     if (!entry) throw new InvalidInputError(`No queued draft '${input.body.key}'.`);
-    // A GuardrailDraft is not a Reflection — letting it fall through to the lesson
-    // branch below would misroute it. Stub until Task 5 lands the managed-region writer.
+    // A GuardrailDraft is not a Reflection — it upserts a managed block into
+    // CLAUDE.md/AGENTS.md rather than writing a distilled file. The human authored
+    // `directive` from the panel is what lands (the seed is only a starting point);
+    // the write is hash-guarded against on-disk drift since preview.
     if (entry.kind === "guardrail") {
-      throw new InvalidInputError("guardrail apply is implemented in Task 5");
+      const { expectHash, target, directive } = input.body;
+      const label = target === "agents" ? "AGENTS.md" : "CLAUDE.md";
+      const file = join(entry.root, label);
+      const block = directive ?? `- ${(entry.draft as GuardrailDraft).detail}`;
+      const res = applyGuardrails(file, [block], expectHash ?? "");
+      if (!res.ok) {
+        if (res.reason === "corrupt") {
+          throw new InvalidInputError(`The managed block in ${label} is malformed — fix it by hand, then re-apply.`);
+        }
+        throw new InvalidInputError(`${label} changed since preview — re-open the diff and apply again.`);
+      }
+      setStatus(entry.key, "accepted", Date.now(), this.base);
+      return { ok: true, path: res.path };
     }
     // Opportunities (REM publish-candidates) write no file — accepting is an
     // acknowledgement; the panel routes to the Curate/publish flow for the session.

@@ -1627,6 +1627,19 @@ button.scorecard-intent { line-height: 1.4; }
   background: var(--raised); cursor: pointer; font: 600 11.5px/1 var(--font-ui); color: var(--ink-soft); }
 .dream-act:hover { border-color: var(--accent); color: var(--accent); }
 .dream-act.is-accept:hover { border-color: var(--emerald); color: var(--emerald); }
+/* Guardrail review breaks onto its own line inside the baseline flex row. */
+.guardrail-review { flex-basis: 100%; display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.guardrail-directive { width: 100%; min-height: 56px; resize: vertical; padding: 8px 10px;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--raised); color: var(--ink);
+  font: 12.5px/1.5 var(--font-mono); }
+.guardrail-target { display: flex; gap: 6px; }
+.guardrail-target button { padding: 3px 10px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--raised); cursor: pointer; font: 600 11.5px/1 var(--font-ui); color: var(--ink-soft); }
+.guardrail-target button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.guardrail-diff { margin: 0; padding: 8px 10px; border: 1px solid var(--line-soft); border-radius: 6px;
+  background: var(--paper-2); color: var(--ink-soft); font: 11.5px/1.5 var(--font-mono);
+  white-space: pre-wrap; overflow-x: auto; max-height: 220px; }
+.guardrail-review .dream-act { align-self: flex-start; margin-left: 0; }
 .dream-diary { margin: 8px 0 0; color: var(--muted); font: 13px/1.5 var(--font-ui); font-style: italic; }
 .dream-diary-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .dream-diary-list li { display: flex; align-items: baseline; gap: 12px; padding: 8px 2px;
