@@ -4,6 +4,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { performance } from "node:perf_hooks";
 import { openTranscriptIndex, type TranscriptIndex } from "@agentgem/capture";
 import { scanFileUsage } from "@agentgem/insight";
 import { buildOffThreadParse } from "../../coldBuildParser.js";
@@ -62,4 +63,35 @@ describe("packaging", () => {
     const src = readFileSync(new URL("../../../scripts/bundle-bins.mjs", import.meta.url), "utf8");
     expect(src).toContain("transcriptParseWorker.js");
   });
+});
+
+function heartbeat() {
+  let last = performance.now(), max = 0;
+  const h = setInterval(() => { const n = performance.now(); max = Math.max(max, n - last - 50); last = n; }, 50);
+  return { async stop() { await new Promise((r) => setTimeout(r, 120)); clearInterval(h); return max; } };
+}
+
+describe("acceptance: main thread stays responsive during a cold build", () => {
+  it("max event-loop block < 100ms while a >150ms file parses off-thread", async () => {
+    // instrument self-test:
+    { const b = heartbeat(); const t0 = Date.now(); while (Date.now() - t0 < 500); const g = await b.stop(); expect(g).toBeGreaterThan(400); }
+    const dir = mkdtempSync(join(tmpdir(), "cbw-acc-"));
+    try {
+      // one big file (~30MB of tool_use records) whose own scanFileUsage measures ~246-250ms
+      // standalone (measured directly, repeat count raised from 60000 until comfortably >200ms
+      // margin above the 150ms target) + some small ones
+      const big = join(dir, "big.jsonl");
+      const line = tu("qa");
+      writeFileSync(big, (line + "\n").repeat(250000)); // ~30MB; standalone scanFileUsage ~246-250ms
+      const small: string[] = [big];
+      for (let i = 0; i < 20; i++) { const p = join(dir, `s${i}.jsonl`); writeFileSync(p, line + "\n"); small.push(p); }
+      process.env.AGENTGEM_USAGE_WORKER_BYTES = "0"; // force the worker branch
+      const index = await openTranscriptIndex(join(dir, "idx.db"));
+      const hb = heartbeat();
+      await index.syncUsage(small, "hd", (p) => scanFileUsage(p, []), buildOffThreadParse(), []);
+      const maxBlock = await hb.stop();
+      await index.close();
+      expect(maxBlock).toBeLessThan(100);
+    } finally { delete process.env.AGENTGEM_USAGE_WORKER_BYTES; rmSync(dir, { recursive: true, force: true }); }
+  }, 30000);
 });
