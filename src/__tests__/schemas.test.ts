@@ -7,7 +7,7 @@ import {
   WorkspaceSummarySchema, CreateWorkspaceRequestSchema, RenderRequestSchema, RenderResultSchema,
   DeployTargetIdSchema, DeployReadyQuerySchema, DeployTargetsResponseSchema,
   RegistryResolveRequestSchema, RegistryInstallRequestSchema, RegistryPublishRequestSchema,
-  GemArtifactSchema, RubricArtifactSchema, SkippedArtifactSchema,
+  GemArtifactSchema, SkippedArtifactSchema,
   SkillArtifactSchema, TriggerContractSchema, DistilledSkillSchema,
 } from "../schemas.js";
 
