@@ -134,6 +134,19 @@ be newest `created_at_ms` (`latestGemVersion`).
 
 ## PR 2 — Private / Unlisted / Public
 
+> **Split during planning (2026-07-11):** PR 2 divides at the Private boundary.
+> **PR 2a** = `visibility` column + publish threading + Explore filter + the
+> Public/Unlisted selector + retire the legacy quick-share (delivers two of three
+> scopes honestly; unlisted needs no enforcement — hidden from Explore but reachable
+> by its already-routable `/games/@scope/name` link). Plan:
+> `docs/superpowers/plans/2026-07-11-publish-visibility-pr2a.md`. To avoid shipping a
+> fake "private," PR 2a's publish edge accepts only `public`|`unlisted`.
+> **PR 2b** = **Private** with real owner-only enforcement (resolve gate on the
+> anonymous `game-meta`/`gem-archive` endpoints + session-gated `my-gems` +
+> originGuard changes) — planned after 2a lands, with the open question of how an
+> owner accesses their own private gem (metadata-only / marketplace-session /
+> console-signed) settled then.
+
 ### Schema
 
 Add to `catalog_gems` (`packages/aggregator/src/schema.ts:264`):
