@@ -10,6 +10,8 @@ import { useIdentity } from "../../identity/IdentityProvider.js";
 import { useGitHubBind } from "../../identity/useGitHubBind.js";
 import { ConnectGitHub } from "../../identity/ConnectGitHub.js";
 import { useSplit } from "../../shell/useSplit.js";
+import { setStudioChat, clearChatId, clearStudioChat } from "./studioChatStore.js";
+import { loadStudioSession } from "./studioResume.js";
 
 const j = (r: Response) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); };
 
@@ -78,11 +80,53 @@ export function Studio({
       .then((r) => { setHtml(r.html); setMeta(r.meta); setLoadErr(null); setShareLink(r.share?.url ?? null); })
       .catch((e: unknown) => setLoadErr(e instanceof Error ? e.message : String(e)));
 
+  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     refresh();
-    return () => closeRef.current?.();
+    let cancelled = false;
+    (async () => {
+      const r = await loadStudioSession(apiBase, name);
+      if (cancelled) return;
+      if (r.msgs.length) setMsgs(r.msgs);
+      if (r.chatId) setChatId(r.chatId);
+      // eng-review NEW P3: dead session with history → tell the user the old thread is
+      // archived and the next message starts fresh, so restored-but-read-only doesn't read as data loss.
+      if (!r.chatId && r.msgs.length) setStatus("previous chat archived — a new message starts a fresh session");
+      if (r.running) { setBusy(true); setWorking("resuming…"); pollWhileRunning(r.chatId!); }
+    })();
+    return () => {
+      cancelled = true;
+      if (pollRef.current) clearTimeout(pollRef.current);
+      closeRef.current?.();
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiBase, name]);
+
+  // Poll /state until the background turn finishes, then refresh history + preview.
+  // eng-review C2: cap the poll so a genuinely wedged turn doesn't spin a silent spinner forever —
+  // after the cap, surface an actionable "still running — Stop?" instead. Guard against a 2nd loop.
+  const POLL_MS = 1500;
+  const POLL_MAX = Math.round((10 * 60_000) / POLL_MS); // ~10 min
+  function pollWhileRunning(id: string) {
+    if (pollRef.current) { clearTimeout(pollRef.current); pollRef.current = null; } // never run two loops
+    let ticks = 0;
+    const tick = async () => {
+      try {
+        const st = await fetch(`${apiBase}/api/chat/${encodeURIComponent(id)}/state`).then((r) => r.ok ? r.json() : { alive: false });
+        if (!st.alive || !st.running) {
+          setBusy(false); setWorking("");
+          const r = await loadStudioSession(apiBase, name);
+          setMsgs(r.msgs);
+          await refresh();
+          return;
+        }
+      } catch { /* transient — keep polling */ }
+      if (++ticks >= POLL_MAX) { setWorking(""); setStatus("agent still running — press Stop to end it"); return; }
+      pollRef.current = setTimeout(tick, POLL_MS);
+    };
+    pollRef.current = setTimeout(tick, POLL_MS);
+  }
 
   // Kick off the build from the blank-tab description: send it as the first chat message, once an agent
   // is ready. One-shot (seededRef) so it never re-fires when the agent list resolves or agent changes.
@@ -142,7 +186,21 @@ export function Studio({
     setGate(null);
     setShare(null);
     setStatus(chatId ? "switched coding agent; next message starts a new studio chat" : "");
+    clearStudioChat(name); // old session belonged to the previous agent; drop the whole pointer
     onAgentIdChange(nextAgentId);
+  }
+
+  // eng-review C2/A3 follow-up: let the user free a live-but-idle (or running) session's slot
+  // without waiting it out. Keeps sessionId so restored history still renders after stopping.
+  async function stop() {
+    const id = chatId;
+    if (pollRef.current) { clearTimeout(pollRef.current); pollRef.current = null; }
+    closeRef.current?.(); closeRef.current = null;
+    setBusy(false); setWorking("");
+    setChatId(null);
+    clearChatId(name); // keep sessionId so history still renders
+    if (id) { try { await fetch(`${apiBase}/api/chat/${encodeURIComponent(id)}`, { method: "DELETE" }); } catch { /* best-effort */ } }
+    setStatus("session stopped");
   }
 
   async function send(text: string) {
@@ -155,12 +213,21 @@ export function Studio({
       if (!id) {
         const res = await fetch(`${apiBase}/api/chat`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ agentId, miniapp: name }) }).then(j);
         id = res.chatId as string; setChatId(id);
+        setStudioChat(name, { chatId: id, sessionId: res.sessionId as string, agent: agentId });
       }
       closeRef.current = openStudioStream(apiBase, id, message, {
         onDelta: (t) => { setWorking("responding…"); pushDelta(t); },
         onTool: (tool) => { setWorking(activity(tool)); setMsgs((m) => [...m, { role: "tool", title: tool.title ?? tool.kind ?? "tool", failed: tool.status === "failed" }]); },
         onDone: async () => { setBusy(false); setWorking(""); await refresh(); },
-        onFailed: (e) => { setBusy(false); setWorking(""); setMsgs((m) => [...m, { role: "tool", title: `failed: ${e}`, failed: true }]); },
+        onFailed: (e) => {
+          if (/already running/i.test(e) && id) {
+            // Another tab (or this one, post-reload) owns the live turn — attach to it instead of failing.
+            setWorking("resuming…"); pollWhileRunning(id);
+            return;
+          }
+          setBusy(false); setWorking("");
+          setMsgs((m) => [...m, { role: "tool", title: `failed: ${e}`, failed: true }]);
+        },
       });
     } catch (e) { setBusy(false); setWorking(""); setStatus(`error: ${(e as Error).message}`); }
   }
@@ -291,6 +358,7 @@ export function Studio({
         <span className="sp" />
         {status && <span className="play-intro" style={{ margin: 0 }}>{status}</span>}
         <button className="play-btn" onClick={save}>Save</button>
+        {(busy || chatId) && <button className="play-btn play-btn--ghost" onClick={stop} title="kill the agent session">Stop</button>}
         <button className="play-btn play-btn--ghost" onClick={pushGit} title="git push the miniapps registry to your git remote">Push to git</button>
         <button className="play-btn" disabled={sharing} onClick={copyShareLink}>Copy share link</button>
         <button className="play-btn play-btn--primary" onClick={shareToExplore}>Share to app.agentgem.ai</button>
