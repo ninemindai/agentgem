@@ -170,7 +170,7 @@ export function Gem({ api, keyName, stars, me }: { api: ReturnType<typeof makeAp
               const p = prettifyId(ing.id, ing.kind);
               return (
                 <li key={ing.id}>
-                  <a href={"/ingredient/" + encodeURIComponent(ing.id)} title={ing.id}>{p.name}</a>
+                  <a href={"/ingredients/" + encodeURIComponent(ing.id)} title={ing.id}>{p.name}</a>
                   <span className="ex-chip">{kindLabel(ing.kind)}</span>
                 </li>
               );

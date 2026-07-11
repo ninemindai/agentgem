@@ -54,7 +54,7 @@ describe("Profile page", () => {
     render(<Profile api={apiWith(withReviews)} login="octocat" />);
     expect(await screen.findByText("Reviews written")).toBeTruthy();
     const link = screen.getByText("brainstorming").closest("a");
-    expect(link?.getAttribute("href")).toBe("/skill/matt-skills/productivity/brainstorming.md");
+    expect(link?.getAttribute("href")).toBe("/skills/matt-skills/productivity/brainstorming.md");
     expect(screen.getByText("a keeper")).toBeTruthy();
   });
 

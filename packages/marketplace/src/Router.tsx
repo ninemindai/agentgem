@@ -53,9 +53,13 @@ export const ROUTES: RouteDef[] = [
   { id: "games", kind: "collection", collection: "games", match: (p) => parseGamePath(p), render: (m, c) => <Play api={c.api} gemKey={m as string} /> },
   { id: "gems-detail", kind: "collection", collection: "gems", match: (p) => p.match(/^\/gems\/(.+)$/), render: (m, c) => <Gem api={c.api} keyName={decodeURIComponent((m as RegExpMatchArray)[1])} stars={c.stars} me={c.me} /> },
   { id: "gems", kind: "collection", collection: "gems", match: (p) => p === "/gems", render: (_m, c) => <Gems api={c.api} stars={c.stars} /> },
-  { id: "ingredients", kind: "collection", collection: "ingredients", match: (p) => p.match(/^\/ingredient\/(.+)$/), render: (m, c) => <Ingredient api={c.api} id={decodeURIComponent((m as RegExpMatchArray)[1])} stars={c.stars} /> },
-  // /skill/:sourceId/*path — the catalog-skill page (repo+path identity) hosting reviews + preview.
-  { id: "skills", kind: "collection", collection: "skills", match: (p) => p.match(/^\/skill\/([^/]+)\/(.+)$/), render: (m, c) => <CatalogSkill api={c.api} reviews={c.reviews} sourceId={decodeURIComponent((m as RegExpMatchArray)[1])} path={(m as RegExpMatchArray)[2]} /> },
+  { id: "ingredients", kind: "collection", collection: "ingredients", match: (p) => p.match(/^\/ingredients\/(.+)$/), render: (m, c) => <Ingredient api={c.api} id={decodeURIComponent((m as RegExpMatchArray)[1])} stars={c.stars} /> },
+  // /skills/:sourceId/*path — the catalog-skill page (repo+path identity) hosting reviews + preview.
+  { id: "skills", kind: "collection", collection: "skills", match: (p) => p.match(/^\/skills\/([^/]+)\/(.+)$/), render: (m, c) => <CatalogSkill api={c.api} reviews={c.reviews} sourceId={decodeURIComponent((m as RegExpMatchArray)[1])} path={(m as RegExpMatchArray)[2]} /> },
+  // Legacy singular forms — old shared links. canonicalize() rewrites the URL to plural before the
+  // render loop runs, so these never actually render; they exist for the conformance test.
+  { id: "ingredient-alias", kind: "alias", match: (p) => /^\/ingredient\/.+$/.test(p), canonical: (p) => p.replace(/^\/ingredient\//, "/ingredients/"), render: () => null },
+  { id: "skill-alias", kind: "alias", match: (p) => /^\/skill\/[^/]+\/.+$/.test(p), canonical: (p) => p.replace(/^\/skill\//, "/skills/"), render: () => null },
   { id: "profile", kind: "profile", match: (p) => p.match(/^\/@([^/]+)$/), render: (m, c) => <Profile api={c.api} login={decodeURIComponent((m as RegExpMatchArray)[1])} me={c.me} /> },
   // Member-only team dashboard — must match before the public /orgs/:scope catalog.
   { id: "org-usage", kind: "collection", collection: "orgs", match: (p) => p.match(/^\/orgs\/([^/]+)\/usage$/), render: (m, c) => <TeamUsage api={c.api} scope={decodeURIComponent((m as RegExpMatchArray)[1])} stars={c.stars} /> },
@@ -66,12 +70,26 @@ export const ROUTES: RouteDef[] = [
 export const COLLECTIONS = ["games", "gems", "ingredients", "skills", "orgs"];  // plural
 export const PANELS = ["publish", "account", "sources"];
 
+// A legacy singular alias (e.g. /ingredient/x) is rewritten to its plural canonical form (e.g.
+// /ingredients/x) via replaceState — old shared links keep working, and the URL bar shows canonical.
+// replaceState does not fire popstate, so this can't loop.
+function canonicalize(path: string): string {
+  for (const r of ROUTES) {
+    if (r.kind === "alias" && r.canonical && r.match(path)) {
+      const to = r.canonical(path);
+      window.history.replaceState({}, "", to);
+      return to;
+    }
+  }
+  return path;
+}
+
 // Navigation is intercepted globally in App (same-origin <a> clicks → pushState + popstate),
 // so pages just use plain <a href> and this Router reacts to popstate.
 export function Router({ api, stars, reviews, me }: { api: ReturnType<typeof makeApi>; stars: StarsCtx; reviews: ReviewsCtx; me: Me | null }) {
-  const [path, setPath] = useState(() => window.location.pathname);
+  const [path, setPath] = useState(() => canonicalize(window.location.pathname));
   useEffect(() => {
-    const onPop = () => setPath(window.location.pathname);
+    const onPop = () => setPath(canonicalize(window.location.pathname));
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);

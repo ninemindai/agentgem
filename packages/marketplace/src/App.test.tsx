@@ -37,7 +37,7 @@ describe("App link interceptor", () => {
     // Wait for the leaderboard row link to appear
     const link = (await screen.findByText("brainstorming")).closest("a")!;
     expect(link).toBeTruthy();
-    const expectedPath = "/ingredient/" + encodeURIComponent("skill:superpowers/brainstorming");
+    const expectedPath = "/ingredients/" + encodeURIComponent("skill:superpowers/brainstorming");
     expect(link.getAttribute("href")).toBe(expectedPath);
 
     fireEvent.click(link);

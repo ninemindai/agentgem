@@ -52,7 +52,7 @@ function matches(g: PopularSkillGroup, s: PopularSkillItem, q: string): boolean 
 // The card's review-aggregate keys on the concrete catalog skill (repo+path), NOT the star's
 // name id — a written review must not cross-attribute same-named skills across repos.
 const reviewTargetId = (sourceId: string, path: string) => `${sourceId}/${path}`;
-const skillHref = (sourceId: string, path: string) => `/skill/${encodeURIComponent(sourceId)}/${path}`;
+const skillHref = (sourceId: string, path: string) => `/skills/${encodeURIComponent(sourceId)}/${path}`;
 
 export function PopularSkills({ api, stars, reviews }: { api: ReturnType<typeof makeApi>; stars: StarsCtx; reviews: ReviewsCtx }) {
   const [groups, setGroups] = useState<PopularSkillGroup[]>([]);

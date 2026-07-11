@@ -14,7 +14,7 @@ describe("Gem (detail)", () => {
     render(<Gem api={apiEmpty} keyName="brainstorming-kit" stars={stars} me={null} />);
     expect(await screen.findByRole("heading", { name: /brainstorming-kit/ })).toBeTruthy();
     const link = screen.getByText("brainstorming").closest("a");
-    expect(link?.getAttribute("href")).toBe("/ingredient/" + encodeURIComponent("skill:superpowers/brainstorming"));
+    expect(link?.getAttribute("href")).toBe("/ingredients/" + encodeURIComponent("skill:superpowers/brainstorming"));
   });
 
   it("renders a live (ingredient-less) gem with NO Contains section", async () => {
