@@ -661,7 +661,7 @@ git commit -m "feat(aggregator): review detail/messages/archive (membership-gate
     | { ok: false; rejected: "not-found" | "not-a-member" | "self-approval" | "not-open" | "conflict" };
   export async function approveReviewRequest(db: AppDb, args: { accountId: string; requestId: string }, now?: number): Promise<ApproveResult>;
   ```
-- Guarantees: (a) approver must be a group member and NOT the author; (b) the `open → approved` transition is a conditional UPDATE so a double-approve loses as a no-op; (c) publishes via `upsertCatalogGem` (`publishedBy` = author login, `ownerAccountId` = author) + `upsertGemArchive`; (d) re-applies the AUTHOR's scope ownership (`accountOwnsScope`) AND the catalog owner-conflict guard, both BEFORE the claim so a rejection leaves the request `open`; (e) fetches archive bytes in a targeted query (loadForMember excludes them) then clears `archive_bytes` after publishing.
+- Guarantees: (a) approver must be a group member and NOT the author; (b) the `open → approved` transition is a conditional UPDATE so a double-approve loses as a no-op; (c) the claim + `upsertCatalogGem` (`publishedBy` = author login, `ownerAccountId` = author) + `upsertGemArchive` run in ONE `db.transaction` (D5) so a mid-publish failure rolls the claim back — never a catalog row without its archive; (d) re-applies the AUTHOR's scope ownership (`accountOwnsScope`, before the tx) AND the catalog owner-conflict guard (inside the tx) so a rejection leaves the request `open`; (e) fetches archive bytes in a targeted query (loadForMember excludes them) then clears `archive_bytes` after publishing.
 - Consumes additionally: `accountOwnsScope` + `gemScope` (already imported/defined in Task 2).
 
 - [ ] **Step 1: Write the failing test**
@@ -766,41 +766,46 @@ export async function approveReviewRequest(db: AppDb, args: { accountId: string;
   // so the submit-time check must not be trusted here.
   if (!(await accountOwnsScope(db, row.authorAccountId, gemScope(row.gemKey)))) return { ok: false, rejected: "not-scope-owner" };
 
-  // Re-apply the catalog owner-conflict guard AT APPROVAL (an intervening publish of the same
-  // key/version by another account must not be overwritten).
-  const existing = (await db.select({ ownerAccountId: catalogGems.ownerAccountId }).from(catalogGems)
-    .where(and(eq(catalogGems.gemKey, row.gemKey), eq(catalogGems.version, row.version))).limit(1))[0];
-  if (existing && existing.ownerAccountId !== row.authorAccountId) return { ok: false, rejected: "conflict" };
+  // The owner-conflict re-check + atomic claim + BOTH publish writes run in ONE transaction, so a
+  // mid-publish failure rolls the claim back — we never leave a catalog row without its archive, nor a
+  // claimed request with no publish (D5). upsertCatalogGem/upsertGemArchive accept the tx handle
+  // (PgTransaction is assignable to AppDb). A clean early return commits (only harmless reads / a
+  // 0-row update happened), so conflict/not-open still leave the request `open`.
+  return await db.transaction(async (tx): Promise<ApproveResult> => {
+    // Owner-conflict guard INSIDE the tx: an intervening publish of the same key/version by another
+    // account must not be overwritten, and the check must be consistent with our own write.
+    const existing = (await tx.select({ ownerAccountId: catalogGems.ownerAccountId }).from(catalogGems)
+      .where(and(eq(catalogGems.gemKey, row.gemKey), eq(catalogGems.version, row.version))).limit(1))[0];
+    if (existing && existing.ownerAccountId !== row.authorAccountId) return { ok: false, rejected: "conflict" };
 
-  // Fetch the archive bytes BEFORE the claim (which nulls the column). loadForMember excludes bytes
-  // for perf (D4), so this targeted read is where approval — the one path that needs them — gets them.
-  const bytesRow = (await db.select({ bytes: reviewRequests.archiveBytes }).from(reviewRequests)
-    .where(eq(reviewRequests.id, args.requestId)).limit(1))[0];
+    // Fetch bytes BEFORE the claim (which nulls the column); loadForMember excludes them for perf (D4).
+    const bytesRow = (await tx.select({ bytes: reviewRequests.archiveBytes }).from(reviewRequests)
+      .where(eq(reviewRequests.id, args.requestId)).limit(1))[0];
 
-  // Atomic claim of the transition: only the row still `open` flips. A concurrent approve/withdraw that
-  // already moved it updates 0 rows -> not-open (no double publish).
-  const claimed = await db.update(reviewRequests)
-    .set({ status: "approved", resolvedAtMs: now, archiveBytes: null })
-    .where(and(eq(reviewRequests.id, args.requestId), eq(reviewRequests.status, "open")))
-    .returning({ id: reviewRequests.id });
-  if (claimed.length === 0) return { ok: false, rejected: "not-open" };
+    // Atomic claim: only the row still `open` flips. A concurrent approve/withdraw updates 0 rows -> not-open.
+    const claimed = await tx.update(reviewRequests)
+      .set({ status: "approved", resolvedAtMs: now, archiveBytes: null })
+      .where(and(eq(reviewRequests.id, args.requestId), eq(reviewRequests.status, "open")))
+      .returning({ id: reviewRequests.id });
+    if (claimed.length === 0) return { ok: false, rejected: "not-open" };
 
-  // Publish through the normal functions. publishedBy/owner are the AUTHOR's, never the approver's.
-  const authorLogin = (await db.select({ login: accounts.login }).from(accounts).where(eq(accounts.id, row.authorAccountId)).limit(1))[0]?.login ?? row.authorAccountId;
-  const m = row.manifest as unknown as CatalogManifest;
-  await upsertCatalogGem(db, {
-    gemKey: row.gemKey, version: row.version, publishedBy: authorLogin, ownerAccountId: row.authorAccountId,
-    author: m.author, description: m.description ?? row.description ?? undefined, tags: m.tags,
-    artifactKinds: m.artifactKinds, type: m.type, grade: m.grade, artifacts: m.artifacts, createdAtMs: now,
+    // Publish through the normal functions. publishedBy/owner are the AUTHOR's, never the approver's.
+    const authorLogin = (await tx.select({ login: accounts.login }).from(accounts).where(eq(accounts.id, row.authorAccountId)).limit(1))[0]?.login ?? row.authorAccountId;
+    const m = row.manifest as unknown as CatalogManifest;
+    await upsertCatalogGem(tx, {
+      gemKey: row.gemKey, version: row.version, publishedBy: authorLogin, ownerAccountId: row.authorAccountId,
+      author: m.author, description: m.description ?? row.description ?? undefined, tags: m.tags,
+      artifactKinds: m.artifactKinds, type: m.type, grade: m.grade, artifacts: m.artifacts, createdAtMs: now,
+    });
+    if (bytesRow?.bytes != null) {
+      await upsertGemArchive(tx, { gemKey: row.gemKey, version: row.version, bytes: bytesRow.bytes, digest: row.archiveDigest, createdAtMs: now, ownerAccountId: row.authorAccountId });
+    }
+    return { ok: true, gemKey: row.gemKey, version: row.version };
   });
-  if (bytesRow?.bytes != null) {
-    await upsertGemArchive(db, { gemKey: row.gemKey, version: row.version, bytes: bytesRow.bytes, digest: row.archiveDigest, createdAtMs: now, ownerAccountId: row.authorAccountId });
-  }
-  return { ok: true, gemKey: row.gemKey, version: row.version };
 }
 ```
 
-Note: the scope re-check and owner-conflict guard both run BEFORE the atomic claim, so a rejection leaves the request `open` (rolled back). The archive bytes are read in their own query before the claim nulls the column, because `loadForMember` no longer carries them (D4).
+Note: the scope re-check runs before the transaction (a pure read, fails fast); the owner-conflict guard, the atomic claim, and both publish writes are inside `db.transaction`, so any failure among them rolls back the claim. `upsertCatalogGem`/`upsertGemArchive` are called with the `tx` handle so their writes join the same transaction. Passing a `PgTransaction` where the fns are typed `db: AppDb` type-checks because `PgTransaction` extends `PgDatabase`.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -1442,7 +1447,7 @@ Not in this plan. Plan 2 will: (a) add local backend signing routes that mirror 
 - Wiring the aggregator/controller tests into CI — the tests exist and run locally (`pnpm test`); moving `dist/__tests__` gating to include them is a separate CI change.
 
 **Failure modes (new codepaths):**
-- `approveReviewRequest` publish step throws mid-way (e.g. `upsertGemArchive` fails after `upsertCatalogGem`) → catalog row exists without archive (`installable:false`). Not transactional across the two upserts. Low likelihood (same-DB writes); a re-approve is blocked (`not-open`). **Captured as a TODO** (wrap the two publish upserts + the claim in one transaction) — see below.
+- `approveReviewRequest` publish step throws mid-way → **resolved (D5): the claim + both publish upserts run in one `db.transaction`**, so a failure rolls the claim back and never leaves a catalog row without its archive.
 - Author loses scope between submit and approve → approval returns `not-scope-owner`, request stays `open` (tested). Visible, not silent.
 - Departed-member cleanup runs inside `removeMemberGuarded` — if it throws, removal already returned "removed" before cleanup. Ordered so removal is the durable step; cleanup is idempotent and self-heals on a re-run.
 
@@ -1452,18 +1457,17 @@ No **critical gaps** (no failure that is silent AND untested AND unhandled).
 
 **Decisions folded in (all approved):** D2 scope-ownership guard (submit + approval), D3 manifest-digest match (submit + resubmit), D4 bytes-excluded `loadForMember`. Plus quality cleanups applied without a separate gate: `ReviewRequestDetail` as its own type, dead-line removal, terminal-comment allowed + tested, real-archive controller fixture (the original hand-rolled `[1,2,3]` bytes would have thrown in `importGem`).
 
-**One TODO surfaced (not yet folded — your call):** wrap approval's claim + two publish upserts in a single DB transaction so a mid-publish failure can't leave a catalog row without its archive. Small change; worth doing in Task 5. Say the word and I'll add it.
+**Transaction-wrap (D5): folded in.** Approval's owner-conflict check + claim + both publish upserts now run in one `db.transaction` (Task 5), so a mid-publish failure can't leave a catalog row without its archive.
 
 ## GSTACK REVIEW REPORT
 
 | Review | Trigger | Why | Runs | Status | Findings |
 |--------|---------|-----|------|--------|----------|
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | issues_found → folded | 7 findings; 3 decisions folded (D2/D3/D4) + 3 quality fixes; 0 critical gaps; 1 TODO open |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAR (folded) | 7 findings; 4 decisions folded (D2/D3/D4/D5) + 3 quality fixes; 0 critical gaps |
 | CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | n/a (backend-only) |
-| Outside Voice | `/plan-eng-review` | Independent 2nd opinion | 0 | not run | offered as next step |
+| Outside Voice | `/plan-eng-review` | Independent 2nd opinion | 0 | not run | user chose to implement |
 
-- **VERDICT:** ENG CLEARED — plan updated with all approved changes; ready to implement. Outside-voice pass not run (offered).
+- **VERDICT:** ENG CLEARED — plan updated with all approved changes (D2/D3/D4/D5 + quality fixes); ready to implement. Outside-voice pass skipped by user choice.
 
-**UNRESOLVED DECISIONS:**
-- Transaction-wrap approval's publish (claim + `upsertCatalogGem` + `upsertGemArchive`) — surfaced as a TODO, awaiting your yes/no before folding into Task 5.
+NO UNRESOLVED DECISIONS
