@@ -75,11 +75,31 @@ where it applies.
 
 ### A. The type (in `@agentgem/model`)
 
-Relocate the three **pure-data** rubric types — `RubricFactorRef`, `LlmCriterion`,
-`RubricScopeKind` / `RubricGranularity` — from `insight` into `model/types.ts`.
-`insight` re-imports them (it already depends on model). Only inert data moves;
-**all engine logic** (`validateRubric`, `loadRubrics`, `evaluateRubric`,
-`rubricGranularity`, `scopeAllowed`, …) stays in insight.
+Define the rubric payload shapes **directly in `model/types.ts`** — mirroring
+insight's shapes structurally rather than relocating them. `insight`'s
+`Rubric`, `RubricFactorRef`, and `LlmCriterion` stay exactly where they are; the
+adapters (§B) compile because the shapes are structurally identical (TypeScript
+structural typing).
+
+Rationale for mirroring over relocating: `LlmCriterion.severity` is typed
+`DetectorSeverity`, which is defined in **insight** (`detectors.ts:19`, `= "info"
+| "warn"`). Relocating `LlmCriterion` into model would drag `DetectorSeverity`
+(or force a re-import) backwards across the package boundary. Model instead
+inlines `severity?: "info" | "warn"` — zero coupling, same no-cycle outcome, and
+no edits to insight's engine files. The adapter round-trip test (§B / Task 3) is
+the drift guard: if the two shapes ever diverge, the adapters stop compiling.
+
+Add to `model/types.ts`:
+
+```ts
+export type RubricScopeKind = "session" | "project" | "all";
+export type RubricGranularity = "session" | "aggregate";
+export interface RubricFactorRef { factor: string; weight?: number }
+export interface LlmCriterion {
+  id: string; title: string; question: string;
+  severity?: "info" | "warn"; advice: string; granularity?: RubricGranularity;
+}
+```
 
 Then add the artifact:
 
