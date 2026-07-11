@@ -574,7 +574,13 @@ Add to `reviewStaging.ts`:
 
 ```ts
 export interface ReviewMessageRow { id: string; authorAccountId: string; authorLogin: string | null; body: string; createdAtMs: number }
-export interface ReviewRequestDetail extends ReviewRequestSummary { manifest: CatalogManifest; archiveDigest: string; messages: ReviewMessageRow[] }
+// Standalone (does NOT extend ReviewRequestSummary): detail has no groupName/unread/messageCount.
+export interface ReviewRequestDetail {
+  id: string; groupId: string; gemKey: string; version: string;
+  authorAccountId: string; authorLogin: string | null; status: ReviewStatus;
+  description: string | null; createdAtMs: number; resolvedAtMs: number | null;
+  manifest: CatalogManifest; archiveDigest: string; messages: ReviewMessageRow[];
+}
 export type MessageResult = { ok: true; messageId: string } | { ok: false; rejected: "not-found" | "not-a-member" };
 
 // Every request column EXCEPT archive_bytes. loadForMember uses this so the two hot read paths
