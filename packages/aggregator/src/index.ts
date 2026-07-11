@@ -35,6 +35,7 @@ export * from "./auth/connectStates.js";
 export * from "./auth/mintSession.js";
 export * from "./auth/mintCookie.js";
 export * from "./auth/migrateAccounts.js";
+export * from "./reviewStaging.js";
 // NOTE: ./auth/testCookie.js is intentionally NOT re-exported here — it's a test-only helper that
 // builds a throwaway better-auth instance with emailAndPassword enabled, and has no business in the
 // production import graph. Tests import it via the "@agentgem/aggregator/testing" subpath instead.
