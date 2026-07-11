@@ -6,6 +6,16 @@ import { setStudioChat, getStudioChat } from "../studioChatStore.js";
 import { IdentityProvider } from "../../../identity/IdentityProvider.js";
 import { playMiniappRoute } from "../../../api/routes.js";
 
+// A dropped EventSource ("connection lost", from studioStream.ts's own error listener) must be
+// reconciled via /state, not rendered as a failure — the turn keeps running server-side (Task 3).
+// Mocking the module lets us drive onFailed synchronously without a real EventSource in jsdom.
+vi.mock("../studioStream.js", () => ({
+  openStudioStream: vi.fn((_apiBase: string, _chatId: string, _message: string, h: { onFailed: (e: string) => void }) => {
+    h.onFailed("connection lost");
+    return () => {};
+  }),
+}));
+
 afterEach(() => { cleanup(); try { localStorage.clear(); } catch { /* ignore */ } vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 const codex = [{ id: "codex", name: "Codex", available: true }];
@@ -74,5 +84,40 @@ describe("Studio resume", () => {
     // sessionId kept (only chatId cleared) so history would still resolve on a later mount.
     expect(getStudioChat("demo2")?.sessionId).toBe("sess_2");
     expect(getStudioChat("demo2")?.chatId).toBe("");
+  });
+
+  it("reconciles via /state instead of failing when the stream reports a transient transport drop", async () => {
+    setStudioChat("demo3", { chatId: "chat_3", sessionId: "sess_3", agent: "codex" });
+    const fetchMock = vi.fn(async (url: string) => {
+      const path = new URL(url, "http://x").pathname;
+      if (path === "/api/inspect/session") {
+        return { ok: true, json: async () => ({ sessionId: "sess_3", agent: "codex", meta: {
+          agent: "codex", sessionId: "sess_3", project: null, model: null, gitBranch: null,
+          startMs: 0, endMs: 0, msgs: 0, tokensIn: 0, tokensOut: 0, tokensCache: 0,
+        }, turns: [] }) } as unknown as Response;
+      }
+      // Alive-but-idle at mount so chatId survives without the mount effect itself entering the poll path.
+      if (path === "/api/chat/chat_3/state") return { ok: true, json: async () => ({ alive: true, running: false }) } as unknown as Response;
+      return { ok: false, status: 404, json: async () => ({}) } as unknown as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    vi.spyOn(playMiniappRoute, "call").mockResolvedValue({
+      name: "demo3", html: "<p>x</p>",
+      meta: { title: "Demo3", genre: "project-fun", createdFrom: { kind: "project", path: "/p", flavor: "node" }, engineVersion: "1" },
+    } as never);
+
+    render(<IdentityProvider apiBase=""><Studio apiBase="" name="demo3" agents={codex} agentId="codex" onAgentIdChange={() => {}} onBack={() => {}} /></IdentityProvider>);
+
+    // chatId restored (alive) → Stop is already visible before any send.
+    const stopBtn = await screen.findByTitle("kill the agent session");
+    const sendBtn = screen.getByRole("button", { name: "Send" });
+    fireEvent.change(screen.getByPlaceholderText(/ask the agent/i), { target: { value: "keep going" } });
+    fireEvent.click(sendBtn);
+
+    // openStudioStream's mock synchronously fires onFailed("connection lost"); the fix must treat
+    // that like "already running" — reconcile via pollWhileRunning, not render a failed chip.
+    await screen.findByText(/resuming…/i);
+    expect(screen.queryByText(/failed: connection lost/i)).toBeNull();
+    expect(screen.getByTitle("kill the agent session")).toBe(stopBtn);
   });
 });
