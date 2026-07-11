@@ -34,7 +34,7 @@ export interface GuardrailPreview {
   malformed: boolean;
   seed: string;
 }
-export const previewGuardrail = (b: string, key: string): Promise<GuardrailPreview> =>
-  post(b, "guardrail/preview", { key });
+export const previewGuardrail = (b: string, key: string, target?: "claude" | "agents"): Promise<GuardrailPreview> =>
+  post(b, "guardrail/preview", { key, target });
 export const applyGuardrail = (b: string, key: string, expectHash: string, directive: string, target: "claude" | "agents") =>
   post(b, "queue/accept", { key, expectHash, directive, target });

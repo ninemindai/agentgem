@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 // src/dream/__tests__/acceptGuardrail.test.ts
 import { describe, it, expect, beforeEach } from "vitest";
+import { createHash } from "node:crypto";
 import { mkdtempSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -87,5 +88,24 @@ describe("accept guardrail", () => {
       c.accept({ body: { key, expectHash: pre.hash, target: "claude", directive: "- x." } }),
     ).rejects.toThrow(/malformed/i);
     expect((await c.queue()).items[0].status).toBe("queued");
+  });
+
+  it("previews and applies against AGENTS.md — not CLAUDE.md — when both files exist and target=agents is requested", async () => {
+    const agentsContent = "agents base\n";
+    writeFileSync(join(base, "AGENTS.md"), agentsContent, "utf8"); // CLAUDE.md already exists from beforeEach → ambiguous
+    const key = `guardrail:${base}:repeated-tool-error:abc`;
+    enqueueNew([guardrailEntry(base)], base);
+    const c = ctl(base);
+
+    const pre = await c.previewGuardrail({ body: { key, target: "agents" } });
+    expect(pre.target).toBe("agents");
+    expect(pre.ambiguous).toBe(true);
+    expect(pre.hash).toBe(createHash("sha256").update(agentsContent).digest("hex")); // AGENTS.md's hash, not CLAUDE.md's
+    expect(pre.hash).not.toBe(createHash("sha256").update(readFileSync(join(base, "CLAUDE.md"), "utf8")).digest("hex"));
+
+    const res = await c.accept({ body: { key, expectHash: pre.hash, target: "agents", directive: "- rule" } });
+    expect(res.ok).toBe(true);
+    expect(readFileSync(join(base, "AGENTS.md"), "utf8")).toContain("- rule");
+    expect(readFileSync(join(base, "CLAUDE.md"), "utf8")).toBe("base\n"); // untouched
   });
 });
