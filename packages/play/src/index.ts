@@ -11,6 +11,7 @@ export { mcpAppClient, MCP_CLIENT_MARKER } from "./mcpAppClient.js";
 export { hostStyleScript, MCP_UI_STYLE_KEYS } from "./hostStyles.js";
 export { migrateMiniappHtml, ensureClientShim, type MigrateOutcome } from "./migrate.js";
 export { studioCwd, studioBrief, seedStudio, importStudio, blankStudio, slugify } from "./studio.js";
+export { readMiniappShare, writeMiniappShare, clearMiniappShare, type MiniappShare } from "./miniappShare.js";
 export { MINIAPP_BUILDER_BRIEF } from "./builderBrief.js";
 export { redactForBake } from "./redact.js";
 export { assertPortable, type PortabilityResult } from "./portability.js";
