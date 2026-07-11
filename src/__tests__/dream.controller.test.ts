@@ -95,6 +95,20 @@ describe("DreamController", () => {
     await expect(c.accept({ body: { key: "lesson:/p:todo:h" } })).rejects.toThrow();
   });
 
+  it("rejects accepting a guardrail (Task 5 implements the real write)", async () => {
+    const e: DreamQueueEntry = { key: "guardrail:/p:repeated-tool-error:h", kind: "guardrail", root: "/p",
+      name: "repeated-tool-error-h", summary: "Bash errored 2x", confidence: "medium", phase: "DEEP",
+      draft: { detectorId: "repeated-tool-error", tool: "Bash", detail: "Bash errored 2x", confidence: "medium",
+        occurrences: 2, provenance: prov } as DreamQueueEntry["draft"],
+      status: "queued", firstSeenMs: 1 };
+    enqueueNew([e], base);
+    const c = new DreamController();
+    (c as unknown as { base: string }).base = base;
+    await expect(c.accept({ body: { key: "guardrail:/p:repeated-tool-error:h" } })).rejects.toThrow(/Task 5/);
+    // Never silently routed through the lesson branch — status must remain queued.
+    expect((await c.queue()).items[0].status).toBe("queued");
+  });
+
   it("returns diary entries newest-first", async () => {
     appendDiary({ atMs: 1, passId: 1, rootsProcessed: ["/p"], phasesLit: ["DEEP"], enqueued: { skills: 2, lessons: 1 }, degraded: false }, base);
     appendDiary({ atMs: 2, passId: 2, rootsProcessed: ["/q"], phasesLit: ["LIGHT"], enqueued: { skills: 0, lessons: 0 }, degraded: true }, base);

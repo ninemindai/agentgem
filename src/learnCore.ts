@@ -13,17 +13,18 @@ import { basename } from "node:path";
 import { introspectConfig, introspectProject } from "@agentgem/capture";
 import { resolveDirs, resolveProject, InvalidInputError } from "@agentgem/model";
 import {
-  claudeTranscriptsForCwd, scanWorkflow, distillWorkflow, extractReflections,
+  claudeTranscriptsForCwd, scanWorkflow, distillWorkflow, extractReflections, detectorGuardrails,
 } from "@agentgem/insight";
-import { harvestEntries } from "./dream/harvest.js";
+import { harvestEntries, guardrailEntries } from "./dream/harvest.js";
 import { enqueueNew } from "./dream/store.js";
 
 export interface LearnResult {
   session: string;   // basename of the distilled transcript
   enqueued: number;  // entries actually added (post-dedup)
-  entries: Array<{ kind: "skill" | "lesson"; name: string }>; // what was actually added (post-dedup)
+  entries: Array<{ kind: "skill" | "lesson" | "guardrail"; name: string }>; // what was actually added (post-dedup)
   skills: number;    // candidate skills found (pre-dedup)
   lessons: number;   // candidate lessons found (pre-dedup, post reflectionToLesson filter)
+  guardrails: number; // candidate guardrails found (pre-dedup)
   degraded: boolean; // LLM path unavailable → heuristic-only
 }
 
@@ -34,6 +35,7 @@ export async function learnFromSession(opts: {
   now?: () => number;
   distillWf?: typeof distillWorkflow;
   extractRefl?: typeof extractReflections;
+  detectGuardrails?: typeof detectorGuardrails;
   base?: string;
 }): Promise<LearnResult> {
   const dirs = resolveDirs(opts.dir);
@@ -59,15 +61,20 @@ export async function learnFromSession(opts: {
   const signal = scanWorkflow([target], scanInv, { retainSequences: true });
   const wf = await (opts.distillWf ?? distillWorkflow)(signal, scanInv);
   const reflections = (opts.extractRefl ?? extractReflections)(signal);
+  const guardrails = (opts.detectGuardrails ?? detectorGuardrails)(signal);
 
-  const entries = harvestEntries(root, wf.distilled, reflections, (opts.now ?? Date.now)(), "LEARN");
+  const entries = [
+    ...harvestEntries(root, wf.distilled, reflections, (opts.now ?? Date.now)(), "LEARN"),
+    ...guardrailEntries(root, guardrails, (opts.now ?? Date.now)(), "LEARN"),
+  ];
   const added = enqueueNew(entries, opts.base);
   return {
     session: basename(target),
     enqueued: added.length,
-    entries: added.map((e) => ({ kind: e.kind as "skill" | "lesson", name: e.name })),
+    entries: added.map((e) => ({ kind: e.kind as "skill" | "lesson" | "guardrail", name: e.name })),
     skills: wf.distilled.length,
     lessons: entries.filter((e) => e.kind === "lesson").length,
+    guardrails: guardrails.length,
     degraded: wf.degraded,
   };
 }

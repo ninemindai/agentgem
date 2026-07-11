@@ -31,13 +31,13 @@ export async function runLearnCommand(args: string[], deps: LearnCliDeps = {}): 
 
   try {
     const r = await learn({ root, session: flagValue("--session"), dir: flagValue("--dir") });
-    if (r.enqueued === 0 && r.skills === 0 && r.lessons === 0) {
+    if (r.enqueued === 0 && r.skills === 0 && r.lessons === 0 && r.guardrails === 0) {
       out(`nothing distilled from ${r.session}${r.degraded ? " (heuristic-only: LLM path unavailable)" : ""}`);
       return 0;
     }
     for (const e of r.entries) out(`+ ${e.kind} "${e.name}" queued`);
-    out(`${r.session}: ${r.skills} skill candidate(s), ${r.lessons} lesson(s) — ${r.enqueued} queued for review` +
-        (r.enqueued > 0 && r.enqueued < r.skills + r.lessons ? " (rest already queued or reviewed)" : ""));
+    out(`${r.session}: ${r.skills} skill candidate(s), ${r.lessons} lesson(s), ${r.guardrails} guardrail(s) — ${r.enqueued} queued for review` +
+        (r.enqueued > 0 && r.enqueued < r.skills + r.lessons + r.guardrails ? " (rest already queued or reviewed)" : ""));
     out(`review in the Dreaming panel or GET /api/dream/queue`);
     return 0;
   } catch (e) {

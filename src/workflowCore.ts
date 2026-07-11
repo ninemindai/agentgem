@@ -9,14 +9,19 @@ import { resolveDirs, resolveProject } from "@agentgem/model";
 import {
   claudeTranscriptsForCwd, scanWorkflow,
   recommendWorkflow, recommendationToSelection, distillWorkflow,
-  extractReflections, writeReflections,
+  extractReflections, writeReflections, detectorGuardrails,
   transcriptToken, readAnalysisCacheEntry, writeAnalysisCache,
 } from "@agentgem/insight";
+import type { GuardrailDraft } from "@agentgem/insight";
 
 export interface WorkflowAnalysisPayload {
   candidates: unknown[]; gaps: string[]; distilled: unknown; reflections: unknown[];
   signalSummary: { sessionsScanned: number; spanDays: number; notes: unknown };
   degraded: boolean;
+  // Populated only on a real (non-cacheOnly) scan, where `signal` (with retained
+  // sequences) is available — the dream harvest reads it back from the cached
+  // payload instead of re-scanning transcripts itself.
+  guardrails?: GuardrailDraft[];
 }
 export interface WorkflowAnalysisResult { payload: WorkflowAnalysisPayload; cached: boolean; updatedAt: number | null }
 
@@ -64,8 +69,9 @@ export async function computeWorkflowAnalysis(
   const gaps = [...analysis.gaps, ...reflections.filter((r) => r.importance === "high").map((r) => r.detail)];
   const candidates = analysis.candidates.map((c) => ({ ...c, selection: recommendationToSelection(c) }));
   const anyDegraded = degraded || distill.degraded;
+  const guardrails = detectorGuardrails(signal);
   const payload: WorkflowAnalysisPayload = {
-    candidates, gaps, distilled: distill.distilled, reflections,
+    candidates, gaps, distilled: distill.distilled, reflections, guardrails,
     signalSummary: { sessionsScanned: signal.sessions.scanned, spanDays: signal.sessions.spanDays, notes: signal.notes },
     degraded: anyDegraded,
   };

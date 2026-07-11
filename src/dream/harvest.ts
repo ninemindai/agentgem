@@ -10,7 +10,7 @@
 // distillation pipeline.
 import { createHash } from "node:crypto";
 import { reflectionToLesson } from "@agentgem/insight";
-import type { DistilledSkill, Reflection, Provenance, PublishCandidate } from "@agentgem/insight";
+import type { DistilledSkill, Reflection, Provenance, PublishCandidate, GuardrailDraft } from "@agentgem/insight";
 import type { DreamQueueEntry } from "./types.js";
 
 export function provenanceHash(p: Provenance): string {
@@ -50,4 +50,17 @@ export function opportunityEntries(root: string, candidates: PublishCandidate[],
     key: `opportunity:${root}:${c.sessionId}`, kind: "opportunity" as const, root, name: c.sessionId,
     summary: c.goal, phase: "REM" as const, draft: c, status: "queued" as const, firstSeenMs: nowMs,
   }));
+}
+// guardrail = a repeated-tool-error/tool-rejection DetectorFinding turned into a draft
+// destined for a managed-region write (Task 5 implements accept). Keyed on detectorId +
+// provenanceHash so re-detecting the same evidence dedupes, mirroring skill/lesson.
+export function guardrailEntries(root: string, guardrails: GuardrailDraft[], nowMs: number, phase: "DEEP" | "LEARN" = "DEEP"): DreamQueueEntry[] {
+  return guardrails.map((g) => {
+    const h = provenanceHash(g.provenance);
+    return {
+      key: `guardrail:${root}:${g.detectorId}:${h}`, kind: "guardrail" as const, root,
+      name: `${g.detectorId}-${h}`, summary: g.detail, confidence: g.confidence,
+      phase, draft: g, status: "queued" as const, firstSeenMs: nowMs,
+    };
+  });
 }

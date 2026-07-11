@@ -48,9 +48,23 @@ describe("dreamRoot", () => {
     expect(opp?.key).toBe("opportunity:/p:sess-1");
     expect(opp?.phase).toBe("REM");
     const d = readDiary(base);
-    expect(d[0].enqueued).toEqual({ skills: 1, lessons: 1, opportunities: 1 });
+    expect(d[0].enqueued).toEqual({ skills: 1, lessons: 1, opportunities: 1, guardrails: 0 });
     expect(d[0].phasesLit).toEqual(["DEEP", "REM"]);
     expect(d[0].rootsProcessed).toEqual(["/p"]);
+  });
+
+  it("enqueues a guardrail drawn from the analyze payload's GuardrailDraft[]", async () => {
+    const guardrail = { detectorId: "repeated-tool-error", tool: "Bash", detail: "Bash errored 2x",
+      confidence: "medium" as const, occurrences: 2, provenance: prov };
+    expect(await dreamRoot("/p", deps({
+      analyze: async () => ({ payload: { ...analyzePayload, guardrails: [guardrail] }, cached: true, updatedAt: 1 }),
+    }))).toBe("warmed");
+    const q = readQueue(base);
+    const g = q.find((e) => e.kind === "guardrail");
+    expect(g?.key.startsWith("guardrail:/p:repeated-tool-error:")).toBe(true);
+    expect(g?.summary).toBe("Bash errored 2x");
+    const d = readDiary(base);
+    expect(d[0].enqueued.guardrails).toBe(1);
   });
 
   it("requests cache-only reads so the harvest never triggers a real pass", async () => {

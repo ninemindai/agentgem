@@ -28,7 +28,7 @@ const StatusSchema = z.object({
 });
 const QueueItemSchema = z.object({
   key: z.string(),
-  kind: z.enum(["skill", "lesson", "opportunity"]),
+  kind: z.enum(["skill", "lesson", "opportunity", "guardrail"]),
   root: z.string(),
   name: z.string(),
   summary: z.string(),
@@ -38,7 +38,8 @@ const QueueItemSchema = z.object({
   status: z.enum(["queued", "accepted", "dismissed"]),
   firstSeenMs: z.number(),
   reviewedMs: z.number().optional(),
-  draft: z.unknown(), // opaque body (DistilledSkill | Reflection) — not re-validated here
+  target: z.enum(["claude", "agents"]).optional(),
+  draft: z.unknown(), // opaque body (DistilledSkill | Reflection | GuardrailDraft) — not re-validated here
 });
 const QueueSchema = z.object({ items: z.array(QueueItemSchema) });
 const OkPathSchema = z.object({ ok: z.boolean(), path: z.string() });
@@ -49,17 +50,17 @@ const DiaryEntrySchema = z.object({
   passId: z.number(),
   rootsProcessed: z.array(z.string()),
   phasesLit: z.array(z.enum(["LIGHT", "DEEP", "REM"])),
-  enqueued: z.object({ skills: z.number(), lessons: z.number(), opportunities: z.number().optional() }),
+  enqueued: z.object({ skills: z.number(), lessons: z.number(), opportunities: z.number().optional(), guardrails: z.number().optional() }),
   degraded: z.boolean(),
 });
 const DiarySchema = z.object({ entries: z.array(DiaryEntrySchema) });
 const JourneyQuerySchema = z.object({
-  kind: z.enum(["skill", "lesson", "opportunity", "pass", "verified"]).optional(),
+  kind: z.enum(["skill", "lesson", "opportunity", "guardrail", "pass", "verified"]).optional(),
   limit: z.coerce.number().int().positive().max(500).optional(),
 });
 const JourneyEventSchema = z.object({
   ts: z.number(),
-  kind: z.enum(["skill", "lesson", "opportunity", "pass", "verified"]),
+  kind: z.enum(["skill", "lesson", "opportunity", "guardrail", "pass", "verified"]),
   title: z.string(),
   detail: z.string().optional(),
   status: z.enum(["queued", "accepted", "dismissed"]).optional(),
@@ -79,9 +80,10 @@ const LearnBody = z.object({
 const LearnResultSchema = z.object({
   session: z.string(),
   enqueued: z.number(),
-  entries: z.array(z.object({ kind: z.enum(["skill", "lesson"]), name: z.string() })),
+  entries: z.array(z.object({ kind: z.enum(["skill", "lesson", "guardrail"]), name: z.string() })),
   skills: z.number(),
   lessons: z.number(),
+  guardrails: z.number(),
   degraded: z.boolean(),
 });
 
@@ -131,6 +133,11 @@ export class DreamController {
   async accept(input: { body: z.infer<typeof KeyBody> }): Promise<z.infer<typeof OkPathSchema>> {
     const entry = readQueue(this.base).find((e) => e.key === input.body.key);
     if (!entry) throw new InvalidInputError(`No queued draft '${input.body.key}'.`);
+    // A GuardrailDraft is not a Reflection — letting it fall through to the lesson
+    // branch below would misroute it. Stub until Task 5 lands the managed-region writer.
+    if (entry.kind === "guardrail") {
+      throw new InvalidInputError("guardrail apply is implemented in Task 5");
+    }
     // Opportunities (REM publish-candidates) write no file — accepting is an
     // acknowledgement; the panel routes to the Curate/publish flow for the session.
     if (entry.kind === "opportunity") {

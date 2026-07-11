@@ -11,7 +11,7 @@ import { readQueue, readDiary } from "./dream/store.js";
 
 export interface JourneyEvent {
   ts: number;                                   // epoch ms, sort key (newest first)
-  kind: "skill" | "lesson" | "opportunity" | "pass" | "verified";
+  kind: "skill" | "lesson" | "opportunity" | "guardrail" | "pass" | "verified";
   title: string;
   detail?: string;
   status?: "queued" | "accepted" | "dismissed"; // queue-backed events only
@@ -45,7 +45,7 @@ export function buildJourney(opts: {
   for (const d of readDiary(opts.base)) {
     events.push({
       ts: d.atMs, kind: "pass", title: `dream pass #${d.passId}`,
-      detail: `${d.phasesLit.join("+") || "no phases"} · +${d.enqueued.skills} skills · +${d.enqueued.lessons} lessons · +${d.enqueued.opportunities ?? 0} opportunities${d.degraded ? " · degraded" : ""}`,
+      detail: `${d.phasesLit.join("+") || "no phases"} · +${d.enqueued.skills} skills · +${d.enqueued.lessons} lessons · +${d.enqueued.opportunities ?? 0} opportunities · +${d.enqueued.guardrails ?? 0} guardrails${d.degraded ? " · degraded" : ""}`,
       root: d.rootsProcessed.length === 1 ? d.rootsProcessed[0] : undefined,
     });
   }

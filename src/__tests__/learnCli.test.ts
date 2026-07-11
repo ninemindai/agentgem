@@ -8,7 +8,7 @@ const result = (over: Partial<LearnResult> = {}): LearnResult =>
   ({
     session: "s1.jsonl", enqueued: 2,
     entries: [{ kind: "skill", name: "extract-api-client" }, { kind: "skill", name: "b" }],
-    skills: 2, lessons: 0, degraded: false, ...over,
+    skills: 2, lessons: 0, guardrails: 0, degraded: false, ...over,
   });
 
 describe("agentgem learn", () => {
