@@ -89,8 +89,13 @@ export async function listInbox(db: AppDb, accountId: string): Promise<ReviewReq
   }));
 }
 
-/** Marks `requestId` as seen by `accountId` at `now`, upserting the review_seen marker. */
+/** Marks `requestId` as seen by `accountId` at `now`, upserting the review_seen marker.
+ *  Gate: only a member of the request's group may mark it seen. A nonexistent request or a
+ *  non-member is a silent no-op — this avoids an FK crash AND closes the enumeration oracle
+ *  (get/seen behave identically for "foreign-group request" and "never existed"). */
 export async function markSeen(db: AppDb, accountId: string, requestId: string, now: number = Date.now()): Promise<void> {
+  const gate = await loadForMember(db, accountId, requestId);
+  if (gate.kind !== "ok") return;
   await db.insert(reviewSeen).values({ accountId, requestId, lastSeenAtMs: now })
     .onConflictDoUpdate({ target: [reviewSeen.accountId, reviewSeen.requestId], set: { lastSeenAtMs: now } });
 }
