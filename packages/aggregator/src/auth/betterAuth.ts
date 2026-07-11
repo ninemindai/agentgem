@@ -106,6 +106,15 @@ export function makeAuth(opts: {
         update: { after: async (a) => anchorAndScopes(opts.db, a, false) },
       },
     },
+    // Task 3 (Flow A) — enable better-auth's native `linkSocial` so a signed-in user can connect a
+    // provider they've never separately used. github/google are trusted (same first-party OAuth
+    // apps already used for primary sign-in, per socialProviders above) and allowDifferentEmails is
+    // required because the whole point of Flow A is linking a provider whose email may not match the
+    // caller's primary email. The anchor stays per-user/idempotent (Task 1) — a linked provider adds
+    // only an `account` row, never a second `accounts` anchor.
+    account: {
+      accountLinking: { enabled: true, trustedProviders: ["github", "google"], allowDifferentEmails: true },
+    },
   };
   return betterAuth(config);
 }

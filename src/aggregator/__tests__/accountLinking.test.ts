@@ -141,3 +141,17 @@ describe("linked-provider regression: a Google-primary account whose desktop bin
     expect(p!.verified).toBe(true); // was false via the legacy accounts.provider join
   });
 });
+
+describe("connectedProviders (Flow A: list every provider linked to an account)", () => {
+  it("connectedProviders lists every provider linked to the account, sorted", async () => {
+    const db = await makeTestDb();
+    const auth = makeAuth({ db, ...opts, googleClientId: "g", googleClientSecret: "g" });
+    const ctx = await auth.$context;
+    const u = await ctx.internalAdapter.createUser({ email: "u@x.com", name: "U", emailVerified: false } as never);
+    await db.execute(sql`insert into account (id, user_id, account_id, provider_id, created_at, updated_at) values
+      (gen_random_uuid()::text, ${u.id}, 'gh', 'github', now(), now()),
+      (gen_random_uuid()::text, ${u.id}, 'go', 'google', now(), now())`);
+    const { connectedProviders } = await import("@agentgem/aggregator");
+    expect(await connectedProviders(db, u.id)).toEqual(["github", "google"]);
+  });
+});

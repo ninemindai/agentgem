@@ -96,3 +96,14 @@ export async function accountIdForProvider(db: AppDb, providerId: string, provid
     select id as user_id from accounts where provider = ${providerId} and provider_account_id = ${providerAccountId} limit 1`)).rows;
   return (viaAnchor?.[0] as { user_id?: string } | undefined)?.user_id ?? null;
 }
+
+/**
+ * Task 3 (Flow A): every provider id linked to `accountId` (better-auth's `user.id`, same value as
+ * the `accounts` anchor's `id` — see anchorAndScopes), sorted. Reads `account` directly rather than
+ * the legacy anchor because the anchor stamps only the PRIMARY provider (Task 1); a natively-linked
+ * second provider (`account.accountLinking`, this file's makeAuth config) lives only here.
+ */
+export async function connectedProviders(db: AppDb, accountId: string): Promise<string[]> {
+  const rows = (await db.execute(sql`select distinct provider_id from account where user_id = ${accountId} order by provider_id`)).rows ?? [];
+  return rows.map((r: unknown) => (r as { provider_id: string }).provider_id);
+}
