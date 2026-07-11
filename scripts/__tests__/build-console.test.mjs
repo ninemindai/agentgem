@@ -10,4 +10,6 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 execFileSync("pnpm", ["build"], { cwd: root, stdio: "inherit" });
 assert.ok(existsSync(join(root, "dist", "public", "console", "index.html")),
   "dist/public/console/index.html must exist after pnpm build");
+assert.ok(existsSync(join(root, "dist", "public", "console", "manifest.webmanifest")),
+  "dist/public/console/manifest.webmanifest must exist after pnpm build");
 console.log("[build-console.test] OK — console SPA present in dist/public/console");
