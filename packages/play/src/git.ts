@@ -58,7 +58,11 @@ export function commitWithLock(dir: string, message: string): Promise<string | n
   const prev = commitChains.get(dir) ?? Promise.resolve();
   const next = prev.catch(() => {}).then(() => commitAll(dir, message));
   // Store a swallowed tail so one rejection never wedges the chain for later commits.
-  commitChains.set(dir, next.catch(() => {}));
+  const tail = next.catch(() => {});
+  commitChains.set(dir, tail);
+  // Drop the entry once this tail drains, unless a newer commit has chained on (which replaces the
+  // map entry). Otherwise the map keeps one permanent Promise per unique dir for the process lifetime.
+  void tail.finally(() => { if (commitChains.get(dir) === tail) commitChains.delete(dir); });
   return next;
 }
 

@@ -241,11 +241,18 @@ const CWD_RE = /"cwd":"((?:[^"\\]|\\.)*)"/;
 // A session file's cwd never changes, so memoize the expensive head-read+parse by
 // path. Recency (statSync) stays live and uncached. Bounded by sessions on disk.
 const cwdByFile = new Map<string, string | null>();
+const CWD_CACHE_MAX = 5000;
 function cachedCwd(file: string, extract: (file: string) => string | null): string | null {
   const hit = cwdByFile.get(file);
   if (hit !== undefined) return hit;
   const cwd = extract(file);
   cwdByFile.set(file, cwd);
+  // Bound the cache: on a machine with years of session files this map would otherwise grow one
+  // permanent entry per path ever read. Evict the oldest once over the cap (insertion order).
+  if (cwdByFile.size > CWD_CACHE_MAX) {
+    const oldest = cwdByFile.keys().next().value;
+    if (oldest !== undefined) cwdByFile.delete(oldest);
+  }
   return cwd;
 }
 
