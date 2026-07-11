@@ -3,7 +3,7 @@
 // src/gem/types.ts
 import type { LoopSpec } from "./loop.js";
 
-export type ArtifactType = "skill" | "mcp_server" | "instructions" | "hook" | "channel" | "subagent" | "game";
+export type ArtifactType = "skill" | "mcp_server" | "instructions" | "hook" | "channel" | "subagent" | "game" | "rubric";
 
 export interface SecretRef {
   name: string;     // leaf key, e.g. "OPENAI_API_KEY"
@@ -142,7 +142,29 @@ export interface ReferenceArtifact {
   ref: ArtifactRef;
 }
 
-export type GemArtifact = SkillArtifact | McpServerArtifact | InstructionsArtifact | HookArtifact | ChannelArtifact | SubagentArtifact | GameArtifact | ReferenceArtifact;
+// ── Rubric payload (mirrors @agentgem/insight's Rubric shapes structurally; adapters bridge them) ──
+export type RubricScopeKind = "session" | "project" | "all";
+export type RubricGranularity = "session" | "aggregate";
+export interface RubricFactorRef { factor: string; weight?: number }
+export interface LlmCriterion {
+  id: string;
+  title: string;
+  question: string;
+  severity?: "info" | "warn";
+  advice: string;
+  granularity?: RubricGranularity;
+}
+export interface RubricArtifact {
+  type: "rubric";
+  name: string;               // kebab identity — equals the engine's Rubric.id
+  title: string;              // display title
+  target: string;
+  naturalScope?: RubricScopeKind;
+  factors: RubricFactorRef[];
+  criteria?: LlmCriterion[];
+}
+
+export type GemArtifact = SkillArtifact | McpServerArtifact | InstructionsArtifact | HookArtifact | ChannelArtifact | SubagentArtifact | GameArtifact | ReferenceArtifact | RubricArtifact;
 
 export interface ProjectInventory {
   root: string;
