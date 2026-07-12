@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { pinGame, unpinGame, listPinned, isPinned, PINNED_CACHE } from "./offline";
+import { pinGame, unpinGame, listPinned, isPinned, storageEstimate, PINNED_CACHE } from "./offline";
 import { gameHtmlUrl } from "./api";
 
 // Minimal in-memory Cache Storage mock (only the methods offline.ts uses).
@@ -56,5 +56,36 @@ describe("offline pin store", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("nope", { status: 404 })));
     await expect(pinGame(BASE, "@acme/x", "1.0.0", "X")).rejects.toThrow();
     expect(listPinned()).toHaveLength(0);
+  });
+
+  it("rolls back the cache entry when the index write fails (localStorage quota)", async () => {
+    const store = installCachesMock();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ html: "<b>x</b>" }))));
+    const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("QuotaExceededError");
+    });
+
+    try {
+      await expect(pinGame(BASE, "@acme/tetris", "1.0.0", "Tetris")).rejects.toThrow();
+    } finally {
+      setItem.mockRestore();
+    }
+
+    expect(store.get(PINNED_CACHE)!.has(gameHtmlUrl(BASE, "@acme/tetris", "1.0.0"))).toBe(false);
+    expect(listPinned()).toHaveLength(0);
+  });
+});
+
+describe("storageEstimate", () => {
+  beforeEach(() => { vi.unstubAllGlobals(); });
+
+  it("returns usage/quota from navigator.storage.estimate", async () => {
+    vi.stubGlobal("navigator", { storage: { estimate: vi.fn(async () => ({ usage: 42, quota: 100 })) } });
+    await expect(storageEstimate()).resolves.toEqual({ usage: 42, quota: 100 });
+  });
+
+  it("returns null when navigator.storage is unavailable", async () => {
+    vi.stubGlobal("navigator", {});
+    await expect(storageEstimate()).resolves.toBeNull();
   });
 });
