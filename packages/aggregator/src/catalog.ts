@@ -243,14 +243,16 @@ export async function recordCatalogShare(db: AppDb, req: ShareRequest, now: numb
   // key/version and overwrite their catalog row + archive bytes). Mirrors deleteCatalogGem's check.
   // Note: this fully closes the deliberate overwrite of an existing gem; a dead-heat first-publish of
   // the same brand-new key by two different accounts is a benign namespace race, not a takeover.
-  const existing = (await db.select({ ownerAccountId: catalogGems.ownerAccountId }).from(catalogGems)
+  const existing = (await db.select({ ownerAccountId: catalogGems.ownerAccountId, visibility: catalogGems.visibility }).from(catalogGems)
     .where(and(eq(catalogGems.gemKey, m.gemKey), eq(catalogGems.version, m.version))).limit(1))[0];
   if (existing && existing.ownerAccountId !== who.accountId) return { shared: false, rejected: "conflict" };
   await upsertCatalogGem(db, {
     gemKey: m.gemKey, version: m.version, publishedBy: who.login, ownerAccountId: who.accountId,
     author: m.author, description: m.description, tags: m.tags, artifactKinds: m.artifactKinds,
     type: m.type, grade: clampGrade(m.grade), artifacts: m.artifacts, createdAtMs: now,
-    visibility: m.visibility ?? "public",
+    // A republish that omits visibility must not silently downgrade an existing private/unlisted
+    // row back to public — preserve the prior scope; only a brand-new row defaults to public.
+    visibility: m.visibility ?? (existing?.visibility as Visibility | undefined) ?? "public",
   });
   return { shared: true, publishedBy: who.login, gemKey: m.gemKey, version: m.version };
 }
