@@ -7,6 +7,7 @@ import { Router } from "./Router";
 import { navigate } from "./nav";
 import { IconMiniapps, IconIngredients, IconGems, IconSources, IconPublish, IconMyApps, IconOffline } from "./icons";
 import { PwaUpdatePrompt } from "./PwaUpdatePrompt";
+import { useOnline } from "./useOnline";
 
 const api = makeApi(defaultApiBase());
 const auth = makeAuth(defaultApiBase());
@@ -18,6 +19,7 @@ export function App() {
   const [me, setMe] = useState<Me | null>(null);
   const [theme, setTheme] = useState(() => (document.documentElement.dataset.theme === "dark" ? "dark" : "light"));
   const [signInError, setSignInError] = useState<string | null>(null);
+  const online = useOnline();
 
   useEffect(() => {
     let alive = true;
@@ -62,6 +64,7 @@ export function App() {
   return (
     <div className="ex-app">
       <PwaUpdatePrompt />
+      {!online && <p className="ex-offline-banner" role="status">You're offline — only downloaded and recently-played games are available.</p>}
       <header className="ex-header">
         <a href="/" className="ex-brand">AgentGem</a>
         <nav className="ex-nav">

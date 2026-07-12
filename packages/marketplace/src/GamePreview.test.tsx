@@ -47,6 +47,16 @@ describe("GamePreview play counting", () => {
   });
 });
 
+describe("GamePreview offline", () => {
+  it("shows 'Not available offline' when the html fetch fails while offline", async () => {
+    Object.defineProperty(navigator, "onLine", { value: false, configurable: true });
+    const offlineApi = { getGameHtml: vi.fn(async () => { throw new Error("offline"); }), recordPlay: vi.fn() } as unknown as Api;
+    render(<GamePreview api={offlineApi} gemKey="@a/t" version="1.0.0" />);
+    expect(await screen.findByText("Not available offline")).toBeTruthy();
+    Object.defineProperty(navigator, "onLine", { value: true, configurable: true });
+  });
+});
+
 describe("GamePreview navigation", () => {
   // The arcade grid wants a copyable URL (onPlay); the gem-detail page wants the existing
   // in-place fullscreen portal (no onPlay). Both must keep counting the play either way.
