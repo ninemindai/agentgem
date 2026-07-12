@@ -10,6 +10,7 @@ export interface GemSelection {
   includeInstructions?: boolean;   // back-compat: all instructions
   instructions?: string[];         // the specific instructions selected
   hooks?: string[];
+  rubrics?: string[];
 }
 
 /** Map a recommendation artifact `type` to the Ledger group key. */
@@ -19,6 +20,7 @@ const GROUP_OF: Record<string, string> = {
   mcp_server: "mcpServers",
   instructions: "instructions",
   hook: "hooks",
+  rubric: "rubrics",
 };
 
 /** Selection keys for an analyze recommendation's `include` list (channels skipped). */
@@ -52,5 +54,6 @@ export function buildSelection(keys: Set<string>): GemSelection {
   if (byGroup.mcpServers?.length) sel.mcpServers = byGroup.mcpServers;
   if (byGroup.hooks?.length) sel.hooks = byGroup.hooks;
   if (byGroup.instructions?.length) sel.instructions = byGroup.instructions;
+  if (byGroup.rubrics?.length) sel.rubrics = byGroup.rubrics;
   return sel;
 }
