@@ -101,6 +101,16 @@ export const IconMyApps = () => (
   </NavIcon>
 );
 
+/** Groups — two people, the shared-with-others circle. */
+export const IconGroups = () => (
+  <NavIcon>
+    <circle cx="5.5" cy="5" r="2" />
+    <circle cx="10.5" cy="5" r="2" />
+    <path d="M2 13v-1a3 3 0 0 1 3-3h1a3 3 0 0 1 1 .18" />
+    <path d="M9 13v-1a3 3 0 0 1 3-3h1a3 3 0 0 1 3 3v1" />
+  </NavIcon>
+);
+
 // ── Visibility badge glyphs (My apps) ──────────────────────────────────────
 // Sized/stroked by `.ex-visibility-badge svg`; no class needed here.
 const BadgeIcon = ({ children }: { children: ReactNode }) => (
