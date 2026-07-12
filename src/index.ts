@@ -71,6 +71,7 @@ import { makeAuth } from "@agentgem/aggregator";
 import { installStars } from "./stars/install.js";
 import { installReviews } from "./reviews/install.js";
 import { installCatalog } from "./catalog/install.js";
+import { installOg } from "./og/install.js";
 import { installGemShares } from "./catalog/shares.js";
 import { installGroups } from "./groups/install.js";
 import { installHandles } from "./handles/install.js";
@@ -288,6 +289,12 @@ export async function createApp(port: number): Promise<RestApplication> {
     installStars(server.expressApp as never, { db: aggDb, auth, webOrigins });
     installReviews(server.expressApp as never, { db: aggDb, auth, webOrigins });
     installCatalog(server.expressApp as never, { db: aggDb, auth, webOrigins });
+    // Deployment-agnostic OG cards. assetOrigin = where the built SPA index.html lives; ogImageOrigin =
+    // the public host whose /og/card.png crawlers fetch. Both default to the public app host and are
+    // overridable so a non-Cloudflare deploy needs zero code change.
+    const ogAssetOrigin = process.env.AGENTGEM_ASSET_ORIGIN ?? "https://app.agentgem.ai";
+    const ogImageOrigin = process.env.AGENTGEM_OG_IMAGE_ORIGIN ?? "https://app.agentgem.ai";
+    installOg(server.expressApp as never, { db: aggDb, assetOrigin: ogAssetOrigin, ogImageOrigin });
     installGroups(server.expressApp as never, { db: aggDb, auth, webOrigins });
     installGemShares(server.expressApp as never, { db: aggDb, auth, webOrigins });
     installUsage(server.expressApp as never, { db: aggDb, auth, webOrigins });
