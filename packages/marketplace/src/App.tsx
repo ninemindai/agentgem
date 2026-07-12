@@ -5,7 +5,7 @@ import { makeStars } from "./stars";
 import { makeReviews } from "./reviews";
 import { Router } from "./Router";
 import { navigate } from "./nav";
-import { IconMiniapps, IconIngredients, IconGems, IconSources, IconPublish, IconMyApps, IconOffline } from "./icons";
+import { IconMiniapps, IconIngredients, IconGems, IconSources, IconPublish, IconMyApps, IconOffline, IconGroups } from "./icons";
 import { PwaUpdatePrompt } from "./PwaUpdatePrompt";
 import { useOnline } from "./useOnline";
 
@@ -75,6 +75,7 @@ export function App() {
           <a href="/offline" className={"ex-navlink" + (onOffline ? " is-active" : "")}><IconOffline />Offline</a>
           {me && <a href="/publish" className="ex-navlink"><IconPublish />Publish</a>}
           {me && <a href="/my-apps" className={"ex-navlink" + (onMyApps ? " is-active" : "")}><IconMyApps />My apps</a>}
+          {me && <a href="/groups" className={"ex-navlink" + (path.startsWith("/groups") ? " is-active" : "")}><IconGroups />Groups</a>}
         </nav>
         <span className="ex-auth">
           <button type="button" className="ex-theme-toggle" aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"} onClick={toggleTheme}>

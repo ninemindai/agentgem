@@ -77,6 +77,26 @@ describe("App link interceptor", () => {
     expect(ingLink.className).not.toMatch(/is-active/);
   });
 
+  it("shows no Groups nav link when signed out", () => {
+    vi.stubGlobal("fetch", vi.fn(async () => res([])));
+    window.history.pushState({}, "", "/gems");
+    render(<App />);
+    expect(screen.queryByRole("link", { name: "Groups" })).toBeNull();
+  });
+
+  it("shows an active Groups nav link when signed in and on /groups", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (u: string) => {
+      if (u.includes("/api/auth/get-session")) return res({ session: { token: "t" }, user: { id: "u0", login: "octocat", handle: "octocat", image: null } });
+      if (u.includes("/popular-skills")) return res({ skills: [], groups: [] });
+      return res([]);
+    }));
+    window.history.pushState({}, "", "/groups");
+    render(<App />);
+    const groupsLink = await screen.findByRole("link", { name: "Groups" });
+    expect(groupsLink.getAttribute("href")).toBe("/groups");
+    expect(groupsLink.className).toMatch(/is-active/);
+  });
+
   it("puts Miniapps first in the nav and marks it active on the home path", () => {
     vi.stubGlobal("fetch", vi.fn(async () => res({ gems: [] })));
     window.history.pushState({}, "", "/");
