@@ -1,11 +1,11 @@
 // Cloudflare Worker that serves the public marketplace SPA (app.agentgem.ai) from
-// Workers Static Assets, fronted by src/worker.ts, which injects per-route OG/
-// unfurl tags (e.g. for shared game gems) before delegating to env.ASSETS.fetch
-// for the actual asset bytes + SPA fallback.
+// Workers Static Assets, fronted by src/worker.ts, which OPTIONALLY proxies
+// shareable entity paths + /og/* to the aggregator's OG handler (OG_ORIGIN, edge
+// cached) before delegating to env.ASSETS.fetch for everything else.
 //
-// run_worker_first = true (below) is REQUIRED for the injection: by default
+// run_worker_first = true (below) is REQUIRED for the proxy: by default
 // Cloudflare serves a matching static asset directly and never invokes the
-// Worker, so the OG-injection branch would be dead code. With it true the
+// Worker, so the OG-proxy branch would be dead code. With it true the
 // Worker runs first on every request, then serves the asset via env.ASSETS
 // for the normal case.
 //
@@ -35,9 +35,9 @@
   "workers_dev": false,
   "routes": [{ "pattern": "app.agentgem.ai", "custom_domain": true }],
 
-  // Hosted aggregator base URL, no trailing slash. The Worker reads this to
-  // fetch share/gem metadata server-to-server when building OG tags.
-  "vars": { "AGGREGATOR_API": "https://api.agentgem.ai" },
+  // Aggregator's own public origin (never this worker's own host — that would loop). The Worker
+  // proxies shareable entity paths + /og/* here for the branded OG card, with edge caching.
+  "vars": { "OG_ORIGIN": "https://api.agentgem.ai" },
 
   "assets": {
     "directory": "./dist",
