@@ -38,12 +38,15 @@ export async function buildOrgCatalog(db: AppDb, rawScope: string): Promise<OrgC
   if (!SCOPE_RE.test(scope)) return null; // malformed → route returns 400
 
   const prefix = `@${scope}/%`.toLowerCase();
+  // This endpoint is served anonymously (PUBLIC_READ_PATHS), so it must apply the same public-only
+  // visibility filter as listCatalogGems — a private/unlisted gem's key/version/description must
+  // never leak to an unauthenticated visitor of an org's catalog page.
   const rows = await db
     .select({ gemKey: catalogGems.gemKey, version: catalogGems.version, publishedBy: catalogGems.publishedBy,
               ownerAccountId: catalogGems.ownerAccountId, description: catalogGems.description,
               tags: catalogGems.tags, artifactKinds: catalogGems.artifactKinds, type: catalogGems.type, grade: catalogGems.grade })
     .from(catalogGems)
-    .where(sql`lower(${catalogGems.gemKey}) like ${prefix}`)
+    .where(sql`lower(${catalogGems.gemKey}) like ${prefix} and ${catalogGems.visibility} = 'public'`)
     .orderBy(desc(catalogGems.createdAtMs), desc(catalogGems.version));
 
   // newest-first → dedupe to the latest version per gemKey (version tiebreak keeps it deterministic).
