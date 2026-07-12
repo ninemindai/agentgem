@@ -5,7 +5,7 @@
 // published_by display string — that string has no uniqueness constraint, and an unresolved gem
 // (owner_account_id NULL) belongs to nobody. A profile now requires a claimed "user".handle; a
 // bind-only account (device-flow only, no web sign-in) has no handle and no profile.
-import { sql, desc, eq } from "drizzle-orm";
+import { sql, desc, eq, and } from "drizzle-orm";
 import type { AppDb } from "./schema.js";
 import { accounts, catalogGems } from "./schema.js";
 import { accountIdForHandle, handleForAccountId } from "./handles.js";
@@ -98,10 +98,13 @@ export async function buildProfile(db: AppDb, rawHandle: string): Promise<Profil
 
   // Ownership read: gems this ACCOUNT owns. Matching published_by would list impostor rows whose
   // string happens to equal the handle but whose owner_account_id is NULL or someone else's.
+  // This endpoint is served anonymously (PUBLIC_READ_PATHS), so it must apply the same public-only
+  // visibility filter as listCatalogGems — a private/unlisted gem's key/version/description must
+  // never leak to an unauthenticated visitor of someone else's profile.
   const rows = await db
     .select({ gemKey: catalogGems.gemKey, version: catalogGems.version, description: catalogGems.description, grade: catalogGems.grade })
     .from(catalogGems)
-    .where(eq(catalogGems.ownerAccountId, accountId))
+    .where(and(eq(catalogGems.ownerAccountId, accountId), eq(catalogGems.visibility, "public")))
     .orderBy(desc(catalogGems.createdAtMs), desc(catalogGems.version));
   const latest = new Map<string, { gemKey: string; version: string; description: string | null; grade: number | null }>();
   for (const r of rows) if (!latest.has(r.gemKey)) latest.set(r.gemKey, r);
