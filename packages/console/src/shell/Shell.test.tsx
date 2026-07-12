@@ -188,6 +188,22 @@ describe("Shell — collapsible sidebar", () => {
   });
 });
 
+describe("Shell — nav item badge slot", () => {
+  const badged = p({
+    id: "reviews", title: "Reviews", phase: "build", category: "projects", order: 20,
+    badge: (apiBase) => <span>badge-for-{apiBase || "root"}</span>,
+  });
+  it("renders a page's badge render-prop next to its title, passing apiBase through", () => {
+    render(<Shell pages={[...pages, badged]} apiBase="root" />);
+    goHash("#/reviews");
+    expect(screen.getByText("badge-for-root")).toBeTruthy();
+  });
+  it("renders nothing extra for pages without a badge", () => {
+    render(<Shell pages={pages} apiBase="" />);
+    expect(screen.queryByText(/badge-for-/)).toBeNull();
+  });
+});
+
 describe("Shell — full-width pages + Studio rename", () => {
   const wide = p({ id: "studio", title: "Studio", phase: "build", category: "setup", order: 5, fullWidth: true });
   it("adds console-main--wide only for fullWidth pages", () => {

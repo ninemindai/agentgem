@@ -195,6 +195,13 @@ body::before {
 .console-nav-item.is-locked { opacity: .45; }
 .console-nav-item.is-locked:hover { opacity: .75; }
 .console-nav-icon { font-size: 14px; line-height: 1; opacity: .85; width: 16px; text-align: center; }
+/* Unread-count pill on a nav item (e.g. Reviews). Pushed to the row's trailing edge. */
+.nav-badge {
+  margin-left: auto; font: 700 10.5px/1 var(--font-ui); font-feature-settings: "tnum";
+  color: #fff; background: var(--accent); border-radius: 999px;
+  min-width: 17px; text-align: center; padding: 3px 6px;
+}
+.console.is-rail .nav-badge { display: none; }
 
 /* Phase switch — segmented control (Observe | Build) at the top of the rail. Reuses
    the paper/terracotta pill language of the active-gem switcher. */

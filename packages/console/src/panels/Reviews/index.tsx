@@ -6,6 +6,7 @@ import {
   reviewInboxRoute, reviewGetRoute, reviewApproveRoute, reviewChangesRoute,
   reviewWithdrawRoute, reviewMessageRoute, reviewInstallRoute, reviewResubmitRoute,
 } from "../../api/routes.js";
+import { ReviewBadge } from "./badge.js";
 
 // The list-item and detail shapes are z.any() on the wire (routes.ts) — real fields come from
 // ReviewRequestSummary/ReviewRequestDetail (packages/aggregator/src/reviewStaging.ts). Narrowed
@@ -279,4 +280,5 @@ export const reviewsPage = defineConsolePage({
   phase: "build", category: "projects",
   route: "#/reviews",
   component: ({ apiBase }) => <Reviews apiBase={apiBase} />,
+  badge: (apiBase) => <ReviewBadge apiBase={apiBase} />,
 });
