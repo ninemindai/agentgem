@@ -69,6 +69,7 @@ import { makeAuth } from "@agentgem/aggregator";
 import { installStars } from "./stars/install.js";
 import { installReviews } from "./reviews/install.js";
 import { installCatalog } from "./catalog/install.js";
+import { installGemShares } from "./catalog/shares.js";
 import { installGroups } from "./groups/install.js";
 import { installHandles } from "./handles/install.js";
 import { installAccount } from "./account/install.js";
@@ -283,6 +284,7 @@ export async function createApp(port: number): Promise<RestApplication> {
     installReviews(server.expressApp as never, { db: aggDb, auth, webOrigins });
     installCatalog(server.expressApp as never, { db: aggDb, auth, webOrigins });
     installGroups(server.expressApp as never, { db: aggDb, auth, webOrigins });
+    installGemShares(server.expressApp as never, { db: aggDb, auth, webOrigins });
     installUsage(server.expressApp as never, { db: aggDb, auth, webOrigins });
     installHandles(server.expressApp as never, { db: aggDb, auth, webOrigins });
     installAccount(server.expressApp as never, { db: aggDb, auth, webOrigins });
