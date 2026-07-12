@@ -30,6 +30,8 @@ vi.mock("@agentgem/distribute", async (importOriginal) => {
 });
 
 import { ReviewController } from "../review.controller.js";
+import { postReviewAction } from "../gem/reviewClient.js";
+const action = postReviewAction as unknown as ReturnType<typeof vi.fn>;
 
 beforeEach(() => { postReviewRequest.mockReset(); postReviewResubmit.mockReset(); });
 
@@ -58,5 +60,24 @@ describe("ReviewController submit/resubmit", () => {
     const res = await c.resubmit({ body: { workspace: "bot", scope: "team", version: "1.0.0", requestId: "req-1" } });
     expect(res).toEqual({ ok: true });
     expect(postReviewResubmit.mock.calls[0][0].requestId).toBe("req-1");
+  });
+});
+
+describe("ReviewController action routes", () => {
+  beforeEach(() => action.mockReset());
+  it("inbox signs the inbox action and returns requests", async () => {
+    action.mockResolvedValue({ requests: [{ id: "r1" }] });
+    const res = await new ReviewController().inbox();
+    expect(res).toEqual({ requests: [{ id: "r1" }] });
+    expect(action.mock.calls[0][0]).toMatchObject({ action: "inbox", requestId: "", path: "/review/inbox" });
+  });
+  it("message binds the body into the signed action", async () => {
+    action.mockResolvedValue({ ok: true });
+    await new ReviewController().message({ body: { requestId: "r1", body: "looks good" } });
+    expect(action.mock.calls[0][0]).toMatchObject({ action: "message:looks good", requestId: "r1", path: "/review/message", extra: { body: "looks good" } });
+  });
+  it("approve returns the aggregator result verbatim", async () => {
+    action.mockResolvedValue({ ok: true, gemKey: "@team/bot", version: "1.0.0" });
+    expect(await new ReviewController().approve({ body: { requestId: "r1" } })).toMatchObject({ ok: true, gemKey: "@team/bot" });
   });
 });
