@@ -41,3 +41,17 @@ it("Request review: disabled with a hint when the author has no groups", async (
   fireEvent.click(await screen.findByRole("button", { name: /request review/i }));
   expect(await screen.findByText(/join or create a team/i)).toBeTruthy();
 });
+
+it("Request review: a lapsed session (authenticated:false) routes to reconnect, not the no-teams hint", async () => {
+  // Local identity still says bound — the server session itself has lapsed, which is what
+  // reviewGroupsRoute's `authenticated:false` signals. Must not be mistaken for a real 0-teams
+  // account (which would show the "join or create a team" hint instead of reconnect).
+  vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob", sessionActive: true } as never);
+  vi.spyOn(routes.playMiniappRoute, "call").mockResolvedValue({} as never);
+  vi.spyOn(routes.playSaveRoute, "call").mockResolvedValue({ ok: true } as never);
+  vi.spyOn(routes.reviewGroupsRoute, "call").mockResolvedValue({ authenticated: false, groups: [] } as never);
+  mount();
+  fireEvent.click(await screen.findByRole("button", { name: /request review/i }));
+  expect(await screen.findByText(/connect github to request review/i)).toBeTruthy();
+  expect(screen.queryByText(/join or create a team/i)).toBeNull();
+});

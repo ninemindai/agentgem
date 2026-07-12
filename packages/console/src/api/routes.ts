@@ -847,12 +847,8 @@ export const reviewWithdrawRoute = defineRoute("POST", "/api/review/withdraw", {
   response: z.object({ ok: z.boolean(), rejected: z.string().optional() }),
 });
 export const reviewMessageRoute = defineRoute("POST", "/api/review/message", {
-  body: z.object({ requestId: z.string(), body: z.string() }),
+  body: z.object({ requestId: z.string(), body: z.string().min(1).max(4000) }),
   response: z.object({ ok: z.boolean(), rejected: z.string().optional() }),
-});
-export const reviewSeenRoute = defineRoute("POST", "/api/review/seen", {
-  body: z.object({ requestId: z.string() }),
-  response: z.object({ ok: z.boolean() }),
 });
 // Install-to-test (ReviewController#install): materializes the staged archive into a new local
 // workspace. consent=true is required when the gem has executable artifacts (mirrors the hosted
