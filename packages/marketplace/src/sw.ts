@@ -1,8 +1,9 @@
 /// <reference lib="webworker" />
 // The marketplace service worker. Built only by `vite build` (injectManifest); never runs in
 // dev or vitest. Precaches the hashed app shell so the installed PWA opens offline, and serves
-// game html pinned-first, then a recently-played LRU.
-import { precacheAndRoute } from "workbox-precaching";
+// game html pinned-first, then a recently-played cap-at-MAX_RECENT, evict-oldest-inserted cache.
+import { precacheAndRoute, createHandlerBoundToURL } from "workbox-precaching";
+import { registerRoute, NavigationRoute } from "workbox-routing";
 import { isGameHtmlRequest, overLimit, PINNED_CACHE, RECENT_CACHE, MAX_RECENT } from "./swCache";
 
 declare const self: ServiceWorkerGlobalScope & { __WB_MANIFEST: Array<{ url: string; revision: string | null }> };
@@ -10,9 +11,16 @@ declare const self: ServiceWorkerGlobalScope & { __WB_MANIFEST: Array<{ url: str
 // Workbox replaces self.__WB_MANIFEST at build time with the content-hashed asset list.
 precacheAndRoute(self.__WB_MANIFEST);
 
+// Offline document navigations (hard reload / deep-link at /gems/x, /offline, …) get the
+// precached SPA shell so React boots and routes client-side; without this only "/" resolves
+// offline. Navigations are document-mode requests to this origin only — never the cross-origin
+// game-html fetch (mode "cors"), so this can't shadow the game cache above.
+registerRoute(new NavigationRoute(createHandlerBoundToURL("index.html")));
+
 // Game html (cross-origin, from the API): pinned copy first (never evicted), else stale-while-
-// revalidate into a small LRU. Serving by request URL works because offline.pinGame stored the
-// pin under the identical gameHtmlUrl(...). Immutable per (key,version), so revalidation is cheap.
+// revalidate into a small cap-at-MAX_RECENT, evict-oldest-inserted cache. Serving by request URL
+// works because offline.pinGame stored the pin under the identical gameHtmlUrl(...). Immutable
+// per (key,version), so revalidation is cheap.
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (event.request.method === "GET" && isGameHtmlRequest(url)) {
@@ -38,7 +46,7 @@ async function serveGame(event: FetchEvent): Promise<Response> {
       return res;
     })
     .catch(() => undefined);
-  // Keep the worker alive until the background revalidation (put + LRU trim) finishes, even
+  // Keep the worker alive until the background revalidation (put + cache trim) finishes, even
   // once respondWith settles from the cache — the SW may otherwise be terminated mid-flight.
   event.waitUntil(fromNetwork);
 

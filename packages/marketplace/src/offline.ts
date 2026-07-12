@@ -47,7 +47,14 @@ export async function pinGame(base: string, key: string, version: string, title:
   const size = new Blob([body]).size;
   const list = readIndex().filter((p) => !(p.key === key && p.version === version));
   list.push({ key, version, title, size, pinnedAt: Date.now() });
-  writeIndex(list);
+  try {
+    writeIndex(list);
+  } catch (e) {
+    // All-or-nothing: if the index write fails, drop the cache entry so we don't leave an
+    // untracked orphan the SW would still serve while isPinned() reports "not pinned".
+    await cache.delete(url);
+    throw e;
+  }
 }
 
 export async function unpinGame(base: string, key: string, version: string): Promise<void> {
