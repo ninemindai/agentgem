@@ -115,7 +115,7 @@ describe("App link interceptor", () => {
     expect(screen.getByRole("link", { name: "Miniapps" }).className).toMatch(/is-active/);
   });
 
-  it("shows a Sign in link when unauthenticated, which POSTs sign-in/social with the GitHub provider", async () => {
+  it("shows a Sign in link that opens the provider dialog, which POSTs sign-in/social with the GitHub provider", async () => {
     let signInBody: string | undefined;
     vi.stubGlobal("fetch", vi.fn(async (u: string, o?: RequestInit) => {
       if (u.includes("/api/auth/get-session")) return res(null);
@@ -124,12 +124,14 @@ describe("App link interceptor", () => {
       return res([]); // leaderboard / other reads
     }));
     render(<App />);
-    const link = await screen.findByRole("link", { name: /sign in with github/i });
+    const link = await screen.findByRole("link", { name: "Sign in" });
     fireEvent.click(link);
+    const choice = await screen.findByRole("button", { name: /sign in with github/i });
+    fireEvent.click(choice);
     await waitFor(() => expect(signInBody && JSON.parse(signInBody)).toMatchObject({ provider: "github" }));
   });
 
-  it("shows a Sign in with Google link that POSTs sign-in/social with the google provider", async () => {
+  it("dialog's Sign in with Google choice POSTs sign-in/social with the google provider", async () => {
     let signInBody: string | undefined;
     vi.stubGlobal("fetch", vi.fn(async (u: string, o?: RequestInit) => {
       if (u.includes("/api/auth/get-session")) return res(null);
@@ -138,8 +140,10 @@ describe("App link interceptor", () => {
       return res([]);
     }));
     render(<App />);
-    const link = await screen.findByRole("link", { name: /sign in with google/i });
+    const link = await screen.findByRole("link", { name: "Sign in" });
     fireEvent.click(link);
+    const choice = await screen.findByRole("button", { name: /sign in with google/i });
+    fireEvent.click(choice);
     await waitFor(() => expect(signInBody && JSON.parse(signInBody)).toMatchObject({ provider: "google" }));
   });
 
