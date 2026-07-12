@@ -688,6 +688,10 @@ body::before {
 .play-btn--danger { background: var(--red); border-color: var(--red); color: #fff; }
 .play-btn--danger:hover:not(:disabled) { background: var(--accent-2); border-color: var(--accent-2); }
 
+.play-tags-input { font: 12.5px var(--font-ui); padding: 8px 10px; border-radius: var(--radius);
+  border: 1px solid var(--line); background: var(--raised); color: var(--ink); min-width: 180px; }
+.play-tags-input::placeholder { color: var(--muted); }
+
 /* Actionable seal-gate banner */
 .play-banner { display: flex; align-items: flex-start; gap: 11px; padding: 11px 13px; border-radius: var(--radius);
   border: 1px solid rgba(154,51,36,.32); background: #fbeee9; margin-bottom: 10px; animation: fade .25s ease both; }
