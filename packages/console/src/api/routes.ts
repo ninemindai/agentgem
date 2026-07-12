@@ -823,6 +823,37 @@ export const reviewRequestRoute = defineRoute("POST", "/api/review/request", {
   }),
   response: z.object({ ok: z.boolean(), requestId: z.string().optional(), rejected: z.string().optional() }),
 });
+// Reviews inbox panel: list open/changes-requested requests, load one's detail (marks-seen
+// server-side), and the reviewer/author actions. Response shapes are z.any() at the list-item /
+// detail level to match ReviewController exactly (packages/aggregator/src/reviewStaging.ts
+// ReviewRequestSummary/ReviewRequestDetail own the real fields) — the panel narrows them itself.
+export const reviewInboxRoute = defineRoute("GET", "/api/review/inbox", {
+  response: z.object({ requests: z.array(z.any()) }),
+});
+export const reviewGetRoute = defineRoute("GET", "/api/review/get", {
+  query: z.object({ requestId: z.string() }),
+  response: z.object({ request: z.any().nullable() }),
+});
+export const reviewApproveRoute = defineRoute("POST", "/api/review/approve", {
+  body: z.object({ requestId: z.string() }),
+  response: z.object({ ok: z.boolean(), gemKey: z.string().optional(), version: z.string().optional(), rejected: z.string().optional() }),
+});
+export const reviewChangesRoute = defineRoute("POST", "/api/review/changes", {
+  body: z.object({ requestId: z.string() }),
+  response: z.object({ ok: z.boolean(), rejected: z.string().optional() }),
+});
+export const reviewWithdrawRoute = defineRoute("POST", "/api/review/withdraw", {
+  body: z.object({ requestId: z.string() }),
+  response: z.object({ ok: z.boolean(), rejected: z.string().optional() }),
+});
+export const reviewMessageRoute = defineRoute("POST", "/api/review/message", {
+  body: z.object({ requestId: z.string(), body: z.string() }),
+  response: z.object({ ok: z.boolean(), rejected: z.string().optional() }),
+});
+export const reviewSeenRoute = defineRoute("POST", "/api/review/seen", {
+  body: z.object({ requestId: z.string() }),
+  response: z.object({ ok: z.boolean() }),
+});
 
 // Zero-config install of a hosted (shared) gem: the server downloads the archive from the hosted
 // aggregator and materializes it. consent=true is required when the gem has executable artifacts.
