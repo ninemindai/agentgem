@@ -7,6 +7,7 @@ import { createClient, defineRoute, type Client } from "@agentback/client";
 const RubricInstallResult = z.object({ installed: z.array(z.string()), skipped: z.array(z.string()) });
 const ArtifactSchema = z.looseObject({
   name: z.string(),
+  title: z.string().optional(),   // rubric display title; other artifact types don't set it
   description: z.string().optional(),
   id: z.string().optional(),        // canonical entity path; present on skills/subagents/instructions
   content: z.string().optional(),   // absent under ?body=defer — fetch it with artifactContentRoute

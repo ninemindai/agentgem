@@ -1,6 +1,6 @@
 import type { Inventory, Usage } from "../../api/routes.js";
 
-export interface LedgerItem { name: string; invocations: number; lastUsedMs: number | null; detail?: string; source?: string; id?: string }
+export interface LedgerItem { name: string; title?: string; invocations: number; lastUsedMs: number | null; detail?: string; source?: string; id?: string }
 export interface LedgerGroup { key: string; label: string; items: LedgerItem[] }
 
 export type SortKey = "uses" | "last" | "name";
@@ -39,6 +39,7 @@ export function groupInventory(inv: Inventory): LedgerGroup[] {
       label,
       items: (inv[key] ?? []).map((a) => ({
         name: a.name,
+        title: a.title,
         invocations: 0,
         lastUsedMs: null,
         // `content` is present only under ?body=full. Under defer, `id` addresses the body and the

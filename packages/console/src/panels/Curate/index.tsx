@@ -387,7 +387,7 @@ export function Curate({ apiBase }: { apiBase: string }) {
                   <div className="ledger-item">
                     <label className="ledger-item-main">
                       <input type="checkbox" checked={selected.has(key)} onChange={() => toggle(key)} />
-                      <span className="ledger-item-name">{i.name}</span>
+                      <span className="ledger-item-name">{i.title ?? i.name}</span>
                     </label>
                     {i.source && <span className="ledger-source" title={i.source}>{formatSource(i.source)}</span>}
                     <span className="ledger-badge" title="invocations">{i.invocations}</span>
