@@ -6,6 +6,7 @@ import { makeReviews } from "./reviews";
 import { Router } from "./Router";
 import { navigate } from "./nav";
 import { IconMiniapps, IconIngredients, IconGems, IconSources, IconPublish, IconMyApps } from "./icons";
+import { PwaUpdatePrompt } from "./PwaUpdatePrompt";
 
 const api = makeApi(defaultApiBase());
 const auth = makeAuth(defaultApiBase());
@@ -59,6 +60,7 @@ export function App() {
 
   return (
     <div className="ex-app">
+      <PwaUpdatePrompt />
       <header className="ex-header">
         <a href="/" className="ex-brand">AgentGem</a>
         <nav className="ex-nav">

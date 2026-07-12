@@ -1060,3 +1060,15 @@ a.ex-skillcard-rating:hover { text-decoration: underline; }
   background: var(--surface-2); font-family: var(--display); font-weight: 600;
 }
 .ex-myapps-signin { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+
+.ex-pwa-update {
+  position: fixed; inset-block-end: 16px; inset-inline-end: 16px; z-index: 2000;
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px; border-radius: 10px;
+  background: var(--paper-raised, #20190f); color: #f1eadb;
+  box-shadow: 0 6px 24px rgba(0,0,0,.28);
+}
+.ex-pwa-update button {
+  border: 1px solid rgba(255,255,255,.3); background: transparent; color: inherit;
+  padding: 4px 12px; border-radius: 8px; cursor: pointer; font: inherit;
+}
