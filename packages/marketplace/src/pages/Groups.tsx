@@ -3,7 +3,7 @@ import { makeAuth, type Me } from "../auth";
 import { makeGroups, type GroupSummary } from "../groups";
 import { useLocationSearch, navigate } from "../nav";
 
-export function Groups({ me, base }: { me: Me | null; base: string }) {
+export function GroupsPanel({ me, base }: { me: Me | null; base: string }) {
   const api = makeGroups(base);
   const search = useLocationSearch();
   const [groups, setGroups] = useState<GroupSummary[] | null>(null);
@@ -12,16 +12,25 @@ export function Groups({ me, base }: { me: Me | null; base: string }) {
   const [err, setErr] = useState<string | null>(null);
   const [joined, setJoined] = useState<string | null>(null);
 
+  const stripJoin = () => {
+    const qs = new URLSearchParams(window.location.search);
+    qs.delete("join");
+    const rest = qs.toString();
+    navigate(window.location.pathname + (rest ? "?" + rest : ""));
+  };
+
   const refresh = useCallback(() => { api.list().then(setGroups).catch((e) => setErr(String(e instanceof Error ? e.message : e))); }, [base]);
 
-  // Invite links land here as /groups?join=<token>. Redeem once, then strip the param and refresh.
+  // Invite links land here as /groups?join=<token> (or /@handle?tab=groups&join=<token> inside the
+  // profile hub). Redeem once, then strip only the join param — keeping the current path and any
+  // other params — and refresh.
   useEffect(() => {
     if (!me) return;
     const token = new URLSearchParams(search).get("join");
     if (!token) { refresh(); return; }
     api.redeem(token)
-      .then(() => { setJoined("You've joined the group."); navigate("/groups"); refresh(); })
-      .catch((e) => { setErr(e instanceof Error ? e.message : String(e)); navigate("/groups"); refresh(); });
+      .then(() => { setJoined("You've joined the group."); stripJoin(); refresh(); })
+      .catch((e) => { setErr(e instanceof Error ? e.message : String(e)); stripJoin(); refresh(); });
   }, [me, search]);
 
   if (!me) {
@@ -65,4 +74,17 @@ export function Groups({ me, base }: { me: Me | null; base: string }) {
         )}
     </div>
   );
+}
+
+/** Route wrapper: mirrors Account's shim — handle-having users go to their profile's Groups tab
+ *  (forwarding query params so an invite /groups?join=<token> lands on /@handle?tab=groups&join=…);
+ *  handle-less users get the panel inline; signed-out falls through to the panel's sign-in prompt. */
+export function Groups({ me, base }: { me: Me | null; base: string }) {
+  useEffect(() => {
+    if (!me?.handle) return;
+    const qs = window.location.search ? "&" + window.location.search.slice(1) : "";
+    navigate(`/@${encodeURIComponent(me.handle)}?tab=groups${qs}`);
+  }, [me]);
+  if (me?.handle) return null;
+  return <GroupsPanel me={me} base={base} />;
 }
