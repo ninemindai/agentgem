@@ -215,6 +215,7 @@ export const InventorySchema = z.object({
   instructions: z.array(InventoryInstructionsSchema),
   hooks: z.array(HookArtifactSchema),
   subagents: z.array(InventorySubagentSchema),
+  rubrics: z.array(RubricArtifactSchema).optional(),
   projects: z.array(ProjectInventorySchema).optional(),
 });
 
@@ -251,6 +252,7 @@ export const GemSelectionSchema = z.union([
     instructions: z.array(z.string()).optional(),
     hooks: z.array(z.string()).optional(),
     subagents: z.array(z.string()).optional(),
+    rubrics: z.array(z.string()).optional(),
     projects: ProjectSelectionSchema.optional(),
   }),
 ]);
