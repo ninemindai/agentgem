@@ -109,13 +109,24 @@ describe("introspectConfig (multi-source)", () => {
   it("captures CLAUDE.md and returns empty for missing dirs", () => {
     const inv = introspectConfig({ claudeDir: dir, agentDir, codexDir, hermesDir });
     expect(inv.instructions.find((i) => i.name === "CLAUDE.md")?.content).toBe("global instructions");
-    const empty = introspectConfig({
-      claudeDir: join(dir, "nope"),
-      agentDir: join(agentDir, "nope"),
-      codexDir: join(codexDir, "nope"),
-      hermesDir: join(hermesDir, "nope"),
-    });
-    expect(empty).toEqual({ skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [] });
+    // Isolate AGENTGEM_HOME so loadRubrics() (backing `rubrics`) reads an empty store, not the
+    // developer's real ~/.agentgem/rubrics — else this "returns empty" test flakes for anyone who
+    // has authored a rubric. The explicit "nope" dirs already zero out the other categories.
+    const prevHome = process.env.AGENTGEM_HOME;
+    const emptyHome = mkdtempSync(join(tmpdir(), "agh-empty-"));
+    process.env.AGENTGEM_HOME = emptyHome;
+    try {
+      const empty = introspectConfig({
+        claudeDir: join(dir, "nope"),
+        agentDir: join(agentDir, "nope"),
+        codexDir: join(codexDir, "nope"),
+        hermesDir: join(hermesDir, "nope"),
+      });
+      expect(empty).toEqual({ skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [], rubrics: [] });
+    } finally {
+      if (prevHome !== undefined) process.env.AGENTGEM_HOME = prevHome; else delete process.env.AGENTGEM_HOME;
+      rmSync(emptyHome, { recursive: true, force: true });
+    }
   });
 
   it("collects hooks from an enabled plugin's hooks/hooks.json, tagged by source", () => {
@@ -143,5 +154,27 @@ describe("introspectConfig (multi-source)", () => {
     expect(hsk?.source).toBe("hermes");
     expect(hsk?.content).toBe("Hermes skill body");
     expect(inv.instructions.find((i) => i.name === "SOUL.md")?.content).toBe("hermes persona");
+  });
+});
+
+describe("introspectConfig surfaces user rubrics (2B)", () => {
+  it("returns user rubrics as rubric artifacts, excluding built-ins", () => {
+    const home = mkdtempSync(join(tmpdir(), "agh-rub-"));
+    const prev = process.env.AGENTGEM_HOME;
+    process.env.AGENTGEM_HOME = home;
+    try {
+      mkdirSync(join(home, ".agentgem", "rubrics"), { recursive: true });
+      writeFileSync(
+        join(home, ".agentgem", "rubrics", "team.json"),
+        JSON.stringify({ id: "team", title: "Team", target: "overview", factors: [{ factor: "retry-storm" }] }),
+      );
+      const inv = introspectConfig({ claudeDir: join(home, ".claude") });
+      expect((inv.rubrics ?? []).map((r) => r.name)).toContain("team");
+      expect((inv.rubrics ?? []).map((r) => r.name)).not.toContain("hygiene"); // built-in excluded
+    } finally {
+      if (prev !== undefined) process.env.AGENTGEM_HOME = prev;
+      else delete process.env.AGENTGEM_HOME;
+      rmSync(home, { recursive: true, force: true });
+    }
   });
 });

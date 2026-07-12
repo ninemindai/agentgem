@@ -6,6 +6,7 @@ import { basename, dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { redactMcpConfig } from "@agentgem/base";
 import { parseTomlMcpServers, agentgemHome } from "@agentgem/model";
+import { loadRubrics, rubricToArtifact } from "@agentgem/insight";
 import { resolveSkillRoot } from "./skillRoots.js";
 import type {
   ConfigInventory,
@@ -283,7 +284,7 @@ export function introspectConfig(opts: IntrospectOptions = {}): ConfigInventory 
     }
   }
 
-  return { skills: dedupByName(skillList), mcpServers: dedupByName(mcpList), instructions, hooks: uniqueHookNames(hookList), subagents: dedupByName(subagentList) };
+  return { skills: dedupByName(skillList), mcpServers: dedupByName(mcpList), instructions, hooks: uniqueHookNames(hookList), subagents: dedupByName(subagentList), rubrics: loadRubrics().map(rubricToArtifact) };
 }
 
 // Discover PROJECT-level artifacts under a chosen project root, tagged source "project".
