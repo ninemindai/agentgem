@@ -7,6 +7,104 @@ All notable changes to AgentGem are documented here. The format follows
 The npm core (`@ninemind/agentgem`) and the desktop app share a version number but
 are tagged separately: core releases are tagged `v*`, desktop releases `desktop-v*`.
 
+## [0.5.0] — `@ninemind/agentgem` (npm core) — 2026-07-12
+
+A large release. Identity moved onto [better-auth](https://better-auth.com), gems
+gained a review-gated publishing path with group sharing and visibility scopes,
+mini-apps became installable PWAs that play offline, and every shareable link now
+unfurls a branded card. 488 commits since 0.4.1.
+
+### Added
+
+- **Sign in with a passkey.** WebAuthn is now a first-class credential alongside
+  GitHub and Google: register a passkey from Account settings, then sign in with a
+  single button that opens a provider dialog. Passkeys are a separate better-auth
+  plugin, and the marketplace RP ID is derived from the cookie domain.
+- **A tabbed profile hub at `/@handle`.** `/account` and `/groups` are absorbed into
+  one hub with **Apps / Reviews / Orgs / Groups / Account** tabs. Owner-only tabs stay
+  hidden from visitors, and each panel fetches the viewer's own data — no cross-account
+  leak.
+- **Publish a gem as Public, Unlisted, or Private.** The publish flow carries a
+  visibility scope through to the catalog row: Explore lists only public gems, an
+  anonymous resolve 404s a private gem, and a private gem gets its own owner-only detail
+  page (download, play, unpublish).
+- **Gem versioning with an overwrite-vs-new-version choice.** Publishing an existing key
+  runs a signed pre-flight (`/api/publish-status`) and asks whether to overwrite the
+  current version or cut a new one.
+- **Review-gated publishing.** An author requests review from a group; members get a
+  Reviews inbox (list / detail / approve / request-changes / comment / withdraw), can
+  install a staged gem to test it — including playing a staged game in a sealed modal —
+  and an approval atomically publishes. An unread badge polls the Reviews nav item.
+- **Groups, and gems shared with a group.** Create or join a group by token, manage
+  members and invites, and share a *private* gem with a group as an additive ACL
+  (`gem_group_shares`) gated by a single `accountCanAccessGem` check. Leaving a group
+  withdraws your open review requests and drops your shares.
+- **Rubrics are a first-class gem type.** A rubric is now a `RubricArtifact` you can
+  bundle into a gem from the Curate surface; it installs alongside the gem's other
+  artifacts, carried end-to-end through the archive, the wire schemas, and all three
+  install handlers.
+- **Installable PWAs that play offline.** The marketplace and console ship a web-app
+  manifest with real gem-mark icons; a service worker precaches the shell and caches
+  game html (pinned-first, then a recently-played LRU). A **Download for offline** toggle
+  pins a game, and an `/offline` library plays your pinned games with no network.
+- **Search and filter the mini-apps gallery.** A search box plus genre and tag chips
+  filter the arcade; free-form tags can be set from the Studio publish toolbar.
+- **Branded link-preview cards for every shareable entity.** Games, gems, `@handle`
+  profiles, and skills now unfurl a branded `summary_large_image` card, rasterized from
+  SVG by a portable resvg-wasm renderer with an embedded font — no system fonts and no
+  Cloudflare primitive required.
+- **Durable Studio sessions and a Stop control.** A Studio chat session survives reload
+  and restores from its transcript, reconciling liveness; the ACP session id names the
+  transcript file.
+- **A built-in Protocol Inspector mini-app**, plus a conformant client shim (v2) that
+  speaks spec-shaped `ui/initialize` and unwraps `CallToolResult`, bringing Play
+  mini-apps in line with MCP Apps / mcp-ui.
+- **Reflection intake in the Dreaming panel.** Repeated tool errors and rejections
+  (recurrence ≥ 2) are detected and drafted as guardrails you can review and apply to
+  `CLAUDE.md` / `AGENTS.md` through a hash-guarded managed-region writer.
+- **A resizable, collapsible console.** The Shell sidebar collapses to an icon rail and
+  resizes by drag or keyboard; Studio gets a draggable preview↔chat split and a
+  full-width page.
+
+### Changed
+
+- **Identity runs on better-auth.** The hand-rolled OAuth stack is deleted in an atomic
+  migration: an account is keyed on a uuid with an optional handle (the one display
+  name), gem ownership is `accounts.id` (an unresolved row is owned by nobody), and
+  Google joins GitHub as a social provider. Accounts can link additional providers and
+  absorb a fresh account (the Flow A / Flow B connect flows).
+- **Shareable entity paths.** A game resolves by a canonical, copyable `/games/:key` URL
+  that also unfurls; a bare share key resolves to its latest version.
+- **Inventory reads defer artifact bodies.** `/api/inventory?body=defer` returns metadata
+  only, with bodies loaded on demand via `/api/artifact/content` — cutting a
+  multi-megabyte read to kilobytes.
+- **The transcript index stores raw usage.** Index schema v2 records raw token counts and
+  resolves them against the current inventory at query time.
+- **Mini-app capabilities are split and reconciled.** `GameCapability` splits into
+  `ToolCapability | ActionCapability`; a mini-app's needs are derived from its html and
+  reconciled against the declaration at save, pruning undeclared calls.
+
+### Fixed
+
+- **The marketplace sign-in and passkey surfaces are styled.** A Modal no longer steals
+  focus on every keystroke, and the passkey + sign-in UI carries hand-authored CSS rules
+  instead of rendering browser defaults.
+- Numerous aggregator, auth, console, and play fixes land across the 488-commit range;
+  see the git history for the full list.
+
+## [desktop-v0.5.0] — desktop app — 2026-07-12
+
+### Added
+
+- **Right-click Cut / Copy / Paste.** The desktop host now has a native editing context
+  menu.
+
+### Changed
+
+- Everything in npm core 0.5.0 above, since the desktop app embeds the same console and
+  server: better-auth identity, review-gated publishing, groups and sharing, rubric
+  gems, installable/offline mini-apps, branded link cards, and the resizable console.
+
 ## [0.4.1] — `@ninemind/agentgem` (npm core) — 2026-07-09
 
 ### Fixed
