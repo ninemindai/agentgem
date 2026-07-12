@@ -23,14 +23,19 @@ vi.mock("@agentgem/archive", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@agentgem/archive")>();
   return { ...actual, readGemArchive: () => ({ name: "bot", artifacts: [{ name: "s", type: "skill" }], grade: 2, checks: [], requiredSecrets: [], createdFrom: "x" }) };
 });
+// importGem is a reconfigurable vi.fn() (default below) so the "play" describe can vary its return
+// value per test (a game artifact / no game artifact) via mockReturnValueOnce without disturbing the
+// fixed shape the other describes (request/resubmit/install) rely on.
+const { importGemMock } = vi.hoisted(() => ({ importGemMock: vi.fn() }));
 vi.mock("@agentgem/distribute", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@agentgem/distribute")>();
   return {
     ...actual,
     exportGem: () => ({ bytes: Buffer.from([9]) }),
-    importGem: () => ({ meta: { gemDigest: "sha256:zz", version: "2.3.0" }, gem: { artifacts: [], name: "bot", checks: [], requiredSecrets: [], createdFrom: "x" } }),
+    importGem: importGemMock,
   };
 });
+importGemMock.mockReturnValue({ meta: { gemDigest: "sha256:zz", version: "2.3.0" }, gem: { artifacts: [], name: "bot", checks: [], requiredSecrets: [], createdFrom: "x" } });
 
 const { readSession } = vi.hoisted(() => ({ readSession: vi.fn() }));
 vi.mock("../bind/bindCore.js", () => ({ readSession, clearSession: vi.fn(), bindConfig: () => ({ base: "https://agg.test" }) }));
@@ -137,6 +142,35 @@ describe("ReviewController install-to-test", () => {
     fetchArch.mockResolvedValue(Buffer.from([9]));
     hasExecutableMock.mockReturnValue(true);
     await expect(new ReviewController().install({ body: { requestId: "req-1" } })).rejects.toThrow();
+  });
+});
+
+describe("ReviewController play", () => {
+  beforeEach(() => { fetchArch.mockReset(); });
+
+  it("returns the game html for a staged game gem", async () => {
+    fetchArch.mockResolvedValue(Buffer.from([9]));
+    importGemMock.mockReturnValueOnce({
+      meta: { gemDigest: "sha256:zz", version: "1.0.0" },
+      gem: { artifacts: [{ type: "game", html: "<h1>hi</h1>" }], name: "bot", checks: [], requiredSecrets: [], createdFrom: "x" },
+    });
+    const res = await new ReviewController().play({ body: { requestId: "r1" } });
+    expect(res).toEqual({ html: "<h1>hi</h1>" });
+    expect(fetchArch.mock.calls[0][0].requestId).toBe("r1");
+  });
+
+  it("rejects (not_a_game) when the staged gem has no game artifact", async () => {
+    fetchArch.mockResolvedValue(Buffer.from([9]));
+    importGemMock.mockReturnValueOnce({
+      meta: { gemDigest: "sha256:zz", version: "1.0.0" },
+      gem: { artifacts: [{ type: "skill", name: "s" }], name: "bot", checks: [], requiredSecrets: [], createdFrom: "x" },
+    });
+    await expect(new ReviewController().play({ body: { requestId: "r1" } })).rejects.toThrow();
+  });
+
+  it("rejects (review_archive_gone) when the archive is gone", async () => {
+    fetchArch.mockResolvedValue(null);
+    await expect(new ReviewController().play({ body: { requestId: "gone" } })).rejects.toThrow();
   });
 });
 

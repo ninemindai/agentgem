@@ -20,6 +20,8 @@ const ReviewResubmitBody = z.object({ workspace: z.string(), scope: z.string(), 
 const ReviewActionResult = z.object({ ok: z.boolean(), rejected: z.string().optional() });
 const ReviewInstallBody = z.object({ requestId: z.string(), name: z.string().optional(), consent: z.boolean().optional() });
 const ReviewInstallResult = z.object({ workspace: z.string(), executables: z.object({ mcp: z.array(z.string()), hooks: z.array(z.string()) }) });
+const ReviewPlayBody = z.object({ requestId: z.string() });
+const ReviewPlayResult = z.object({ html: z.string() });
 const ReviewGroupsResult = z.object({ authenticated: z.boolean(), groups: z.array(z.object({ id: z.string(), name: z.string(), role: z.string() })) });
 
 // Build the same manifest publishSetup builds (src/gem.controller.ts:620-641), MINUS visibility (a
@@ -103,6 +105,19 @@ export class ReviewController {
     // Thread the STAGED version through (like installHosted) — otherwise createWorkspace defaults it to "0.1.0".
     createWorkspace(name, gem, { version: meta.version });
     return { workspace: name, executables };
+  }
+
+  // Play-to-test: like aggregator.controller.ts's gameHtml, but sourced from the review-staging fetch
+  // (Task 1's signed fetchReviewArchive) instead of the public gem-archive download. No workspace, no
+  // consent gate — returning html for a sealed iframe runs nothing.
+  @post("/play", { body: ReviewPlayBody, response: ReviewPlayResult })
+  async play(input: { body: z.infer<typeof ReviewPlayBody> }): Promise<z.infer<typeof ReviewPlayResult>> {
+    const bytes = await fetchReviewArchive({ requestId: input.body.requestId, identity: loadOrCreateIdentity() });
+    if (bytes == null) throw new AgentError("staging archive not available", { status: 404, code: "review_archive_gone", retryable: false });
+    const { gem } = importGem(bytes);
+    const game = gem.artifacts.find((a) => a.type === "game") as { html?: unknown } | undefined;
+    if (!game || typeof game.html !== "string") throw new AgentError("this gem has no game to play", { status: 404, code: "not_a_game", retryable: false });
+    return { html: game.html };
   }
 
   // Populates the console's Request-review group picker. The ONLY route on this controller that
