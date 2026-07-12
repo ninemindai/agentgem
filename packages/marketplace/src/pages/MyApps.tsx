@@ -6,18 +6,27 @@
 // aggregator ones, which 404 anything not public. Ownership itself is never asserted client-side —
 // the server derives it from the session cookie, `me` here is display-only.
 import { useEffect, useState } from "react";
+import type { ReactElement } from "react";
 import type { makeApi, MyGem } from "../api";
 import { defaultApiBase } from "../api";
 import { makeAuth, type Me } from "../auth";
 import { GamePlayer } from "../GamePlayer";
 import { gamePath } from "../entityPath";
+import { kindLabel } from "../data";
+import { IconGlobe, IconLink, IconLock } from "../icons";
 
 type View = { status: "loading" } | { status: "error"; message: string } | { status: "ok"; gems: MyGem[] };
 
 const VISIBILITY_LABEL: Record<MyGem["visibility"], string> = { public: "Public", unlisted: "Unlisted", private: "Private" };
+const VISIBILITY_ICON: Record<MyGem["visibility"], () => ReactElement> = { public: IconGlobe, unlisted: IconLink, private: IconLock };
 
 function VisibilityBadge({ visibility }: { visibility: MyGem["visibility"] }) {
-  return <span className={`ex-tag ex-visibility-badge ex-visibility-badge--${visibility}`}>{VISIBILITY_LABEL[visibility]}</span>;
+  const Glyph = VISIBILITY_ICON[visibility];
+  return (
+    <span className={`ex-visibility-badge ex-visibility-badge--${visibility}`}>
+      <Glyph />{VISIBILITY_LABEL[visibility]}
+    </span>
+  );
 }
 
 export function MyApps({ api, me }: { api: ReturnType<typeof makeApi>; me: Me | null }) {
@@ -41,7 +50,11 @@ export function MyApps({ api, me }: { api: ReturnType<typeof makeApi>; me: Me | 
     const signIn = (provider: "github" | "google") => auth.signIn(provider, window.location.href);
     return (
       <div className="ex-card">
-        <p>Sign in to see the apps you&apos;ve published, including anything private. <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("github"); }}>Sign in with GitHub</a> <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("google"); }}>Sign in with Google</a></p>
+        <p>Sign in to see the apps you&apos;ve published, including anything private.</p>
+        <div className="ex-myapps-signin">
+          <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("github"); }}>Sign in with GitHub</a>
+          <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("google"); }}>Sign in with Google</a>
+        </div>
       </div>
     );
   }
@@ -60,33 +73,48 @@ export function MyApps({ api, me }: { api: ReturnType<typeof makeApi>; me: Me | 
   };
 
   return (
-    <div className="ex-card">
-      <h2>My apps</h2>
+    <div className="ex-myapps">
+      <div className="ex-myapps-head">
+        <div className="ex-myapps-titles">
+          <h2 className="ex-myapps-title">
+            My apps
+            {view.status === "ok" && view.gems.length > 0 && <span className="ex-myapps-count">{view.gems.length} published</span>}
+          </h2>
+          <p className="ex-myapps-sub">Everything you&apos;ve published — including unlisted and private gems that never appear in Explore.</p>
+        </div>
+      </div>
+
       {view.status === "loading" && <p className="ex-empty">Loading…</p>}
       {view.status === "error" && <p className="ex-error">Couldn&apos;t load your apps: {view.message}</p>}
       {view.status === "ok" && view.gems.length === 0 && <p className="ex-empty">Nothing published yet. Publish a gem from Studio to see it here.</p>}
       {view.status === "ok" && view.gems.length > 0 && (
-        <ul className="ex-my-apps-list">
+        <ul className="ex-gem-list">
           {view.gems.map((g) => {
             const isGame = g.artifactKinds.includes("game");
             return (
-              <li key={g.key + "@" + g.version} className="ex-my-apps-item">
-                <div className="ex-my-apps-item__head">
-                  <span className="ex-my-apps-item__key">{g.key}</span>
-                  <VisibilityBadge visibility={g.visibility} />
-                </div>
-                {g.description && <p className="ex-my-apps-item__desc">{g.description}</p>}
-                <div className="ex-my-apps-item__actions">
-                  {/* Details always goes to the owner detail (/my-apps/<key>), which resolves every
-                      visibility via getMyGem — unlike /gems/<key> (Explore), which only ever resolves
-                      PUBLIC gems (listCatalogGems filters visibility = 'public'). */}
-                  <a className="ex-navlink" href={"/my-apps/" + encodeURIComponent(g.key)}>Details</a>
-                  {isGame && g.visibility === "private" && (
-                    <button type="button" className="ex-signin" onClick={() => playPrivate(g.key)}>Play</button>
+              <li key={g.key + "@" + g.version} className="ex-gem-item">
+                <div className={`ex-gem-card ex-myapps-card ex-myapps-card--${g.visibility}`}>
+                  <div className="ex-myapps-card__head">
+                    <span className="ex-myapps-glyph" aria-hidden="true" />
+                    <span className="ex-myapps-key">{g.key}</span>
+                    <VisibilityBadge visibility={g.visibility} />
+                  </div>
+                  {g.description && <p className="ex-myapps-card__desc">{g.description}</p>}
+                  {g.artifactKinds.length > 0 && (
+                    <span className="ex-gem-kinds">{g.artifactKinds.map((k) => <span key={k} className="ex-chip">{kindLabel(k)}</span>)}</span>
                   )}
-                  {isGame && g.visibility !== "private" && (
-                    <a className="ex-signin" href={gamePath(g.key)}>Play</a>
-                  )}
+                  <div className="ex-myapps-card__actions">
+                    {/* Details always goes to the owner detail (/my-apps/<key>), which resolves every
+                        visibility via getMyGem — unlike /gems/<key> (Explore), which only ever resolves
+                        PUBLIC gems (listCatalogGems filters visibility = 'public'). */}
+                    <a className="ex-btn" href={"/my-apps/" + encodeURIComponent(g.key)}>Details</a>
+                    {isGame && g.visibility === "private" && (
+                      <button type="button" className="ex-signin" onClick={() => playPrivate(g.key)}>Play</button>
+                    )}
+                    {isGame && g.visibility !== "private" && (
+                      <a className="ex-signin" href={gamePath(g.key)}>Play</a>
+                    )}
+                  </div>
                 </div>
               </li>
             );
@@ -95,8 +123,8 @@ export function MyApps({ api, me }: { api: ReturnType<typeof makeApi>; me: Me | 
       )}
       {playError && <p className="ex-error" role="alert">Couldn&apos;t load that game: {playError}</p>}
       {playing && (
-        <div className="ex-my-apps-player">
-          <div className="ex-my-apps-player__head">
+        <div className="ex-myapps-player">
+          <div className="ex-myapps-player__head">
             <span>{playing.key}</span>
             <button type="button" className="ex-signin" onClick={() => setPlaying(null)}>Close</button>
           </div>

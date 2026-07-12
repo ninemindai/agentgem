@@ -5,6 +5,7 @@ import { makeStars } from "./stars";
 import { makeReviews } from "./reviews";
 import { Router } from "./Router";
 import { navigate } from "./nav";
+import { IconMiniapps, IconIngredients, IconGems, IconSources, IconPublish, IconMyApps } from "./icons";
 
 const api = makeApi(defaultApiBase());
 const auth = makeAuth(defaultApiBase());
@@ -61,12 +62,12 @@ export function App() {
       <header className="ex-header">
         <a href="/" className="ex-brand">AgentGem</a>
         <nav className="ex-nav">
-          <a href="/miniapps" className={"ex-navlink" + (onMiniapps ? " is-active" : "")}>Miniapps</a>
-          <a href="/ingredients" className={"ex-navlink" + (onIngredients ? " is-active" : "")}>Ingredients</a>
-          <a href="/gems" className={"ex-navlink" + (onGems ? " is-active" : "")}>Gems</a>
-          <a href="/sources" className={"ex-navlink" + (onSources ? " is-active" : "")}>Sources</a>
-          {me && <a href="/publish" className="ex-navlink">Publish</a>}
-          {me && <a href="/my-apps" className={"ex-navlink" + (onMyApps ? " is-active" : "")}>My apps</a>}
+          <a href="/miniapps" className={"ex-navlink" + (onMiniapps ? " is-active" : "")}><IconMiniapps />Miniapps</a>
+          <a href="/ingredients" className={"ex-navlink" + (onIngredients ? " is-active" : "")}><IconIngredients />Ingredients</a>
+          <a href="/gems" className={"ex-navlink" + (onGems ? " is-active" : "")}><IconGems />Gems</a>
+          <a href="/sources" className={"ex-navlink" + (onSources ? " is-active" : "")}><IconSources />Sources</a>
+          {me && <a href="/publish" className="ex-navlink"><IconPublish />Publish</a>}
+          {me && <a href="/my-apps" className={"ex-navlink" + (onMyApps ? " is-active" : "")}><IconMyApps />My apps</a>}
         </nav>
         <span className="ex-auth">
           <button type="button" className="ex-theme-toggle" aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"} onClick={toggleTheme}>

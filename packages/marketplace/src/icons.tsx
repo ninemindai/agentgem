@@ -1,5 +1,7 @@
 // Inline 16px icons from GitHub's MIT-licensed Octicons (primer/octicons): eye, mark-github,
 // comment. fill="currentColor" + aria-hidden so they ride the surrounding text color/hover.
+import type { ReactNode } from "react";
+
 function Icon({ d }: { d: string }) {
   return (
     <svg className="ex-icon" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
@@ -18,4 +20,98 @@ export const IconGitHub = () => (
 
 export const IconComment = () => (
   <Icon d="M1 2.75C1 1.784 1.784 1 2.75 1h10.5c.966 0 1.75.784 1.75 1.75v7.5A1.75 1.75 0 0 1 13.25 12H9.06l-2.573 2.573A1.458 1.458 0 0 1 4 13.543V12H2.75A1.75 1.75 0 0 1 1 10.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h4.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z" />
+);
+
+// ── Nav tab glyphs ─────────────────────────────────────────────────────────
+// Stroke-based line icons; .ex-nav-ico (styles.css) supplies stroke/fill/width so
+// the whole set stays one weight and rides the surrounding text color + hover.
+const NavIcon = ({ children }: { children: ReactNode }) => (
+  <svg className="ex-nav-ico" viewBox="0 0 16 16" aria-hidden="true">{children}</svg>
+);
+
+/** Miniapps — a 2×2 grid, the arcade of playable apps. */
+export const IconMiniapps = () => (
+  <NavIcon>
+    <rect x="2" y="2" width="5" height="5" rx="1.3" />
+    <rect x="9" y="2" width="5" height="5" rx="1.3" />
+    <rect x="2" y="9" width="5" height="5" rx="1.3" />
+    <rect x="9" y="9" width="5" height="5" rx="1.3" />
+  </NavIcon>
+);
+
+/** Ingredients — a beaker, the skill building-blocks you mix in. */
+export const IconIngredients = () => (
+  <NavIcon>
+    <path d="M6 2.5v3.2L3.3 11.4A1.4 1.4 0 0 0 4.6 13.5h6.8a1.4 1.4 0 0 0 1.3-2.1L10 5.7V2.5" />
+    <path d="M5.2 2.5h5.6" />
+    <path d="M4.4 9.5h7.2" />
+  </NavIcon>
+);
+
+/** Gems — a faceted gem, echoing the brand mark. */
+export const IconGems = () => (
+  <NavIcon>
+    <path d="M2.5 6 5 3h6l2.5 3-5.5 7.5L2.5 6Z" />
+    <path d="M2.5 6h11" />
+    <path d="M5 3 6.6 6 8 13.5" />
+    <path d="M11 3 9.4 6 8 13.5" />
+    <path d="M6.6 6h2.8" />
+  </NavIcon>
+);
+
+/** Sources — an RSS/feed mark, curated inputs that flow in. */
+export const IconSources = () => (
+  <NavIcon>
+    <path d="M4 12.2a0.4 0.4 0 1 0 0.01 0" />
+    <path d="M3.8 8.4a3.8 3.8 0 0 1 3.8 3.8" />
+    <path d="M3.8 4.6a7.6 7.6 0 0 1 7.6 7.6" />
+  </NavIcon>
+);
+
+/** Publish — an upward arrow into a tray. */
+export const IconPublish = () => (
+  <NavIcon>
+    <path d="M8 10.5v-8" />
+    <path d="M4.8 5.7 8 2.5l3.2 3.2" />
+    <path d="M2.7 11v1.7A1.3 1.3 0 0 0 4 14h8a1.3 1.3 0 0 0 1.3-1.3V11" />
+  </NavIcon>
+);
+
+/** My apps — a bookmark, the collection that's yours. */
+export const IconMyApps = () => (
+  <NavIcon>
+    <path d="M4 2.6h8a0.6 0.6 0 0 1 0.6 0.6v10.2l-4.6-2.8-4.6 2.8V3.2A0.6 0.6 0 0 1 4 2.6Z" />
+  </NavIcon>
+);
+
+// ── Visibility badge glyphs (My apps) ──────────────────────────────────────
+// Sized/stroked by `.ex-visibility-badge svg`; no class needed here.
+const BadgeIcon = ({ children }: { children: ReactNode }) => (
+  <svg viewBox="0 0 16 16" aria-hidden="true">{children}</svg>
+);
+
+/** Public — a globe: discoverable in Explore. */
+export const IconGlobe = () => (
+  <BadgeIcon>
+    <circle cx="8" cy="8" r="6" />
+    <path d="M2 8h12" />
+    <path d="M8 2c1.9 1.6 1.9 10.4 0 12M8 2c-1.9 1.6-1.9 10.4 0 12" />
+  </BadgeIcon>
+);
+
+/** Unlisted — a link: shareable by URL only. */
+export const IconLink = () => (
+  <BadgeIcon>
+    <path d="M6.5 9.5 9.5 6.5" />
+    <path d="M7 5.6 8.5 4.1a2.5 2.5 0 0 1 3.5 3.5l-1.5 1.5" />
+    <path d="M9 10.4 7.5 11.9a2.5 2.5 0 0 1-3.5-3.5L5.5 6.9" />
+  </BadgeIcon>
+);
+
+/** Private — a padlock: owner-only. */
+export const IconLock = () => (
+  <BadgeIcon>
+    <rect x="3.5" y="7" width="9" height="6.5" rx="1.2" />
+    <path d="M5.5 7V5.4a2.5 2.5 0 0 1 5 0V7" />
+  </BadgeIcon>
 );

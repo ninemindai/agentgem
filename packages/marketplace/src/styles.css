@@ -155,6 +155,9 @@ h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: -0.005em
 
 .ex-nav { display: flex; gap: 4px; }
 .ex-navlink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   text-decoration: none;
   color: var(--ink-2);
   font-size: 0.9rem;
@@ -964,3 +967,90 @@ a.ex-skillcard-rating:hover { text-decoration: underline; }
   color: #b42318; font-weight: 600; font-size: 13px; padding: 8px 14px; border-radius: var(--r-md); cursor: pointer; transition: background .16s, border-color .16s; }
 .ex-unpublish:hover:not(:disabled) { background: color-mix(in srgb, #b42318 14%, var(--surface)); border-color: #b42318; }
 .ex-unpublish:disabled { opacity: .6; cursor: default; }
+
+/* ── Nav tab icons ───────────────────────────────────────────── */
+.ex-nav-ico {
+  width: 15px; height: 15px; flex: none;
+  fill: none; stroke: currentColor; stroke-width: 1.5;
+  stroke-linecap: round; stroke-linejoin: round;
+  opacity: 0.72; transition: opacity var(--t);
+}
+.ex-navlink:hover .ex-nav-ico,
+.ex-navlink.is-active .ex-nav-ico { opacity: 1; }
+
+/* ── My apps ─────────────────────────────────────────────────── */
+.ex-myapps-head {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 16px 20px; flex-wrap: wrap; margin: 0 0 22px;
+}
+.ex-myapps-titles { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ex-myapps-title {
+  font-family: var(--display); font-weight: 600;
+  font-size: clamp(1.55rem, 3.4vw, 1.95rem); letter-spacing: -0.02em;
+  margin: 0; display: inline-flex; align-items: center; gap: 12px;
+}
+.ex-myapps-count {
+  font-family: var(--font); font-size: 0.72rem; font-weight: 700;
+  letter-spacing: 0.02em; font-variant-numeric: tabular-nums;
+  color: var(--brand-strong); background: var(--brand-wash);
+  border-radius: var(--r-pill); padding: 3px 11px; transform: translateY(-3px);
+}
+.ex-myapps-sub { color: var(--muted); font-size: 0.9rem; line-height: 1.5; margin: 0; max-width: 58ch; }
+
+/* Cards reuse .ex-gem-list (grid) + .ex-gem-item (stagger + reduced-motion).
+   Only the card internals differ from a browse gem card, hence .ex-myapps-*. */
+.ex-myapps-card { gap: 10px; }
+.ex-myapps-card__head { display: flex; align-items: center; gap: 10px; }
+.ex-myapps-glyph {
+  width: 12px; height: 12px; flex: none; margin: 1px 1px 0; border-radius: 3px;
+  transform: rotate(45deg); background: var(--grad-gem);
+  box-shadow: 0 0 0 1px rgba(180, 84, 58, 0.25), 0 2px 8px -1px rgba(189, 138, 44, 0.5);
+}
+.ex-myapps-card--unlisted .ex-myapps-glyph {
+  background: linear-gradient(135deg, var(--gold), var(--gold-2));
+  box-shadow: 0 0 0 1px rgba(189, 138, 44, 0.3), 0 2px 8px -1px rgba(216, 164, 65, 0.5);
+}
+.ex-myapps-card--private .ex-myapps-glyph {
+  background: linear-gradient(135deg, var(--muted), var(--ink-2)); box-shadow: none;
+}
+.ex-myapps-key {
+  font-family: var(--display); font-weight: 650; letter-spacing: -0.01em;
+  font-size: 1.02rem; line-height: 1.25; word-break: break-word; min-width: 0;
+}
+.ex-myapps-card__desc { color: var(--ink-2); font-size: 0.9rem; line-height: 1.5; margin: 0; }
+.ex-myapps-card__actions {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line);
+}
+.ex-myapps-card__actions:empty { display: none; }
+.ex-myapps-card__actions .ex-signin,
+.ex-myapps-card__actions .ex-btn { font-size: 0.82rem; padding: 5px 15px; }
+.ex-myapps-card__actions a.ex-btn { text-decoration: none; }
+.ex-myapps-card__actions a.ex-btn:hover { color: var(--ink); border-color: var(--line-2); background: var(--surface-2); }
+
+/* Visibility badge — semantic color + glyph */
+.ex-visibility-badge {
+  display: inline-flex; align-items: center; gap: 4px; margin-left: auto;
+  font-size: 0.66rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  padding: 2px 8px 2px 6px; border-radius: var(--r-pill);
+  border: 1px solid transparent; white-space: nowrap; line-height: 1.5;
+}
+.ex-visibility-badge svg {
+  width: 11px; height: 11px; fill: none; stroke: currentColor;
+  stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round;
+}
+.ex-visibility-badge--public   { color: var(--verified); background: var(--verified-wash); }
+.ex-visibility-badge--unlisted { color: var(--gold);     background: var(--gold-wash); }
+.ex-visibility-badge--private  { color: var(--ink-2);    background: var(--surface-2); border-color: var(--line); }
+
+/* Inline player (private/unlisted games resolve here) */
+.ex-myapps-player {
+  margin-top: 22px; border: 1px solid var(--line); border-radius: var(--r-lg);
+  overflow: hidden; background: var(--surface); box-shadow: var(--shadow-md);
+}
+.ex-myapps-player__head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 14px; border-bottom: 1px solid var(--line);
+  background: var(--surface-2); font-family: var(--display); font-weight: 600;
+}
+.ex-myapps-signin { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
