@@ -106,6 +106,49 @@ export function filterGems(gems: Gem[], query: string, cuts: string[] = []): Gem
   );
 }
 
+// The 4 miniapp genres (canonical union: packages/model/src/types.ts GameGenre). The publish path
+// writes them into the gem's tags as ["game", <genre>, ...userTags], so the marketplace reads genre
+// straight off the tags it already receives — no separate field.
+export const GAME_GENRES = ["replay", "skill-run", "project-fun", "session-heatmap"] as const;
+export type GameGenreTag = (typeof GAME_GENRES)[number];
+const GENRE_SET = new Set<string>(GAME_GENRES);
+
+const GENRE_LABEL: Record<GameGenreTag, string> = {
+  replay: "Session replay",
+  "skill-run": "Skill run",
+  "project-fun": "Project fun",
+  "session-heatmap": "Session heatmap",
+};
+
+/** Display label for a genre chip; passes unknown values through unchanged. */
+export function genreLabel(g: string): string {
+  return GENRE_LABEL[g as GameGenreTag] ?? g;
+}
+
+/** A game gem's genre, read from its tags. Undefined if it carries no genre tag. */
+export function gameGenre(gem: Gem): GameGenreTag | undefined {
+  return gem.tags.find((t): t is GameGenreTag => GENRE_SET.has(t));
+}
+
+/** The chip-worthy tags: everything except the structural "game" tag and the genre tag. */
+export function displayTags(gem: Gem): string[] {
+  return gem.tags.filter((t) => t !== "game" && !GENRE_SET.has(t));
+}
+
+/** Case-insensitive query over key + description + display tags, AND-ed with a genre facet
+ *  (OR within the facet; empty facet = all). Mirrors filterGems but genre-aware. */
+export function filterGames(games: Gem[], query: string, genres: string[] = []): Gem[] {
+  const q = query.trim().toLowerCase();
+  return games.filter(
+    (g) =>
+      (q === "" ||
+        g.key.toLowerCase().includes(q) ||
+        g.description.toLowerCase().includes(q) ||
+        displayTags(g).some((t) => t.toLowerCase().includes(q))) &&
+      (genres.length === 0 || genres.includes(gameGenre(g) ?? "")),
+  );
+}
+
 import type { RegistryGem } from "../types";
 import type { makeApi } from "../api";
 
