@@ -931,6 +931,12 @@ a.ex-skillcard-rating:hover { text-decoration: underline; }
 .mg-empty { border: 1px dashed var(--line-2); border-radius: var(--r-lg); padding: 44px 24px; text-align: center; color: var(--muted); }
 .mg-foot { margin-top: 18px; color: var(--muted); font-size: 13px; text-align: center; }
 .mg-foot-link { color: var(--brand-strong); }
+.mg-tags { display: flex; gap: 6px; flex-wrap: wrap; margin: 2px 0 10px; }
+.mg-tag { background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
+.mg-tag:hover { text-decoration: underline; }
+/* Genre facet reuses .ex-cut-toggle geometry; give the chips a readable surface (cuts get theirs
+   from inline cutMeta colors, which genres don't have). */
+.mg .ex-cut { background: var(--surface-2); color: var(--ink-2); }
 
 /* Playable game preview — shared by arcade cards and the gem-detail Play section (GamePreview).
    The button fills its positioned container (.mg-thumb / .ex-game-stage set the height + framing). */

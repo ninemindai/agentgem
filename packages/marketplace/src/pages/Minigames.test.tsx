@@ -1,5 +1,5 @@
 // packages/marketplace/src/pages/Minigames.test.tsx
-import { render, screen, cleanup, waitFor } from "@testing-library/react";
+import { render, screen, cleanup, waitFor, fireEvent } from "@testing-library/react";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { Minigames } from "./Minigames";
 import { makeApi } from "../api";
@@ -66,5 +66,45 @@ describe("Minigames", () => {
     await waitFor(() => expect(screen.getByText("4")).toBeTruthy());       // server count rendered
     expect(get).toHaveBeenCalledWith("gem", ["@me/duel"]);                  // games-only, kind "gem"
     expect(screen.getByRole("button", { name: "Unstar" })).toBeTruthy();    // "mine" reflected
+  });
+
+  const tagged = [
+    { key: "@me/duel", version: "1.0.0", artifactKinds: ["game"], description: "a coding duel", tags: ["game", "replay", "puzzle"] },
+    { key: "@me/heat", version: "1.0.0", artifactKinds: ["game"], description: "a heatmap view", tags: ["game", "session-heatmap"] },
+  ];
+
+  it("filters the grid by the search box", async () => {
+    stubFetch(tagged);
+    render(<Minigames api={makeApi("")} stars={stars} />);
+    await waitFor(() => expect(screen.getByText("@me/duel")).toBeTruthy());
+    fireEvent.change(screen.getByLabelText("search miniapps"), { target: { value: "heatmap" } });
+    expect(screen.queryByText("@me/duel")).toBeNull();
+    expect(screen.getByText("@me/heat")).toBeTruthy();
+  });
+
+  it("filters by a genre chip", async () => {
+    stubFetch(tagged);
+    render(<Minigames api={makeApi("")} stars={stars} />);
+    await waitFor(() => expect(screen.getByText("@me/duel")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /filter by Session replay/i }));
+    await waitFor(() => expect(screen.queryByText("@me/heat")).toBeNull());
+    expect(screen.getByText("@me/duel")).toBeTruthy();
+  });
+
+  it("clicking a tag chip narrows to matching miniapps", async () => {
+    stubFetch(tagged);
+    render(<Minigames api={makeApi("")} stars={stars} />);
+    await waitFor(() => expect(screen.getByText("@me/duel")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /filter by tag puzzle/i }));
+    await waitFor(() => expect(screen.queryByText("@me/heat")).toBeNull());
+    expect(screen.getByText("@me/duel")).toBeTruthy();
+  });
+
+  it("shows a no-match state when the search matches nothing", async () => {
+    stubFetch(tagged);
+    render(<Minigames api={makeApi("")} stars={stars} />);
+    await waitFor(() => expect(screen.getByText("@me/duel")).toBeTruthy());
+    fireEvent.change(screen.getByLabelText("search miniapps"), { target: { value: "zzzznope" } });
+    expect(screen.getByText(/no miniapps match/i)).toBeTruthy();
   });
 });
