@@ -9,18 +9,26 @@ export function Modal({ title, onClose, children }: {
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const opener = useRef<Element | null>(null);
+  // onClose is typically an inline arrow (new identity each render). Read it through a ref so the
+  // focus effect below can run once on mount/unmount — depending on onClose would re-run the effect
+  // on every parent re-render, stealing focus out of any field being typed into.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     opener.current = document.activeElement;
     const panel = panelRef.current;
-    // Focus the first focusable in the panel (close button), else the panel.
     const focusables = () => Array.from(
       panel?.querySelectorAll<HTMLElement>('button, a[href], [tabindex]:not([tabindex="-1"]), input, textarea') ?? [],
     );
-    (focusables()[0] ?? panel)?.focus();
+    // Prefer a field the caller marked for initial focus (React's autoFocus is imperative and fires
+    // before this effect, so it can't be observed here — callers use data-autofocus instead). Else
+    // focus the panel container itself: a11y-valid ("focus is inside the dialog") but visually quiet,
+    // vs. auto-focusing the close button which makes the × look pre-selected.
+    (panel?.querySelector<HTMLElement>("[data-autofocus]") ?? panel)?.focus();
 
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { e.preventDefault(); onClose(); return; }
+      if (e.key === "Escape") { e.preventDefault(); onCloseRef.current(); return; }
       if (e.key !== "Tab") return;
       const items = focusables();
       if (items.length === 0) { e.preventDefault(); return; }
@@ -34,7 +42,8 @@ export function Modal({ title, onClose, children }: {
       document.removeEventListener("keydown", onKey);
       (opener.current as HTMLElement | null)?.focus?.();   // return focus to the opener
     };
-  }, [onClose]);
+    // Mount/unmount only — onClose is reached via onCloseRef so a new identity never re-runs this.
+  }, []);
 
   return (
     <div className="ex-modal" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>

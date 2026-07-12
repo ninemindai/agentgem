@@ -89,3 +89,20 @@ landed both times).
 - **`gh pr merge --delete-branch` will error** on the local branch-delete step
   because `main` is checked out in another worktree — but the **remote merge still
   succeeds**. Verify the merge landed; don't trust the error.
+
+## UI: every class name must be CSS-enforced
+
+The marketplace (`packages/marketplace`) has **no CSS framework** — all styling is
+hand-authored in `src/styles.css` against the `--ink`/`--surface`/`--brand` design
+tokens. A className with no matching rule renders as raw browser defaults (bulleted
+`<ul>`, gray `<button>`, unspaced spans), which ships as "unstyled UI." This has
+bitten the passkey + sign-in surfaces.
+
+- **When you add an `ex-*` className in a `.tsx`, add a matching rule in
+  `styles.css` in the same change.** Grep the class before finishing —
+  `grep -c "ex-my-class" src/styles.css` must be > 0.
+- **Match the design language**, don't invent values: reuse the tokens and mirror a
+  sibling component (e.g. new list rows follow `.ex-account-provider`; primary
+  buttons use `var(--grad-gem)` like `.ex-signin`).
+- **Verify styled UI in a real browser, not just tests** — jsdom asserts behavior,
+  never appearance.
