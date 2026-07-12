@@ -862,6 +862,13 @@ export const reviewInstallRoute = defineRoute("POST", "/api/review/install", {
   body: z.object({ requestId: z.string(), name: z.string().optional(), consent: z.boolean().optional() }),
   response: z.object({ workspace: z.string(), executables: z.object({ mcp: z.array(z.string()), hooks: z.array(z.string()) }) }),
 });
+// Play-to-test (ReviewController#play): returns a staged game gem's html for the sealed player,
+// so a reviewer can play it without installing it to a workspace. 404 `not_a_game` when the staged
+// gem has no game artifact, `review_archive_gone` when the staging archive expired.
+export const reviewPlayRoute = defineRoute("POST", "/api/review/play", {
+  body: z.object({ requestId: z.string() }),
+  response: z.object({ html: z.string() }),
+});
 // Resubmit (ReviewController#resubmit): re-runs Studio's request build path against an existing
 // requestId, for the author addressing changes-requested feedback.
 export const reviewResubmitRoute = defineRoute("POST", "/api/review/resubmit", {
