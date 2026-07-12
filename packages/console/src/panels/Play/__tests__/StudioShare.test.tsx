@@ -60,7 +60,7 @@ describe("Studio → Share to app.agentgem.ai", () => {
     expect(await screen.findByText(/https:\/\/app\.agentgem\.ai\/games\/@bob\/snake/)).toBeTruthy();
   });
 
-  it("scope set to Private: publishes with visibility: private", async () => {
+  it("scope set to Private: publishes with visibility: private and points the success link at My apps, not Explore's /gems/", async () => {
     vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob", sessionActive: true } as never);
     vi.spyOn(routes.playMiniappRoute, "call").mockResolvedValue(miniapp as never);
     vi.spyOn(routes.playSaveRoute, "call").mockResolvedValue({ name: "g1", commit: "abc1234", prunedNeeds: [] } as never);
@@ -71,7 +71,11 @@ describe("Studio → Share to app.agentgem.ai", () => {
     fireEvent.click(await screen.findByRole("button", { name: /share to app\.agentgem\.ai/i }));
     await waitFor(() => expect(publish).toHaveBeenCalledTimes(1));
     expect(publish.mock.calls[0][1]).toMatchObject({ body: expect.objectContaining({ scope: "bob", workspace: "snake", version: "0.1.0", visibility: "private" }) });
-    expect(await screen.findByText(/Published to app\.agentgem\.ai/)).toBeTruthy();
+    // Private isn't Explore-listed, so it must NOT get the /gems/ link like public does — a private
+    // gem is owner-only reachable, and only findable again from My apps.
+    expect(await screen.findByText(/Published privately/)).toBeTruthy();
+    expect(await screen.findByText(/https:\/\/app\.agentgem\.ai\/my-apps/)).toBeTruthy();
+    expect(screen.queryByText(/\/gems\/@bob\/snake/)).toBeNull();
   });
 
   it("bound + already published by me: shows the confirm banner, and each button publishes the right version", async () => {
