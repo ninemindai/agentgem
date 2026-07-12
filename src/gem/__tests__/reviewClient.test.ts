@@ -39,6 +39,6 @@ describe("reviewClient", () => {
 
   it("throws InvalidInputError on a non-2xx forward", async () => {
     const http = vi.fn(async (_url: string, _init: Init) => ({ status: 500, json: async () => ({}) }));
-    await expect(postReviewAction({ action: "approve", requestId: "r", path: "/review/approve", identity, endpoint: "https://agg.test", http })).rejects.toThrow();
+    await expect(postReviewAction({ action: "approve", requestId: "r", path: "/review/approve", identity, endpoint: "https://agg.test", http })).rejects.toMatchObject({ statusCode: 400 });
   });
 });
