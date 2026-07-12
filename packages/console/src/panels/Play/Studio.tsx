@@ -58,6 +58,7 @@ export function Studio({
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewGroups, setReviewGroups] = useState<{ id: string; name: string; role: string }[] | null>(null);
   const [reviewGroupId, setReviewGroupId] = useState("");
+  const [reviewDescription, setReviewDescription] = useState("");   // optional note to reviewers, sent at submit
   const { status: identity } = useIdentity();
   const closeRef = useRef<null | (() => void)>(null);
   const logRef = useRef<HTMLDivElement>(null);
@@ -381,8 +382,8 @@ export function Studio({
     if (action.kind === "taken") { setStatus(`“${name}” is already published by another account — choose a different name.`); return; }
     const version = action.kind === "publish" ? action.version : action.nextVersion;
     try {
-      const r = await reviewRequestRoute.call(makeClient(apiBase), { body: { workspace: name, scope: identity.login, name, version, groupId: reviewGroupId } });
-      if (r.ok) { setStatus("In review"); setReviewOpen(false); }
+      const r = await reviewRequestRoute.call(makeClient(apiBase), { body: { workspace: name, scope: identity.login, name, version, groupId: reviewGroupId, description: reviewDescription.trim() || undefined } });
+      if (r.ok) { setStatus("In review"); setReviewOpen(false); setReviewDescription(""); }
       else setStatus(`review request rejected: ${r.rejected}`);
     } catch (e) {
       setStatus(`review request failed: ${(e as Error).message}`);
@@ -466,10 +467,22 @@ export function Studio({
             ) : reviewGroups.length === 0 ? (
               <div className="play-banner__detail">Join or create a team to request review.</div>
             ) : (
-              <select aria-label="Review group" value={reviewGroupId} onChange={(e) => setReviewGroupId(e.target.value)}>
-                <option value="">Select a group…</option>
-                {reviewGroups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-              </select>
+              <>
+                <select aria-label="Review group" value={reviewGroupId} onChange={(e) => setReviewGroupId(e.target.value)}>
+                  <option value="">Select a group…</option>
+                  {reviewGroups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                </select>
+                <textarea
+                  aria-label="Note to reviewers"
+                  className="play-input"
+                  style={{ marginTop: 6, resize: "vertical" }}
+                  placeholder="Note to reviewers (optional) — what changed, what to look at"
+                  value={reviewDescription}
+                  maxLength={4000}
+                  rows={2}
+                  onChange={(e) => setReviewDescription(e.target.value)}
+                />
+              </>
             )}
           </div>
           {reviewGroups && reviewGroups.length > 0 && (

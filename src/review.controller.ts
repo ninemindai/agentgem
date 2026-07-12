@@ -21,7 +21,7 @@ const ReviewActionResult = z.object({ ok: z.boolean(), rejected: z.string().opti
 const ReviewInstallBody = z.object({ requestId: z.string(), name: z.string().optional(), consent: z.boolean().optional() });
 const ReviewInstallResult = z.object({ workspace: z.string(), executables: z.object({ mcp: z.array(z.string()), hooks: z.array(z.string()) }) });
 const ReviewPlayBody = z.object({ requestId: z.string() });
-const ReviewPlayResult = z.object({ html: z.string() });
+const ReviewPlayResult = z.object({ html: z.string(), needs: z.array(z.string()).optional() });
 const ReviewGroupsResult = z.object({ authenticated: z.boolean(), groups: z.array(z.object({ id: z.string(), name: z.string(), role: z.string() })) });
 
 // Build the same manifest publishSetup builds (src/gem.controller.ts:620-641), MINUS visibility (a
@@ -115,9 +115,12 @@ export class ReviewController {
     const bytes = await fetchReviewArchive({ requestId: input.body.requestId, identity: loadOrCreateIdentity() });
     if (bytes == null) throw new AgentError("staging archive not available", { status: 404, code: "review_archive_gone", retryable: false });
     const { gem } = importGem(bytes);
-    const game = gem.artifacts.find((a) => a.type === "game") as { html?: unknown } | undefined;
+    const game = gem.artifacts.find((a) => a.type === "game") as { html?: unknown; needs?: unknown } | undefined;
     if (!game || typeof game.html !== "string") throw new AgentError("this gem has no game to play", { status: 404, code: "not_a_game", retryable: false });
-    return { html: game.html };
+    // Surface the game's DECLARED capabilities so a reviewer sees what it wants before approving.
+    // Informational only — the sealed player stays broker-less; nothing here grants a capability.
+    const needs = Array.isArray(game.needs) ? game.needs.filter((n): n is string => typeof n === "string") : [];
+    return { html: game.html, needs: needs.length ? needs : undefined };
   }
 
   // Populates the console's Request-review group picker. The ONLY route on this controller that

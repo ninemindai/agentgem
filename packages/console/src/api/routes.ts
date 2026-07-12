@@ -867,7 +867,7 @@ export const reviewInstallRoute = defineRoute("POST", "/api/review/install", {
 // gem has no game artifact, `review_archive_gone` when the staging archive expired.
 export const reviewPlayRoute = defineRoute("POST", "/api/review/play", {
   body: z.object({ requestId: z.string() }),
-  response: z.object({ html: z.string() }),
+  response: z.object({ html: z.string(), needs: z.array(z.string()).optional() }),
 });
 // Resubmit (ReviewController#resubmit): re-runs Studio's request build path against an existing
 // requestId, for the author addressing changes-requested feedback.

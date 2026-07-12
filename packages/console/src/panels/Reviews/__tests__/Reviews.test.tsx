@@ -212,6 +212,22 @@ describe("Reviews", () => {
     expect(await screen.findByRole("dialog")).toBeTruthy();
   });
 
+  it("the sealed-play modal surfaces the game's declared needs (informational, not granted)", async () => {
+    const gameDetail = { ...detail, manifest: { ...detail.manifest, artifactKinds: ["game"] } };
+    vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob", sessionActive: true } as never);
+    vi.spyOn(routes.reviewInboxRoute, "call").mockResolvedValue({ requests: [inboxRequest] } as never);
+    vi.spyOn(routes.reviewGetRoute, "call").mockResolvedValue({ request: gameDetail } as never);
+    vi.spyOn(routes.reviewPlayRoute, "call").mockResolvedValue({ html: "<h1>x</h1>", needs: ["session-data", "open-link"] } as never);
+
+    mount();
+    fireEvent.click(await screen.findByText(/acme\/tool@1\.0\.0/));
+    fireEvent.click(await screen.findByRole("button", { name: /play to test/i }));
+
+    await screen.findByRole("dialog");
+    expect(screen.getByText(/session-data, open-link/)).toBeTruthy();
+    expect(screen.getByText(/not granted in review/i)).toBeTruthy();
+  });
+
   it("a non-game gem still shows Install to test", async () => {
     const skillDetail = { ...detail, manifest: { ...detail.manifest, artifactKinds: ["skill"] } };
     vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob", sessionActive: true } as never);
