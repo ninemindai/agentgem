@@ -32,10 +32,15 @@ vi.mock("@agentgem/distribute", async (importOriginal) => {
   };
 });
 
+const { readSession } = vi.hoisted(() => ({ readSession: vi.fn() }));
+vi.mock("../bind/bindCore.js", () => ({ readSession, clearSession: vi.fn(), bindConfig: () => ({ base: "https://agg.test" }) }));
+
 import { ReviewController } from "../review.controller.js";
 import { postReviewAction, fetchReviewArchive } from "../gem/reviewClient.js";
+import { clearSession } from "../bind/bindCore.js";
 const action = postReviewAction as unknown as ReturnType<typeof vi.fn>;
 const fetchArch = fetchReviewArchive as unknown as ReturnType<typeof vi.fn>;
+const clearSess = clearSession as unknown as ReturnType<typeof vi.fn>;
 
 beforeEach(() => { postReviewRequest.mockReset(); postReviewResubmit.mockReset(); });
 
@@ -108,5 +113,45 @@ describe("ReviewController install-to-test", () => {
     fetchArch.mockResolvedValue(Buffer.from([9]));
     hasExecutableMock.mockReturnValue(true);
     await expect(new ReviewController().install({ body: { requestId: "req-1" } })).rejects.toThrow();
+  });
+});
+
+describe("ReviewController groups", () => {
+  beforeEach(() => { readSession.mockReset(); clearSess.mockReset(); vi.unstubAllGlobals(); });
+
+  it("returns authenticated:false with no session (and does not fetch)", async () => {
+    readSession.mockReturnValue(null);
+    const fetchSpy = vi.fn(async (_url: string | URL, _init?: RequestInit) => ({ status: 200, json: async () => ({ groups: [] }) }));
+    vi.stubGlobal("fetch", fetchSpy);
+    expect(await new ReviewController().groups()).toEqual({ authenticated: false, groups: [] });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("bearer-fetches the aggregator groups list and maps the real /api/catalog/groups shape", async () => {
+    readSession.mockReturnValue({ sessionToken: "tok" });
+    // Real shape (packages/aggregator/src/groups.ts listGroupsForAccount): { groups: (Group & { role })[] }
+    // where Group = { id, kind, installationId, scope, name } — extra fields beyond {id,name,role}.
+    const fetchSpy = vi.fn(async (_url: string | URL, _init?: RequestInit) => ({
+      status: 200,
+      json: async () => ({ groups: [{ id: "g1", kind: "native", installationId: null, scope: null, name: "Team", role: "admin" }] }),
+    }));
+    vi.stubGlobal("fetch", fetchSpy);
+    const res = await new ReviewController().groups();
+    expect(res).toEqual({ authenticated: true, groups: [{ id: "g1", name: "Team", role: "admin" }] });
+    expect(fetchSpy.mock.calls[0][0].toString()).toBe("https://agg.test/api/catalog/groups");
+    expect(fetchSpy.mock.calls[0][1]).toMatchObject({ headers: { Authorization: "Bearer tok" } });
+  });
+
+  it("clears the session and returns authenticated:false on 401", async () => {
+    readSession.mockReturnValue({ sessionToken: "stale" });
+    vi.stubGlobal("fetch", vi.fn(async () => ({ status: 401, json: async () => ({}) })));
+    expect(await new ReviewController().groups()).toEqual({ authenticated: false, groups: [] });
+    expect(clearSess).toHaveBeenCalled();
+  });
+
+  it("returns authenticated:true with empty groups on other non-2xx", async () => {
+    readSession.mockReturnValue({ sessionToken: "tok" });
+    vi.stubGlobal("fetch", vi.fn(async () => ({ status: 500, json: async () => ({}) })));
+    expect(await new ReviewController().groups()).toEqual({ authenticated: true, groups: [] });
   });
 });

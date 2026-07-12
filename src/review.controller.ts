@@ -12,6 +12,7 @@ import { loadOrCreateIdentity } from "@agentgem/model";
 import type { CatalogManifest } from "@agentgem/aggregator";
 import { postReviewRequest, postReviewResubmit, postReviewAction, fetchReviewArchive } from "./gem/reviewClient.js";
 import { executableArtifacts, hasExecutable } from "./gem/hostedInstall.js";
+import { readSession, clearSession, bindConfig } from "./bind/bindCore.js";
 
 const ReviewRequestBody = z.object({ workspace: z.string(), scope: z.string(), name: z.string().optional(), version: z.string(), groupId: z.string(), description: z.string().max(4000).optional() });
 const ReviewRequestResult = z.object({ ok: z.boolean(), requestId: z.string().optional(), rejected: z.string().optional() });
@@ -19,6 +20,7 @@ const ReviewResubmitBody = z.object({ workspace: z.string(), scope: z.string(), 
 const ReviewActionResult = z.object({ ok: z.boolean(), rejected: z.string().optional() });
 const ReviewInstallBody = z.object({ requestId: z.string(), name: z.string().optional(), consent: z.boolean().optional() });
 const ReviewInstallResult = z.object({ workspace: z.string(), executables: z.object({ mcp: z.array(z.string()), hooks: z.array(z.string()) }) });
+const ReviewGroupsResult = z.object({ authenticated: z.boolean(), groups: z.array(z.object({ id: z.string(), name: z.string(), role: z.string() })) });
 
 // Build the same manifest publishSetup builds (src/gem.controller.ts:620-641), MINUS visibility (a
 // staged gem's visibility is decided at approval/publish, not at review submission) and MINUS tags
@@ -100,5 +102,24 @@ export class ReviewController {
     const name = (b.name ?? `review-${b.requestId}`).replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "review-gem";
     createWorkspace(name, gem);
     return { workspace: name, executables };
+  }
+
+  // Populates the console's Request-review group picker. The ONLY route on this controller that
+  // uses the local session BEARER rather than the ed25519 signature: group membership is read
+  // straight off the aggregator's session-authed /api/catalog/groups (src/groups/install.ts,
+  // groupsHandler GET branch), same auth as GemController.webHandoff. A 401 means the session
+  // lapsed → clear it so the UI prompts a reconnect; other non-2xx just show an empty list.
+  @get("/groups", { response: ReviewGroupsResult })
+  async groups(): Promise<z.infer<typeof ReviewGroupsResult>> {
+    const session = readSession();
+    const cfg = bindConfig();
+    if (!session || !cfg.base) return { authenticated: false, groups: [] };
+    const res = await fetch(new URL("/api/catalog/groups", cfg.base), { headers: { Authorization: `Bearer ${session.sessionToken}` } });
+    if (res.status === 401) { clearSession(); return { authenticated: false, groups: [] }; }
+    if (res.status < 200 || res.status >= 300) return { authenticated: true, groups: [] };
+    // listGroupsForAccount (packages/aggregator/src/groups.ts) returns Group & { role }, i.e.
+    // { id, kind, installationId, scope, name, role } — pick only the fields the picker needs.
+    const data = (await res.json()) as { groups?: { id: string; name: string; role: string }[] };
+    return { authenticated: true, groups: (data.groups ?? []).map((g) => ({ id: g.id, name: g.name, role: g.role })) };
   }
 }
