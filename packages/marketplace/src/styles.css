@@ -928,9 +928,18 @@ a.ex-skillcard-rating:hover { text-decoration: underline; }
 .mg-open:hover { text-decoration: underline; }
 /* The star sits hard-right whether or not the card has an author to sit opposite it. */
 .mg-row .ex-star { margin-left: auto; }
-.mg-actions { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
-.mg-remix { color: var(--brand-strong); font-weight: 600; font-size: 13px; text-decoration: none; }
+.mg-actions { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.mg-action-links { display: flex; align-items: center; gap: 14px; }
+.mg-remix { color: var(--brand-strong); font-weight: 600; font-size: 13px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
 .mg-remix:hover { text-decoration: underline; }
+/* Card actions borrow the nav-tab stroke icons; show them at full weight (not the dimmed nav idle state)
+   and in the link's own brand colour, sized down to sit with 13px text. */
+.mg-remix .ex-nav-ico, .mg-open .ex-nav-ico, .mg-actions .ex-navlink .ex-nav-ico { width: 14px; height: 14px; opacity: 1; }
+/* The offline toggle reuses .ex-navlink (built for the header nav); strip its nav padding/colour so it
+   reads as a card action alongside Make-your-own / Open-gem. */
+.mg-actions .ex-offline-toggle { margin-block-start: 0; font-size: 13px; }
+.mg-actions .ex-navlink { padding: 0; border: 0; background: none; font-size: 13px; color: var(--brand-strong); font-weight: 600; }
+.mg-actions .ex-navlink:hover { background: none; text-decoration: underline; }
 .mg-empty { border: 1px dashed var(--line-2); border-radius: var(--r-lg); padding: 44px 24px; text-align: center; color: var(--muted); }
 .mg-foot { margin-top: 18px; color: var(--muted); font-size: 13px; text-align: center; }
 .mg-foot-link { color: var(--brand-strong); }
