@@ -27,6 +27,7 @@
 - **Modify** `src/index.ts` — `app.restController(ReviewController)`.
 - **Create** `src/gem/__tests__/reviewClient.test.ts` — client-level (mock `http` + fake `identity`), per `catalogShareClient.test.ts`.
 - **Create** `src/__tests__/reviewController.test.ts` — controller-level: `vi.mock` the reviewClient module + `loadOrCreateIdentity`, assert the controller signs/forwards/maps correctly and enforces the consent gate.
+- **Create** `src/__tests__/reviewE2E.test.ts` — the integration gate: `postReviewRequest`'s REAL ed25519-signed body run through a REAL `AggregatorController(makeTestDb())` (no mocked signing/verify), proving the local client signs exactly what the aggregator verifies (the S1 seam) + that a catalog-signed body is rejected.
 
 ---
 
@@ -590,7 +591,113 @@ git commit -m "feat(review-console): /review/groups list (session-bearer -> aggr
 
 ---
 
-## Task 6: Full-suite regression + PR
+## Task 6: End-to-end signing integration test (client ↔ real aggregator)
+
+**Files:**
+- Create: `src/__tests__/reviewE2E.test.ts`
+
+**Why:** every other test mocks the forward. This one proves the local client signs EXACTLY what the aggregator verifies — the S1 replay-safety seam. It runs `postReviewRequest`'s real ed25519-signed body through a REAL `AggregatorController(makeTestDb())` via an injected `http`, so a payload drift between `reviewClient` and the aggregator fails here instead of in production.
+
+**Interfaces:**
+- Consumes: `makeTestDb`, `upsertAccount`, `createNativeGroup`, `grantInvite`, `producers`, `accountBindings`, `accountScopes` (`@agentgem/aggregator`); `AggregatorController` (`../aggregator.controller.js`); `postReviewRequest`, `postReviewAction`, `type ReviewHttp` (`../gem/reviewClient.js`); `exportGem`/`importGem` (`@agentgem/distribute`) + a sample gem (reuse `src/aggregator/__tests__/helpers/publishFixtures.ts` `sampleGem`/`signer`).
+
+- [ ] **Step 1: Write the test (it exercises real code on both sides — no mocks of the signing/verify)**
+
+Create `src/__tests__/reviewE2E.test.ts`:
+
+```ts
+import { describe, it, expect } from "vitest";
+import { makeTestDb, upsertAccount, createNativeGroup, grantInvite, producers, accountBindings, accountScopes } from "@agentgem/aggregator";
+import { exportGem, importGem } from "@agentgem/distribute";
+import { AggregatorController } from "../aggregator.controller.js";
+import { signer, sampleGem } from "../aggregator/__tests__/helpers/publishFixtures.js";
+import { postReviewRequest, postReviewAction, type ReviewHttp } from "../gem/reviewClient.js";
+
+// Bind a signer's pubkey to a seeded account so the aggregator's resolveSignedAccount maps the
+// signature -> accounts.id (identical to reviewStagingController.test.ts's bind helper).
+async function bind(db: any, pubkey: string, acct: { login: string }) {
+  await db.insert(producers).values({ pubkey }).onConflictDoNothing();
+  await db.insert(accountBindings).values({ pubkey, provider: "github", accountId: acct.login, accountLogin: acct.login });
+}
+
+// An http that routes the client's POST into the REAL AggregatorController (no network, no fetch).
+function wire(c: AggregatorController): ReviewHttp {
+  return async (url, init) => {
+    const body = JSON.parse(init.body);
+    const path = url.split("/api/aggregator")[1];
+    const map: Record<string, (b: any) => Promise<any>> = {
+      "/review/request": (b) => c.reviewRequest({ body: b }),
+      "/review/inbox": (b) => c.reviewInbox({ body: b }),
+    };
+    const fn = map[path];
+    if (!fn) throw new Error("unrouted " + path);
+    return { status: 200, json: async () => await fn(body) };
+  };
+}
+
+describe("review client ↔ real aggregator (e2e signing)", () => {
+  it("a locally-signed review request verifies at the aggregator and creates a staging request the reviewer can see", async () => {
+    const db = await makeTestDb();
+    const author = await upsertAccount(db, { provider: "github", accountId: "alice", login: "alice" });
+    await db.insert(accountScopes).values({ accountId: author.id, scope: "team", role: "member" }); // author owns @team
+    const reviewer = await upsertAccount(db, { provider: "github", accountId: "rob", login: "rob" });
+    const g = await createNativeGroup(db, author.id, "Team");
+    await grantInvite(db, g.id, reviewer.id, "member");
+    const ak = signer(); await bind(db, ak.pubkey, { login: "alice" });
+    const rk = signer(); await bind(db, rk.pubkey, { login: "rob" });
+    const c = new AggregatorController(db);
+    const http = wire(c);
+
+    // Build a REAL archive + a manifest whose gemDigest matches (so the aggregator's D3 check passes).
+    const { bytes } = exportGem(sampleGem(), { version: "1.0.0" });
+    const { meta } = importGem(bytes);
+    const manifest = { gemKey: "@team/bot", version: "1.0.0", description: "please review", gemDigest: meta.gemDigest } as any;
+
+    // The author's LOCAL client signs reviewSubmitPayload and forwards to the REAL aggregator.
+    const authorIdentity = { publicKey: ak.pubkey, sign: ak.sign };
+    const sub = await postReviewRequest({ manifest, archiveBase64: bytes.toString("base64"), groupId: g.id, identity: authorIdentity, http });
+    expect(sub).toMatchObject({ ok: true });
+    const requestId = (sub as { ok: true; requestId: string }).requestId;
+
+    // The reviewer's LOCAL client signs the inbox action; the real aggregator returns the request.
+    const reviewerIdentity = { publicKey: rk.pubkey, sign: rk.sign };
+    const inbox = await postReviewAction({ action: "inbox", requestId: "", path: "/review/inbox", identity: reviewerIdentity, http });
+    expect(inbox.requests.map((r: any) => r.id)).toContain(requestId);
+  });
+
+  it("a review request signed with the WRONG payload (catalogSigningPayload) is rejected by the aggregator", async () => {
+    const db = await makeTestDb();
+    const author = await upsertAccount(db, { provider: "github", accountId: "alice", login: "alice" });
+    await db.insert(accountScopes).values({ accountId: author.id, scope: "team", role: "member" });
+    const g = await createNativeGroup(db, author.id, "Team");
+    const ak = signer(); await bind(db, ak.pubkey, { login: "alice" });
+    const c = new AggregatorController(db);
+    // Forge a body signed with catalogSigningPayload instead of reviewSubmitPayload — must NOT verify.
+    const { catalogSigningPayload } = await import("@agentgem/aggregator");
+    const { bytes } = exportGem(sampleGem(), { version: "1.0.0" });
+    const { meta } = importGem(bytes);
+    const manifest = { gemKey: "@team/bot", version: "1.0.0", gemDigest: meta.gemDigest } as any;
+    const now = Date.now();
+    const badBody = { manifest, archiveBase64: bytes.toString("base64"), groupId: g.id, pubkey: ak.pubkey, signedAt: now, signature: ak.sign(catalogSigningPayload(manifest, ak.pubkey, now)) };
+    await expect(c.reviewRequest({ body: badBody })).rejects.toThrow(); // 401: review route rejects a catalog signature
+  });
+});
+```
+
+- [ ] **Step 2: Run to verify it fails** — `pnpm -w exec tsc -b && npx vitest run dist/__tests__/reviewE2E.test.js` → FAIL until Tasks 1–2 exist (they do by now; this task runs last among the code tasks, so it should compile — if the first case fails on an assertion, that is a REAL client↔aggregator contract bug to fix, not a missing symbol).
+
+- [ ] **Step 3: Make it pass** — no new production code; if it fails, the client's signed body or payload does not match the aggregator's verify. Fix `reviewClient.ts` (the payload fn / body field names) until the real aggregator accepts it. THIS is the bug this task exists to catch.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/__tests__/reviewE2E.test.ts
+git commit -m "test(review-console): e2e — local signed body verifies at the real aggregator"
+```
+
+---
+
+## Task 7: Full-suite regression + PR
 
 - [ ] **Step 1:** `pnpm test` — full suite green except the known unrelated `consoleMount.test.js`. `tsc -b` clean.
 - [ ] **Step 2:** Push `feat/review-console`, open a PR against `main` titled "feat: gem review staging — console backend seam (Plan 2a)". Body: summarize the local ReviewController + sign+forward client; note it depends on the merged aggregator `/review/*` routes; note Plan 2b (console UI) follows. End with the Co-Authored-By line.
@@ -602,6 +709,12 @@ git commit -m "feat(review-console): /review/groups list (session-bearer -> aggr
 - **Placeholder scan:** no TBD/TODO; every step has real code. The "implementer note" callouts flag exact-signature verifications against existing files (`publishSetup`, `installHosted`, `webHandoff`, `groups/install.ts`) — deliberate, since those signatures must be matched to the real code, not guessed. ✓
 - **Type consistency:** `reviewClient` fn names (`postReviewRequest`/`postReviewResubmit`/`postReviewAction`/`fetchReviewArchive`) are used verbatim by `ReviewController`; `buildManifest` shared by request/resubmit; the `act()` helper by all action routes. ✓
 - **Auth correctness:** signature path for all routes except `/review/groups` (session bearer) — the one deliberate exception, matching how the aggregator gates group reads. ✓
+- **Client↔aggregator contract (finding ①):** Task 6 e2e runs the real signed body through the real `AggregatorController`, so a `reviewClient`↔aggregator payload/field drift fails a test, not production. It also asserts a `catalogSigningPayload`-signed body is rejected (S1 replay-safety). ✓
+
+## Deferred to Plan 2b / follow-on (from the spec review)
+- **Badge-poll cost (②):** `/review/inbox` is a signed round-trip; Plan 2b polls it SLOWLY (30–60s, an async review flow) and/or adds a cheap unread-count. Decide in 2b.
+- **Miniapp install-to-test (③):** `/review/install` → `createWorkspace` fits skill/subagent gems; a `game` gem reviewer wants to PLAY it — Plan 2b routes game gems to the miniapp player, others to install.
+- **Rubric (④):** the reviewer sees manifest metadata (description/grade/artifacts), not a computed rubric; computing a staging rubric is a later aggregator-side follow-on.
 
 ## Follow-on: Plan 2b (console UI)
 
