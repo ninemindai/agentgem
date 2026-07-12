@@ -5,7 +5,7 @@ import { makeStars } from "./stars";
 import { makeReviews } from "./reviews";
 import { Router } from "./Router";
 import { navigate } from "./nav";
-import { IconMiniapps, IconIngredients, IconGems, IconSources, IconPublish, IconMyApps } from "./icons";
+import { IconMiniapps, IconIngredients, IconGems, IconSources, IconPublish, IconMyApps, IconOffline } from "./icons";
 import { PwaUpdatePrompt } from "./PwaUpdatePrompt";
 
 const api = makeApi(defaultApiBase());
@@ -41,6 +41,7 @@ export function App() {
   // deliberately covers both the "/ingredients" board and an "/ingredient/:id" detail page.
   const onMiniapps = path === "/" || path.startsWith("/miniapps") || path.startsWith("/minigames");
   const onSources = path.startsWith("/sources");
+  const onOffline = path.startsWith("/offline");
   const onIngredients = path.startsWith("/ingredient");
   const onMyApps = path === "/my-apps";
   const signOut = async () => { await auth.logout(); setMe(null); };
@@ -68,6 +69,7 @@ export function App() {
           <a href="/ingredients" className={"ex-navlink" + (onIngredients ? " is-active" : "")}><IconIngredients />Ingredients</a>
           <a href="/gems" className={"ex-navlink" + (onGems ? " is-active" : "")}><IconGems />Gems</a>
           <a href="/sources" className={"ex-navlink" + (onSources ? " is-active" : "")}><IconSources />Sources</a>
+          <a href="/offline" className={"ex-navlink" + (onOffline ? " is-active" : "")}><IconOffline />Offline</a>
           {me && <a href="/publish" className="ex-navlink"><IconPublish />Publish</a>}
           {me && <a href="/my-apps" className={"ex-navlink" + (onMyApps ? " is-active" : "")}><IconMyApps />My apps</a>}
         </nav>
