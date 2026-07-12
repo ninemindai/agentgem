@@ -17,6 +17,7 @@ export function countChips(ws: WorkspaceSummary): { label: string; n: number }[]
     { label: "instructions", n: c.instructions },
     { label: "hooks", n: c.hook },
     { label: "games", n: c.game },
+    { label: "rubrics", n: c.rubric },
     { label: "checks", n: ws.checks },
   ];
 }

@@ -12,7 +12,7 @@ const ws = {
   name: "my-ws",
   gemName: "starter",
   version: "1.2.0",
-  artifactCounts: { skill: 3, mcp_server: 1, instructions: 2, hook: 0, subagent: 0, game: 2 },
+  artifactCounts: { skill: 3, mcp_server: 1, instructions: 2, hook: 0, subagent: 0, game: 2, rubric: 0 },
   // (counts and this representative list are independent test concerns)
   artifacts: [{ type: "skill", name: "pdf" }, { type: "mcp_server", name: "context7" }],
   modifiedMs: 1_700_000_000_000,
@@ -29,6 +29,7 @@ describe("countChips", () => {
       { label: "instructions", n: 2 },
       { label: "hooks", n: 0 },
       { label: "games", n: 2 },
+      { label: "rubrics", n: 0 },
       { label: "checks", n: 4 },
     ]);
   });
