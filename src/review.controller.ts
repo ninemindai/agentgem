@@ -114,12 +114,18 @@ export class ReviewController {
     const session = readSession();
     const cfg = bindConfig();
     if (!session || !cfg.base) return { authenticated: false, groups: [] };
-    const res = await fetch(new URL("/api/catalog/groups", cfg.base), { headers: { Authorization: `Bearer ${session.sessionToken}` } });
-    if (res.status === 401) { clearSession(); return { authenticated: false, groups: [] }; }
-    if (res.status < 200 || res.status >= 300) return { authenticated: true, groups: [] };
-    // listGroupsForAccount (packages/aggregator/src/groups.ts) returns Group & { role }, i.e.
-    // { id, kind, installationId, scope, name, role } — pick only the fields the picker needs.
-    const data = (await res.json()) as { groups?: { id: string; name: string; role: string }[] };
-    return { authenticated: true, groups: (data.groups ?? []).map((g) => ({ id: g.id, name: g.name, role: g.role })) };
+    // Wrap the fetch (like webHandoff) so an unreachable aggregator degrades to an empty picker
+    // instead of surfacing a raw 500 — the group picker must never hard-fail on a network hiccup.
+    try {
+      const res = await fetch(new URL("/api/catalog/groups", cfg.base), { headers: { Authorization: `Bearer ${session.sessionToken}` } });
+      if (res.status === 401) { clearSession(); return { authenticated: false, groups: [] }; }
+      if (res.status < 200 || res.status >= 300) return { authenticated: true, groups: [] };
+      // listGroupsForAccount (packages/aggregator/src/groups.ts) returns Group & { role }, i.e.
+      // { id, kind, installationId, scope, name, role } — pick only the fields the picker needs.
+      const data = (await res.json()) as { groups?: { id: string; name: string; role: string }[] };
+      return { authenticated: true, groups: (data.groups ?? []).map((g) => ({ id: g.id, name: g.name, role: g.role })) };
+    } catch {
+      return { authenticated: true, groups: [] };
+    }
   }
 }

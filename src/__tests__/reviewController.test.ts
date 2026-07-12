@@ -154,4 +154,10 @@ describe("ReviewController groups", () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({ status: 500, json: async () => ({}) })));
     expect(await new ReviewController().groups()).toEqual({ authenticated: true, groups: [] });
   });
+
+  it("degrades to an empty picker (no throw) when the aggregator fetch rejects", async () => {
+    readSession.mockReturnValue({ sessionToken: "tok" });
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("ECONNREFUSED"); }));
+    expect(await new ReviewController().groups()).toEqual({ authenticated: true, groups: [] });
+  });
 });
