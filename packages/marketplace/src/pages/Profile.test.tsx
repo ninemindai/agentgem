@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import { Profile } from "./Profile";
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.history.pushState({}, "", "/"); });
 const full = {
   login: "octocat", avatarUrl: "https://a/octocat", verified: true,
   githubUrl: "https://github.com/octocat", totalStars: 7,
@@ -13,7 +13,7 @@ const apiWith = (p: unknown) => ({ getProfile: () => Promise.resolve(p) }) as ne
 
 describe("Profile page", () => {
   it("renders login, verified badge, avatar, total stars, and a gem card linking to the gem", async () => {
-    render(<Profile api={apiWith(full)} login="octocat" />);
+    render(<Profile api={apiWith(full)} login="octocat" base="" />);
     expect(await screen.findByRole("heading", { name: /octocat/ })).toBeTruthy();
     expect(screen.getByText(/verified/i)).toBeTruthy();
     expect(document.querySelector("img")?.getAttribute("src")).toBe("https://a/octocat");
@@ -22,13 +22,13 @@ describe("Profile page", () => {
   });
 
   it("renders the handle as a GitHub link only when githubUrl is set", async () => {
-    render(<Profile api={apiWith(full)} login="octocat" />);
+    render(<Profile api={apiWith(full)} login="octocat" base="" />);
     const link = await screen.findByRole("link", { name: "@octocat" });
     expect(link.getAttribute("href")).toBe("https://github.com/octocat");
   });
 
   it("a login-less (Google) profile shows the handle as plain text — NO GitHub link", async () => {
-    render(<Profile api={apiWith({ ...full, login: "raymondg", githubUrl: null, verified: false })} login="raymondg" />);
+    render(<Profile api={apiWith({ ...full, login: "raymondg", githubUrl: null, verified: false })} login="raymondg" base="" />);
     expect(await screen.findByRole("heading", { name: /raymondg/ })).toBeTruthy();
     // the handle must NOT be a link (no misleading github.com/<handle>)
     expect(screen.queryByRole("link", { name: "@raymondg" })).toBeNull();
@@ -36,37 +36,51 @@ describe("Profile page", () => {
   });
 
   it("omits the verified badge and avatar when absent", async () => {
-    render(<Profile api={apiWith({ ...full, verified: false, avatarUrl: null })} login="octocat" />);
+    render(<Profile api={apiWith({ ...full, verified: false, avatarUrl: null })} login="octocat" base="" />);
     await screen.findByRole("heading", { name: /octocat/ });
     expect(screen.queryByText(/verified/i)).toBeNull();
     expect(document.querySelector("img")).toBeNull();
   });
 
   it("shows an empty-gems note for a profile with no published gems", async () => {
-    render(<Profile api={apiWith({ ...full, gems: [] })} login="octocat" />);
+    render(<Profile api={apiWith({ ...full, gems: [] })} login="octocat" base="" />);
     expect(await screen.findByText(/hasn't published/i)).toBeTruthy();
   });
 
-  it("renders a 'Reviews written' section linking each review to its /skill page", async () => {
-    const withReviews = { ...full, reviews: [
-      { sourceId: "matt-skills", path: "productivity/brainstorming.md", name: "brainstorming", rating: 5, body: "a keeper", createdAt: "2026-07-02T00:00:00Z" },
-    ] };
-    render(<Profile api={apiWith(withReviews)} login="octocat" />);
-    expect(await screen.findByText("Reviews written")).toBeTruthy();
-    const link = screen.getByText("brainstorming").closest("a");
-    expect(link?.getAttribute("href")).toBe("/skills/matt-skills/productivity/brainstorming.md");
-    expect(screen.getByText("a keeper")).toBeTruthy();
-  });
-
-  it("omits the 'Reviews written' section when the user has written none", async () => {
-    render(<Profile api={apiWith(full)} login="octocat" />);
-    await screen.findByRole("heading", { name: /octocat/ });
-    expect(screen.queryByText("Reviews written")).toBeNull();
+  it("renders reviews under the Reviews tab, linking each to its /skill page", async () => {
+    window.history.pushState({}, "", "/@octocat?tab=reviews");
+    const withReviews = { ...full, reviews: [ { sourceId: "matt-skills", path: "productivity/brainstorming.md", name: "brainstorming", rating: 5, body: "a keeper", createdAt: "2026-07-02T00:00:00Z" } ] };
+    render(<Profile api={apiWith(withReviews)} login="octocat" me={{ id:"1", name:"octocat", handle:"octocat", avatarUrl:null, orgs:[] }} base="" />);
+    const link = await screen.findByText("brainstorming");
+    expect(link.closest("a")?.getAttribute("href")).toBe("/skills/matt-skills/productivity/brainstorming.md");
   });
 
   it("shows a not-found state when the profile is null", async () => {
-    render(<Profile api={apiWith(null)} login="ghost" />);
+    render(<Profile api={apiWith(null)} login="ghost" base="" />);
     expect(await screen.findByText(/no profile for @ghost/i)).toBeTruthy();
+  });
+
+  it("a non-owner viewer sees only Apps and Reviews tabs", async () => {
+    render(<Profile api={apiWith(full)} login="octocat" me={{ id:"2", name:"bob", handle:"bob", avatarUrl:null, orgs:[] }} base="" />);
+    await screen.findByRole("heading", { name: /octocat/ });
+    expect(screen.getByRole("tab", { name: "Apps" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Reviews" })).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: "Account" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "Groups" })).toBeNull();
+  });
+
+  it("the owner sees all five tabs", async () => {
+    render(<Profile api={apiWith(full)} login="octocat" me={{ id:"1", name:"octocat", handle:"octocat", avatarUrl:null, orgs:[] }} base="" />);
+    await screen.findByRole("heading", { name: /octocat/ });
+    for (const t of ["Apps","Reviews","Orgs","Groups","Account"]) expect(screen.getByRole("tab", { name: t })).toBeTruthy();
+  });
+
+  it("a non-owner requesting ?tab=account falls back to Apps (no account controls)", async () => {
+    window.history.pushState({}, "", "/@octocat?tab=account");
+    render(<Profile api={apiWith(full)} login="octocat" me={{ id:"2", name:"bob", handle:"bob", avatarUrl:null, orgs:[] }} base="" />);
+    await screen.findByRole("heading", { name: /octocat/ });
+    expect(screen.getByRole("tab", { name: "Apps" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.queryByRole("heading", { name: /^account$/i })).toBeNull();
   });
 });
 
@@ -76,7 +90,8 @@ describe("Profile own-orgs navigation", () => {
   const orgs = [{ scope: "ninemind", role: "admin" }, { scope: "acme", role: "member" }];
 
   it("shows the signed-in owner their orgs with role badges and Team Pulse links", async () => {
-    render(<Profile api={apiP} login="alice" me={{ id: "u1", name: "alice", handle: "alice", avatarUrl: null, orgs }} />);
+    window.history.pushState({}, "", "/@alice?tab=orgs");
+    render(<Profile api={apiP} login="alice" me={{ id: "u1", name: "alice", handle: "alice", avatarUrl: null, orgs }} base="" />);
     expect(await screen.findByLabelText("your orgs")).toBeTruthy();
     expect(screen.getByText("@ninemind").getAttribute("href")).toBe("/orgs/ninemind");
     expect(screen.getByText("admin")).toBeTruthy(); // role badge on ninemind only
@@ -84,13 +99,13 @@ describe("Profile own-orgs navigation", () => {
     expect(pulses.map((a) => a.getAttribute("href"))).toEqual(["/orgs/ninemind/usage", "/orgs/acme/usage"]);
   });
 
-  it("hides the section from other viewers and when signed out", async () => {
-    const { unmount } = render(<Profile api={apiP} login="alice" me={{ id: "u2", name: "bob", handle: "bob", avatarUrl: null, orgs }} />);
+  it("the Orgs tab isn't offered to non-owners / signed-out", async () => {
+    const { unmount } = render(<Profile api={apiP} login="alice" me={{ id: "u2", name: "bob", handle: "bob", avatarUrl: null, orgs }} base="" />);
     await screen.findByText("@alice");
-    expect(screen.queryByLabelText("your orgs")).toBeNull();
+    expect(screen.queryByRole("tab", { name: "Orgs" })).toBeNull();
     unmount();
-    render(<Profile api={apiP} login="alice" me={null} />);
+    render(<Profile api={apiP} login="alice" me={null} base="" />);
     await screen.findByText("@alice");
-    expect(screen.queryByLabelText("your orgs")).toBeNull();
+    expect(screen.queryByRole("tab", { name: "Orgs" })).toBeNull();
   });
 });

@@ -73,7 +73,7 @@ export const ROUTES: RouteDef[] = [
   // render loop runs, so these never actually render; they exist for the conformance test.
   { id: "ingredient-alias", kind: "alias", match: (p) => /^\/ingredient\/.+$/.test(p), canonical: (p) => p.replace(/^\/ingredient\//, "/ingredients/"), render: () => null },
   { id: "skill-alias", kind: "alias", match: (p) => /^\/skill\/[^/]+\/.+$/.test(p), canonical: (p) => p.replace(/^\/skill\//, "/skills/"), render: () => null },
-  { id: "profile", kind: "profile", match: (p) => p.match(/^\/@([^/]+)$/), render: (m, c) => <Profile api={c.api} login={decodeURIComponent((m as RegExpMatchArray)[1])} me={c.me} /> },
+  { id: "profile", kind: "profile", match: (p) => p.match(/^\/@([^/]+)$/), render: (m, c) => <Profile api={c.api} login={decodeURIComponent((m as RegExpMatchArray)[1])} me={c.me} base={defaultApiBase()} /> },
   // Member-only team dashboard — must match before the public /orgs/:scope catalog.
   { id: "org-usage", kind: "collection", collection: "orgs", match: (p) => p.match(/^\/orgs\/([^/]+)\/usage$/), render: (m, c) => <TeamUsage api={c.api} scope={decodeURIComponent((m as RegExpMatchArray)[1])} stars={c.stars} /> },
   { id: "org", kind: "collection", collection: "orgs", match: (p) => p.match(/^\/orgs\/([^/]+)$/), render: (m, c) => <OrgCatalog api={c.api} scope={decodeURIComponent((m as RegExpMatchArray)[1])} /> },
