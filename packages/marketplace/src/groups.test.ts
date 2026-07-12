@@ -14,7 +14,7 @@ function stub(handler: (url: string, init?: RequestInit) => { status?: number; b
 describe("makeGroups", () => {
   it("list returns the groups array and sends credentials", async () => {
     const seen: RequestInit[] = [];
-    stub((url, init) => { seen.push(init ?? {}); return { body: { groups: [{ id: "g1", name: "Team", role: "admin", kind: "native", installationId: null, scope: null }] } }; });
+    stub((_url, init) => { seen.push(init ?? {}); return { body: { groups: [{ id: "g1", name: "Team", role: "admin", kind: "native", installationId: null, scope: null }] } }; });
     const groups = await makeGroups("http://x").list();
     expect(groups[0]).toMatchObject({ id: "g1", name: "Team", role: "admin" });
     expect(seen[0].credentials).toBe("include");
