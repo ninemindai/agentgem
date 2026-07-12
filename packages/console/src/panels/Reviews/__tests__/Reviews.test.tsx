@@ -193,4 +193,50 @@ describe("Reviews", () => {
     await screen.findByRole("button", { name: /approve/i });
     expect(screen.queryByRole("button", { name: /resubmit/i })).toBeNull();
   });
+
+  it("a staged game shows Play to test (not Install to test), and clicking it opens a sealed-play modal", async () => {
+    const gameDetail = { ...detail, manifest: { ...detail.manifest, artifactKinds: ["game"] } };
+    vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob", sessionActive: true } as never);
+    vi.spyOn(routes.reviewInboxRoute, "call").mockResolvedValue({ requests: [inboxRequest] } as never);
+    vi.spyOn(routes.reviewGetRoute, "call").mockResolvedValue({ request: gameDetail } as never);
+    const play = vi.spyOn(routes.reviewPlayRoute, "call").mockResolvedValue({ html: "<h1>x</h1>" } as never);
+
+    mount();
+    fireEvent.click(await screen.findByText(/acme\/tool@1\.0\.0/));
+
+    expect(await screen.findByRole("button", { name: /play to test/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /install to test/i })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /play to test/i }));
+    await waitFor(() => expect(play).toHaveBeenCalledWith(expect.anything(), { body: { requestId: "req-1" } }));
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+  });
+
+  it("a non-game gem still shows Install to test", async () => {
+    const skillDetail = { ...detail, manifest: { ...detail.manifest, artifactKinds: ["skill"] } };
+    vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob", sessionActive: true } as never);
+    vi.spyOn(routes.reviewInboxRoute, "call").mockResolvedValue({ requests: [inboxRequest] } as never);
+    vi.spyOn(routes.reviewGetRoute, "call").mockResolvedValue({ request: skillDetail } as never);
+
+    mount();
+    fireEvent.click(await screen.findByText(/acme\/tool@1\.0\.0/));
+
+    expect(await screen.findByRole("button", { name: /install to test/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /play to test/i })).toBeNull();
+  });
+
+  it("a 404 not_a_game on Play to test shows a friendly message", async () => {
+    const gameDetail = { ...detail, manifest: { ...detail.manifest, artifactKinds: ["game"] } };
+    vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob", sessionActive: true } as never);
+    vi.spyOn(routes.reviewInboxRoute, "call").mockResolvedValue({ requests: [inboxRequest] } as never);
+    vi.spyOn(routes.reviewGetRoute, "call").mockResolvedValue({ request: gameDetail } as never);
+    vi.spyOn(routes.reviewPlayRoute, "call")
+      .mockRejectedValue(new ClientError("not a game", 404, { error: { message: "not a game", code: "not_a_game" } }));
+
+    mount();
+    fireEvent.click(await screen.findByText(/acme\/tool@1\.0\.0/));
+    fireEvent.click(await screen.findByRole("button", { name: /play to test/i }));
+
+    expect(await screen.findByText(/no longer available|not a game/i)).toBeTruthy();
+  });
 });

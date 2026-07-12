@@ -4,9 +4,10 @@ import { useIdentity } from "../../identity/IdentityProvider.js";
 import {
   makeClient,
   reviewInboxRoute, reviewGetRoute, reviewApproveRoute, reviewChangesRoute,
-  reviewWithdrawRoute, reviewMessageRoute, reviewInstallRoute, reviewResubmitRoute,
+  reviewWithdrawRoute, reviewMessageRoute, reviewInstallRoute, reviewResubmitRoute, reviewPlayRoute,
 } from "../../api/routes.js";
 import { ReviewBadge } from "./badge.js";
+import { PlayModal } from "./PlayModal.js";
 
 // The list-item and detail shapes are z.any() on the wire (routes.ts) — real fields come from
 // ReviewRequestSummary/ReviewRequestDetail (packages/aggregator/src/reviewStaging.ts). Narrowed
@@ -44,6 +45,9 @@ function RequestDetail({
   const [installConsent, setInstallConsent] = useState(false);
   const [installWorkspace, setInstallWorkspace] = useState<string | null>(null);
   const [installError, setInstallError] = useState<string | null>(null);
+  const [playBusy, setPlayBusy] = useState(false);
+  const [playError, setPlayError] = useState<string | null>(null);
+  const [playHtml, setPlayHtml] = useState<string | null>(null);
 
   const load = () => {
     setDetail(null);
@@ -117,6 +121,25 @@ function RequestDetail({
         setInstallError(e instanceof Error ? e.message : String(e));
       })
       .finally(() => setInstallBusy(false));
+  };
+
+  // Play-to-test: game/miniapp gems can't be meaningfully tested by installing them to a workspace, so a
+  // staged game gets a sealed-play modal instead of Install. `manifest` is z.any() on the wire — narrow
+  // just the field this needs.
+  const manifest = detail.manifest as { artifactKinds?: unknown } | null;
+  const isGame = Array.isArray(manifest?.artifactKinds) && manifest.artifactKinds.includes("game");
+  const play = () => {
+    setPlayBusy(true);
+    setPlayError(null);
+    reviewPlayRoute
+      .call(makeClient(apiBase), { body: { requestId: summary.id } })
+      .then((r) => setPlayHtml(r.html))
+      .catch((e) => {
+        const status = e && typeof e === "object" && "status" in e ? (e as { status?: number }).status : undefined;
+        if (status === 404) { setPlayError("archive no longer available"); return; }
+        setPlayError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => setPlayBusy(false));
   };
 
   // Resubmit (author only, changes-requested only): re-runs Studio's request build path against the
@@ -197,7 +220,11 @@ function RequestDetail({
       </div>
 
       <div className="run-status" style={{ marginTop: 12, gap: 8 }}>
-        {installWorkspace ? (
+        {isGame ? (
+          <button type="button" className="ledger-view" disabled={playBusy} onClick={play}>
+            {playBusy ? "Loading…" : "Play to test"}
+          </button>
+        ) : installWorkspace ? (
           <span className="getgems-done">Installed to workspace <code>{installWorkspace}</code></span>
         ) : installConsent ? (
           <span className="getgems-consent">
@@ -210,8 +237,12 @@ function RequestDetail({
             {installBusy ? "Installing…" : "Install to test"}
           </button>
         )}
-        {installError && <span className="ledger-error" role="alert">{installError}</span>}
+        {isGame ? (playError && <span className="ledger-error" role="alert">{playError}</span>)
+          : (installError && <span className="ledger-error" role="alert">{installError}</span>)}
       </div>
+      {playHtml != null && (
+        <PlayModal html={playHtml} gemKey={detail.gemKey} version={detail.version} onClose={() => setPlayHtml(null)} />
+      )}
     </div>
   );
 }
