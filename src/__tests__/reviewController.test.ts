@@ -12,10 +12,13 @@ vi.mock("@agentgem/model", async (importOriginal) => {
 const { postReviewRequest, postReviewResubmit } = vi.hoisted(() => ({ postReviewRequest: vi.fn(), postReviewResubmit: vi.fn() }));
 vi.mock("../gem/reviewClient.js", () => ({ postReviewRequest, postReviewResubmit, postReviewAction: vi.fn(), fetchReviewArchive: vi.fn() }));
 // Mock the workspace→gem build so no FS is touched; return a minimal gem + bytes.
+const { createWorkspace } = vi.hoisted(() => ({ createWorkspace: vi.fn(() => ({ name: "review-req-1" })) }));
 vi.mock("@agentgem/base", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@agentgem/base")>();
-  return { ...actual, readWorkspace: () => ({ files: {} }) };
+  return { ...actual, readWorkspace: () => ({ files: {} }), createWorkspace };
 });
+const { hasExecutableMock } = vi.hoisted(() => ({ hasExecutableMock: vi.fn(() => false) }));
+vi.mock("../gem/hostedInstall.js", () => ({ executableArtifacts: () => ({ mcp: [], hooks: [] }), hasExecutable: hasExecutableMock }));
 vi.mock("@agentgem/archive", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@agentgem/archive")>();
   return { ...actual, readGemArchive: () => ({ name: "bot", artifacts: [{ name: "s", type: "skill" }], grade: 2, checks: [], requiredSecrets: [], createdFrom: "x" }) };
@@ -30,8 +33,9 @@ vi.mock("@agentgem/distribute", async (importOriginal) => {
 });
 
 import { ReviewController } from "../review.controller.js";
-import { postReviewAction } from "../gem/reviewClient.js";
+import { postReviewAction, fetchReviewArchive } from "../gem/reviewClient.js";
 const action = postReviewAction as unknown as ReturnType<typeof vi.fn>;
+const fetchArch = fetchReviewArchive as unknown as ReturnType<typeof vi.fn>;
 
 beforeEach(() => { postReviewRequest.mockReset(); postReviewResubmit.mockReset(); });
 
@@ -79,5 +83,30 @@ describe("ReviewController action routes", () => {
   it("approve returns the aggregator result verbatim", async () => {
     action.mockResolvedValue({ ok: true, gemKey: "@team/bot", version: "1.0.0" });
     expect(await new ReviewController().approve({ body: { requestId: "r1" } })).toMatchObject({ ok: true, gemKey: "@team/bot" });
+  });
+});
+
+describe("ReviewController install-to-test", () => {
+  beforeEach(() => {
+    fetchArch.mockReset();
+    createWorkspace.mockReset();
+    createWorkspace.mockReturnValue({ name: "review-req-1" });
+    hasExecutableMock.mockReset();
+    hasExecutableMock.mockReturnValue(false);
+  });
+  it("fetches the signed archive, verifies, and creates a workspace when no executables", async () => {
+    fetchArch.mockResolvedValue(Buffer.from([9]));
+    const res = await new ReviewController().install({ body: { requestId: "req-1" } });
+    expect(res).toMatchObject({ workspace: "review-req-1", executables: { mcp: [], hooks: [] } });
+    expect(fetchArch.mock.calls[0][0].requestId).toBe("req-1");
+  });
+  it("returns 404-ish when the archive is gone (null)", async () => {
+    fetchArch.mockResolvedValue(null);
+    await expect(new ReviewController().install({ body: { requestId: "gone" } })).rejects.toThrow();
+  });
+  it("requires consent (409) when the staged gem has executable artifacts", async () => {
+    fetchArch.mockResolvedValue(Buffer.from([9]));
+    hasExecutableMock.mockReturnValue(true);
+    await expect(new ReviewController().install({ body: { requestId: "req-1" } })).rejects.toThrow();
   });
 });
