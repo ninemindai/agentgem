@@ -7,6 +7,7 @@
 import { sql, desc } from "drizzle-orm";
 import type { AppDb } from "./schema.js";
 import { catalogGems, accountScopes } from "./schema.js";
+import { visiblePublic } from "./catalog.js";
 import { accountIdForHandle } from "./handles.js";
 import { starCounts } from "./stars.js";
 import { gemAdoption } from "./aggregates.js";
@@ -46,7 +47,7 @@ export async function buildOrgCatalog(db: AppDb, rawScope: string): Promise<OrgC
               ownerAccountId: catalogGems.ownerAccountId, description: catalogGems.description,
               tags: catalogGems.tags, artifactKinds: catalogGems.artifactKinds, type: catalogGems.type, grade: catalogGems.grade })
     .from(catalogGems)
-    .where(sql`lower(${catalogGems.gemKey}) like ${prefix} and ${catalogGems.visibility} = 'public'`)
+    .where(sql`lower(${catalogGems.gemKey}) like ${prefix} and ${visiblePublic()}`)
     .orderBy(desc(catalogGems.createdAtMs), desc(catalogGems.version));
 
   // newest-first → dedupe to the latest version per gemKey (version tiebreak keeps it deterministic).
