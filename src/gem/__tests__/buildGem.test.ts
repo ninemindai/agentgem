@@ -1,7 +1,7 @@
 // tests/gem/buildGem.test.ts
 import { describe, it, expect } from "vitest";
 import { buildGem } from "@agentgem/build";
-import type { ConfigInventory } from "@agentgem/model";
+import type { ConfigInventory, RubricArtifact } from "@agentgem/model";
 
 const inv: ConfigInventory = {
   skills: [
@@ -170,6 +170,23 @@ describe("buildGem", () => {
     it("adds no channels when none are declared", () => {
       const gem = buildGem(emptyInv, { all: false }, {});
       expect(gem.artifacts.some((a) => a.type === "channel")).toBe(false);
+    });
+  });
+
+  describe("buildGem bundles rubrics (2B)", () => {
+    const rubric: RubricArtifact = { type: "rubric", name: "team-hygiene", title: "Team hygiene", target: "overview", factors: [{ factor: "retry-storm" }] };
+    const inv = (): ConfigInventory => ({ skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [], rubrics: [rubric] });
+
+    it("resolves a named rubric into the gem's artifacts", () => {
+      const gem = buildGem(inv(), { rubrics: ["team-hygiene"] }, { name: "g" });
+      expect(gem.artifacts.filter((a) => a.type === "rubric").map((a) => a.name)).toEqual(["team-hygiene"]);
+    });
+    it("includes rubrics under { all: true }", () => {
+      const gem = buildGem(inv(), { all: true }, { name: "g" });
+      expect(gem.artifacts.some((a) => a.type === "rubric" && a.name === "team-hygiene")).toBe(true);
+    });
+    it("throws on a missing rubric name", () => {
+      expect(() => buildGem(inv(), { rubrics: ["nope"] }, { name: "g" })).toThrow(/No rubric 'nope'/);
     });
   });
 });
