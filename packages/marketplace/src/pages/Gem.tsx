@@ -8,6 +8,7 @@ import { CutBadge } from "../CutBadge";
 import { StoneRating } from "../StoneRating";
 import { GemContents } from "./GemContents";
 import { GamePreview } from "../GamePreview";
+import { OfflineToggle } from "../OfflineToggle";
 import type { StarsCtx } from "../Router";
 import type { StarState } from "../stars";
 import type { Me } from "../auth";
@@ -122,6 +123,7 @@ export function Gem({ api, keyName, stars, me }: { api: ReturnType<typeof makeAp
           <h3>Play</h3>
           <div className="ex-game-stage"><GamePreview api={api} gemKey={gem.key} version={gem.version} /></div>
           <p className="ex-game-hint">Sealed and runs entirely in your browser — click to play fullscreen.</p>
+          <OfflineToggle gemKey={gem.key} version={gem.version} title={gem.key} />
         </section>
       )}
 
