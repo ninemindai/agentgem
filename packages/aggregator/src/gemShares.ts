@@ -58,7 +58,8 @@ export async function listGemsSharedWithGroup(
   db: AppDb, groupId: string,
 ): Promise<{ gemKey: string; version: string; description: string; artifactKinds: string[]; installable: boolean }[]> {
   const shares = await db.select({ gemKey: gemGroupShares.gemKey })
-    .from(gemGroupShares).where(eq(gemGroupShares.groupId, groupId));
+    .from(gemGroupShares).where(eq(gemGroupShares.groupId, groupId))
+    .orderBy(desc(gemGroupShares.createdAtMs));
   const out: { gemKey: string; version: string; description: string; artifactKinds: string[]; installable: boolean }[] = [];
   for (const s of shares) {
     const row = (await db.select({

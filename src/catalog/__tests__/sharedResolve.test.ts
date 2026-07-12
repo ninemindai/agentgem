@@ -6,7 +6,7 @@ import {
   createNativeGroup, grantInvite, shareGemWithGroup,
 } from "@agentgem/aggregator";
 import type { AppDb } from "@agentgem/aggregator";
-import { ownerGemArchiveHandler } from "../install.js";
+import { ownerGemArchiveHandler, ownerGemHandler } from "../install.js";
 
 const ORIGINS = ["https://app.agentgem.ai"];
 const authOpts = {
@@ -58,6 +58,32 @@ describe("shared-gem resolve (access-gated, no-leak 404)", () => {
 
     const s = res();
     await handler(req({ query: { key: "o/secret", version: "1.0.0" }, headers: stranger.headers }), s);
+    expect(s.code).toBe(404);
+  });
+
+  it("ownerGemHandler: a shared-group member can view a private gem's detail; a stranger gets 404", async () => {
+    const db = await makeTestDb();
+    const auth = makeAuth({ db, ...authOpts });
+    const owner = await signedIn(db, auth, "owner");
+    const member = await signedIn(db, auth, "member");
+    const stranger = await signedIn(db, auth, "stranger");
+
+    await upsertCatalogGem(db, { gemKey: "o/secret", version: "1.0.0", publishedBy: "owner", ownerAccountId: owner.acct.id, createdAtMs: 1, visibility: "private" });
+    await upsertGemArchive(db, { gemKey: "o/secret", version: "1.0.0", bytes: new Uint8Array([1, 2, 3]), digest: "d", createdAtMs: 1, ownerAccountId: owner.acct.id });
+    const g = await createNativeGroup(db, owner.acct.id, "Team");
+    await grantInvite(db, g.id, member.acct.id, "member");
+    await shareGemWithGroup(db, "o/secret", g.id, owner.acct.id);
+
+    const deps = { db, auth, webOrigins: ORIGINS };
+    const handler = ownerGemHandler(deps);
+
+    const m = res();
+    await handler(req({ query: { key: "o/secret" }, headers: member.headers }), m);
+    expect(m.code).toBe(200);
+    expect((m.body as any).key).toBe("o/secret");
+
+    const s = res();
+    await handler(req({ query: { key: "o/secret" }, headers: stranger.headers }), s);
     expect(s.code).toBe(404);
   });
 });
