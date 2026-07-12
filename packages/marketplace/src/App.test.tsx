@@ -88,6 +88,7 @@ describe("App link interceptor", () => {
     vi.stubGlobal("fetch", vi.fn(async (u: string) => {
       if (u.includes("/api/auth/get-session")) return res({ session: { token: "t" }, user: { id: "u0", login: "octocat", handle: "octocat", image: null } });
       if (u.includes("/popular-skills")) return res({ skills: [], groups: [] });
+      if (u.includes("/api/catalog/groups")) return res({ groups: [] });
       return res([]);
     }));
     window.history.pushState({}, "", "/groups");
