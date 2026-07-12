@@ -32,9 +32,10 @@ describe("PasskeysSection", () => {
 
   it("adds a passkey then reloads the list", async () => {
     const client = makeClient([]);
-    vi.spyOn(window, "prompt").mockReturnValue("Phone");
     render(<PasskeysSection client={client as never} supported={true} />);
     fireEvent.click(await screen.findByRole("button", { name: /add a passkey/i }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Phone" } });
+    fireEvent.click(screen.getByRole("button", { name: /add passkey/i }));
     await waitFor(() => expect(client.passkey.addPasskey).toHaveBeenCalledWith({ name: "Phone" }));
     expect(client.passkey.listUserPasskeys).toHaveBeenCalledTimes(2); // initial + reload
   });
@@ -49,10 +50,13 @@ describe("PasskeysSection", () => {
   it("surfaces an add error", async () => {
     const client = makeClient([]);
     client.passkey.addPasskey.mockResolvedValue({ error: { message: "cancelled" } });
-    vi.spyOn(window, "prompt").mockReturnValue("Phone");
     render(<PasskeysSection client={client as never} supported={true} />);
     fireEvent.click(await screen.findByRole("button", { name: /add a passkey/i }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Phone" } });
+    fireEvent.click(screen.getByRole("button", { name: /add passkey/i }));
     expect((await screen.findByRole("alert")).textContent).toMatch(/cancelled/i);
+    // Modal stays open on error — the name input is still present.
+    expect(screen.getByRole("textbox")).toBeTruthy();
   });
 
   it("hides the add button when unsupported", () => {

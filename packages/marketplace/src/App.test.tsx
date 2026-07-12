@@ -11,6 +11,13 @@ vi.mock("./passkeyAuth", () => {
   return {
     makePasskeyAuth: () => ({ signIn: { passkey: signInPasskey } }),
     passkeySupported: () => true,
+    passkeyErrorMessage: (e: unknown, fallback = "Something went wrong") => {
+      if (typeof e === "string") return e;
+      if (e && typeof e === "object" && "message" in e && typeof (e as { message: unknown }).message === "string") {
+        return (e as { message: string }).message;
+      }
+      return fallback;
+    },
     __signInPasskey: signInPasskey,
   };
 });

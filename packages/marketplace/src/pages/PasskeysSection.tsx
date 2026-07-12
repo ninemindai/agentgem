@@ -1,6 +1,8 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 import { useCallback, useEffect, useState } from "react";
+import { Modal } from "../Modal";
+import { passkeyErrorMessage } from "../passkeyAuth";
 
 type PasskeyRow = { id: string; name?: string | null; createdAt?: string | Date };
 type PasskeyClient = {
@@ -11,40 +13,34 @@ type PasskeyClient = {
   };
 };
 
-function errMessage(e: unknown): string {
-  if (e && typeof e === "object" && "message" in e && typeof (e as { message: unknown }).message === "string") {
-    return (e as { message: string }).message;
-  }
-  return "Something went wrong";
-}
-
 /** Manage passkeys for the signed-in user: list, add (WebAuthn registration against the current
  *  session), delete. The client is injected so this is testable without the browser ceremony. */
 export function PasskeysSection({ client, supported }: { client: PasskeyClient; supported: boolean }) {
   const [rows, setRows] = useState<PasskeyRow[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [naming, setNaming] = useState(false);
+  const [name, setName] = useState("");
 
   const reload = useCallback(async () => {
     const res = await client.passkey.listUserPasskeys();
-    if (res.error) { setError(errMessage(res.error)); return; }
+    if (res.error) { setError(passkeyErrorMessage(res.error)); return; }
     setRows(res.data ?? []);
   }, [client]);
 
   useEffect(() => { void reload(); }, [reload]);
 
   const add = async () => {
-    setError(null);
-    const name = window.prompt("Name this passkey (e.g. \"MacBook\")");
-    if (!name) return;
-    const res = await client.passkey.addPasskey({ name });
-    if (res.error) { setError(errMessage(res.error)); return; }
+    if (!name.trim()) return;
+    const res = await client.passkey.addPasskey({ name: name.trim() });
+    if (res.error) { setError(passkeyErrorMessage(res.error)); return; }
+    setNaming(false);
     await reload();
   };
 
   const remove = async (id: string) => {
     setError(null);
     const res = await client.passkey.deletePasskey({ id });
-    if (res.error) { setError(errMessage(res.error)); return; }
+    if (res.error) { setError(passkeyErrorMessage(res.error)); return; }
     await reload();
   };
 
@@ -71,8 +67,35 @@ export function PasskeysSection({ client, supported }: { client: PasskeyClient; 
           ))}
         </ul>
       )}
-      {supported && <button type="button" className="ex-passkey-add" onClick={add}>Add a passkey</button>}
+      {supported && (
+        <button
+          type="button"
+          className="ex-passkey-add"
+          onClick={() => { setError(null); setName(""); setNaming(true); }}
+        >
+          Add a passkey
+        </button>
+      )}
       {error && <p className="ex-error" role="alert">{error}</p>}
+      {naming && (
+        <Modal title="Add a passkey" onClose={() => setNaming(false)}>
+          <form
+            className="ex-passkey-name-form"
+            onSubmit={(e) => { e.preventDefault(); void add(); }}
+          >
+            <label htmlFor="ex-passkey-name">Passkey name</label>
+            <input
+              id="ex-passkey-name"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. MacBook"
+              autoFocus
+            />
+            <button type="submit" className="ex-passkey-name-submit">Add passkey</button>
+          </form>
+        </Modal>
+      )}
     </section>
   );
 }
