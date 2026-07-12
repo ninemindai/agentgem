@@ -185,6 +185,7 @@ export interface ConfigInventory {
   instructions: InstructionsArtifact[];
   hooks: HookArtifact[];
   subagents: SubagentArtifact[];
+  rubrics?: RubricArtifact[];   // global user rubrics available to bundle (2B); optional — not every inventory has them
   projects?: ProjectInventory[];
 }
 

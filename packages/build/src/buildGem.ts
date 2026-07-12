@@ -25,6 +25,7 @@ export type GemSelection =
       instructions?: string[];
       hooks?: string[];
       subagents?: string[];
+      rubrics?: string[];
       projects?: Record<string, ProjectSelection>; // keyed by project root path
     };
 
@@ -64,7 +65,7 @@ export function buildGem(
   const projects = inventory.projects ?? [];
 
   if ("all" in selection && selection.all) {
-    artifacts.push(...inventory.skills, ...inventory.mcpServers, ...inventory.instructions, ...inventory.hooks, ...inventory.subagents);
+    artifacts.push(...inventory.skills, ...inventory.mcpServers, ...inventory.instructions, ...inventory.hooks, ...inventory.subagents, ...(inventory.rubrics ?? []));
     for (const p of projects) artifacts.push(...p.skills, ...p.mcpServers, ...p.instructions, ...p.hooks, ...p.subagents);
   } else {
     const sel = selection as Exclude<GemSelection, { all: true }>;
@@ -87,6 +88,11 @@ export function buildGem(
     for (const n of sel.subagents ?? []) {
       const a = inventory.subagents.find((s) => s.name === n);
       if (!a) throw new InvalidInputError(`No subagent '${n}'. Available: ${inventory.subagents.map((s) => s.name).join(", ") || "(none)"}`);
+      artifacts.push(a);
+    }
+    for (const n of sel.rubrics ?? []) {
+      const a = (inventory.rubrics ?? []).find((r) => r.name === n);
+      if (!a) throw new InvalidInputError(`No rubric '${n}'. Available: ${(inventory.rubrics ?? []).map((r) => r.name).join(", ") || "(none)"}`);
       artifacts.push(a);
     }
     for (const [root, ps] of Object.entries(sel.projects ?? {})) {
