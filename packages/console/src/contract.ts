@@ -25,6 +25,10 @@ export interface ConsolePage {
   /** Hash route, e.g. '#/ledger'. */
   route: string;
   component: (props: { apiBase: string }) => ReactNode;
+  /** Optional small pill rendered next to the title in the nav item (e.g. an unread
+   *  count). Render-prop so the page owns its own poll/data source; return null for
+   *  "no badge right now". */
+  badge?: (apiBase: string) => ReactNode;
 }
 
 export const defineConsolePage = (p: ConsolePage): ConsolePage => p;

@@ -137,6 +137,7 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
     >
       {p.icon ? <span className="console-nav-icon">{p.icon}</span> : null}
       {p.title}
+      {p.badge?.(apiBase)}
     </button>
   );
 
