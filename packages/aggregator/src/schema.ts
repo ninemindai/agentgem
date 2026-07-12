@@ -456,6 +456,28 @@ export const verification = pgTable("verification", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// better-auth passkey plugin (@better-auth/passkey). JS property names MUST match the plugin's model
+// field names exactly (id, name, publicKey, userId, credentialID, counter, deviceType, backedUp,
+// transports, aaguid, createdAt) so the drizzle adapter resolves the model; columns are snake_case
+// per house style. DDL authority is ensureSchema below.
+export const passkey = pgTable(
+  "passkey",
+  {
+    id: text("id").primaryKey(),
+    name: text("name"),
+    publicKey: text("public_key").notNull(),
+    userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+    credentialID: text("credential_id").notNull(),
+    counter: integer("counter").notNull().default(0),
+    deviceType: text("device_type"),
+    backedUp: boolean("backed_up"),
+    transports: text("transports"),
+    aaguid: text("aaguid"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("passkey_user_idx").on(t.userId)],
+);
+
 // Account-linking Flow B seam (Task 0 spike, seam b): better-auth's linkSocial does NOT persist the
 // server-resolved identity of a provider it rejects as "already linked to a different user" (its
 // OAuth callback redirects without a DB write). So Flow B cannot piggyback on linkSocial's rejection;
@@ -470,7 +492,7 @@ export const pendingAccountLinks = pgTable("pending_account_links", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, handoffCodes, stars, reviews, gemAdoptions, accountScopes, usageDays, usageDayModels, orgSettings, catalogGems, gemArchives, gamePlays, curatedSkills, appInstallations, orgMembers, groups, groupMembers, groupInvites, gemGroupShares, reviewRequests, reviewMessages, reviewSeen, user, session, account, verification, pendingAccountLinks, connectStates };
+export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, handoffCodes, stars, reviews, gemAdoptions, accountScopes, usageDays, usageDayModels, orgSettings, catalogGems, gemArchives, gamePlays, curatedSkills, appInstallations, orgMembers, groups, groupMembers, groupInvites, gemGroupShares, reviewRequests, reviewMessages, reviewSeen, user, session, account, verification, pendingAccountLinks, connectStates, passkey };
 export type AppDb = PgDatabase<any, typeof schema>;
 
 /** One-time, idempotent: give every account_binding with no matching `accounts` anchor row one,
@@ -769,6 +791,19 @@ export async function ensureSchema(db: AppDb): Promise<void> {
   await db.execute(sql`create table if not exists "verification" (
     id text primary key, identifier text not null, value text not null, expires_at timestamptz not null,
     created_at timestamptz not null default now(), updated_at timestamptz not null default now())`);
+  await db.execute(sql`create table if not exists "passkey" (
+    id text primary key,
+    name text,
+    public_key text not null,
+    user_id text not null references "user"(id) on delete cascade,
+    credential_id text not null,
+    counter integer not null default 0,
+    device_type text,
+    backed_up boolean,
+    transports text,
+    aaguid text,
+    created_at timestamptz not null default now())`);
+  await db.execute(sql`create index if not exists passkey_user_idx on "passkey"(user_id)`);
   // Flow B connect-OAuth handoff (Task 0 seam b): one short-lived pending link per session user.
   await db.execute(sql`create table if not exists "pending_account_links" (
     session_user_id text primary key references "user"(id) on delete cascade,

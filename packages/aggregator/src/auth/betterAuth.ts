@@ -6,6 +6,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { bearer } from "better-auth/plugins";
 import { customSession } from "better-auth/plugins/custom-session";
 import { oneTimeToken } from "better-auth/plugins/one-time-token";
+import { passkey } from "@better-auth/passkey";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { AppDb } from "../schema.js";
@@ -19,6 +20,7 @@ export function makeAuth(opts: {
   db: AppDb; secret: string; baseURL: string; githubClientId: string; githubClientSecret: string;
   googleClientId?: string; googleClientSecret?: string;
   webOrigins: string[]; cookieDomain?: string;
+  passkeyRpId?: string; passkeyOrigins?: string[]; rpName?: string;
 }): Auth<BetterAuthOptions> {
   // Widened to `BetterAuthOptions` (rather than letting TS infer the literal options-object type)
   // so the exported `makeAuth`'s return type doesn't need to structurally encode the
@@ -62,7 +64,13 @@ export function makeAuth(opts: {
     // 1 is already generous since verify consumes (deletes) the exchange token on first read and
     // mintSessionCookie redeems it within the same request. storeToken: "hashed" (defense-in-depth,
     // 1b-Task 5) — the exchange token would otherwise be persisted in plaintext for that one minute.
-    oneTimeToken({ expiresIn: 1, storeToken: "hashed" })],
+    oneTimeToken({ expiresIn: 1, storeToken: "hashed" }),
+    // Passkey (WebAuthn) passwordless sign-in. rpID MUST be a registrable suffix of the page origin
+    // (app.agentgem.ai) — the api.agentgem.ai baseURL default would fail verification — so the caller
+    // (src/index.ts) passes agentgem.ai, mirroring crossSubDomainCookies. `origin` is the allowed page
+    // origin(s); it defaults to webOrigins. requireSession stays default (true): a passkey always
+    // attaches to the caller's existing social session (there is no passkey-first onboarding).
+    passkey({ rpID: opts.passkeyRpId, rpName: opts.rpName ?? "AgentGem", origin: opts.passkeyOrigins ?? opts.webOrigins })],
     // review fix #1/#14 — force uuid ids so downstream uuid FKs (accounts.id, stars.account_id, ...) work
     advanced: {
       database: { generateId: () => randomUUID() },
