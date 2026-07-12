@@ -1,8 +1,40 @@
 # Public API → framework controllers (Fix 3)
 
 **Date:** 2026-07-12
-**Status:** Approved design
+**Status:** ❌ SHELVED after engineering review (2026-07-12). Do not implement without new justification.
 **Prerequisite:** Fix 1 (shared `publicCors` helper) — merged (PR #371).
+
+## Review outcome — why this is shelved
+
+An engineering review (`/plan-eng-review`) drove this to a no-go. The chain:
+
+1. **The `@authenticate` strategy (Seam A) was over-engineered.** It adds 3 framework
+   deps (`@agentback/authentication`+`security`+`authorization`) used nowhere in the
+   repo, to replace a pattern `GemController` already uses (inject `HTTP_REQUEST` +
+   `AUTH_BINDING`, call `resolveSession` — `gem.controller.ts:408`, `:1330`). Correct
+   call: drop the strategy, resolve sessions directly.
+2. **But dropping it collapses the payoff.** A behavior-preserving controller then
+   injects `HTTP_REQUEST`+`HTTP_RESPONSE`+db+auth, resolves the session by hand,
+   hand-writes error bodies, and hand-maintains a CORS table — a raw handler wearing a
+   `@get` decorator. The only remaining benefit is OpenAPI presence, which this spec
+   (below) explicitly says is *not* the goal.
+3. **Framework-native would break the error contract.** `sendError`
+   (`rest.server.ts:1037`) emits nested `{error:{code,message}}`; all 10 modules return
+   flat `{error:"..."}`. Going framework-native changes the JSON error shape on *every*
+   public 4xx (400/401/403/404/409/410/429) — a real API break vs the marketplace
+   client and every module's tests.
+4. **Fix 1 already banked the real value** — the 10× copy-pasted CORS/preflight drift.
+
+If ever revisited, the open blockers are: the global error-envelope reconciliation; the
+`orgs` `res.type("text/markdown")` non-JSON body (no schema-controller precedent exists);
+and unconditional controller registration (`requireSession(undefined)` would 500 where
+`install*` today 404s — needs `if (!auth) throw 404`). Already proven safe: per-request
+`HTTP_REQUEST` injection (`gem.controller.ts:408`) and expressMiddleware-set CORS
+surviving dispatch (`originGuard`→`AggregatorController`, live).
+
+The design below is preserved as the reviewed artifact.
+
+---
 
 ## Goal
 

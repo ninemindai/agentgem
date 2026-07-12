@@ -31,29 +31,29 @@ the new login.
 **Depends on / blocked by:** Nothing blocking. Naturally belongs with the
 `account_identities` sequel, which re-keys identity anyway.
 
-## Extract the duplicated route preamble into a shared routeKit
+## Fix the catalog cookie-only Bearer gap
 
-**What:** `cors()`, `preflight()`, and `whoami()` / `sessionLogin()` are copy-pasted
-across `src/catalog/install.ts:19-36`, `src/githubApp/orgsApi.ts:24-41`,
-`src/usage/install.ts`, and `src/groups/install.ts` — four near-identical copies, plus
-four hand-written `interface Req` / `interface Res` / `type ExpressApp` declarations.
+**What:** `catalog/install.ts` resolves the session from the cookie only, while every
+sibling public route (`orgsApi`, `usage`, `groups`, etc.) accepts either a session
+cookie or `Authorization: Bearer` via `resolveSession`. So the CLI cannot call
+`DELETE /api/catalog/gem` (or the catalog reads) with a Bearer token.
 
-**Why:** The copies have already diverged, and one divergence is a real bug.
-`orgsApi.ts:35-41` accepts either a session cookie or `Authorization: Bearer`, while
-`catalog/install.ts:32-36` reads only the cookie. So the CLI cannot call
-`DELETE /api/catalog/gem` with a Bearer token, even though every other catalog-adjacent
-route accepts one. Each `preflight()` also hardcodes its own `Allow-Methods` string.
+**Why:** A real inconsistency bug on an auth path — the CLI can publish/unpublish
+everywhere except catalog. The fix is one line: route catalog's session lookup through
+`resolveSession(auth, req.headers)` like the others (add a regression test:
+`DELETE /api/catalog/gem` with a Bearer token → 200).
 
-**Pros:** One `routeKit.ts` collapses roughly 120 duplicated lines, fixes the Bearer
-inconsistency, and makes the Req/Res shim a single type.
+**Pros:** Closes a documented bug; makes the catalog auth surface uniform with its
+siblings; ~one-line change plus a test.
 
-**Cons:** Touches four modules across two packages. A cross-cutting refactor bundled
-into a feature PR hides the real change. Four differently-shaped modules is also thin
-evidence for a shared abstraction — copy-paste twice before you abstract.
+**Cons:** Widens catalog's accepted auth (cookie → cookie|Bearer). Intended, but must be
+tested so it's owned, not accidental.
 
-**Context:** Pre-existing pattern; the groups plan merely adds the fourth copy. The
-Bearer gap at `catalog/install.ts:32-36` is the concrete motivating bug. Surfaced during
-the 2026-07-08 eng review.
+**Context:** The CORS/`preflight`/type-shim dedup half of this (originally "shared
+routeKit") shipped as Fix 1 — `src/publicCors.ts`, PR #371. The *controller migration*
+that would have folded this in (Fix 3) was reviewed and SHELVED on 2026-07-12
+(`docs/superpowers/specs/2026-07-12-public-api-framework-migration-design.md` — the
+framework-native path breaks the flat `{error:"..."}` envelope). So this Bearer bug is
+now a standalone fix, not blocked on any migration.
 
-**Depends on / blocked by:** Nothing. Best done as its own PR, before or after the
-groups plans.
+**Depends on / blocked by:** Nothing. Its own small PR.
