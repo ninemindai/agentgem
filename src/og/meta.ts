@@ -43,6 +43,10 @@ async function profileMeta(db: AppDb, login: string): Promise<OgMeta | null> {
   return { title: `@${p.login}`, description: `${p.gems.length} apps · ${p.reviews.length} reviews on AgentGem`, imageUrl: null };
 }
 
+// Skill cards are path-derived (sourceId + filename), NOT catalog-verified — deliberately, because
+// curated skills aren't a fixed catalog (any path in a source may resolve on demand) and this mirrors
+// what the live /skills/:sourceId/* SPA page already renders. Text is escaped; no new phishing surface
+// beyond the existing page. Hardening (gate on a known curated source) is a possible fast-follow.
 function skillMeta(key: string): OgMeta {
   const i = key.indexOf("/");
   const sourceId = i >= 0 ? key.slice(0, i) : key;

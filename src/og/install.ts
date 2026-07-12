@@ -76,7 +76,7 @@ export function installOg(app: OgExpressApp, deps: { db: AppDb; assetOrigin: str
     if (req.method !== "GET" || !resolveCard(req.path)) { next(); return; }
     void (async () => {
       try {
-        const pageUrl = `${req.protocol}://${req.get("host") ?? deps.ogImageOrigin}${req.originalUrl}`;
+        const pageUrl = `${deps.ogImageOrigin}${req.originalUrl}`;
         const html = await renderEntityHtml({ getMeta, assetOrigin: deps.assetOrigin, ogImageOrigin: deps.ogImageOrigin, fetchImpl: fetch }, req.path, pageUrl);
         if (html == null) { next(); return; }
         res.set("Content-Type", "text/html; charset=utf-8").send(html);
