@@ -74,6 +74,11 @@ export const ROUTES: RouteDef[] = [
 ];
 
 // Declared classifications the conformance test checks against.
+// NOTE: "my-apps" is deliberately in BOTH lists. It is a panel (the /my-apps list) whose owner-only
+// detail (/my-apps/<key>) reuses the "collection" route kind for its <base>/<entity> shape — it is NOT
+// a public entity-address collection like games/gems (those keys are world-addressable; a my-apps gem
+// may be private and is only reachable session-gated). The dual listing has no runtime effect: nothing
+// outside this file and the conformance test reads these arrays.
 export const COLLECTIONS = ["games", "gems", "ingredients", "skills", "orgs", "my-apps"];  // plural
 export const PANELS = ["publish", "account", "sources", "my-apps"];
 

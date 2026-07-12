@@ -36,7 +36,7 @@ export interface MyGemDetail {
   tags: string[];
   artifactKinds: string[];
   artifacts: unknown[];
-  grade: string;
+  grade: number | null;   // wire shape: the /api/catalog/gem-detail handler returns `grade ?? null`
   visibility: "public" | "unlisted" | "private";
   installable: boolean;
 }
