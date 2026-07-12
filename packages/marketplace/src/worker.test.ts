@@ -73,4 +73,13 @@ describe("marketplace OG worker", () => {
     expect(f).not.toHaveBeenCalled();                  // no aggregator meta call
     expect(await res.text()).toBe(SHELL);              // returns exactly what ASSETS gave, unmodified
   });
+
+  it("passes /sw.js straight to ASSETS (no OG injection, no meta fetch)", async () => {
+    const f = vi.fn(); vi.stubGlobal("fetch", f);
+    const e = env();
+    const res = await worker.fetch(req("/sw.js"), e);
+    expect(e.ASSETS.fetch).toHaveBeenCalledOnce();     // delegated to static assets
+    expect(f).not.toHaveBeenCalled();                  // no aggregator meta call
+    expect(await res.text()).toBe(SHELL);              // returns exactly what ASSETS gave, unmodified
+  });
 });
