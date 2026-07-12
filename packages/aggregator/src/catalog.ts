@@ -254,3 +254,33 @@ export async function recordCatalogShare(db: AppDb, req: ShareRequest, now: numb
   });
   return { shared: true, publishedBy: who.login, gemKey: m.gemKey, version: m.version };
 }
+
+// Visibility + owner for one (key, version). null = no catalog row (archive-only unlisted share or
+// unknown) — such a resolve is NOT private and must keep working.
+export async function gemAccessInfo(db: AppDb, gemKey: string, version: string): Promise<{ visibility: Visibility; ownerAccountId: string | null } | null> {
+  const r = (await db.select({ visibility: catalogGems.visibility, ownerAccountId: catalogGems.ownerAccountId })
+    .from(catalogGems).where(and(eq(catalogGems.gemKey, gemKey), eq(catalogGems.version, version))).limit(1))[0];
+  return r ? { visibility: r.visibility as Visibility, ownerAccountId: r.ownerAccountId ?? null } : null;
+}
+
+// Every gem owned by accountId, across all visibilities (the owner's own "My apps" view). Newest first.
+export async function listCatalogGemsForOwner(db: AppDb, accountId: string): Promise<CatalogRow[]> {
+  const rows = await db.select({
+    gemKey: catalogGems.gemKey, version: catalogGems.version, publishedBy: catalogGems.publishedBy,
+    author: catalogGems.author, description: catalogGems.description, tags: catalogGems.tags,
+    artifactKinds: catalogGems.artifactKinds, type: catalogGems.type, grade: catalogGems.grade,
+    artifacts: catalogGems.artifacts, createdAtMs: catalogGems.createdAtMs,
+    ownerAccountId: catalogGems.ownerAccountId, visibility: catalogGems.visibility, archiveKey: gemArchives.gemKey,
+  }).from(catalogGems)
+    .leftJoin(gemArchives, and(eq(catalogGems.gemKey, gemArchives.gemKey), eq(catalogGems.version, gemArchives.version)))
+    .where(eq(catalogGems.ownerAccountId, accountId))
+    .orderBy(desc(catalogGems.createdAtMs));
+  return rows.map((r) => ({
+    gemKey: r.gemKey, version: r.version, publishedBy: r.publishedBy,
+    author: r.author ?? undefined, description: r.description ?? undefined,
+    tags: r.tags ?? undefined, artifactKinds: r.artifactKinds ?? undefined,
+    type: r.type ?? undefined, grade: r.grade ?? undefined, artifacts: r.artifacts ?? undefined,
+    createdAtMs: r.createdAtMs, ownerAccountId: r.ownerAccountId ?? null,
+    visibility: (r.visibility as Visibility) ?? "public", installable: r.archiveKey != null,
+  }));
+}
