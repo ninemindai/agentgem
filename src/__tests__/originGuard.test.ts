@@ -303,4 +303,13 @@ describe("originGuard — public aggregator reads (CORS + cross-site exemption)"
     // The post-install Setup URL is a top-level navigation arriving FROM github.com.
     expect(run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "GET", "/api/github/setup").nexted).toBe(true);
   });
+
+  // OG card image: headless-browser link-unfurl previewers (Slack, Discord, iMessage) send
+  // Sec-Fetch-Site: cross-site with no cookies, so it needs the same public-read CORS treatment
+  // as the other credential-less GETs above.
+  it("allows a cross-site GET of /og/card.png with a wildcard CORS header", () => {
+    const r = run({ "sec-fetch-site": "cross-site" }, "api.agentgem.ai", "GET", "/og/card.png");
+    expect(r.nexted).toBe(true);
+    expect(r.set["access-control-allow-origin"]).toBe("*");
+  });
 });
