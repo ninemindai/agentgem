@@ -42,6 +42,15 @@ export async function upsertCatalogGem(db: AppDb, row: CatalogRow): Promise<void
   });
 }
 
+// The single source of truth for "publicly listable". EVERY anonymous list reader of catalog_gems
+// (served via PUBLIC_READ_PATHS) MUST AND this predicate into its WHERE, or it leaks private/unlisted
+// gems' key/version/description to unauthenticated callers — buildProfile and buildOrgCatalog once did
+// exactly that (caught in whole-branch review). Interpolatable into a raw `sql` template too.
+// NOT for single-gem resolves: those are gated by an explicit private→404 check (gemAccessInfo).
+export function visiblePublic() {
+  return eq(catalogGems.visibility, "public");
+}
+
 export async function listCatalogGems(db: AppDb): Promise<CatalogRow[]> {
   // Left-join gem_archives so `installable` reflects whether the content was uploaded.
   const rows = await db.select({
@@ -51,7 +60,7 @@ export async function listCatalogGems(db: AppDb): Promise<CatalogRow[]> {
     artifacts: catalogGems.artifacts, createdAtMs: catalogGems.createdAtMs, archiveKey: gemArchives.gemKey,
   }).from(catalogGems)
     .leftJoin(gemArchives, and(eq(catalogGems.gemKey, gemArchives.gemKey), eq(catalogGems.version, gemArchives.version)))
-    .where(eq(catalogGems.visibility, "public"))
+    .where(visiblePublic())
     .orderBy(desc(catalogGems.createdAtMs));
   return rows.map((r) => ({
     gemKey: r.gemKey, version: r.version, publishedBy: r.publishedBy,

@@ -8,6 +8,7 @@
 import { sql, desc, eq, and } from "drizzle-orm";
 import type { AppDb } from "./schema.js";
 import { accounts, catalogGems } from "./schema.js";
+import { visiblePublic } from "./catalog.js";
 import { accountIdForHandle, handleForAccountId } from "./handles.js";
 import { starCounts } from "./stars.js";
 import { reviewsByAccount } from "./reviews.js";
@@ -104,7 +105,7 @@ export async function buildProfile(db: AppDb, rawHandle: string): Promise<Profil
   const rows = await db
     .select({ gemKey: catalogGems.gemKey, version: catalogGems.version, description: catalogGems.description, grade: catalogGems.grade })
     .from(catalogGems)
-    .where(and(eq(catalogGems.ownerAccountId, accountId), eq(catalogGems.visibility, "public")))
+    .where(and(eq(catalogGems.ownerAccountId, accountId), visiblePublic()))
     .orderBy(desc(catalogGems.createdAtMs), desc(catalogGems.version));
   const latest = new Map<string, { gemKey: string; version: string; description: string | null; grade: number | null }>();
   for (const r of rows) if (!latest.has(r.gemKey)) latest.set(r.gemKey, r);
