@@ -289,17 +289,20 @@ export async function createApp(port: number): Promise<RestApplication> {
     installStars(server.expressApp as never, { db: aggDb, auth, webOrigins });
     installReviews(server.expressApp as never, { db: aggDb, auth, webOrigins });
     installCatalog(server.expressApp as never, { db: aggDb, auth, webOrigins });
-    // Deployment-agnostic OG cards. assetOrigin = where the built SPA index.html lives; ogImageOrigin =
-    // the public host whose /og/card.png crawlers fetch. Both default to the public app host and are
-    // overridable so a non-Cloudflare deploy needs zero code change.
-    const ogAssetOrigin = process.env.AGENTGEM_ASSET_ORIGIN ?? "https://app.agentgem.ai";
-    const ogImageOrigin = process.env.AGENTGEM_OG_IMAGE_ORIGIN ?? "https://app.agentgem.ai";
-    installOg(server.expressApp as never, { db: aggDb, assetOrigin: ogAssetOrigin, ogImageOrigin });
     installGroups(server.expressApp as never, { db: aggDb, auth, webOrigins });
     installGemShares(server.expressApp as never, { db: aggDb, auth, webOrigins });
     installUsage(server.expressApp as never, { db: aggDb, auth, webOrigins });
     installHandles(server.expressApp as never, { db: aggDb, auth, webOrigins });
     installAccount(server.expressApp as never, { db: aggDb, auth, webOrigins });
+  }
+  // Deployment-agnostic OG cards. Only needs the DB (no auth/web-origins) so a bare aggregator
+  // still registers card routes. assetOrigin = where the built SPA index.html lives; ogImageOrigin =
+  // the public host whose /og/card.png crawlers fetch. Both default to the public app host and are
+  // overridable so a non-Cloudflare deploy needs zero code change.
+  if (aggDb) {
+    const ogAssetOrigin = process.env.AGENTGEM_ASSET_ORIGIN ?? "https://app.agentgem.ai";
+    const ogImageOrigin = process.env.AGENTGEM_OG_IMAGE_ORIGIN ?? "https://app.agentgem.ai";
+    installOg(server.expressApp as never, { db: aggDb, assetOrigin: ogAssetOrigin, ogImageOrigin });
   }
   // GitHub App (enterprise orgs): webhook always mounts when the DB exists (503s until the three
   // GITHUB_APP_* secrets are set — the dormant contract); the /api/orgs reads mount with the same

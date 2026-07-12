@@ -1,6 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { cardImageUrl, renderCardResponse, renderEntityHtml, installOg } from "../og/install.js";
 import type { OgMeta } from "../og/meta.js";
+
+// installOg wires its GetMeta to buildOgMeta(db, card) internally, so the entity-middleware test
+// below stubs that module rather than injecting a getMeta directly.
+vi.mock("../og/meta.js", () => ({
+  buildOgMeta: vi.fn(async (): Promise<OgMeta> => ({ title: "Pizza", description: "Play on AgentGem", imageUrl: null })),
+}));
 
 const SHELL = `<!doctype html><html><head><title>AgentGem</title></head><body><div id="root"></div></body></html>`;
 const fakeFetch = ((_url: string) => Promise.resolve(new Response(SHELL, { status: 200 }))) as unknown as typeof fetch;
@@ -75,5 +81,43 @@ describe("installOg /og/card.png handler", () => {
 
     expect(statusCode).toBe(400);
     expect(done).toBe(true);
+  });
+});
+
+describe("installOg entity middleware — og:url", () => {
+  const originalFetch = globalThis.fetch;
+  afterEach(() => { globalThis.fetch = originalFetch; });
+
+  it("builds og:url from the configured ogImageOrigin, not req.get('host')", async () => {
+    globalThis.fetch = fakeFetch;
+
+    let entityHandler: ((req: any, res: any, next: () => void) => void) | undefined;
+    const fakeApp = {
+      get() {},
+      use(h: (req: any, res: any, next: () => void) => void) { entityHandler = h; },
+    };
+    installOg(fakeApp as never, { db: {} as never, assetOrigin: "https://assets.example", ogImageOrigin: "https://app.example" });
+    expect(entityHandler).toBeDefined();
+
+    let sent = "";
+    const res: any = {
+      set() { return res; },
+      status() { return res; },
+      send(b: string) { sent = b; },
+      end() {},
+    };
+    const req = {
+      method: "GET",
+      path: "/games/@acme/pizza",
+      originalUrl: "/games/@acme/pizza",
+      query: {},
+      protocol: "https",
+      get(h: string) { return h === "host" ? "api.internal" : undefined; },
+    };
+    entityHandler!(req, res, () => {});
+    await new Promise((r) => setImmediate(r)); // let the handler's async IIFE settle
+
+    expect(sent).toContain('content="https://app.example/games/@acme/pizza"');
+    expect(sent).not.toContain("api.internal");
   });
 });
