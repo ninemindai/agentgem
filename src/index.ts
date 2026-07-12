@@ -29,7 +29,7 @@ import { streamGemVerify } from "./gemVerifyStream.js";
 import { streamScorecard } from "./scorecardStream.js";
 import { streamInsights } from "./insightsStream.js";
 import { streamRubric } from "./rubricStream.js";
-import { listRubricsWithMeta, validateRubricInput, saveRubric, deleteRubric } from "./rubricCore.js";
+import { RubricController } from "./rubric.controller.js";
 import { streamWatch } from "./watchStream.js";
 import { streamWatchEvents } from "./watchEvents.js";
 import { streamWatchHygiene } from "./watchHygiene.js";
@@ -150,6 +150,7 @@ export async function createApp(port: number): Promise<RestApplication> {
   app.component(AgentSourcesComponent);
   app.configure("servers.MCPServer").to({ name: "agentgem", version: "0.1.0", transports: { stdio: false } });
   app.restController(GemController);
+  app.restController(RubricController);
   app.restController(ReviewController);
   app.restController(DreamController);
   app.restController(ShareProxyController);
@@ -383,17 +384,6 @@ export async function createApp(port: number): Promise<RestApplication> {
     beginForeground();
     try { await streamRubric(req as never, res as never); } finally { endForeground(); }
   });
-  // The rubric picker's catalog: built-in + user rubrics. GET /api/rubrics?dir=...
-  server.expressApp.get("/api/rubrics", originGuard, (req, res) =>
-    res.json({ rubrics: listRubricsWithMeta(typeof req.query.dir === "string" ? req.query.dir : undefined) } as never));
-  // Authoring (validated JSON editor). Validate always returns 200 with the result so
-  // the editor can render errors inline; save/delete write ~/.agentgem/rubrics/<id>.json.
-  server.expressApp.post("/api/rubrics/validate", originGuard, (req, res) =>
-    res.json(validateRubricInput((req as { body?: unknown }).body) as never));
-  server.expressApp.post("/api/rubrics", originGuard, (req, res) =>
-    res.json(saveRubric((req as { body?: unknown }).body) as never));
-  server.expressApp.post("/api/rubrics/delete", originGuard, (req, res) =>
-    res.json(deleteRubric((req as { body?: { id?: string } }).body?.id ?? "") as never));
   // Watch tab: live-preview HTML artifacts a regular coding session builds. List the
   // recently-active transcripts, then SSE-stream one session's HTML file snapshots
   // (redacted, sandbox-ready) as it writes/edits them. Read-only, metadata + scrubbed
