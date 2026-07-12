@@ -4,18 +4,21 @@
 // (like GemController.publishSetup) and forward it via the Task 1 sign+forward client
 // (src/gem/reviewClient.ts), which signs the review-specific payloads (never catalogSigningPayload).
 import { z } from "zod";
-import { api, get, post } from "@agentback/openapi";
-import { readWorkspace } from "@agentgem/base";
+import { api, get, post, AgentError } from "@agentback/openapi";
+import { readWorkspace, createWorkspace } from "@agentgem/base";
 import { readGemArchive } from "@agentgem/archive";
 import { exportGem, importGem } from "@agentgem/distribute";
 import { loadOrCreateIdentity } from "@agentgem/model";
 import type { CatalogManifest } from "@agentgem/aggregator";
-import { postReviewRequest, postReviewResubmit, postReviewAction } from "./gem/reviewClient.js";
+import { postReviewRequest, postReviewResubmit, postReviewAction, fetchReviewArchive } from "./gem/reviewClient.js";
+import { executableArtifacts, hasExecutable } from "./gem/hostedInstall.js";
 
 const ReviewRequestBody = z.object({ workspace: z.string(), scope: z.string(), name: z.string().optional(), version: z.string(), groupId: z.string(), description: z.string().max(4000).optional() });
 const ReviewRequestResult = z.object({ ok: z.boolean(), requestId: z.string().optional(), rejected: z.string().optional() });
 const ReviewResubmitBody = z.object({ workspace: z.string(), scope: z.string(), name: z.string().optional(), version: z.string(), requestId: z.string(), description: z.string().max(4000).optional() });
 const ReviewActionResult = z.object({ ok: z.boolean(), rejected: z.string().optional() });
+const ReviewInstallBody = z.object({ requestId: z.string(), name: z.string().optional(), consent: z.boolean().optional() });
+const ReviewInstallResult = z.object({ workspace: z.string(), executables: z.object({ mcp: z.array(z.string()), hooks: z.array(z.string()) }) });
 
 // Build the same manifest publishSetup builds (src/gem.controller.ts:620-641), MINUS visibility (a
 // staged gem's visibility is decided at approval/publish, not at review submission) and MINUS tags
@@ -80,4 +83,22 @@ export class ReviewController {
 
   @post("/seen", { body: z.object({ requestId: z.string() }), response: z.object({ ok: z.boolean() }) })
   async seen(input: { body: { requestId: string } }) { return await this.act("seen", input.body.requestId, "/review/seen"); }
+
+  // Install-to-test: like GemController.installHosted, but the archive comes from the review-staging
+  // fetch (Task 1, keyed by requestId + signed identity) instead of the hosted public download
+  // (keyed by key/version). Same verify + executable-consent gate + workspace materialization.
+  @post("/install", { body: ReviewInstallBody, response: ReviewInstallResult })
+  async install(input: { body: z.infer<typeof ReviewInstallBody> }): Promise<z.infer<typeof ReviewInstallResult>> {
+    const b = input.body;
+    const bytes = await fetchReviewArchive({ requestId: b.requestId, identity: loadOrCreateIdentity() });
+    if (bytes == null) throw new AgentError("staging archive not available", { status: 404, code: "review_archive_gone", retryable: false });
+    const { gem } = importGem(bytes); // verifies gem.lock; throws on tamper
+    const executables = executableArtifacts(gem);
+    if (hasExecutable(gem) && b.consent !== true) {
+      throw new AgentError("this gem runs executable artifacts; install requires consent", { status: 409, code: "consent_required", retryable: false });
+    }
+    const name = (b.name ?? `review-${b.requestId}`).replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "review-gem";
+    createWorkspace(name, gem);
+    return { workspace: name, executables };
+  }
 }
