@@ -27,6 +27,20 @@ export interface MyGem {
   installable: boolean;
 }
 
+// Detailed gem view for the owner — includes metadata and artifacts.
+export interface MyGemDetail {
+  key: string;
+  version: string;
+  publishedBy: string;
+  description: string;
+  tags: string[];
+  artifactKinds: string[];
+  artifacts: unknown[];
+  grade: string;
+  visibility: "public" | "unlisted" | "private";
+  installable: boolean;
+}
+
 type Query = Record<string, string | number | undefined>;
 
 // The ONE querystring encoder: undefined params are dropped, everything else (incl. "" and 0)
@@ -89,6 +103,12 @@ export function makeApi(base: string) {
       getCred<GameMeta>(base, "/api/catalog/game-meta", { key }),
     getOwnerGameHtml: (key: string, version: string) =>
       getCred<{ html: string }>(base, "/api/catalog/game-html", { key, version }).then((r) => r.html),
+    // Owner-only detail view of a gem (including metadata and artifacts), gated to the session's own gems.
+    getMyGem: (key: string) =>
+      getCred<MyGemDetail>(base, "/api/catalog/gem-detail", { key }),
+    // Owner-only gem archive base64 (for download/install), gated to the session's own gems.
+    getOwnerGemArchive: (key: string, version: string) =>
+      getCred<{ archiveBase64: string }>(base, "/api/catalog/gem-archive", { key, version }).then((r) => r.archiveBase64),
     // Sealed HTML of a gem's game artifact (for the playable Minigames arcade). 404s a non-game gem.
     getGameHtml: (key: string, version: string) =>
       get<{ html: string }>(base, "/api/aggregator/game-html", { key, version }).then((r) => r.html),
