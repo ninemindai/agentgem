@@ -26,9 +26,11 @@ it("Request review: picks a group and submits a review request", async () => {
   // pick the group (the picker appears once groups load), then confirm
   const select = await screen.findByRole("combobox", { name: /group|team/i });
   fireEvent.change(select, { target: { value: "g1" } });
+  // Optional note to reviewers is threaded into the request body at submit.
+  fireEvent.change(await screen.findByRole("textbox", { name: /note to reviewers/i }), { target: { value: "fixed the boss fight" } });
   fireEvent.click(await screen.findByRole("button", { name: /submit for review|request$/i }));
   await waitFor(() => expect(req).toHaveBeenCalledTimes(1));
-  expect(req.mock.calls[0][1]).toMatchObject({ body: expect.objectContaining({ scope: "bob", groupId: "g1", version: "0.1.0" }) });
+  expect(req.mock.calls[0][1]).toMatchObject({ body: expect.objectContaining({ scope: "bob", groupId: "g1", version: "0.1.0", description: "fixed the boss fight" }) });
   expect(await screen.findByText(/in review/i)).toBeTruthy();
 });
 

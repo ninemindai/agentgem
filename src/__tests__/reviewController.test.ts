@@ -159,6 +159,16 @@ describe("ReviewController play", () => {
     expect(fetchArch.mock.calls[0][0].requestId).toBe("r1");
   });
 
+  it("surfaces the game's declared needs (informational; play stays broker-less)", async () => {
+    fetchArch.mockResolvedValue(Buffer.from([9]));
+    importGemMock.mockReturnValueOnce({
+      meta: { gemDigest: "sha256:zz", version: "1.0.0" },
+      gem: { artifacts: [{ type: "game", html: "<h1>hi</h1>", needs: ["session-data", "open-link"] }], name: "bot", checks: [], requiredSecrets: [], createdFrom: "x" },
+    });
+    const res = await new ReviewController().play({ body: { requestId: "r1" } });
+    expect(res).toEqual({ html: "<h1>hi</h1>", needs: ["session-data", "open-link"] });
+  });
+
   it("rejects (not_a_game) when the staged gem has no game artifact", async () => {
     fetchArch.mockResolvedValue(Buffer.from([9]));
     importGemMock.mockReturnValueOnce({

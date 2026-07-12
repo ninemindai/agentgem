@@ -48,6 +48,7 @@ function RequestDetail({
   const [playBusy, setPlayBusy] = useState(false);
   const [playError, setPlayError] = useState<string | null>(null);
   const [playHtml, setPlayHtml] = useState<string | null>(null);
+  const [playNeeds, setPlayNeeds] = useState<string[] | undefined>(undefined);
 
   const load = () => {
     setDetail(null);
@@ -134,7 +135,7 @@ function RequestDetail({
     setPlayError(null);
     reviewPlayRoute
       .call(makeClient(apiBase), { body: { requestId: summary.id } })
-      .then((r) => setPlayHtml(r.html))
+      .then((r) => { setPlayHtml(r.html); setPlayNeeds(r.needs); })
       .catch((e) => {
         const status = e && typeof e === "object" && "status" in e ? (e as { status?: number }).status : undefined;
         if (status === 404) { setPlayError("archive no longer available"); return; }
@@ -242,7 +243,7 @@ function RequestDetail({
           : (installError && <span className="ledger-error" role="alert">{installError}</span>)}
       </div>
       {playHtml != null && (
-        <PlayModal html={playHtml} gemKey={detail.gemKey} version={detail.version} onClose={() => setPlayHtml(null)} />
+        <PlayModal html={playHtml} needs={playNeeds} gemKey={detail.gemKey} version={detail.version} onClose={() => { setPlayHtml(null); setPlayNeeds(undefined); }} />
       )}
     </div>
   );
