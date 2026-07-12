@@ -7,13 +7,18 @@
 // SameSite=Lax session cookie + the 401, NOT by CORS. Unpublish is a hard delete of the catalog row +
 // archive bytes (visibility scope is a separate, later feature).
 import type { AppDb, makeAuth } from "@agentgem/aggregator";
-import { resolveSession, deleteCatalogGem } from "@agentgem/aggregator";
+import { resolveSession, deleteCatalogGem, listCatalogGemsForOwner, gemAccessInfo, latestGemVersion, getGemArchive } from "@agentgem/aggregator";
+import { importGem } from "@agentgem/distribute";
 
 export interface CatalogDeps { db: AppDb; auth: ReturnType<typeof makeAuth>; webOrigins: string[] }
 
 interface Req { method: string; path: string; query: Record<string, unknown>; headers: Record<string, string | undefined> }
 interface Res { status(c: number): Res; set(k: string, v: string): Res; json(b: unknown): Res; send(b: unknown): Res }
-type ExpressApp = { delete(p: string, h: (req: Req, res: Res) => unknown): unknown; options(p: string, h: (req: Req, res: Res) => unknown): unknown };
+type ExpressApp = {
+  delete(p: string, h: (req: Req, res: Res) => unknown): unknown;
+  get(p: string, h: (req: Req, res: Res) => unknown): unknown;
+  options(p: string, h: (req: Req, res: Res) => unknown): unknown;
+};
 
 function cors(req: Req, res: Res, origins: string[]): void {
   const origin = req.headers["origin"];
@@ -24,7 +29,7 @@ function cors(req: Req, res: Res, origins: string[]): void {
   }
 }
 function preflight(res: Res): void {
-  res.set("Access-Control-Allow-Methods", "DELETE, OPTIONS").set("Access-Control-Allow-Headers", "content-type").status(204).send("");
+  res.set("Access-Control-Allow-Methods", "GET, DELETE, OPTIONS").set("Access-Control-Allow-Headers", "content-type").status(204).send("");
 }
 // Ownership is the accounts.id uuid, never the login string (see deleteCatalogGem).
 async function sessionAccountId(deps: CatalogDeps, req: Req): Promise<string | null> {
@@ -48,7 +53,71 @@ export function unpublishHandler(deps: CatalogDeps) {
   };
 }
 
+// The owner's own "My apps" view: every gem they own, across all visibilities (private included).
+export function myGemsHandler(deps: CatalogDeps) {
+  return async (req: Req, res: Res): Promise<void> => {
+    cors(req, res, deps.webOrigins);
+    if (req.method === "OPTIONS") { preflight(res); return; }
+    const accountId = await sessionAccountId(deps, req);
+    if (!accountId) { res.status(401).json({ error: "sign in required" }); return; }
+    const rows = await listCatalogGemsForOwner(deps.db, accountId);
+    res.json({
+      gems: rows.map((g) => ({
+        key: g.gemKey, version: g.version, description: g.description ?? "",
+        artifactKinds: g.artifactKinds ?? [], visibility: g.visibility ?? "public", installable: g.installable ?? false,
+      })),
+    });
+  };
+}
+
+// Owner-only game-meta resolve (mirrors AggregatorController.gameMeta's extraction, but gated to the
+// session's own gems instead of public visibility). A non-owner authenticated caller gets the SAME
+// 404 as an unknown key — no existence leak via a 403.
+export function ownerGameMetaHandler(deps: CatalogDeps) {
+  return async (req: Req, res: Res): Promise<void> => {
+    cors(req, res, deps.webOrigins);
+    if (req.method === "OPTIONS") { preflight(res); return; }
+    const accountId = await sessionAccountId(deps, req);
+    if (!accountId) { res.status(401).json({ error: "sign in required" }); return; }
+    const key = String((req.query.key as string | undefined) ?? "");
+    const version = key ? await latestGemVersion(deps.db, key) : null;
+    if (!key || !version) { res.status(404).json({ error: "gem not found" }); return; }
+    const info = await gemAccessInfo(deps.db, key, version);
+    if (!info || info.ownerAccountId !== accountId) { res.status(404).json({ error: "gem not found" }); return; }
+    const a = await getGemArchive(deps.db, key, version);
+    if (!a) { res.status(404).json({ error: "gem not found" }); return; }
+    const { gem } = importGem(Buffer.from(a.bytes));
+    const game = gem.artifacts.find((x) => x.type === "game") as { title?: unknown; genre?: unknown } | undefined;
+    if (!game || typeof game.title !== "string") { res.status(404).json({ error: "this gem has no game to play" }); return; }
+    res.json({ title: game.title, genre: game.genre, version });
+  };
+}
+
+// Owner-only game-html (the sealed play HTML). Same no-leak 404 rule as ownerGameMetaHandler.
+export function ownerGameHtmlHandler(deps: CatalogDeps) {
+  return async (req: Req, res: Res): Promise<void> => {
+    cors(req, res, deps.webOrigins);
+    if (req.method === "OPTIONS") { preflight(res); return; }
+    const accountId = await sessionAccountId(deps, req);
+    if (!accountId) { res.status(401).json({ error: "sign in required" }); return; }
+    const key = String((req.query.key as string | undefined) ?? "");
+    const version = String((req.query.version as string | undefined) ?? "");
+    if (!key || !version) { res.status(404).json({ error: "gem not found" }); return; }
+    const info = await gemAccessInfo(deps.db, key, version);
+    if (!info || info.ownerAccountId !== accountId) { res.status(404).json({ error: "gem not found" }); return; }
+    const a = await getGemArchive(deps.db, key, version);
+    if (!a) { res.status(404).json({ error: "gem not found" }); return; }
+    const { gem } = importGem(Buffer.from(a.bytes));
+    const game = gem.artifacts.find((x) => x.type === "game") as { html?: unknown } | undefined;
+    if (!game || typeof game.html !== "string") { res.status(404).json({ error: "this gem has no game to play" }); return; }
+    res.json({ html: game.html });
+  };
+}
+
 export function installCatalog(expressApp: ExpressApp, deps: CatalogDeps): void {
   expressApp.delete("/api/catalog/gem", unpublishHandler(deps));
   expressApp.options("/api/catalog/gem", unpublishHandler(deps));
+  for (const p of ["/api/catalog/my-gems"]) { expressApp.get(p, myGemsHandler(deps)); expressApp.options(p, myGemsHandler(deps)); }
+  for (const p of ["/api/catalog/game-meta"]) { expressApp.get(p, ownerGameMetaHandler(deps)); expressApp.options(p, ownerGameMetaHandler(deps)); }
+  for (const p of ["/api/catalog/game-html"]) { expressApp.get(p, ownerGameHtmlHandler(deps)); expressApp.options(p, ownerGameHtmlHandler(deps)); }
 }
