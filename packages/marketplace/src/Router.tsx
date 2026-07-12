@@ -19,6 +19,7 @@ import { OrgCatalog } from "./pages/OrgCatalog";
 import { TeamUsage } from "./pages/TeamUsage";
 import { Sources } from "./pages/Sources";
 import { Offline } from "./pages/Offline";
+import { Groups } from "./pages/Groups";
 import { Minigames } from "./pages/Minigames";
 import { Play } from "./pages/Play";
 import { parseGamePath } from "./entityPath";
@@ -56,6 +57,7 @@ export const ROUTES: RouteDef[] = [
   // Owner play of private gems lives here — never in Explore/Minigames, which are public-only.
   { id: "my-apps", kind: "panel", match: (p) => p === "/my-apps", render: (_m, c) => <MyApps api={c.api} me={c.me} /> },
   { id: "sources", kind: "panel", match: (p) => p === "/sources", render: (_m, c) => <Sources api={c.api} /> },
+  { id: "groups", kind: "panel", match: (p) => p === "/groups", render: (_m, c) => <Groups me={c.me} base={defaultApiBase()} /> },
   // Miniapps is the home tab. "/minigames" is the old path, kept alive for shared links and the
   // desktop deep-link; "/" is home. The ingredients board moved to its own "/ingredients".
   { id: "home", kind: "home", match: (p) => p === "/" || p === "/miniapps" || p === "/minigames", render: (_m, c) => <Minigames api={c.api} stars={c.stars} /> },
@@ -82,7 +84,7 @@ export const ROUTES: RouteDef[] = [
 // may be private and is only reachable session-gated). The dual listing has no runtime effect: nothing
 // outside this file and the conformance test reads these arrays.
 export const COLLECTIONS = ["games", "gems", "ingredients", "skills", "orgs", "my-apps"];  // plural
-export const PANELS = ["publish", "account", "sources", "my-apps", "offline"];
+export const PANELS = ["publish", "account", "sources", "my-apps", "offline", "groups"];
 
 // A legacy singular alias (e.g. /ingredient/x) is rewritten to its plural canonical form (e.g.
 // /ingredients/x) via replaceState — old shared links keep working, and the URL bar shows canonical.
