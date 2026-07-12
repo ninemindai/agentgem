@@ -1,6 +1,19 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { App } from "./App";
+import * as pk from "./passkeyAuth";
+
+// App.tsx builds `passkeyAuth` once at module load via `makePasskeyAuth(defaultApiBase())` and gates
+// the passkey affordance on `passkeySupported()`. Mock the whole module so every test sees the
+// button and controls what the WebAuthn ceremony resolves/throws, via the exported test hook below.
+vi.mock("./passkeyAuth", () => {
+  const signInPasskey = vi.fn();
+  return {
+    makePasskeyAuth: () => ({ signIn: { passkey: signInPasskey } }),
+    passkeySupported: () => true,
+    __signInPasskey: signInPasskey,
+  };
+});
 
 afterEach(() => {
   cleanup();
@@ -182,6 +195,89 @@ describe("App link interceptor", () => {
     render(<App />);
     const link = await screen.findByRole("link", { name: "octocat" });
     expect(link.getAttribute("href")).toBe("/@octocat");
+  });
+});
+
+describe("App passkey sign-in", () => {
+  const signInPasskey = (pk as unknown as { __signInPasskey: ReturnType<typeof vi.fn> }).__signInPasskey;
+
+  async function openPasskeyDialog() {
+    const link = await screen.findByRole("link", { name: "Sign in" });
+    fireEvent.click(link);
+    return screen.findByRole("button", { name: /use a passkey/i });
+  }
+
+  it("success: closes the dialog and refetches the session so the UI shows signed-in state", async () => {
+    let getSessionCalls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (u: string) => {
+        if (u.includes("/api/auth/get-session")) {
+          getSessionCalls++;
+          // First call (on mount) is signed-out; after a successful passkey ceremony, App refetches
+          // and this second call reports the now-signed-in session.
+          return getSessionCalls === 1 ? res(null) : res({ user: { id: "u1", name: "Neo" } });
+        }
+        if (u.includes("/popular-skills")) return res({ skills: [], groups: [] });
+        return res([]);
+      }),
+    );
+    signInPasskey.mockResolvedValue({ data: { token: "t" }, error: null });
+
+    render(<App />);
+    const passkeyBtn = await openPasskeyDialog();
+    fireEvent.click(passkeyBtn);
+
+    // Dialog closed (its "Use a passkey" button is gone) and the header reflects signed-in state.
+    await waitFor(() => expect(screen.queryByRole("button", { name: /use a passkey/i })).toBeNull());
+    expect(await screen.findByRole("button", { name: /sign out/i })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Sign in" })).toBeNull();
+    expect(getSessionCalls).toBe(2);
+  });
+
+  it("returned error: shows an alert with the message and leaves the dialog open", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (u: string) => {
+        if (u.includes("/api/auth/get-session")) return res(null);
+        if (u.includes("/popular-skills")) return res({ skills: [], groups: [] });
+        return res([]);
+      }),
+    );
+    signInPasskey.mockResolvedValue({ data: null, error: { message: "no authenticator" } });
+
+    render(<App />);
+    const passkeyBtn = await openPasskeyDialog();
+    fireEvent.click(passkeyBtn);
+
+    await waitFor(() => {
+      const alerts = screen.getAllByRole("alert");
+      expect(alerts.some((a) => a.textContent?.includes("no authenticator"))).toBe(true);
+    });
+    // No silent no-op: the dialog is still open (its passkey button is still present).
+    expect(screen.getByRole("button", { name: /use a passkey/i })).toBeTruthy();
+  });
+
+  it("thrown rejection: shows an alert with the error message", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (u: string) => {
+        if (u.includes("/api/auth/get-session")) return res(null);
+        if (u.includes("/popular-skills")) return res({ skills: [], groups: [] });
+        return res([]);
+      }),
+    );
+    signInPasskey.mockRejectedValue(new Error("ceremony cancelled"));
+
+    render(<App />);
+    const passkeyBtn = await openPasskeyDialog();
+    fireEvent.click(passkeyBtn);
+
+    await waitFor(() => {
+      const alerts = screen.getAllByRole("alert");
+      expect(alerts.some((a) => a.textContent?.includes("ceremony cancelled"))).toBe(true);
+    });
+    expect(screen.getByRole("button", { name: /use a passkey/i })).toBeTruthy();
   });
 });
 
