@@ -543,6 +543,52 @@ a.ex-skillcard-rating:hover { text-decoration: underline; }
   color: var(--verified); background: color-mix(in srgb, var(--verified) 14%, transparent); border-radius: var(--r-pill); padding: 2px 7px;
 }
 
+/* ── Account: passkeys ───────────────────────────────────────── */
+.ex-passkeys { margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--line); }
+.ex-passkeys > h2 { margin: 0 0 4px; }
+.ex-passkeys > .ex-muted { margin: 0 0 14px; }
+.ex-passkey-list { list-style: none; padding: 0; margin: 0 0 14px; display: flex; flex-direction: column; }
+.ex-passkey-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 0; font-size: 0.92rem; }
+.ex-passkey-row + .ex-passkey-row { border-top: 1px solid var(--line); }
+.ex-passkey-meta { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.ex-passkey-name { font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ex-passkey-date { color: var(--muted); font-size: 0.8rem; white-space: nowrap; }
+.ex-passkey-add, .ex-passkey-del, .ex-passkey-name-submit {
+  font: inherit; font-weight: 500; cursor: pointer; border-radius: var(--r-sm);
+  transition: color var(--t), background var(--t), border-color var(--t), box-shadow var(--t), filter var(--t);
+}
+.ex-passkey-add { font-size: 0.9rem; color: var(--ink-2); background: var(--surface); border: 1px solid var(--line-2); padding: 8px 14px; }
+.ex-passkey-add:hover { color: var(--ink); background: var(--surface-2); box-shadow: var(--shadow); }
+.ex-passkey-del { font-size: 0.8rem; color: var(--muted); background: none; border: 1px solid transparent; padding: 4px 9px; }
+.ex-passkey-del:hover { color: var(--brand-strong); background: var(--brand-wash); }
+
+/* passkey-name modal */
+.ex-passkey-name-form { display: flex; flex-direction: column; gap: 7px; margin-top: 4px; }
+.ex-passkey-name-form > label { font-size: 0.85rem; font-weight: 500; color: var(--ink-2); }
+.ex-passkey-name-form > input {
+  font: inherit; font-size: 0.95rem; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line-2); border-radius: var(--r-sm); padding: 9px 11px;
+  transition: border-color var(--t), box-shadow var(--t);
+}
+.ex-passkey-name-form > input:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-wash); }
+.ex-passkey-name-submit {
+  align-self: flex-start; margin-top: 6px; font-size: 0.9rem;
+  color: #fff; background: var(--grad-gem); border: 1px solid transparent; padding: 9px 16px;
+  box-shadow: 0 1px 3px rgba(180, 84, 58, 0.28);
+}
+.ex-passkey-name-submit:hover { filter: brightness(1.06) saturate(1.05); box-shadow: 0 2px 9px rgba(180, 84, 58, 0.4); }
+
+/* ── Sign-in chooser (vertical list of provider options) ─────── */
+.ex-signin-choices { display: flex; flex-direction: column; gap: 9px; margin-top: 6px; }
+.ex-signin-choice {
+  font: inherit; font-size: 0.95rem; font-weight: 500;
+  color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line-2); border-radius: var(--r);
+  padding: 11px 14px; text-align: center; cursor: pointer;
+  transition: color var(--t), background var(--t), border-color var(--t), box-shadow var(--t);
+}
+.ex-signin-choice:hover { background: var(--surface-2); box-shadow: var(--shadow); }
+
 .ex-spark { display: block; width: 100%; height: auto; overflow: visible; }
 .ex-legend { display: flex; align-items: center; gap: 8px; margin: 12px 0 0; font-size: 0.8rem; color: var(--muted); }
 .ex-dot { width: 9px; height: 9px; border-radius: var(--r-pill); display: inline-block; }

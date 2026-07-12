@@ -90,7 +90,7 @@ export function PasskeysSection({ client, supported }: { client: PasskeyClient; 
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. MacBook"
-              autoFocus
+              data-autofocus
             />
             <button type="submit" className="ex-passkey-name-submit">Add passkey</button>
           </form>
