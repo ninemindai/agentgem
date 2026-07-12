@@ -7,6 +7,8 @@ import { defineConsolePage } from "../../registry.js";
 import { setPendingRubric } from "../../pendingAnalyze.js";
 import { Loading } from "../../shell/Loading.js";
 import { useSplit } from "../../shell/useSplit.js";
+import { getKeys, setKeys } from "../../activeGem.js";
+import { selKey } from "../Curate/selection.js";
 
 function isCheap(r: RubricSummary): boolean {
   return !r.criteria || r.criteria.length === 0;
@@ -28,6 +30,12 @@ const TEMPLATE = JSON.stringify({
 function runRubric(id: string): void {
   setPendingRubric(id);
   window.location.hash = "#/rubrics";
+}
+
+/** Add a rubric to the active gem selection (additive) and return the curate route to navigate to. */
+export function bundleRubric(rubricId: string): string {
+  setKeys(new Set([...getKeys(), selKey("rubrics", rubricId)]));
+  return "#/curate";
 }
 
 // The validated JSON editor: live server-side validation with a resolved-factors preview.
@@ -118,6 +126,7 @@ function RubricRow({ apiBase, r, onChanged }: { apiBase: string; r: RubricSummar
         {!r.builtin && <button type="button" className="ledger-view" onClick={() => { setEditing(true); setOpen(true); }}>Edit</button>}
         {!r.builtin && <button type="button" className="ledger-view rub-del" onClick={del}>Delete</button>}
         <button type="button" className="ledger-view" onClick={() => runRubric(r.id)}>Run ▶</button>
+        <button type="button" className="ledger-view" onClick={() => { window.location.hash = bundleRubric(r.id); }}>Bundle ▸</button>
       </div>
       {open && !editing && (
         <div className="run-out">
