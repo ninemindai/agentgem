@@ -51,7 +51,7 @@ export function Studio({
   const [share, setShare] = useState<{ gemUrl: string; cardUrl?: string } | null>(null);
   const [pendingPublish, setPendingPublish] = useState(false);   // Share clicked while unbound
   const [pendingVersion, setPendingVersion] = useState<{ latestVersion: string; nextVersion: string; login: string } | null>(null);
-  const [scope, setScope] = useState<"public" | "unlisted">("public");
+  const [scope, setScope] = useState<"public" | "unlisted" | "private">("public");
   const { status: identity } = useIdentity();
   const closeRef = useRef<null | (() => void)>(null);
   const logRef = useRef<HTMLDivElement>(null);
@@ -270,7 +270,7 @@ export function Studio({
 
   // The actual publish. Takes `login` explicitly (see the onBound comment above) and
   // deliberately does NOT save: the caller already did, and the workspace + seal exist.
-  async function publishWorkspace(login: string, version: string, visibility: "public" | "unlisted") {
+  async function publishWorkspace(login: string, version: string, visibility: "public" | "unlisted" | "private") {
     setStatus("publishing to app.agentgem.ai…");
     try {
       const g = genreOf(meta?.genre ?? "project-fun");
@@ -339,6 +339,7 @@ export function Studio({
         <div className="play-scope" role="radiogroup" aria-label="Sharing scope">
           <button type="button" className={`play-btn ${scope === "public" ? "play-btn--primary" : "play-btn--ghost"}`} aria-pressed={scope === "public"} onClick={() => setScope("public")}>Public</button>
           <button type="button" className={`play-btn ${scope === "unlisted" ? "play-btn--primary" : "play-btn--ghost"}`} aria-pressed={scope === "unlisted"} onClick={() => setScope("unlisted")}>Unlisted</button>
+          <button type="button" className={`play-btn ${scope === "private" ? "play-btn--primary" : "play-btn--ghost"}`} aria-pressed={scope === "private"} onClick={() => setScope("private")}>Private</button>
         </div>
         <button className="play-btn play-btn--primary" onClick={shareToExplore}>Share to app.agentgem.ai</button>
       </div>
