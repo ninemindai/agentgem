@@ -6,7 +6,7 @@ import { sql, desc, and, eq } from "drizzle-orm";
 import { verify } from "@agentgem/model";
 import { canonicalJSON } from "@agentgem/insight";
 import type { AppDb } from "./schema.js";
-import { catalogGems, gemArchives, producers, accountBindings } from "./schema.js";
+import { catalogGems, gemArchives, producers, accountBindings, gemGroupShares } from "./schema.js";
 import { accountIdForProvider } from "./auth/accountLinking.js";
 
 export type Visibility = "public" | "unlisted" | "private";
@@ -138,6 +138,11 @@ export async function deleteCatalogGem(db: AppDb, gemKey: string, version: strin
     // delete would otherwise leave an orphaned catalog row that reads as installable:false forever.
     await tx.delete(gemArchives).where(and(eq(gemArchives.gemKey, gemKey), eq(gemArchives.version, version)));
     await tx.delete(catalogGems).where(and(eq(catalogGems.gemKey, gemKey), eq(catalogGems.version, version)));
+    // If that was the key's last catalog row, drop its group shares too (a share to a gem that no
+    // longer exists would otherwise linger in the owner's share panel and group discovery listings).
+    const remaining = (await tx.select({ gemKey: catalogGems.gemKey }).from(catalogGems)
+      .where(eq(catalogGems.gemKey, gemKey)).limit(1))[0];
+    if (!remaining) await tx.delete(gemGroupShares).where(eq(gemGroupShares.gemKey, gemKey));
     return "deleted";
   });
 }
