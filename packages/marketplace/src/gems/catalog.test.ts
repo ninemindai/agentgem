@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { filterGems, STATIC_GEMS, loadGems, findGem } from "./catalog";
+import { filterGems, STATIC_GEMS, loadGems, findGem, gameGenre, displayTags, filterGames, genreLabel } from "./catalog";
 import type { RegistryGem } from "../types";
 import { cutMeta } from "./cuts";
 
@@ -87,5 +87,61 @@ describe("cut threading", () => {
     const live: RegistryGem = { key: "k", version: "1.0.0", description: "d", tags: [], artifactKinds: [] };
     const [g] = await loadGems(apiWith(() => Promise.resolve([live])));
     expect(g.publishedBy).toBeUndefined();
+  });
+});
+
+import type { Gem } from "./catalog";
+
+const mkGem = (key: string, tags: string[], description = ""): Gem => ({
+  key, version: "1.0.0", description, tags, artifactKinds: ["game"], ingredients: [],
+});
+
+describe("game genre + tag helpers", () => {
+  it("gameGenre reads the genre value out of the tags array", () => {
+    expect(gameGenre(mkGem("a", ["game", "replay", "puzzle"]))).toBe("replay");
+    expect(gameGenre(mkGem("b", ["game", "session-heatmap"]))).toBe("session-heatmap");
+  });
+
+  it("gameGenre is undefined when no genre tag is present", () => {
+    expect(gameGenre(mkGem("c", ["game", "puzzle"]))).toBeUndefined();
+    expect(gameGenre(mkGem("d", []))).toBeUndefined();
+  });
+
+  it("displayTags strips the structural game tag and the genre tag", () => {
+    expect(displayTags(mkGem("a", ["game", "replay", "puzzle", "coop"]))).toEqual(["puzzle", "coop"]);
+    expect(displayTags(mkGem("b", ["game", "project-fun"]))).toEqual([]);
+  });
+
+  it("filterGames returns all games on a blank query and no genre facet", () => {
+    const gs = [mkGem("a", ["game", "replay"]), mkGem("b", ["game", "project-fun"])];
+    expect(filterGames(gs, "", []).length).toBe(2);
+  });
+
+  it("filterGames narrows by genre facet (OR within the facet)", () => {
+    const gs = [mkGem("a", ["game", "replay"]), mkGem("b", ["game", "project-fun"]), mkGem("c", ["game", "replay"])];
+    expect(filterGames(gs, "", ["replay"]).map((g) => g.key)).toEqual(["a", "c"]);
+    expect(filterGames(gs, "", ["replay", "project-fun"]).length).toBe(3);
+  });
+
+  it("filterGames matches query over key, description, and display tags (not the structural tags)", () => {
+    const gs = [
+      mkGem("@me/duel", ["game", "replay", "puzzle"], "a coding duel"),
+      mkGem("@me/heat", ["game", "session-heatmap"], "a heatmap"),
+    ];
+    expect(filterGames(gs, "puzzle", []).map((g) => g.key)).toEqual(["@me/duel"]);   // display tag
+    expect(filterGames(gs, "heatmap", []).map((g) => g.key)).toEqual(["@me/heat"]);  // description
+    expect(filterGames(gs, "duel", []).map((g) => g.key)).toEqual(["@me/duel"]);     // key
+    expect(filterGames(gs, "game", []).length).toBe(0);      // "game" is structural, not searchable
+  });
+
+  it("filterGames AND-combines query and genre facet", () => {
+    const gs = [mkGem("a", ["game", "replay", "puzzle"], "x"), mkGem("b", ["game", "project-fun", "puzzle"], "y")];
+    expect(filterGames(gs, "puzzle", ["replay"]).map((g) => g.key)).toEqual(["a"]);
+  });
+
+  it("genreLabel maps known genres and passes through unknown", () => {
+    expect(genreLabel("replay")).toBe("Session replay");
+    expect(genreLabel("session-heatmap")).toBe("Session heatmap");
+    expect(genreLabel("mystery")).toBe("mystery");
   });
 });
