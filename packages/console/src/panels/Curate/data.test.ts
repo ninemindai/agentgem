@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { groupInventory, mergeUsage, applyView, sortGroupItems, relativeTime, formatSource, type LedgerGroup } from "./data.js";
+import type { Inventory } from "../../api/routes.js";
 
 describe("formatSource", () => {
   it("extracts the plugin name from a plugin source", () =>
@@ -48,6 +49,15 @@ describe("groupInventory: deferred bodies", () => {
     const mcp = groups.find((g) => g.key === "mcpServers")!.items[0];
     expect(mcp.detail).toContain("gh");                // config still renders inline
     expect(mcp.id).toBeUndefined();
+  });
+});
+
+describe("groupInventory: rubric title", () => {
+  it("carries the rubric title through to the ledger item", () => {
+    const groups = groupInventory({ skills: [], mcpServers: [], instructions: [], hooks: [], subagents: [],
+      rubrics: [{ name: "team-hygiene", title: "Team hygiene", type: "rubric" }] } as unknown as Inventory);
+    const rub = groups.find((g) => g.key === "rubrics");
+    expect(rub?.items[0].title).toBe("Team hygiene");
   });
 });
 
