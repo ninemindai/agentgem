@@ -14,7 +14,9 @@ async function jsonOrThrow<T>(r: Response, what: string): Promise<T> {
   if (r.status === 401) throw new NotSignedIn();
   if (!r.ok) {
     const body = await r.json().catch(() => ({})) as { error?: string };
-    throw new Error(body.error ?? `${what} -> ${r.status}`);
+    const err = new Error(body.error ?? `${what} -> ${r.status}`) as Error & { status?: number };
+    err.status = r.status;
+    throw err;
   }
   return (await r.json()) as T;
 }
