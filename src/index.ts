@@ -66,6 +66,7 @@ import { resolveAggregatorDb, type AppDb, migrateAccountsToBetterAuth, backfillU
 import { mountGating } from "./gating.js";
 import { installHandoff } from "./auth/handoff.js";
 import { mountAuth, AUTH_BINDING } from "./auth/mount.js";
+import { deriveRpId } from "./auth/passkeyRpId.js";
 import { makeAuth } from "@agentgem/aggregator";
 import { installStars } from "./stars/install.js";
 import { installReviews } from "./reviews/install.js";
@@ -242,6 +243,7 @@ export async function createApp(port: number): Promise<RestApplication> {
       googleClientSecret,
       webOrigins,
       cookieDomain: process.env.AGENTGEM_SESSION_COOKIE_DOMAIN,
+      passkeyRpId: deriveRpId(process.env.AGENTGEM_PASSKEY_RP_ID, process.env.AGENTGEM_SESSION_COOKIE_DOMAIN),
     });
     app.bind(AUTH_BINDING).to(auth);
     // Desktop→web SSO handoff (1b-Task 4): registered BEFORE mountAuth's catch-all below. better-auth
