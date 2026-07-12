@@ -83,4 +83,15 @@ describe("gem shares store", () => {
     await db.execute(sql`delete from groups where id = ${g.id}`);
     expect(await listGroupsForGem(db, "o/secret")).toEqual([]);
   });
+
+  it("unpublishing a gem's last version removes its shares", async () => {
+    const db = await makeTestDb();
+    const { deleteCatalogGem } = await import("@agentgem/aggregator");
+    const owner = await acct(db, "owner");
+    await privateGem(db, "o/secret", owner.id);
+    const g = await createNativeGroup(db, owner.id, "Team");
+    await shareGemWithGroup(db, "o/secret", g.id, owner.id);
+    expect(await deleteCatalogGem(db, "o/secret", "1.0.0", owner.id)).toBe("deleted");
+    expect(await listGroupsForGem(db, "o/secret")).toEqual([]);
+  });
 });
