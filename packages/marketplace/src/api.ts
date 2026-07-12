@@ -16,6 +16,17 @@ export type OrgSettingsResult =
 
 export interface GameMeta { title: string; genre: "replay" | "skill-run" | "project-fun" | "session-heatmap"; version: string }
 
+// A gem as seen by its owner in "My apps" — spans every visibility (public/unlisted/private),
+// unlike RegistryGem which is only ever populated from the public registry listing.
+export interface MyGem {
+  key: string;
+  version: string;
+  description: string;
+  artifactKinds: string[];
+  visibility: "public" | "unlisted" | "private";
+  installable: boolean;
+}
+
 type Query = Record<string, string | number | undefined>;
 
 // The ONE querystring encoder: undefined params are dropped, everything else (incl. "" and 0)
@@ -30,6 +41,14 @@ function buildQs(query: Query): string {
 
 async function get<T>(base: string, path: string, query: Query = {}): Promise<T> {
   const res = await fetch(base + path + buildQs(query));
+  if (!res.ok) throw new Error(`${path} -> ${res.status}`);
+  return JSON.parse(await res.text()) as T;
+}
+
+// Credentialed sibling of `get` — the parent-domain session cookie travels, for the owner-only
+// catalog routes (my-gems, owner game-meta/game-html). Mirrors getAccountProviders's fetch shape.
+async function getCred<T>(base: string, path: string, query: Query = {}): Promise<T> {
+  const res = await fetch(base + path + buildQs(query), { credentials: "include" });
   if (!res.ok) throw new Error(`${path} -> ${res.status}`);
   return JSON.parse(await res.text()) as T;
 }
@@ -57,6 +76,19 @@ export function makeApi(base: string) {
       const res = await fetch(base + "/api/catalog/gem" + buildQs({ key, version }), { method: "DELETE", credentials: "include" });
       if (!res.ok) throw new Error(`unpublish -> ${res.status}`);
     },
+    // The owner's own "My apps" view — every gem they own, across all visibilities (private
+    // included). Credentialed; the server derives ownership from the session, never a client-sent id.
+    getMyGems: async (): Promise<{ gems: MyGem[] }> => {
+      const res = await fetch(base + "/api/catalog/my-gems", { credentials: "include" });
+      if (!res.ok) throw new Error(`/api/catalog/my-gems -> ${res.status}`);
+      return JSON.parse(await res.text()) as { gems: MyGem[] };
+    },
+    // Owner-only siblings of getGameMeta/getGameHtml: resolve a private gem's game for My apps'
+    // inline Play, gated to the session's own gems (a non-owner gets the same 404 as an unknown key).
+    getOwnerGameMeta: (key: string) =>
+      getCred<GameMeta>(base, "/api/catalog/game-meta", { key }),
+    getOwnerGameHtml: (key: string, version: string) =>
+      getCred<{ html: string }>(base, "/api/catalog/game-html", { key, version }).then((r) => r.html),
     // Sealed HTML of a gem's game artifact (for the playable Minigames arcade). 404s a non-game gem.
     getGameHtml: (key: string, version: string) =>
       get<{ html: string }>(base, "/api/aggregator/game-html", { key, version }).then((r) => r.html),

@@ -48,7 +48,7 @@ export function Studio({
   const [pruned, setPruned] = useState<string[]>([]);
   const [status, setStatus] = useState("");
   const [gate, setGate] = useState<string[] | null>(null);       // seal failures → actionable banner
-  const [share, setShare] = useState<{ gemUrl: string; cardUrl?: string } | null>(null);
+  const [share, setShare] = useState<{ gemUrl: string; cardUrl?: string; message?: string } | null>(null);
   const [pendingPublish, setPendingPublish] = useState(false);   // Share clicked while unbound
   const [pendingVersion, setPendingVersion] = useState<{ latestVersion: string; nextVersion: string; login: string } | null>(null);
   const [scope, setScope] = useState<"public" | "unlisted" | "private">("public");
@@ -280,10 +280,15 @@ export function Studio({
       } });
       // Link the gem's marketplace page (installable / playable), not just the OG teaser card.
       // Unlisted publishes aren't in Explore, so point straight at the playable /games/ link instead.
+      // Private publishes aren't Explore-listed OR reachable by a bare /games/ link (owner-only,
+      // session-gated) — point at My apps, the only place the owner can find and play it.
       const gemUrl = visibility === "unlisted"
         ? `https://app.agentgem.ai/games/${pub.exploreRef}`
+        : visibility === "private"
+        ? `https://app.agentgem.ai/my-apps`
         : `https://app.agentgem.ai/gems/${encodeURIComponent(pub.exploreRef)}`;
-      setShare({ gemUrl, cardUrl: pub.shareUrl }); setStatus("");
+      const message = visibility === "private" ? "Published privately — find it in My apps." : undefined;
+      setShare({ gemUrl, cardUrl: pub.shareUrl, message }); setStatus("");
     } catch (e) {
       const body = (e as Record<string, unknown>).body;
       setStatus(`share failed: ${typeof body === "string" ? body : (e as Error).message}`);
@@ -350,7 +355,7 @@ export function Studio({
         <div className="play-banner play-banner--ok">
           <span className="play-banner__ico">🌐</span>
           <div className="play-banner__body">
-            <div className="play-banner__title">Published to app.agentgem.ai</div>
+            <div className="play-banner__title">{share.message ?? "Published to app.agentgem.ai"}</div>
             <div className="play-banner__detail">{share.gemUrl}{share.cardUrl ? ` · share card: ${share.cardUrl}` : ""}</div>
           </div>
           <button className="play-btn" onClick={() => navigator.clipboard?.writeText(share.gemUrl)}>Copy</button>

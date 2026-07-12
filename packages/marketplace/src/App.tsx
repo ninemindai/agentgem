@@ -40,6 +40,7 @@ export function App() {
   const onMiniapps = path === "/" || path.startsWith("/miniapps") || path.startsWith("/minigames");
   const onSources = path.startsWith("/sources");
   const onIngredients = path.startsWith("/ingredient");
+  const onMyApps = path === "/my-apps";
   const signOut = async () => { await auth.logout(); setMe(null); };
   // Surface a failed sign-in (misconfigured provider, rate-limit, 5xx, network error) instead of
   // the click having zero visible effect — this is the primary login path, shared by the header
@@ -65,6 +66,7 @@ export function App() {
           <a href="/gems" className={"ex-navlink" + (onGems ? " is-active" : "")}>Gems</a>
           <a href="/sources" className={"ex-navlink" + (onSources ? " is-active" : "")}>Sources</a>
           {me && <a href="/publish" className="ex-navlink">Publish</a>}
+          {me && <a href="/my-apps" className={"ex-navlink" + (onMyApps ? " is-active" : "")}>My apps</a>}
         </nav>
         <span className="ex-auth">
           <button type="button" className="ex-theme-toggle" aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"} onClick={toggleTheme}>
