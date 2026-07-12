@@ -807,6 +807,23 @@ export const publishStatusRoute = defineRoute("GET", "/api/publish-status", {
   query: z.object({ workspace: z.string(), scope: z.string(), name: z.string().optional() }),
   response: z.object({ exists: z.boolean(), ownedByMe: z.boolean(), latestVersion: z.string().nullable() }),
 });
+// Review staging (Plan 2a's ReviewController, src/review.controller.ts): request review on a
+// workspace, and populate the console's group picker. Body/response schemas mirror
+// ReviewRequestBody/ReviewRequestResult and ReviewGroupsResult exactly.
+export const reviewGroupsRoute = defineRoute("GET", "/api/review/groups", {
+  response: z.object({
+    authenticated: z.boolean(),
+    groups: z.array(z.object({ id: z.string(), name: z.string(), role: z.string() })),
+  }),
+});
+export const reviewRequestRoute = defineRoute("POST", "/api/review/request", {
+  body: z.object({
+    workspace: z.string(), scope: z.string(), name: z.string().optional(),
+    version: z.string(), groupId: z.string(), description: z.string().max(4000).optional(),
+  }),
+  response: z.object({ ok: z.boolean(), requestId: z.string().optional(), rejected: z.string().optional() }),
+});
+
 // Zero-config install of a hosted (shared) gem: the server downloads the archive from the hosted
 // aggregator and materializes it. consent=true is required when the gem has executable artifacts.
 export const installHostedRoute = defineRoute("POST", "/api/install-hosted", {
