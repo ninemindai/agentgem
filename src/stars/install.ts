@@ -5,26 +5,12 @@
 // count read + the caller's `mine` when a session cookie is present.
 import type { AppDb, makeAuth } from "@agentgem/aggregator";
 import { resolveSession, toggleStar, starCounts, starredIds } from "@agentgem/aggregator";
+import { cors, preflight, type Req, type Res, type ExpressApp } from "../publicCors.js";
 
 export interface StarsDeps { db: AppDb; auth: ReturnType<typeof makeAuth>; webOrigins: string[] }
 
-interface Req { method: string; path: string; query: Record<string, unknown>; body: Record<string, unknown>; headers: Record<string, string | undefined>; get(n: string): string | undefined }
-interface Res { status(c: number): Res; set(k: string, v: string): Res; setHeader(k: string, v: string): Res; json(b: unknown): Res; send(b: unknown): Res }
-type ExpressApp = { get(p: string, h: (req: Req, res: Res) => unknown): unknown; post(p: string, h: (req: Req, res: Res) => unknown): unknown; options(p: string, h: (req: Req, res: Res) => unknown): unknown };
-
 const KINDS = new Set(["gem", "ingredient"]);
 
-function cors(req: Req, res: Res, origins: string[]): void {
-  const origin = req.headers["origin"];
-  if (origin && origins.includes(origin)) {
-    res.set("Access-Control-Allow-Origin", origin);
-    res.set("Access-Control-Allow-Credentials", "true");
-    res.set("Vary", "Origin");
-  }
-}
-function preflight(res: Res): void {
-  res.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS").set("Access-Control-Allow-Headers", "content-type").status(204).send("");
-}
 async function account(deps: StarsDeps, req: Req): Promise<string | null> {
   const who = await resolveSession(deps.auth, req.headers);
   return who?.accountId ?? null;
@@ -33,7 +19,7 @@ async function account(deps: StarsDeps, req: Req): Promise<string | null> {
 export function toggleHandler(deps: StarsDeps) {
   return async (req: Req, res: Res): Promise<void> => {
     cors(req, res, deps.webOrigins);
-    if (req.method === "OPTIONS") { preflight(res); return; }
+    if (req.method === "OPTIONS") { preflight(res, "GET, POST, OPTIONS"); return; }
     const accountId = await account(deps, req);
     if (!accountId) { res.status(401).json({ error: "sign in required" }); return; }
     const kind = String((req.body.kind as string | undefined) ?? "");
@@ -46,7 +32,7 @@ export function toggleHandler(deps: StarsDeps) {
 export function listHandler(deps: StarsDeps) {
   return async (req: Req, res: Res): Promise<void> => {
     cors(req, res, deps.webOrigins);
-    if (req.method === "OPTIONS") { preflight(res); return; }
+    if (req.method === "OPTIONS") { preflight(res, "GET, POST, OPTIONS"); return; }
     const kind = String((req.query.kind as string | undefined) ?? "");
     if (!KINDS.has(kind)) { res.status(400).json({ error: "invalid kind" }); return; }
     const ids = String((req.query.ids as string | undefined) ?? "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 100);

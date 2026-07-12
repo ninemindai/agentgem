@@ -6,31 +6,11 @@
 // 403 that would confirm the gem exists. The only 403 is "you own the gem but are not in that group".
 import type { AppDb, makeAuth } from "@agentgem/aggregator";
 import { resolveSession, catalogGemForOwner, groupMemberRole, shareGemWithGroup, unshareGemFromGroup, listGroupsForGem } from "@agentgem/aggregator";
+import { cors, preflight, type Req, type Res, type ExpressApp } from "../publicCors.js";
 
 export interface SharesDeps { db: AppDb; auth: ReturnType<typeof makeAuth>; webOrigins: string[] }
 
-interface Req { method: string; query: Record<string, unknown>; body: Record<string, unknown>; headers: Record<string, string | undefined> }
-interface Res { status(c: number): Res; set(k: string, v: string): Res; json(b: unknown): Res; send(b: unknown): Res }
-type ExpressApp = {
-  get(p: string, h: (req: Req, res: Res) => unknown): unknown;
-  post(p: string, h: (req: Req, res: Res) => unknown): unknown;
-  delete(p: string, h: (req: Req, res: Res) => unknown): unknown;
-  options(p: string, h: (req: Req, res: Res) => unknown): unknown;
-};
-
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function cors(req: Req, res: Res, origins: string[]): void {
-  const origin = req.headers["origin"];
-  if (origin && origins.includes(origin)) {
-    res.set("Access-Control-Allow-Origin", origin);
-    res.set("Access-Control-Allow-Credentials", "true");
-    res.set("Vary", "Origin");
-  }
-}
-function preflight(res: Res): void {
-  res.set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS").set("Access-Control-Allow-Headers", "content-type").status(204).send("");
-}
 
 // Resolve the session and confirm the caller owns `key`. Returns the accountId, or null after
 // having already sent the correct no-leak response (401 signed out, 400 bad key, 404 not owner).
@@ -46,7 +26,7 @@ async function requireGemOwner(deps: SharesDeps, req: Req, res: Res, key: string
 export function shareGemHandler(deps: SharesDeps) {
   return async (req: Req, res: Res): Promise<void> => {
     cors(req, res, deps.webOrigins);
-    if (req.method === "OPTIONS") { preflight(res); return; }
+    if (req.method === "OPTIONS") { preflight(res, "GET, POST, DELETE, OPTIONS"); return; }
 
     if (req.method === "GET") {
       const key = String((req.query.key as string | undefined) ?? "");

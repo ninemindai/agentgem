@@ -24,17 +24,9 @@ import {
   listGemsSharedWithGroup,
   type GroupRole,
 } from "@agentgem/aggregator";
+import { cors, preflight, type Req, type Res, type ExpressApp } from "../publicCors.js";
 
 export interface GroupsDeps { db: AppDb; auth: ReturnType<typeof makeAuth>; webOrigins: string[] }
-
-interface Req { method: string; path: string; query: Record<string, unknown>; body: Record<string, unknown>; headers: Record<string, string | undefined> }
-interface Res { status(c: number): Res; set(k: string, v: string): Res; json(b: unknown): Res; send(b: unknown): Res }
-type ExpressApp = {
-  get(p: string, h: (req: Req, res: Res) => unknown): unknown;
-  post(p: string, h: (req: Req, res: Res) => unknown): unknown;
-  delete(p: string, h: (req: Req, res: Res) => unknown): unknown;
-  options(p: string, h: (req: Req, res: Res) => unknown): unknown;
-};
 
 const DEFAULT_INVITE_TTL_DAYS = 7;
 const MAX_INVITE_TTL_DAYS = 30;
@@ -44,18 +36,6 @@ const MAX_GROUP_NAME = 80;
 // makes Postgres reject the query and the promise reject, which Express 5 forwards to the default
 // error handler → 500 with a stack trace. Reject the shape before it ever reaches a query.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function cors(req: Req, res: Res, origins: string[]): void {
-  const origin = req.headers["origin"];
-  if (origin && origins.includes(origin)) {
-    res.set("Access-Control-Allow-Origin", origin);
-    res.set("Access-Control-Allow-Credentials", "true");
-    res.set("Vary", "Origin");
-  }
-}
-function preflight(res: Res): void {
-  res.set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS").set("Access-Control-Allow-Headers", "content-type, authorization").status(204).send("");
-}
 
 async function whoami(deps: GroupsDeps, req: Req): Promise<{ accountId: string; login: string } | null> {
   const who = await resolveSession(deps.auth, req.headers);
@@ -88,7 +68,7 @@ async function requireGroupRole(
 export function groupsHandler(deps: GroupsDeps) {
   return async (req: Req, res: Res): Promise<void> => {
     cors(req, res, deps.webOrigins);
-    if (req.method === "OPTIONS") { preflight(res); return; }
+    if (req.method === "OPTIONS") { preflight(res, "GET, POST, DELETE, OPTIONS", "content-type, authorization"); return; }
 
     if (req.method === "DELETE") {
       const ok = await requireGroupRole(deps, req, res, true);
@@ -117,7 +97,7 @@ export function groupsHandler(deps: GroupsDeps) {
 export function groupMembersHandler(deps: GroupsDeps) {
   return async (req: Req, res: Res): Promise<void> => {
     cors(req, res, deps.webOrigins);
-    if (req.method === "OPTIONS") { preflight(res); return; }
+    if (req.method === "OPTIONS") { preflight(res, "GET, POST, DELETE, OPTIONS", "content-type, authorization"); return; }
     const ok = await requireGroupRole(deps, req, res, false);
     if (!ok) return;
 
@@ -141,7 +121,7 @@ export function groupMembersHandler(deps: GroupsDeps) {
 export function groupInvitesHandler(deps: GroupsDeps) {
   return async (req: Req, res: Res): Promise<void> => {
     cors(req, res, deps.webOrigins);
-    if (req.method === "OPTIONS") { preflight(res); return; }
+    if (req.method === "OPTIONS") { preflight(res, "GET, POST, DELETE, OPTIONS", "content-type, authorization"); return; }
     const ok = await requireGroupRole(deps, req, res, true);
     if (!ok) return;
 
@@ -170,7 +150,7 @@ export function groupInvitesHandler(deps: GroupsDeps) {
 export function groupInviteRedeemHandler(deps: GroupsDeps) {
   return async (req: Req, res: Res): Promise<void> => {
     cors(req, res, deps.webOrigins);
-    if (req.method === "OPTIONS") { preflight(res); return; }
+    if (req.method === "OPTIONS") { preflight(res, "GET, POST, DELETE, OPTIONS", "content-type, authorization"); return; }
     const who = await requireSession(deps, req, res);
     if (!who) return;
     const token = String((req.body.token as string | undefined) ?? "");
@@ -186,7 +166,7 @@ export function groupInviteRedeemHandler(deps: GroupsDeps) {
 export function groupGemsHandler(deps: GroupsDeps) {
   return async (req: Req, res: Res): Promise<void> => {
     cors(req, res, deps.webOrigins);
-    if (req.method === "OPTIONS") { preflight(res); return; }
+    if (req.method === "OPTIONS") { preflight(res, "GET, POST, DELETE, OPTIONS", "content-type, authorization"); return; }
     const ok = await requireGroupRole(deps, req, res, false);
     if (!ok) return;
     res.json({ gems: await listGemsSharedWithGroup(deps.db, ok.groupId) });

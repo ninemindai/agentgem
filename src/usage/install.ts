@@ -15,6 +15,7 @@ import {
   buildOrgUsage, getOrgSettings, patchOrgSettings, normalizeRetentionDays, applyRetentionForScopes,
   RANGE_DAYS, type OrgUsageRange,
 } from "@agentgem/aggregator";
+import { cors, preflight, type Req, type Res, type ExpressApp } from "../publicCors.js";
 
 export interface UsageDeps { db: AppDb; auth: ReturnType<typeof makeAuth>; webOrigins: string[]; scopeTtlMs?: number }
 
@@ -24,22 +25,6 @@ export interface UsageDeps { db: AppDb; auth: ReturnType<typeof makeAuth>; webOr
 export function defaultScopeTtlMs(): number {
   const days = Number(process.env.AGENTGEM_SCOPE_TTL_DAYS ?? 7);
   return (Number.isFinite(days) && days > 0 ? days : 7) * 86_400_000;
-}
-
-interface Req { method: string; path: string; query: Record<string, unknown>; body: Record<string, unknown>; headers: Record<string, string | undefined>; get(n: string): string | undefined }
-interface Res { status(c: number): Res; set(k: string, v: string): Res; setHeader(k: string, v: string): Res; json(b: unknown): Res; send(b: unknown): Res }
-type ExpressApp = { get(p: string, h: (req: Req, res: Res) => unknown): unknown; post(p: string, h: (req: Req, res: Res) => unknown): unknown; put(p: string, h: (req: Req, res: Res) => unknown): unknown; options(p: string, h: (req: Req, res: Res) => unknown): unknown };
-
-function cors(req: Req, res: Res, origins: string[]): void {
-  const origin = req.headers["origin"];
-  if (origin && origins.includes(origin)) {
-    res.set("Access-Control-Allow-Origin", origin);
-    res.set("Access-Control-Allow-Credentials", "true");
-    res.set("Vary", "Origin");
-  }
-}
-function preflight(res: Res): void {
-  res.set("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS").set("Access-Control-Allow-Headers", "content-type, authorization").status(204).send("");
 }
 
 /** Session from `Authorization: Bearer <token>` (local process) OR the web session cookie —
@@ -52,7 +37,7 @@ async function whoami(deps: UsageDeps, req: Req): Promise<{ accountId: string; l
 export function reportHandler(deps: UsageDeps) {
   return async (req: Req, res: Res): Promise<void> => {
     cors(req, res, deps.webOrigins);
-    if (req.method === "OPTIONS") { preflight(res); return; }
+    if (req.method === "OPTIONS") { preflight(res, "GET, POST, PUT, OPTIONS", "content-type, authorization"); return; }
     const who = await whoami(deps, req);
     if (!who) { res.status(401).json({ error: "sign in required" }); return; }
     const report = normalizeUsageReport(req.body ?? {});
@@ -90,7 +75,7 @@ async function memberGate(deps: UsageDeps, res: Res, who: { accountId: string; l
 export function orgSettingsHandler(deps: UsageDeps) {
   return async (req: Req, res: Res): Promise<void> => {
     cors(req, res, deps.webOrigins);
-    if (req.method === "OPTIONS") { preflight(res); return; }
+    if (req.method === "OPTIONS") { preflight(res, "GET, POST, PUT, OPTIONS", "content-type, authorization"); return; }
     const who = await whoami(deps, req);
     if (!who) { res.status(401).json({ error: "sign in required" }); return; }
     const scope = String((req.query.scope as string | undefined) ?? "").trim();
@@ -129,7 +114,7 @@ export function orgSettingsHandler(deps: UsageDeps) {
 export function orgUsageHandler(deps: UsageDeps) {
   return async (req: Req, res: Res): Promise<void> => {
     cors(req, res, deps.webOrigins);
-    if (req.method === "OPTIONS") { preflight(res); return; }
+    if (req.method === "OPTIONS") { preflight(res, "GET, POST, PUT, OPTIONS", "content-type, authorization"); return; }
     const who = await whoami(deps, req);
     if (!who) { res.status(401).json({ error: "sign in required" }); return; }
     const scope = String((req.query.scope as string | undefined) ?? "").trim();

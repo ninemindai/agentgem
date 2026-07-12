@@ -9,28 +9,10 @@
 import type { AppDb, makeAuth } from "@agentgem/aggregator";
 import { resolveSession, deleteCatalogGem, listCatalogGemsForOwner, latestGemVersion, getGemArchive, catalogGemForViewer, accountCanAccessGem } from "@agentgem/aggregator";
 import { importGem } from "@agentgem/distribute";
+import { cors, preflight, type Req, type Res, type ExpressApp } from "../publicCors.js";
 
 export interface CatalogDeps { db: AppDb; auth: ReturnType<typeof makeAuth>; webOrigins: string[] }
 
-interface Req { method: string; path: string; query: Record<string, unknown>; headers: Record<string, string | undefined> }
-interface Res { status(c: number): Res; set(k: string, v: string): Res; json(b: unknown): Res; send(b: unknown): Res }
-type ExpressApp = {
-  delete(p: string, h: (req: Req, res: Res) => unknown): unknown;
-  get(p: string, h: (req: Req, res: Res) => unknown): unknown;
-  options(p: string, h: (req: Req, res: Res) => unknown): unknown;
-};
-
-function cors(req: Req, res: Res, origins: string[]): void {
-  const origin = req.headers["origin"];
-  if (origin && origins.includes(origin)) {
-    res.set("Access-Control-Allow-Origin", origin);
-    res.set("Access-Control-Allow-Credentials", "true");
-    res.set("Vary", "Origin");
-  }
-}
-function preflight(res: Res): void {
-  res.set("Access-Control-Allow-Methods", "GET, DELETE, OPTIONS").set("Access-Control-Allow-Headers", "content-type").status(204).send("");
-}
 // Ownership is the accounts.id uuid, never the login string (see deleteCatalogGem).
 async function sessionAccountId(deps: CatalogDeps, req: Req): Promise<string | null> {
   const who = await resolveSession(deps.auth, req.headers);
@@ -40,7 +22,7 @@ async function sessionAccountId(deps: CatalogDeps, req: Req): Promise<string | n
 export function unpublishHandler(deps: CatalogDeps) {
   return async (req: Req, res: Res): Promise<void> => {
     cors(req, res, deps.webOrigins);
-    if (req.method === "OPTIONS") { preflight(res); return; }
+    if (req.method === "OPTIONS") { preflight(res, "GET, DELETE, OPTIONS"); return; }
     const accountId = await sessionAccountId(deps, req);
     if (!accountId) { res.status(401).json({ error: "sign in required" }); return; }
     const key = String((req.query.key as string | undefined) ?? "");
@@ -57,7 +39,7 @@ export function unpublishHandler(deps: CatalogDeps) {
 export function myGemsHandler(deps: CatalogDeps) {
   return async (req: Req, res: Res): Promise<void> => {
     cors(req, res, deps.webOrigins);
-    if (req.method === "OPTIONS") { preflight(res); return; }
+    if (req.method === "OPTIONS") { preflight(res, "GET, DELETE, OPTIONS"); return; }
     const accountId = await sessionAccountId(deps, req);
     if (!accountId) { res.status(401).json({ error: "sign in required" }); return; }
     const rows = await listCatalogGemsForOwner(deps.db, accountId);
@@ -76,7 +58,7 @@ export function myGemsHandler(deps: CatalogDeps) {
 export function ownerGameMetaHandler(deps: CatalogDeps) {
   return async (req: Req, res: Res): Promise<void> => {
     cors(req, res, deps.webOrigins);
-    if (req.method === "OPTIONS") { preflight(res); return; }
+    if (req.method === "OPTIONS") { preflight(res, "GET, DELETE, OPTIONS"); return; }
     const accountId = await sessionAccountId(deps, req);
     if (!accountId) { res.status(401).json({ error: "sign in required" }); return; }
     const key = String((req.query.key as string | undefined) ?? "");
@@ -96,7 +78,7 @@ export function ownerGameMetaHandler(deps: CatalogDeps) {
 export function ownerGameHtmlHandler(deps: CatalogDeps) {
   return async (req: Req, res: Res): Promise<void> => {
     cors(req, res, deps.webOrigins);
-    if (req.method === "OPTIONS") { preflight(res); return; }
+    if (req.method === "OPTIONS") { preflight(res, "GET, DELETE, OPTIONS"); return; }
     const accountId = await sessionAccountId(deps, req);
     if (!accountId) { res.status(401).json({ error: "sign in required" }); return; }
     const key = String((req.query.key as string | undefined) ?? "");
@@ -117,7 +99,7 @@ export function ownerGameHtmlHandler(deps: CatalogDeps) {
 export function ownerGemArchiveHandler(deps: CatalogDeps) {
   return async (req: Req, res: Res): Promise<void> => {
     cors(req, res, deps.webOrigins);
-    if (req.method === "OPTIONS") { preflight(res); return; }
+    if (req.method === "OPTIONS") { preflight(res, "GET, DELETE, OPTIONS"); return; }
     const accountId = await sessionAccountId(deps, req);
     if (!accountId) { res.status(401).json({ error: "sign in required" }); return; }
     const key = String((req.query.key as string | undefined) ?? "");
@@ -135,7 +117,7 @@ export function ownerGemArchiveHandler(deps: CatalogDeps) {
 export function ownerGemHandler(deps: CatalogDeps) {
   return async (req: Req, res: Res): Promise<void> => {
     cors(req, res, deps.webOrigins);
-    if (req.method === "OPTIONS") { preflight(res); return; }
+    if (req.method === "OPTIONS") { preflight(res, "GET, DELETE, OPTIONS"); return; }
     const accountId = await sessionAccountId(deps, req);
     if (!accountId) { res.status(401).json({ error: "sign in required" }); return; }
     const key = String((req.query.key as string | undefined) ?? "");

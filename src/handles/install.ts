@@ -13,29 +13,14 @@
 // let a prober enumerate which GitHub orgs the App has seen.
 import type { AppDb, makeAuth } from "@agentgem/aggregator";
 import { resolveSession, claimHandle } from "@agentgem/aggregator";
+import { cors, preflight, type Req, type Res, type ExpressApp } from "../publicCors.js";
 
 export interface HandleDeps { db: AppDb; auth: ReturnType<typeof makeAuth>; webOrigins: string[] }
-
-interface Req { method: string; path: string; query: Record<string, unknown>; body: Record<string, unknown>; headers: Record<string, string | undefined> }
-interface Res { status(c: number): Res; set(k: string, v: string): Res; json(b: unknown): Res; send(b: unknown): Res }
-type ExpressApp = { post(p: string, h: (req: Req, res: Res) => unknown): unknown; options(p: string, h: (req: Req, res: Res) => unknown): unknown };
-
-function cors(req: Req, res: Res, origins: string[]): void {
-  const origin = req.headers["origin"];
-  if (origin && origins.includes(origin)) {
-    res.set("Access-Control-Allow-Origin", origin);
-    res.set("Access-Control-Allow-Credentials", "true");
-    res.set("Vary", "Origin");
-  }
-}
-function preflight(res: Res): void {
-  res.set("Access-Control-Allow-Methods", "POST, OPTIONS").set("Access-Control-Allow-Headers", "content-type").status(204).send("");
-}
 
 export function claimHandler(deps: HandleDeps) {
   return async (req: Req, res: Res): Promise<void> => {
     cors(req, res, deps.webOrigins);
-    if (req.method === "OPTIONS") { preflight(res); return; }
+    if (req.method === "OPTIONS") { preflight(res, "POST, OPTIONS"); return; }
 
     const who = await resolveSession(deps.auth, req.headers);
     if (!who) { res.status(401).json({ error: "sign in required" }); return; }
