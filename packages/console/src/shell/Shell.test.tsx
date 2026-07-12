@@ -1,12 +1,14 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { useState } from "react";
-import { render, screen, cleanup, fireEvent, act } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, act, within, waitFor } from "@testing-library/react";
 import { Shell } from "./Shell.js";
 import { defineConsolePage, type ConsolePage } from "../registry.js";
 import { setKeys, setName, resetGem } from "../activeGem.js";
+import * as routes from "../api/routes.js";
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   window.location.hash = "";
   resetGem();
   localStorage.clear();
@@ -201,6 +203,33 @@ describe("Shell — nav item badge slot", () => {
   it("renders nothing extra for pages without a badge", () => {
     render(<Shell pages={pages} apiBase="" />);
     expect(screen.queryByText(/badge-for-/)).toBeNull();
+  });
+});
+
+describe("Shell — cross-phase review unread signal", () => {
+  it("shows an unread indicator on the Build phase button even while Observe is active", async () => {
+    vi.spyOn(routes.reviewInboxRoute, "call").mockResolvedValue({
+      requests: [{ id: "1", unread: true }, { id: "2", unread: true }, { id: "3", unread: false }],
+    } as never);
+
+    render(<Shell pages={pages} apiBase="" />); // defaults to Observe
+    expect(screen.getByRole("radio", { name: "Observe" }).getAttribute("aria-checked")).toBe("true");
+
+    const build = screen.getByRole("radio", { name: "Build" });
+    expect(await within(build).findByText("2")).toBeTruthy();
+  });
+
+  it("does not show the indicator once Build is the active phase", async () => {
+    const inbox = vi.spyOn(routes.reviewInboxRoute, "call").mockResolvedValue({
+      requests: [{ id: "1", unread: true }],
+    } as never);
+
+    window.location.hash = "#/curate"; // Build
+    render(<Shell pages={pages} apiBase="" />);
+
+    const build = await screen.findByRole("radio", { name: "Build" });
+    await waitFor(() => expect(inbox).toHaveBeenCalled());
+    expect(within(build).queryByText("1")).toBeNull();
   });
 });
 

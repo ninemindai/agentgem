@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
 import { useIdentity } from "../../identity/IdentityProvider.js";
 import {
@@ -16,7 +16,7 @@ interface ReviewRequestSummary {
   authorLogin: string | null; status: string; description: string | null;
   createdAtMs: number; messageCount: number; unread: boolean;
 }
-interface ReviewMessage { authorLogin: string | null; body: string; createdAtMs: number }
+interface ReviewMessage { id: string; authorLogin: string | null; body: string; createdAtMs: number }
 interface ReviewRequestDetail {
   id: string; gemKey: string; version: string; authorLogin: string | null;
   status: string; description: string | null; manifest: unknown; messages: ReviewMessage[];
@@ -34,7 +34,7 @@ const ageLabel = (ms: number): string => {
 
 function RequestDetail({
   apiBase, summary, onChanged,
-}: { apiBase: string; summary: ReviewRequestSummary; onChanged: () => void }) {
+}: { apiBase: string; summary: ReviewRequestSummary; onChanged: (notice?: string) => void }) {
   const { status: identity } = useIdentity();
   const [detail, setDetail] = useState<ReviewRequestDetail | null>(null);
   const [comment, setComment] = useState("");
@@ -56,16 +56,24 @@ function RequestDetail({
 
   useEffect(load, [apiBase, summary.id]);
 
-  const isAuthor = Boolean(identity?.login) && identity?.login === summary.authorLogin;
+  // Requires an active session, not just a locally-remembered login — a lapsed session
+  // (identity.bound still true from a stale local record) must not surface author-only
+  // actions (Withdraw/Resubmit) for a request the current session can't actually own.
+  const isAuthor = Boolean(identity?.bound) && identity?.login === summary.authorLogin;
 
-  const runAction = (action: () => Promise<{ ok: boolean; rejected?: string }>) => {
+  // `label` becomes the confirmation banner text once the action succeeds. The request
+  // drops out of listInbox right after (status leaves open/changes-requested) and this
+  // detail unmounts with it, so the confirmation is handed up to the parent (onChanged)
+  // rather than rendered here — it must survive the row vanishing.
+  const runAction = (action: () => Promise<{ ok: boolean; rejected?: string; gemKey?: string; version?: string }>, label: string) => {
     setBusy(true);
     setError(null);
     action()
       .then((r) => {
         if (!r.ok) { setError(r.rejected ?? "action rejected"); return; }
         load();
-        onChanged();
+        const target = r.gemKey && r.version ? `${r.gemKey}@${r.version}` : `${summary.gemKey}@${summary.version}`;
+        onChanged(`${label} ${target}`);
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setBusy(false));
@@ -121,8 +129,8 @@ function RequestDetail({
       .catch((e) => {
         const msg = e instanceof Error ? e.message : String(e);
         throw new Error(`${msg} — reopen this gem in Studio to resubmit.`);
-      })
-  );
+      }),
+  "Resubmitted");
 
   return (
     <div className="review-detail">
@@ -136,8 +144,8 @@ function RequestDetail({
       {detail.description && <p>{detail.description}</p>}
 
       <ul className="analyze-list" style={{ marginTop: 12 }}>
-        {detail.messages.map((m, i) => (
-          <li key={i} className="analyze-row" style={{ display: "block" }}>
+        {detail.messages.map((m) => (
+          <li key={m.id} className="analyze-row" style={{ display: "block" }}>
             <div style={{ fontSize: 12, opacity: 0.7 }}>{m.authorLogin ?? "unknown"} · {ageLabel(m.createdAtMs)}</div>
             <div>{m.body}</div>
           </li>
@@ -165,7 +173,7 @@ function RequestDetail({
       <div className="run-status" style={{ marginTop: 12, gap: 8 }}>
         {isAuthor ? (
           <>
-            <button type="button" className="ledger-view" disabled={busy} onClick={() => runAction(() => reviewWithdrawRoute.call(makeClient(apiBase), { body: { requestId: summary.id } }))}>
+            <button type="button" className="ledger-view" disabled={busy} onClick={() => runAction(() => reviewWithdrawRoute.call(makeClient(apiBase), { body: { requestId: summary.id } }), "Withdrew")}>
               Withdraw
             </button>
             {canResubmit && (
@@ -176,10 +184,10 @@ function RequestDetail({
           </>
         ) : (
           <>
-            <button type="button" className="ledger-view" disabled={busy} onClick={() => runAction(() => reviewApproveRoute.call(makeClient(apiBase), { body: { requestId: summary.id } }))}>
+            <button type="button" className="ledger-view" disabled={busy} onClick={() => runAction(() => reviewApproveRoute.call(makeClient(apiBase), { body: { requestId: summary.id } }), "Approved")}>
               Approve
             </button>
-            <button type="button" className="ledger-view" disabled={busy} onClick={() => runAction(() => reviewChangesRoute.call(makeClient(apiBase), { body: { requestId: summary.id } }))}>
+            <button type="button" className="ledger-view" disabled={busy} onClick={() => runAction(() => reviewChangesRoute.call(makeClient(apiBase), { body: { requestId: summary.id } }), "Requested changes on")}>
               Request changes
             </button>
           </>
@@ -209,6 +217,13 @@ function RequestDetail({
 export function Reviews({ apiBase }: { apiBase: string }) {
   const [requests, setRequests] = useState<ReviewRequestSummary[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  // Transient success confirmation: the acted-on request drops out of listInbox right
+  // after (status leaves open/changes-requested), so its detail unmounts with no other
+  // trace the action even happened. Lives here (not in RequestDetail) so it survives
+  // that unmount, and clears itself after a few seconds.
+  const [notice, setNotice] = useState<string | null>(null);
+  const noticeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (noticeTimeoutRef.current) clearTimeout(noticeTimeoutRef.current); }, []);
 
   const load = () => {
     reviewInboxRoute
@@ -219,12 +234,21 @@ export function Reviews({ apiBase }: { apiBase: string }) {
 
   useEffect(load, [apiBase]);
 
+  const onChanged = (msg?: string) => {
+    load();
+    if (!msg) return;
+    setNotice(msg);
+    if (noticeTimeoutRef.current) clearTimeout(noticeTimeoutRef.current);
+    noticeTimeoutRef.current = setTimeout(() => setNotice(null), 5000);
+  };
+
   const selectedSummary = requests?.find((r) => r.id === selected) ?? null;
 
   return (
     <section className="analyze">
       <div className="obs-head"><h2 className="obs-title">Reviews</h2></div>
       <p className="analyze-intro">Gems submitted for review by your teams — comment, approve, request changes, or withdraw.</p>
+      {notice && <p className="getgems-done" role="status">{notice}</p>}
 
       <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
         <div style={{ flex: "1 1 320px", minWidth: 260 }}>
@@ -264,7 +288,7 @@ export function Reviews({ apiBase }: { apiBase: string }) {
         <div style={{ flex: "2 1 460px", minWidth: 320 }}>
           {!selectedSummary && <p className="ledger-empty">Select a request to view it.</p>}
           {selectedSummary && (
-            <RequestDetail key={selectedSummary.id} apiBase={apiBase} summary={selectedSummary} onChanged={load} />
+            <RequestDetail key={selectedSummary.id} apiBase={apiBase} summary={selectedSummary} onChanged={onChanged} />
           )}
         </div>
       </div>

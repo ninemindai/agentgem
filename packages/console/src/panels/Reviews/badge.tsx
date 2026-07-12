@@ -6,10 +6,12 @@ export const REVIEW_POLL_MS = 45_000;
 
 interface ReviewRequestSummary { unread: boolean }
 
-// Drives the unread-count pill on the Reviews nav item (wired via ConsolePage.badge).
-// Polls the inbox on mount + every REVIEW_POLL_MS, following the NotificationsProvider
-// setInterval/alive idiom. Best-effort: a failed poll just leaves the last count in place.
-export function ReviewBadge({ apiBase }: { apiBase: string }) {
+// Drives the review-unread signal: the count pill on the Reviews nav item AND (lifted
+// into Shell) the cross-phase indicator on the Build phase switcher, so the signal is
+// visible even while the user is in Observe. Polls the inbox on mount + every
+// REVIEW_POLL_MS, following the NotificationsProvider setInterval/alive idiom.
+// Best-effort: a failed poll just leaves the last count in place.
+export function useReviewUnread(apiBase: string): number {
   const [count, setCount] = useState(0);
 
   useEffect(() => {
@@ -31,6 +33,12 @@ export function ReviewBadge({ apiBase }: { apiBase: string }) {
     return () => { alive = false; clearInterval(h); };
   }, [apiBase]);
 
+  return count;
+}
+
+// Thin consumer of useReviewUnread — the nav-item pill wired via ConsolePage.badge.
+export function ReviewBadge({ apiBase }: { apiBase: string }) {
+  const count = useReviewUnread(apiBase);
   if (count === 0) return null;
   return <span className="nav-badge">{count}</span>;
 }

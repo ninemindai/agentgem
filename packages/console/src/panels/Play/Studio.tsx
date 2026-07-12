@@ -351,6 +351,15 @@ export function Studio({
     if (reviewGroups != null) return;
     try {
       const r = await reviewGroupsRoute.call(makeClient(apiBase));
+      // A lapsed session (local identity still says bound, server session expired) looks
+      // identical to a real 0-teams account unless we check `authenticated` — route it into
+      // the SAME reconnect flow as the unbound case instead of the "join or create a team"
+      // hint, which would be misleading (this isn't a teams problem, it's an auth problem).
+      if (!r.authenticated) {
+        setReviewOpen(false);
+        setPendingReview(true);
+        return;
+      }
       setReviewGroups(r.groups);
     } catch {
       setReviewGroups([]); // degrade to the empty-groups hint rather than hard-failing the picker

@@ -10,6 +10,7 @@ import { NotifyBell } from "../notify/NotifyBell.js";
 import { IdentityProvider } from "../identity/IdentityProvider.js";
 import { IdentityChip } from "../identity/IdentityChip.js";
 import { useSidebar } from "./sidebar.js";
+import { useReviewUnread } from "../panels/Reviews/badge.js";
 
 const PHASES: { id: Phase; label: string }[] = [
   { id: "observe", label: "Observe" },
@@ -60,6 +61,13 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
   const { keys } = useActiveGem();
   const hasGem = keys.size > 0;
   const sidebar = useSidebar();
+
+  // Mounted unconditionally (like NotificationsProvider) so the review-unread signal
+  // keeps polling regardless of the active phase — the Reviews nav item only renders
+  // (and thus only polls) while Build is active, so without this the badge is
+  // invisible the whole time the user is in Observe. Feeds the Build phase switcher's
+  // cross-phase indicator below.
+  const reviewUnread = useReviewUnread(apiBase);
   const [hash, setHash] = useState(() => normalizeHash(window.location.hash));
 
   // Route normalization lives in ONE place: legacy routes (#/your-gems, #/get-gems?…)
@@ -177,6 +185,11 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
                 onClick={() => goPhase(p.id)}
               >
                 {p.label}
+                {p.id === "build" && reviewUnread > 0 && phase !== "build" && (
+                  <span className="console-phase-btn__unread" aria-label={`${reviewUnread} unread review${reviewUnread === 1 ? "" : "s"}`}>
+                    {reviewUnread}
+                  </span>
+                )}
               </button>
             ))}
           </div>
