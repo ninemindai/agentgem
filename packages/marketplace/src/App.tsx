@@ -8,11 +8,14 @@ import { navigate } from "./nav";
 import { IconMiniapps, IconIngredients, IconGems, IconSources, IconPublish, IconMyApps, IconOffline, IconGroups } from "./icons";
 import { PwaUpdatePrompt } from "./PwaUpdatePrompt";
 import { useOnline } from "./useOnline";
+import { SignInDialog } from "./SignInDialog";
+import { makePasskeyAuth, passkeySupported } from "./passkeyAuth";
 
 const api = makeApi(defaultApiBase());
 const auth = makeAuth(defaultApiBase());
 const starsApi = makeStars(defaultApiBase());
 const reviewsApi = makeReviews(defaultApiBase());
+const passkeyAuth = makePasskeyAuth(defaultApiBase());
 
 export function App() {
   const [path, setPath] = useState(() => window.location.pathname);
@@ -20,6 +23,7 @@ export function App() {
   const [theme, setTheme] = useState(() => (document.documentElement.dataset.theme === "dark" ? "dark" : "light"));
   const [signInError, setSignInError] = useState<string | null>(null);
   const online = useOnline();
+  const [showSignIn, setShowSignIn] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -53,6 +57,18 @@ export function App() {
   const signIn = (provider: "github" | "google" = "github") => {
     setSignInError(null);
     auth.signIn(provider, window.location.href).catch((err) => setSignInError(err instanceof Error ? err.message : String(err)));
+  };
+  const signInPasskey = async () => {
+    setSignInError(null);
+    try {
+      const res = await passkeyAuth.signIn.passkey();
+      if (res?.error) { setSignInError(res.error.message ?? "Passkey sign-in failed"); return; }
+      setShowSignIn(false);
+      setMe(await auth.getMe());
+    } catch (err) {
+      // The WebAuthn ceremony rejects on cancel / no authenticator / unsupported — surface it.
+      setSignInError(err instanceof Error ? err.message : String(err));
+    }
   };
   const toggleTheme = () => {
     const next = theme === "dark" ? "light" : "dark";
@@ -98,13 +114,19 @@ export function App() {
               <button type="button" className="ex-signout" onClick={signOut}>Sign out</button>
             </>
           ) : (
-            <>
-              <a className="ex-signin" href="#" onClick={(e) => { e.preventDefault(); signIn("github"); }}>Sign in with GitHub</a>
-              <a className="ex-signin" href="#" onClick={(e) => { e.preventDefault(); signIn("google"); }}>Sign in with Google</a>
-            </>
+            <a className="ex-signin" href="#" onClick={(e) => { e.preventDefault(); setSignInError(null); setShowSignIn(true); }}>Sign in</a>
           )}
         </span>
       </header>
+      {showSignIn && (
+        <SignInDialog
+          onClose={() => setShowSignIn(false)}
+          onSocial={(p) => { setShowSignIn(false); signIn(p); }}
+          onPasskey={signInPasskey}
+          passkeyAvailable={passkeySupported()}
+          error={signInError}
+        />
+      )}
       {signInError && <p className="ex-error" role="alert" style={{ margin: "0 24px 16px" }}>Sign-in failed: {signInError}</p>}
       <main className="ex-main"><Router api={api} me={me} stars={{ signedIn: !!me, loginUrl: signIn, api: starsApi }} reviews={{ signedIn: !!me, loginUrl: signIn, api: reviewsApi }} /></main>
       <footer className="ex-footer">Early testbed — accounts, stars, and reviews may be reset. Trusted-adoption data, k-anonymized. <a href="https://agentgem.ai">agentgem.ai</a></footer>
