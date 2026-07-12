@@ -13,6 +13,7 @@ import type { StarsCtx } from "../Router";
 import type { StarState } from "../stars";
 import type { Me } from "../auth";
 import { navigate } from "../nav";
+import { makeGroups, type GroupSummary, type GemShareRef } from "../groups";
 
 // The locally-running console (CLI default http://127.0.0.1:4317, see src/cli.ts). A deep link into
 // its Get Gems tab, pre-searched, so publishing a gem key here lands the reader ready to install.
@@ -38,7 +39,41 @@ function openInAppUrl(gem: { key: string; version: string; installable?: boolean
   return `agentgem://get-gems?${deepLinkQuery(gem)}`;
 }
 
-export function Gem({ api, keyName, stars, me }: { api: ReturnType<typeof makeApi>; keyName: string; stars: StarsCtx; me: Me | null }) {
+function ShareWithGroups({ base, gemKey }: { base: string; gemKey: string }) {
+  const api = makeGroups(base);
+  const [groups, setGroups] = useState<GroupSummary[] | null>(null);
+  const [shared, setShared] = useState<Set<string>>(new Set());
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    api.list().then((g) => { if (alive) setGroups(g); }).catch(() => { if (alive) setGroups([]); });
+    api.listGemShares(gemKey).then((s: GemShareRef[]) => { if (alive) setShared(new Set(s.map((x) => x.groupId))); }).catch(() => {});
+    return () => { alive = false; };
+  }, [base, gemKey]);
+
+  const toggle = async (groupId: string, on: boolean) => {
+    setErr(null);
+    const next = new Set(shared); on ? next.add(groupId) : next.delete(groupId); setShared(next);   // optimistic
+    try { on ? await api.shareGem(gemKey, groupId) : await api.unshareGem(gemKey, groupId); }
+    catch (e) { const back = new Set(shared); setShared(back); setErr(e instanceof Error ? e.message : String(e)); }
+  };
+
+  if (groups === null) return null;
+  if (groups.length === 0) return <p className="ex-empty">You're not in any groups yet. <a href="/groups">Create one</a> to share this privately.</p>;
+  return (
+    <div>
+      {err && <p className="ex-error">{err}</p>}
+      {groups.map((g) => (
+        <label key={g.id} style={{ display: "block", padding: "3px 0" }}>
+          <input type="checkbox" aria-label={`share with ${g.name}`} checked={shared.has(g.id)} onChange={(e) => toggle(g.id, e.target.checked)} /> {g.name}
+        </label>
+      ))}
+    </div>
+  );
+}
+
+export function Gem({ api, keyName, stars, me, base }: { api: ReturnType<typeof makeApi>; keyName: string; stars: StarsCtx; me: Me | null; base: string }) {
   const [gems, setGems] = useState<GemT[] | null>(null);
   const [starState, setStarState] = useState<StarState>({ counts: {}, mine: [] });
   const [adoptions, setAdoptions] = useState<Record<string, { installs: number; verifiedInstalls: number }>>({});
@@ -156,6 +191,9 @@ export function Gem({ api, keyName, stars, me }: { api: ReturnType<typeof makeAp
       {isOwner && (
         <section className="ex-card ex-danger">
           <h3>Owner controls</h3>
+          <h4>Share privately with a group</h4>
+          <p className="ex-danger-note" style={{ marginTop: 0 }}>Members of a checked group can open and install this gem even while it's private.</p>
+          <ShareWithGroups base={base} gemKey={gemKey} />
           <p className="ex-danger-note">Unpublishing removes this {label} from app.agentgem.ai for everyone. This can't be undone.</p>
           {removeErr && <p className="ex-danger-err">{removeErr}</p>}
           <button type="button" className="ex-unpublish" disabled={removing} onClick={unpublish}>

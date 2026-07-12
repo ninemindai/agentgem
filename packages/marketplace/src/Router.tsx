@@ -64,7 +64,7 @@ export const ROUTES: RouteDef[] = [
   // desktop deep-link; "/" is home. The ingredients board moved to its own "/ingredients".
   { id: "home", kind: "home", match: (p) => p === "/" || p === "/miniapps" || p === "/minigames", render: (_m, c) => <Minigames api={c.api} stars={c.stars} /> },
   { id: "games", kind: "collection", collection: "games", match: (p) => parseGamePath(p), render: (m, c) => <Play api={c.api} gemKey={m as string} /> },
-  { id: "gems-detail", kind: "collection", collection: "gems", match: (p) => p.match(/^\/gems\/(.+)$/), render: (m, c) => <Gem api={c.api} keyName={decodeURIComponent((m as RegExpMatchArray)[1])} stars={c.stars} me={c.me} /> },
+  { id: "gems-detail", kind: "collection", collection: "gems", match: (p) => p.match(/^\/gems\/(.+)$/), render: (m, c) => <Gem api={c.api} keyName={decodeURIComponent((m as RegExpMatchArray)[1])} stars={c.stars} me={c.me} base={defaultApiBase()} /> },
   { id: "gems", kind: "collection", collection: "gems", match: (p) => p === "/gems", render: (_m, c) => <Gems api={c.api} stars={c.stars} /> },
   { id: "ingredients", kind: "collection", collection: "ingredients", match: (p) => p.match(/^\/ingredients\/(.+)$/), render: (m, c) => <Ingredient api={c.api} id={decodeURIComponent((m as RegExpMatchArray)[1])} stars={c.stars} /> },
   // /skills/:sourceId/*path — the catalog-skill page (repo+path identity) hosting reviews + preview.
