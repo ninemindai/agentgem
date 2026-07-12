@@ -1288,14 +1288,18 @@ export class GemController {
   async registryInstall(input: { body: z.infer<typeof RegistryInstallRequestSchema> }): Promise<z.infer<typeof RegistryInstallResponseSchema>> {
     const { source } = this.registrySource();
     const { plan, gem } = await resolveInstall({ refs: input.body.refs, mode: input.body.mode, target: input.body.target as TargetId | undefined, source, a2aServer: input.body.a2aServer });
+    // Validate mode-specific inputs BEFORE any install side-effect, so a rejected install
+    // (materialize without `dest`) writes nothing — the same "a refused install writes nothing"
+    // principle installHosted's consent gate follows.
+    if (input.body.mode === "materialize" && !input.body.dest) throw new Error("materialize mode requires `dest`");
     const rubrics = installRubricGem(gem);
     // Adoption fires only AFTER the install actually lands (below), never on a resolve-then-fail.
     const installed = plan.items.map((it) => ({ gemKey: it.key, version: it.version, gemDigest: "" }));
     if (input.body.mode === "materialize") {
-      if (!input.body.dest) throw new Error("materialize mode requires `dest`");
-      writeArchiveDir(input.body.dest, plan.materialize!.files);
+      const dest = input.body.dest!;   // guarded above
+      writeArchiveDir(dest, plan.materialize!.files);
       void emitAdoption(installed);   // opt-in + fire-and-forget; never awaited, never throws
-      return { plan, applied: { mode: "materialize", dest: input.body.dest, written: Object.keys(plan.materialize!.files) }, rubrics };
+      return { plan, applied: { mode: "materialize", dest, written: Object.keys(plan.materialize!.files) }, rubrics };
     }
     const name = input.body.workspaceName ?? gem.name;
     createWorkspace(name, gem);
