@@ -7,7 +7,7 @@
 // SameSite=Lax session cookie + the 401, NOT by CORS. Unpublish is a hard delete of the catalog row +
 // archive bytes (visibility scope is a separate, later feature).
 import type { AppDb, makeAuth } from "@agentgem/aggregator";
-import { resolveSession, deleteCatalogGem, listCatalogGemsForOwner, gemAccessInfo, latestGemVersion, getGemArchive, catalogGemForOwner } from "@agentgem/aggregator";
+import { resolveSession, deleteCatalogGem, listCatalogGemsForOwner, latestGemVersion, getGemArchive, catalogGemForViewer, accountCanAccessGem } from "@agentgem/aggregator";
 import { importGem } from "@agentgem/distribute";
 
 export interface CatalogDeps { db: AppDb; auth: ReturnType<typeof makeAuth>; webOrigins: string[] }
@@ -70,9 +70,9 @@ export function myGemsHandler(deps: CatalogDeps) {
   };
 }
 
-// Owner-only game-meta resolve (mirrors AggregatorController.gameMeta's extraction, but gated to the
-// session's own gems instead of public visibility). A non-owner authenticated caller gets the SAME
-// 404 as an unknown key — no existence leak via a 403.
+// Access-gated game-meta resolve (mirrors AggregatorController.gameMeta's extraction, but gated to
+// accountCanAccessGem instead of public visibility: the owner, or a member of a group the gem is
+// shared with). A caller with no access gets the SAME 404 as an unknown key — no existence leak.
 export function ownerGameMetaHandler(deps: CatalogDeps) {
   return async (req: Req, res: Res): Promise<void> => {
     cors(req, res, deps.webOrigins);
@@ -82,8 +82,7 @@ export function ownerGameMetaHandler(deps: CatalogDeps) {
     const key = String((req.query.key as string | undefined) ?? "");
     const version = key ? await latestGemVersion(deps.db, key) : null;
     if (!key || !version) { res.status(404).json({ error: "gem not found" }); return; }
-    const info = await gemAccessInfo(deps.db, key, version);
-    if (!info || info.ownerAccountId !== accountId) { res.status(404).json({ error: "gem not found" }); return; }
+    if (!(await accountCanAccessGem(deps.db, key, version, accountId))) { res.status(404).json({ error: "gem not found" }); return; }
     const a = await getGemArchive(deps.db, key, version);
     if (!a) { res.status(404).json({ error: "gem not found" }); return; }
     const { gem } = importGem(Buffer.from(a.bytes));
@@ -93,7 +92,7 @@ export function ownerGameMetaHandler(deps: CatalogDeps) {
   };
 }
 
-// Owner-only game-html (the sealed play HTML). Same no-leak 404 rule as ownerGameMetaHandler.
+// Access-gated game-html (the sealed play HTML). Same no-leak 404 rule as ownerGameMetaHandler.
 export function ownerGameHtmlHandler(deps: CatalogDeps) {
   return async (req: Req, res: Res): Promise<void> => {
     cors(req, res, deps.webOrigins);
@@ -103,8 +102,7 @@ export function ownerGameHtmlHandler(deps: CatalogDeps) {
     const key = String((req.query.key as string | undefined) ?? "");
     const version = String((req.query.version as string | undefined) ?? "");
     if (!key || !version) { res.status(404).json({ error: "gem not found" }); return; }
-    const info = await gemAccessInfo(deps.db, key, version);
-    if (!info || info.ownerAccountId !== accountId) { res.status(404).json({ error: "gem not found" }); return; }
+    if (!(await accountCanAccessGem(deps.db, key, version, accountId))) { res.status(404).json({ error: "gem not found" }); return; }
     const a = await getGemArchive(deps.db, key, version);
     if (!a) { res.status(404).json({ error: "gem not found" }); return; }
     const { gem } = importGem(Buffer.from(a.bytes));
@@ -114,8 +112,8 @@ export function ownerGameHtmlHandler(deps: CatalogDeps) {
   };
 }
 
-// Owner-only archive download (the raw .gem bytes, base64-encoded for JSON transport). Same no-leak
-// 404 rule as ownerGameMetaHandler/ownerGameHtmlHandler.
+// Access-gated archive download (the raw .gem bytes, base64-encoded for JSON transport). Same
+// no-leak 404 rule as ownerGameMetaHandler/ownerGameHtmlHandler.
 export function ownerGemArchiveHandler(deps: CatalogDeps) {
   return async (req: Req, res: Res): Promise<void> => {
     cors(req, res, deps.webOrigins);
@@ -125,16 +123,15 @@ export function ownerGemArchiveHandler(deps: CatalogDeps) {
     const key = String((req.query.key as string | undefined) ?? "");
     const version = String((req.query.version as string | undefined) ?? "");
     if (!key || !version) { res.status(404).json({ error: "gem not found" }); return; }
-    const info = await gemAccessInfo(deps.db, key, version);
-    if (!info || info.ownerAccountId !== accountId) { res.status(404).json({ error: "gem not found" }); return; }
+    if (!(await accountCanAccessGem(deps.db, key, version, accountId))) { res.status(404).json({ error: "gem not found" }); return; }
     const a = await getGemArchive(deps.db, key, version);
     if (!a) { res.status(404).json({ error: "gem not found" }); return; }
     res.json({ archiveBase64: Buffer.from(a.bytes).toString("base64") });
   };
 }
 
-// Owner-only gem detail (metadata for the owner's private detail page, across all visibilities).
-// Same no-leak 404 rule as the other owner-gated handlers.
+// Access-gated gem detail (metadata for the owner/viewer's private detail page, across all
+// visibilities). Same no-leak 404 rule as the other access-gated handlers.
 export function ownerGemHandler(deps: CatalogDeps) {
   return async (req: Req, res: Res): Promise<void> => {
     cors(req, res, deps.webOrigins);
@@ -143,7 +140,7 @@ export function ownerGemHandler(deps: CatalogDeps) {
     if (!accountId) { res.status(401).json({ error: "sign in required" }); return; }
     const key = String((req.query.key as string | undefined) ?? "");
     if (!key) { res.status(404).json({ error: "gem not found" }); return; }
-    const g = await catalogGemForOwner(deps.db, key, accountId);
+    const g = await catalogGemForViewer(deps.db, key, accountId);
     if (!g) { res.status(404).json({ error: "gem not found" }); return; }
     res.json({
       key: g.gemKey, version: g.version, publishedBy: g.publishedBy, description: g.description ?? "",
