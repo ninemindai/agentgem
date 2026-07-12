@@ -3,9 +3,9 @@
 // gem_group_shares store: the additive ACL that gives native groups a payload. Sharing keys on
 // gem_key (the app identity) — every private version of the gem inherits the share. Access is
 // decided by accountCanAccessGem, the single gate every private-serving reader routes through.
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import type { AppDb } from "./schema.js";
-import { gemGroupShares, groups } from "./schema.js";
+import { gemGroupShares, groups, catalogGems, gemArchives } from "./schema.js";
 import { gemAccessInfo } from "./catalog.js";
 
 /** Share a gem (by key) with a group. Idempotent — re-sharing is a no-op. */
@@ -50,4 +50,29 @@ export async function accountCanAccessGem(
     where s.gem_key = ${gemKey} and m.account_id = ${accountId}
     limit 1`)).rows;
   return shared.length > 0;
+}
+
+/** Gems shared with a group, each at its latest published version, with the metadata the
+ *  marketplace's discovery listing needs. Newest-shared first. */
+export async function listGemsSharedWithGroup(
+  db: AppDb, groupId: string,
+): Promise<{ gemKey: string; version: string; description: string; artifactKinds: string[]; installable: boolean }[]> {
+  const shares = await db.select({ gemKey: gemGroupShares.gemKey })
+    .from(gemGroupShares).where(eq(gemGroupShares.groupId, groupId));
+  const out: { gemKey: string; version: string; description: string; artifactKinds: string[]; installable: boolean }[] = [];
+  for (const s of shares) {
+    const row = (await db.select({
+      version: catalogGems.version, description: catalogGems.description,
+      artifactKinds: catalogGems.artifactKinds, archiveKey: gemArchives.gemKey,
+    }).from(catalogGems)
+      .leftJoin(gemArchives, and(eq(catalogGems.gemKey, gemArchives.gemKey), eq(catalogGems.version, gemArchives.version)))
+      .where(eq(catalogGems.gemKey, s.gemKey))
+      .orderBy(desc(catalogGems.createdAtMs)).limit(1))[0];
+    if (!row) continue;   // share to a gem with no catalog row (fully unpublished) — skip
+    out.push({
+      gemKey: s.gemKey, version: row.version, description: row.description ?? "",
+      artifactKinds: row.artifactKinds ?? [], installable: row.archiveKey != null,
+    });
+  }
+  return out;
 }

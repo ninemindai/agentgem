@@ -21,6 +21,7 @@ import {
   resolveSession, createNativeGroup, deleteNativeGroup, listGroupsForAccount, listGroupMembers,
   groupMemberRole, removeMemberGuarded,
   createGroupInvite, redeemGroupInvite, revokeGroupInvite, listGroupInvites,
+  listGemsSharedWithGroup,
   type GroupRole,
 } from "@agentgem/aggregator";
 
@@ -181,6 +182,17 @@ export function groupInviteRedeemHandler(deps: GroupsDeps) {
   };
 }
 
+/** GET → gems shared with this group (any member). Member-gated via requireGroupRole. */
+export function groupGemsHandler(deps: GroupsDeps) {
+  return async (req: Req, res: Res): Promise<void> => {
+    cors(req, res, deps.webOrigins);
+    if (req.method === "OPTIONS") { preflight(res); return; }
+    const ok = await requireGroupRole(deps, req, res, false);
+    if (!ok) return;
+    res.json({ gems: await listGemsSharedWithGroup(deps.db, ok.groupId) });
+  };
+}
+
 export function installGroups(expressApp: ExpressApp, deps: GroupsDeps): void {
   for (const [path, handler] of [
     ["/api/catalog/groups", groupsHandler(deps)],
@@ -193,4 +205,8 @@ export function installGroups(expressApp: ExpressApp, deps: GroupsDeps): void {
     expressApp.delete(path, handler);
     expressApp.options(path, handler);
   }
+
+  const groupGems = groupGemsHandler(deps);
+  expressApp.get("/api/catalog/group-gems", groupGems);
+  expressApp.options("/api/catalog/group-gems", groupGems);
 }

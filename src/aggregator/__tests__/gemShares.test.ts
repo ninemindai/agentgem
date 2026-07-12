@@ -94,4 +94,19 @@ describe("gem shares store", () => {
     expect(await deleteCatalogGem(db, "o/secret", "1.0.0", owner.id)).toBe("deleted");
     expect(await listGroupsForGem(db, "o/secret")).toEqual([]);
   });
+
+  it("listGemsSharedWithGroup returns the latest version + metadata of each shared gem", async () => {
+    const db = await makeTestDb();
+    const { listGemsSharedWithGroup, upsertGemArchive } = await import("@agentgem/aggregator");
+    const owner = await acct(db, "owner");
+    await upsertCatalogGem(db, { gemKey: "o/secret", version: "1.0.0", publishedBy: "owner", ownerAccountId: owner.id, createdAtMs: 1, visibility: "private", description: "hi", artifactKinds: ["game"] });
+    await upsertGemArchive(db, { gemKey: "o/secret", version: "1.0.0", bytes: new Uint8Array([1]), digest: "d", createdAtMs: 1, ownerAccountId: owner.id });
+    const g = await createNativeGroup(db, owner.id, "Team");
+    await shareGemWithGroup(db, "o/secret", g.id, owner.id);
+    expect(await listGemsSharedWithGroup(db, g.id)).toEqual([
+      { gemKey: "o/secret", version: "1.0.0", description: "hi", artifactKinds: ["game"], installable: true },
+    ]);
+    const empty = await createNativeGroup(db, owner.id, "Empty");
+    expect(await listGemsSharedWithGroup(db, empty.id)).toEqual([]);
+  });
 });

@@ -2,12 +2,15 @@
 // SPDX-License-Identifier: MIT
 import { describe, it, expect } from "vitest";
 import { sql } from "drizzle-orm";
-import { makeTestDb, makeAuth, mintSession, createNativeGroup, grantInvite, groupMemberRole } from "@agentgem/aggregator";
+import {
+  makeTestDb, makeAuth, mintSession, createNativeGroup, grantInvite, groupMemberRole,
+  upsertCatalogGem, upsertGemArchive, shareGemWithGroup,
+} from "@agentgem/aggregator";
 import type { AppDb } from "@agentgem/aggregator";
 // Test-only helper — not re-exported from the main barrel (see index.ts), imported via the
 // package's "testing" subpath instead.
 import { mintBetterAuthCookieForTest } from "@agentgem/aggregator/testing";
-import { groupsHandler, groupMembersHandler, groupInvitesHandler, groupInviteRedeemHandler } from "../install.js";
+import { groupsHandler, groupMembersHandler, groupInvitesHandler, groupInviteRedeemHandler, groupGemsHandler } from "../install.js";
 
 const ORIGINS = ["https://app.agentgem.ai"];
 const authOpts = {
@@ -288,5 +291,29 @@ describe("groups routes", () => {
     const ok = res();
     await groupsHandler(deps(db, auth))(req({ method: "DELETE", headers: owner.headers, query: { id: g.id } }), ok);
     expect(ok.code).toBe(200);
+  });
+
+  it("group-gems: a member sees the gems shared with the group; a non-member gets 404", async () => {
+    const db = await makeTestDb();
+    const auth = makeAuth({ db, ...authOpts });
+    const owner = await signedIn(db, auth, "owner");
+    const member = await signedIn(db, auth, "member");
+    const stranger = await signedIn(db, auth, "stranger");
+    const g = await createNativeGroup(db, owner.acct.id, "Team");
+    await grantInvite(db, g.id, member.acct.id, "member");
+    await upsertCatalogGem(db, { gemKey: "o/secret", version: "1.0.0", publishedBy: "owner", ownerAccountId: owner.acct.id, createdAtMs: 1, visibility: "private", description: "hi", artifactKinds: ["game"] });
+    await upsertGemArchive(db, { gemKey: "o/secret", version: "1.0.0", bytes: new Uint8Array([1]), digest: "d", createdAtMs: 1, ownerAccountId: owner.acct.id });
+    await shareGemWithGroup(db, "o/secret", g.id, owner.acct.id);
+
+    const seen = res();
+    await groupGemsHandler(deps(db, auth))(req({ headers: member.headers, query: { id: g.id } }), seen);
+    expect(seen.code).toBe(200);
+    expect((seen.body as any).gems).toEqual([
+      { gemKey: "o/secret", version: "1.0.0", description: "hi", artifactKinds: ["game"], installable: true },
+    ]);
+
+    const denied = res();
+    await groupGemsHandler(deps(db, auth))(req({ headers: stranger.headers, query: { id: g.id } }), denied);
+    expect(denied.code).toBe(404);
   });
 });
