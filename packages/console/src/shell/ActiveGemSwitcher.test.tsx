@@ -10,9 +10,9 @@ const res = (body: unknown) =>
 
 // Server returns workspaces already recency-ordered (most-recent first).
 const workspaces = [
-  { name: "fresh", gemName: "fresh", version: "1.0.0", artifactCounts: { skill: 2, mcp_server: 0, instructions: 0, hook: 0, subagent: 0, game: 0 },
+  { name: "fresh", gemName: "fresh", version: "1.0.0", artifactCounts: { skill: 2, mcp_server: 0, instructions: 0, hook: 0, subagent: 0, game: 0, rubric: 0 },
     artifacts: [{ type: "skill", name: "pdf" }, { type: "skill", name: "csv" }], modifiedMs: 3000, checks: 0, renderedTargets: [] },
-  { name: "older", gemName: "older", version: "1.0.0", artifactCounts: { skill: 0, mcp_server: 1, instructions: 0, hook: 0, subagent: 0, game: 0 },
+  { name: "older", gemName: "older", version: "1.0.0", artifactCounts: { skill: 0, mcp_server: 1, instructions: 0, hook: 0, subagent: 0, game: 0, rubric: 0 },
     artifacts: [{ type: "mcp_server", name: "context7" }], modifiedMs: 1000, checks: 0, renderedTargets: [] },
 ];
 

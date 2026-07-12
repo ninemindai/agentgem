@@ -1187,3 +1187,15 @@ describe("rubric bundling through the API (2B)", () => {
     } finally { rmSync(out, { recursive: true, force: true }); }
   });
 });
+
+describe("workspace counts a bundled rubric (2C)", () => {
+  it("artifactCounts.rubric reflects a bundled rubric", async () => {
+    mkdirSync(join(agentgemHomeDir, ".agentgem", "rubrics"), { recursive: true });
+    writeFileSync(join(agentgemHomeDir, ".agentgem", "rubrics", "cnt.json"),
+      JSON.stringify({ id: "cnt", title: "Counted", target: "overview", factors: [{ factor: "retry-storm" }] }));
+    await client.post("/api/workspaces").send({ dir, name: "rub-ws", selection: { rubrics: ["cnt"] } }).expect(200);
+    const r = await client.get("/api/workspaces").expect(200);
+    const ws = r.body.workspaces.find((w: { name: string }) => w.name === "rub-ws");
+    expect(ws.artifactCounts.rubric).toBe(1);
+  });
+});
