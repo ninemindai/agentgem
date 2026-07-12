@@ -4,7 +4,7 @@ import { useIdentity } from "../../identity/IdentityProvider.js";
 import {
   makeClient,
   reviewInboxRoute, reviewGetRoute, reviewApproveRoute, reviewChangesRoute,
-  reviewWithdrawRoute, reviewMessageRoute,
+  reviewWithdrawRoute, reviewMessageRoute, reviewInstallRoute, reviewResubmitRoute,
 } from "../../api/routes.js";
 
 // The list-item and detail shapes are z.any() on the wire (routes.ts) — real fields come from
@@ -39,6 +39,10 @@ function RequestDetail({
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [installBusy, setInstallBusy] = useState(false);
+  const [installConsent, setInstallConsent] = useState(false);
+  const [installWorkspace, setInstallWorkspace] = useState<string | null>(null);
+  const [installError, setInstallError] = useState<string | null>(null);
 
   const load = () => {
     setDetail(null);
@@ -85,6 +89,40 @@ function RequestDetail({
   if (!detail && !error) return <p className="ledger-empty">Loading…</p>;
   if (!detail) return <p className="ledger-error" role="alert">{error}</p>;
 
+  // Install-to-test: all gem types install to a local workspace in this MVP (routing game gems to
+  // the miniapp player is a documented follow-on, not done here). The server 409s with
+  // consent_required when the gem has executable artifacts — flip to a confirm and retry with
+  // consent:true; a 404 means the staged archive expired.
+  const install = (consent?: boolean) => {
+    setInstallBusy(true);
+    setInstallError(null);
+    reviewInstallRoute
+      .call(makeClient(apiBase), { body: consent ? { requestId: summary.id, consent: true } : { requestId: summary.id } })
+      .then((r) => { setInstallWorkspace(r.workspace); setInstallConsent(false); })
+      .catch((e) => {
+        const status = e && typeof e === "object" && "status" in e ? (e as { status?: number }).status : undefined;
+        if (!consent && status === 409) { setInstallConsent(true); return; }
+        if (status === 404) { setInstallError("archive no longer available"); return; }
+        setInstallError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => setInstallBusy(false));
+  };
+
+  // Resubmit (author only, changes-requested only): re-runs Studio's request build path against the
+  // existing requestId. MVP gate: derive scope/name from gemKey and assume the local workspace name
+  // matches (Studio's request always builds gemKey as `${scope}/${workspace}`, see Studio.tsx) — if
+  // that workspace is gone locally, the server call fails and we hint at reopening it in Studio.
+  const [gemScope, gemName] = detail.gemKey.split("/");
+  const canResubmit = isAuthor && detail.status === "changes-requested" && Boolean(gemScope && gemName);
+  const resubmit = () => runAction(() =>
+    reviewResubmitRoute
+      .call(makeClient(apiBase), { body: { workspace: gemName, scope: gemScope, name: gemName, version: detail.version, requestId: summary.id } })
+      .catch((e) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new Error(`${msg} — reopen this gem in Studio to resubmit.`);
+      })
+  );
+
   return (
     <div className="review-detail">
       <div className="analyze-row-head">
@@ -125,9 +163,16 @@ function RequestDetail({
 
       <div className="run-status" style={{ marginTop: 12, gap: 8 }}>
         {isAuthor ? (
-          <button type="button" className="ledger-view" disabled={busy} onClick={() => runAction(() => reviewWithdrawRoute.call(makeClient(apiBase), { body: { requestId: summary.id } }))}>
-            Withdraw
-          </button>
+          <>
+            <button type="button" className="ledger-view" disabled={busy} onClick={() => runAction(() => reviewWithdrawRoute.call(makeClient(apiBase), { body: { requestId: summary.id } }))}>
+              Withdraw
+            </button>
+            {canResubmit && (
+              <button type="button" className="ledger-view" disabled={busy} onClick={resubmit}>
+                Resubmit
+              </button>
+            )}
+          </>
         ) : (
           <>
             <button type="button" className="ledger-view" disabled={busy} onClick={() => runAction(() => reviewApproveRoute.call(makeClient(apiBase), { body: { requestId: summary.id } }))}>
@@ -138,6 +183,23 @@ function RequestDetail({
             </button>
           </>
         )}
+      </div>
+
+      <div className="run-status" style={{ marginTop: 12, gap: 8 }}>
+        {installWorkspace ? (
+          <span className="getgems-done">Installed to workspace <code>{installWorkspace}</code></span>
+        ) : installConsent ? (
+          <span className="getgems-consent">
+            This gem runs executable artifacts — install anyway?
+            <button type="button" className="ledger-sort" disabled={installBusy} onClick={() => install(true)}>Install anyway</button>
+            <button type="button" className="ledger-sort" onClick={() => setInstallConsent(false)}>Cancel</button>
+          </span>
+        ) : (
+          <button type="button" className="ledger-view" disabled={installBusy} onClick={() => install()}>
+            {installBusy ? "Installing…" : "Install to test"}
+          </button>
+        )}
+        {installError && <span className="ledger-error" role="alert">{installError}</span>}
       </div>
     </div>
   );

@@ -854,6 +854,23 @@ export const reviewSeenRoute = defineRoute("POST", "/api/review/seen", {
   body: z.object({ requestId: z.string() }),
   response: z.object({ ok: z.boolean() }),
 });
+// Install-to-test (ReviewController#install): materializes the staged archive into a new local
+// workspace. consent=true is required when the gem has executable artifacts (mirrors the hosted
+// install consent gate below) — the server throws 409 `consent_required` without it, and 404
+// `review_archive_gone` if the staging archive is no longer available.
+export const reviewInstallRoute = defineRoute("POST", "/api/review/install", {
+  body: z.object({ requestId: z.string(), name: z.string().optional(), consent: z.boolean().optional() }),
+  response: z.object({ workspace: z.string(), executables: z.object({ mcp: z.array(z.string()), hooks: z.array(z.string()) }) }),
+});
+// Resubmit (ReviewController#resubmit): re-runs Studio's request build path against an existing
+// requestId, for the author addressing changes-requested feedback.
+export const reviewResubmitRoute = defineRoute("POST", "/api/review/resubmit", {
+  body: z.object({
+    workspace: z.string(), scope: z.string(), name: z.string().optional(),
+    version: z.string(), requestId: z.string(), description: z.string().max(4000).optional(),
+  }),
+  response: z.object({ ok: z.boolean(), rejected: z.string().optional() }),
+});
 
 // Zero-config install of a hosted (shared) gem: the server downloads the archive from the hosted
 // aggregator and materializes it. consent=true is required when the gem has executable artifacts.

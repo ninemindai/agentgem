@@ -25,7 +25,7 @@ describe("pages registry", () => {
     expect(g.map((x) => x.category)).toEqual(["setup", "projects"]);
     expect(flat("build")).toEqual([
       "curate", "sources", "gems", "play", "rubric-library",
-      "materialize", "deploy", "publish",
+      "materialize", "deploy", "publish", "reviews",
     ]);
   });
 

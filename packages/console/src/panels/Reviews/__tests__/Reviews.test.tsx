@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
+import { ClientError } from "@agentback/client";
 import { IdentityProvider } from "../../../identity/IdentityProvider.js";
 import { Reviews } from "../index.js";
 import * as routes from "../../../api/routes.js";
@@ -67,5 +68,82 @@ describe("Reviews", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /withdraw/i }));
     await waitFor(() => expect(withdraw).toHaveBeenCalledWith(expect.anything(), { body: { requestId: "req-1" } }));
+  });
+
+  it("Install to test calls reviewInstallRoute and shows the workspace name", async () => {
+    vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob", sessionActive: true } as never);
+    vi.spyOn(routes.reviewInboxRoute, "call").mockResolvedValue({ requests: [inboxRequest] } as never);
+    vi.spyOn(routes.reviewGetRoute, "call").mockResolvedValue({ request: detail } as never);
+    const install = vi.spyOn(routes.reviewInstallRoute, "call")
+      .mockResolvedValue({ workspace: "review-req-1", executables: { mcp: [], hooks: [] } } as never);
+
+    mount();
+    fireEvent.click(await screen.findByText(/acme\/tool@1\.0\.0/));
+    fireEvent.click(await screen.findByRole("button", { name: /install to test/i }));
+
+    await waitFor(() => expect(install).toHaveBeenCalledWith(expect.anything(), { body: { requestId: "req-1" } }));
+    expect(await screen.findByText(/review-req-1/)).toBeTruthy();
+  });
+
+  it("a 409 consent_required prompts consent then retries with consent:true", async () => {
+    vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob", sessionActive: true } as never);
+    vi.spyOn(routes.reviewInboxRoute, "call").mockResolvedValue({ requests: [inboxRequest] } as never);
+    vi.spyOn(routes.reviewGetRoute, "call").mockResolvedValue({ request: detail } as never);
+    const install = vi.spyOn(routes.reviewInstallRoute, "call")
+      .mockRejectedValueOnce(new ClientError(
+        "this gem runs executable artifacts; install requires consent", 409,
+        { error: { message: "this gem runs executable artifacts; install requires consent", code: "consent_required" } },
+      ))
+      .mockResolvedValueOnce({ workspace: "review-req-1", executables: { mcp: ["gh"], hooks: [] } } as never);
+
+    mount();
+    fireEvent.click(await screen.findByText(/acme\/tool@1\.0\.0/));
+    fireEvent.click(await screen.findByRole("button", { name: /install to test/i }));
+
+    fireEvent.click(await screen.findByRole("button", { name: /install anyway/i }));
+    await waitFor(() => expect(install).toHaveBeenLastCalledWith(expect.anything(), { body: { requestId: "req-1", consent: true } }));
+    expect(await screen.findByText(/review-req-1/)).toBeTruthy();
+  });
+
+  it("a 404 review_archive_gone shows a friendly message", async () => {
+    vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob", sessionActive: true } as never);
+    vi.spyOn(routes.reviewInboxRoute, "call").mockResolvedValue({ requests: [inboxRequest] } as never);
+    vi.spyOn(routes.reviewGetRoute, "call").mockResolvedValue({ request: detail } as never);
+    vi.spyOn(routes.reviewInstallRoute, "call")
+      .mockRejectedValue(new ClientError("staging archive not available", 404, { error: { message: "staging archive not available", code: "review_archive_gone" } }));
+
+    mount();
+    fireEvent.click(await screen.findByText(/acme\/tool@1\.0\.0/));
+    fireEvent.click(await screen.findByRole("button", { name: /install to test/i }));
+
+    expect(await screen.findByText(/archive no longer available/i)).toBeTruthy();
+  });
+
+  it("the author sees Resubmit on a changes-requested request and it calls reviewResubmitRoute", async () => {
+    const changesRequestedRequest = { ...inboxRequest, authorLogin: "alice", status: "changes-requested" };
+    const changesRequestedDetail = { ...detail, authorLogin: "alice", status: "changes-requested" };
+    vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "alice", sessionActive: true } as never);
+    vi.spyOn(routes.reviewInboxRoute, "call").mockResolvedValue({ requests: [changesRequestedRequest] } as never);
+    vi.spyOn(routes.reviewGetRoute, "call").mockResolvedValue({ request: changesRequestedDetail } as never);
+    const resubmit = vi.spyOn(routes.reviewResubmitRoute, "call").mockResolvedValue({ ok: true } as never);
+
+    mount();
+    fireEvent.click(await screen.findByText(/acme\/tool@1\.0\.0/));
+
+    fireEvent.click(await screen.findByRole("button", { name: /resubmit/i }));
+    await waitFor(() => expect(resubmit).toHaveBeenCalledWith(expect.anything(), {
+      body: { workspace: "tool", scope: "acme", name: "tool", version: "1.0.0", requestId: "req-1" },
+    }));
+  });
+
+  it("a non-author, or an open request, does not show Resubmit", async () => {
+    vi.spyOn(routes.bindStatusRoute, "call").mockResolvedValue({ bound: true, login: "bob", sessionActive: true } as never);
+    vi.spyOn(routes.reviewInboxRoute, "call").mockResolvedValue({ requests: [inboxRequest] } as never);
+    vi.spyOn(routes.reviewGetRoute, "call").mockResolvedValue({ request: detail } as never);
+
+    mount();
+    fireEvent.click(await screen.findByText(/acme\/tool@1\.0\.0/));
+    await screen.findByRole("button", { name: /approve/i });
+    expect(screen.queryByRole("button", { name: /resubmit/i })).toBeNull();
   });
 });
