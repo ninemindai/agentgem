@@ -7,12 +7,9 @@
 // (kind "skill", id "<sourceId>/<path>") — content must not cross-attribute same-named skills.
 import type { AppDb, makeAuth } from "@agentgem/aggregator";
 import { resolveSession, upsertReview, deleteReview, reviewSummary, reviewSummaries, listReviews, myReview } from "@agentgem/aggregator";
+import { cors, preflight, type Req, type Res, type ExpressApp } from "../publicCors.js";
 
 export interface ReviewsDeps { db: AppDb; auth: ReturnType<typeof makeAuth>; webOrigins: string[] }
-
-interface Req { method: string; path: string; query: Record<string, unknown>; body: Record<string, unknown>; headers: Record<string, string | undefined>; get(n: string): string | undefined }
-interface Res { status(c: number): Res; set(k: string, v: string): Res; setHeader(k: string, v: string): Res; json(b: unknown): Res; send(b: unknown): Res }
-type ExpressApp = { get(p: string, h: (req: Req, res: Res) => unknown): unknown; post(p: string, h: (req: Req, res: Res) => unknown): unknown; delete(p: string, h: (req: Req, res: Res) => unknown): unknown; options(p: string, h: (req: Req, res: Res) => unknown): unknown };
 
 const KINDS = new Set(["skill"]);           // catalog-skill reviews only; no gem UI yet
 const MAX_BODY = 4000;
@@ -38,17 +35,6 @@ function rateLimited(accountId: string): boolean {
   return false;
 }
 
-function cors(req: Req, res: Res, origins: string[]): void {
-  const origin = req.headers["origin"];
-  if (origin && origins.includes(origin)) {
-    res.set("Access-Control-Allow-Origin", origin);
-    res.set("Access-Control-Allow-Credentials", "true");
-    res.set("Vary", "Origin");
-  }
-}
-function preflight(res: Res): void {
-  res.set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS").set("Access-Control-Allow-Headers", "content-type").status(204).send("");
-}
 async function account(deps: ReviewsDeps, req: Req): Promise<string | null> {
   const who = await resolveSession(deps.auth, req.headers);
   return who?.accountId ?? null;
@@ -60,7 +46,7 @@ function validTarget(kind: string, id: string): boolean {
 export function postHandler(deps: ReviewsDeps) {
   return async (req: Req, res: Res): Promise<void> => {
     cors(req, res, deps.webOrigins);
-    if (req.method === "OPTIONS") { preflight(res); return; }
+    if (req.method === "OPTIONS") { preflight(res, "GET, POST, DELETE, OPTIONS"); return; }
     const accountId = await account(deps, req);
     if (!accountId) { res.status(401).json({ error: "sign in required" }); return; }
     const kind = String((req.body.kind as string | undefined) ?? "");
@@ -80,7 +66,7 @@ export function postHandler(deps: ReviewsDeps) {
 export function deleteHandler(deps: ReviewsDeps) {
   return async (req: Req, res: Res): Promise<void> => {
     cors(req, res, deps.webOrigins);
-    if (req.method === "OPTIONS") { preflight(res); return; }
+    if (req.method === "OPTIONS") { preflight(res, "GET, POST, DELETE, OPTIONS"); return; }
     const accountId = await account(deps, req);
     if (!accountId) { res.status(401).json({ error: "sign in required" }); return; }
     const kind = String((req.query.kind as string | undefined) ?? "");
@@ -94,7 +80,7 @@ export function deleteHandler(deps: ReviewsDeps) {
 export function getHandler(deps: ReviewsDeps) {
   return async (req: Req, res: Res): Promise<void> => {
     cors(req, res, deps.webOrigins);
-    if (req.method === "OPTIONS") { preflight(res); return; }
+    if (req.method === "OPTIONS") { preflight(res, "GET, POST, DELETE, OPTIONS"); return; }
     const kind = String((req.query.kind as string | undefined) ?? "");
     const id = String((req.query.id as string | undefined) ?? "");
     if (!validTarget(kind, id)) { res.status(400).json({ error: "invalid target" }); return; }
@@ -108,7 +94,7 @@ export function getHandler(deps: ReviewsDeps) {
 export function summaryHandler(deps: ReviewsDeps) {
   return async (req: Req, res: Res): Promise<void> => {
     cors(req, res, deps.webOrigins);
-    if (req.method === "OPTIONS") { preflight(res); return; }
+    if (req.method === "OPTIONS") { preflight(res, "GET, POST, DELETE, OPTIONS"); return; }
     const kind = String((req.query.kind as string | undefined) ?? "");
     if (!KINDS.has(kind)) { res.status(400).json({ error: "invalid kind" }); return; }
     const ids = String((req.query.ids as string | undefined) ?? "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 100);

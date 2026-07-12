@@ -13,24 +13,10 @@ import { resolveSession, resolveOrgAccess, installationForScope, listOrgSkills, 
 import { ghContents, decodeFile, assertSkillsPath, type Http, type GithubCfg } from "@agentgem/distribute";
 import { defaultScopeTtlMs } from "../usage/install.js";
 import type { InstallationTokens } from "./client.js";
+import { cors, preflight, type Req, type Res, type ExpressApp } from "../publicCors.js";
 
 export interface OrgsApiDeps { db: AppDb; auth: ReturnType<typeof makeAuth>; webOrigins: string[]; tokens: InstallationTokens | null; http: Http; scopeTtlMs?: number }
 
-interface Req { method: string; path: string; query: Record<string, unknown>; body: Record<string, unknown>; headers: Record<string, string | undefined>; get(n: string): string | undefined }
-interface Res { status(c: number): Res; set(k: string, v: string): Res; setHeader(k: string, v: string): Res; type(t: string): Res; json(b: unknown): Res; send(b: unknown): Res }
-type ExpressApp = { get(p: string, h: (req: Req, res: Res) => unknown): unknown; options(p: string, h: (req: Req, res: Res) => unknown): unknown };
-
-function cors(req: Req, res: Res, origins: string[]): void {
-  const origin = req.headers["origin"];
-  if (origin && origins.includes(origin)) {
-    res.set("Access-Control-Allow-Origin", origin);
-    res.set("Access-Control-Allow-Credentials", "true");
-    res.set("Vary", "Origin");
-  }
-}
-function preflight(res: Res): void {
-  res.set("Access-Control-Allow-Methods", "GET, OPTIONS").set("Access-Control-Allow-Headers", "content-type, authorization").status(204).send("");
-}
 async function whoami(deps: OrgsApiDeps, req: Req): Promise<{ accountId: string; login: string } | null> {
   const who = await resolveSession(deps.auth, req.headers);
   return who ? { accountId: who.accountId, login: who.login } : null;
@@ -43,7 +29,7 @@ function scopeParam(req: Req): string | null {
 export function orgAppHandler(deps: OrgsApiDeps) {
   return async (req: Req, res: Res): Promise<void> => {
     cors(req, res, deps.webOrigins);
-    if (req.method === "OPTIONS") { preflight(res); return; }
+    if (req.method === "OPTIONS") { preflight(res, "GET, OPTIONS", "content-type, authorization"); return; }
     const scope = scopeParam(req);
     if (!scope) { res.status(400).json({ error: "invalid scope" }); return; }
     const inst = await installationForScope(deps.db, scope);
@@ -68,7 +54,7 @@ async function requireMember(deps: OrgsApiDeps, req: Req, res: Res, scope: strin
 export function orgSkillsHandler(deps: OrgsApiDeps) {
   return async (req: Req, res: Res): Promise<void> => {
     cors(req, res, deps.webOrigins);
-    if (req.method === "OPTIONS") { preflight(res); return; }
+    if (req.method === "OPTIONS") { preflight(res, "GET, OPTIONS", "content-type, authorization"); return; }
     const scope = scopeParam(req);
     if (!scope) { res.status(400).json({ error: "invalid scope" }); return; }
     if (!(await requireMember(deps, req, res, scope))) return;
@@ -83,7 +69,7 @@ export function orgSkillsHandler(deps: OrgsApiDeps) {
 export function orgSkillBodyHandler(deps: OrgsApiDeps) {
   return async (req: Req, res: Res): Promise<void> => {
     cors(req, res, deps.webOrigins);
-    if (req.method === "OPTIONS") { preflight(res); return; }
+    if (req.method === "OPTIONS") { preflight(res, "GET, OPTIONS", "content-type, authorization"); return; }
     const scope = scopeParam(req);
     const source = String((req.query.source as string | undefined) ?? "");
     const path = String((req.query.path as string | undefined) ?? "");

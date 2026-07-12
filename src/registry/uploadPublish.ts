@@ -15,29 +15,16 @@ import { importGem, publishGem, type RegistrySource, type RegistryPublisher } fr
 import { resolvePublishType, type GemTypeRegistry } from "../gem/gemTypeRegistry.js";
 import { InvalidInputError } from "@agentgem/model";
 import { createLogger } from "@agentgem/base";
+import { cors, preflight, type Req, type Res } from "../publicCors.js";
 
 const log = createLogger("registry");
 
 export interface UploadPublishDeps { db: AppDb; auth: ReturnType<typeof makeAuth>; webOrigins: string[]; source: RegistrySource; publisher: RegistryPublisher; gemTypes: GemTypeRegistry }
-type Req = { method?: string; headers: Record<string, string | undefined>; body?: Record<string, unknown> };
-type Res = { status(c: number): Res; set(k: string, v: string): Res; json(b: unknown): Res; send(b: unknown): Res };
-
-function cors(req: Req, res: Res, origins: string[]): void {
-  const origin = req.headers["origin"];
-  if (origin && origins.includes(origin)) {
-    res.set("Access-Control-Allow-Origin", origin);
-    res.set("Access-Control-Allow-Credentials", "true");
-    res.set("Vary", "Origin");
-  }
-}
 
 export function uploadPublishHandler(deps: UploadPublishDeps) {
   return async (req: Req, res: Res): Promise<void> => {
     cors(req, res, deps.webOrigins);
-    if (req.method === "OPTIONS") {
-      res.set("Access-Control-Allow-Methods", "POST, OPTIONS").set("Access-Control-Allow-Headers", "content-type").status(204).send("");
-      return;
-    }
+    if (req.method === "OPTIONS") { preflight(res, "POST, OPTIONS"); return; }
     const who = await resolveSession(deps.auth, req.headers);
     if (!who) { res.status(401).json({ error: "sign in required" }); return; }
 
