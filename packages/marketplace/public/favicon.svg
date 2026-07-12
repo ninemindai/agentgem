@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-label="AgentGem">
+  <!-- Brand gem — the boot-splash / PWA silhouette (shell/Loading.tsx, packages/console/pwa-icons.mjs).
+       Marketplace variant: terracotta→gold (--grad-gem) so app.agentgem.ai's tab reads distinct
+       from the local console's solid-terracotta gem. Keep the silhouette in sync with the PWA icons. -->
+  <defs>
+    <linearGradient id="gem" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#b4543a"/>
+      <stop offset="1" stop-color="#d8a441"/>
+    </linearGradient>
+  </defs>
+  <path d="M6 3h12l4 6-10 12L2 9l4-6Z" fill="url(#gem)"/>
+  <path d="M2 9h20M9 3 7 9l5 12M15 3l2 6-5 12" fill="none" stroke="#8a5a1f" stroke-width="0.8" stroke-opacity="0.5" stroke-linejoin="round"/>
+  <path d="M6 3h12l4 6-10 12L2 9l4-6Z" fill="none" stroke="#8a3f28" stroke-width="1" stroke-linejoin="round"/>
+</svg>

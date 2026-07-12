@@ -36,7 +36,7 @@ const html = `<!doctype html>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="icon" href="data:," />
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%2024%2024%22%3E%3Cpath%20d=%22M6%203h12l4%206-10%2012L2%209l4-6Z%22%20fill=%22%23c8543f%22/%3E%3Cpath%20d=%22M2%209h20M9%203%207%209l5%2012M15%203l2%206-5%2012%22%20fill=%22none%22%20stroke=%22%237d2a1e%22%20stroke-width=%22.9%22%20stroke-linejoin=%22round%22/%3E%3Cpath%20d=%22M6%203h12l4%206-10%2012L2%209l4-6Z%22%20fill=%22none%22%20stroke=%22%235c1f16%22%20stroke-width=%221%22%20stroke-linejoin=%22round%22/%3E%3C/svg%3E">
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#f1eadb">
 <link rel="apple-touch-icon" href="${ICON_192}">
