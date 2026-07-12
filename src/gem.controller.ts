@@ -9,6 +9,7 @@ import { scanSessionsCached, aggregateObserve, loadSessionTranscript, resolveCla
 import { scanArtifactUsage, optimizeUsageMap, type ArtifactUsage } from "@agentgem/insight";
 import { buildOptimizePayload, buildDiscover, rerankCandidates, installSkill, type OptimizeRange } from "@agentgem/insight";
 import { createLogger } from "@agentgem/base";
+import { installRubricGem } from "./rubricCore.js";
 
 const log = createLogger("gem");
 
@@ -673,7 +674,8 @@ export class GemController {
     }
     const name = (key.replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "")) || "installed-gem";
     createWorkspace(name, gem, { version });
-    return { workspace: name, executables };
+    const rubrics = installRubricGem(gem);
+    return { workspace: name, executables, rubrics };
   }
 
   // Global-scope Optimize usage via the persistent transcript index (incremental, off the event
@@ -904,7 +906,8 @@ export class GemController {
     const { gem } = importGem(Buffer.from(input.body.bytesBase64, "base64")); // unpack + verify gem.lock; throws on tampering
     const dir = resolveProject(input.body.dir);
     const { written, skipped } = materializeGemToTestbed(gem, dir, (input.body.flavor ?? "claude") as TestbedFlavorId);
-    return { dir, name: gem.name, written, skipped };
+    const rubrics = installRubricGem(gem);
+    return { dir, name: gem.name, written, skipped, rubrics };
   }
 
   @post("/transfer/token", { body: TransferTokenRequestSchema, response: TransferTokenResponseSchema })
@@ -1287,18 +1290,19 @@ export class GemController {
   async registryInstall(input: { body: z.infer<typeof RegistryInstallRequestSchema> }): Promise<z.infer<typeof RegistryInstallResponseSchema>> {
     const { source } = this.registrySource();
     const { plan, gem } = await resolveInstall({ refs: input.body.refs, mode: input.body.mode, target: input.body.target as TargetId | undefined, source, a2aServer: input.body.a2aServer });
+    const rubrics = installRubricGem(gem);
     // Adoption fires only AFTER the install actually lands (below), never on a resolve-then-fail.
     const installed = plan.items.map((it) => ({ gemKey: it.key, version: it.version, gemDigest: "" }));
     if (input.body.mode === "materialize") {
       if (!input.body.dest) throw new Error("materialize mode requires `dest`");
       writeArchiveDir(input.body.dest, plan.materialize!.files);
       void emitAdoption(installed);   // opt-in + fire-and-forget; never awaited, never throws
-      return { plan, applied: { mode: "materialize", dest: input.body.dest, written: Object.keys(plan.materialize!.files) } };
+      return { plan, applied: { mode: "materialize", dest: input.body.dest, written: Object.keys(plan.materialize!.files) }, rubrics };
     }
     const name = input.body.workspaceName ?? gem.name;
     createWorkspace(name, gem);
     void emitAdoption(installed);   // opt-in + fire-and-forget; never awaited, never throws
-    return { plan, applied: { mode: "workspace", workspace: name } };
+    return { plan, applied: { mode: "workspace", workspace: name }, rubrics };
   }
 
   @get("/settings/adoption", { query: PickQuerySchema, response: z.object({ enabled: z.boolean() }) })

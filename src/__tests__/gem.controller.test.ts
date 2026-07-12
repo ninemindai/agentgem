@@ -14,6 +14,8 @@ import { writeArchiveDir } from "@agentgem/archive";
 import { setRunConnectFnForTests, type RunConnectFn } from "@agentgem/run";
 import { resolveRun, resolveVerify, ledgerPath } from "@agentgem/run";
 import type { Gem } from "@agentgem/model";
+import { rubricToArtifact, builtinRubrics, loadRubrics } from "@agentgem/insight";
+import type { RubricArtifact } from "@agentgem/model";
 
 let app: RestApplication;
 let client: ReturnType<typeof supertest>;
@@ -648,6 +650,45 @@ describe("POST /api/gem/apply installs a received .gem into a picked dir", () =>
       rmSync(out, { recursive: true, force: true });
       rmSync(target, { recursive: true, force: true });
     }
+  });
+});
+
+// Build a .gem (base64) carrying exactly one rubric artifact with the given id.
+function rubricGemBytes(gemName: string, rubricId: string): string {
+  const base = builtinRubrics().find((r) => r.id === "context-hygiene")!;
+  const rubric: RubricArtifact = { ...rubricToArtifact(base), name: rubricId };
+  const gem: Gem = { name: gemName, createdFrom: "test", artifacts: [rubric], checks: [], requiredSecrets: [] };
+  return packTar(writeGemArchive(gem).files).toString("base64");
+}
+
+describe("POST /api/gem/apply installs a bundled rubric globally", () => {
+  it("lands the rubric in the store and reports it", async () => {
+    const target = mkdtempSync(join(tmpdir(), "apply-rub-"));
+    try {
+      const r = await client.post("/api/gem/apply")
+        .send({ bytesBase64: rubricGemBytes("rub-pack", "team-hygiene"), dir: target }).expect(200);
+      expect(r.body.rubrics.installed).toContain("team-hygiene");
+      expect(loadRubrics().map((x: { id: string }) => x.id)).toContain("team-hygiene");
+    } finally { rmSync(target, { recursive: true, force: true }); }
+  });
+  it("skips a rubric whose id collides with a built-in", async () => {
+    const target = mkdtempSync(join(tmpdir(), "apply-rub2-"));
+    try {
+      const r = await client.post("/api/gem/apply")
+        .send({ bytesBase64: rubricGemBytes("rub-pack2", "hygiene"), dir: target }).expect(200);
+      expect(r.body.rubrics.skipped).toContain("hygiene");
+      expect(r.body.rubrics.installed).not.toContain("hygiene");
+    } finally { rmSync(target, { recursive: true, force: true }); }
+  });
+  it("reports empty rubrics for a skill-only gem", async () => {
+    const gem: Gem = { name: "skill-only", createdFrom: "test",
+      artifacts: [{ type: "skill", name: "s", source: "project", content: "# S" }], checks: [], requiredSecrets: [] };
+    const bytesBase64 = packTar(writeGemArchive(gem).files).toString("base64");
+    const target = mkdtempSync(join(tmpdir(), "apply-noskill-"));
+    try {
+      const r = await client.post("/api/gem/apply").send({ bytesBase64, dir: target }).expect(200);
+      expect(r.body.rubrics).toEqual({ installed: [], skipped: [] });
+    } finally { rmSync(target, { recursive: true, force: true }); }
   });
 });
 
