@@ -162,6 +162,9 @@ export function gemToInventory(gem: Gem): ConfigInventory {
     else if (a.type === "hook") inv.hooks.push(a);
     else if (a.type === "subagent") inv.subagents.push(a);
   }
+  // type === "rubric" artifacts are intentionally NOT partitioned here: rubrics are global
+  // (~/.agentgem/rubrics) with no testbed home. They are installed at gem-receive time by
+  // installRubricGem in the install handlers (src/gem.controller.ts), not materialized to a testbed.
   return inv;
 }
 
