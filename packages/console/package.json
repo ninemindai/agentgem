@@ -13,6 +13,7 @@
   "dependencies": {
     "@agentback/client": "^0.7.1",
     "@agentgem/insight": "workspace:*",
+    "@agentgem/model": "workspace:*",
     "@agentgem/play": "workspace:*",
     "dompurify": "^3.4.11",
     "marked": "^18.0.6",
