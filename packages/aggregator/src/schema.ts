@@ -475,7 +475,7 @@ export const passkey = pgTable(
     aaguid: text("aaguid"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [index("passkey_user_idx").on(t.userId)],
+  (t) => [index("passkey_user_idx").on(t.userId), index("passkey_credential_idx").on(t.credentialID)],
 );
 
 // Account-linking Flow B seam (Task 0 spike, seam b): better-auth's linkSocial does NOT persist the
@@ -804,6 +804,7 @@ export async function ensureSchema(db: AppDb): Promise<void> {
     aaguid text,
     created_at timestamptz not null default now())`);
   await db.execute(sql`create index if not exists passkey_user_idx on "passkey"(user_id)`);
+  await db.execute(sql`create index if not exists passkey_credential_idx on "passkey"(credential_id)`);
   // Flow B connect-OAuth handoff (Task 0 seam b): one short-lived pending link per session user.
   await db.execute(sql`create table if not exists "pending_account_links" (
     session_user_id text primary key references "user"(id) on delete cascade,

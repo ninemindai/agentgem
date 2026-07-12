@@ -167,6 +167,12 @@ New env (all optional; sensible defaults):
 
 - `AGENTGEM_PASSKEY_RP_ID` — WebAuthn RP ID. Default: `AGENTGEM_SESSION_COOKIE_DOMAIN`
   with any leading dot stripped, else `localhost`.
+- In production, passkeys depend on `AGENTGEM_SESSION_COOKIE_DOMAIN` (or an explicit
+  `AGENTGEM_PASSKEY_RP_ID`) being set: if neither is set, `deriveRpId` falls back to
+  `localhost` and every passkey ceremony on `app.agentgem.ai` fails verification. The
+  `app.`↔`api.` cross-subdomain cookie setup already requires the cookie domain, so
+  this holds in the real deployment — the note is to prevent a misconfigured deploy
+  from failing silently.
 
 No schema migration tooling beyond the existing idempotent `ensureSchema` (runs at
 boot). No changes to the social sign-in or session-handoff paths.

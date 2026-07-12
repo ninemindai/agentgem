@@ -35,4 +35,11 @@ describe("betterAuth passkey plugin", () => {
     expect((rows.rows[0] as { credential_id: string }).credential_id).toBe("CRED1");
     expect((rows.rows[0] as { user_id: string }).user_id).toBe(user.id);
   });
+
+  it("ensureSchema indexes credential_id for authentication lookups", async () => {
+    const db = await makeTestDb();
+    const rows = await db.execute(sql`select indexname from pg_indexes where tablename = 'passkey'`);
+    const names = rows.rows.map((r: { indexname: string }) => r.indexname);
+    expect(names).toContain("passkey_credential_idx");
+  });
 });
