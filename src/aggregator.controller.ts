@@ -17,7 +17,7 @@ import { recordBinding } from "@agentgem/aggregator";
 import { GitHubVerifier } from "@agentgem/aggregator";
 import { sweepQuarantine, sweepAdoptionQuarantine } from "@agentgem/aggregator";
 import { issueKey, revokeKey, listKeys } from "@agentgem/aggregator";
-import { recordCatalogShare, upsertGemArchive, getGemArchive, catalogGemExists, latestGemVersion, archiveOnlyVersion } from "@agentgem/aggregator";
+import { recordCatalogShare, upsertGemArchive, getGemArchive, catalogGemExists, latestGemVersion, archiveOnlyVersion, gemAccessInfo } from "@agentgem/aggregator";
 import { recordGamePlay, gamePlayCounts } from "@agentgem/aggregator";
 import { resolveSignedAccount, gemStatusFor, gemStatusSigningPayload } from "@agentgem/aggregator";
 import { importGem } from "@agentgem/distribute";
@@ -322,6 +322,8 @@ export class AggregatorController {
   async gemArchive(input: { query: z.infer<typeof GemArchiveQuery> }): Promise<z.infer<typeof GemArchiveResult>> {
     const a = await getGemArchive(this.db, input.query.key, input.query.version);
     if (!a) throw new AgentError("gem archive not found", { status: 404, code: "gem_archive_not_found", retryable: false });
+    if ((await gemAccessInfo(this.db, input.query.key, input.query.version))?.visibility === "private")
+      throw new AgentError("gem archive not found", { status: 404, code: "gem_archive_not_found", retryable: false });
     return { archiveBase64: Buffer.from(a.bytes).toString("base64") };
   }
 
@@ -332,6 +334,8 @@ export class AggregatorController {
   async gameHtml(input: { query: z.infer<typeof GemArchiveQuery> }): Promise<z.infer<typeof GameHtmlResult>> {
     const a = await getGemArchive(this.db, input.query.key, input.query.version);
     if (!a) throw new AgentError("gem archive not found", { status: 404, code: "gem_archive_not_found", retryable: false });
+    if ((await gemAccessInfo(this.db, input.query.key, input.query.version))?.visibility === "private")
+      throw new AgentError("gem archive not found", { status: 404, code: "gem_archive_not_found", retryable: false });
     const { gem } = importGem(Buffer.from(a.bytes));
     const game = gem.artifacts.find((x) => x.type === "game") as { html?: unknown } | undefined;
     if (!game || typeof game.html !== "string") throw new AgentError("this gem has no game to play", { status: 404, code: "not_a_game", retryable: false });
@@ -346,6 +350,8 @@ export class AggregatorController {
     const { key } = input.query;
     const version = input.query.version ?? (await latestGemVersion(this.db, key)) ?? (await archiveOnlyVersion(this.db, key));
     if (!version) throw new AgentError("gem archive not found", { status: 404, code: "gem_archive_not_found", retryable: false });
+    if ((await gemAccessInfo(this.db, key, version))?.visibility === "private")
+      throw new AgentError("gem archive not found", { status: 404, code: "gem_archive_not_found", retryable: false });
     const a = await getGemArchive(this.db, key, version);
     if (!a) throw new AgentError("gem archive not found", { status: 404, code: "gem_archive_not_found", retryable: false });
     const { gem } = importGem(Buffer.from(a.bytes));
