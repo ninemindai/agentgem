@@ -3,6 +3,7 @@ import type { makeApi } from "../api";
 import { makeAuth, type Me } from "../auth";
 import { makePasskeyAuth, passkeySupported } from "../passkeyAuth";
 import { PasskeysSection } from "./PasskeysSection";
+import { navigate } from "../nav";
 
 // The known, connectable providers (Task 3's socialProviders). `connected` from the API is
 // provider-agnostic (better-auth's own `account` table may carry ids this page doesn't know about,
@@ -33,7 +34,7 @@ type ConnectStatus = "ready" | "none" | "error" | null;
  *  surfaces the handle-claim nudge (`?merge=1&handle=`, HandleClaim.tsx) when a claim 409'd because
  *  the name is already taken (owned by another account, or reserved — the server deliberately
  *  doesn't say which, see HandleClaim.tsx). */
-export function Account({ api, me, base }: { api: ReturnType<typeof makeApi>; me: Me | null; base: string }) {
+export function AccountPanel({ api, me, base }: { api: ReturnType<typeof makeApi>; me: Me | null; base: string }) {
   const [view, setView] = useState<View>({ status: "loading" });
   const [linkError, setLinkError] = useState<string | null>(null);
   // better-auth's OAuth callback redirects a colliding link-social attempt back here with this exact
@@ -77,7 +78,10 @@ export function Account({ api, me, base }: { api: ReturnType<typeof makeApi>; me
   // captured once via a useState initializer above and never change afterward.
   useEffect(() => {
     if (!collision && !connectStatus && !mergeNudgeHandle) return;
-    window.history.replaceState(window.history.state, "", window.location.pathname);
+    const qs = new URLSearchParams(window.location.search);
+    for (const k of ["connect", "error", "merge", "handle"]) qs.delete(k);
+    const rest = qs.toString();
+    window.history.replaceState(window.history.state, "", window.location.pathname + (rest ? "?" + rest : ""));
   }, []);
 
   useEffect(() => {
@@ -183,4 +187,18 @@ export function Account({ api, me, base }: { api: ReturnType<typeof makeApi>; me
       {me && <PasskeysSection client={passkeyAuth} supported={passkeySupported()} />}
     </div>
   );
+}
+
+/** Route wrapper: a signed-in user WITH a handle is redirected to their profile's Account tab
+ *  (forwarding any one-shot query params like ?connect=ready from the OAuth return); a signed-in
+ *  user with NO handle (a fresh Google account) has no /@handle URL, so the panel renders inline
+ *  here; signed-out falls through to the panel's own sign-in prompt. */
+export function Account({ api, me, base }: { api: ReturnType<typeof makeApi>; me: Me | null; base: string }) {
+  useEffect(() => {
+    if (!me?.handle) return;
+    const qs = window.location.search ? "&" + window.location.search.slice(1) : "";
+    navigate(`/@${encodeURIComponent(me.handle)}?tab=account${qs}`);
+  }, [me]);
+  if (me?.handle) return null;   // redirecting
+  return <AccountPanel api={api} me={me} base={base} />;
 }
