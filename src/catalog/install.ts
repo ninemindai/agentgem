@@ -7,7 +7,7 @@
 // SameSite=Lax session cookie + the 401, NOT by CORS. Unpublish is a hard delete of the catalog row +
 // archive bytes (visibility scope is a separate, later feature).
 import type { AppDb, makeAuth } from "@agentgem/aggregator";
-import { resolveSession, deleteCatalogGem, listCatalogGemsForOwner, gemAccessInfo, latestGemVersion, getGemArchive } from "@agentgem/aggregator";
+import { resolveSession, deleteCatalogGem, listCatalogGemsForOwner, gemAccessInfo, latestGemVersion, getGemArchive, catalogGemForOwner } from "@agentgem/aggregator";
 import { importGem } from "@agentgem/distribute";
 
 export interface CatalogDeps { db: AppDb; auth: ReturnType<typeof makeAuth>; webOrigins: string[] }
@@ -114,10 +114,51 @@ export function ownerGameHtmlHandler(deps: CatalogDeps) {
   };
 }
 
+// Owner-only archive download (the raw .gem bytes, base64-encoded for JSON transport). Same no-leak
+// 404 rule as ownerGameMetaHandler/ownerGameHtmlHandler.
+export function ownerGemArchiveHandler(deps: CatalogDeps) {
+  return async (req: Req, res: Res): Promise<void> => {
+    cors(req, res, deps.webOrigins);
+    if (req.method === "OPTIONS") { preflight(res); return; }
+    const accountId = await sessionAccountId(deps, req);
+    if (!accountId) { res.status(401).json({ error: "sign in required" }); return; }
+    const key = String((req.query.key as string | undefined) ?? "");
+    const version = String((req.query.version as string | undefined) ?? "");
+    if (!key || !version) { res.status(404).json({ error: "gem not found" }); return; }
+    const info = await gemAccessInfo(deps.db, key, version);
+    if (!info || info.ownerAccountId !== accountId) { res.status(404).json({ error: "gem not found" }); return; }
+    const a = await getGemArchive(deps.db, key, version);
+    if (!a) { res.status(404).json({ error: "gem not found" }); return; }
+    res.json({ archiveBase64: Buffer.from(a.bytes).toString("base64") });
+  };
+}
+
+// Owner-only gem detail (metadata for the owner's private detail page, across all visibilities).
+// Same no-leak 404 rule as the other owner-gated handlers.
+export function ownerGemHandler(deps: CatalogDeps) {
+  return async (req: Req, res: Res): Promise<void> => {
+    cors(req, res, deps.webOrigins);
+    if (req.method === "OPTIONS") { preflight(res); return; }
+    const accountId = await sessionAccountId(deps, req);
+    if (!accountId) { res.status(401).json({ error: "sign in required" }); return; }
+    const key = String((req.query.key as string | undefined) ?? "");
+    if (!key) { res.status(404).json({ error: "gem not found" }); return; }
+    const g = await catalogGemForOwner(deps.db, key, accountId);
+    if (!g) { res.status(404).json({ error: "gem not found" }); return; }
+    res.json({
+      key: g.gemKey, version: g.version, publishedBy: g.publishedBy, description: g.description ?? "",
+      tags: g.tags ?? [], artifactKinds: g.artifactKinds ?? [], artifacts: g.artifacts ?? [],
+      grade: g.grade ?? null, visibility: g.visibility ?? "public", installable: g.installable ?? false,
+    });
+  };
+}
+
 export function installCatalog(expressApp: ExpressApp, deps: CatalogDeps): void {
   expressApp.delete("/api/catalog/gem", unpublishHandler(deps));
   expressApp.options("/api/catalog/gem", unpublishHandler(deps));
   for (const p of ["/api/catalog/my-gems"]) { expressApp.get(p, myGemsHandler(deps)); expressApp.options(p, myGemsHandler(deps)); }
   for (const p of ["/api/catalog/game-meta"]) { expressApp.get(p, ownerGameMetaHandler(deps)); expressApp.options(p, ownerGameMetaHandler(deps)); }
   for (const p of ["/api/catalog/game-html"]) { expressApp.get(p, ownerGameHtmlHandler(deps)); expressApp.options(p, ownerGameHtmlHandler(deps)); }
+  for (const p of ["/api/catalog/gem-archive"]) { expressApp.get(p, ownerGemArchiveHandler(deps)); expressApp.options(p, ownerGemArchiveHandler(deps)); }
+  for (const p of ["/api/catalog/gem-detail"]) { expressApp.get(p, ownerGemHandler(deps)); expressApp.options(p, ownerGemHandler(deps)); }
 }
