@@ -13,6 +13,7 @@ import { useSplit } from "../../shell/useSplit.js";
 import { setStudioChat, clearChatId, clearStudioChat } from "./studioChatStore.js";
 import { loadStudioSession } from "./studioResume.js";
 import { resolvePublishAction, type PublishAction } from "./publishAction.js";
+import { parseTags } from "./parseTags.js";
 
 const j = (r: Response) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); };
 
@@ -52,6 +53,7 @@ export function Studio({
   const [pendingPublish, setPendingPublish] = useState(false);   // Share clicked while unbound
   const [pendingVersion, setPendingVersion] = useState<{ latestVersion: string; nextVersion: string; login: string } | null>(null);
   const [scope, setScope] = useState<"public" | "unlisted" | "private">("public");
+  const [tags, setTags] = useState("");   // free-form publish tags (comma separated), parsed via parseTags
   const { status: identity } = useIdentity();
   const closeRef = useRef<null | (() => void)>(null);
   const logRef = useRef<HTMLDivElement>(null);
@@ -276,7 +278,7 @@ export function Studio({
       const g = genreOf(meta?.genre ?? "project-fun");
       const pub = await publishSetupRoute.call(makeClient(apiBase), { body: {
         workspace: name, scope: login, name, version, provenance: "play", visibility,
-        description: `${g.label} mini-game`, tags: ["game", meta?.genre ?? "project-fun"],
+        description: `${g.label} mini-game`, tags: ["game", meta?.genre ?? "project-fun", ...parseTags(tags)],
       } });
       // Link the gem's marketplace page (installable / playable), not just the OG teaser card.
       // Unlisted publishes aren't in Explore, so point straight at the playable /games/ link instead.
@@ -341,6 +343,8 @@ export function Studio({
         <button className="play-btn" onClick={save}>Save</button>
         {(busy || chatId) && <button className="play-btn play-btn--ghost" onClick={stop} title="kill the agent session">Stop</button>}
         <button className="play-btn play-btn--ghost" onClick={pushGit} title="git push the miniapps registry to your git remote">Push to git</button>
+        <input className="play-tags-input" type="text" aria-label="tags" placeholder="tags, comma separated"
+          value={tags} onChange={(e) => setTags(e.target.value)} />
         <div className="play-scope" role="radiogroup" aria-label="Sharing scope">
           <button type="button" className={`play-btn ${scope === "public" ? "play-btn--primary" : "play-btn--ghost"}`} aria-pressed={scope === "public"} onClick={() => setScope("public")}>Public</button>
           <button type="button" className={`play-btn ${scope === "unlisted" ? "play-btn--primary" : "play-btn--ghost"}`} aria-pressed={scope === "unlisted"} onClick={() => setScope("unlisted")}>Unlisted</button>
