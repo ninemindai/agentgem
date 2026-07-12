@@ -6,7 +6,7 @@ import { PasskeysSection } from "./PasskeysSection";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
-function makeClient(rows: { id: string; name?: string }[]) {
+function makeClient(rows: { id: string; name?: string; createdAt?: string }[]) {
   return {
     passkey: {
       listUserPasskeys: vi.fn().mockResolvedValue({ data: rows, error: null }),
@@ -21,6 +21,13 @@ describe("PasskeysSection", () => {
     const client = makeClient([{ id: "a", name: "Laptop" }]);
     render(<PasskeysSection client={client as never} supported={true} />);
     expect(await screen.findByText("Laptop")).toBeTruthy();
+  });
+
+  it("shows each passkey's created date", async () => {
+    const iso = "2026-07-01T12:00:00Z";
+    const client = makeClient([{ id: "a", name: "Laptop", createdAt: iso }]);
+    render(<PasskeysSection client={client as never} supported={true} />);
+    expect(await screen.findByText(new Date(iso).toLocaleDateString())).toBeTruthy();
   });
 
   it("adds a passkey then reloads the list", async () => {
