@@ -58,7 +58,14 @@ export function PasskeysSection({ client, supported }: { client: PasskeyClient; 
         <ul className="ex-passkey-list">
           {rows.map((r) => (
             <li key={r.id} className="ex-passkey-row">
-              <span>{r.name || "Unnamed passkey"}</span>
+              <span className="ex-passkey-meta">
+                <span className="ex-passkey-name">{r.name || "Unnamed passkey"}</span>
+                {r.createdAt && (
+                  <time className="ex-passkey-date" dateTime={new Date(r.createdAt).toISOString()}>
+                    {new Date(r.createdAt).toLocaleDateString()}
+                  </time>
+                )}
+              </span>
               <button type="button" className="ex-passkey-del" onClick={() => remove(r.id)}>Delete</button>
             </li>
           ))}

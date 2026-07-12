@@ -20,7 +20,7 @@ export function makeAuth(opts: {
   db: AppDb; secret: string; baseURL: string; githubClientId: string; githubClientSecret: string;
   googleClientId?: string; googleClientSecret?: string;
   webOrigins: string[]; cookieDomain?: string;
-  passkeyRpId?: string; passkeyOrigins?: string[]; rpName?: string;
+  passkeyRpId?: string;
 }): Auth<BetterAuthOptions> {
   // Widened to `BetterAuthOptions` (rather than letting TS infer the literal options-object type)
   // so the exported `makeAuth`'s return type doesn't need to structurally encode the
@@ -68,9 +68,9 @@ export function makeAuth(opts: {
     // Passkey (WebAuthn) passwordless sign-in. rpID MUST be a registrable suffix of the page origin
     // (app.agentgem.ai) — the api.agentgem.ai baseURL default would fail verification — so the caller
     // (src/index.ts) passes agentgem.ai, mirroring crossSubDomainCookies. `origin` is the allowed page
-    // origin(s); it defaults to webOrigins. requireSession stays default (true): a passkey always
-    // attaches to the caller's existing social session (there is no passkey-first onboarding).
-    passkey({ rpID: opts.passkeyRpId, rpName: opts.rpName ?? "AgentGem", origin: opts.passkeyOrigins ?? opts.webOrigins })],
+    // origin(s), always webOrigins. requireSession stays default (true): a passkey always attaches to
+    // the caller's existing social session (there is no passkey-first onboarding).
+    passkey({ rpID: opts.passkeyRpId, rpName: "AgentGem", origin: opts.webOrigins })],
     // review fix #1/#14 — force uuid ids so downstream uuid FKs (accounts.id, stars.account_id, ...) work
     advanced: {
       database: { generateId: () => randomUUID() },
