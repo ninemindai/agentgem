@@ -20,6 +20,7 @@ import { TeamUsage } from "./pages/TeamUsage";
 import { Sources } from "./pages/Sources";
 import { Offline } from "./pages/Offline";
 import { Groups } from "./pages/Groups";
+import { GroupDetail } from "./pages/GroupDetail";
 import { Minigames } from "./pages/Minigames";
 import { Play } from "./pages/Play";
 import { parseGamePath } from "./entityPath";
@@ -58,6 +59,7 @@ export const ROUTES: RouteDef[] = [
   { id: "my-apps", kind: "panel", match: (p) => p === "/my-apps", render: (_m, c) => <MyApps api={c.api} me={c.me} /> },
   { id: "sources", kind: "panel", match: (p) => p === "/sources", render: (_m, c) => <Sources api={c.api} /> },
   { id: "groups", kind: "panel", match: (p) => p === "/groups", render: (_m, c) => <Groups me={c.me} base={defaultApiBase()} /> },
+  { id: "group-detail", kind: "collection", collection: "groups", match: (p) => p.match(/^\/groups\/([^/]+)$/), render: (m, c) => <GroupDetail id={decodeURIComponent((m as RegExpMatchArray)[1])} me={c.me} base={defaultApiBase()} /> },
   // Miniapps is the home tab. "/minigames" is the old path, kept alive for shared links and the
   // desktop deep-link; "/" is home. The ingredients board moved to its own "/ingredients".
   { id: "home", kind: "home", match: (p) => p === "/" || p === "/miniapps" || p === "/minigames", render: (_m, c) => <Minigames api={c.api} stars={c.stars} /> },
@@ -83,7 +85,7 @@ export const ROUTES: RouteDef[] = [
 // a public entity-address collection like games/gems (those keys are world-addressable; a my-apps gem
 // may be private and is only reachable session-gated). The dual listing has no runtime effect: nothing
 // outside this file and the conformance test reads these arrays.
-export const COLLECTIONS = ["games", "gems", "ingredients", "skills", "orgs", "my-apps"];  // plural
+export const COLLECTIONS = ["games", "gems", "ingredients", "skills", "orgs", "my-apps", "groups"];  // plural
 export const PANELS = ["publish", "account", "sources", "my-apps", "offline", "groups"];
 
 // A legacy singular alias (e.g. /ingredient/x) is rewritten to its plural canonical form (e.g.
