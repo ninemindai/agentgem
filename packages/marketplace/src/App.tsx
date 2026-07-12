@@ -50,6 +50,8 @@ export function App() {
   const onOffline = path.startsWith("/offline");
   const onIngredients = path.startsWith("/ingredient");
   const onMyApps = path === "/my-apps";
+  const accountHref = me?.handle ? `/@${encodeURIComponent(me.handle)}?tab=account` : "/account";
+  const groupsHref = me?.handle ? `/@${encodeURIComponent(me.handle)}?tab=groups` : "/groups";
   const signOut = async () => { await auth.logout(); setMe(null); };
   // Surface a failed sign-in (misconfigured provider, rate-limit, 5xx, network error) instead of
   // the click having zero visible effect — this is the primary login path, shared by the header
@@ -91,7 +93,7 @@ export function App() {
           <a href="/offline" className={"ex-navlink" + (onOffline ? " is-active" : "")}><IconOffline />Offline</a>
           {me && <a href="/publish" className="ex-navlink"><IconPublish />Publish</a>}
           {me && <a href="/my-apps" className={"ex-navlink" + (onMyApps ? " is-active" : "")}><IconMyApps />My apps</a>}
-          {me && <a href="/groups" className={"ex-navlink" + (path.startsWith("/groups") ? " is-active" : "")}><IconGroups />Groups</a>}
+          {me && <a href={groupsHref} className={"ex-navlink" + (path.startsWith("/groups") ? " is-active" : "")}><IconGroups />Groups</a>}
         </nav>
         <span className="ex-auth">
           <button type="button" className="ex-theme-toggle" aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"} onClick={toggleTheme}>
@@ -110,7 +112,7 @@ export function App() {
                   <span className="ex-login">{me.name}</span>
                 </span>
               )}
-              <a className="ex-navlink" href="/account">Account</a>
+              <a className="ex-navlink" href={accountHref}>Account</a>
               <button type="button" className="ex-signout" onClick={signOut}>Sign out</button>
             </>
           ) : (

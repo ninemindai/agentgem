@@ -114,8 +114,34 @@ describe("App link interceptor", () => {
     window.history.pushState({}, "", "/groups");
     render(<App />);
     const groupsLink = await screen.findByRole("link", { name: "Groups" });
-    expect(groupsLink.getAttribute("href")).toBe("/groups");
+    expect(groupsLink.getAttribute("href")).toBe("/@octocat?tab=groups");
     expect(groupsLink.className).toMatch(/is-active/);
+  });
+
+  it("points the Account + Groups nav links at the signed-in user's profile tabs", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (u: string) => {
+      if (u.includes("/api/auth/get-session")) return res({ session: { token: "t" }, user: { id: "u0", login: "alice", handle: "alice", image: null } });
+      if (u.includes("/popular-skills")) return res({ skills: [], groups: [] });
+      return res([]);
+    }));
+    render(<App />);
+    const accountLink = await screen.findByRole("link", { name: "Account" });
+    expect(accountLink.getAttribute("href")).toBe("/@alice?tab=account");
+    const groupsLink = screen.getByRole("link", { name: "Groups" });
+    expect(groupsLink.getAttribute("href")).toBe("/@alice?tab=groups");
+  });
+
+  it("falls back to /account and /groups for a handle-less signed-in user", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (u: string) => {
+      if (u.includes("/api/auth/get-session")) return res({ user: { id: "u1", name: "Ray Feng", handle: null, image: null }, orgs: [] });
+      if (u.includes("/popular-skills")) return res({ skills: [], groups: [] });
+      return res([]);
+    }));
+    render(<App />);
+    const accountLink = await screen.findByRole("link", { name: "Account" });
+    expect(accountLink.getAttribute("href")).toBe("/account");
+    const groupsLink = screen.getByRole("link", { name: "Groups" });
+    expect(groupsLink.getAttribute("href")).toBe("/groups");
   });
 
   it("puts Miniapps first in the nav and marks it active on the home path", () => {
