@@ -8,7 +8,7 @@ import supertest from "supertest";
 import { RestApplication } from "@agentback/rest";
 import { GemController } from "../gem.controller.js";
 import { createServer } from "node:http";
-import { packTar, unpackTar } from "@agentgem/archive";
+import { packTar, unpackTar, readGemArchive } from "@agentgem/archive";
 import { writeGemArchive } from "@agentgem/archive";
 import { writeArchiveDir } from "@agentgem/archive";
 import { setRunConnectFnForTests, type RunConnectFn } from "@agentgem/run";
@@ -1163,5 +1163,27 @@ describe("testbed flavors", () => {
       rmSync(home, { recursive: true, force: true });
       rmSync(proj, { recursive: true, force: true });
     }
+  });
+});
+
+describe("rubric bundling through the API (2B)", () => {
+  beforeAll(() => {
+    // agentgemHomeDir is the suite's AGENTGEM_HOME temp dir (set in the file's root beforeAll)
+    mkdirSync(join(agentgemHomeDir, ".agentgem", "rubrics"), { recursive: true });
+    writeFileSync(join(agentgemHomeDir, ".agentgem", "rubrics", "team.json"),
+      JSON.stringify({ id: "team", title: "Team", target: "overview", factors: [{ factor: "retry-storm" }] }));
+  });
+  it("GET /api/inventory lists the user rubric under rubrics", async () => {
+    const r = await client.get("/api/inventory").expect(200);
+    expect((r.body.rubrics ?? []).map((x: { name: string }) => x.name)).toContain("team");
+  });
+  it("POST /api/archive with a rubric selection produces an archive carrying it", async () => {
+    const out = mkdtempSync(join(tmpdir(), "rub-arch-"));
+    const gemFile = join(out, "r.gem");
+    try {
+      await client.post("/api/archive").send({ dir, selection: { rubrics: ["team"] }, name: "r", outFile: gemFile }).expect(200);
+      const gem = readGemArchive(unpackTar(readFileSync(gemFile)));
+      expect(gem.artifacts.some((a) => a.type === "rubric" && a.name === "team")).toBe(true);
+    } finally { rmSync(out, { recursive: true, force: true }); }
   });
 });
