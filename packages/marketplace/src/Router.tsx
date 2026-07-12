@@ -18,6 +18,7 @@ import { MyAppDetail } from "./pages/MyAppDetail";
 import { OrgCatalog } from "./pages/OrgCatalog";
 import { TeamUsage } from "./pages/TeamUsage";
 import { Sources } from "./pages/Sources";
+import { Offline } from "./pages/Offline";
 import { Minigames } from "./pages/Minigames";
 import { Play } from "./pages/Play";
 import { parseGamePath } from "./entityPath";
@@ -48,6 +49,7 @@ export const ROUTES: RouteDef[] = [
   { id: "publish", kind: "panel", match: (p) => p === "/publish", render: (_m, c) => <Publish api={c.api} me={c.me} base={defaultApiBase()} /> },
   // Signed-in guard lives inside Account itself (mirrors Publish's !me gate) rather than here.
   { id: "account", kind: "panel", match: (p) => p === "/account", render: (_m, c) => <Account api={c.api} me={c.me} base={defaultApiBase()} /> },
+  { id: "offline", kind: "panel", match: (p) => p === "/offline", render: () => <Offline /> },
   // Owner-only gem detail (download/play/unpublish) — reachable only from /my-apps, since it is the
   // sole place a private gem's key is linked from. Matched before the /my-apps panel below.
   { id: "my-apps-detail", kind: "collection", collection: "my-apps", match: (p) => p.match(/^\/my-apps\/(.+)$/), render: (m, c) => <MyAppDetail api={c.api} me={c.me} keyName={decodeURIComponent((m as RegExpMatchArray)[1])} /> },
@@ -80,7 +82,7 @@ export const ROUTES: RouteDef[] = [
 // may be private and is only reachable session-gated). The dual listing has no runtime effect: nothing
 // outside this file and the conformance test reads these arrays.
 export const COLLECTIONS = ["games", "gems", "ingredients", "skills", "orgs", "my-apps"];  // plural
-export const PANELS = ["publish", "account", "sources", "my-apps"];
+export const PANELS = ["publish", "account", "sources", "my-apps", "offline"];
 
 // A legacy singular alias (e.g. /ingredient/x) is rewritten to its plural canonical form (e.g.
 // /ingredients/x) via replaceState — old shared links keep working, and the URL bar shows canonical.

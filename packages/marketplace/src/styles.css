@@ -1071,3 +1071,7 @@ a.ex-skillcard-rating:hover { text-decoration: underline; }
 .ex-offline-badge { font-size: 13px; opacity: .8; }
 .ex-linkbtn { border: 0; background: none; color: var(--link, #7a5); cursor: pointer; font: inherit; padding: 0; text-decoration: underline; }
 .ex-linkbtn:disabled { opacity: .5; cursor: default; }
+
+.ex-offline-list { list-style: none; padding: 0; margin: 12px 0; }
+.ex-offline-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-block-end: 1px solid var(--rule, rgba(0,0,0,.08)); }
+.ex-offline-size { margin-inline-start: auto; opacity: .7; font-size: 13px; }
