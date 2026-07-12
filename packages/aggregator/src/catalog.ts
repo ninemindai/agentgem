@@ -340,3 +340,42 @@ export async function catalogGemForOwner(db: AppDb, gemKey: string, accountId: s
     visibility: (r.visibility as Visibility) ?? "public", installable: r.archiveKey != null,
   };
 }
+
+// Latest version of a gem visible to `accountId` under the access rules (owner OR shared-group
+// member OR non-private). Returns null when the account has no access — the caller 404s with no leak.
+export async function catalogGemForViewer(db: AppDb, gemKey: string, accountId: string): Promise<CatalogRow | null> {
+  const version = await latestGemVersion(db, gemKey);
+  if (!version) return null;
+  const info = await gemAccessInfo(db, gemKey, version);
+  if (!info) return null;
+  const allowed = info.visibility !== "private"
+    || info.ownerAccountId === accountId
+    || ((await db.execute(sql`
+        select 1 from gem_group_shares s join group_members m on m.group_id = s.group_id
+        where s.gem_key = ${gemKey} and m.account_id = ${accountId} limit 1`)).rows.length > 0);
+  if (!allowed) return null;
+  return catalogGemForOwnerless(db, gemKey, version);
+}
+
+// The row for (gemKey, version) with no owner filter (the viewer path has already authorized access).
+async function catalogGemForOwnerless(db: AppDb, gemKey: string, version: string): Promise<CatalogRow | null> {
+  const rows = await db.select({
+    gemKey: catalogGems.gemKey, version: catalogGems.version, publishedBy: catalogGems.publishedBy,
+    author: catalogGems.author, description: catalogGems.description, tags: catalogGems.tags,
+    artifactKinds: catalogGems.artifactKinds, type: catalogGems.type, grade: catalogGems.grade,
+    artifacts: catalogGems.artifacts, createdAtMs: catalogGems.createdAtMs,
+    ownerAccountId: catalogGems.ownerAccountId, visibility: catalogGems.visibility, archiveKey: gemArchives.gemKey,
+  }).from(catalogGems)
+    .leftJoin(gemArchives, and(eq(catalogGems.gemKey, gemArchives.gemKey), eq(catalogGems.version, gemArchives.version)))
+    .where(and(eq(catalogGems.gemKey, gemKey), eq(catalogGems.version, version))).limit(1);
+  const r = rows[0];
+  if (!r) return null;
+  return {
+    gemKey: r.gemKey, version: r.version, publishedBy: r.publishedBy,
+    author: r.author ?? undefined, description: r.description ?? undefined,
+    tags: r.tags ?? undefined, artifactKinds: r.artifactKinds ?? undefined,
+    type: r.type ?? undefined, grade: r.grade ?? undefined, artifacts: r.artifacts ?? undefined,
+    createdAtMs: r.createdAtMs, ownerAccountId: r.ownerAccountId ?? null,
+    visibility: (r.visibility as Visibility) ?? "public", installable: r.archiveKey != null,
+  };
+}
