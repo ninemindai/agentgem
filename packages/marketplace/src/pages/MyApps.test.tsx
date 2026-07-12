@@ -42,11 +42,16 @@ describe("MyApps page", () => {
     expect(screen.getAllByText("Private").length).toBe(2);
   });
 
-  it("Details links to /gems/ only for the public gem — /gems/ 404s unlisted and private (listCatalogGems filters visibility = public)", async () => {
+  it("Details links to the owner detail (/my-apps/<key>) for every gem, regardless of visibility", async () => {
     render(<MyApps api={apiStub()} me={me} />);
     const details = await screen.findAllByRole("link", { name: "Details" });
-    expect(details.length).toBe(1);
-    expect(details[0].getAttribute("href")).toBe("/gems/%40octocat%2Fpub-game");
+    expect(details.length).toBe(4);
+    expect(details.map((a) => a.getAttribute("href"))).toEqual([
+      "/my-apps/%40octocat%2Fpub-game",
+      "/my-apps/%40octocat%2Funlisted-game",
+      "/my-apps/%40octocat%2Fpriv-game",
+      "/my-apps/%40octocat%2Fpriv-skill",
+    ]);
   });
 
   it("public/unlisted games link straight to the shareable /games/ path, no fetch needed", async () => {

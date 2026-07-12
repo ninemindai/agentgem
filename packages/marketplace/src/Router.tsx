@@ -14,6 +14,7 @@ import { Publish } from "./pages/Publish";
 import { Profile } from "./pages/Profile";
 import { Account } from "./pages/Account";
 import { MyApps } from "./pages/MyApps";
+import { MyAppDetail } from "./pages/MyAppDetail";
 import { OrgCatalog } from "./pages/OrgCatalog";
 import { TeamUsage } from "./pages/TeamUsage";
 import { Sources } from "./pages/Sources";
@@ -47,6 +48,9 @@ export const ROUTES: RouteDef[] = [
   { id: "publish", kind: "panel", match: (p) => p === "/publish", render: (_m, c) => <Publish api={c.api} me={c.me} base={defaultApiBase()} /> },
   // Signed-in guard lives inside Account itself (mirrors Publish's !me gate) rather than here.
   { id: "account", kind: "panel", match: (p) => p === "/account", render: (_m, c) => <Account api={c.api} me={c.me} base={defaultApiBase()} /> },
+  // Owner-only gem detail (download/play/unpublish) — reachable only from /my-apps, since it is the
+  // sole place a private gem's key is linked from. Matched before the /my-apps panel below.
+  { id: "my-apps-detail", kind: "collection", collection: "my-apps", match: (p) => p.match(/^\/my-apps\/(.+)$/), render: (m, c) => <MyAppDetail api={c.api} me={c.me} keyName={decodeURIComponent((m as RegExpMatchArray)[1])} /> },
   // Owner play of private gems lives here — never in Explore/Minigames, which are public-only.
   { id: "my-apps", kind: "panel", match: (p) => p === "/my-apps", render: (_m, c) => <MyApps api={c.api} me={c.me} /> },
   { id: "sources", kind: "panel", match: (p) => p === "/sources", render: (_m, c) => <Sources api={c.api} /> },
@@ -70,7 +74,7 @@ export const ROUTES: RouteDef[] = [
 ];
 
 // Declared classifications the conformance test checks against.
-export const COLLECTIONS = ["games", "gems", "ingredients", "skills", "orgs"];  // plural
+export const COLLECTIONS = ["games", "gems", "ingredients", "skills", "orgs", "my-apps"];  // plural
 export const PANELS = ["publish", "account", "sources", "my-apps"];
 
 // A legacy singular alias (e.g. /ingredient/x) is rewritten to its plural canonical form (e.g.

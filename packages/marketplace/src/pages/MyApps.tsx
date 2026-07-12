@@ -77,11 +77,10 @@ export function MyApps({ api, me }: { api: ReturnType<typeof makeApi>; me: Me | 
                 </div>
                 {g.description && <p className="ex-my-apps-item__desc">{g.description}</p>}
                 <div className="ex-my-apps-item__actions">
-                  {/* /gems/<key> (Explore) only ever resolves PUBLIC gems (listCatalogGems filters
-                      visibility = 'public') — linking there for unlisted/private would 404. */}
-                  {g.visibility === "public" && (
-                    <a className="ex-navlink" href={"/gems/" + encodeURIComponent(g.key)}>Details</a>
-                  )}
+                  {/* Details always goes to the owner detail (/my-apps/<key>), which resolves every
+                      visibility via getMyGem — unlike /gems/<key> (Explore), which only ever resolves
+                      PUBLIC gems (listCatalogGems filters visibility = 'public'). */}
+                  <a className="ex-navlink" href={"/my-apps/" + encodeURIComponent(g.key)}>Details</a>
                   {isGame && g.visibility === "private" && (
                     <button type="button" className="ex-signin" onClick={() => playPrivate(g.key)}>Play</button>
                   )}
