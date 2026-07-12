@@ -8,148 +8,159 @@
 
 The public marketplace miniapps gallery (`packages/marketplace/src/pages/Minigames.tsx`)
 loads every published `game` gem and renders them in a single flat grid — no search,
-no filtering. As the catalog grows this is undiscoverable. We want a search box, a
-structured **genre** facet, and **free-form tags**.
+no filtering (`Minigames.tsx:73`, a plain `.filter(g => g.artifactKinds.includes("game"))`).
+As the catalog grows this is undiscoverable. We want a search box, a structured
+**genre** facet, and **free-form tags**.
 
-## Current state (verified)
+## Key discovery (drives the whole approach)
 
-- Gallery: `Minigames.tsx` calls `loadGems(api)` → `GET /api/registry/gems`, then
-  `gems.filter(g => g.artifactKinds.includes("game"))`. No search/filter UI.
-- A proven search+facet pattern already exists next door in `Gems.tsx`
-  (`ex-search` input + toggle chips + `filterGems()` doing case-insensitive substring
-  over key/description/tags). This is the template to adapt.
-- `catalog_gems.tags jsonb` exists end-to-end (schema → `RegistryGem.tags` →
-  client `Gem.tags`) **but the miniapp publish path never populates it** — published
-  miniapps land with `tags = null`.
-- Every miniapp has a `genre` (fixed enum `replay | skill-run | project-fun |
-  session-heatmap`, canonical type `packages/model/src/types.ts:48`), but genre lives
-  only inside the `.gem` archive bytes — it is **not** in the list payload, so it is
-  not filterable without plumbing.
+Every miniapp published through the console Studio **already carries its genre in the
+catalog `tags` array**. `Studio.tsx:279` hardcodes `tags: ["game", <genre>]` on publish,
+and that flows unchanged into `catalog_gems.tags` and back out through
+`GET /api/registry/gems` → the marketplace client's `Gem.tags`. So the marketplace
+already *receives* genre — it just doesn't *interpret* it.
+
+Consequence: genre chips and search are a **client-side reading of data the gallery
+already has**. No schema column, no migration, no backfill, no API plumbing. Existing
+miniapps become genre-filterable immediately because they already carry the genre tag.
 
 ## Decisions
 
 - **Tags meaning:** both — genre as the structured facet **and** free-form author tags.
-- **Search engine:** client-side. The gallery already loads the full gem list; filter
-  in the browser (adapt the `Gems.tsx` pattern). No new API endpoint. Fine to hundreds
-  of miniapps; revisit at thousands.
-- **Genre backfill:** yes — a one-time migration unpacks existing archives so the whole
-  catalog is genre-filterable on day one.
-- **Free-form tags UI:** rendered as small clickable chips on each card; clicking a chip
-  adds it to the search query. No fixed tag rail (open-ended tags don't fit a fixed facet).
-- **Ship as a single PR** (may contain multiple logical commits).
+- **Design shape: UI-only (Option B).** Genre is read from the tags the gallery already
+  receives (the tag matching the 4-value genre enum). No aggregator/schema/API/backfill work.
+- **Search engine:** client-side, adapting the proven `Gems.tsx` pattern (`ex-search`
+  input + toggle chips + a pure filter helper).
+- **Free-form tags authoring:** a tags input in the console Studio publish toolbar,
+  merged into the publish tags array at `Studio.tsx:279`. **Publish-time only** — tags
+  are not persisted into the archive's `meta.json` (that would pull in the model package
+  and the save route; out of scope). Re-entered on republish.
+- **Free-form tags UI:** each card renders its non-structural tags as small clickable
+  chips; clicking one sets the search query. No fixed tag rail.
+- **Reserved words:** the console tags input rejects/drops `game` and the 4 genre values
+  so a free-form tag can never collide with the genre convention.
+- **Ship as a single PR** (multiple logical commits).
 
-## Data flow
-
-Authoring (local console/Studio) → aggregator Postgres → marketplace browse.
+## Data flow (nothing new server-side)
 
 ```
-Studio publish dialog (tags input)
-        │  share manifest.tags
+Studio publish toolbar
+  scope radios + NEW tags input (setTags)
+        │  publishSetupRoute body.tags = ["game", genre, ...userTags]
         ▼
-recordCatalogShare ──► catalog_gems.tags (jsonb)      [free-form tags]
-        │  genre read from game artifact bytes
-        ▼
-recordCatalogShare ──► catalog_gems.genre (new col)   [structured facet]
+publishSetup → manifest.tags → recordCatalogShare → catalog_gems.tags   [UNCHANGED chain]
         │
         ▼
-GET /api/registry/gems  (RegistryGem: + genre, tags already present)
+GET /api/registry/gems  → Gem.tags (already carries ["game", genre, ...])
         │
         ▼
-Minigames.tsx  (search box + genre chips + tag chips, client-side filter)
+Minigames.tsx  (search box + genre chips + tag chips; genre + tags read from Gem.tags)
 ```
 
 ## Components
 
-### 1. Storage — `packages/aggregator/src/schema.ts`
+### 1. Console authoring — `packages/console/src/panels/Play/Studio.tsx`
 
-- Add `genre: text("genre")` to the `catalogGems` Drizzle def (~`:276`), nullable.
-- In `ensureSchema` (~`:522`): `alter table catalog_gems add column if not exists genre text`.
-- No new tags column — reuse the existing `tags jsonb`.
+- New state `const [tags, setTags] = useState<string>("")` (near `scope`, ~line 54).
+- A tags `<input>` in the `play-studio-head` toolbar next to the `play-scope`
+  radiogroup (~lines 344-348), `aria-label="tags"`, placeholder `"tags, comma separated"`.
+- A pure, tested helper `parseTags(raw: string): string[]` (new file
+  `packages/console/src/panels/Play/parseTags.ts`) that: splits on comma, trims,
+  lowercases, drops empties, drops `game` and the 4 genre values (reserved), dedupes,
+  and caps to ≤ 8 tags of ≤ 24 chars each.
+- At publish, merge into the existing array:
+  `tags: ["game", meta?.genre ?? "project-fun", ...parseTags(tags)]` at `Studio.tsx:279`.
 
-Genre gets a dedicated column (not folded into `tags`) because it's a fixed structured
-facet distinct from open-ended keyword tags, and denormalizing it out of the archive
-avoids unpacking archives on every list read.
+No route/schema/manifest changes — `publishSetupRoute` (`routes.ts:797`),
+`PlaybookPublishBodySchema` (`schemas.ts:584`), and the manifest already accept
+`tags: string[]`.
 
-### 2. Publish / write path
+### 2. Marketplace filter helpers — `packages/marketplace/src/gems/catalog.ts`
 
-- **Genre** — in `recordCatalogShare` (`packages/aggregator/src/catalog.ts:222`), read
-  the game artifact's `genre` from the archive bytes already in hand and store it in the
-  new column. Single source of truth (the artifact), so it cannot drift from a manifest
-  field. Non-game gems store `null`.
-- **Tags** — add a tags input to the console Studio publish dialog
-  (`packages/console`, alongside the existing `resolvePublishAction` / publish-status
-  flow). Tags travel in the share manifest (`CatalogManifest.tags`, already supported)
-  and are stored in the existing `tags` column by `recordCatalogShare`.
-- `upsertCatalogGem` (`catalog.ts:22`) updated to carry `genre` through the merge/sync path.
+`Gem.tags: string[]` already exists (catalog.ts:14) — no interface change. Add pure,
+tested helpers:
 
-### 3. API surface
+```ts
+export const GAME_GENRES = ["replay", "skill-run", "project-fun", "session-heatmap"] as const;
+export type GameGenreTag = (typeof GAME_GENRES)[number];
+const GENRE_SET = new Set<string>(GAME_GENRES);
 
-Surface both fields in the existing `GET /api/registry/gems` payload (no new endpoint):
+/** A game gem's genre, read from tags (publish writes ["game", <genre>, ...]). */
+export function gameGenre(gem: Gem): GameGenreTag | undefined {
+  return gem.tags.find((t): t is GameGenreTag => GENRE_SET.has(t));
+}
 
-- `RegistryGemSchema` (`src/schemas.ts:906`): add `genre: GameGenreEnum.optional()`
-  (reuse the existing enum; `tags` is already present).
-- `CatalogRow` + `listCatalogGems` (`packages/aggregator/src/catalog.ts:13,40`): select
-  the new `genre` column.
-- `registryGems` / `mergeGems` (`src/gem.controller.ts:1267`): carry `genre` through.
-- Client `RegistryGem` (`packages/marketplace/src/types.ts`) + `Gem`
-  (`packages/marketplace/src/gems/catalog.ts:8`): add `genre?: GameGenre`.
+/** Chip tags: everything except the structural "game" tag and the genre tag. */
+export function displayTags(gem: Gem): string[] {
+  return gem.tags.filter((t) => t !== "game" && !GENRE_SET.has(t));
+}
 
-### 4. Marketplace UI — `packages/marketplace/src/pages/Minigames.tsx`
+/** Case-insensitive query over key + description + display tags, AND-ed with a genre facet. */
+export function filterGames(games: Gem[], query: string, genres: string[] = []): Gem[] {
+  const q = query.trim().toLowerCase();
+  return games.filter(
+    (g) =>
+      (q === "" ||
+        g.key.toLowerCase().includes(q) ||
+        g.description.toLowerCase().includes(q) ||
+        displayTags(g).some((t) => t.toLowerCase().includes(q))) &&
+      (genres.length === 0 || genres.includes(gameGenre(g) ?? "")),
+  );
+}
+```
+
+Plus a tiny genre label map for chip display (marketplace can't import the console's):
+`genreLabel(g)` → `"Session replay" | "Skill run" | "Project fun" | "Session heatmap"`.
+
+### 3. Marketplace UI — `packages/marketplace/src/pages/Minigames.tsx`
 
 Adapt the `Gems.tsx` pattern:
+- `const [search, setSearch] = useState("")` and
+  `const [selectedGenres, setSelectedGenres] = useState<string[]>([])`.
+- `const presentGenres = [...new Set(games.map(gameGenre).filter(Boolean))]`.
+- `const visible = filterGames(games, search, selectedGenres)`.
+- Render an `.ex-search` input, a genre facet chip row (reuse `.ex-cut-facet` /
+  `.ex-cut-toggle` / `.is-on`), a no-match empty state, and the existing grid over `visible`.
+- In `GameCard`, render `displayTags(gem)` as clickable chips (reuse `.ex-tag`) that call
+  `setSearch(tag)`.
 
-- `<input className="ex-search">` bound to a `query` state; matches key + description + tags.
-- **Genre facet chips** — one toggle per genre value, analogous to `Gems.tsx`'s `cut`
-  chips (`selectedGenres` set). Only genres present in the loaded set are shown.
-- **Tag chips** — each card renders its tags as small clickable chips; clicking one sets
-  the search query to that tag.
-- A single pure helper `filterMiniapps(games, query, selectedGenres)`:
-  - case-insensitive substring of `query` over key + description + tags, AND
-  - `selectedGenres.size === 0 || selectedGenres.has(game.genre)`.
-- Empty-state copy when filters match nothing.
+### 4. Styling — `packages/marketplace/src/styles.css`
 
-### 5. Backfill migration
-
-A standalone idempotent script under `packages/aggregator/src` (run once against prod):
-
-- Select `catalog_gems` rows where `artifact_kinds ∋ "game"` and `genre is null`.
-- For each, load the `.gem` archive from `gem_archives`, import it server-side (reuse the
-  same import path `game-meta` uses in `aggregator.controller.ts`), read the artifact
-  `genre`, write the column.
-- Log rows scanned / updated / skipped. Safe to re-run.
+Reuse existing classes (`.ex-search`, `.ex-cut-facet`, `.ex-cut-toggle`, `.ex-tag`).
+Add only small `.mg-`-scoped tweaks if spacing needs it (e.g. a `.mg-tags` chip row on the
+card). No new design system work.
 
 ## Error handling / edge cases
 
-- Miniapp archive missing or unreadable during backfill → log and skip (leave `genre`
-  null); does not abort the run.
-- Publish of a gem with no game artifact → `genre` stays null (non-game gems).
-- Genre value present in the archive but outside the enum → store null and log (guard
-  against archive corruption / future values), so the marketplace never renders an
-  unknown chip.
-- Tags: cap count/length in the publish dialog (e.g. ≤ 8 tags, ≤ 24 chars each,
-  lowercased/trimmed) to keep the chip UI sane. Reject empty/whitespace tags.
+- A miniapp with no genre tag (older/edge publish) → `gameGenre` returns `undefined`; it
+  is simply absent from every genre facet and shows no genre chip. Never crashes.
+- Empty search + no genre selected → all games (current behavior preserved).
+- Free-form tag input: empties/whitespace dropped; reserved words (`game` + genres)
+  dropped; capped (≤ 8 × ≤ 24 chars); deduped. All in `parseTags`.
+- Clicking a tag chip whose text also appears in another card's description is fine — it's
+  a substring search, intentionally broad.
 
 ## Testing
 
-- `filterMiniapps` unit tests: empty query; genre facet single/multi; tag substring
-  match; combined query+genre; no-match empty state.
-- Publish → list round-trip: a published miniapp's `genre` and `tags` appear in the
-  `/api/registry/gems` payload.
-- Backfill test: archive with genre X + null column → column becomes X; corrupt/missing
-  archive → skipped, no throw.
-- `Minigames` render/filter test (RTL): search box + genre chips filter the grid;
-  clicking a tag chip narrows results. (Marketplace tests run in CI.)
+- `packages/marketplace/src/gems/catalog.test.ts`: `gameGenre` (present / absent / picks
+  the genre not "game"), `displayTags` (strips game + genre, keeps user tags),
+  `filterGames` (empty query, genre facet single/multi, tag substring, combined, no-match).
+- `packages/marketplace/src/pages/Minigames.test.tsx` (extend existing, fetch-stub style):
+  search narrows the grid; a genre chip filters; clicking a tag chip narrows. Stub gems
+  must include `tags` like `["game","replay","puzzle"]`.
+- `packages/console/src/panels/Play/parseTags.test.ts`: parsing, lowercasing, reserved-word
+  drop, caps, dedupe. (Console tests run locally, not in CI — run them by hand.)
 
-## Enum drift note
+## Enum note
 
-Reuse the canonical `GameGenre` (`packages/model/src/types.ts:48`) and the existing
-`GameGenreEnum` (`src/schemas.ts:108`). Do **not** add a new copy — the enum is already
-duplicated across ~5 files (schemas.ts, archive.ts, marketplace/api.ts, console/routes.ts)
-and that is the known drift risk.
+The 4 genre values live canonically at `packages/model/src/types.ts:48` (`GameGenre`) and
+are duplicated in several files. This PR adds `GAME_GENRES` in the marketplace and reuses
+the existing genre list in the console `parseTags` reserved set — do **not** add a new
+enum copy in a shared package; these are local literal lists matching the canonical union.
 
 ## Out of scope
 
-- Server-side search endpoint / pagination (revisit at thousands of miniapps).
-- Editing tags of already-published miniapps without republishing (tags are populated
-  on publish; genre is backfilled).
-- Tag taxonomy / suggestions / autocomplete beyond a plain input.
+- Explicit `genre` column / server-side filtering / pagination (Option A — revisit at scale).
+- Persisting free-form tags into the archive `meta.json` (would touch the model package,
+  `MiniappMeta`, and `PlayMetaSchema`); tags are publish-time input for now.
+- Editing tags without republishing; tag taxonomy / autocomplete.
