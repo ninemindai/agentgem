@@ -1,13 +1,17 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
-import { Account } from "./Account";
+import { Account, AccountPanel } from "./Account";
 import { makeApi } from "../api";
 import type { Me } from "../auth";
+
+const { nav } = vi.hoisted(() => ({ nav: vi.fn() }));
+vi.mock("../nav", () => ({ navigate: (...a: unknown[]) => nav(...a), useLocationSearch: () => "" }));
 
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
-  window.history.pushState({}, "", "/account");
+  nav.mockClear();
+  window.history.pushState({}, "", "/");
   try { sessionStorage.clear(); } catch { /* ignore */ }
 });
 
@@ -48,7 +52,7 @@ describe("Account page", () => {
     const assign = vi.fn();
     vi.stubGlobal("location", { ...window.location, assign, origin: "https://app.x", pathname: "/account", href: "https://app.x/account", search: "" } as unknown as Location);
 
-    render(<Account api={makeApi("https://api.x")} me={me} base="https://api.x" />);
+    render(<AccountPanel api={makeApi("https://api.x")} me={me} base="https://api.x" />);
 
     expect(await screen.findByText("GitHub connected")).toBeTruthy();
     const connectGoogle = await screen.findByRole("button", { name: "Connect Google" });
@@ -71,7 +75,7 @@ describe("Account page", () => {
   it("prompts sign-in when signed out, instead of fetching providers", async () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
-    render(<Account api={makeApi("https://api.x")} me={null} base="https://api.x" />);
+    render(<AccountPanel api={makeApi("https://api.x")} me={null} base="https://api.x" />);
     expect(await screen.findByRole("link", { name: /sign in with github/i })).toBeTruthy();
     expect(fetchSpy).not.toHaveBeenCalled();
   });
@@ -83,7 +87,7 @@ describe("Account page", () => {
     });
     window.history.pushState({}, "", "/account?error=account_already_linked_to_different_user");
 
-    render(<Account api={makeApi("https://api.x")} me={me} base="https://api.x" />);
+    render(<AccountPanel api={makeApi("https://api.x")} me={me} base="https://api.x" />);
 
     expect(await screen.findByText(/already linked to another AgentGem account/i)).toBeTruthy();
     // The banner itself is expected to still be showing (read once at mount) — it's the URL that
@@ -102,7 +106,7 @@ describe("Account page", () => {
     const assign = vi.fn();
     vi.stubGlobal("location", { ...window.location, assign, origin: "https://app.x", pathname: "/account", href: "https://app.x/account?error=account_already_linked_to_different_user", search: "?error=account_already_linked_to_different_user" } as unknown as Location);
 
-    render(<Account api={makeApi("https://api.x")} me={me} base="https://api.x" />);
+    render(<AccountPanel api={makeApi("https://api.x")} me={me} base="https://api.x" />);
 
     const connectGoogle = await screen.findByRole("button", { name: "Connect Google" });
     fireEvent.click(connectGoogle);
@@ -120,7 +124,7 @@ describe("Account page", () => {
       if (u.includes("/api/account/providers")) return res({ connected: ["github", "credential"] });
       throw new Error("unexpected fetch: " + u);
     });
-    render(<Account api={makeApi("https://api.x")} me={me} base="https://api.x" />);
+    render(<AccountPanel api={makeApi("https://api.x")} me={me} base="https://api.x" />);
     expect(await screen.findByText("GitHub connected")).toBeTruthy();
     expect(screen.queryByText(/credential/i)).toBeNull();
   });
@@ -137,7 +141,7 @@ describe("Account page", () => {
     // First mount: clicking Connect Google stashes "google" as the in-flight attempt before the
     // full-page OAuth redirect (which a real browser would now follow — this test doesn't simulate
     // navigating away, just the write side).
-    const { unmount } = render(<Account api={makeApi("https://api.x")} me={me} base="https://api.x" />);
+    const { unmount } = render(<AccountPanel api={makeApi("https://api.x")} me={me} base="https://api.x" />);
     fireEvent.click(await screen.findByRole("button", { name: "Connect Google" }));
     await waitFor(() => expect(assignBeforeRedirect).toHaveBeenCalled());
     unmount();
@@ -148,7 +152,7 @@ describe("Account page", () => {
     vi.stubGlobal("location", { ...window.location, assign: assignOnMerge, origin: "https://app.x", pathname: "/account", href: "https://app.x/account", search: "?error=account_already_linked_to_different_user" } as unknown as Location);
     window.history.pushState({}, "", "/account?error=account_already_linked_to_different_user");
 
-    render(<Account api={makeApi("https://api.x")} me={me} base="https://api.x" />);
+    render(<AccountPanel api={makeApi("https://api.x")} me={me} base="https://api.x" />);
     const mergeBtn = await screen.findByRole("button", { name: /merge this account/i });
     fireEvent.click(mergeBtn);
     expect(assignOnMerge).toHaveBeenCalledWith("https://api.x/api/account/connect/google");
@@ -160,7 +164,7 @@ describe("Account page", () => {
       throw new Error("unexpected fetch: " + u);
     });
     window.history.pushState({}, "", "/account?error=account_already_linked_to_different_user");
-    render(<Account api={makeApi("https://api.x")} me={me} base="https://api.x" />);
+    render(<AccountPanel api={makeApi("https://api.x")} me={me} base="https://api.x" />);
     expect(await screen.findByText(/already linked to another AgentGem account/i)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /merge this account/i })).toBeNull();
   });
@@ -175,7 +179,7 @@ describe("Account page", () => {
     const reload = vi.fn();
     vi.stubGlobal("location", { ...window.location, reload, pathname: "/account", search: "?connect=ready" } as unknown as Location);
 
-    render(<Account api={makeApi("https://api.x")} me={me} base="https://api.x" />);
+    render(<AccountPanel api={makeApi("https://api.x")} me={me} base="https://api.x" />);
 
     expect(await screen.findByText(/merges the just-verified account/i)).toBeTruthy();
     const confirmBtn = screen.getByRole("button", { name: "Connect" });
@@ -197,7 +201,7 @@ describe("Account page", () => {
     const reload = vi.fn();
     vi.stubGlobal("location", { ...window.location, reload, pathname: "/account", search: "?connect=ready" } as unknown as Location);
 
-    render(<Account api={makeApi("https://api.x")} me={me} base="https://api.x" />);
+    render(<AccountPanel api={makeApi("https://api.x")} me={me} base="https://api.x" />);
     fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
 
     expect(await screen.findByText(/merging accounts with existing gems/i)).toBeTruthy();
@@ -212,7 +216,7 @@ describe("Account page", () => {
       throw new Error("unexpected fetch: " + u);
     });
     vi.stubGlobal("location", { ...window.location, pathname: "/account", search: "?connect=none" } as unknown as Location);
-    render(<Account api={makeApi("https://api.x")} me={me} base="https://api.x" />);
+    render(<AccountPanel api={makeApi("https://api.x")} me={me} base="https://api.x" />);
     expect(await screen.findByText(/nothing new to connect/i)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Connect" })).toBeNull();
   });
@@ -223,7 +227,7 @@ describe("Account page", () => {
       throw new Error("unexpected fetch: " + u);
     });
     vi.stubGlobal("location", { ...window.location, pathname: "/account", search: "?connect=error" } as unknown as Location);
-    render(<Account api={makeApi("https://api.x")} me={me} base="https://api.x" />);
+    render(<AccountPanel api={makeApi("https://api.x")} me={me} base="https://api.x" />);
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect(screen.getByRole("alert").textContent).toMatch(/went wrong connecting/i);
     expect(screen.queryByRole("button", { name: "Connect" })).toBeNull();
@@ -235,9 +239,22 @@ describe("Account page", () => {
       throw new Error("unexpected fetch: " + u);
     });
     vi.stubGlobal("location", { ...window.location, pathname: "/account", search: "?merge=1&handle=raymond" } as unknown as Location);
-    render(<Account api={makeApi("https://api.x")} me={me} base="https://api.x" />);
+    render(<AccountPanel api={makeApi("https://api.x")} me={me} base="https://api.x" />);
     const banner = await screen.findByText(/that handle \(@raymond\) isn't available\. if you have another account that might own it, connect it below\./i);
     expect(banner).toBeTruthy();
     expect(banner.textContent).not.toMatch(/github|google/i);
+  });
+
+  it("shim redirects a handle-having user to their Account tab, forwarding query params", () => {
+    window.history.pushState({}, "", "/account?connect=ready");
+    render(<Account api={makeApi("https://api.x")} me={me} base="https://api.x" />);
+    expect(nav).toHaveBeenCalledWith("/@octocat?tab=account&connect=ready");
+  });
+
+  it("shim renders the panel inline for a signed-in user with NO handle", () => {
+    const handleless: Me = { ...me, handle: null };
+    render(<Account api={{ getAccountProviders: () => Promise.resolve({ connected: [] }) } as never} me={handleless} base="https://api.x" />);
+    expect(screen.getByRole("heading", { name: /account/i })).toBeTruthy();
+    expect(nav).not.toHaveBeenCalled();
   });
 });
