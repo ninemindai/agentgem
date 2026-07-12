@@ -28,7 +28,7 @@ vi.mock("@agentgem/distribute", async (importOriginal) => {
   return {
     ...actual,
     exportGem: () => ({ bytes: Buffer.from([9]) }),
-    importGem: () => ({ meta: { gemDigest: "sha256:zz" }, gem: { artifacts: [], name: "bot", checks: [], requiredSecrets: [], createdFrom: "x" } }),
+    importGem: () => ({ meta: { gemDigest: "sha256:zz", version: "2.3.0" }, gem: { artifacts: [], name: "bot", checks: [], requiredSecrets: [], createdFrom: "x" } }),
   };
 });
 
@@ -89,6 +89,28 @@ describe("ReviewController action routes", () => {
     action.mockResolvedValue({ ok: true, gemKey: "@team/bot", version: "1.0.0" });
     expect(await new ReviewController().approve({ body: { requestId: "r1" } })).toMatchObject({ ok: true, gemKey: "@team/bot" });
   });
+  // Pin the exact signed verb + path for the remaining action routes (a verb typo fails aggregator
+  // signature verification with a 401 — loud, but cheap to guard against a future refactor).
+  it("getOne signs the 'get' action with the query requestId", async () => {
+    action.mockResolvedValue({ request: null });
+    await new ReviewController().getOne({ query: { requestId: "r7" } });
+    expect(action.mock.calls[0][0]).toMatchObject({ action: "get", requestId: "r7", path: "/review/get" });
+  });
+  it("changes signs the 'changes' action", async () => {
+    action.mockResolvedValue({ ok: true });
+    await new ReviewController().changes({ body: { requestId: "r7" } });
+    expect(action.mock.calls[0][0]).toMatchObject({ action: "changes", requestId: "r7", path: "/review/changes" });
+  });
+  it("withdraw signs the 'withdraw' action", async () => {
+    action.mockResolvedValue({ ok: true });
+    await new ReviewController().withdraw({ body: { requestId: "r7" } });
+    expect(action.mock.calls[0][0]).toMatchObject({ action: "withdraw", requestId: "r7", path: "/review/withdraw" });
+  });
+  it("seen signs the 'seen' action", async () => {
+    action.mockResolvedValue({ ok: true });
+    await new ReviewController().seen({ body: { requestId: "r7" } });
+    expect(action.mock.calls[0][0]).toMatchObject({ action: "seen", requestId: "r7", path: "/review/seen" });
+  });
 });
 
 describe("ReviewController install-to-test", () => {
@@ -104,6 +126,8 @@ describe("ReviewController install-to-test", () => {
     const res = await new ReviewController().install({ body: { requestId: "req-1" } });
     expect(res).toMatchObject({ workspace: "review-req-1", executables: { mcp: [], hooks: [] } });
     expect(fetchArch.mock.calls[0][0].requestId).toBe("req-1");
+    // The STAGED version (importGem meta.version) is threaded to createWorkspace, not defaulted to 0.1.0.
+    expect((createWorkspace.mock.calls[0] as unknown[])[2]).toEqual({ version: "2.3.0" });
   });
   it("returns 404-ish when the archive is gone (null)", async () => {
     fetchArch.mockResolvedValue(null);

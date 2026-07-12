@@ -94,13 +94,14 @@ export class ReviewController {
     const b = input.body;
     const bytes = await fetchReviewArchive({ requestId: b.requestId, identity: loadOrCreateIdentity() });
     if (bytes == null) throw new AgentError("staging archive not available", { status: 404, code: "review_archive_gone", retryable: false });
-    const { gem } = importGem(bytes); // verifies gem.lock; throws on tamper
+    const { gem, meta } = importGem(bytes); // verifies gem.lock; throws on tamper
     const executables = executableArtifacts(gem);
     if (hasExecutable(gem) && b.consent !== true) {
       throw new AgentError("this gem runs executable artifacts; install requires consent", { status: 409, code: "consent_required", retryable: false });
     }
     const name = (b.name ?? `review-${b.requestId}`).replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "review-gem";
-    createWorkspace(name, gem);
+    // Thread the STAGED version through (like installHosted) — otherwise createWorkspace defaults it to "0.1.0".
+    createWorkspace(name, gem, { version: meta.version });
     return { workspace: name, executables };
   }
 
