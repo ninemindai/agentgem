@@ -22,15 +22,20 @@ export const IconComment = () => (
   <Icon d="M1 2.75C1 1.784 1.784 1 2.75 1h10.5c.966 0 1.75.784 1.75 1.75v7.5A1.75 1.75 0 0 1 13.25 12H9.06l-2.573 2.573A1.458 1.458 0 0 1 4 13.543V12H2.75A1.75 1.75 0 0 1 1 10.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h4.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z" />
 );
 
-export const IconOffline = () => (
-  <Icon d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14Zm4.72-4.72V2.75a.75.75 0 0 1 1.5 0v6.53l1.97-1.97a.749.749 0 1 1 1.06 1.06L8.53 11.53a.749.749 0 0 1-1.06 0L4.22 8.09a.749.749 0 1 1 1.06-1.06Z" />
-);
-
 // ── Nav tab glyphs ─────────────────────────────────────────────────────────
 // Stroke-based line icons; .ex-nav-ico (styles.css) supplies stroke/fill/width so
 // the whole set stays one weight and rides the surrounding text color + hover.
 const NavIcon = ({ children }: { children: ReactNode }) => (
   <svg className="ex-nav-ico" viewBox="0 0 16 16" aria-hidden="true">{children}</svg>
+);
+
+/** Offline — a downward arrow into a tray, the mirror of Publish's upward one. */
+export const IconOffline = () => (
+  <NavIcon>
+    <path d="M8 2.5v8" />
+    <path d="M4.8 7.3 8 10.5l3.2-3.2" />
+    <path d="M2.7 11v1.7A1.3 1.3 0 0 0 4 14h8a1.3 1.3 0 0 0 1.3-1.3V11" />
+  </NavIcon>
 );
 
 /** Miniapps — a 2×2 grid, the arcade of playable apps. */

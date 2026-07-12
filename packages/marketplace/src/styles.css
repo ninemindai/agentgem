@@ -1082,4 +1082,4 @@ a.ex-skillcard-rating:hover { text-decoration: underline; }
 .ex-offline-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-block-end: 1px solid var(--rule, rgba(0,0,0,.08)); }
 .ex-offline-size { margin-inline-start: auto; opacity: .7; font-size: 13px; }
 
-.ex-offline-banner { margin: 0; padding: 8px 24px; text-align: center; background: var(--paper-raised, #efe6d2); font-size: 14px; }
+.ex-offline-banner { margin: 0; padding: 8px 24px; text-align: center; background: var(--surface-2); color: var(--ink); border-block-end: 1px solid var(--line); font-size: 14px; }
