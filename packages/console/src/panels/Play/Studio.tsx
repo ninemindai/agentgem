@@ -1,6 +1,6 @@
 // packages/console/src/panels/Play/Studio.tsx
 import { useEffect, useRef, useState } from "react";
-import { makeClient, playMiniappRoute, playSaveRoute, playPublishRoute, publishSetupRoute, publishStatusRoute } from "../../api/routes.js";
+import { makeClient, playMiniappRoute, playSaveRoute, playPublishRoute, publishSetupRoute, publishStatusRoute, reviewGroupsRoute, reviewRequestRoute } from "../../api/routes.js";
 import { AgentSelector, type PlayAgent } from "./AgentSelector.js";
 import { CapabilityStrip } from "./CapabilityStrip.js";
 import { Runner } from "./Runner.js";
@@ -54,6 +54,10 @@ export function Studio({
   const [pendingVersion, setPendingVersion] = useState<{ latestVersion: string; nextVersion: string; login: string } | null>(null);
   const [scope, setScope] = useState<"public" | "unlisted" | "private">("public");
   const [tags, setTags] = useState("");   // free-form publish tags (comma separated), parsed via parseTags
+  const [pendingReview, setPendingReview] = useState(false);   // Request review clicked while unbound
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewGroups, setReviewGroups] = useState<{ id: string; name: string; role: string }[] | null>(null);
+  const [reviewGroupId, setReviewGroupId] = useState("");
   const { status: identity } = useIdentity();
   const closeRef = useRef<null | (() => void)>(null);
   const logRef = useRef<HTMLDivElement>(null);
@@ -70,6 +74,7 @@ export function Studio({
   const bind = useGitHubBind(apiBase, {
     onBound: (login) => {
       if (pendingPublish) { setPendingPublish(false); void checkAndPublish(login); }
+      if (pendingReview) { setPendingReview(false); void openReviewGroupPicker(); }
     },
   });
 
@@ -253,8 +258,9 @@ export function Studio({
       // Adopting only the PRUNE was a one-way street: a capability ADDED to meta.json (by the agent or by
       // hand) never reached `meta` state, so <Runner needs> stayed stale, the host never attached, and the
       // miniapp ran host-less until an unmount/remount. There is no reload control to escape that with.
-      setPruned(res.prunedNeeds);
-      const needs = (cur.meta.needs ?? []).filter((n) => !(res.prunedNeeds as string[]).includes(n));
+      const prunedNeeds = (res.prunedNeeds ?? []) as string[];
+      setPruned(prunedNeeds);
+      const needs = (cur.meta.needs ?? []).filter((n) => !prunedNeeds.includes(n));
       setMeta({ title: cur.meta.title, genre: cur.meta.genre, ...(needs.length ? { needs } : {}) });
       setStatus("saved ✓"); return true;
     } catch (e) {
@@ -328,7 +334,50 @@ export function Studio({
   // resume at all — dropping the banner drops the pending publish with it.
   function dismissConnect() {
     setPendingPublish(false);
+    setPendingReview(false);
     bind.reset();
+  }
+
+  // Request review: gate on identity first (like shareToExplore), then open the group
+  // picker, fetching the group list only once (cached in reviewGroups for the session).
+  async function requestReview() {
+    setStatus("");
+    if (!(identity?.bound && identity.login)) { setPendingReview(true); return; }
+    await openReviewGroupPicker();
+  }
+
+  async function openReviewGroupPicker() {
+    setReviewOpen(true);
+    if (reviewGroups != null) return;
+    try {
+      const r = await reviewGroupsRoute.call(makeClient(apiBase));
+      setReviewGroups(r.groups);
+    } catch {
+      setReviewGroups([]); // degrade to the empty-groups hint rather than hard-failing the picker
+    }
+  }
+
+  // Submit: save (the archive request builds from the current workspace state), resolve
+  // the version the same way publish does, then request review with the chosen group.
+  async function submitReview() {
+    if (!reviewGroupId || !(identity?.bound && identity.login)) return;
+    if (!(await save())) return; // gate failure already surfaced as the banner
+    let action: PublishAction;
+    try {
+      const st = await publishStatusRoute.call(makeClient(apiBase), { query: { workspace: name, scope: identity.login, name } });
+      action = resolvePublishAction(st);
+    } catch (e) {
+      setStatus(`could not check for an existing app: ${(e as Error).message}`); return;
+    }
+    if (action.kind === "taken") { setStatus(`“${name}” is already published by another account — choose a different name.`); return; }
+    const version = action.kind === "publish" ? action.version : action.nextVersion;
+    try {
+      const r = await reviewRequestRoute.call(makeClient(apiBase), { body: { workspace: name, scope: identity.login, name, version, groupId: reviewGroupId } });
+      if (r.ok) { setStatus("In review"); setReviewOpen(false); }
+      else setStatus(`review request rejected: ${r.rejected}`);
+    } catch (e) {
+      setStatus(`review request failed: ${(e as Error).message}`);
+    }
   }
 
   const g = genreOf(meta?.genre ?? "");
@@ -351,6 +400,7 @@ export function Studio({
           <button type="button" className={`play-btn ${scope === "private" ? "play-btn--primary" : "play-btn--ghost"}`} aria-pressed={scope === "private"} onClick={() => setScope("private")}>Private</button>
         </div>
         <button className="play-btn play-btn--primary" onClick={shareToExplore}>Share to app.agentgem.ai</button>
+        <button className="play-btn play-btn--ghost" onClick={requestReview}>Request review</button>
       </div>
 
       <CapabilityStrip needs={meta?.needs} pruned={pruned} />
@@ -387,14 +437,36 @@ export function Studio({
           <button className="play-btn play-btn--primary" disabled={busy} onClick={() => { const f = gate; setGate(null); send(fixSealPrompt(f)); }}>Fix with agent</button>
         </div>
       )}
-      {pendingPublish && (
+      {(pendingPublish || pendingReview) && (
         <div className="play-banner">
           <span className="play-banner__ico">🔑</span>
           <div className="play-banner__body">
-            <div className="play-banner__title">Connect GitHub to publish</div>
-            <ConnectGitHub bind={bind} idleHint={<p className="play-banner__detail">Publishing continues automatically once you authorize.</p>} />
+            <div className="play-banner__title">Connect GitHub to {pendingReview ? "request review" : "publish"}</div>
+            <ConnectGitHub bind={bind} idleHint={<p className="play-banner__detail">{pendingReview ? "The review request continues automatically once you authorize." : "Publishing continues automatically once you authorize."}</p>} />
           </div>
           <button className="play-btn play-btn--ghost" onClick={dismissConnect}>Dismiss</button>
+        </div>
+      )}
+      {reviewOpen && (
+        <div className="play-banner">
+          <span className="play-banner__ico">🧑‍⚖️</span>
+          <div className="play-banner__body">
+            <div className="play-banner__title">Request review</div>
+            {reviewGroups === null ? (
+              <div className="play-banner__detail">loading groups…</div>
+            ) : reviewGroups.length === 0 ? (
+              <div className="play-banner__detail">Join or create a team to request review.</div>
+            ) : (
+              <select aria-label="Review group" value={reviewGroupId} onChange={(e) => setReviewGroupId(e.target.value)}>
+                <option value="">Select a group…</option>
+                {reviewGroups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+              </select>
+            )}
+          </div>
+          {reviewGroups && reviewGroups.length > 0 && (
+            <button className="play-btn play-btn--primary" disabled={!reviewGroupId} onClick={submitReview}>Submit for review</button>
+          )}
+          <button className="play-btn play-btn--ghost" onClick={() => setReviewOpen(false)}>Cancel</button>
         </div>
       )}
 
