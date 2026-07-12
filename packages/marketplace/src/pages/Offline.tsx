@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { defaultApiBase } from "../api";
+import { defaultApiBase, type makeApi } from "../api";
+import { GamePreview } from "../GamePreview";
 import { listPinned, unpinGame, storageEstimate, type PinnedGame } from "../offline";
 
 function fmtBytes(n: number): string {
@@ -8,10 +9,12 @@ function fmtBytes(n: number): string {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
-// The "Offline library": every game the reader downloaded for offline play, with sizes and a remove
-// control, plus total storage used. Pins live in Cache Storage (served by the SW); this page reads the
-// localStorage index that mirrors them.
-export function Offline() {
+// The "Offline library": every game the reader downloaded for offline play. Each card plays IN PLACE
+// here — GamePreview fetches the game html, which the service worker serves from the never-evicted
+// games-pinned cache, so it plays with no network at all. This page is deliberately the offline play
+// surface: the home grid (catalog list) and the gem detail page (gem metadata) both need uncached API
+// calls and go blank / "not found" offline, whereas this page needs only the localStorage pin index.
+export function Offline({ api }: { api: ReturnType<typeof makeApi> }) {
   const [pins, setPins] = useState<PinnedGame[]>(() => listPinned());
   const [est, setEst] = useState<{ usage: number; quota: number } | null>(null);
 
@@ -29,16 +32,19 @@ export function Offline() {
       {pins.length === 0 ? (
         <p className="ex-empty">No games downloaded yet. Open any game and choose “Download for offline”.</p>
       ) : (
-        <ul className="ex-offline-list">
+        <div className="ex-offline-grid">
           {pins.map((p) => (
-            <li key={`${p.key}@${p.version}`} className="ex-offline-row">
-              <a href={`/gems/${encodeURIComponent(p.key)}`}>{p.title}</a>
-              <span className="ex-gem-version">v{p.version}</span>
-              <span className="ex-offline-size">{fmtBytes(p.size)}</span>
-              <button type="button" className="ex-linkbtn" onClick={() => remove(p)}>Remove</button>
-            </li>
+            <div key={`${p.key}@${p.version}`} className="ex-offline-card">
+              <div className="ex-offline-thumb"><GamePreview api={api} gemKey={p.key} version={p.version} /></div>
+              <div className="ex-offline-meta">
+                <span className="ex-offline-title">{p.title}</span>
+                <span className="ex-gem-version">v{p.version}</span>
+                <span className="ex-offline-size">{fmtBytes(p.size)}</span>
+                <button type="button" className="ex-linkbtn" onClick={() => remove(p)}>Remove</button>
+              </div>
+            </div>
           ))}
-        </ul>
+        </div>
       )}
     </div>
   );

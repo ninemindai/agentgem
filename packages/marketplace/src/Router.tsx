@@ -49,7 +49,7 @@ export const ROUTES: RouteDef[] = [
   { id: "publish", kind: "panel", match: (p) => p === "/publish", render: (_m, c) => <Publish api={c.api} me={c.me} base={defaultApiBase()} /> },
   // Signed-in guard lives inside Account itself (mirrors Publish's !me gate) rather than here.
   { id: "account", kind: "panel", match: (p) => p === "/account", render: (_m, c) => <Account api={c.api} me={c.me} base={defaultApiBase()} /> },
-  { id: "offline", kind: "panel", match: (p) => p === "/offline", render: () => <Offline /> },
+  { id: "offline", kind: "panel", match: (p) => p === "/offline", render: (_m, c) => <Offline api={c.api} /> },
   // Owner-only gem detail (download/play/unpublish) — reachable only from /my-apps, since it is the
   // sole place a private gem's key is linked from. Matched before the /my-apps panel below.
   { id: "my-apps-detail", kind: "collection", collection: "my-apps", match: (p) => p.match(/^\/my-apps\/(.+)$/), render: (m, c) => <MyAppDetail api={c.api} me={c.me} keyName={decodeURIComponent((m as RegExpMatchArray)[1])} /> },
