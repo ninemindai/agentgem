@@ -9,7 +9,7 @@ import { IconMiniapps, IconIngredients, IconGems, IconSources, IconPublish, Icon
 import { PwaUpdatePrompt } from "./PwaUpdatePrompt";
 import { useOnline } from "./useOnline";
 import { SignInDialog } from "./SignInDialog";
-import { makePasskeyAuth, passkeySupported } from "./passkeyAuth";
+import { makePasskeyAuth, passkeySupported, passkeyErrorMessage } from "./passkeyAuth";
 
 const api = makeApi(defaultApiBase());
 const auth = makeAuth(defaultApiBase());
@@ -62,12 +62,12 @@ export function App() {
     setSignInError(null);
     try {
       const res = await passkeyAuth.signIn.passkey();
-      if (res?.error) { setSignInError(res.error.message ?? "Passkey sign-in failed"); return; }
+      if (res?.error) { setSignInError(passkeyErrorMessage(res.error, "Passkey sign-in failed")); return; }
       setShowSignIn(false);
       setMe(await auth.getMe());
     } catch (err) {
       // The WebAuthn ceremony rejects on cancel / no authenticator / unsupported — surface it.
-      setSignInError(err instanceof Error ? err.message : String(err));
+      setSignInError(passkeyErrorMessage(err, "Passkey sign-in failed"));
     }
   };
   const toggleTheme = () => {
