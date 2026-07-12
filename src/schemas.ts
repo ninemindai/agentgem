@@ -773,11 +773,16 @@ export const GemApplyRequestSchema = z.object({
   dir: z.string(),
   flavor: TestbedFlavorIdSchema.optional(),
 });
+export const RubricInstallResultSchema = z.object({
+  installed: z.array(z.string()),
+  skipped: z.array(z.string()),
+});
 export const GemApplyResponseSchema = z.object({
   dir: z.string(),
   name: z.string(),
   written: z.array(ImportedRefSchema),
   skipped: z.array(z.object({ artifact: z.string(), reason: z.string() })),
+  rubrics: RubricInstallResultSchema.optional(),
 });
 
 // ── Run a Gem with a local ACP coding agent ──
@@ -983,6 +988,7 @@ export const RegistryInstallResponseSchema = z.object({
     z.object({ mode: z.literal("materialize"), dest: z.string(), written: z.array(z.string()) }),
     z.object({ mode: z.literal("workspace"), workspace: z.string() }),
   ]),
+  rubrics: RubricInstallResultSchema.optional(),
 });
 
 export const RegistryPublishRequestSchema = z.object({

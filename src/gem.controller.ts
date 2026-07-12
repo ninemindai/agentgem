@@ -13,7 +13,7 @@ import { createLogger } from "@agentgem/base";
 const log = createLogger("gem");
 
 const InstallHostedBody = z.object({ key: z.string(), version: z.string(), consent: z.boolean().optional() });
-const InstallHostedResult = z.object({ workspace: z.string(), executables: z.object({ mcp: z.array(z.string()), hooks: z.array(z.string()) }) });
+const InstallHostedResult = z.object({ workspace: z.string(), executables: z.object({ mcp: z.array(z.string()), hooks: z.array(z.string()) }), rubrics: RubricInstallResultSchema.optional() });
 const ObserveQuerySchema = z.object({
   range: z.enum(["today", "7d", "30d", "all"]).optional(),
   agent: z.string().optional(),
@@ -262,7 +262,7 @@ import {
   TargetProjectsQuerySchema, TargetProjectsResponseSchema,
   TestbedScaffoldRequestSchema, TestbedScaffoldResponseSchema,
   TestbedImportRequestSchema, TestbedImportResponseSchema,
-  GemApplyRequestSchema, GemApplyResponseSchema,
+  GemApplyRequestSchema, GemApplyResponseSchema, RubricInstallResultSchema,
   AgentcoreReadyResponseSchema, AgentcoreDeployRequestSchema, AgentcoreStatusQuerySchema, AgentcoreDeployStateSchema,
   RegistryReadyResponseSchema, RegistryIndexResponseSchema,
   RegistrySearchQuerySchema, RegistrySearchResponseSchema, RegistryGemsResponseSchema,
