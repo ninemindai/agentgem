@@ -38,6 +38,14 @@ export const IconOffline = () => (
   </NavIcon>
 );
 
+/** Make your own — a sparkle, for remixing a game into a new one of your own. */
+export const IconSparkle = () => (
+  <NavIcon>
+    <path d="M6.5 2 7.6 6.4 12 7.5 7.6 8.6 6.5 13 5.4 8.6 1 7.5 5.4 6.4Z" />
+    <path d="M12.2 9.5 12.7 11.3 14.5 11.8 12.7 12.3 12.2 14.1 11.7 12.3 9.9 11.8 11.7 11.3Z" />
+  </NavIcon>
+);
+
 /** Miniapps — a 2×2 grid, the arcade of playable apps. */
 export const IconMiniapps = () => (
   <NavIcon>

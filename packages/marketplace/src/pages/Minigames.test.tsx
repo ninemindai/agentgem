@@ -48,7 +48,7 @@ describe("Minigames", () => {
   it("gives each game a deep link that opens Play prefilled to build your own version", async () => {
     stubFetch(twoGems);
     render(<Minigames api={makeApi("")} stars={stars} />);
-    const link = await screen.findByText("Make your own →");
+    const link = await screen.findByRole("link", { name: "Make your own" });
     const href = link.getAttribute("href") ?? "";
     expect(href.startsWith("agentgem://play?")).toBe(true);
     const q = new URLSearchParams(href.split("?")[1]);
@@ -56,6 +56,15 @@ describe("Minigames", () => {
     expect(q.get("title")).toBe("duel-remix");            // scope stripped from @me/duel
     expect(q.get("prompt")).toContain("@me/duel");         // seeded from this game, not a generic prompt
     expect(q.get("prompt")).toContain("a coding duel");
+  });
+
+  it("puts a Download-for-offline-play control on each game card", async () => {
+    stubFetch(twoGems);
+    render(<Minigames api={makeApi("")} stars={stars} />);
+    await screen.findByText("@me/duel");
+    // one toggle per rendered game card (twoGems has a single "game"; @me/kit is a skill, filtered out)
+    const cards = document.querySelectorAll(".mg-card");
+    expect(screen.getAllByRole("button", { name: /download for offline play/i })).toHaveLength(cards.length);
   });
 
   it("stars a game under the same ('gem', key) identity the Gems pages use", async () => {

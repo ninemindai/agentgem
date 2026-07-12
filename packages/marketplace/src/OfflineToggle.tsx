@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { defaultApiBase } from "./api";
+import { IconOffline } from "./icons";
 import { pinGame, unpinGame, isPinned } from "./offline";
 
-// "Download for offline" control on the gem-detail page. Pins the game's html into the SW's
+// "Download for offline" control (gem-detail page + arcade cards). Pins the game's html into the SW's
 // never-evicted cache so it plays with no connection; toggles back to remove. Errors surface inline
-// (a failed download must not look like success).
-export function OfflineToggle({ gemKey, version, title }: { gemKey: string; version: string; title: string }) {
+// (a failed download must not look like success). `label` overrides the download-prompt text (the
+// cards use "Download for offline play"); the pinned/remove wording is shared.
+export function OfflineToggle({ gemKey, version, title, label = "Download for offline" }: { gemKey: string; version: string; title: string; label?: string }) {
   const [pinned, setPinned] = useState(() => isPinned(gemKey, version));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -36,7 +38,7 @@ export function OfflineToggle({ gemKey, version, title }: { gemKey: string; vers
         </>
       ) : (
         <button type="button" className="ex-navlink" disabled={busy} onClick={download}>
-          {busy ? "Downloading…" : "Download for offline"}
+          <IconOffline />{busy ? "Downloading…" : label}
         </button>
       )}
       {err && <span className="ex-error" role="alert">{err}</span>}

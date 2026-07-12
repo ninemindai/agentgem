@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import type { makeApi } from "../api";
 import { loadGems, filterGames, gameGenre, displayTags, genreLabel, type Gem } from "../gems/catalog";
 import { GamePreview } from "../GamePreview";
+import { OfflineToggle } from "../OfflineToggle";
+import { IconSparkle, IconGems } from "../icons";
 import { StarButton } from "../StarButton";
 import type { StarsCtx } from "../Router";
 import type { StarState } from "../stars";
@@ -61,10 +63,13 @@ function GameCard({ api, gem, stars, starState, plays, onTag }: { api: Api; gem:
           <StarButton kind="gem" id={gem.key} count={starState.counts[gem.key] ?? 0} starred={starState.mine.includes(gem.key)}
             signedIn={stars.signedIn} loginUrl={stars.loginUrl} api={stars.api} />
         </div>
-        <div className="mg-row mg-actions">
-          <a className="mg-remix" href={remixAppUrl(gem)}
-            title={`Opens AgentGem → Play, prefilled to build your own version of ${gem.key}`}>Make your own →</a>
-          <button className="mg-open" onClick={() => navigate(`/gems/${encodeURIComponent(gem.key)}`)}>Open gem →</button>
+        <div className="mg-actions">
+          <div className="mg-action-links">
+            <a className="mg-remix" href={remixAppUrl(gem)}
+              title={`Opens AgentGem → Play, prefilled to build your own version of ${gem.key}`}><IconSparkle />Make your own</a>
+            <button className="mg-open" onClick={() => navigate(`/gems/${encodeURIComponent(gem.key)}`)}><IconGems />Open gem</button>
+          </div>
+          <OfflineToggle gemKey={gem.key} version={gem.version} title={gem.key} label="Download for offline play" />
         </div>
       </div>
     </li>
