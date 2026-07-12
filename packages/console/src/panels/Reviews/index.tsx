@@ -104,9 +104,10 @@ function RequestDetail({
   if (!detail && !error) return <p className="ledger-empty">Loading…</p>;
   if (!detail) return <p className="ledger-error" role="alert">{error}</p>;
 
-  // Install-to-test: all gem types install to a local workspace in this MVP (routing game gems to
-  // the miniapp player is a documented follow-on, not done here). The server 409s with
-  // consent_required when the gem has executable artifacts — flip to a confirm and retry with
+  // Install-to-test for NON-game gems: install to a local workspace. Game/miniapp gems get "Play to
+  // test" instead (the sealed PlayModal below — see `isGame`), since a game installed to a workspace
+  // can't be run. The server 409s with consent_required when the gem has executable artifacts —
+  // flip to a confirm and retry with
   // consent:true; a 404 means the staged archive expired.
   const install = (consent?: boolean) => {
     setInstallBusy(true);
