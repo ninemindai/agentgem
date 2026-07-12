@@ -53,6 +53,13 @@ function buildQs(query: Query): string {
   return qs ? `?${qs}` : "";
 }
 
+// The one game-html URL builder, shared by getGameHtml (below) and offline.pinGame, so the URL a
+// pin is stored under is byte-identical to the URL the app fetches — the service worker serves a
+// pinned game by request-URL match. Both sides route through buildQs({ key, version }).
+export function gameHtmlUrl(base: string, key: string, version: string): string {
+  return base + "/api/aggregator/game-html" + buildQs({ key, version });
+}
+
 async function get<T>(base: string, path: string, query: Query = {}): Promise<T> {
   const res = await fetch(base + path + buildQs(query));
   if (!res.ok) throw new Error(`${path} -> ${res.status}`);

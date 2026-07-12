@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { makeApi } from "./api";
+import { makeApi, gameHtmlUrl } from "./api";
 
 afterEach(() => vi.unstubAllGlobals());
 const res = (body: unknown) => ({ ok: true, status: 200, text: async () => JSON.stringify(body) }) as unknown as Response;
@@ -107,6 +107,16 @@ describe("getGameMeta", () => {
 
     expect(calls[0]).toContain("version=1.0.0");
   });
+});
+
+it("gameHtmlUrl equals the URL getGameHtml fetches (cache-key identity)", async () => {
+  const fetchMock = vi.fn(async (_url: string) => new Response(JSON.stringify({ html: "<b>hi</b>" })));
+  vi.stubGlobal("fetch", fetchMock);
+  const api = makeApi("https://api.test");
+  await api.getGameHtml("@acme/tetris", "1.2.0");
+  const fetched = fetchMock.mock.calls[0][0] as string;
+  expect(fetched).toBe(gameHtmlUrl("https://api.test", "@acme/tetris", "1.2.0"));
+  vi.unstubAllGlobals();
 });
 
 describe("makeApi sources", () => {
