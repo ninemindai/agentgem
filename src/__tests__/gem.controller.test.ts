@@ -692,6 +692,32 @@ describe("POST /api/gem/apply installs a bundled rubric globally", () => {
   });
 });
 
+describe("POST /api/install-hosted installs a bundled rubric with no consent prompt", () => {
+  let stub: ReturnType<typeof createServer>;
+  let prevAgg: string | undefined;
+  beforeAll(async () => {
+    const b64 = rubricGemBytes("hosted-rub", "hosted-hygiene");
+    stub = createServer((_req, res) => {
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify({ archiveBase64: b64 }));   // fetchHostedArchive reads { archiveBase64 }
+    });
+    await new Promise<void>((resolve) => stub.listen(0, resolve));
+    const addr = stub.address() as import("node:net").AddressInfo;
+    prevAgg = process.env.AGENTGEM_AGGREGATOR_URL;
+    process.env.AGENTGEM_AGGREGATOR_URL = `http://127.0.0.1:${addr.port}`;
+  });
+  afterAll(async () => {
+    await new Promise<void>((resolve) => stub.close(() => resolve()));
+    if (prevAgg !== undefined) process.env.AGENTGEM_AGGREGATOR_URL = prevAgg;
+    else delete process.env.AGENTGEM_AGGREGATOR_URL;
+  });
+  it("returns 200 (no consent_required) and reports the installed rubric", async () => {
+    const r = await client.post("/api/install-hosted").send({ key: "acme/hosted", version: "0.1.0" }).expect(200);
+    expect(r.body.rubrics.installed).toContain("hosted-hygiene");
+    expect(loadRubrics().map((x: { id: string }) => x.id)).toContain("hosted-hygiene");
+  });
+});
+
 describe("share loop: .gem file + install from file/URL", () => {
   it("POST /api/archive with outFile writes one portable .gem that round-trips", async () => {
     const out = mkdtempSync(join(tmpdir(), "share-"));
