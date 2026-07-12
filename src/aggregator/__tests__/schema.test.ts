@@ -10,7 +10,7 @@ describe("schema/testDb", () => {
     const rows = await db.select().from(producers);
     expect(rows.map((r) => r.pubkey)).toEqual(["ed25519:p1"]);
     const t = await db.execute(sql`select table_name from information_schema.tables where table_schema='public' order by 1`);
-    expect((t.rows as { table_name: string }[]).map((x) => x.table_name)).toEqual(["account", "account_bindings", "account_scopes", "accounts", "api_keys", "app_installations", "attestations", "catalog_gems", "connect_states", "curated_skills", "game_plays", "gem_adoptions", "gem_archives", "group_invites", "group_members", "groups", "handoff_codes", "ingredients", "model_outcomes", "org_members", "org_settings", "pending_account_links", "producers", "review_messages", "review_requests", "review_seen", "reviews", "session", "share_cards", "stars", "usage_day_models", "usage_days", "usage_edges", "user", "verification"]);
+    expect((t.rows as { table_name: string }[]).map((x) => x.table_name)).toEqual(["account", "account_bindings", "account_scopes", "accounts", "api_keys", "app_installations", "attestations", "catalog_gems", "connect_states", "curated_skills", "game_plays", "gem_adoptions", "gem_archives", "gem_group_shares", "group_invites", "group_members", "groups", "handoff_codes", "ingredients", "model_outcomes", "org_members", "org_settings", "pending_account_links", "producers", "review_messages", "review_requests", "review_seen", "reviews", "session", "share_cards", "stars", "usage_day_models", "usage_days", "usage_edges", "user", "verification"]);
   });
 
   it("groups: kind is a closed set, and federated iff installation_id", async () => {

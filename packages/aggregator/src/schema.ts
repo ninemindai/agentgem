@@ -273,6 +273,16 @@ export const groupInvites = pgTable("group_invites", {
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
 });
 
+// Additive ACL: which groups a private gem (by key, all versions) is shared with. A member of any
+// listed group may access the gem's private versions (see accountCanAccessGem). Group deletion
+// cascades these rows; gem deletion cleans them via deleteCatalogGem.
+export const gemGroupShares = pgTable("gem_group_shares", {
+  gemKey: text("gem_key").notNull(),
+  groupId: uuid("group_id").notNull().references(() => groups.id, { onDelete: "cascade" }),
+  createdBy: uuid("created_by").notNull().references(() => accounts.id),
+  createdAtMs: bigint("created_at_ms", { mode: "number" }).notNull(),
+}, (t) => [primaryKey({ columns: [t.gemKey, t.groupId] })]);
+
 export const catalogGems = pgTable("catalog_gems", {
   gemKey: text("gem_key").notNull(),
   version: text("version").notNull(),
@@ -460,7 +470,7 @@ export const pendingAccountLinks = pgTable("pending_account_links", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, handoffCodes, stars, reviews, gemAdoptions, accountScopes, usageDays, usageDayModels, orgSettings, catalogGems, gemArchives, gamePlays, curatedSkills, appInstallations, orgMembers, groups, groupMembers, groupInvites, reviewRequests, reviewMessages, reviewSeen, user, session, account, verification, pendingAccountLinks, connectStates };
+export const schema = { producers, attestations, ingredients, usageEdges, modelOutcomes, accountBindings, shareCards, apiKeys, accounts, handoffCodes, stars, reviews, gemAdoptions, accountScopes, usageDays, usageDayModels, orgSettings, catalogGems, gemArchives, gamePlays, curatedSkills, appInstallations, orgMembers, groups, groupMembers, groupInvites, gemGroupShares, reviewRequests, reviewMessages, reviewSeen, user, session, account, verification, pendingAccountLinks, connectStates };
 export type AppDb = PgDatabase<any, typeof schema>;
 
 /** One-time, idempotent: give every account_binding with no matching `accounts` anchor row one,
@@ -671,6 +681,13 @@ export async function ensureSchema(db: AppDb): Promise<void> {
     expires_at timestamptz not null,
     created_by uuid not null references accounts(id),
     revoked_at timestamptz
+  )`);
+  await db.execute(sql`create table if not exists gem_group_shares (
+    gem_key text not null,
+    group_id uuid not null references groups(id) on delete cascade,
+    created_by uuid not null references accounts(id),
+    created_at_ms bigint not null,
+    primary key (gem_key, group_id)
   )`);
   await db.execute(sql`create index if not exists group_invites_group_idx on group_invites (group_id)`);
   // Login → account lookup for the Plan 1b federated member sync. accounts.login keeps GitHub's casing.
