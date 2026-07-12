@@ -73,8 +73,10 @@ call exactly the same thing.
 - **A GitHub-backed registry + public marketplace** — publish, resolve, merge, and
   install composable Gems over the same archive format, and browse published Gems and
   curated skills at [app.agentgem.ai](https://app.agentgem.ai) — star, review, preview,
-  and copy an install command. The hosted marketplace is an **early testbed**: treat it
-  as a preview, and expect accounts, stars, and reviews to be reset occasionally.
+  and copy an install command. Every shareable link — a game, gem, profile, or curated
+  skill — [unfurls with a branded preview card](docs/sharing.md#branded-link-previews)
+  when pasted into Slack, X, or iMessage. The hosted marketplace is an **early testbed**:
+  treat it as a preview, and expect accounts, stars, and reviews to be reset occasionally.
 - **Registry-free sharing & identity** — [`agentgem get`](docs/sharing.md) installs a
   published Gem with one command; `agentgem send` / `receive` pass one directly over an
   encrypted, one-time hand-off; `agentgem bind` ties a GitHub identity to this machine's

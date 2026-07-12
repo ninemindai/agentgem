@@ -76,6 +76,39 @@ button launches or focuses the app and jumps to the right screen — regardless 
 random local port the app is on. When you're running over `npx`, the same links work
 through a `http://localhost:4317/#/get-gems?…` fallback.
 
+## Branded link previews
+
+Paste any shareable **app.agentgem.ai** link into Slack, X, iMessage, or LinkedIn and it
+unfurls with a branded **1200×630 `summary_large_image` card** — a large-image preview
+carrying the entity's real title and a one-line description, not a bare URL. Four link
+types get one:
+
+| Link | Card title · subtitle |
+|---|---|
+| `/games/<key>` — a mini-game | app name · genre |
+| `/gems/<key>` — a Gem | gem name · its artifact kinds |
+| `/@<handle>` — a profile | `@handle` · N apps · N reviews |
+| `/skills/<source>/<path>` — a curated skill | skill name · source |
+
+The image is rendered on demand at `GET /og/card.png?type=&key=` — a per-type SVG frame
+rasterized to PNG with `@resvg/resvg-wasm` and an embedded font, so it renders identically
+on any host. The endpoint is **identity-driven, not text-driven**: it takes a `type` + a
+catalog `key`, never a free-form `?title=`, so it only ever draws entities that actually
+exist. A missing or private entity falls back to a generic branded placeholder, never a
+404 image.
+
+The whole path is **deployment-agnostic** and **fails open**. The logic is a
+runtime-neutral core wired onto the aggregator, so any Node host serves correct cards with
+no Cloudflare primitive required — the marketplace's Cloudflare Worker is now only an
+optional proxy + edge cache in front of it (remove it and cards still work, just uncached).
+If metadata lookup or rasterization ever throws, the request falls through to the plain SPA
+(for a page) or the placeholder (for an image): a card bug can never take the site down.
+
+`AGENTGEM_ASSET_ORIGIN` (where the built SPA `index.html` lives) and
+`AGENTGEM_OG_IMAGE_ORIGIN` (the public host crawlers fetch `/og/card.png` from) both
+default to `https://app.agentgem.ai` and are overridable, so a different deployment works
+with no code change.
+
 ## GitHub identity
 
 Publishing and sharing are tied to a **GitHub identity** so the network can tell one
