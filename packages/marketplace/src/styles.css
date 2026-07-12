@@ -1072,3 +1072,8 @@ a.ex-skillcard-rating:hover { text-decoration: underline; }
   border: 1px solid rgba(255,255,255,.3); background: transparent; color: inherit;
   padding: 4px 12px; border-radius: 8px; cursor: pointer; font: inherit;
 }
+
+.ex-offline-toggle { display: inline-flex; align-items: center; gap: 10px; margin-block-start: 8px; }
+.ex-offline-badge { font-size: 13px; opacity: .8; }
+.ex-linkbtn { border: 0; background: none; color: var(--link, #7a5); cursor: pointer; font: inherit; padding: 0; text-decoration: underline; }
+.ex-linkbtn:disabled { opacity: .5; cursor: default; }
