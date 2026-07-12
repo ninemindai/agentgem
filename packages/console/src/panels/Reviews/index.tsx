@@ -56,10 +56,12 @@ function RequestDetail({
 
   useEffect(load, [apiBase, summary.id]);
 
-  // Requires an active session, not just a locally-remembered login — a lapsed session
-  // (identity.bound still true from a stale local record) must not surface author-only
-  // actions (Withdraw/Resubmit) for a request the current session can't actually own.
-  const isAuthor = Boolean(identity?.bound) && identity?.login === summary.authorLogin;
+  // Role selection: author-only actions (Withdraw/Resubmit) vs reviewer actions (Approve/Request
+  // changes), keyed on the stable login identity — an author stays the author even if their session
+  // has lapsed. Session-freshness is NOT gated here: a stale session's action call fails auth
+  // server-side (and surfaces a reject), rather than us guessing at ownership from a display flag.
+  // (bound stays true through a lapse — only sessionActive flips — so bound is the wrong signal here.)
+  const isAuthor = Boolean(identity?.login) && identity?.login === summary.authorLogin;
 
   // `label` becomes the confirmation banner text once the action succeeds. The request
   // drops out of listInbox right after (status leaves open/changes-requested) and this
