@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import type { makeApi } from "./api";
 import { GamePlayer } from "./GamePlayer";
 import { visitorId } from "./visitor";
+import { useOnline } from "./useOnline";
 
 type Api = ReturnType<typeof makeApi>;
 
@@ -23,6 +24,7 @@ export function GamePreview({ api, gemKey, version, onPlayCountChange, onPlay }:
   const [html, setHtml] = useState<string | null>(null);
   const [err, setErr] = useState(false);
   const [playing, setPlaying] = useState(false);
+  const online = useOnline();
   const thumbRef = useRef<HTMLButtonElement>(null);
   // A thumbnail is a whole game: the iframe parses its html and RUNS it. Booting one per card meant a
   // full grid launched a dozen applications on first paint. Wait until the card is near the viewport.
@@ -60,7 +62,7 @@ export function GamePreview({ api, gemKey, version, onPlayCountChange, onPlay }:
         title={html ? "Play" : undefined} aria-label={`Play ${gemKey}`}>
         {html
           ? <GamePlayer html={html} interactive={false} />
-          : <span className="gp-ph">{err ? "preview unavailable" : "loading…"}</span>}
+          : <span className="gp-ph">{err ? (online ? "preview unavailable" : "Not available offline") : "loading…"}</span>}
         {html && <span className="gp-play-badge" aria-hidden>▶</span>}
       </button>
       {playing && html && createPortal(
