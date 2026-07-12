@@ -32,6 +32,11 @@ describe("buildSelection", () => {
   it("returns an empty object for no selection", () => {
     expect(buildSelection(new Set())).toEqual({});
   });
+
+  it("round-trips a rubric pick into selection.rubrics", () => {
+    const sel = buildSelection(new Set([selKey("rubrics", "team-hygiene")]));
+    expect(sel.rubrics).toEqual(["team-hygiene"]);
+  });
 });
 
 describe("includeToKeys", () => {

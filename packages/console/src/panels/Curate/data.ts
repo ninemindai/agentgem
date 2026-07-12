@@ -12,7 +12,7 @@ export interface LedgerView { query: string; usedOnly: boolean }
 // Skills list manageable.
 export const DEFAULT_VIEW: LedgerView = { query: "", usedOnly: false };
 
-type InventoryCategory = "skills" | "subagents" | "mcpServers" | "instructions" | "hooks";
+type InventoryCategory = "skills" | "subagents" | "mcpServers" | "instructions" | "hooks" | "rubrics";
 
 /** Friendly provenance label for a chip: "plugin:superpowers@repo" → "superpowers";
  * "standalone"/"user"/"project" pass through. */
@@ -29,6 +29,7 @@ const CATEGORIES: { key: InventoryCategory; type: string; label: string }[] = [
   { key: "mcpServers", type: "mcp_server", label: "MCP Servers" }, // /api/usage types MCP rows as "mcp_server"
   { key: "instructions", type: "instructions", label: "Instructions" },
   { key: "hooks", type: "hook", label: "Hooks" },
+  { key: "rubrics", type: "rubric", label: "Rubrics" },
 ];
 
 export function groupInventory(inv: Inventory): LedgerGroup[] {
