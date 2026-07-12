@@ -14,16 +14,37 @@ afterEach(() => {
 const me: Me = { id: "u1", name: "octocat", handle: "octocat", avatarUrl: null, orgs: [] };
 
 const res = (body: unknown, ok = true, status = 200) =>
-  ({ ok, status, text: async () => JSON.stringify(body), json: async () => body }) as unknown as Response;
+  ({
+    ok,
+    status,
+    text: async () => JSON.stringify(body),
+    json: async () => body,
+    // api.ts never reads this, but better-fetch (the passkey client below) inspects
+    // content-type to decide how to parse the body before it ever reaches our handlers.
+    headers: { get: () => "application/json" },
+  }) as unknown as Response;
+
+// Account now mounts PasskeysSection, whose better-auth client hits the API directly (not through
+// api.ts's hand-rolled fetch calls) and requests with a URL object rather than a string — unlike
+// every other request these tests stub. Normalize both to a string here and answer its
+// list-user-passkeys GET with an empty list so each test below can keep asserting only on the
+// account routes it actually cares about.
+function stubAccountFetch(handler: (url: string, opts?: RequestInit) => Promise<Response> | Response) {
+  vi.stubGlobal("fetch", vi.fn(async (u: string | URL, o?: RequestInit) => {
+    const url = typeof u === "string" ? u : u.toString();
+    if (url.includes("/passkey/list-user-passkeys")) return res([]);
+    return handler(url, o);
+  }));
+}
 
 describe("Account page", () => {
   it("lists connected providers and offers Connect for the missing one; clicking Connect triggers link-social", async () => {
     let linkBody: string | undefined;
-    vi.stubGlobal("fetch", vi.fn(async (u: string, o?: RequestInit) => {
+    stubAccountFetch(async (u, o) => {
       if (u.includes("/api/account/providers")) return res({ connected: ["github"] });
       if (u.includes("/api/auth/link-social")) { linkBody = o?.body as string; return res({ url: "https://accounts.google.com/o?state=abc", redirect: true }); }
       throw new Error("unexpected fetch: " + u);
-    }));
+    });
     const assign = vi.fn();
     vi.stubGlobal("location", { ...window.location, assign, origin: "https://app.x", pathname: "/account", href: "https://app.x/account", search: "" } as unknown as Location);
 
@@ -56,10 +77,10 @@ describe("Account page", () => {
   });
 
   it("surfaces a plain message when link-social's OAuth round trip collides with another account, then strips ?error= from the address bar so a refresh doesn't re-show it", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (u: string) => {
+    stubAccountFetch(async (u) => {
       if (u.includes("/api/account/providers")) return res({ connected: ["github"] });
       throw new Error("unexpected fetch: " + u);
-    }));
+    });
     window.history.pushState({}, "", "/account?error=account_already_linked_to_different_user");
 
     render(<Account api={makeApi("https://api.x")} me={me} base="https://api.x" />);
@@ -73,11 +94,11 @@ describe("Account page", () => {
 
   it("sends a clean callbackURL/errorCallbackURL (no stale ?error=) when Connect is triggered from a URL that still carries a collision error", async () => {
     let linkBody: string | undefined;
-    vi.stubGlobal("fetch", vi.fn(async (u: string, o?: RequestInit) => {
+    stubAccountFetch(async (u, o) => {
       if (u.includes("/api/account/providers")) return res({ connected: ["github"] });
       if (u.includes("/api/auth/link-social")) { linkBody = o?.body as string; return res({ url: "https://accounts.google.com/o?state=abc", redirect: true }); }
       throw new Error("unexpected fetch: " + u);
-    }));
+    });
     const assign = vi.fn();
     vi.stubGlobal("location", { ...window.location, assign, origin: "https://app.x", pathname: "/account", href: "https://app.x/account?error=account_already_linked_to_different_user", search: "?error=account_already_linked_to_different_user" } as unknown as Location);
 
@@ -95,21 +116,21 @@ describe("Account page", () => {
   });
 
   it("ignores an unknown connected provider id (e.g. \"credential\") rather than rendering it", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (u: string) => {
+    stubAccountFetch(async (u) => {
       if (u.includes("/api/account/providers")) return res({ connected: ["github", "credential"] });
       throw new Error("unexpected fetch: " + u);
-    }));
+    });
     render(<Account api={makeApi("https://api.x")} me={me} base="https://api.x" />);
     expect(await screen.findByText("GitHub connected")).toBeTruthy();
     expect(screen.queryByText(/credential/i)).toBeNull();
   });
 
   it("carries which provider a collision was for across the redirect, so Merge targets the right one", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (u: string, o?: RequestInit) => {
+    stubAccountFetch(async (u, o) => {
       if (u.includes("/api/account/providers")) return res({ connected: ["github"] });
       if (u.includes("/api/auth/link-social")) { void o; return res({ url: "https://accounts.google.com/o?state=abc", redirect: true }); }
       throw new Error("unexpected fetch: " + u);
-    }));
+    });
     const assignBeforeRedirect = vi.fn();
     vi.stubGlobal("location", { ...window.location, assign: assignBeforeRedirect, origin: "https://app.x", pathname: "/account", href: "https://app.x/account", search: "" } as unknown as Location);
 
@@ -134,10 +155,10 @@ describe("Account page", () => {
   });
 
   it("withholds the Merge button when the attempted provider wasn't carried (defensive: no guessing)", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (u: string) => {
+    stubAccountFetch(async (u) => {
       if (u.includes("/api/account/providers")) return res({ connected: ["github"] });
       throw new Error("unexpected fetch: " + u);
-    }));
+    });
     window.history.pushState({}, "", "/account?error=account_already_linked_to_different_user");
     render(<Account api={makeApi("https://api.x")} me={me} base="https://api.x" />);
     expect(await screen.findByText(/already linked to another AgentGem account/i)).toBeTruthy();
@@ -146,11 +167,11 @@ describe("Account page", () => {
 
   it("on ?connect=ready, confirming calls POST /api/account/absorb, shows the refreshed provider list, and reloads", async () => {
     let absorbCalled = false;
-    vi.stubGlobal("fetch", vi.fn(async (u: string, o?: RequestInit) => {
+    stubAccountFetch(async (u, o) => {
       if (u.includes("/api/account/providers")) return res({ connected: ["github"] });
       if (u.includes("/api/account/absorb") && o?.method === "POST") { absorbCalled = true; return res({ keep: "u1", connected: ["github", "google"] }); }
       throw new Error("unexpected fetch: " + u);
-    }));
+    });
     const reload = vi.fn();
     vi.stubGlobal("location", { ...window.location, reload, pathname: "/account", search: "?connect=ready" } as unknown as Location);
 
@@ -166,13 +187,13 @@ describe("Account page", () => {
   });
 
   it("shows the server's message on absorb 409 (merge not supported) instead of reloading", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (u: string, o?: RequestInit) => {
+    stubAccountFetch(async (u, o) => {
       if (u.includes("/api/account/providers")) return res({ connected: ["github"] });
       if (u.includes("/api/account/absorb") && o?.method === "POST") {
         return res({ error: "Both accounts have activity on AgentGem. Merging accounts with existing gems or a claimed handle isn't supported yet." }, false, 409);
       }
       throw new Error("unexpected fetch: " + u);
-    }));
+    });
     const reload = vi.fn();
     vi.stubGlobal("location", { ...window.location, reload, pathname: "/account", search: "?connect=ready" } as unknown as Location);
 
@@ -186,10 +207,10 @@ describe("Account page", () => {
   });
 
   it("shows a brief notice on ?connect=none, without offering a confirm", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (u: string) => {
+    stubAccountFetch(async (u) => {
       if (u.includes("/api/account/providers")) return res({ connected: ["github"] });
       throw new Error("unexpected fetch: " + u);
-    }));
+    });
     vi.stubGlobal("location", { ...window.location, pathname: "/account", search: "?connect=none" } as unknown as Location);
     render(<Account api={makeApi("https://api.x")} me={me} base="https://api.x" />);
     expect(await screen.findByText(/nothing new to connect/i)).toBeTruthy();
@@ -197,10 +218,10 @@ describe("Account page", () => {
   });
 
   it("shows a brief notice on ?connect=error, without offering a confirm", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (u: string) => {
+    stubAccountFetch(async (u) => {
       if (u.includes("/api/account/providers")) return res({ connected: ["github"] });
       throw new Error("unexpected fetch: " + u);
-    }));
+    });
     vi.stubGlobal("location", { ...window.location, pathname: "/account", search: "?connect=error" } as unknown as Location);
     render(<Account api={makeApi("https://api.x")} me={me} base="https://api.x" />);
     expect(await screen.findByRole("alert")).toBeTruthy();
@@ -209,10 +230,10 @@ describe("Account page", () => {
   });
 
   it("shows the handle-claim nudge banner from ?merge=1&handle=, without naming a provider", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (u: string) => {
+    stubAccountFetch(async (u) => {
       if (u.includes("/api/account/providers")) return res({ connected: ["github"] });
       throw new Error("unexpected fetch: " + u);
-    }));
+    });
     vi.stubGlobal("location", { ...window.location, pathname: "/account", search: "?merge=1&handle=raymond" } as unknown as Location);
     render(<Account api={makeApi("https://api.x")} me={me} base="https://api.x" />);
     const banner = await screen.findByText(/that handle \(@raymond\) isn't available\. if you have another account that might own it, connect it below\./i);

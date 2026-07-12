@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { makeApi } from "../api";
 import { makeAuth, type Me } from "../auth";
+import { makePasskeyAuth, passkeySupported } from "../passkeyAuth";
+import { PasskeysSection } from "./PasskeysSection";
 
 // The known, connectable providers (Task 3's socialProviders). `connected` from the API is
 // provider-agnostic (better-auth's own `account` table may carry ids this page doesn't know about,
@@ -87,6 +89,8 @@ export function Account({ api, me, base }: { api: ReturnType<typeof makeApi>; me
     return () => { alive = false; };
     // api is a stable module-level singleton (App.tsx) — excluded so re-renders don't refetch.
   }, [me]);
+
+  const passkeyAuth = useMemo(() => makePasskeyAuth(base), [base]);
 
   if (!me) {
     const signIn = (provider: "github" | "google") => {
@@ -176,6 +180,7 @@ export function Account({ api, me, base }: { api: ReturnType<typeof makeApi>; me
         </ul>
       )}
       {linkError && <p className="ex-error" role="alert">{linkError}</p>}
+      {me && <PasskeysSection client={passkeyAuth} supported={passkeySupported()} />}
     </div>
   );
 }
