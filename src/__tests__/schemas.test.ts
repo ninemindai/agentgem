@@ -9,6 +9,7 @@ import {
   RegistryResolveRequestSchema, RegistryInstallRequestSchema, RegistryPublishRequestSchema,
   GemArtifactSchema, SkippedArtifactSchema,
   SkillArtifactSchema, TriggerContractSchema, DistilledSkillSchema,
+  GemApplyResponseSchema, RubricInstallResultSchema,
 } from "../schemas.js";
 
 describe("wire schemas", () => {
@@ -272,5 +273,17 @@ describe("RubricArtifactSchema", () => {
 
   it("rejects an empty factors array", () => {
     expect(GemArtifactSchema.safeParse({ ...valid, factors: [] }).success).toBe(false);
+  });
+});
+
+describe("install responses carry an optional rubrics result", () => {
+  it("RubricInstallResultSchema parses installed/skipped and rejects a missing array", () => {
+    expect(RubricInstallResultSchema.safeParse({ installed: ["a"], skipped: [] }).success).toBe(true);
+    expect(RubricInstallResultSchema.safeParse({ installed: ["a"] }).success).toBe(false);
+  });
+  it("GemApplyResponseSchema accepts rubrics and also omits it", () => {
+    const base = { dir: "/d", name: "g", written: [], skipped: [] };
+    expect(GemApplyResponseSchema.safeParse(base).success).toBe(true);
+    expect(GemApplyResponseSchema.safeParse({ ...base, rubrics: { installed: ["r"], skipped: [] } }).success).toBe(true);
   });
 });

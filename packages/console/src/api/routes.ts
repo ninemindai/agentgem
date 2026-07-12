@@ -4,6 +4,7 @@ import { createClient, defineRoute, type Client } from "@agentback/client";
 // Minimal client-side schemas: validate ONLY what the UI reads. Zod strips the
 // server's extra artifact fields. When a shared browser-safe contract package is
 // extracted later, replace these with imports from it.
+const RubricInstallResult = z.object({ installed: z.array(z.string()), skipped: z.array(z.string()) });
 const ArtifactSchema = z.looseObject({
   name: z.string(),
   description: z.string().optional(),
@@ -303,6 +304,7 @@ export const registryInstallRoute = defineRoute("POST", "/api/registry/install",
   }),
   response: z.object({
     applied: z.object({ mode: z.string(), workspace: z.string().optional(), dest: z.string().optional() }),
+    rubrics: RubricInstallResult.optional(),
   }),
 });
 export const registryPublishRoute = defineRoute("POST", "/api/registry/publish", {
@@ -422,6 +424,7 @@ export const gemApplyRoute = defineRoute("POST", "/api/gem/apply", {
     name: z.string(),
     written: z.array(z.looseObject({ type: z.string(), name: z.string(), overwritten: z.boolean() })),
     skipped: z.array(z.looseObject({ artifact: z.string(), reason: z.string() })),
+    rubrics: RubricInstallResult.optional(),
   }),
 });
 
@@ -808,7 +811,7 @@ export const publishStatusRoute = defineRoute("GET", "/api/publish-status", {
 // aggregator and materializes it. consent=true is required when the gem has executable artifacts.
 export const installHostedRoute = defineRoute("POST", "/api/install-hosted", {
   body: z.object({ key: z.string(), version: z.string(), consent: z.boolean().optional() }),
-  response: z.object({ workspace: z.string(), executables: z.object({ mcp: z.array(z.string()), hooks: z.array(z.string()) }) }),
+  response: z.object({ workspace: z.string(), executables: z.object({ mcp: z.array(z.string()), hooks: z.array(z.string()) }), rubrics: RubricInstallResult.optional() }),
 });
 
 // Network cross-model benchmark (aggregator, k-anonymised). Per-model outcome
