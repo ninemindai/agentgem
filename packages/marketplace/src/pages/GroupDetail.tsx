@@ -15,6 +15,7 @@ export function GroupDetail({ id, me, base }: { id: string; me: Me | null; base:
   const iAmAdmin = (members ?? []).find((m) => m.accountId === me?.id)?.role === "admin";
 
   const load = useCallback(() => {
+    setNotFound(false);
     api.members(id)
       .then((m) => { setMembers(m); setGems(null); api.groupGems(id).then(setGems).catch(() => setGems([])); api.invites(id).then(setInvites).catch(() => setInvites(null)); })
       .catch((e) => { if ((e as { status?: number }).status === 404) setNotFound(true); else setErr(e instanceof Error ? e.message : String(e)); });
@@ -24,13 +25,13 @@ export function GroupDetail({ id, me, base }: { id: string; me: Me | null; base:
 
   if (!me) {
     const signIn = (p: "github" | "google") => makeAuth(base).signIn(p, window.location.href).catch((e) => setErr(String(e)));
-    return <div className="ex-card"><p>Sign in to view this group. <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("github"); }}>Sign in with GitHub</a></p>{err && <p className="ex-error">{err}</p>}</div>;
+    return <div className="ex-card"><p>Sign in to view this group. <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("github"); }}>Sign in with GitHub</a> <a href="#" className="ex-signin" onClick={(e) => { e.preventDefault(); signIn("google"); }}>Sign in with Google</a></p>{err && <p className="ex-error">{err}</p>}</div>;
   }
   if (notFound) return <div className="ex-card"><p className="ex-empty">Group not found, or you're not a member.</p></div>;
   if (members === null) return <div className="ex-card"><p className="ex-empty">Loading…</p></div>;
 
   const mint = async () => { setErr(null); try { setMinted(await api.createInvite(id, { role: "member" })); api.invites(id).then(setInvites).catch(() => {}); } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } };
-  const revoke = async (inviteId: string) => { try { await api.revokeInvite(id, inviteId); api.invites(id).then(setInvites).catch(() => {}); } catch (e) { setErr(String(e)); } };
+  const revoke = async (inviteId: string) => { try { await api.revokeInvite(id, inviteId); api.invites(id).then(setInvites).catch(() => {}); } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } };
   const remove = async (account: string) => { try { await api.removeMember(id, account); load(); } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } };
   const del = async () => { if (!window.confirm("Delete this group? This can't be undone.")) return; try { await api.remove(id); navigate("/groups"); } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } };
   const inviteLink = minted ? `${window.location.origin}/groups?join=${encodeURIComponent(minted.token)}` : "";
