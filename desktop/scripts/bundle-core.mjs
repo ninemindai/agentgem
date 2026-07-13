@@ -73,7 +73,12 @@ execFileSync("npm", ["install", "--omit=dev", "--no-audit", "--no-fund"], {
 console.log("core bundled →", out);
 
 const __bundle = __rf(join(out, "index.mjs"), "utf8");
-for (const forbidden of ["@electric-sql/pglite", "new PGlite(", "AggregatorController", "drizzle-orm/pglite"]) {
+// The spec's guarantee is "no @agentgem/aggregator, better-auth, pg, or PGlite in the client
+// bundle". These strings only appear if a client-reachable module value-imports a server dep:
+// the PGlite/drizzle-pglite dynamic-import specifiers, the AggregatorController class name, or
+// better-auth (its package code / the `makeAuth` factory). `pg` is covered transitively — it is
+// only reached via drizzle-orm/pglite or the Pool in localDb, both already caught.
+for (const forbidden of ["@electric-sql/pglite", "new PGlite(", "AggregatorController", "drizzle-orm/pglite", "makeAuth", "better-auth"]) {
   if (__bundle.includes(forbidden)) {
     throw new Error(`desktop bundle must not contain "${forbidden}" — client entry leaked a server dep`);
   }
