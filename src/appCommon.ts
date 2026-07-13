@@ -55,7 +55,7 @@ import { playNoCache } from "./playCache.js";
 import { gemNoCache } from "./gemCache.js";
 import { getWarmStatus, beginForeground, endForeground } from "./warm/orchestrator.js";
 import { ReportRegistry } from "./report/registry.js";
-import { makeTracker, insightsParamsKey, rubricParamsKey, analyzeParamsKey } from "./report/track.js";
+import { trackerFor, insightsParamsKey, rubricParamsKey, analyzeParamsKey } from "./report/track.js";
 import { ShareProxyController } from "./share.proxy.controller.js";
 import { SourcesController } from "./sources.controller.js";
 import { PlayController } from "./play.controller.js";
@@ -244,7 +244,7 @@ export function finalizeCommonApp(app: RestApplication, server: Awaited<RestAppl
   server.expressApp.get("/api/report/runs", originGuard, (_req, res) => res.json({ runs: reportRegistry.list() } as never));
   // Foreground gate: mark user-facing LLM computes so background warming yields.
   server.expressApp.get("/api/workflow/analyze/stream", originGuard, async (req, res) => {
-    const track = makeTracker(reportRegistry, "analyze", analyzeParamsKey(req.query as never), req.query as never);
+    const track = trackerFor(reportRegistry, "analyze", analyzeParamsKey(req.query as never), req.query as never, (req.query as { fresh?: string }).fresh === "1");
     beginForeground();
     try { await streamWorkflowAnalyze(req as never, res as never, track); } finally { endForeground(); }
   });
@@ -260,7 +260,7 @@ export function finalizeCommonApp(app: RestApplication, server: Awaited<RestAppl
   // SSE personal session-insights report: scan a project's transcripts → judge
   // each session with the ACP agent → synthesize. GET /api/insights/stream?root=...&dir=...
   server.expressApp.get("/api/insights/stream", originGuard, async (req, res) => {
-    const track = makeTracker(reportRegistry, "insights", insightsParamsKey(req.query as never), req.query as never);
+    const track = trackerFor(reportRegistry, "insights", insightsParamsKey(req.query as never), req.query as never, (req.query as { fresh?: string }).fresh === "1");
     beginForeground();
     try { await streamInsights(req as never, res as never, track); } finally { endForeground(); }
   });
@@ -269,7 +269,7 @@ export function finalizeCommonApp(app: RestApplication, server: Awaited<RestAppl
   // A rubric may include LLM criteria (Phase 2) that drive the agent, so it takes the
   // foreground guard like the insights route (harmless for cheap-only rubrics).
   server.expressApp.get("/api/rubric/stream", originGuard, async (req, res) => {
-    const track = makeTracker(reportRegistry, "rubric", rubricParamsKey(req.query as never), req.query as never);
+    const track = trackerFor(reportRegistry, "rubric", rubricParamsKey(req.query as never), req.query as never, (req.query as { refresh?: string }).refresh === "true");
     beginForeground();
     try { await streamRubric(req as never, res as never, track); } finally { endForeground(); }
   });
