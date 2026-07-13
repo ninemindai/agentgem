@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { verify } from "@agentgem/model";
 import { canonicalJSON, type UsageAttestation } from "@agentgem/insight";
 import type { AppDb } from "./schema.js";
+import { isUniqueViolation } from "./handles.js";
 import { projectAttestation, updateAttestation } from "./project.js";
 
 export type VerifyResult = { ok: true } | { ok: false; reason: "bad-signature" | "inconsistent" };
@@ -55,7 +56,7 @@ export async function ingestAttestation(db: AppDb, att: UsageAttestation): Promi
     return { accepted: true, ...p, idempotent: false, updated: false };
   } catch (e) {
     // #8: a concurrent first-insert (manual route vs warm tick) lost the unique race → treat as resubmit.
-    if (String((e as { code?: string }).code) === "23505" || /unique|duplicate/i.test(String((e as Error).message))) {
+    if (isUniqueViolation(e)) {
       const id = await priorId(db, att);
       if (id) { const p = await updateAttestation(db, id, att); return { accepted: true, ...p, idempotent: true, updated: true }; }
     }
