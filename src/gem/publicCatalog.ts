@@ -63,11 +63,21 @@ export async function safeDbGems(list: () => Promise<CatalogRow[]>): Promise<Reg
  *  a freshly shared teaser reflects the author's latest intent. Note the trade-off — if a key
  *  exists in BOTH the registry (installable) and the DB (teaser), the merged row is the
  *  browse-only teaser and loses its install affordance. Acceptable while share and publish are
- *  distinct verbs; revisit if a single key is expected to be both. */
+ *  distinct verbs; revisit if a single key is expected to be both.
+ *
+ *  `dbGems` arrives newest-first (listCatalogGems orders by created_at_ms DESC). A gem republished
+ *  as a new version has multiple DB rows sharing one key; we keep the FIRST (newest) so the merged
+ *  browse row shows the current version, not the original — RegistryGem carries no timestamp to
+ *  sort on here, so this relies on the caller's newest-first ordering. */
 export function mergeGems(dbGems: RegistryGem[], indexGems: RegistryGem[]): RegistryGem[] {
   const byKey = new Map<string, RegistryGem>();
   for (const g of indexGems) byKey.set(g.key, g);
-  for (const g of dbGems) byKey.set(g.key, g); // DB overwrites
+  const seenDbKeys = new Set<string>();
+  for (const g of dbGems) {
+    if (seenDbKeys.has(g.key)) continue; // an older version of a key we already took
+    seenDbKeys.add(g.key);
+    byKey.set(g.key, g); // newest DB row overrides both older DB versions and the registry index
+  }
   return [...byKey.values()];
 }
 

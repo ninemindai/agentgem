@@ -23,6 +23,19 @@ describe("publicCatalog merge", () => {
     expect(merged[0]).toMatchObject({ key: "@o/k", version: "1.0.0", installable: false });
   });
 
+  it("keeps the latest version when a key has multiple DB rows (newest-first input)", () => {
+    // listCatalogGems returns newest-first (ORDER BY created_at_ms DESC). When a gem has been
+    // republished as a new version, both rows arrive; the newest must survive the key dedup so the
+    // Explore list / detail page show the current version, not the original.
+    const db = mapDbToGems([
+      { gemKey: "@o/k", version: "0.1.1", publishedBy: "o", createdAtMs: 2 },
+      { gemKey: "@o/k", version: "0.1.0", publishedBy: "o", createdAtMs: 1 },
+    ]);
+    const merged = mergeGems(db, []);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].version).toBe("0.1.1");
+  });
+
   it("safeDbGems maps rows on success", async () => {
     const gems = await safeDbGems(async () => [
       { gemKey: "@o/k", version: "1.0.0", publishedBy: "o", description: "d", createdAtMs: 1 },
