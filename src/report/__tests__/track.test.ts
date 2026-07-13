@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { ReportRegistry } from "../registry.js";
-import { makeTracker, trackerFor, insightsParamsKey, rubricParamsKey } from "../track.js";
+import { makeTracker, trackerFor, insightsParamsKey, rubricParamsKey, queryParams } from "../track.js";
 
 describe("makeTracker", () => {
   it("registers begin on creation and forwards phase/done to the registry", () => {
@@ -55,6 +55,13 @@ describe("trackerFor (reattach guard)", () => {
     reg.begin("insights", "/p", { root: "/p" });
     const t = trackerFor(reg, "insights", "/p", { root: "/p" }, false);
     expect(t).toBeDefined();
+  });
+});
+
+describe("queryParams", () => {
+  it("keeps string values and drops array/undefined values", () => {
+    const q = { root: "/p", dir: "d", repeated: ["a", "b"], missing: undefined } as unknown as Record<string, unknown>;
+    expect(queryParams(q)).toEqual({ root: "/p", dir: "d" });
   });
 });
 

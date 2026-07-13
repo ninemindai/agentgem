@@ -1,3 +1,5 @@
+import { KIND_LABEL } from "../report/kinds.js";
+
 export interface NotifyEvent {
   key: string;
   title: string;
@@ -34,7 +36,6 @@ export interface ReportSnapshot {
   kindOf: Record<string, string>;                 // run id -> kind
 }
 
-const KIND_LABEL: Record<string, string> = { insights: "Insights", rubric: "Rubric", analyze: "Analysis" };
 
 // One NotifyEvent per run that became terminal since `prev`. On the FIRST snapshot
 // (prev === null) we normally stay silent, EXCEPT for a run that started after the

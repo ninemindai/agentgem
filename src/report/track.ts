@@ -41,6 +41,16 @@ export function trackerFor(
 
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
 
+// Coerce an Express query object into a flat string map for the registry's stored
+// `params` (used to rebuild the stream on reattach). Drops array/undefined values so
+// a repeated `?k=a&k=b` can't smuggle an array in behind the `Record<string,string>`
+// type. Mirrors what the insights controller does with its schema-typed query.
+export function queryParams(q: Record<string, unknown>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(q)) if (typeof v === "string") out[k] = v;
+  return out;
+}
+
 export function insightsParamsKey(q: Record<string, unknown>): string { return str(q.root); }
 export function analyzeParamsKey(q: Record<string, unknown>): string { return str(q.root); }
 export function rubricParamsKey(q: Record<string, unknown>): string {
