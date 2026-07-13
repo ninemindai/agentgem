@@ -160,6 +160,10 @@ export const OptimizePayloadSchema = z.object({
     name: z.string(),
     source: z.string(),
   })),
+  // Stale-while-revalidate signal for global scope: true when the usage figures were served from a
+  // not-yet-caught-up transcript index and a background revalidate is running. The client shows an
+  // "updating…" affordance and re-fetches until this clears. Absent/false = figures are fresh.
+  usageStale: z.boolean().optional(),
 });
 // Enable echoes the freshly-analyzed rows for the re-enabled artifacts so the client
 // repaints them into the prune table without a Refresh (covers rows disabled in a
@@ -237,7 +241,7 @@ import { readDeployRecord, writeDeployRecord, clearDeployRecord } from "@agentge
 import type { DeployBackend } from "@agentgem/base";
 import { transcriptToken, readAnalysisCache, writeAnalysisCache } from "@agentgem/insight";
 import { readGlobalUsageCache, writeGlobalUsageCache, readGlobalUsageCacheStale } from "@agentgem/capture";
-import { computeGlobalUsage, getGlobalUsageIndexed } from "@agentgem/capture";
+import { computeGlobalUsage, getGlobalUsageIndexed, getGlobalUsageStale } from "@agentgem/capture";
 import { buildOffThreadParse } from "./coldBuildParser.js";
 import { undeployManagedAgent, anthropicPublishClient } from "@agentgem/deploy";
 import { undeployAgentcoreHarness, realAgentcoreControlClient } from "@agentgem/deploy";
@@ -695,6 +699,24 @@ export class GemController {
     }
   }
 
+  // Stale-while-revalidate variant used ONLY by GET /api/optimize's first paint: returns the index's
+  // current rows immediately (no blocking parse) plus `stale`, kicking off a background sync when the
+  // index is behind. This turns the cold first-open (a ~15s build over the whole corpus) into an
+  // instant response that fills in on a follow-up fetch. Discover/enable keep the blocking
+  // optimizeUsageGlobal above — they need fully-fresh figures, not a fast first paint.
+  private async optimizeUsageGlobalStale(
+    dirs: ReturnType<typeof resolveDirs>,
+  ): Promise<{ usage: Map<string, ArtifactUsage>; stale: boolean }> {
+    const paths = allClaudeTranscripts(dirs.claudeDir);
+    try {
+      const { result, stale } = await getGlobalUsageStale(dirs, paths, buildOffThreadParse());
+      return { usage: optimizeUsageMap(result.artifacts), stale };
+    } catch (e) {
+      log.warn("[optimize] stale index path failed, falling back to full scan: %s", (e as Error)?.message ?? e);
+      return { usage: scanArtifactUsage(introspectConfig(dirs), dirs.claudeDir), stale: false };
+    }
+  }
+
   @get("/optimize", { query: OptimizeQuerySchema, response: OptimizePayloadSchema })
   async optimize(input: { query: z.infer<typeof OptimizeQuerySchema> }): Promise<z.infer<typeof OptimizePayloadSchema>> {
     const range: OptimizeRange = input.query.range ?? "30d";
@@ -709,9 +731,11 @@ export class GemController {
     }
     const dirs = resolveDirs();
     const inv = introspectConfig(dirs);
-    const usage = await this.optimizeUsageGlobal(dirs);   // ?refresh is a no-op now: the index is always incrementally fresh
+    // SWR first paint: serve current figures instantly + `usageStale`; a background revalidate runs
+    // when the index is behind. (?refresh is a no-op: the index is always incrementally fresh.)
+    const { usage, stale } = await this.optimizeUsageGlobalStale(dirs);
     const payload = buildOptimizePayload(inv, usage, range, now);
-    return { ...payload, disabled: listDisabled() };
+    return { ...payload, disabled: listDisabled(), usageStale: stale };
   }
 
   @get("/optimize/discover", { response: DiscoverPayloadSchema })

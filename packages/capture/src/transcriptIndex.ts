@@ -76,6 +76,17 @@ export interface TranscriptIndex {
     offThreadParse?: OffThreadParse,
     hooks?: HookArtifact[],
   ): Promise<{ raw: StoredRawRow[]; hooks: StoredHookRow[] }>;
+  /**
+   * Stale-while-revalidate read: return whatever rows are stored NOW without parsing anything.
+   * Runs one cheap stat pass (planSync) to report `pending` — whether any file in `paths` is
+   * new/changed/hook-dirty and would be reparsed by syncUsage. Never writes, never parses, and is
+   * NOT serialized behind the sync `chain`, so it returns instantly even while a cold build is in
+   * flight (reading committed rows — a partially-built index just reports fewer rows + pending:true).
+   */
+  peekUsage(
+    paths: string[],
+    hookDigest: string,
+  ): Promise<{ raw: StoredRawRow[]; hooks: StoredHookRow[]; pending: boolean }>;
   close(): Promise<void>;
 }
 
@@ -148,6 +159,12 @@ export async function openTranscriptIndex(dataDir?: string): Promise<TranscriptI
       const run = chain.then(() => doSyncRouted(db, paths, hookDigest, parseFile, offThreadParse, hooks ?? []));
       chain = run.catch(() => {}); // keep the chain alive past a failed sync
       return run;
+    },
+    peekUsage(paths, hookDigest) {
+      // Read-only + parse-free: stat pass for `pending`, plus the current committed rows. Deliberately
+      // NOT chained — it must return instantly even while syncUsage is mid-build (SWR fast path).
+      const { changed } = planSync(db, paths, hookDigest);
+      return Promise.resolve({ ...readbackRows(db), pending: changed.length > 0 });
     },
     async close() {
       if (!closed) { db.close(); closed = true; }

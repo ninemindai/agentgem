@@ -88,3 +88,34 @@ export async function getGlobalUsageIndexed(
   const stored = await index.syncUsage(paths, hookDigest(globalInv.hooks), parseFile, offThreadParse, globalInv.hooks);
   return resolveUsage(stored.raw, stored.hooks, { skills: globalInv.skills, mcpServers: globalInv.mcpServers });
 }
+
+// Single-flight guard for the SWR background revalidate: many stale reads in a row must not each kick
+// off their own sync (the index `chain` would serialize them into a pile of no-op passes after the
+// first). One in-flight revalidate at a time; the next stale read after it settles starts a fresh one.
+// Module-scoped like `indexPromise` above — process-level singleton state, not per-request.
+let revalidating: Promise<unknown> | null = null;
+
+/**
+ * Stale-while-revalidate global usage. Returns the CURRENTLY-stored rows immediately (one cheap stat
+ * pass, NO parse) plus `stale` — true when the index is behind `paths`, in which case a background
+ * revalidate (the real `getGlobalUsageIndexed` sync, coordinated with any warm pass via the index
+ * chain) is kicked off. The caller serves the stale result now and re-fetches once `stale` flips
+ * false. On a cold/empty index the first call returns empty artifacts + stale:true and starts the
+ * build in the background — turning a ~15s blocking first paint into an instant one that fills in.
+ */
+export async function getGlobalUsageStale(
+  dirs: ReturnType<typeof resolveDirs>, paths: string[], offThreadParse?: OffThreadParse,
+): Promise<{ result: GlobalUsageResult; stale: boolean }> {
+  const globalInv = introspectConfig(dirs);
+  const index = await sharedIndex();
+  const { raw, hooks, pending } = await index.peekUsage(paths, hookDigest(globalInv.hooks));
+  if (pending && !revalidating) {
+    revalidating = getGlobalUsageIndexed(dirs, paths, offThreadParse)
+      .catch(() => {})   // best-effort: a failed revalidate just leaves `pending` true for the next read to retry
+      .finally(() => { revalidating = null; });
+  }
+  return {
+    result: resolveUsage(raw, hooks, { skills: globalInv.skills, mcpServers: globalInv.mcpServers }),
+    stale: pending,
+  };
+}

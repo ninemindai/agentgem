@@ -17,6 +17,12 @@ export function Optimize({ apiBase }: { apiBase: string }) {
   // A manual refresh forces ?refresh=true for that one fetch; the ref keeps it out
   // of the dep array so range changes stay normal (cache-eligible) re-fetches.
   const freshRef = useRef(false);
+  // Stale-while-revalidate: the first global fetch can return usageStale=true (figures served from a
+  // still-building index). We keep re-fetching on a short timer until it clears, so the panel fills
+  // in without a blocking spinner. Capped so a persistently-stale index can't poll forever.
+  const [pollKey, setPollKey] = useState(0);
+  const pollCount = useRef(0);
+  const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -24,11 +30,20 @@ export function Optimize({ apiBase }: { apiBase: string }) {
     setError(null);
     const fresh = freshRef.current; freshRef.current = false;
     optimizeRoute.call(makeClient(apiBase), { query: { range, ...(root ? { root } : {}), ...(fresh ? { refresh: true } : {}) } })
-      .then((p) => { if (alive) setData(p); })
+      .then((p) => {
+        if (!alive) return;
+        setData(p);
+        if (p.usageStale && pollCount.current < 40) {
+          pollCount.current += 1;
+          pollTimer.current = setTimeout(() => { if (alive) setPollKey((k) => k + 1); }, 1500);
+        } else {
+          pollCount.current = 0;   // fresh (or gave up): stop the poll loop
+        }
+      })
       .catch((e) => { if (alive) setError(String(e?.message ?? e)); })
       .finally(() => { if (alive) setPending(false); });
-    return () => { alive = false; };
-  }, [apiBase, range, reloadKey, root]);
+    return () => { alive = false; if (pollTimer.current) { clearTimeout(pollTimer.current); pollTimer.current = null; } };
+  }, [apiBase, range, reloadKey, root, pollKey]);
 
   const onRefresh = () => { freshRef.current = true; setReloadKey((k) => k + 1); };
   // Apply a local, network-free transform after a disable/re-enable so the panel

@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GemController } from "../../gem.controller.js";
-import { computeGlobalUsage, closeSharedIndex, getGlobalUsageIndexed, hookDigest } from "@agentgem/capture";
+import { computeGlobalUsage, closeSharedIndex, getGlobalUsageIndexed, getGlobalUsageStale, hookDigest } from "@agentgem/capture";
 import { readGlobalUsageCacheStale, writeGlobalUsageCache } from "@agentgem/capture";
 import { allClaudeTranscripts } from "@agentgem/insight";
 import { resolveDirs } from "@agentgem/model";
@@ -91,6 +91,21 @@ describe("getGlobalUsageIndexed — inventory-independent", () => {
     const key = (a: { type: string; name: string }) => `${a.type} ${a.name}`;
     const sort = <T extends { type: string; name: string }>(xs: T[]) => [...xs].sort((a, b) => key(a).localeCompare(key(b)));
     expect(sort(got)).toEqual(sort(want));
+  });
+
+  it("getGlobalUsageStale reports stale on a cold index, then fresh once the index is built", async () => {
+    const dirs = resolveDirs(claudeDir);
+    const paths = allClaudeTranscripts(dirs.claudeDir);
+    // Cold: nothing indexed under this fresh AGENTGEM_HOME → stale, and no figures resolved yet.
+    const cold = await getGlobalUsageStale(dirs, paths);
+    expect(cold.stale).toBe(true);
+    expect(cold.result.artifacts.find((a) => a.name === "diagram")).toBeUndefined();
+    // Build the index (the same sync the background revalidate performs, awaited here for determinism).
+    await getGlobalUsageIndexed(dirs, paths);
+    // Warm: caught up → fresh, and the diagram skill (3 uses across the corpus) now resolves.
+    const warm = await getGlobalUsageStale(dirs, paths);
+    expect(warm.stale).toBe(false);
+    expect(warm.result.artifacts.find((a) => a.name === "diagram")?.invocations).toBe(3);
   });
 });
 
