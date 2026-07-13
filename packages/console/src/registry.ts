@@ -16,6 +16,7 @@ const LEGACY_ROUTES: Record<string, string> = {
   "#/received": "#/gems/received",
   "#/get-gems": "#/gems/market",
   "#/inspect": "#/overview", // the Overview dashboard was renamed from Inspect
+  "#/insights": "#/mine/outcomes", // Insights folded into Mine as the Outcomes view
 };
 
 /** Rewrite a legacy route to its current one, preserving any `?query` verbatim.

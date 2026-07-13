@@ -12,10 +12,11 @@ export type ScorecardStreamEvent =
 export function openScorecardStream(
   apiBase: string,
   onEvent: (e: ScorecardStreamEvent) => void,
-  opts?: { refresh?: boolean },
+  opts?: { refresh?: boolean; projects?: string[] },
 ): () => void {
   const params = new URLSearchParams();
   if (opts?.refresh) params.set("refresh", "true");
+  if (opts?.projects?.length) params.set("projects", JSON.stringify(opts.projects));
   const qs = params.toString();
   const es = new EventSource(`${apiBase}/api/scorecard/stream${qs ? `?${qs}` : ""}`);
   const data = (m: Event) => JSON.parse((m as MessageEvent).data);

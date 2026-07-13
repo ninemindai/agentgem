@@ -27,6 +27,18 @@ describe("openScorecardStream", () => {
     expect(FakeES.last!.url).toContain("refresh=true");
   });
 
+  it("encodes a scoped project list into the query", () => {
+    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
+    openScorecardStream("http://x", () => {}, { projects: ["/a", "/b"] });
+    expect(FakeES.last!.url).toBe(`http://x/api/scorecard/stream?projects=${encodeURIComponent(JSON.stringify(["/a", "/b"]))}`);
+  });
+
+  it("omits the projects param when scope is undefined", () => {
+    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
+    openScorecardStream("http://x", () => {});
+    expect(FakeES.last!.url).toBe("http://x/api/scorecard/stream");
+  });
+
   it("translates start/progress/done events and closes on done", () => {
     vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
     const events: ScorecardStreamEvent[] = [];

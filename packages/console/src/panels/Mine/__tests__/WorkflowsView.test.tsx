@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 
 afterEach(cleanup);
-import { Mine } from "../index.js";
+import { WorkflowsView } from "../WorkflowsView.js";
 import type { ScorecardStreamEvent } from "../scorecardStream.js";
 import type { Scorecard } from "../../../api/routes.js";
 
@@ -36,9 +36,9 @@ function syncStream(events: ScorecardStreamEvent[]) {
   };
 }
 
-describe("Mine panel", () => {
+describe("WorkflowsView", () => {
   it("shows the scoring skeleton before any event", () => {
-    render(<Mine apiBase="http://localhost:0" openStream={silentStream} />);
+    render(<WorkflowsView apiBase="http://localhost:0" scope="*" openStream={silentStream} />);
     expect(screen.getByText(/scoring your goldmine/i)).toBeTruthy();
   });
 
@@ -47,7 +47,7 @@ describe("Mine panel", () => {
       { type: "start", total: 3 },
       { type: "progress", done: 2, total: 3, label: "proj-a", partial: { breadth: 7, battleTested: 3, portable: 1 } },
     ]);
-    render(<Mine apiBase="http://localhost:0" openStream={stream} />);
+    render(<WorkflowsView apiBase="http://localhost:0" scope="*" openStream={stream} />);
     expect(screen.getByText(/7 reusable workflows/i)).toBeTruthy();
     expect(screen.getByText(/2\/3/)).toBeTruthy();
   });
@@ -58,7 +58,7 @@ describe("Mine panel", () => {
       { type: "progress", done: 2, total: 3, label: "proj-a", partial: { breadth: 7, battleTested: 3, portable: 1 } },
       { type: "done", scorecard: FAKE_SCORECARD, cached: false, updatedAt: null },
     ]);
-    render(<Mine apiBase="http://localhost:0" openStream={stream} />);
+    render(<WorkflowsView apiBase="http://localhost:0" scope="*" openStream={stream} />);
     expect(screen.getByText(/10 reusable workflows/i)).toBeTruthy();
     expect(screen.getByText(/pick workflows to distill into a gem/i)).toBeTruthy();
   });
@@ -68,7 +68,7 @@ describe("Mine panel", () => {
       { type: "start", total: 3 },
       { type: "stale", scorecard: FAKE_SCORECARD, updatedAt: 123 },
     ]);
-    render(<Mine apiBase="http://localhost:0" openStream={stream} />);
+    render(<WorkflowsView apiBase="http://localhost:0" scope="*" openStream={stream} />);
     expect(screen.getByText(/10 reusable workflows/i)).toBeTruthy(); // hero shown from last-good data
     expect(screen.getByText("updating…")).toBeTruthy();               // ...with the revalidating pill
   });
@@ -80,7 +80,7 @@ describe("Mine panel", () => {
       { type: "progress", done: 1, total: 3, label: "p", partial: { breadth: 1, battleTested: 0, portable: 0 } },
       { type: "done", scorecard: SCORECARD_WITH_WORKFLOWS, cached: false, updatedAt: 456 }, // breadth 3
     ]);
-    render(<Mine apiBase="http://localhost:0" openStream={stream} />);
+    render(<WorkflowsView apiBase="http://localhost:0" scope="*" openStream={stream} />);
     expect(screen.getByText(/3 reusable workflows/i)).toBeTruthy();   // fresh result
     expect(screen.queryByText(/10 reusable workflows/i)).toBeNull();  // stale replaced
     expect(screen.queryByText("updating…")).toBeNull();               // pill cleared
@@ -88,13 +88,13 @@ describe("Mine panel", () => {
 
   it("shows error state after failed event", () => {
     const stream = syncStream([{ type: "failed", message: "oops" }]);
-    render(<Mine apiBase="http://localhost:0" openStream={stream} />);
+    render(<WorkflowsView apiBase="http://localhost:0" scope="*" openStream={stream} />);
     expect(screen.getByText(/couldn't compute/i)).toBeTruthy();
   });
 
   it("clicking a filter chip in the workflow list filters the workflow list", () => {
     const stream = syncStream([{ type: "done", scorecard: SCORECARD_WITH_WORKFLOWS, cached: false, updatedAt: null }]);
-    render(<Mine apiBase="http://localhost:0" openStream={stream} />);
+    render(<WorkflowsView apiBase="http://localhost:0" scope="*" openStream={stream} />);
     // both workflows are visible before filtering
     expect(screen.getByText("Deploy workflow")).toBeTruthy();
     expect(screen.getByText("Test workflow")).toBeTruthy();
@@ -108,7 +108,7 @@ describe("Mine panel", () => {
 
   it("ScorecardHero does not receive filter/onFilter — stats are plain text", () => {
     const stream = syncStream([{ type: "done", scorecard: SCORECARD_WITH_WORKFLOWS, cached: false, updatedAt: null }]);
-    render(<Mine apiBase="http://localhost:0" openStream={stream} />);
+    render(<WorkflowsView apiBase="http://localhost:0" scope="*" openStream={stream} />);
     // Stats text appears in the hero as a plain paragraph (not a button)
     const statsEl = screen.getByText(/1 battle-tested · 1 worth sharing/i);
     expect(statsEl.tagName.toLowerCase()).not.toBe("button");
@@ -116,7 +116,7 @@ describe("Mine panel", () => {
 
   it("MineWorkflows receives filter, onFilter, and apiBase", () => {
     const stream = syncStream([{ type: "done", scorecard: SCORECARD_WITH_WORKFLOWS, cached: false, updatedAt: null }]);
-    render(<Mine apiBase="http://localhost:0" openStream={stream} />);
+    render(<WorkflowsView apiBase="http://localhost:0" scope="*" openStream={stream} />);
     // Filter chips are rendered inside MineWorkflows
     expect(screen.getByRole("button", { name: /^all$/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /battle-tested \(1\)/i })).toBeTruthy();

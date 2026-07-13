@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { phaseGroups, footerPages, sortedPages } from "./registry.js";
+import { phaseGroups, footerPages, sortedPages, normalizeHash } from "./registry.js";
 import { defineConsolePage } from "./contract.js";
 import type { ConsolePage } from "./contract.js";
 
@@ -81,5 +81,15 @@ describe("sortedPages", () => {
   it("still rejects duplicate ids", () => {
     const pages = [page({ id: "a", footer: true }), page({ id: "a", footer: true })];
     expect(() => sortedPages(pages)).toThrow(/duplicate/i);
+  });
+});
+
+describe("normalizeHash", () => {
+  it("redirects the legacy #/insights route to the Outcomes sub-route", () => {
+    expect(normalizeHash("#/insights")).toBe("#/mine/outcomes");
+  });
+  it("passes #/mine and #/mine/outcomes through unchanged", () => {
+    expect(normalizeHash("#/mine")).toBe("#/mine");
+    expect(normalizeHash("#/mine/outcomes")).toBe("#/mine/outcomes");
   });
 });

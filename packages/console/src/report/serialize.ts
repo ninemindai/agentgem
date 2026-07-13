@@ -51,7 +51,7 @@ ul { padding-left: 1.2em; }
 </style></head><body><h1>${escapeHtml(title)}</h1>${body}</body></html>`;
 }
 
-import type { InsightsReportView } from "../panels/Insights/insightsStream.js";
+import type { InsightsReportView } from "../panels/Mine/insightsStream.js";
 import type { AnalyzeCandidate } from "../panels/Curate/analyzeStream.js";
 
 export function insightsToBlocks(report: InsightsReportView, scanned?: number | null): ReportBlock[] {
