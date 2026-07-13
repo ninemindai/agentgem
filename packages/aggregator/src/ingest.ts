@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { verify } from "@agentgem/model";
 import { canonicalJSON, type UsageAttestation } from "@agentgem/insight";
 import type { AppDb } from "./schema.js";
-import { projectAttestation } from "./project.js";
+import { projectAttestation, updateAttestation } from "./project.js";
 
 export type VerifyResult = { ok: true } | { ok: false; reason: "bad-signature" | "inconsistent" };
 
@@ -30,23 +30,35 @@ export function verifyAttestation(att: UsageAttestation): VerifyResult {
 }
 
 export type IngestResult =
-  | { accepted: true; id: string; publicIngredients: number; privateCount: number; idempotent: boolean }
+  | { accepted: true; id: string; publicIngredients: number; privateCount: number; idempotent: boolean; updated: boolean }
   | { accepted: false; rejected: "bad-signature" | "inconsistent" };
+
+async function priorId(db: AppDb, att: UsageAttestation): Promise<string | null> {
+  const r = await db.execute<{ id: string }>(sql`select id from attestations where gem_digest = ${att.gem.digest} and producer_pubkey = ${att.producer.publicKey}`);
+  return r.rows[0]?.id ?? null;
+}
 
 export async function ingestAttestation(db: AppDb, att: UsageAttestation): Promise<IngestResult> {
   const v = verifyAttestation(att);
   if (!v.ok) return { accepted: false, rejected: v.reason };
-  // Idempotency is per (gem_digest, producer_pubkey): the SAME producer re-submitting the same gem is
-  // a no-op, but a DIFFERENT producer of the same gem binary gets their own attestation (previously the
-  // gem_digest-global unique dropped the second producer's data and hid them from the aggregates).
-  const prior = await db.execute<{ id: string; private_count: number }>(
-    sql`select id, private_count from attestations where gem_digest = ${att.gem.digest} and producer_pubkey = ${att.producer.publicKey}`);
-  if (prior.rows.length > 0) {
-    const row = prior.rows[0];
-    const pub = await db.execute<{ c: number }>(
-      sql`select count(*)::int as c from usage_edges where attestation_id = ${row.id}`);
-    return { accepted: true, id: row.id, publicIngredients: pub.rows[0].c, privateCount: row.private_count, idempotent: true };
+  // Idempotency is per (gem_digest, producer_pubkey): the SAME producer re-submitting the same gem
+  // refreshes the existing row in place (usage may have changed since the last submission), but a
+  // DIFFERENT producer of the same gem binary gets their own attestation (previously the gem_digest-global
+  // unique dropped the second producer's data and hid them from the aggregates).
+  const existing = await priorId(db, att);
+  if (existing) {
+    const p = await updateAttestation(db, existing, att);
+    return { accepted: true, ...p, idempotent: true, updated: true };
   }
-  const p = await projectAttestation(db, att);
-  return { accepted: true, ...p, idempotent: false };
+  try {
+    const p = await projectAttestation(db, att);
+    return { accepted: true, ...p, idempotent: false, updated: false };
+  } catch (e) {
+    // #8: a concurrent first-insert (manual route vs warm tick) lost the unique race → treat as resubmit.
+    if (String((e as { code?: string }).code) === "23505" || /unique|duplicate/i.test(String((e as Error).message))) {
+      const id = await priorId(db, att);
+      if (id) { const p = await updateAttestation(db, id, att); return { accepted: true, ...p, idempotent: true, updated: true }; }
+    }
+    throw e;
+  }
 }
