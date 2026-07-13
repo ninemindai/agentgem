@@ -86,10 +86,13 @@ export class InsightsController {
   async *stream(input: {
     query: z.infer<typeof InsightsStreamQuery>;
   }): AsyncGenerator<z.infer<typeof InsightsEvent>> {
-    const { root, dir, fresh } = input.query;
+    const { root, dir, fresh, cacheOnly } = input.query;
+    // A cacheOnly peek is a free cache read (a cached report or `cached:false`
+    // with an empty report) — it never spends the LLM, so it is NOT a tracked run.
+    const peek = cacheOnly === "1";
     // trackerFor returns undefined for a reattach (non-fresh open of an already
     // terminal run) so we don't re-begin a finished run.
-    const track = this.reportRegistry
+    const track = !peek && this.reportRegistry
       ? trackerFor(this.reportRegistry, "insights", insightsParamsKey({ root }), dir ? { root, dir } : { root }, fresh === "1")
       : undefined;
     // begin/end live in the producer, NOT the generator's finally: on client
@@ -100,9 +103,10 @@ export class InsightsController {
     yield* pump<z.infer<typeof InsightsEvent>>(async (emit) => {
       beginForeground();
       try {
-        const { payload, updatedAt } = await computeFn(root, {
+        const { payload, cached, updatedAt } = await computeFn(root, {
           dir,
           force: fresh === "1",
+          cacheOnly: peek,
           progress: {
             onPhase: (phase, extra) => {
               emit({
@@ -120,6 +124,7 @@ export class InsightsController {
           type: "done",
           report: payload.report,
           degraded: payload.degraded,
+          cached,
           scanned: payload.signalSummary.sessionsScanned,
           updatedAt,
         });

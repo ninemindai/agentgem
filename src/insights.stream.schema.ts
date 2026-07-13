@@ -18,6 +18,7 @@ export const InsightsStreamQuery = z.object({
   root: z.string().min(1),
   dir: z.string().optional(),
   fresh: z.enum(["0", "1"]).optional(), // "1" bypasses the cache (Re-run)
+  cacheOnly: z.enum(["0", "1"]).optional(), // "1" peeks the cache — a cached report or none, never the LLM
 });
 export type InsightsStreamQuery = z.infer<typeof InsightsStreamQuery>;
 
@@ -38,6 +39,7 @@ const DoneEvent = z.object({
   // report type isn't assignable to — no index signature).
   report: z.unknown(),
   degraded: z.boolean(),
+  cached: z.boolean(), // true = served from cache (a cacheOnly peek hit, or a warm compute)
   scanned: z.number().optional(),
   updatedAt: z.number().nullable(),
 });

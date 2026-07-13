@@ -70,6 +70,22 @@ describe("InsightsController.stream (streamOf route)", () => {
     expect(run).toMatchObject({ status: "failed", error: "boom" });
   });
 
+  it("a cacheOnly peek passes cacheOnly through, emits cached, and is NOT tracked as a run", async () => {
+    const reg = new ReportRegistry();
+    let sawCacheOnly: boolean | undefined;
+    setInsightsComputeForTests((async (_root: string, opts: { cacheOnly?: boolean }) => {
+      sawCacheOnly = opts.cacheOnly;
+      return { payload: { report: { ok: true }, facets: [], findings: [], detectorSummary: [], degraded: false, signalSummary: { sessionsScanned: 0, spanDays: 0, notes: null } }, cached: true, updatedAt: 7 } as unknown as InsightsResult;
+    }) as unknown as Parameters<typeof setInsightsComputeForTests>[0]);
+
+    const events = await drain(new InsightsController(reg).stream({ query: { root: "/peek", cacheOnly: "1" } }));
+
+    expect(sawCacheOnly).toBe(true);
+    expect(events.at(-1)).toMatchObject({ type: "done", cached: true, updatedAt: 7 });
+    // A peek is a free cache read, not a run — else useReportRun would reattach it on mount.
+    expect(reg.list().find((r) => r.paramsKey === "/peek")).toBeUndefined();
+  });
+
   it("holds the foreground gate until compute settles, even after client disconnect", async () => {
     expect(isForegroundBusy()).toBe(false); // prior tests balanced begin/end
     let release!: () => void;
