@@ -18,7 +18,8 @@ import { GitHubVerifier } from "@agentgem/aggregator";
 import { sweepQuarantine, sweepAdoptionQuarantine } from "@agentgem/aggregator";
 import { sweepStaleReviewRequests, STALE_REVIEW_TTL_MS } from "@agentgem/aggregator";
 import { issueKey, revokeKey, listKeys } from "@agentgem/aggregator";
-import { recordCatalogShare, upsertGemArchive, getGemArchive, catalogGemExists, latestGemVersion, archiveOnlyVersion, gemAccessInfo } from "@agentgem/aggregator";
+import { recordCatalogShare, upsertGemArchive, getGemArchive, catalogGemExists, latestGemVersion, archiveOnlyVersion, gemAccessInfo, upsertGemCover } from "@agentgem/aggregator";
+import { parseImageDataUrl } from "./og/coverDataUrl.js";
 import { recordGamePlay, gamePlayCounts } from "@agentgem/aggregator";
 import { resolveSignedAccount, gemStatusFor, gemStatusSigningPayload, catalogSigningPayload, reviewActionPayload, reviewSubmitPayload, reviewResubmitPayload } from "@agentgem/aggregator";
 import {
@@ -148,7 +149,7 @@ const CatalogBody = z.object({ manifest: CatalogManifestSchema, pubkey: z.string
 const CatalogResult = z.object({ shared: z.boolean(), publishedBy: z.string().optional(), gemKey: z.string().optional(), version: z.string().optional(), rejected: z.string().optional() });
 const GemStatusBody = z.object({ key: z.string(), pubkey: z.string(), signedAt: z.number(), signature: z.string() });
 const GemStatusResult = z.object({ exists: z.boolean(), ownedByMe: z.boolean(), latestVersion: z.string().nullable() });
-const PublishGemBody = z.object({ manifest: CatalogManifestSchema, archiveBase64: z.string(), pubkey: z.string(), signedAt: z.number(), signature: z.string() });
+const PublishGemBody = z.object({ manifest: CatalogManifestSchema, archiveBase64: z.string(), pubkey: z.string(), signedAt: z.number(), signature: z.string(), coverDataUrl: z.string().optional() });
 const GemArchiveQuery = z.object({ key: z.string(), version: z.string() });
 const GemArchiveResult = z.object({ archiveBase64: z.string() });
 const GameHtmlResult = z.object({ html: z.string() });
@@ -337,6 +338,15 @@ export class AggregatorController {
     const r = await recordCatalogShare(this.db, { manifest: input.body.manifest, pubkey: input.body.pubkey, signedAt: input.body.signedAt, signature: input.body.signature });
     if (!r.shared) return { shared: false, rejected: r.rejected };
     await upsertGemArchive(this.db, { gemKey: r.gemKey, version: r.version, bytes: new Uint8Array(bytes), digest, createdAtMs: Date.now() });
+    // Cover is cosmetic and unsigned (Decision A): store it best-effort, NEVER fail the publish over it.
+    if (input.body.coverDataUrl) {
+      const cover = parseImageDataUrl(input.body.coverDataUrl);
+      if (cover) {
+        try {
+          await upsertGemCover(this.db, { gemKey: r.gemKey, version: r.version, bytes: cover.bytes, contentType: cover.contentType, createdAtMs: Date.now() });
+        } catch { /* cover is decorative; a store failure must not fail the gem publish */ }
+      }
+    }
     return { shared: true, publishedBy: r.publishedBy, gemKey: r.gemKey, version: r.version };
   }
 
