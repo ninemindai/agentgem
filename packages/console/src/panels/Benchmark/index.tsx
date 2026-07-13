@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { defineConsolePage } from "../../registry.js";
 import { benchmarksRoute, effectivenessRoute, makeClient, type BenchmarkRow, type EffectivenessRow } from "../../api/routes.js";
 import { Loading } from "../../shell/Loading.js";
+import { Contribute } from "./Contribute.js";
 
 // Only surface gems with enough judged-session volume to trust the score (SkillGem's
 // `confidence > 0.3` leaderboard gate — here confidence >= 0.3, ~15+ judged sessions).
@@ -66,6 +67,8 @@ export function Benchmark({ apiBase }: { apiBase: string }) {
           ))}
         </ul>
       )}
+
+      <Contribute apiBase={apiBase} />
     </section>
   );
 }

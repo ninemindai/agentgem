@@ -934,6 +934,22 @@ body::before {
 .insights-section .analyze-include-name { font: 13px/1.4 var(--font-ui); color: var(--ink); }
 .insights-section .targets-label { font: 12px/1.5 var(--font-ui); color: var(--ink-soft); }
 
+/* Benchmark ▸ Contribute: opt-in consent toggle + one-shot bulk contribution.
+   Card mirrors .dream-scene; toggle mirrors .ledger-usedonly (checkbox, accent-color
+   input) sized up for a primary settings row; result rows reuse .insights-bymodel. */
+.benchmark-consent { margin-top: 18px; padding: 14px 16px; background: var(--raised);
+  border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-sm); }
+.benchmark-consent-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 10px; }
+.benchmark-consent-toggle { display: flex; align-items: center; gap: 8px; color: var(--ink);
+  font: 600 13.5px/1.4 var(--font-ui); cursor: pointer; }
+.benchmark-consent-toggle input { accent-color: var(--accent); }
+.benchmark-results { margin-top: 12px; }
+.benchmark-result-status { padding: 1px 7px; border-radius: 999px; font: 600 9.5px/1.4 var(--font-mono);
+  letter-spacing: .06em; text-transform: uppercase; background: var(--paper-2); color: var(--muted); }
+.benchmark-result-status[data-status="ingested"], .benchmark-result-status[data-status="updated"] {
+  background: rgba(47, 107, 58, .1); color: var(--emerald); }
+.benchmark-result-status[data-status="failed"] { background: rgba(154, 51, 36, .1); color: var(--accent); }
+
 /* Transfer: share-via-ticket (Materialize) + receive/apply (Received) */
 .transfer-section { margin: 18px 0 0; }
 .transfer-section:first-child { margin-top: 0; }

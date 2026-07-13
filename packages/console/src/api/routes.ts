@@ -913,6 +913,27 @@ export const effectivenessRoute = defineRoute("GET", "/api/benchmark/effectivene
   response: EffectivenessSchema,
 });
 
+// Bulk benchmark contribution (opt-in): consent toggle + one-shot "contribute now" that
+// signs and posts anonymous ingredient/usage rollups for the caller's own published Gems.
+// Mirrors the server's BenchmarkProxyController schemas exactly (src/benchmark.proxy.controller.ts).
+export const ContributeSettingSchema = z.object({ enabled: z.boolean() });
+export const contributeSettingRoute = defineRoute("GET", "/api/benchmark/contribute-setting", {
+  response: ContributeSettingSchema,
+});
+export const setContributeSettingRoute = defineRoute("POST", "/api/benchmark/contribute-setting", {
+  body: ContributeSettingSchema,
+  response: ContributeSettingSchema,
+});
+export const ContributeResultSchema = z.object({
+  gem: z.string(),
+  status: z.enum(["ingested", "updated", "skipped", "failed"]),
+  reason: z.string().optional(),
+});
+export type ContributeResult = z.infer<typeof ContributeResultSchema>;
+export const contributeRoute = defineRoute("POST", "/api/benchmark/contribute", {
+  response: z.object({ results: z.array(ContributeResultSchema) }),
+});
+
 // Identity binding: link the local key to a GitHub account via device-flow OAuth.
 export const bindStatusRoute = defineRoute("GET", "/api/bind/status", {
   response: z.object({ bound: z.boolean(), login: z.string().optional(), provider: z.string().optional(), avatarUrl: z.string().optional(), sessionActive: z.boolean().optional() }),
