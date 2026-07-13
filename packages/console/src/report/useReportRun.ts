@@ -14,6 +14,9 @@ interface RunSummary { id: string; kind: string; paramsKey: string; params: Reco
 
 const IDLE = { status: "idle" as RunPhase, phase: "", deltas: "", report: null, error: null, params: null };
 const POLL_MS = 1500;
+// Stop polling a reattached run after ~10 min (it keeps running server-side; the
+// activity poll + a later remount still reflect it). Mirrors Studio's pollWhileRunning.
+const POLL_MAX = Math.round((10 * 60_000) / POLL_MS);
 
 export function useReportRun<T>(apiBase: string, kind: string, openStream: OpenStream<T>) {
   const [view, setView] = useState<ReportRunView<T>>(IDLE);
@@ -44,11 +47,17 @@ export function useReportRun<T>(apiBase: string, kind: string, openStream: OpenS
   const attachAndPoll = useCallback((paramsKey: string, params: Record<string, string>) => {
     if (pollRef.current) { clearTimeout(pollRef.current); pollRef.current = null; }
     setView({ ...IDLE, status: "running", phase: "resuming…", params });
+    let ticks = 0;
     const tick = async () => {
       const runs = await fetchRuns();
       if (!aliveRef.current) return;
       const rec = runs.find((x) => x.kind === kind && x.paramsKey === paramsKey);
-      if (!rec || rec.status === "running") { if (rec?.phase) setView((s) => ({ ...s, phase: rec.phase })); pollRef.current = setTimeout(tick, POLL_MS); return; }
+      if (!rec || rec.status === "running") {
+        if (rec?.phase) setView((s) => ({ ...s, phase: rec.phase }));
+        if (++ticks >= POLL_MAX) return;   // give up after ~10 min; the run continues server-side
+        pollRef.current = setTimeout(tick, POLL_MS);
+        return;
+      }
       if (rec.status === "failed") { setView((s) => ({ ...s, status: "failed", error: rec.error ?? "failed" })); return; }
       openLive(false, params);   // done → cache hit loads the report
     };

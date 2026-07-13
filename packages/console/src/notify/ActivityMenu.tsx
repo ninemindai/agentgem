@@ -2,9 +2,7 @@
 // deep-links to each one's panel (the panel reattaches the latest run of its kind).
 import { useState, type ReactElement } from "react";
 import { useActivity, type ActivityRun } from "./ActivityProvider.js";
-
-const ROUTE_FOR: Record<string, string> = { insights: "#/insights", rubric: "#/rubrics", analyze: "#/curate" };
-const KIND_LABEL: Record<string, string> = { insights: "Insights", rubric: "Rubric", analyze: "Analysis" };
+import { KIND_LABEL, ROUTE_FOR } from "../report/kinds.js";
 
 function label(r: ActivityRun): string {
   const kind = KIND_LABEL[r.kind] ?? r.kind;
