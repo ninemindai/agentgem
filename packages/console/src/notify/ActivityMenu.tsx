@@ -32,7 +32,7 @@ export function ActivityMenu(): ReactElement {
           {runs.length === 0
             ? <div className="activity-empty">No recent reports.</div>
             : runs.slice(0, 12).map((r) => (
-                <button key={r.id} type="button" role="menuitem" className={"activity-row activity-" + r.status} onClick={() => go(r)}>
+                <button key={r.id} type="button" role="menuitem" className="activity-row" onClick={() => go(r)}>
                   <span className={"activity-dot activity-dot-" + r.status} aria-hidden="true" />{label(r)}
                 </button>
               ))}
