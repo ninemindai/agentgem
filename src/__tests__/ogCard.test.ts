@@ -30,3 +30,20 @@ describe("renderCardSvg", () => {
     expect(svg).toContain("AgentGem");
   });
 });
+
+describe("renderCardSvg with a screenshot", () => {
+  const shot = "data:image/png;base64,iVBORw0KGgo=";
+  it("embeds the screenshot as an <image> hero with title + wordmark over a legibility band", () => {
+    const svg = renderCardSvg({ type: "game", title: "Pizza Panic", subtitle: "Play on AgentGem", screenshotDataUri: shot });
+    expect(svg).toContain(`<image href="${shot}"`);
+    expect(svg).toContain('preserveAspectRatio="xMidYMid slice"');
+    expect(svg).toContain("Pizza Panic");
+    expect(svg).toContain("AgentGem");
+    expect(svg).toContain("opacity"); // the semi-opaque legibility band behind the text
+  });
+  it("falls back to the synthetic frame when no screenshot is given", () => {
+    const svg = renderCardSvg({ type: "game", title: "Pizza", subtitle: "Play on AgentGem" });
+    expect(svg).not.toContain("<image");
+    expect(svg).toContain("Miniapp"); // the per-type label frame
+  });
+});
