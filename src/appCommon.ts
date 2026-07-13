@@ -86,6 +86,44 @@ export function serverHost(): string {
   return process.env.HOST ?? "127.0.0.1";
 }
 
+// Graceful shutdown: orchestrators (k8s / Cloud Run / ECS / Fly) send SIGTERM and
+// expect the process to drain in-flight work (and close the pg pool — see mountAggregator)
+// then exit within the grace period. Without this, Node exits immediately on SIGTERM,
+// dropping connections. Hooks are injectable so it's unit-testable without spawning.
+// Moved from index.ts (Task 6, pure move — no behaviour change): both the server and
+// the client entry point need this, and client.ts must not import from index.ts.
+export function installGracefulShutdown(
+  app: { stop: () => Promise<void> },
+  opts: {
+    on?: (signal: "SIGTERM" | "SIGINT", cb: () => void) => void;
+    exit?: (code: number) => void;
+    log?: (msg: string) => void;
+  } = {},
+): void {
+  const on = opts.on ?? ((sig, cb) => { process.once(sig, cb); });
+  const exit = opts.exit ?? ((code) => process.exit(code));
+  const log = opts.log ?? ((msg: string) => serverLog.info("%s", msg));
+  let stopping = false;
+  const shutdown = async (sig: string): Promise<void> => {
+    if (stopping) return; // a second signal mid-drain must not double-stop
+    stopping = true;
+    log(`agentgem received ${sig}, draining…`);
+    try { await app.stop(); exit(0); }
+    catch (err) { console.error(err); exit(1); }
+  };
+  on("SIGTERM", () => void shutdown("SIGTERM"));
+  on("SIGINT", () => void shutdown("SIGINT"));
+}
+
+// Background cache warming is console-only (never on the hosted API, which does not
+// serve one). AGENTGEM_WARM=off disables it independently: the desktop host pays for
+// warm in the core process's working set, so it needs a way to turn it off that does
+// not also stop the console from being served.
+// Moved from index.ts (Task 6, pure move — no behaviour change): see installGracefulShutdown above.
+export function warmEnabled(env: Record<string, string | undefined>): boolean {
+  return env.SERVE_CONSOLE !== "false" && env.AGENTGEM_WARM !== "off";
+}
+
 // The part of app-building that must run BEFORE each entry's aggregator/benchmark step: new
 // RestApplication, body-parser config, components, MCPServer config, the common controllers,
 // GemTools, dispatch hooks, installExplorer, installMcpHttp, restServer, trust-proxy. Does NOT

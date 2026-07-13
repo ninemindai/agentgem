@@ -11,12 +11,9 @@ loadEnv({ quiet: true });
 loadEnv({ path: credentialsEnvPath(), quiet: true });
 import { isMain } from "@agentback/core";
 import type { RestApplication } from "@agentback/rest";
-import { createLogger } from "@agentgem/base";
-import { buildCommonApp, finalizeCommonApp } from "./appCommon.js";
+import { buildCommonApp, finalizeCommonApp, installGracefulShutdown, warmEnabled } from "./appCommon.js";
 import { mountAggregator } from "./serverAggregator.js";
 import { startWarmSchedule } from "./warm/schedule.js";
-
-const serverLog = createLogger("server");
 
 // Moved to serverAggregator.ts (Task 4); re-exported here because
 // src/__tests__/migrateAccountsOrFail.test.ts imports it from "../index.js".
@@ -25,6 +22,12 @@ export { migrateAccountsOrFail } from "./serverAggregator.js";
 // Moved to appCommon.ts (Task 5); re-exported here because
 // src/__tests__/serverHost.test.ts imports it from "../index.js".
 export { serverHost } from "./appCommon.js";
+
+// Moved to appCommon.ts (Task 6, pure move — no behaviour change: src/client.ts needs both
+// and must not import from index.ts); re-exported here because
+// src/__tests__/gracefulShutdown.test.ts and src/__tests__/warmEnabled.test.ts import them
+// from "../index.js".
+export { installGracefulShutdown, warmEnabled } from "./appCommon.js";
 
 export async function createApp(port: number): Promise<RestApplication> {
   const { app, server } = await buildCommonApp(port);
@@ -39,41 +42,6 @@ export async function createApp(port: number): Promise<RestApplication> {
   // before the global originGuard).
   finalizeCommonApp(app, server);
   return app;
-}
-
-// Graceful shutdown: orchestrators (k8s / Cloud Run / ECS / Fly) send SIGTERM and
-// expect the process to drain in-flight work (and close the pg pool — see createApp)
-// then exit within the grace period. Without this, Node exits immediately on SIGTERM,
-// dropping connections. Hooks are injectable so it's unit-testable without spawning.
-export function installGracefulShutdown(
-  app: { stop: () => Promise<void> },
-  opts: {
-    on?: (signal: "SIGTERM" | "SIGINT", cb: () => void) => void;
-    exit?: (code: number) => void;
-    log?: (msg: string) => void;
-  } = {},
-): void {
-  const on = opts.on ?? ((sig, cb) => { process.once(sig, cb); });
-  const exit = opts.exit ?? ((code) => process.exit(code));
-  const log = opts.log ?? ((msg: string) => serverLog.info("%s", msg));
-  let stopping = false;
-  const shutdown = async (sig: string): Promise<void> => {
-    if (stopping) return; // a second signal mid-drain must not double-stop
-    stopping = true;
-    log(`agentgem received ${sig}, draining…`);
-    try { await app.stop(); exit(0); }
-    catch (err) { console.error(err); exit(1); }
-  };
-  on("SIGTERM", () => void shutdown("SIGTERM"));
-  on("SIGINT", () => void shutdown("SIGINT"));
-}
-
-// Background cache warming is console-only (never on the hosted API, which does not
-// serve one). AGENTGEM_WARM=off disables it independently: the desktop host pays for
-// warm in the core process's working set, so it needs a way to turn it off that does
-// not also stop the console from being served.
-export function warmEnabled(env: Record<string, string | undefined>): boolean {
-  return env.SERVE_CONSOLE !== "false" && env.AGENTGEM_WARM !== "off";
 }
 
 // Start the server and print where its surfaces live. Shared by the default
