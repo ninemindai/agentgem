@@ -21,11 +21,24 @@ describe("cardImageUrl", () => {
 describe("renderCardResponse", () => {
   it("renders a PNG when meta resolves", async () => {
     const png = await renderCardResponse(async () => ({ title: "Pizza", description: "Play on AgentGem", imageUrl: null }),
-      { type: "game", key: "@acme/pizza" });
+      async () => null, { type: "game", key: "@acme/pizza" });
     expect([png[0], png[1], png[2], png[3]]).toEqual([0x89, 0x50, 0x4e, 0x47]);
   });
   it("renders the placeholder PNG when meta is null", async () => {
-    const png = await renderCardResponse(async () => null, { type: "gem", key: "nope" });
+    const png = await renderCardResponse(async () => null, async () => null, { type: "gem", key: "nope" });
+    expect([png[0], png[1], png[2], png[3]]).toEqual([0x89, 0x50, 0x4e, 0x47]);
+  });
+});
+
+describe("renderCardResponse with a cover", () => {
+  it("composites the screenshot when getCover returns a data URI", async () => {
+    const meta: OgMeta = { title: "Pizza", description: "Play on AgentGem", imageUrl: null };
+    const png = await renderCardResponse(async () => meta, async () => "data:image/png;base64,iVBORw0KGgo=", { type: "game", key: "@a/g" });
+    expect([png[0], png[1], png[2], png[3]]).toEqual([0x89, 0x50, 0x4e, 0x47]); // valid PNG (composited)
+  });
+  it("renders the synthetic card when getCover returns null", async () => {
+    const meta: OgMeta = { title: "Pizza", description: "Play on AgentGem", imageUrl: null };
+    const png = await renderCardResponse(async () => meta, async () => null, { type: "game", key: "@a/g" });
     expect([png[0], png[1], png[2], png[3]]).toEqual([0x89, 0x50, 0x4e, 0x47]);
   });
 });
