@@ -1,13 +1,17 @@
 // Copyright (c) 2026 NineMind, Inc.
 // SPDX-License-Identifier: MIT
 // src/__tests__/rubric.controller.test.ts
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import supertest from "supertest";
 import { RestApplication } from "@agentback/rest";
-import { RubricController } from "../rubric.controller.js";
+import { RubricController, setRubricComputeForTests } from "../rubric.controller.js";
+import { RubricEvent } from "../rubric.stream.schema.js";
+import { ReportRegistry, REPORT_REGISTRY } from "../report/registry.js";
+import { isForegroundBusy } from "../warm/orchestrator.js";
+import type { RubricResult } from "../rubricCore.js";
 
 let app: RestApplication;
 let client: ReturnType<typeof supertest>;
@@ -94,5 +98,84 @@ describe("RubricController", () => {
   it("POST /api/rubrics/delete 422s when id is missing (schema-gated)", async () => {
     const res = await client.post("/api/rubrics/delete").send({});
     expect(res.status).toBe(422);
+  });
+});
+
+// GET /api/rubric/stream — driven directly (the generator), computeRubric swapped;
+// resolveRubric stays real (the built-in "hygiene" rubric resolves in-memory).
+afterEach(() => setRubricComputeForTests(null));
+
+function fakeCompute(deltas: string[]) {
+  return (async (_rubric: unknown, _scope: unknown, opts?: { onDelta?: (c: string) => void }) => {
+    for (const d of deltas) opts?.onDelta?.(d);
+    return { payload: { rubricId: "hygiene", target: "process", scope: "project", factors: [] }, cached: false, updatedAt: 0 } as unknown as RubricResult;
+  }) as unknown as Parameters<typeof setRubricComputeForTests>[0];
+}
+
+async function drain(gen: AsyncGenerator<unknown>) {
+  const out: unknown[] = [];
+  for await (const e of gen) out.push(e);
+  return out;
+}
+
+describe("RubricController.stream (streamOf route)", () => {
+  it("opens with start, streams deltas, then done — each validated", async () => {
+    setRubricComputeForTests(fakeCompute(["evaluating factor…"]));
+
+    const events = await drain(new RubricController().stream({ query: { rubric: "hygiene", scope: "project", root: "/x" } }));
+
+    expect(events.map((e) => (e as { type: string }).type)).toEqual(["start", "delta", "done"]);
+    for (const e of events) expect(RubricEvent.safeParse(e).success).toBe(true);
+    expect(events[0]).toMatchObject({ type: "start", rubric: "hygiene", scope: "project" });
+    expect(events[2]).toMatchObject({ type: "done", cached: false, updatedAt: 0 });
+  });
+
+  it("yields a failed event for an unknown rubric (not a 422)", async () => {
+    const events = await drain(new RubricController().stream({ query: { rubric: "does-not-exist", scope: "all" } }));
+    expect(events).toEqual([{ type: "failed", message: "unknown rubric: does-not-exist" }]);
+  });
+
+  it("yields a failed event when project scope is missing ?root=", async () => {
+    setRubricComputeForTests(fakeCompute([]));
+    const events = await drain(new RubricController().stream({ query: { rubric: "hygiene", scope: "project" } }));
+    expect(events).toEqual([{ type: "failed", message: "project scope requires ?root=" }]);
+  });
+
+  it("records the run under kind 'rubric' in an injected ReportRegistry", async () => {
+    const reg = new ReportRegistry();
+    setRubricComputeForTests(fakeCompute([]));
+
+    await drain(new RubricController(reg).stream({ query: { rubric: "hygiene", scope: "project", root: "/x" } }));
+
+    expect(reg.list().find((r) => r.kind === "rubric" && r.paramsKey === "hygiene:project:/x:")).toMatchObject({ status: "done" });
+  });
+
+  it("resolves the injected ReportRegistry bound in the app context", async () => {
+    const app2 = new RestApplication({});
+    app2.restController(RubricController);
+    const reg = new ReportRegistry();
+    app2.bind(REPORT_REGISTRY).to(reg);
+
+    const ctrl = await app2.get<RubricController>("controllers.RubricController");
+    setRubricComputeForTests(fakeCompute([]));
+    await drain(ctrl.stream({ query: { rubric: "hygiene", scope: "all" } }));
+
+    expect(reg.list().find((r) => r.kind === "rubric")).toMatchObject({ status: "done" });
+  });
+
+  it("holds the foreground gate until compute settles, even after client disconnect", async () => {
+    expect(isForegroundBusy()).toBe(false);
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    setRubricComputeForTests((async () => { await gate; return { payload: {}, cached: false, updatedAt: 0 } as unknown as RubricResult; }) as unknown as Parameters<typeof setRubricComputeForTests>[0]);
+
+    const gen = new RubricController().stream({ query: { rubric: "hygiene", scope: "all" } });
+    await gen.next(); // start event -> producer running, foreground begun
+    expect(isForegroundBusy()).toBe(true);
+    await gen.return(undefined);
+    expect(isForegroundBusy()).toBe(true); // held — compute runs on in the background
+    release();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(isForegroundBusy()).toBe(false);
   });
 });
