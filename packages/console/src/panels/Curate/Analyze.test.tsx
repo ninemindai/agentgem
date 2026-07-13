@@ -21,6 +21,7 @@ describe("Analyze", () => {
   it("lists discovered projects and analyzes one in place, handing keys to onPick", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
       const u = String(url);
+      if (u.includes("/api/report/runs")) return res({ runs: [] });
       if (u.includes("/api/testbed/recents")) return res({ recents: [] });
       if (u.includes("/api/testbed/projects"))
         return res({ projects: [{ path: "/home/me/proj", flavor: "claude", lastUsed: null, exists: true }] });
@@ -32,6 +33,9 @@ describe("Analyze", () => {
 
     // the project list renders immediately (no disclosure); click the project's Analyze
     fireEvent.click(await screen.findByText("Analyze →"));
+    // The hook's start-guard fetches /api/report/runs before opening the stream, so the
+    // EventSource appears one tick later (not synchronously on click).
+    await waitFor(() => expect(FakeES.last).not.toBeNull());
     FakeES.last!.emit("done", { cached: false, candidates: [
       { name: "Spec Loop", description: "", confidence: "high", include: [{ type: "skill", name: "brainstorming" }] },
     ] });
@@ -42,6 +46,7 @@ describe("Analyze", () => {
   it("gives immediate feedback and streams the agent's output", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
       const u = String(url);
+      if (u.includes("/api/report/runs")) return res({ runs: [] });
       if (u.includes("/api/testbed/recents")) return res({ recents: [] });
       if (u.includes("/api/testbed/projects")) return res({ projects: [{ path: "/home/me/proj", flavor: "claude", lastUsed: null, exists: true }] });
       throw new Error("unexpected " + u);
@@ -49,9 +54,11 @@ describe("Analyze", () => {
     vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
     render(<Analyze apiBase="" onPick={() => {}} />);
     fireEvent.click(await screen.findByText("Analyze →"));
-    // immediate feedback before any stream event: badge + the active row's button both read "Analyzing…"
-    expect(screen.getAllByText("Analyzing…").length).toBeGreaterThanOrEqual(2);
+    // Feedback appears once the run starts (after the hook's start-guard fetch): badge +
+    // the active row's button both read "Analyzing…".
+    await waitFor(() => expect(screen.getAllByText("Analyzing…").length).toBeGreaterThanOrEqual(2));
     // agent tokens stream into a transcript
+    await waitFor(() => expect(FakeES.last).not.toBeNull());
     FakeES.last!.emit("delta", { text: "scanning sessions…" });
     expect(await screen.findByText(/scanning sessions/)).toBeTruthy();
     FakeES.last!.emit("done", { cached: false, candidates: [] });
@@ -61,6 +68,7 @@ describe("Analyze", () => {
   it("filters the project list by the search query", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
       const u = String(url);
+      if (u.includes("/api/report/runs")) return res({ runs: [] });
       if (u.includes("/api/testbed/recents")) return res({ recents: [] });
       if (u.includes("/api/testbed/projects")) return res({ projects: [
         { path: "/home/me/alpha", flavor: "claude", lastUsed: null, exists: true },

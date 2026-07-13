@@ -1,10 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { testbedRecentsRoute, testbedProjectsRoute, makeClient, type RecentEntry, type ProjectCandidate } from "../../api/routes.js";
 import { openAnalyzeStream, type AnalyzeCandidate } from "./analyzeStream.js";
+import { useReportRun, type Handlers } from "../../report/useReportRun.js";
 import { includeToKeys } from "./selection.js";
 import { Loading } from "../../shell/Loading.js";
 import { ReportActions } from "../../report/ReportActions.js";
 import { analyzeToBlocks, blocksToMarkdown, blocksToHtml } from "../../report/serialize.js";
+
+// The analyze `done` event carries `candidates` (not a single report object), so the
+// run's payload type is candidates + the cache flag.
+type AnalyzeDone = { candidates: AnalyzeCandidate[]; cached: boolean };
 
 function short(path: string): string {
   const parts = path.split("/").filter(Boolean);
@@ -20,34 +25,42 @@ export function Analyze({ apiBase, onPick, initialPath }: { apiBase: string; onP
   const [projects, setProjects] = useState<ProjectCandidate[] | null>(null);
   const [recents, setRecents] = useState<RecentEntry[] | null>(null);
   const [activePath, setActivePath] = useState<string | null>(null);
-  const [phase, setPhase] = useState("");
-  const [candidates, setCandidates] = useState<AnalyzeCandidate[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [running, setRunning] = useState(false);
-  const [out, setOut] = useState("");
-  const closeRef = useRef<(() => void) | null>(null);
+
+  // openStream adapter: the hook decides WHEN to open; this maps openAnalyzeStream's
+  // events to the normalized Handlers and closes over the current root.
+  const openStream = useCallback(
+    (fresh: boolean, params: Record<string, string>, h: Handlers<AnalyzeDone>) =>
+      openAnalyzeStream(apiBase, params.root, fresh, (e) => {
+        if (e.type === "phase") h.phase(e.sessions != null ? `${e.phase} (${e.sessions} sessions)` : e.phase);
+        else if (e.type === "delta") h.delta(e.text);
+        else if (e.type === "done") h.done({ candidates: e.candidates, cached: e.cached });
+        else if (e.type === "failed") h.failed(e.message);
+      }),
+    [apiBase],
+  );
+  const { view, start } = useReportRun<AnalyzeDone>(apiBase, "analyze", openStream);
 
   useEffect(() => {
     const client = makeClient(apiBase);
     testbedProjectsRoute.call(client).then((r) => setProjects(r.projects)).catch(() => setProjects([]));
     testbedRecentsRoute.call(client).then((r) => setRecents(r.recents)).catch(() => setRecents([]));
   }, [apiBase]);
-  useEffect(() => () => closeRef.current?.(), []);
 
-  const analyze = (path: string) => {
-    closeRef.current?.();
-    setActivePath(path); setPhase(""); setCandidates([]); setError(null); setOut(""); setRunning(true);
-    closeRef.current = openAnalyzeStream(apiBase, path, false, (e) => {
-      if (e.type === "phase") setPhase(e.sessions != null ? `${e.phase} (${e.sessions} sessions)` : e.phase);
-      else if (e.type === "delta") setOut((o) => o + e.text);
-      else if (e.type === "done") { setPhase("done"); setCandidates(e.candidates); setRunning(false); }
-      else if (e.type === "failed") { setError(e.message); setRunning(false); }
-    });
-  };
+  const analyze = (path: string) => { setActivePath(path); start(path, { root: path }); };
 
   // Auto-run when another panel hands us a project (Insights → "Build a Gem").
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (initialPath) analyze(initialPath); }, [initialPath]);
+
+  // Reattached a run on mount → select its row.
+  useEffect(() => { const root = view.params?.root; if (root && !activePath) setActivePath(root); }, [view.params, activePath]);
+
+  const running = view.status === "running";
+  const candidates = view.report?.candidates ?? [];
+  const phase = view.phase;
+  const error = view.error;
+  const out = view.deltas;
 
   // Merge recents + discovered projects into one de-duped, compact list, then
   // filter by the search query (matches the display label OR the full path).
