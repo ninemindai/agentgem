@@ -9,6 +9,7 @@
 import { computeRubric, resolveRubric } from "./rubricCore.js";
 import { scopeAllowed, type RubricScope } from "@agentgem/insight";
 import { createLogger } from "@agentgem/base";
+import type { RunTracker } from "./report/track.js";
 
 const log = createLogger("rubric");
 
@@ -40,7 +41,7 @@ function parseScope(q: Record<string, unknown>): RubricScope | { error: string }
   return { error: `unknown scope: ${kind}` };
 }
 
-export async function streamRubric(req: SseReq, res: SseRes): Promise<void> {
+export async function streamRubric(req: SseReq, res: SseRes, track?: RunTracker): Promise<void> {
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache, no-transform",
@@ -55,30 +56,36 @@ export async function streamRubric(req: SseReq, res: SseRes): Promise<void> {
   try {
     const dir = str(req.query.dir);
     const id = str(req.query.rubric);
-    if (!id) { send("failed", { message: "missing ?rubric=<id>" }); return; }
+    if (!id) { send("failed", { message: "missing ?rubric=<id>" }); track?.failed("missing ?rubric=<id>"); return; }
 
     const rubric = resolveRubric(id, dir);
-    if (!rubric) { send("failed", { message: `unknown rubric: ${id}` }); return; }
+    if (!rubric) { send("failed", { message: `unknown rubric: ${id}` }); track?.failed(`unknown rubric: ${id}`); return; }
 
     const scope = parseScope(req.query);
-    if ("error" in scope) { send("failed", { message: scope.error }); return; }
+    if ("error" in scope) { send("failed", { message: scope.error }); track?.failed(scope.error); return; }
 
     // Hard rule: an aggregate-only rubric can't run at session scope (§Scope).
     if (!scopeAllowed(rubric, scope.kind)) {
-      send("failed", { message: `rubric "${rubric.id}" is aggregate-only and cannot run at scope "${scope.kind}"` });
+      const msg = `rubric "${rubric.id}" is aggregate-only and cannot run at scope "${scope.kind}"`;
+      send("failed", { message: msg });
+      track?.failed(msg);
       return;
     }
 
     send("start", { rubric: rubric.id, title: rubric.title, target: rubric.target, scope: scope.kind });
     const fresh = str(req.query.refresh) === "true";   // ?refresh=true bypasses the cache
+    track?.phase("evaluating");
     // onDelta forwards LLM-criterion agent output as it streams (cheap-only rubrics never emit).
     const { payload, cached, updatedAt } = await computeRubric(rubric, scope, {
       dir, force: fresh, onDelta: (chunk) => send("delta", { text: chunk }),
     });
     send("done", { report: payload, cached, updatedAt });
+    track?.done();
   } catch (err) {
-    log.warn("streamRubric failed: %s", (err as Error)?.message ?? err);
-    send("failed", { message: (err as Error)?.message ?? String(err) });
+    const msg = (err as Error)?.message ?? String(err);
+    log.warn("streamRubric failed: %s", msg);
+    send("failed", { message: msg });
+    track?.failed(msg);
   } finally {
     res.end();
   }

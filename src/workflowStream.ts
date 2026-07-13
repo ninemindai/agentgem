@@ -7,6 +7,7 @@
 // is served by a raw Express handler registered on `server.expressApp`. The
 // non-streaming POST /api/workflow/analyze stays for programmatic/test callers.
 import { computeWorkflowAnalysis } from "./workflowCore.js";
+import type { RunTracker } from "./report/track.js";
 
 // Minimal structural types for the Express req/res we use — avoids a hard
 // dependency on @types/express (expressApp's handler is duck-typed).
@@ -17,7 +18,7 @@ interface SseRes {
   end(): void;
 }
 
-export async function streamWorkflowAnalyze(req: SseReq, res: SseRes): Promise<void> {
+export async function streamWorkflowAnalyze(req: SseReq, res: SseRes, track?: RunTracker): Promise<void> {
   const root = typeof req.query.root === "string" ? req.query.root : "";
   const dir = typeof req.query.dir === "string" ? req.query.dir : undefined;
   const fresh = req.query.fresh === "1";   // bypass the cache (Re-analyze)
@@ -34,17 +35,20 @@ export async function streamWorkflowAnalyze(req: SseReq, res: SseRes): Promise<v
   };
 
   try {
-    if (!root) { send("failed", { message: "missing root" }); return; }
+    if (!root) { send("failed", { message: "missing root" }); track?.failed("missing root"); return; }
     const { payload, cached, updatedAt } = await computeWorkflowAnalysis(root, {
       dir, force: fresh,
       progress: {
-        onPhase: (phase, extra) => send("phase", { phase, ...(extra ?? {}) }),
+        onPhase: (phase, extra) => { send("phase", { phase, ...(extra ?? {}) }); track?.phase(extra?.sessions != null ? `${phase} (${extra.sessions} sessions)` : phase); },
         onDelta: (text) => send("delta", { text }),
       },
     });
     send("done", { ...payload, cached, updatedAt });
+    track?.done();
   } catch (err) {
-    send("failed", { message: (err as Error)?.message ?? String(err) });
+    const msg = (err as Error)?.message ?? String(err);
+    send("failed", { message: msg });
+    track?.failed(msg);
   } finally {
     res.end();
   }
