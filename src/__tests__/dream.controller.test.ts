@@ -8,7 +8,9 @@ import { join } from "node:path";
 import { DreamController } from "../dream.controller.js";
 import { enqueueNew, appendDiary } from "../dream/store.js";
 import { appendVerification } from "@agentgem/run";
+import { runWarmPass, getWarmStatus } from "../warm/orchestrator.js";
 import type { DreamQueueEntry } from "../dream/types.js";
+import type { Warmable } from "../warm/registry.js";
 
 const prov = { occurrences: [{ sessionId: "s1", transcript: "t.jsonl", messageIndices: [1], atMs: 5 }] };
 function lessonEntry(): DreamQueueEntry {
@@ -178,5 +180,32 @@ describe("DreamController", () => {
     (c as unknown as { base: string }).base = base;
     const r = await c.journey({ query: { kind: "skill" } });
     expect(r.events.map((e) => e.kind)).toEqual(["skill"]);
+  });
+
+  it("status() surfaces live warm progress mid-pass and null when idle", async () => {
+    const c = new DreamController();
+    (c as unknown as { base: string }).base = base;
+
+    expect((await c.status()).progress).toBeNull();       // idle
+
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const reg: Warmable[] = [
+      { id: "usage", cost: "cheap", scope: "global", async warm() { return "warmed"; } },
+      { id: "analyze", cost: "llm", scope: "per-root", async warm() { await gate; return "warmed"; } },
+    ];
+    const pass = runWarmPass({ registry: reg, roots: ["/proj"], topN: 1, now: () => 1, isBusy: () => false });
+    await new Promise((r) => setTimeout(r, 0));
+
+    const s = await c.status();
+    expect(s.progress).not.toBeNull();
+    expect(s.progress!.phase).toBe("DEEP");       // analyze running
+    expect(s.progress!.currentRoot).toBe("proj");
+    expect(s.progress!.total).toBe(2);
+    expect(s.progress!.done).toBe(1);
+
+    release();
+    await pass;
+    expect((await c.status()).progress).toBeNull();  // cleared
   });
 });
