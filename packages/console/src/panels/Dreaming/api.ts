@@ -1,4 +1,13 @@
-export interface DreamStatus { enabled: boolean; phasesLit: Array<"LIGHT" | "DEEP" | "REM">; promoted: number; queued: number; lastPassAtMs: number | null }
+export interface DreamProgressData {
+  phase: "LIGHT" | "DEEP" | "REM" | null;
+  phasesLit: Array<"LIGHT" | "DEEP" | "REM">;
+  currentRoot: string | null;
+  rootIndex: number;
+  rootCount: number;
+  done: number;
+  total: number;
+}
+export interface DreamStatus { enabled: boolean; phasesLit: Array<"LIGHT" | "DEEP" | "REM">; promoted: number; queued: number; lastPassAtMs: number | null; progress: DreamProgressData | null }
 
 const j = (r: Response) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); };
 export const getStatus = (b: string): Promise<DreamStatus> => fetch(`${b}/api/dream/status`).then(j);
