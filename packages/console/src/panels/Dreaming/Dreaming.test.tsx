@@ -230,16 +230,28 @@ describe("Journey panel", () => {
     expect(screen.queryByRole("button", { name: /^apply$/i })).toBeNull();
   });
 
-  it("polls until a new pass lands, shows a 'complete' note, and re-enables the button", async () => {
-    let statusCalls = 0;
+  it("re-enables the button once a new pass lands (optimistic pending clears)", async () => {
+    let ran = false;
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
-      if (url.endsWith("/api/dream/status")) return new Response(JSON.stringify({ enabled: true, phasesLit: ["DEEP"], promoted: 2, queued: 1, lastPassAtMs: ++statusCalls }));
+      if (url.endsWith("/api/dream/status")) return new Response(JSON.stringify({ enabled: true, phasesLit: ["DEEP"], promoted: 2, queued: 1, lastPassAtMs: ran ? 2 : 1, progress: null }));
+      if (url.endsWith("/api/dream/run")) { ran = true; return new Response(JSON.stringify({ started: true })); }
       if (url.includes("/api/journey")) return new Response(JSON.stringify({ events: [], truncated: false }));
       return new Response(JSON.stringify({ ok: true }));
     }));
     render(<Dreaming apiBase="" />);
     fireEvent.click(await screen.findByRole("button", { name: "Dream now" }));
-    await waitFor(() => expect(screen.getByText(/Dream pass complete/i)).toBeTruthy(), { timeout: 4000 });
-    expect(screen.getByRole("button", { name: "Dream now" })).toBeTruthy(); // re-enabled, no longer "Dreaming…"
+    await screen.findByRole("button", { name: /dreaming/i });                 // instant optimistic feedback
+    await waitFor(() => expect(screen.getByRole("button", { name: "Dream now" })).toBeTruthy(), { timeout: 4000 }); // pass landed → re-enabled
+  });
+
+  it("shows the live step tracker while a pass reports progress", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.endsWith("/api/dream/status")) return new Response(JSON.stringify({ enabled: true, phasesLit: [], promoted: 0, queued: 0, lastPassAtMs: null, progress: { phase: "DEEP", phasesLit: ["LIGHT"], currentRoot: "my-app", rootIndex: 2, rootCount: 5, done: 3, total: 8 } }));
+      if (url.includes("/api/journey")) return new Response(JSON.stringify({ events: [], truncated: false }));
+      return new Response(JSON.stringify({ ok: true }));
+    }));
+    render(<Dreaming apiBase="" />);
+    await waitFor(() => expect(screen.getByText("my-app")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/2 of 5/)).toBeTruthy());
   });
 });
