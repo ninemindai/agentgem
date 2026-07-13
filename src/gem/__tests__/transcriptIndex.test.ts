@@ -287,3 +287,41 @@ describe("transcript index — raw rows, inventory-independent", () => {
     rmSync(storeDir, { recursive: true, force: true });
   });
 });
+
+describe("peekUsage — stale-while-revalidate read (no parse)", () => {
+  let dir: string;
+  let index: TranscriptIndex;
+  beforeEach(async () => { dir = mkdtempSync(join(tmpdir(), "peek-")); index = await openTranscriptIndex("memory://"); });
+  afterEach(async () => { await index.close(); rmSync(dir, { recursive: true, force: true }); });
+
+  it("returns stored rows and pending:true WITHOUT parsing an unsynced file", async () => {
+    const a = join(dir, "a.jsonl"); write(a, "a");
+    const b = join(dir, "b.jsonl"); write(b, "b");
+    const { files, parseCount, parseFile } = makeParser();
+    files.set(a, { raw: [{ kind: "skill", token: "x:qa", invocations: 2 }], hooks: [] });
+
+    await index.syncUsage([a], "h1", parseFile);   // index only `a`; `b` is new/unindexed
+    expect(parseCount.get(a)).toBe(1);
+
+    const peek = await index.peekUsage([a, b], "h1");
+    expect(peek.raw).toEqual([{ path: a, kind: "skill", token: "x:qa", invocations: 2, lastUsedMs: statSync(a).mtimeMs }]);
+    expect(peek.pending).toBe(true);              // `b` is unindexed → a real sync would reparse it
+    expect(parseCount.get(b) ?? 0).toBe(0);       // ...but peek parsed NOTHING
+    expect(parseCount.get(a)).toBe(1);            // and did not re-parse `a`
+  });
+
+  it("reports pending:false once the index is caught up", async () => {
+    const a = join(dir, "a.jsonl"); write(a, "a");
+    const { parseFile } = makeParser();
+    await index.syncUsage([a], "h1", parseFile);
+    expect((await index.peekUsage([a], "h1")).pending).toBe(false);
+  });
+
+  it("reports pending:true when a hook-digest change would force a reparse", async () => {
+    const a = join(dir, "a.jsonl"); write(a, "a");
+    const { parseFile } = makeParser();
+    await index.syncUsage([a], "h1", parseFile);
+    expect((await index.peekUsage([a], "h1")).pending).toBe(false);
+    expect((await index.peekUsage([a], "h2")).pending).toBe(true);   // digest moved → `a` is dirty
+  });
+});

@@ -19,3 +19,14 @@ describe("Dashboard scope-aware eligibility", () => {
     expect(screen.queryByLabelText("select demo")).toBeNull();
   });
 });
+
+describe("Dashboard usageStale affordance", () => {
+  it("shows the 'updating usage…' pill when usageStale is true", () => {
+    render(<Dashboard data={{ ...payload("global"), usageStale: true }} range="all" onRange={() => {}} pending={false} apiBase="" scope={{ kind: "global" }} onScope={() => {}} />);
+    expect(screen.getByText("updating usage…")).toBeTruthy();
+  });
+  it("shows no pill when usage is fresh", () => {
+    render(<Dashboard data={payload("global")} range="all" onRange={() => {}} pending={false} apiBase="" scope={{ kind: "global" }} onScope={() => {}} />);
+    expect(screen.queryByText("updating usage…")).toBeNull();
+  });
+});

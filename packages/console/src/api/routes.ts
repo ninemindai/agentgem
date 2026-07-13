@@ -711,6 +711,9 @@ const OptimizePayloadSchema = z.object({
   artifacts: z.array(OptimizeArtifactSchema),
   instructions: z.array(OptimizeInstructionSchema),
   disabled: z.array(DisabledArtifactSchema),
+  // Global scope only: usage figures came from a not-yet-caught-up index and a background revalidate
+  // is running. The panel shows an "updating…" pill and re-fetches until this clears. See index.tsx.
+  usageStale: z.boolean().optional(),
 });
 export type OptimizeArtifact = z.infer<typeof OptimizeArtifactSchema>;
 export type OptimizeInstruction = z.infer<typeof OptimizeInstructionSchema>;

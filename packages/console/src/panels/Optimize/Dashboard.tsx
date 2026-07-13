@@ -146,7 +146,13 @@ export function Dashboard({ data, range, onRange, pending, onRefresh, onMutate, 
           ))}
         </div>
         <ScopePicker apiBase={apiBase} scope={scope} onScope={onScope} />
-        {pending && <span className="obs-muted">refreshing…</span>}
+        {data.usageStale && (
+          <span className="warming-pill" title="Usage figures are still being computed from your session history — they'll refresh automatically.">
+            <span className="warming-pill__spark" aria-hidden="true">✦</span>
+            updating usage…
+          </span>
+        )}
+        {pending && !data.usageStale && <span className="obs-muted">refreshing…</span>}
         {onRefresh && <RefreshButton onClick={onRefresh} busy={pending} />}
       </div>
 
