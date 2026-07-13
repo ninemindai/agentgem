@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { testbedRecentsRoute, testbedProjectsRoute, rubricsRoute, makeClient, type RecentEntry, type ProjectCandidate, type RubricSummary } from "../../api/routes.js";
 import { defineConsolePage } from "../../registry.js";
 import { openRubricStream, type RubricReportView, type RubricFactorView, type RubricScopeParams } from "./rubricStream.js";
@@ -111,12 +111,26 @@ export function Rubrics({ apiBase }: { apiBase: string }) {
   );
   const { view, start } = useReportRun<RubricDone>(apiBase, "rubric", openStream);
 
+  // Guards the default-first-rubric fallback below against a reattached run or a
+  // pending deep-link claiming the selection first — whichever resolves first,
+  // in either order (the two effects race on mount). A ref (not a state closure)
+  // so the fallback always reads the live claim, not a stale value captured when
+  // the effect was set up.
+  const claimedRef = useRef(false);
+
   useEffect(() => {
     const client = makeClient(apiBase);
     rubricsRoute.call(client).then((r) => {
       setRubrics(r.rubrics);
       const pending = consumePendingRubric();
-      setRubricId(pending && r.rubrics.some((x) => x.id === pending) ? pending : (r.rubrics[0]?.id ?? ""));
+      // Priority: an explicit deep-link (pending) claims the selection; otherwise the
+      // default-first fallback applies ONLY if a reattach hasn't already claimed one.
+      if (pending && r.rubrics.some((x) => x.id === pending)) {
+        claimedRef.current = true;
+        setRubricId(pending);
+      } else if (!claimedRef.current) {
+        setRubricId(r.rubrics[0]?.id ?? "");
+      }
     }).catch(() => setRubrics([]));
     testbedProjectsRoute.call(client).then((r) => setProjects(r.projects)).catch(() => setProjects([]));
     testbedRecentsRoute.call(client).then((r) => setRecents(r.recents)).catch(() => setRecents([]));
@@ -125,7 +139,7 @@ export function Rubrics({ apiBase }: { apiBase: string }) {
   useEffect(() => {
     const p = view.params;
     if (!p || activePath) return;
-    if (p.rubric) setRubricId(p.rubric);
+    if (p.rubric && !claimedRef.current) { claimedRef.current = true; setRubricId(p.rubric); }
     if (p.scope === "all") setActivePath("*");
     else if (p.root) setActivePath(p.root);
   }, [view.params, activePath]);
@@ -133,9 +147,9 @@ export function Rubrics({ apiBase }: { apiBase: string }) {
   const run = (path: string, fresh = false) => {
     if (!rubricId) return;
     setActivePath(path);
-    const p: { rubric: string; scope: "all" | "project"; root?: string } =
+    const p: { rubric: string; scope: "all" | "project"; root?: string; sessionId?: string } =
       path === "*" ? { rubric: rubricId, scope: "all" } : { rubric: rubricId, scope: "project", root: path };
-    const key = `${p.rubric}:${p.scope}:${p.root ?? ""}:`;
+    const key = `${p.rubric}:${p.scope}:${p.root ?? ""}:${p.sessionId ?? ""}`;
     const params: Record<string, string> = { rubric: p.rubric, scope: p.scope };
     if (p.root) params.root = p.root;
     start(key, params, fresh);
