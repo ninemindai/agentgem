@@ -32,8 +32,23 @@ const ANCHOR_SHIM =
   "var h=a.getAttribute('href');if(!h||h.charAt(0)!=='#')return;" +
   "e.preventDefault();try{location.hash=h.slice(1);}catch(_e){}},true);})();</script>";
 
+// Publish-time screenshot capture. On the parent's request, pick the largest visible <canvas>, serialize
+// it to a PNG data URL, and post it back on a channel SEPARATE from the MCP-Apps protocol (so a game's
+// capability surface is untouched). WebGL canvases without preserveDrawingBuffer serialize blank — the
+// host's confirm UI + manual-upload fallback cover that; we do not touch the game's context.
+const CAPTURE_SHIM =
+  "<script>(function(){window.addEventListener('message',function(e){" +
+  "if(!e.data||e.data.type!=='agentgem:capture')return;" +
+  "try{var cs=document.querySelectorAll('canvas');var best=null,ba=0;" +
+  "for(var i=0;i<cs.length;i++){var r=cs[i].getBoundingClientRect();var a=r.width*r.height;if(a>ba){best=cs[i];ba=a;}}" +
+  "if(!best||ba===0){parent.postMessage({type:'agentgem:capture-result',ok:false,reason:'no-canvas'},'*');return;}" +
+  "var u=best.toDataURL('image/png');" +
+  "if(!u||u.length<64){parent.postMessage({type:'agentgem:capture-result',ok:false,reason:'blank'},'*');return;}" +
+  "parent.postMessage({type:'agentgem:capture-result',ok:true,dataUrl:u},'*');" +
+  "}catch(err){parent.postMessage({type:'agentgem:capture-result',ok:false,reason:'error'},'*');}});})();</script>";
+
 export function sandboxDoc(html: string): string {
-  const head = `<meta http-equiv="Content-Security-Policy" content="${CSP}">${STORAGE_SHIM}${ANCHOR_SHIM}`;
+  const head = `<meta http-equiv="Content-Security-Policy" content="${CSP}">${STORAGE_SHIM}${ANCHOR_SHIM}${CAPTURE_SHIM}`;
   // Force the CSP meta to be the FIRST node in <head>, whatever the input's shape. The old code
   // injected after an existing <head>, so a <script> placed BEFORE that <head> ran at parse time —
   // before the policy applied — and could open a network connection the CSP would otherwise block.
