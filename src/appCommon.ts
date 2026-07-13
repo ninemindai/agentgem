@@ -54,6 +54,8 @@ import { originGuard } from "./originGuard.js";
 import { playNoCache } from "./playCache.js";
 import { gemNoCache } from "./gemCache.js";
 import { getWarmStatus, beginForeground, endForeground } from "./warm/orchestrator.js";
+import { ReportRegistry } from "./report/registry.js";
+import { makeTracker, insightsParamsKey, rubricParamsKey, analyzeParamsKey } from "./report/track.js";
 import { ShareProxyController } from "./share.proxy.controller.js";
 import { SourcesController } from "./sources.controller.js";
 import { PlayController } from "./play.controller.js";
@@ -234,10 +236,17 @@ export function finalizeCommonApp(app: RestApplication, server: Awaited<RestAppl
   // routes are registered directly on expressApp, outside the controller dispatch chain.
   // Read-only warm cache status. Outside any foreground gate — cheap metadata only.
   server.expressApp.get("/api/warm/status", originGuard, (_req, res) => res.json(getWarmStatus() as never));
+  // Report activity registry: the three agent-backed report routes record their
+  // run lifecycle here so the console can notify-on-done and show what is running.
+  // In-memory; swept for TTL. The compute + cache are untouched — this only tracks.
+  const reportRegistry = new ReportRegistry();
+  setInterval(() => reportRegistry.sweep(), 60_000).unref();
+  server.expressApp.get("/api/report/runs", originGuard, (_req, res) => res.json({ runs: reportRegistry.list() } as never));
   // Foreground gate: mark user-facing LLM computes so background warming yields.
   server.expressApp.get("/api/workflow/analyze/stream", originGuard, async (req, res) => {
+    const track = makeTracker(reportRegistry, "analyze", analyzeParamsKey(req.query as never), req.query as never);
     beginForeground();
-    try { await streamWorkflowAnalyze(req as never, res as never); } finally { endForeground(); }
+    try { await streamWorkflowAnalyze(req as never, res as never, track); } finally { endForeground(); }
   });
   // SSE progress stream for running a Gem with a local ACP agent (materialize →
   // run → tool/token deltas → done). POST /api/gem/run stays for programmatic callers.
@@ -251,16 +260,18 @@ export function finalizeCommonApp(app: RestApplication, server: Awaited<RestAppl
   // SSE personal session-insights report: scan a project's transcripts → judge
   // each session with the ACP agent → synthesize. GET /api/insights/stream?root=...&dir=...
   server.expressApp.get("/api/insights/stream", originGuard, async (req, res) => {
+    const track = makeTracker(reportRegistry, "insights", insightsParamsKey(req.query as never), req.query as never);
     beginForeground();
-    try { await streamInsights(req as never, res as never); } finally { endForeground(); }
+    try { await streamInsights(req as never, res as never, track); } finally { endForeground(); }
   });
   // SSE rubric evaluation: run one rubric's factors over a scope's sessions → a
   // per-rubric report. GET /api/rubric/stream?rubric=<id>&scope=session|project|all&root=&sessionId=&dir=
   // A rubric may include LLM criteria (Phase 2) that drive the agent, so it takes the
   // foreground guard like the insights route (harmless for cheap-only rubrics).
   server.expressApp.get("/api/rubric/stream", originGuard, async (req, res) => {
+    const track = makeTracker(reportRegistry, "rubric", rubricParamsKey(req.query as never), req.query as never);
     beginForeground();
-    try { await streamRubric(req as never, res as never); } finally { endForeground(); }
+    try { await streamRubric(req as never, res as never, track); } finally { endForeground(); }
   });
   // Watch tab: live-preview HTML artifacts a regular coding session builds. List the
   // recently-active transcripts, then SSE-stream one session's HTML file snapshots

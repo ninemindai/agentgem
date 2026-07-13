@@ -7,6 +7,7 @@
 // sync. Registered raw on expressApp because the decorator framework only
 // returns single JSON bodies.
 import { computeInsights } from "./insightsCore.js";
+import type { RunTracker } from "./report/track.js";
 
 interface SseReq { query: Record<string, unknown> }
 interface SseRes {
@@ -15,7 +16,7 @@ interface SseRes {
   end(): void;
 }
 
-export async function streamInsights(req: SseReq, res: SseRes): Promise<void> {
+export async function streamInsights(req: SseReq, res: SseRes, track?: RunTracker): Promise<void> {
   const root = typeof req.query.root === "string" ? req.query.root : "";
   const dir = typeof req.query.dir === "string" ? req.query.dir : undefined;
   const fresh = req.query.fresh === "1";   // bypass the cache (Re-run)
@@ -32,17 +33,20 @@ export async function streamInsights(req: SseReq, res: SseRes): Promise<void> {
   };
 
   try {
-    if (!root) { send("failed", { message: "missing root" }); return; }
+    if (!root) { send("failed", { message: "missing root" }); track?.failed("missing root"); return; }
     const { payload, cached, updatedAt } = await computeInsights(root, {
       dir, force: fresh,
       progress: {
-        onPhase: (phase, extra) => send("phase", { phase, ...(extra ?? {}) }),
+        onPhase: (phase, extra) => { send("phase", { phase, ...(extra ?? {}) }); track?.phase(extra?.sessions != null ? `${phase} (${extra.sessions} sessions)` : phase); },
         onDelta: (text) => send("delta", { text }),
       },
     });
     send("done", { ...payload, cached, updatedAt });
+    track?.done();
   } catch (err) {
-    send("failed", { message: (err as Error)?.message ?? String(err) });
+    const msg = (err as Error)?.message ?? String(err);
+    send("failed", { message: msg });
+    track?.failed(msg);
   } finally {
     res.end();
   }
