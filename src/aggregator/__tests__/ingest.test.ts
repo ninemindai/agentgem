@@ -20,6 +20,10 @@ function make(digest: string) {
   return signAttestation(buildAttestation({ gem, signal, gemDigest: digest, salt: "S" }), id, 1);
 }
 
+const fixedId = loadOrCreateIdentity(mkdtempSync(join(tmpdir(), "agg-fixed-")));
+const makeFixed = (digest: string, invocations: number) => signAttestation(
+  buildAttestation({ gem, signal: { ...signal, artifacts: [{ ...signal.artifacts[0], invocations, sessionsUsedIn: 2 }] }, gemDigest: digest, salt: "S" }), fixedId, 1);
+
 describe("ingestAttestation", () => {
   it("accepts, projects, and is idempotent on gem_digest", async () => {
     const db = await makeTestDb();
@@ -47,5 +51,19 @@ describe("ingestAttestation", () => {
     const r = await ingestAttestation(db, { ...make("sha256:u2"), signature: "AAAA" });
     expect(r).toEqual({ accepted: false, rejected: "bad-signature" });
     expect((await db.execute<{ c: number }>(sql`select count(*)::int as c from attestations`)).rows[0].c).toBe(0);
+  });
+
+  it("resubmit refreshes usage in place without new rows, count bumps, or ingested_at churn", async () => {
+    const db = await makeTestDb();
+    const r1 = await ingestAttestation(db, makeFixed("sha256:re", 5));
+    expect(r1).toMatchObject({ accepted: true, idempotent: false, updated: false });
+    const before = (await db.execute<{ t: string }>(sql`select ingested_at::text as t from attestations`)).rows[0].t;
+    const r2 = await ingestAttestation(db, makeFixed("sha256:re", 9));
+    expect(r2).toMatchObject({ accepted: true, idempotent: true, updated: true });
+    expect((await db.execute<{ c: number }>(sql`select count(*)::int c from attestations`)).rows[0].c).toBe(1);
+    expect((await db.execute<{ c: number }>(sql`select attest_count c from producers`)).rows[0].c).toBe(1);
+    const after = (await db.execute<{ t: string }>(sql`select ingested_at::text t from attestations`)).rows[0].t;
+    expect(after).toBe(before); // #4: ingested_at preserved
+    expect((await db.execute<{ c: number }>(sql`select invocations c from usage_edges where invocations = 9`)).rows.length).toBe(1);
   });
 });
