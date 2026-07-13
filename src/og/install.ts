@@ -7,8 +7,10 @@ import { injectHead } from "./inject.js";
 import { renderCardSvg, placeholderSvg } from "./card.js";
 import { renderCardPng } from "./raster.js";
 import { buildOgMeta, type OgMeta } from "./meta.js";
+import { getCoverDataUri } from "./cover.js";
 
 export type GetMeta = (card: Card) => Promise<OgMeta | null>;
+export type GetCover = (card: Card) => Promise<string | null>;
 
 // Minimal express surface we depend on (avoids importing express types here).
 interface OgReq { method: string; path: string; query: Record<string, unknown>; protocol: string; originalUrl: string; get(h: string): string | undefined }
@@ -26,9 +28,12 @@ export function cardImageUrl(origin: string, card: Card): string {
   return `${origin}/og/card.png?type=${card.type}&key=${encodeURIComponent(card.key)}`;
 }
 
-export async function renderCardResponse(getMeta: GetMeta, card: Card): Promise<Uint8Array> {
+export async function renderCardResponse(getMeta: GetMeta, getCover: GetCover, card: Card): Promise<Uint8Array> {
   const meta = await getMeta(card).catch(() => null);
-  const svg = meta ? renderCardSvg({ type: card.type, title: meta.title, subtitle: meta.description }) : placeholderSvg();
+  const screenshotDataUri = (await getCover(card).catch(() => null)) ?? undefined;
+  const svg = meta
+    ? renderCardSvg({ type: card.type, title: meta.title, subtitle: meta.description, screenshotDataUri })
+    : placeholderSvg();
   return renderCardPng(svg);
 }
 
@@ -53,13 +58,14 @@ export async function renderEntityHtml(
 
 export function installOg(app: OgExpressApp, deps: { db: AppDb; assetOrigin: string; ogImageOrigin: string }): void {
   const getMeta: GetMeta = (card) => buildOgMeta(deps.db, card);
+  const getCover: GetCover = (card) => getCoverDataUri(deps.db, card);
 
   app.get("/og/card.png", (req, res) => {
     void (async () => {
       const { type, key } = req.query;
       if (!isCardType(type) || typeof key !== "string") { res.status(400).end(); return; }
       try {
-        const png = await renderCardResponse(getMeta, { type, key });
+        const png = await renderCardResponse(getMeta, getCover, { type, key });
         res.set("Content-Type", "image/png").set("Cache-Control", "public, max-age=300, s-maxage=3600").send(Buffer.from(png));
       } catch {
         try {
