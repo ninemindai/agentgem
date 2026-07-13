@@ -1,5 +1,10 @@
-// Rubric evaluation stream (named SSE events: start/done/failed), consumed via
-// native EventSource — same shape as insightsStream.ts.
+// Rubric evaluation stream (named events start/delta/done/failed, modelled as one
+// discriminated union). Consumed via @agentback/client's typed `route.stream()`
+// over the server's `streamOf:` route — each event validated against the same
+// schema shape the server yields (mirrored here because the console can't import
+// root `src/`; api/routes.ts mirrors server schemas too).
+import { z } from "zod";
+import { defineRoute, type Client } from "@agentback/client";
 
 export interface RubricFactorView {
   id: string;
@@ -25,6 +30,8 @@ export interface RubricReportView {
   perSessionTruncated?: boolean;
 }
 
+// Panel-facing union: `report` typed as the view the panel renders. The wire
+// schema below keeps it opaque (z.unknown()); the bridge casts once.
 export type RubricEvent =
   | { type: "start"; rubric: string; title: string; target: string; scope: string }
   | { type: "delta"; text: string }
@@ -38,31 +45,52 @@ export interface RubricScopeParams {
   sessionId?: string;
 }
 
+const RubricWireEvent = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("start"), rubric: z.string(), title: z.string(), target: z.string(), scope: z.string() }),
+  z.object({ type: z.literal("delta"), text: z.string() }),
+  z.object({ type: z.literal("done"), report: z.unknown(), cached: z.boolean(), updatedAt: z.number().nullable() }),
+  z.object({ type: z.literal("failed"), message: z.string() }),
+]);
+
+const rubricStreamRoute = defineRoute("GET", "/api/rubric/stream", {
+  query: z.object({
+    rubric: z.string(),
+    scope: z.enum(["session", "project", "all"]).optional(),
+    root: z.string().optional(),
+    sessionId: z.string().optional(),
+    refresh: z.string().optional(),
+  }),
+  streamOf: RubricWireEvent,
+});
+
+/**
+ * Open the rubric-evaluation stream. Same `(onEvent) => cleanup` contract the
+ * panel already uses, but typed end to end and validated per event. Returns a
+ * function that aborts the stream (also stops the server generator via res.close).
+ */
 export function openRubricStream(
-  apiBase: string,
+  client: Client,
   params: RubricScopeParams,
   onEvent: (e: RubricEvent) => void,
   fresh = false,
 ): () => void {
-  const qs = new URLSearchParams({ rubric: params.rubric, scope: params.scope });
-  if (params.root) qs.set("root", params.root);
-  if (params.sessionId) qs.set("sessionId", params.sessionId);
-  if (fresh) qs.set("refresh", "true");
-  const es = new EventSource(`${apiBase}/api/rubric/stream?${qs.toString()}`);
-  const data = (m: Event) => JSON.parse((m as MessageEvent).data);
-
-  es.addEventListener("start", (m) => {
-    const d = data(m);
-    onEvent({ type: "start", rubric: d.rubric, title: d.title, target: d.target, scope: d.scope });
-  });
-  es.addEventListener("delta", (m) => onEvent({ type: "delta", text: data(m).text }));
-  es.addEventListener("done", (m) => {
-    const d = data(m);
-    onEvent({ type: "done", report: d.report, cached: !!d.cached, updatedAt: typeof d.updatedAt === "number" ? d.updatedAt : null });
-    es.close();
-  });
-  es.addEventListener("failed", (m) => { onEvent({ type: "failed", message: data(m).message }); es.close(); });
-  es.addEventListener("error", () => onEvent({ type: "failed", message: "stream connection error" }));
-
-  return () => es.close();
+  const ctrl = new AbortController();
+  const query: { rubric: string; scope: RubricScopeParams["scope"]; root?: string; sessionId?: string; refresh?: string } = {
+    rubric: params.rubric,
+    scope: params.scope,
+  };
+  if (params.root) query.root = params.root;
+  if (params.sessionId) query.sessionId = params.sessionId;
+  if (fresh) query.refresh = "true";
+  void (async () => {
+    try {
+      for await (const e of rubricStreamRoute.stream(client, { query }, { signal: ctrl.signal })) {
+        if (e.type === "done") onEvent({ ...e, report: e.report as RubricReportView });
+        else onEvent(e);
+      }
+    } catch {
+      if (!ctrl.signal.aborted) onEvent({ type: "failed", message: "stream connection error" });
+    }
+  })();
+  return () => ctrl.abort();
 }

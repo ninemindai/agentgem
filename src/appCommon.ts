@@ -28,7 +28,6 @@ import { streamGemRun } from "./gemRunStream.js";
 import { streamGemVerify } from "./gemVerifyStream.js";
 import { streamScorecard } from "./scorecardStream.js";
 import { InsightsController } from "./insights.controller.js";
-import { streamRubric } from "./rubricStream.js";
 import { RubricController } from "./rubric.controller.js";
 import { streamWatch } from "./watchStream.js";
 import { streamWatchEvents } from "./watchEvents.js";
@@ -53,9 +52,8 @@ import { closeSharedIndex } from "@agentgem/capture";
 import { originGuard } from "./originGuard.js";
 import { playNoCache } from "./playCache.js";
 import { gemNoCache } from "./gemCache.js";
-import { getWarmStatus, beginForeground, endForeground } from "./warm/orchestrator.js";
+import { getWarmStatus } from "./warm/orchestrator.js";
 import { ReportRegistry, REPORT_REGISTRY } from "./report/registry.js";
-import { trackerFor, rubricParamsKey, queryParams } from "./report/track.js";
 import { ShareProxyController } from "./share.proxy.controller.js";
 import { SourcesController } from "./sources.controller.js";
 import { PlayController } from "./play.controller.js";
@@ -268,15 +266,10 @@ export function finalizeCommonApp(app: RestApplication, server: Awaited<RestAppl
   // dispatch — see InsightsController, registered above. It keeps the foreground
   // guard internally and drives the same reportRegistry (bound below) via its
   // injected ReportRegistry, so /api/report/runs + console reattach are unchanged.
-  // SSE rubric evaluation: run one rubric's factors over a scope's sessions → a
-  // per-rubric report. GET /api/rubric/stream?rubric=<id>&scope=session|project|all&root=&sessionId=&dir=
-  // A rubric may include LLM criteria (Phase 2) that drive the agent, so it takes the
-  // foreground guard like the insights route (harmless for cheap-only rubrics).
-  server.expressApp.get("/api/rubric/stream", originGuard, async (req, res) => {
-    const track = trackerFor(reportRegistry, "rubric", rubricParamsKey(req.query as never), queryParams(req.query as never), (req.query as { refresh?: string }).refresh === "true");
-    beginForeground();
-    try { await streamRubric(req as never, res as never, track); } finally { endForeground(); }
-  });
+  // The rubric-evaluation SSE report is now a `streamOf:` route on the decorator
+  // dispatch — see RubricController.stream, registered above. Like the insights
+  // and workflow routes it keeps the foreground guard internally and drives the
+  // same reportRegistry (kind "rubric") via its injected ReportRegistry.
   // Watch tab: live-preview HTML artifacts a regular coding session builds. List the
   // recently-active transcripts, then SSE-stream one session's HTML file snapshots
   // (redacted, sandbox-ready) as it writes/edits them. Read-only, metadata + scrubbed

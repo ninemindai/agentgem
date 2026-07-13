@@ -13,24 +13,11 @@
 // the order explicitly: it lets /api/report/runs (and therefore the reattach
 // claim) resolve and fully apply BEFORE releasing a held /api/rubrics response,
 // reproducing the exact "reattach resolves first" scenario from the finding.
-import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, waitFor, cleanup } from "@testing-library/react";
 import { Rubrics } from "../index.js";
 
-class FakeES {
-  static last: FakeES | null = null;
-  listeners = new Map<string, (e: MessageEvent) => void>();
-  constructor(public url: string) { FakeES.last = this; }
-  addEventListener(t: string, cb: (e: MessageEvent) => void) { this.listeners.set(t, cb); }
-  close() {}
-}
-
 afterEach(cleanup);
-
-beforeEach(() => {
-  (globalThis as any).EventSource = FakeES as unknown;
-  FakeES.last = null;
-});
 
 // The route client (@agentback/client) parses responses via `.text()`, not
 // `.json()` — mimic a real Response so route calls don't fail validation and
@@ -39,14 +26,28 @@ function jsonResponse(body: unknown) {
   const text = JSON.stringify(body);
   return { ok: true, text: async () => text, json: async () => body } as any;
 }
+// The rubric stream is now `route.stream()` over fetch; a real event-stream
+// Response so the reattach's stream open (a cache-hit) completes cleanly.
+function sseResponse(frames: unknown[]) {
+  const body = frames.map((f) => `data: ${JSON.stringify(f)}\n\n`).join("");
+  return new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } });
+}
 
 describe("Rubrics panel — reattach vs default-select race", () => {
   it("keeps the reattached run's rubric selected once /api/rubrics resolves afterward", async () => {
     let releaseRubrics: (() => void) | null = null;
     const rubricsGate = new Promise<void>((resolve) => { releaseRubrics = resolve; });
+    // Signals that the reattach path opened the rubric stream (proof its rubric
+    // claim landed) — the fetch-transport analogue of the old EventSource probe.
+    let markStreamOpened: (() => void) | null = null;
+    const streamOpened = new Promise<void>((resolve) => { markStreamOpened = resolve; });
 
     vi.stubGlobal("fetch", vi.fn(async (u: string) => {
       const url = String(u);
+      if (url.includes("/api/rubric/stream")) {
+        markStreamOpened!();
+        return sseResponse([{ type: "done", report: {}, cached: true, updatedAt: null }]);
+      }
       if (url.includes("/api/report/runs")) {
         // A done run for "hygiene", which is NOT first in the rubrics list below.
         return jsonResponse({
@@ -76,9 +77,9 @@ describe("Rubrics panel — reattach vs default-select race", () => {
     render(<Rubrics apiBase="http://x" />);
 
     // The reattach path (useReportRun's mount fetch → openLive → openStream)
-    // opens an EventSource once it has fully applied — proof the reattach
+    // opens the rubric stream once it has fully applied — proof the reattach
     // claim (rubricId="hygiene") landed before /api/rubrics is allowed to resolve.
-    await waitFor(() => expect(FakeES.last).not.toBeNull());
+    await streamOpened;
 
     const select = (await screen.findByLabelText("Rubric")) as HTMLSelectElement;
     // No options yet (the list is held), so select.value can't reflect the claimed

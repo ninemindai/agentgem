@@ -100,7 +100,7 @@ export function Rubrics({ apiBase }: { apiBase: string }) {
         root: params.root,
         sessionId: params.sessionId,
       };
-      return openRubricStream(apiBase, scope, (e) => {
+      return openRubricStream(makeClient(apiBase), scope, (e) => {
         if (e.type === "start") h.phase("evaluating");
         else if (e.type === "delta") h.delta(e.text);
         else if (e.type === "done") h.done({ report: e.report, cached: e.cached, updatedAt: e.updatedAt });

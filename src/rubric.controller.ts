@@ -14,7 +14,14 @@
 // what's wrong. The real, structural validation lives in rubricCore.validateRubric.
 import { z } from "zod";
 import { api, get, post } from "@agentback/openapi";
-import { listRubricsWithMeta, validateRubricInput, saveRubric, deleteRubric } from "./rubricCore.js";
+import { inject } from "@agentback/core";
+import { listRubricsWithMeta, validateRubricInput, saveRubric, deleteRubric, computeRubric as realComputeRubric, resolveRubric } from "./rubricCore.js";
+import { scopeAllowed, type RubricScope } from "@agentgem/insight";
+import { beginForeground, endForeground } from "./warm/orchestrator.js";
+import { ReportRegistry, REPORT_REGISTRY } from "./report/registry.js";
+import { trackerFor, rubricParamsKey, queryParams } from "./report/track.js";
+import { pump } from "./sse/pump.js";
+import { RubricStreamQuery, RubricEvent } from "./rubric.stream.schema.js";
 
 // The Rubric shape (packages/insight/src/rubrics.ts), mirrored so /openapi.json
 // describes the catalog + validation payloads. Response validation is advisory
@@ -59,8 +66,83 @@ const RubricListResponseSchema = z.object({ rubrics: z.array(RubricWithBuiltinSc
 const RubricDeleteBodySchema = z.object({ id: z.string() });
 const RubricDeleteResponseSchema = z.object({ deleted: z.boolean(), error: z.string().optional() });
 
+// Test seam: swap computeRubric so the stream route can be driven without the
+// spine scan / ACP stack. resolveRubric stays real (built-in rubrics resolve
+// in-memory). Mirrors setInsightsComputeForTests / setWorkflowComputeForTests.
+type ComputeRubric = typeof realComputeRubric;
+let computeFn: ComputeRubric = realComputeRubric;
+export function setRubricComputeForTests(fn: ComputeRubric | null): void {
+  computeFn = fn ?? realComputeRubric;
+}
+
+const str = (q: unknown): string | undefined => (typeof q === "string" && q ? q : undefined);
+
+// Parse ?scope=&root=&sessionId= into a RubricScope, or a user-facing error
+// message (surfaced as a `failed` event, not a 422 — moved from rubricStream.ts).
+function parseScope(q: { scope?: string; root?: string; sessionId?: string }): RubricScope | { error: string } {
+  const kind = q.scope ?? "project";
+  if (kind === "all") return { kind: "all" };
+  if (kind === "project") {
+    if (!q.root) return { error: "project scope requires ?root=" };
+    return { kind: "project", root: q.root };
+  }
+  const sessionId = str(q.sessionId);
+  if (!q.root || !sessionId) return { error: "session scope requires ?root= and ?sessionId=" };
+  return { kind: "session", root: q.root, sessionId };
+}
+
 @api({ basePath: "/api" })
 export class RubricController {
+  // Optional so the catalog/authoring routes (and their supertest) construct
+  // without a bound registry; the stream route uses it for report-run tracking
+  // (kind "rubric"), shared with the analyze/insights routes + /api/report/runs.
+  constructor(
+    @inject(REPORT_REGISTRY, { optional: true }) private reportRegistry?: ReportRegistry,
+  ) {}
+
+  // GET /api/rubric/stream — SSE evaluation of one rubric at a scope. Opens with a
+  // `start` event (rubric metadata), streams LLM-criterion deltas (Phase 2), then
+  // `done`. Business failures (unknown rubric, bad scope) are `failed` events, not
+  // 422s, so the panel shows the message. Drives the report registry (kind "rubric").
+  @get("/rubric/stream", { query: RubricStreamQuery, streamOf: RubricEvent })
+  async *stream(input: {
+    query: z.infer<typeof RubricStreamQuery>;
+  }): AsyncGenerator<z.infer<typeof RubricEvent>> {
+    const { rubric: id, dir, refresh } = input.query;
+    const fresh = refresh === "true"; // ?refresh=true bypasses the cache
+    const track = this.reportRegistry
+      ? trackerFor(this.reportRegistry, "rubric", rubricParamsKey(input.query as Record<string, unknown>), queryParams(input.query as Record<string, unknown>), fresh)
+      : undefined;
+    // begin/end in the producer (not the generator's finally) so the foreground
+    // gate is held through a client disconnect — see sse/pump.ts.
+    yield* pump<z.infer<typeof RubricEvent>>(async (emit) => {
+      beginForeground();
+      try {
+        const rubric = resolveRubric(id, dir);
+        if (!rubric) { const m = `unknown rubric: ${id}`; emit({ type: "failed", message: m }); track?.failed(m); return; }
+        const scope = parseScope(input.query);
+        if ("error" in scope) { emit({ type: "failed", message: scope.error }); track?.failed(scope.error); return; }
+        // Hard rule: an aggregate-only rubric can't run at session scope.
+        if (!scopeAllowed(rubric, scope.kind)) {
+          const m = `rubric "${rubric.id}" is aggregate-only and cannot run at scope "${scope.kind}"`;
+          emit({ type: "failed", message: m }); track?.failed(m); return;
+        }
+        emit({ type: "start", rubric: rubric.id, title: rubric.title, target: rubric.target, scope: scope.kind });
+        track?.phase("evaluating");
+        const { payload, cached, updatedAt } = await computeFn(rubric, scope, {
+          dir, force: fresh, onDelta: (chunk) => emit({ type: "delta", text: chunk }),
+        });
+        emit({ type: "done", report: payload, cached, updatedAt });
+        track?.done();
+      } catch (err) {
+        const m = (err as Error)?.message ?? String(err);
+        emit({ type: "failed", message: m }); track?.failed(m);
+      } finally {
+        endForeground();
+      }
+    });
+  }
+
   // GET /api/rubrics?dir= — built-in + user rubrics for the picker.
   @get("/rubrics", { query: RubricListQuerySchema, response: RubricListResponseSchema })
   async list(input: { query: z.infer<typeof RubricListQuerySchema> }): Promise<z.infer<typeof RubricListResponseSchema>> {
