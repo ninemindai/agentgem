@@ -60,6 +60,7 @@ import { AggregatorController } from "./aggregator.controller.js";
 import { ShareController } from "./share.controller.js";
 import { requireShareOriginSecret } from "./originSecret.js";
 import { ShareProxyController } from "./share.proxy.controller.js";
+import { BenchmarkProxyController } from "./benchmark.proxy.controller.js";
 import { SourcesController } from "./sources.controller.js";
 import { PlayController } from "./play.controller.js";
 import { resolveAggregatorDb, type AppDb, migrateAccountsToBetterAuth, backfillUserHandles } from "@agentgem/aggregator";
@@ -155,6 +156,7 @@ export async function createApp(port: number): Promise<RestApplication> {
   app.restController(ReviewController);
   app.restController(DreamController);
   app.restController(ShareProxyController);
+  app.restController(BenchmarkProxyController);
   app.restController(SourcesController);
   app.restController(PlayController);
   app.service(GemTools);
