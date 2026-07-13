@@ -6,7 +6,7 @@
 import type { Identity } from "@agentgem/model";
 import { InvalidInputError } from "@agentgem/model";
 import { createLogger } from "@agentgem/base";
-import { reviewSubmitPayload, reviewResubmitPayload, reviewActionPayload, type CatalogManifest } from "@agentgem/aggregator";
+import { reviewSubmitPayload, reviewResubmitPayload, reviewActionPayload, type CatalogManifest } from "@agentgem/aggregator/catalog";
 
 const log = createLogger("review");
 

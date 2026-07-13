@@ -7,7 +7,7 @@ import { writeFileSync, mkdirSync, readFileSync, existsSync, rmSync } from "node
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { loadOrCreateIdentity, type Identity } from "@agentgem/model";
-import { bindSigningPayload } from "@agentgem/aggregator";
+import { bindSigningPayload } from "@agentgem/aggregator/binding";
 import { requestDeviceCode, pollForToken } from "./deviceFlow.js";
 
 export interface BindConfig { clientId?: string; base?: string }

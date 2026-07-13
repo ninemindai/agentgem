@@ -5,6 +5,7 @@
   "license": "MIT",
   "private": true,
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -17,6 +18,18 @@
     "./catalog": {
       "types": "./dist/catalog.d.ts",
       "default": "./dist/catalog.js"
+    },
+    "./webAuth": {
+      "types": "./dist/webAuth.d.ts",
+      "default": "./dist/webAuth.js"
+    },
+    "./handles": {
+      "types": "./dist/handles.d.ts",
+      "default": "./dist/handles.js"
+    },
+    "./binding": {
+      "types": "./dist/binding.d.ts",
+      "default": "./dist/binding.js"
     }
   },
   "files": [

@@ -52,7 +52,6 @@ import { mkdirSync } from "node:fs";
 import { closeSharedIndex } from "@agentgem/capture";
 import { originGuard } from "./originGuard.js";
 import { playNoCache } from "./playCache.js";
-import { gameHtmlCache } from "./arcadeCache.js";
 import { gemNoCache } from "./gemCache.js";
 import { getWarmStatus, beginForeground, endForeground } from "./warm/orchestrator.js";
 import { ShareProxyController } from "./share.proxy.controller.js";
@@ -170,11 +169,9 @@ export async function buildCommonApp(port: number): Promise<{ app: RestApplicati
   // responseHeaders collector so it holds on the Web/edge pipeline too. Bound before start(): the
   // hook list is resolved once, on the first dispatched request, and cached.
   app.bind("hooks.playNoCache").to(playNoCache).tag(REST_DISPATCH_HOOK_TAG);
-  // The arcade's sealed-game read is the opposite case: versioned, re-read by every card on the
-  // Miniapps grid, and expensive to serve (bytea out of Postgres, then unzip). Give it a short
-  // max-age so a repeat visit skips the request — but never `immutable`, since a republish reuses
-  // the same (key, version).
-  app.bind("hooks.gameHtmlCache").to(gameHtmlCache).tag(REST_DISPATCH_HOOK_TAG);
+  // hooks.gameHtmlCache (the arcade's sealed-game read cache) is aggregator-specific — bound by
+  // mountAggregator (serverAggregator.ts), not here, since it keys on AggregatorController, which
+  // the desktop client entry never mounts. See arcadeCache.ts's module comment.
   // The inventory reads serve mutable local state (installing a skill changes them); without
   // Cache-Control the browser heuristically caches them off the bare ETag. Same rationale and
   // mechanism as hooks.playNoCache above.

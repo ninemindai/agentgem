@@ -9,8 +9,10 @@
 // reconcile timers), and registry upload-publish. Called once from createApp, after
 // `const server = await app.restServer` is resolved.
 import type { RestApplication } from "@agentback/rest";
+import { REST_DISPATCH_HOOK_TAG } from "@agentback/rest";
 import { registerDrizzle } from "@agentback/drizzle";
 import { AggregatorController } from "./aggregator.controller.js";
+import { gameHtmlCache } from "./arcadeCache.js";
 import { ShareController } from "./share.controller.js";
 import { requireShareOriginSecret } from "./originSecret.js";
 import { resolveAggregatorDb, type AppDb, migrateAccountsToBetterAuth, backfillUserHandles } from "@agentgem/aggregator";
@@ -68,6 +70,12 @@ export async function mountAggregator(
     registerDrizzle(app, db as never, { onStop });
     app.restController(AggregatorController);
     app.restController(ShareController);
+    // The arcade's sealed-game read is versioned, re-read by every card on the Miniapps grid, and
+    // expensive to serve (bytea out of Postgres, then unzip) — give it a short max-age so a repeat
+    // visit skips the request, but never `immutable` since a republish reuses the same (key,
+    // version). Bound here (not buildCommonApp) because it keys on AggregatorController, which the
+    // desktop client entry never mounts — see arcadeCache.ts's module comment.
+    app.bind("hooks.gameHtmlCache").to(gameHtmlCache).tag(REST_DISPATCH_HOOK_TAG);
     // POST /api/aggregator/share (anonymous create) is rate-limited by mountGating's anon per-IP
     // bucket below (keyed on CLIENT_IP_HEADER). That IP is only trustworthy if the request came
     // through Cloudflare, so require a CF-injected origin secret on the create (no-op until

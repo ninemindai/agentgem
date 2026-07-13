@@ -7,8 +7,9 @@
 // This lands in the git registry index's public discovery JSON (buildDiscovery), so it must be
 // human-readable — it is attribution, NOT authorization. Publishing is gated separately, by
 // accountOwnsScope(accountId, scope), which is uuid-keyed.
-import { resolveSession, handleForAccountId, type makeAuth } from "@agentgem/aggregator";
-import type { AppDb } from "@agentgem/aggregator";
+import { resolveSession } from "@agentgem/aggregator/webAuth";
+import { handleForAccountId } from "@agentgem/aggregator/handles";
+import type { makeAuth, AppDb } from "@agentgem/aggregator";
 
 // Structural — the injected Express request only needs to expose its headers (better-auth reads
 // its own cookie/bearer off them — see webAuth.ts resolveSession).
