@@ -320,6 +320,16 @@ export const gemArchives = pgTable("gem_archives", {
   ownerAccountId: uuid("owner_account_id").references(() => accounts.id),
 }, (t) => [primaryKey({ columns: [t.gemKey, t.version] })]);
 
+// Per-(gem_key, version) cover image for OG cards — a screenshot captured at publish time. Cosmetic:
+// NOT part of the signed manifest/gemDigest. Streamed only as pixels composited inside /og/card.png.
+export const gemCovers = pgTable("gem_covers", {
+  gemKey: text("gem_key").notNull(),
+  version: text("version").notNull(),
+  bytes: bytea("bytes").notNull(),
+  contentType: text("content_type").notNull(),
+  createdAtMs: bigint("created_at_ms", { mode: "number" }).notNull(),
+}, (t) => [primaryKey({ columns: [t.gemKey, t.version] })]);
+
 export type ReviewStatus = "open" | "approved" | "changes-requested" | "withdrawn";
 
 // A staging gem under review. Bytes + manifest live HERE, isolated from every published surface
@@ -638,6 +648,7 @@ export async function ensureSchema(db: AppDb): Promise<void> {
   // pre-existing table, so back-fill the columns any adoption/effectiveness/profile query reads.
   await db.execute(sql`alter table gem_adoptions add column if not exists trust_score real not null default 1`);
   await db.execute(sql`alter table gem_adoptions add column if not exists quarantined boolean not null default false`);
+  await db.execute(sql`create table if not exists gem_covers (gem_key text not null, version text not null, bytes bytea not null, content_type text not null, created_at_ms bigint not null, primary key (gem_key, version))`);
   await db.execute(sql`create table if not exists account_scopes (account_id uuid not null references accounts(id), scope text not null, role text not null default 'member', captured_at timestamptz not null default now(), primary key (account_id, scope))`);
   await db.execute(sql`alter table account_scopes add column if not exists captured_at timestamptz not null default now()`);
   await db.execute(sql`alter table account_scopes add column if not exists role text not null default 'member'`);
