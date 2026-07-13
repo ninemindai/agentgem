@@ -118,6 +118,13 @@ export function gemStatusSigningPayload(gemKey: string, pubkey: string, signedAt
   return canonicalJSON({ pubkey, signedAt, gemKey });
 }
 
+// Signed payload for the /my-gems listing query. Mirrors gemStatusSigningPayload's shape but has no
+// key to commit to — it's just "prove key possession right now" so resolveSignedAccount can attribute
+// the request to an accountId.
+export function myGemsSigningPayload(pubkey: string, signedAt: number): string {
+  return canonicalJSON({ action: "my-gems", pubkey, signedAt });
+}
+
 // Pre-flight for the publish dialog: does this key exist, is it owned by `accountId` (the resolved
 // signer; null = unresolved/anonymous), and what is the latest-published version?
 export async function gemStatusFor(db: AppDb, gemKey: string, accountId: string | null): Promise<GemStatus> {
