@@ -128,10 +128,6 @@ export async function createApp(port: number): Promise<RestApplication> {
   // flushes its WASM instance cleanly instead of leaving it resident until exit
   // (symmetric with the aggregator's registerDrizzle onStop). No-op if never opened.
   app.onStop(async () => { await closeSharedIndex(); });
-  // CSRF / drive-by guard: reject browser-initiated cross-site requests to the loopback API
-  // (controller routes). Same-origin UI and non-browser clients (CLI/MCP/tests) pass. Mounted in
-  // the framework middleware chain so it runs before controller dispatch.
-  app.expressMiddleware("middleware.originGuard", originGuard);
   // The Play registry reads serve mutable on-disk state; without Cache-Control the browser
   // heuristically caches them off the bare ETag and the Studio renders a stale miniapp. A dispatch
   // hook keys on the matched route rather than a path string, and writes through the neutral
@@ -163,6 +159,14 @@ export async function createApp(port: number): Promise<RestApplication> {
   // account + OG cards + the GitHub App + registry upload-publish (Task 4: extracted into
   // serverAggregator.ts, no behaviour change).
   await mountAggregator(app, server, process.env);
+  // CSRF / drive-by guard: reject browser-initiated cross-site requests to the loopback API
+  // (controller routes). Same-origin UI and non-browser clients (CLI/MCP/tests) pass. Mounted in
+  // the framework middleware chain so it runs before controller dispatch. Registered AFTER
+  // mountAggregator (not before, as its own internal middleware.shareOriginSecret + mountGating's
+  // rate limiters must run first — same-group express middleware order is registration order, and
+  // that ordering is what proves CF origin / rate-limits the anonymous share-create route before
+  // originGuard would otherwise short-circuit it with its own, less specific, 403).
+  app.expressMiddleware("middleware.originGuard", originGuard);
   // The React console (`dist/public/console`) is the UI, served at `/` (and `/console`).
   // It replaced the original vanilla UI, now removed (history in git). The gem-transfer
   // feature's backend (/api/transfer/*) ships, but its web redeem UI is not yet ported to
