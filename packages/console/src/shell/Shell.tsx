@@ -7,6 +7,8 @@ import { useRovingTabIndex } from "./useRovingTabIndex.js";
 import { ToastProvider } from "./Toast.js";
 import { NotificationsProvider } from "../notify/NotificationsProvider.js";
 import { NotifyBell } from "../notify/NotifyBell.js";
+import { ActivityProvider } from "../notify/ActivityProvider.js";
+import { ActivityMenu } from "../notify/ActivityMenu.js";
 import { IdentityProvider } from "../identity/IdentityProvider.js";
 import { IdentityChip } from "../identity/IdentityChip.js";
 import { useSidebar } from "./sidebar.js";
@@ -152,6 +154,7 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
   return (
     <ToastProvider>
       <IdentityProvider apiBase={apiBase}>
+      <ActivityProvider apiBase={apiBase}>
       <div
         className={"console" + (sidebar.isRail ? " is-rail" : "") + (sidebar.collapsed ? " is-hidden" : "") + (sidebar.dragging ? " is-dragging" : "")}
         style={{ ["--rail-w" as string]: `${sidebar.width}px` }}
@@ -169,6 +172,7 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
             </svg>
             AgentGem
             <NotifyBell />
+            <ActivityMenu />
           </div>
           <WarmingPill apiBase={apiBase} />
           <div className="console-phase-switch" role="radiogroup" aria-label="Phase" {...roving.containerProps}>
@@ -206,6 +210,7 @@ export function Shell({ pages, apiBase }: { pages: ConsolePage[]; apiBase: strin
         <NotificationsProvider apiBase={apiBase} />
         {!sidebar.collapsed && <div className="console-rail-handle" aria-label="Resize sidebar" {...sidebar.handleProps} />}
       </div>
+      </ActivityProvider>
       </IdentityProvider>
     </ToastProvider>
   );

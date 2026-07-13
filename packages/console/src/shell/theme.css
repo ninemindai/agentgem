@@ -148,6 +148,8 @@ body::before {
    wordmark's baseline, not the border-bottom padding. */
 .console-brand .notify-bell { margin-left: auto; align-self: center; margin-bottom: 12px; }
 .console.is-rail .console-brand .notify-bell { display: none; }
+.console-brand .activity-menu { align-self: center; margin-bottom: 12px; }
+.console.is-rail .console-brand .activity-menu { display: none; }
 
 /* Warming pill — shows only while background precompute runs. A soft terracotta
    pill with a light sweep crossing it left→right (same shimmer language as the
@@ -1819,6 +1821,44 @@ button.scorecard-intent { line-height: 1.4; }
 .notify-bell:hover { opacity: 1; background: rgba(154, 51, 36, .06); }
 .notify-bell.is-on { opacity: 1; }
 .notify-bell.is-blocked { opacity: .4; cursor: not-allowed; }
+
+/* Activity menu — bell-adjacent dropdown listing background report runs. Mirrors
+   .notify-bell's opacity-toggle button; the popover reuses --raised/--line/--shadow-md
+   like the other console popovers (e.g. .console-switcher). */
+.activity-menu { position: relative; display: inline-flex; }
+.activity-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  padding: 4px 6px;
+  border-radius: 6px;
+  opacity: .7;
+  position: relative;
+}
+.activity-toggle:hover, .activity-toggle.is-active { opacity: 1; background: rgba(154, 51, 36, .06); }
+.activity-count {
+  position: absolute; top: -3px; right: -5px; min-width: 14px; height: 14px; padding: 0 3px;
+  border-radius: 7px; background: var(--accent); color: var(--raised);
+  font: 600 10px/14px var(--font-ui); text-align: center;
+}
+.activity-pop {
+  position: absolute; top: 100%; right: 0; z-index: 30; margin-top: 4px; min-width: 240px;
+  background: var(--raised); border: 1px solid var(--line, rgba(0,0,0,.12)); border-radius: var(--radius, 9px);
+  box-shadow: var(--shadow-md, 0 6px 24px rgba(0,0,0,.18)); padding: 4px;
+}
+.activity-empty { padding: 10px 12px; color: var(--ink-soft); font-size: 13px; }
+.activity-row {
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+  background: none; border: 0; cursor: pointer; padding: 8px 10px; border-radius: 6px;
+  font: 500 13px/1.3 var(--font-ui); color: var(--ink);
+}
+.activity-row:hover { background: rgba(154, 51, 36, .06); }
+.activity-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+.activity-dot-running { background: var(--accent); }
+.activity-dot-done { background: var(--emerald); }
+.activity-dot-failed { background: var(--red); }
 
 /* Play capability-consent prompt (overlays the sealed game when it requests a gated capability) */
 .play-consent { position: absolute; inset: 0; z-index: 1002; display: grid; place-items: center; background: rgba(12,10,18,.72); }
