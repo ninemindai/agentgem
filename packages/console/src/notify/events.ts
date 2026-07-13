@@ -28,3 +28,37 @@ export function detectDream(prev: DreamSnapshot | null, next: DreamSnapshot): No
   }
   return null;
 }
+
+export interface ReportSnapshot {
+  terminal: Record<string, "done" | "failed">;   // run id -> terminal status
+  kindOf: Record<string, string>;                 // run id -> kind
+}
+
+const KIND_LABEL: Record<string, string> = { insights: "Insights", rubric: "Rubric", analyze: "Analysis" };
+
+// One NotifyEvent per run that became terminal since `prev`. On the FIRST snapshot
+// (prev === null) we normally stay silent, EXCEPT for a run that started after the
+// provider mounted (firstBaselineAt) — that's an instant cached run that finished
+// before the first poll and would otherwise be swallowed (#6).
+export function detectReportDone(
+  prev: ReportSnapshot | null,
+  next: ReportSnapshot,
+  opts?: { firstBaselineAt?: number; startedAt?: Record<string, number> },
+): NotifyEvent[] {
+  const out: NotifyEvent[] = [];
+  for (const [id, status] of Object.entries(next.terminal)) {
+    if (prev) {
+      if (prev.terminal[id]) continue;
+    } else {
+      const started = opts?.startedAt?.[id];
+      if (!(opts?.firstBaselineAt != null && started != null && started >= opts.firstBaselineAt)) continue;
+    }
+    const label = KIND_LABEL[next.kindOf[id]] ?? "Report";
+    out.push({
+      key: `report-${id}-${status}`,
+      title: status === "done" ? `${label} ready` : `${label} failed`,
+      message: status === "done" ? `Your ${label.toLowerCase()} report is ready.` : `Your ${label.toLowerCase()} report failed.`,
+    });
+  }
+  return out;
+}
