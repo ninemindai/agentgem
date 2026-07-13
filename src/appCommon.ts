@@ -23,7 +23,7 @@ import { GemController } from "./gem.controller.js";
 import { ReviewController } from "./review.controller.js";
 import { DreamController } from "./dream.controller.js";
 import { GemTools } from "./gem.tools.js";
-import { streamWorkflowAnalyze } from "./workflowStream.js";
+import { WorkflowController } from "./workflow.controller.js";
 import { streamGemRun } from "./gemRunStream.js";
 import { streamGemVerify } from "./gemVerifyStream.js";
 import { streamScorecard } from "./scorecardStream.js";
@@ -55,7 +55,7 @@ import { playNoCache } from "./playCache.js";
 import { gemNoCache } from "./gemCache.js";
 import { getWarmStatus, beginForeground, endForeground } from "./warm/orchestrator.js";
 import { ReportRegistry, REPORT_REGISTRY } from "./report/registry.js";
-import { trackerFor, rubricParamsKey, analyzeParamsKey, queryParams } from "./report/track.js";
+import { trackerFor, rubricParamsKey, queryParams } from "./report/track.js";
 import { ShareProxyController } from "./share.proxy.controller.js";
 import { SourcesController } from "./sources.controller.js";
 import { PlayController } from "./play.controller.js";
@@ -160,6 +160,7 @@ export async function buildCommonApp(port: number): Promise<{ app: RestApplicati
   app.restController(SourcesController);
   app.restController(PlayController);
   app.restController(InsightsController);
+  app.restController(WorkflowController);
   app.service(GemTools);
   // The persistent transcript index (capture) is a separate, lazily-opened on-disk
   // PGlite — not the aggregator DB. Close it on graceful shutdown too, so SIGTERM
@@ -248,11 +249,11 @@ export function finalizeCommonApp(app: RestApplication, server: Awaited<RestAppl
   setInterval(() => reportRegistry.sweep(), 60_000).unref();
   server.expressApp.get("/api/report/runs", originGuard, (_req, res) => res.json({ runs: reportRegistry.list() } as never));
   // Foreground gate: mark user-facing LLM computes so background warming yields.
-  server.expressApp.get("/api/workflow/analyze/stream", originGuard, async (req, res) => {
-    const track = trackerFor(reportRegistry, "analyze", analyzeParamsKey(req.query as never), queryParams(req.query as never), (req.query as { fresh?: string }).fresh === "1");
-    beginForeground();
-    try { await streamWorkflowAnalyze(req as never, res as never, track); } finally { endForeground(); }
-  });
+  // The workflow-analysis SSE report is now a `streamOf:` route on the decorator
+  // dispatch — see WorkflowController, registered above. Like InsightsController it
+  // keeps the foreground guard internally and drives the same reportRegistry (kind
+  // "analyze") via its injected ReportRegistry, so /api/report/runs + console
+  // reattach are unchanged.
   // SSE progress stream for running a Gem with a local ACP agent (materialize →
   // run → tool/token deltas → done). POST /api/gem/run stays for programmatic callers.
   server.expressApp.get("/api/gem/run/stream", originGuard, streamGemRun);

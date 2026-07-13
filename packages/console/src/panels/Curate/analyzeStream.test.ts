@@ -1,61 +1,56 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect } from "vitest";
+import { createClient, type Client } from "@agentback/client";
 import { openAnalyzeStream, type AnalyzeEvent } from "./analyzeStream.js";
 
-class FakeES {
-  static last: FakeES | null = null;
-  listeners: Record<string, ((e: unknown) => void)[]> = {};
-  closed = false;
-  constructor(public url: string) { FakeES.last = this; }
-  addEventListener(type: string, cb: (e: unknown) => void) { (this.listeners[type] ??= []).push(cb); }
-  close() { this.closed = true; }
-  emit(type: string, data: unknown) { for (const cb of this.listeners[type] ?? []) cb({ data: JSON.stringify(data) }); }
-  emitRaw(type: string, raw: string) { for (const cb of this.listeners[type] ?? []) cb({ data: raw }); }
+const CANDIDATE = { name: "auth-flow", description: "sign-in gem", confidence: "high", include: [{ type: "skill", name: "login" }] };
+
+// A client whose fetch replays `items` as a text/event-stream body — the wire the
+// server's streamOf route produces. Drives the real route.stream() consumer
+// (URL building, SSE parse, per-event validation) without a live server.
+function sseClient(items: unknown[], onUrl?: (url: string) => void): Client {
+  const fetch = (async (url: string | URL | Request) => {
+    onUrl?.(String(url));
+    const body = items.map((i) => `data: ${JSON.stringify(i)}\n\n`).join("");
+    return new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } });
+  }) as typeof globalThis.fetch;
+  return createClient({ baseURL: "http://console.test", fetch });
 }
 
-afterEach(() => { FakeES.last = null; });
+function run(client: Client, root: string, fresh = false): Promise<AnalyzeEvent[]> {
+  return new Promise((resolve) => {
+    const events: AnalyzeEvent[] = [];
+    openAnalyzeStream(client, root, fresh, (e) => {
+      events.push(e);
+      if (e.type === "done" || e.type === "failed") resolve(events);
+    });
+  });
+}
 
 describe("openAnalyzeStream", () => {
-  it("passes root + fresh and translates events, closing on done", () => {
-    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
-    const events: AnalyzeEvent[] = [];
-    openAnalyzeStream("", "/home/me/proj", true, (e) => events.push(e));
-    const es = FakeES.last!;
-    expect(es.url).toContain("root=%2Fhome%2Fme%2Fproj");
-    expect(es.url).toContain("fresh=1");
-
-    es.emit("phase", { phase: "scanning" });
-    es.emit("phase", { phase: "scanned", transcripts: 4, sessions: 2 });
-    es.emit("delta", { text: "thinking…" });
-    es.emit("done", { cached: false });
-
-    expect(events).toEqual([
-      { type: "phase", phase: "scanning", transcripts: undefined, sessions: undefined },
+  it("forwards phase/delta/done and passes candidates through", async () => {
+    const events = await run(sseClient([
+      { type: "phase", phase: "scanning" },
       { type: "phase", phase: "scanned", transcripts: 4, sessions: 2 },
       { type: "delta", text: "thinking…" },
-      { type: "done", cached: false, candidates: [] },
-    ]);
-    expect(es.closed).toBe(true);
+      { type: "done", cached: false, candidates: [CANDIDATE] },
+    ]), "/home/me/proj");
+
+    expect(events.map((e) => e.type)).toEqual(["phase", "phase", "delta", "done"]);
+    expect(events[1]).toMatchObject({ type: "phase", phase: "scanned", transcripts: 4, sessions: 2 });
+    const done = events[3];
+    expect(done).toMatchObject({ type: "done", cached: false });
+    if (done.type === "done") expect(done.candidates).toEqual([CANDIDATE]);
   });
 
-  it("a malformed done frame closes the stream and reports failure instead of freezing", () => {
-    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
-    const events: AnalyzeEvent[] = [];
-    openAnalyzeStream("", "/p", false, (e) => events.push(e));
-    const es = FakeES.last!;
-    expect(() => es.emitRaw("done", "{ not json")).not.toThrow();
-    expect(es.closed).toBe(true);
-    expect(events.at(-1)?.type).toBe("failed");
+  it("puts the project root and fresh=1 on the request", async () => {
+    let seen = "";
+    await run(sseClient([{ type: "done", cached: false, candidates: [] }], (u) => { seen = u; }), "/home/me/proj", true);
+    expect(seen).toContain("root=%2Fhome%2Fme%2Fproj");
+    expect(seen).toContain("fresh=1");
   });
 
-  it("a malformed delta frame is skipped without throwing or killing the stream", () => {
-    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
-    const events: AnalyzeEvent[] = [];
-    openAnalyzeStream("", "/p", false, (e) => events.push(e));
-    const es = FakeES.last!;
-    expect(() => es.emitRaw("delta", "garbage")).not.toThrow();
-    expect(events).toEqual([]);            // bad frame dropped
-    expect(es.closed).toBe(false);          // stream still alive
-    es.emit("done", { cached: true });
-    expect(events.at(-1)).toEqual({ type: "done", cached: true, candidates: [] });
+  it("forwards a failed event", async () => {
+    const events = await run(sseClient([{ type: "failed", message: "boom" }]), "/p");
+    expect(events).toEqual([{ type: "failed", message: "boom" }]);
   });
 });

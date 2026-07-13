@@ -3,7 +3,7 @@
 // src/workflowCore.ts
 //
 // Headless, cache-aware core for the Curate workflow analysis. Shared by the SSE
-// endpoint (src/workflowStream.ts) and the background warmer.
+// route (src/workflow.controller.ts) and the background warmer.
 import { introspectConfig, introspectProject } from "@agentgem/capture";
 import { resolveDirs, resolveProject } from "@agentgem/model";
 import {

@@ -4,41 +4,49 @@ import { Analyze } from "./Analyze.js";
 
 afterEach(cleanup);
 
+// JSON routes (testbed, report/runs) — the typed client reads .text().
 const res = (body: unknown) =>
   ({ ok: true, status: 200, text: async () => JSON.stringify(body) }) as unknown as Response;
 
-class FakeES {
-  static last: FakeES | null = null;
-  listeners: Record<string, ((e: unknown) => void)[]> = {};
-  closed = false;
-  constructor(public url: string) { FakeES.last = this; }
-  addEventListener(t: string, cb: (e: unknown) => void) { (this.listeners[t] ??= []).push(cb); }
-  close() { this.closed = true; }
-  emit(t: string, data: unknown) { for (const cb of this.listeners[t] ?? []) cb({ data: JSON.stringify(data) }); }
+// A text/event-stream Response of `data:` frames — the wire the streamOf route
+// produces, consumed by @agentback/client's route.stream(). Frames are enqueued
+// with a gap so React renders each intermediate state (delta) before the next.
+function sseResponse(frames: unknown[]): Response {
+  const enc = new TextEncoder();
+  const body = new ReadableStream<Uint8Array>({
+    async start(ctrl) {
+      for (const f of frames) {
+        ctrl.enqueue(enc.encode(`data: ${JSON.stringify(f)}\n\n`));
+        await new Promise((r) => setTimeout(r, 5));
+      }
+      ctrl.close();
+    },
+  });
+  return new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } });
 }
+
+const testbed = (u: string, projects: unknown[]) => {
+  if (u.includes("/api/report/runs")) return res({ runs: [] });
+  if (u.includes("/api/testbed/recents")) return res({ recents: [] });
+  if (u.includes("/api/testbed/projects")) return res({ projects });
+  return null;
+};
 
 describe("Analyze", () => {
   it("lists discovered projects and analyzes one in place, handing keys to onPick", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
       const u = String(url);
-      if (u.includes("/api/report/runs")) return res({ runs: [] });
-      if (u.includes("/api/testbed/recents")) return res({ recents: [] });
-      if (u.includes("/api/testbed/projects"))
-        return res({ projects: [{ path: "/home/me/proj", flavor: "claude", lastUsed: null, exists: true }] });
+      if (u.includes("/api/workflow/analyze/stream")) return sseResponse([
+        { type: "done", cached: false, candidates: [{ name: "Spec Loop", description: "", confidence: "high", include: [{ type: "skill", name: "brainstorming" }] }] },
+      ]);
+      const t = testbed(u, [{ path: "/home/me/proj", flavor: "claude", lastUsed: null, exists: true }]);
+      if (t) return t;
       throw new Error("unexpected " + u);
     }));
-    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
     const picked: string[][] = [];
     render(<Analyze apiBase="" onPick={(k) => picked.push(k)} />);
 
-    // the project list renders immediately (no disclosure); click the project's Analyze
     fireEvent.click(await screen.findByText("Analyze →"));
-    // The hook's start-guard fetches /api/report/runs before opening the stream, so the
-    // EventSource appears one tick later (not synchronously on click).
-    await waitFor(() => expect(FakeES.last).not.toBeNull());
-    FakeES.last!.emit("done", { cached: false, candidates: [
-      { name: "Spec Loop", description: "", confidence: "high", include: [{ type: "skill", name: "brainstorming" }] },
-    ] });
     fireEvent.click(await screen.findByText(/Use this selection/));
     expect(picked).toEqual([["skills::brainstorming"]]);
   });
@@ -46,34 +54,31 @@ describe("Analyze", () => {
   it("gives immediate feedback and streams the agent's output", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
       const u = String(url);
-      if (u.includes("/api/report/runs")) return res({ runs: [] });
-      if (u.includes("/api/testbed/recents")) return res({ recents: [] });
-      if (u.includes("/api/testbed/projects")) return res({ projects: [{ path: "/home/me/proj", flavor: "claude", lastUsed: null, exists: true }] });
+      if (u.includes("/api/workflow/analyze/stream")) return sseResponse([
+        { type: "delta", text: "scanning sessions…" },
+        { type: "done", cached: false, candidates: [] },
+      ]);
+      const t = testbed(u, [{ path: "/home/me/proj", flavor: "claude", lastUsed: null, exists: true }]);
+      if (t) return t;
       throw new Error("unexpected " + u);
     }));
-    vi.stubGlobal("EventSource", FakeES as unknown as typeof EventSource);
     render(<Analyze apiBase="" onPick={() => {}} />);
     fireEvent.click(await screen.findByText("Analyze →"));
-    // Feedback appears once the run starts (after the hook's start-guard fetch): badge +
-    // the active row's button both read "Analyzing…".
+    // Feedback appears once the run starts (after the hook's start-guard fetch).
     await waitFor(() => expect(screen.getAllByText("Analyzing…").length).toBeGreaterThanOrEqual(2));
-    // agent tokens stream into a transcript
-    await waitFor(() => expect(FakeES.last).not.toBeNull());
-    FakeES.last!.emit("delta", { text: "scanning sessions…" });
+    // agent tokens stream into a transcript, then the terminal report renders
     expect(await screen.findByText(/scanning sessions/)).toBeTruthy();
-    FakeES.last!.emit("done", { cached: false, candidates: [] });
     expect(await screen.findByText(/No recurring workflow found/i)).toBeTruthy();
   });
 
   it("filters the project list by the search query", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
       const u = String(url);
-      if (u.includes("/api/report/runs")) return res({ runs: [] });
-      if (u.includes("/api/testbed/recents")) return res({ recents: [] });
-      if (u.includes("/api/testbed/projects")) return res({ projects: [
+      const t = testbed(u, [
         { path: "/home/me/alpha", flavor: "claude", lastUsed: null, exists: true },
         { path: "/home/me/beta", flavor: "claude", lastUsed: null, exists: true },
-      ] });
+      ]);
+      if (t) return t;
       throw new Error("unexpected " + u);
     }));
     render(<Analyze apiBase="" onPick={() => {}} />);
