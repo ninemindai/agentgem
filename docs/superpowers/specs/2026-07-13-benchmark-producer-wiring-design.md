@@ -174,15 +174,34 @@ Off by default. The consent surface states exactly what is shared:
 behavior). A **real-browser** check confirms the new `ex-*` styles render (jsdom
 never asserts appearance).
 
-## Implementation risk (flagged)
+## Design refinements (resolved during planning)
 
-Enumerating "my published gems **that this workspace can rebuild**." Working
-assumption: contribution iterates gems *published from this workspace*, where the
-local `GemSelection` + sessions still exist — you attest **your** usage. A gem
-published from another machine is not attestable here, which is correct behavior,
-not a bug. The implementation plan will pin the exact local source (a local publish
-ledger vs. a signed remote "my gems" query, intersected with locally-resolvable
-selections) before building the enumerator.
+Two points the initial design flagged as open were pinned before writing the plan:
+
+**1. Published-gem enumeration.** There is **no** local publish ledger. The
+authoritative "gems I own" list is `listCatalogGemsForOwner(db, accountId)`
+(`packages/aggregator/src/catalog.ts`), but it is exposed only cookie-authed at
+`GET /api/catalog/my-gems` — the background warmable holds the ed25519 producer key,
+not a session cookie. Resolution: **add a producer-key-signed route**
+`POST /api/aggregator/my-gems` that mirrors the existing `/gem-status` route
+(`resolveSignedAccount` → `listCatalogGemsForOwner`). The core then **intersects**
+that owned-gem list with local **workspaces** (`listWorkspaces()` /
+`readWorkspace(name)` in `@agentgem/base`, which reconstruct the full built `Gem` via
+`readGemArchive` — so no `GemSelection` rebuild is needed). Owned gems with no local
+workspace are skipped (you can only attest what this machine can reproduce).
+
+**2. Per-gem outcome scoping.** `Gem.createdFrom` is a provenance *summary*, not a
+reusable project dir, so a background sweep has no per-gem `cwd`. Attaching one
+**global** judged outcome histogram to every gem would mis-attribute all outcomes and
+inflate effectiveness. Resolution (decided: *scope outcomes per gem*): run **one**
+global `scanWorkflow(..., { retainSequences: true })` + **one** `judgeSessions`, then
+scope outcomes per gem. The scan's accumulator already tracks a `Set<string>` of
+session ids per artifact but emits only its size (`sessionsUsedIn`); expose the set as
+`ArtifactUsage.sessionIds`. A new insight helper `facetsForGem(signal, gem, facets)`
+unions the gem's artifacts' `sessionIds` and filters the judged `SessionFacet[]` (each
+carries `sessionId`) to that set. `buildAttestation` is unchanged — the caller passes
+gem-scoped facets. Ingredient/usage counts are already per-gem (buildAttestation
+matches the gem's artifact names against the signal), so only outcomes needed scoping.
 
 ## Files (anticipated)
 
