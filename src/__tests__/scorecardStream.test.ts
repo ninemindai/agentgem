@@ -78,6 +78,28 @@ describe("streamScorecard", () => {
     expect(events(res.chunks)[0]).toMatchObject({ event: "start" }); // ...and it was `start`
   });
 
+  it("yields after `stale` so it flushes before the blocking bucket read (deferred past a macrotask)", async () => {
+    const STALE_SC = { breadth: 5, battleTested: 2, portable: 1, gaps: [], projects: [], generatedAtMs: 0, degraded: false };
+    const res = fakeRes();
+    let bucketRanSynchronously = false;
+    const deps: ScorecardStreamDeps = {
+      discover: () => [],
+      loadProject: () => mkLoad() as never,
+      transcriptsFor: () => [],
+      bucketTranscripts: () => { bucketRanSynchronously = true; return new Map(); },
+      readCacheEntry: () => null,
+      readLatestCache: () => ({ result: STALE_SC, ts: 1 }),
+      writeCache: vi.fn(),
+    };
+    const p = streamScorecard({ query: { projects: JSON.stringify(["/r/a"]) } }, res as never, deps);
+    // Same tick as kicking it off: the `stale` frame is already written...
+    expect(res.chunks.join("")).toContain("event: stale");
+    // ...but the yield deferred the seconds-long bucket read to a later macrotask (so the frame flushes first).
+    expect(bucketRanSynchronously).toBe(false);
+    await p;
+    expect(bucketRanSynchronously).toBe(true); // it still runs, just after the flush
+  });
+
   it("stale-while-revalidate: emits `stale` (last-good) before any progress, then a fresh `done` supersedes it", async () => {
     const STALE_SC = { breadth: 5, battleTested: 2, portable: 1, gaps: [], projects: [], generatedAtMs: 0, degraded: false };
     const loadProject = vi.fn(() => mkLoad("fresh") as never);
