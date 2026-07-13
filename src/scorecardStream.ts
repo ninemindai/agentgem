@@ -71,6 +71,13 @@ export async function streamScorecard(req: SseReq, res: SseRes, deps: ScorecardS
 
   try {
     const roots = selectScorecardRoots(dir, projects, deps);
+
+    // Emit `start` BEFORE bucketing the transcripts: the bucket read (and, on a hit, the cache
+    // lookup that depends on its token) can take seconds on a large corpus, and doing it before the
+    // first event left the panel on a blank loading skeleton the whole time. Start now → the UI
+    // shows "scanning" immediately. A cache hit still short-circuits to `done` right after.
+    send("start", { total: roots.length });
+
     const bucket = deps.bucketTranscripts(dir);
     const paths = scorecardTranscriptPaths(roots, bucket);
     const token = transcriptToken(paths);
@@ -81,8 +88,6 @@ export async function streamScorecard(req: SseReq, res: SseRes, deps: ScorecardS
       const entry = deps.readCacheEntry(SCORECARD_CACHE_ROOT, token);
       if (entry) { send("done", { scorecard: entry.result, cached: true, updatedAt: entry.ts }); return; }
     }
-
-    send("start", { total: roots.length });
     const loads: ProjectLoad[] = [];
     let degraded = false;
     for (let i = 0; i < roots.length; i++) {

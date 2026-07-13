@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { claudeTranscriptsForCwd, scanWorkflow, spineWithIndices } from "@agentgem/insight";
+import { claudeTranscriptsForCwd, scanWorkflow, spineWithIndices, bucketTranscriptsByCwd } from "@agentgem/insight";
 import type { ProjectInventory } from "@agentgem/model";
 
 let claudeDir: string;
@@ -118,6 +118,34 @@ describe("scanWorkflow hooks, instructions, co-occurrence", () => {
     const sig = scanWorkflow([file], { project: inventory });
     expect(sig.notes.some((n) => /unparseable/i.test(n))).toBe(true);
     expect(sig.artifacts.find((a) => a.name === "qa")!.invocations).toBe(1);
+    rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("bucketTranscriptsByCwd — bounded head read", () => {
+  it("buckets by the first-record cwd, finding it in a large file WITHOUT reading the whole file", () => {
+    const dir = mkdtempSync(join(tmpdir(), "bucket-"));
+    const enc = join(dir, "projects", "enc"); mkdirSync(enc, { recursive: true });
+    // cwd on line 1 followed by a ~2MB body: the read must stay bounded yet still find the cwd.
+    const big = join(enc, "big.jsonl");
+    writeFileSync(big, JSON.stringify({ cwd: "/proj/big" }) + "\n" + "x".repeat(2_000_000) + "\n");
+    const small = join(enc, "small.jsonl");
+    writeFileSync(small, JSON.stringify({ cwd: "/proj/small" }) + "\n");
+
+    const bucket = bucketTranscriptsByCwd(dir);
+    expect(bucket.get("/proj/big")).toEqual([big]);
+    expect(bucket.get("/proj/small")).toEqual([small]);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("treats a cwd beyond the 64KB head as absent (the bounded-read contract; cwd is always line 1)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "bucket2-"));
+    const enc = join(dir, "projects", "enc"); mkdirSync(enc, { recursive: true });
+    const deep = join(enc, "deep.jsonl");
+    // ~72KB of cwd-less filler, THEN the cwd — past the 64KB window, so the file is skipped.
+    const filler = Array.from({ length: 1000 }, (_, i) => JSON.stringify({ n: i, pad: "y".repeat(60) })).join("\n");
+    writeFileSync(deep, filler + "\n" + JSON.stringify({ cwd: "/proj/deep" }) + "\n");
+    expect(bucketTranscriptsByCwd(dir).has("/proj/deep")).toBe(false);
     rmSync(dir, { recursive: true, force: true });
   });
 });

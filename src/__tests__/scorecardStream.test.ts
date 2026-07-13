@@ -58,6 +58,24 @@ describe("streamScorecard", () => {
     expect(res.end).toHaveBeenCalled();
   });
 
+  it("emits start BEFORE bucketing transcripts (no dead-silence while the bucket read runs)", async () => {
+    const res = fakeRes();
+    let chunksWhenBucketRan = -1;
+    const deps: ScorecardStreamDeps = {
+      discover: () => [],
+      loadProject: () => mkLoad() as never,
+      transcriptsFor: () => [],
+      // The real bucket read can take seconds on a big corpus — record how much had already been
+      // written (the `start` frame) by the time it runs.
+      bucketTranscripts: () => { chunksWhenBucketRan = res.chunks.length; return new Map(); },
+      readCacheEntry: () => null,
+      writeCache: vi.fn(),
+    };
+    await streamScorecard({ query: { projects: JSON.stringify(["/r/a"]) } }, res as never, deps);
+    expect(chunksWhenBucketRan).toBeGreaterThan(0);              // something was flushed before bucketing
+    expect(events(res.chunks)[0]).toMatchObject({ event: "start" }); // ...and it was `start`
+  });
+
   it("emits done immediately on cache hit (no progress)", async () => {
     const loadProject = vi.fn(() => mkLoad() as never);
     const CACHED_SC = { breadth: 9, battleTested: 0, portable: 0, gaps: [], projects: [], generatedAtMs: 0, degraded: false };
