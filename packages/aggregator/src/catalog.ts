@@ -6,7 +6,7 @@ import { sql, desc, and, eq } from "drizzle-orm";
 import { verify } from "@agentgem/model";
 import { canonicalJSON } from "@agentgem/insight";
 import type { AppDb } from "./schema.js";
-import { catalogGems, gemArchives, producers, accountBindings, gemGroupShares } from "./schema.js";
+import { catalogGems, gemArchives, gemCovers, producers, accountBindings, gemGroupShares } from "./schema.js";
 import { accountIdForProvider } from "./auth/accountLinking.js";
 
 export type Visibility = "public" | "unlisted" | "private";
@@ -80,6 +80,17 @@ export async function getGemArchive(db: AppDb, gemKey: string, version: string):
   const r = (await db.select({ bytes: gemArchives.bytes, digest: gemArchives.digest }).from(gemArchives)
     .where(and(eq(gemArchives.gemKey, gemKey), eq(gemArchives.version, version))).limit(1))[0];
   return r ? { bytes: r.bytes, digest: r.digest } : null;
+}
+
+export async function upsertGemCover(db: AppDb, c: { gemKey: string; version: string; bytes: Uint8Array; contentType: string; createdAtMs: number }): Promise<void> {
+  await db.insert(gemCovers).values({ gemKey: c.gemKey, version: c.version, bytes: c.bytes, contentType: c.contentType, createdAtMs: c.createdAtMs })
+    .onConflictDoUpdate({ target: [gemCovers.gemKey, gemCovers.version], set: { bytes: c.bytes, contentType: c.contentType, createdAtMs: c.createdAtMs } });
+}
+
+export async function getGemCover(db: AppDb, gemKey: string, version: string): Promise<{ bytes: Uint8Array; contentType: string } | null> {
+  const r = (await db.select({ bytes: gemCovers.bytes, contentType: gemCovers.contentType }).from(gemCovers)
+    .where(and(eq(gemCovers.gemKey, gemKey), eq(gemCovers.version, version))).limit(1))[0];
+  return r ? { bytes: r.bytes, contentType: r.contentType } : null;
 }
 
 // The most recently PUBLISHED version of a gem. Ordering is by publish time, not semver: "latest"
