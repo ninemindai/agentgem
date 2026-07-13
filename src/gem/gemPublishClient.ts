@@ -24,7 +24,7 @@ function resolveBase(endpoint: string | undefined): string {
 }
 
 export async function postGemPublish(args: {
-  manifest: CatalogManifest; archiveBase64: string; identity: Identity; endpoint?: string; http?: ShareHttp; now?: () => number;
+  manifest: CatalogManifest; archiveBase64: string; identity: Identity; endpoint?: string; http?: ShareHttp; now?: () => number; coverDataUrl?: string;
 }): Promise<{ shared: true; publishedBy: string } | { shared: false; rejected: string }> {
   const base = resolveBase(args.endpoint);
   const http = args.http ?? defaultHttp;
@@ -33,7 +33,7 @@ export async function postGemPublish(args: {
   const res = await http(`${base}/api/aggregator/publish-gem`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ manifest: args.manifest, archiveBase64: args.archiveBase64, pubkey: args.identity.publicKey, signedAt: now, signature }),
+    body: JSON.stringify({ manifest: args.manifest, archiveBase64: args.archiveBase64, pubkey: args.identity.publicKey, signedAt: now, signature, ...(args.coverDataUrl ? { coverDataUrl: args.coverDataUrl } : {}) }),
   });
   if (res.status < 200 || res.status >= 300) {
     log.warn("publish-gem POST to %s failed: HTTP %d", base, res.status);
