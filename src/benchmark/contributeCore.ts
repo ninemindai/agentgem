@@ -80,13 +80,10 @@ export function defaultDeps(): ContributeDeps {
       );
     },
     // Random per-call salt hashes private ids; it is NOT stored in the attestation.
-    digestOf: (gem) => {
-      try {
-        return computeLock(readWorkspace(gem.name).files).gemDigest;
-      } catch {
-        return "";
-      }
-    },
+    // Let any failure propagate to the per-gem `catch` in contribute() — swallowing
+    // it here would post an attestation with an empty digest instead of reporting
+    // the gem as `failed`.
+    digestOf: (gem) => computeLock(readWorkspace(gem.name).files).gemDigest,
     build: buildAttestation,
     sign: (att) => signAttestation(att, identity, Date.now()),
     post: (att) => postAttestation({ attestation: att }),
