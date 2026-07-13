@@ -15,7 +15,7 @@ export interface GemArtifactRef { name: string; type: string }
 export interface CatalogRow {
   gemKey: string; version: string; publishedBy: string;
   author?: string; description?: string; tags?: string[]; artifactKinds?: string[];
-  type?: string; grade?: number; createdAtMs: number;
+  type?: string; grade?: number; createdAtMs: number; updatedAtMs?: number;
   artifacts?: GemArtifactRef[];
   installable?: boolean; // derived: a gem_archives row exists (read path only)
   ownerAccountId?: string | null;
@@ -28,14 +28,18 @@ export async function upsertCatalogGem(db: AppDb, row: CatalogRow): Promise<void
     author: row.author ?? null, description: row.description ?? null,
     tags: row.tags ?? null, artifactKinds: row.artifactKinds ?? null,
     type: row.type ?? null, grade: row.grade ?? null, artifacts: row.artifacts ?? null,
-    createdAtMs: row.createdAtMs, ownerAccountId: row.ownerAccountId ?? null,
+    createdAtMs: row.createdAtMs, updatedAtMs: row.updatedAtMs ?? row.createdAtMs,
+    ownerAccountId: row.ownerAccountId ?? null,
     visibility: row.visibility ?? "public",
   }).onConflictDoUpdate({
     target: [catalogGems.gemKey, catalogGems.version],
+    // createdAtMs is intentionally NOT in the update set — an overwrite preserves the original
+    // creation time and only bumps updatedAtMs to the write time.
     set: {
       publishedBy: row.publishedBy, author: row.author ?? null, description: row.description ?? null,
       tags: row.tags ?? null, artifactKinds: row.artifactKinds ?? null, type: row.type ?? null,
-      grade: row.grade ?? null, artifacts: row.artifacts ?? null, createdAtMs: row.createdAtMs,
+      grade: row.grade ?? null, artifacts: row.artifacts ?? null,
+      updatedAtMs: row.updatedAtMs ?? row.createdAtMs,
       ownerAccountId: row.ownerAccountId ?? null,
       visibility: row.visibility ?? "public",
     },
@@ -57,7 +61,7 @@ export async function listCatalogGems(db: AppDb): Promise<CatalogRow[]> {
     gemKey: catalogGems.gemKey, version: catalogGems.version, publishedBy: catalogGems.publishedBy,
     author: catalogGems.author, description: catalogGems.description, tags: catalogGems.tags,
     artifactKinds: catalogGems.artifactKinds, type: catalogGems.type, grade: catalogGems.grade,
-    artifacts: catalogGems.artifacts, createdAtMs: catalogGems.createdAtMs, archiveKey: gemArchives.gemKey,
+    artifacts: catalogGems.artifacts, createdAtMs: catalogGems.createdAtMs, updatedAtMs: catalogGems.updatedAtMs, archiveKey: gemArchives.gemKey,
   }).from(catalogGems)
     .leftJoin(gemArchives, and(eq(catalogGems.gemKey, gemArchives.gemKey), eq(catalogGems.version, gemArchives.version)))
     .where(visiblePublic())
@@ -67,7 +71,7 @@ export async function listCatalogGems(db: AppDb): Promise<CatalogRow[]> {
     author: r.author ?? undefined, description: r.description ?? undefined,
     tags: r.tags ?? undefined, artifactKinds: r.artifactKinds ?? undefined,
     type: r.type ?? undefined, grade: r.grade ?? undefined, artifacts: r.artifacts ?? undefined,
-    createdAtMs: r.createdAtMs, installable: r.archiveKey != null,
+    createdAtMs: r.createdAtMs, updatedAtMs: r.updatedAtMs ?? r.createdAtMs, installable: r.archiveKey != null,
   }));
 }
 
@@ -320,7 +324,7 @@ export async function listCatalogGemsForOwner(db: AppDb, accountId: string): Pro
     gemKey: catalogGems.gemKey, version: catalogGems.version, publishedBy: catalogGems.publishedBy,
     author: catalogGems.author, description: catalogGems.description, tags: catalogGems.tags,
     artifactKinds: catalogGems.artifactKinds, type: catalogGems.type, grade: catalogGems.grade,
-    artifacts: catalogGems.artifacts, createdAtMs: catalogGems.createdAtMs,
+    artifacts: catalogGems.artifacts, createdAtMs: catalogGems.createdAtMs, updatedAtMs: catalogGems.updatedAtMs,
     ownerAccountId: catalogGems.ownerAccountId, visibility: catalogGems.visibility, archiveKey: gemArchives.gemKey,
   }).from(catalogGems)
     .leftJoin(gemArchives, and(eq(catalogGems.gemKey, gemArchives.gemKey), eq(catalogGems.version, gemArchives.version)))
@@ -331,7 +335,7 @@ export async function listCatalogGemsForOwner(db: AppDb, accountId: string): Pro
     author: r.author ?? undefined, description: r.description ?? undefined,
     tags: r.tags ?? undefined, artifactKinds: r.artifactKinds ?? undefined,
     type: r.type ?? undefined, grade: r.grade ?? undefined, artifacts: r.artifacts ?? undefined,
-    createdAtMs: r.createdAtMs, ownerAccountId: r.ownerAccountId ?? null,
+    createdAtMs: r.createdAtMs, updatedAtMs: r.updatedAtMs ?? r.createdAtMs, ownerAccountId: r.ownerAccountId ?? null,
     visibility: (r.visibility as Visibility) ?? "public", installable: r.archiveKey != null,
   }));
 }
@@ -343,7 +347,7 @@ export async function catalogGemForOwner(db: AppDb, gemKey: string, accountId: s
     gemKey: catalogGems.gemKey, version: catalogGems.version, publishedBy: catalogGems.publishedBy,
     author: catalogGems.author, description: catalogGems.description, tags: catalogGems.tags,
     artifactKinds: catalogGems.artifactKinds, type: catalogGems.type, grade: catalogGems.grade,
-    artifacts: catalogGems.artifacts, createdAtMs: catalogGems.createdAtMs,
+    artifacts: catalogGems.artifacts, createdAtMs: catalogGems.createdAtMs, updatedAtMs: catalogGems.updatedAtMs,
     ownerAccountId: catalogGems.ownerAccountId, visibility: catalogGems.visibility, archiveKey: gemArchives.gemKey,
   }).from(catalogGems)
     .leftJoin(gemArchives, and(eq(catalogGems.gemKey, gemArchives.gemKey), eq(catalogGems.version, gemArchives.version)))
@@ -356,7 +360,7 @@ export async function catalogGemForOwner(db: AppDb, gemKey: string, accountId: s
     author: r.author ?? undefined, description: r.description ?? undefined,
     tags: r.tags ?? undefined, artifactKinds: r.artifactKinds ?? undefined,
     type: r.type ?? undefined, grade: r.grade ?? undefined, artifacts: r.artifacts ?? undefined,
-    createdAtMs: r.createdAtMs, ownerAccountId: r.ownerAccountId ?? null,
+    createdAtMs: r.createdAtMs, updatedAtMs: r.updatedAtMs ?? r.createdAtMs, ownerAccountId: r.ownerAccountId ?? null,
     visibility: (r.visibility as Visibility) ?? "public", installable: r.archiveKey != null,
   };
 }
@@ -383,7 +387,7 @@ async function catalogGemForOwnerless(db: AppDb, gemKey: string, version: string
     gemKey: catalogGems.gemKey, version: catalogGems.version, publishedBy: catalogGems.publishedBy,
     author: catalogGems.author, description: catalogGems.description, tags: catalogGems.tags,
     artifactKinds: catalogGems.artifactKinds, type: catalogGems.type, grade: catalogGems.grade,
-    artifacts: catalogGems.artifacts, createdAtMs: catalogGems.createdAtMs,
+    artifacts: catalogGems.artifacts, createdAtMs: catalogGems.createdAtMs, updatedAtMs: catalogGems.updatedAtMs,
     ownerAccountId: catalogGems.ownerAccountId, visibility: catalogGems.visibility, archiveKey: gemArchives.gemKey,
   }).from(catalogGems)
     .leftJoin(gemArchives, and(eq(catalogGems.gemKey, gemArchives.gemKey), eq(catalogGems.version, gemArchives.version)))
@@ -395,7 +399,7 @@ async function catalogGemForOwnerless(db: AppDb, gemKey: string, version: string
     author: r.author ?? undefined, description: r.description ?? undefined,
     tags: r.tags ?? undefined, artifactKinds: r.artifactKinds ?? undefined,
     type: r.type ?? undefined, grade: r.grade ?? undefined, artifacts: r.artifacts ?? undefined,
-    createdAtMs: r.createdAtMs, ownerAccountId: r.ownerAccountId ?? null,
+    createdAtMs: r.createdAtMs, updatedAtMs: r.updatedAtMs ?? r.createdAtMs, ownerAccountId: r.ownerAccountId ?? null,
     visibility: (r.visibility as Visibility) ?? "public", installable: r.archiveKey != null,
   };
 }

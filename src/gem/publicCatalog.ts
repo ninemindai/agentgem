@@ -19,6 +19,8 @@ export interface RegistryGem {
   grade?: number;
   installable: boolean;
   artifacts?: { name: string; type: string }[];
+  createdAtMs?: number;
+  updatedAtMs?: number;
 }
 
 /** Flatten the index's per-item discovery block into a browse list. No ingredients (browse-only). */
@@ -46,6 +48,7 @@ export function mapDbToGems(rows: CatalogRow[]): RegistryGem[] {
     key: r.gemKey, version: r.version, author: r.author, description: r.description,
     tags: r.tags, artifactKinds: r.artifactKinds, type: r.type, publishedBy: r.publishedBy,
     grade: clampGrade(r.grade), installable: r.installable ?? false, artifacts: r.artifacts,
+    createdAtMs: r.createdAtMs, updatedAtMs: r.updatedAtMs ?? r.createdAtMs,
   }));
 }
 

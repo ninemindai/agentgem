@@ -25,6 +25,8 @@ export interface MyGem {
   artifactKinds: string[];
   visibility: "public" | "unlisted" | "private";
   installable: boolean;
+  createdAtMs?: number;
+  updatedAtMs?: number;
 }
 
 // Detailed gem view for the owner — includes metadata and artifacts.
@@ -39,6 +41,8 @@ export interface MyGemDetail {
   grade: number | null;   // wire shape: the /api/catalog/gem-detail handler returns `grade ?? null`
   visibility: "public" | "unlisted" | "private";
   installable: boolean;
+  createdAtMs?: number;
+  updatedAtMs?: number;
 }
 
 type Query = Record<string, string | number | undefined>;

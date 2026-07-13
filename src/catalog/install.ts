@@ -47,6 +47,7 @@ export function myGemsHandler(deps: CatalogDeps) {
       gems: rows.map((g) => ({
         key: g.gemKey, version: g.version, description: g.description ?? "",
         artifactKinds: g.artifactKinds ?? [], visibility: g.visibility ?? "public", installable: g.installable ?? false,
+        createdAtMs: g.createdAtMs, updatedAtMs: g.updatedAtMs ?? g.createdAtMs,
       })),
     });
   };
@@ -128,6 +129,7 @@ export function ownerGemHandler(deps: CatalogDeps) {
       key: g.gemKey, version: g.version, publishedBy: g.publishedBy, description: g.description ?? "",
       tags: g.tags ?? [], artifactKinds: g.artifactKinds ?? [], artifacts: g.artifacts ?? [],
       grade: g.grade ?? null, visibility: g.visibility ?? "public", installable: g.installable ?? false,
+      createdAtMs: g.createdAtMs, updatedAtMs: g.updatedAtMs ?? g.createdAtMs,
     });
   };
 }

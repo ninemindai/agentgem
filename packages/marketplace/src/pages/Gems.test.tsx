@@ -14,6 +14,13 @@ describe("Gems (browse)", () => {
     expect(await screen.findByText("live-gem")).toBeTruthy();
   });
 
+  it("shows the version on each gem card", async () => {
+    const api = apiWith(() => Promise.resolve([{ key: "live-gem", version: "3.0.0", description: "d", tags: [], artifactKinds: ["mcp"] }]));
+    render(<Gems api={api} stars={stars} />);
+    await screen.findByText("live-gem");
+    expect(screen.getByText("v3.0.0")).toBeTruthy();
+  });
+
   it("falls back to the static catalog when the api returns empty", async () => {
     const api = apiWith(() => Promise.resolve([]));
     render(<Gems api={api} stars={stars} />);

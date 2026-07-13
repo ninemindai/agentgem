@@ -627,6 +627,7 @@ a.ex-skillcard-rating:hover { text-decoration: underline; }
 .ex-gem-title { font-family: var(--display); font-size: 1.6rem; letter-spacing: -0.02em; margin: 0 0 4px; }
 .ex-gem-version { color: var(--muted); font-size: 0.62em; font-weight: 500; margin-left: 6px; font-variant-numeric: tabular-nums; }
 .ex-gem-meta { display: flex; gap: 10px; align-items: center; color: var(--ink-2); font-size: 0.9rem; margin: 0 0 12px; }
+.ex-gem-dates { color: var(--muted); font-size: 0.8rem; margin: 0 0 12px; font-variant-numeric: tabular-nums; }
 .ex-gem-detail > .ex-gem-desc { font-size: 1rem; color: var(--ink-2); max-width: 70ch; margin: 0 0 10px; }
 .ex-gem-detail > .ex-gem-tags { margin: 0 0 22px; }
 

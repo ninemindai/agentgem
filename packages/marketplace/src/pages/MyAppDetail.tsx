@@ -8,6 +8,7 @@ import { defaultApiBase } from "../api";
 import { makeAuth, type Me } from "../auth";
 import { GamePlayer } from "../GamePlayer";
 import { GemContents } from "./GemContents";
+import { gemDate } from "../gems/catalog";
 import { navigate } from "../nav";
 
 type View = { status: "loading" } | { status: "not-found" } | { status: "error"; message: string } | { status: "ok"; gem: MyGemDetail };
@@ -106,6 +107,14 @@ export function MyAppDetail({ api, me, keyName }: { api: ReturnType<typeof makeA
     <div className="ex-gem-detail">
       <h2 className="ex-gem-title">{gem.key} <span className="ex-gem-version">v{gem.version}</span> <VisibilityBadge visibility={gem.visibility} /></h2>
       {gem.description && <p className="ex-gem-desc">{gem.description}</p>}
+      {gem.createdAtMs && (
+        <p className="ex-gem-dates">
+          <span>Created <time dateTime={new Date(gem.createdAtMs).toISOString()}>{gemDate(gem.createdAtMs)}</time></span>
+          {gem.updatedAtMs && gem.updatedAtMs !== gem.createdAtMs && (
+            <span> · Updated <time dateTime={new Date(gem.updatedAtMs).toISOString()}>{gemDate(gem.updatedAtMs)}</time></span>
+          )}
+        </p>
+      )}
 
       {isGame && (
         <section className="ex-card ex-game-play">
