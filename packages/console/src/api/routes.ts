@@ -805,7 +805,7 @@ export const playbookPublishRoute = defineRoute("POST", "/api/playbook/publish",
 // Installable publish: same body as playbook/publish, but the server uploads the .gem archive so
 // the shared setup is installable by others (not a browse-only teaser).
 export const publishSetupRoute = defineRoute("POST", "/api/publish-setup", {
-  body: z.object({ workspace: z.string(), scope: z.string(), name: z.string().optional(), version: z.string(), description: z.string().optional(), tags: z.array(z.string()).optional(), provenance: z.string(), visibility: z.enum(["public", "unlisted", "private"]).optional() }),
+  body: z.object({ workspace: z.string(), scope: z.string(), name: z.string().optional(), version: z.string(), description: z.string().optional(), tags: z.array(z.string()).optional(), provenance: z.string(), visibility: z.enum(["public", "unlisted", "private"]).optional(), coverDataUrl: z.string().optional() }),
   response: z.object({ exploreRef: z.string(), version: z.string(), shareUrl: z.string() }),
 });
 // Pre-flight for the publish dialog: is this workspace's gem already published, do we own it, and

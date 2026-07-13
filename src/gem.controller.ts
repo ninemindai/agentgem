@@ -639,7 +639,7 @@ export class GemController {
           gemDigest: meta.gemDigest,
         };
         const identity = loadOrCreateIdentity();
-        const r = await postGemPublish({ manifest, archiveBase64: bytes.toString("base64"), identity });
+        const r = await postGemPublish({ manifest, archiveBase64: bytes.toString("base64"), identity, coverDataUrl: b.coverDataUrl });
         if (!r.shared) throw shareRejectedError(r.rejected);
         return { ref: manifest.gemKey, version: b.version };
       },
