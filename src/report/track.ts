@@ -18,6 +18,27 @@ export function makeTracker(reg: ReportRegistry, kind: string, paramsKey: string
   };
 }
 
+// Decide whether a stream open should be tracked as a run, or is a reattach/re-view
+// that must NOT re-register the run. The client reattaches by re-opening the SAME
+// cache-backed stream to load a finished report; without this guard makeTracker
+// would begin() again, reset startedAt to "now", and trip detectReportDone's
+// first-poll baseline into a spurious "report ready" toast on every app open. So:
+// a NON-fresh open of a key that already has a TERMINAL run is a reattach — skip it.
+// A fresh open (Re-run) or a first open (no record, or a still-running one) tracks.
+export function trackerFor(
+  reg: ReportRegistry,
+  kind: string,
+  paramsKey: string,
+  params: Record<string, string>,
+  fresh: boolean,
+): RunTracker | undefined {
+  if (!fresh) {
+    const existing = reg.get(kind, paramsKey);
+    if (existing && existing.status !== "running") return undefined;
+  }
+  return makeTracker(reg, kind, paramsKey, params);
+}
+
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
 
 export function insightsParamsKey(q: Record<string, unknown>): string { return str(q.root); }
