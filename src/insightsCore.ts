@@ -3,7 +3,7 @@
 // src/insightsCore.ts
 //
 // Headless, cache-aware core for the personal session-insights report. Both the
-// SSE endpoint (src/insightsStream.ts) and the background warmer call this so
+// SSE route (src/insights.controller.ts) and the background warmer call this so
 // they cache identically. Progress is optional callbacks; the warmer passes none.
 import { introspectConfig, introspectProject } from "@agentgem/capture";
 import { resolveDirs, resolveProject } from "@agentgem/model";

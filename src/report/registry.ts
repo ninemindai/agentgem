@@ -7,6 +7,7 @@
 // The RESULT is never stored here — the compute cores' own cache holds it, and a
 // reattaching panel re-opens the existing stream (a cache hit) to load it.
 import { createLogger } from "@agentgem/base";
+import { BindingKey } from "@agentback/core";
 
 const log = createLogger("report-registry");
 
@@ -76,3 +77,8 @@ export class ReportRegistry {
     log.debug("swept; %d runs retained", this.runs.size);
   }
 }
+
+// DI key so a decorator controller (InsightsController) can share the ONE
+// registry instance the raw analyze/rubric routes + /api/report/runs use. Bound
+// in finalizeCommonApp; injected `{optional:true}` so tests/non-tracking paths work.
+export const REPORT_REGISTRY = BindingKey.create<ReportRegistry>("agentgem.report.registry");

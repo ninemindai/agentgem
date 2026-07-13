@@ -39,7 +39,7 @@ export function Insights({ apiBase }: { apiBase: string }) {
   // events to the normalized Handlers and closes over the current root.
   const openStream = useCallback(
     (fresh: boolean, params: Record<string, string>, h: Handlers<InsightsDone>) =>
-      openInsightsStream(apiBase, params.root, (e) => {
+      openInsightsStream(makeClient(apiBase), params.root, (e) => {
         if (e.type === "phase") h.phase(e.sessions != null ? `${e.phase} (${e.sessions} sessions)` : e.phase);
         else if (e.type === "delta") h.delta(e.text);
         else if (e.type === "done") h.done({ report: e.report, degraded: e.degraded, scanned: e.scanned, updatedAt: e.updatedAt });

@@ -27,7 +27,7 @@ import { streamWorkflowAnalyze } from "./workflowStream.js";
 import { streamGemRun } from "./gemRunStream.js";
 import { streamGemVerify } from "./gemVerifyStream.js";
 import { streamScorecard } from "./scorecardStream.js";
-import { streamInsights } from "./insightsStream.js";
+import { InsightsController } from "./insights.controller.js";
 import { streamRubric } from "./rubricStream.js";
 import { RubricController } from "./rubric.controller.js";
 import { streamWatch } from "./watchStream.js";
@@ -54,8 +54,8 @@ import { originGuard } from "./originGuard.js";
 import { playNoCache } from "./playCache.js";
 import { gemNoCache } from "./gemCache.js";
 import { getWarmStatus, beginForeground, endForeground } from "./warm/orchestrator.js";
-import { ReportRegistry } from "./report/registry.js";
-import { trackerFor, insightsParamsKey, rubricParamsKey, analyzeParamsKey } from "./report/track.js";
+import { ReportRegistry, REPORT_REGISTRY } from "./report/registry.js";
+import { trackerFor, rubricParamsKey, analyzeParamsKey } from "./report/track.js";
 import { ShareProxyController } from "./share.proxy.controller.js";
 import { SourcesController } from "./sources.controller.js";
 import { PlayController } from "./play.controller.js";
@@ -159,6 +159,7 @@ export async function buildCommonApp(port: number): Promise<{ app: RestApplicati
   app.restController(ShareProxyController);
   app.restController(SourcesController);
   app.restController(PlayController);
+  app.restController(InsightsController);
   app.service(GemTools);
   // The persistent transcript index (capture) is a separate, lazily-opened on-disk
   // PGlite — not the aggregator DB. Close it on graceful shutdown too, so SIGTERM
@@ -240,6 +241,10 @@ export function finalizeCommonApp(app: RestApplication, server: Awaited<RestAppl
   // run lifecycle here so the console can notify-on-done and show what is running.
   // In-memory; swept for TTL. The compute + cache are untouched — this only tracks.
   const reportRegistry = new ReportRegistry();
+  // Share this instance with the decorator-dispatched InsightsController (bound
+  // before any request, so its optional @inject resolves the same registry the
+  // analyze/rubric routes and /api/report/runs use).
+  app.bind(REPORT_REGISTRY).to(reportRegistry);
   setInterval(() => reportRegistry.sweep(), 60_000).unref();
   server.expressApp.get("/api/report/runs", originGuard, (_req, res) => res.json({ runs: reportRegistry.list() } as never));
   // Foreground gate: mark user-facing LLM computes so background warming yields.
@@ -257,13 +262,11 @@ export function finalizeCommonApp(app: RestApplication, server: Awaited<RestAppl
   // SSE scorecard scan: per-project progress with live-climbing counts, then the
   // final aggregate scorecard. GET /api/scorecard/stream?projects=[...]&dir=...
   server.expressApp.get("/api/scorecard/stream", originGuard, (req, res) => streamScorecard(req as never, res as never));
-  // SSE personal session-insights report: scan a project's transcripts → judge
-  // each session with the ACP agent → synthesize. GET /api/insights/stream?root=...&dir=...
-  server.expressApp.get("/api/insights/stream", originGuard, async (req, res) => {
-    const track = trackerFor(reportRegistry, "insights", insightsParamsKey(req.query as never), req.query as never, (req.query as { fresh?: string }).fresh === "1");
-    beginForeground();
-    try { await streamInsights(req as never, res as never, track); } finally { endForeground(); }
-  });
+  // SSE personal session-insights report (scan transcripts → judge each session
+  // with the ACP agent → synthesize) is now a `streamOf:` route on the decorator
+  // dispatch — see InsightsController, registered above. It keeps the foreground
+  // guard internally and drives the same reportRegistry (bound below) via its
+  // injected ReportRegistry, so /api/report/runs + console reattach are unchanged.
   // SSE rubric evaluation: run one rubric's factors over a scope's sessions → a
   // per-rubric report. GET /api/rubric/stream?rubric=<id>&scope=session|project|all&root=&sessionId=&dir=
   // A rubric may include LLM criteria (Phase 2) that drive the agent, so it takes the
