@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { DreamController } from "../dream.controller.js";
 import { enqueueNew, appendDiary } from "../dream/store.js";
 import { appendVerification } from "@agentgem/run";
-import { runWarmPass, getWarmStatus } from "../warm/orchestrator.js";
+import { runWarmPass } from "../warm/orchestrator.js";
 import type { DreamQueueEntry } from "../dream/types.js";
 import type { Warmable } from "../warm/registry.js";
 
